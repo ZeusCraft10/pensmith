@@ -39,7 +39,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans
 Plans:
 - [x] 00-01-PLAN.md — Root config files + source-tree skeleton + stubs (REPO-01, REPO-03) — COMPLETE 2026-05-07
-- [ ] 00-02-PLAN.md — ESLint flat config + chokepoint rules + red-team fixture + repo-files smoke test (REPO-05)
+- [x] 00-02-PLAN.md — ESLint flat config + chokepoint rules + red-team fixture + repo-files smoke test (REPO-05) — COMPLETE 2026-05-07
 - [ ] 00-03-PLAN.md — plugin.json + marketplace.json + .mcp.json + manifest validator + manifest tests (REPO-02, REPO-03)
 - [ ] 00-04-PLAN.md — GitHub Actions CI matrix on linux-x64/macos-arm64/windows-x64 (REPO-04)
 **UI hint**: no

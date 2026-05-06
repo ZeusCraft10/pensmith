@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: "00-01-PLAN.md complete (2026-05-07)"
-last_updated: "2026-05-07T00:00:00.000Z"
-last_activity: 2026-05-07 — Phase 0 Plan 01 (repo skeleton) complete; 2 tasks, 27 files, npx tsc --noEmit exits 0
+stopped_at: "00-02-PLAN.md complete (2026-05-07)"
+last_updated: "2026-05-07T20:48:31Z"
+last_activity: 2026-05-07 — Phase 0 Plan 02 (eslint chokepoints + tests) complete; 2 tasks, 4 files, npm test 12/12 pass
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
-  percent: 3
+  completed_plans: 2
+  percent: 6
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 0 of 11 (Repo skeleton & plugin manifest) — executing
-Plan: 4 plans across 3 waves (00-01 → {00-02, 00-03} → 00-04) — Plan 01 COMPLETE
-Status: Executing — 00-01 complete; 00-02 and 00-03 ready (Wave 2, parallel)
-Last activity: 2026-05-07 — Plan 00-01 complete (repo skeleton, 27 files, 2 commits: 8c235e1, 86d6b27)
+Plan: 4 plans across 3 waves (00-01 → {00-02, 00-03} → 00-04) — Plans 01 + 02 COMPLETE
+Status: Executing — 00-01 + 00-02 complete; 00-03 ready (Wave 2)
+Last activity: 2026-05-07 — Plan 00-02 complete (eslint chokepoints, 4 files, 2 commits: d9bc781, 158f8ed; npm test 12/12 pass)
 
-Progress: [█░░░░░░░░░] 3%  (1/4 plans in Phase 0)
+Progress: [██░░░░░░░░] 6%  (2/4 plans in Phase 0)
 
 ## Performance Metrics
 
@@ -45,6 +45,7 @@ Progress: [█░░░░░░░░░] 3%  (1/4 plans in Phase 0)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | Phase 0 (00-01) | 1 | ~12 min | ~12 min |
+| Phase 0 (00-02) | 1 | ~4 min | ~4 min |
 
 **Recent Trend:**
 
@@ -69,6 +70,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [00-01] scripts.test = node scripts/run-tests.mjs (not shell glob) — Windows cmd.exe glob-expansion landmine avoided per D-10
 - [00-01] No eslint-plugin-import at Phase 0 — D-06 satisfied by built-in no-restricted-imports + per-file override
 - [00-01] tsconfig.exclude includes tests/fixtures/**/* — Plan 02 red-team fixture excluded from typecheck from day one
+- [00-02] ESLint flat-config global ignores cannot be overridden by later files entries — integration tests that re-lint ignored files must filter out global-ignores entries from loaded project config
+- [00-02] AST selector for D-07 DOI chokepoint: Literal[regex.pattern=/^\^10\\\\\\./] — 4-level escape depth (Pitfall B verified by negative test)
 
 ### Pending Todos
 
@@ -89,6 +92,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-07T00:00:00.000Z
-Stopped at: 00-01-PLAN.md complete — ready for 00-02 and 00-03 (Wave 2)
+Last session: 2026-05-07T20:48:31Z
+Stopped at: 00-02-PLAN.md complete — ready for 00-03 (Wave 2, manifests + CI)
 Resume file: None
