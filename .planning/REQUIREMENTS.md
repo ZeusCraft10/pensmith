@@ -12,7 +12,7 @@ Requirements for v0.1.0 (initial release). 131 atomic, testable requirements. Ea
 - [ ] **REPO-01**: Repository ships `package.json` (TypeScript + ESM, Node ≥20.10), `tsconfig.json`, ESLint config, `.gitignore`, MIT `LICENSE`, README skeleton, `PRIVACY.md` skeleton
 - [ ] **REPO-02**: `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` validate against Claude Code plugin schema
 - [ ] **REPO-03**: `.mcp.json` declares the pensmith MCP server entry point
-- [ ] **REPO-04**: CI runs `npm run lint`, `tsc --noEmit`, and `node --test` on linux-x64, macos-arm64, windows-x64
+- [ ] **REPO-04**: CI runs `npm run lint`, `tsc --noEmit`, and `npm test` (which discovers and runs `tests/**/*.test.ts` via `scripts/run-tests.mjs` + `node --import tsx --test`) on linux-x64, macos-arm64, windows-x64
 - [ ] **REPO-05**: Lint forbids direct `fetch`/`http`/`https`/`undici` imports outside `bin/lib/http.ts`, and bans `/^10\./` regex outside `bin/lib/doi.ts` `[research]`
 
 ### Architecture & Foundation
@@ -28,7 +28,7 @@ Requirements for v0.1.0 (initial release). 131 atomic, testable requirements. Ea
 - [ ] **ARCH-09**: Per-session hard cost cap (`cost_cap_usd`, default $5) aborts *before* an LLM call — not after billing — with running cost meter banner
 - [ ] **ARCH-10**: Per-step cost cap (e.g., $0.50/section for Pass 2) gates runaway parallel waves, separate from session cap `[research]`
 - [ ] **ARCH-11**: `--max-parallel` flag (default 5) caps parallel subagent fan-out; refuses `--yolo` when estimate exceeds 50% of session cap
-- [ ] **ARCH-12**: HTTP client (`bin/lib/http.ts`) provides per-source TTL disk cache, full-jitter exponential backoff, polite User-Agent; refuses to start without `PENSMITH_CONTACT_EMAIL`
+- [ ] **ARCH-12**: HTTP client (`bin/lib/http.ts`) provides per-source TTL disk cache, full-jitter exponential backoff, polite User-Agent. When `PENSMITH_CONTACT_EMAIL` is unset the client emits a one-time WARN banner and proceeds with a generic User-Agent (free basics still work per PRD §12); the doctor-level warning is owned by `DOCT-03`. The client only hard-refuses when an external source explicitly requires identification (e.g., a future API key requirement) — never by default.
 - [ ] **ARCH-13**: HTTP client honors `Retry-After` and `X-Rate-Limit` headers; circuit-breaks on 429 storms; per-source rate-limit floors enforced (Crossref 50/s, OpenAlex 15K/hr, arXiv 1/3s, PubMed 3/s) `[research]`
 - [ ] **ARCH-14**: `OPENALEX_API_KEY` config slot exists in v0.1.0 even if unused (OpenAlex polite-pool email-only sunset Feb 13, 2026) `[research]`
 - [ ] **ARCH-15**: DOI / arXiv ID / PMID normalization concentrated in `bin/lib/doi.ts` — ASCII-only case-folding, trailing punctuation stripped, arXiv old/new format handled, PMID/PMCID kept separate; round-trip property test for idempotence
@@ -130,7 +130,7 @@ Requirements for v0.1.0 (initial release). 131 atomic, testable requirements. Ea
 - [ ] **VRFY-03**: Pass 2 — claim support (LLM-judged), verdict ∈ {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}, prompt calibrated UNCLEAR-bias (advisory)
 - [ ] **VRFY-04**: Pass 3 — quotation verification, OA full-text via Unpaywall, tiered exact → Levenshtein-≥0.95 substring match with NFKC Unicode normalization both sides; PASS / NOT_FOUND / FUZZY_MATCH (deterministic, blocking)
 - [ ] **VRFY-05**: Pass 3 — strip soft hyphens, decompose known ligatures, canonicalize smart quotes / em-dash / ellipsis / diacritics; minimum quote length ≥10 words for fuzzy
-- [ ] **VRFY-06**: Pass 4 — per-paragraph orphan-claim audit (LLM-judged, advisory)
+- [ ] **VRFY-06**: Pass 4 — per-paragraph orphan-claim audit. The claim-extraction step is deterministic (pure-Node, paragraph→claim regex/grammar pipeline) per PRD §14 "Determinism where it counts." The orphan-vs-cited judgment compares extracted claims to in-text citations deterministically; LLM is used only for *labeling* edge cases (e.g., "is this a claim or a definition?") and remains advisory. Verdict is written to `sections/<N>/VERIFICATION.md` and never auto-blocks compile or export — but presence of any orphan claims feeds the §7.9 export-confirmation gate (`DONE-09`).
 - [ ] **VRFY-07**: Section marked `verified` only when Pass 1 + Pass 3 are clean (Pass 2 / Pass 4 verdicts are advisory)
 - [ ] **VRFY-08**: `last_verified` timestamps written per citation; auto-recheck on stale
 
@@ -154,7 +154,7 @@ Requirements for v0.1.0 (initial release). 131 atomic, testable requirements. Ea
 - [ ] **DONE-06**: Export to `.docx` / `.pdf` / `.tex` / `.md` (Pandoc when present; markdown-only fallback when absent)
 - [ ] **DONE-07**: Zero pensmith trace in exported document — no metadata stamp, no footer, no fingerprint; verified by zero-trace test (grep `.docx` ZIP entries for "pensmith" → must be zero)
 - [ ] **DONE-08**: Bundle `.paper/CITATIONS.bib` in configured citation style
-- [ ] **DONE-09**: Export confirmation gate (skipped only with `--yolo`)
+- [ ] **DONE-09**: Export confirmation gate. PRD §7.9: when any UNSUPPORTED claim, orphan claim (Pass 4), or plagiarism hit (DONE-02) exists, the user MUST be shown a per-issue summary and confirm before export proceeds. The gate also wraps the generic "ready to export?" approval. Skipped only with `--yolo`. The confirmation is the SOLE escape valve for the Core Value claim "every citation supports the claim it's attached to" when Pass 2 / Pass 4 surface advisory issues — without this gate, the Core Value would force compile/export to block automatically, contradicting `VRFY-07`.
 
 ### Resume / Hooks (Tier 1)
 

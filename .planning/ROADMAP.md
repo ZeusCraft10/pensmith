@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Depends on**: Nothing (first phase)
 **Requirements**: REPO-01, REPO-02, REPO-03, REPO-04, REPO-05
 **Success Criteria** (what must be TRUE):
-  1. `npm run lint`, `tsc --noEmit`, and `node --test` all pass on linux-x64, macos-arm64, and windows-x64 in CI (zero tests yet is fine).
+  1. `npm run lint`, `tsc --noEmit`, and `npm test` all pass on linux-x64, macos-arm64, and windows-x64 in CI. (`npm test` invokes `scripts/run-tests.mjs` which discovers `tests/**/*.test.ts` and runs them via `node --import tsx --test`.)
   2. `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` validate against the Claude Code plugin schema.
   3. `.mcp.json` declares the pensmith MCP server entry point.
   4. Lint forbids direct `fetch` / `http` / `https` / `undici` imports anywhere outside `bin/lib/http.ts`, and forbids `/^10\./` regex outside `bin/lib/doi.ts`.
@@ -53,7 +53,7 @@ Plans:
   2. DOI normalization round-trip property test asserts idempotence; trailing-punctuation, ASCII-only case-fold, arXiv old/new format, and PMID/PMCID separation cases pass.
   3. Lock conflict test passes — a second runner detects an active lock with PID + hostname + heartbeat and waits or aborts cleanly; lock file lives in the platform local-only data dir, never inside `.paper/`.
   4. Budget abort test fires *before* the LLM call (verified with cost-fixture test), not after billing; `--max-parallel` cap enforced; `OPENALEX_API_KEY` config slot exists even if unused.
-  5. HTTP client refuses to start without `PENSMITH_CONTACT_EMAIL`; honors `Retry-After` / `X-Rate-Limit`; per-source rate-limit floors (Crossref 50/s, OpenAlex 15K/hr, arXiv 1/3s, PubMed 3/s) are enforced; cassette tests cover 429 / 503 / Retry-After cases.
+  5. HTTP client emits a one-time WARN when `PENSMITH_CONTACT_EMAIL` is unset and proceeds with a generic User-Agent (per PRD §12 free-basics framing — no key needed); doctor surfaces the same warning per `DOCT-03`. Client honors `Retry-After` / `X-Rate-Limit`; per-source rate-limit floors (Crossref 50/s, OpenAlex 15K/hr, arXiv 1/3s, PubMed 3/s) are enforced; cassette tests cover 429 / 503 / Retry-After cases AND the missing-email WARN-and-proceed path.
 **Plans**: TBD
 **UI hint**: no
 
@@ -101,8 +101,8 @@ Plans:
 **Depends on**: Phase 4
 **Requirements**: VRFY-03, VRFY-06
 **Success Criteria** (what must be TRUE):
-  1. Pass 2 produces verdicts ∈ {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR} per claim, with prompts calibrated UNCLEAR-bias on adversarial fixtures, and never blocks compile or export.
-  2. Pass 4 flags orphan claims per paragraph, with verdicts written to `sections/<N>/VERIFICATION.md`, never blocking compile or export.
+  1. Pass 2 produces verdicts ∈ {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR} per claim, with prompts calibrated UNCLEAR-bias on adversarial fixtures. Pass 2 does not auto-block compile/export; per PRD §7.9, presence of any UNSUPPORTED, orphan claim, or plagiarism hit triggers a user-confirmation gate at `done` before export proceeds (the gate is implemented in Phase 6 export, not here).
+  2. Pass 4 flags orphan claims per paragraph, with verdicts written to `sections/<N>/VERIFICATION.md`. Claim extraction is deterministic (pure-Node) per PRD §14 + VRFY-06; LLM is used only for advisory labeling of edge cases. Pass 4 never auto-blocks compile or export, but any orphan claim feeds the Phase 6 export-confirmation gate (DONE-09 / PRD §7.9).
   3. `tier-contract.test.js` confirms equivalent verdicts (modulo prose) for Pass 2 and Pass 4 across both tiers on the fixture set.
 **Plans**: TBD
 **UI hint**: no
@@ -116,7 +116,7 @@ Plans:
   2. Humanizer wrap detects `~/.claude/skills/humanizer/`; skips with a clear banner when absent and never fails the export.
   3. GPTZero honesty score is reported before AND after humanize, with the framing "improves prose, not evades detection" rendered verbatim from a locked copy file (CONTRIBUTING.md rule prevents drift); backend pluggable to Originality / Sapling via config.
   4. Free distinctive-phrase plagiarism check via DuckDuckGo HTML produces an n-gram report; never blocks export by itself but warns user.
-  5. Export confirmation gate prompts the user before writing exports; skipped only with `--yolo`.
+  5. Export confirmation gate prompts the user before writing exports. Per PRD §7.9 + REQUIREMENTS DONE-09, when any UNSUPPORTED claim, orphan claim (Pass 4), or plagiarism hit (DONE-02) is present, the gate shows a per-issue summary and requires explicit user confirmation before export. Generic confirmation also runs even with no issues. Skipped only with `--yolo`.
 **Plans**: TBD
 **UI hint**: no
 
@@ -188,8 +188,8 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 
 ## Coverage
 
-- v1 requirements: 116 total
-- Mapped to phases: 116 ✓
+- v1 requirements: 131 total
+- Mapped to phases: 131 ✓
 - Unmapped: 0 ✓
 
 Full traceability table lives in `.planning/REQUIREMENTS.md` § Traceability.
