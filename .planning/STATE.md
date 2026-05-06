@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: convergence complete (2026-05-07)
+stopped_at: "00-01-PLAN.md complete (2026-05-07)"
 last_updated: "2026-05-07T00:00:00.000Z"
-last_activity: 2026-05-07 — Phase 0 plan-review convergence COMPLETE in 3 cycles (codex + claude-opus-4-6); execution-ready
+last_activity: 2026-05-07 — Phase 0 Plan 01 (repo skeleton) complete; 2 tasks, 27 files, npx tsc --noEmit exits 0
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 3
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 ## Current Position
 
-Phase: 0 of 11 (Repo skeleton & plugin manifest) — planned, peer-reviewed, converged, ready to execute
-Plan: 4 plans across 3 waves (00-01 → {00-02, 00-03} → 00-04)
-Status: Ready to execute (`/gsd-execute-phase 0`) — cross-AI convergence complete (HIGH=0)
-Last activity: 2026-05-07 — Phase 0 plan-review convergence loop completed in 3 cycles (codex + claude-opus-4-6)
+Phase: 0 of 11 (Repo skeleton & plugin manifest) — executing
+Plan: 4 plans across 3 waves (00-01 → {00-02, 00-03} → 00-04) — Plan 01 COMPLETE
+Status: Executing — 00-01 complete; 00-02 and 00-03 ready (Wave 2, parallel)
+Last activity: 2026-05-07 — Plan 00-01 complete (repo skeleton, 27 files, 2 commits: 8c235e1, 86d6b27)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 3%  (1/4 plans in Phase 0)
 
 ## Performance Metrics
 
@@ -44,7 +44,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| — | — | — | — |
+| Phase 0 (00-01) | 1 | ~12 min | ~12 min |
 
 **Recent Trend:**
 
@@ -66,6 +66,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - Zero pensmith trace in exports — verified by zero-trace test in Phase 6
 - OneDrive/iCloud/Dropbox/Google Drive detection ships in Phase 2 doctor (dev folder is in OneDrive)
 - CSL via citeproc-js + bundled CSL files resolves PRD §17 citation-style open question
+- [00-01] scripts.test = node scripts/run-tests.mjs (not shell glob) — Windows cmd.exe glob-expansion landmine avoided per D-10
+- [00-01] No eslint-plugin-import at Phase 0 — D-06 satisfied by built-in no-restricted-imports + per-file override
+- [00-01] tsconfig.exclude includes tests/fixtures/**/* — Plan 02 red-team fixture excluded from typecheck from day one
 
 ### Pending Todos
 
@@ -86,6 +89,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-06T18:53:31.888Z
-Stopped at: context exhaustion at 75% (2026-05-06)
+Last session: 2026-05-07T00:00:00.000Z
+Stopped at: 00-01-PLAN.md complete — ready for 00-02 and 00-03 (Wave 2)
 Resume file: None
