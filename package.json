@@ -1,0 +1,27 @@
+{
+  "name": "pensmith",
+  "version": "0.1.0-dev",
+  "description": "Structured research-and-drafting assistant for academic papers — verifies every citation against the live source. Two-tier: Claude Code plugin + portable Node CLI.",
+  "license": "MIT",
+  "author": "Akhil Achanta <akhilachanta8@gmail.com>",
+  "type": "module",
+  "engines": { "node": ">=20.10.0" },
+  "packageManager": "npm@10.9.0",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "build": "tsc",
+    "dev": "tsx",
+    "validate:manifests": "node scripts/validate-plugin-manifest.cjs",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run validate:manifests"
+  },
+  "files": ["dist/", "skills/", "agents/", "workflows/", "templates/", "references/", "hooks/", ".claude-plugin/", ".mcp.json", "README.md", "PRIVACY.md", "LICENSE"],
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "eslint": "^9.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}

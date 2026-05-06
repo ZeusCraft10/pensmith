@@ -1,0 +1,26 @@
+# Build output
+dist/
+*.tsbuildinfo
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+Thumbs.db
+
+# Test artifacts
+coverage/
+.nyc_output/
+
+# Phase-1+ runtime artifacts (not in Phase 0 yet, but document the intent)
+# .paper/        # active paper workspace — created by `pensmith new`
+# ~/.pensmith/   # global library — outside repo, listed for awareness only
+
+# Local-only
+.env
+.env.local
+*.log
