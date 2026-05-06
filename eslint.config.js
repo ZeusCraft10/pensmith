@@ -78,4 +78,14 @@ export default [
   {
     ignores: ['tests/fixtures/lint-chokepoint-fixture.ts', 'dist/**', 'node_modules/**'],
   },
+
+  // === CommonJS validator script exemption (D-17) ===
+  // scripts/validate-plugin-manifest.cjs is intentionally CommonJS (uses require())
+  // because package.json has "type":"module" — the .cjs extension is mandatory so
+  // Node loads it as CJS. The @typescript-eslint/no-require-imports rule must be
+  // disabled for this file only.
+  {
+    files: ['scripts/**/*.cjs'],
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
 ];
