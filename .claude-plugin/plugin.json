@@ -1,0 +1,19 @@
+{
+  "name": "pensmith",
+  "version": "0.1.0-dev",
+  "description": "Structured research-and-drafting assistant for academic papers — verifies every citation against the live source.",
+  "license": "MIT",
+  "author": {
+    "name": "Akhil Achanta",
+    "email": "akhilachanta8@gmail.com"
+  },
+  "repository": "https://github.com/akhilachanta/pensmith",
+  "keywords": ["academic-writing", "citation-verification", "research", "papers"],
+  "mcpServers": {
+    "pensmith": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"]
+    }
+  }
+}

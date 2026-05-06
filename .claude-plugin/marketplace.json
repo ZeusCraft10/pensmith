@@ -1,0 +1,24 @@
+{
+  "name": "pensmith",
+  "owner": {
+    "name": "Akhil Achanta",
+    "email": "akhilachanta8@gmail.com"
+  },
+  "metadata": {
+    "description": "Pensmith — structured academic paper writing with verified citations"
+  },
+  "plugins": [
+    {
+      "name": "pensmith",
+      "source": "./",
+      "description": "Two-tier (Claude Code plugin + portable Node CLI) for academic paper writing with section-level citation verification",
+      "version": "0.1.0-dev",
+      "author": { "name": "Akhil Achanta" },
+      "homepage": "https://github.com/akhilachanta/pensmith",
+      "repository": "https://github.com/akhilachanta/pensmith",
+      "license": "MIT",
+      "keywords": ["academic-writing", "citation-verification"],
+      "category": "productivity"
+    }
+  ]
+}
