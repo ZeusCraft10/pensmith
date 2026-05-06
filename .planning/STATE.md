@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: "00-02-PLAN.md complete (2026-05-07)"
-last_updated: "2026-05-07T20:48:31Z"
-last_activity: 2026-05-07 — Phase 0 Plan 02 (eslint chokepoints + tests) complete; 2 tasks, 4 files, npm test 12/12 pass
+stopped_at: "00-03-PLAN.md complete (2026-05-07)"
+last_updated: "2026-05-07T20:54:28Z"
+last_activity: 2026-05-07 — Phase 0 Plan 03 (plugin manifests + CI validator) complete; 2 tasks, 5 files created, 1 modified, npm test 18/18 pass
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
-  percent: 6
+  completed_plans: 3
+  percent: 9
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 0 of 11 (Repo skeleton & plugin manifest) — executing
-Plan: 4 plans across 3 waves (00-01 → {00-02, 00-03} → 00-04) — Plans 01 + 02 COMPLETE
-Status: Executing — 00-01 + 00-02 complete; 00-03 ready (Wave 2)
-Last activity: 2026-05-07 — Plan 00-02 complete (eslint chokepoints, 4 files, 2 commits: d9bc781, 158f8ed; npm test 12/12 pass)
+Plan: 4 plans across 3 waves (00-01 → {00-02, 00-03} → 00-04) — Plans 01 + 02 + 03 COMPLETE
+Status: Executing — 00-01 + 00-02 + 00-03 complete; 00-04 ready (Wave 3)
+Last activity: 2026-05-07 — Plan 00-03 complete (plugin manifests + CI validator, 5 files created, 1 modified, 2 commits: 78a2652, fff8e63; npm test 18/18 pass)
 
-Progress: [██░░░░░░░░] 6%  (2/4 plans in Phase 0)
+Progress: [███░░░░░░░] 9%  (3/4 plans in Phase 0)
 
 ## Performance Metrics
 
@@ -46,6 +46,7 @@ Progress: [██░░░░░░░░] 6%  (2/4 plans in Phase 0)
 |-------|-------|-------|----------|
 | Phase 0 (00-01) | 1 | ~12 min | ~12 min |
 | Phase 0 (00-02) | 1 | ~4 min | ~4 min |
+| Phase 0 (00-03) | 1 | ~3 min | ~3 min |
 
 **Recent Trend:**
 
@@ -72,6 +73,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [00-01] tsconfig.exclude includes tests/fixtures/**/* — Plan 02 red-team fixture excluded from typecheck from day one
 - [00-02] ESLint flat-config global ignores cannot be overridden by later files entries — integration tests that re-lint ignored files must filter out global-ignores entries from loaded project config
 - [00-02] AST selector for D-07 DOI chokepoint: Literal[regex.pattern=/^\^10\\\\\\./] — 4-level escape depth (Pitfall B verified by negative test)
+- [00-03] MCP server declared in BOTH plugin.json.mcpServers AND .mcp.json (Assumption A3 — redundant dual-declaration per D-18 + RESEARCH A3)
+- [00-03] Structural assertions used for manifest validation (no JSON-Schema) — Anthropic publishes no stable JSON-Schema artifact; structural approach matches gsd-plugin's bin/validate-plugin.cjs (D-17 revised cycle 2)
+- [00-03] eslint.config.js requires scripts/**/*.cjs override for @typescript-eslint/no-require-imports — .cjs files in ESM packages intentionally use require(); tseslint.configs.recommended flags this without the override
 
 ### Pending Todos
 
@@ -92,6 +96,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-07T20:48:31Z
-Stopped at: 00-02-PLAN.md complete — ready for 00-03 (Wave 2, manifests + CI)
+Last session: 2026-05-07T20:54:28Z
+Stopped at: 00-03-PLAN.md complete — ready for 00-04 (Wave 3, GitHub Actions CI matrix)
 Resume file: None

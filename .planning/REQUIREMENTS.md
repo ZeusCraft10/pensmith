@@ -10,8 +10,8 @@ Requirements for v0.1.0 (initial release). 131 atomic, testable requirements. Ea
 ### Repo & Plugin Manifest
 
 - [ ] **REPO-01**: Repository ships `package.json` (TypeScript + ESM, Node ≥20.10), `tsconfig.json`, ESLint config, `.gitignore`, MIT `LICENSE`, README skeleton, `PRIVACY.md` skeleton
-- [ ] **REPO-02**: `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` validate against Claude Code plugin schema
-- [ ] **REPO-03**: `.mcp.json` declares the pensmith MCP server entry point
+- [x] **REPO-02**: `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` validate against Claude Code plugin schema
+- [x] **REPO-03**: `.mcp.json` declares the pensmith MCP server entry point
 - [ ] **REPO-04**: CI runs `npm run lint`, `tsc --noEmit`, and `npm test` (which discovers and runs `tests/**/*.test.ts` via `scripts/run-tests.mjs` + `node --import tsx --test`) on linux-x64, macos-arm64, windows-x64
 - [ ] **REPO-05**: Lint forbids direct `fetch`/`http`/`https`/`undici` imports outside `bin/lib/http.ts`, and bans `/^10\./` regex outside `bin/lib/doi.ts` `[research]`
 
@@ -245,8 +245,8 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | REPO-01 | Phase 0 | Pending |
-| REPO-02 | Phase 0 | Pending |
-| REPO-03 | Phase 0 | Pending |
+| REPO-02 | Phase 0 | Complete (00-03) |
+| REPO-03 | Phase 0 | Complete (00-03) |
 | REPO-04 | Phase 0 | Pending |
 | REPO-05 | Phase 0 | Pending |
 | ARCH-05 | Phase 1 | Pending |
