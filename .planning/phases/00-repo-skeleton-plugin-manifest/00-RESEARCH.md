@@ -790,28 +790,33 @@ Standard MIT 2026, copyright `Akhil Achanta`. Use the canonical SPDX MIT templat
 | A7 | `package.json` `bin` field omitted at Phase 0 | package.json | Low — Tier 2 CLI doesn't exist yet (lands in Phase 2 TIER-04). Adding `bin` with a non-existent target would break `npm install -g` |
 | A8 | The CONTEXT.md D-07 selector `Literal[regex.pattern=/^\^10\\\\\\./]` is the correct ESLint AST selector | Pattern 2 + Pitfall B | Medium — escape-level confusion is real. Mitigation: red-team fixture catches breakage; test by hand against `/^10\./`, `/^11\./`, `/foo/` to confirm correct firing |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `bin/lib/migrations/` ship a README at Phase 0 or just `.gitkeep`?**
+   - **RESOLVED — ship README:** planner adopted the recommendation. Plan 01 creates `bin/lib/migrations/README.md` instead of `.gitkeep`; the README references ARCH-07 and Pitfall 5, satisfying both the directory-presence requirement (D-21) and the contract-documentation requirement (PITFALLS.md Pitfall 5).
    - What we know: ARCH-07 says day-one migrations directory ships even though empty in v0.1.0; PITFALLS.md Pitfall 5 says "the directory exists with a README explaining the contract."
    - What's unclear: CONTEXT.md D-21 says `.gitkeep`; PITFALLS.md says README. These conflict at Phase 0 scope.
    - Recommendation: ship `bin/lib/migrations/README.md` instead of `.gitkeep` — README serves both purposes (keeps the dir in git AND documents the contract for future contributors). One-line content: "Each migration is `<from>-to-<to>.ts` exporting `migrate(state) -> newState`. See ARCH-07 and Pitfall 5."
 
 2. **Do we ship a CONTRIBUTING.md at Phase 0?**
+   - **RESOLVED — yes, ship a Phase 0 stub:** planner adopted the recommendation. Plan 01 creates `CONTRIBUTING.md` documenting the two chokepoints (`bin/lib/http.ts` for HTTP imports, `bin/lib/doi.ts` for the `/^10\./` regex) and pointing at `eslint.config.js` and `tests/lint-chokepoint.test.ts`. Phase 2 expands it.
    - What we know: CONTEXT.md doesn't list it. ROADMAP says Phase 6 has the locked-copy-files rule for honesty-score framing. Phase 2 acceptance mentions "CONTRIBUTING.md states every workflow body added in any later phase MUST add a contract-test entry."
    - What's unclear: Is the Phase 2 CONTRIBUTING.md the first version, or is there a Phase 0 stub?
    - Recommendation: Phase 0 ships a minimal CONTRIBUTING.md with the chokepoint rules ("DOI regex `/^10\./` only in `bin/lib/doi.ts`; HTTP imports only in `bin/lib/http.ts`") — this is where future contributors look first. Phase 2 expands it.
 
 3. **Should the manifest validator script also lint that `${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js` resolves after `npm run build`?**
+   - **RESOLVED — strict (fail if missing):** planner adopted the recommendation. Plan 03's `scripts/validate-plugin-manifest.js` includes a Pitfall D guard: if `dist/` exists but `dist/mcp/server.js` does not, the validator exits non-zero with an actionable error. CI runs `npm run build` before the validator; local devs who skip the build get a clear message.
    - What we know: D-22 documents the chicken-and-egg in README-DEV.md; CI YAML adds `npm run build` before validation.
    - What's unclear: Whether the validator should fail if the file is missing (strict) or warn (lenient).
    - Recommendation: validator fails if the path is missing AFTER `npm run build`. CI inherits this strict behavior; local devs who skip `npm run build` get a clear actionable error.
 
 4. **`packageManager` field exact pin — `npm@10.9.0` or `npm@10.x`?**
+   - **RESOLVED — pin to exact `npm@10.9.0`:** planner adopted the recommendation. Plan 01's `package.json` pins `"packageManager": "npm@10.9.0"` exactly. Bumps will be deliberate, recorded in commit messages.
    - What we know: D-15 says `npm@10.x`. corepack interprets `npm@10.x` as a range; some toolchains require an exact version.
    - Recommendation: Pin to a specific 10.x version (e.g., `npm@10.9.0`) and bump deliberately. Document the choice in PLAN.md.
 
 5. **OneDrive path vs `npm run build`'s `dist/` write speed.**
+   - **RESOLVED — document in README-DEV.md, do not block Phase 0 acceptance:** planner adopted the recommendation. Plan 01's `README-DEV.md` advises Windows developers inside OneDrive/iCloud/Dropbox/Google Drive sync folders to exclude `dist/` and `node_modules/` from sync. Phase 0 acceptance is CI green (clean checkouts, no sync layer), not local-dev-ergonomics. Phase 2's `pensmith doctor` will surface the same warning for `.paper/` workspaces.
    - What we know: Pitfall 4 + the dev folder being inside OneDrive means atomic writes can race with sync. Phase 0's `npm run build` writes a lot of small files to `dist/`.
    - What's unclear: Will Phase 0 dev experience suffer from OneDrive sync delays during builds?
    - Recommendation: Add `dist/` to a OneDrive sync-exclude pattern in README-DEV.md as a Windows-developer note. Not a blocker for Phase 0 acceptance (Phase 0 acceptance is CI green, not local-dev-ergonomics).

@@ -36,7 +36,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. `.mcp.json` declares the pensmith MCP server entry point.
   4. Lint forbids direct `fetch` / `http` / `https` / `undici` imports anywhere outside `bin/lib/http.ts`, and forbids `/^10\./` regex outside `bin/lib/doi.ts`.
   5. README skeleton, `PRIVACY.md` skeleton, MIT `LICENSE`, and `.gitignore` exist.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 00-01-PLAN.md — Root config files + source-tree skeleton + stubs (REPO-01, REPO-03)
+- [ ] 00-02-PLAN.md — ESLint flat config + chokepoint rules + red-team fixture + repo-files smoke test (REPO-05)
+- [ ] 00-03-PLAN.md — plugin.json + marketplace.json + .mcp.json + manifest validator + manifest tests (REPO-02, REPO-03)
+- [ ] 00-04-PLAN.md — GitHub Actions CI matrix on linux-x64/macos-arm64/windows-x64 (REPO-04)
 **UI hint**: no
 
 ### Phase 1: Foundation NFRs
