@@ -5,7 +5,7 @@
 
 ## v1 Requirements
 
-Requirements for v0.1.0 (initial release). Each maps to a phase in `.planning/ROADMAP.md`. IDs are stable; once assigned, never renumber. Push-back additions surfaced by research are flagged `[research]`.
+Requirements for v0.1.0 (initial release). 131 atomic, testable requirements. Each maps to exactly one phase in `.planning/ROADMAP.md`. IDs are stable — once assigned, never renumber. Push-back additions surfaced by research are flagged `[research]`.
 
 ### Repo & Plugin Manifest
 
@@ -377,8 +377,8 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | CITE-05 | Phase 10 | Pending |
 
 **Coverage:**
-- v1 requirements: 116 total
-- Mapped to phases: 116
+- v1 requirements: 131 total
+- Mapped to phases: 131
 - Unmapped: 0 ✓
 
 ---
