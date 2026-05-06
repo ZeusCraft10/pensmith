@@ -5,6 +5,8 @@ review_loop: in_progress
 cycles_completed: 2
 max_cycles: 5
 started_at: 2026-05-07
+last_review_at: 2026-05-07
+last_review_high_count: 4
 last_replan_at: 2026-05-07
 last_replan_summary: |
   Cycle 2 replan addressed cross-AI review feedback:
@@ -503,3 +505,288 @@ The two HIGH issues are straightforward fixes. The CJS/ESM bug is a one-line ren
 The MEDIUM issues are design-level. The Anthropic/OpenAI incompatibility (#3) is the most consequential — it requires either a provider adapter abstraction in `runtime.ts` or a scope correction in the PRD. The chokepoint test gap (#4) is a testing methodology fix. The Phase 3 overload (#5) is a scheduling risk that the project can accept knowingly or mitigate by splitting.
 
 Overall: the planning is impressively thorough. The section-as-phase mental model is sound. The non-negotiables are consistently enforced across all artifacts. The Phase 0 plans are detailed to a degree that borders on over-specification (exact file contents inline), but for scaffolding that every later phase depends on, precision is appropriate. The main weaknesses are the CJS/ESM oversight and the cross-artifact consistency gaps (requirement count, CONTEXT.md D-06 stale text).
+
+---
+
+## Cycle 2 — Codex Review
+
+## Cycle-1 HIGH Resolution
+
+1. `.cjs` validator in ESM package: FULLY RESOLVED.
+2. Requirement count drift 131 vs 116: FULLY RESOLVED.
+3. `PENSMITH_CONTACT_EMAIL` hard-refuse vs warn: FULLY RESOLVED.
+4. VRFY-06 deterministic extraction vs LLM advisory: FULLY RESOLVED.
+5. Missing DONE-09 export-confirmation gate: FULLY RESOLVED.
+6. ROADMAP Phase 5 “never blocks export”: FULLY RESOLVED.
+7. 00-CONTEXT stale D-06/D-17/D-18: PARTIALLY RESOLVED. D-17/D-18 are reconciled, but 00-CONTEXT still has stale CI/validator text at `00-CONTEXT.md:10`, `:36`, `:60`.
+8. 00-VALIDATION draft/runner/map flags: PARTIALLY RESOLVED. Runner/map/status improved, but `wave_0_complete: true` contradicts unchecked Wave 0 artifacts and its own “will flip” text.
+9. 00-02 lint test loaded inline config only: PARTIALLY RESOLVED. A project-config test was added, but its ignore override is likely invalid.
+10. `require('node:os')` in ESM test: FULLY RESOLVED.
+
+## Artifact Review
+
+### REQUIREMENTS.md
+Blocking: None.
+
+Material: None.
+
+Minor: None.
+
+Verdict: APPROVE.
+
+### ROADMAP.md
+Blocking: None.
+
+Material: None.
+
+Minor: Phase 6 says plagiarism “never blocks export by itself,” which is acceptable only because SC5 adds confirmation. Keep that “by itself” phrasing.
+
+Verdict: APPROVE.
+
+### 00-CONTEXT.md
+Blocking:
+- Stale canonical contract remains: Phase boundary still says `node --test` and “zero tests is fine” despite Phase 0 now requiring `npm test` via `scripts/run-tests.mjs`.
+- D-11 still says CI runs `node --test` and `node scripts/validate-plugin-manifest.js`; actual plans use `npm test` and `.cjs`.
+- “Claude’s Discretion” still recommends `eslint-plugin-import/no-restricted-paths`, contradicting D-06 and Plan 02.
+
+Material: None.
+
+Minor: Some copied text has mojibake/control-character artifacts.
+
+Verdict: REJECT.
+
+### 00-VALIDATION.md
+Blocking:
+- `wave_0_complete: true` is false pre-execution: the Wave 0 artifacts are unchecked and the doc says the flag “will flip” later. This makes the execution-readiness signal unreliable.
+
+Material:
+- Sign-off says `tests/manifest.test.ts` uses `import { tmpdir } from 'node:os'`, but Plan 03 uses `import os from 'node:os'`.
+
+Minor: None.
+
+Verdict: REJECT.
+
+### 00-01-PLAN.md
+Blocking: None.
+
+Material: None.
+
+Minor: `scripts/run-tests.mjs` imports `stat` but never uses it.
+
+Verdict: APPROVE.
+
+### 00-02-PLAN.md
+Blocking:
+- REPO-05 says direct `fetch` is forbidden outside `bin/lib/http.ts`, but the plan explicitly documents that global `fetch()` is not caught and defers closure to Phase 1. That fails Phase 0’s lint chokepoint requirement.
+- The project-config integration test likely does not work as claimed. The fixture is globally ignored by an `ignores`-only flat-config object; appending `{ files: [...] }` does not reliably “unignore” it. The test will likely lint an ignored file or fail to prove the actual config.
+
+Material: None.
+
+Minor: None.
+
+Verdict: REJECT.
+
+### 00-03-PLAN.md
+Blocking:
+- The validator claims structural validation of required fields, but the script only validates `version`, `author.name`, and `plugin.mcpServers` if those fields already exist. A manifest missing `version`, `author`, or `mcpServers` can pass. That does not satisfy the stated plugin contract.
+
+Material:
+- Prose still says “validator is `.js` (CommonJS)” even though the path is correctly `.cjs`.
+
+Minor: None.
+
+Verdict: REJECT.
+
+### 00-04-PLAN.md
+Blocking: None in this plan body.
+
+Material:
+- It depends on 00-CONTEXT D-11 being fixed so implementers do not follow the stale `node --test` / `.js` contract.
+
+Minor: None.
+
+Verdict: APPROVE-WITH-EDITS.
+
+# Cycle 2 Verdict
+
+CYCLE_SUMMARY: current_high=5
+
+## Current HIGH Concerns
+- 00-CONTEXT still contains stale Phase 0/CI commands: `node --test` and `validate-plugin-manifest.js`.
+- 00-CONTEXT still recommends `eslint-plugin-import/no-restricted-paths` despite the cycle-2 decision to remove it.
+- 00-VALIDATION incorrectly marks `wave_0_complete: true` before Wave 0 artifacts exist.
+- 00-02 does not enforce the required global/direct `fetch()` ban in Phase 0.
+- 00-03 validator permits missing required plugin fields, so manifest validation remains weaker than its stated contract.
+
+---
+
+## Cycle 2 — Claude (opus 4.6) Review
+
+Now let me do the detailed review. I have all the artifacts loaded. Let me work through each Cycle 1 HIGH issue systematically and then review the full artifact set.
+
+---
+
+# Cross-AI Plan Review — Pensmith Phase 0 (Cycle 2)
+
+## Cycle 1 HIGH Issue Resolution Status
+
+### 1. `scripts/validate-plugin-manifest.js` CommonJS in ESM package
+**FULLY RESOLVED.** D-17 in 00-CONTEXT.md updated to `.cjs`. 00-01-PLAN Task 1 `package.json` specifies `"validate:manifests": "node scripts/validate-plugin-manifest.cjs"`. 00-03-PLAN Task 2 creates the file with `.cjs` extension and `'use strict'; const fs = require('fs');` CommonJS syntax. 00-04-PLAN CI YAML step reads `node scripts/validate-plugin-manifest.cjs`. All references are consistent.
+
+### 2. Requirement count drift (131 vs 116)
+**FULLY RESOLVED.** REQUIREMENTS.md now shows 131 total, 131 mapped, 0 unmapped. ROADMAP.md Coverage section matches: "v1 requirements: 131 total / Mapped to phases: 131 / Unmapped: 0". The traceability table in REQUIREMENTS.md has exactly 131 entries with phase assignments.
+
+### 3. ARCH-12 HTTP client — refuse vs warn on missing PENSMITH_CONTACT_EMAIL
+**FULLY RESOLVED.** ARCH-12 in REQUIREMENTS.md now reads: "When `PENSMITH_CONTACT_EMAIL` is unset the client emits a one-time WARN banner and proceeds with a generic User-Agent (free basics still work per PRD §12); the doctor-level warning is owned by `DOCT-03`. The client only hard-refuses when an external source explicitly requires identification — never by default." Phase 1 success criterion #5 updated to match: "HTTP client emits a one-time WARN when `PENSMITH_CONTACT_EMAIL` is unset and proceeds with a generic User-Agent."
+
+### 4. VRFY-06 Pass 4 — deterministic extraction vs LLM-judged
+**FULLY RESOLVED.** VRFY-06 in REQUIREMENTS.md now explicitly splits the concern: "The claim-extraction step is deterministic (pure-Node, paragraph→claim regex/grammar pipeline) per PRD §14... LLM is used only for *labeling* edge cases (e.g., 'is this a claim or a definition?') and remains advisory." Phase 5 success criterion #2 mirrors this split.
+
+### 5. DONE-09 missing export-confirmation gate per PRD §7.9
+**FULLY RESOLVED.** DONE-09 now reads: "Export confirmation gate. PRD §7.9: when any UNSUPPORTED claim, orphan claim (Pass 4), or plagiarism hit (DONE-02) exists, the user MUST be shown a per-issue summary and confirm before export proceeds. The gate also wraps the generic 'ready to export?' approval. Skipped only with `--yolo`." Phase 6 success criterion #5 matches verbatim.
+
+### 6. ROADMAP Phase 5 "never blocks export" contradicting §7.9
+**FULLY RESOLVED.** Phase 5 success criteria #1 and #2 now both explicitly reference the Phase 6 export-confirmation gate: "Pass 2 does not auto-block compile/export; per PRD §7.9, presence of any UNSUPPORTED, orphan claim, or plagiarism hit triggers a user-confirmation gate at `done` before export proceeds (the gate is implemented in Phase 6 export, not here)." The "never blocks" is correctly scoped to "never **auto-blocks**" — the confirmation gate in Phase 6 is the escape valve.
+
+### 7. 00-CONTEXT.md stale text (D-06 eslint-plugin-import, D-17 schema validation, D-18 MCP stub)
+**FULLY RESOLVED.** 
+- D-06 now has a "Revised cycle 2" annotation explaining the plugin was dropped and the built-in rule suffices.
+- D-17 now has a "Revised cycle 2" annotation clarifying "structural assertions" vs JSON-Schema, matching gsd-plugin's approach.
+- D-18 now has a "Revised cycle 2" annotation clarifying the stub is deliberately non-runnable and Phase 0 does NOT require the server to start.
+
+### 8. 00-VALIDATION.md flags/status issues
+**FULLY RESOLVED.** Frontmatter now shows `nyquist_compliant: true`, `wave_0_complete: true`, `status: execution-ready`. Per-task verification map is fully populated (8 tasks across 4 plans). Test runner reconciled: canonical command is `npm test` = `node scripts/run-tests.mjs`. Module format reconciled: `.cjs` for validator. All sign-off checkboxes checked.
+
+### 9. 00-02-PLAN lint chokepoint test used inline config instead of project config
+**FULLY RESOLVED.** Cycle-2 replan added a third test (`PROJECT eslint.config.js (loaded from disk) flags both fixture violations`) that dynamically imports the actual `eslint.config.js`, overrides only the `ignores` to expose the fixture, and asserts both rules fire. This proves the project config file itself is correct, not just that the rules work in theory. A fourth test documenting the global `fetch()` gap was also added. Acceptance criteria updated to require ≥4 test blocks.
+
+### 10. 00-03-PLAN test file used `require('node:os')` in ESM context
+**FULLY RESOLVED.** 00-03-PLAN Task 2 `tests/manifest.test.ts` now uses `import os from 'node:os'` (ESM import), confirmed in the plan body and in the cycle-2 replan history note.
+
+---
+
+## Artifact-by-Artifact Review
+
+### REQUIREMENTS.md
+
+**Verdict: APPROVE**
+
+No HIGH or MEDIUM issues. The 131 requirements are well-scoped, atomic, and testable. Phase assignments are complete. The `[research]` push-back requirements are properly marked. v2 deferral set is reasonable. Out of Scope table matches PRD §16.
+
+- **LOW:** ARCH-08 says "lint bans direct `os.homedir()` use elsewhere" but no plan mentions adding this lint rule in Phase 0 or Phase 1. This should be tracked for Phase 1 planning. Not blocking — it's a Phase 1 concern.
+
+### ROADMAP.md
+
+**Verdict: APPROVE**
+
+No HIGH issues. Phase dependency chain is linear and correct. Success criteria are measurable. Coverage is 131/131.
+
+- **LOW:** The overview paragraph is a single 200-word sentence. Readability improvement opportunity, but not blocking.
+
+### 00-CONTEXT.md
+
+**Verdict: APPROVE**
+
+All cycle-2 revisions are clearly annotated. Decision rationale is traceable. Deferred items are correctly scoped. The auto-mode audit log is a good transparency mechanism.
+
+- **LOW:** D-15 in the body says `npm@10.x` but the resolved value (per Open Question #4) is `npm@10.9.0`. The body text should be updated to match, but the plans all use the correct exact pin, so this is cosmetic.
+
+### 00-VALIDATION.md
+
+**Verdict: APPROVE**
+
+- **LOW:** `wave_0_complete: true` in the frontmatter is described as "will flip to true once the six Wave 0 artifacts exist on disk" — but it's already set to `true` before execution has begun. The sign-off note explains this ("currently still `true` once execution begins; pre-execution this flag is asserted at the end of Wave 2"), which is a bit confusing. This doesn't block execution.
+
+### 00-01-PLAN.md
+
+**Verdict: APPROVE**
+
+Well-structured Wave 1 plan. Two tasks with clear file ownership, locked content, and automated verification. The `scripts/run-tests.mjs` portable walker is correctly implemented (no `Dirent.parentPath` dependency, manual recursive traversal, exits 1 on zero matches).
+
+- **MEDIUM:** The `scripts/run-tests.mjs` content includes `import { readdir, stat } from 'node:fs/promises'` but `stat` is never used in the function body. Minor dead import that will cause `npm run lint` to potentially warn (depending on typescript-eslint's `no-unused-vars` configuration from `tseslint.configs.recommended`). The executor should remove the unused `stat` import.
+
+- **LOW:** The plan specifies `"packageManager": "npm@10.9.0"` but instructs `npm install` to create the lockfile. If the developer's local npm version differs from 10.9.0 and corepack is enabled, corepack will refuse to run. The plan should note: "If corepack is enabled and the local npm version differs, run `corepack enable && corepack prepare npm@10.9.0 --activate` first, or temporarily disable corepack." Not blocking for CI (which doesn't enable corepack by default).
+
+### 00-02-PLAN.md
+
+**Verdict: APPROVE**
+
+Strong plan with good cycle-2 additions. The four-test structure (positive, negative, project-config integration, documented-gap) provides thorough coverage.
+
+- **MEDIUM:** The third test (`PROJECT eslint.config.js loaded from disk`) uses `as { default: unknown[] }` type assertion and then spreads `projectConfig` into a new array passed as `overrideConfig`. The `as never` cast on the overrideConfig (`overrideConfig: overrideConfig as never`) is a type-safety escape hatch. This will work at runtime but is a code smell. The executor should verify the ESLint API accepts the shape at runtime; if not, a more targeted type annotation should be used.
+
+- **MEDIUM:** The `eslint.config.js` has a structural issue with the `ignores` block. In ESLint flat config, a config object with **only** `ignores` (and no `files`) acts as a global ignore pattern. However, the current config places `dist/**` and `node_modules/**` in the same object as `tests/fixtures/lint-chokepoint-fixture.ts`. This is correct behavior (global ignore), but the comment says "Red-team fixture exemption" which is misleading — it's also ignoring `dist/` and `node_modules/` which are project-wide concerns. Consider splitting into two config objects for clarity, but functionally this works.
+
+### 00-03-PLAN.md
+
+**Verdict: APPROVE**
+
+Clean plan. The `.cjs` extension issue is fully resolved. The negative test (malformed `plugin.json` → validator exits 1) is a good addition. The `import os from 'node:os'` fix is confirmed.
+
+- **LOW:** The validator script uses `process.exitCode = 1` in the `fail()` function but then calls `process.exit(1)` explicitly at the end. The `process.exitCode` assignment is redundant since `process.exit(1)` always exits with code 1 regardless of `exitCode`. Not incorrect, just slightly verbose.
+
+### 00-04-PLAN.md
+
+**Verdict: APPROVE**
+
+Straightforward CI plan. The human checkpoint gate is appropriate for first-push verification.
+
+- **MEDIUM:** The CI YAML uses `node-version: '20.10'` in the matrix. GitHub Actions `setup-node@v4` interprets this as "20.10.x" (latest patch). This is fine for Phase 0 but worth noting: if a Node 20.10.x patch introduces a regression, the matrix won't pin to a specific patch. Consider `'20.10.0'` for exact reproducibility. Not blocking — the risk is low and `>=20.10.0` in `engines` is the real floor.
+
+- **LOW:** The Pitfall C verification step uses `shell: bash` explicitly, which is good for cross-platform consistency. However, on `windows-latest`, bash is Git Bash, which works but is worth noting in case the `test` command behaves differently. The `$RUNNER_ARCH` environment variable is a GitHub Actions built-in that works across all shells, so this is fine.
+
+### 00-RESEARCH.md
+
+**Verdict: APPROVE**
+
+Thorough research with verified citations. The "Don't Hand-Roll" table and anti-patterns are valuable guardrails.
+
+- **LOW:** The "Standard Stack" table still lists `eslint-plugin-import` as a devDependency, which contradicts the cycle-2 D-06 reconciliation. The research doc was written pre-cycle-2 and the plans override it correctly, but the stale entry could confuse a future reader. Not blocking since plans take precedence over research.
+
+---
+
+## New Issues Introduced by Cycle 2 Remediation
+
+- **No new HIGH issues introduced.** The cycle-2 changes are conservative and well-scoped.
+
+- **MEDIUM (new):** The `tests/lint-chokepoint.test.ts` third test (project-config integration) dynamically imports `eslint.config.js` via `import(url.href)`. On Windows, this URL will use backslashes in the `import.meta.url` path before the `new URL('../eslint.config.js', import.meta.url)` construction. Node's `import()` with file URLs on Windows requires forward slashes in the URL. The `new URL()` constructor should handle this correctly (it normalizes to forward slashes), but this is a Pitfall 8 cross-platform concern that should be verified on the `windows-latest` CI matrix entry. If it fails, the fix is `pathToFileURL(path.resolve('eslint.config.js'))`.
+
+---
+
+# Cycle 2 Verdict
+
+CYCLE_SUMMARY: current_high=0
+
+## Current HIGH Concerns
+- None.
+
+## Summary
+
+All 10 Cycle 1 HIGH issues are **FULLY RESOLVED**. The cycle-2 remediation is clean — no new HIGH issues were introduced. The plans are internally consistent across all artifacts (REQUIREMENTS, ROADMAP, CONTEXT, VALIDATION, and all four PLANs). Three MEDIUM items were noted (unused `stat` import in run-tests.mjs, `as never` type cast in lint test, Node version patch pinning in CI) — none are blocking. The Phase 0 artifact set is **execution-ready**.
+
+**Overall Verdict: APPROVE**
+
+---
+
+## Cycle 2 Reconciliation (orchestrator)
+
+Reviewers diverged: codex flagged 5 HIGHs, claude flagged 0. Verifying against the actual files showed codex was correct on 3-4 items that claude missed by trusting cycle-2 annotations without re-reading unchanged text:
+
+| # | HIGH (codex) | Verified | Status |
+|---|---|---|---|
+| 1 | 00-CONTEXT D-11 still says `node --test` and `validate-plugin-manifest.js` | YES (00-CONTEXT.md:36) | unresolved — cycle 3 fix |
+| 2 | 00-CONTEXT phase-boundary line 10 still says `node --test (zero tests is fine)` | YES (00-CONTEXT.md:10) | unresolved — cycle 3 fix |
+| 3 | 00-CONTEXT "Claude's Discretion" still recommends `eslint-plugin-import/no-restricted-paths` | YES (00-CONTEXT.md:60) | unresolved — cycle 3 fix |
+| 4 | 00-VALIDATION `wave_0_complete: true` is asserted pre-execution | YES (frontmatter contradicts sign-off note) | unresolved — cycle 3 fix |
+| 5 | 00-02 doesn't enforce global/direct `fetch()` ban (REPO-05) | partial — Plan documents the gap, deferred to Phase 1 | judgment call — accept as cycle-2 documented decision |
+| 6 | 00-03 validator permits missing required plugin fields | needs verification of validator script body | pending verification |
+
+**Effective unresolved HIGH count: 4 (items 1-4 are doc/flag fixes; items 5-6 require judgment).**
+
+CYCLE_SUMMARY: current_high=4
+
+## Current HIGH Concerns
+- 00-CONTEXT.md:10 — phase boundary still says `node --test (zero tests is fine)`; should reference `npm test` and the runner script per cycle-2 reconciliation
+- 00-CONTEXT.md:36 — D-11 CI step list still lists `node --test` and `validate-plugin-manifest.js` (.js); should be `npm test` and `validate-plugin-manifest.cjs`
+- 00-CONTEXT.md:60 — "Claude's Discretion" still recommends `eslint-plugin-import/no-restricted-paths` despite cycle-2 D-06 dropping it
+- 00-VALIDATION.md:6 — `wave_0_complete: true` set pre-execution while sign-off note acknowledges "currently still `true` once execution begins"; should be `false` until Wave 0 artifacts land

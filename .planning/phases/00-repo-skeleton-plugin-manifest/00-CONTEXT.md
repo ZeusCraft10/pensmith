@@ -7,7 +7,7 @@
 <domain>
 ## Phase Boundary
 
-Stand up the repo, plugin manifest, MCP entry, and CI discipline that every later phase depends on. Phase 0 ships **no business logic** — only the scaffolding (config files, manifests, lint chokepoints, CI matrix, empty source-tree dirs) that makes Phase 1 Foundation NFRs land cleanly. The phase ends when `npm run lint`, `tsc --noEmit`, and `node --test` (zero tests is fine) all pass on linux-x64 / macos-arm64 / windows-x64 in CI, and the plugin/MCP manifests validate.
+Stand up the repo, plugin manifest, MCP entry, and CI discipline that every later phase depends on. Phase 0 ships **no business logic** — only the scaffolding (config files, manifests, lint chokepoints, CI matrix, empty source-tree dirs) that makes Phase 1 Foundation NFRs land cleanly. The phase ends when `npm run lint`, `tsc --noEmit`, and `npm test` (which runs `node scripts/run-tests.mjs` — exits 1 on zero tests; raw `node --test` is NOT used per cycle-2 D-11) all pass on linux-x64 / macos-arm64 / windows-x64 in CI, and the plugin/MCP manifests validate via `scripts/validate-plugin-manifest.cjs`.
 
 In scope: `package.json`, `tsconfig.json`, `eslint.config.js`, `.gitignore`, `LICENSE`, README skeleton, `PRIVACY.md` skeleton, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.mcp.json`, CI workflow, lint chokepoint rules + red-team fixture, empty `bin/`, `bin/lib/`, `mcp/`, `hooks/`, `skills/`, `agents/`, `workflows/`, `templates/`, `references/`, `schema/`, `tests/`, `migrations/` directories with `.gitkeep`.
 
@@ -33,7 +33,7 @@ Out of scope (belongs in later phases): any Foundation NFR implementation (Phase
 ### CI matrix (REPO-04)
 - **D-09:** GitHub Actions only. Repo lives on GitHub; matching the runtime to the host avoids extra surface area.
 - **D-10:** Matrix is `[linux-x64, macos-arm64, windows-x64]` × `[node@20.10]` for v0.1.0. macos-arm64 + windows-x64 are non-negotiable (Pitfall 8 path landmines surface only on real OSes); Node 22 deferred until native TS strip becomes load-bearing.
-- **D-11:** CI steps: `actions/setup-node@v4` → `npm ci` → `npm run lint` → `npx tsc --noEmit` → `node --test` → manifest validation (`node scripts/validate-plugin-manifest.js`). All steps run on every matrix entry.
+- **D-11:** CI steps: `actions/setup-node@v4` → `npm ci` → `npm run lint` → `npx tsc --noEmit` → `npm test` (= `node scripts/run-tests.mjs`) → manifest validation (`node scripts/validate-plugin-manifest.cjs`). All steps run on every matrix entry. **Revised cycle 3 (2026-05-07):** raw `node --test` was replaced with the runner script (vacuous-pass landmine on Windows cmd.exe) and the validator extension is `.cjs` (mandatory in ESM packages); cycle-2 stale text corrected.
 - **D-12:** Cache `node_modules` keyed on `package-lock.json`. Don't enable codecov yet — there's no code to cover.
 
 ### Package manager
@@ -57,7 +57,7 @@ Out of scope (belongs in later phases): any Foundation NFR implementation (Phase
 ### Claude's Discretion
 The following are mechanical choices the planner can make without further input:
 - Exact dependency pin styles (`^` vs exact) — match research/STACK.md guidance: pin `pdf-parse` exact, allow caret on everything else.
-- ESLint plugin choice for the directory-scoped ban (`eslint-plugin-import/no-restricted-paths` is recommended; if a flatter alternative emerges, the planner picks).
+- ESLint plugin choice for the directory-scoped ban. **Revised cycle 3 (2026-05-07):** the recommendation to use `eslint-plugin-import/no-restricted-paths` was withdrawn at cycle 2 (D-06) — the built-in `no-restricted-imports` rule plus a per-file override fully encodes D-06 without a third-party dependency. Phase 1+ may re-add the plugin only if directory-scoped restrictions across multiple `bin/lib/` modules are needed; not required at Phase 0.
 - CI workflow file name (`.github/workflows/ci.yml` is conventional).
 - Whether to add a `npm run` aggregator command (`npm run check` = lint + tsc + test). Recommended yes.
 - Schema-version stamp in placeholder JSON files (use `schema_version: 1` everywhere from day one per ARCH-07, even on stubs).

@@ -3,10 +3,10 @@ phase: 0
 slug: repo-skeleton-plugin-manifest
 status: execution-ready
 nyquist_compliant: true
-wave_0_complete: true
+wave_0_complete: false
 created: 2026-05-06
 updated: 2026-05-07
-update_reason: cycle-2 replan — populated per-task verification map, reconciled test runner contract with Plan 01 (scripts/run-tests.mjs), flipped status flags
+update_reason: cycle-3 fix — `wave_0_complete` reset to `false` (correct pre-execution state per codex review HIGH #3); flag flips to `true` only when the six Wave 0 artifacts exist on disk and `npm run check` exits 0 (asserted at end of Wave 2)
 ---
 
 # Phase 0 — Validation Strategy
@@ -98,6 +98,6 @@ Phase 0 starts greenfield (no existing test infrastructure). Wave 0 (= "what mus
 - [x] Per-task verification map populated (8 tasks across 4 plans)
 - [x] Module-format reconciled: `scripts/validate-plugin-manifest.cjs` (`.cjs`, not `.js`); `tests/manifest.test.ts` uses `import { tmpdir } from 'node:os'` (not `require`)
 - [x] `nyquist_compliant: true` set in frontmatter
-- [x] `wave_0_complete` flag will flip to `true` once the six Wave 0 artifacts exist on disk and `npm run check` exits 0 (currently still `true` once execution begins; pre-execution this flag is asserted at the end of Wave 2)
+- [x] `wave_0_complete` flag is `false` pre-execution and flips to `true` only when the six Wave 0 artifacts exist on disk and `npm run check` exits 0 (asserted at end of Wave 2)
 
 **Approval:** execution-ready (cycle 2 replan, 2026-05-07)
