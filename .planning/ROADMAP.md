@@ -12,7 +12,7 @@ Pensmith ships in eleven prescriptive phases derived from the architecture's thr
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 0: Repo skeleton & plugin manifest** - Repo, plugin manifest, MCP entry, CI on three OSes, ban-list lints
+- [x] **Phase 0: Repo skeleton & plugin manifest** - Repo, plugin manifest, MCP entry, CI on three OSes, ban-list lints — COMPLETE 2026-05-07
 - [ ] **Phase 1: Foundation NFRs** - paths → atomic-write → lock → doi → http → budget → migrations → pii → session-log → state/library/checkpoint → runtime, in strict order, all unit-tested
 - [ ] **Phase 2: Tier shells + doctor + tier-contract gate** - MCP server skeleton + Tier 2 CLI dispatcher + ecosystem probe + `/pensmith doctor` (with OneDrive detection) as first contract case
 - [ ] **Phase 3: Vertical slice through one section** - Single-fixture intake → research → outline → plan → write → verify, deterministic Pass 1 + Pass 3 only, APA only, both tiers
@@ -41,7 +41,7 @@ Plans:
 - [x] 00-01-PLAN.md — Root config files + source-tree skeleton + stubs (REPO-01, REPO-03) — COMPLETE 2026-05-07
 - [x] 00-02-PLAN.md — ESLint flat config + chokepoint rules + red-team fixture + repo-files smoke test (REPO-05) — COMPLETE 2026-05-07
 - [x] 00-03-PLAN.md — plugin.json + marketplace.json + .mcp.json + manifest validator + manifest tests (REPO-02, REPO-03) — COMPLETE 2026-05-07
-- [ ] 00-04-PLAN.md — GitHub Actions CI matrix on linux-x64/macos-arm64/windows-x64 (REPO-04)
+- [x] 00-04-PLAN.md — GitHub Actions CI matrix on linux-x64/macos-arm64/windows-x64 (REPO-04) — COMPLETE 2026-05-07
 **UI hint**: no
 
 ### Phase 1: Foundation NFRs
@@ -174,7 +174,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Repo skeleton & plugin manifest | 3/4 | In progress | - |
+| 0. Repo skeleton & plugin manifest | 4/4 | COMPLETE | 2026-05-07 |
 | 1. Foundation NFRs | 0/TBD | Not started | - |
 | 2. Tier shells + doctor + tier-contract gate | 0/TBD | Not started | - |
 | 3. Vertical slice through one section | 0/TBD | Not started | - |

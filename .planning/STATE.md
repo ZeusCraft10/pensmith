@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: "00-03-PLAN.md complete (2026-05-07)"
-last_updated: "2026-05-07T20:54:28Z"
-last_activity: 2026-05-07 — Phase 0 Plan 03 (plugin manifests + CI validator) complete; 2 tasks, 5 files created, 1 modified, npm test 18/18 pass
+stopped_at: "Phase 0 COMPLETE — 00-04-PLAN.md complete (2026-05-07)"
+last_updated: "2026-05-07T20:59:26Z"
+last_activity: 2026-05-07 — Phase 0 Plan 04 (GitHub Actions CI matrix) complete; 1 task auto + 1 checkpoint auto-approved, 1 file created; local pipeline ALL GREEN (18/18 tests pass)
 progress:
   total_phases: 11
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 9
+  completed_plans: 4
+  percent: 12
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 ## Current Position
 
-Phase: 0 of 11 (Repo skeleton & plugin manifest) — executing
-Plan: 4 plans across 3 waves (00-01 → {00-02, 00-03} → 00-04) — Plans 01 + 02 + 03 COMPLETE
-Status: Executing — 00-01 + 00-02 + 00-03 complete; 00-04 ready (Wave 3)
-Last activity: 2026-05-07 — Plan 00-03 complete (plugin manifests + CI validator, 5 files created, 1 modified, 2 commits: 78a2652, fff8e63; npm test 18/18 pass)
+Phase: 0 of 11 (Repo skeleton & plugin manifest) — COMPLETE
+Plan: 4/4 plans complete (00-01 → {00-02, 00-03} → 00-04) — ALL COMPLETE
+Status: Phase 0 COMPLETE — ready for Phase 1 (Foundation NFRs)
+Last activity: 2026-05-07 — Plan 00-04 complete (GitHub Actions CI matrix, 1 file created, 1 commit: a056f98; local pipeline ALL GREEN 18/18 tests pass)
 
-Progress: [███░░░░░░░] 9%  (3/4 plans in Phase 0)
+Progress: [████░░░░░░] 12%  (4/4 plans in Phase 0 — Phase 0 COMPLETE)
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Progress: [███░░░░░░░] 9%  (3/4 plans in Phase 0)
 | Phase 0 (00-01) | 1 | ~12 min | ~12 min |
 | Phase 0 (00-02) | 1 | ~4 min | ~4 min |
 | Phase 0 (00-03) | 1 | ~3 min | ~3 min |
+| Phase 0 (00-04) | 1 | ~2 min | ~2 min |
 
 **Recent Trend:**
 
@@ -76,6 +77,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [00-03] MCP server declared in BOTH plugin.json.mcpServers AND .mcp.json (Assumption A3 — redundant dual-declaration per D-18 + RESEARCH A3)
 - [00-03] Structural assertions used for manifest validation (no JSON-Schema) — Anthropic publishes no stable JSON-Schema artifact; structural approach matches gsd-plugin's bin/validate-plugin.cjs (D-17 revised cycle 2)
 - [00-03] eslint.config.js requires scripts/**/*.cjs override for @typescript-eslint/no-require-imports — .cjs files in ESM packages intentionally use require(); tseslint.configs.recommended flags this without the override
+- [00-04] npm run build placed BEFORE npm test in CI step order — Pitfall D: manifest validator checks dist/mcp/server.js exists when dist/ exists; building first ensures clean path resolution
+- [00-04] Pitfall C arm64 assertion step added to macos-latest — test "$RUNNER_ARCH" = "ARM64" explicitly fails CI if GitHub demotes runner to Intel without notice
+- [00-04] fail-fast: false locked in — all 3 OSes report independently; macOS failure does not hide Windows failures
 
 ### Pending Todos
 
@@ -96,6 +100,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-07T20:54:28Z
-Stopped at: 00-03-PLAN.md complete — ready for 00-04 (Wave 3, GitHub Actions CI matrix)
+Last session: 2026-05-07T20:59:26Z
+Stopped at: Phase 0 COMPLETE — 00-04-PLAN.md complete (GitHub Actions CI matrix); ready for Phase 1 (Foundation NFRs)
 Resume file: None
