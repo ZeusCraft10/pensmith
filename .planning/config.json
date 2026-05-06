@@ -12,7 +12,14 @@
     "milestone_branch_template": "gsd/{milestone}-{slug}",
     "quick_branch_template": null
   },
+  "review": {
+    "models": {
+      "claude": "claude-opus-4-6",
+      "codex": null
+    }
+  },
   "workflow": {
+    "plan_review_convergence": true,
     "research": true,
     "plan_check": true,
     "verifier": true,
