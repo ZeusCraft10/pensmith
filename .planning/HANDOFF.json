@@ -1,0 +1,75 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-07T03:33:43Z",
+  "phase": "1",
+  "phase_name": "Foundation NFRs",
+  "phase_dir": ".planning/phases/01-foundation-nfrs",
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "stage": "discuss-phase complete; plan-phase pending",
+  "completed_tasks": [
+    {
+      "id": "discuss-phase",
+      "name": "Auto-generate CONTEXT.md and DISCUSSION-LOG.md (--auto mode)",
+      "status": "done",
+      "commit": null,
+      "note": "Artifacts written but uncommitted at pause time"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": "plan-phase",
+      "name": "Run /gsd-plan-phase 1 --auto",
+      "status": "not_started"
+    },
+    {
+      "id": "execute-phase",
+      "name": "Execute the 13-library Foundation slice in strict dep order",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "human_actions_pending": [
+    {
+      "action": "Commit CONTEXT.md, DISCUSSION-LOG.md, STATE.md update",
+      "context": "Phase 1 discuss-phase artifacts must land before plan-phase",
+      "blocking": true
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Strict 13-step dependency order is a hard rule (paths -> atomic-write -> lock -> doi -> http -> budget -> migrations -> pii -> session-log -> state -> library -> checkpoint -> runtime)",
+      "rationale": "ROADMAP §1 mandates strict order; ARCHITECTURE three-ring model collapses if a later lib lands first",
+      "phase": "1"
+    },
+    {
+      "decision": "Atomic write contract: write tmp -> fsync(tmp) -> rename -> fsync(dir); chokepoint lint bans direct fs.writeFile outside bin/lib/atomic-write.ts",
+      "rationale": "PRD §14 + Pitfall 4 — dir-fsync is the silent-data-loss landmine on sync-folder pause",
+      "phase": "1"
+    },
+    {
+      "decision": "Lock file lives at LOCAL_DATA_DIR/pensmith/locks/${sha256(path).slice(0,16)}.lock — never inside .paper/",
+      "rationale": "OneDrive non-negotiable (CLAUDE.md); dev folder is inside OneDrive and would eat in-.paper locks",
+      "phase": "1"
+    },
+    {
+      "decision": "DOI normalization: single chokepoint, ordered spec, ASCII-only case-fold, both canonical+as-cited stored, fast-check property test",
+      "rationale": "PRD §14 + Pitfall 2 + DOI Handbook (10.123/ABÇ ≠ 10.123/abç)",
+      "phase": "1"
+    },
+    {
+      "decision": "HTTP client: undici@^7 + p-retry@^6 + per-source TTL disk cache + per-source rate-limit floors + WARN-once on missing PENSMITH_CONTACT_EMAIL",
+      "rationale": "STACK.md verdict; node-fetch/axios/got explicitly rejected; PRD §12 says free basics work without email",
+      "phase": "1"
+    }
+  ],
+  "uncommitted_files": [
+    ".planning/phases/01-foundation-nfrs/01-CONTEXT.md",
+    ".planning/phases/01-foundation-nfrs/01-DISCUSSION-LOG.md",
+    ".planning/STATE.md"
+  ],
+  "next_action": "Commit Phase 1 discuss-phase artifacts, then run /gsd-plan-phase 1 --auto",
+  "context_notes": "Phase 0 (Repo skeleton) shipped 2026-05-07 with 4/4 plans green and CI matrix passing 18/18. STATE.md still shows Phase 0 100% — needs update to mark Phase 0 closed and Phase 1 discuss-phase done. Discuss-phase ran in --auto mode, so all gray areas were resolved with recommended defaults (see DISCUSSION-LOG.md for the alternatives considered). Planner can proceed without re-prompting."
+}
