@@ -1,0 +1,15 @@
+{
+  "request": { "method": "GET", "url": "https://api.unpaywall.org/v2/10.1038/closed" },
+  "responses": [
+    {
+      "status": 200,
+      "headers": { "content-type": "application/json" },
+      "body": {
+        "doi": "10.1038/closed",
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_locations": []
+      }
+    }
+  ]
+}

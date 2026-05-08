@@ -110,6 +110,21 @@ export default [
     rules: { 'no-restricted-syntax': 'off' },
   },
 
+  // === HTTP/path chokepoint EXEMPTIONS for HTTP test files (Wave 5) ===
+  // tests/http.test.ts and tests/http-cache.test.ts MUST import undici
+  // (MockAgent / setGlobalDispatcher) to install cassette interceptors —
+  // there is no other way to test bin/lib/http.ts without live network.
+  // They MUST also override process.env.LOCALAPPDATA / XDG_DATA_HOME / HOME
+  // to redirect pensmithHttpCacheDir() into a per-test tmpdir for isolation.
+  // Both exemptions are scoped to these test files only.
+  {
+    files: ['tests/http.test.ts', 'tests/http-cache.test.ts', 'tests/retry.test.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
+      'no-restricted-syntax': 'off',
+    },
+  },
+
   // === Red-team fixture exemption (D-08) ===
   // The fixture INTENTIONALLY violates both chokepoints. It is executed
   // by tests/lint-chokepoint.test.ts which runs ESLint programmatically

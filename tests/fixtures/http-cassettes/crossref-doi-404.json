@@ -1,0 +1,14 @@
+{
+  "request": { "method": "GET", "url": "https://api.crossref.org/works/10.0000/notfound" },
+  "responses": [
+    {
+      "status": 404,
+      "headers": { "content-type": "application/json" },
+      "body": {
+        "status": "error",
+        "message-type": "route",
+        "message": "Resource not found."
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "request": { "method": "GET", "url": "https://api.crossref.org/works/10.1038/rate" },
+  "responses": [
+    {
+      "status": 429,
+      "headers": { "retry-after": "1", "content-type": "application/json" },
+      "body": { "status": "rate-limited" }
+    },
+    {
+      "status": 200,
+      "headers": { "content-type": "application/json" },
+      "body": {
+        "status": "ok",
+        "message": { "DOI": "10.1038/rate", "title": ["Recovered After 429"] }
+      }
+    }
+  ]
+}

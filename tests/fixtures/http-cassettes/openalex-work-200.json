@@ -1,0 +1,18 @@
+{
+  "request": { "method": "GET", "url": "https://api.openalex.org/works/W123" },
+  "responses": [
+    {
+      "status": 200,
+      "headers": { "content-type": "application/json" },
+      "body": {
+        "id": "https://openalex.org/W123",
+        "doi": "https://doi.org/10.1038/test",
+        "title": "Sample",
+        "publication_year": 2021,
+        "authorships": [
+          { "author": { "id": "https://openalex.org/A1", "display_name": "Alice Smith" } }
+        ]
+      }
+    }
+  ]
+}

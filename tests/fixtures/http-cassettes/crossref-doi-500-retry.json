@@ -1,0 +1,18 @@
+{
+  "request": { "method": "GET", "url": "https://api.crossref.org/works/10.1038/err" },
+  "responses": [
+    {
+      "status": 500,
+      "headers": { "content-type": "application/json" },
+      "body": { "error": "internal" }
+    },
+    {
+      "status": 200,
+      "headers": { "content-type": "application/json" },
+      "body": {
+        "status": "ok",
+        "message": { "DOI": "10.1038/err", "title": ["Recovered After 500"] }
+      }
+    }
+  ]
+}

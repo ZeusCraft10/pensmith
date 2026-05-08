@@ -1,0 +1,15 @@
+{
+  "request": { "method": "GET", "url": "https://api.openalex.org/works?search=foo" },
+  "responses": [
+    {
+      "status": 200,
+      "headers": { "content-type": "application/json" },
+      "body": {
+        "meta": { "count": 1, "page": 1, "per_page": 25 },
+        "results": [
+          { "id": "https://openalex.org/W123", "title": "Foo", "publication_year": 2020 }
+        ]
+      }
+    }
+  ]
+}

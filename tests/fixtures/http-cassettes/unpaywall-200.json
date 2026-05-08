@@ -1,0 +1,21 @@
+{
+  "request": { "method": "GET", "url": "https://api.unpaywall.org/v2/10.1038/oa" },
+  "responses": [
+    {
+      "status": 200,
+      "headers": { "content-type": "application/json" },
+      "body": {
+        "doi": "10.1038/oa",
+        "is_oa": true,
+        "oa_status": "gold",
+        "oa_locations": [
+          {
+            "url_for_pdf": "https://example.org/oa.pdf",
+            "host_type": "publisher",
+            "license": "cc-by"
+          }
+        ]
+      }
+    }
+  ]
+}
