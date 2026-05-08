@@ -47,15 +47,42 @@ export default [
         ],
       }],
 
-      // === D-07: DOI regex chokepoint ===
+      // === D-07 (Phase 0): DOI regex chokepoint ===
       // AST selector for a regex literal whose pattern starts with "^10."
       // The pattern /^10\./ contains no forward slash so the ESLint
       // Selectors esquery forward-slash workaround does not apply here.
       // DO NOT simplify the escapes — see Pitfall B.
-      'no-restricted-syntax': ['error', {
-        selector: 'Literal[regex.pattern=/^\\^10\\\\\\./]',
-        message: 'DOI regex /^10\\./ is a chokepoint — use bin/lib/doi.ts only',
-      }],
+      // === D-07 (Phase 1): atomic-write chokepoint — bans direct fs.writeFile / fs.promises.writeFile outside bin/lib/atomic-write.ts ===
+      // === D-41 (Phase 1): paths chokepoint — bans os.homedir() and process.env.{LOCALAPPDATA,APPDATA,XDG_DATA_HOME} outside bin/lib/paths.ts ===
+      // NOTE (Pitfall B5): D-41 is enforced via no-restricted-syntax MemberExpression
+      // selectors, NOT no-restricted-globals — the latter cannot ban member access
+      // patterns like process.env.X (it only bans bare global identifiers).
+      'no-restricted-syntax': ['error',
+        {
+          selector: 'Literal[regex.pattern=/^\\^10\\\\\\./]',
+          message: 'DOI regex /^10\\./ is a chokepoint — use bin/lib/doi.ts only',
+        },
+        {
+          selector: "CallExpression[callee.property.name='writeFile']",
+          message: 'Direct fs.writeFile is forbidden (ARCH-05 / D-07) — use bin/lib/atomic-write.ts',
+        },
+        {
+          selector: "MemberExpression[object.name='os'][property.name='homedir']",
+          message: 'os.homedir() is a chokepoint (D-41) — use bin/lib/paths.ts',
+        },
+        {
+          selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='LOCALAPPDATA']",
+          message: 'process.env.LOCALAPPDATA is a chokepoint (D-41) — use bin/lib/paths.ts',
+        },
+        {
+          selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='APPDATA']",
+          message: 'process.env.APPDATA is a chokepoint (D-41) — use bin/lib/paths.ts (use LOCALAPPDATA, not APPDATA — Pitfall 4)',
+        },
+        {
+          selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='XDG_DATA_HOME']",
+          message: 'process.env.XDG_DATA_HOME is a chokepoint (D-41) — use bin/lib/paths.ts',
+        },
+      ],
     },
   },
 
@@ -71,12 +98,30 @@ export default [
     rules: { 'no-restricted-syntax': 'off' },
   },
 
+  // === atomic-write chokepoint EXEMPTION for bin/lib/atomic-write.ts (lands Phase 1, Wave 2) ===
+  {
+    files: ['bin/lib/atomic-write.ts'],
+    rules: { 'no-restricted-syntax': 'off' },
+  },
+
+  // === paths chokepoint EXEMPTION for bin/lib/paths.ts (lands Phase 1, Wave 1) ===
+  {
+    files: ['bin/lib/paths.ts'],
+    rules: { 'no-restricted-syntax': 'off' },
+  },
+
   // === Red-team fixture exemption (D-08) ===
   // The fixture INTENTIONALLY violates both chokepoints. It is executed
   // by tests/lint-chokepoint.test.ts which runs ESLint programmatically
   // and asserts both errors are flagged. Project lint must NOT see it.
   {
-    ignores: ['tests/fixtures/lint-chokepoint-fixture.ts', 'dist/**', 'node_modules/**'],
+    ignores: [
+      'tests/fixtures/lint-chokepoint-fixture.ts',
+      'tests/fixtures/lint-atomic-write-chokepoint-fixture.ts',
+      'tests/fixtures/lint-paths-chokepoint-fixture.ts',
+      'dist/**',
+      'node_modules/**',
+    ],
   },
 
   // === CommonJS validator script exemption (D-17) ===
