@@ -127,22 +127,27 @@ export default [
 
   // === Path chokepoint EXEMPTION for tests/session-log.test.ts (Wave 9) +
   //     tests/state.test.ts (Wave 10) + tests/library.test.ts (Wave 10) +
-  //     tests/checkpoint.test.ts (Wave 10) ===
-  // All four files MUST override process.env.LOCALAPPDATA / XDG_DATA_HOME /
+  //     tests/checkpoint.test.ts (Wave 10) + tests/runtime.test.ts (Wave 11) ===
+  // All five files MUST override process.env.LOCALAPPDATA / XDG_DATA_HOME /
   // HOME to redirect pensmithDataDir() into a per-test tmpdir for isolation —
   // same pattern as tests/http.test.ts and tests/http-cache.test.ts.
-  // tests/state.test.ts, tests/library.test.ts, and tests/checkpoint.test.ts
-  // all use the override so the session-log singleton inside bin/lib/state.ts,
-  // bin/lib/library.ts, and bin/lib/checkpoint.ts (lazy-init at first .event()
-  // call) resolves into the per-test tmpdir instead of the host's real
-  // pensmithDataDir.
-  // Scoped to these four files only.
+  // tests/state.test.ts, tests/library.test.ts, tests/checkpoint.test.ts, and
+  // tests/runtime.test.ts all use the override so the session-log singleton
+  // inside bin/lib/state.ts, bin/lib/library.ts, bin/lib/checkpoint.ts, and
+  // bin/lib/runtime.ts (lazy-init at first .event() call) resolves into the
+  // per-test tmpdir instead of the host's real pensmithDataDir.
+  // tests/runtime.test.ts ALSO needs the override because runtime.ts persists
+  // its global runtime.json under pensmithDataDir() — without redirecting
+  // LOCALAPPDATA the test would clobber the user's real runtime.json (or
+  // worse, fail with EACCES on a sealed sysdir).
+  // Scoped to these five files only.
   {
     files: [
       'tests/session-log.test.ts',
       'tests/state.test.ts',
       'tests/library.test.ts',
       'tests/checkpoint.test.ts',
+      'tests/runtime.test.ts',
     ],
     rules: {
       'no-restricted-syntax': 'off',
