@@ -61,8 +61,8 @@ Plans:
 - Wave 0: 01-00 (prep)
 - Wave 1: 01-01 (paths)
 - Wave 2: 01-02 (atomic-write)
-- Wave 3: 01-03 (lock), 01-07 (migrations + 5 schemas) — parallel
-- Wave 4: 01-04 (doi), 01-05 (http), 01-06 (budget), 01-08 (pii) — parallel
+- Wave 3: 01-03 (lock)
+- Wave 4: 01-04 (doi), 01-05 (http), 01-06 (budget), 01-07 (migrations + 5 schemas), 01-08 (pii) — parallel
 - Wave 9: 01-09 (session-log)
 - Wave 10: 01-10 (state), 01-11 (library), 01-12 (checkpoint) — parallel
 - Wave 11: 01-13 (runtime)
