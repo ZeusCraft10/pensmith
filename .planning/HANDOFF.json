@@ -1,41 +1,86 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-07T03:33:43Z",
+  "timestamp": "2026-05-08T22:00:00Z",
   "phase": "1",
   "phase_name": "Foundation NFRs",
   "phase_dir": ".planning/phases/01-foundation-nfrs",
-  "plan": null,
-  "task": null,
-  "total_tasks": null,
+  "plan": "01-01",
+  "task": "tests/paths.test.ts + quality gates + atomic commit + 01-01-SUMMARY.md",
+  "total_tasks": 14,
   "status": "paused",
-  "stage": "discuss-phase complete; plan-phase pending",
+  "stage": "execute-phase Wave 1 paused mid-plan; fresh-session resume required",
+  "reason": "two consecutive gsd-executor failures on Wave 1 (Stream idle timeout, then Internal server error); user selected 'Pause and resume in fresh session'",
   "completed_tasks": [
     {
       "id": "discuss-phase",
-      "name": "Auto-generate CONTEXT.md and DISCUSSION-LOG.md (--auto mode)",
+      "name": "Auto-generated CONTEXT.md and DISCUSSION-LOG.md (--auto mode)",
       "status": "done",
-      "commit": null,
-      "note": "Artifacts written but uncommitted at pause time"
-    }
-  ],
-  "remaining_tasks": [
-    {
-      "id": "plan-phase",
-      "name": "Run /gsd-plan-phase 1 --auto",
-      "status": "not_started"
+      "commit": "e18ba91"
     },
     {
-      "id": "execute-phase",
-      "name": "Execute the 13-library Foundation slice in strict dep order",
-      "status": "not_started"
+      "id": "plan-phase",
+      "name": "14 PLAN.md files, RESEARCH.md, VALIDATION.md, PATTERNS.md, 01-GAPS.md (4 revision iterations PASSED)",
+      "status": "done",
+      "commit": "6e70b9c + 6592ba7"
+    },
+    {
+      "id": "01-00",
+      "name": "Wave 0 prep (CI Node 20.18, deps, chokepoints, fixtures, locked WARN copy)",
+      "status": "done",
+      "commits": ["2e109dc", "f3569c3", "f1842e7"]
     }
+  ],
+  "in_progress_tasks": [
+    {
+      "id": "01-01",
+      "name": "paths.ts — cross-platform LOCALAPPDATA/Library/XDG_DATA_HOME + slugify + projectHash + isInsideSyncFolder + sectionDir",
+      "status": "checkpoint_committed_unverified",
+      "recovery_commit": "a507cd7",
+      "files_written": ["bin/lib/paths.ts (208 lines)"],
+      "files_pending": [
+        "tests/paths.test.ts (per 01-01-PLAN.md success criteria)",
+        ".planning/phases/01-foundation-nfrs/01-01-SUMMARY.md"
+      ],
+      "verification_pending": [
+        "Spot-check bin/lib/paths.ts against 01-01-PLAN.md spec (10 exports, OneDrive list, slugify edges, projectHash hex length, sectionDir bounds)",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test"
+      ]
+    }
+  ],
+  "remaining_waves": [
+    {"wave": 2, "plans": ["01-02"], "title": "atomic-write.ts (D-07 chokepoint, Win32 fsync(dirfd) guard)"},
+    {"wave": 3, "plans": ["01-03", "01-07"], "title": "lock.ts (proper-lockfile CJS shim) + migrations + 5 zod schemas"},
+    {"wave": 4, "plans": ["01-04", "01-05", "01-06", "01-08"], "title": "doi + http + budget + pii (parallel)"},
+    {"wave": 9, "plans": ["01-09"], "title": "session-log.ts (D-49 8-kind records, 50MB rotation, 16KB spillover)"},
+    {"wave": 10, "plans": ["01-10", "01-11", "01-12"], "title": "state + library + checkpoint (parallel)"},
+    {"wave": 11, "plans": ["01-13"], "title": "runtime.ts (structural-only tests, OPENALEX_API_KEY slot)"}
   ],
   "blockers": [],
   "human_actions_pending": [
     {
-      "action": "Commit CONTEXT.md, DISCUSSION-LOG.md, STATE.md update",
-      "context": "Phase 1 discuss-phase artifacts must land before plan-phase",
+      "action": "Run /clear, then /gsd-execute-phase 1 --auto --no-transition",
+      "context": "Fresh context avoids the Stream idle timeouts that killed the last two executor subagents. Wave 0 commits are intact; Wave 1 paths.ts is checkpoint-committed at a507cd7 and the next session picks up from writing tests for it.",
       "blocking": true
+    }
+  ],
+  "executor_failure_log": [
+    {
+      "attempt": 1,
+      "plan": "01-01",
+      "error": "API Error: Stream idle timeout - partial response received",
+      "duration_minutes": 7.5,
+      "tool_uses": 23,
+      "outcome": "bin/lib/paths.ts written (208 lines), no tests, no commit"
+    },
+    {
+      "attempt": 2,
+      "plan": "01-01",
+      "error": "API Error: Internal server error",
+      "duration_minutes": 3.7,
+      "tool_uses": 15,
+      "outcome": "no progress; scripts/.verify-paths.mjs leftover (deleted in this handoff)"
     }
   ],
   "decisions": [
@@ -45,31 +90,24 @@
       "phase": "1"
     },
     {
-      "decision": "Atomic write contract: write tmp -> fsync(tmp) -> rename -> fsync(dir); chokepoint lint bans direct fs.writeFile outside bin/lib/atomic-write.ts",
-      "rationale": "PRD §14 + Pitfall 4 — dir-fsync is the silent-data-loss landmine on sync-folder pause",
+      "decision": "Lock file + local-only data live at %LOCALAPPDATA%/~/Library/Application Support/$XDG_DATA_HOME — NEVER inside .paper/",
+      "rationale": "OneDrive non-negotiable (CLAUDE.md); dev folder is inside OneDrive and would eat in-.paper locks/state",
       "phase": "1"
     },
     {
-      "decision": "Lock file lives at LOCAL_DATA_DIR/pensmith/locks/${sha256(path).slice(0,16)}.lock — never inside .paper/",
-      "rationale": "OneDrive non-negotiable (CLAUDE.md); dev folder is inside OneDrive and would eat in-.paper locks",
-      "phase": "1"
-    },
-    {
-      "decision": "DOI normalization: single chokepoint, ordered spec, ASCII-only case-fold, both canonical+as-cited stored, fast-check property test",
-      "rationale": "PRD §14 + Pitfall 2 + DOI Handbook (10.123/ABÇ ≠ 10.123/abç)",
-      "phase": "1"
-    },
-    {
-      "decision": "HTTP client: undici@^7 + p-retry@^6 + per-source TTL disk cache + per-source rate-limit floors + WARN-once on missing PENSMITH_CONTACT_EMAIL",
-      "rationale": "STACK.md verdict; node-fetch/axios/got explicitly rejected; PRD §12 says free basics work without email",
+      "decision": "session-log records use D-49 shape: {at, kind, run_id, ...payload} with 8 kinds (prompt/response/tool_call/tool_result/cost/event/warn/error)",
+      "rationale": "VALIDATION.md line 941 + Plan 09 iteration-4 rewrite; consumers in plans 10/11/12/13 use log().event({...}) not log().info(...)",
       "phase": "1"
     }
   ],
-  "uncommitted_files": [
-    ".planning/phases/01-foundation-nfrs/01-CONTEXT.md",
-    ".planning/phases/01-foundation-nfrs/01-DISCUSSION-LOG.md",
-    ".planning/STATE.md"
+  "punch_list_summary": [
+    "OneDrive landmine: lock file + local-only data MUST go to platform-local dirs, NEVER inside .paper/.",
+    "p-retry@^6 ships equal-jitter; D-31 requires full-jitter — Plan 05 includes shim.",
+    "Windows fsync(dirfd) guard: Plan 02 atomic-write must catch EPERM and fall through.",
+    "proper-lockfile is CJS-only — Plan 03 uses createRequire shim.",
+    "Session-log records have NO $schemaVersion field — Plan 07 schema is passthrough."
   ],
-  "next_action": "Commit Phase 1 discuss-phase artifacts, then run /gsd-plan-phase 1 --auto",
-  "context_notes": "Phase 0 (Repo skeleton) shipped 2026-05-07 with 4/4 plans green and CI matrix passing 18/18. STATE.md still shows Phase 0 100% — needs update to mark Phase 0 closed and Phase 1 discuss-phase done. Discuss-phase ran in --auto mode, so all gray areas were resolved with recommended defaults (see DISCUSSION-LOG.md for the alternatives considered). Planner can proceed without re-prompting."
+  "uncommitted_files": [],
+  "next_action": "Run /clear, then /gsd-execute-phase 1 --auto --no-transition. The executor will see paths.ts already committed at a507cd7 and resume by writing tests/paths.test.ts.",
+  "context_notes": "Phase 0 closed (4/4 plans, CI green). Phase 1 plan-phase verified PASSED after 4 revision iterations (B1-B10 + W1-W7 all resolved). Wave 0 (01-00) executed cleanly with 3 atomic commits. Wave 1 hit two consecutive infrastructure failures (Stream idle timeout #2410 pattern) so we paused and recovery-committed paths.ts as wip(01-01). All 5 soft findings from 01-GAPS.md remain non-blocking. See .planning/phases/01-foundation-nfrs/01-GAPS.md pre-execute punch list before resuming."
 }

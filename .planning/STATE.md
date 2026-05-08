@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: context exhaustion at 81% (2026-05-07)
-last_updated: "2026-05-08T20:00:00.000Z"
-last_activity: 2026-05-08 -- Phase 01 plan-phase complete (14 plans, 4 revision iterations)
+stopped_at: Wave 1 paused — two consecutive subagent stream idle timeouts (2026-05-08)
+last_updated: "2026-05-08T22:00:00.000Z"
+last_activity: 2026-05-08 -- Phase 01 Wave 0 executed (3 commits); Wave 1 paths.ts recovery-committed (untested), paused for fresh-session resume
 progress:
   total_phases: 11
   completed_phases: 1
   total_plans: 32
-  completed_plans: 4
-  percent: 12
+  completed_plans: 5
+  percent: 15
 ---
 
 # Project State
@@ -25,17 +25,17 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 ## Current Position
 
-Phase: 1 of 11 (Foundation NFRs) — PLAN-PHASE COMPLETE, ready to execute
-Plan: 0/14 (Wave 0 prep + 13 Ring-1 libs in strict dep order; verified PASSED after 4 revision iterations)
-Status: Ready to execute
-Last activity: 2026-05-08 -- Phase 01 plan-phase complete (14 plans, 4 revision iterations)
+Phase: 1 of 11 (Foundation NFRs) — EXECUTING (Wave 0 done, Wave 1 paused)
+Plan: 1/14 complete (01-00 wave 0); 01-01 paths.ts checkpoint-committed but UNTESTED
+Status: Paused — fresh-session resume required (two consecutive subagent stream timeouts on Wave 1)
+Last activity: 2026-05-08 -- Wave 0 executed (3 commits: 2e109dc, f3569c3, f1842e7); Wave 1 paths.ts recovery-committed (a507cd7)
 
-Progress: [█░░░░░░░░░] 12%  (Phase 0 of 11 complete; Phase 1 plan-phase done, execute-phase pending)
+Progress: [█░░░░░░░░░] 15%  (Phase 0 done; Phase 1 Wave 0 done, Wave 1 paused mid-execution)
 
 Plan files (depends_on order):
 
-- 01-00 (wave 0) — Wave 0 prep (CI Node 20.10→20.18, deps, chokepoints, fixtures, locked WARN copy)
-- 01-01 (wave 1) — paths.ts (cross-platform LOCALAPPDATA / ~/Library / XDG_DATA_HOME)
+- 01-00 (wave 0) — ✅ DONE — Wave 0 prep (CI Node 20.10→20.18, deps, chokepoints, fixtures, locked WARN copy) — commits 2e109dc/f3569c3/f1842e7
+- 01-01 (wave 1) — 🟡 PAUSED — paths.ts (208 lines, recovery-committed at a507cd7, NOT verified; tests/paths.test.ts pending)
 - 01-02 (wave 2) — atomic-write.ts (D-07 chokepoint; Win32 fsync(dirfd) guard)
 - 01-03 (wave 3) — lock.ts (proper-lockfile@^4 CJS shim + heartbeat)
 - 01-04 (wave 4) — doi.ts (fast-check property test; doi_canonical + doi_as_cited)
