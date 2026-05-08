@@ -27,8 +27,7 @@ export const ProviderSchema = z.object({
 
 export const Schema = z.object({
   $schemaVersion: z.literal(CURRENT_RUNTIME_CONFIG_VERSION),
-  providers: z
-    .record(z.string(), ProviderSchema)
+  providers: z.record(z.string(), ProviderSchema)
     .refine((p) => Object.keys(p).length >= 1, 'at least one provider required'),
   openalexApiKeyEnv: z.string().default('OPENALEX_API_KEY'),
   openalexApiKeyOptional: z.boolean().default(true),
