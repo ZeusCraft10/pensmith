@@ -14,12 +14,29 @@
     "build": "tsc",
     "dev": "tsx",
     "validate:manifests": "node scripts/validate-plugin-manifest.cjs",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run validate:manifests"
+    "check": "npm run lint && npm run typecheck && npm run test && npm run validate:manifests",
+    "coverage": "c8 node scripts/run-tests.mjs"
   },
   "files": ["dist/", "skills/", "agents/", "workflows/", "templates/", "references/", "hooks/", ".claude-plugin/", ".mcp.json", "README.md", "PRIVACY.md", "LICENSE"],
+  "dependencies": {
+    "undici": "^7",
+    "p-retry": "^6",
+    "proper-lockfile": "^4",
+    "zod": "^3.23",
+    "smol-toml": "^1.6.1",
+    "doi-regex": "^0.1.17",
+    "@anthropic-ai/sdk": "^0.93",
+    "openai": "^4",
+    "@modelcontextprotocol/sdk": "^1.29",
+    "@clack/prompts": "^0.7"
+  },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@types/proper-lockfile": "^4",
+    "c8": "^11.0.0",
     "eslint": "^9.0.0",
+    "fast-check": "^3",
+    "nock": "^14",
     "tsx": "^4.0.0",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.0.0"
