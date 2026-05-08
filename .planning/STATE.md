@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: in_progress
-stopped_at: paused after Phase 1 discuss-phase (--auto), pre-plan-phase (2026-05-07)
-last_updated: "2026-05-07T03:33:43Z"
-last_activity: "2026-05-07 — Phase 1 discuss-phase complete in --auto mode (CONTEXT.md + DISCUSSION-LOG.md generated; 13-lib Foundation slice scoped); paused for commit before /gsd-plan-phase 1 --auto"
+status: executing
+stopped_at: context exhaustion at 81% (2026-05-07)
+last_updated: "2026-05-08T20:00:00.000Z"
+last_activity: 2026-05-08 -- Phase 01 plan-phase complete (14 plans, 4 revision iterations)
 progress:
   total_phases: 11
   completed_phases: 1
-  total_plans: 4
+  total_plans: 32
   completed_plans: 4
-  percent: 9
+  percent: 12
 ---
 
 # Project State
@@ -25,12 +25,29 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 ## Current Position
 
-Phase: 1 of 11 (Foundation NFRs) — DISCUSS-PHASE COMPLETE, plan-phase pending
-Plan: 0/? (planner not yet run — expected ≥13 plans, one per Ring-1 library in strict dep order)
-Status: Paused after `/gsd-discuss-phase 1 --auto` — CONTEXT.md + DISCUSSION-LOG.md generated; ready for `/gsd-plan-phase 1 --auto`
-Last activity: 2026-05-07 — Phase 1 discuss-phase complete (--auto mode); 13-lib Foundation slice scoped; chokepoint contracts decided (atomic-write, lock placement, DOI normalization, HTTP client)
+Phase: 1 of 11 (Foundation NFRs) — PLAN-PHASE COMPLETE, ready to execute
+Plan: 0/14 (Wave 0 prep + 13 Ring-1 libs in strict dep order; verified PASSED after 4 revision iterations)
+Status: Ready to execute
+Last activity: 2026-05-08 -- Phase 01 plan-phase complete (14 plans, 4 revision iterations)
 
-Progress: [█░░░░░░░░░] 9%  (Phase 0 of 11 complete; Phase 1 discuss-phase done, plan-phase pending)
+Progress: [█░░░░░░░░░] 12%  (Phase 0 of 11 complete; Phase 1 plan-phase done, execute-phase pending)
+
+Plan files (depends_on order):
+
+- 01-00 (wave 0) — Wave 0 prep (CI Node 20.10→20.18, deps, chokepoints, fixtures, locked WARN copy)
+- 01-01 (wave 1) — paths.ts (cross-platform LOCALAPPDATA / ~/Library / XDG_DATA_HOME)
+- 01-02 (wave 2) — atomic-write.ts (D-07 chokepoint; Win32 fsync(dirfd) guard)
+- 01-03 (wave 3) — lock.ts (proper-lockfile@^4 CJS shim + heartbeat)
+- 01-04 (wave 4) — doi.ts (fast-check property test; doi_canonical + doi_as_cited)
+- 01-05 (wave 4) — http.ts (undici@^7 + p-retry full-jitter shim + per-source TokenBucket + 8 cassettes)
+- 01-06 (wave 4) — budget.ts (assertBudget BEFORE LLM + Semaphore + wouldYoloRefuse)
+- 01-07 (wave 3) — migrations + 5 zod schemas (state, library, checkpoint, session-log, runtime-config)
+- 01-08 (wave 4) — pii.ts (cross-platform os.tmpdir())
+- 01-09 (wave 9) — session-log.ts (D-49 kind-discriminated records, 50MB rotation, 16KB oversize spillover, setMirrorPromptsToStderr)
+- 01-10 (wave 10) — state.ts (loadAndMigrate + log.event)
+- 01-11 (wave 10) — library.ts (JSON v0.1)
+- 01-12 (wave 10) — checkpoint.ts (atomic write/read primitives)
+- 01-13 (wave 11) — runtime.ts (structural-only tests; OPENALEX_API_KEY slot)
 
 See `.planning/phases/01-foundation-nfrs/.continue-here.md` and `.planning/HANDOFF.json` for full handoff.
 

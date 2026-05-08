@@ -1304,24 +1304,25 @@ test('normalizeDoi is idempotent', () => {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should `package.json` engines be updated to `>=20.18.0`?**
-   - What we know: undici@7 + nock@14 require Node 20.18+; current engines says 20.10+
-   - What's unclear: whether engines reflects CI requirement or user-facing minimum
-   - Recommendation: Keep 20.10 in engines (user-facing minimum), bump CI only; add TODO comment in package.json
+All Phase 1 open questions are resolved below; resolutions are locked into the plan set (no further deliberation in plan-phase).
 
-2. **Is `p-retry@^6` or `^8` preferred?**
-   - What we know: D-64 says `^6`; v8 is current on npm; API is compatible
-   - What's unclear: whether v6 is intentionally pinned for stability or was just current at research time
-   - Recommendation: Use `^6` as locked; note that `^8` is a drop-in upgrade if v8-specific features are ever needed
+1. **Should `package.json` engines be updated to `>=20.18.0`?** — RESOLVED
+   - **Decision:** Keep `engines.node: ">=20.10.0"` as the user-facing minimum runtime; bump only CI (Node 20.18) so the matrix can install undici@7 / nock@14 / clack@1. The two values document distinct contracts: `engines` documents what pensmith is willing to run on after install; CI documents what we test against.
+   - **Locked in:** 01-00-PLAN.md Task 1 Step 1.5 ("DO NOT touch `engines.node`"). Step 1.1 bumps CI to `'20.18'` only.
 
-3. **Should `doi-regex@^0.1.17` be `^0.1.17` or exact pin?**
-   - What we know: The package is very low-change (last published 2024-06-14); 0.1.x minor versions only
-   - Recommendation: `^0.1.17` caret is fine; the package is stable
+2. **Is `p-retry@^6` or `^8` preferred?** — RESOLVED
+   - **Decision:** Use `^6` as specified in D-64. Phase 1 implements its own full-jitter shim in `bin/lib/retry.ts` (RESEARCH §RQ-9) and does NOT actually depend on p-retry's runtime API today; the package is installed for downstream consumers (Phase 2+) who may want to call it directly. v8 would be a drop-in upgrade later if a specific feature is needed.
+   - **Locked in:** 01-00-PLAN.md Task 1 Step 1.2(b) pins `"p-retry": "^6"`. 01-05-PLAN.md Task 1 implements the full-jitter shim without importing p-retry.
 
-4. **nock v14 lockdown mode: validate immediately or wait for failures?**
-   - Recommendation: First cassette test in Phase 1 should verify lockdown mode works. If #2806 regression persists, file a note in `tests/http.test.ts` and use per-file nockBack cleanup.
+3. **Should `doi-regex@^0.1.17` be `^0.1.17` or exact pin?** — RESOLVED
+   - **Decision:** Use the caret form `^0.1.17`. The package has had only patch-level releases since first publish; risk of breakage from `^` is negligible and matches the rest of the dependency block style.
+   - **Locked in:** 01-00-PLAN.md Task 1 Step 1.2(b) pins `"doi-regex": "^0.1.17"`.
+
+4. **nock v14 lockdown mode: validate immediately or wait for failures?** — RESOLVED
+   - **Decision:** Validate IMMEDIATELY in Phase 1. The first http.ts test (`tests/http.test.ts` lockdown-mode case) calls `fetch('https://example.invalid/x')` with NO MockAgent installed and asserts a network error is thrown. This proves nock@14 + undici MockAgent's `disableNetConnect()` is wired correctly before any further work depends on it. If lockdown regression #2806 fires under nock 14.0.15, the test will fail loudly in Wave 4 — fix forward there rather than deferring.
+   - **Locked in:** 01-05-PLAN.md Task 3 Step 3.6 ("Lockdown mode assertion") and Task 3 acceptance criterion `npm test exits 0 with PENSMITH_NETWORK_TESTS unset (lockdown mode active)`.
 
 ---
 
