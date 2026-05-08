@@ -125,6 +125,18 @@ export default [
     },
   },
 
+  // === Path chokepoint EXEMPTION for tests/session-log.test.ts (Wave 9) ===
+  // tests/session-log.test.ts MUST override process.env.LOCALAPPDATA /
+  // XDG_DATA_HOME / HOME to redirect pensmithDataDir() into a per-test tmpdir
+  // for isolation — same pattern as tests/http.test.ts and tests/http-cache.test.ts.
+  // Scoped to this single file.
+  {
+    files: ['tests/session-log.test.ts'],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
+
   // === Red-team fixture exemption (D-08) ===
   // The fixture INTENTIONALLY violates both chokepoints. It is executed
   // by tests/lint-chokepoint.test.ts which runs ESLint programmatically
