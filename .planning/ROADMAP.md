@@ -69,19 +69,19 @@ Plans:
 
 Plans:
 
-- [ ] 01-00-PLAN.md (wave 0) — CI Node 20.18 bump + 11 runtime + 4 dev deps + D-07/D-41 chokepoint rules + red-team fixtures + http-warnings copy + DOI corpus (REPO-04 carry-over, ARCH-12, TEST-11)
-- [ ] 01-01-PLAN.md (wave 1) — bin/lib/paths.ts (10 exports) + tests (ARCH-08, TEST-05, TEST-11)
-- [ ] 01-02-PLAN.md (wave 2) — bin/lib/atomic-write.ts + Win32 fsync(dirFd) guard + EXDEV fallback + tests (ARCH-05, TEST-05, TEST-11)
-- [ ] 01-03-PLAN.md (wave 3) — bin/lib/lock.ts via proper-lockfile CJS createRequire shim + cross-process serialization test (ARCH-06, TEST-05, TEST-07, TEST-11)
-- [ ] 01-04-PLAN.md (wave 4) — bin/lib/doi.ts (8 exports) + fast-check property test for idempotence (ARCH-15, TEST-05, TEST-06, TEST-11)
-- [ ] 01-05-PLAN.md (wave 4) — bin/lib/http.ts undici@7 + p-retry full-jitter shim + 8 cassettes + per-source TokenBucket (ARCH-12, ARCH-13, TEST-05, TEST-11)
-- [ ] 01-06-PLAN.md (wave 4) — bin/lib/budget.ts assertBudget pre-call gate + appendCost via O_APPEND + Semaphore + cost-fixture (ARCH-09, ARCH-10, ARCH-11, TEST-05, TEST-08, TEST-11)
-- [ ] 01-07-PLAN.md (wave 3) — bin/lib/migrations/loader.ts + ForwardIncompatError + 5 zod schemas (state/library/checkpoint/session-log/runtime-config) (ARCH-07, TEST-05, TEST-11)
-- [ ] 01-08-PLAN.md (wave 4) — bin/lib/pii.ts redactPii/redactKeys/classifyPii hand-rolled regex (ARCH-17, TEST-05, TEST-11)
-- [ ] 01-09-PLAN.md (wave 9) — bin/lib/session-log.ts D-49 kind-discriminated JSONL + 50MB rotation + 16KB oversize spillover + setMirrorPromptsToStderr (ARCH-16, TEST-05, TEST-11)
-- [ ] 01-10-PLAN.md (wave 10) — bin/lib/state.ts load/save/update/init under withLock (TEST-05, TEST-11)
-- [ ] 01-11-PLAN.md (wave 10) — bin/lib/library.ts addEntry duplicate-id-guarded under withLock (TEST-05, TEST-11)
-- [ ] 01-12-PLAN.md (wave 10) — bin/lib/checkpoint.ts atomic write/read primitives + tolerant reader for forward-version skip (TEST-05, TEST-11)
+- [x] 01-00-PLAN.md (wave 0) — CI Node 20.18 bump + 11 runtime + 4 dev deps + D-07/D-41 chokepoint rules + red-team fixtures + http-warnings copy + DOI corpus (REPO-04 carry-over, ARCH-12, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-01-PLAN.md (wave 1) — bin/lib/paths.ts (10 exports) + tests (ARCH-08, TEST-05, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-02-PLAN.md (wave 2) — bin/lib/atomic-write.ts + Win32 fsync(dirFd) guard + EXDEV fallback + tests (ARCH-05, TEST-05, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-03-PLAN.md (wave 3) — bin/lib/lock.ts via proper-lockfile CJS createRequire shim + cross-process serialization test (ARCH-06, TEST-05, TEST-07, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-04-PLAN.md (wave 4) — bin/lib/doi.ts (8 exports) + fast-check property test for idempotence (ARCH-15, TEST-05, TEST-06, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-05-PLAN.md (wave 4) — bin/lib/http.ts undici@7 + p-retry full-jitter shim + 8 cassettes + per-source TokenBucket (ARCH-12, ARCH-13, TEST-05, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-06-PLAN.md (wave 4) — bin/lib/budget.ts assertBudget pre-call gate + appendCost via O_APPEND + Semaphore + cost-fixture (ARCH-09, ARCH-10, ARCH-11, TEST-05, TEST-08, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-07-PLAN.md (wave 3) — bin/lib/migrations/loader.ts + ForwardIncompatError + 5 zod schemas (state/library/checkpoint/session-log/runtime-config) (ARCH-07, TEST-05, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-08-PLAN.md (wave 4) — bin/lib/pii.ts redactPii/redactKeys/classifyPii hand-rolled regex (ARCH-17, TEST-05, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-09-PLAN.md (wave 9) — bin/lib/session-log.ts D-49 kind-discriminated JSONL + 50MB rotation + 16KB oversize spillover + setMirrorPromptsToStderr (ARCH-16, TEST-05, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-10-PLAN.md (wave 10) — bin/lib/state.ts load/save/update/init under withLock (TEST-05, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-11-PLAN.md (wave 10) — bin/lib/library.ts addEntry duplicate-id-guarded under withLock (TEST-05, TEST-11) — COMPLETE 2026-05-08
+- [x] 01-12-PLAN.md (wave 10) — bin/lib/checkpoint.ts atomic write/read primitives + tolerant reader for forward-version skip (TEST-05, TEST-11) — COMPLETE 2026-05-08
 - [ ] 01-13-PLAN.md (wave 11) — bin/lib/runtime.ts SDK provider chokepoint + OPENALEX_API_KEY slot + bin/lib/pricing.ts MODEL_PRICES (ARCH-14, TEST-05, TEST-11)
 **UI hint**: no
 
@@ -203,7 +203,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Repo skeleton & plugin manifest | 4/4 | COMPLETE | 2026-05-07 |
-| 1. Foundation NFRs | 0/14 | Not started | - |
+| 1. Foundation NFRs | 13/14 | In flight (Wave 11 remaining) | - |
 | 2. Tier shells + doctor + tier-contract gate | 0/TBD | Not started | - |
 | 3. Vertical slice through one section | 0/TBD | Not started | - |
 | 4. Breadth — N sections + compile + wave scheduling | 0/TBD | Not started | - |

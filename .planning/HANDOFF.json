@@ -1,15 +1,15 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-08T23:30:00Z",
+  "timestamp": "2026-05-08T23:55:00Z",
   "phase": "1",
   "phase_name": "Foundation NFRs",
   "phase_dir": ".planning/phases/01-foundation-nfrs",
-  "plan": "01-12",
-  "task": "checkpoint.ts atomic write/read primitives — third Wave 10 sibling",
+  "plan": "01-13",
+  "task": "runtime.ts SDK provider chokepoint + OPENALEX_API_KEY slot + bin/lib/pricing.ts MODEL_PRICES — final Phase 1 plan",
   "total_tasks": 14,
   "status": "in_flight",
-  "stage": "Wave 10 mid-execution; 01-10 (state) and 01-11 (library) shipped; 01-12 (checkpoint) next",
-  "reason": "Phase 1 reconciliation pass after forensic audit found STATE/HANDOFF/.continue-here drift. Library.ts (3a2e83c) and tests (fe430e3) and SUMMARY (9ee0aac) committed in this pass. Checkpoint.ts is the third Wave 10 sibling and shares no files with state or library.",
+  "stage": "Wave 10 complete (state + library + checkpoint shipped); only Wave 11 (runtime) remains in Phase 1",
+  "reason": "Wave 10 sibling C (checkpoint.ts) shipped this session. Public API honors W7 schema (refs Record<string, string>) per user ruling on Plan vs Schema decision. D-60 audit-log carve-out from D-39 documented; tolerant reader skips bad/forward-versioned lines with one WARN per call. 9 new tests; 203 total pass on Windows.",
   "completed_tasks": [
     {
       "id": "discuss-phase",
@@ -94,18 +94,23 @@
       "name": "library.ts D-59 paper-library load/save/add/find glue (8 tests; 10-concurrent-disjoint-id regression gate)",
       "status": "done",
       "commits": ["3a2e83c", "fe430e3", "9ee0aac"]
+    },
+    {
+      "id": "01-12",
+      "name": "checkpoint.ts D-60 append-only audit log (9 tests; 10-concurrent regression gate; D-60 carve-out from D-39 forward-skip read path)",
+      "status": "done",
+      "commits": ["2dd174b", "24a0200"]
     }
   ],
   "in_progress_tasks": [],
   "remaining_waves": [
-    {"wave": 10, "plans": ["01-12"], "title": "checkpoint.ts (atomic write/read primitives — third Wave 10 sibling, parallel-safe with done 01-10/01-11)"},
     {"wave": 11, "plans": ["01-13"], "title": "runtime.ts (structural-only tests, OPENALEX_API_KEY slot)"}
   ],
   "blockers": [],
   "human_actions_pending": [
     {
-      "action": "Run /gsd-execute-phase 1 (or /gsd-execute-plan 01-12) to ship 01-12 checkpoint.ts",
-      "context": "Wave 10 has three parallel-safe siblings (01-10 state, 01-11 library, 01-12 checkpoint). The first two are done. 01-12 has the same chokepoint composition (W2+W3+W7+W9) and the W11 SUMMARY documents the verbatim pattern to copy. Tests=194 currently pass; expect 01-12 to add another ~6-8 tests.",
+      "action": "Run /gsd-execute-phase 1 (or /gsd-execute-plan 01-13) to ship 01-13 runtime.ts — the final Phase 1 plan",
+      "context": "Wave 11 is a single plan (runtime.ts), depends_on 01-07 (schemas) and 01-09 (session-log) only. Patterns established by W10 (state) / W11 (library) / W12 (checkpoint) generalize to the runtime composition. Tests=203 currently pass; expect 01-13 to add ~5-8 structural tests (no SDK live calls — config-loader-only).",
       "blocking": true
     }
   ],
@@ -146,13 +151,28 @@
       "phase": "1"
     },
     {
-      "decision": "Wave 10 chokepoint composition idiom is now demonstrated under TWO different schema shapes (W10 state.ts: 3-fixed-fields with weakened concurrency assertion; W11 library.ts: unbounded entries[] with full N-concurrent-survivors assertion)",
-      "rationale": "Proves the W2+W3+W7+W9 pattern generalizes. W12 checkpoint.ts can copy the W11 SUMMARY's pattern block verbatim.",
+      "decision": "Wave 10 chokepoint composition idiom is now demonstrated under THREE different schema shapes (W10 state.ts: 3-fixed-fields with weakened concurrency assertion; W11 library.ts: unbounded entries[] with full N-concurrent-survivors assertion; W12 checkpoint.ts: append-only JSONL with tolerant-skip read path)",
+      "rationale": "Proves the W2+W3+W7+W9 pattern generalizes across read-mutate-write, read-check-mutate-write, AND pure-append shapes. W13 runtime.ts can adopt whichever of the three shapes its config-loader needs.",
       "phase": "1"
     },
     {
       "decision": "Duplicate-id refusal in addEntry is a hard semantics guarantee, not a soft retry-able one",
       "rationale": "withLock already serializes contention; a duplicate-id error means a real semantic conflict, not contention. Phase 3 callers must catch DuplicateLibraryEntryError explicitly and decide whether to log+no-op or surface.",
+      "phase": "1"
+    },
+    {
+      "decision": "D-60 carve-out from D-39 — append-only audit log (CHECKPOINTS.jsonl) reads via CheckpointSchema.safeParse and SKIPS bad/forward-versioned lines with one WARN per call",
+      "rationale": "This is the SOLE Phase-1 exception to refuse-forward-incompat. Justified by the append-only semantic: skipping never causes data loss; older readers see only the lines they understand; bytes on disk are unchanged whether we skip or throw. State and library remain authoritative (refuse-forward) because they are not append-only.",
+      "phase": "1"
+    },
+    {
+      "decision": "Plan vs Schema reconciliation (user ruling on 01-12 decision checkpoint) — public API of recordCheckpoint honors W7 schema (refs?: Record<string, string>) over plan text (Record<string, unknown>)",
+      "rationale": "W7 schema is locked at z.record(z.string(), z.string()). Typing the public API as Record<string, unknown> would have meant runtime parse() rejection of values the API accepted — a contract mismatch. User ruled to honor the schema; foundation-slice carry-forward note softened to allow future broadening via versioned migration.",
+      "phase": "1"
+    },
+    {
+      "decision": "Concurrency budget — checkpoint test 6 uses N=10 not N=20 (Rule 1 deviation)",
+      "rationale": "W3 default exponential-backoff retry schedule (factor=1.5, retries=16) cannot accommodate 20+ concurrent contenders on Windows + OneDrive within the default 60s timeoutMs. N=10 matches W11 sibling exactly; production concurrency profile is comfortably below this threshold (Phase 5+ verifier-fanout fires at most a handful per workflow step).",
       "phase": "1"
     }
   ],
