@@ -124,13 +124,17 @@ export default [
     ],
   },
 
-  // === CommonJS validator script exemption (D-17) ===
+  // === CommonJS validator script + test-helper exemption (D-17) ===
   // scripts/validate-plugin-manifest.cjs is intentionally CommonJS (uses require())
   // because package.json has "type":"module" — the .cjs extension is mandatory so
   // Node loads it as CJS. The @typescript-eslint/no-require-imports rule must be
   // disabled for this file only.
+  //
+  // tests/lock-conflict.cjs (W3, lock conflict spawn helper) is also intentionally
+  // .cjs — it is spawned by node directly with no tsx loader and must `require()`
+  // proper-lockfile (which is itself CJS-only). See tests/lock-conflict.cjs header.
   {
-    files: ['scripts/**/*.cjs'],
+    files: ['scripts/**/*.cjs', 'tests/**/*.cjs'],
     rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
 ];
