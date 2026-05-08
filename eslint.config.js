@@ -126,16 +126,21 @@ export default [
   },
 
   // === Path chokepoint EXEMPTION for tests/session-log.test.ts (Wave 9) +
-  //     tests/state.test.ts (Wave 10) ===
-  // Both files MUST override process.env.LOCALAPPDATA / XDG_DATA_HOME / HOME
-  // to redirect pensmithDataDir() into a per-test tmpdir for isolation —
+  //     tests/state.test.ts (Wave 10) + tests/library.test.ts (Wave 10) ===
+  // All three files MUST override process.env.LOCALAPPDATA / XDG_DATA_HOME /
+  // HOME to redirect pensmithDataDir() into a per-test tmpdir for isolation —
   // same pattern as tests/http.test.ts and tests/http-cache.test.ts.
-  // tests/state.test.ts uses the override so the session-log singleton inside
-  // bin/lib/state.ts (lazy-init at first .event() call) resolves into the
-  // per-test tmpdir instead of the host's real pensmithDataDir.
-  // Scoped to these two files only.
+  // tests/state.test.ts and tests/library.test.ts use the override so the
+  // session-log singleton inside bin/lib/state.ts and bin/lib/library.ts
+  // (lazy-init at first .event() call) resolves into the per-test tmpdir
+  // instead of the host's real pensmithDataDir.
+  // Scoped to these three files only.
   {
-    files: ['tests/session-log.test.ts', 'tests/state.test.ts'],
+    files: [
+      'tests/session-log.test.ts',
+      'tests/state.test.ts',
+      'tests/library.test.ts',
+    ],
     rules: {
       'no-restricted-syntax': 'off',
     },
