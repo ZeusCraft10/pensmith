@@ -1,15 +1,15 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-08T22:00:00Z",
+  "timestamp": "2026-05-08T23:30:00Z",
   "phase": "1",
   "phase_name": "Foundation NFRs",
   "phase_dir": ".planning/phases/01-foundation-nfrs",
-  "plan": "01-01",
-  "task": "tests/paths.test.ts + quality gates + atomic commit + 01-01-SUMMARY.md",
+  "plan": "01-12",
+  "task": "checkpoint.ts atomic write/read primitives — third Wave 10 sibling",
   "total_tasks": 14,
-  "status": "paused",
-  "stage": "execute-phase Wave 1 paused mid-plan; fresh-session resume required",
-  "reason": "two consecutive gsd-executor failures on Wave 1 (Stream idle timeout, then Internal server error); user selected 'Pause and resume in fresh session'",
+  "status": "in_flight",
+  "stage": "Wave 10 mid-execution; 01-10 (state) and 01-11 (library) shipped; 01-12 (checkpoint) next",
+  "reason": "Phase 1 reconciliation pass after forensic audit found STATE/HANDOFF/.continue-here drift. Library.ts (3a2e83c) and tests (fe430e3) and SUMMARY (9ee0aac) committed in this pass. Checkpoint.ts is the third Wave 10 sibling and shares no files with state or library.",
   "completed_tasks": [
     {
       "id": "discuss-phase",
@@ -28,40 +28,84 @@
       "name": "Wave 0 prep (CI Node 20.18, deps, chokepoints, fixtures, locked WARN copy)",
       "status": "done",
       "commits": ["2e109dc", "f3569c3", "f1842e7"]
-    }
-  ],
-  "in_progress_tasks": [
+    },
     {
       "id": "01-01",
-      "name": "paths.ts — cross-platform LOCALAPPDATA/Library/XDG_DATA_HOME + slugify + projectHash + isInsideSyncFolder + sectionDir",
-      "status": "checkpoint_committed_unverified",
-      "recovery_commit": "a507cd7",
-      "files_written": ["bin/lib/paths.ts (208 lines)"],
-      "files_pending": [
-        "tests/paths.test.ts (per 01-01-PLAN.md success criteria)",
-        ".planning/phases/01-foundation-nfrs/01-01-SUMMARY.md"
-      ],
-      "verification_pending": [
-        "Spot-check bin/lib/paths.ts against 01-01-PLAN.md spec (10 exports, OneDrive list, slugify edges, projectHash hex length, sectionDir bounds)",
-        "npm run typecheck",
-        "npm run lint",
-        "npm test"
-      ]
+      "name": "paths.ts cross-platform LOCALAPPDATA/Library/XDG_DATA_HOME + slugify + projectHash + isInsideSyncFolder + sectionDir",
+      "status": "done",
+      "commits": ["a507cd7", "7b0869e", "79cf59d"]
+    },
+    {
+      "id": "01-02",
+      "name": "atomic-write.ts D-07 chokepoint per ARCH-05/D-04 (tmp+fsync+rename+fsync(dir), Win32 EPERM fall-through)",
+      "status": "done",
+      "commits": ["908cdc2", "53e01b5", "e1b582e"]
+    },
+    {
+      "id": "01-03",
+      "name": "lock.ts cross-process advisory lock chokepoint (proper-lockfile@^4 CJS shim)",
+      "status": "done",
+      "commits": ["2a5bed4", "b250bb0", "4599549"]
+    },
+    {
+      "id": "01-04",
+      "name": "doi.ts DOI/arXiv/PMID/PMCID normalization chokepoint (fast-check property fuzz)",
+      "status": "done",
+      "commits": ["b915ad6", "a793506", "479403d"]
+    },
+    {
+      "id": "01-05",
+      "name": "http.ts undici@^7 + retry shim + per-source TokenBucket + 8 cassettes",
+      "status": "done",
+      "commits": ["a71a798", "0a56be6", "30f7642", "4538b44"]
+    },
+    {
+      "id": "01-06",
+      "name": "budget.ts assertBudget + Semaphore + cost ledger",
+      "status": "done",
+      "commits": ["65fb183", "8567e88", "795296c"]
+    },
+    {
+      "id": "01-07",
+      "name": "migrations + 5 zod schemas + loader (state, library, checkpoint, session-log, runtime-config)",
+      "status": "done",
+      "commits": ["8bd0a4d", "85fc938", "ed35099", "d0d955b", "4f1b11a"]
+    },
+    {
+      "id": "01-08",
+      "name": "pii.ts D-49 PII redaction primitives",
+      "status": "done",
+      "commits": ["1c9f3af", "2a77d74", "89d1493"]
+    },
+    {
+      "id": "01-09",
+      "name": "session-log.ts JSONL D-49/D-50/D-51/D-52 (kind-discriminated, 50MB rotation, 16KB spillover, mirror-prompts)",
+      "status": "done",
+      "commits": ["f605207", "1334691", "6e4b985"]
+    },
+    {
+      "id": "01-10",
+      "name": "state.ts D-58 paper-state load/save/update glue (W2+W3+W7+W9 composition)",
+      "status": "done",
+      "commits": ["8617c63", "e475b0b", "85e2737"]
+    },
+    {
+      "id": "01-11",
+      "name": "library.ts D-59 paper-library load/save/add/find glue (8 tests; 10-concurrent-disjoint-id regression gate)",
+      "status": "done",
+      "commits": ["3a2e83c", "fe430e3", "9ee0aac"]
     }
   ],
+  "in_progress_tasks": [],
   "remaining_waves": [
-    {"wave": 2, "plans": ["01-02"], "title": "atomic-write.ts (D-07 chokepoint, Win32 fsync(dirfd) guard)"},
-    {"wave": 3, "plans": ["01-03", "01-07"], "title": "lock.ts (proper-lockfile CJS shim) + migrations + 5 zod schemas"},
-    {"wave": 4, "plans": ["01-04", "01-05", "01-06", "01-08"], "title": "doi + http + budget + pii (parallel)"},
-    {"wave": 9, "plans": ["01-09"], "title": "session-log.ts (D-49 8-kind records, 50MB rotation, 16KB spillover)"},
-    {"wave": 10, "plans": ["01-10", "01-11", "01-12"], "title": "state + library + checkpoint (parallel)"},
+    {"wave": 10, "plans": ["01-12"], "title": "checkpoint.ts (atomic write/read primitives — third Wave 10 sibling, parallel-safe with done 01-10/01-11)"},
     {"wave": 11, "plans": ["01-13"], "title": "runtime.ts (structural-only tests, OPENALEX_API_KEY slot)"}
   ],
   "blockers": [],
   "human_actions_pending": [
     {
-      "action": "Run /clear, then /gsd-execute-phase 1 --auto --no-transition",
-      "context": "Fresh context avoids the Stream idle timeouts that killed the last two executor subagents. Wave 0 commits are intact; Wave 1 paths.ts is checkpoint-committed at a507cd7 and the next session picks up from writing tests for it.",
+      "action": "Run /gsd-execute-phase 1 (or /gsd-execute-plan 01-12) to ship 01-12 checkpoint.ts",
+      "context": "Wave 10 has three parallel-safe siblings (01-10 state, 01-11 library, 01-12 checkpoint). The first two are done. 01-12 has the same chokepoint composition (W2+W3+W7+W9) and the W11 SUMMARY documents the verbatim pattern to copy. Tests=194 currently pass; expect 01-12 to add another ~6-8 tests.",
       "blocking": true
     }
   ],
@@ -72,7 +116,8 @@
       "error": "API Error: Stream idle timeout - partial response received",
       "duration_minutes": 7.5,
       "tool_uses": 23,
-      "outcome": "bin/lib/paths.ts written (208 lines), no tests, no commit"
+      "outcome": "bin/lib/paths.ts written (208 lines), no tests, no commit",
+      "resolution": "Recovery commit a507cd7 + tests in 7b0869e + SUMMARY 79cf59d. Resolved 2026-05-08."
     },
     {
       "attempt": 2,
@@ -80,7 +125,8 @@
       "error": "API Error: Internal server error",
       "duration_minutes": 3.7,
       "tool_uses": 15,
-      "outcome": "no progress; scripts/.verify-paths.mjs leftover (deleted in this handoff)"
+      "outcome": "no progress; scripts/.verify-paths.mjs leftover (deleted in handoff)",
+      "resolution": "Resolved with attempt 1's recovery commits. No further timeouts since."
     }
   ],
   "decisions": [
@@ -98,6 +144,16 @@
       "decision": "session-log records use D-49 shape: {at, kind, run_id, ...payload} with 8 kinds (prompt/response/tool_call/tool_result/cost/event/warn/error)",
       "rationale": "VALIDATION.md line 941 + Plan 09 iteration-4 rewrite; consumers in plans 10/11/12/13 use log().event({...}) not log().info(...)",
       "phase": "1"
+    },
+    {
+      "decision": "Wave 10 chokepoint composition idiom is now demonstrated under TWO different schema shapes (W10 state.ts: 3-fixed-fields with weakened concurrency assertion; W11 library.ts: unbounded entries[] with full N-concurrent-survivors assertion)",
+      "rationale": "Proves the W2+W3+W7+W9 pattern generalizes. W12 checkpoint.ts can copy the W11 SUMMARY's pattern block verbatim.",
+      "phase": "1"
+    },
+    {
+      "decision": "Duplicate-id refusal in addEntry is a hard semantics guarantee, not a soft retry-able one",
+      "rationale": "withLock already serializes contention; a duplicate-id error means a real semantic conflict, not contention. Phase 3 callers must catch DuplicateLibraryEntryError explicitly and decide whether to log+no-op or surface.",
+      "phase": "1"
     }
   ],
   "punch_list_summary": [
@@ -105,9 +161,11 @@
     "p-retry@^6 ships equal-jitter; D-31 requires full-jitter — Plan 05 includes shim.",
     "Windows fsync(dirfd) guard: Plan 02 atomic-write must catch EPERM and fall through.",
     "proper-lockfile is CJS-only — Plan 03 uses createRequire shim.",
-    "Session-log records have NO $schemaVersion field — Plan 07 schema is passthrough."
+    "Session-log records have NO $schemaVersion field — Plan 07 schema is passthrough.",
+    "Wave 10 sibling pattern: load INSIDE the lock for any mutator (W10 updateState, W11 addEntry); read+check+write share ONE withLock acquisition.",
+    "Carry-forward: any new field added to State / LibraryEntry MUST come with a migration in bin/lib/migrations/<schema>/."
   ],
   "uncommitted_files": [],
-  "next_action": "Run /clear, then /gsd-execute-phase 1 --auto --no-transition. The executor will see paths.ts already committed at a507cd7 and resume by writing tests/paths.test.ts.",
-  "context_notes": "Phase 0 closed (4/4 plans, CI green). Phase 1 plan-phase verified PASSED after 4 revision iterations (B1-B10 + W1-W7 all resolved). Wave 0 (01-00) executed cleanly with 3 atomic commits. Wave 1 hit two consecutive infrastructure failures (Stream idle timeout #2410 pattern) so we paused and recovery-committed paths.ts as wip(01-01). All 5 soft findings from 01-GAPS.md remain non-blocking. See .planning/phases/01-foundation-nfrs/01-GAPS.md pre-execute punch list before resuming."
+  "next_action": "Run /gsd-execute-phase 1 (or /gsd-execute-plan 01-12). The executor will see 01-10 and 01-11 already shipped (commits 8617c63/e475b0b/85e2737 and 3a2e83c/fe430e3/9ee0aac respectively) and will pick up Wave 10 sibling C: 01-12 checkpoint.ts.",
+  "context_notes": "Phase 0 closed (4/4 plans, CI green). Phase 1 is 12/14 plans through Wave 10 sibling B. Tests=194 currently pass on Windows. The W11 SUMMARY (.planning/phases/01-foundation-nfrs/01-11-SUMMARY.md) contains the verbatim pattern block W12 should copy: lazy logger child, load INSIDE the lock, defense-in-depth schema validation, ENOENT translation, lock-free pure reads. STATE.md was reconciled in the same commit as this handoff after a forensic audit found drift (the prior HANDOFF claimed 01-01 paused, but 10 commits had landed past that)."
 }
