@@ -13,7 +13,7 @@ Pensmith ships in eleven prescriptive phases derived from the architecture's thr
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 0: Repo skeleton & plugin manifest** - Repo, plugin manifest, MCP entry, CI on three OSes, ban-list lints — COMPLETE 2026-05-07
-- [ ] **Phase 1: Foundation NFRs** - paths → atomic-write → lock → doi → http → budget → migrations → pii → session-log → state/library/checkpoint → runtime, in strict order, all unit-tested
+- [x] **Phase 1: Foundation NFRs** - paths → atomic-write → lock → doi → http → budget → migrations → pii → session-log → state/library/checkpoint → runtime, in strict order, all unit-tested — COMPLETE 2026-05-14 (VERIFICATION PASS 5/5 SCs)
 - [ ] **Phase 2: Tier shells + doctor + tier-contract gate** - MCP server skeleton + Tier 2 CLI dispatcher + ecosystem probe + `/pensmith doctor` (with OneDrive detection) as first contract case
 - [ ] **Phase 3: Vertical slice through one section** - Single-fixture intake → research → outline → plan → write → verify, deterministic Pass 1 + Pass 3 only, APA only, both tiers
 - [ ] **Phase 4: Breadth — N sections + compile + wave scheduling** - Wave scheduler, compile pipeline, cross-section consistency flags, stable section numbering with letter suffixes
@@ -203,7 +203,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Repo skeleton & plugin manifest | 4/4 | COMPLETE | 2026-05-07 |
-| 1. Foundation NFRs | 14/14 | Execution complete — awaiting `/gsd-verify-phase 1` | - |
+| 1. Foundation NFRs | 14/14 | COMPLETE (VERIFICATION PASS 5/5) | 2026-05-14 |
 | 2. Tier shells + doctor + tier-contract gate | 0/TBD | Not started | - |
 | 3. Vertical slice through one section | 0/TBD | Not started | - |
 | 4. Breadth — N sections + compile + wave scheduling | 0/TBD | Not started | - |

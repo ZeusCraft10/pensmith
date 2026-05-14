@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: execution_complete_awaiting_verification
-stopped_at: Phase 1 execution complete — 14/14 plans shipped (Wave 11 runtime.ts + pricing.ts landed); awaiting /gsd-verify-phase 1 gate
-last_updated: "2026-05-09T00:30:00.000Z"
-last_activity: 2026-05-09 -- Phase 01 Plan 13 (runtime.ts + pricing.ts) shipped — feat 43a1835 / feat adfcbc2 / test b00ed17; 222 tests pass on Windows
+status: phase_complete
+stopped_at: Phase 1 COMPLETE — 14/14 plans shipped + 4 code-review fixes applied + verification PASS (5/5 SCs, 1 documented Phase 2 carry-forward); awaiting /gsd-discuss-phase 2
+last_updated: "2026-05-14T00:00:00.000Z"
+last_activity: 2026-05-14 -- Phase 1 closed: REVIEW (2 BLOCK + 9 FLAG + 6 NIT), 4 fixes applied (BLOCKER-01, BLOCKER-02, FLAG-01, FLAG-03), VERIFICATION PASS — 226 tests on Windows; tsc --noEmit clean. Commits dc3e944 / 91d2f5a / e333e40 / 09d06fb / bf9421f / 3fa69df.
 progress:
   total_phases: 11
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 32
   completed_plans: 18
   percent: 57
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 ## Current Position
 
-Phase: 1 of 11 (Foundation NFRs) — EXECUTION COMPLETE (14/14 plans) — AWAITING VERIFICATION
-Plan: All Phase 1 plans shipped; next is `/gsd-verify-phase 1` to gate Phase 2
-Status: Execution complete — Wave 11 (runtime + pricing) landed; ARCH-14 closed, Key Finding #5 OPENALEX_API_KEY slot reserved with optional=true default; T-01-07 no-leak property under test
-Last activity: 2026-05-09 -- Plan 13 runtime.ts + pricing.ts shipped: feat 43a1835 + feat adfcbc2 + test b00ed17 (19 new tests; 222 total pass)
+Phase: 1 of 11 (Foundation NFRs) — **COMPLETE** (14/14 plans + verification PASS)
+Plan: Phase 1 closed; next is `/gsd-discuss-phase 2` (Phase 2: tier shells + doctor + tier-contract gate)
+Status: Phase complete — REVIEW (2 BLOCK + 9 FLAG + 6 NIT); 4 fixes applied (BLOCKER-01, BLOCKER-02, FLAG-01, FLAG-03); VERIFICATION PASS (5/5 SCs, 1 documented Phase 2 carry-forward on Retry-After parser)
+Last activity: 2026-05-14 -- Phase 1 closed: 226 tests pass on Windows; tsc --noEmit clean. Fix commits dc3e944 / 91d2f5a / e333e40 / 09d06fb; review docs bf9421f / 3fa69df.
 
-Progress: [██████░░░░] 57%  (Phase 0 done; Phase 1 14/14 plans through 01-13 — awaiting verification)
+Progress: [██████░░░░] 57%  (Phase 0 done; Phase 1 14/14 plans + REVIEW + VERIFICATION PASS — phase closed)
 
 Plan files (depends_on order):
 

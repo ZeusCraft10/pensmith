@@ -1,15 +1,15 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-09T00:30:00Z",
-  "phase": "1",
-  "phase_name": "Foundation NFRs",
-  "phase_dir": ".planning/phases/01-foundation-nfrs",
-  "plan": "verify",
-  "task": "Phase 1 execution complete (14/14 plans shipped); next gate is /gsd-verify-phase 1",
-  "total_tasks": 14,
-  "status": "execution_complete_awaiting_verification",
-  "stage": "All Phase 1 plans shipped; Wave 11 runtime.ts + pricing.ts landed (43a1835 / adfcbc2 / b00ed17). 222 tests pass on Windows; tsc --noEmit clean.",
-  "reason": "Wave 11 closed-out Phase 1. ARCH-14 satisfied (SDK provider chokepoint via bin/lib/runtime.ts), Key Finding #5 satisfied (OPENALEX_API_KEY slot reserved with optional=true default), T-01-07 no-leak property under test (test 8 in tests/runtime.test.ts asserts resolved api-key values never reach disk OR the session-log payload). 19 new tests; +19 over prior 203 = 222 total.",
+  "timestamp": "2026-05-14T00:00:00Z",
+  "phase": "2",
+  "phase_name": "Tier shells + doctor + tier-contract gate",
+  "phase_dir": ".planning/phases/02-tier-shells",
+  "plan": "discuss",
+  "task": "Phase 1 COMPLETE (14/14 plans + 4 review fixes + VERIFICATION PASS); next phase begins with /gsd-discuss-phase 2",
+  "total_tasks": null,
+  "status": "phase_complete_awaiting_next_discuss",
+  "stage": "Phase 1 closed. 226 tests pass on Windows; tsc --noEmit clean. Phase 2 (tier shells + doctor + tier-contract gate) is next; CONTEXT.md / DISCUSSION-LOG.md do NOT yet exist for Phase 2 so /gsd-discuss-phase 2 must precede /gsd-plan-phase 2.",
+  "reason": "Phase 1 fully closed: 14 plans shipped, code review surfaced 2 BLOCK + 9 FLAG + 6 NIT (REVIEW.md), 4 fixes applied per user direction (dc3e944 BLOCKER-01, 91d2f5a BLOCKER-02, e333e40 FLAG-01, 09d06fb FLAG-03), gsd-verifier returned PASS on 5/5 SCs with one documented override (Retry-After / X-Rate-Limit header parsing → Phase 2 carry-forward; politeness floor enforced by per-source TokenBucket so no free-burst hole). Deferred items: REVIEW.md FLAG-02/04/05/06/07/08/09 + NIT-01..06 (see REVIEW-FIXES.md for the tracked debt list).",
   "completed_tasks": [
     {
       "id": "discuss-phase",
@@ -113,18 +113,13 @@
   "blockers": [],
   "human_actions_pending": [
     {
-      "action": "Run /gsd-code-review 1 (optional, recommended) to audit Phase 1 source files before the verification gate",
-      "context": "Code review covers all 13 Foundation libs + 14 test files. Standard depth per .planning/config.json (code_review_depth: standard).",
-      "blocking": false
-    },
-    {
-      "action": "Run /gsd-verify-phase 1 to gate Phase 2",
-      "context": "Verifier checks SC-1..SC-5 against implemented code: (1) 13 libs unit-tested green on CI matrix; (2) DOI round-trip property; (3) Lock conflict + platform-local location; (4) Budget pre-call abort + OPENALEX_API_KEY slot; (5) HTTP missing-email WARN + Retry-After + per-source floors + cassettes. 222 tests pass on Windows; CI matrix not yet pushed.",
+      "action": "Run /gsd-discuss-phase 2 to begin Phase 2 (tier shells + doctor + tier-contract gate)",
+      "context": "Phase 2 success criteria (per ROADMAP.md lines 88-99): both Tier 1 plugin and Tier 2 CLI bring up against Foundation libs; /pensmith doctor returns PASS in both tiers with equivalent structured output verified by tier-contract.test.js (hard merge gate from this phase forward); doctor warns when .paper/ is in a OneDrive/iCloud/Dropbox/Google Drive sync folder and probes Zotero MCP / Pandoc / humanizer; MCP server (mcp/server.ts) exposes paper://state, paper://outline, paper://section/{N}, paper://library, paper://capabilities resources with ≤30-line tool handlers (lint-checked). Phase 2 also picks up Phase 1 carry-forwards: Retry-After / X-Rate-Limit header parser in http.ts (gated by DOCT-03), REVIEW.md deferred FLAGs/NITs.",
       "blocking": true
     },
     {
-      "action": "After verification PASSES: run /gsd-discuss-phase 2 to begin Phase 2 (tier shells + doctor + tier-contract gate)",
-      "context": "CONTEXT.md and DISCUSSION-LOG.md do NOT exist for Phase 2 yet. discuss-phase precedes plan-phase per the standard GSD pipeline.",
+      "action": "Optional: push commits to remote to exercise CI matrix (linux-x64 / macos-arm64 / windows-x64) before starting Phase 2",
+      "context": "VERIFICATION marked CI matrix observation as out-of-scope-but-deferred — Phase 1 SCs are verified locally on Windows + tsc but the CI run is the only proof for cross-platform behavior. Push at any point; not gating Phase 2 start.",
       "blocking": false
     }
   ],
@@ -248,13 +243,7 @@
     "Carry-forward: any new field added to State / LibraryEntry / RuntimeConfig MUST come with a migration in bin/lib/migrations/<schema>/.",
     "T-01-07 no-leak: resolved api-key VALUES never reach disk or the session log; W7 persists env-var NAMES only."
   ],
-  "uncommitted_files": [
-    ".planning/phases/01-foundation-nfrs/01-13-SUMMARY.md",
-    ".planning/STATE.md",
-    ".planning/ROADMAP.md",
-    ".planning/HANDOFF.json",
-    ".planning/phases/01-foundation-nfrs/.continue-here.md"
-  ],
-  "next_action": "Run /gsd-verify-phase 1 to confirm the 5 SC criteria are satisfied by the implemented code (or /gsd-code-review 1 first for an audit pass). Once verification PASSES, proceed to /gsd-discuss-phase 2 to begin Phase 2 (tier shells + doctor + tier-contract gate).",
-  "context_notes": "Phase 0 closed (4/4 plans, CI green). Phase 1 EXECUTION COMPLETE — 14/14 plans through Wave 11. Tests=222 pass on Windows; tsc --noEmit clean. The W13 runtime.ts adopted a W7+W9-only chokepoint variant (no atomic-write or lock); saveRuntimeConfig exists as a thin escape hatch for tests/CLI scaffolding. T-01-07 no-leak property is the load-bearing assertion for Key Finding #5 (OPENALEX_API_KEY slot). Phase 2 (tier shells + doctor + tier-contract gate) is next; CONTEXT.md does NOT yet exist for Phase 2 so /gsd-discuss-phase 2 must precede /gsd-plan-phase 2."
+  "uncommitted_files": [],
+  "next_action": "Run /gsd-discuss-phase 2 to begin Phase 2 (tier shells + doctor + tier-contract gate). Optional pre-step: push to remote to exercise CI matrix.",
+  "context_notes": "Phase 0 + Phase 1 both CLOSED. Phase 1: 14/14 plans + 4 review fixes (BLOCKER-01 TOCTOU race in init, BLOCKER-02 unlocked writeBack, FLAG-01 cache envelope, FLAG-03 deep-freeze leaves) + VERIFICATION PASS (5/5 SCs, 1 documented Retry-After override → Phase 2 carry-forward). Tests=226 pass on Windows; tsc --noEmit clean. Phase 2 (tier shells + doctor + tier-contract gate) is next; CONTEXT.md / DISCUSSION-LOG.md do NOT yet exist for Phase 2 so /gsd-discuss-phase 2 must precede /gsd-plan-phase 2. Phase 2 picks up Phase 1 carry-forwards: Retry-After / X-Rate-Limit header parser (gated by DOCT-03 which already touches http.ts to surface the WARN), and the 6 deferred FLAGs + 6 NITs in REVIEW.md."
 }
