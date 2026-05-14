@@ -82,7 +82,7 @@ Plans:
 - [x] 01-10-PLAN.md (wave 10) — bin/lib/state.ts load/save/update/init under withLock (TEST-05, TEST-11) — COMPLETE 2026-05-08
 - [x] 01-11-PLAN.md (wave 10) — bin/lib/library.ts addEntry duplicate-id-guarded under withLock (TEST-05, TEST-11) — COMPLETE 2026-05-08
 - [x] 01-12-PLAN.md (wave 10) — bin/lib/checkpoint.ts atomic write/read primitives + tolerant reader for forward-version skip (TEST-05, TEST-11) — COMPLETE 2026-05-08
-- [ ] 01-13-PLAN.md (wave 11) — bin/lib/runtime.ts SDK provider chokepoint + OPENALEX_API_KEY slot + bin/lib/pricing.ts MODEL_PRICES (ARCH-14, TEST-05, TEST-11)
+- [x] 01-13-PLAN.md (wave 11) — bin/lib/runtime.ts SDK provider chokepoint + OPENALEX_API_KEY slot + bin/lib/pricing.ts MODEL_PRICES (ARCH-14, TEST-05, TEST-11) — COMPLETE 2026-05-09
 **UI hint**: no
 
 ### Phase 2: Tier shells + doctor + tier-contract gate
@@ -203,7 +203,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Repo skeleton & plugin manifest | 4/4 | COMPLETE | 2026-05-07 |
-| 1. Foundation NFRs | 13/14 | In flight (Wave 11 remaining) | - |
+| 1. Foundation NFRs | 14/14 | Execution complete — awaiting `/gsd-verify-phase 1` | - |
 | 2. Tier shells + doctor + tier-contract gate | 0/TBD | Not started | - |
 | 3. Vertical slice through one section | 0/TBD | Not started | - |
 | 4. Breadth — N sections + compile + wave scheduling | 0/TBD | Not started | - |

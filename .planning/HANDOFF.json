@@ -1,15 +1,15 @@
 {
   "version": "1.0",
-  "timestamp": "2026-05-08T23:55:00Z",
+  "timestamp": "2026-05-09T00:30:00Z",
   "phase": "1",
   "phase_name": "Foundation NFRs",
   "phase_dir": ".planning/phases/01-foundation-nfrs",
-  "plan": "01-13",
-  "task": "runtime.ts SDK provider chokepoint + OPENALEX_API_KEY slot + bin/lib/pricing.ts MODEL_PRICES — final Phase 1 plan",
+  "plan": "verify",
+  "task": "Phase 1 execution complete (14/14 plans shipped); next gate is /gsd-verify-phase 1",
   "total_tasks": 14,
-  "status": "in_flight",
-  "stage": "Wave 10 complete (state + library + checkpoint shipped); only Wave 11 (runtime) remains in Phase 1",
-  "reason": "Wave 10 sibling C (checkpoint.ts) shipped this session. Public API honors W7 schema (refs Record<string, string>) per user ruling on Plan vs Schema decision. D-60 audit-log carve-out from D-39 documented; tolerant reader skips bad/forward-versioned lines with one WARN per call. 9 new tests; 203 total pass on Windows.",
+  "status": "execution_complete_awaiting_verification",
+  "stage": "All Phase 1 plans shipped; Wave 11 runtime.ts + pricing.ts landed (43a1835 / adfcbc2 / b00ed17). 222 tests pass on Windows; tsc --noEmit clean.",
+  "reason": "Wave 11 closed-out Phase 1. ARCH-14 satisfied (SDK provider chokepoint via bin/lib/runtime.ts), Key Finding #5 satisfied (OPENALEX_API_KEY slot reserved with optional=true default), T-01-07 no-leak property under test (test 8 in tests/runtime.test.ts asserts resolved api-key values never reach disk OR the session-log payload). 19 new tests; +19 over prior 203 = 222 total.",
   "completed_tasks": [
     {
       "id": "discuss-phase",
@@ -99,19 +99,33 @@
       "id": "01-12",
       "name": "checkpoint.ts D-60 append-only audit log (9 tests; 10-concurrent regression gate; D-60 carve-out from D-39 forward-skip read path)",
       "status": "done",
-      "commits": ["2dd174b", "24a0200"]
+      "commits": ["2dd174b", "24a0200", "44bec0f"]
+    },
+    {
+      "id": "01-13",
+      "name": "runtime.ts SDK provider chokepoint + OPENALEX_API_KEY slot (ARCH-14, Key Finding #5) + pricing.ts MODEL_PRICES table (10 tests runtime + 9 tests pricing; T-01-07 no-leak property under test)",
+      "status": "done",
+      "commits": ["43a1835", "adfcbc2", "b00ed17"]
     }
   ],
   "in_progress_tasks": [],
-  "remaining_waves": [
-    {"wave": 11, "plans": ["01-13"], "title": "runtime.ts (structural-only tests, OPENALEX_API_KEY slot)"}
-  ],
+  "remaining_waves": [],
   "blockers": [],
   "human_actions_pending": [
     {
-      "action": "Run /gsd-execute-phase 1 (or /gsd-execute-plan 01-13) to ship 01-13 runtime.ts — the final Phase 1 plan",
-      "context": "Wave 11 is a single plan (runtime.ts), depends_on 01-07 (schemas) and 01-09 (session-log) only. Patterns established by W10 (state) / W11 (library) / W12 (checkpoint) generalize to the runtime composition. Tests=203 currently pass; expect 01-13 to add ~5-8 structural tests (no SDK live calls — config-loader-only).",
+      "action": "Run /gsd-code-review 1 (optional, recommended) to audit Phase 1 source files before the verification gate",
+      "context": "Code review covers all 13 Foundation libs + 14 test files. Standard depth per .planning/config.json (code_review_depth: standard).",
+      "blocking": false
+    },
+    {
+      "action": "Run /gsd-verify-phase 1 to gate Phase 2",
+      "context": "Verifier checks SC-1..SC-5 against implemented code: (1) 13 libs unit-tested green on CI matrix; (2) DOI round-trip property; (3) Lock conflict + platform-local location; (4) Budget pre-call abort + OPENALEX_API_KEY slot; (5) HTTP missing-email WARN + Retry-After + per-source floors + cassettes. 222 tests pass on Windows; CI matrix not yet pushed.",
       "blocking": true
+    },
+    {
+      "action": "After verification PASSES: run /gsd-discuss-phase 2 to begin Phase 2 (tier shells + doctor + tier-contract gate)",
+      "context": "CONTEXT.md and DISCUSSION-LOG.md do NOT exist for Phase 2 yet. discuss-phase precedes plan-phase per the standard GSD pipeline.",
+      "blocking": false
     }
   ],
   "executor_failure_log": [
@@ -132,6 +146,24 @@
       "tool_uses": 15,
       "outcome": "no progress; scripts/.verify-paths.mjs leftover (deleted in handoff)",
       "resolution": "Resolved with attempt 1's recovery commits. No further timeouts since."
+    },
+    {
+      "attempt": 3,
+      "plan": "01-12",
+      "error": "API Error: Stream idle timeout at decision checkpoint",
+      "duration_minutes": 1.5,
+      "tool_uses": null,
+      "outcome": "Decision surface (refs typing) presented to user; user ruled Honor schema; continuation executor completed plan cleanly.",
+      "resolution": "Fresh-agent-with-decision pattern (not resume). Resolved 2026-05-08."
+    },
+    {
+      "attempt": 4,
+      "plan": "01-13",
+      "error": "API Error: Stream idle timeout (24,499s elapsed, 67 tool uses)",
+      "duration_minutes": 408,
+      "tool_uses": 67,
+      "outcome": "All 3 atomic commits landed (43a1835 feat pricing / adfcbc2 feat runtime / b00ed17 test); SUMMARY.md written; tests 222 pass; tracking artifacts NOT yet updated by executor.",
+      "resolution": "Spot-check-on-timeout pattern: filesystem + git log + test/typecheck confirmed substantive work landed. Orchestrator (this session) reconciled tracking artifacts manually. Resolved 2026-05-09."
     }
   ],
   "decisions": [
@@ -152,7 +184,7 @@
     },
     {
       "decision": "Wave 10 chokepoint composition idiom is now demonstrated under THREE different schema shapes (W10 state.ts: 3-fixed-fields with weakened concurrency assertion; W11 library.ts: unbounded entries[] with full N-concurrent-survivors assertion; W12 checkpoint.ts: append-only JSONL with tolerant-skip read path)",
-      "rationale": "Proves the W2+W3+W7+W9 pattern generalizes across read-mutate-write, read-check-mutate-write, AND pure-append shapes. W13 runtime.ts can adopt whichever of the three shapes its config-loader needs.",
+      "rationale": "Proves the W2+W3+W7+W9 pattern generalizes across read-mutate-write, read-check-mutate-write, AND pure-append shapes. W13 runtime.ts adopted a fourth variant: W7+W9 only (no atomic-write or lock — runtime config is read-mostly; saveRuntimeConfig is a thin escape hatch for tests/CLI scaffolding).",
       "phase": "1"
     },
     {
@@ -162,7 +194,7 @@
     },
     {
       "decision": "D-60 carve-out from D-39 — append-only audit log (CHECKPOINTS.jsonl) reads via CheckpointSchema.safeParse and SKIPS bad/forward-versioned lines with one WARN per call",
-      "rationale": "This is the SOLE Phase-1 exception to refuse-forward-incompat. Justified by the append-only semantic: skipping never causes data loss; older readers see only the lines they understand; bytes on disk are unchanged whether we skip or throw. State and library remain authoritative (refuse-forward) because they are not append-only.",
+      "rationale": "This is the SOLE Phase-1 exception to refuse-forward-incompat. Justified by the append-only semantic: skipping never causes data loss; older readers see only the lines they understand; bytes on disk are unchanged whether we skip or throw. State, library, AND runtime remain authoritative (refuse-forward) because they are not append-only.",
       "phase": "1"
     },
     {
@@ -174,18 +206,55 @@
       "decision": "Concurrency budget — checkpoint test 6 uses N=10 not N=20 (Rule 1 deviation)",
       "rationale": "W3 default exponential-backoff retry schedule (factor=1.5, retries=16) cannot accommodate 20+ concurrent contenders on Windows + OneDrive within the default 60s timeoutMs. N=10 matches W11 sibling exactly; production concurrency profile is comfortably below this threshold (Phase 5+ verifier-fanout fires at most a handful per workflow step).",
       "phase": "1"
+    },
+    {
+      "decision": "pricing.ts is a separate file from runtime.ts — pure constant table + pure function with NO imports/IO",
+      "rationale": "runtime.ts is the W2+W3+W7+W9 config-loader chokepoint. Different semantic surfaces → different files; W6 budget.ts imports estimateCost from pricing.ts without pulling in the chokepoint stack.",
+      "phase": "1"
+    },
+    {
+      "decision": "T-01-07 no-leak property — resolved api-key VALUES never reach disk (W7 schema persists env-var NAMES only) AND never reach the session log (`present:boolean` pre-computed before log call so the resolved string never enters the payload object)",
+      "rationale": "Test 8 in tests/runtime.test.ts is the load-bearing assertion that proves both halves of the invariant. Failure here would surface as Phase 1 verification block (Key Finding #5 + T-01-07 are both gated by this property).",
+      "phase": "1"
+    },
+    {
+      "decision": "ENOENT → defaults() (NOT NotFoundError) — runtime config is OPTIONAL",
+      "rationale": "Missing runtime.json operates with schema defaults. First W10/W11 sibling that does NOT translate ENOENT to a typed error class (state, library, and checkpoint all throw NotFoundError on ENOENT). Justified by config semantics: a paper without a runtime.json is a perfectly valid state.",
+      "phase": "1"
+    },
+    {
+      "decision": "defaults() seeds an anthropic provider entry — W7 RuntimeConfigSchema's providers has a .refine requiring ≥1 provider, so RuntimeConfigSchema.parse({}) would fail without seed",
+      "rationale": "anthropic with apiKeyEnv='ANTHROPIC_API_KEY' is the production-typical first provider; callers overwrite via saveRuntimeConfig. Avoids a refine-fails-on-defaults trap.",
+      "phase": "1"
+    },
+    {
+      "decision": "Test fixtures adapted per Plan-vs-Schema reconciliation — W7 ProviderSchema requires `name: z.enum(['anthropic','openai'])` in addition to `apiKeyEnv`",
+      "rationale": "Test fixtures here include the `name` field. Same reconciliation pattern as 01-12 (refs typing). Documented under Deviations from Plan in 01-13-SUMMARY.md.",
+      "phase": "1"
+    },
+    {
+      "decision": "gpt-5 set equal to gpt-4o in MODEL_PRICES per RESEARCH §pricing-pending — placeholder so budget assertions don't rely on a divergent value while the official rate is unannounced",
+      "rationale": "When OpenAI publishes the rate, bump the entry and reference the vendor page in the commit message. Conservative choice — gpt-4o is mid-tier, won't under-estimate cost.",
+      "phase": "1"
     }
   ],
   "punch_list_summary": [
     "OneDrive landmine: lock file + local-only data MUST go to platform-local dirs, NEVER inside .paper/.",
     "p-retry@^6 ships equal-jitter; D-31 requires full-jitter — Plan 05 includes shim.",
-    "Windows fsync(dirfd) guard: Plan 02 atomic-write must catch EPERM and fall through.",
+    "Windows fsync(dirfd) guard: Plan 02 atomic-write catches EPERM and falls through.",
     "proper-lockfile is CJS-only — Plan 03 uses createRequire shim.",
     "Session-log records have NO $schemaVersion field — Plan 07 schema is passthrough.",
     "Wave 10 sibling pattern: load INSIDE the lock for any mutator (W10 updateState, W11 addEntry); read+check+write share ONE withLock acquisition.",
-    "Carry-forward: any new field added to State / LibraryEntry MUST come with a migration in bin/lib/migrations/<schema>/."
+    "Carry-forward: any new field added to State / LibraryEntry / RuntimeConfig MUST come with a migration in bin/lib/migrations/<schema>/.",
+    "T-01-07 no-leak: resolved api-key VALUES never reach disk or the session log; W7 persists env-var NAMES only."
   ],
-  "uncommitted_files": [],
-  "next_action": "Run /gsd-execute-phase 1 (or /gsd-execute-plan 01-12). The executor will see 01-10 and 01-11 already shipped (commits 8617c63/e475b0b/85e2737 and 3a2e83c/fe430e3/9ee0aac respectively) and will pick up Wave 10 sibling C: 01-12 checkpoint.ts.",
-  "context_notes": "Phase 0 closed (4/4 plans, CI green). Phase 1 is 12/14 plans through Wave 10 sibling B. Tests=194 currently pass on Windows. The W11 SUMMARY (.planning/phases/01-foundation-nfrs/01-11-SUMMARY.md) contains the verbatim pattern block W12 should copy: lazy logger child, load INSIDE the lock, defense-in-depth schema validation, ENOENT translation, lock-free pure reads. STATE.md was reconciled in the same commit as this handoff after a forensic audit found drift (the prior HANDOFF claimed 01-01 paused, but 10 commits had landed past that)."
+  "uncommitted_files": [
+    ".planning/phases/01-foundation-nfrs/01-13-SUMMARY.md",
+    ".planning/STATE.md",
+    ".planning/ROADMAP.md",
+    ".planning/HANDOFF.json",
+    ".planning/phases/01-foundation-nfrs/.continue-here.md"
+  ],
+  "next_action": "Run /gsd-verify-phase 1 to confirm the 5 SC criteria are satisfied by the implemented code (or /gsd-code-review 1 first for an audit pass). Once verification PASSES, proceed to /gsd-discuss-phase 2 to begin Phase 2 (tier shells + doctor + tier-contract gate).",
+  "context_notes": "Phase 0 closed (4/4 plans, CI green). Phase 1 EXECUTION COMPLETE — 14/14 plans through Wave 11. Tests=222 pass on Windows; tsc --noEmit clean. The W13 runtime.ts adopted a W7+W9-only chokepoint variant (no atomic-write or lock); saveRuntimeConfig exists as a thin escape hatch for tests/CLI scaffolding. T-01-07 no-leak property is the load-bearing assertion for Key Finding #5 (OPENALEX_API_KEY slot). Phase 2 (tier shells + doctor + tier-contract gate) is next; CONTEXT.md does NOT yet exist for Phase 2 so /gsd-discuss-phase 2 must precede /gsd-plan-phase 2."
 }
