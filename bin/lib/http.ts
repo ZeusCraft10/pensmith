@@ -282,6 +282,31 @@ interface CacheEnvelope {
   response: Omit<HttpResponse, 'cached' | 'cachedAt'>;
 }
 
+/**
+ * Structural validator for a cache envelope. Returns true iff the parsed
+ * JSON has the full expected shape; corrupt-but-parseable JSON (wrong
+ * type, missing fields, null nested objects) reads as false and the
+ * caller treats it as a cache miss.
+ *
+ * Defense-in-depth alongside state/library/checkpoint/runtime — those
+ * schema-validate via zod; the cache is small + on the hot path, so we
+ * keep it to a hand-rolled type-guard instead of paying for a zod parse
+ * on every readCache. The fields validated below are exactly those that
+ * downstream callers (and writeCache) treat as load-bearing.
+ */
+function isValidCacheEnvelope(parsed: unknown): parsed is CacheEnvelope {
+  if (!parsed || typeof parsed !== 'object') return false;
+  const p = parsed as Record<string, unknown>;
+  if (typeof p.savedAt !== 'string') return false;
+  const r = p.response;
+  if (!r || typeof r !== 'object') return false;
+  const resp = r as Record<string, unknown>;
+  if (typeof resp.status !== 'number') return false;
+  if (typeof resp.body !== 'string') return false;
+  if (!resp.headers || typeof resp.headers !== 'object') return false;
+  return true;
+}
+
 async function readCache(key: string, ttlMs: number): Promise<HttpResponse | null> {
   const file = path.join(pensmithHttpCacheDir(), `${key}.json`);
   let raw: string;
@@ -290,20 +315,29 @@ async function readCache(key: string, ttlMs: number): Promise<HttpResponse | nul
   } catch {
     return null;
   }
-  let parsed: CacheEnvelope;
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(raw) as CacheEnvelope;
+    parsed = JSON.parse(raw);
   } catch {
     return null;
   }
-  const ageMs = Date.now() - new Date(parsed.savedAt).getTime();
+  // FLAG-01 fix: structurally validate the cache envelope BEFORE treating
+  // it as a CacheEnvelope. A type assertion is not a runtime check; a file
+  // that parses as JSON but has the wrong shape (e.g. {savedAt:'x',
+  // response:null}, or an old envelope format from a previous build)
+  // would otherwise return an HttpResponse with status:undefined / body:
+  // undefined / headers:undefined — crashing downstream JSON.parse(r.body)
+  // calls. Corrupt cache is transparently a cache MISS, never an exception.
+  if (!isValidCacheEnvelope(parsed)) return null;
+  const envelope: CacheEnvelope = parsed;
+  const ageMs = Date.now() - new Date(envelope.savedAt).getTime();
   if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > ttlMs) return null;
   const out: HttpResponse = {
-    status: parsed.response.status,
-    headers: parsed.response.headers,
-    body: parsed.response.body,
+    status: envelope.response.status,
+    headers: envelope.response.headers,
+    body: envelope.response.body,
     cached: true,
-    cachedAt: parsed.savedAt,
+    cachedAt: envelope.savedAt,
   };
   return out;
 }

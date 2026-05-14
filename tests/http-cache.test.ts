@@ -230,6 +230,80 @@ test('http-cache: 404 GET is also cached (verifier short-circuit)', async () => 
   });
 });
 
+test('FLAG-01: malformed cache envelope reads as a miss (no crash, no torn response)', async () => {
+  await withFreshState(async () => {
+    // Deliberately seed a parseable-but-malformed envelope at the location
+    // readCache will look. The cacheKey is sha256-derived; we precompute
+    // the exact path the next fetch() will check by mirroring the request
+    // shape the http module uses, then plant a JSON file there with the
+    // wrong shape. After FLAG-01 the http module must treat this as a
+    // cache MISS (return cached:false), NOT crash on undefined fields.
+    const cassette = loadCassette('crossref-doi-200');
+    const agent = new MockAgent();
+    agent.disableNetConnect();
+    setGlobalDispatcher(agent);
+    const u = new URL(cassette.request.url);
+    const pool = agent.get(u.origin);
+    const r0 = cassette.responses[0]!;
+    // One interceptor — the malformed cache MUST be ignored and the network
+    // call MUST fire (otherwise the interceptor stays pending and the test
+    // assertion catches it).
+    pool
+      .intercept({ path: u.pathname + u.search, method: cassette.request.method })
+      .reply(r0.status, r0.body, { headers: r0.headers });
+    try {
+      // Plant a malformed cache file in pensmithHttpCacheDir(). We don't
+      // know the cacheKey up front (it depends on header order + UA
+      // filtering), so we plant garbage at EVERY .json under the dir we
+      // can guess — but a simpler approach: warm the cache once, then
+      // overwrite the on-disk file with the bad shape, then call again.
+      // Use a separate cassette+interceptor to warm; that's two
+      // interceptors instead of one. Pivot: plant a file with a deliberately
+      // computable key by running a dummy request first.
+      const warm = await fetch(cassette.request.url, { source: 'crossref' });
+      assert.equal(warm.cached, false, 'warmup must fire network');
+      const dir = pensmithHttpCacheDir();
+      const files = await fsp.readdir(dir);
+      assert.equal(files.length, 1, 'exactly one cache file after warmup');
+      const cachePath = path.join(dir, files[0]!);
+
+      // Overwrite with deliberately malformed envelope: savedAt is the
+      // wrong type, response is null. JSON-parseable, structurally
+      // broken — must read as a miss after FLAG-01.
+      await atomicWriteFile(
+        cachePath,
+        JSON.stringify({ savedAt: 12345, response: null }),
+      );
+
+      // Re-register ONE interceptor so the post-corruption fetch can
+      // succeed against the network (since the cache miss must trigger
+      // a real network dispatch).
+      pool
+        .intercept({ path: u.pathname + u.search, method: cassette.request.method })
+        .reply(r0.status, r0.body, { headers: r0.headers });
+
+      // Pre-FLAG-01: this would either crash with "Cannot read properties
+      // of null" or return {status:undefined, body:undefined, ...} as
+      // cached:true. Post-fix: cached:false and a fresh network body.
+      const second = await fetch(cassette.request.url, { source: 'crossref' });
+      assert.equal(
+        second.cached,
+        false,
+        'malformed cache envelope must read as a miss (cached:false)',
+      );
+      assert.equal(second.status, r0.status, 'fresh network response must populate status');
+      assert.equal(
+        typeof second.body,
+        'string',
+        'body must be a string (not undefined from torn envelope)',
+      );
+      assert.deepEqual(agent.pendingInterceptors(), [], 'both interceptors must have fired');
+    } finally {
+      await agent.close();
+    }
+  });
+});
+
 test('http-cache: clearCache removes every entry', async () => {
   await withFreshState(async () => {
     const cassette = loadCassette('crossref-doi-200');
