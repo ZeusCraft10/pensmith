@@ -228,6 +228,70 @@ test('invalid JSON throws (caller-handled SyntaxError)', async () => {
   });
 });
 
+test('BLOCKER-02: concurrent loadAndMigrate(writeBack:true) wrapped in withLock — disk is consistent post-migration, no torn writes', async () => {
+  // This test models the exact contract that state.ts/library.ts/runtime.ts
+  // honor after BLOCKER-02 — every loadAndMigrate call with writeBack:true
+  // is wrapped in withLock at the call site. We replay that wrap here against
+  // the v1->v2 sample migration fixture to prove the lock serializes
+  // concurrent writers and the on-disk file ends in a single consistent
+  // v2 state (never torn, never half-migrated, never racing tmp+rename
+  // pairs against each other).
+  await withTmp(async (dir) => {
+    const file = path.join(dir, 's.json');
+    await seed(
+      file,
+      JSON.stringify({ $schemaVersion: 1, paperId: 'race-target', createdAt: ISO }),
+    );
+    const V2Schema = z.object({
+      $schemaVersion: z.literal(2),
+      paperId: z.string(),
+      createdAt: z.string(),
+    });
+
+    // Import withLock to wrap loadAndMigrate the same way state.ts /
+    // library.ts / runtime.ts do post-fix.
+    const { withLock } = await import('../bin/lib/lock.js');
+
+    // Fire 5 concurrent locked load+migrate+writeBack calls. With the lock
+    // in place every caller serializes; without the lock (the pre-fix bug)
+    // tmp+rename pairs could interleave and produce torn writes.
+    const N = 5;
+    const results = await Promise.all(
+      Array.from({ length: N }, () =>
+        withLock(file, async () =>
+          loadAndMigrate({
+            file,
+            schema: V2Schema,
+            schemaName: 'state',
+            currentVersion: 2,
+            migrations: { 1: v1_to_v2 },
+            writeBack: true,
+          }),
+        ),
+      ),
+    );
+
+    // Every caller must observe the migrated $schemaVersion = 2 with the
+    // original paperId intact. No half-merged shapes.
+    for (const r of results) {
+      assert.equal((r as { $schemaVersion: number }).$schemaVersion, 2);
+      assert.equal((r as { paperId: string }).paperId, 'race-target');
+    }
+
+    // Disk reflects the migrated value — and the file is parseable as a
+    // single valid v2 envelope (no torn JSON).
+    const onDiskRaw = await fsp.readFile(file, 'utf8');
+    const onDisk = JSON.parse(onDiskRaw) as {
+      $schemaVersion: number;
+      paperId: string;
+      createdAt: string;
+    };
+    assert.equal(onDisk.$schemaVersion, 2, 'on-disk schemaVersion must be 2 post-migration');
+    assert.equal(onDisk.paperId, 'race-target', 'paperId must survive the race');
+    assert.equal(onDisk.createdAt, ISO, 'createdAt must survive the race');
+  });
+});
+
 test('schema validation failure throws SchemaValidationError with rich issues', async () => {
   await withTmp(async (dir) => {
     const file = path.join(dir, 's.json');

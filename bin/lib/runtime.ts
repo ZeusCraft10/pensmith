@@ -47,13 +47,23 @@
 //     absent and the env NAME is present.
 //
 // Foundation-slice contract:
-//   - The runtime config is read-only at start of pensmith — this means
-//     concurrent loadRuntimeConfig calls don't need a lock. Concurrent
-//     saveRuntimeConfig calls DO need a lock; we use withLock per the W10
-//     pattern. There is no "load INSIDE the lock for updateConfig" pattern
-//     here because Phase 1 ships no updateRuntimeConfig — saves are full
+//   - The runtime config is read-only at start of pensmith — saves go
+//     through saveRuntimeConfig only. We acquire withLock on:
+//       (a) every saveRuntimeConfig (W10 pattern), AND
+//       (b) every readOne call when writeBack:true is in effect (BLOCKER-02
+//           fix). The loader's writeBack branch issues atomicWriteFile when
+//           a forward migration runs; without the lock, two concurrent
+//           loadRuntimeConfig callers each migrating a v(N-1) file to vN
+//           would race tmp+rename writes against each other AND against
+//           any concurrent saveRuntimeConfig.
+//     There is no "load INSIDE the lock for updateConfig" pattern here
+//     because Phase 1 ships no updateRuntimeConfig — saves are full
 //     replacements (config edits go through `pensmith config <key>=<value>`
 //     in Phase 7+, which is out-of-scope here).
+//
+//     Auto-mode (`scope:'auto'`) reads global first, then paper. Each is
+//     wrapped in its OWN withLock — the locks are sequential (not nested);
+//     the global lock is released before the paper lock is acquired.
 //
 // Forward-incompat contract (T-01-COMPAT-01 mitigation):
 //   - ForwardIncompatError from loadAndMigrate propagates UNCHANGED — runtime
@@ -180,13 +190,31 @@ function defaults(): RuntimeConfig {
  */
 async function readOne(file: string): Promise<RuntimeConfig | null> {
   try {
-    return (await loadAndMigrate({
-      file,
-      schema: RuntimeConfigSchema,
-      schemaName: 'runtime-config',
-      currentVersion: CURRENT_RUNTIME_CONFIG_VERSION,
-      writeBack: true,
-    })) as RuntimeConfig;
+    // BLOCKER-02 fix: wrap the loadAndMigrate call inside withLock. The
+    // loader's writeBack:true branch issues an atomicWriteFile when a
+    // forward migration runs — without the lock, two concurrent
+    // loadRuntimeConfig callers each migrating a v(N-1) file to vN would
+    // race tmp+rename writes against each other AND against concurrent
+    // saveRuntimeConfig. The race is dormant today (no v2 schema yet)
+    // but the lock must be in place so it cannot activate the day a
+    // real forward migration ships. The lock key is the file path — so
+    // global and paper-overlay reads use distinct locks (no deadlock
+    // when auto-mode reads both).
+    //
+    // T-01-07 no-leak property is unaffected: no log call is added here,
+    // and the only payload that crosses this function is the parsed
+    // RuntimeConfig (which holds env-var NAMES only — never resolved
+    // api-key VALUES). The withLock wrap operates strictly on the file
+    // path; it does not touch the loaded config or any env value.
+    return await withLock(file, async () =>
+      (await loadAndMigrate({
+        file,
+        schema: RuntimeConfigSchema,
+        schemaName: 'runtime-config',
+        currentVersion: CURRENT_RUNTIME_CONFIG_VERSION,
+        writeBack: true,
+      })) as RuntimeConfig,
+    );
   } catch (e) {
     const err = e as NodeJS.ErrnoException & { cause?: NodeJS.ErrnoException };
     if (err?.code === 'ENOENT' || err?.cause?.code === 'ENOENT') {

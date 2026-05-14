@@ -192,13 +192,24 @@ export async function loadState(paperRoot: string): Promise<State> {
   const file = stateFile(paperRoot);
   let value: State;
   try {
-    value = (await loadAndMigrate({
-      file,
-      schema: StateSchema,
-      schemaName: 'state',
-      currentVersion: CURRENT_STATE_VERSION,
-      writeBack: true,
-    })) as State;
+    // BLOCKER-02 fix: wrap the loadAndMigrate call inside withLock. The
+    // loader's writeBack:true branch issues an atomicWriteFile when a
+    // forward migration runs — without the lock, two concurrent loadState
+    // callers each migrating a v(N-1) file to vN would race tmp+rename
+    // writes against each other and against any concurrent saveState/
+    // updateState. The race is dormant today (no v2 schema yet) but the
+    // lock must be in place so the race cannot activate the day a real
+    // forward migration ships. The lock cost when no migration runs is
+    // bounded by W3's per-process advisory-lock fast path.
+    value = await withLock(file, async () =>
+      (await loadAndMigrate({
+        file,
+        schema: StateSchema,
+        schemaName: 'state',
+        currentVersion: CURRENT_STATE_VERSION,
+        writeBack: true,
+      })) as State,
+    );
   } catch (e) {
     const err = e as NodeJS.ErrnoException & { cause?: NodeJS.ErrnoException };
     if (err?.code === 'ENOENT' || err?.cause?.code === 'ENOENT') {

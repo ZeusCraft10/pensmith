@@ -215,13 +215,23 @@ export async function loadLibrary(paperRoot: string): Promise<Library> {
   const file = libraryFile(paperRoot);
   let value: Library;
   try {
-    value = (await loadAndMigrate({
-      file,
-      schema: LibrarySchema,
-      schemaName: 'library',
-      currentVersion: CURRENT_LIBRARY_VERSION,
-      writeBack: true,
-    })) as Library;
+    // BLOCKER-02 fix: wrap the loadAndMigrate call inside withLock. The
+    // loader's writeBack:true branch issues an atomicWriteFile when a
+    // forward migration runs — without the lock, two concurrent
+    // loadLibrary callers each migrating a v(N-1) file to vN would race
+    // tmp+rename writes against each other and against any concurrent
+    // saveLibrary/addEntry. The race is dormant today (no v2 schema yet)
+    // but the lock must be in place so the race cannot activate the day
+    // a real forward migration ships.
+    value = await withLock(file, async () =>
+      (await loadAndMigrate({
+        file,
+        schema: LibrarySchema,
+        schemaName: 'library',
+        currentVersion: CURRENT_LIBRARY_VERSION,
+        writeBack: true,
+      })) as Library,
+    );
   } catch (e) {
     const err = e as NodeJS.ErrnoException & { cause?: NodeJS.ErrnoException };
     if (err?.code === 'ENOENT' || err?.cause?.code === 'ENOENT') {
