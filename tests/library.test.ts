@@ -158,6 +158,40 @@ test('findEntry returns matching entry / undefined for miss', async () => {
   assert.equal(miss, undefined);
 });
 
+test('BLOCKER-01: concurrent initLibrary calls — exactly one succeeds, others get AlreadyExists (no clobber)', async () => {
+  const root = mkPaperRoot();
+  const { initLibrary, LibraryAlreadyExistsError, loadLibrary } = await import(
+    '../bin/lib/library.js'
+  );
+
+  // Fire 8 concurrent initLibrary calls. The lock-inside-init fix guarantees
+  // exactly one wins the race; the others all observe the seeded file
+  // inside the critical section and throw LibraryAlreadyExistsError. The
+  // on-disk library must be valid (parseable + empty entries[]) — never
+  // a partial/torn write.
+  const N = 8;
+  const results = await Promise.allSettled(
+    Array.from({ length: N }, () => initLibrary(root)),
+  );
+
+  const fulfilled = results.filter((r) => r.status === 'fulfilled');
+  const rejected = results.filter((r) => r.status === 'rejected');
+
+  assert.equal(fulfilled.length, 1, `exactly one initLibrary must succeed; got ${fulfilled.length}`);
+  assert.equal(rejected.length, N - 1, `the other ${N - 1} must reject`);
+  for (const r of rejected) {
+    assert.ok(
+      (r as PromiseRejectedResult).reason instanceof LibraryAlreadyExistsError,
+      'every loser must throw LibraryAlreadyExistsError',
+    );
+  }
+
+  // The on-disk library must be the empty seed shape — confirms no clobber
+  // by a later contender after the winner committed.
+  const final = await loadLibrary(root);
+  assert.deepEqual(final.entries, [], 'on-disk entries must be the seeded empty array');
+});
+
 test('forward-incompat: $schemaVersion=999 throws ForwardIncompatError', async () => {
   const root = mkPaperRoot();
   const file = path.join(root, 'LIBRARY.json');

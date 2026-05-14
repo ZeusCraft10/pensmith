@@ -24,6 +24,22 @@
 //   would silently clobber the first. The 10-concurrent-disjoint-ids test
 //   in tests/library.test.ts is the regression gate for this invariant.
 //
+//   loadLibrary ALSO takes withLock around its loadAndMigrate call because
+//   the loader's writeBack:true path issues an atomicWriteFile when a
+//   forward migration runs (BLOCKER-02 fix). Without the lock, two
+//   concurrent loadLibrary callers each migrating a v(N-1) file to vN
+//   would race their tmp+rename writes against each other AND against
+//   any concurrent addEntry/saveLibrary. Today the migration registry
+//   is empty so the writeBack branch is dormant, but the lock is in
+//   place so the race cannot activate the day a real v2 ships.
+//
+//   initLibrary ALSO takes withLock around the existence check (BLOCKER-01
+//   fix) so the access-then-write is atomic. The pre-fix code performed
+//   fs.access OUTSIDE the lock, allowing two concurrent inits to both
+//   observe ENOENT and both seed — the second silently clobbering the
+//   first via atomic rename. The fix is to move the access check inside
+//   the same critical section as the write.
+//
 // Forward-incompat contract (T-01-COMPAT-01 mitigation):
 //   ForwardIncompatError from loadAndMigrate propagates UNCHANGED so a
 //   newer-on-disk LIBRARY.json never gets silently downgraded by an older
@@ -141,30 +157,32 @@ function log(): SessionLogger {
 export async function initLibrary(paperRoot: string): Promise<Library> {
   const file = libraryFile(paperRoot);
 
-  // Refuse to clobber. fs.access throws ENOENT when the file is absent —
-  // which is exactly the case where init is allowed to proceed. Any other
-  // error code (EACCES, EPERM, etc.) bubbles up unchanged.
-  let exists = false;
-  try {
-    await fs.promises.access(file);
-    exists = true;
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException | null)?.code;
-    if (code !== 'ENOENT') {
-      throw e;
-    }
-  }
-  if (exists) {
-    throw new LibraryAlreadyExistsError(`LIBRARY.json already exists at ${file}`);
-  }
-
-  // Validate the seed against the schema BEFORE writing.
+  // Validate the seed against the schema BEFORE acquiring the lock.
   const seeded: Library = LibrarySchema.parse({
     $schemaVersion: CURRENT_LIBRARY_VERSION,
     entries: [],
   });
 
+  // BLOCKER-01 fix: the existence check MUST run INSIDE the lock. The
+  // pre-fix code performed fs.access OUTSIDE the lock, which left a
+  // window where two concurrent inits could both observe ENOENT, both
+  // pass the access-then-throw gate, and both enter withLock sequentially
+  // — the second writer silently clobbering the first via atomic rename.
+  // Moving the access call inside the critical section makes
+  // "check-then-write" atomic against any other locked writer
+  // (saveLibrary, addEntry, or another initLibrary).
   await withLock(file, async () => {
+    // Refuse to clobber. fs.access throws ENOENT when the file is absent —
+    // which is exactly the case where init is allowed to proceed. Any
+    // other error code (EACCES, EPERM, etc.) bubbles up unchanged.
+    try {
+      await fs.promises.access(file);
+      throw new LibraryAlreadyExistsError(`LIBRARY.json already exists at ${file}`);
+    } catch (e) {
+      if (e instanceof LibraryAlreadyExistsError) throw e;
+      const code = (e as NodeJS.ErrnoException | null)?.code;
+      if (code !== 'ENOENT') throw e;
+    }
     await atomicWriteFile(file, JSON.stringify(seeded, null, 2) + '\n');
   });
 

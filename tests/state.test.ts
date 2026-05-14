@@ -134,6 +134,42 @@ test('forward-incompat: $schemaVersion=999 on disk throws ForwardIncompatError',
   );
 });
 
+test('BLOCKER-01: concurrent initState calls — exactly one succeeds, others get AlreadyExists (no clobber)', async () => {
+  const root = mkPaperRoot();
+  const { initState, StateAlreadyExistsError, loadState } = await import('../bin/lib/state.js');
+
+  // Fire 8 concurrent initState calls with distinct paperIds. The lock-
+  // inside-init fix guarantees exactly one wins the race; the others all
+  // observe the seeded file inside the critical section and throw
+  // StateAlreadyExistsError. The on-disk paperId must match exactly one of
+  // the candidate seeds — never a partial/torn write, never a clobbered
+  // value from a later writer.
+  const N = 8;
+  const ids = Array.from({ length: N }, (_, i) => `paper-race-${i}`);
+  const results = await Promise.allSettled(
+    ids.map((id) => initState(root, { paperId: id })),
+  );
+
+  const fulfilled = results.filter((r) => r.status === 'fulfilled');
+  const rejected = results.filter((r) => r.status === 'rejected');
+
+  assert.equal(fulfilled.length, 1, `exactly one initState must succeed; got ${fulfilled.length}`);
+  assert.equal(rejected.length, N - 1, `the other ${N - 1} must reject`);
+  for (const r of rejected) {
+    assert.ok(
+      (r as PromiseRejectedResult).reason instanceof StateAlreadyExistsError,
+      'every loser must throw StateAlreadyExistsError',
+    );
+  }
+
+  // The on-disk paperId must equal the winner's paperId — confirms no
+  // clobber by a later contender after the winner committed.
+  const winner = (fulfilled[0] as PromiseFulfilledResult<{ paperId: string }>).value;
+  const final = await loadState(root);
+  assert.equal(final.paperId, winner.paperId, 'on-disk paperId must match the race winner');
+  assert.ok(ids.includes(final.paperId), 'on-disk paperId must be one of the candidates');
+});
+
 test('updateState mutator that returns invalid shape rejects (StateSchema.parse fails)', async () => {
   const root = mkPaperRoot();
   const { initState, updateState } = await import('../bin/lib/state.js');
