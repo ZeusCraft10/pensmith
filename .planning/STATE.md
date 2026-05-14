@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: phase_complete
-stopped_at: Phase 1 COMPLETE — 14/14 plans shipped + 4 code-review fixes applied + verification PASS (5/5 SCs, 1 documented Phase 2 carry-forward); awaiting /gsd-discuss-phase 2
-last_updated: "2026-05-14T00:00:00.000Z"
-last_activity: 2026-05-14 -- Phase 1 closed: REVIEW (2 BLOCK + 9 FLAG + 6 NIT), 4 fixes applied (BLOCKER-01, BLOCKER-02, FLAG-01, FLAG-03), VERIFICATION PASS — 226 tests on Windows; tsc --noEmit clean. Commits dc3e944 / 91d2f5a / e333e40 / 09d06fb / bf9421f / 3fa69df.
+status: phase_discussed
+stopped_at: Phase 2 CONTEXT.md + DISCUSSION-LOG.md committed (18472bb); 7 areas discussed, 24 decisions locked (D-01..D-24); awaiting /gsd-plan-phase 2
+last_updated: "2026-05-14T12:00:00.000Z"
+last_activity: 2026-05-14 -- Phase 2 discuss-phase complete. 7 areas: carry-forwards triage / exit criteria-DoD / MCP server surface / MCP auth-trust boundary / Tier-2 CLI dispatch / doctor output / tier-contract test scaffolding. 24 decisions locked. Commit 18472bb.
 progress:
   total_phases: 11
   completed_phases: 2
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 ## Current Position
 
-Phase: 1 of 11 (Foundation NFRs) — **COMPLETE** (14/14 plans + verification PASS)
-Plan: Phase 1 closed; next is `/gsd-discuss-phase 2` (Phase 2: tier shells + doctor + tier-contract gate)
-Status: Phase complete — REVIEW (2 BLOCK + 9 FLAG + 6 NIT); 4 fixes applied (BLOCKER-01, BLOCKER-02, FLAG-01, FLAG-03); VERIFICATION PASS (5/5 SCs, 1 documented Phase 2 carry-forward on Retry-After parser)
-Last activity: 2026-05-14 -- Phase 1 closed: 226 tests pass on Windows; tsc --noEmit clean. Fix commits dc3e944 / 91d2f5a / e333e40 / 09d06fb; review docs bf9421f / 3fa69df.
+Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **DISCUSSED** (CONTEXT.md + DISCUSSION-LOG.md committed)
+Plan: Phase 2 discuss-phase complete; next is `/gsd-plan-phase 2`
+Status: Phase 2 CONTEXT.md committed (18472bb) — 24 decisions locked (D-01..D-24) across 7 areas: carry-forwards triage, exit criteria/DoD, MCP server surface, MCP auth/trust boundary, Tier-2 CLI dispatch, doctor output, tier-contract test scaffolding. Phase 1 verification PASS (5/5 SCs); fix commits dc3e944 / 91d2f5a / e333e40 / 09d06fb; review docs bf9421f / 3fa69df.
+Last activity: 2026-05-14 -- Phase 2 discuss-phase complete. Locks include parseRetryAfter() split (D-01), 02-00-review-cleanup as first plan (D-02), DOCT-05 wiring-smoke + Phase 3 follow-up (D-03/D-04), stdio-only MCP locked by lint (D-10), tier-contract spawns mcp/server.js (D-11), 4-layer hard merge gate (D-22..D-24).
 
-Progress: [██████░░░░] 57%  (Phase 0 done; Phase 1 14/14 plans + REVIEW + VERIFICATION PASS — phase closed)
+Progress: [██████░░░░] 57%  (Phase 0 done; Phase 1 closed; Phase 2 discussed — plans pending)
 
 Plan files (depends_on order):
 
@@ -128,6 +128,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-09T00:30:00.000Z
-Stopped at: Phase 1 execution complete (14/14 plans shipped); Wave 11 runtime.ts + pricing.ts landed (43a1835 / adfcbc2 / b00ed17). 222 tests pass on Windows; `tsc --noEmit` clean. Awaiting `/gsd-verify-phase 1` to gate Phase 2.
-Resume file: .planning/HANDOFF.json (next_action points at `/gsd-verify-phase 1`)
+Last session: 2026-05-14T12:00:00.000Z
+Stopped at: Phase 2 discuss-phase complete. CONTEXT.md (.planning/phases/02-tier-shells-doctor-tier-contract-gate/02-CONTEXT.md) and DISCUSSION-LOG.md committed at 18472bb. 24 decisions locked (D-01..D-24) across 7 areas. Phase 1 closed prior (ecc8f4b) with 5/5 SC PASS.
+Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-CONTEXT.md (next_action: `/gsd-plan-phase 2`)
