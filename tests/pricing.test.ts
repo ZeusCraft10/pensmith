@@ -90,7 +90,7 @@ test('estimateCost throws RangeError on negative input tokens', () => {
   );
 });
 
-test('MODEL_PRICES is deeply frozen (outer + each inner provider record)', () => {
+test('MODEL_PRICES is deeply frozen (outer + each inner provider record + each leaf ModelPrice — FLAG-03)', () => {
   assert.ok(Object.isFrozen(MODEL_PRICES), 'MODEL_PRICES outer must be frozen');
   assert.ok(
     Object.isFrozen(MODEL_PRICES.anthropic),
@@ -99,6 +99,33 @@ test('MODEL_PRICES is deeply frozen (outer + each inner provider record)', () =>
   assert.ok(
     Object.isFrozen(MODEL_PRICES.openai),
     'MODEL_PRICES.openai must be frozen',
+  );
+  // FLAG-03 regression: every leaf ModelPrice value object must ALSO be
+  // frozen. The pre-fix code froze only the outer record and each provider
+  // record but left the leaves writable. Verify at least one well-known
+  // leaf — exhaustive coverage follows in the loop below.
+  assert.ok(
+    Object.isFrozen(MODEL_PRICES.anthropic?.['claude-opus-4']),
+    'MODEL_PRICES.anthropic[claude-opus-4] leaf must be frozen (FLAG-03)',
+  );
+  // Exhaustive: every leaf across every provider must be frozen.
+  for (const [providerKey, models] of Object.entries(MODEL_PRICES)) {
+    for (const [modelKey, price] of Object.entries(models)) {
+      assert.ok(
+        Object.isFrozen(price),
+        `MODEL_PRICES.${providerKey}[${modelKey}] leaf must be frozen`,
+      );
+    }
+  }
+  // Behavioral assertion: under strict mode, an assignment to a frozen
+  // leaf field must THROW (this file is an ES module, which is strict by
+  // default). Verifies the freeze is enforced, not just declared.
+  assert.throws(
+    () => {
+      (MODEL_PRICES.anthropic!['claude-opus-4'] as { inputPerMtok: number }).inputPerMtok = 99;
+    },
+    TypeError,
+    'mutation of a frozen leaf must throw TypeError under strict mode',
   );
 });
 

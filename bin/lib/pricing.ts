@@ -22,9 +22,14 @@
 //     a divergent value.
 //
 // Defense-in-depth contract:
-//   - MODEL_PRICES is deeply frozen via Object.freeze on the outer record AND
-//     each inner provider record. No caller can mutate the table at runtime —
+//   - MODEL_PRICES is GENUINELY deeply frozen — Object.freeze on the outer
+//     record, each inner provider record, AND each leaf ModelPrice value
+//     object. No caller can mutate the table at runtime at ANY level —
 //     attempts to assign throw TypeError under strict mode (which we are in).
+//     The pre-fix code froze only the outer record and the per-provider
+//     record but left the leaf ModelPrice objects writable, so
+//     MODEL_PRICES.anthropic['claude-opus-4'].inputPerMtok = 99 succeeded
+//     silently (FLAG-03 fix).
 //   - estimateCost rejects negative tokens with RangeError BEFORE the
 //     provider/model lookup so callers get the most-specific error first.
 //
@@ -67,16 +72,25 @@ const RAW: Record<string, Record<string, ModelPrice>> = {
   },
 };
 
-// Deep-freeze: outer record + each inner provider record. Mutation attempts
-// at runtime throw TypeError under strict mode (tsconfig "strict": true is
-// load-bearing here). Each ModelPrice object is itself effectively frozen
-// because the outer record reference is frozen and the inner records are
-// frozen — the only way to swap a price would be to reach through the
-// provider record, which would also throw.
+// Deep-freeze: outer record + each inner provider record + each leaf
+// ModelPrice value object. Mutation attempts at runtime throw TypeError
+// under strict mode (tsconfig "strict": true is load-bearing here).
+//
+// FLAG-03 fix: the pre-fix code froze the outer record and the per-provider
+// records but NOT the leaf ModelPrice objects, so a caller could still
+// mutate MODEL_PRICES.anthropic['claude-opus-4'].inputPerMtok = 99
+// silently (strict mode would only throw if BOTH the parent record AND the
+// leaf were frozen — only the parent was). Iterating one extra level deep
+// and freezing each leaf closes the gap; the module header's claim
+// "MODEL_PRICES is deeply frozen" is now genuinely true.
 for (const provider of Object.keys(RAW)) {
   // RAW[provider] is guaranteed defined since we just iterated the same keys;
   // the non-null assertion documents intent for noUncheckedIndexedAccess.
-  Object.freeze(RAW[provider]!);
+  const providerRecord = RAW[provider]!;
+  for (const model of Object.keys(providerRecord)) {
+    Object.freeze(providerRecord[model]!);
+  }
+  Object.freeze(providerRecord);
 }
 Object.freeze(RAW);
 
