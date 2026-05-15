@@ -95,7 +95,19 @@ Plans:
   3. Doctor probes ecosystem (Zotero MCP authenticated, Pandoc on PATH, humanizer skill at `~/.claude/skills/humanizer/`) and warns when `PENSMITH_CONTACT_EMAIL` is unset.
   4. MCP server (`mcp/server.ts`) exposes the read-only resources `paper://state`, `paper://outline`, `paper://section/{N}`, `paper://library`, `paper://capabilities` and idempotent state-mutation tools; tool handlers are ≤30 lines each (lint-checked) with all logic in `bin/lib/*`.
   5. `tests/tier-contract.test.js` exists, is wired into CI as a merge block, and CONTRIBUTING.md states every workflow body added in any later phase MUST add a contract-test entry.
-**Plans**: TBD
+**Plans**: 9 plans
+
+Plans:
+
+- [ ] 02-00-PLAN.md (wave 0) -- Carry-forward + Wave 0 prep: parseRetryAfter extracted into bin/lib/retry.ts (D-01), citty^0.2.2 + zod dep, references/doctor-output.md locked copy, hooks/.gitkeep, tests/repo-files.test.ts extended
+- [ ] 02-01-PLAN.md (wave 1) -- D-09 thin-shim AST lint chokepoint + red-team fixture (ARCH-18)
+- [ ] 02-02-PLAN.md (wave 1) -- D-10 mcp-no-network AST lint chokepoint + red-team fixture (ARCH-18)
+- [ ] 02-03-PLAN.md (wave 1) -- D-12 capabilities-no-leak AST lint chokepoint + red-team fixture (ARCH-18)
+- [ ] 02-04-PLAN.md (wave 2) -- mcp/server.ts: MCP SDK ^1.29 + 4 paper:// resources + 4 zod-validated tools, each handler <=30 stmts (TIER-05, TIER-06, ARCH-18)
+- [ ] 02-05-PLAN.md (wave 2) -- bin/cli/pensmith.ts citty dispatcher (17 verbs, 1 real + 16 stubs) + doctor verb with 5 probes (TIER-01..04, DOCT-01..04, DOCT-06)
+- [ ] 02-06-PLAN.md (wave 2) -- hooks/ scaffolding (3 lifecycle stubs) + workflows/*.md (17 stubs with capability_check blocks) + manifest validator extension (TIER-07, ARCH-01, ARCH-03)
+- [ ] 02-07-PLAN.md (wave 3) -- tests/tier-contract.test.ts (D-17 contract via official MCP Client + StdioClientTransport) + DOCT-05 wiring-smoke probe + CI step (TIER-05, DOCT-05)
+- [ ] 02-08-PLAN.md (wave 4) -- CONTRIBUTING.md Tier contract section (D-24, locked) + tests/repo-files.test.ts CF-D24 assertion
 **UI hint**: no
 
 ### Phase 3: Vertical slice through one section
@@ -204,7 +216,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 |-------|----------------|--------|-----------|
 | 0. Repo skeleton & plugin manifest | 4/4 | COMPLETE | 2026-05-07 |
 | 1. Foundation NFRs | 14/14 | COMPLETE (VERIFICATION PASS 5/5) | 2026-05-14 |
-| 2. Tier shells + doctor + tier-contract gate | 0/TBD | Not started | - |
+| 2. Tier shells + doctor + tier-contract gate | 0/9 | Planned | - |
 | 3. Vertical slice through one section | 0/TBD | Not started | - |
 | 4. Breadth — N sections + compile + wave scheduling | 0/TBD | Not started | - |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 0/TBD | Not started | - |
