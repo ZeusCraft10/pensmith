@@ -105,7 +105,7 @@ Plans:
 - [x] 02-03-PLAN.md (wave 1) -- D-12 capabilities-no-leak AST lint chokepoint + red-team fixture (ARCH-18) — COMPLETE 2026-05-16 (b4473d2/f106197/577d513/b85a902)
 - [x] 02-04-PLAN.md (wave 2) -- mcp/server.ts: MCP SDK ^1.29 + 5 paper:// resources (state/outline/section/{N}/library/capabilities) + 6 snake_case state-mutation tools, each handler <=30 stmts (TIER-01, TIER-02, TIER-06, ARCH-18) — COMPLETE 2026-05-16 (f219474/658d5da/faad8c0/9137a53/f796fd5)
 - [x] 02-05-PLAN.md (wave 2) -- bin/pensmith.ts citty dispatcher (16 UX-02 verbs, 1 real + 15 stubs) + doctor verb (10 probes: DOCT-01/02/03/04/05/07 + D-03(d) SKIP) + runDoctor() Record<string,ProbeResult> + TTY/JSON renderers + exit-code contract + 300 tests pass (TIER-04, DOCT-01..04, DOCT-07) — COMPLETE 2026-05-16 (53d6f68/89ff1f3/52b5e7e)
-- [ ] 02-06-PLAN.md (wave 2) -- hooks/ scaffolding (4 lifecycle stubs: session-start/stop/pre-compact/post-tool-use) + hooks.json manifest + workflows/*.md (17 stubs with full capability_check blocks) + manifest validator extension (TIER-03, TIER-07, ARCH-01, ARCH-03)
+- [x] 02-06-PLAN.md (wave 2) -- hooks/ scaffolding (4 lifecycle stubs: session-start/stop/pre-compact/post-tool-use) + hooks.json manifest + workflows/*.md (16 stubs with full capability_check blocks, W4 closed vocabulary) + manifest validator extension (TIER-03, TIER-07, ARCH-01, ARCH-03) — COMPLETE 2026-05-16 (b71f8e2/1236a13/0e57eab)
 - [ ] 02-07-PLAN.md (wave 3) -- tests/tier-contract.test.ts (4 cases A-D via official MCP Client + StdioClientTransport) + tier-contract preflight test (D-13/D-24) + assert-tier-equivalent helper (±20%) + CI step (TIER-06, TIER-07, DOCT-06)
 - [ ] 02-08-PLAN.md (wave 4) -- CONTRIBUTING.md Tier contract section (D-24, locked) + tolerance-helper documentation + tests/repo-files.test.ts CF-D24 assertion
 - [ ] 02-09-PLAN.md (wave 2) -- bin/lib/prompts.ts @clack/prompts numbered-prompt fallback (TIER-05)
@@ -217,7 +217,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 |-------|----------------|--------|-----------|
 | 0. Repo skeleton & plugin manifest | 4/4 | COMPLETE | 2026-05-07 |
 | 1. Foundation NFRs | 14/14 | COMPLETE (VERIFICATION PASS 5/5) | 2026-05-14 |
-| 2. Tier shells + doctor + tier-contract gate | 3/10 | Executing | - |
+| 2. Tier shells + doctor + tier-contract gate | 7/10 | Executing | - |
 | 3. Vertical slice through one section | 0/TBD | Not started | - |
 | 4. Breadth — N sections + compile + wave scheduling | 0/TBD | Not started | - |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 0/TBD | Not started | - |

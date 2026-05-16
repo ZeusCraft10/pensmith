@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 plan 02-05 (cli-doctor) complete. bin/pensmith.ts citty dispatcher (16 UX-02 verbs), 10 doctor probes, read-only runDoctor(), TTY + --json renderers, exit-code contract, 300 tests pass. Next plan is 02-06.
-last_updated: "2026-05-16T10:45:00Z"
-last_activity: 2026-05-16 -- Phase 2 plan 02-05 executed (3 tasks + 4 auto-fixes, 20 files created, commits 53d6f68/89ff1f3/52b5e7e)
+stopped_at: Phase 2 plan 02-06 (hooks-workflows) complete. 4 TIER-03 hook stubs + hooks/hooks.json manifest + 16 UX-02 workflow .md stubs with W4 capability_check vocabulary + manifest validator extension. 309 tests pass. Next plan is 02-07.
+last_updated: "2026-05-16T11:00:00Z"
+last_activity: 2026-05-16 -- Phase 2 plan 02-06 executed (3 tasks + 2 auto-fixes, 25 files created/modified, commits b71f8e2/1236a13/0e57eab)
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 28
-  completed_plans: 21
-  percent: 75
+  completed_plans: 22
+  percent: 79
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **EXECUTING**
-Plan: 02-05 complete (8/10 plans in Phase 2); next is 02-06
+Plan: 02-06 complete (9/10 plans in Phase 2); next is 02-07
 Status: Executing Phase 2
-Last activity: 2026-05-16 -- 02-05 cli-doctor complete (53d6f68/89ff1f3/52b5e7e)
+Last activity: 2026-05-16 -- 02-06 hooks-workflows complete (b71f8e2/1236a13/0e57eab)
 
-Progress: [███████░░░] 71%  (Phase 0 done; Phase 1 closed; Phase 2 wave 2 partial)
+Progress: [███████░░░] 79%  (Phase 0 done; Phase 1 closed; Phase 2 wave 2 advancing)
 
 Plan files (depends_on order):
 
@@ -128,6 +128,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-05] http-crossref-ping probe is SKIP-only in Phase 2 (cross-AI review HIGH fix from Codex iter 1) — production code must not import from tests/; Phase 3 ships bin/lib/http-mock.ts production-tree chokepoint to re-enable PASS/FAIL
 - [02-05] DOCT-07 runtime-config-presence delegates entirely to loadCapabilityFacts() (cross-AI cycle-2 HIGH #2) — single composition site shared with mcp/; probe only re-keys snake_case to camelCase for the doctor's historical detail shape
 - [02-05] TIER-03 exit-code test uses [FAIL] pattern (not /FAIL/) to avoid matching the footer 'N FAIL' count in the TTY renderer
+- [02-06] hooks/.gitkeep removed and replaced by 4 real hook stubs — Phase 0 placeholder retired; tests/repo-files.test.ts updated to assert hook files instead of .gitkeep
+- [02-06] noUncheckedIndexedAccess requires blockMatch[1] ?? '' pattern in workflows-keyequal test — non-null assertion alone insufficient under exactOptionalPropertyTypes + noUncheckedIndexedAccess
+- [02-06] All 4 hooks emit no stdout — hook-protocol stdout is the Claude Code hook channel; diagnostics go to stderr (T-02-06-02 mitigation)
+- [02-06] W4 closed vocabulary enforced in both test (workflows-keyequal.test.ts) and validator (validate-plugin-manifest.cjs) — two independent gates at test + CI-script layers
 
 ### Pending Todos
 
@@ -148,6 +152,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-16T10:45:00Z
-Stopped at: Phase 2 plan 02-05 complete. bin/pensmith.ts citty dispatcher (16 UX-02 verbs, 1 real + 15 stubs), 10 doctor probes (DOCT-01/02/03/04/05/07 + D-03(d) SKIP-only), runDoctor() Record<string,ProbeResult>, TTY + --json renderers (D-16/D-18), exit code from FAIL presence (D-15), D-12 no-leak sentinel test, 300 tests pass, lint+typecheck+build clean. Next: 02-06.
-Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-06-PLAN.md (next_action: execute 02-06)
+Last session: 2026-05-16T11:00:00Z
+Stopped at: Phase 2 plan 02-06 complete. 4 exit-0 TIER-03 hook stubs (session-start/pre-compact/post-tool-use/stop) + hooks/hooks.json manifest (schemaVersion=1, 4 events) + 16 UX-02 workflow .md stubs with W4 closed-vocabulary capability_check blocks + manifest validator extended (TIER-03/07/ARCH-01/ARCH-03). hooks/.gitkeep retired. 309 tests pass, lint+typecheck clean. Next: 02-07.
+Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-07-tier-contract-PLAN.md (next_action: execute 02-07)
