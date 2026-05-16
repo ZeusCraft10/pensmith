@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 plan 02-09 (prompts-fallback) complete. ask() dispatcher + @clack/prompts TTY delegate + stdin numbered-prompt fallback + Zod schema. 337 tests pass. Next plan is 02-07.
-last_updated: "2026-05-16T12:00:00Z"
-last_activity: 2026-05-16 -- Phase 2 plan 02-09 executed (3 tasks + 3 auto-fixes, 7 files created, commits da3fbd8/99c3744/00994df)
+stopped_at: Phase 2 plan 02-07 (tier-contract) complete. 4-case black-box tier contract (Cases A-D) + TIER-07 ±20% helper + D-13 preflight + CI step. 352 tests pass. Next plan is 02-08 (contributing).
+last_updated: "2026-05-16T11:31:00Z"
+last_activity: 2026-05-16 -- Phase 2 plan 02-07 executed (4 tasks + 5 auto-fixes, 4 files created, 3 modified, commits 338ee0b/379e894/51d0b6e/91dee53)
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 28
-  completed_plans: 22
-  percent: 79
+  completed_plans: 23
+  percent: 82
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **EXECUTING**
-Plan: 02-09 complete (10/10 plans in Phase 2); next is 02-07
+Plan: 02-07 complete (9/10 plans in Phase 2 executed); next is 02-08 (contributing)
 Status: Executing Phase 2
-Last activity: 2026-05-16 -- 02-09 prompts-fallback complete (da3fbd8/99c3744/00994df)
+Last activity: 2026-05-16 -- 02-07 tier-contract complete (338ee0b/379e894/51d0b6e/91dee53)
 
 Progress: [███████░░░] 79%  (Phase 0 done; Phase 1 closed; Phase 2 wave 2 advancing)
 
@@ -132,6 +132,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-06] noUncheckedIndexedAccess requires blockMatch[1] ?? '' pattern in workflows-keyequal test — non-null assertion alone insufficient under exactOptionalPropertyTypes + noUncheckedIndexedAccess
 - [02-06] All 4 hooks emit no stdout — hook-protocol stdout is the Claude Code hook channel; diagnostics go to stderr (T-02-06-02 mitigation)
 - [02-06] W4 closed vocabulary enforced in both test (workflows-keyequal.test.ts) and validator (validate-plugin-manifest.cjs) — two independent gates at test + CI-script layers
+- [02-07] test:tier-contract uses node --import tsx --test with explicit file args — run-tests.mjs always discovers all tests; explicit paths are Windows cmd.exe safe (D-10)
+- [02-07] Case B Phase 2 key-set: undefined ecosystem fields are omitted by JSON.stringify so paper://capabilities only has 3 keys in Phase 2 (not 8); optional keys validated when present
+- [02-07] Case D length comparison uses serialized fact-set JSON not raw full texts — doctor JSON (~3KB) vs capabilities JSON (~180B) is apples-to-oranges; fact-set text comparison enforces TIER-07 meaningfully
+- [02-07] MCP server main-guard uses pathToFileURL for Windows compatibility — naive file://${argv[1]} never matches absolute import.meta.url when argv[1] is relative
+- [02-07] Preflight resource count: listResources() (4 static) + listResourceTemplates() (1 section template) = 5 total per TIER-01
 
 ### Pending Todos
 
@@ -152,6 +157,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-16T12:00:00Z
-Stopped at: Phase 2 plan 02-09 complete. ask() dispatcher + @clack/prompts TTY delegate (clack.ts sole importer) + stdin numbered-prompt fallback (readline, no clack dep) + Zod discriminated-union schema. PENSMITH_PROMPT_MODE env override. 337 tests pass, lint+typecheck+build clean. TIER-05 closed. Next: 02-07.
-Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-07-tier-contract-PLAN.md (next_action: execute 02-07)
+Last session: 2026-05-16T11:31:00Z
+Stopped at: Phase 2 plan 02-07 complete. Tier-contract (Cases A-D) + TIER-07 ±20% helper + D-13 preflight + CI step on all 3 OSes. 352 tests pass, lint+typecheck+build clean. TIER-06+TIER-07+DOCT-06 closed. D-23 layer 1 (CI step) live. Next: 02-08 (contributing).
+Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-08-contributing-PLAN.md (next_action: execute 02-08)
