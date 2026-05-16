@@ -1037,14 +1037,16 @@ export async function getOpenAlexApiKey(opts): Promise<string | undefined>  // r
     import type { Probe, ProbeResult } from '../probes.js';
 
     // Phase 2: SKIP-only. Cross-AI review HIGH (Codex iter 1) ruled out any
-    // dynamic import from tests/ in production code — it inverts the layering
-    // and breaks production-only builds (tests/ is excluded from tsc dist).
+    // dynamic import from the test fixtures directory in production code — it
+    // inverts the layering and breaks production-only builds (the fixtures
+    // directory is excluded from tsc dist).
     //
     // Phase 3 will introduce a production-tree `bin/lib/http-mock.ts`
-    // chokepoint owned by the http layer (NOT by tests). When that lands,
-    // this probe's `run()` will: (a) check for the chokepoint, (b) if present,
-    // call `dispatchCrossrefPing()` against MockAgent, (c) discriminate
-    // PASS/FAIL on response status. Until then, SKIP is the honest answer.
+    // chokepoint owned by the http layer (NOT by the fixtures directory).
+    // When that lands, this probe's `run()` will: (a) check for the chokepoint,
+    // (b) if present, call `dispatchCrossrefPing()` against MockAgent,
+    // (c) discriminate PASS/FAIL on response status. Until then, SKIP is the
+    // honest answer.
     //
     // The probe interface (id + run signature) is stable — 02-07 Case A
     // extracts `probes['http-crossref-ping']?.severity` and treats SKIP as
