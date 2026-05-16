@@ -103,7 +103,7 @@ Plans:
 - [x] 02-01-PLAN.md (wave 1) -- D-09 thin-shim AST lint chokepoint + red-team fixture (ARCH-18) — COMPLETE 2026-05-16 (f6b7520/6f034cb/4c3cfe4)
 - [x] 02-02-PLAN.md (wave 1) -- D-10 mcp-no-network AST lint chokepoint + red-team fixture (ARCH-18) — COMPLETE 2026-05-16 (339b728/a473ee7/9f4fcc2)
 - [x] 02-03-PLAN.md (wave 1) -- D-12 capabilities-no-leak AST lint chokepoint + red-team fixture (ARCH-18) — COMPLETE 2026-05-16 (b4473d2/f106197/577d513/b85a902)
-- [ ] 02-04-PLAN.md (wave 2) -- mcp/server.ts: MCP SDK ^1.29 + 5 paper:// resources (state/outline/section/{N}/library/capabilities) + 6 snake_case state-mutation tools, each handler <=30 stmts (TIER-01, TIER-02, TIER-06, ARCH-18)
+- [x] 02-04-PLAN.md (wave 2) -- mcp/server.ts: MCP SDK ^1.29 + 5 paper:// resources (state/outline/section/{N}/library/capabilities) + 6 snake_case state-mutation tools, each handler <=30 stmts (TIER-01, TIER-02, TIER-06, ARCH-18) — COMPLETE 2026-05-16 (f219474/658d5da/faad8c0/9137a53/f796fd5)
 - [ ] 02-05-PLAN.md (wave 2) -- bin/cli/pensmith.ts citty dispatcher (17 verbs, 1 real + 16 stubs) + doctor verb with 8 probes incl. Zotero/Pandoc/humanizer ecosystem + runtime-config-presence (TIER-04, DOCT-01..04, DOCT-07)
 - [ ] 02-06-PLAN.md (wave 2) -- hooks/ scaffolding (4 lifecycle stubs: session-start/stop/pre-compact/post-tool-use) + hooks.json manifest + workflows/*.md (17 stubs with full capability_check blocks) + manifest validator extension (TIER-03, TIER-07, ARCH-01, ARCH-03)
 - [ ] 02-07-PLAN.md (wave 3) -- tests/tier-contract.test.ts (4 cases A-D via official MCP Client + StdioClientTransport) + tier-contract preflight test (D-13/D-24) + assert-tier-equivalent helper (±20%) + CI step (TIER-06, TIER-07, DOCT-06)

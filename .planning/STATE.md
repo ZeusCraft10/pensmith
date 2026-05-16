@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 plan 02-03 (lint-capabilities-noleak) complete. D-12 capabilities-noleak chokepoint landed (eslint.config.js + fixture + 3-test regression gate). 248 tests pass. Next plan is 02-04 (mcp-server).
-last_updated: "2026-05-16T10:07:10Z"
-last_activity: 2026-05-16 -- Phase 2 plan 02-03 executed (3 tasks + 1 fix, 3 files, commits b4473d2/f106197/577d513/b85a902)
+stopped_at: Phase 2 plan 02-04 (mcp-server) complete. McpServer+StdioServerTransport boot, 5 paper:// resources, 6 snake_case tools, loadCapabilityFacts() D-12 architectural fix, 265 tests pass. Next plan is 02-05.
+last_updated: "2026-05-16T10:47:00Z"
+last_activity: 2026-05-16 -- Phase 2 plan 02-04 executed (4 tasks + 2 auto-fixes, 12 files, commits f219474/658d5da/faad8c0/9137a53/f796fd5)
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 28
-  completed_plans: 19
-  percent: 68
+  completed_plans: 20
+  percent: 71
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **DISCUSSED** (CONTEXT.md + DISCUSSION-LOG.md committed)
-Plan: 02-03 complete (6/10 plans in Phase 2); next is 02-04 (mcp-server)
+Plan: 02-04 complete (7/10 plans in Phase 2); next is 02-05 (http-crossref-ping)
 Status: Executing Phase 2
-Last activity: 2026-05-16 -- 02-03 lint-capabilities-noleak complete (b4473d2/f106197/577d513/b85a902)
+Last activity: 2026-05-16 -- 02-04 mcp-server complete (f219474/658d5da/faad8c0/9137a53/f796fd5)
 
-Progress: [██████░░░░] 57%  (Phase 0 done; Phase 1 closed; Phase 2 discussed — plans pending)
+Progress: [███████░░░] 71%  (Phase 0 done; Phase 1 closed; Phase 2 wave 2 partial)
 
 Plan files (depends_on order):
 
@@ -120,6 +120,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-03] D-12 mcp/** block re-lists D-07/D-41/D-10 selectors — ESLint 9 flat-config last-match semantics: the D-12 block (third mcp/** no-restricted-syntax block) REPLACES D-10 block without re-listing; same override-merge safety pattern as 02-02
 - [02-03] D-12 doctor-probe scope uses files+ignores combination — ESLint flat-config ignores inside a config object excludes specific files from matching; allows computed-env selector on all probes except the authorized runtime-config-presence.ts
 - [02-03] TypeScript as const on rules array incompatible with ESLint RuleConfig mutable type — inline rules in overrideConfig instead (matches 02-01/02-02 sibling pattern)
+- [02-04] SDK v1.29 wraps all handler errors (including zod McpError(InvalidParams)) in {isError:true, content:[...]} body — TIER-06 tests assert res.isError===true instead of assert.rejects; this is correct per SDK mcp.js catch block behavior
+- [02-04] loadCapabilityFacts() in bin/lib/capabilities.ts is the single authorised composition site for runtime config + env presence flags; both mcp/resources.ts and mcp/tools.ts are zero-composition thin shims (D-12 architectural fix from cross-AI review)
+- [02-04] sections[] added as optional field to StateSchema v1 (not via migration) — additive-only change; mutation helpers default to prev.sections ?? [] so existing STATE.json files are backward-compatible
+- [02-04] verifyDoi() added to bin/lib/doi.ts (Rule 3 auto-fix) — Phase 1 doi.ts only had normalization; Phase 2 paper_doi_verify tool requires Crossref re-fetch; doi.ts exemption covers http import
 
 ### Pending Todos
 
@@ -140,6 +144,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-16T10:07:10Z
-Stopped at: Phase 2 plan 02-03 complete. D-12 capabilities-noleak chokepoint landed: eslint.config.js mcp/**/*.ts block (computed env + runtime helpers selectors + D-07/D-41/D-10 re-listed) + doctor-probe scope + runtime-config-presence static backstop + fixture + 3-test regression gate. 248 tests pass, lint+typecheck clean. Next: 02-04 (mcp-server, wave 2).
-Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-04-mcp-server-PLAN.md (next_action: execute 02-04)
+Last session: 2026-05-16T10:47:00Z
+Stopped at: Phase 2 plan 02-04 complete. McpServer+StdioServerTransport boot, 5 paper:// resources (state/outline/section/{N}/library/capabilities), 6 snake_case tools (TIER-01/TIER-02), D-12 architectural fix (loadCapabilityFacts), 265 tests pass, lint+typecheck+build clean. Next: 02-05 (http-crossref-ping, wave 2).
+Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-05-http-crossref-ping-PLAN.md (next_action: execute 02-05)
