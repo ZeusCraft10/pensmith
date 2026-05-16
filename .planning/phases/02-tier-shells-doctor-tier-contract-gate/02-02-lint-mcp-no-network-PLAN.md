@@ -3,7 +3,7 @@ phase: 02-tier-shells-doctor-tier-contract-gate
 plan: 02
 type: execute
 wave: 1
-depends_on: ["02-00"]
+depends_on: ["02-00", "02-01"]  # serial — shares eslint.config.js with 02-01 (write-conflict avoidance per plan-checker iter 2)
 files_modified:
   - eslint.config.js
   - tests/fixtures/lint-mcp-no-network-fixture.ts

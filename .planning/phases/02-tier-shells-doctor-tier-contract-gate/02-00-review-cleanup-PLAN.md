@@ -14,16 +14,19 @@ files_modified:
   - hooks/.gitkeep
   - tests/repo-files.test.ts
 autonomous: true
-requirements:
-  - ARCH-13
+requirements: []  # ARCH-13 is a carry-forward verification, not a fresh implementation owned by Phase 2
+carry_forward:
+  - ARCH-13  # Phase 1 retry helper (parseRetryAfter); 02-00 verifies the helper still passes Phase 1's SC-5 tests under Phase 2's Node-20.10 + tsx setup. Per plan-checker iter 2 / W3.
 user_setup: []
 must_haves:
   truths:
     - "parseRetryAfter is a pure helper in bin/lib/retry.ts (per D-01, Phase 1 SC-5 carry-forward)"
     - "citty@^0.2.2 is declared in package.json dependencies (per D-14)"
-    - "references/doctor-output.md exists with locked TTY copy (per D-18)"
+    - "@clack/prompts ^0.7 is declared in package.json dependencies (per TIER-05 build-now decision)"
+    - "references/doctor-output.md exists with locked TTY copy (per D-18) — pinned by sha256 in tests/repo-files.test.ts"
+    - "references/doctor-output.md does NOT contain wiring-smoke / DOCT-05 (deferred to Phase 3 per D-04)"
     - "hooks/ directory exists on disk (carry into TIER-07)"
-    - "tests/repo-files.test.ts asserts the four Wave-0 artifacts (per D-02 carry-forward block)"
+    - "tests/repo-files.test.ts asserts the Wave-0 artifacts AND hash-pins doctor-output.md"
   artifacts:
     - path: "bin/lib/retry.ts"
       provides: "parseRetryAfter() pure helper + existing fullJitterDelayMs/retry"
@@ -32,7 +35,7 @@ must_haves:
       provides: "parseRetryAfter unit cases (delta-seconds + HTTP-date + invalid)"
       contains: "parseRetryAfter"
     - path: "package.json"
-      provides: "citty@^0.2.2 dependency entry"
+      provides: "citty@^0.2.2 + @clack/prompts@^0.7 dependency entries"
       contains: "\"citty\""
     - path: "references/doctor-output.md"
       provides: "Locked TTY copy + JSON shape doc for /pensmith doctor"
@@ -282,18 +285,26 @@ From bin/lib/http.ts (call site to add in this plan):
     - .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-PATTERNS.md § "Excerpt 5 — Locked-copy reference file" (lines 188-209) AND § "Excerpt 8 — repo-files.test.ts extension shape" (lines 264-286)
   </read_first>
   <action>
-    1. **package.json** — Add `"citty": "^0.2.2"` to the `"dependencies"` block, alphabetically ordered (between `"@modelcontextprotocol/sdk"` and `"@clack/prompts"` would put it as `"citty"` after `"@clack/prompts"`; insertion order in JSON doesn't matter functionally but match existing alphabetic-by-key-where-possible style of the block). After editing, run `npm install` so `package-lock.json` is updated and `node_modules/citty/` is populated. Do NOT change any other dependency or script. Per D-14 this dep is locked.
+    1. **package.json** — Add `"citty": "^0.2.2"` AND `"@clack/prompts": "^0.7"` to the `"dependencies"` block. After editing, run `npm install` so `package-lock.json` is updated and `node_modules/citty/` + `node_modules/@clack/prompts/` are populated. Do NOT change any other dependency or script. Per D-14 + TIER-05 these deps are locked.
+
+       Rationale: Wave 2 consumes both — `bin/cli/pensmith.ts` (02-05) uses `citty`, and `bin/lib/prompts.ts` (02-09 — new plan in this revision) uses `@clack/prompts` for the TIER-05 AskUserQuestion fallback. Installing both in Wave 0 means Wave 2 plans can run in parallel without sequencing the dep install.
 
     2. **references/doctor-output.md** — Create with the following shape (model on `references/http-warnings.md`):
 
        ```markdown
        # Doctor Output Strings (locked — D-18)
 
-       This file is the SINGLE source of truth for `/pensmith doctor` (DOCT-01..06)
-       user-facing prose. `bin/cli/doctor.ts` reads these strings at module load.
-       The Tier-1 MCP `paper://capabilities` resource consumes the same Record
-       shape (severities only — no copy strings persisted across the wire).
-       Drift between the locked copy and the rendered output is a regression.
+       This file is the SINGLE source of truth for `/pensmith doctor` (DOCT-01..04, DOCT-07
+       + DOCT-02 ecosystem probes) user-facing prose. `bin/cli/doctor.ts` reads these
+       strings at module load. The Tier-1 MCP `paper://capabilities` resource consumes
+       the same Record shape (severities only — no copy strings persisted across the wire).
+       Drift between the locked copy and the rendered output is a regression — pinned
+       by sha256 hash in `tests/repo-files.test.ts`.
+
+       DOCT-05 (end-to-end fixture probe) is deferred to Phase 3 per CONTEXT D-04; this
+       file does NOT contain wiring-smoke copy. DOCT-06 (tier-equivalence) is the
+       tier-contract Case A assertion in `tests/tier-contract.test.ts` (02-07), not a
+       probe — also not in this file.
 
        ## TTY render — header
 
@@ -312,7 +323,7 @@ From bin/lib/http.ts (call site to add in this plan):
        ### node-version (DOCT-01)
        > Node.js runtime version probe — pensmith requires >=20.10.0.
 
-       ### mcp-sdk-presence (DOCT-02)
+       ### mcp-sdk-presence (DOCT-01 wiring)
        > MCP server build artifact presence — dist/mcp/server.js must exist and be non-empty.
 
        ### http-contact-email (DOCT-03)
@@ -321,11 +332,17 @@ From bin/lib/http.ts (call site to add in this plan):
        ### sync-folder-detection (DOCT-04)
        > .paper/ inside cloud sync folder (OneDrive / iCloud / Dropbox / Google Drive) detection — WARN if matched.
 
-       ### wiring-smoke (DOCT-05)
-       > Built CLI smoke test — `node dist/bin/pensmith.js --version` exits 0.
+       ### runtime-config-presence (DOCT-07)
+       > Runtime config provider API-key resolvability — WARN if no provider has its env-var set. Per-provider `{name, apiKeyEnv, present:boolean}` shape only — the resolved value never leaves loadRuntimeConfig (symmetric to T-01-07 / D-12).
 
-       ### runtime-config-presence (DOCT-06)
-       > Runtime config provider API-key resolvability — WARN if no provider has its env-var set. Presence flag only — never logs or persists the key value.
+       ### zotero-mcp-presence (DOCT-02 ecosystem)
+       > Zotero MCP server reachable via the user's ~/.claude/.mcp.json — WARN if not configured. Optional dependency surfaced for Phase 3+ intake.
+
+       ### pandoc-presence (DOCT-02 ecosystem)
+       > Pandoc binary on PATH — WARN if not found. Required by Phase 10 export.
+
+       ### humanizer-skill-presence (DOCT-02 ecosystem)
+       > Humanizer skill at ~/.claude/skills/humanizer/ — WARN if missing. Optional Phase 8 dependency.
 
        ## JSON shape
 
@@ -333,21 +350,31 @@ From bin/lib/http.ts (call site to add in this plan):
 
        ```json
        {
-         "node-version":            { "id": "...", "severity": "PASS|WARN|FAIL|SKIP", "summary": "...", "detail": "...", "fix": "..." },
-         "mcp-sdk-presence":        { ... },
-         "http-contact-email":      { ... },
-         "sync-folder-detection":   { ... },
-         "wiring-smoke":            { ... },
-         "runtime-config-presence": { ... }
+         "schemaVersion": 1,
+         "probes": {
+           "node-version":             { "id": "...", "severity": "PASS|WARN|FAIL|SKIP", "summary": "...", "detail": "...", "fix": "..." },
+           "mcp-sdk-presence":         { ... },
+           "http-contact-email":       { ... },
+           "sync-folder-detection":    { ... },
+           "runtime-config-presence":  { ... },
+           "zotero-mcp-presence":      { ... },
+           "pandoc-presence":          { ... },
+           "humanizer-skill-presence": { ... }
+         },
+         "summary": { "pass": 0, "warn": 0, "fail": 0, "skip": 0 }
        }
        ```
 
-       Keys = `probe.id` (per D-20 — Record keyed by id, NOT an Array). The tier-contract test compares Tier 1 + Tier 2 by `Object.keys().sort()` deep-equal.
+       Keys under `probes` = `probe.id` (per D-20 — Record keyed by id, NOT an Array).
+       The tier-contract test (02-07 Case A) compares Tier 1 `paper://capabilities`
+       and Tier 2 `doctor --json` for capability-fact equivalence — the **boolean
+       facts** must agree, even though the SHAPES differ by design.
 
-       (Do NOT edit the wording above without also updating the test cases that match against it.)
+       (Do NOT edit the wording above without also updating the SHA-256 hash pin in
+       tests/repo-files.test.ts. The hash pin is the canonical drift sentinel.)
        ```
 
-       This file is hash-pinned by the repo-files test below. ANY substantive edit must update the assertions.
+       This file is hash-pinned by the repo-files test below. ANY substantive edit must update the SHA-256 pin.
 
     3. **hooks/.gitkeep** — Create an empty file. (`hooks/` currently exists but is empty; the placeholder ensures git tracks the directory until 02-06 lands real hook files.)
 
@@ -361,17 +388,47 @@ From bin/lib/http.ts (call site to add in this plan):
          ```
        - ADD a new test at the end of the file:
          ```typescript
-         test('references/doctor-output.md is the locked DOCT-01..06 copy (D-18)', () => {
+         import { createHash } from 'node:crypto';
+
+         // D-18: references/doctor-output.md is a single source of truth for DOCT copy.
+         // We pin the file's exact bytes via SHA-256. ANY substantive change to the
+         // locked copy MUST be paired with a hash-pin update in this test — making the
+         // drift visible at PR-review time. Substring matching was rejected as too weak
+         // (it would silently allow inserted lines, reordered probes, or rewritten copy
+         // outside the matched fragments).
+         test('references/doctor-output.md hash-pin (D-18)', () => {
+           const bytes = readFileSync('references/doctor-output.md');  // raw bytes, no BOM strip
+           const hash = createHash('sha256').update(bytes).digest('hex');
+           // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"`
+           // after every intentional edit. The PR diff makes the change visible.
+           const PINNED = '<<<COMPUTED-AT-COMMIT-TIME>>>';
+           assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
+         });
+
+         // Coarse-grained content sentinel — catches gross removals even before the
+         // hash pin gets a chance to re-fire (e.g., file wiped to empty).
+         test('references/doctor-output.md retains the 7 Phase-2 probe section anchors', () => {
            const copy = read('references/doctor-output.md');
            assert.match(copy, /# Doctor Output Strings \(locked — D-18\)/);
            assert.match(copy, /node-version \(DOCT-01\)/);
-           assert.match(copy, /mcp-sdk-presence \(DOCT-02\)/);
+           assert.match(copy, /mcp-sdk-presence \(DOCT-01 wiring\)/);
            assert.match(copy, /http-contact-email \(DOCT-03\)/);
            assert.match(copy, /sync-folder-detection \(DOCT-04\)/);
-           assert.match(copy, /wiring-smoke \(DOCT-05\)/);
-           assert.match(copy, /runtime-config-presence \(DOCT-06\)/);
+           assert.match(copy, /runtime-config-presence \(DOCT-07\)/);
+           assert.match(copy, /zotero-mcp-presence \(DOCT-02 ecosystem\)/);
+           assert.match(copy, /pandoc-presence \(DOCT-02 ecosystem\)/);
+           assert.match(copy, /humanizer-skill-presence \(DOCT-02 ecosystem\)/);
+           // Anti-drift: DOCT-05 wiring-smoke MUST NOT appear (deferred to Phase 3 — D-04).
+           assert.equal(/wiring-smoke|DOCT-05/.test(copy), false, 'DOCT-05 / wiring-smoke must NOT appear in Phase 2 doctor copy (deferred per D-04)');
          });
          ```
+
+       **Executor note:** When you commit this plan, replace `<<<COMPUTED-AT-COMMIT-TIME>>>` with the actual sha256 of the freshly-written `references/doctor-output.md`. Compute it with:
+       ```bash
+       node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"
+       ```
+       Paste the output as the value of `PINNED`. Future intentional edits regenerate this hash; PR diff makes the change visible.
+
        Do NOT yet add the CONTRIBUTING.md "Tier contract — do not skip" assertion — that lands in 02-08 to keep the assertion-vs-content commits paired.
 
     5. Verify: `npm run lint && npm run typecheck && node scripts/run-tests.mjs tests/repo-files.test.ts`.
@@ -381,12 +438,17 @@ From bin/lib/http.ts (call site to add in this plan):
   </verify>
   <acceptance_criteria>
     - `grep -c "\"citty\":" package.json` returns at least 1
+    - `grep -c "\"@clack/prompts\":" package.json` returns at least 1
     - `grep -c "0.2" package.json` includes the citty pin (manual visual confirmation: the citty entry is `"citty": "^0.2.2"`)
+    - `node_modules/@clack/prompts/package.json` exists (npm install completed for the prompts dep)
     - `test -f references/doctor-output.md` succeeds
     - `grep -c "DOCT-01" references/doctor-output.md` >= 1
-    - `grep -c "DOCT-06" references/doctor-output.md` >= 1
+    - `grep -c "DOCT-07" references/doctor-output.md` >= 1
+    - `grep -c "DOCT-02 ecosystem" references/doctor-output.md` >= 3 (zotero-mcp + pandoc + humanizer)
+    - `grep -c "wiring-smoke\|DOCT-05" references/doctor-output.md` returns 0 (DOCT-05 deferred to Phase 3)
     - `test -f hooks/.gitkeep` succeeds
     - `grep -c "references/doctor-output.md" tests/repo-files.test.ts` >= 2 (existence loop + new test block)
+    - `grep -c "createHash\|sha256" tests/repo-files.test.ts` >= 1 (hash-pin assertion present)
     - `grep -c "citty" tests/repo-files.test.ts` >= 1
     - `node scripts/run-tests.mjs tests/repo-files.test.ts` exits 0
     - `node_modules/citty/package.json` exists (npm install completed)

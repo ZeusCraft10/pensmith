@@ -75,6 +75,8 @@
 <phase_requirements>
 ## Phase Requirements
 
+> **NOTE (2026-05-16 revision):** REQUIREMENTS.md was renumbered after this research artifact was emitted (TIER-05 is now `@clack/prompts` numbered-prompt fallback; DOCT-05 deferred to Phase 3; DOCT-07 added). The authoritative per-requirement verification map is **`02-VALIDATION.md § Per-Requirement Verification Map`**. The rows below are preserved as the *research record* (showing which SDK / library / pattern unblocks each capability) — read them as research-topic-to-capability mapping, not as a current requirement ID list.
+
 | ID | Description | Research Support |
 |----|-------------|------------------|
 | ARCH-01 | Two-tier source-of-truth: workflow bodies + templates shared between Tier 1 plugin and Tier 2 CLI | Topic 6 (`<capability_check>` workflow body pattern) — gsd-plugin reference shows the canonical body+capability_check shape we adopt |
@@ -809,6 +811,8 @@ import { isInsideSyncFolder, paperDir } from '../lib/paths.js';
 | Full suite command | `npm run check` (lint + typecheck + build + test:tier-contract + test + validate:manifests) |
 
 ### Phase Requirements → Test Map
+
+> **NOTE (2026-05-16 revision):** This table reflects the requirement IDs as they stood when this research artifact was first emitted. REQUIREMENTS.md has since been renumbered (TIER-05 → `@clack/prompts`, DOCT-05 deferred, DOCT-07 added). The authoritative current map is in **`02-VALIDATION.md § Per-Requirement Verification Map`**. The rows below are preserved as the *research record* (showing which test surfaces are reachable from research). Do not consume this table as a current ID list.
 
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|

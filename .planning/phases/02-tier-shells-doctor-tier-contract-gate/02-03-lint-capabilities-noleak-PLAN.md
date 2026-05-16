@@ -3,7 +3,7 @@ phase: 02-tier-shells-doctor-tier-contract-gate
 plan: 03
 type: execute
 wave: 1
-depends_on: ["02-00"]
+depends_on: ["02-00", "02-02"]  # serial — shares eslint.config.js with 02-01/02-02 (write-conflict avoidance per plan-checker iter 2)
 files_modified:
   - tests/fixtures/lint-capabilities-noleak-fixture.ts
   - eslint.config.js
@@ -14,6 +14,8 @@ must_haves:
   truths:
     - "Any expression of shape `process.env[<computed>]` inside mcp/** triggers an ESLint error"
     - "Any inline call to `getProviderApiKey` / `getOpenAlexApiKey` / `loadRuntimeConfig` inside mcp/** triggers an ESLint error"
+    - "Any expression of shape `process.env[<computed>]` inside `bin/lib/doctor/probes/**/*.ts` (excluding `runtime-config-presence.ts`) triggers an ESLint error — D-12 scope extension per plan-checker iter 2 / B5"
+    - "Inside `bin/lib/doctor/probes/runtime-config-presence.ts`, JSON.stringify of an identifier named `v`/`value`/`secret`/`token`/`apiKey`/`providerKey` triggers an ESLint error, and template-literal interpolation of any such identifier also triggers — static backstop to the T-02-05-01 sentinel test"
     - "Lint runs on the project as-shipped (not just a stand-alone Linter instance)"
   artifacts:
     - path: "tests/fixtures/lint-capabilities-noleak-fixture.ts"
@@ -280,8 +282,14 @@ These resolve actual secret values. The capabilities handler in 02-04 must consu
             message: 'D-10: mcp/ runs over stdio transport only. No TLS servers.',
           },
           {
-            selector: "NewExpression[callee.name='Server'][arguments.0.type='ObjectExpression']",
-            message: 'D-10: instantiate via McpServer + StdioServerTransport (mcp/server.ts pattern), never raw new Server().',
+            // CROSS-AI REVIEW HIGH FIX (Codex iter 1): the selector MUST match
+            // 02-02's bare `NewExpression[callee.name='Server']` exactly.
+            // Adding `[arguments.0.type='ObjectExpression']` would let bare
+            // `new Server()` (no args) slip through here under flat-config
+            // last-match semantics, weakening the D-10 chokepoint that 02-02
+            // installed. Keep the selector PURE — argument shape is irrelevant.
+            selector: "NewExpression[callee.name='Server']",
+            message: 'D-10: instantiate via McpServer + StdioServerTransport (mcp/server.ts pattern), never raw new Server() — with or without arguments.',
           },
           // ---- D-12 (this plan) ----
           {
@@ -302,9 +310,62 @@ These resolve actual secret values. The capabilities handler in 02-04 must consu
     that the rule fires; the fix is to make tiers agree by NOT writing the leak
     in the first place.
 
+    **D-12 doctor-probe scope extension (per plan-checker iter 2 — B5)**: the
+    DOCT-07 runtime-config-presence probe is the ONE place outside mcp/** where
+    the capabilities-no-leak invariant applies — it intentionally binds
+    `process.env[provider.apiKeyEnv]` to a local, but the resolved value must
+    never escape into any output string. Add a **second** file-scoped block
+    that targets the doctor probes EXCEPT the runtime-config one (which is
+    explicitly allowed to bind, with the discard pattern enforced by 02-05's
+    sentinel-value test):
+
+    ```js
+    // D-12 — doctor-probe scope extension (plan-checker iter 2, B5).
+    // Forbids computed process.env access in ALL doctor probes except
+    // runtime-config-presence.ts (which legitimately does the bound-+-discard
+    // pattern). The discard-discipline inside runtime-config-presence.ts is
+    // enforced by 02-05's sentinel-value leak test (T-02-05-01).
+    {
+      files: ['bin/lib/doctor/probes/**/*.ts'],
+      ignores: ['bin/lib/doctor/probes/runtime-config-presence.ts'],
+      rules: {
+        'no-restricted-syntax': [
+          'error',
+          {
+            selector: "MemberExpression[object.object.name='process'][object.property.name='env'][computed=true]",
+            message: 'D-12 (doctor-probe scope): computed process.env[…] reads are forbidden in doctor probes other than runtime-config-presence.ts. Only the runtime-config-presence probe is permitted to bind process.env[provider.apiKeyEnv] (with immediate length-test discard, T-02-05-01 sentinel-tested).',
+          },
+        ],
+      },
+    },
+    // D-12 — runtime-config-presence ALSO enforces no-leak: forbid JSON.stringify
+    // of identifiers named `v`/`value`/`secret`/`token`/`apiKey`, and forbid
+    // template-literal interpolation of those names. The bound-+-discard pattern
+    // means those identifiers must NEVER reach a result string. The sentinel
+    // test in 02-05 (T-02-05-01) is the dynamic backstop; this lint is the
+    // static one.
+    {
+      files: ['bin/lib/doctor/probes/runtime-config-presence.ts'],
+      rules: {
+        'no-restricted-syntax': [
+          'error',
+          {
+            selector: "CallExpression[callee.object.name='JSON'][callee.property.name='stringify'] Identifier[name=/^(v|value|secret|token|apiKey|providerKey)$/]",
+            message: 'D-12: runtime-config-presence.ts must NEVER JSON.stringify a resolved-key identifier. Serialise only the {name, apiKeyEnv, present} shape.',
+          },
+          {
+            selector: "TemplateLiteral > TemplateElement + Identifier[name=/^(v|value|secret|token|apiKey|providerKey)$/]",
+            message: 'D-12: runtime-config-presence.ts must NEVER interpolate a resolved-key identifier into a result string. Use the boolean `present` flag only.',
+          },
+        ],
+      },
+    },
+    ```
+
     Self-check after edit:
-    - `grep -c "D-12" eslint.config.js` MUST return at least 2 (one comment header + at least one selector message).
+    - `grep -c "D-12" eslint.config.js` MUST return at least 4 (header + selectors in mcp/** block + doctor-probe scope block + runtime-config no-leak block).
     - `grep -c "mcp/\*\*/\*\.ts" eslint.config.js` MUST return at least 3 (one per file-scoped block: D-09 from 02-01, D-10 from 02-02, D-12 from this plan).
+    - `grep -c "bin/lib/doctor/probes/" eslint.config.js` MUST return at least 2 (the doctor-probe scope block + the runtime-config-presence-specific block).
     - `npx eslint eslint.config.js --no-warn-ignored` MUST exit 0 (the config file itself must remain lint-clean).
   </action>
   <verify>

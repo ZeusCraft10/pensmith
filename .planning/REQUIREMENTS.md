@@ -5,7 +5,7 @@
 
 ## v1 Requirements
 
-Requirements for v0.1.0 (initial release). 131 atomic, testable requirements. Each maps to exactly one phase in `.planning/ROADMAP.md`. IDs are stable — once assigned, never renumber. Push-back additions surfaced by research are flagged `[research]`.
+Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Each maps to exactly one phase in `.planning/ROADMAP.md`. IDs are stable — once assigned, never renumber. Push-back additions surfaced by research are flagged `[research]`.
 
 ### Repo & Plugin Manifest
 
@@ -43,7 +43,7 @@ Requirements for v0.1.0 (initial release). 131 atomic, testable requirements. Ea
 - [ ] **TIER-01**: `mcp/server.ts` exposes read-only resources `paper://state`, `paper://outline`, `paper://section/{N}`, `paper://library`, `paper://capabilities`
 - [ ] **TIER-02**: `mcp/server.ts` exposes idempotent state-mutation tools `paper_init_section`, `paper_advance_section`, `paper_record_verification`, `paper_set_status`, `paper_doi_verify`, `paper_capability_probe`
 - [ ] **TIER-03**: `hooks/hooks.json` wires SessionStart (auto-resume), Stop (release lock + flush session log), PreCompact (HANDOFF.json, configured to 10s explicitly), PostToolUse (≤1/min throttled checkpoint)
-- [ ] **TIER-04**: Tier 2 CLI (`bin/pensmith-cli.ts`) is a `citty`-based verb dispatcher reading workflow bodies and executing sequentially against any OpenAI-compatible endpoint
+- [ ] **TIER-04**: Tier 2 CLI (`bin/cli/pensmith.ts`) is a `citty`-based verb dispatcher reading workflow bodies and executing sequentially against any OpenAI-compatible endpoint
 - [ ] **TIER-05**: Tier 2 fallback for AskUserQuestion uses `@clack/prompts` with stdin numbered-prompt mode matching gsd-plugin's `--text` JSON question schema
 - [ ] **TIER-06**: `tests/tier-contract.test.js` exists from Phase 2 onward and is a hard merge gate; every workflow body added in any later phase adds a contract-test entry `[research]`
 - [ ] **TIER-07**: Tier-contract test asserts equivalent output (modulo prose) for verdicts, citation lists, structure; tolerates ±20% length difference
@@ -51,8 +51,9 @@ Requirements for v0.1.0 (initial release). 131 atomic, testable requirements. Ea
 - [ ] **DOCT-02**: Doctor probes ecosystem (Zotero MCP authenticated, Pandoc on PATH, humanizer skill at `~/.claude/skills/humanizer/`)
 - [ ] **DOCT-03**: Doctor verifies `PENSMITH_CONTACT_EMAIL` set; warns if missing
 - [ ] **DOCT-04**: Doctor warns when `.paper/` lives inside OneDrive / iCloud / Dropbox / Google Drive sync folders — ships in v0.1.0, not polish `[research]`
-- [ ] **DOCT-05**: Doctor runs end-to-end fixture probe (intake → outline → verify on a tiny known-good fixture) with cassettes; reports PASS/FAIL per stage
+- [ ] **DOCT-05**: Doctor runs end-to-end fixture probe (intake → outline → verify on a tiny known-good fixture) with cassettes; reports PASS/FAIL per stage — **scope deferred to Phase 3** when vertical-slice intake/outline/verify lands (per phase-2 CONTEXT D-04). Phase 2 ships a `build-artifact-resolves` probe in its place (asserts `dist/bin/pensmith.js` + `dist/mcp/server.js` are present and `--version` exits 0).
 - [ ] **DOCT-06**: Both tiers produce equivalent doctor output (first contract-test case)
+- [ ] **DOCT-07**: Doctor `runtime-config-presence` probe iterates `loadRuntimeConfig().providers` and emits per-provider `{name, apiKeyEnv, present:boolean}` — env-var NAME and presence flag only; the resolved value never reaches the probe output, log, or report (symmetric to T-01-07 / D-12). WARN if no provider has its key set; PASS otherwise.
 
 ### Single-Command UX
 
@@ -281,8 +282,9 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | DOCT-02 | Phase 2 | Pending |
 | DOCT-03 | Phase 2 | Pending |
 | DOCT-04 | Phase 2 | Pending |
-| DOCT-05 | Phase 2 | Pending |
 | DOCT-06 | Phase 2 | Pending |
+| DOCT-07 | Phase 2 | Pending |
+| DOCT-05 | Phase 3 | Pending (deferred from Phase 2 — see CONTEXT D-04) |
 | ARCH-02 | Phase 3 | Pending |
 | ARCH-04 | Phase 3 | Pending |
 | INTK-01 | Phase 3 | Pending |
@@ -377,10 +379,10 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | CITE-05 | Phase 10 | Pending |
 
 **Coverage:**
-- v1 requirements: 131 total
-- Mapped to phases: 131
+- v1 requirements: 132 total
+- Mapped to phases: 132
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-05-06*
-*Last updated: 2026-05-06 after initialization from PRD.md + research synthesis*
+*Last updated: 2026-05-15 — Phase 2 revision iter 1: TIER-04 path amended to bin/cli/pensmith.ts; DOCT-05 deferred to Phase 3 (per CONTEXT D-04); DOCT-07 added for runtime-config-presence; total raised from 131 → 132.*
