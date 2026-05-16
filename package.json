@@ -28,7 +28,8 @@
     "@anthropic-ai/sdk": "^0.93",
     "openai": "^4",
     "@modelcontextprotocol/sdk": "^1.29",
-    "@clack/prompts": "^0.7"
+    "@clack/prompts": "^0.7",
+    "citty": "^0.2.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

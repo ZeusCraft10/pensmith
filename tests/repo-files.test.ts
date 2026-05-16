@@ -1,11 +1,14 @@
 // tests/repo-files.test.ts
 // Smoke test: every required Phase 0 root file exists and contains the
 // locked stub strings from D-19, D-20, and the architecture decisions.
+// Extended in Phase 2 (02-00): doctor-output.md hash-pin, citty dep,
+// hooks/.gitkeep assertions.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
+import fs, { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 function read(rel: string): string {
   return fs.readFileSync(path.resolve(rel), 'utf-8');
@@ -25,6 +28,8 @@ test('root config files exist', () => {
     'eslint.config.js',
     'mcp/server.ts',
     'scripts/run-tests.mjs',
+    'references/doctor-output.md',
+    'hooks/.gitkeep',
   ]) {
     assert.ok(fs.existsSync(path.resolve(f)), `missing required file: ${f}`);
   }
@@ -47,6 +52,9 @@ test('package.json contract', () => {
   const dev = pkg['devDependencies'] as Record<string, string> | undefined;
   assert.ok(dev && !dev['eslint-plugin-import'],
     'eslint-plugin-import must NOT be a Phase 0 devDependency (D-06 covered by no-restricted-imports alone)');
+  const deps = pkg['dependencies'] as Record<string, string> | undefined;
+  assert.ok(deps && deps['citty'], 'package.json must declare citty dependency (D-14)');
+  assert.match(deps?.['citty'] ?? '', /\^0\.2/, 'citty pin must satisfy ^0.2.2 (D-14)');
 });
 
 test('tsconfig contract (D-03)', () => {
@@ -118,4 +126,36 @@ test('scripts/run-tests.mjs is the test runner (not a shell glob)', () => {
   assert.match(runner, /--test/);
   assert.match(runner, /discovered/);
   assert.match(runner, /process\.exit\(1\)/, 'must exit 1 on zero matches');
+});
+
+// D-18: references/doctor-output.md is a single source of truth for DOCT copy.
+// We pin the file's exact bytes via SHA-256. ANY substantive change to the
+// locked copy MUST be paired with a hash-pin update in this test — making the
+// drift visible at PR-review time. Substring matching was rejected as too weak
+// (it would silently allow inserted lines, reordered probes, or rewritten copy
+// outside the matched fragments).
+test('references/doctor-output.md hash-pin (D-18)', () => {
+  const bytes = readFileSync('references/doctor-output.md');  // raw bytes, no BOM strip
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"`
+  // after every intentional edit. The PR diff makes the change visible.
+  const PINNED = 'e1a00959050c56b18cc97804ab226577cbb26af9582b22717b21cb9a48386060';
+  assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
+});
+
+// Coarse-grained content sentinel — catches gross removals even before the
+// hash pin gets a chance to re-fire (e.g., file wiped to empty).
+test('references/doctor-output.md retains the 7 Phase-2 probe section anchors', () => {
+  const copy = read('references/doctor-output.md');
+  assert.match(copy, /# Doctor Output Strings \(locked — D-18\)/);
+  assert.match(copy, /node-version \(DOCT-01\)/);
+  assert.match(copy, /mcp-sdk-presence \(DOCT-01 wiring\)/);
+  assert.match(copy, /contact-email-presence \(DOCT-03\)/);
+  assert.match(copy, /sync-folder-detection \(DOCT-04\)/);
+  assert.match(copy, /runtime-config-presence \(DOCT-07\)/);
+  assert.match(copy, /zotero-mcp-presence \(DOCT-02 ecosystem\)/);
+  assert.match(copy, /pandoc-presence \(DOCT-02 ecosystem\)/);
+  assert.match(copy, /humanizer-skill-presence \(DOCT-02 ecosystem\)/);
+  // Anti-drift: DOCT-05 wiring-smoke MUST NOT appear (deferred to Phase 3 — D-04).
+  assert.equal(/wiring-smoke|DOCT-05/.test(copy), false, 'DOCT-05 / wiring-smoke must NOT appear in Phase 2 doctor copy (deferred per D-04)');
 });
