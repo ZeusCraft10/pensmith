@@ -93,6 +93,44 @@ export function fullJitterDelayMs(
   return Math.floor(Math.random() * (upper + 1));
 }
 
+/**
+ * Parse a Retry-After header value into a delay in milliseconds.
+ *
+ * Per RFC 7231 §7.1.3, Retry-After may be either:
+ *   (a) a non-negative integer count of delta-seconds, e.g. "120"
+ *   (b) an HTTP-date, e.g. "Wed, 21 Oct 2026 07:28:00 GMT"
+ *
+ * X-Rate-Limit-Reset is Unix-epoch seconds and is NOT handled here —
+ * the http.ts call site converts it to milliseconds-from-now before
+ * deciding which delay to use.
+ *
+ * Guarantees:
+ *   - Returns a non-negative integer in milliseconds
+ *   - Never throws (invalid input collapses to 0 so the caller may
+ *     safely fall back to fullJitterDelayMs)
+ *   - Past HTTP-dates and negative delta-seconds return 0
+ */
+export function parseRetryAfter(headerValue: string | undefined, now: number): number {
+  if (!headerValue) return 0;
+  const trimmed = headerValue.trim();
+  if (trimmed === '') return 0;
+  // (a) delta-seconds form — pure-digit integer
+  if (/^-?\d+$/.test(trimmed)) {
+    const seconds = parseInt(trimmed, 10);
+    if (Number.isNaN(seconds) || seconds < 0) return 0;
+    return seconds * 1000;
+  }
+  // (b) HTTP-date form — RFC 7231 accepts the IMF-fixdate / RFC 850 /
+  //     asctime() formats; Date.parse handles IMF-fixdate which is the
+  //     RFC-7231 preferred form. Servers that emit non-IMF dates are
+  //     non-compliant; we collapse to 0 (caller falls back to jitter).
+  const parsed = Date.parse(trimmed);
+  if (Number.isNaN(parsed)) return 0;
+  const delta = parsed - now;
+  if (delta <= 0) return 0;
+  return delta;
+}
+
 const sleep = (ms: number): Promise<void> =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
