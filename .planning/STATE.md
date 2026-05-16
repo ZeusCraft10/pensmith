@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 plan 02-07 (tier-contract) complete. 4-case black-box tier contract (Cases A-D) + TIER-07 ±20% helper + D-13 preflight + CI step. 352 tests pass. Next plan is 02-08 (contributing).
-last_updated: "2026-05-16T11:31:00Z"
-last_activity: 2026-05-16 -- Phase 2 plan 02-07 executed (4 tasks + 5 auto-fixes, 4 files created, 3 modified, commits 338ee0b/379e894/51d0b6e/91dee53)
+stopped_at: Phase 2 plan 02-08 (contributing) complete. D-24-locked Tier contract section + CF-D24 test. 353 tests pass. Phase 2 CLOSED. Next phase is Phase 3 (vertical slice).
+last_updated: "2026-05-16T12:00:00Z"
+last_activity: 2026-05-16 -- Phase 2 plan 02-08 executed (2 tasks, 0 deviations, commits 9a99f7f/d9f490c)
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 28
-  completed_plans: 23
-  percent: 82
+  completed_plans: 24
+  percent: 86
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **EXECUTING**
-Plan: 02-07 complete (9/10 plans in Phase 2 executed); next is 02-08 (contributing)
-Status: Executing Phase 2
-Last activity: 2026-05-16 -- 02-07 tier-contract complete (338ee0b/379e894/51d0b6e/91dee53)
+Plan: 02-08 complete (10/10 plans in Phase 2 executed); Phase 2 CLOSED
+Status: Phase 2 complete; Phase 3 not yet started
+Last activity: 2026-05-16 -- 02-08 contributing complete (9a99f7f/d9f490c)
 
-Progress: [███████░░░] 79%  (Phase 0 done; Phase 1 closed; Phase 2 wave 2 advancing)
+Progress: [████████░░] 86%  (Phase 0 done; Phase 1 closed; Phase 2 CLOSED — 10/10 plans)
 
 Plan files (depends_on order):
 
@@ -157,6 +157,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-16T11:31:00Z
-Stopped at: Phase 2 plan 02-07 complete. Tier-contract (Cases A-D) + TIER-07 ±20% helper + D-13 preflight + CI step on all 3 OSes. 352 tests pass, lint+typecheck+build clean. TIER-06+TIER-07+DOCT-06 closed. D-23 layer 1 (CI step) live. Next: 02-08 (contributing).
-Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-08-contributing-PLAN.md (next_action: execute 02-08)
+Last session: 2026-05-16T12:00:00Z
+Stopped at: Phase 2 COMPLETE (10/10 plans done). 02-08 (contributing): D-24-locked Tier contract section in CONTRIBUTING.md + CF-D24 test. 353 tests pass, npm run check clean. D-24 + D-23 layer 4 (prose) closed. Phase 2 fully closed. Next: /gsd-discuss-phase 3.
+Resume file: none — Phase 2 complete; begin Phase 3 discuss

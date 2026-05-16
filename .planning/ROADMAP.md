@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 0: Repo skeleton & plugin manifest** - Repo, plugin manifest, MCP entry, CI on three OSes, ban-list lints — COMPLETE 2026-05-07
 - [x] **Phase 1: Foundation NFRs** - paths → atomic-write → lock → doi → http → budget → migrations → pii → session-log → state/library/checkpoint → runtime, in strict order, all unit-tested — COMPLETE 2026-05-14 (VERIFICATION PASS 5/5 SCs)
-- [ ] **Phase 2: Tier shells + doctor + tier-contract gate** - MCP server skeleton + Tier 2 CLI dispatcher + ecosystem probe + `/pensmith doctor` (with OneDrive detection) as first contract case
+- [x] **Phase 2: Tier shells + doctor + tier-contract gate** - MCP server skeleton + Tier 2 CLI dispatcher + ecosystem probe + `/pensmith doctor` (with OneDrive detection) as first contract case — COMPLETE 2026-05-16
 - [ ] **Phase 3: Vertical slice through one section** - Single-fixture intake → research → outline → plan → write → verify, deterministic Pass 1 + Pass 3 only, APA only, both tiers
 - [ ] **Phase 4: Breadth — N sections + compile + wave scheduling** - Wave scheduler, compile pipeline, cross-section consistency flags, stable section numbering with letter suffixes
 - [ ] **Phase 5: Verifier completeness (Pass 2 + Pass 4)** - LLM-judged claim support and per-paragraph orphan-claim audit, advisory only
@@ -107,7 +107,7 @@ Plans:
 - [x] 02-05-PLAN.md (wave 2) -- bin/pensmith.ts citty dispatcher (16 UX-02 verbs, 1 real + 15 stubs) + doctor verb (10 probes: DOCT-01/02/03/04/05/07 + D-03(d) SKIP) + runDoctor() Record<string,ProbeResult> + TTY/JSON renderers + exit-code contract + 300 tests pass (TIER-04, DOCT-01..04, DOCT-07) — COMPLETE 2026-05-16 (53d6f68/89ff1f3/52b5e7e)
 - [x] 02-06-PLAN.md (wave 2) -- hooks/ scaffolding (4 lifecycle stubs: session-start/stop/pre-compact/post-tool-use) + hooks.json manifest + workflows/*.md (16 stubs with full capability_check blocks, W4 closed vocabulary) + manifest validator extension (TIER-03, TIER-07, ARCH-01, ARCH-03) — COMPLETE 2026-05-16 (b71f8e2/1236a13/0e57eab)
 - [x] 02-07-PLAN.md (wave 3) -- tests/tier-contract.test.ts (4 cases A-D via official MCP Client + StdioClientTransport) + tier-contract preflight test (D-13/D-24) + assert-tier-equivalent helper (±20%) + CI step (TIER-06, TIER-07, DOCT-06) — COMPLETE 2026-05-16 (338ee0b/379e894/51d0b6e/91dee53)
-- [ ] 02-08-PLAN.md (wave 4) -- CONTRIBUTING.md Tier contract section (D-24, locked) + tolerance-helper documentation + tests/repo-files.test.ts CF-D24 assertion
+- [x] 02-08-PLAN.md (wave 4) -- CONTRIBUTING.md Tier contract section (D-24, locked) + CF-D24 test in tests/repo-files.test.ts — COMPLETE 2026-05-16 (9a99f7f/d9f490c)
 - [x] 02-09-PLAN.md (wave 2) -- bin/lib/prompts.ts @clack/prompts numbered-prompt fallback (TIER-05) — COMPLETE 2026-05-16 (da3fbd8/99c3744/00994df)
 **UI hint**: no
 
@@ -217,7 +217,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 |-------|----------------|--------|-----------|
 | 0. Repo skeleton & plugin manifest | 4/4 | COMPLETE | 2026-05-07 |
 | 1. Foundation NFRs | 14/14 | COMPLETE (VERIFICATION PASS 5/5) | 2026-05-14 |
-| 2. Tier shells + doctor + tier-contract gate | 7/10 | Executing | - |
+| 2. Tier shells + doctor + tier-contract gate | 10/10 | COMPLETE | 2026-05-16 |
 | 3. Vertical slice through one section | 0/TBD | Not started | - |
 | 4. Breadth — N sections + compile + wave scheduling | 0/TBD | Not started | - |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 0/TBD | Not started | - |
