@@ -195,7 +195,57 @@ export default [
     },
   },
 
-  // === Red-team fixture exemption (D-08 + D-09) ===
+  // === D-10: MCP no-network chokepoint (Phase 2) ===
+  // mcp/**/*.ts MUST NOT start a server on any network transport.
+  // Stdio is the only allowed transport (per D-10 lock). Future SSE/HTTP
+  // is a separate phase decision with its own auth design.
+  //
+  // The HTTP-imports rule above (lines 40-48) already blocks the
+  // `http`/`https`/`net` MODULE imports project-wide; this block extends
+  // the ban to the CALL-SITE level inside mcp/** so a developer can't
+  // sneak in a server via dynamic import or destructured re-export.
+  //
+  // ESLint 9 flat-config semantics: a file-scoped block OVERRIDES the
+  // project-wide no-restricted-syntax rule for matched files. To avoid
+  // silently losing the D-07 / D-41 selectors on mcp/**/*.ts files, all
+  // project-wide selectors are re-listed here alongside the D-10 additions.
+  {
+    files: ['mcp/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': ['error',
+        // project-wide selectors re-listed (D-07, D-41 — override-merge safety):
+        { selector: 'Literal[regex.pattern=/^\\^10\\\\\\./]', message: 'DOI regex /^10\\./ is a chokepoint — use bin/lib/doi.ts only' },
+        { selector: "CallExpression[callee.property.name='writeFile']", message: 'Direct fs.writeFile is forbidden (ARCH-05 / D-07) — use bin/lib/atomic-write.ts' },
+        { selector: "MemberExpression[object.name='os'][property.name='homedir']", message: 'os.homedir() is a chokepoint (D-41) — use bin/lib/paths.ts' },
+        { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='LOCALAPPDATA']", message: 'process.env.LOCALAPPDATA is a chokepoint (D-41) — use bin/lib/paths.ts' },
+        { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='APPDATA']", message: 'process.env.APPDATA is a chokepoint (D-41) — use bin/lib/paths.ts (use LOCALAPPDATA, not APPDATA — Pitfall 4)' },
+        { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='XDG_DATA_HOME']", message: 'process.env.XDG_DATA_HOME is a chokepoint (D-41) — use bin/lib/paths.ts' },
+        // D-10 stdio-only selectors:
+        { selector: "CallExpression[callee.object.name='net'][callee.property.name='createServer']", message: 'D-10 stdio-only: net.createServer() is forbidden in mcp/ — only stdio transport is allowed' },
+        { selector: "CallExpression[callee.object.name='http'][callee.property.name='createServer']", message: 'D-10 stdio-only: http.createServer() is forbidden in mcp/ — only stdio transport is allowed' },
+        { selector: "CallExpression[callee.object.name='https'][callee.property.name='createServer']", message: 'D-10 stdio-only: https.createServer() is forbidden in mcp/ — only stdio transport is allowed' },
+        { selector: "CallExpression[callee.object.name='tls'][callee.property.name='createServer']", message: 'D-10 stdio-only: tls.createServer() is forbidden in mcp/ — only stdio transport is allowed' },
+        { selector: "NewExpression[callee.name='Server']", message: 'D-10 stdio-only: new Server() is forbidden in mcp/ — only stdio transport is allowed' },
+      ],
+    },
+  },
+
+  // === atomic-write + no-network EXEMPTION for tests/lint-mcp-no-network.test.ts (Phase 2, Wave 1) ===
+  // tests/lint-mcp-no-network.test.ts (Test 2) MUST write a temporary copy of the
+  // D-10 fixture under mcp/ so the file-scoped no-restricted-syntax D-10 rule fires
+  // (the rule targets mcp/**/*.ts; the original fixture lives under tests/fixtures/).
+  // This write is a test-only helper action, NOT production code — it is cleaned up
+  // in a try/finally block immediately after the ESLint run.
+  // The D-07 writeFile chokepoint (CallExpression[callee.property.name='writeFile'])
+  // correctly fires on this usage; this exemption acknowledges it is deliberate.
+  {
+    files: ['tests/lint-mcp-no-network.test.ts'],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
+
+  // === Red-team fixture exemption (D-08 + D-09 + D-10) ===
   // Each fixture INTENTIONALLY violates a chokepoint. Fixtures are executed
   // by their corresponding lint-*.test.ts files which run ESLint
   // programmatically and assert the errors are flagged. Project lint must
@@ -204,6 +254,7 @@ export default [
     ignores: [
       'tests/fixtures/lint-chokepoint-fixture.ts',
       'tests/fixtures/lint-atomic-write-chokepoint-fixture.ts',
+      'tests/fixtures/lint-mcp-no-network-fixture.ts',
       'tests/fixtures/lint-paths-chokepoint-fixture.ts',
       'tests/fixtures/lint-thin-shim-fixture.ts',
       'dist/**',
