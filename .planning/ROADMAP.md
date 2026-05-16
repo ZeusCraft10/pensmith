@@ -108,7 +108,7 @@ Plans:
 - [x] 02-06-PLAN.md (wave 2) -- hooks/ scaffolding (4 lifecycle stubs: session-start/stop/pre-compact/post-tool-use) + hooks.json manifest + workflows/*.md (16 stubs with full capability_check blocks, W4 closed vocabulary) + manifest validator extension (TIER-03, TIER-07, ARCH-01, ARCH-03) — COMPLETE 2026-05-16 (b71f8e2/1236a13/0e57eab)
 - [ ] 02-07-PLAN.md (wave 3) -- tests/tier-contract.test.ts (4 cases A-D via official MCP Client + StdioClientTransport) + tier-contract preflight test (D-13/D-24) + assert-tier-equivalent helper (±20%) + CI step (TIER-06, TIER-07, DOCT-06)
 - [ ] 02-08-PLAN.md (wave 4) -- CONTRIBUTING.md Tier contract section (D-24, locked) + tolerance-helper documentation + tests/repo-files.test.ts CF-D24 assertion
-- [ ] 02-09-PLAN.md (wave 2) -- bin/lib/prompts.ts @clack/prompts numbered-prompt fallback (TIER-05)
+- [x] 02-09-PLAN.md (wave 2) -- bin/lib/prompts.ts @clack/prompts numbered-prompt fallback (TIER-05) — COMPLETE 2026-05-16 (da3fbd8/99c3744/00994df)
 **UI hint**: no
 
 ### Phase 3: Vertical slice through one section

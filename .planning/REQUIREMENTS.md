@@ -44,7 +44,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [ ] **TIER-02**: `mcp/server.ts` exposes idempotent state-mutation tools `paper_init_section`, `paper_advance_section`, `paper_record_verification`, `paper_set_status`, `paper_doi_verify`, `paper_capability_probe`
 - [ ] **TIER-03**: `hooks/hooks.json` wires SessionStart (auto-resume), Stop (release lock + flush session log), PreCompact (HANDOFF.json, configured to 10s explicitly), PostToolUse (≤1/min throttled checkpoint)
 - [x] **TIER-04**: Tier 2 CLI (`bin/cli/pensmith.ts`) is a `citty`-based verb dispatcher reading workflow bodies and executing sequentially against any OpenAI-compatible endpoint
-- [ ] **TIER-05**: Tier 2 fallback for AskUserQuestion uses `@clack/prompts` with stdin numbered-prompt mode matching gsd-plugin's `--text` JSON question schema
+- [x] **TIER-05**: Tier 2 fallback for AskUserQuestion uses `@clack/prompts` with stdin numbered-prompt mode matching gsd-plugin's `--text` JSON question schema
 - [ ] **TIER-06**: `tests/tier-contract.test.js` exists from Phase 2 onward and is a hard merge gate; every workflow body added in any later phase adds a contract-test entry `[research]`
 - [ ] **TIER-07**: Tier-contract test asserts equivalent output (modulo prose) for verdicts, citation lists, structure; tolerates ±20% length difference
 - [x] **DOCT-01**: `/pensmith doctor` reports plugin presence, MCP server reachable, hooks wired, Node version, disk paths writable
@@ -275,7 +275,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | TIER-02 | Phase 2 | Pending |
 | TIER-03 | Phase 2 | Pending |
 | TIER-04 | Phase 2 | DONE — 02-05 |
-| TIER-05 | Phase 2 | Pending |
+| TIER-05 | Phase 2 | DONE — 02-09 |
 | TIER-06 | Phase 2 | Pending |
 | TIER-07 | Phase 2 | Pending |
 | DOCT-01 | Phase 2 | DONE — 02-05 |

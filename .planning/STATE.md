@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 plan 02-06 (hooks-workflows) complete. 4 TIER-03 hook stubs + hooks/hooks.json manifest + 16 UX-02 workflow .md stubs with W4 capability_check vocabulary + manifest validator extension. 309 tests pass. Next plan is 02-07.
-last_updated: "2026-05-16T11:00:00Z"
-last_activity: 2026-05-16 -- Phase 2 plan 02-06 executed (3 tasks + 2 auto-fixes, 25 files created/modified, commits b71f8e2/1236a13/0e57eab)
+stopped_at: Phase 2 plan 02-09 (prompts-fallback) complete. ask() dispatcher + @clack/prompts TTY delegate + stdin numbered-prompt fallback + Zod schema. 337 tests pass. Next plan is 02-07.
+last_updated: "2026-05-16T12:00:00Z"
+last_activity: 2026-05-16 -- Phase 2 plan 02-09 executed (3 tasks + 3 auto-fixes, 7 files created, commits da3fbd8/99c3744/00994df)
 progress:
   total_phases: 11
   completed_phases: 2
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **EXECUTING**
-Plan: 02-06 complete (9/10 plans in Phase 2); next is 02-07
+Plan: 02-09 complete (10/10 plans in Phase 2); next is 02-07
 Status: Executing Phase 2
-Last activity: 2026-05-16 -- 02-06 hooks-workflows complete (b71f8e2/1236a13/0e57eab)
+Last activity: 2026-05-16 -- 02-09 prompts-fallback complete (da3fbd8/99c3744/00994df)
 
 Progress: [███████░░░] 79%  (Phase 0 done; Phase 1 closed; Phase 2 wave 2 advancing)
 
@@ -152,6 +152,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-16T11:00:00Z
-Stopped at: Phase 2 plan 02-06 complete. 4 exit-0 TIER-03 hook stubs (session-start/pre-compact/post-tool-use/stop) + hooks/hooks.json manifest (schemaVersion=1, 4 events) + 16 UX-02 workflow .md stubs with W4 closed-vocabulary capability_check blocks + manifest validator extended (TIER-03/07/ARCH-01/ARCH-03). hooks/.gitkeep retired. 309 tests pass, lint+typecheck clean. Next: 02-07.
+Last session: 2026-05-16T12:00:00Z
+Stopped at: Phase 2 plan 02-09 complete. ask() dispatcher + @clack/prompts TTY delegate (clack.ts sole importer) + stdin numbered-prompt fallback (readline, no clack dep) + Zod discriminated-union schema. PENSMITH_PROMPT_MODE env override. 337 tests pass, lint+typecheck+build clean. TIER-05 closed. Next: 02-07.
 Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-07-tier-contract-PLAN.md (next_action: execute 02-07)
