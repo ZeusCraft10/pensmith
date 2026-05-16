@@ -82,15 +82,20 @@ test('DOCT-03 contact-email-presence PASS when env set', async () => {
 });
 
 test('DOCT-04 sync-folder-detection WARN when paperDir is inside /OneDrive/', async () => {
-  const prev = process.env.PENSMITH_PAPER_DIR;
+  // WR-05: canonical env var name is PENSMITH_PAPER_ROOT. Matches the
+  // tier-contract test's Case C (which spawns the MCP server with
+  // PENSMITH_PAPER_ROOT=<tmp>) and mcp/server.ts's boot-time resolution.
+  // The transitional PENSMITH_PAPER_DIR fallback was dropped from
+  // bin/lib/ecosystem-presence.ts in the same commit.
+  const prev = process.env.PENSMITH_PAPER_ROOT;
   // Use a synthetic path that matches SYNC_FOLDER_PATTERNS regardless of OS.
-  process.env.PENSMITH_PAPER_DIR = '/tmp/fake/OneDrive/project';
+  process.env.PENSMITH_PAPER_ROOT = '/tmp/fake/OneDrive/project';
   try {
     const r = await syncFolderDetectionProbe.run();
     assert.equal(r.severity, 'WARN');
   } finally {
-    if (prev !== undefined) process.env.PENSMITH_PAPER_DIR = prev;
-    else delete process.env.PENSMITH_PAPER_DIR;
+    if (prev !== undefined) process.env.PENSMITH_PAPER_ROOT = prev;
+    else delete process.env.PENSMITH_PAPER_ROOT;
   }
 });
 

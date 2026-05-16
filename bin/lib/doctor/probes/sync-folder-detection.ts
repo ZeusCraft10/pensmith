@@ -13,8 +13,9 @@ export const syncFolderDetectionProbe: Probe = {
   async run(): Promise<ProbeResult> {
     // CR-01: share the detection algorithm with bin/lib/capabilities.ts via
     // ecosystem-presence.ts so both tiers agree on `onedrive_detected`.
-    // Env-var precedence: PENSMITH_PAPER_ROOT > PENSMITH_PAPER_DIR (legacy)
-    // > paperDir() — handled inside ecosystem-presence.ts.
+    // WR-05: env-var is PENSMITH_PAPER_ROOT (canonical, matches mcp/server.ts
+    // and the tier-contract test). The transitional PENSMITH_PAPER_DIR
+    // fallback has been dropped.
     const { detected, dir } = detectSyncFolder();
     if (detected) {
       return {
