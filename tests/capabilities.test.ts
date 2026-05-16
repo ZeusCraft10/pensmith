@@ -39,16 +39,23 @@ test('D-12: capability shape is stable (mcp_self, contact_email_set, providers, 
     assert.ok(keys.includes('present'), `provider missing present: ${JSON.stringify(p)}`);
     assert.equal(typeof p.present, 'boolean');
   }
-  // CR-01: pandoc/zotero_mcp/humanizer/onedrive_detected/sync_folder_match are
-  // now REAL booleans (populated via bin/lib/ecosystem-presence.ts) so the
-  // tier-contract Case A/D fact equivalence holds against the CLI's doctor
-  // probes. The previous `undefined` placeholders caused MCP-vs-CLI
-  // divergence on any host where pandoc was installed (D-21: fix the tiers,
-  // not the test).
-  for (const k of ['pandoc', 'zotero_mcp', 'humanizer', 'onedrive_detected', 'sync_folder_match'] as const) {
+  // CR-01: pandoc/zotero_mcp/humanizer/onedrive_detected are REAL booleans
+  // (populated via bin/lib/ecosystem-presence.ts) so the tier-contract Case
+  // A/D fact equivalence holds against the CLI's doctor probes. The previous
+  // `undefined` placeholders caused MCP-vs-CLI divergence on any host where
+  // pandoc was installed (D-21: fix the tiers, not the test).
+  for (const k of ['pandoc', 'zotero_mcp', 'humanizer', 'onedrive_detected'] as const) {
     assert.equal(typeof (facts as unknown as Record<string, unknown>)[k], 'boolean',
       `${k} should be a boolean (populated by ecosystem-presence.ts)`);
   }
+  // WR-02: sync_folder_match is `string | null` — the matched paper-dir path
+  // when detected (so callers can show *which* folder triggered the warning),
+  // or null otherwise. Boolean collapsed that signal.
+  const sfm = (facts as unknown as Record<string, unknown>).sync_folder_match;
+  assert.ok(
+    sfm === null || typeof sfm === 'string',
+    `sync_folder_match should be string | null, got ${typeof sfm} (${String(sfm)})`,
+  );
 });
 
 test('D-12: sentinel API-key value never appears in serialized capability facts', async () => {

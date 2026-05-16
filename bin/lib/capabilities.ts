@@ -36,7 +36,12 @@ export interface CapabilityFacts {
   readonly zotero_mcp: boolean;
   readonly humanizer: boolean;
   readonly onedrive_detected: boolean;
-  readonly sync_folder_match: boolean;
+  // WR-02: sync_folder_match is the absolute paper-dir path that matched a
+  // known cloud-sync folder, or null when no match. Previous boolean type
+  // collapsed information (which folder matched) that consumers want.
+  // tests/tier-contract.test.ts McpCapabilities already declared this as
+  // `string` (line 100) — the type now matches the contract.
+  readonly sync_folder_match: string | null;
 }
 
 /**
@@ -93,10 +98,10 @@ export async function loadCapabilityFacts(): Promise<CapabilityFacts> {
     zotero_mcp: safeBool(isZoteroMcpPresent),
     humanizer: safeBool(isHumanizerSkillPresent),
     onedrive_detected: syncFolder.detected,
-    // Phase 2 placeholder: sync_folder_match remains a boolean for backward
-    // compatibility with the Phase 1 tier-contract shape. WR-02 changes the
-    // declared type to `string | null` in a follow-up commit.
-    sync_folder_match: syncFolder.match !== null,
+    // WR-02: emit the matched path (or null) so downstream consumers can show
+    // which folder caused the detection (e.g., "OneDrive at /Users/.../OneDrive
+    // — Roanoke College"). Boolean collapsed this signal.
+    sync_folder_match: syncFolder.match,
   };
 }
 
