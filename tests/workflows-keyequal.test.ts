@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { UX02_VERBS } from '../bin/lib/verbs.js';
+import { command } from '../bin/pensmith.js';
 
-const EXPECTED_16 = [
-  'doctor', 'new', 'next', 'status', 'research', 'outline', 'plan', 'write',
-  'verify', 'compile', 'done', 'resume', 'list', 'open', 'sketch', 'add',
-].sort();
+// WR-03 + WR-06 (cross-AI review): derived from the single source of truth
+// (bin/lib/verbs.ts), not a local copy. ARCH-01 below also introspects the
+// runtime command.subCommands instead of regex-scanning bin/pensmith.ts.
+const EXPECTED_16 = [...UX02_VERBS].sort();
 
 // W4: closed vocabulary for ARCH-03 `required:` tokens.
 // Workflows that need nothing emit `(none required)`.
@@ -58,11 +60,21 @@ test('ARCH-03 W4: every required: token is in the closed Phase 2 vocabulary', ()
   }
 });
 
-test('ARCH-01: workflow filenames are bijective with dispatcher verbs', () => {
-  const dispatcherSrc = readFileSync('bin/pensmith.ts', 'utf8');
-  const fileVerbs = readdirSync('workflows').filter((f) => f.endsWith('.md')).map((f) => f.replace(/\.md$/, '')).sort();
-  for (const v of fileVerbs) {
-    const re = new RegExp(`['"]?${v.replace('-', '\\-')}['"]?:\\s*\\(\\)\\s*=>`);
-    assert.ok(re.test(dispatcherSrc), `workflow ${v}.md has no matching subCommand`);
-  }
+test('ARCH-01: workflow filenames are bijective with dispatcher verbs (runtime introspection)', () => {
+  // WR-06: introspect the actual citty CommandDef instead of regex-scanning
+  // bin/pensmith.ts source. command.subCommands is the live dispatcher map;
+  // its keys are the verbs the user can actually invoke. Failure here means
+  // a workflow file has no matching subCommand at runtime (or vice versa),
+  // regardless of how the dispatcher source happens to be formatted.
+  const subCommands = command.subCommands as Record<string, unknown>;
+  const dispatcherVerbs = Object.keys(subCommands).sort();
+  const fileVerbs = readdirSync('workflows')
+    .filter((f) => f.endsWith('.md'))
+    .map((f) => f.replace(/\.md$/, ''))
+    .sort();
+  assert.deepEqual(
+    fileVerbs,
+    dispatcherVerbs,
+    `workflow files and dispatcher subCommands must be bijective (ARCH-01) — files: ${JSON.stringify(fileVerbs)}, dispatcher: ${JSON.stringify(dispatcherVerbs)}`,
+  );
 });
