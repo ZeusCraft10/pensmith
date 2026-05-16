@@ -26,18 +26,6 @@ import fsp from 'node:fs/promises';
 
 const FIXTURE = path.resolve('tests/fixtures/lint-capabilities-noleak-fixture.ts');
 
-const D12_RULES = [
-  'error',
-  {
-    selector: "MemberExpression[object.object.name='process'][object.property.name='env'][computed=true]",
-    message: 'D-12: computed process.env[…] read forbidden in mcp/**.',
-  },
-  {
-    selector: "CallExpression[callee.name=/^(getProviderApiKey|getOpenAlexApiKey|loadRuntimeConfig)$/]",
-    message: 'D-12: do not call runtime.ts secret-resolution helpers inside mcp/**.',
-  },
-] as const;
-
 test('D-12 INLINE: selectors fire on red-team fixture', async () => {
   // Include tseslint.configs.recommended to wire the TypeScript parser.
   // The fixture uses TypeScript interface syntax; the default espree parser fails.
@@ -49,7 +37,10 @@ test('D-12 INLINE: selectors fire on red-team fixture', async () => {
         files: ['**/*.ts'],
         languageOptions: { ecmaVersion: 2022, sourceType: 'module' },
         rules: {
-          'no-restricted-syntax': D12_RULES,
+          'no-restricted-syntax': ['error',
+            { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][computed=true]", message: 'D-12: computed process.env[…] read forbidden in mcp/**.' },
+            { selector: "CallExpression[callee.name=/^(getProviderApiKey|getOpenAlexApiKey|loadRuntimeConfig)$/]", message: 'D-12: do not call runtime.ts secret-resolution helpers inside mcp/**.' },
+          ],
         },
       },
     ],
@@ -69,7 +60,10 @@ test('D-12 INLINE: static dot-access process.env.FOO is allowed', async () => {
         files: ['**/*.ts'],
         languageOptions: { ecmaVersion: 2022, sourceType: 'module' },
         rules: {
-          'no-restricted-syntax': D12_RULES,
+          'no-restricted-syntax': ['error',
+            { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][computed=true]", message: 'D-12: computed process.env[…] read forbidden in mcp/**.' },
+            { selector: "CallExpression[callee.name=/^(getProviderApiKey|getOpenAlexApiKey|loadRuntimeConfig)$/]", message: 'D-12: do not call runtime.ts secret-resolution helpers inside mcp/**.' },
+          ],
         },
       },
     ],
