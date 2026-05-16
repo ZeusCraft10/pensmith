@@ -56,7 +56,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pensmithHttpCacheDir } from './paths.js';
 import { atomicWriteFile } from './atomic-write.js';
-import { retry } from './retry.js';
+import { retry, parseRetryAfter } from './retry.js';
 
 // Touch the optional Agent reference so verbatimModuleSyntax does not strip
 // it; we may use it in Phase 2 when wiring connection pooling.
@@ -438,35 +438,46 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   };
 
   // --- 4. Optional retry wrap ---
+  // serverRetryDelay captures the parsed Retry-After header from the most-recent
+  // retryable response. On the next attempt, we sleep for this duration BEFORE
+  // re-acquiring the rate bucket + dispatching — honoring the server's request
+  // on top of the existing fullJitter backoff (per ARCH-13 / D-01).
+  let serverRetryDelay = 0;
+  const wrapped = async (): Promise<HttpResponse> => {
+    if (serverRetryDelay > 0) {
+      // Server asked us to wait — honor it before the next attempt.
+      const delay = serverRetryDelay;
+      serverRetryDelay = 0;
+      await new Promise<void>((r) => setTimeout(r, delay));
+    }
+    const r = await dispatch();
+    if (RETRYABLE_STATUSES.has(r.status)) {
+      const ra = r.headers['retry-after'];
+      serverRetryDelay = parseRetryAfter(typeof ra === 'string' ? ra : undefined, Date.now());
+      const err = new Error(`HTTP ${r.status}`) as Error & {
+        status?: number;
+        response?: HttpResponse;
+      };
+      err.status = r.status;
+      err.response = r;
+      throw err;
+    }
+    return r;
+  };
   const response: HttpResponse = opts.noRetry
     ? await dispatch()
-    : await retry(
-        async () => {
-          const r = await dispatch();
-          if (RETRYABLE_STATUSES.has(r.status)) {
-            const err = new Error(`HTTP ${r.status}`) as Error & {
-              status?: number;
-              response?: HttpResponse;
-            };
-            err.status = r.status;
-            err.response = r;
-            throw err;
-          }
-          return r;
+    : await retry(wrapped, {
+        maxAttempts: 5,
+        baseMs: 200,
+        capMs: 30_000,
+        retryOn: (err) => {
+          const e = err as { status?: number; code?: string } | null;
+          if (!e) return false;
+          if (typeof e.status === 'number' && RETRYABLE_STATUSES.has(e.status)) return true;
+          if (typeof e.code === 'string' && RETRYABLE_ERR_CODES.has(e.code)) return true;
+          return false;
         },
-        {
-          maxAttempts: 5,
-          baseMs: 200,
-          capMs: 30_000,
-          retryOn: (err) => {
-            const e = err as { status?: number; code?: string } | null;
-            if (!e) return false;
-            if (typeof e.status === 'number' && RETRYABLE_STATUSES.has(e.status)) return true;
-            if (typeof e.code === 'string' && RETRYABLE_ERR_CODES.has(e.code)) return true;
-            return false;
-          },
-        },
-      );
+      });
 
   // --- 5. Cache write (GET, success or definite 404) ---
   if (method === 'GET' && !opts.noCache && (response.status === 200 || response.status === 404)) {
