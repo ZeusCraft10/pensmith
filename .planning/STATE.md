@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 plan 02-02 (lint-mcp-no-network) complete. D-10 stdio-only chokepoint landed (eslint.config.js + fixture + 2-test regression gate). 245 tests pass. Next plan is 02-03 (wave 1).
-last_updated: "2026-05-16T10:17:31Z"
-last_activity: 2026-05-16 -- Phase 2 plan 02-02 executed (3 tasks, 3 files, commits 339b728/a473ee7/9f4fcc2)
+stopped_at: Phase 2 plan 02-03 (lint-capabilities-noleak) complete. D-12 capabilities-noleak chokepoint landed (eslint.config.js + fixture + 3-test regression gate). 248 tests pass. Next plan is 02-04 (mcp-server).
+last_updated: "2026-05-16T10:07:10Z"
+last_activity: 2026-05-16 -- Phase 2 plan 02-03 executed (3 tasks + 1 fix, 3 files, commits b4473d2/f106197/577d513/b85a902)
 progress:
   total_phases: 11
   completed_phases: 2
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **DISCUSSED** (CONTEXT.md + DISCUSSION-LOG.md committed)
-Plan: 02-02 complete (5/10 plans in Phase 2); next is 02-03 (wave 1)
+Plan: 02-03 complete (6/10 plans in Phase 2); next is 02-04 (mcp-server)
 Status: Executing Phase 2
-Last activity: 2026-05-16 -- 02-02 lint-mcp-no-network complete (339b728/a473ee7/9f4fcc2)
+Last activity: 2026-05-16 -- 02-03 lint-capabilities-noleak complete (b4473d2/f106197/577d513/b85a902)
 
 Progress: [██████░░░░] 57%  (Phase 0 done; Phase 1 closed; Phase 2 discussed — plans pending)
 
@@ -117,6 +117,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-01] D-09 handler statement-count budget enforced by AST walk in Test 3, not by ESLint selector — no-restricted-syntax cannot count statement-body length in a single selector
 - [02-02] D-10 mcp/** file-scoped block re-lists all D-07/D-41 project-wide selectors — ESLint 9 flat-config file-scoped blocks OVERRIDE (not merge) project-wide rule; without re-listing, DOI regex in mcp/server.ts would escape the chokepoint
 - [02-02] https selector included in D-10 alongside net/http/tls — plan listed 5 selectors including https.createServer; all 5 covered in fixture and eslint.config.js
+- [02-03] D-12 mcp/** block re-lists D-07/D-41/D-10 selectors — ESLint 9 flat-config last-match semantics: the D-12 block (third mcp/** no-restricted-syntax block) REPLACES D-10 block without re-listing; same override-merge safety pattern as 02-02
+- [02-03] D-12 doctor-probe scope uses files+ignores combination — ESLint flat-config ignores inside a config object excludes specific files from matching; allows computed-env selector on all probes except the authorized runtime-config-presence.ts
+- [02-03] TypeScript as const on rules array incompatible with ESLint RuleConfig mutable type — inline rules in overrideConfig instead (matches 02-01/02-02 sibling pattern)
 
 ### Pending Todos
 
@@ -137,6 +140,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-16T10:17:31Z
-Stopped at: Phase 2 plan 02-02 complete. D-10 stdio-only chokepoint landed: eslint.config.js mcp/**/*.ts block (5 selectors + D-07/D-41 re-listed) + fixture + 2-test regression gate. 245 tests pass, lint+typecheck clean. Next: 02-03 (wave 1, sequential).
-Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-03-PLAN.md (next_action: execute 02-03)
+Last session: 2026-05-16T10:07:10Z
+Stopped at: Phase 2 plan 02-03 complete. D-12 capabilities-noleak chokepoint landed: eslint.config.js mcp/**/*.ts block (computed env + runtime helpers selectors + D-07/D-41/D-10 re-listed) + doctor-probe scope + runtime-config-presence static backstop + fixture + 3-test regression gate. 248 tests pass, lint+typecheck clean. Next: 02-04 (mcp-server, wave 2).
+Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-04-mcp-server-PLAN.md (next_action: execute 02-04)
