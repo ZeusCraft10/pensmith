@@ -165,3 +165,34 @@ test('references/doctor-output.md retains the 7 Phase-2 probe section anchors', 
   // Anti-drift: DOCT-05 wiring-smoke MUST NOT appear (deferred to Phase 3 — D-04).
   assert.equal(/wiring-smoke|DOCT-05/.test(copy), false, 'DOCT-05 / wiring-smoke must NOT appear in Phase 2 doctor copy (deferred per D-04)');
 });
+
+// CF-D24: Guard the D-24-locked "Tier contract — do not skip" section in CONTRIBUTING.md.
+// If a future contributor (human or AI) deletes or rewords the section, this test catches
+// it before merge. The Phase 2 D-24 lock makes this section non-negotiable.
+test('CF-D24: CONTRIBUTING.md has Tier contract — do not skip section with locked headings', () => {
+  const src = readFileSync('CONTRIBUTING.md', 'utf8');
+  const required = [
+    '## Tier contract — do not skip',
+    '### What the tier contract guarantees',
+    '### The four merge-gate layers',
+    '### Wave 1 lint chokepoints',
+    '### Discipline rule',
+  ];
+  for (const heading of required) {
+    assert.ok(
+      src.includes(heading),
+      `CONTRIBUTING.md missing locked heading: "${heading}". This section is D-24-locked; do not delete.`,
+    );
+  }
+  // Each Wave 1 chokepoint must be named:
+  assert.match(src, /D-09.*thin-shim/s, 'D-09 thin-shim must be named');
+  assert.match(src, /D-10.*mcp-no-network|mcp-no-network.*D-10/s, 'D-10 mcp-no-network must be named');
+  assert.match(src, /D-12.*capabilities-no-leak|capabilities-no-leak.*D-12/s, 'D-12 capabilities-no-leak must be named');
+  // The four merge-gate layers must be named:
+  assert.match(src, /CI step/, 'merge-gate layer 1 (CI step) must be named');
+  assert.match(src, /branch protection/i, 'merge-gate layer 2 (branch protection) must be named');
+  assert.match(src, /preflight|validate-plugin-manifest/i, 'merge-gate layer 3 (preflight) must be named');
+  assert.match(src, /prose|this section/i, 'merge-gate layer 4 (prose) must be named');
+  // Phase 0 chokepoints section preserved:
+  assert.match(src, /Architectural chokepoints \(Phase 0\+\)/, 'Phase 0 chokepoints section must be preserved');
+});
