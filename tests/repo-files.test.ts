@@ -1,8 +1,9 @@
 // tests/repo-files.test.ts
 // Smoke test: every required Phase 0 root file exists and contains the
 // locked stub strings from D-19, D-20, and the architecture decisions.
-// Extended in Phase 2 (02-00): doctor-output.md hash-pin, citty dep,
-// hooks/.gitkeep assertions.
+// Extended in Phase 2 (02-00): doctor-output.md hash-pin, citty dep.
+// Extended in Phase 2 (02-06): hooks/*.ts + hooks.json (TIER-03) replace the
+// previous hooks/.gitkeep placeholder from 02-00.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,7 +30,12 @@ test('root config files exist', () => {
     'mcp/server.ts',
     'scripts/run-tests.mjs',
     'references/doctor-output.md',
-    'hooks/.gitkeep',
+    // 02-06: hooks/.gitkeep replaced by real TIER-03 hook modules.
+    'hooks/hooks.json',
+    'hooks/session-start.ts',
+    'hooks/pre-compact.ts',
+    'hooks/post-tool-use.ts',
+    'hooks/stop.ts',
   ]) {
     assert.ok(fs.existsSync(path.resolve(f)), `missing required file: ${f}`);
   }
