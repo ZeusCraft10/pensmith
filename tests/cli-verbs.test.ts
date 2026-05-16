@@ -1,16 +1,21 @@
 // tests/cli-verbs.test.ts
 //
 // TIER-04: 16 UX-02 verbs dispatchable + workflow-key-equal preflight.
+//
+// WR-03 (cross-AI review): the canonical 16-verb list lives in bin/lib/verbs.ts
+// — the SINGLE source of truth imported by both bin/pensmith.ts (citty
+// subCommands keys) and this test. The previous inline copy here could drift
+// silently; importing UX02_VERBS guarantees the test fails immediately if
+// bin/lib/verbs.ts and bin/pensmith.ts disagree.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { UX02_VERBS } from '../bin/lib/verbs.js';
 
-// UX-02 canonical 16 verbs (REQUIREMENTS.md line 61, locked by CONTEXT D-05).
-const EXPECTED_16 = [
-  'doctor', 'new', 'next', 'status', 'research', 'outline', 'plan', 'write',
-  'verify', 'compile', 'done', 'resume', 'list', 'open', 'sketch', 'add',
-];
+// WR-03: derived from the single-source-of-truth list. Length-locked to 16
+// here to make the UX-02 contract explicit at the test site.
+const EXPECTED_16: readonly string[] = UX02_VERBS;
 
 test('TIER-04: dispatcher registers exactly 16 verbs (UX-02 canonical)', () => {
   const src = readFileSync('bin/pensmith.ts', 'utf8');

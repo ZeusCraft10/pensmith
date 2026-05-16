@@ -78,10 +78,34 @@ if (fs.existsSync(distDir)) {
 // ARCH-03: every workflow body contains a <capability_check> block.
 
 const REQUIRED_HOOK_EVENTS = ['SessionStart', 'PreCompact', 'PostToolUse', 'Stop'];
-const EXPECTED_WORKFLOWS = [
-  'doctor', 'new', 'next', 'status', 'research', 'outline', 'plan', 'write',
-  'verify', 'compile', 'done', 'resume', 'list', 'open', 'sketch', 'add',
-];
+// WR-03 (cross-AI review): the canonical 16-verb list lives in bin/lib/verbs.ts;
+// scripts/prebuild.mjs writes the JSON sibling bin/lib/verbs.json so this
+// CommonJS validator (which runs in `npm run check` before tsc) reads the
+// same source of truth. Falls back to the historical inline literal if the
+// JSON is missing (fresh clone, prebuild not yet run) so this script remains
+// runnable standalone — but `npm run check` always invokes prebuild first.
+const VERBS_JSON_PATH = path.join(root, 'bin/lib/verbs.json');
+let EXPECTED_WORKFLOWS;
+try {
+  const verbsRaw = fs.readFileSync(VERBS_JSON_PATH, 'utf8');
+  const verbsParsed = JSON.parse(verbsRaw);
+  // scripts/prebuild.mjs writes { verbs: [...], generatedFrom: '...' }.
+  // Accept both shapes (bare array OR wrapped) to keep this validator
+  // resilient if the prebuild output format is tightened later.
+  const arr = Array.isArray(verbsParsed) ? verbsParsed : verbsParsed && verbsParsed.verbs;
+  if (!Array.isArray(arr) || arr.length !== 16) {
+    throw new Error(`bin/lib/verbs.json must contain a 16-element verb array, got ${arr && arr.length}`);
+  }
+  EXPECTED_WORKFLOWS = arr;
+} catch (e) {
+  // Fallback: hand-maintained mirror used only when verbs.json absent.
+  // If you edit this list, also edit bin/lib/verbs.ts (the real SoT).
+  console.error(`  - warn: ${VERBS_JSON_PATH} unreadable (${e.message}); falling back to inline list`);
+  EXPECTED_WORKFLOWS = [
+    'doctor', 'new', 'next', 'status', 'research', 'outline', 'plan', 'write',
+    'verify', 'compile', 'done', 'resume', 'list', 'open', 'sketch', 'add',
+  ];
+}
 
 const hooksDir = path.join(root, 'hooks');
 if (!fs.existsSync(hooksDir)) {
