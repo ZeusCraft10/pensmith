@@ -101,7 +101,7 @@ Plans:
 
 - [x] 02-00-PLAN.md (wave 0) -- Carry-forward + Wave 0 prep: parseRetryAfter extracted into bin/lib/retry.ts (D-01), citty^0.2.2 + zod dep, references/doctor-output.md locked copy (sha256-pinned), hooks/.gitkeep, tests/repo-files.test.ts extended — COMPLETE 2026-05-16 (8d5ac8e/deff862/e651435)
 - [x] 02-01-PLAN.md (wave 1) -- D-09 thin-shim AST lint chokepoint + red-team fixture (ARCH-18) — COMPLETE 2026-05-16 (f6b7520/6f034cb/4c3cfe4)
-- [ ] 02-02-PLAN.md (wave 1) -- D-10 mcp-no-network AST lint chokepoint + red-team fixture (ARCH-18)
+- [x] 02-02-PLAN.md (wave 1) -- D-10 mcp-no-network AST lint chokepoint + red-team fixture (ARCH-18) — COMPLETE 2026-05-16 (339b728/a473ee7/9f4fcc2)
 - [ ] 02-03-PLAN.md (wave 1) -- D-12 capabilities-no-leak AST lint chokepoint + red-team fixture (ARCH-18)
 - [ ] 02-04-PLAN.md (wave 2) -- mcp/server.ts: MCP SDK ^1.29 + 5 paper:// resources (state/outline/section/{N}/library/capabilities) + 6 snake_case state-mutation tools, each handler <=30 stmts (TIER-01, TIER-02, TIER-06, ARCH-18)
 - [ ] 02-05-PLAN.md (wave 2) -- bin/cli/pensmith.ts citty dispatcher (17 verbs, 1 real + 16 stubs) + doctor verb with 8 probes incl. Zotero/Pandoc/humanizer ecosystem + runtime-config-presence (TIER-04, DOCT-01..04, DOCT-07)
@@ -217,7 +217,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 |-------|----------------|--------|-----------|
 | 0. Repo skeleton & plugin manifest | 4/4 | COMPLETE | 2026-05-07 |
 | 1. Foundation NFRs | 14/14 | COMPLETE (VERIFICATION PASS 5/5) | 2026-05-14 |
-| 2. Tier shells + doctor + tier-contract gate | 2/10 | Executing | - |
+| 2. Tier shells + doctor + tier-contract gate | 3/10 | Executing | - |
 | 3. Vertical slice through one section | 0/TBD | Not started | - |
 | 4. Breadth — N sections + compile + wave scheduling | 0/TBD | Not started | - |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 0/TBD | Not started | - |

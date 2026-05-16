@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 plan 02-01 (lint-thin-shim) complete. D-09 thin-shim chokepoint landed (eslint.config.js + fixture + 3-test AST-walk gate). 243 tests pass. Next plan is 02-02 or 02-03 (wave 1).
-last_updated: "2026-05-16T09:57:00.000Z"
-last_activity: 2026-05-16 -- Phase 2 plan 02-01 executed (3 tasks, 4 files, commits f6b7520/6f034cb/4c3cfe4)
+stopped_at: Phase 2 plan 02-02 (lint-mcp-no-network) complete. D-10 stdio-only chokepoint landed (eslint.config.js + fixture + 2-test regression gate). 245 tests pass. Next plan is 02-03 (wave 1).
+last_updated: "2026-05-16T10:17:31Z"
+last_activity: 2026-05-16 -- Phase 2 plan 02-02 executed (3 tasks, 3 files, commits 339b728/a473ee7/9f4fcc2)
 progress:
   total_phases: 11
   completed_phases: 2
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **DISCUSSED** (CONTEXT.md + DISCUSSION-LOG.md committed)
-Plan: 02-01 complete (4/10 plans in Phase 2); next is 02-02 or 02-03 (wave 1)
+Plan: 02-02 complete (5/10 plans in Phase 2); next is 02-03 (wave 1)
 Status: Executing Phase 2
-Last activity: 2026-05-16 -- 02-01 lint-thin-shim complete (f6b7520/6f034cb/4c3cfe4)
+Last activity: 2026-05-16 -- 02-02 lint-mcp-no-network complete (339b728/a473ee7/9f4fcc2)
 
 Progress: [██████░░░░] 57%  (Phase 0 done; Phase 1 closed; Phase 2 discussed — plans pending)
 
@@ -115,6 +115,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-01] tseslint.configs.recommended required in inline ESLint test config when fixture uses TypeScript-specific syntax (declare const) — precedent for future chokepoint test inline configs
 - [02-01] tests/lint-thin-shim.test.ts exempted from no-restricted-syntax (D-07 writeFile selector) — test-only fsp.writeFile to create mcp/-pathed tmp file; deliberate and documented
 - [02-01] D-09 handler statement-count budget enforced by AST walk in Test 3, not by ESLint selector — no-restricted-syntax cannot count statement-body length in a single selector
+- [02-02] D-10 mcp/** file-scoped block re-lists all D-07/D-41 project-wide selectors — ESLint 9 flat-config file-scoped blocks OVERRIDE (not merge) project-wide rule; without re-listing, DOI regex in mcp/server.ts would escape the chokepoint
+- [02-02] https selector included in D-10 alongside net/http/tls — plan listed 5 selectors including https.createServer; all 5 covered in fixture and eslint.config.js
 
 ### Pending Todos
 
@@ -135,6 +137,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-16T09:57:00.000Z
-Stopped at: Phase 2 plan 02-01 complete. D-09 thin-shim chokepoint landed: eslint.config.js mcp/**/*.ts block + fixture + 3-test AST-walk gate. 243 tests pass, lint+typecheck clean. Next: 02-02 or 02-03 (wave 1, sequential).
-Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-02-PLAN.md (next_action: execute 02-02)
+Last session: 2026-05-16T10:17:31Z
+Stopped at: Phase 2 plan 02-02 complete. D-10 stdio-only chokepoint landed: eslint.config.js mcp/**/*.ts block (5 selectors + D-07/D-41 re-listed) + fixture + 2-test regression gate. 245 tests pass, lint+typecheck clean. Next: 02-03 (wave 1, sequential).
+Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-03-PLAN.md (next_action: execute 02-03)
