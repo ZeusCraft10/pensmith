@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 plan 02-04 (mcp-server) complete. McpServer+StdioServerTransport boot, 5 paper:// resources, 6 snake_case tools, loadCapabilityFacts() D-12 architectural fix, 265 tests pass. Next plan is 02-05.
-last_updated: "2026-05-16T10:47:00Z"
-last_activity: 2026-05-16 -- Phase 2 plan 02-04 executed (4 tasks + 2 auto-fixes, 12 files, commits f219474/658d5da/faad8c0/9137a53/f796fd5)
+stopped_at: Phase 2 plan 02-05 (cli-doctor) complete. bin/pensmith.ts citty dispatcher (16 UX-02 verbs), 10 doctor probes, read-only runDoctor(), TTY + --json renderers, exit-code contract, 300 tests pass. Next plan is 02-06.
+last_updated: "2026-05-16T10:45:00Z"
+last_activity: 2026-05-16 -- Phase 2 plan 02-05 executed (3 tasks + 4 auto-fixes, 20 files created, commits 53d6f68/89ff1f3/52b5e7e)
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 28
-  completed_plans: 20
-  percent: 71
+  completed_plans: 21
+  percent: 75
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 ## Current Position
 
-Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **DISCUSSED** (CONTEXT.md + DISCUSSION-LOG.md committed)
-Plan: 02-04 complete (7/10 plans in Phase 2); next is 02-05 (http-crossref-ping)
+Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **EXECUTING**
+Plan: 02-05 complete (8/10 plans in Phase 2); next is 02-06
 Status: Executing Phase 2
-Last activity: 2026-05-16 -- 02-04 mcp-server complete (f219474/658d5da/faad8c0/9137a53/f796fd5)
+Last activity: 2026-05-16 -- 02-05 cli-doctor complete (53d6f68/89ff1f3/52b5e7e)
 
 Progress: [███████░░░] 71%  (Phase 0 done; Phase 1 closed; Phase 2 wave 2 partial)
 
@@ -124,6 +124,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-04] loadCapabilityFacts() in bin/lib/capabilities.ts is the single authorised composition site for runtime config + env presence flags; both mcp/resources.ts and mcp/tools.ts are zero-composition thin shims (D-12 architectural fix from cross-AI review)
 - [02-04] sections[] added as optional field to StateSchema v1 (not via migration) — additive-only change; mutation helpers default to prev.sections ?? [] so existing STATE.json files are backward-compatible
 - [02-04] verifyDoi() added to bin/lib/doi.ts (Rule 3 auto-fix) — Phase 1 doi.ts only had normalization; Phase 2 paper_doi_verify tool requires Crossref re-fetch; doi.ts exemption covers http import
+- [02-05] bin.pensmith locked to dist/bin/pensmith.js (D-24 LOCKED path) in package.json — exact path required by 02-07 preflight and CONTRIBUTING.md
+- [02-05] http-crossref-ping probe is SKIP-only in Phase 2 (cross-AI review HIGH fix from Codex iter 1) — production code must not import from tests/; Phase 3 ships bin/lib/http-mock.ts production-tree chokepoint to re-enable PASS/FAIL
+- [02-05] DOCT-07 runtime-config-presence delegates entirely to loadCapabilityFacts() (cross-AI cycle-2 HIGH #2) — single composition site shared with mcp/; probe only re-keys snake_case to camelCase for the doctor's historical detail shape
+- [02-05] TIER-03 exit-code test uses [FAIL] pattern (not /FAIL/) to avoid matching the footer 'N FAIL' count in the TTY renderer
 
 ### Pending Todos
 
@@ -144,6 +148,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-16T10:47:00Z
-Stopped at: Phase 2 plan 02-04 complete. McpServer+StdioServerTransport boot, 5 paper:// resources (state/outline/section/{N}/library/capabilities), 6 snake_case tools (TIER-01/TIER-02), D-12 architectural fix (loadCapabilityFacts), 265 tests pass, lint+typecheck+build clean. Next: 02-05 (http-crossref-ping, wave 2).
-Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-05-http-crossref-ping-PLAN.md (next_action: execute 02-05)
+Last session: 2026-05-16T10:45:00Z
+Stopped at: Phase 2 plan 02-05 complete. bin/pensmith.ts citty dispatcher (16 UX-02 verbs, 1 real + 15 stubs), 10 doctor probes (DOCT-01/02/03/04/05/07 + D-03(d) SKIP-only), runDoctor() Record<string,ProbeResult>, TTY + --json renderers (D-16/D-18), exit code from FAIL presence (D-15), D-12 no-leak sentinel test, 300 tests pass, lint+typecheck+build clean. Next: 02-06.
+Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-06-PLAN.md (next_action: execute 02-06)
