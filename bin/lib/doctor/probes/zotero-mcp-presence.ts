@@ -6,13 +6,12 @@
 // D-19 read-only: readFileSync only, no writes.
 
 import type { Probe, ProbeResult } from '../probes.js';
-import { readFileSync, existsSync } from 'node:fs';
+import { isZoteroMcpPresent } from '../../ecosystem-presence.js';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-// Standard locations where Claude MCP server configs live.
-// The exact set must be re-checked against the user's Claude version;
-// probe is best-effort and treats absence as WARN, not FAIL.
+// Standard locations where Claude MCP server configs live (kept here for
+// the WARN-path `detail` text so users see where we looked).
 function candidatePaths(): string[] {
   const home = homedir();
   return [
@@ -24,35 +23,20 @@ function candidatePaths(): string[] {
 export const zoteroMcpPresenceProbe: Probe = {
   id: 'zotero-mcp-presence',
   async run(): Promise<ProbeResult> {
-    const paths = candidatePaths();
-    const checked: string[] = [];
-    for (const p of paths) {
-      checked.push(p);
-      if (!existsSync(p)) continue;
-      try {
-        const raw = readFileSync(p, 'utf8');
-        // Parse defensively — config schema may differ across Claude versions.
-        // We only care whether the word "zotero" appears as a server key/name.
-        const parsed = JSON.parse(raw) as { mcpServers?: Record<string, unknown> };
-        const servers = parsed.mcpServers ?? {};
-        const names = Object.keys(servers);
-        const match = names.find((n) => /zotero/i.test(n));
-        if (match) {
-          return {
-            id: 'zotero-mcp-presence',
-            severity: 'PASS',
-            summary: `Zotero MCP configured (${match}) in ${p}`,
-          };
-        }
-      } catch {
-        // Malformed JSON — fall through and keep checking.
-      }
+    // CR-01: share the detection algorithm with bin/lib/capabilities.ts via
+    // ecosystem-presence.ts so both tiers report the same boolean.
+    if (isZoteroMcpPresent()) {
+      return {
+        id: 'zotero-mcp-presence',
+        severity: 'PASS',
+        summary: 'Zotero MCP configured in a known Claude MCP config location',
+      };
     }
     return {
       id: 'zotero-mcp-presence',
       severity: 'WARN',
       summary: 'Zotero MCP server not configured — citations and research verbs (Phase 3+) will be offline-only.',
-      detail: `Checked: ${checked.join(', ')}`,
+      detail: `Checked: ${candidatePaths().join(', ')}`,
       fix: 'See https://github.com/<zotero-mcp-org>/zotero-mcp for installation. Then add to your Claude MCP config.',
     };
   },

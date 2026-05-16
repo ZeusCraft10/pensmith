@@ -6,34 +6,26 @@
 // Pitfall 8: NEVER exec() (shell-interpolation risk) — always execFileSync with argv array.
 
 import type { Probe, ProbeResult } from '../probes.js';
-import { execFileSync } from 'node:child_process';
+import { isPandocPresent } from '../../ecosystem-presence.js';
 
 export const pandocPresenceProbe: Probe = {
   id: 'pandoc-presence',
   async run(): Promise<ProbeResult> {
-    try {
-      // execFileSync — NEVER exec (Pitfall 8: shell-interpolation risk).
-      // argv array form; no shell involved.
-      const out = execFileSync('pandoc', ['--version'], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        encoding: 'utf8',
-        timeout: 5000,
-      });
-      const firstLine = out.split('\n')[0] ?? 'pandoc';
+    // CR-01: share the detection algorithm with bin/lib/capabilities.ts via
+    // ecosystem-presence.ts. Both tiers MUST converge on the same boolean
+    // so the tier-contract Case D fact equivalence holds across hosts.
+    if (isPandocPresent()) {
       return {
         id: 'pandoc-presence',
         severity: 'PASS',
-        summary: `pandoc on PATH — ${firstLine}`,
-      };
-    } catch (err: unknown) {
-      const reason = err instanceof Error ? err.message : String(err);
-      return {
-        id: 'pandoc-presence',
-        severity: 'WARN',
-        summary: 'pandoc not found on PATH — the `export` verb (Phase 3+) will be unavailable.',
-        detail: `spawn failed: ${reason}`,
-        fix: 'Install pandoc: https://pandoc.org/installing.html',
+        summary: 'pandoc on PATH',
       };
     }
+    return {
+      id: 'pandoc-presence',
+      severity: 'WARN',
+      summary: 'pandoc not found on PATH — the `export` verb (Phase 3+) will be unavailable.',
+      fix: 'Install pandoc: https://pandoc.org/installing.html',
+    };
   },
 };

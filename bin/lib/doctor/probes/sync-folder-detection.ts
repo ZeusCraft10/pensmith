@@ -6,20 +6,22 @@
 // D-19 read-only: paperDir() + isInsideSyncFolder() are pure path functions, no writes.
 
 import type { Probe, ProbeResult } from '../probes.js';
-import { paperDir, isInsideSyncFolder } from '../../paths.js';
+import { detectSyncFolder } from '../../ecosystem-presence.js';
 
 export const syncFolderDetectionProbe: Probe = {
   id: 'sync-folder-detection',
   async run(): Promise<ProbeResult> {
-    // PENSMITH_PAPER_DIR env-var override for testability (D-17).
-    // In production, paperDir() resolves from process.cwd().
-    const dir = process.env.PENSMITH_PAPER_DIR ?? paperDir();
-    if (isInsideSyncFolder(dir)) {
+    // CR-01: share the detection algorithm with bin/lib/capabilities.ts via
+    // ecosystem-presence.ts so both tiers agree on `onedrive_detected`.
+    // Env-var precedence: PENSMITH_PAPER_ROOT > PENSMITH_PAPER_DIR (legacy)
+    // > paperDir() — handled inside ecosystem-presence.ts.
+    const { detected, dir } = detectSyncFolder();
+    if (detected) {
       return {
         id: 'sync-folder-detection',
         severity: 'WARN',
         summary: `paperDir() ${dir} is inside a cloud-sync folder — locks and SQLite WALs may corrupt.`,
-        fix: 'Move the paper project outside OneDrive/Dropbox/Google Drive/iCloud, or set PENSMITH_PAPER_DIR to an unsynced path.',
+        fix: 'Move the paper project outside OneDrive/Dropbox/Google Drive/iCloud, or set PENSMITH_PAPER_ROOT to an unsynced path.',
       };
     }
     return {

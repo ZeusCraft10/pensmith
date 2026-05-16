@@ -39,10 +39,15 @@ test('D-12: capability shape is stable (mcp_self, contact_email_set, providers, 
     assert.ok(keys.includes('present'), `provider missing present: ${JSON.stringify(p)}`);
     assert.equal(typeof p.present, 'boolean');
   }
-  // Phase 2 placeholders: present-but-undefined so 02-05 can populate without shape drift.
+  // CR-01: pandoc/zotero_mcp/humanizer/onedrive_detected/sync_folder_match are
+  // now REAL booleans (populated via bin/lib/ecosystem-presence.ts) so the
+  // tier-contract Case A/D fact equivalence holds against the CLI's doctor
+  // probes. The previous `undefined` placeholders caused MCP-vs-CLI
+  // divergence on any host where pandoc was installed (D-21: fix the tiers,
+  // not the test).
   for (const k of ['pandoc', 'zotero_mcp', 'humanizer', 'onedrive_detected', 'sync_folder_match'] as const) {
-    assert.equal((facts as unknown as Record<string, unknown>)[k], undefined,
-      `${k} should be undefined in Phase 2 (populated by 02-05)`);
+    assert.equal(typeof (facts as unknown as Record<string, unknown>)[k], 'boolean',
+      `${k} should be a boolean (populated by ecosystem-presence.ts)`);
   }
 });
 
