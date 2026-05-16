@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 plan 02-00 (review-cleanup) complete. parseRetryAfter wired; citty dep installed; doctor-output.md locked; hooks/.gitkeep created. Next plan is 02-01.
-last_updated: "2026-05-16T09:38:00.000Z"
-last_activity: 2026-05-16 -- Phase 2 plan 02-00 executed (3 tasks, 8 files, commits 8d5ac8e/deff862/e651435)
+stopped_at: Phase 2 plan 02-01 (lint-thin-shim) complete. D-09 thin-shim chokepoint landed (eslint.config.js + fixture + 3-test AST-walk gate). 243 tests pass. Next plan is 02-02 or 02-03 (wave 1).
+last_updated: "2026-05-16T09:57:00.000Z"
+last_activity: 2026-05-16 -- Phase 2 plan 02-01 executed (3 tasks, 4 files, commits f6b7520/6f034cb/4c3cfe4)
 progress:
   total_phases: 11
   completed_phases: 2
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **DISCUSSED** (CONTEXT.md + DISCUSSION-LOG.md committed)
-Plan: 02-00 complete (3/10 plans in Phase 2); next is 02-01
+Plan: 02-01 complete (4/10 plans in Phase 2); next is 02-02 or 02-03 (wave 1)
 Status: Executing Phase 2
-Last activity: 2026-05-16 -- 02-00 review-cleanup complete (8d5ac8e/deff862/e651435)
+Last activity: 2026-05-16 -- 02-01 lint-thin-shim complete (f6b7520/6f034cb/4c3cfe4)
 
 Progress: [██████░░░░] 57%  (Phase 0 done; Phase 1 closed; Phase 2 discussed — plans pending)
 
@@ -112,6 +112,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-00] serverRetryDelay closure inside wrapped fn — cleanest Retry-After pattern given retry() fixed-base signature; maxAttempts/baseMs/capMs unchanged (T-02-00-02 preserved)
 - [02-00] SHA-256 hash-pin (not substring match) for doctor-output.md — substring match silently allows inserted lines or rewritten copy outside matched fragments (D-18)
 - [02-00] DOCT-05/wiring-smoke absent from doctor-output.md — Phase 3 deferral enforced by anti-drift assertion in repo-files.test.ts (D-04)
+- [02-01] tseslint.configs.recommended required in inline ESLint test config when fixture uses TypeScript-specific syntax (declare const) — precedent for future chokepoint test inline configs
+- [02-01] tests/lint-thin-shim.test.ts exempted from no-restricted-syntax (D-07 writeFile selector) — test-only fsp.writeFile to create mcp/-pathed tmp file; deliberate and documented
+- [02-01] D-09 handler statement-count budget enforced by AST walk in Test 3, not by ESLint selector — no-restricted-syntax cannot count statement-body length in a single selector
 
 ### Pending Todos
 
@@ -132,6 +135,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-16T09:38:00.000Z
-Stopped at: Phase 2 plan 02-00 complete. parseRetryAfter wired (D-01), citty dep installed, doctor-output.md locked (D-18), hooks/.gitkeep created. 240 tests pass, lint+typecheck clean. Next: 02-01 thin-shim lint chokepoint.
-Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-01-PLAN.md (next_action: execute 02-01)
+Last session: 2026-05-16T09:57:00.000Z
+Stopped at: Phase 2 plan 02-01 complete. D-09 thin-shim chokepoint landed: eslint.config.js mcp/**/*.ts block + fixture + 3-test AST-walk gate. 243 tests pass, lint+typecheck clean. Next: 02-02 or 02-03 (wave 1, sequential).
+Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-02-PLAN.md (next_action: execute 02-02)
