@@ -10,11 +10,15 @@
 
 import { defineCommand, runMain } from 'citty';
 import { makeStub } from './cli/stubs.js';
+import { VERSION } from './lib/version.generated.js';
 
 const main = defineCommand({
   meta: {
     name: 'pensmith',
-    version: '0.2.0',
+    // WR-01: VERSION is derived from package.json#version at prebuild time
+    // (scripts/prebuild.mjs writes bin/lib/version.generated.ts). NEVER
+    // inline a literal here — it will drift from npm's view of the package.
+    version: VERSION,
     description: 'Pensmith — Tier 2 portable CLI. Section-as-phase academic writing.',
   },
   subCommands: {

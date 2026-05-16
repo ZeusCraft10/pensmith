@@ -13,6 +13,7 @@ import { pathToFileURL } from 'node:url';
 import { registerPaperResources } from './resources.js';
 import { registerPaperTools } from './tools.js';
 import { paperDir } from '../bin/lib/paths.js';
+import { VERSION } from '../bin/lib/version.generated.js';
 
 // cross-AI cycle-2 HIGH #4 fix: resolve paperRoot ONCE at boot time and
 // close it over the resource handlers. The CLI launcher and the 02-07
@@ -25,7 +26,10 @@ import { paperDir } from '../bin/lib/paths.js';
 export function buildServer(paperRoot: string): McpServer {
   const server = new McpServer({
     name: 'pensmith',
-    version: '0.2.0',
+    // WR-01: VERSION is derived from package.json#version at prebuild time
+    // (scripts/prebuild.mjs writes bin/lib/version.generated.ts). NEVER
+    // inline a literal here — it will drift from npm's view of the package.
+    version: VERSION,
   });
   registerPaperResources(server, paperRoot);
   registerPaperTools(server);
