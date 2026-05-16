@@ -41,7 +41,7 @@ test('D-12: capability shape is stable (mcp_self, contact_email_set, providers, 
   }
   // Phase 2 placeholders: present-but-undefined so 02-05 can populate without shape drift.
   for (const k of ['pandoc', 'zotero_mcp', 'humanizer', 'onedrive_detected', 'sync_folder_match'] as const) {
-    assert.equal((facts as Record<string, unknown>)[k], undefined,
+    assert.equal((facts as unknown as Record<string, unknown>)[k], undefined,
       `${k} should be undefined in Phase 2 (populated by 02-05)`);
   }
 });
