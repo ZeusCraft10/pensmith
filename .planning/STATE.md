@@ -5,7 +5,7 @@ milestone_name: milestone
 status: executing
 stopped_at: Phase 2 discuss-phase complete. CONTEXT.md (.planning/phases/02-tier-shells-doctor-tier-contract-gate/02-CONTEXT.md) and DISCUSSION-LOG.md committed at 18472bb. 24 decisions locked (D-01..D-24) across 7 areas. Phase 1 closed prior (ecc8f4b) with 5/5 SC PASS.
 last_updated: "2026-05-16T07:12:18.390Z"
-last_activity: 2026-05-16 -- Phase 2 planning complete
+last_activity: 2026-05-16 -- Phase 0 + Phase 1 learnings extracted (00-LEARNINGS.md, 01-LEARNINGS.md)
 progress:
   total_phases: 11
   completed_phases: 2
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **DISCUSSED** (CONTEXT.md + DISCUSSION-LOG.md committed)
 Plan: Phase 2 discuss-phase complete; next is `/gsd-plan-phase 2`
 Status: Ready to execute
-Last activity: 2026-05-16 -- Phase 2 planning complete
+Last activity: 2026-05-16 -- Phase 0 + Phase 1 learnings extracted (00-LEARNINGS.md, 01-LEARNINGS.md)
 
 Progress: [██████░░░░] 57%  (Phase 0 done; Phase 1 closed; Phase 2 discussed — plans pending)
 
