@@ -16,11 +16,27 @@ import path from 'node:path';
 // invocation cwd. See sibling probe build-artifact-resolves.ts for the
 // full rationale.
 //
-// After `npm run build`, this file is emitted to:
-//   dist/bin/lib/doctor/probes/mcp-sdk-presence.js
-// So PKG_ROOT is `..` × 4 from HERE.
+// Walk up from HERE until we find a directory containing package.json.
+// Fixed-depth `..` arithmetic does not work because this file ships at two
+// different depths under tsx vs after build. See sibling probe
+// build-artifact-resolves.ts for the full rationale.
+function findPkgRoot(start: string): string {
+  let cur = start;
+  for (let i = 0; i < 8; i++) {
+    try {
+      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
+    } catch {
+      // continue
+    }
+    const next = path.dirname(cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  return start;
+}
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PKG_ROOT = path.resolve(HERE, '..', '..', '..', '..');
+const PKG_ROOT = findPkgRoot(HERE);
 const MCP_REL = 'dist/mcp/server.js';
 const MCP_PATH = path.join(PKG_ROOT, MCP_REL);
 

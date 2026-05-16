@@ -21,11 +21,30 @@ import path from 'node:path';
 // `pensmith doctor` invocation outside the repo root. CI never caught this
 // because CI always runs from the repo root.
 //
-// After `npm run build`, this file is emitted to:
-//   dist/bin/lib/doctor/probes/build-artifact-resolves.js
-// So PKG_ROOT is `..` × 4 from HERE.
+// Walk up from HERE until we find a directory containing package.json.
+// Fixed-depth `..` arithmetic does not work because this file ships at two
+// different depths: bin/lib/doctor/probes/*.ts under tsx (4 `..` to root)
+// and dist/bin/lib/doctor/probes/*.js after build (5 `..` to root). An
+// earlier fix used `..` × 4 unconditionally and produced a bogus
+// dist/dist/bin/pensmith.js path that no Tier-2 install would satisfy.
+function findPkgRoot(start: string): string {
+  let cur = start;
+  for (let i = 0; i < 8; i++) {
+    try {
+      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
+    } catch {
+      // continue
+    }
+    const next = path.dirname(cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  // Fall back to start; the probe will report FAIL with a clear summary.
+  return start;
+}
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PKG_ROOT = path.resolve(HERE, '..', '..', '..', '..');
+const PKG_ROOT = findPkgRoot(HERE);
 const BIN_REL = 'dist/bin/pensmith.js';
 const MCP_REL = 'dist/mcp/server.js';
 const BIN = path.join(PKG_ROOT, BIN_REL);

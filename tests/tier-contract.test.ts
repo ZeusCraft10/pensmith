@@ -154,7 +154,17 @@ function extractMcpFacts(caps: McpCapabilities): Record<string, boolean> {
 test('Case A (DOCT-06): capability fact equivalence (MCP vs CLI)', async () => {
   const { parsed: caps } = await readMcpCapabilities();
   const { stdout: cliRaw, exitCode } = runCliDoctor({ json: true });
-  assert.ok([0, 1].includes(exitCode), `doctor unexpected exit ${exitCode}`);
+  // D-15: doctor exits 0 when all probes are PASS/WARN/SKIP; exits 1 only on
+  // FAIL. From the post-build state Case A runs in, every probe should PASS —
+  // any non-zero exit indicates a real defect (e.g. CR-02 path arithmetic).
+  // The earlier tolerance of [0, 1] masked CR-02 by letting Tier-2 install
+  // failures sail past the gate; that tolerance is intentionally removed.
+  assert.equal(
+    exitCode,
+    0,
+    `doctor --json must exit 0 in the post-build Case A environment (got ${exitCode}). ` +
+      `stdout: ${cliRaw.slice(0, 1500)}`,
+  );
   const cliJson = JSON.parse(cliRaw) as { probes: Record<string, { severity: string; detail?: string }> };
   const mcpFacts = extractMcpFacts(caps);
   const cliFacts = extractCliFacts(cliJson);
