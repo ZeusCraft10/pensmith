@@ -61,8 +61,13 @@ test('D-10 no-network: PROJECT eslint.config.js flags 5 violations on mcp/-pathe
     const keys = Object.keys(entry);
     return !(keys.length === 1 && keys[0] === 'ignores');
   });
+  // WR-04: write fixture into mcp/__fixtures__/ (gitignored) instead of as
+  // a stray sibling of server.ts. The path still matches the mcp/**/*.ts
+  // lint glob so the D-10 rule still fires.
   const fixtureContent = await fsp.readFile(FIXTURE, 'utf-8');
-  const tmpMcpPath = path.resolve('mcp/_no-network-fixture-tmp.ts');
+  const tmpDir = path.resolve('mcp/__fixtures__');
+  await fsp.mkdir(tmpDir, { recursive: true });
+  const tmpMcpPath = path.join(tmpDir, '_no-network-fixture-tmp.ts');
   await fsp.writeFile(tmpMcpPath, fixtureContent, 'utf-8');
   try {
     const eslint = new ESLint({

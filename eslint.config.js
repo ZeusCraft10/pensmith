@@ -348,6 +348,14 @@ export default [
   // by their corresponding lint-*.test.ts files which run ESLint
   // programmatically and assert the errors are flagged. Project lint must
   // NOT see them.
+  //
+  // WR-04: mcp/__fixtures__/ is the dedicated subdir where lint-thin-shim,
+  // lint-mcp-no-network, and lint-capabilities-noleak tests stage temp
+  // copies of the originals so the file-scoped mcp/**/*.ts chokepoints
+  // fire. Ignored from `npm run lint` so stale copies (after a crash) do
+  // not turn into project-lint noise. The PROGRAMMATIC ESLint runs inside
+  // those tests use overrideConfig + their own globs, so the rules still
+  // fire there.
   {
     ignores: [
       'tests/fixtures/lint-capabilities-noleak-fixture.ts',
@@ -356,6 +364,7 @@ export default [
       'tests/fixtures/lint-mcp-no-network-fixture.ts',
       'tests/fixtures/lint-paths-chokepoint-fixture.ts',
       'tests/fixtures/lint-thin-shim-fixture.ts',
+      'mcp/__fixtures__/**',
       'dist/**',
       'node_modules/**',
     ],

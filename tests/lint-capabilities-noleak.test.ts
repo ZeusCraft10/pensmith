@@ -92,8 +92,13 @@ test('D-12 PROJECT: real eslint.config.js fires on fixture copied to mcp/', asyn
     return !(keys.length === 1 && keys[0] === 'ignores');
   });
 
+  // WR-04: write fixture into mcp/__fixtures__/ (gitignored) instead of as
+  // a stray sibling of server.ts. The path still matches the mcp/**/*.ts
+  // lint glob so the D-12 rule still fires.
   const fixtureContent = await fsp.readFile(FIXTURE, 'utf-8');
-  const tmpPath = path.resolve('mcp/_capabilities-noleak-fixture-tmp.ts');
+  const tmpDir = path.resolve('mcp/__fixtures__');
+  await fsp.mkdir(tmpDir, { recursive: true });
+  const tmpPath = path.join(tmpDir, '_capabilities-noleak-fixture-tmp.ts');
   await fsp.copyFile(FIXTURE, tmpPath);
   try {
     const eslint = new ESLint({

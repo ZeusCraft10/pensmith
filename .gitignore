@@ -19,6 +19,11 @@ Thumbs.db
 # Test artifacts
 coverage/
 .nyc_output/
+# WR-04: per-test temp fixture copies. tests/lint-{thin-shim,mcp-no-network,
+# capabilities-noleak}.test.ts each write a fixture into this directory so
+# the file-scoped mcp/**/*.ts lint chokepoints fire. The tests clean up
+# in finally blocks, but a crash mid-test could leave stale files behind.
+mcp/__fixtures__/
 
 # Phase-1+ runtime artifacts (not in Phase 0 yet, but document the intent)
 # .paper/        # active paper workspace — created by `pensmith new`

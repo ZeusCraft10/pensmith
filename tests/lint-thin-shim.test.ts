@@ -79,12 +79,18 @@ test('thin-shim chokepoint: PROJECT eslint.config.js flags fs import on fixture 
 
   // The project's D-09 block targets mcp/**/*.ts. The fixture lives at
   // tests/fixtures/lint-thin-shim-fixture.ts so it won't match that block.
-  // Write a temporary copy under mcp/ so the file-scoped rule fires, then
-  // delete it in the finally block (T-02-01-03: deterministic name is safe
-  // because this test runs single-threaded under node:test).
+  // WR-04: write the temporary copy under mcp/__fixtures__/ (gitignored)
+  // rather than as a stray sibling of server.ts. Keeping fixtures in a
+  // dedicated subdir signals "test artifact, not production code" and lets
+  // contributors recognise it at a glance. The path still matches the
+  // mcp/**/*.ts file-scoped lint glob, so the rule still fires.
+  // T-02-01-03: deterministic name is safe because this test runs
+  // single-threaded under node:test.
   const fsp = await import('node:fs/promises');
   const fixtureContent = await fsp.readFile(FIXTURE, 'utf-8');
-  const tmpMcpPath = path.resolve('mcp/_thin-shim-fixture-tmp.ts');
+  const tmpDir = path.resolve('mcp/__fixtures__');
+  await fsp.mkdir(tmpDir, { recursive: true });
+  const tmpMcpPath = path.join(tmpDir, '_thin-shim-fixture-tmp.ts');
   await fsp.writeFile(tmpMcpPath, fixtureContent, 'utf-8');
   try {
     const eslint = new ESLint({
