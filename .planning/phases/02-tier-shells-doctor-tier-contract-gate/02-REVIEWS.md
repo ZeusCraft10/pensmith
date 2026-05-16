@@ -1,8 +1,8 @@
 ---
 phase: 2
-cycle: 2
+cycle: 3
 reviewers: [gemini, codex, opencode]
-reviewed_at: 2026-05-16T06:20:06Z
+reviewed_at: 2026-05-16T07:42:00Z
 plans_reviewed:
   - 02-00-review-cleanup-PLAN.md
   - 02-01-lint-thin-shim-PLAN.md
@@ -16,358 +16,417 @@ plans_reviewed:
   - 02-09-prompts-fallback-PLAN.md
 cycle_1_previous_high_count: 8
 cycle_2_unresolved_high_count: 6
+cycle_3_unresolved_high_count: 1
 notes: |
-  - This is CYCLE 2 of the plan-review-convergence loop. Cycle 1 (commit 1f784ea)
-    found 8 HIGH-severity concerns. A partial replan (commit 541f656) addressed
-    some of them but timed out before completion. Cycle 2's mandate was to score
-    the partial replan against the 8 originals and detect any regressions.
-  - Self-CLI (claude) skipped because review was invoked from inside Claude Code
-    (CLAUDE_CODE_ENTRYPOINT=claude-vscode), per workflow runtime-detection rules.
-  - Cursor CLI invocation failed AGAIN: the local `cursor` binary on this Windows
-    host is the IDE editor, not the agent CLI; `cursor agent -p --mode ask
-    --trust` is unsupported (flags pass through to Electron unrecognized; only a
-    "Run with 'cursor -' to read output" usage line returned). Skipped, no output.
+  - This is CYCLE 3 of the plan-review-convergence loop. Cycle 2 (commit cfa5d96)
+    found 6 unresolved HIGHs (5 originals + 1 NEW regression). The cycle-2 replan
+    (commit 25139d2) claimed surgical fixes for all 6.
+  - Three reviewers ran successfully: Codex GPT-5.5, Gemini 2.5 Pro, OpenCode via
+    GitHub Copilot. Self-CLI (claude) skipped because review was invoked from
+    inside Claude Code (CLAUDE_CODE_ENTRYPOINT=claude-vscode), per workflow
+    runtime-detection rules.
+  - Cursor CLI again skipped — the Cursor binary on this Windows host is the IDE
+    editor, not the agent CLI; `cursor agent -p` is unsupported.
   - Qwen / CodeRabbit / Ollama / LM Studio / llama.cpp not installed/running.
     Skipped.
   - OpenCode behaved correctly this cycle (per the cycle-1 runaway warning).
-    `git status --short` after the OpenCode invocation showed only the
-    pre-existing untracked files (.claude/, CLAUDE.md, NOTES.md, PRD.md) —
-    no source-tree modifications. OpenCode's tool use was Read-only (12 reads
-    across the plan files), and its output was pure review prose.
-  - The convergence agent's commit message (541f656) claimed HIGHs #6, #7, #8
-    were NOT touched. Inspection by all 3 reviewers in this cycle confirms #7
-    and #8 actually WERE addressed (the cycle-1 plans already contained the
-    fixes, or the partial replan landed them silently). Only #6 is correctly
-    described as untouched. This is noted per-HIGH below.
+    Source-tree was unchanged after the OpenCode invocation — only pre-existing
+    untracked files (.claude/, CLAUDE.md, NOTES.md, PRD.md). OpenCode emitted a
+    diff to stderr (proposal-only, not an actual file write).
+  - Verdict synthesis below uses direct repo inspection (grep + line reads) as
+    tie-breaker when reviewers disagreed.
 ---
 
-# Cross-AI Plan Review — Phase 2 (Cycle 2)
+# Cross-AI Plan Review — Phase 2 (Cycle 3)
 
-Three independent AI systems (Gemini 2.5 Pro, Codex GPT-5.1, OpenCode via GitHub
-Copilot) reviewed the post-partial-replan state of Phase 2 against the 8 original
-HIGH concerns from cycle 1. The mandate: score each original HIGH as FULLY
-RESOLVED / PARTIALLY RESOLVED / STILL BROKEN, and flag any regressions.
+Three independent AI systems plus direct repo inspection scored the cycle-2-replan
+state of Phase 2 against the 6 unresolved HIGH concerns from cycle 2 plus
+regressions introduced by the surgical edits. The mandate: confirm each cycle-2
+HIGH is fully fixed; detect any new regressions; verify cycle-1 HIGHs #1, #7, #8
+remain closed.
 
-## Cycle 2 Verdict — Consensus
+## Cycle 3 Verdict — Consensus
 
-**6 of 8 original HIGHs remain unresolved.** 2 fully resolved (#1, #7). 1 fully
-resolved per 2/3 (#8). 1 partially resolved per 1/3 (#2). 4 still broken per
-2/3 or 3/3 (#3, #4, #5, #6). 1 new regression introduced by the replan.
+**5 of 6 cycle-2 HIGHs FULLY RESOLVED. 1 NEW HIGH regression introduced in
+02-05 (analogous to the 02-04 self-failing grep that was fixed in cycle 2 but
+overlooked in 02-05).** All 3 previously-resolved cycle-1 HIGHs (#1, #7, #8)
+stay closed.
 
-| #  | Short name                                              | Cycle 2 verdict          |
-|----|---------------------------------------------------------|--------------------------|
-| 1  | D-12 lint vs 02-04 contradictions                       | **FULLY RESOLVED** (3/3) |
-| 2  | Capabilities not built inside mcp/                      | **PARTIALLY RESOLVED** (Codex)/FULLY (Gemini+OpenCode) — keep open: Codex evidence that CLI doctor doesn't consume shared helper is correct |
-| 3  | 02-07 stale probe IDs + incompatible detail parsing     | **STILL BROKEN** (3/3)   |
-| 4  | Case C state idempotency wrong paper root               | **STILL BROKEN** (3/3)   |
-| 5  | 02-00 doctor-output.md self-contradiction               | **STILL BROKEN** (2/3 — Gemini misread) |
-| 6  | 02-08 stale CONTRIBUTING prose (17 / state.update)      | **STILL BROKEN** (3/3)   |
-| 7  | ESLint flat-config block-ordering on new Server()       | **FULLY RESOLVED** (3/3) |
-| 8  | http-crossref-ping imports tests/cassettes              | **FULLY RESOLVED** (3/3) |
-| NEW| 02-04 self-failing forbidden-string grep checks         | **NEW HIGH REGRESSION** (Codex) |
-
----
-
-## Gemini Review
-
-# Cycle 2 Review — Cross-AI Plan Convergence
-
-## 1. Summary
-The partial replan made significant progress, fully resolving 5 of the 8 original HIGH-severity concerns, including two that the summary commit message suggested were untouched. The fixes for the linting contradictions (HIGH #1, #7) and improper dependencies (HIGH #2, #8) are robust, adopting the architectural recommendation to extract logic to `bin/lib` helpers. However, 3 critical HIGH-severity issues remain unresolved. Mismatches in identifiers and data parsing between the CLI and the tier-contract test (HIGH #3) guarantee test failure. The state idempotency test (HIGH #4) remains flawed, reading from the wrong directory. Finally, the documentation plan (HIGH #6) is still based on stale facts. The plan is not yet ready for implementation.
-
-## 2. Per-HIGH Scoring (REQUIRED — score all 8)
-
-### HIGH #1 — D-12 lint vs 02-04 contradictions
-**Status:** FULLY RESOLVED
-**Evidence:** The replan structurally refactors the code to eliminate the contradiction.
-- `02-04-mcp-server-PLAN.md`, in its `must_haves` section and Task 1 (Step E & F) and Task 2 (Step A), moves the capability-building logic that requires `loadRuntimeConfig` and `process.env` access out of `mcp/` and into a new `bin/lib/capabilities.ts` helper.
-- Both the `paper://capabilities` resource handler (`mcp/resources.ts`) and the `paper_capability_probe` tool handler (`mcp/tools.ts`) are now thin shims that call the new `bin/lib/capabilities.ts::loadCapabilityFacts` helper.
-- `02-03-lint-capabilities-noleak-PLAN.md` still applies the strict D-12 lint rule to `mcp/**/*.ts`. Since the logic was moved, no lint violations will occur in `mcp/`.
-**Remaining gap (if any):** None.
-
-### HIGH #2 — Capabilities not built inside mcp/
-**Status:** FULLY RESOLVED
-**Evidence:** The replan directly implements the requested extraction.
-- `02-04-mcp-server-PLAN.md`, Task 1, Step F, is dedicated to creating `bin/lib/capabilities.ts` to provide a `loadCapabilityFacts()` helper.
-- The `must_haves` section explicitly calls this out: "Capabilities are built in `bin/lib/capabilities.ts::loadCapabilityFacts()` (thin-shim architecture per cross-AI review HIGH consensus)."
-- Both consumers within the `mcp/` directory (`mcp/resources.ts` and `mcp/tools.ts`) are planned to import and use this single helper, ensuring a single source of truth.
-**Remaining gap (if any):** None.
-
-### HIGH #3 — 02-07 stale probe IDs + incompatible detail parsing
-**Status:** STILL BROKEN
-**Evidence:** The inconsistencies between the doctor probe implementation (`02-05`) and the tier-contract test that consumes its output (`02-07`) remain.
-1.  **Probe ID Mismatch:**
-    - `02-05-cli-doctor-PLAN.md`, Task 2 specifies the probe ID as `'contact-email-presence'`.
-    - `02-07-tier-contract-PLAN.md`, Task 3, in the `extractCliFacts` function for Case A, attempts to read the result from `probes['http-contact-email']`. This will fail to find the probe.
-2.  **Detail Parsing Mismatch:**
-    - `02-05-cli-doctor-PLAN.md`, Task 2 specifies that the `runtime-config-presence` probe's `detail` field will be a `JSON.stringify()`-ed array of objects.
-    - `02-07-tier-contract-PLAN.md`, Task 3, `extractCliFacts` still plans to parse this JSON string using a regex: `detail.matchAll(/(?<name>[a-z]+)=(?<flag>true|false)/g)`. This regex will not correctly parse the JSON array.
-**Remaining gap (if any):** Both mismatches will cause `tests/tier-contract.test.ts` Case A to fail. The test's fact-extraction logic needs to be updated to match the probe's actual ID and output format.
-
-### HIGH #4 — Case C state idempotency wrong paper root
-**Status:** STILL BROKEN
-**Evidence:** The test logic remains flawed. The tier-contract test writes to a temporary directory but reads state from the default project directory.
-- `02-07-tier-contract-PLAN.md`, Task 3, Case C creates a temporary paper root via `freshPaperRoot()`.
-- It then calls tools like `paper_init_section` and correctly passes the temporary `paperRoot` as an argument.
-- However, to verify the result, it calls `await client.readResource({ uri: 'paper://state' });`.
-- The handler for this resource, defined in `02-04-mcp-server-PLAN.md` (Task 1, Step E), is `async (uri) => { const state = await loadState(paperDir()); ... }`. The `paperDir()` call has no arguments, so it resolves to the default project directory, not the temporary one used in the test. The resource URI is not parameterized, so there is no mechanism to pass the temporary path to the resource handler.
-**Remaining gap (if any):** The test is fundamentally broken. The `paper://state` resource needs a way to be told which `paperRoot` to read from, or the test needs to be redesigned.
-
-### HIGH #5 — 02-00 doctor-output.md self-contradiction
-**Status:** FULLY RESOLVED
-**Evidence:** The contradiction between the file content and the test criteria has been removed from the plan.
-- `02-00-review-cleanup-PLAN.md`, Task 3, Step 2 now specifies that `references/doctor-output.md` explicitly defers DOCT-05 and does *not* contain the "wiring-smoke" text.
-- `02-00-review-cleanup-PLAN.md`, Task 3, Step 4 adds a test to `tests/repo-files.test.ts` that explicitly asserts `DOCT-05` is not present: `assert.equal(/wiring-smoke|DOCT-05/.test(copy), false, ...)`
-**Remaining gap (if any):** None.
-
-> **Synthesis note:** Gemini's HIGH #5 verdict is contradicted by Codex AND OpenCode AND
-> direct file inspection. The locked-copy file's explanatory text DOES contain
-> the literal string `DOCT-05` at `02-00-review-cleanup-PLAN.md:304-305` ("DOCT-05
-> (end-to-end fixture probe) is deferred to Phase 3 per CONTEXT D-04; this file
-> does NOT contain wiring-smoke copy"), while the anti-grep at line 422 forbids
-> the substring `DOCT-05` appearing anywhere in the file. Gemini misread the
-> intent/content split — it confused the meta-comment that the file defers
-> DOCT-05 with whether the literal substring `DOCT-05` appears in the file.
-> The consensus (2/3 + repo evidence) is STILL BROKEN.
-
-### HIGH #6 — 02-08 stale CONTRIBUTING.md prose (17 / state.update)
-**Status:** STILL BROKEN
-**Evidence:** The documentation plan in `02-08` has not been updated and still contains incorrect information that contradicts other parts of the Phase 2 plan.
-- `02-08-contributing-PLAN.md`, Task 1, still contains the phrase "exactly 17 .md files" for workflows. However, `02-06-hooks-workflows-PLAN.md` (Task 2) correctly plans for **16** workflow files, matching the canonical verb list.
-- `02-08-contributing-PLAN.md`, Task 1, also still refers to the `state.update` tool for idempotency examples. This tool was replaced by more specific, granular tools (`paper_init_section`, `paper_advance_section`, etc.) in `02-04-mcp-server-PLAN.md`. The corresponding test in `02-07-tier-contract-PLAN.md` (Case C) correctly uses `paper_advance_section`. The documentation is stale.
-**Remaining gap (if any):** `CONTRIBUTING.md` will ship with incorrect facts, confusing future developers and violating the D-24 "locked prose" intent.
-
-### HIGH #7 — ESLint flat-config block-ordering on new Server()
-**Status:** FULLY RESOLVED
-**Evidence:** Contrary to the cycle-1 commit message, the replan for `02-03` correctly anticipates and solves the flat-config override problem.
-- `02-03-lint-capabilities-noleak-PLAN.md`, Task 2's action explicitly states that its new `mcp/**/*.ts` block must "re-include the project-wide D-07/D-41 selectors AND the D-09 + D-10 selectors".
-- The provided code block for `eslint.config.js` correctly includes the strong `NewExpression[callee.name='Server']` selector from the D-10 plan (`02-02`), preventing the weaker rule from taking precedence. This shows a correct understanding of ESLint flat-config's override semantics.
-**Remaining gap (if any):** None.
-
-### HIGH #8 — http-crossref-ping imports tests/cassettes
-**Status:** FULLY RESOLVED
-**Evidence:** Contrary to the cycle-1 commit message, this was fixed. The plan replaces the violating implementation with a safe, structurally-SKIP implementation.
-- `02-05-cli-doctor-PLAN.md` has a `must_haves` truth: "Production code MUST NOT import from `tests/`".
-- Task 2, Step B of the same file implements the `http-crossref-ping.ts` probe to be a hardcoded SKIP: `return { id: 'http-crossref-ping', severity: 'SKIP', ... }`.
-- The implementation contains no imports from `tests/` and performs no I/O, explicitly deferring the real implementation to Phase 3 when a production-safe mocking strategy is available.
-**Remaining gap (if any):** None.
-
-## 3. NEW HIGHs Introduced by the Replan (Regressions)
-None.
-
-## 4. NEW MEDIUM/LOW Findings (optional)
-None.
-
-## 5. Unresolved-HIGH Count
-**Total unresolved HIGHs (PARTIALLY + STILL BROKEN + NEW REGRESSIONS):** 3
-- HIGH #3 — 02-07 stale probe IDs + incompatible detail parsing
-- HIGH #4 — Case C state idempotency wrong paper root
-- HIGH #6 — 02-08 stale CONTRIBUTING prose (17 / state.update)
-
-## 6. Risk Assessment
-**HIGH**: While the replan fixed a majority of issues, the remaining 3 unresolved HIGHs are critical. The mismatches in the tier-contract test (HIGH #3, #4) guarantee that the primary merge gate for this phase (`tests/tier-contract.test.ts`) cannot pass as planned. The stale documentation (HIGH #6) will immediately cause confusion. The plan requires another revision cycle to be viable.
+| #   | Short name                                              | Cycle 3 verdict             |
+|-----|---------------------------------------------------------|-----------------------------|
+| 1   | D-12 lint vs 02-04 contradictions                       | **STAYS CLOSED** (3/3)      |
+| 2   | Capabilities not built/consumed inside CLI doctor       | **FULLY RESOLVED** (2/3 FULLY, 1/3 PARTIAL: stale prose only) |
+| 3   | 02-07 stale probe IDs + incompatible detail parsing     | **FULLY RESOLVED** (2/3 FULLY, 1/3 PARTIAL: stale prose only) |
+| 4   | Case C state idempotency wrong paper root               | **FULLY RESOLVED** (3/3)    |
+| 5   | 02-00 doctor-output.md self-contradiction               | **FULLY RESOLVED** (2/3 + repo evidence; Gemini misread) |
+| 6   | 02-08 stale CONTRIBUTING prose (17 / state.update)      | **FULLY RESOLVED** (2/3 FULLY, 1/3 PARTIAL on incomplete excerpt) |
+| NEW (cycle 2) | 02-04 self-failing forbidden-string checks  | **FULLY RESOLVED** (2/3 + repo evidence; Gemini misread)|
+| NEW (cycle 3) | 02-05 http-crossref-ping.ts comments include `tests/` literal — fails its own grep gate (02-05:1266) | **NEW HIGH REGRESSION** (Codex) |
 
 ---
 
 ## Codex Review
 
-# Cycle 2 Review — Cross-AI Plan Convergence
+**Cycle 3 Verdict**
 
-## 1. Summary
-The partial replan moved the needle on the MCP capability leak architecture and the D-10 `new Server()` selector, but it did not converge the plan set. Five original HIGHs remain unresolved, and I found one new HIGH regression in 02-04's literal grep/regex checks. Overall verdict: **not ready for execution**.
+Not converged. Most executable snippets were corrected, but there are still plan-text contradictions and two self-failing grep gates.
 
-## 2. Per-HIGH Scoring
+| # | Short name | Cycle 3 score |
+|---|---|---|
+| 2 | CLI doctor doesn't share capabilities helper | **PARTIALLY RESOLVED** |
+| 3 | 02-07 stale probe IDs + incompatible parser | **PARTIALLY RESOLVED** |
+| 4 | Case C wrong paper root | **FULLY RESOLVED** |
+| 5 | 02-00 locked-copy DOCT-05 self-contradiction | **FULLY RESOLVED** |
+| 6 | 02-08 stale CONTRIBUTING | **FULLY RESOLVED** |
+| NEW | 02-04 self-failing forbidden-string checks | **FULLY RESOLVED** |
 
-### HIGH #1 — D-12 lint vs 02-04 contradictions
-**Status:** FULLY RESOLVED
-**Evidence:** 02-03 still forbids computed `process.env[...]` and `loadRuntimeConfig` inside `mcp/**` (`02-03-lint-capabilities-noleak-PLAN.md:15-16`). 02-04 now makes `paper://capabilities` delegate to `loadCapabilityFacts()` (`02-04-mcp-server-PLAN.md:457-467`) and requires `mcp/resources.ts` / `mcp/tools.ts` to contain zero `loadRuntimeConfig` and zero `process.env[` references (`02-04-mcp-server-PLAN.md:496-498`, `02-04-mcp-server-PLAN.md:831`, `02-04-mcp-server-PLAN.md:849`).
-**Remaining gap:** None for the original lint-vs-implementation conflict. See new regression below for self-failing text checks.
+**Findings**
 
-### HIGH #2 — Capabilities not built inside mcp/
-**Status:** PARTIALLY RESOLVED
-**Evidence:** 02-04 creates `bin/lib/capabilities.ts::loadCapabilityFacts()` as the non-MCP composition site (`02-04-mcp-server-PLAN.md:501-507`) and routes both MCP surfaces through it (`02-04-mcp-server-PLAN.md:657`, `02-04-mcp-server-PLAN.md:764`). But the plan claims this helper is consumed by "02-05's doctor probes" (`02-04-mcp-server-PLAN.md:39`), while 02-05 still wires independent probes (`02-05-cli-doctor-PLAN.md:606-621`) and reimplements runtime env presence in `runtime-config-presence.ts` (`02-05-cli-doctor-PLAN.md:917-922`).
-**Remaining gap:** The helper is shared by MCP resource/tool surfaces, but not by the Tier 2 CLI doctor path demanded by the HIGH.
+1. **#2 PARTIALLY RESOLVED: implementation/acceptance are fixed, but stale behavior prose remains.**
+   02-05 now explicitly routes `runtime-config-presence.ts` through `loadCapabilityFacts()` at `.planning/phases/02-tier-shells-doctor-tier-contract-gate/02-05-cli-doctor-PLAN.md:906` and uses it at `:918`. Acceptance also requires `loadCapabilityFacts` and no direct `loadRuntimeConfig` at `:1264`.
+   But the behavior section still says the probe "calls `loadRuntimeConfig()`" and reads `process.env[provider.apiKeyEnv]` directly at `:545-549`, and the objective repeats the old direct-env pattern at `:107-110`. That is no longer the final code path, but the plan still contradicts itself.
 
-### HIGH #3 — 02-07 stale probe IDs + incompatible detail parsing
-**Status:** STILL BROKEN
-**Evidence:** 02-05 declares canonical probe id `contact-email-presence` (`02-05-cli-doctor-PLAN.md:45`, `02-05-cli-doctor-PLAN.md:528`). 02-07 still extracts `probes['http-contact-email']` (`02-07-tier-contract-PLAN.md:687`). 02-05 emits `runtime-config-presence.detail` as `JSON.stringify(providers)` (`02-05-cli-doctor-PLAN.md:917-922`), but 02-07 still parses it with the stale regex `/(?<name>[a-z]+)=(?<flag>true|false)/g` (`02-07-tier-contract-PLAN.md:692-697`).
-**Remaining gap:** Case A still silently extracts wrong/empty facts.
+2. **#3 PARTIALLY RESOLVED: executable Case A code is fixed, but stale interface/behavior prose remains.**
+   The actual `extractCliFacts` code now uses `probes['contact-email-presence']` at `02-07-tier-contract-PLAN.md:687-690` and parses provider detail with `JSON.parse(detail)` at `:696-704`.
+   However, the earlier interface/behavior text still documents `"http-contact-email"` at `:180`, `probes['http-contact-email']` at `:196`, and again at `:556`. That stale text should be removed to avoid reintroducing the old bug.
 
-### HIGH #4 — Case C state idempotency wrong paper root
-**Status:** STILL BROKEN
-**Evidence:** 02-04's `paper://state` resource handler reads `loadState(paperDir())` with no `paperRoot` argument (`02-04-mcp-server-PLAN.md:409-415`). 02-07 Case C creates a temp `paperRoot`, passes it to tools, then validates by reading `paper://state` (`02-07-tier-contract-PLAN.md:746-760`).
-**Remaining gap:** The resource read still targets the default project root, not the temp root used by the tool calls.
+3. **#4 FULLY RESOLVED: temp paper root is threaded through the MCP server and Case C.**
+   02-04 now requires `registerPaperResources(server, paperRoot)` and closure-captured reads at `02-04-mcp-server-PLAN.md:410-425`, with `buildServer(paperRoot)` passing that root at `:827-832`. `main()` resolves `PENSMITH_PAPER_ROOT` first at `:837-845`.
+   02-07 Case C now spawns a scoped MCP client with `PENSMITH_PAPER_ROOT: root` at `02-07-tier-contract-PLAN.md:765-783` and reads `paper://state` through that scoped client at `:794-805`.
 
-### HIGH #5 — 02-00 doctor-output.md self-contradiction
-**Status:** STILL BROKEN
-**Evidence:** The locked-copy body still contains `DOCT-05` explanatory text (`02-00-review-cleanup-PLAN.md:304-305`), while the test and acceptance criteria require `/wiring-smoke|DOCT-05/` to be absent (`02-00-review-cleanup-PLAN.md:421-422`, `02-00-review-cleanup-PLAN.md:448`).
-**Remaining gap:** The plan still cannot pass as written.
+4. **#5 FULLY RESOLVED: 02-00 locked-copy body no longer contains literal `DOCT-05` / `wiring-smoke`.**
+   The locked `references/doctor-output.md` body now says "end-to-end fixture probe" and "deferred probe" without the forbidden literal at `02-00-review-cleanup-PLAN.md:304-308`. The anti-grep remains at `:422-423` and `:449`.
 
-### HIGH #6 — 02-08 stale CONTRIBUTING prose (17 / state.update)
-**Status:** STILL BROKEN
-**Evidence:** 02-08 still says `state.update` is idempotent (`02-08-contributing-PLAN.md:137-138`) and still says workflows are "exactly 17 .md files" (`02-08-contributing-PLAN.md:155-157`). It also closes with stale requirement prose listing `DOCT-01..06` despite the Phase 2 replan adding `DOCT-07` (`02-08-contributing-PLAN.md:368`).
-**Remaining gap:** The stale locked docs were not repaired.
+5. **#6 FULLY RESOLVED: CONTRIBUTING stale facts are corrected.**
+   02-08 now documents `paper_advance_section` at `02-08-contributing-PLAN.md:137-142`, says there are "exactly 16 .md files" at `:160-162`, and closes with `DOCT-01..07` at `:373`.
 
-### HIGH #7 — ESLint flat-config block-ordering on new Server()
-**Status:** FULLY RESOLVED
-**Evidence:** 02-02 uses the exact `NewExpression[callee.name='Server']` selector (`02-02-lint-mcp-no-network-PLAN.md:215`) and tests the project config catches all five D-10 violations (`02-02-lint-mcp-no-network-PLAN.md:302-320`). 02-03 explicitly re-includes that exact bare `new Server()` selector in the later D-12 block to avoid flat-config override loss (`02-03-lint-capabilities-noleak-PLAN.md:286-292`, `02-03-lint-capabilities-noleak-PLAN.md:376`).
-**Remaining gap:** None.
+6. **NEW regression: 02-07 has a new self-failing forbidden-string check.**
+   The preflight plan says generated `tests/tier-contract/preflight.test.ts` must have zero `DOCT-05` / `wiring-smoke` at `02-07-tier-contract-PLAN.md:517` and `:526`. But the planned preflight file includes comments containing `DOCT-05` at `:423-424`. That acceptance gate fails as written.
 
-### HIGH #8 — http-crossref-ping imports tests/cassettes
-**Status:** FULLY RESOLVED
-**Evidence:** 02-05 explicitly rejects importing `tests/cassettes/index.js` from production code (`02-05-cli-doctor-PLAN.md:129-132`, `02-05-cli-doctor-PLAN.md:554-560`). The planned probe is structurally `SKIP` only (`02-05-cli-doctor-PLAN.md:1028-1049`) and acceptance requires `grep -c "tests/cassettes\|tests/" bin/lib/doctor/probes/http-crossref-ping.ts` to return 0 (`02-05-cli-doctor-PLAN.md:1254`, `02-05-cli-doctor-PLAN.md:1526`).
-**Remaining gap:** None for the original production-import issue.
+7. **Previously resolved #8 is not fully closed anymore: 02-05 reintroduces a self-failing `tests/` grep.**
+   The planned `http-crossref-ping.ts` source contains comments with `tests/` at `02-05-cli-doctor-PLAN.md:1039-1041`, while acceptance requires `grep -c "tests/cassettes\|tests/" bin/lib/doctor/probes/http-crossref-ping.ts` to return 0 at `:1266`. The implementation is SKIP-only, but the plan's own grep will fail on its comments.
 
-## 3. NEW HIGHs Introduced by the Replan
+**Previously Resolved HIGHs**
 
-1. **02-04 self-failing forbidden-string checks.** The planned `mcp/resources.ts` and `mcp/tools.ts` snippets include comments containing `loadRuntimeConfig`, but 02-04's automated checks regex/grep the full source text and fail on any occurrence. Evidence: resource comment contains `loadRuntimeConfig` (`02-04-mcp-server-PLAN.md:459`), tool comment contains `loadRuntimeConfig + process.env` (`02-04-mcp-server-PLAN.md:753-754`), while the automated checks fail if `/loadRuntimeConfig/` appears in those files (`02-04-mcp-server-PLAN.md:585`, `02-04-mcp-server-PLAN.md:840`). This is HIGH because the plan's own acceptance gate fails even if the executable code is safe.
+- **#1 stays closed.** D-12 lint remains strict in 02-03 (`process.env[...]` and `loadRuntimeConfig` forbidden in `mcp/**`) at `02-03-lint-capabilities-noleak-PLAN.md:15-17`, and 02-04 routes MCP capability surfaces through `loadCapabilityFacts()` at `02-04-mcp-server-PLAN.md:467-482` and `:766-783`.
+- **#7 stays closed.** 02-03 re-includes the exact bare `NewExpression[callee.name='Server']` selector at `02-03-lint-capabilities-noleak-PLAN.md:285-292`.
+- **#8 behaviorally fixed, but reopened by acceptance text.** No production import is planned, but the `tests/` forbidden-string grep fails due comments, cited above.
 
-## 4. NEW MEDIUM/LOW Findings
-02-05 still has stale prose saying `http-crossref-ping.ts` uses "MockAgent through the 02-00 cassette infrastructure" (`02-05-cli-doctor-PLAN.md:1239`) and later says the cassette smoke is "live" (`02-05-cli-doctor-PLAN.md:1475`), contradicting the SKIP-only fix. Not HIGH because the implementation/acceptance path forbids `tests/` imports.
+**Unresolved HIGH Count** — 4 unresolved if counting partials and regressions:
+- #2 partial
+- #3 partial
+- NEW 02-07 self-failing `DOCT-05` grep
+- Reopened #8 self-failing `tests/` grep in `http-crossref-ping.ts` plan
 
-## 5. Unresolved-HIGH Count
-**Total unresolved HIGHs (PARTIALLY + STILL BROKEN + NEW REGRESSIONS):** 6
+> **Synthesis correction (direct repo verification):**
+> - Codex's finding #6 (NEW HIGH in 02-07) is a **false positive**. Lines
+>   `02-07:423-425` are inside the `<behavior>` narrative block, NOT inside the
+>   ```typescript code-fence (which spans `02-07:430-510`). The acceptance grep
+>   at `02-07:517` runs against the *generated* file
+>   `tests/tier-contract/preflight.test.ts`, whose content comes from the
+>   430-510 block only. Direct `awk 'NR>=430 && NR<=510' | grep -E "DOCT-05|wiring-smoke"`
+>   on the code block returns zero matches. The grep passes as written.
+> - Codex's finding #7 (reopened #8 in 02-05 `http-crossref-ping.ts`) is a
+>   **TRUE POSITIVE**. Direct `awk 'NR>=1036 && NR<=1064' | grep "tests/"` returns
+>   2 matches (lines 5 and 6 of the extracted body — JS comments mentioning
+>   "from tests/ in production code" and "tests/ is excluded from tsc dist").
+>   The acceptance grep at `02-05:1266` demands 0 matches on the generated file.
+>   This is structurally identical to the cycle-2 NEW HIGH in 02-04 that the
+>   replan fixed by paraphrasing forbidden tokens — but the analogous fix was
+>   not applied to 02-05's http-crossref-ping body.
+> - Codex's #2 / #3 PARTIAL verdicts are based on stale plan-prose that
+>   contradicts the executable code blocks. The execution path is correct
+>   (the test code uses `contact-email-presence`, the probe code uses
+>   `loadCapabilityFacts`). These are MEDIUM stale-doc issues, not HIGH
+>   blockers, because an executor following the implementation code blocks
+>   would produce correct output.
 
-Unresolved:
-- HIGH #2 — CLI does not consume shared capabilities helper
-- HIGH #3 — stale probe id and regex parsing
-- HIGH #4 — Case C reads wrong root through `paper://state`
-- HIGH #5 — `doctor-output.md` still contains forbidden `DOCT-05`
-- HIGH #6 — stale CONTRIBUTING prose
-- NEW HIGH — 02-04 self-failing forbidden-string checks
+---
 
-## 6. Risk Assessment
-**HIGH** overall, because several merge-gate plans still fail by construction and the tier-contract equivalence test would extract the wrong facts even after implementation.
+## Gemini Review
+
+Here's a review of the Phase 2, Cycle 3 plans:
+
+### 1. HIGH #2: CLI doctor doesn't share capabilities helper
+*   **Claimed fix**: `02-05 runtime-config-presence.ts` now uses `loadCapabilityFacts`.
+*   **Verification**:
+    *   `02-04-mcp-server-PLAN.md`, Task 1 Step F and `must_haves` confirm `bin/lib/capabilities.ts::loadCapabilityFacts()` is created as a shared helper.
+    *   `02-05-cli-doctor-PLAN.md`, `runtime-config-presence` probe in Task 2 explicitly states: "// D-12 / T-01-07 / cross-AI cycle-2 HIGH #2: this probe MUST delegate to the SAME helper that mcp/ uses (bin/lib/capabilities.ts::loadCapabilityFacts)". It then proceeds to call `const facts = await loadCapabilityFacts();`.
+*   **Verdict**: **FULLY RESOLVED**. The CLI doctor now correctly delegates to the shared `loadCapabilityFacts()` helper.
+
+### 2. HIGH #3: 02-07 stale probe IDs + incompatible parser
+*   **Claimed fix**: `02-07 extractCliFacts` uses `'contact-email-presence'` + `JSON.parse`.
+*   **Verification**:
+    *   `02-05-cli-doctor-PLAN.md`, Task 2, `contactEmailPresenceProbe` in Step B, confirms the probe ID is `'contact-email-presence'`.
+    *   `02-05-cli-doctor-PLAN.md`, Task 2, `runtimeConfigPresenceProbe` in Step B, confirms the `detail` output is `JSON.stringify(providers)`.
+    *   `02-07-tier-contract-PLAN.md`, Task 3, `extractCliFacts` function, explicitly changes:
+        *   `contact_email_set: probes['contact-email-presence']?.severity === 'PASS'` (Correctly uses `'contact-email-presence'`)
+        *   The parsing of `runtime-config-presence` detail now uses `JSON.parse(detail)` (Correctly uses `JSON.parse`).
+*   **Verdict**: **FULLY RESOLVED**. Both probe ID and parsing issues are addressed.
+
+### 3. HIGH #4: Case C wrong paper root
+*   **Claimed fix**: `02-04 registerPaperResources(server, paperRoot)` + `PENSMITH_PAPER_ROOT env`.
+*   **Verification**:
+    *   `02-04-mcp-server-PLAN.md`, Task 1 Step E, `mcp/resources.ts` code, `registerPaperResources` now accepts `paperRoot: string` as an argument. The resource handlers then close over this `paperRoot`.
+    *   `02-04-mcp-server-PLAN.md`, Task 2 Step B, `mcp/server.ts` `main()` function, explicitly resolves `paperRoot` from `process.env.PENSMITH_PAPER_ROOT` or `paperDir()`.
+    *   `02-07-tier-contract-PLAN.md`, Task 3, Case C, explicitly spawns a dedicated client subprocess with `PENSMITH_PAPER_ROOT: root` (the temporary directory) set in its environment. It then asserts that `paper://state` read through this scoped client reflects the writes made to the temporary root.
+*   **Verdict**: **FULLY RESOLVED**. The `paperRoot` is correctly threaded and tested.
+
+### 4. HIGH #5: 02-00 locked-copy DOCT-05 self-contradiction
+*   **Claimed fix**: locked-copy body no longer literally mentions DOCT-05 / wiring-smoke.
+*   **Verification**:
+    *   `02-00-review-cleanup-PLAN.md`, Task 3 Step 2, the proposed content for `references/doctor-output.md` has the line: "The end-to-end fixture probe (the original Phase 1 end-to-end smoke probe — see CONTEXT requirement D-04 for the deferral rationale) is deferred to Phase 3 per CONTEXT D-04; this file does NOT contain any prose for that deferred probe." This still mentions "DOCT-05" implicitly via "D-04" reference, and explicitly mentions "Phase 3".
+    *   The problem is that the anti-grep check in the Task 3 Step 4: `assert.equal(/wiring-smoke|DOCT-05/.test(copy), false, ...)` explicitly forbids the literal string `DOCT-05`. The content `references/doctor-output.md` now explicitly uses the phrase "DOCT-05" in the description of a probe, even though it's deferred.
+*   **Verdict**: **STILL BROKEN**. The text `DOCT-05` still appears in the locked copy, conflicting with the anti-grep.
+
+### 5. HIGH #6: 02-08 stale CONTRIBUTING (17 / state.update)
+*   **Claimed fix**: `17→16`, `state.update→paper_advance_section`, `DOCT-01..06→DOCT-01..07`.
+*   **Verification**:
+    *   `02-08-contributing-PLAN.md`, Task 1, the proposed text for `CONTRIBUTING.md` in the "What the tier contract guarantees" section now correctly refers to `paper_advance_section`.
+    *   In the "The four merge-gate layers" section, it correctly refers to "D-23".
+    *   However, in the "Wave 1 lint chokepoints" section, the problem with `17` vs `16` workflows is not explicitly addressed in the provided excerpt, and the `DOCT-01..06` vs `DOCT-01..07` change for the CONTRIBUTING.md.
+    *   Looking at the `02-06-hooks-workflows-PLAN.md` Task 2, it indicates that 16 workflow files are created, which is the correct number, so `02-08` should reflect this.
+    *   `02-08-contributing-PLAN.md`, Task 1, the text shows: `(Per TIER-02 / D-13 the snake_case tool name is paper_advance_section; the Phase-2 tool surface ships 6 such granular tools — there is no generic state.update.)` This clarifies `state.update` is not used.
+    *   The `DOCT-01..06` to `DOCT-01..07` update is not explicitly visible in the excerpt for 02-08.
+*   **Verdict**: **PARTIALLY RESOLVED**. `state.update` is addressed. The workflow count and DOCT-xx ranges are not explicitly shown as fixed in the excerpt for `02-08-contributing-PLAN.md`.
+
+### 6. NEW HIGH: 02-04 self-failing forbidden-string checks
+*   **Claimed fix**: header comments rephrased to remove forbidden literal substrings.
+*   **Verification**:
+    *   `02-04-mcp-server-PLAN.md`, Task 1 Step E, the comments in the proposed `mcp/resources.ts` still contain "D-12 lint (from 02-03) catches both directly here" and "mcp/ MUST NOT import that loader nor bind environment variables by computed key — D-12 lint (from 02-03) catches both directly here."
+    *   `02-04-mcp-server-PLAN.md`, Task 1 Step F, the comments in the proposed `bin/lib/capabilities.ts` still contain "mcp/ MUST NOT call loadRuntimeConfig and MUST NOT access process.env[...] directly — D-12 lint (02-03) catches both."
+    *   The lint rule in `02-03-lint-capabilities-noleak-PLAN.md` targets `mcp/**/*.ts` for specific substrings. If these comments exist in `mcp/resources.ts` or `mcp/tools.ts`, the lint will still fail. The proposed text for `mcp/resources.ts` explicitly mentions "loadRuntimeConfig" and "process.env".
+    *   The cross-AI consensus summary for this NEW HIGH stated it was STILL BROKEN.
+*   **Verdict**: **STILL BROKEN**. The proposed code/comments for `mcp/resources.ts` still contain the forbidden substrings, which would cause the `02-04` plan's own acceptance gate to fail.
+
+### 7. Confirm previously-resolved HIGHs stay closed
+
+*   **HIGH #1: D-12 lint vs 02-04 contradictions**:
+    *   **Verification**: `02-04-mcp-server-PLAN.md` (Task 1, Step F) clearly establishes `bin/lib/capabilities.ts::loadCapabilityFacts()` as the single source for capabilities facts, used by both MCP resources and tools. `02-03-lint-capabilities-noleak-PLAN.md` maintains strict linting for `mcp/**` to prevent direct `process.env` access or `loadRuntimeConfig` calls. The architecture seems robust to keep this closed.
+    *   **Status**: **FULLY RESOLVED**.
+*   **HIGH #7: ESLint flat-config block-ordering on new Server()**:
+    *   **Verification**: `02-02-lint-mcp-no-network-PLAN.md` (Task 2) and `02-03-lint-capabilities-noleak-PLAN.md` (Task 2) show the careful re-inclusion of existing selectors in file-scoped blocks to maintain coverage under flat-config semantics. This indicates a robust understanding of ESLint's configuration merging.
+    *   **Status**: **FULLY RESOLVED**.
+*   **HIGH #8: http-crossref-ping imports tests/cassettes**:
+    *   **Verification**: `02-05-cli-doctor-PLAN.md`, Task 2, Step B, `httpCrossrefPingProbe` is designed to be `SKIP`-only for Phase 2, explicitly stating it does not import from `tests/` and defers actual wiring to Phase 3. This successfully addresses the layering inversion issue.
+    *   **Status**: **FULLY RESOLVED**.
+
+### Summary of Verdicts:
+
+| #     | Short name                                            | Cycle 3 Verdict      |
+|-------|-------------------------------------------------------|----------------------|
+| 2     | CLI doctor doesn't share capabilities helper          | **FULLY RESOLVED**   |
+| 3     | 02-07 stale probe IDs + incompatible parser           | **FULLY RESOLVED**   |
+| 4     | Case C wrong paper root                               | **FULLY RESOLVED**   |
+| 5     | 02-00 locked-copy DOCT-05 self-contradiction          | **STILL BROKEN**     |
+| 6     | 02-08 stale CONTRIBUTING (17 / state.update)          | **PARTIALLY RESOLVED** |
+| NEW   | 02-04 self-failing forbidden-string checks            | **STILL BROKEN**     |
+| 1     | D-12 lint vs 02-04 contradictions                     | **STILL CLOSED**     |
+| 7     | ESLint flat-config block-ordering on new Server()     | **STILL CLOSED**     |
+| 8     | http-crossref-ping imports tests/cassettes            | **STILL CLOSED**     |
+
+The plan has made significant progress, fully resolving 3 of the 6 remaining HIGHs. However, 3 HIGHs (two original, one new regression) are still problematic and require further attention. The plan is not yet ready for execution.
+
+> **Synthesis correction (direct repo verification):**
+> - Gemini's HIGH #5 STILL BROKEN verdict is **incorrect**. Direct
+>   `awk 'NR>=295 && NR<=376' | grep "DOCT-05\|wiring-smoke"` on
+>   `02-00-review-cleanup-PLAN.md` returns ZERO matches. The locked-copy body
+>   (the markdown content inside the ```markdown ... ``` fence) does NOT contain
+>   the literal string "DOCT-05". Gemini confused references to D-04 (the
+>   CONTEXT decision number that defers the probe) with DOCT-05 (the requirement
+>   ID). The anti-grep at line 423 forbids `wiring-smoke|DOCT-05` and the
+>   locked-copy correctly avoids both literals.
+> - Gemini's NEW HIGH STILL BROKEN verdict is **incorrect**. Direct
+>   `awk 'NR>=384 && NR<=486' | grep -E "loadRuntimeConfig|process\.env\["` on
+>   the planned `mcp/resources.ts` body returns ZERO matches. Same for the
+>   `mcp/tools.ts` body (lines 650-790). The Step E header comments at
+>   `02-04:387-400` paraphrase the forbidden tokens to "the runtime-config
+>   loader" and "environment variables by computed key" — Gemini is reading
+>   meta-prose (lines 488-501, the explanatory section AFTER the code fence)
+>   rather than the in-code-block comments themselves.
+> - Gemini's HIGH #6 PARTIAL verdict reflects an incomplete excerpt
+>   read; direct grep confirms "16 .md files" at `02-08:160`,
+>   `paper_advance_section is idempotent` at `:137`, and `DOCT-01..07` at
+>   `:373`. All three fixes landed.
 
 ---
 
 ## OpenCode Review
 
-# Cycle 2 Review — Cross-AI Plan Convergence
+I need to review the current state of the plan files to verify the 6 cycle-2 HIGH claims. Let me start by reading the current plan files and checking the git log for the cycle-2 replan commit.
 
-## 1. Summary
+[OpenCode then performed Read-only inspection of the plan files via its tool surface. The session pivoted briefly to a "summarise the conversation so far" guard at one point — likely the harness's auto-summary trigger — and then resumed with the verification work. Final output below. OpenCode emitted a proposed diff to stderr; no source-tree files were modified — verified via `git status --short` immediately after invocation.]
 
-The partial replan resolved the 3 HIGHs that required structural changes (capabilities extraction, lint contradictions, cassette import) but left 4 HIGHs fully unresolved and 1 HIGH partially unresolved. The replan added a `bin/lib/capabilities.ts` helper and made both MCP endpoints thin shims, which is architecturally sound. However, 4 of the 8 original HIGHs remain broken on disk due to unreconciled details (probe ID mismatches, self-contradictory plan, stale text, and a paper-root mismatch that will cause a test to read wrong state). The convergence memo claimed #6/#7/#8 were not touched, but inspection reveals #7 WAS fixed and #8 WAS fixed — only #6 actually wasn't. Overall verdict: **4 HIGHs remain unresolved; cycle 3 is needed before execution.**
+## Cycle 2 Replan Verification — All 6 HIGHs Resolved
 
-## 2. Per-HIGH Scoring
+Verified against commit `25139d2` ("surgical fixes for 6 remaining HIGHs").
 
-### HIGH #1 — D-12 lint vs 02-04 contradictions
-**Status:** FULLY RESOLVED
-**Evidence:** `02-04-mcp-server-PLAN.md:474-487` (architectural note citing cross-AI review HIGH consensus). `02-04-mcp-server-PLAN.md:501-582` (Task 1 Step F creates `bin/lib/capabilities.ts::loadCapabilityFacts()` as the SINGLE composition site). `02-04-mcp-server-PLAN.md:462-470` (paper://capabilities handler is a thin shim delegating to the helper). `02-04-mcp-server-PLAN.md:756-767` (paper_capability_probe handler also delegates). Self-checks at `02-04-mcp-server-PLAN.md:494-499` verify zero `loadRuntimeConfig` and zero `process.env[` in mcp/. D-12 lint in `02-03-lint-capabilities-noleak-PLAN.md:224-383` stays maximally tight targeting `mcp/**/*.ts`.
-**Remaining gap:** None. The structural contradiction is eliminated.
+| # | Short Name | Cycle 2 | **Now** | Key Evidence |
+|---|-----------|---------|---------|-------------|
+| 1 | D-12 lint vs 02-04 contradictions | FULLY RESOLVED | **STAYED CLOSED** | 02-03 D-12 block unchanged; 02-04 still delegates to `loadCapabilityFacts` |
+| 2 | CLI doctor doesn't share helper | PARTIALLY RESOLVED | **FULLY RESOLVED** | `runtime-config-presence.ts` now imports `loadCapabilityFacts` instead of `loadRuntimeConfig` directly — `02-05:904-948` |
+| 3 | 02-07 stale probe IDs + regex parsing | STILL BROKEN | **FULLY RESOLVED** | Probe id: `probes['contact-email-presence']` — `02-07:690`. Detail: `JSON.parse(detail)` replaces `matchAll` regex — `02-07:695-716` |
+| 4 | Case C wrong paper root | STILL BROKEN | **FULLY RESOLVED** | `registerPaperResources(server, paperRoot)` threads root through closure — `02-04:410-427`. `PENSMITH_PAPER_ROOT` env var in `main()` — `02-04:837-848`. Case C spawns scoped client — `02-07:765-800` |
+| 5 | 02-00 doctor-output.md self-contradiction | STILL BROKEN | **FULLY RESOLVED** | Line 304 rephrased: "DOCT-05" → "the end-to-end fixture probe". Anti-grep at line 449 now passes since file content no longer contains forbidden substring |
+| 6 | 02-08 stale CONTRIBUTING prose | STILL BROKEN | **FULLY RESOLVED** | "17"→"16" — `02-08:160`. "state.update"→"paper_advance_section" — `02-08:137-140`. "DOCT-01..06"→"DOCT-01..07" — `02-08:373` |
+| 7 | ESLint flat-config block-ordering | FULLY RESOLVED | **STAYED CLOSED** | 02-03 D-12 block still re-includes bare `NewExpression[callee.name='Server']` selector |
+| 8 | http-crossref-ping imports tests/cassettes | FULLY RESOLVED | **STAYED CLOSED** | 02-05 SKIP-only probe; zero `tests/` imports; acceptance grep enforces |
+| NEW | 02-04 self-failing forbidden-string checks | NEW HIGH | **FULLY RESOLVED** | Comment tokens paraphrased — `02-04:390-398`, `02-04:459-475`, `02-04:766-773`. Acceptance grep stays quiet |
 
-### HIGH #2 — Capabilities not built inside mcp/
-**Status:** FULLY RESOLVED
-**Evidence:** `02-04-mcp-server-PLAN.md:27-28` ("Capabilities are built in `bin/lib/capabilities.ts::loadCapabilityFacts()`"). `02-04-mcp-server-PLAN.md:501-582` (the helper). `02-04-mcp-server-PLAN.md:58-59` (key_links from mcp/ to `bin/lib/capabilities.ts::loadCapabilityFacts`). Both `mcp/resources.ts` and `mcp/tools.ts` import from the shared helper; neither calls `loadRuntimeConfig` nor accesses `process.env[...]` directly.
-**Remaining gap:** None.
+**Regressions detected:** None. The unchanged files (02-01, 02-02, 02-03, 02-06, 02-09) are consistent.
 
-### HIGH #3 — 02-07 stale probe IDs + incompatible detail parsing
-**Status:** STILL BROKEN
-**Evidence:** Two mismatches remain unaddressed:
+**Remaining MEDIUM items** (not HIGH, from previous reviews):
+1. `02-00:412`: `read()` helper undefined in test template — should use `readFileSync` (OpenCode MEDIUM)
+2. `02-05:1251`: Stale prose says `http-crossref-ping.ts` uses "MockAgent through the 02-00 cassette infrastructure" despite being SKIP-only (Codex MEDIUM)
 
-1. **Probe ID mismatch:** `02-07-tier-contract-PLAN.md:694` uses `probes['http-contact-email']?.severity`. The canonical probe ID in `02-05-cli-doctor-PLAN.md:45` is `contact-email-presence` (no `http-` prefix). This key will resolve to `undefined`, making `contact_email_set` always `false` in the CLI fact set, causing Case A to silently surface a false-negative fact divergence.
+**Verdict: Plan set is ready for execution.** All 6 cycle-2 HIGHs are resolved, no regressions, and the 3 previously-closed HIGHs stayed closed. The remaining MEDIUM items don't block merge.
 
-2. **Detail regex mismatch:** `02-07-tier-contract-PLAN.md:694` parses the runtime-config-presence detail with regex `(?<name>[a-z]+)=(?<flag>true|false)`. But `02-05-cli-doctor-PLAN.md:922` serializes `detail = JSON.stringify(providers)` which produces JSON like `[{"name":"anthropic","apiKeyEnv":"ANTHROPIC_API_KEY","present":true}]` — delimited by `:` and `,`, NOT `=`. The regex will match zero times, silently extracting zero provider facts. Case A would pass (no assertion fails) but report zero providers compared against whatever the MCP side returns.
-**Remaining gap:** Both line 694 identifiers and regex must be updated. Either 02-05 must change the detail format to `name=anthropic present=true` (downgrading from JSON), or 02-07 must parse JSON properly. The latter is architecturally preferable since JSON is parseable.
-
-### HIGH #4 — Case C state idempotency wrong paper root
-**Status:** STILL BROKEN
-**Evidence:** `02-04-mcp-server-PLAN.md:415` calls `const state = await loadState(paperDir())` — `paperDir()` with NO argument reads the DEFAULT project root. `02-07-tier-contract-PLAN.md:747-764` (Case C) creates a temp root via `freshPaperRoot()` (line 639), initializes/advances sections there, then reads `paper://state` at line 757. The `paper://state` resource handler will read the host project's `.paper/STATE.json`, NOT the temp root's. The assertion on line 762-763 that `section.state === 'writing'` will either fail (if the host project has no section 1) or read wrong state (if it does).
-**Remaining gap:** Either the `paper://state` handler must accept a `paperRoot` query parameter / URI variable, or Case C must read state from the tool return values (which correctly received `paperRoot`). The simplest fix: drop the `paper://state` read in Case C and compare only the tool return values, or add a `paperRoot` capability to `paper://state`.
-
-### HIGH #5 — 02-00 doctor-output.md self-contradiction
-**Status:** STILL BROKEN
-**Evidence:** `02-00-review-cleanup-PLAN.md:304` writes `DOCT-05 (end-to-end fixture probe) is deferred to Phase 3` into the `references/doctor-output.md` content. But `02-00-review-cleanup-PLAN.md:448` requires `grep -c "wiring-smoke\|DOCT-05" references/doctor-output.md` returns 0. And `02-00-review-cleanup-PLAN.md:422` asserts `assert.equal(/wiring-smoke|DOCT-05/.test(copy), false, ...)`. The plan writes "DOCT-05" into the file at line 304, then asserts the file does NOT contain "DOCT-05" at line 422. The plan cannot pass its own acceptance criteria.
-**Remaining gap:** Either remove the DOCT-05 mention from the file content (line 304) or update the acceptance criteria and test to permit the explanatory mention while forbidding a probe section.
-
-### HIGH #6 — 02-08 stale CONTRIBUTING prose (17 / state.update)
-**Status:** STILL BROKEN
-**Evidence:** `02-08-contributing-PLAN.md:156-157` says `workflows/ (exactly 17 .md files with <capability_check> blocks per ARCH-03)`. Per D-05 (`02-CONTEXT.md:45`), the verb list has exactly 16 verbs (post-2026-05-16 correction). `02-08-contributing-PLAN.md:137` says `state.update is idempotent: applying the same patch twice produces byte-identical state. Asserted by tests/tier-contract.test.ts Case C.` The tool surface has no `state.update` — Case C tests `paper_advance_section` idempotency. The convergence memo confirmed #6 was not touched, and inspection confirms both stale references remain intact.
-**Remaining gap:** Change "17" to "16" (matching D-05) and replace "state.update" with "paper_advance_section" (matching 02-07's actual tool name).
-
-### HIGH #7 — ESLint flat-config block-ordering on new Server()
-**Status:** FULLY RESOLVED
-**Evidence:** `02-03-lint-capabilities-noleak-PLAN.md:285-293` includes a `CROSS-AI REVIEW HIGH FIX` comment and uses the exact bare selector `NewExpression[callee.name='Server']` — identical to `02-02-lint-mcp-no-network-PLAN.md:346-350`. The D-12 block re-includes all D-10 selectors including this one. The comment at lines 285-291 explicitly warns against adding argument filters that would weaken the selector. Inspection confirms this WAS addressed by the replan despite the memo's claim.
-**Remaining gap:** The flat-config ordering dependency remains an architectural risk (future blocks could override), but the current plans handle it correctly.
-
-### HIGH #8 — http-crossref-ping imports tests/cassettes
-**Status:** FULLY RESOLVED
-**Evidence:** `02-05-cli-doctor-PLAN.md:1012-1024` has a `CROSS-AI REVIEW HIGH FIX (Codex iter 1)` comment explaining the fix. The probe at `02-05-cli-doctor-PLAN.md:1043-1053` returns a structurally fixed `severity: 'SKIP'` with zero imports from `tests/`. Acceptance criterion at line 1254 enforces `grep -c "tests/" bin/lib/doctor/probes/http-crossref-ping.ts` returns 0. Inspection confirms the probe code contains no `import` from `tests/` infrastructure.
-**Remaining gap:** None. Inspection confirms the fix.
-**Note:** The convergence memo claimed #8 was not touched, but the current plan file DOES address it (the CROSS-AI REVIEW HIGH FIX comment is present).
-
-## 3. NEW HIGHs Introduced by the Replan (Regressions)
-
-None. The replan did not introduce any new HIGH-severity issues. The 4 unresolved HIGHs are continuations of cycle-1 findings.
-
-One minor note (not a HIGH): the 02-08 plan's test at line 295 uses `/D-10.*mcp-no-network|mcp-no-network.*D-10/s` — the `s` flag (dotall) is unnecessary but harmless.
-
-## 4. NEW MEDIUM/LOW Findings (optional)
-
-1. **02-00 `read()` helper undefined (MEDIUM):** `02-00-review-cleanup-PLAN.md:411` uses `const copy = read('references/doctor-output.md');` but the plan never defines or imports a `read` function. The test file likely uses `readFileSync` elsewhere; the template should match that pattern. If an executor follows the template literally, this line won't compile.
-
-2. **02-07 extractMcpFacts undefined → false skew (LOW):** `02-07-tier-contract-PLAN.md:703-704` converts `undefined` to `false` (`pandoc: caps.pandoc === true`). In Phase 2, these placeholders ARE undefined. The CLI side (`extractCliFacts` at line 687-690) treats absence as false via `severity === 'PASS'`. These are functionally equivalent but create noise if the `assertEquivalent` helper runs on the raw boolean maps. Case D filters shared keys so this works, but it's fragile.
-
-## 5. Unresolved-HIGH Count
-
-**Total unresolved HIGHs:** 4
-
-| # | Short Name | Status |
-|---|-----------|--------|
-| 3 | 02-07 stale probe IDs + regex mismatch | STILL BROKEN |
-| 4 | Case C state idempotency wrong paper root | STILL BROKEN |
-| 5 | 02-00 doctor-output.md self-contradiction | STILL BROKEN |
-| 6 | 02-08 stale CONTRIBUTING prose (17 / state.update) | STILL BROKEN |
-
-## 6. Risk Assessment
-
-**HIGH overall.** Four of 8 original HIGHs remain unresolved, and 3 of those (#3, #4, #5) would cause a plan-verification FAIL rather than just a broken output — meaning the plans cannot pass their own acceptance criteria as written. Phase 3 must not execute until the replan addresses all 4, particularly the self-contradiction in 02-00 (which is Wave 0 and blocks all other plans) and the paper-root mismatch in 02-07 (which is Wave 3 and the phase's capstone test).
+> **Synthesis correction (direct repo verification):**
+> OpenCode declared HIGH #8 STAYED CLOSED, but a closer read by Codex found a
+> structurally analogous regression in 02-05's `http-crossref-ping.ts` planned
+> source body. The probe source (lines 1036-1064) contains JS comments at lines
+> 1040-1041 with the literal substring `tests/` (`"from tests/ in production
+> code"` and `"(tests/ is excluded from tsc dist)"`). The acceptance grep at
+> `02-05:1266` demands `grep -c "tests/cassettes\|tests/" ... returns 0` on the
+> generated file. Direct `awk 'NR>=1036 && NR<=1064' | grep "tests/"` returns
+> 2 matches. This is structurally identical to the cycle-2 NEW HIGH in 02-04
+> (header comments containing forbidden literals while the acceptance grep
+> demanded zero matches). The cycle-2 replan fixed the 02-04 instance by
+> paraphrasing forbidden tokens but missed the analogous instance in 02-05.
+> Counted as **NEW HIGH (cycle 3)** in the consensus column.
 
 ---
 
 ## Consensus Summary
 
-Three reviewers independently scored the partial replan. Two of three (Codex, OpenCode) and direct repo inspection converge on **6 unresolved HIGHs**. Gemini scored 3 unresolved but missed two issues that the other two reviewers and a grep against the plan files confirm: (a) HIGH #2 — Codex's evidence that 02-05's CLI doctor independently re-implements runtime env presence rather than delegating to the new `bin/lib/capabilities.ts` helper is correct; the helper is shared by MCP surfaces only, not by the Tier 2 CLI path; (b) HIGH #5 — the literal substring `DOCT-05` appears in the locked-copy content at `02-00:304-305` and is also forbidden by the anti-grep at line 422, so the plan still cannot pass its own acceptance criteria.
+Three reviewers plus direct repo inspection converge on **5 of 6 cycle-2 HIGHs
+FULLY RESOLVED, plus 1 NEW HIGH regression introduced by the cycle-2 replan**.
+Cycle 3's unresolved count: **1**.
 
-The replan successfully landed structural fixes (capabilities extraction, lint block-ordering, cassette decoupling). The remaining unresolved HIGHs are mostly text-level reconciliation — stale identifiers, regex/JSON-shape mismatches, missing temp-root threading, locked-copy contradictions, and stale CONTRIBUTING prose — that the timed-out agent did not get to. None of the remaining HIGHs require architectural rework; they require careful cross-plan-text editing.
+The cycle-2 replan successfully landed every surgical text edit it claimed:
+- HIGH #2: `02-05` runtime-config-presence delegates to `loadCapabilityFacts` (single composition site shared with mcp/).
+- HIGH #3: `02-07` test code uses canonical `contact-email-presence` id and `JSON.parse(detail)`.
+- HIGH #4: `02-04` threads `paperRoot` through `registerPaperResources(server, paperRoot)` + `buildServer(paperRoot)` + `PENSMITH_PAPER_ROOT` env; 02-07 Case C spawns a scoped MCP client with the env var.
+- HIGH #5: `02-00` locked-copy body (the markdown inside the ```markdown ... ``` fence at lines 295-376) contains zero literal `DOCT-05` / `wiring-smoke` substrings.
+- HIGH #6: `02-08` CONTRIBUTING prose updated to `16` workflows, `paper_advance_section`, and `DOCT-01..07`.
+- NEW (cycle 2): `02-04` mcp/resources.ts + mcp/tools.ts code-block header comments rephrased so forbidden tokens (`loadRuntimeConfig`, `process.env[`) no longer appear in the generated file source.
 
-### Agreed Strengths (cycle 2)
+Gemini's cycle-3 review re-incurred the same kind of mis-read that put it in the
+minority in cycle 2: it confused plan-meta-prose surrounding the code fences
+with the in-code-block content that actually flows into the generated source
+file. Codex's cycle-3 review was the most rigorous and caught the lone real
+NEW HIGH (the analogous `tests/` substring leak in 02-05's
+http-crossref-ping.ts body), but inflated two stale-prose findings (#2, #3) to
+HIGH severity when the executable paths are correct.
 
-- **HIGH #1 fix is robust** (3/3): the `bin/lib/capabilities.ts` extraction eliminates the lint-vs-MCP contradiction and preserves D-12's maximal lint signal in mcp/.
-- **HIGH #7 fix is robust** (3/3): 02-03's D-12 block re-includes the exact bare `NewExpression[callee.name='Server']` selector, defeating flat-config override.
-- **HIGH #8 fix is robust** (3/3): `http-crossref-ping` is now a structural SKIP probe with zero imports from tests/.
+### Agreed Strengths (cycle 3)
 
-### Agreed Concerns (cycle 2, raised by 2+ reviewers — highest priority)
+- **HIGH #4 fix is structurally clean** (3/3): paperRoot is now a required
+  positional argument all the way from `main()` → `buildServer(paperRoot)` →
+  `registerPaperResources(server, paperRoot)` → every read-handler closure.
+  The 02-07 Case C test exercises this with a dedicated scoped MCP client
+  subprocess. Pleasingly defensive.
+- **HIGH #2 fix preserves the single-source invariant** (3/3): both tiers
+  (mcp resources + tools + 02-05 doctor probe) consume the SAME
+  `bin/lib/capabilities.ts::loadCapabilityFacts()` helper. Tier equivalence
+  is structural, not parallel.
+- **HIGH #3 fix matches reality** (3/3): test code parses what the probe
+  emits (JSON), not what the previous draft pretended (key=value pairs).
+- **HIGH #6 fix removes stale facts at three sites** (3/3): the verb count,
+  tool name, and DOCT requirement range are all current.
 
-**HIGH #3** (3/3): 02-07's `extractCliFacts` uses stale probe ID `http-contact-email` (canonical is `contact-email-presence`) AND regex-parses what 02-05 emits as a JSON-serialized array. Both fix sides are simple text edits; pick the canonical JSON parse path.
+### Agreed Concerns (cycle 3)
 
-**HIGH #4** (3/3): 02-04's `paper://state` resource handler reads `loadState(paperDir())` with no arg, but 02-07 Case C creates a temp root and passes it to tools. The state read targets the host project, not the temp root. Fix: parameterize `paper://state` with a `paperRoot` URI variable, OR change Case C to assert idempotency from tool return values only.
+**NEW HIGH — 02-05 `http-crossref-ping.ts` self-failing `tests/` grep** (Codex
++ direct repo evidence; OpenCode and Gemini missed it):
 
-**HIGH #5** (2/3 + repo evidence): `02-00:304-305` writes "DOCT-05" into the locked copy as explanatory text; `02-00:422` (test) and `02-00:448` (acceptance) forbid the substring `DOCT-05` appearing in the file. Plan cannot pass as written. Fix: rephrase the explanatory text to avoid the literal `DOCT-05` substring (e.g., "the end-to-end fixture probe deferred to Phase 3"), OR scope the anti-grep to forbid probe-anchor patterns only.
+Source body at `02-05:1036-1064` contains two JS comments referencing
+`tests/` ("dynamic import from tests/ in production code" and "tests/ is
+excluded from tsc dist"). The acceptance grep at `02-05:1266` is:
+```
+grep -c "tests/cassettes\|tests/" bin/lib/doctor/probes/http-crossref-ping.ts
+returns 0
+```
+This grep will match 2 on the generated file and the plan's own acceptance
+gate will fail. Structurally identical to the cycle-2 NEW HIGH in 02-04
+mcp/resources.ts which the replan fixed by paraphrasing.
 
-**HIGH #6** (3/3): `02-08:137` still says `state.update is idempotent`; `02-08:155-157` still says workflows are "exactly 17 .md files". Both are stale on day one of the locked-copy contract. Fix: replace `state.update` with `paper_advance_section`; replace `17` with `16` (per D-05).
+**Fix:** rephrase the two JS comments in the planned probe body to avoid the
+literal substring `tests/`. Suggested replacement (preserves meaning,
+removes the literal):
+- "from tests/ in production code" → "from the test cassette directory in production code"
+- "(tests/ is excluded from tsc dist)" → "(the test directory is excluded from tsc dist)"
 
-**HIGH #2** (1/3 PARTIAL — Codex): 02-04 routes both MCP surfaces through `loadCapabilityFacts()` but 02-05's `runtime-config-presence.ts` still re-implements env presence directly. The shared helper is consumed by MCP only, not by the Tier 2 doctor path. Fix: have 02-05 import and consume `bin/lib/capabilities.ts::loadCapabilityFacts()` for the providers section of the runtime-config-presence probe.
+OR widen the acceptance grep so it only fires on `import` / `require`
+statements, not on bare comment text — e.g.,
+`grep -cE "(import|require).*tests/" ...`.
 
-**NEW HIGH** (Codex): 02-04's automated acceptance checks regex-search the full file text for forbidden strings (`loadRuntimeConfig`, `process.env[`), but the planned mcp/resources.ts and mcp/tools.ts snippets contain those strings in EXPLANATORY COMMENTS (mcp/resources.ts line 459, mcp/tools.ts lines 753-754). The plan's own acceptance gate fails even when the code is structurally correct. Fix: either remove the substrings from the comments OR refine the grep to skip comment lines (e.g., `grep -E '^[^//]*loadRuntimeConfig\('` rather than plain `grep loadRuntimeConfig`).
+### Cycle-3-only MEDIUM findings (not blocking)
+
+- **02-05:107-110 and 545-553** (Codex MEDIUM): the probe-behavior narrative
+  still says "calls `loadRuntimeConfig()`" and "process.env[apiKeyEnv]" as if
+  the probe re-implements env presence directly, even though the actual code
+  block at 904-947 delegates to `loadCapabilityFacts`. Executable path is
+  correct; narrative is stale. An executor reading prose-first could be
+  confused. Recommend updating the prose to say "delegates to
+  `loadCapabilityFacts()` and re-keys snake_case providers back into the
+  doctor's `{name, apiKeyEnv, present}` JSON shape."
+- **02-07:180, 196, 556** (Codex MEDIUM): the interfaces section JSON skeleton
+  and Case A behavior description still reference `'http-contact-email'` as
+  the probe id. Test code at 687-718 uses the correct
+  `'contact-email-presence'`. Stale narrative. Recommend three find/replace
+  edits in the descriptive prose.
+- **02-05:1251** (Codex MEDIUM, carry-over from cycle 2): self-check claim
+  "http-crossref-ping.ts never touches the live network — only MockAgent
+  through the 02-00 cassette infrastructure" contradicts the SKIP-only
+  design. Recommend updating to "the probe is structurally SKIP in Phase 2;
+  Phase 3 will wire MockAgent via the production-tree chokepoint."
+- **02-00:412** (OpenCode MEDIUM, carry-over from cycle 2): test template uses
+  undefined `read()` helper instead of `readFileSync`. Trivial inline fix.
 
 ### Divergent Views
 
-- **HIGH #2 severity.** Gemini and OpenCode call it FULLY RESOLVED based on the MCP-side delegation being clean. Codex calls it PARTIALLY RESOLVED because the original HIGH demanded a SINGLE shared capability source for BOTH tiers, and 02-05's CLI path still has its own env-presence code. Codex's reading is more faithful to the cycle-1 HIGH text ("gives CLI doctor and MCP one shared capability fact source"). Listed as unresolved per Codex.
-- **HIGH #5 severity.** Gemini says FULLY RESOLVED based on the test being well-formed. Codex + OpenCode + direct repo inspection say STILL BROKEN because the file content (line 304) contains the literal forbidden substring. The 2/3 + evidence consensus is STILL BROKEN.
+- **HIGH #5 verdict.** Gemini scored STILL BROKEN; Codex + OpenCode + direct
+  repo evidence scored FULLY RESOLVED. Direct verification:
+  `awk 'NR>=295 && NR<=376' 02-00-review-cleanup-PLAN.md | grep -E "DOCT-05|wiring-smoke"`
+  returns ZERO matches. Locked-copy body is clean. Gemini misread
+  surrounding meta-prose as locked-copy body. Consensus = FULLY RESOLVED.
+- **NEW HIGH (02-04 grep) verdict.** Same shape: Gemini scored STILL BROKEN;
+  Codex + OpenCode + direct grep scored FULLY RESOLVED. Direct verification
+  on the mcp/resources.ts (384-486) and mcp/tools.ts (650-790) code blocks
+  shows zero `loadRuntimeConfig` and zero `process.env[` literals. Gemini
+  misread the meta-prose at 488-501. Consensus = FULLY RESOLVED.
+- **HIGH #2 / #3 stale-prose severity.** Codex scored both PARTIAL on the
+  basis that stale plan-narrative could re-introduce bugs in future passes.
+  Gemini + OpenCode scored both FULLY RESOLVED based on the executable code
+  blocks being correct. Synthesis: executable correctness is enough to
+  declare these RESOLVED at the HIGH-severity level; the stale narrative
+  is a MEDIUM doc-hygiene issue, not a HIGH execution blocker.
+- **NEW cycle-3 regression detection.** Only Codex caught the 02-05
+  http-crossref-ping `tests/` regression. OpenCode and Gemini both missed
+  it (they accepted the cycle-2 #8 closure as if it carried forward
+  unchanged, but the same anti-pattern silently re-appeared in 02-05's body).
+  Direct repo verification confirms Codex is correct. Counted as the sole
+  NEW HIGH in cycle 3's unresolved count.
 
-### Recommended Next Steps (cycle 3 / for /gsd-plan-phase --reviews)
+### Recommended Next Steps (cycle 4 / for /gsd-plan-phase --reviews)
 
-Cycle 3 should:
+Cycle 4 should:
 
-1. **Reconcile 02-07 with 02-05** (HIGH #3): change `probes['http-contact-email']` → `probes['contact-email-presence']` AND replace the regex `for (const m of detail.matchAll(...))` block with `for (const p of JSON.parse(detail))`. Cite line 687, 692-697 in 02-07.
-2. **Parameterize `paper://state`** (HIGH #4): add a `paperRoot` URI variable to `paper://state` (e.g., `paper://state?paperRoot=...`) and update 02-04's resource handler to honor it. OR drop the `paper://state` read in 02-07 Case C and rely on tool return values.
-3. **Fix 02-00 self-contradiction** (HIGH #5): rephrase the line-304 explanatory paragraph to not contain the literal `DOCT-05` substring, OR change the test+acceptance to forbid only probe-anchor patterns (e.g., `### DOCT-05` or `## DOCT-05 — `).
-4. **Repair 02-08 locked prose** (HIGH #6): `17` → `16`; `state.update` → `paper_advance_section`; `DOCT-01..06` → `DOCT-01..07`. Three text replacements.
-5. **Share capabilities helper with CLI doctor** (HIGH #2): have 02-05's `runtime-config-presence.ts` import `loadCapabilityFacts()` (or its providers subset) from `bin/lib/capabilities.ts`. This gives both tiers ONE source of truth.
-6. **Fix 02-04 self-failing forbidden-string checks** (NEW HIGH): scope the grep checks to non-comment lines, OR remove `loadRuntimeConfig` / `process.env[` from the explanatory comments in the planned snippets.
-7. **Clean up 02-05 stale prose** about MockAgent/cassette (Codex MEDIUM): remove or rewrite `02-05:1239` and `02-05:1475` so they don't contradict the SKIP-only fix.
-8. **Fix 02-00 undefined `read()` helper** (OpenCode MEDIUM): use `readFileSync` directly or define `read` locally.
+1. **Fix the 02-05 self-failing `tests/` grep** (only HIGH remaining):
+   rephrase the two JS comments in the planned `http-crossref-ping.ts` body
+   at `02-05:1040-1041` to avoid the literal substring `tests/`, OR widen
+   the acceptance grep at `02-05:1266` so it fires only on
+   `import` / `require` / `await import` lines containing `tests/`.
+2. **(Optional cleanup, MEDIUM):** sync stale narrative prose in `02-05`
+   (lines 107-110, 545-553, 1251) and `02-07` (lines 180, 196, 556) with
+   the implementation code blocks. Three small find/replace edits in each
+   file. Reduces future-cycle misreading risk.
+3. **(Optional cleanup, MEDIUM):** fix the `read()` → `readFileSync` typo at
+   `02-00:412`.
+
+After step 1 lands, the plan set should be at zero unresolved HIGHs and ready
+for execution.
 
 To incorporate this feedback into planning:
 
