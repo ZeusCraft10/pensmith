@@ -41,11 +41,13 @@ test('ARCH-03: every workflow body has a <capability_check> block with required 
 test('ARCH-03 W4: every required: token is in the closed Phase 2 vocabulary', () => {
   for (const verb of EXPECTED_16) {
     const src = readFileSync(`workflows/${verb}.md`, 'utf8');
-    const block = src.match(/<capability_check>([\s\S]+?)<\/capability_check>/);
-    assert.ok(block, `${verb}.md: <capability_check> not found`);
-    const required = block![1].match(/required:\s*\n([\s\S]*?)\n\s*degrade_if_missing:/);
+    const blockMatch = src.match(/<capability_check>([\s\S]+?)<\/capability_check>/);
+    assert.ok(blockMatch, `${verb}.md: <capability_check> not found`);
+    const blockInner = blockMatch[1] ?? '';
+    const required = blockInner.match(/required:\s*\n([\s\S]*?)\n\s*degrade_if_missing:/);
     assert.ok(required, `${verb}.md: required: section not parseable`);
-    const tokens = required![1]
+    const requiredSection = required[1] ?? '';
+    const tokens = requiredSection
       .split('\n')
       .map((l) => l.replace(/^\s*-\s*/, '').trim())
       .filter((l) => l.length > 0);

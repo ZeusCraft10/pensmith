@@ -72,6 +72,65 @@ if (fs.existsSync(distDir)) {
   if (!fs.existsSync(built)) fail(`dist/ exists but ${built} is missing — run \`npm run build\``);
 }
 
+// TIER-03 (Phase 2): 4 hooks + hooks.json manifest declares them.
+// TIER-07 (Phase 2): plugin shell + hooks + workflows scaffolding present.
+// ARCH-01: workflows are markdown shared by both tiers.
+// ARCH-03: every workflow body contains a <capability_check> block.
+
+const REQUIRED_HOOK_EVENTS = ['SessionStart', 'PreCompact', 'PostToolUse', 'Stop'];
+const EXPECTED_WORKFLOWS = [
+  'doctor', 'new', 'next', 'status', 'research', 'outline', 'plan', 'write',
+  'verify', 'compile', 'done', 'resume', 'list', 'open', 'sketch', 'add',
+];
+
+const hooksDir = path.join(root, 'hooks');
+if (!fs.existsSync(hooksDir)) {
+  fail('hooks/ directory missing (TIER-07)');
+} else {
+  const manifestPath = path.join(hooksDir, 'hooks.json');
+  if (!fs.existsSync(manifestPath)) {
+    fail('hooks/hooks.json missing (TIER-03)');
+  } else {
+    let manifest;
+    try {
+      manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    } catch (e) {
+      fail(`hooks/hooks.json: invalid JSON (${e.message}) (TIER-03)`);
+    }
+    if (manifest) {
+      if (manifest.schemaVersion !== 1) {
+        fail(`hooks/hooks.json: schemaVersion must be 1 (TIER-03)`);
+      }
+      const declaredEvents = (manifest.hooks ?? []).map((h) => h.event).sort();
+      const wantedEvents = [...REQUIRED_HOOK_EVENTS].sort();
+      if (JSON.stringify(declaredEvents) !== JSON.stringify(wantedEvents)) {
+        fail(`hooks/hooks.json: events must equal ${JSON.stringify(wantedEvents)}, got ${JSON.stringify(declaredEvents)} (TIER-03)`);
+      }
+      for (const h of manifest.hooks ?? []) {
+        const sp = path.join(hooksDir, h.script);
+        if (!fs.existsSync(sp)) fail(`hooks.json declares ${h.event} → ${h.script} but hooks/${h.script} is missing (TIER-03)`);
+      }
+    }
+  }
+}
+
+const workflowsDir = path.join(root, 'workflows');
+if (!fs.existsSync(workflowsDir)) {
+  fail('workflows/ directory missing (ARCH-01)');
+} else {
+  const files = fs.readdirSync(workflowsDir).filter((f) => f.endsWith('.md')).sort();
+  const expected = [...EXPECTED_WORKFLOWS].map((v) => `${v}.md`).sort();
+  if (JSON.stringify(files) !== JSON.stringify(expected)) {
+    fail(`workflows/ mismatch — expected ${JSON.stringify(expected)}, got ${JSON.stringify(files)}`);
+  }
+  for (const f of files) {
+    const body = fs.readFileSync(path.join(workflowsDir, f), 'utf8');
+    if (!/<capability_check>[\s\S]+?<\/capability_check>/.test(body)) {
+      fail(`workflows/${f} missing <capability_check> block (ARCH-03)`);
+    }
+  }
+}
+
 if (process.exitCode === 1) {
   console.error('Manifest validation FAILED');
   process.exit(1);
