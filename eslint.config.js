@@ -154,15 +154,43 @@ export default [
     },
   },
 
-  // === Red-team fixture exemption (D-08) ===
-  // The fixture INTENTIONALLY violates both chokepoints. It is executed
-  // by tests/lint-chokepoint.test.ts which runs ESLint programmatically
-  // and asserts both errors are flagged. Project lint must NOT see it.
+  // === D-09: MCP thin-shim chokepoint (Phase 2) ===
+  // mcp/**/*.ts handlers MUST NOT import fs / fs/promises / node:fs /
+  // node:fs/promises directly. Business logic must live in bin/lib/* so
+  // the MCP layer stays a thin shim (D-09). HTTP imports (undici / http /
+  // https / node:http / node:https) are already blocked project-wide by the
+  // rule above; this block adds the fs ban scoped to mcp/** only.
+  //
+  // The handler-statement-count budget (≤30) is enforced by the AST walk
+  // in tests/lint-thin-shim.test.ts (Test 3), not here, because
+  // no-restricted-syntax cannot count statement-body length in a single
+  // selector. The test file does that walk programmatically.
+  {
+    files: ['mcp/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [
+          { name: 'fs',               message: 'D-09 thin-shim: mcp handlers must not touch fs directly — delegate to bin/lib/*' },
+          { name: 'node:fs',          message: 'D-09 thin-shim: mcp handlers must not touch fs directly — delegate to bin/lib/*' },
+          { name: 'fs/promises',      message: 'D-09 thin-shim: mcp handlers must not touch fs directly — delegate to bin/lib/*' },
+          { name: 'node:fs/promises', message: 'D-09 thin-shim: mcp handlers must not touch fs directly — delegate to bin/lib/*' },
+          // HTTP imports already blocked project-wide by the rule in the main block above.
+        ],
+      }],
+    },
+  },
+
+  // === Red-team fixture exemption (D-08 + D-09) ===
+  // Each fixture INTENTIONALLY violates a chokepoint. Fixtures are executed
+  // by their corresponding lint-*.test.ts files which run ESLint
+  // programmatically and assert the errors are flagged. Project lint must
+  // NOT see them.
   {
     ignores: [
       'tests/fixtures/lint-chokepoint-fixture.ts',
       'tests/fixtures/lint-atomic-write-chokepoint-fixture.ts',
       'tests/fixtures/lint-paths-chokepoint-fixture.ts',
+      'tests/fixtures/lint-thin-shim-fixture.ts',
       'dist/**',
       'node_modules/**',
     ],
