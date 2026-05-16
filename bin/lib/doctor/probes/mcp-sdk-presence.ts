@@ -62,7 +62,28 @@ export const mcpSdkPresenceProbe: Probe = {
         };
       }
       return { id: 'mcp-sdk-presence', severity: 'PASS', summary: `${MCP_REL} present (${s.size}B)` };
-    } catch {
+    } catch (err) {
+      // IN-01: classify ENOENT vs EACCES so the fix hint matches the cause.
+      // ENOENT → build is missing; EACCES → file exists but pensmith can't
+      // read it (permission/ACL problem). Other errno values pass through so
+      // they don't get misreported as "not found".
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'EACCES') {
+        return {
+          id: 'mcp-sdk-presence',
+          severity: 'FAIL',
+          summary: `${MCP_REL} permission denied (EACCES)`,
+          fix: 'Check filesystem permissions on the install directory.',
+        };
+      }
+      if (code && code !== 'ENOENT') {
+        return {
+          id: 'mcp-sdk-presence',
+          severity: 'FAIL',
+          summary: `${MCP_REL} stat failed (${code})`,
+          fix: 'Investigate; then rerun `npm run build` if the artifact is gone.',
+        };
+      }
       return {
         id: 'mcp-sdk-presence',
         severity: 'FAIL',

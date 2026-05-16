@@ -151,18 +151,26 @@ test('DOCT-07 runtime-config-presence WARN when no provider keys present + no va
   }
 });
 
-test('D-19: runDoctor is read-only — does not create files in cwd', async () => {
+test('D-19: runDoctor is read-only — does not create files in the configured paper root', async () => {
+  // IN-02 fix: previous version mutated process.cwd() via process.chdir(tmp).
+  // After the CR-02 fix the probes resolve their inputs from import.meta.url
+  // (findPkgRoot) and from PENSMITH_PAPER_ROOT — NOT from cwd. So the chdir
+  // dance was decorative; worse, it mutated a process-wide global that other
+  // top-level tests could observe if the runner ever flipped them concurrent.
+  // We exercise the actual contract by pointing the canonical paper-root env
+  // var at a tmp dir and asserting it stays empty.
   const tmp = mkdtempSync(join(tmpdir(), 'pensmith-doctor-readonly-'));
   const before = readdirSync(tmp);
-  const cwd = process.cwd();
-  process.chdir(tmp);
+  const prevRoot = process.env.PENSMITH_PAPER_ROOT;
+  process.env.PENSMITH_PAPER_ROOT = tmp;
   try {
     await runDoctor();
   } finally {
-    process.chdir(cwd);
+    if (prevRoot === undefined) delete process.env.PENSMITH_PAPER_ROOT;
+    else process.env.PENSMITH_PAPER_ROOT = prevRoot;
   }
   const after = readdirSync(tmp);
-  assert.deepEqual(after, before, 'D-19: doctor MUST NOT create files');
+  assert.deepEqual(after, before, 'D-19: doctor MUST NOT create files under the paper root');
 });
 
 test('D-20: runDoctor returns Record keyed by probe.id (10 probes)', async () => {

@@ -149,6 +149,22 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 
+// IN-03 / D-24: references/http-warnings.md is the SINGLE source of truth
+// for the HTTP-client WARN-once banner string. bin/lib/http.ts reads it at
+// module load; tests/http.test.ts asserts the runtime banner matches the
+// "no-contact User-Agent" phrasing from this file. A hash-pin here means any
+// edit to the canonical copy shows up in PR diff alongside the WARN-once
+// test changes — preventing accidental drift that the substring matcher in
+// http.test.ts would not catch (e.g., subtle URL or punctuation changes).
+test('references/http-warnings.md hash-pin (IN-03 / D-24)', () => {
+  const bytes = readFileSync('references/http-warnings.md');  // raw bytes, no BOM strip
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/http-warnings.md')).digest('hex'))"`
+  // after every intentional edit. The PR diff makes the change visible.
+  const PINNED = '2ff637adb29ce2a34442ddb7472e6ad6485200717275415f022e427f00dc72e9';
+  assert.equal(hash, PINNED, `references/http-warnings.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
+});
+
 // Coarse-grained content sentinel — catches gross removals even before the
 // hash pin gets a chance to re-fire (e.g., file wiped to empty).
 test('references/doctor-output.md retains the 7 Phase-2 probe section anchors', () => {

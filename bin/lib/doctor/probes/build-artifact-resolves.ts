@@ -55,8 +55,15 @@ function presentNonEmpty(p: string): { ok: boolean; size: number; reason?: strin
     const s = statSync(p);
     if (s.size === 0) return { ok: false, size: 0, reason: `${p} exists but is empty` };
     return { ok: true, size: s.size };
-  } catch {
-    return { ok: false, size: 0, reason: `${p} not found` };
+  } catch (err) {
+    // IN-01: classify the failure so an operator can act. ENOENT = build is
+    // missing (run `npm run build`); EACCES = file exists but pensmith can't
+    // read it (permission/ACL problem, not a missing artifact). Anything else
+    // surfaces verbatim so unknown errno states don't disappear into "not found".
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') return { ok: false, size: 0, reason: `${p} not found` };
+    if (code === 'EACCES') return { ok: false, size: 0, reason: `${p} permission denied (EACCES)` };
+    return { ok: false, size: 0, reason: `${p} stat failed (${code ?? 'unknown'})` };
   }
 }
 

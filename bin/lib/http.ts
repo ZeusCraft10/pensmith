@@ -50,7 +50,7 @@
 
 import { request, getGlobalDispatcher, setGlobalDispatcher, Agent } from 'undici';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -67,10 +67,33 @@ void Agent;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// IN-03 fix: this file ships at two different depths — bin/lib/http.ts under
+// tsx, dist/bin/lib/http.js after build. Fixed-depth `..` × N produced
+// `dist/references/http-warnings.md` (nonexistent) post-build, silently
+// degrading the WARN banner to the short fallback. Same defect-class as CR-02
+// for the doctor probes; same shape of fix — walk up from HERE until we hit
+// the directory that owns package.json. See bin/lib/doctor/probes/
+// build-artifact-resolves.ts for the original rationale.
+function findPkgRoot(start: string): string {
+  let cur = start;
+  for (let i = 0; i < 8; i++) {
+    try {
+      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
+    } catch {
+      // continue
+    }
+    const next = path.dirname(cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  return start;
+}
+const PKG_ROOT = findPkgRoot(__dirname);
+
 // ============================================================
 //   WARN-once for missing contact email
 // ============================================================
-const WARN_FILE = path.resolve(__dirname, '..', '..', 'references', 'http-warnings.md');
+const WARN_FILE = path.join(PKG_ROOT, 'references', 'http-warnings.md');
 
 let warnString: string | null = null;
 let warnedNoEmail = false;
@@ -123,7 +146,10 @@ let cachedVersion: string | null = null;
 function pkgVersion(): string {
   if (cachedVersion !== null) return cachedVersion;
   try {
-    const pkgPath = path.resolve(__dirname, '..', '..', 'package.json');
+    // IN-03: same off-by-one as WARN_FILE — `..` × 2 from __dirname lands at
+    // dist/ post-build, producing a path that doesn't exist and silently
+    // returning '0.0.0' in the User-Agent header. Reuse PKG_ROOT.
+    const pkgPath = path.join(PKG_ROOT, 'package.json');
     const raw = readFileSync(pkgPath, 'utf8');
     const parsed = JSON.parse(raw) as { version?: string };
     cachedVersion = parsed.version ?? '0.0.0';
