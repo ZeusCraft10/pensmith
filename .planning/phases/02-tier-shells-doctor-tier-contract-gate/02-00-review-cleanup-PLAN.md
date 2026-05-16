@@ -301,10 +301,11 @@ From bin/lib/http.ts (call site to add in this plan):
        Drift between the locked copy and the rendered output is a regression — pinned
        by sha256 hash in `tests/repo-files.test.ts`.
 
-       DOCT-05 (end-to-end fixture probe) is deferred to Phase 3 per CONTEXT D-04; this
-       file does NOT contain wiring-smoke copy. DOCT-06 (tier-equivalence) is the
-       tier-contract Case A assertion in `tests/tier-contract.test.ts` (02-07), not a
-       probe — also not in this file.
+       The end-to-end fixture probe (the original Phase 1 end-to-end smoke probe —
+       see CONTEXT requirement D-04 for the deferral rationale) is deferred to
+       Phase 3 per CONTEXT D-04; this file does NOT contain any prose for that
+       deferred probe. The tier-equivalence assertion is the tier-contract Case A
+       in `tests/tier-contract.test.ts` (02-07), not a probe — also not in this file.
 
        ## TTY render — header
 
@@ -326,8 +327,8 @@ From bin/lib/http.ts (call site to add in this plan):
        ### mcp-sdk-presence (DOCT-01 wiring)
        > MCP server build artifact presence — dist/mcp/server.js must exist and be non-empty.
 
-       ### http-contact-email (DOCT-03)
-       > PENSMITH_CONTACT_EMAIL environment variable presence — see references/http-warnings.md for the full WARN copy.
+       ### contact-email-presence (DOCT-03)
+       > PENSMITH_CONTACT_EMAIL environment variable presence — see references/http-warnings.md for the full WARN copy. (Canonical probe id per 02-05 line 45; 02-07 Case A reads `probes['contact-email-presence']`.)
 
        ### sync-folder-detection (DOCT-04)
        > .paper/ inside cloud sync folder (OneDrive / iCloud / Dropbox / Google Drive) detection — WARN if matched.
@@ -354,7 +355,7 @@ From bin/lib/http.ts (call site to add in this plan):
          "probes": {
            "node-version":             { "id": "...", "severity": "PASS|WARN|FAIL|SKIP", "summary": "...", "detail": "...", "fix": "..." },
            "mcp-sdk-presence":         { ... },
-           "http-contact-email":       { ... },
+           "contact-email-presence":   { ... },
            "sync-folder-detection":    { ... },
            "runtime-config-presence":  { ... },
            "zotero-mcp-presence":      { ... },
@@ -412,7 +413,7 @@ From bin/lib/http.ts (call site to add in this plan):
            assert.match(copy, /# Doctor Output Strings \(locked — D-18\)/);
            assert.match(copy, /node-version \(DOCT-01\)/);
            assert.match(copy, /mcp-sdk-presence \(DOCT-01 wiring\)/);
-           assert.match(copy, /http-contact-email \(DOCT-03\)/);
+           assert.match(copy, /contact-email-presence \(DOCT-03\)/);
            assert.match(copy, /sync-folder-detection \(DOCT-04\)/);
            assert.match(copy, /runtime-config-presence \(DOCT-07\)/);
            assert.match(copy, /zotero-mcp-presence \(DOCT-02 ecosystem\)/);

@@ -134,8 +134,12 @@ divergence, (b) loosen the assertion, or (c) skip the test.
     - `paper://capabilities` content is presence-flag booleans only — NEVER a resolved
       key value. D-12 lint enforces this at build time; `tests/tier-contract.test.ts`
       Case B enforces it at runtime.
-    - `state.update` is idempotent: applying the same patch twice produces byte-identical
-      state. Asserted by `tests/tier-contract.test.ts` Case C.
+    - `paper_advance_section` is idempotent: applying the same `{paperRoot, n, toState}`
+      twice produces byte-identical tool output and the resulting `paper://state` is
+      unchanged on the second call. Asserted by `tests/tier-contract.test.ts` Case C.
+      (Per TIER-02 / D-13 the snake_case tool name is `paper_advance_section`; the
+      Phase-2 tool surface ships 6 such granular tools — there is no generic
+      `state.update`.)
 
     ### The four merge-gate layers
 
@@ -153,9 +157,10 @@ divergence, (b) loosen the assertion, or (c) skip the test.
        to add the same protection on your fork.
 
     3. **Preflight (layer 3):** `node scripts/validate-plugin-manifest.cjs` asserts
-       presence of `hooks/`, `workflows/` (exactly 17 .md files with `<capability_check>`
-       blocks per ARCH-03), `dist/mcp/server.js`, and the `.claude-plugin/*.json` shapes.
-       Runs in CI after `npm test`.
+       presence of `hooks/`, `workflows/` (exactly 16 .md files with `<capability_check>`
+       blocks — one per UX-02 canonical verb per CONTEXT D-05, matched by the 02-06
+       hooks-workflows plan), `dist/mcp/server.js`, and the `.claude-plugin/*.json`
+       shapes. Runs in CI after `npm test`.
 
     4. **Prose (layer 4 — this section):** The "Tier contract — do not skip" section
        in `CONTRIBUTING.md`. The Phase 2 D-24 lock keeps this section intact.
@@ -365,7 +370,7 @@ After both tasks:
 - D-24: CONTRIBUTING.md has the locked "Tier contract — do not skip" section.
 - D-23 layer 4 (prose): live and named.
 - CF-D24 test guards the section against drift / accidental deletion.
-- Phase 2 closed — all 16 requirement IDs (ARCH-01, ARCH-03, ARCH-18, TIER-01..07, DOCT-01..06) addressed across the 9-plan set; all 24 D-decisions honored.
+- Phase 2 closed — all Phase-2 requirement IDs (ARCH-01, ARCH-03, ARCH-18, TIER-01..07, DOCT-01..07) addressed across the 10-plan set (02-00 through 02-09); all D-decisions honored.
 </success_criteria>
 
 <output>

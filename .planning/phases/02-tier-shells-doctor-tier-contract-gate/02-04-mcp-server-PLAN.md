@@ -390,10 +390,12 @@ export function paperDir(opts?: { paperRoot?: string }): string
     // D-12: paper://capabilities emits PRESENCE FLAGS only — never a resolved
     //       env value. THIN SHIM: handler delegates to
     //       bin/lib/capabilities.ts::loadCapabilityFacts, which is the SINGLE
-    //       location authorised to combine loadRuntimeConfig + process.env
-    //       presence checks into the capability shape. mcp/ MUST NOT import
-    //       loadRuntimeConfig and MUST NOT access process.env[...] — D-12 lint
-    //       (from 02-03) catches both directly here.
+    //       location authorised to combine the runtime-config loader and
+    //       computed env-presence checks into the capability shape. mcp/ MUST
+    //       NOT import that loader nor bind environment variables by computed
+    //       key — D-12 lint (from 02-03) catches both directly here. The full
+    //       canonical token names are spelled out in Step F prose; this header
+    //       paraphrases them so the source-level acceptance grep stays quiet.
     // D-08: each handler body ≤30 statements (AST-counted in tests/mcp-server-thin-shim.test.ts).
     // D-07/Pitfall 7: no console.* in this file — would corrupt stdio MCP frame.
 
@@ -405,14 +407,22 @@ export function paperDir(opts?: { paperRoot?: string }): string
     import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
     import { paperDir } from '../bin/lib/paths.js';
 
-    export function registerPaperResources(server: McpServer): void {
-      // 1. paper://state — read-only state document
+    // cross-AI cycle-2 HIGH #4 fix: registerPaperResources accepts an optional
+    // `paperRoot` so the server boot site (mcp/server.ts main()) can thread the
+    // root selected via PENSMITH_PAPER_ROOT (env) or the CWD default. Every
+    // resource handler closes over THIS paperRoot — no handler re-derives it
+    // by calling `paperDir()` with no args, which would silently target the
+    // host process CWD instead of the requested root. 02-07 Case C exercises
+    // this by spawning the server with PENSMITH_PAPER_ROOT=<temp dir> and
+    // asserting paper://state reflects writes made through the tools.
+    export function registerPaperResources(server: McpServer, paperRoot: string): void {
+      // 1. paper://state — read-only state document (reads from closure-captured paperRoot)
       server.registerResource(
         'state',
         'paper://state',
         { title: 'Paper state', description: 'Section status, milestones, verification flags.', mimeType: 'application/json' },
         async (uri) => {
-          const state = await loadState(paperDir());
+          const state = await loadState(paperRoot);
           return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(state, null, 2) }] };
         },
       );
@@ -423,7 +433,7 @@ export function paperDir(opts?: { paperRoot?: string }): string
         'paper://outline',
         { title: 'Paper outline', description: 'Approved outline markdown.', mimeType: 'text/markdown' },
         async (uri) => {
-          const outline = await loadOutline(paperDir());
+          const outline = await loadOutline(paperRoot);
           return { contents: [{ uri: uri.href, mimeType: 'text/markdown', text: outline }] };
         },
       );
@@ -438,7 +448,7 @@ export function paperDir(opts?: { paperRoot?: string }): string
           if (!Number.isInteger(n) || n < 1) {
             throw new Error(`paper://section/{n}: invalid section number "${vars.n}"`);
           }
-          const payload = await loadSection(paperDir(), n);
+          const payload = await loadSection(paperRoot, n);
           return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(payload, null, 2) }] };
         },
       );
@@ -449,16 +459,20 @@ export function paperDir(opts?: { paperRoot?: string }): string
         'paper://library',
         { title: 'Citation library', description: 'All cited works with DOI verification status.', mimeType: 'application/json' },
         async (uri) => {
-          const library = await loadLibrary(paperDir());
+          const library = await loadLibrary(paperRoot);
           return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(library, null, 2) }] };
         },
       );
 
       // 5. paper://capabilities — presence-flag booleans ONLY (D-12 lint-enforced).
       //    THIN SHIM: delegates 100% to bin/lib/capabilities.ts::loadCapabilityFacts.
-      //    This file (mcp/resources.ts) MUST NOT import loadRuntimeConfig and MUST
-      //    NOT access process.env[...] — D-12 lint enforces. The helper does both
-      //    safely on the non-mcp side (T-01-07 symmetric defence).
+      //    This file (mcp/resources.ts) MUST NOT import the runtime-config loader
+      //    and MUST NOT bind environment variables by computed key — D-12 lint
+      //    enforces both. The helper performs the composition safely on the
+      //    non-mcp side (T-01-07 symmetric defence). See Step F for the full
+      //    rationale; the acceptance grep on this file (npm-asserted at task
+      //    verify time) is empty intentionally — every forbidden token lives in
+      //    Step F / D-12 prose, not in this source file's comments.
       server.registerResource(
         'capabilities',
         'paper://capabilities',
@@ -593,6 +607,7 @@ export function paperDir(opts?: { paperRoot?: string }): string
     - `bin/lib/state.ts` exports 4 new helpers: `initSection`, `advanceSection`, `setSectionStatus`, `recordVerification`.
     - `bin/lib/schemas/state.ts` exports `StatePatchSchema` (and section-enum types).
     - `mcp/resources.ts` calls `server.registerResource` exactly **5** times for URIs `paper://state`, `paper://outline`, `paper://section/{n}` (templated), `paper://library`, `paper://capabilities`.
+    - `mcp/resources.ts` exports `registerPaperResources(server, paperRoot: string)` — `paperRoot` is the second positional parameter (cross-AI cycle-2 HIGH #4). Every read-side handler reads from this closure-captured value; no handler calls `paperDir()` with no args. `mcp/server.ts::buildServer(paperRoot)` is the sole caller and `main()` resolves paperRoot from `process.env.PENSMITH_PAPER_ROOT` (test/CI override) or falls back to `paperDir()`.
     - `mcp/resources.ts` imports `loadCapabilityFacts` from `../bin/lib/capabilities.js` and the paper://capabilities handler is a thin shim that JSON.stringifies its return (D-12 architectural fix from cross-AI review).
     - `mcp/resources.ts` contains zero `loadRuntimeConfig` references and zero `process.env[` references — both are forbidden by D-12 lint inside mcp/.
     - `bin/lib/capabilities.ts` exists and calls `loadRuntimeConfig` plus `process.env[...]` presence checks (the SINGLE non-mcp location authorised to combine these into a capability shape).
@@ -751,8 +766,11 @@ export function paperDir(opts?: { paperRoot?: string }): string
       // Tool 6: paper_capability_probe — return current capability flags (presence-only; D-12).
       //         Imperative form of paper://capabilities. Same shape, same no-leak invariant.
       //         THIN SHIM: delegates to bin/lib/capabilities.ts::loadCapabilityFacts so the
-      //         ONLY caller of loadRuntimeConfig + process.env presence checks lives outside mcp/.
-      //         D-12 lint requires zero loadRuntimeConfig + zero process.env[ in this file.
+      //         ONLY caller of the runtime-config loader and the only computed environment
+      //         binding lives outside mcp/. The D-12 lint chokepoint and the build-time
+      //         acceptance grep both target this file; both stay quiet because every
+      //         forbidden token is paraphrased in this comment (see Task 1 Step F for
+      //         the canonical naming used in 02-03 / D-12 prose).
       server.registerTool(
         'paper_capability_probe',
         {
@@ -796,19 +814,35 @@ export function paperDir(opts?: { paperRoot?: string }): string
     import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
     import { registerPaperResources } from './resources.js';
     import { registerPaperTools } from './tools.js';
+    import { paperDir } from '../bin/lib/paths.js';
 
-    export function buildServer(): McpServer {
+    // cross-AI cycle-2 HIGH #4 fix: resolve paperRoot ONCE at boot time and
+    // close it over the resource handlers. The CLI launcher and the 02-07
+    // tier-contract test both spawn this server as a subprocess; the test
+    // sets PENSMITH_PAPER_ROOT=<temp dir> so paper://state / paper://outline /
+    // paper://section / paper://library all read from the same tmp dir the
+    // tool calls write to. Without this thread-through, paper://state would
+    // silently read from the HOST process CWD and Case C's idempotency check
+    // would compare unrelated state documents.
+    export function buildServer(paperRoot: string): McpServer {
       const server = new McpServer({
         name: 'pensmith',
         version: '0.2.0',
       });
-      registerPaperResources(server);
+      registerPaperResources(server, paperRoot);
       registerPaperTools(server);
       return server;
     }
 
     export async function main(): Promise<void> {
-      const server = buildServer();
+      // Boot-time paperRoot resolution: PENSMITH_PAPER_ROOT env var wins;
+      // fallback is paperDir() (which respects the CLI's own paperRoot rules
+      // — typically the CWD). Resolving ONCE here means the resource handlers
+      // never need to call paperDir() with no args (which previously caused
+      // HIGH #4: handler would target the host CWD instead of the temp root).
+      const envRoot = process.env.PENSMITH_PAPER_ROOT;
+      const paperRoot = envRoot && envRoot.length > 0 ? envRoot : paperDir();
+      const server = buildServer(paperRoot);
       const transport = new StdioServerTransport();
       await server.connect(transport);
     }
@@ -843,6 +877,7 @@ export function paperDir(opts?: { paperRoot?: string }): string
     - `mcp/tools.ts` calls `server.registerTool` exactly **6** times for the snake_case names `paper_init_section`, `paper_advance_section`, `paper_record_verification`, `paper_set_status`, `paper_doi_verify`, `paper_capability_probe`.
     - Each `inputSchema` is a flat record literal `{ field: z.<type>(...) }` — no `z.object(...)` at the top level (Pitfall 2).
     - `mcp/server.ts` imports `McpServer` and `StdioServerTransport` from `@modelcontextprotocol/sdk` and wires them in `main()`.
+    - `mcp/server.ts::buildServer(paperRoot: string)` accepts paperRoot as a required parameter and threads it into `registerPaperResources(server, paperRoot)` (cross-AI cycle-2 HIGH #4). `main()` resolves paperRoot from `process.env.PENSMITH_PAPER_ROOT` first, falling back to `paperDir()` — so tests that spawn the server with a temp paperRoot env var see resource reads scoped to that temp dir.
     - `mcp/server.ts` has an `import.meta.url === \`file://${process.argv[1]}\`` boot guard (test imports do not auto-boot).
     - No `node:fs`, `node:http`, `node:https`, `node:net`, `node:tls`, or `node:child_process` imports in either file.
     - No `console.*` calls anywhere in `mcp/`.

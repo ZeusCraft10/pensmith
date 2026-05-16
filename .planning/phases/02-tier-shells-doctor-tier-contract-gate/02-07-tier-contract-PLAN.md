@@ -683,17 +683,36 @@ node dist/bin/pensmith.js --version       # → "0.2.0\n" exit 0
 
     function extractCliFacts(cliJson: { probes: Record<string, { severity: string; detail?: string }> }): Record<string, boolean> {
       const probes = cliJson.probes;
+      // Canonical probe ids per 02-05 line 45 (read_first source-of-truth list).
+      // cross-AI cycle-2 HIGH #3 fix: the probe id is `contact-email-presence`
+      // (not the legacy `http-contact-email` placeholder some earlier drafts used).
       const facts: Record<string, boolean> = {
-        contact_email_set: probes['http-contact-email']?.severity === 'PASS',
+        contact_email_set: probes['contact-email-presence']?.severity === 'PASS',
         pandoc: probes['pandoc-presence']?.severity === 'PASS',
         zotero_mcp: probes['zotero-mcp-presence']?.severity === 'PASS',
         humanizer: probes['humanizer-skill-presence']?.severity === 'PASS',
       };
-      // Parse per-provider lines from runtime-config-presence detail.
-      const detail = probes['runtime-config-presence']?.detail ?? '';
-      for (const m of detail.matchAll(/(?<name>[a-z]+)=(?<flag>true|false)/g)) {
-        const g = m.groups;
-        if (g) facts[`provider:${g.name}`] = g.flag === 'true';
+      // cross-AI cycle-2 HIGH #3 fix: parse per-provider entries from
+      // runtime-config-presence.detail using JSON.parse — the probe's emitted
+      // shape per 02-05 lines 906-948 is `JSON.stringify(providers)` where
+      // each element is `{ name: string; apiKeyEnv: string; present: boolean }`.
+      // The old regex-based `name=true|false` form NEVER matched the actual
+      // detail string (which is JSON, not key=value pairs) and would have
+      // silently produced an empty provider fact set on every run.
+      const detail = probes['runtime-config-presence']?.detail ?? '[]';
+      try {
+        const providers = JSON.parse(detail) as Array<{ name: string; apiKeyEnv: string; present: boolean }>;
+        if (Array.isArray(providers)) {
+          for (const p of providers) {
+            if (p && typeof p.name === 'string' && typeof p.present === 'boolean') {
+              facts[`provider:${p.name}`] = p.present;
+            }
+          }
+        }
+      } catch {
+        // Detail wasn't valid JSON — leave provider facts unset so Case A
+        // surfaces a clear mismatch against the mcp/ side (which always
+        // returns a structured providers array via loadCapabilityFacts).
       }
       return facts;
     }
@@ -743,24 +762,50 @@ node dist/bin/pensmith.js --version       # → "0.2.0\n" exit 0
       assert.equal(/"apiKey"\s*:\s*"[^"]+"/.test(raw), false, 'paper://capabilities contains a resolved apiKey value — D-12 leak');
     });
 
-    test('Case C: paper_advance_section is idempotent', async () => {
+    test('Case C: paper_advance_section is idempotent (state read scoped to temp paperRoot)', async () => {
+      // cross-AI cycle-2 HIGH #4 fix: the default `client` in before() is
+      // connected to a server that resolved paperRoot from the HOST CWD. To
+      // assert idempotency against the SAME paperRoot the tools wrote into,
+      // we spawn a dedicated client subprocess with PENSMITH_PAPER_ROOT set
+      // to the temp dir. The mcp/server.ts main() reads that env var and
+      // threads it into registerPaperResources, so paper://state on this
+      // dedicated client reads STATE.json from `${root}/.paper/STATE.json`.
       const root = freshPaperRoot();
-      // First init the section so advance has something to act on.
-      await client.callTool({
-        name: 'paper_init_section',
-        arguments: { paperRoot: root, n: 1, slug: 'intro' },
+      const scopedTransport = new StdioClientTransport({
+        command: process.execPath,
+        args: [MCP_BIN],
+        env: { ...process.env, PENSMITH_PAPER_ROOT: root },
       });
-      const args = { paperRoot: root, n: 1, toState: 'writing' };
-      const r1 = await client.callTool({ name: 'paper_advance_section', arguments: args });
-      const r2 = await client.callTool({ name: 'paper_advance_section', arguments: args });
-      assert.deepEqual(JSON.parse(r1.content[0].text), JSON.parse(r2.content[0].text), 'paper_advance_section must be idempotent on the same {n, toState}');
-      const state = await client.readResource({ uri: 'paper://state' });
-      const stateText = state.contents[0]?.text;
-      assert.ok(typeof stateText === 'string');
-      const stateJson = JSON.parse(stateText as string);
-      const section = (stateJson.sections ?? []).find((s: { n: number }) => s.n === 1);
-      assert.ok(section, 'section 1 must exist in state after advance');
-      assert.equal(section.state, 'writing', 'section 1 state must be "writing" after advance');
+      const scopedClient = new Client(
+        { name: 'tier-contract-case-c', version: '0.0.0' },
+        { capabilities: {} },
+      );
+      await scopedClient.connect(scopedTransport);
+      try {
+        // First init the section so advance has something to act on.
+        await scopedClient.callTool({
+          name: 'paper_init_section',
+          arguments: { paperRoot: root, n: 1, slug: 'intro' },
+        });
+        const args = { paperRoot: root, n: 1, toState: 'writing' };
+        const r1 = await scopedClient.callTool({ name: 'paper_advance_section', arguments: args });
+        const r2 = await scopedClient.callTool({ name: 'paper_advance_section', arguments: args });
+        assert.deepEqual(JSON.parse(r1.content[0].text), JSON.parse(r2.content[0].text), 'paper_advance_section must be idempotent on the same {n, toState}');
+        // Read paper://state THROUGH the scoped client — verifies the read
+        // returns the temp paperRoot's state (HIGH #4 regression-proof), NOT
+        // the host project's. If the env-var thread-through ever regresses,
+        // section 1 would NOT appear because the tool wrote to <root>/.paper
+        // but the resource read would target whichever CWD launched the test.
+        const state = await scopedClient.readResource({ uri: 'paper://state' });
+        const stateText = state.contents[0]?.text;
+        assert.ok(typeof stateText === 'string');
+        const stateJson = JSON.parse(stateText as string);
+        const section = (stateJson.sections ?? []).find((s: { n: number }) => s.n === 1);
+        assert.ok(section, `section 1 must exist in state at temp paperRoot ${root} (HIGH #4 regression check — if missing, paper://state is reading the wrong paperRoot)`);
+        assert.equal(section.state, 'writing', 'section 1 state must be "writing" after advance');
+      } finally {
+        await scopedClient.close();
+      }
     });
 
     test('Case D (TIER-07): fact-set equivalence with ±20% tolerance', async () => {

@@ -41,7 +41,7 @@ must_haves:
     - "DOCT-02 reports presence of three ecosystem dependencies — Zotero MCP, Pandoc, humanizer skill"
     - "DOCT-05 substitute: `build-artifact-resolves` probe asserts `dist/bin/pensmith.js` + `dist/mcp/server.js` exist non-empty AND `node dist/bin/pensmith.js --version` (via `execFileSync`, no shell) exits 0. Real Phase 3+ intake/outline/verify exercise deferred per D-04."
     - "D-03(d) Phase-2 contract (cross-AI review HIGH fix from Codex iter 1): `http-crossref-ping` ships with a stable id but a structurally fixed SKIP severity. Production code MUST NOT import from `tests/` (inverts layering, breaks production-only builds). Phase 3 will land a production-tree `bin/lib/http-mock.ts` chokepoint and re-enable PASS/FAIL discrimination. The probe interface is stable across phases so 02-07 Case A tier-fact extraction stays unchanged."
-    - "DOCT-07 runtime-config-presence emits per-provider {name, apiKeyEnv, present} — value never leaves loadRuntimeConfig"
+    - "DOCT-07 runtime-config-presence emits per-provider {name, apiKeyEnv, present} — value never leaves bin/lib/capabilities.ts::loadCapabilityFacts (the SINGLE composition site shared with mcp/, per cross-AI cycle-2 HIGH #2)"
     - "Canonical probe ids (Record keys): `node-version`, `mcp-sdk-presence`, `contact-email-presence`, `sync-folder-detection`, `runtime-config-presence`, `zotero-mcp-presence`, `pandoc-presence`, `humanizer-skill-presence`, `build-artifact-resolves`, `http-crossref-ping` — these MUST match the keys read in 02-07's Case A fact-extraction code AND the locked JSON shape in `references/doctor-output.md`."
   artifacts:
     - path: "bin/pensmith.ts"
@@ -68,9 +68,9 @@ must_haves:
       via: "presence check on paperDir()"
       pattern: "isInsideSyncFolder"
     - from: "bin/lib/doctor/probes/runtime-config-presence.ts"
-      to: "bin/lib/runtime.ts::loadRuntimeConfig"
-      via: "iterate cfg.providers — emit {name, apiKeyEnv, present} only"
-      pattern: "loadRuntimeConfig"
+      to: "bin/lib/capabilities.ts::loadCapabilityFacts"
+      via: "delegates to the SHARED helper (same source mcp/ consumes — cross-AI cycle-2 HIGH #2); probe re-keys snake_case facts to the doctor's historical {name, apiKeyEnv, present} JSON detail"
+      pattern: "loadCapabilityFacts"
     - from: "bin/lib/doctor/probes/build-artifact-resolves.ts"
       to: "dist/bin/pensmith.js + dist/mcp/server.js"
       via: "statSync presence + execFileSync(node, [BIN, '--version'])"
@@ -903,21 +903,29 @@ export async function getOpenAlexApiKey(opts): Promise<string | undefined>  // r
 
     ```typescript
     import type { Probe, ProbeResult } from '../probes.js';
-    import { loadRuntimeConfig } from '../../runtime.js';
+    import { loadCapabilityFacts } from '../../capabilities.js';
 
     export const runtimeConfigPresenceProbe: Probe = {
       id: 'runtime-config-presence',
       async run(): Promise<ProbeResult> {
-        // D-12 / T-01-07: re-read read_first_d12 block before edit.
-        // The pattern below is the ONLY acceptable shape — lint in 02-01 enforces.
-        const cfg = await loadRuntimeConfig({});
-        const providers = cfg.providers.map((p) => {
-          // Bound to a literal-typed field (provider.apiKeyEnv: string).
-          // Length-test + boolean coercion — the value `v` never escapes.
-          const v = process.env[p.apiKeyEnv];
-          const present = typeof v === 'string' && v.length > 0;
-          return { name: p.name, apiKeyEnv: p.apiKeyEnv, present };
-        });
+        // D-12 / T-01-07 / cross-AI cycle-2 HIGH #2: this probe MUST delegate
+        // to the SAME helper that mcp/ uses (bin/lib/capabilities.ts::
+        // loadCapabilityFacts). Re-implementing env presence here would create
+        // a second composition site of loadRuntimeConfig + process.env[...],
+        // which 02-07 Case A would have no way to keep in sync with mcp/.
+        // The helper returns CapabilityFacts.providers as a readonly array of
+        // { name, api_key_env, present } — exactly the shape we serialize here.
+        const facts = await loadCapabilityFacts();
+        // Re-key from snake_case (capability-fact shape — owned by 02-04's
+        // loadCapabilityFacts and consumed unmodified by mcp/) to the doctor's
+        // historical detail shape { name, apiKeyEnv, present }. 02-07's
+        // extractCliFacts JSON.parses this detail string into an object array
+        // and reads p.present per element — no regex parsing.
+        const providers = facts.providers.map((p) => ({
+          name: p.name,
+          apiKeyEnv: p.api_key_env,
+          present: p.present,
+        }));
         const anyPresent = providers.some((p) => p.present);
         const detail = JSON.stringify(providers);  // only {name, apiKeyEnv, present}
         return anyPresent
@@ -938,14 +946,17 @@ export async function getOpenAlexApiKey(opts): Promise<string | undefined>  // r
     };
     ```
 
-    **Why `loadRuntimeConfig` is called here but not in mcp/**:** D-12 forbids
-    `loadRuntimeConfig` *inside `mcp/**`* (the capabilities resource gets its
-    presence flags via a different chokepoint per 02-04). The doctor probe
-    lives in `bin/lib/doctor/`, which is on the CLI side of the tier seam and
-    is explicitly allowed by D-12 to call `loadRuntimeConfig`. Symmetry with
-    the capabilities resource (02-04) is maintained in the *output shape*, not
-    in the access path: both surfaces emit `{name, apiKeyEnv, present}` only,
-    and 02-07's tier-contract harness asserts shape equivalence (DOCT-06).
+    **Why this probe delegates to `loadCapabilityFacts` (cross-AI cycle-2 HIGH #2):**
+    The probe lives in `bin/lib/doctor/`, which is on the CLI side of the tier
+    seam — D-12 lint does not forbid `loadRuntimeConfig` or `process.env[...]`
+    here. However, having two composition sites (one in mcp via the helper, a
+    parallel one here in the probe) would mean 02-07 Case A has no structural
+    guarantee that the two stay in sync. The cross-AI review made the
+    architectural call: BOTH surfaces consume the SAME single source
+    (`bin/lib/capabilities.ts::loadCapabilityFacts`). Tier-equivalence becomes
+    structural (same source) rather than statistical (parallel implementations).
+    The probe's only job is to re-key the snake_case capability-fact shape
+    back into the doctor's historical `{name, apiKeyEnv, present}` JSON detail.
 
     `bin/lib/doctor/probes/build-artifact-resolves.ts` (DOCT-05 Phase-2
     substitute, per checker iter 2 + B4 user decision):
@@ -1233,7 +1244,8 @@ export async function getOpenAlexApiKey(opts): Promise<string | undefined>  // r
     Self-check (use header-strip pattern per Nyquist hygiene — `grep -v '^//'`
     to avoid self-invalidating gates on comments mentioning these tokens):
     - `grep -v '^[[:space:]]*//' bin/lib/doctor/probes/*.ts | grep -cE "writeFile|atomicWriteFile|withLock|mkdir"` returns 0 (D-19 read-only — except `statSync` for presence checks).
-    - `grep -v '^[[:space:]]*//' bin/lib/doctor/probes/*.ts | grep -cE 'process\.env\[' | head -1` should equal 1 (only `runtime-config-presence.ts` is allowed to bind `process.env[p.apiKeyEnv]` because the value is immediately length-tested and discarded — see D-12 read_first block).
+    - `grep -v '^[[:space:]]*//' bin/lib/doctor/probes/*.ts | grep -cE 'process\.env\[' | head -1` should equal 0 (cross-AI cycle-2 HIGH #2: DOCT-07 now delegates to `bin/lib/capabilities.ts::loadCapabilityFacts`, which is the SINGLE composition site of `loadRuntimeConfig` + `process.env[...]` — the probe re-keys the facts and never touches `process.env[...]` directly).
+    - `grep -v '^[[:space:]]*//' bin/lib/doctor/probes/contact-email-presence.ts | grep -c 'process\.env\.PENSMITH_CONTACT_EMAIL' | head -1` may be 0 OR 1: the probe can either read `process.env.PENSMITH_CONTACT_EMAIL` directly (dotted access, not computed `[...]` — allowed) or, preferred for symmetry, read `loadCapabilityFacts().contact_email_set`. Either is acceptable; 02-07 Case A reads the probe via `probes['contact-email-presence'].severity === 'PASS'` which is shape-stable across both implementations.
     - `grep -cE 'exec\(' bin/lib/doctor/probes/*.ts` returns 0 (Pitfall 8: no shell-spawning `exec` — only `execFileSync`).
     - Each probe file exports a single `Probe`-typed constant.
     - `http-crossref-ping.ts` never touches the live network — only MockAgent through the 02-00 cassette infrastructure (D-03(d)).
@@ -1249,7 +1261,7 @@ export async function getOpenAlexApiKey(opts): Promise<string | undefined>  // r
     - All 13+ tests pass.
     - `grep -v '^[[:space:]]*//' bin/lib/doctor/probes/*.ts | grep -cE "writeFile|atomicWriteFile|withLock|mkdir"` returns 0.
     - `grep -cE 'exec\(' bin/lib/doctor/probes/*.ts` returns 0 (only `execFileSync` permitted).
-    - `runtime-config-presence.ts` is the ONLY probe that calls `loadRuntimeConfig` (`grep -lE 'loadRuntimeConfig' bin/lib/doctor/probes/*.ts` lists exactly `runtime-config-presence.ts`).
+    - `runtime-config-presence.ts` calls `loadCapabilityFacts` (not `loadRuntimeConfig` directly — cross-AI cycle-2 HIGH #2): `grep -l 'loadCapabilityFacts' bin/lib/doctor/probes/*.ts` lists exactly `runtime-config-presence.ts`, AND `grep -l 'loadRuntimeConfig' bin/lib/doctor/probes/*.ts` returns no probe files (the helper is the single composition site). 02-07 Case A asserts tier-fact equivalence end-to-end against this shared source.
     - DOCT-07 probe output detail JSON contains `apiKeyEnv` and `present` keys only — never any concatenation of the resolved value.
     - `http-crossref-ping.ts` is structurally SKIP-only in Phase 2: `grep -c "tests/cassettes\\|tests/" bin/lib/doctor/probes/http-crossref-ping.ts` returns 0 (cross-AI review HIGH fix — no production-tree imports from tests/). The probe interface (id + run signature) is stable so 02-07 fact-extraction works unchanged.
   </acceptance_criteria>
@@ -1520,7 +1532,7 @@ After all three tasks:
 6. `node scripts/run-tests.mjs tests/cli-verbs.test.ts tests/cli-stubs.test.ts tests/doctor-exit-code.test.ts tests/doctor-shape.test.ts tests/doctor-probes.test.ts` — all green.
 7. `npm run lint` + `npm run typecheck` pass.
 8. `grep -v '^[[:space:]]*//' bin/lib/doctor/**/*.ts | grep -cE "writeFile|atomicWriteFile|withLock|mkdir"` returns 0 (D-19).
-9. `grep -lE 'loadRuntimeConfig' bin/lib/doctor/probes/*.ts` lists exactly `bin/lib/doctor/probes/runtime-config-presence.ts` (only DOCT-07 calls the chokepoint).
+9. `grep -lE 'loadCapabilityFacts' bin/lib/doctor/probes/*.ts` lists exactly `bin/lib/doctor/probes/runtime-config-presence.ts` (cross-AI cycle-2 HIGH #2: DOCT-07 delegates to the shared `bin/lib/capabilities.ts::loadCapabilityFacts` helper rather than calling `loadRuntimeConfig` directly, so both tiers compose facts from a SINGLE source). `grep -lE 'loadRuntimeConfig' bin/lib/doctor/probes/*.ts` returns no probe files.
 10. `grep -cE 'exec\(' bin/lib/doctor/probes/*.ts` returns 0 (Pitfall 8 — only `execFileSync`).
 11. **Sentinel-value leak test** (in `tests/doctor-probes.test.ts`) passes: `process.env.OPENALEX_API_KEY = 'sk-test-LEAK-SENTINEL-12345'` → `runtimeConfigPresenceProbe.run()` → `r.detail!.includes('sk-test-LEAK-SENTINEL-12345') === false`.
 12. `http-crossref-ping.ts` is structurally SKIP-only in Phase 2 — `grep -c "tests/" bin/lib/doctor/probes/http-crossref-ping.ts` returns 0 (cross-AI review HIGH fix: production code MUST NOT import from tests/). Probe interface is stable so 02-07 fact extraction is unaffected.
