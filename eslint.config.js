@@ -154,6 +154,21 @@ export default [
     },
   },
 
+  // === atomic-write + thin-shim EXEMPTION for tests/lint-thin-shim.test.ts (Phase 2, Wave 1) ===
+  // tests/lint-thin-shim.test.ts (Test 2) MUST write a temporary copy of the
+  // D-09 fixture under mcp/ so the file-scoped no-restricted-imports rule fires
+  // (the rule targets mcp/**/*.ts; the original fixture lives under tests/fixtures/).
+  // This write is a test-only helper action, NOT production code — it is cleaned up
+  // in a try/finally block immediately after the ESLint run.
+  // The D-07 writeFile chokepoint (CallExpression[callee.property.name='writeFile'])
+  // correctly fires on this usage; this exemption acknowledges it is deliberate.
+  {
+    files: ['tests/lint-thin-shim.test.ts'],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
+
   // === D-09: MCP thin-shim chokepoint (Phase 2) ===
   // mcp/**/*.ts handlers MUST NOT import fs / fs/promises / node:fs /
   // node:fs/promises directly. Business logic must live in bin/lib/* so
