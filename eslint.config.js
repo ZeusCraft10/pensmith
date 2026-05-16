@@ -118,7 +118,12 @@ export default [
   // to redirect pensmithHttpCacheDir() into a per-test tmpdir for isolation.
   // Both exemptions are scoped to these test files only.
   {
-    files: ['tests/http.test.ts', 'tests/http-cache.test.ts', 'tests/retry.test.ts'],
+    files: [
+      'tests/http.test.ts',
+      'tests/http-cache.test.ts',
+      'tests/http-cache-no-header-leak.test.ts',
+      'tests/retry.test.ts',
+    ],
     rules: {
       'no-restricted-imports': 'off',
       'no-restricted-syntax': 'off',

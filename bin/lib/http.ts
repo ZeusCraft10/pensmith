@@ -342,13 +342,45 @@ async function readCache(key: string, ttlMs: number): Promise<HttpResponse | nul
   return out;
 }
 
+// FLAG-06 / CR-03: cache files persist for up to 7 days and may be tailed
+// by debugging tools / log shippers / cloud-sync clients. Raw response
+// headers commonly carry sensitive material (Set-Cookie session tokens,
+// Authorization echoes for some misconfigured proxies, vendor-specific
+// debug headers like x-amz-* / x-aws-* / x-azure-*). We MUST persist only
+// the small set of headers needed for cache-replay semantics.
+//
+// Allowlist sources: HTTP/1.1 caching primitives (etag, last-modified,
+// cache-control, date, retry-after) + content negotiation (content-type) +
+// rate-limit budget hints the verifier consumes on cache replay
+// (x-ratelimit-remaining, x-ratelimit-reset). Anything else gets dropped.
+const CACHE_HEADER_ALLOWLIST: ReadonlySet<string> = new Set([
+  'content-type',
+  'etag',
+  'last-modified',
+  'cache-control',
+  'date',
+  'retry-after',
+  'x-ratelimit-remaining',
+  'x-ratelimit-reset',
+]);
+
+function filterHeadersForCache(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) {
+    if (CACHE_HEADER_ALLOWLIST.has(k.toLowerCase())) out[k] = v;
+  }
+  return out;
+}
+
 async function writeCache(key: string, response: HttpResponse): Promise<void> {
   const file = path.join(pensmithHttpCacheDir(), `${key}.json`);
   const envelope: CacheEnvelope = {
     savedAt: new Date().toISOString(),
     response: {
       status: response.status,
-      headers: response.headers,
+      // CR-03: ONLY allowlisted headers go to disk. Set-Cookie / Authorization /
+      // x-amz-* / opaque session tokens are dropped here, not after the fact.
+      headers: filterHeadersForCache(response.headers),
       body: response.body,
     },
   };
