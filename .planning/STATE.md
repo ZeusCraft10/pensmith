@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 2 discuss-phase complete. CONTEXT.md (.planning/phases/02-tier-shells-doctor-tier-contract-gate/02-CONTEXT.md) and DISCUSSION-LOG.md committed at 18472bb. 24 decisions locked (D-01..D-24) across 7 areas. Phase 1 closed prior (ecc8f4b) with 5/5 SC PASS.
-last_updated: "2026-05-16T07:12:18.390Z"
-last_activity: 2026-05-16 -- Phase 0 + Phase 1 learnings extracted (00-LEARNINGS.md, 01-LEARNINGS.md)
+stopped_at: Phase 2 plan 02-00 (review-cleanup) complete. parseRetryAfter wired; citty dep installed; doctor-output.md locked; hooks/.gitkeep created. Next plan is 02-01.
+last_updated: "2026-05-16T09:38:00.000Z"
+last_activity: 2026-05-16 -- Phase 2 plan 02-00 executed (3 tasks, 8 files, commits 8d5ac8e/deff862/e651435)
 progress:
   total_phases: 11
   completed_phases: 2
   total_plans: 28
-  completed_plans: 18
-  percent: 64
+  completed_plans: 19
+  percent: 68
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **DISCUSSED** (CONTEXT.md + DISCUSSION-LOG.md committed)
-Plan: Phase 2 discuss-phase complete; next is `/gsd-plan-phase 2`
-Status: Ready to execute
-Last activity: 2026-05-16 -- Phase 0 + Phase 1 learnings extracted (00-LEARNINGS.md, 01-LEARNINGS.md)
+Plan: 02-00 complete (3/10 plans in Phase 2); next is 02-01
+Status: Executing Phase 2
+Last activity: 2026-05-16 -- 02-00 review-cleanup complete (8d5ac8e/deff862/e651435)
 
 Progress: [██████░░░░] 57%  (Phase 0 done; Phase 1 closed; Phase 2 discussed — plans pending)
 
@@ -108,6 +108,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [01-13] defaults() seeds an anthropic provider entry — W7 RuntimeConfigSchema's providers has a .refine requiring ≥1 provider, so `RuntimeConfigSchema.parse({})` would fail without seed. anthropic with apiKeyEnv='ANTHROPIC_API_KEY' is the production-typical first provider; callers overwrite via saveRuntimeConfig
 - [01-13] Test fixtures adapted per Plan-vs-Schema reconciliation — W7 ProviderSchema requires `name: z.enum(['anthropic','openai'])` in addition to `apiKeyEnv`; test fixtures here include the `name` field. Same reconciliation pattern as 01-12 (refs typing)
 - [01-13] gpt-5 set equal to gpt-4o per RESEARCH §pricing-pending — placeholder so budget assertions don't accidentally rely on a divergent value while the official rate is still unannounced. When OpenAI publishes the rate, bump the entry and reference the vendor page in the commit message
+- [02-00] parseRetryAfter is a pure export in retry.ts (not inlined in http.ts) — matches fullJitterDelayMs shape; independently unit-testable per D-01
+- [02-00] serverRetryDelay closure inside wrapped fn — cleanest Retry-After pattern given retry() fixed-base signature; maxAttempts/baseMs/capMs unchanged (T-02-00-02 preserved)
+- [02-00] SHA-256 hash-pin (not substring match) for doctor-output.md — substring match silently allows inserted lines or rewritten copy outside matched fragments (D-18)
+- [02-00] DOCT-05/wiring-smoke absent from doctor-output.md — Phase 3 deferral enforced by anti-drift assertion in repo-files.test.ts (D-04)
 
 ### Pending Todos
 
@@ -128,6 +132,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-14T12:00:00.000Z
-Stopped at: Phase 2 discuss-phase complete. CONTEXT.md (.planning/phases/02-tier-shells-doctor-tier-contract-gate/02-CONTEXT.md) and DISCUSSION-LOG.md committed at 18472bb. 24 decisions locked (D-01..D-24) across 7 areas. Phase 1 closed prior (ecc8f4b) with 5/5 SC PASS.
-Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-CONTEXT.md (next_action: `/gsd-plan-phase 2`)
+Last session: 2026-05-16T09:38:00.000Z
+Stopped at: Phase 2 plan 02-00 complete. parseRetryAfter wired (D-01), citty dep installed, doctor-output.md locked (D-18), hooks/.gitkeep created. 240 tests pass, lint+typecheck clean. Next: 02-01 thin-shim lint chokepoint.
+Resume file: .planning/phases/02-tier-shells-doctor-tier-contract-gate/02-01-PLAN.md (next_action: execute 02-01)

@@ -99,7 +99,7 @@ Plans:
 
 Plans:
 
-- [ ] 02-00-PLAN.md (wave 0) -- Carry-forward + Wave 0 prep: parseRetryAfter extracted into bin/lib/retry.ts (D-01), citty^0.2.2 + zod dep, references/doctor-output.md locked copy (sha256-pinned), hooks/.gitkeep, tests/repo-files.test.ts extended
+- [x] 02-00-PLAN.md (wave 0) -- Carry-forward + Wave 0 prep: parseRetryAfter extracted into bin/lib/retry.ts (D-01), citty^0.2.2 + zod dep, references/doctor-output.md locked copy (sha256-pinned), hooks/.gitkeep, tests/repo-files.test.ts extended — COMPLETE 2026-05-16 (8d5ac8e/deff862/e651435)
 - [ ] 02-01-PLAN.md (wave 1) -- D-09 thin-shim AST lint chokepoint + red-team fixture (ARCH-18)
 - [ ] 02-02-PLAN.md (wave 1) -- D-10 mcp-no-network AST lint chokepoint + red-team fixture (ARCH-18)
 - [ ] 02-03-PLAN.md (wave 1) -- D-12 capabilities-no-leak AST lint chokepoint + red-team fixture (ARCH-18)
