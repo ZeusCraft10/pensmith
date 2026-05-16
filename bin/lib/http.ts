@@ -182,6 +182,7 @@ export interface FetchOptions {
 //   TTL table (D-30)
 // ============================================================
 const ONE_DAY_MS = 24 * 3_600_000;
+const ONE_HOUR_MS = 3_600_000;
 const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
   crossref: 7 * ONE_DAY_MS,
   openalex: 7 * ONE_DAY_MS,
@@ -190,6 +191,15 @@ const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
   unpaywall: 1 * ONE_DAY_MS,
   generic: 1 * ONE_DAY_MS,
 };
+// WR-07 (cross-AI review): 404 responses are cached so the verifier doesn't
+// re-fetch obvious negatives on every pass. But a "not found" verdict at
+// crossref/openalex can flip to "found" as soon as the publisher's
+// metadata pipeline indexes the record — a 7-day TTL would cause the
+// verifier to keep emitting FABRICATED on a DOI that just landed.
+// 1 hour is short enough to recover from publisher-side indexing latency
+// (typically minutes) but long enough that a stuck verifier pass doesn't
+// re-hit the origin every second.
+const NEGATIVE_RESPONSE_TTL_MS = ONE_HOUR_MS;
 
 // ============================================================
 //   Per-source TokenBucket (ARCH-13)
@@ -331,7 +341,13 @@ async function readCache(key: string, ttlMs: number): Promise<HttpResponse | nul
   if (!isValidCacheEnvelope(parsed)) return null;
   const envelope: CacheEnvelope = parsed;
   const ageMs = Date.now() - new Date(envelope.savedAt).getTime();
-  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > ttlMs) return null;
+  // WR-07: clamp the effective TTL down to NEGATIVE_RESPONSE_TTL_MS for 404s.
+  // 404 means "this URL did not resolve at fetch time" — a verdict that
+  // can flip when the upstream catalog indexes a freshly-deposited record.
+  // Positive responses (200) keep the per-source TTL (7d for crossref, etc.).
+  const effectiveTtlMs =
+    envelope.response.status === 404 ? Math.min(ttlMs, NEGATIVE_RESPONSE_TTL_MS) : ttlMs;
+  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > effectiveTtlMs) return null;
   const out: HttpResponse = {
     status: envelope.response.status,
     headers: envelope.response.headers,
