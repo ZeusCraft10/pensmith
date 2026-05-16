@@ -38,6 +38,9 @@ jobs:
       - name: Build (produces dist/mcp/server.js for manifest validation)
         run: npm run build
 
+      - name: Tier contract (Tier 1 ↔ Tier 2 equivalence — D-23 layer 1)
+        run: npm run test:tier-contract
+
       - run: npm test
 
       - name: Validate plugin manifests
