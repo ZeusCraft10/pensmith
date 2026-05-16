@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: phase_discussed
-stopped_at: Phase 2 CONTEXT.md + DISCUSSION-LOG.md committed (18472bb); 7 areas discussed, 24 decisions locked (D-01..D-24); awaiting /gsd-plan-phase 2
-last_updated: "2026-05-14T12:00:00.000Z"
-last_activity: 2026-05-14 -- Phase 2 discuss-phase complete. 7 areas: carry-forwards triage / exit criteria-DoD / MCP server surface / MCP auth-trust boundary / Tier-2 CLI dispatch / doctor output / tier-contract test scaffolding. 24 decisions locked. Commit 18472bb.
+status: executing
+stopped_at: Phase 2 discuss-phase complete. CONTEXT.md (.planning/phases/02-tier-shells-doctor-tier-contract-gate/02-CONTEXT.md) and DISCUSSION-LOG.md committed at 18472bb. 24 decisions locked (D-01..D-24) across 7 areas. Phase 1 closed prior (ecc8f4b) with 5/5 SC PASS.
+last_updated: "2026-05-16T07:12:18.390Z"
+last_activity: 2026-05-16 -- Phase 2 planning complete
 progress:
   total_phases: 11
   completed_phases: 2
-  total_plans: 32
+  total_plans: 28
   completed_plans: 18
-  percent: 57
+  percent: 64
 ---
 
 # Project State
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 Phase: 2 of 11 (Tier shells + doctor + tier-contract gate) — **DISCUSSED** (CONTEXT.md + DISCUSSION-LOG.md committed)
 Plan: Phase 2 discuss-phase complete; next is `/gsd-plan-phase 2`
-Status: Phase 2 CONTEXT.md committed (18472bb) — 24 decisions locked (D-01..D-24) across 7 areas: carry-forwards triage, exit criteria/DoD, MCP server surface, MCP auth/trust boundary, Tier-2 CLI dispatch, doctor output, tier-contract test scaffolding. Phase 1 verification PASS (5/5 SCs); fix commits dc3e944 / 91d2f5a / e333e40 / 09d06fb; review docs bf9421f / 3fa69df.
-Last activity: 2026-05-14 -- Phase 2 discuss-phase complete. Locks include parseRetryAfter() split (D-01), 02-00-review-cleanup as first plan (D-02), DOCT-05 wiring-smoke + Phase 3 follow-up (D-03/D-04), stdio-only MCP locked by lint (D-10), tier-contract spawns mcp/server.js (D-11), 4-layer hard merge gate (D-22..D-24).
+Status: Ready to execute
+Last activity: 2026-05-16 -- Phase 2 planning complete
 
 Progress: [██████░░░░] 57%  (Phase 0 done; Phase 1 closed; Phase 2 discussed — plans pending)
 
