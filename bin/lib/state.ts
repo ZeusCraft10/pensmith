@@ -59,7 +59,14 @@ import { randomUUID } from 'node:crypto';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { loadAndMigrate } from './migrations/loader.js';
-import { Schema as StateSchema, CURRENT_STATE_VERSION, type State } from './schemas/state.js';
+import {
+  Schema as StateSchema,
+  CURRENT_STATE_VERSION,
+  type State,
+  type SectionState,
+  type SectionStatus,
+  type VerificationVerdict,
+} from './schemas/state.js';
 import { openSessionLog, type SessionLogger } from './session-log.js';
 
 // ---------------------------------------------------------------------------
@@ -291,4 +298,72 @@ export async function updateState(
   });
 
   return next;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 state-mutation helpers (D-13 / TIER-02).
+// Each is a typed convenience wrapper over updateState. Business logic
+// is HERE (bin/lib), not in mcp/ — handlers in mcp/tools.ts are thin shims
+// that call these and JSON.stringify the result.
+// ---------------------------------------------------------------------------
+
+/**
+ * Initialise a new section row in state.sections. Idempotent per D-08:
+ * re-init on an existing section number returns the prior state unchanged.
+ */
+export async function initSection(
+  paperRoot: string,
+  n: number,
+  slug: string,
+): Promise<State> {
+  return updateState(paperRoot, (prev) => {
+    const sections = prev.sections ?? [];
+    if (sections.some((s) => s.n === n)) return prev; // idempotent (D-08)
+    return { ...prev, sections: [...sections, { n, slug, state: 'planned' as SectionState, status: 'pending' as SectionStatus }] };
+  });
+}
+
+/**
+ * Transition section[n].state to `toState`. Idempotent at the natural-key
+ * level (same args yield same end state).
+ */
+export async function advanceSection(
+  paperRoot: string,
+  n: number,
+  toState: SectionState,
+): Promise<State> {
+  return updateState(paperRoot, (prev) => ({
+    ...prev,
+    sections: (prev.sections ?? []).map((s) => (s.n === n ? { ...s, state: toState } : s)),
+  }));
+}
+
+/**
+ * Update section[n].status. Idempotent.
+ */
+export async function setSectionStatus(
+  paperRoot: string,
+  n: number,
+  status: SectionStatus,
+): Promise<State> {
+  return updateState(paperRoot, (prev) => ({
+    ...prev,
+    sections: (prev.sections ?? []).map((s) => (s.n === n ? { ...s, status } : s)),
+  }));
+}
+
+/**
+ * Persist a verifier verdict on section[n].lastVerification.
+ */
+export async function recordVerification(
+  paperRoot: string,
+  n: number,
+  verdict: VerificationVerdict,
+): Promise<State> {
+  return updateState(paperRoot, (prev) => ({
+    ...prev,
+    sections: (prev.sections ?? []).map((s) =>
+      s.n === n ? { ...s, lastVerification: verdict } : s,
+    ),
+  }));
 }
