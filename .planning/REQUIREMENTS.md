@@ -95,7 +95,8 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [ ] **RSCH-02**: Generate 5–10 focused queries from the assignment
 - [ ] **RSCH-03**: `pensmith-source-researcher` runs in parallel per query (Tier 1) / sequentially (Tier 2)
 - [ ] **RSCH-04**: Source adapters in `bin/lib/sources.ts` for OpenAlex, Crossref, arXiv, PubMed, Semantic Scholar, Unpaywall, Retraction Watch
-- [ ] **RSCH-05**: BYO PDF ingestion — `pdf-parse` (pinned exact) with `pymupdf` shellout fallback; metadata via Crossref hydration
+- [ ] **RSCH-05a**: Phase 3 subset — `pdf-parse` (pinned exact, wrapped by `bin/lib/pdf-text.ts` chokepoint) extracts text from Unpaywall-resolved OA PDFs for Pass 3 quote verification. NO BYO PDF; NO `pymupdf` fallback; NO Crossref hydration of arbitrary PDFs — those stay RSCH-05b (Phase 8). Split per Phase 3 CONTEXT D-06/D-07.
+- [ ] **RSCH-05b**: Phase 8 superset — BYO PDF ingestion (user-supplied arbitrary PDFs); `pymupdf` shellout fallback when `pdf-parse` fails; metadata hydration via Crossref. Builds on the RSCH-05a chokepoint from Phase 3.
 - [ ] **RSCH-06**: Zotero MCP source provider when detected and authenticated
 - [ ] **RSCH-07**: `pensmith-source-evaluator` scores, dedupes, tiers candidates
 - [ ] **RSCH-08**: Approval gate to prune / approve / add sources before research is locked
@@ -296,6 +297,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | RSCH-02 | Phase 3 | Pending |
 | RSCH-03 | Phase 3 | Pending |
 | RSCH-04 | Phase 3 | Pending |
+| RSCH-05a | Phase 3 | Pending (Phase-3 subset per CONTEXT D-06; full BYO PDF + pymupdf stays RSCH-05b in Phase 8) |
 | RSCH-07 | Phase 3 | Pending |
 | RSCH-08 | Phase 3 | Pending |
 | RSCH-09 | Phase 3 | Pending |
@@ -367,7 +369,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | LIB-05 | Phase 8 | Pending |
 | ERGO-05 | Phase 8 | Pending |
 | ERGO-06 | Phase 8 | Pending |
-| RSCH-05 | Phase 8 | Pending |
+| RSCH-05b | Phase 8 | Pending (Phase-8 superset: BYO PDF + pymupdf shellout + Crossref hydration; builds on RSCH-05a) |
 | STYL-01 | Phase 8 | Pending |
 | STYL-02 | Phase 8 | Pending |
 | STYL-03 | Phase 8 | Pending |
