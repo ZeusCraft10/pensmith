@@ -121,8 +121,23 @@ Plans:
   3. `tests/fixtures/known-bad-quotes.json` has 10+ NOT_FOUND fixtures of which ≥5 carry real PDF artifacts (ligature, soft hyphen, smart quotes, ellipsis variant, diacritic), and the verifier flags 10/10 (Pass 3 deterministic).
   4. The section-isolation mtime test asserts that re-doing section 3 leaves any other extant sections' mtimes unchanged — section state lives only under `.paper/sections/<NN-slug>/`.
   5. `tier-contract.test.js` is green for every workflow body added in this slice (intake, research, outline, plan-section, write-section, verify-section).
-**Plans**: TBD
+**Plans**: see plan list below
 **UI hint**: no
+
+**Plans:** 10 plans
+
+Plans:
+- [ ] 03-00-PLAN.md (wave 0) -- Test bootstrap: pdf-parse@1.1.1 + citation-js@0.7.22 + yaml@^2 pinned, ESLint chokepoints extended, 14 new test files + 5 extensions, 3 fixture artifacts (assignment.txt, known-bad-citations.json, known-bad-quotes.json), DOCT-05 anti-drift removed
+- [ ] 03-01-PLAN.md (wave 1) -- bin/lib/normalize.ts + bin/lib/fuzzy.ts hand-rolled (NFKC, JW 0.92/0.85, Levenshtein-substring, zero-dep) (D-11, VRFY-02/04)
+- [ ] 03-02-PLAN.md (wave 1) -- bin/lib/pdf-text.ts + bin/lib/citations.ts chokepoints (D-06 sub-path import workaround, D-19 citation-js lazy plugin pattern) + synthetic PDF fixtures
+- [ ] 03-03-PLAN.md (wave 2) -- 4 zod schemas (SourceCandidate D-14, Handoff D-17/18, PlanFrontmatter D-04/10, slimmed State D-08) + CURRENT_STATE_VERSION 1->2 + v1->v2 migration wake + state.ts writeBack + paths.ts section helpers (T-3-12 slug regex) + runtime.ts getS2ApiKey (D-16, T-01-07)
+- [ ] 03-04-PLAN.md (wave 3) -- 7 source adapters (crossref/openalex/arxiv/pubmed/semanticscholar/unpaywall/retraction-watch) + http-mock cassette loader + 8 committed cassettes (D-23/24/25)
+- [ ] 03-05-PLAN.md (wave 4) -- 8 hash-pinned prompts in templates/prompts/ + apa.csl + disciplines.json preset + 9 new hash-pins (D-12, D-13, D-19, INTK-04)
+- [ ] 03-06-PLAN.md (wave 4) -- 6 workflow bodies (intake/research/outline/plan/write/verify) with capability_checks + outline approval gate + retraction cross-check + deterministic-first verify (PRD non-negotiables)
+- [ ] 03-07-PLAN.md (wave 4) -- bin/pensmith.ts 7 verb loaders + 6 bin/cli/*.ts entrypoints + drafter-input chokepoint (T-3-10) + prompt-loader (hash-validated at runtime) + mcp/server.ts 3 new tool handlers
+- [ ] 03-08-PLAN.md (wave 5) -- bin/lib/handoff.ts (atomic write, 5KB cap, withLock) + bin/lib/frontmatter.ts (yaml@^2 Document API round-trip safe, D-08) + pre-compact hook + post-tool-use throttle
+- [ ] 03-09-PLAN.md (wave 5) -- DOCT-05 probe + references/doctor-output.md re-pinned + 6 new tier-contract cases + section-isolation/known-bad-* tests green + cassette-refresh.yml weekly cron + CONTRIBUTING.md docs + human-verify checkpoint (SC-1)
+
 
 ### Phase 4: Breadth — N sections + compile + wave scheduling
 **Goal**: Scale from one section to N. Wave scheduler honors `depends_on`; compile concatenates sections in outline order, runs cross-section smoothing read-only on section files, produces consistency flags (never edits), and refuses on any FABRICATED / MIS-CITED / quote NOT_FOUND. Stable section numbering with letter suffixes is locked.
