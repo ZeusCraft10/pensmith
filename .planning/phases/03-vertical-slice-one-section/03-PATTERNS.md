@@ -707,7 +707,7 @@ test('templates/citation-styles/apa.csl hash-pin (CITE-01 / D-19)', () => {
 
 **Analog:** `bin/lib/verbs.json` (committed JSON used by code at runtime)
 
-**Pattern:** JSON array of 8 discipline preset objects (humanities/social-sci/STEM/medicine/law/business/CS/general). Consumer = `bin/cli/new.ts` (the intake CLI) reads via `JSON.parse(readFileSync(...))` once at module load.
+**Pattern:** JSON array of 9 effective discipline preset objects (humanities/social-sci/STEM/medicine/law/business/CS/education/general; "general" being the fallback). Consumer = `bin/cli/intake.ts` (canonical intake CLI per CYCLE-2 M-1; `new` is a dispatcher alias only) reads via `JSON.parse(readFileSync(...))` once at module load.
 
 **What to copy:** the JSON-loaded-at-module-init discipline from `bin/lib/verbs.ts` reading `UX02_VERBS` (referenced in `bin/pensmith.ts` line 20).
 
