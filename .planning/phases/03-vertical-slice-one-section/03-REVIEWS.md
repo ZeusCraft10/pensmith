@@ -1,8 +1,9 @@
 ---
 phase: 3
-cycle: 2
+cycle: 3
 reviewers: [gemini, codex, claude-in-session]
-reviewed_at: 2026-05-21T13:15:00Z
+reviewed_at: 2026-05-21T15:00:00Z
+head_at_review: 8a9dd87
 plans_reviewed:
   - 03-00-PLAN.md
   - 03-01-PLAN.md
@@ -14,18 +15,32 @@ plans_reviewed:
   - 03-07-PLAN.md
   - 03-08-PLAN.md
   - 03-09-PLAN.md
-runtime_skipped: "claude CLI (running inside Claude Code — skipped for independence; in-session Claude review provided instead)"
-unavailable_clis: [claude-cli, cursor-agent, qwen, coderabbit]
-opencode_status: "TIMEOUT — opencode CLI ran for 1463s and produced only a 189-byte stub before being terminated; no usable review output. Excluded from this cycle."
-prior_cycle_findings: 24
+runtime_skipped: "claude CLI (running inside Claude Code — skipped for independence)"
+unavailable_clis: [claude-cli, cursor-agent, qwen, coderabbit, opencode]
+opencode_status: "FAILED — opencode 1.1.34 hung on stdin pipe with empty output after >5 min; terminated. Excluded from cycle-3 review."
+cursor_status: "UNAVAILABLE — only Cursor IDE GUI installed; cursor-agent CLI not on PATH. Excluded."
+cycle3_summary:
+  unresolved_high_count: 2
+  unresolved_high_ids: ["NEW-H-1 citations.ts Cite export", "NEW-H-2 frontmatter.ts API inconsistency (Plan 03 Task 3.2 vs 3.4)"]
+  cycle2_high_status:
+    H-1_frontmatter_wave_order: PARTIALLY RESOLVED (worst-case — Codex flags Plan 03 Task 3.2 vs 3.4 API contradiction within same plan)
+    H-2_author_shape: PARTIALLY RESOLVED (worst-case — Codex flags fixtures missing D-14 fields and doi:null vs optional-string)
+    H-3_handoff_d17_schema: PARTIALLY RESOLVED (worst-case — Codex flags stale pre-replace snippets in Plan 03)
+    H-4_pass1_pass3_signature: FULLY RESOLVED (both reviewers agree)
 note: |
-  Cycle 2 convergence review of AMENDED plans (commit b3e6230) that addressed the 24
-  findings from cycle 1 (commit 7d70e85). Stricter-than-default stop rule: surfaces
-  MEDIUM/LOW concerns that reveal real plan gaps, not just HIGH.
+  Cycle 3 convergence review of cycle-2-amended plans (commit 8a9dd87). Cycle-2 replan
+  claimed to fix all 4 HIGHs + 9 MEDIUMs + 3 LOWs from cycle 2. This cycle verifies
+  those claims and surfaces new concerns introduced by the cycle-2 amendments.
 
-  All three reviewers (Gemini, Codex, in-session Claude) independently identified the
-  SAME critical wave-ordering break (Plan 03 ↔ Plan 08 frontmatter.ts), giving high
-  confidence in that finding.
+  Both external reviewers (Gemini, Codex) independently identified citations.ts
+  missing-Cite-export as a HIGH compile blocker. Codex additionally surfaces an
+  internal Plan 03 API contradiction (Task 3.2 expects updateFrontmatter(path,merge)
+  while Task 3.4 defines updateFrontmatter(text,mutator):string).
+
+  Two CYCLE-2 HIGHs (H-2, H-3) were technically addressed at the headline level but
+  Codex found residual contradictions (stale snippet text, fixture schema drift)
+  worth folding in on the conservative worst-case principle. H-4 is fully closed
+  by both reviewers. Estimated cycle-4 close-out: ~1 hour of focused edits.
 ---
 
 # Cross-AI Plan Review — Phase 3 Cycle 2 (Vertical Slice Through One Section)
@@ -396,3 +411,321 @@ Reviewers' resolution counts:
 The cycle-2 amendments demonstrably solved the cycle-1 *conceptual* gaps but introduced *mechanical synchronization* errors across plan boundaries. None of the new HIGH concerns are architectural; all are mechanical syncs that one focused replan-phase can close. Estimated cycle-3 close-out work: 1-2 hours.
 
 If cycle 3 fully closes H-1 through H-4 plus M-1 through M-9, Phase 3 is execution-ready at **LOW** risk.
+
+---
+
+# Cycle 3 Review — Convergence Loop Iteration 3
+
+**Reviewed at:** 2026-05-21T15:00:00Z
+**HEAD at review:** 8a9dd87 (cycle-2 replan — cross-plan sync H-1..H-4 + MEDIUMs/LOWs, 635 insertions across 9 files)
+**Reviewers invoked:** gemini (0.42.0), codex (codex-cli 0.132.0)
+**Skipped CLI:** claude (running inside Claude Code — skipped for independence)
+**Unavailable CLIs this cycle:** cursor-agent (only Cursor IDE GUI installed, not the cursor-agent CLI); opencode (1.1.34 — hung on stdin pipe with no LLM output after >5 min, terminated); qwen, coderabbit (not installed)
+
+This cycle re-reviews the cycle-2-amended plans. The cycle-2 replan claimed to resolve 4 HIGHs (H-1..H-4) + 9 MEDIUMs + 3 LOWs from the cycle-2 review. Reviewers were asked to (a) verify each cycle-2 fix item is truly fixed, (b) surface NEW concerns introduced by the cycle-2 amendments (esp. the 285-line Plan 08 assembleHandoff rewrite), and (c) apply the stricter stop rule — surface MEDIUM/LOWs that reveal real gaps.
+
+---
+
+## Gemini Review (Cycle 3)
+
+# Phase 3 Cycle 3 Review — Convergence Loop Iteration 3
+
+The Cycle 2 amendments have significantly strengthened the plans, successfully addressing the wave-ordering criticals (H-1) and normalizing the author string format across the entire pipeline (H-2). The D-09 migration is now data-safe and idempotent (Plan 03), and the verification signatures are largely aligned (H-4). However, a few mechanical synchronization errors remain that will block compilation or lead to data loss in the verification loop.
+
+### 1. Cycle-2 HIGH Resolution Verification
+
+*   **H-1: `frontmatter.ts` wave-ordering — FULLY RESOLVED**
+    *   `frontmatter.ts` is now created in **Plan 03 Task 3.4** (Wave 2) and consumed by the D-09 migration in Task 3.2. **Plan 08** correctly identifies itself as a consumer rather than a producer (Artifacts list, line 1863).
+*   **H-2: `SourceCandidate` author shape propagation — FULLY RESOLVED**
+    *   **Plan 03 Task 3.1** (line 1357) locks `authors: z.array(z.string())`.
+    *   **Plan 04 Task 4.2** (line 1650) enforces adapters emit `string[]` in `"Family, Given"` format.
+    *   **Plan 07 Task 7.1** (line 1883) `DrafterInputSchema` validates the `string[]` shape.
+    *   **Plan 07 Task 7.2** (line 1974) `runPass1` normalizes to `string[]` at the boundary and uses `firstAuthorSurname` for comparison.
+*   **H-3: `HANDOFF.json` D-17 canonical schema — FULLY RESOLVED**
+    *   **Plan 03 Task 3.1** (line 1370) and **Plan 08 Task 8.1** (line 1864) are now in sync on the D-17 canonical shape (`schema_version: 1`, `section_pointers`, `breadcrumbs`). The older `schemaVersion` / `pointers` keys have been removed.
+*   **H-4: `runPass1`/`runPass3` signature lock — FULLY RESOLVED**
+    *   **Plan 07 Task 7.2** (line 1960, 1990) now exports `runPass1Unit` and `runPass3Unit` specifically for fixture testing.
+    *   **Plan 09 Task 9.2** (line 1989, 2000) correctly imports and calls these unit-helpers, matching the fixture data shapes.
+
+### 2. Cycle-2 MEDIUM/LOW Resolution Verification
+
+*   **deep-equal.ts task — FULLY RESOLVED**: Added in **Plan 03 Task 3.5**.
+*   **Plan 06 acceptance unit-only — FULLY RESOLVED**: Tasks 6.1/6.2 ACs updated to "unit-green-only" (static invariants).
+*   **SENSITIVE_HEADERS centralized — FULLY RESOLVED**: Centralized in `bin/lib/http-mock.ts` per **Plan 04 Task 4.1**.
+*   **Dormant-prompts grep extended — FULLY RESOLVED**: Added to **Plan 06 Task 6.2** AC (line 1846).
+*   **Citekey collision base-26 — FULLY RESOLVED**: Added to `bin/lib/bibtex-write.ts` in **Plan 04 Task 4.4**.
+*   **Canonical `intake.ts` — FULLY RESOLVED**: canonical name used in **Plan 07 Task 7.2** with `new` as alias.
+*   **Plan 09 Sentinel replacement — FULLY RESOLVED**: Explicitly handled in **Plan 09 Task 9.3.5**.
+*   **Plan 05 "9 keys" sweep — FULLY RESOLVED**: AC for **Task 5.3** (line 1797) updated to "EXACTLY 9 keys".
+*   **MIDDLE_SECTION location — FULLY RESOLVED**: Defined inline in `tier-contract.test.ts` (Plan 00 Task 0.4).
+*   **Plan 00 task-count — FULLY RESOLVED**: Updated to 6 in Plan 00 Objective.
+*   **Stale-lock recovery test — FULLY RESOLVED**: Added to **Plan 08 Task 8.1** AC (line 1883).
+*   **Plan 04 adapter BibTeX examples — FULLY RESOLVED**: Snippets updated to `authors: string[]`.
+
+### 3. NEW Concerns Introduced by Cycle-2 Amendments
+
+*   **HIGH: `bin/lib/citations.ts` (Plan 02) missing `Cite` export.**
+    *   **Plan 02 Task 2.2** (line 1121) defines artifacts with `exports: ["parseBibtex", "renderApa"]`. However, **Plan 04 Task 4.4** (line 1672) and **Plan 09 Task 9.2** (line 1982) try to import `Cite` from `./citations.js`. Compilation will fail.
+    *   **Resolution:** Add `Cite` to the export list in Plan 02 Task 2.2.
+*   **MEDIUM: `tests/repo-files.test.ts` sentinel replacement shape mismatch.**
+    *   **Plan 00 Task 0.3** (line 1406) scaffolds `PENDING_HASH_PINS` as an **array** of objects and iterates with a loop. **Plan 09 Task 9.3.5** (line 2030) shows the replacement of an **object** map. The replacement instructions in Plan 09 will not work on the file structure created in Plan 00.
+    *   **Resolution:** Align Plan 09 Task 9.3.5 replacement snippet with the `Plan 00` array-of-objects structure.
+*   **MEDIUM: `writeBibtex` (Plan 04) fails to persist the `retracted` flag.**
+    *   **Plan 06 research** flags sources as retracted, but **Plan 04 Task 4.4** `toCsl` (line 1675) does not include the `retracted` flag in its mapping. Since `citation-js` is used to format the BibTeX, the flag is lost. Consequently, the verifier in **Plan 07 Task 7.2** (line 1983) will find `claimed.retracted` is always undefined, defeating the D-15 requirement.
+    *   **Resolution:** Update `Plan 04 Task 4.4` to persist the `retracted` flag (e.g., via the `note` field or a custom CSL field that maps to BibTeX).
+*   **MEDIUM: `Plan 07` `runPass1Unit` crashes on null `input.actual`.**
+    *   In **Task 7.2** (line 2011), the code checks `if (!input.actual)` but then immediately attempts to read `input.actual.authors` on line 2012. This will crash with a TypeError.
+    *   **Resolution:** Ensure line 2012 uses safe navigation: `input.actual?.authors[0]`.
+
+### 4. Remaining Concerns Worth Folding In
+
+*   **MEDIUM: `CslEntry` interface (Plan 04 Task 4.4) missing `id`.**
+    *   The `CslEntry` interface (line 1680) is missing the `id` property, which causes the logic on line 1694 (`csl.id = citekey`) to fail typecheck. This is critical for forcing `citation-js` to use the deterministic citekey.
+*   **LOW: `BREADCRUMBS.jsonl` writer is missing.**
+    *   **Plan 08 Task 8.2** (line 1916) attempts to read from `.paper/BREADCRUMBS.jsonl`, but no task in Phase 3 (or earlier) appears to write to this file. The breadcrumbs in `HANDOFF.json` will be perpetually empty.
+*   **LOW: `Plan 03` `HandoffSchema` enum duplication.**
+    *   `Plan 03` Task 3.1 (line 1373) duplicates the `SectionStateSchema` enum literals instead of importing them from `state.ts`. While a cycle is claimed (line 1371), no cycle actually exists between the two schema files.
+*   **LOW: `Plan 09` sentinel replacement verification command.**
+    *   The `diff` command in **Task 9.3.5** (line 2040) uses `require()` on ESM files, which will fail.
+
+### 5. Risk Assessment — MEDIUM
+
+The transition to Cycle 3 has solved the fundamental architectural and sequencing risks. The remaining issues are purely mechanical (missing exports, interface field mismatches, and logic edge cases). However, because these "mechanical" issues include compilation blockers (`Cite` export, `CslEntry.id`) and a breakage of a core verifier requirement (retraction persistence), the risk remains **MEDIUM** until these specific sync defects are closed. Once aligned, Phase 3 will be ready for high-fidelity execution.
+
+
+---
+
+## Codex Review (Cycle 3)
+
+**Summary**
+
+The cycle-2 amendments materially improve the plan set and close several prior sync defects, but the plans are not yet execution-ready at LOW risk. The four cycle-2 HIGHs are mostly addressed at the headline level, but two have residual contradictions that would still cause implementer confusion or compile/runtime failure. The largest remaining risks are stale snippets that contradict the replacement text, mismatched helper signatures around `frontmatter.ts`, and lingering cross-plan module/export drift around `citations.ts`, `http-mock.ts`, and atomic-write helper names.
+
+**Cycle-2 HIGH Resolution Verification**
+
+| ID | Status | Evidence |
+|---|---|---|
+| H-1 frontmatter.ts wave-ordering | **PARTIALLY RESOLVED** | Plan 03 now lists `bin/lib/frontmatter.ts` and `tests/frontmatter-roundtrip.test.ts` in Wave 2 files (`03-03-PLAN.md:16-18`) and Task 3.4 creates it (`03-03-PLAN.md:592-743`). Plan 08 explicitly no longer owns it (`03-08-PLAN.md:11-13`, `242`). However, there is a new signature/IO contradiction: Task 3.2 calls `updateFrontmatter(path, merge)` and says it “internally delegates” atomic write (`03-03-PLAN.md:440-441`), while Task 3.4 defines `updateFrontmatter(text, mutator)` as a pure string transformer with no FS or atomic write (`03-03-PLAN.md:604-605`, `645`). This will break the migration implementation unless reconciled. |
+| H-2 SourceCandidate author shape propagation | **FULLY RESOLVED for author shape; broader SourceCandidate shape still risky** | Plan 03 locks `authors: z.array(z.string())` (`03-03-PLAN.md:206`). Plan 04 adapter snippets emit string authors (`03-04-PLAN.md:445-451`) and add grep gates against object authors (`03-04-PLAN.md:455`, `467`). Plan 07 DrafterInput uses `authors: z.array(z.string())` (`03-07-PLAN.md:186-194`) and pass1 normalizes citation-js author objects into `claimedAuthorsD14` before comparing via `firstAuthorSurname` (`03-07-PLAN.md:431-460`). Plan 09 tests import unit helpers with string-array author fixtures (`03-09-PLAN.md:288-322`). Caveat: Plan 04 snippets still omit required D-14 fields like `id`, `last_verified`, `citekey`, `raw`, and use `doi: null` in fixtures despite Plan 03 making `doi` optional string, not nullable (`03-03-PLAN.md:204-215`; `03-04-PLAN.md:658-660`). |
+| H-3 HANDOFF D-17 canonical schema | **PARTIALLY RESOLVED** | Plan 08’s `assembleHandoff` rewrite now emits `schema_version: 1`, `last_updated`, `current_section`, `phase`, `next_action`, `breadcrumbs`, `section_pointers` and validates twice (`03-08-PLAN.md:196-218`, `248-250`). That fixes the Plan 08 assembler. But Plan 03 still contains stale old-schema behavior and snippets before the “replace” block: `schemaVersion`, `wave`, `resumePrompt`, `pointers` at `03-03-PLAN.md:160`, `243-256`, and an acceptance criterion for a `6000-byte resumePrompt` at `03-03-PLAN.md:346`. Also Plan 03 must-have still says “except resumePrompt” (`03-03-PLAN.md:37`). These stale lines should be removed, not left as contradictory instructions. |
+| H-4 runPass1/runPass3 signature lock | **FULLY RESOLVED** | Plan 07 defines canonical signatures `runPass1(draftMd: string, citationsBibPath: string)` and `runPass3(draftMd: string, bibByCitekey: Map<string, any>)` (`03-07-PLAN.md:414`, `505`) and adds fixture helpers `runPass1Unit` / `runPass3Unit` (`03-07-PLAN.md:549`, `570`). Plan 09 explicitly imports `runPass1Unit` and `runPass3Unit` for known-bad tests and forbids canonical helper calls from those fixture tests (`03-09-PLAN.md:291-322`, `349`). |
+
+**Cycle-2 MEDIUM/LOW Resolution Verification**
+
+| Item | Status | Evidence |
+|---|---|---|
+| `deep-equal.ts` task | **FULLY RESOLVED** | Plan 03 adds file to frontmatter (`03-03-PLAN.md:17`) and Task 3.5 creates `bin/lib/deep-equal.ts` plus tests (`03-03-PLAN.md:748-807`). |
+| Plan 06 acceptance softened to unit-green-only | **FULLY RESOLVED** | Plan 06 explicitly defers tier-contract integration to Plan 09 and only requires `workflow-static` at Plan 06 time (`03-06-PLAN.md:261`, `483`). |
+| `SENSITIVE_HEADERS` centralized in Plan 04 | **PARTIALLY RESOLVED** | Plan 04 exports `SENSITIVE_HEADERS` from `bin/lib/http-mock.ts` (`03-04-PLAN.md:306-351`). But Plan 09 still says the scrubber lives in `tests/_helpers/http-mock.ts` (`03-09-PLAN.md:40`, `335`), contradicting Plan 04’s `bin/lib/http-mock.ts` location. |
+| Dormant-prompts grep extended to workflows/bin/dist | **FULLY RESOLVED** | Plan 06 adds grep gates for `workflows/`, `bin/`, and `dist/` (`03-06-PLAN.md:485-488`) plus Plan 07 has verify call-site gates (`03-07-PLAN.md:290`, `345`). |
+| Citekey collision beyond `z` | **FULLY RESOLVED** | Plan 04 adds base-26 `suffixForCollision` and tests for 26→`z`, 27→`aa`, 53→`ba` (`03-04-PLAN.md:736-769`). |
+| Canonical `bin/cli/intake.ts`, alias `new` | **FULLY RESOLVED** | Plan 00 tier-contract uses `verbFile: 'bin/cli/intake.ts'` for `new` alias (`03-00-PLAN.md:694`). Plan 07 files list only `bin/cli/intake.ts` (`03-07-PLAN.md:9`) and declares no `bin/cli/new.ts` is created (`03-07-PLAN.md:363`). |
+| Plan 09 Task 9.3.5 sentinel replacement | **FULLY RESOLVED as a plan item** | Dedicated task exists with no-sentinel grep, real SHA replacement, env gate unset, and lock-step updates (`03-09-PLAN.md:412-471`). |
+| Plan 05 “8-discipline” prose sweep | **PARTIALLY RESOLVED** | Plan 05 now explains “9 effective keys” (`03-05-PLAN.md:64`, `81`, `463`). But stale task title and done text still say “8-discipline disciplines.json preset” / “8-discipline preset lands” (`03-05-PLAN.md:339`, `420`), and Plan 06 still asks intake body to reference “8 presets” (`03-06-PLAN.md:258`). |
+| `MIDDLE_SECTION` constant location | **FULLY RESOLVED** | Plan 00 explicitly inlines `MIDDLE_SECTION = '3'` in tier-contract and documents why it is not exported from runtime modules (`03-00-PLAN.md:689-699`, `822`). |
+| Plan 00 task-count 7→6 | **FULLY RESOLVED** | Plan 00 verification says task count is exactly 6 and explains the prior off-by-one (`03-00-PLAN.md:821`). |
+| Stale-lock recovery test for `HANDOFF.json.lock` | **FULLY RESOLVED** | Plan 08 Task 8.1 acceptance requires a stale/orphan lock recovery test (`03-08-PLAN.md:253-256`). |
+| Plan 04 adapter list sync / BibTeX examples string[] | **PARTIALLY RESOLVED** | Author examples are string arrays (`03-04-PLAN.md:658-660`), and adapter output is string[] (`03-04-PLAN.md:455`). But fixtures still use `doi: null` and omit required `id`, `last_verified`, `citekey`, `raw`, which conflicts with Plan 03 D-14 schema (`03-03-PLAN.md:204-215`). |
+
+**New Concerns Introduced**
+
+**HIGH — `frontmatter.ts` API is internally inconsistent.**  
+Task 3.2 needs a disk updater: `updateFrontmatter(path, merge)` plus atomic persistence (`03-03-PLAN.md:440-441`). Task 3.4 defines a pure text transformer `updateFrontmatter(text, mutator): string` and explicitly says callers persist returned text themselves (`03-03-PLAN.md:604-605`). This is a real execution blocker for the D-09 migration.
+
+**HIGH — `citations.ts` / `bibtex-write.ts` export contract still conflicts.**  
+Plan 02 says `bin/lib/citations.ts` exports exactly `parseBibtex` and `renderApa` (`03-02-PLAN.md:251`). Plan 04 imports `Cite` from `./citations.js` (`03-04-PLAN.md:585`) and tests import `Cite` from `../bin/lib/citations.js` (`03-04-PLAN.md:645`). Either Plan 02 must export `Cite`, or Plan 04 must use a wrapper function. This was a cycle-2 medium and remains unresolved.
+
+**MEDIUM — `atomicWrite` vs `atomicWriteFile` naming drift.**  
+Plan 08 imports and calls `atomicWrite` (`03-08-PLAN.md:180`, `236`). Plan 04 assumes `atomic-write.ts` exports `atomicWriteFile` (`03-04-PLAN.md:167`, `586`, `633`, `747`). Plan 03 migration text also references `atomicWrite` (`03-03-PLAN.md:441`, `486`). The plans need one canonical exported name.
+
+**MEDIUM — Plan 08 still has stale “frontmatter helper” ownership language.**  
+Plan 08 objective says it lands “the YAML frontmatter helper” (`03-08-PLAN.md:64`) and output still asks for “handoff.ts + frontmatter.ts LOC” (`03-08-PLAN.md:471`), even though Plan 08 now only consumes frontmatter. Not a code blocker, but it undermines the H-1 fix.
+
+**MEDIUM — `http-mock.ts` location is still split between Plan 04 and Plan 09.**  
+Plan 04 creates `bin/lib/http-mock.ts` (`03-04-PLAN.md:16`, `189`). Plan 09 says scrubber implementations live in `tests/_helpers/http-mock.ts` (`03-09-PLAN.md:40`, `335`). This will send implementers to the wrong module.
+
+**MEDIUM — `UNVERIFIABLE` compile policy remains questionable.**  
+Plan 06 says `UNVERIFIABLE` “Does NOT block compile” (`03-06-PLAN.md:415`). Phase 3 does not implement compile, so this is forward-looking, but it conflicts with the broader “verifier blocks compile/export” project framing unless a Phase 4/6 approval gate is explicitly named. Fold this into the plan text now to avoid future policy drift.
+
+**MEDIUM — Plan 07 verify status text omits `unverifiable`.**  
+Plan 07 initial verify entry says it persists status `'verified' | 'failed'` (`03-07-PLAN.md:343`), while later orchestration text includes `UNVERIFIABLE` aggregation (`03-07-PLAN.md:646`) and Plan 03/06 add `unverifiable`. Update the stale status line.
+
+**Remaining Concerns Worth Folding In**
+
+- Plan 03 Task 3.1 still carries old Handoff and SourceCandidate snippets before “replace this” amendments (`03-03-PLAN.md:160-196`, `243-256`). Remove obsolete snippets entirely. “Replace this” prose is easy to miss during execution.
+- Plan 04 `retraction-watch` still has contradictory must-haves: fetchById-only (`03-04-PLAN.md:44`) and “search() that throws/returns empty” (`03-04-PLAN.md:51`).
+- Plan 04 recorder lifecycle is still weak: `recordCassettes()` starts recording, `finalizeRecording()` writes files, but there is no guaranteed `finally`/test lifecycle hook around adapter tests. Also `finalizeRecording()` uses `writeFileSync` (`03-04-PLAN.md:338`) without an explicit tooling exemption.
+- Plan 04 says cassettes scrub response headers, but the threat model claims request+response headers (`03-09-PLAN.md:580`). The implementation sets `enable_reqheaders_recording: false`, so request headers are not recorded, not scrubbed. Wording should match the mechanism.
+- Plan 00 says WN-2 “≤10 files per task” but accepts Task 0.2a touching 13 files (`03-00-PLAN.md:821`). That is a conscious exception, but if WN-2 is supposed to be a rule, either split or explicitly mark it as waived.
+
+**Risk Assessment**
+
+**MEDIUM.** The plan set is much closer and most cycle-2 HIGHs are substantively handled, especially H-2 and H-4. The remaining risk is not conceptual architecture; it is implementability drift from stale snippets and mismatched module contracts. Before execution, I would fold in the `frontmatter.ts` API fix, `citations.ts` export fix, `atomicWrite` naming unification, and `http-mock.ts` location cleanup. Those are small edits, but leaving them would likely cause compile failures or incorrect implementation choices.
+
+---
+
+## Cycle 3 Consensus Summary
+
+### Agreed Cycle-2 HIGH Status
+
+| Cycle-2 HIGH | Gemini | Codex | Consensus (worst-case) |
+|---|---|---|---|
+| H-1 frontmatter.ts wave-ordering | FULLY RESOLVED | PARTIALLY RESOLVED (Task 3.2 vs 3.4 API contradiction) | **PARTIALLY RESOLVED** |
+| H-2 SourceCandidate author shape | FULLY RESOLVED | FULLY RESOLVED for authors; broader D-14 shape risky (fixtures still missing `id`/`last_verified`/`citekey`/`raw`; `doi: null` vs optional-string) | **PARTIALLY RESOLVED** |
+| H-3 HANDOFF D-17 canonical schema | FULLY RESOLVED | PARTIALLY RESOLVED (Plan 03 still has stale `schemaVersion`/`wave`/`resumePrompt`/`pointers` snippets pre-replace block) | **PARTIALLY RESOLVED** |
+| H-4 runPass1/runPass3 signature lock | FULLY RESOLVED | FULLY RESOLVED | **FULLY RESOLVED** |
+
+Both reviewers agree H-4 is fully closed. The other three HIGHs have residual contradictions that are mechanical (stale snippet text, internal API mismatch within a single plan, fixture-vs-schema drift) — not architectural — but still blocking for clean implementation.
+
+### Agreed Cycle-2 MEDIUM/LOW Status
+
+| Cycle-2 fix item | Consensus | Notes |
+|---|---|---|
+| deep-equal.ts task (Plan 03 Task 3.5) | FULLY RESOLVED | Both reviewers confirm |
+| Plan 06 acceptance softened to unit-green-only | FULLY RESOLVED | Both reviewers confirm |
+| SENSITIVE_HEADERS centralized in Plan 04 http-mock.ts | PARTIALLY RESOLVED | Plan 04 exports from `bin/lib/http-mock.ts`, but Plan 09 still says scrubber lives in `tests/_helpers/http-mock.ts` (Codex) |
+| Dormant-prompts grep extended (workflows/bin/dist) | FULLY RESOLVED | Both reviewers confirm |
+| Citekey collision base-26 (z, 27→aa, 53→ba) | FULLY RESOLVED | Both reviewers confirm |
+| Canonical bin/cli/intake.ts (alias new) | FULLY RESOLVED | Both reviewers confirm |
+| Plan 09 Task 9.3.5 sentinel replacement | PARTIALLY RESOLVED | Task exists, but Gemini flags shape mismatch — Plan 00 Task 0.3 scaffolds PENDING_HASH_PINS as array-of-objects while Plan 09 Task 9.3.5 replaces an object-map. ALSO `diff`/`require()` issue on ESM. |
+| Plan 05 "8-discipline" → "9 keys" prose sweep | PARTIALLY RESOLVED | Stale "8-discipline" still in Plan 05 task title/done text (lines 339, 420) and Plan 06 intake body (line 258) per Codex |
+| MIDDLE_SECTION constant inline in tier-contract.test.ts | FULLY RESOLVED | Both reviewers confirm |
+| Plan 00 task-count "exactly 7" → "exactly 6" | FULLY RESOLVED | Both reviewers confirm |
+| Stale-lock recovery test for HANDOFF.json.lock | FULLY RESOLVED | Both reviewers confirm |
+| Plan 04 adapter list sync (BibTeX examples string[]) | PARTIALLY RESOLVED | Author shape is `string[]`, but fixtures still violate D-14 (omit `id`/`last_verified`/`citekey`/`raw`; `doi: null` vs optional-string) per Codex |
+
+### New Cycle-3 Concerns (Introduced by Cycle-2 Amendments)
+
+**HIGH — citations.ts missing Cite export (CROSS-REVIEWER AGREEMENT, Gemini + Codex independently):**
+- Plan 02 Task 2.2 (line 1121 / 251) defines `bin/lib/citations.ts` exports as exactly `["parseBibtex", "renderApa"]`.
+- Plan 04 Task 4.4 (line 1672) and Plan 09 Task 9.2 (line 1982) both import `Cite` from `./citations.js`.
+- Plan 04 tests also import `Cite` from `../bin/lib/citations.js`.
+- **Compilation will fail.** Either Plan 02 must export `Cite` (re-export from citation-js) or Plan 04 must use a wrapper.
+- This was a cycle-2 medium and remains unresolved per Codex.
+
+**HIGH — frontmatter.ts API internally inconsistent within Plan 03 (Codex):**
+- Plan 03 Task 3.2 calls `updateFrontmatter(path, merge)` with "internally delegates atomic write" (lines 440-441).
+- Plan 03 Task 3.4 defines `updateFrontmatter(text, mutator): string` as a pure string transformer with no FS/atomic write (lines 604-605, 645).
+- **D-09 migration implementation will not compile** until reconciled.
+
+**MEDIUM — atomicWrite vs atomicWriteFile naming drift (Codex):**
+- Plan 08 imports/calls `atomicWrite` (lines 180, 236).
+- Plan 04 assumes `atomic-write.ts` exports `atomicWriteFile` (lines 167, 586, 633, 747).
+- Plan 03 migration text uses `atomicWrite` (lines 441, 486).
+- **Must canonicalize one name** before execution.
+
+**MEDIUM — writeBibtex fails to persist retracted flag (Gemini):**
+- Plan 04 Task 4.4 `toCsl` (line 1675) doesn't map `retracted` into CSL/BibTeX.
+- citation-js drops unknown CSL fields, so `claimed.retracted` is always undefined at verify time.
+- **Defeats D-15 retracted-source verification.**
+
+**MEDIUM — CslEntry interface missing `id` property (Gemini):**
+- Plan 04 Task 4.4 line 1680 `CslEntry` interface lacks `id`; line 1694 assigns `csl.id = citekey`.
+- TypeScript will not compile this assignment.
+
+**MEDIUM — runPass1Unit crashes on null input.actual (Gemini):**
+- Plan 07 Task 7.2 line 2011 checks `if (!input.actual)` but immediately reads `input.actual.authors` on line 2012.
+- Needs safe navigation `input.actual?.authors[0]`.
+
+**MEDIUM — repo-files.test.ts sentinel replacement shape mismatch (Gemini):**
+- Plan 00 Task 0.3 (line 1406) scaffolds `PENDING_HASH_PINS` as array-of-objects.
+- Plan 09 Task 9.3.5 (line 2030) replaces an object-map.
+- Replacement instructions will not match the scaffolded structure.
+
+**MEDIUM — http-mock.ts location split between plans (Codex):**
+- Plan 04 creates `bin/lib/http-mock.ts` (line 16, 189).
+- Plan 09 says scrubber implementations live in `tests/_helpers/http-mock.ts` (lines 40, 335).
+- Implementers will be sent to the wrong module.
+
+**MEDIUM — Plan 08 stale frontmatter-ownership language (Codex):**
+- Plan 08 objective says it lands "the YAML frontmatter helper" (line 64).
+- Output asks for "handoff.ts + frontmatter.ts LOC" (line 471).
+- Not a code blocker, but undermines the H-1 fix narrative.
+
+**MEDIUM — Plan 03 stale pre-replace snippets (Codex):**
+- Plan 03 Task 3.1 still contains old Handoff/SourceCandidate snippets (lines 160-196, 243-256) BEFORE the "replace this" blocks.
+- "Must-have" still says "except resumePrompt" (line 37).
+- Acceptance still mentions 6000-byte resumePrompt (line 346).
+- "Replace this" prose is easy to miss during execution — remove obsolete snippets.
+
+**MEDIUM — UNVERIFIABLE compile policy ambiguity (Codex):**
+- Plan 06 says UNVERIFIABLE "Does NOT block compile" (line 415).
+- Phase 3 doesn't implement compile, so it's forward-looking, but it conflicts with project framing of "verifier blocks compile/export" unless a Phase 4/6 approval gate is explicitly named.
+
+**MEDIUM — Plan 07 verify status omits unverifiable (Codex):**
+- Plan 07 line 343 persists status `'verified' | 'failed'` (no `unverifiable`).
+- Plan 07 line 646 aggregates UNVERIFIABLE.
+- Plan 03/06 add unverifiable to the schema. Stale line at 343 needs updating.
+
+### LOW Concerns
+
+**LOW — BREADCRUMBS.jsonl writer is missing (Gemini):**
+- Plan 08 Task 8.2 line 1916 reads `.paper/BREADCRUMBS.jsonl`.
+- No task in Phase 3 (or earlier) writes to it. Breadcrumbs in HANDOFF.json will always be empty.
+
+**LOW — Plan 03 HandoffSchema duplicates SectionStateSchema enum literals (Gemini):**
+- Plan 03 Task 3.1 line 1373 duplicates instead of importing from `state.ts`. No actual cycle exists.
+
+**LOW — Plan 09 sentinel verification uses `require()` on ESM (Gemini):**
+- Plan 09 Task 9.3.5 line 2040 `diff` command uses `require()`; project is ESM-only. Will fail.
+
+**LOW — Plan 04 retraction-watch contradictory must-haves (Codex):**
+- Line 44 says fetchById-only. Line 51 says "search() that throws/returns empty". Resolve to one.
+
+**LOW — Plan 04 recorder lifecycle weak (Codex):**
+- `recordCassettes()` + `finalizeRecording()` without guaranteed `finally` hook.
+- `finalizeRecording()` uses `writeFileSync` without tooling exemption.
+
+**LOW — Plan 04 cassette scrubbing wording mismatch (Codex):**
+- Plan 04 says scrubs response headers; Plan 09 line 580 claims request+response headers.
+- Implementation sets `enable_reqheaders_recording: false`, so request headers aren't recorded (not scrubbed).
+
+**LOW — WN-2 "<=10 files per task" rule with Task 0.2a exception (Codex):**
+- Plan 00 line 821 accepts 13 files for Task 0.2a. Either split or mark as waived.
+
+### Divergent Views
+
+- **H-1, H-2, H-3 status:** Gemini calls them FULLY RESOLVED; Codex calls them PARTIALLY RESOLVED with specific stale-snippet / fixture-shape / API-contradiction evidence. Codex's read is more conservative and worth honoring on the worst-case principle.
+- **citations.ts Cite export:** Gemini flags as NEW HIGH; Codex flags as still-unresolved cycle-2 medium. Same root issue, different framing.
+
+### Risk Assessment (Consensus)
+
+**Overall risk for execution: MEDIUM.**
+
+Both reviewers agree the risk has dropped from "architectural" to "mechanical / cross-plan-sync drift." Remaining blockers are:
+
+1. citations.ts must export `Cite` (or Plan 04 must wrap) — **HIGH, compile blocker**
+2. frontmatter.ts API: Plan 03 Task 3.2 vs Task 3.4 contract collision — **HIGH, compile blocker**
+3. atomicWrite vs atomicWriteFile naming — **MEDIUM, compile blocker**
+4. http-mock.ts location split (bin/lib vs tests/_helpers) — **MEDIUM, implementer misdirection**
+5. Plan 03 stale pre-replace snippets — **MEDIUM, implementer confusion**
+6. Plan 04 fixture data omits required D-14 fields — **MEDIUM, schema-fixture drift**
+7. CslEntry interface missing `id` — **MEDIUM, typecheck fail**
+8. runPass1Unit safe-navigation bug — **MEDIUM, runtime crash**
+9. writeBibtex doesn't persist retracted flag — **MEDIUM, D-15 verifier defeat**
+10. Plan 09 sentinel-replacement shape mismatch with Plan 00 scaffold — **MEDIUM**
+
+If cycle 4 closes the two HIGHs (#1, #2) plus the cross-plan-sync MEDIUMs (#3, #4, #5, #6, #7, #8, #9, #10), Phase 3 will be execution-ready at LOW risk. Estimated cycle-4 close-out work: ~1 hour of focused edits.
+
+### Action Items for Cycle-4 Replan (Priority Order)
+
+1. **(HIGH)** Plan 02 Task 2.2 — add `Cite` (or `formatBibtex` wrapper) to exports of `bin/lib/citations.ts`. Update acceptance criterion.
+2. **(HIGH)** Plan 03 Task 3.2 vs 3.4 — reconcile `updateFrontmatter()` API. Either Task 3.4 takes `(path, merge)` + handles atomic write, OR Task 3.2 reads file, calls `updateFrontmatter(text, mutator)`, writes with `atomicWrite`. Pick one.
+3. **(MEDIUM)** Canonicalize `atomicWrite` vs `atomicWriteFile` — pick one and use across Plan 03, 04, 08. Update `bin/lib/atomic-write.ts` export contract in whichever plan owns it.
+4. **(MEDIUM)** Plan 04 + Plan 09 — pick canonical `http-mock.ts` location (recommend `bin/lib/http-mock.ts`, scrubbers exported from there, tests import from there). Update Plan 09 lines 40, 335.
+5. **(MEDIUM)** Plan 03 Task 3.1 — DELETE obsolete pre-replace snippets (lines 160-196, 243-256). Remove "except resumePrompt" line 37. Remove 6000-byte resumePrompt acceptance line 346.
+6. **(MEDIUM)** Plan 04 Task 4.4 — `toCsl` must persist `retracted` flag (via CSL `note` or custom field that survives BibTeX roundtrip). Add acceptance test.
+7. **(MEDIUM)** Plan 04 Task 4.4 — `CslEntry` interface must include `id?: string` (or appropriate type) so `csl.id = citekey` typechecks.
+8. **(MEDIUM)** Plan 07 Task 7.2 — `runPass1Unit` safe-navigation: `input.actual?.authors[0]` or guard return after null check.
+9. **(MEDIUM)** Plan 04 fixtures — add `id`, `last_verified`, `citekey`, `raw` to all SourceCandidate fixtures. Change `doi: null` to either omit or `doi: undefined`. Match D-14 schema (Plan 03 line 204-215).
+10. **(MEDIUM)** Plan 00 Task 0.3 + Plan 09 Task 9.3.5 — align `PENDING_HASH_PINS` shape (array-of-objects vs object-map). Pick one and update both. Fix `require()` → `import` for ESM diff command (Plan 09 line 2040).
+11. **(MEDIUM)** Plan 05 prose sweep — remove all remaining "8-discipline" mentions (Plan 05 lines 339, 420; Plan 06 line 258).
+12. **(MEDIUM)** Plan 07 line 343 — add `'unverifiable'` to verify status enum literal.
+13. **(MEDIUM)** Plan 06 line 415 — clarify UNVERIFIABLE policy: name the future approval gate phase (e.g., "tracked for Phase 6 approval gate per D-15").
+14. **(MEDIUM)** Plan 08 — remove stale frontmatter-ownership language (line 64, line 471).
+15. **(LOW)** Plan 08 Task 8.2 — clarify BREADCRUMBS.jsonl is written by hooks (point at SessionStart hook or PreCompact hook). If no writer in Phase 3, mark this as deferred or no-op.
+16. **(LOW)** Plan 03 Task 3.1 — import enum literals from `state.ts` instead of duplicating. Remove the false "cycle" claim.
+17. **(LOW)** Plan 04 retraction-watch — resolve fetchById-only vs search() contradiction (lines 44 vs 51). Pick fetchById-only and delete the search() line.
+18. **(LOW)** Plan 04 recorder lifecycle — add explicit `try/finally` or test-lifecycle hook around `recordCassettes()` → `finalizeRecording()`. Mark `writeFileSync` in finalizeRecording as a tooling exemption.
+19. **(LOW)** Plan 04 / Plan 09 — align scrubbing wording: response-only (or enable request header recording first).
+20. **(LOW)** Plan 00 — either split Task 0.2a (13 files > WN-2's 10) or explicitly waive WN-2 for it with rationale.
