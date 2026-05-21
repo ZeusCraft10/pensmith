@@ -1,9 +1,9 @@
 ---
 phase: 3
-cycle: 4
+cycle: 5
 reviewers: [gemini, codex, claude-in-session]
-reviewed_at: 2026-05-21T15:38:00Z
-head_at_review: e39ab05
+reviewed_at: 2026-05-21T10:39:00Z
+head_at_review: 1ba43a8
 plans_reviewed:
   - 03-00-PLAN.md
   - 03-01-PLAN.md
@@ -17,903 +17,206 @@ plans_reviewed:
   - 03-09-PLAN.md
 runtime_skipped: "claude CLI (running inside Claude Code — skipped for independence)"
 unavailable_clis: [claude-cli, cursor-agent, qwen, coderabbit]
-opencode_status: "FAILED — opencode 1.1.34 returned 0-byte output (silent failure on stdin pipe). Excluded from cycle-4."
-cursor_status: "UNAVAILABLE — only Cursor IDE GUI installed (Cursor 3.4.20); no cursor-agent CLI subcommand. Excluded."
-cycle4_summary:
-  unresolved_high_count: 1
-  unresolved_high_ids: ["NEW-H-3 PlanFrontmatterSchema.status enum missing 'unverifiable' (D-08-AMENDED schema/prose drift in Plan 03)"]
-  cycle3_high_status:
-    NEW-H-1_cite_reexport: FULLY RESOLVED (both reviewers agree — Plan 02 line 219 export, Plan 04 line 613 import, grep gates correct)
-    NEW-H-2_updateFrontmatter_pure_string: FULLY RESOLVED (both reviewers agree — Task 3.2 consumer composes readFile → updateFrontmatter → atomicWriteFile around the Task 3.4 producer signature)
+opencode_status: "FAILED — opencode 1.1.34 returned a 0-byte file and the underlying LLM API call to gpt-5-nano errored at the 'title generator' step (AI_APICallError on opencode.ai/zen/v1/responses). Same failure mode as cycle 4. Excluded from cycle-5."
+cursor_status: "UNAVAILABLE — only Cursor IDE GUI (Cursor 3.4.20) installed; no cursor-agent headless CLI subcommand. Excluded."
+cycle5_summary:
+  unresolved_high_count: 0
+  unresolved_high_ids: []
+  cycle4_fix_status:
+    NEW-H-3_status_enum: FULLY RESOLVED (gemini + codex agree — schema, parity, and grep AC all in place)
+    M-1_pending_hash_pins_export: PARTIALLY RESOLVED (gemini says fully; codex catches Plan 09 lines 444/454 still showing bare `const PENDING_HASH_PINS` in the Task 9.3.5 "before/after" snippets — could re-introduce the export-bug at execution time)
+    M-2_last_verification_field: PARTIALLY RESOLVED (gemini says fully; codex catches sibling field `was_current_at_migration` still NOT in PlanFrontmatterSchema — strict-by-default Zod parsing will strip it, recreating the exact silent-drop problem M-2 fixed for last_verification)
+    M-3_per_plan_lock: FULLY RESOLVED (gemini + codex agree — `withLock(planUpdate.path)` wrap present at Plan 03 lines 405-411, nested-lock semantics documented, grep AC in place)
+    L-1_disciplines_9key: FULLY RESOLVED (gemini + codex agree — 8-key snippet removed, prose swept to "9 presets")
+    L-2_resumePrompt_resumed: FULLY RESOLVED (gemini + codex agree — T-3-LEAK-01 now references `next_action max 200`)
   reviewer_verdicts:
-    gemini: CONVERGED (0 HIGH, 0 MEDIUM, 1 LOW non-blocking)
-    codex: NEEDS-CYCLE-5 (1 HIGH, 3 MEDIUM, 2 LOW)
+    gemini: NEEDS-CYCLE-N (0 HIGH, 2 MEDIUM, 0 LOW — but both MEDIUMs are not real plan gaps under analysis; see Consensus Analysis)
+    codex: NEEDS-CYCLE-6 (0 HIGH, 1 MEDIUM was_current_at_migration, 2 LOW Plan 09 snippets + Plan 06 acceptance enum)
+    claude_in_session: NEEDS-CYCLE-6 (0 HIGH, 1 MEDIUM, 2 LOW — converges with Codex; rejects both Gemini MEDIUMs as not-plan-gaps after verification)
+  consensus:
+    confirmed_plan_gaps:
+      - "M-2 sibling field: was_current_at_migration is written by migration (Plan 03 line 397) but not in PlanFrontmatterSchema; strict-by-default Zod parse strips it"
+      - "Plan 09 Task 9.3.5 snippets at lines 444 and 454 still use bare `const PENDING_HASH_PINS` — implementer following the literal snippet would strip the M-1 fix"
+      - "Plan 06 verify-workflow acceptance criteria at lines 477 and 540 list only 'verifying'/'verified'/'failed' — missing the 'unverifiable' literal that D-08-AMENDED requires the verify verb to persist"
+    rejected_as_not_real_gaps:
+      - "Gemini MEDIUM #1 (lock retry semantics) — withLock helper from Phase 2 bin/lib/lock.ts already encodes a retry schedule (lines 88-108) and the migration code documents MigrationLockTimeoutError; the plan is NOT brittle on this axis"
+      - "Gemini MEDIUM #2 (.refine() interaction with last_verification) — the existing .refine on PlanFrontmatterSchema only checks `!p.depends_on.includes(p.slug)` and never touches last_verification; there is zero interaction surface"
 note: |
-  Cycle 4 convergence review of cycle-3-amended plans (commit e39ab05). Cycle 3 closed both
-  NEW-H-1 (Cite re-export) and NEW-H-2 (updateFrontmatter pure-string transformer) cleanly
-  per both reviewers.
+  Cycle 5 convergence review of cycle-4-amended plans (commit 1ba43a8). HIGH=0 holds.
+  All six cycle-4 fixes hit their primary targets; two of them (M-1 and M-2) have small
+  collateral gaps that Codex caught with grep-level precision and that an independent
+  Claude-in-session re-read confirmed by reading the offending lines directly:
 
-  However Codex caught a real residual HIGH that Gemini missed: PlanFrontmatterSchema.status
-  enum at Plan 03 line 274 still lists only ['planned'|'writing'|'written'|'verifying'|'verified'|'failed']
-  — the D-08-AMENDED `unverifiable` literal is missing from the actual zod schema even though
-  the prose at lines 250 and 257 claims it's accepted and lists explicit acceptance criteria
-  asserting `PlanFrontmatterSchema accepts status: 'unverifiable'`. This is schema-vs-prose
-  drift introduced when the D-08-AMENDED amendment was applied to handoff.ts but not
-  propagated to plan-frontmatter.ts. The verify verb will fail at parse-time when it tries
-  to persist status='unverifiable' to PLAN.md frontmatter.
+  1. The M-2 schema-strict-by-default decision was the right choice, but the migration
+     writes a SECOND extra field (was_current_at_migration) that did NOT get declared.
+     Cycle 4 made the schema explicit about ONE field and forgot the other. Either
+     declare it (`was_current_at_migration: z.boolean().optional()`) or drop the migration
+     emit; otherwise the migration appears to write a useful breadcrumb that Zod silently
+     strips on the very next loadState — exactly the failure mode cycle-4 M-2 was fixing.
 
-  Codex also surfaces two real MEDIUM gaps that Gemini did not flag:
-  - PENDING_HASH_PINS in Plan 00 line 601 is declared `const` (not `export const`); Plan 09
-    Task 9.3.5 line 468/476 does `import('./tests/repo-files.test.ts').then(m => m.PENDING_HASH_PINS...)`
-    which will resolve as `undefined`.
-  - PlanFrontmatterSchema.passthrough() and the `last_verification: z.unknown().optional()` field
-    are claimed by Task 3.2 prose (line 385) but not present in the actual schema snippet
-    (lines 267-280), so migration forensics will be silently dropped at schema parse.
+  2. The M-1 `export` keyword is correctly placed on the live source-of-truth at Plan 00
+     line 601, but Plan 09 Task 9.3.5's didactic "before/after" snippets at lines 444
+     and 454 still show bare `const`. An implementer following the snippet literally
+     when re-pinning hashes would re-introduce the export bug. Either both snippets
+     gain `export const` (mirroring the live state) or the snippets reference the live
+     line by number rather than re-rendering them.
 
-  Two LOW are also worth folding in: Plan 05 Task 5.3 still has the original "EXACTLY 8 presets"
-  action block (lines 365-378) immediately above the cycle-3 "9-keys" amendment (lines 397-417),
-  creating a contradictory action body that an implementer could resolve either way. And Plan 08
-  threat model line 448 still references the pre-D-17 `resumePrompt max 300` field that no longer
-  exists in the canonical HANDOFF schema.
+  3. Plan 06's verify-workflow acceptance criteria need 'unverifiable' added to the
+     status-enum gate at lines 477 and 540 — the body amendment correctly handles the
+     terminal state but the acceptance gate would falsely PASS a verify implementation
+     that never persists 'unverifiable'.
 
-  Estimated cycle-5 close-out: ~30 min — all 5 findings are mechanical text edits to plan files,
-  no decision changes needed.
+  Gemini surfaced two MEDIUM concerns that did not survive verification: the lock-retry
+  concern overlooks the Phase 2 withLock helper's built-in retry schedule; the .refine()
+  interaction concern overlooks that the existing refine only touches `depends_on`.
+  Both are excluded under the cycle-5 stricter-rule "real plan gap" filter.
+
+  All 3 confirmed items are mechanical text edits (~15 min total replan). No decision
+  changes needed; no schema/architecture rework. Recommend NEEDS-CYCLE-6.
 ---
 
-# Cross-AI Plan Review — Phase 3 Cycle 2 (Vertical Slice Through One Section)
+# Cross-AI Plan Review — Phase 3 Cycle 5 (Vertical Slice Through One Section)
 
-## Cycle 2 Context
+## Cycle 5 Context
 
-This is the SECOND review pass on the Phase 3 plans. Cycle 1 (committed 7d70e85, reviewed at 03-REVIEWS.md prior version) surfaced 5 HIGH + ~11 MEDIUM + ~7 LOW concerns spanning 24 distinct findings. The plans were AMENDED in commit b3e6230 (and refinement 3159abc) to address all 24. This cycle re-reviews the amended plans, verifying:
+This is the FIFTH review pass on the Phase 3 plans. The cycle trajectory has been:
+- Cycle 1 (7d70e85 → b3e6230): 5 HIGH closed → 4 → 2.
+- Cycle 2 (a86d2df → 8a9dd87): cross-plan wave-order + handoff schema HIGHs closed → 2 → 1.
+- Cycle 3 (cd0cdd2 → e39ab05): NEW-H-1 (Cite re-export) + NEW-H-2 (updateFrontmatter pure-string) closed → 1.
+- Cycle 4 (4b9d641 → 1ba43a8): NEW-H-3 (status enum 'unverifiable' parity) + 3 MEDIUMs + 2 LOWs closed. Claimed HIGH=0.
 
-1. Each of the 24 prior findings is truly fixed (not just claimed-fixed)
-2. Surfaces any NEW concerns introduced by the amendments (over-fixes, contradictions, dependency-ordering breaks)
-3. Applies stricter stop rule — MEDIUM/LOW with real plan gaps must surface, not be smoothed away.
+This cycle re-reviews the cycle-4-amended plans (commit 1ba43a8) under a STRICTER
+convergence rule: orchestrator continues until every MEDIUM/LOW concern that reveals
+a real plan gap, ambiguity, or missing safeguard is folded in. Stylistic preferences,
+items already addressed in prior cycles, out-of-scope items, and reviewer disagreements
+that reflect different threat models (rather than real gaps) are explicitly excluded.
 
----
-
-## Gemini Review (Cycle 2)
-
-# Phase 3 Implementation Plan Review — Cycle 2
-
-The amended implementation plans for Phase 3 demonstrate strong convergence and address the 24 findings from Cycle 1 with high technical fidelity. The inclusion of Ukkonen banding for Levenshtein performance, deterministic citekey collision handling, and the sophisticated D-09 migration strategy (persisting state into `PLAN.md` before slimming `STATE.json`) significantly reduces architectural risk.
-
-However, the rapid replanning has introduced several **internal contradictions** between plans (specifically regarding schema field names and data shapes) and one **critical dependency break** in the wave ordering.
-
-### Strengths
-- **Robust Migration Strategy**: The D-09 implementation (Plan 03) correctly addresses the "two-homes" data loss risk by performing atomic merges into per-section `PLAN.md` files.
-- **Algorithm Precision**: Hand-rolled Jaro-Winkler and Ukkonen-banded Levenshtein (Plan 01) preserve zero-dependency discipline while meeting performance requirements.
-- **Verification Verdicts**: Clear disambiguation between `PDF_UNAVAILABLE`, `TEXT_UNAVAILABLE`, and `NOT_FOUND` (Plan 06) provides much-needed diagnostic clarity for the user.
-- **Safety Gates**: The prompt hash-pin sequencing (sentinels + env gate) and the deterministic-only verify path (no LLM at verify time) are well-guarded.
-
-### Concerns
-
-#### HIGH: Dependency Break (Wave Ordering)
-Plan 03 (Wave 2) implements the D-09 migration, which explicitly depends on calling `updateFrontmatter` from `bin/lib/frontmatter.ts`. However, `frontmatter.ts` is not created until Plan 08 (Wave 5). This prevents the migration from being implemented or tested in its assigned wave.
-- **Evidence**: Plan 03 Task 3.2 Step 2b vs. Plan 08 Task 8.1.
-
-#### MEDIUM: Internal Schema Contradictions (Authors Shape)
-There is a discrepancy in the author list shape across the pipeline. Plan 03/D-14 restored authors to `string[]`, but later plans still use the old object-array shape.
-- **Evidence**:
-    - **Plan 03 Task 3.1**: `SourceCandidateSchema` uses `authors: z.array(z.string())`.
-    - **Plan 04 Task 4.2**: `toCandidate` maps authors to `Array<{ family, given }>`.
-    - **Plan 07 Task 7.1**: `DrafterInputSchema` uses `authors: z.array(z.object({ family, given }))`.
-    - **Plan 07 Task 7.2**: `pass1.ts` tries to access `claimed.author[0].family`.
-
-#### MEDIUM: Handoff Schema Sync Failure
-Plan 08 (Handoff assembler) was not fully updated to match the amended Plan 03 (Handoff schema).
-- **Evidence**:
-    - **Plan 03 Task 3.1**: Schema uses `schema_version` (number) and `section_pointers`.
-    - **Plan 08 Task 8.1**: `assembleHandoff` constructs an object with `schemaVersion` (string) and `pointers`. This will fail validation.
-
-#### MEDIUM: Missing File Implementation (`deep-equal.ts`)
-Plan 03 Task 3.2 Step 2d requires `deepEqual` from `bin/lib/deep-equal.ts` for migration idempotency, but this file is never created in any task.
-
-#### LOW: Plan 00 Task Counting
-Plan 00 Objective states exactly 7 tasks (0.1 through 0.5), but the frontmatter/body contains 6 tasks. This is minor but indicates a slight lack of final coordination.
-
-### Prior Finding Verification (Gemini)
-
-1.  **D-09 migration** — **FULLY RESOLVED** (Plan 03 Task 3.2) - Logic now persists state to `PLAN.md`.
-2.  **Pass 3 verdicts** — **FULLY RESOLVED** (Plan 06 Task 6.2) - `PDF_UNAVAILABLE` etc. implemented.
-3.  **Tier-contract green semantics** — **FULLY RESOLVED** (Plan 09 Task 9.1) - Moved end-to-end green to last plan.
-4.  **Pass 3 quote extraction** — **FULLY RESOLVED** (Plan 07 Task 7.2) - `quote-extractor.ts` handles block/multi-paragraph/10-word rules.
-5.  **Citekey collisions** — **FULLY RESOLVED** (Plan 04 Task 4.4) - Deterministic generator + 'a','b','c' suffixing.
-6.  **D-17 HANDOFF schema** — **FULLY RESOLVED** (Plan 03 Task 3.1) - Fields restored (note Plan 08 assembler needs fix).
-7.  **D-14 SourceCandidate schema** — **FULLY RESOLVED** (Plan 03 Task 3.1) - Fields restored (note Plan 04/07 implementations need fix).
-8.  **First-author surname** — **FULLY RESOLVED** (Plan 01 Task 1.3) - handles particles/initials.
-9.  **Cassette refresh** — **FULLY RESOLVED** (Plan 04 Task 4.1 + Plan 09 Task 9.2).
-10. **Pass 1 AND-gate field presence** — **FULLY RESOLVED** (Plan 07 Task 7.2) - Explicit sub-gate added.
-11. **Slug-vs-directory canonical form** — **FULLY RESOLVED** (Plan 03 Task 3.3).
-12. **Prompt hash-pin sequencing** — **FULLY RESOLVED** (Plan 00/07/09).
-13. **nock as runtime dependency** — **FULLY RESOLVED** (Plan 04 Task 4.1) - Moved to `dependencies`.
-14. **Retraction Watch wiring** — **FULLY RESOLVED** (Plan 06 Task 6.1) - Surfaces at research stderr and outline gate.
-15. **Levenshtein performance** — **FULLY RESOLVED** (Plan 01 Task 1.2) - Ukkonen banding required.
-16. **Plan 09 retrofit of runPass1/runPass3** — **FULLY RESOLVED** (Moved to Plan 07).
-17. **Dormant prompts guard** — **FULLY RESOLVED** (Plan 06 Task 6.2) - Grep gate in place.
-18. **Wave 0 red tests** — **FULLY RESOLVED** (Plan 00 Task 0.4) - `it.todo()` used correctly.
-19. **"Other" discipline** — **FULLY RESOLVED** (Plan 05 Task 5.3) - Included in `disciplines.json`.
-20. **Image-only PDFs** — **FULLY RESOLVED** (Plan 02 + Plan 06) - `TEXT_UNAVAILABLE` verdict logic.
-21. **BibTeX @-split fragility** — **FULLY RESOLVED** (Plan 04 Task 4.4) - Citekey-based ordering.
-22. **Citation-render CSL pin** — **FULLY RESOLVED** (Plan 05 Task 5.3) - Provenance SHA pinned.
-23. **Jaro-Winkler floating point** — **FULLY RESOLVED** (Plan 01 Task 1.2) - Epsilon comparison requirement.
-24. **cwd resolution for .paper/** — **FULLY RESOLVED** (Plan 09 Task 9.4).
-
-### Suggestions (Gemini)
-
-1.  **Move Frontmatter Helper**: Move the creation of `bin/lib/frontmatter.ts` from Plan 08 Task 8.1 to **Plan 03 Task 3.1**. This resolves the HIGH-severity dependency cycle.
-2.  **Add Deep-Equal**: Add a new task to **Plan 03** (or include in Task 3.1) to create `bin/lib/deep-equal.ts`.
-3.  **Sync Author Shapes**:
-    - Update **Plan 04 Task 4.2** (`toCandidate` in `crossref.ts` etc.) to map authors to a simple `string[]` instead of objects.
-    - Update **Plan 07 Task 7.1** (`DrafterInputSchema`) to expect `assignedSources[].authors` as `z.array(z.string())`.
-    - Update **Plan 07 Task 7.2** (`runPass1` implementation) to call `firstAuthorSurname(claimed.authors[0])` instead of using `.family`.
-4.  **Sync Handoff Assembler**: Update **Plan 08 Task 8.1** (`assembleHandoff`) to use `schema_version: 1` (number) and `section_pointers` (key name) to match the schema defined in Plan 03.
-
-### Risk Assessment (Gemini)
-**MEDIUM**. The core logic is sound and the Cycle 1 findings were robustly addressed in the "Plan" sections. The remaining risks are mostly synchronization errors between plans (naming conventions and author shapes) and a wave-order mistake. Applying the suggestions above will move the project to **LOW** risk and readiness for execution.
+Two highest-risk surfaces from cycle 4 receive extra scrutiny:
+- **M-3 nested-lock**: outer state.json lock + inner per-PLAN.md locks. Deadlock-free?
+  Compatible timeouts? Lock ordering across multiple PLAN.md paths?
+- **M-2 schema change**: `z.unknown().optional()` for `last_verification`. Does it admit
+  all the right shapes? Does it interact correctly with the existing `.refine`?
+  Does the round-trip preserve the migration's emitted shape?
 
 ---
 
-## Codex Review (Cycle 2)
+## Gemini Review (Cycle 5)
 
-## Summary
+### Cycle-4 Fix Verification
+- **NEW-H-3 (D-08-AMENDED schema enum parity)**: FULLY RESOLVED — The diff for Plan 03 shows the `status` enum now includes `'unverifiable'`, and the plan text confirms this change will be propagated to `SectionStateSchema` and `HandoffSchema`.
+- **M-1 (PENDING_HASH_PINS export)**: FULLY RESOLVED — The diff for Plan 00 shows the change from `const` to `export const`, and Plan 09 adds a corresponding dynamic-import test to verify the change.
+- **M-2 (last_verification field present)**: FULLY RESOLVED — The diff for Plan 03 confirms the `last_verification: z.unknown().optional()` field has been added to the `PlanFrontmatterSchema`, satisfying the requirement.
+- **M-3 (per-PLAN.md lock missing)**: FULLY RESOLVED — The diff for Plan 03 shows the file update operation is now correctly wrapped in a `withLock` call, addressing the missing lock.
+- **L-1 (Plan 05 8-key vs 9-key contradiction)**: FULLY RESOLVED — The diff for Plan 05 shows the stale 8-key JSON snippet and contradictory prose have been removed and corrected.
+- **L-2 (Plan 08 stale resumePrompt reference)**: FULLY RESOLVED — The diff for Plan 08 shows the outdated reference to `resumePrompt` has been correctly updated to `next_action`.
 
-The amendments substantially converged on the major cycle-1 issues: D-09 migration, D-17/D-14 schema restoration, Pass 3 unavailable-state separation, citekey determinism, cassette refresh/no-leak handling, dormant prompt guards, and Plan 09 retrofit concerns are all addressed with concrete files, tests, and code-shape commitments. However, the amended plans also introduce several new consistency and sequencing problems. The biggest remaining risks are dependency-ordering contradictions, stale schema/interface snippets that conflict with later amendments, and tests/plans that still assume helper signatures different from the code they require.
+### New Concerns Introduced by Cycle-4 Amendments
+- **MEDIUM** | **Lock acquisition is brittle due to unspecified retry logic.** The M-3 fix introduces a nested lock pattern using `withLock` but fails to specify retry behavior. `proper-lockfile` defaults to `retries: 0`, meaning a transient lock held by an editor or other process will cause the entire migration to fail immediately rather than waiting. This makes the implementation fragile. | **Plan 03**: The `withLock` implementation details should be amended to include a sane retry strategy (e.g., specifying `retries` and `retryWait` options) to ensure robustness against transient file contention.
+- **MEDIUM** | **The `z.unknown()` type for `last_verification` creates ambiguity for the schema's existing `.refine()` logic.** The M-2 fix adds `last_verification: z.unknown().optional()`. This is risky because the `PlanFrontmatterSchema` has a pre-existing `.refine()` validation. The refinement function will now receive an object containing a key with a completely unknown type, which could cause the refinement to crash if it makes any assumptions about property types (e.g., during iteration). The plan does not address how the `.refine()` logic should be updated to handle this. | **Plan 03**: The plan must be updated to either (a) use a more specific type than `z.unknown()` for `last_verification` or (b) explicitly detail the necessary changes to the `.refine()` implementation to ensure it can safely handle or ignore the new field.
 
-## Strengths
+### Remaining MEDIUM/LOW Concerns Worth Folding In
+None — convergence achieved under stricter rule.
 
-- The plans now include real contract surfaces instead of only decision references: `bin/lib/verify/pass1.ts`, `pass3.ts`, `quote-extractor.ts`, `citekey.ts`, `bibtex-write.ts`, `http-mock.ts`, `migration-d09.test.ts`, `cassette-no-leak.test.ts`, and `verify-verdicts.test.ts`.
-- The D-09 migration is no longer data-destructive in intent; it explicitly writes embedded section state into `PLAN.md` frontmatter before slimming `STATE.json`.
-- Pass 3 failure modes are now semantically distinct: `PDF_UNAVAILABLE`, `TEXT_UNAVAILABLE`, `NOT_FOUND`, and aggregate `unverifiable`.
-- The plans added good structural guardrails: no dormant prompt references, no direct `citation-js`/`pdf-parse` imports, no `@`-split BibTeX ordering, no section-1 smoke path, no raw cassette secrets.
-- The "middle section" invariant is repeatedly called out and has grep-based checks.
+### Convergence Recommendation
+NEEDS-CYCLE-N — 2 plan-worthy items remain.
 
-## Concerns (Codex)
-
-### Prior Findings Verification (Codex)
-
-| # | Finding | Status | Evidence / Concern |
-|---|---|---|---|
-| 1 | D-09 migration writes embedded section state into `PLAN.md` frontmatter | **PARTIALLY RESOLVED** | Plan 03 Task 3.2 adds the right 4-phase migration and `migration-d09.test.ts`. But Plan 03 depends only on `03-00`, `03-01`; it calls `updateFrontmatter` from Plan 08, which has not landed yet. This is a hard dependency break unless Plan 08 frontmatter helper moves earlier or Plan 03 depends on it. |
-| 2 | Pass 3 verdicts distinct from `NOT_FOUND`; D-08 enum; cassettes | **PARTIALLY RESOLVED** | Plan 06/07 define `PDF_UNAVAILABLE`, `TEXT_UNAVAILABLE`, `UNVERIFIABLE`; Plan 03 adds `unverifiable` status. But cassette/test commitments are split and inconsistent: `verify-verdicts.test.ts` is referenced as a Plan 00 sentinel but is not listed in Plan 00 files. |
-| 3 | Tier-contract green semantics: Plan 06 static only, Plan 09 real E2E | **PARTIALLY RESOLVED** | Plan 09 explicitly separates `workflow-static.test.ts` from real tier-contract. But Plan 06 still says "Tier-contract tests for intake/research/outline pass" and "tier-contract green for all 6 cases," which contradicts the later non-overlapping contract. |
-| 4 | Dedicated quote extractor with block/multi/nested/scare-filter/citation-strip/≥10 words | **PARTIALLY RESOLVED** | Plan 07 adds `bin/lib/quote-extractor.ts` with block, inline, multi-line block, citation-token strip, ≥10 words. Missing: nested quote handling and scare-quote filter are not specified. Inline regex only captures double/smart quotes followed immediately by citekey; single quotes are mentioned but not implemented in snippet. |
-| 5 | Citekey collisions deterministic and persisted in SourceCandidate/LIBRARY/BibTeX/DRAFT | **PARTIALLY RESOLVED** | Plan 03 adds `citekey` to `SourceCandidate`; Plan 04 adds `generateCitekey` and collision suffixing in BibTeX. But adapters in Plan 04 Tasks 4.2/4.3 still show candidate mapping without `citekey`, `id`, `last_verified`, `raw`, or D-14 fields. Persistence to `LIBRARY.json` and DRAFT citation generation is asserted but not fully wired in concrete adapter/drafter steps. |
-| 6 | D-17 HANDOFF schema restored | **PARTIALLY RESOLVED** | Plan 03 restores D-17 schema. But Plan 08 still uses the old `schemaVersion`, `wave`, `resumePrompt`, `pointers` interface in its `<interfaces>` and code snippets. `assembleHandoff` therefore conflicts with `HandoffSchema` from Plan 03. |
-| 7 | D-14 SourceCandidate schema restored | **PARTIALLY RESOLVED** | Plan 03 amendment restores D-14 fields. But Plan 04 adapter snippets and `bibtex-write.ts` tests still use the old `{ authors: [{family,given}], doi: null }` shape, conflicting with D-14 `authors: string[]`, optional `doi`, required `id`, `last_verified`, `citekey`, `raw`. |
-| 8 | `firstAuthorSurname()` normalization | **FULLY RESOLVED** | Plan 01 Task 1.3 defines `bin/lib/author-normalize.ts` with particles, comma form, initials, hyphen/diacritic cases and tests. |
-| 9 | Cassette refresh: `recordCassettes`, header scrubbing, no-leak test, GH permissions | **PARTIALLY RESOLVED** | Plan 04 adds recorder and sensitive header scrub; Plan 09 adds workflow permissions and no-leak step. But Plan 04 places `http-mock.ts` in `bin/lib`, while Plan 09 text says `tests/_helpers/http-mock.ts`. Also `finalizeRecording` uses `writeFileSync`, conflicting with the project's atomic-write discipline unless explicitly exempted as test cassette tooling. |
-| 10 | Pass 1 AND-gate field presence | **FULLY RESOLVED** | Plan 06 adds step 4a; Plan 07 `runPass1` includes empty metadata, retraction, and multi-DOI redirect handling. |
-| 11 | Slug-vs-directory canonical form | **FULLY RESOLVED** | Plan 03 Task 3.3 locks bare slug vs `NN-slug` directory basename and forbids reverse parsing. |
-| 12 | Prompt hash-pin sequencing | **PARTIALLY RESOLVED** | Sentinel + env gate is a reasonable solution. But Plan 07 says Plan 05 lands sentinels in `EXPECTED_PROMPT_HASHES`, while Plan 05 explicitly does not create `prompt-loader.ts`; Plan 00 sentinel block is in `tests/repo-files.test.ts`. The ownership of sentinels is still muddled. |
-| 13 | `nock` runtime dependency or dynamic guard | **FULLY RESOLVED** | Plan 04 chooses Option A: move `nock` to `dependencies`. |
-| 14 | Retraction Watch wiring and approval warning | **FULLY RESOLVED** | Plan 06 research and outline bodies add WARN and `RETRACTED` annotation; Plan 07 Pass 1 treats retracted as `MIS-CITED`. |
-| 15 | Levenshtein performance | **PARTIALLY RESOLVED** | Plan 01 now requires Ukkonen banding and perf test. However its earlier action snippet still describes sliding-window full DP, and `levenshteinSubstring` is character-based with only whitespace collapse, which does not really address token-normalized OCR split examples. |
-| 16 | Plan 09 retrofit of `runPass1/runPass3` moved to Plan 07 | **FULLY RESOLVED** | Plan 07 creates `bin/lib/verify/pass1.ts` and `pass3.ts`; Plan 09 tests import from those modules. |
-| 17 | Dormant prompts guard | **FULLY RESOLVED** | Plan 05/06/07 add no-reference grep gates for `pass1-fuzzy-judge` and `pass3-quote-checker` in verify path. |
-| 18 | Wave 0 red tests don't fail CI | **FULLY RESOLVED** | Plan 00 uses `test.todo()` and sentinel skips. |
-| 19 | "Other" discipline | **FULLY RESOLVED** | Plan 05 adds explicit `other` preset and Plan 06 intake behavior. |
-| 20 | Image-only PDFs documented in VERIFICATION/README known issues | **PARTIALLY RESOLVED** | VERIFICATION behavior is specified via `TEXT_UNAVAILABLE` and user-facing copy. README known-issues documentation is not concretely added to any plan/file. |
-| 21 | BibTeX `@`-split fragility | **FULLY RESOLVED** | Plan 04 replaces split sorting with pre-render citekey ordering and no post-process split. |
-| 22 | CSL pin by commit/SHA before Plan 05 | **FULLY RESOLVED** | Plan 05 pins upstream APA CSL by commit URL and provenance comment. |
-| 23 | Jaro-Winkler float tolerance | **FULLY RESOLVED** | Plan 01 requires `Math.abs(...) < 1e-12`. |
-| 24 | cwd resolution for `.paper/` | **PARTIALLY RESOLVED** | Plan 09 smoke instructions clarify cwd-relative behavior. But this is only in human-verify instructions; no code/test contract is added to `paths.ts` or CLI tests to enforce cwd-relative `.paper/` resolution. |
-
-### New Concerns (Codex)
-
-**HIGH — Plan 03 depends on Plan 08 code that does not exist yet.**
-D-09 migration in Plan 03 requires `bin/lib/frontmatter.ts updateFrontmatter` and possibly `atomicWrite` behavior from Plan 08. Since Plan 03 runs before Plan 08, implementation cannot compile unless a temporary helper is added or the plan order changes.
-
-**HIGH — Handoff schema remains contradictory across Plan 03 and Plan 08.**
-Plan 03 correctly restores D-17 fields: `schema_version`, `last_updated`, `current_section`, `phase`, `next_action`, `breadcrumbs`, `section_pointers`. Plan 08 still assembles `{ schemaVersion, phase, wave, resumePrompt, pointers }`. This would fail schema validation.
-
-**HIGH — SourceCandidate shape conflicts across Plan 03, adapters, bibtex writer, drafter input.**
-Plan 03 locks `authors: string[]`, required `id`, `last_verified`, `citekey`, `raw`; Plan 04/07 examples still use `authors: [{ family, given }]`, nullable DOI, missing required fields. This undermines D-14 and will produce type/test failures.
-
-**HIGH — `runPass1` / `runPass3` signatures are inconsistent.**
-Plan 07 defines `runPass1(draftMd, citationsBibPath)` and `runPass3(draftMd, bibByCitekey)`. Plan 09 known-bad tests call `runPass1(fx)` and `runPass3({ claimedQuote, pdfText })`. Either add fixture-specific helper functions or align tests with real signatures.
-
-**MEDIUM — Plan 07 still names `bin/cli/new.ts` in frontmatter/artifacts despite alias amendment.**
-The amendment says canonical file is `bin/cli/intake.ts`, with `new` alias. But `files_modified`, artifact list, and earlier dispatcher text still include `bin/cli/new.ts`. This will confuse implementers and Wave 0 tests that skip on `bin/cli/new.ts`.
-
-**MEDIUM — Several "Plan 00 sentinel" tests are referenced but absent from Plan 00.**
-Examples: `tests/author-normalize.test.ts`, `tests/migration-d09.test.ts`, `tests/verify-verdicts.test.ts`, `tests/quote-extractor.test.ts`, `tests/retraction-surface.test.ts`, `tests/cli-aliases.test.ts`, `tests/tier2-placeholder.test.ts`, `tests/prompts-no-pending.test.ts`, `tests/frontmatter-roundtrip.test.ts`. Some later plans create a few, but the Wave 0 contract claims tests exist up front.
-
-**MEDIUM — Tier 2 placeholder strategy may invalidate Phase 3 success criterion 1.**
-Plan 07 says Tier 2 LLM-required verbs write placeholders and succeed. ROADMAP SC-1 requires end-to-end in both tiers with equivalent verdicts, citation lists, and structure modulo prose. Placeholder outputs are unlikely to satisfy meaningful equivalence unless tier-contract explicitly accepts placeholders for Phase 3.
-
-**MEDIUM — `writeBibtex` claims citation-js chokepoint but imports `Cite` from `./citations.js`, while Plan 02 does not export `Cite`.**
-Plan 02 says `citations.ts` exports exactly `parseBibtex`, `renderApa`. Plan 04 later imports `Cite` from it. Either export a `formatBibtex` helper from `citations.ts` or amend Plan 02 exports.
-
-**MEDIUM — `unverifiable` "does not block compile" conflicts with core value/verifier blocks export.**
-Plan 06 says `UNVERIFIABLE` does not block compile, while project core value says verifier blocks compile/export and no unverifiable quote should escape unless explicitly accepted. This needs a locked policy: is `unverifiable` allowed through compile, allowed with warning, or blocking until user approval?
-
-**LOW — Retraction Watch adapter contract ambiguity.**
-Plan 04 must-have says retraction-watch has search that throws/returns empty, but tests and D-15 say no `search` export. Later plan says no `export.*search`. Remove the contradictory must-have.
-
-**LOW — Citation style preset count text remains stale.**
-Plan 05 success criteria still says "8-discipline disciplines.json" in places after adding `other` as a ninth key. Not fatal, but it will cause acceptance confusion.
-
-**LOW — `recordCassettes()` design is incomplete.**
-The function starts recorder and `finalizeRecording()` writes recordings, but no wrapper guarantees finalize on test completion. The adapter tests need explicit lifecycle instructions.
-
-### Suggestions (Codex)
-
-1. Move `bin/lib/frontmatter.ts` and `tests/frontmatter-roundtrip.test.ts` from Plan 08 to Plan 03 before D-09 migration, or make Plan 03 depend on Plan 08 and reorder waves.
-
-2. Replace Plan 08 handoff interface/code with the D-17 schema exactly:
-   `schema_version`, `last_updated`, `current_section`, `phase`, `next_action`, `breadcrumbs`, `section_pointers`.
-
-3. Normalize `SourceCandidate` everywhere:
-   use `authors: string[]`, required `id`, `last_verified`, `citekey`, `raw`, optional `doi`, `oa_pdf_url`, `retracted`, `retraction_details`. Update adapter snippets, `DrafterInputSchema`, `bibtex-write.ts`, and tests.
-
-4. Add a single explicit verify helper API:
-   - `runPass1(draftMd, citationsBibPath)`
-   - `runPass1Fixture(fixture)` if needed
-   - `runPass3(draftMd, bibByCitekey)`
-   - `runPass3Fixture({ claimedQuote, pdfText })` if needed
-   Or rewrite Plan 09 tests to call the real signatures.
-
-5. Fix Plan 07 file naming: remove `bin/cli/new.ts`; use `bin/cli/intake.ts`; keep `new` only as dispatcher alias. Update Plan 00 tier-contract skip guards accordingly.
-
-6. Add all referenced sentinel tests to Plan 00 or stop calling them Wave 0 sentinels. The plan should not rely on tests that are never created.
-
-7. Decide and document `unverifiable` policy: blocking, warning-with-approval, or non-blocking. Align PRD/core value, Plan 06, README known issues, and compile/export gate language.
-
-8. Amend Plan 02 `citations.ts` to export a safe BibTeX formatting helper or `Cite` explicitly, so Plan 04 does not break the "exactly two exports" acceptance criterion.
-
-9. Add a concrete cwd-resolution unit/integration test for `.paper/`, not only human smoke instructions.
-
-10. Add README known-issues update for image-only PDFs, as required by prior finding #20.
-
-### Risk Assessment (Codex)
-**Overall risk: MEDIUM.** The amendments solve most conceptual gaps, but the plan set is not yet internally consistent enough to execute cleanly. The remaining issues are mostly contract and sequencing problems rather than missing architecture. Fixing Plan 03/08 ordering, D-17/D-14 schema drift, verify helper signatures, and Tier 2 placeholder semantics would likely bring the risk down to LOW.
+While all six specific fixes from the previous cycle were implemented correctly in the plan, the amendments for M-2 and M-3 introduced two new medium-severity concerns related to implementation robustness and correctness. These gaps should be closed before proceeding to ensure the migration process is not brittle and the schema validation does not contain hidden failure modes.
 
 ---
 
-## Claude In-Session Review (Cycle 2)
+## Codex Review (Cycle 5)
 
-Performed in the same session as this REVIEWS.md authorship; provides an independent third voice. Read all 10 amended plans (03-00 through 03-09) end-to-end. Note: Claude CLI was skipped for independence (running inside Claude Code), so this is an in-session review using the same prompt as the other reviewers.
+### Cycle-4 Fix Verification
 
-### Strengths
+- **NEW-H-3 — FULLY RESOLVED**: `PlanFrontmatterSchema.status` includes `'unverifiable'` at `03-03-PLAN.md:274`; `SectionStateSchema` parity is explicitly required at `03-03-PLAN.md:289`; acceptance covers all three schemas at `03-03-PLAN.md:303-307`.
+- **M-1 — PARTIALLY RESOLVED**: Plan 00 now uses `export const PENDING_HASH_PINS` at `03-00-PLAN.md:601`, and Plan 09 adds a dynamic-import assertion at `03-09-PLAN.md:485-497`. But Plan 09's replacement snippets still show bare `const PENDING_HASH_PINS` at `03-09-PLAN.md:444` and `03-09-PLAN.md:454`, which can reintroduce the export bug during Task 9.3.5.
+- **M-2 — PARTIALLY RESOLVED**: `last_verification: z.unknown().optional()` is present at `03-03-PLAN.md:275`, with round-trip AC at `03-03-PLAN.md:308-311`. However the same migration writes `was_current_at_migration` at `03-03-PLAN.md:397`, and that field is still not schema-declared, so strict/default Zod object parsing can strip it.
+- **M-3 — FULLY RESOLVED**: The PLAN.md mutation is wrapped in `withLock(planUpdate.path)` at `03-03-PLAN.md:405-411`, and the outer/inner lock behavior plus timeout error is documented at `03-03-PLAN.md:413` and `03-03-PLAN.md:431-433`.
+- **L-1 — FULLY RESOLVED**: Plan 05 now consistently says EXACTLY 9 presets and removes the inline 8-key body at `03-05-PLAN.md:365-367`; acceptance also requires the 9 keys at `03-05-PLAN.md:404-406`.
+- **L-2 — FULLY RESOLVED**: T-3-LEAK-01 now references `next_action max 200 chars`, not `resumePrompt`, at `03-08-PLAN.md:448`.
 
-- Wave 0 sentinel pattern via `__PENDING_HASH_${slug}__` per-slug literals + env gate `PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1` is a well-engineered solution to the prompt hash-pin sequencing chicken-and-egg.
-- Plan 04 cassette no-leak test (`tests/cassette-no-leak.test.ts`) with explicit `SENSITIVE_HEADERS` set + a deliberate failing-fixture test step is genuine defense-in-depth, not theater.
-- D-09 migration in Plan 03 is decomposed into 5 explicit sub-steps (2a-2e) with crash-mid-migration idempotency via `_migration_lock`, and 5 distinct test cases in `tests/migration-d09.test.ts`. The most-agreed-on HIGH from cycle 1 is genuinely engineered, not papered over.
-- `bin/lib/verify/pass1.ts` and `pass3.ts` as Plan-07-from-inception modules (not Plan-09 retrofit) is the right architectural call and closes OpenCode's cycle-1 retrofit concern.
+### New Concerns Introduced by Cycle-4 Amendments
 
-### Concerns
+- **MEDIUM | M-2 schema strictness leaves `was_current_at_migration` unpreserved**: Cycle-4 chose explicit fields instead of `.passthrough()`, but only added `last_verification`. The migration still writes `was_current_at_migration`, so either add `was_current_at_migration: z.boolean().optional()` to `PlanFrontmatterSchema` or remove that migration output.
 
-#### HIGH — Plan 03 → Plan 08 forward dependency on `updateFrontmatter`
+### Remaining MEDIUM/LOW Concerns Worth Folding In
 
-Plan 03 Task 3.2 Step 2b explicitly calls `updateFrontmatter` from `bin/lib/frontmatter.ts`. Plan 08 (Wave 5) is where `frontmatter.ts` is created. Plan 03 lives in Wave 2 with `depends_on: ["03-00", "03-01"]` — it cannot import a Wave-5 artifact. This is a hard wave-ordering break. Three reviewers (Gemini, Codex, Claude in-session) independently identified this same issue, giving very high confidence.
+- **LOW | Plan 09 can undo the `PENDING_HASH_PINS` export during re-pin**: The Task 9.3.5 "before/after" snippets still use bare `const`. Change both snippets to `export const`, and update the stale illustrative `Object.keys(m.PENDING_HASH_PINS)` command at `03-09-PLAN.md:468` to the array `.map(p => p.slug)` form.
+- **LOW | Plan 06 acceptance text still omits `unverifiable` from verify status values**: The body amendment is correct at `03-06-PLAN.md:421-424`, but acceptance/success criteria at `03-06-PLAN.md:477` and `03-06-PLAN.md:540` still list only `verified/failed`. Add `unverifiable` there so the acceptance gate matches D-08-AMENDED.
 
-**Resolution path**: Move `bin/lib/frontmatter.ts` + `tests/frontmatter-roundtrip.test.ts` from Plan 08 to Plan 03, OR add `03-08` to Plan 03's `depends_on` AND reorder waves so Plan 08 is in Wave 2 alongside Plan 03.
+### Convergence Recommendation
 
-#### HIGH — Schema drift across `SourceCandidate.authors` shape (Plan 03 vs. Plan 04 vs. Plan 07)
+**NEEDS-CYCLE-6 — 3 plan-worthy items remain**
 
-Plan 03 amendment locks D-14: `authors: z.array(z.string())`. But Plan 04 adapter snippets still produce `{ family, given }` objects, Plan 07 `DrafterInputSchema` expects object form, and Plan 07 `runPass1` reads `claimed.author[0].family`. The single source of truth is broken across 3 plans, all of which will fail typecheck.
-
-#### HIGH — Handoff schema drift (Plan 03 vs. Plan 08)
-
-Plan 03 Task 3.1 restores D-17 keys: `schema_version` (number), `current_section`, `breadcrumbs`, `section_pointers`. Plan 08 Task 8.1 `assembleHandoff` still uses old keys `schemaVersion` (string), `wave`, `resumePrompt`, `pointers`. `HandoffSchema.parse()` in Plan 08 will reject Plan 08's own output.
-
-#### HIGH — `runPass1` / `runPass3` signature mismatch (Plan 07 vs. Plan 09 tests)
-
-Plan 07 defines:
-- `runPass1(draftMd: string, citationsBibPath: string): Promise<Pass1Result[]>`
-- `runPass3(draftMd: string, bibByCitekey: Map<string, any>): Promise<Pass3Result[]>`
-
-Plan 09 tests call:
-- `runPass1(fx)` where `fx` is a fixture object
-- `runPass3({ claimedQuote, pdfText })`
-
-Plan 09 will fail to compile. Either Plan 07 must add fixture-shaped overloads or Plan 09 tests must adapt to the production signatures (e.g., synthesizing a `draftMd` and `bibByCitekey` from each fixture).
-
-#### MEDIUM — `bin/lib/deep-equal.ts` referenced but never created
-
-Plan 03 Task 3.2 Step 2d uses `deepEqual` from `bin/lib/deep-equal.ts` for migration idempotency. The file is mentioned as "OK to introduce here" in the action text but is NOT listed in `files_modified`, has no implementation snippet, and has no test file. Resolution: add to Plan 03 files_modified + task action, or use `node:util.isDeepStrictEqual` from the stdlib (no new file needed).
-
-#### MEDIUM — `bin/cli/new.ts` vs. `bin/cli/intake.ts` inconsistency in Plan 07
-
-Plan 07 amendment says: canonical file is `bin/cli/intake.ts`; `new` is a dispatcher alias. But Plan 07's `files_modified` lists `bin/cli/intake.ts` (post-amendment), the artifact section header says "bin/cli/new.ts", the dispatcher snippet has TWO registrations pointing at `./cli/intake.js` (one keyed `intake`, one keyed `new`) — but earlier in the same plan the artifacts table still has `path: "bin/cli/new.ts"`. Plan 00 tier-contract skip guards reference `bin/cli/new.ts`. Implementation will create both files or be confused.
-
-#### MEDIUM — Plan 02 `citations.ts` export contract vs. Plan 04 `Cite` import
-
-Plan 02 acceptance: "citations.ts exports exactly `parseBibtex`, `renderApa`." Plan 04 Task 4.4 imports `{ Cite }` from `./citations.js`. Plan 02 contract is silently broken by Plan 04. Resolution: amend Plan 02 to export `Cite` (or a wrapper `formatBibtex`), and update the acceptance criterion.
-
-#### MEDIUM — Plan 02 image-only PDF contract contradiction
-
-Plan 02 says: "extractPdfText throws if input is not Buffer/Uint8Array" AND "Image-only PDF detection: result.text.replace(/\s/g, '').length < 50 → WARN log, return empty string, caller marks UNVERIFIABLE". The two are inconsistent: does the function throw or return empty? The image-only branch should NOT throw (caller decides UNVERIFIABLE); the input-type branch SHOULD throw (programmer error). Acceptance criteria need to disambiguate.
-
-#### MEDIUM — Plan 06 acceptance claims tier-contract green; Plan 09 says only Plan 09 is green
-
-Plan 06 Task 6.1 acceptance: "Tier-contract tests for intake/research/outline cases pass." Plan 06 Task 6.2 acceptance: "Tier-contract tests for plan-section/write-section/verify-section pass." Plan 09 Task 9.1 says workflow-static is Plan 06, real tier-contract is Plan 09 only. These are contradictory — Plan 06 cannot make tier-contract pass without the CLI verbs (Plan 07) and the MCP wiring (Plan 07) and the doctor probe (Plan 09).
-
-#### MEDIUM — Plan 04 retraction-watch must-have contradiction
-
-Plan 04 line "Each adapter exports search(query) and fetchById(id), EXCEPT retraction-watch which exports only fetchById (D-15 side-channel)" is correct. But the must_haves further down says "retraction-watch adapter has search() that throws/returns empty deliberately — only fetchById is supported (D-15)" — implying search DOES exist (just deliberately broken). Plan 00 Wave 0 sentinel test asserts `typeof adapter.search === 'undefined'`. Pick one: search export absent, or search export present-but-broken.
-
-#### MEDIUM — `verify-verdicts.test.ts`, `quote-extractor.test.ts`, `retraction-surface.test.ts`, etc. claimed as "Plan 00 Wave 0 sentinels" but not in Plan 00 files_modified
-
-Plans 06, 07 repeatedly say "tests/X.test.ts (Plan 00 Wave 0 sentinel)" but Plan 00's files_modified does not include these. Either Plan 00 needs to add these to its scaffold list, or the references need to be relocated to the plan that actually creates them.
-
-#### MEDIUM — `unverifiable` blocking policy unspecified
-
-Plan 06 Task 6.2 says: "UNVERIFIABLE does not block compile (per PRD §3 — README disclaimer covers this), BUT surfaces in VERIFICATION.md." CLAUDE.md project memory non-negotiable: "Verifier blocks compile and export. No FABRICATED, MIS-CITED, or quote-NOT_FOUND citation ever escapes a section." If UNVERIFIABLE passes through compile silently, a user can ship a paper where an unauditable quote is never seen as risky. Either: (a) UNVERIFIABLE blocks compile too, (b) UNVERIFIABLE compile-passes ONLY if user explicitly approves (gate analogous to `--yolo`), or (c) the non-negotiable is amended. Plan must pick one and document.
-
-#### LOW — `recordCassettes()` lifecycle missing in Plan 04
-
-Plan 04 Task 4.1 amendment adds `recordCassettes()` and `finalizeRecording()` but no test/hook ensures `finalizeRecording` runs at end of every recording session. A flaky test or process kill leaves cassettes un-finalized. Add an `afterEach`/`process.on('beforeExit')` invocation pattern, or document the explicit caller responsibility.
-
-#### LOW — Plan 04 `finalizeRecording` uses `writeFileSync` (not atomic-write)
-
-`writeFileSync(outPath, ...)` violates D-07 (atomic-write chokepoint). Cassettes are tooling, not production state, so maybe exempt — but document the exemption explicitly. Also, current code has no `nock` import for `writeFileSync`; needs explicit import.
-
-#### LOW — Plan 05 description still says "8-discipline" in 3+ places after `other` was added (9 total)
-
-Plan 05 success_criteria #1 still says "8 prompts + apa.csl + 8-discipline disciplines.json", but Plan 05 acceptance_criteria for Task 5.3 says "EXACTLY 9 keys". Pick one count and propagate.
-
-#### LOW — Plan 00 task count vs. objective count mismatch
-
-Plan 00 objective text says "exactly 7 tasks (0.1 through 0.5)"; actual task count is 6 (0.1-0.6). Numbering and count both inconsistent.
-
-#### LOW — README known-issues for image-only PDFs (prior finding #20) not added to any plan file
-
-Finding #20 says: image-only PDFs trigger UNVERIFIABLE verdict — document in README known-issues. This is implemented at the algorithm level (Plan 02 + Plan 06) but no plan task adds README content. The user-facing transparency promise (per CLAUDE.md "Honest framing on detection") is partial.
-
-### Risk Assessment (Claude in-session)
-
-**MEDIUM.** Cycle 2 amendments demonstrably solve cycle-1 conceptual problems (the 24 findings are 15 FULLY resolved + 9 PARTIALLY resolved per my counting). However, the rapid replanning has introduced 4 NEW HIGH concerns and ~7 NEW MEDIUM concerns, almost all of which are contract/sequencing/internal-consistency mismatches across plan boundaries — exactly the failure mode the cycle-2 review was instructed to catch. None of the new HIGH concerns are unfixable; all are mechanical syncs (dependency reorder, schema field rename, signature alignment). Estimated effort to close cycle 3: 1-2 hours focused replanning.
+HIGH appears to be 0, and the nested-lock concern is adequately bounded for this slice. The remaining items are small but real plan gaps: one schema preservation bug and two stale snippets/acceptance lines that can mislead implementation or weaken convergence checks.
 
 ---
 
-## Consensus Summary (Cycle 2)
+## Claude-in-Session Review (Cycle 5)
 
-### Cross-Reviewer Agreement on NEW HIGH Concerns
+### Cycle-4 Fix Verification
 
-| # | Concern | Gemini | Codex | Claude | Notes |
-|---|---|---|---|---|---|
-| H-1 | Plan 03 → Plan 08 frontmatter.ts dependency break | YES | YES | YES | 3/3 reviewers. Highest confidence. |
-| H-2 | SourceCandidate authors shape drift across Plan 03/04/07 | YES (MEDIUM) | YES (HIGH) | YES (HIGH) | 3/3 reviewers. Gemini called MEDIUM, others HIGH. |
-| H-3 | Handoff schema drift Plan 03 vs Plan 08 | YES (MEDIUM) | YES (HIGH) | YES (HIGH) | 3/3 reviewers. |
-| H-4 | runPass1/runPass3 signature mismatch Plan 07 vs Plan 09 | (not flagged) | YES (HIGH) | YES (HIGH) | 2/3 reviewers. Codex caught this; Gemini did not. |
+- **NEW-H-3 — FULLY RESOLVED**: Verified at three independent code-shape pin points. (a) Plan 03 line 274 PlanFrontmatterSchema.status now has 7 literals including 'unverifiable'. (b) Plan 03 step 4 (line 289) extends SectionStateSchema with the same 7th literal AND declares it the single source of truth (HandoffSchema imports it transitively per line 219). (c) Acceptance criteria (lines 303-307) assert all three schemas accept status='unverifiable' AND a grep gate covers state.ts + plan-frontmatter.ts. All three schemas stay in lock-step.
 
-### Cross-Reviewer Agreement on NEW MEDIUM Concerns
+- **M-1 — PARTIALLY RESOLVED**: Plan 00 line 601 is correct (`export const PENDING_HASH_PINS`). Plan 09 step 4.5 (lines 485-497) adds the fail-fast dynamic-import test. HOWEVER Plan 09 Task 9.3.5 "before" snippet at line 444 shows `const PENDING_HASH_PINS` (no export) and the "after" snippet at line 454 also shows bare `const`. If an implementer applies the "after" snippet literally during re-pin, they would silently strip the `export` keyword that step 4.5 just installed grep-coverage for. The fail-fast test would then catch it at test-execution time, so this is correctly classified as LOW (not MEDIUM) — the safety net exists, but the snippets bait the implementer toward a wrong edit. Codex's classification (LOW) is correct.
 
-| # | Concern | Reviewers |
-|---|---|---|
-| M-1 | `bin/cli/new.ts` vs `bin/cli/intake.ts` inconsistency in Plan 07 | Codex + Claude |
-| M-2 | "Plan 00 Wave 0 sentinel" tests not actually in Plan 00 files_modified | Codex + Claude |
-| M-3 | Tier 2 placeholder strategy may invalidate SC-1 | Codex (Claude noted but didn't fully assess) |
-| M-4 | `writeBibtex` imports `Cite` from citations.ts but Plan 02 says only `parseBibtex`/`renderApa` exported | Codex + Claude |
-| M-5 | `unverifiable` does-not-block-compile conflicts with verifier-blocks-export non-negotiable | Codex + Claude |
-| M-6 | `bin/lib/deep-equal.ts` referenced but never created | Gemini + Claude |
-| M-7 | Plan 06 acceptance claims tier-contract green for cases Plan 09 says only Plan 09 makes green | Codex + Claude |
-| M-8 | Plan 04 retraction-watch contradictory must-have (search-throws vs search-absent) | Claude only |
-| M-9 | Plan 02 image-only-PDF: throws-on-input vs returns-empty-on-image-only contract is inconsistent | Claude only |
+- **M-2 — PARTIALLY RESOLVED**: Plan 03 line 275 correctly adds `last_verification: z.unknown().optional()` with explicit-not-passthrough semantics, and lines 308-311 add round-trip acceptance criteria. The cycle-4 fix is internally consistent for `last_verification`. BUT Plan 03 line 397 (in the same migration that motivated the M-2 fix) ALSO writes `was_current_at_migration: true` into the PLAN.md frontmatter when `parsed.currentSection === entry.n` or `parsed.currentSectionSlug === slug`. The schema at lines 267-279 has NO declaration for `was_current_at_migration` AND is NOT `.passthrough()`. By the same logic that drove the M-2 fix (strict-by-default Zod object schemas strip undeclared keys), this breadcrumb will be silently stripped on the very next loadState round-trip. The migration emit is therefore write-once-then-lost: the v1→v2 migration writes it, the next normal load reads PLAN.md through PlanFrontmatterSchema.parse() and the key vanishes. This is the exact failure mode M-2 was patching, missed for the sibling field. MEDIUM, not LOW — confirms Codex.
 
-### Resolution Status of 24 Cycle-1 Findings (Consensus)
+- **M-3 — FULLY RESOLVED**: Plan 03 lines 405-411 wrap each PLAN.md mutation in `withLock(planUpdate.path)`. The nested-lock design is documented at line 413 (outer = stateJsonPath, inner = planPath, distinct paths, proper-lockfile supports nested acquisition). Lock timeout escalation to `MigrationLockTimeoutError` is specified at lines 413 and 431-433. The grep AC at line 415 (`grep -B2 "updateFrontmatter(text" bin/lib/state.ts` must show `withLock(` within 2 preceding lines) is mechanical and enforceable. Gemini's "brittle retries" concern overlooks that `bin/lib/lock.ts withLock` (Phase 2) already encodes a default retry schedule with exponential backoff (lines 88-108 of lock.ts) — this is the same helper, not a fresh proper-lockfile.lock call. Not a plan gap.
 
-Reviewers' resolution counts:
-- Gemini: 24/24 FULLY RESOLVED
-- Codex: 14/24 FULLY RESOLVED, 10/24 PARTIALLY RESOLVED
-- Claude in-session: 15/24 FULLY RESOLVED, 9/24 PARTIALLY RESOLVED
+- **L-1 — FULLY RESOLVED**: Plan 05 line 365 removes the prior 8-key JSON snippet and points to the canonical 9-key body in the REVIEWS CONVERGENCE block. Stale prose sweeps at lines 182 and 345 align "9 preset keys". Acceptance criteria at line 406 require the 9-key shape.
 
-**Consensus (worst-case, conservative):** When any reviewer says PARTIAL, treat as PARTIAL. Per-finding statuses are listed in detail in the final orchestrator response.
+- **L-2 — FULLY RESOLVED**: Plan 08 line 448 T-3-LEAK-01 row now lists `next_action max 200 chars` with the D-17 cite. Historical references at lines 108 and 171 are correctly preserved with "GONE" / "older shape" markers per the cycle-4 commit message.
 
-### Synthesized Action Items for Cycle 3 Replan
+### New Concerns Introduced by Cycle-4 Amendments
 
-1. **(HIGH)** Move `bin/lib/frontmatter.ts` + `tests/frontmatter-roundtrip.test.ts` from Plan 08 to Plan 03. Update Plan 03 files_modified and Plan 08 must-haves/artifacts.
-2. **(HIGH)** Normalize `SourceCandidate.authors` to `z.array(z.string())` everywhere: Plan 03 schema (already done), Plan 04 adapter snippets, Plan 04 bibtex-write fixture data, Plan 07 DrafterInputSchema, Plan 07 runPass1 implementation.
-3. **(HIGH)** Sync Plan 08 `assembleHandoff` to D-17: `schema_version: 1`, `section_pointers`, `breadcrumbs`, `current_section`, `last_updated`, `next_action`, `phase`. Remove old keys `schemaVersion`/`wave`/`resumePrompt`/`pointers`.
-4. **(HIGH)** Reconcile `runPass1`/`runPass3` signatures across Plan 07 (production) and Plan 09 (tests). Either add `runPass1Fixture(fx)` / `runPass3Fixture({ claimedQuote, pdfText })` shims to Plan 07, or rewrite Plan 09 tests to build a draftMd + bib map from each fixture.
-5. **(MEDIUM)** Add `bin/lib/deep-equal.ts` to Plan 03 files_modified with a minimal implementation (or switch to `node:util.isDeepStrictEqual` and remove the deep-equal.ts reference).
-6. **(MEDIUM)** Resolve `bin/cli/new.ts` vs `bin/cli/intake.ts` once and for all: pick `intake.ts` as the canonical file, remove all `new.ts` references from files_modified and artifacts in Plans 00/06/07, keep `new` only as a dispatcher alias in REAL_VERB_LOADERS.
-7. **(MEDIUM)** Add all "Plan 00 Wave 0 sentinel" tests to Plan 00 files_modified, OR move those test creations to the plans that actually create them. Tests referenced but not created: `tests/migration-d09.test.ts`, `tests/verify-verdicts.test.ts`, `tests/quote-extractor.test.ts`, `tests/retraction-surface.test.ts`, `tests/cli-aliases.test.ts`, `tests/tier2-placeholder.test.ts`, `tests/prompts-no-pending.test.ts`, `tests/frontmatter-roundtrip.test.ts`.
-8. **(MEDIUM)** Amend Plan 02 to export `Cite` (or a `formatBibtex` wrapper) from `bin/lib/citations.ts`. Update Plan 02 acceptance criterion. OR amend Plan 04 to delegate BibTeX formatting to a citation-js call inside citations.ts and only consume the formatted string.
-9. **(MEDIUM)** Lock `unverifiable` blocking policy explicitly: pick (a) compile-blocks, (b) compile-passes-with-explicit-approval, or (c) compile-passes-with-warning. Document in Plan 06 + ROADMAP + amend CLAUDE.md non-negotiable wording if needed.
-10. **(MEDIUM)** Resolve Plan 06 tier-contract acceptance: drop the "tier-contract green" claim from Plan 06, replace with "workflow-static.test.ts green" (the static-invariant suite); ensure only Plan 09 claims real tier-contract green.
-11. **(MEDIUM)** Resolve Plan 04 retraction-watch search export: pick "no search export" (D-15) and remove the "search throws/returns empty deliberately" must-have line.
-12. **(MEDIUM)** Disambiguate Plan 02 extractPdfText contract: throws on non-Buffer input (programmer error); returns empty string on image-only (caller logic). Add 2 distinct acceptance criteria + 2 test cases.
-13. **(LOW)** Plan 05 success criteria: replace "8-discipline" with "9-discipline (8 INTK-03 + other fallback)" consistently.
-14. **(LOW)** Plan 00 task count alignment: pick 6 or 7 and update both objective and body text.
-15. **(LOW)** Add README known-issues section update task to Plan 09 (or wherever README updates land) covering image-only PDFs → UNVERIFIABLE verdict — closes prior finding #20 honestly.
-16. **(LOW)** Document `recordCassettes()` lifecycle + atomic-write exemption explicitly in Plan 04.
+- **MEDIUM | Schema-strict regression on sibling migration field**: same finding as Codex. The cycle-4 M-2 fix declared ONE migration-emitted field (`last_verification`) explicitly to defeat strict-by-default stripping, but did not declare the sibling field `was_current_at_migration` that the same migration step writes when the v1 STATE.json's `currentSection` / `currentSectionSlug` matches the section being persisted. PlanFrontmatterSchema is not `.passthrough()`. On the next loadState parse the field is silently dropped — the migration appears to write a useful "this section was current at migration time" breadcrumb for `pensmith status` rendering, but the breadcrumb never survives a single round-trip. Fix: declare `was_current_at_migration: z.boolean().optional()` on PlanFrontmatterSchema (Plan 03 line 275 area) AND add a corresponding round-trip acceptance criterion (Plan 03 lines 308-311 area).
 
-### Risk Assessment (Consensus)
+### Remaining MEDIUM/LOW Concerns Worth Folding In
 
-**Overall risk for execution: MEDIUM.**
+- **LOW | Plan 09 Task 9.3.5 "before/after" snippets re-introduce the `const` bug visually**: same finding as Codex. Plan 09 lines 444 and 454 still show bare `const PENDING_HASH_PINS = ...`. The fail-fast assertion added at lines 485-497 catches the regression at test time, but the snippets bait the implementer toward stripping `export` during the manual re-pin edit. Fix: change both snippets to `export const`, OR rewrite the snippets to "edit Plan 00 line 601 in place by adding `expected: 'sha256...'` to each entry" without reproducing the full block. Either resolves the visual bait.
 
-The cycle-2 amendments demonstrably solved the cycle-1 *conceptual* gaps but introduced *mechanical synchronization* errors across plan boundaries. None of the new HIGH concerns are architectural; all are mechanical syncs that one focused replan-phase can close. Estimated cycle-3 close-out work: 1-2 hours.
+- **LOW | Plan 06 verify-workflow acceptance enum omits `unverifiable`**: same finding as Codex. Lines 477 (`verify.md body uses D-08 LOCKED enum values: 'verifying', 'verified', 'failed'`) and 540 (`D-08 LOCKED status enum values used in write.md and verify.md ('writing', 'written', 'verifying', 'verified', 'failed')`) list only 6 of the 7 D-08-AMENDED literals. The body amendment at line 423 ("UNVERIFIABLE → 'unverifiable'") and the verdict computation at lines 414-415 do emit the terminal state correctly, but a verify implementation that NEVER persists 'unverifiable' would still pass these acceptance gates. Fix: add `'unverifiable'` to both lists; also extend the verification block at line 530 to include 'unverifiable' in the slug grep. Defense-in-depth alignment with the schema parity already in place at Plan 03.
 
-If cycle 3 fully closes H-1 through H-4 plus M-1 through M-9, Phase 3 is execution-ready at **LOW** risk.
+### Gemini Concerns That Did Not Survive Verification (Excluded)
+
+- **Gemini MEDIUM #1 (lock retry brittleness)**: REJECTED. The migration code calls `withLock(...)` from `bin/lib/lock.ts` — the Phase 2 helper that already encodes a retry schedule with exponential backoff (lock.ts lines 88-108). It does NOT call `proper-lockfile.lock` directly with `retries: 0`. The plan inherits the sane defaults; the design is robust against transient editor contention.
+
+- **Gemini MEDIUM #2 (.refine() interaction with last_verification)**: REJECTED. The existing `.refine` on PlanFrontmatterSchema (Plan 03 lines 276-279) is one line: `(p) => !p.depends_on.includes(p.slug)`. It only inspects the `depends_on` array; it does not iterate other keys, does not call `Object.entries(p)`, does not type-narrow `last_verification`. There is zero interaction surface between `z.unknown()` for `last_verification` and the depends_on no-self-ref check. The concern is theoretical without a real failure path.
+
+### Convergence Recommendation
+
+**NEEDS-CYCLE-6 — 3 plan-worthy items remain**
+
+All three are mechanical text edits (no decision changes, no schema architecture rework). Estimated close-out: ~15 minutes. The three findings are:
+1. (MEDIUM) Plan 03: declare `was_current_at_migration: z.boolean().optional()` on PlanFrontmatterSchema, or remove the migration's emit of that field.
+2. (LOW) Plan 09: fix the bare-const snippets at lines 444 and 454 to `export const`, or rewrite the task to edit Plan 00 in place.
+3. (LOW) Plan 06: add `'unverifiable'` to the acceptance enum lists at lines 477 and 540, and to the verification block at line 530.
+
+After these three are folded in, the cycle-6 review should converge cleanly (no expected new findings — both Gemini and Codex independently report no other plan-worthy items, and the rejected Gemini MEDIUMs do not represent real plan gaps under stricter-rule analysis).
 
 ---
 
-# Cycle 3 Review — Convergence Loop Iteration 3
-
-**Reviewed at:** 2026-05-21T15:00:00Z
-**HEAD at review:** 8a9dd87 (cycle-2 replan — cross-plan sync H-1..H-4 + MEDIUMs/LOWs, 635 insertions across 9 files)
-**Reviewers invoked:** gemini (0.42.0), codex (codex-cli 0.132.0)
-**Skipped CLI:** claude (running inside Claude Code — skipped for independence)
-**Unavailable CLIs this cycle:** cursor-agent (only Cursor IDE GUI installed, not the cursor-agent CLI); opencode (1.1.34 — hung on stdin pipe with no LLM output after >5 min, terminated); qwen, coderabbit (not installed)
-
-This cycle re-reviews the cycle-2-amended plans. The cycle-2 replan claimed to resolve 4 HIGHs (H-1..H-4) + 9 MEDIUMs + 3 LOWs from the cycle-2 review. Reviewers were asked to (a) verify each cycle-2 fix item is truly fixed, (b) surface NEW concerns introduced by the cycle-2 amendments (esp. the 285-line Plan 08 assembleHandoff rewrite), and (c) apply the stricter stop rule — surface MEDIUM/LOWs that reveal real gaps.
-
----
-
-## Gemini Review (Cycle 3)
-
-# Phase 3 Cycle 3 Review — Convergence Loop Iteration 3
-
-The Cycle 2 amendments have significantly strengthened the plans, successfully addressing the wave-ordering criticals (H-1) and normalizing the author string format across the entire pipeline (H-2). The D-09 migration is now data-safe and idempotent (Plan 03), and the verification signatures are largely aligned (H-4). However, a few mechanical synchronization errors remain that will block compilation or lead to data loss in the verification loop.
-
-### 1. Cycle-2 HIGH Resolution Verification
-
-*   **H-1: `frontmatter.ts` wave-ordering — FULLY RESOLVED**
-    *   `frontmatter.ts` is now created in **Plan 03 Task 3.4** (Wave 2) and consumed by the D-09 migration in Task 3.2. **Plan 08** correctly identifies itself as a consumer rather than a producer (Artifacts list, line 1863).
-*   **H-2: `SourceCandidate` author shape propagation — FULLY RESOLVED**
-    *   **Plan 03 Task 3.1** (line 1357) locks `authors: z.array(z.string())`.
-    *   **Plan 04 Task 4.2** (line 1650) enforces adapters emit `string[]` in `"Family, Given"` format.
-    *   **Plan 07 Task 7.1** (line 1883) `DrafterInputSchema` validates the `string[]` shape.
-    *   **Plan 07 Task 7.2** (line 1974) `runPass1` normalizes to `string[]` at the boundary and uses `firstAuthorSurname` for comparison.
-*   **H-3: `HANDOFF.json` D-17 canonical schema — FULLY RESOLVED**
-    *   **Plan 03 Task 3.1** (line 1370) and **Plan 08 Task 8.1** (line 1864) are now in sync on the D-17 canonical shape (`schema_version: 1`, `section_pointers`, `breadcrumbs`). The older `schemaVersion` / `pointers` keys have been removed.
-*   **H-4: `runPass1`/`runPass3` signature lock — FULLY RESOLVED**
-    *   **Plan 07 Task 7.2** (line 1960, 1990) now exports `runPass1Unit` and `runPass3Unit` specifically for fixture testing.
-    *   **Plan 09 Task 9.2** (line 1989, 2000) correctly imports and calls these unit-helpers, matching the fixture data shapes.
-
-### 2. Cycle-2 MEDIUM/LOW Resolution Verification
-
-*   **deep-equal.ts task — FULLY RESOLVED**: Added in **Plan 03 Task 3.5**.
-*   **Plan 06 acceptance unit-only — FULLY RESOLVED**: Tasks 6.1/6.2 ACs updated to "unit-green-only" (static invariants).
-*   **SENSITIVE_HEADERS centralized — FULLY RESOLVED**: Centralized in `bin/lib/http-mock.ts` per **Plan 04 Task 4.1**.
-*   **Dormant-prompts grep extended — FULLY RESOLVED**: Added to **Plan 06 Task 6.2** AC (line 1846).
-*   **Citekey collision base-26 — FULLY RESOLVED**: Added to `bin/lib/bibtex-write.ts` in **Plan 04 Task 4.4**.
-*   **Canonical `intake.ts` — FULLY RESOLVED**: canonical name used in **Plan 07 Task 7.2** with `new` as alias.
-*   **Plan 09 Sentinel replacement — FULLY RESOLVED**: Explicitly handled in **Plan 09 Task 9.3.5**.
-*   **Plan 05 "9 keys" sweep — FULLY RESOLVED**: AC for **Task 5.3** (line 1797) updated to "EXACTLY 9 keys".
-*   **MIDDLE_SECTION location — FULLY RESOLVED**: Defined inline in `tier-contract.test.ts` (Plan 00 Task 0.4).
-*   **Plan 00 task-count — FULLY RESOLVED**: Updated to 6 in Plan 00 Objective.
-*   **Stale-lock recovery test — FULLY RESOLVED**: Added to **Plan 08 Task 8.1** AC (line 1883).
-*   **Plan 04 adapter BibTeX examples — FULLY RESOLVED**: Snippets updated to `authors: string[]`.
-
-### 3. NEW Concerns Introduced by Cycle-2 Amendments
-
-*   **HIGH: `bin/lib/citations.ts` (Plan 02) missing `Cite` export.**
-    *   **Plan 02 Task 2.2** (line 1121) defines artifacts with `exports: ["parseBibtex", "renderApa"]`. However, **Plan 04 Task 4.4** (line 1672) and **Plan 09 Task 9.2** (line 1982) try to import `Cite` from `./citations.js`. Compilation will fail.
-    *   **Resolution:** Add `Cite` to the export list in Plan 02 Task 2.2.
-*   **MEDIUM: `tests/repo-files.test.ts` sentinel replacement shape mismatch.**
-    *   **Plan 00 Task 0.3** (line 1406) scaffolds `PENDING_HASH_PINS` as an **array** of objects and iterates with a loop. **Plan 09 Task 9.3.5** (line 2030) shows the replacement of an **object** map. The replacement instructions in Plan 09 will not work on the file structure created in Plan 00.
-    *   **Resolution:** Align Plan 09 Task 9.3.5 replacement snippet with the `Plan 00` array-of-objects structure.
-*   **MEDIUM: `writeBibtex` (Plan 04) fails to persist the `retracted` flag.**
-    *   **Plan 06 research** flags sources as retracted, but **Plan 04 Task 4.4** `toCsl` (line 1675) does not include the `retracted` flag in its mapping. Since `citation-js` is used to format the BibTeX, the flag is lost. Consequently, the verifier in **Plan 07 Task 7.2** (line 1983) will find `claimed.retracted` is always undefined, defeating the D-15 requirement.
-    *   **Resolution:** Update `Plan 04 Task 4.4` to persist the `retracted` flag (e.g., via the `note` field or a custom CSL field that maps to BibTeX).
-*   **MEDIUM: `Plan 07` `runPass1Unit` crashes on null `input.actual`.**
-    *   In **Task 7.2** (line 2011), the code checks `if (!input.actual)` but then immediately attempts to read `input.actual.authors` on line 2012. This will crash with a TypeError.
-    *   **Resolution:** Ensure line 2012 uses safe navigation: `input.actual?.authors[0]`.
-
-### 4. Remaining Concerns Worth Folding In
-
-*   **MEDIUM: `CslEntry` interface (Plan 04 Task 4.4) missing `id`.**
-    *   The `CslEntry` interface (line 1680) is missing the `id` property, which causes the logic on line 1694 (`csl.id = citekey`) to fail typecheck. This is critical for forcing `citation-js` to use the deterministic citekey.
-*   **LOW: `BREADCRUMBS.jsonl` writer is missing.**
-    *   **Plan 08 Task 8.2** (line 1916) attempts to read from `.paper/BREADCRUMBS.jsonl`, but no task in Phase 3 (or earlier) appears to write to this file. The breadcrumbs in `HANDOFF.json` will be perpetually empty.
-*   **LOW: `Plan 03` `HandoffSchema` enum duplication.**
-    *   `Plan 03` Task 3.1 (line 1373) duplicates the `SectionStateSchema` enum literals instead of importing them from `state.ts`. While a cycle is claimed (line 1371), no cycle actually exists between the two schema files.
-*   **LOW: `Plan 09` sentinel replacement verification command.**
-    *   The `diff` command in **Task 9.3.5** (line 2040) uses `require()` on ESM files, which will fail.
-
-### 5. Risk Assessment — MEDIUM
-
-The transition to Cycle 3 has solved the fundamental architectural and sequencing risks. The remaining issues are purely mechanical (missing exports, interface field mismatches, and logic edge cases). However, because these "mechanical" issues include compilation blockers (`Cite` export, `CslEntry.id`) and a breakage of a core verifier requirement (retraction persistence), the risk remains **MEDIUM** until these specific sync defects are closed. Once aligned, Phase 3 will be ready for high-fidelity execution.
-
-
----
-
-## Codex Review (Cycle 3)
-
-**Summary**
-
-The cycle-2 amendments materially improve the plan set and close several prior sync defects, but the plans are not yet execution-ready at LOW risk. The four cycle-2 HIGHs are mostly addressed at the headline level, but two have residual contradictions that would still cause implementer confusion or compile/runtime failure. The largest remaining risks are stale snippets that contradict the replacement text, mismatched helper signatures around `frontmatter.ts`, and lingering cross-plan module/export drift around `citations.ts`, `http-mock.ts`, and atomic-write helper names.
-
-**Cycle-2 HIGH Resolution Verification**
-
-| ID | Status | Evidence |
-|---|---|---|
-| H-1 frontmatter.ts wave-ordering | **PARTIALLY RESOLVED** | Plan 03 now lists `bin/lib/frontmatter.ts` and `tests/frontmatter-roundtrip.test.ts` in Wave 2 files (`03-03-PLAN.md:16-18`) and Task 3.4 creates it (`03-03-PLAN.md:592-743`). Plan 08 explicitly no longer owns it (`03-08-PLAN.md:11-13`, `242`). However, there is a new signature/IO contradiction: Task 3.2 calls `updateFrontmatter(path, merge)` and says it “internally delegates” atomic write (`03-03-PLAN.md:440-441`), while Task 3.4 defines `updateFrontmatter(text, mutator)` as a pure string transformer with no FS or atomic write (`03-03-PLAN.md:604-605`, `645`). This will break the migration implementation unless reconciled. |
-| H-2 SourceCandidate author shape propagation | **FULLY RESOLVED for author shape; broader SourceCandidate shape still risky** | Plan 03 locks `authors: z.array(z.string())` (`03-03-PLAN.md:206`). Plan 04 adapter snippets emit string authors (`03-04-PLAN.md:445-451`) and add grep gates against object authors (`03-04-PLAN.md:455`, `467`). Plan 07 DrafterInput uses `authors: z.array(z.string())` (`03-07-PLAN.md:186-194`) and pass1 normalizes citation-js author objects into `claimedAuthorsD14` before comparing via `firstAuthorSurname` (`03-07-PLAN.md:431-460`). Plan 09 tests import unit helpers with string-array author fixtures (`03-09-PLAN.md:288-322`). Caveat: Plan 04 snippets still omit required D-14 fields like `id`, `last_verified`, `citekey`, `raw`, and use `doi: null` in fixtures despite Plan 03 making `doi` optional string, not nullable (`03-03-PLAN.md:204-215`; `03-04-PLAN.md:658-660`). |
-| H-3 HANDOFF D-17 canonical schema | **PARTIALLY RESOLVED** | Plan 08’s `assembleHandoff` rewrite now emits `schema_version: 1`, `last_updated`, `current_section`, `phase`, `next_action`, `breadcrumbs`, `section_pointers` and validates twice (`03-08-PLAN.md:196-218`, `248-250`). That fixes the Plan 08 assembler. But Plan 03 still contains stale old-schema behavior and snippets before the “replace” block: `schemaVersion`, `wave`, `resumePrompt`, `pointers` at `03-03-PLAN.md:160`, `243-256`, and an acceptance criterion for a `6000-byte resumePrompt` at `03-03-PLAN.md:346`. Also Plan 03 must-have still says “except resumePrompt” (`03-03-PLAN.md:37`). These stale lines should be removed, not left as contradictory instructions. |
-| H-4 runPass1/runPass3 signature lock | **FULLY RESOLVED** | Plan 07 defines canonical signatures `runPass1(draftMd: string, citationsBibPath: string)` and `runPass3(draftMd: string, bibByCitekey: Map<string, any>)` (`03-07-PLAN.md:414`, `505`) and adds fixture helpers `runPass1Unit` / `runPass3Unit` (`03-07-PLAN.md:549`, `570`). Plan 09 explicitly imports `runPass1Unit` and `runPass3Unit` for known-bad tests and forbids canonical helper calls from those fixture tests (`03-09-PLAN.md:291-322`, `349`). |
-
-**Cycle-2 MEDIUM/LOW Resolution Verification**
-
-| Item | Status | Evidence |
-|---|---|---|
-| `deep-equal.ts` task | **FULLY RESOLVED** | Plan 03 adds file to frontmatter (`03-03-PLAN.md:17`) and Task 3.5 creates `bin/lib/deep-equal.ts` plus tests (`03-03-PLAN.md:748-807`). |
-| Plan 06 acceptance softened to unit-green-only | **FULLY RESOLVED** | Plan 06 explicitly defers tier-contract integration to Plan 09 and only requires `workflow-static` at Plan 06 time (`03-06-PLAN.md:261`, `483`). |
-| `SENSITIVE_HEADERS` centralized in Plan 04 | **PARTIALLY RESOLVED** | Plan 04 exports `SENSITIVE_HEADERS` from `bin/lib/http-mock.ts` (`03-04-PLAN.md:306-351`). But Plan 09 still says the scrubber lives in `tests/_helpers/http-mock.ts` (`03-09-PLAN.md:40`, `335`), contradicting Plan 04’s `bin/lib/http-mock.ts` location. |
-| Dormant-prompts grep extended to workflows/bin/dist | **FULLY RESOLVED** | Plan 06 adds grep gates for `workflows/`, `bin/`, and `dist/` (`03-06-PLAN.md:485-488`) plus Plan 07 has verify call-site gates (`03-07-PLAN.md:290`, `345`). |
-| Citekey collision beyond `z` | **FULLY RESOLVED** | Plan 04 adds base-26 `suffixForCollision` and tests for 26→`z`, 27→`aa`, 53→`ba` (`03-04-PLAN.md:736-769`). |
-| Canonical `bin/cli/intake.ts`, alias `new` | **FULLY RESOLVED** | Plan 00 tier-contract uses `verbFile: 'bin/cli/intake.ts'` for `new` alias (`03-00-PLAN.md:694`). Plan 07 files list only `bin/cli/intake.ts` (`03-07-PLAN.md:9`) and declares no `bin/cli/new.ts` is created (`03-07-PLAN.md:363`). |
-| Plan 09 Task 9.3.5 sentinel replacement | **FULLY RESOLVED as a plan item** | Dedicated task exists with no-sentinel grep, real SHA replacement, env gate unset, and lock-step updates (`03-09-PLAN.md:412-471`). |
-| Plan 05 “8-discipline” prose sweep | **PARTIALLY RESOLVED** | Plan 05 now explains “9 effective keys” (`03-05-PLAN.md:64`, `81`, `463`). But stale task title and done text still say “8-discipline disciplines.json preset” / “8-discipline preset lands” (`03-05-PLAN.md:339`, `420`), and Plan 06 still asks intake body to reference “8 presets” (`03-06-PLAN.md:258`). |
-| `MIDDLE_SECTION` constant location | **FULLY RESOLVED** | Plan 00 explicitly inlines `MIDDLE_SECTION = '3'` in tier-contract and documents why it is not exported from runtime modules (`03-00-PLAN.md:689-699`, `822`). |
-| Plan 00 task-count 7→6 | **FULLY RESOLVED** | Plan 00 verification says task count is exactly 6 and explains the prior off-by-one (`03-00-PLAN.md:821`). |
-| Stale-lock recovery test for `HANDOFF.json.lock` | **FULLY RESOLVED** | Plan 08 Task 8.1 acceptance requires a stale/orphan lock recovery test (`03-08-PLAN.md:253-256`). |
-| Plan 04 adapter list sync / BibTeX examples string[] | **PARTIALLY RESOLVED** | Author examples are string arrays (`03-04-PLAN.md:658-660`), and adapter output is string[] (`03-04-PLAN.md:455`). But fixtures still use `doi: null` and omit required `id`, `last_verified`, `citekey`, `raw`, which conflicts with Plan 03 D-14 schema (`03-03-PLAN.md:204-215`). |
-
-**New Concerns Introduced**
-
-**HIGH — `frontmatter.ts` API is internally inconsistent.**  
-Task 3.2 needs a disk updater: `updateFrontmatter(path, merge)` plus atomic persistence (`03-03-PLAN.md:440-441`). Task 3.4 defines a pure text transformer `updateFrontmatter(text, mutator): string` and explicitly says callers persist returned text themselves (`03-03-PLAN.md:604-605`). This is a real execution blocker for the D-09 migration.
-
-**HIGH — `citations.ts` / `bibtex-write.ts` export contract still conflicts.**  
-Plan 02 says `bin/lib/citations.ts` exports exactly `parseBibtex` and `renderApa` (`03-02-PLAN.md:251`). Plan 04 imports `Cite` from `./citations.js` (`03-04-PLAN.md:585`) and tests import `Cite` from `../bin/lib/citations.js` (`03-04-PLAN.md:645`). Either Plan 02 must export `Cite`, or Plan 04 must use a wrapper function. This was a cycle-2 medium and remains unresolved.
-
-**MEDIUM — `atomicWrite` vs `atomicWriteFile` naming drift.**  
-Plan 08 imports and calls `atomicWrite` (`03-08-PLAN.md:180`, `236`). Plan 04 assumes `atomic-write.ts` exports `atomicWriteFile` (`03-04-PLAN.md:167`, `586`, `633`, `747`). Plan 03 migration text also references `atomicWrite` (`03-03-PLAN.md:441`, `486`). The plans need one canonical exported name.
-
-**MEDIUM — Plan 08 still has stale “frontmatter helper” ownership language.**  
-Plan 08 objective says it lands “the YAML frontmatter helper” (`03-08-PLAN.md:64`) and output still asks for “handoff.ts + frontmatter.ts LOC” (`03-08-PLAN.md:471`), even though Plan 08 now only consumes frontmatter. Not a code blocker, but it undermines the H-1 fix.
-
-**MEDIUM — `http-mock.ts` location is still split between Plan 04 and Plan 09.**  
-Plan 04 creates `bin/lib/http-mock.ts` (`03-04-PLAN.md:16`, `189`). Plan 09 says scrubber implementations live in `tests/_helpers/http-mock.ts` (`03-09-PLAN.md:40`, `335`). This will send implementers to the wrong module.
-
-**MEDIUM — `UNVERIFIABLE` compile policy remains questionable.**  
-Plan 06 says `UNVERIFIABLE` “Does NOT block compile” (`03-06-PLAN.md:415`). Phase 3 does not implement compile, so this is forward-looking, but it conflicts with the broader “verifier blocks compile/export” project framing unless a Phase 4/6 approval gate is explicitly named. Fold this into the plan text now to avoid future policy drift.
-
-**MEDIUM — Plan 07 verify status text omits `unverifiable`.**  
-Plan 07 initial verify entry says it persists status `'verified' | 'failed'` (`03-07-PLAN.md:343`), while later orchestration text includes `UNVERIFIABLE` aggregation (`03-07-PLAN.md:646`) and Plan 03/06 add `unverifiable`. Update the stale status line.
-
-**Remaining Concerns Worth Folding In**
-
-- Plan 03 Task 3.1 still carries old Handoff and SourceCandidate snippets before “replace this” amendments (`03-03-PLAN.md:160-196`, `243-256`). Remove obsolete snippets entirely. “Replace this” prose is easy to miss during execution.
-- Plan 04 `retraction-watch` still has contradictory must-haves: fetchById-only (`03-04-PLAN.md:44`) and “search() that throws/returns empty” (`03-04-PLAN.md:51`).
-- Plan 04 recorder lifecycle is still weak: `recordCassettes()` starts recording, `finalizeRecording()` writes files, but there is no guaranteed `finally`/test lifecycle hook around adapter tests. Also `finalizeRecording()` uses `writeFileSync` (`03-04-PLAN.md:338`) without an explicit tooling exemption.
-- Plan 04 says cassettes scrub response headers, but the threat model claims request+response headers (`03-09-PLAN.md:580`). The implementation sets `enable_reqheaders_recording: false`, so request headers are not recorded, not scrubbed. Wording should match the mechanism.
-- Plan 00 says WN-2 “≤10 files per task” but accepts Task 0.2a touching 13 files (`03-00-PLAN.md:821`). That is a conscious exception, but if WN-2 is supposed to be a rule, either split or explicitly mark it as waived.
-
-**Risk Assessment**
-
-**MEDIUM.** The plan set is much closer and most cycle-2 HIGHs are substantively handled, especially H-2 and H-4. The remaining risk is not conceptual architecture; it is implementability drift from stale snippets and mismatched module contracts. Before execution, I would fold in the `frontmatter.ts` API fix, `citations.ts` export fix, `atomicWrite` naming unification, and `http-mock.ts` location cleanup. Those are small edits, but leaving them would likely cause compile failures or incorrect implementation choices.
-
----
-
-## Cycle 3 Consensus Summary
-
-### Agreed Cycle-2 HIGH Status
-
-| Cycle-2 HIGH | Gemini | Codex | Consensus (worst-case) |
-|---|---|---|---|
-| H-1 frontmatter.ts wave-ordering | FULLY RESOLVED | PARTIALLY RESOLVED (Task 3.2 vs 3.4 API contradiction) | **PARTIALLY RESOLVED** |
-| H-2 SourceCandidate author shape | FULLY RESOLVED | FULLY RESOLVED for authors; broader D-14 shape risky (fixtures still missing `id`/`last_verified`/`citekey`/`raw`; `doi: null` vs optional-string) | **PARTIALLY RESOLVED** |
-| H-3 HANDOFF D-17 canonical schema | FULLY RESOLVED | PARTIALLY RESOLVED (Plan 03 still has stale `schemaVersion`/`wave`/`resumePrompt`/`pointers` snippets pre-replace block) | **PARTIALLY RESOLVED** |
-| H-4 runPass1/runPass3 signature lock | FULLY RESOLVED | FULLY RESOLVED | **FULLY RESOLVED** |
-
-Both reviewers agree H-4 is fully closed. The other three HIGHs have residual contradictions that are mechanical (stale snippet text, internal API mismatch within a single plan, fixture-vs-schema drift) — not architectural — but still blocking for clean implementation.
-
-### Agreed Cycle-2 MEDIUM/LOW Status
-
-| Cycle-2 fix item | Consensus | Notes |
-|---|---|---|
-| deep-equal.ts task (Plan 03 Task 3.5) | FULLY RESOLVED | Both reviewers confirm |
-| Plan 06 acceptance softened to unit-green-only | FULLY RESOLVED | Both reviewers confirm |
-| SENSITIVE_HEADERS centralized in Plan 04 http-mock.ts | PARTIALLY RESOLVED | Plan 04 exports from `bin/lib/http-mock.ts`, but Plan 09 still says scrubber lives in `tests/_helpers/http-mock.ts` (Codex) |
-| Dormant-prompts grep extended (workflows/bin/dist) | FULLY RESOLVED | Both reviewers confirm |
-| Citekey collision base-26 (z, 27→aa, 53→ba) | FULLY RESOLVED | Both reviewers confirm |
-| Canonical bin/cli/intake.ts (alias new) | FULLY RESOLVED | Both reviewers confirm |
-| Plan 09 Task 9.3.5 sentinel replacement | PARTIALLY RESOLVED | Task exists, but Gemini flags shape mismatch — Plan 00 Task 0.3 scaffolds PENDING_HASH_PINS as array-of-objects while Plan 09 Task 9.3.5 replaces an object-map. ALSO `diff`/`require()` issue on ESM. |
-| Plan 05 "8-discipline" → "9 keys" prose sweep | PARTIALLY RESOLVED | Stale "8-discipline" still in Plan 05 task title/done text (lines 339, 420) and Plan 06 intake body (line 258) per Codex |
-| MIDDLE_SECTION constant inline in tier-contract.test.ts | FULLY RESOLVED | Both reviewers confirm |
-| Plan 00 task-count "exactly 7" → "exactly 6" | FULLY RESOLVED | Both reviewers confirm |
-| Stale-lock recovery test for HANDOFF.json.lock | FULLY RESOLVED | Both reviewers confirm |
-| Plan 04 adapter list sync (BibTeX examples string[]) | PARTIALLY RESOLVED | Author shape is `string[]`, but fixtures still violate D-14 (omit `id`/`last_verified`/`citekey`/`raw`; `doi: null` vs optional-string) per Codex |
-
-### New Cycle-3 Concerns (Introduced by Cycle-2 Amendments)
-
-**HIGH — citations.ts missing Cite export (CROSS-REVIEWER AGREEMENT, Gemini + Codex independently):**
-- Plan 02 Task 2.2 (line 1121 / 251) defines `bin/lib/citations.ts` exports as exactly `["parseBibtex", "renderApa"]`.
-- Plan 04 Task 4.4 (line 1672) and Plan 09 Task 9.2 (line 1982) both import `Cite` from `./citations.js`.
-- Plan 04 tests also import `Cite` from `../bin/lib/citations.js`.
-- **Compilation will fail.** Either Plan 02 must export `Cite` (re-export from citation-js) or Plan 04 must use a wrapper.
-- This was a cycle-2 medium and remains unresolved per Codex.
-
-**HIGH — frontmatter.ts API internally inconsistent within Plan 03 (Codex):**
-- Plan 03 Task 3.2 calls `updateFrontmatter(path, merge)` with "internally delegates atomic write" (lines 440-441).
-- Plan 03 Task 3.4 defines `updateFrontmatter(text, mutator): string` as a pure string transformer with no FS/atomic write (lines 604-605, 645).
-- **D-09 migration implementation will not compile** until reconciled.
-
-**MEDIUM — atomicWrite vs atomicWriteFile naming drift (Codex):**
-- Plan 08 imports/calls `atomicWrite` (lines 180, 236).
-- Plan 04 assumes `atomic-write.ts` exports `atomicWriteFile` (lines 167, 586, 633, 747).
-- Plan 03 migration text uses `atomicWrite` (lines 441, 486).
-- **Must canonicalize one name** before execution.
-
-**MEDIUM — writeBibtex fails to persist retracted flag (Gemini):**
-- Plan 04 Task 4.4 `toCsl` (line 1675) doesn't map `retracted` into CSL/BibTeX.
-- citation-js drops unknown CSL fields, so `claimed.retracted` is always undefined at verify time.
-- **Defeats D-15 retracted-source verification.**
-
-**MEDIUM — CslEntry interface missing `id` property (Gemini):**
-- Plan 04 Task 4.4 line 1680 `CslEntry` interface lacks `id`; line 1694 assigns `csl.id = citekey`.
-- TypeScript will not compile this assignment.
-
-**MEDIUM — runPass1Unit crashes on null input.actual (Gemini):**
-- Plan 07 Task 7.2 line 2011 checks `if (!input.actual)` but immediately reads `input.actual.authors` on line 2012.
-- Needs safe navigation `input.actual?.authors[0]`.
-
-**MEDIUM — repo-files.test.ts sentinel replacement shape mismatch (Gemini):**
-- Plan 00 Task 0.3 (line 1406) scaffolds `PENDING_HASH_PINS` as array-of-objects.
-- Plan 09 Task 9.3.5 (line 2030) replaces an object-map.
-- Replacement instructions will not match the scaffolded structure.
-
-**MEDIUM — http-mock.ts location split between plans (Codex):**
-- Plan 04 creates `bin/lib/http-mock.ts` (line 16, 189).
-- Plan 09 says scrubber implementations live in `tests/_helpers/http-mock.ts` (lines 40, 335).
-- Implementers will be sent to the wrong module.
-
-**MEDIUM — Plan 08 stale frontmatter-ownership language (Codex):**
-- Plan 08 objective says it lands "the YAML frontmatter helper" (line 64).
-- Output asks for "handoff.ts + frontmatter.ts LOC" (line 471).
-- Not a code blocker, but undermines the H-1 fix narrative.
-
-**MEDIUM — Plan 03 stale pre-replace snippets (Codex):**
-- Plan 03 Task 3.1 still contains old Handoff/SourceCandidate snippets (lines 160-196, 243-256) BEFORE the "replace this" blocks.
-- "Must-have" still says "except resumePrompt" (line 37).
-- Acceptance still mentions 6000-byte resumePrompt (line 346).
-- "Replace this" prose is easy to miss during execution — remove obsolete snippets.
-
-**MEDIUM — UNVERIFIABLE compile policy ambiguity (Codex):**
-- Plan 06 says UNVERIFIABLE "Does NOT block compile" (line 415).
-- Phase 3 doesn't implement compile, so it's forward-looking, but it conflicts with project framing of "verifier blocks compile/export" unless a Phase 4/6 approval gate is explicitly named.
-
-**MEDIUM — Plan 07 verify status omits unverifiable (Codex):**
-- Plan 07 line 343 persists status `'verified' | 'failed'` (no `unverifiable`).
-- Plan 07 line 646 aggregates UNVERIFIABLE.
-- Plan 03/06 add unverifiable to the schema. Stale line at 343 needs updating.
-
-### LOW Concerns
-
-**LOW — BREADCRUMBS.jsonl writer is missing (Gemini):**
-- Plan 08 Task 8.2 line 1916 reads `.paper/BREADCRUMBS.jsonl`.
-- No task in Phase 3 (or earlier) writes to it. Breadcrumbs in HANDOFF.json will always be empty.
-
-**LOW — Plan 03 HandoffSchema duplicates SectionStateSchema enum literals (Gemini):**
-- Plan 03 Task 3.1 line 1373 duplicates instead of importing from `state.ts`. No actual cycle exists.
-
-**LOW — Plan 09 sentinel verification uses `require()` on ESM (Gemini):**
-- Plan 09 Task 9.3.5 line 2040 `diff` command uses `require()`; project is ESM-only. Will fail.
-
-**LOW — Plan 04 retraction-watch contradictory must-haves (Codex):**
-- Line 44 says fetchById-only. Line 51 says "search() that throws/returns empty". Resolve to one.
-
-**LOW — Plan 04 recorder lifecycle weak (Codex):**
-- `recordCassettes()` + `finalizeRecording()` without guaranteed `finally` hook.
-- `finalizeRecording()` uses `writeFileSync` without tooling exemption.
-
-**LOW — Plan 04 cassette scrubbing wording mismatch (Codex):**
-- Plan 04 says scrubs response headers; Plan 09 line 580 claims request+response headers.
-- Implementation sets `enable_reqheaders_recording: false`, so request headers aren't recorded (not scrubbed).
-
-**LOW — WN-2 "<=10 files per task" rule with Task 0.2a exception (Codex):**
-- Plan 00 line 821 accepts 13 files for Task 0.2a. Either split or mark as waived.
+## Consensus Summary
+
+### Agreed Strengths
+- All 6 cycle-4 fixes hit their named primary targets (Gemini + Codex + Claude agree).
+- The M-3 nested-lock design (outer state.json + inner per-PLAN.md, with documented timeout escalation) is sound for this slice (all three reviewers confirm; Gemini's brittleness concern overlooks the existing Phase 2 retry schedule).
+- The D-08-AMENDED enum parity is now structurally enforced across all three schemas with both syntactic (grep) and semantic (zod-parse) acceptance criteria.
+- The cycle trajectory holds: 5 → 4 → 2 → 1 → 0 HIGH, with the cycle-5 review confirming HIGH=0.
+
+### Agreed Concerns (the three real plan gaps)
+- **MEDIUM** — Plan 03 PlanFrontmatterSchema is missing the `was_current_at_migration` declaration. The migration emits this field at line 397 but the schema (strict-by-default per the explicit M-2 decision) will strip it on the next round-trip. Same failure mode that M-2 fixed for `last_verification`, missed for the sibling field. (Codex + Claude.)
+- **LOW** — Plan 09 Task 9.3.5 snippets at lines 444 and 454 still show bare `const PENDING_HASH_PINS`. The fail-fast test from step 4.5 catches the regression at test time, but the snippets bait the implementer toward stripping `export` during the re-pin edit. (Codex + Claude.)
+- **LOW** — Plan 06 verify-workflow acceptance criteria at lines 477 and 540 list only 6 of the 7 D-08-AMENDED status literals; `'unverifiable'` is absent from the acceptance gate even though the body amendment handles the terminal state correctly. (Codex + Claude.)
 
 ### Divergent Views
+- **Gemini vs Codex on lock-retry brittleness**: Gemini flags it as MEDIUM; Codex and Claude reject after verifying that `withLock` from Phase 2 lock.ts already encodes a retry schedule. The disagreement reflects Gemini reading the plan in isolation without consulting bin/lib/lock.ts. Not a real plan gap.
+- **Gemini vs Codex on .refine() interaction with last_verification**: Gemini flags it as MEDIUM; Codex and Claude reject after verifying that the only `.refine` on PlanFrontmatterSchema inspects only the `depends_on` array. Not a real plan gap.
+- **Codex severity (MEDIUM) for was_current_at_migration vs the architectural-recurrence framing (this is the same failure pattern M-2 fixed)**: All three reviewers agree the issue is real; the MEDIUM classification reflects that the migration breadcrumb is non-load-bearing for the verify pipeline (it's a `pensmith status` rendering hint), but the silent-strip is exactly the same architectural flaw the cycle-4 work was meant to close.
 
-- **H-1, H-2, H-3 status:** Gemini calls them FULLY RESOLVED; Codex calls them PARTIALLY RESOLVED with specific stale-snippet / fixture-shape / API-contradiction evidence. Codex's read is more conservative and worth honoring on the worst-case principle.
-- **citations.ts Cite export:** Gemini flags as NEW HIGH; Codex flags as still-unresolved cycle-2 medium. Same root issue, different framing.
+### Recommendation
 
-### Risk Assessment (Consensus)
+**NEEDS-CYCLE-6** — 3 plan-worthy items remain (1 MEDIUM + 2 LOW). All mechanical text edits to existing plan files. No decisions, schemas, or architecture to revisit. Estimated close-out: ~15 minutes. After cycle 6 amends these three lines, convergence is the expected outcome under the stricter rule.
 
-**Overall risk for execution: MEDIUM.**
-
-Both reviewers agree the risk has dropped from "architectural" to "mechanical / cross-plan-sync drift." Remaining blockers are:
-
-1. citations.ts must export `Cite` (or Plan 04 must wrap) — **HIGH, compile blocker**
-2. frontmatter.ts API: Plan 03 Task 3.2 vs Task 3.4 contract collision — **HIGH, compile blocker**
-3. atomicWrite vs atomicWriteFile naming — **MEDIUM, compile blocker**
-4. http-mock.ts location split (bin/lib vs tests/_helpers) — **MEDIUM, implementer misdirection**
-5. Plan 03 stale pre-replace snippets — **MEDIUM, implementer confusion**
-6. Plan 04 fixture data omits required D-14 fields — **MEDIUM, schema-fixture drift**
-7. CslEntry interface missing `id` — **MEDIUM, typecheck fail**
-8. runPass1Unit safe-navigation bug — **MEDIUM, runtime crash**
-9. writeBibtex doesn't persist retracted flag — **MEDIUM, D-15 verifier defeat**
-10. Plan 09 sentinel-replacement shape mismatch with Plan 00 scaffold — **MEDIUM**
-
-If cycle 4 closes the two HIGHs (#1, #2) plus the cross-plan-sync MEDIUMs (#3, #4, #5, #6, #7, #8, #9, #10), Phase 3 will be execution-ready at LOW risk. Estimated cycle-4 close-out work: ~1 hour of focused edits.
-
-### Action Items for Cycle-4 Replan (Priority Order)
-
-1. **(HIGH)** Plan 02 Task 2.2 — add `Cite` (or `formatBibtex` wrapper) to exports of `bin/lib/citations.ts`. Update acceptance criterion.
-2. **(HIGH)** Plan 03 Task 3.2 vs 3.4 — reconcile `updateFrontmatter()` API. Either Task 3.4 takes `(path, merge)` + handles atomic write, OR Task 3.2 reads file, calls `updateFrontmatter(text, mutator)`, writes with `atomicWrite`. Pick one.
-3. **(MEDIUM)** Canonicalize `atomicWrite` vs `atomicWriteFile` — pick one and use across Plan 03, 04, 08. Update `bin/lib/atomic-write.ts` export contract in whichever plan owns it.
-4. **(MEDIUM)** Plan 04 + Plan 09 — pick canonical `http-mock.ts` location (recommend `bin/lib/http-mock.ts`, scrubbers exported from there, tests import from there). Update Plan 09 lines 40, 335.
-5. **(MEDIUM)** Plan 03 Task 3.1 — DELETE obsolete pre-replace snippets (lines 160-196, 243-256). Remove "except resumePrompt" line 37. Remove 6000-byte resumePrompt acceptance line 346.
-6. **(MEDIUM)** Plan 04 Task 4.4 — `toCsl` must persist `retracted` flag (via CSL `note` or custom field that survives BibTeX roundtrip). Add acceptance test.
-7. **(MEDIUM)** Plan 04 Task 4.4 — `CslEntry` interface must include `id?: string` (or appropriate type) so `csl.id = citekey` typechecks.
-8. **(MEDIUM)** Plan 07 Task 7.2 — `runPass1Unit` safe-navigation: `input.actual?.authors[0]` or guard return after null check.
-9. **(MEDIUM)** Plan 04 fixtures — add `id`, `last_verified`, `citekey`, `raw` to all SourceCandidate fixtures. Change `doi: null` to either omit or `doi: undefined`. Match D-14 schema (Plan 03 line 204-215).
-10. **(MEDIUM)** Plan 00 Task 0.3 + Plan 09 Task 9.3.5 — align `PENDING_HASH_PINS` shape (array-of-objects vs object-map). Pick one and update both. Fix `require()` → `import` for ESM diff command (Plan 09 line 2040).
-11. **(MEDIUM)** Plan 05 prose sweep — remove all remaining "8-discipline" mentions (Plan 05 lines 339, 420; Plan 06 line 258).
-12. **(MEDIUM)** Plan 07 line 343 — add `'unverifiable'` to verify status enum literal.
-13. **(MEDIUM)** Plan 06 line 415 — clarify UNVERIFIABLE policy: name the future approval gate phase (e.g., "tracked for Phase 6 approval gate per D-15").
-14. **(MEDIUM)** Plan 08 — remove stale frontmatter-ownership language (line 64, line 471).
-15. **(LOW)** Plan 08 Task 8.2 — clarify BREADCRUMBS.jsonl is written by hooks (point at SessionStart hook or PreCompact hook). If no writer in Phase 3, mark this as deferred or no-op.
-16. **(LOW)** Plan 03 Task 3.1 — import enum literals from `state.ts` instead of duplicating. Remove the false "cycle" claim.
-17. **(LOW)** Plan 04 retraction-watch — resolve fetchById-only vs search() contradiction (lines 44 vs 51). Pick fetchById-only and delete the search() line.
-18. **(LOW)** Plan 04 recorder lifecycle — add explicit `try/finally` or test-lifecycle hook around `recordCassettes()` → `finalizeRecording()`. Mark `writeFileSync` in finalizeRecording as a tooling exemption.
-19. **(LOW)** Plan 04 / Plan 09 — align scrubbing wording: response-only (or enable request header recording first).
-20. **(LOW)** Plan 00 — either split Task 0.2a (13 files > WN-2's 10) or explicitly waive WN-2 for it with rationale.
-
----
-
-# Cross-AI Plan Review — Phase 3 Cycle 4 (Vertical Slice Through One Section)
-
-## Cycle 4 Context
-
-This is the FOURTH review pass on the Phase 3 plans. Trajectory: 5 (cycle 1) → 4 (cycle 2) → 2 (cycle 3) → 1 (cycle 4, this review).
-
-Cycle 3 surfaced 2 HIGHs + 12 MEDIUMs + 7 LOWs (20 fix items total). Commit `e39ab05` applied amendments to all 20 items, and the in-session pre-pass confirmed every cycle-3 fix is visibly present in the plan text. Cycle 4 verifies the cycle-3 HIGHs are TRULY resolved (not just claimed-resolved) and surfaces any concerns introduced by the cycle-3 amendments themselves.
-
-**HEAD at review:** `e39ab05` — cycle-3 reviews convergence applied.
-
-## CYCLE_SUMMARY
-
-```
-CYCLE_SUMMARY: current_high=1
-```
-
-## Reviewer Verdicts
-
-| Reviewer | HIGH | MEDIUM | LOW | Verdict |
-|---|---|---|---|---|
-| Gemini (gemini-cli @ flash latest, --approval-mode yolo, GEMINI_CLI_TRUST_WORKSPACE=true) | 0 | 0 | 1 | **CONVERGED** |
-| Codex (codex CLI, gpt-5-codex) | 1 | 3 | 2 | **NEEDS-CYCLE-5** |
-| Claude in-session (orchestrator pre-pass) | confirmed Codex HIGH against Plan 03 line 274 (verified directly) | confirmed Codex MEDIUM #1 and #2 against Plan 00 line 601 and Plan 03 line 385 | confirmed Codex LOW #1 (Plan 05 line 365-378) and LOW #2 (Plan 08 line 448) | **NEEDS-CYCLE-5** |
-
-## Convergence Math
-
-- Cycle 3 verdict: 2 HIGH unresolved (NEW-H-1, NEW-H-2).
-- Cycle 4 verdict: NEW-H-1 + NEW-H-2 both **FULLY RESOLVED** (both reviewers agree, directly verified).
-- Cycle 4 introduces 1 NEW HIGH (NEW-H-3) caught only by Codex — a real schema-vs-prose drift that would break verify-status persistence at runtime.
-- Cycle 4 surfaces 3 MEDIUMs (2 confirmed-real, 1 marginal: lost-update protection on PLAN.md outside migration scope) and 2 LOWs (both confirmed-real).
-- Trajectory: 2 → 1 HIGH. Still > 0 → another cycle needed.
-
-## Current HIGH Concerns
-
-### NEW-H-3 — PlanFrontmatterSchema.status enum missing 'unverifiable' (D-08-AMENDED schema/prose drift)
-
-**Reviewer:** Codex (confirmed by in-session direct read of Plan 03 line 274).
-
-**Location:** `03-03-PLAN.md` line 274 (Task 3.1, step 3 schema snippet) vs lines 250, 257 (D-08-AMENDED prose + acceptance criterion).
-
-**Evidence:** Plan 03 line 274 reads:
-```typescript
-status: z.enum(['planned', 'writing', 'written', 'verifying', 'verified', 'failed']).default('planned'),  // D-08 LOCKED enum
-```
-The literal `'unverifiable'` is MISSING from the enum. Yet Plan 03 line 250 says "PlanFrontmatterSchema.status accepted values become `'planned' | 'writing' | 'written' | 'verifying' | 'verified' | 'failed' | 'unverifiable'`" and line 257 is an explicit acceptance criterion: "PlanFrontmatterSchema accepts `status: 'unverifiable'`".
-
-**Why this matters:** Plan 07's verify verb (line 343) emits `status: 'unverifiable'` on Pass-3 fetch failure. Persisting that to PLAN.md frontmatter via the migration helper (`updateFrontmatter` + `atomicWriteFile`) requires `PlanFrontmatterSchema.parse(fm)` to accept the literal. As-written, parse throws and the verify verb crashes the section. The D-08-AMENDED amendment was correctly applied to `handoff.ts` (Plan 03 line 220-222: `SectionStateSchema` from state.ts via D-08-AMENDED enum) but NOT propagated to the `PlanFrontmatterSchema.status` literal one screen lower in the same plan.
-
-**Fix:** Plan 03 line 274 — change the zod enum to `z.enum(['planned', 'writing', 'written', 'verifying', 'verified', 'failed', 'unverifiable'])`. Add an acceptance criterion grep gate: `grep "'unverifiable'" bin/lib/schemas/plan-frontmatter.ts` returns ≥1 match.
-
-## Current MEDIUM Concerns
-
-### M-1 — PENDING_HASH_PINS not exported from tests/repo-files.test.ts (Plan 00 + Plan 09 export/import mismatch)
-
-**Reviewer:** Codex (confirmed in-session against Plan 00 line 601 + Plan 09 lines 468/476).
-
-**Location:** `03-00-PLAN.md` line 601 (the `const PENDING_HASH_PINS = [...]` declaration) vs `03-09-PLAN.md` lines 468 and 476 (the dynamic-import diff command).
-
-**Evidence:** Plan 00 line 601: `const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; decision: string }> = [...]` — declared inside `tests/repo-files.test.ts` but NOT `export const`. Plan 09 line 476: `import('./tests/repo-files.test.ts').then(m => console.log(m.PENDING_HASH_PINS.map(p => p.slug).sort().join('\n')))`. The `m.PENDING_HASH_PINS` will be `undefined` because the const is module-private.
-
-**Fix:** Plan 00 line 601 — change `const` to `export const`. Add acceptance criterion to Plan 09 Task 9.3.5: `grep "export const PENDING_HASH_PINS" tests/repo-files.test.ts` returns ≥1 match.
-
-### M-2 — PlanFrontmatterSchema.passthrough() + last_verification field claimed but not in schema snippet
-
-**Reviewer:** Codex (confirmed in-session against Plan 03 lines 267-280 vs line 385).
-
-**Location:** `03-03-PLAN.md` lines 267-280 (PlanFrontmatterSchema definition) vs line 385 (D-09 migration step 2a claim).
-
-**Evidence:** Plan 03 line 385 explicitly states "preserve raw verdict object for forensics; `PlanFrontmatterSchema.passthrough()` admits unknown keys — gated by a new `last_verification: z.unknown().optional()` field added in Task 3.1 step 3 above". But Task 3.1 step 3's actual schema snippet (lines 267-280) contains neither `.passthrough()` NOR a `last_verification` field — the schema closes with `.refine(...)` directly on `z.object({...})` which by default STRIPS unknown keys.
-
-**Why this matters:** D-09 migration writes `last_verification` into PLAN.md frontmatter via `updateFrontmatter` to preserve historical verdict for `pensmith status` rendering. When `PlanFrontmatterSchema.parse(fm)` runs in the next loadState pass, `last_verification` will be silently stripped (zod's default behavior) and the migration forensics are lost on next save. This contradicts the explicit "preserve raw verdict object for forensics" intent.
-
-**Fix:** Plan 03 lines 267-280 — add `last_verification: z.unknown().optional()` as a schema field AND `.passthrough()` modifier (or omit passthrough and just list `was_current_at_migration: z.boolean().optional()` + `last_verification: z.unknown().optional()` as explicit fields). Add acceptance criterion: `PlanFrontmatterSchema.parse({...with last_verification: {...arbitrary obj}})` round-trips the field non-destructively.
-
-### M-3 — Migration PLAN.md updates lack per-file lock (concurrent-edit lost-update risk)
-
-**Reviewer:** Codex (in-session verification: migration sequence is under `withLock(stateJsonPath)` at Plan 03 line 412-413, which covers the STATE.json side. But there is no per-PLAN.md lock during the 3-step compose at lines 393-395).
-
-**Location:** `03-03-PLAN.md` lines 393-395 (the readFile → updateFrontmatter → atomicWriteFile compose) inside the withLock(stateJsonPath) block at lines 412-413.
-
-**Evidence:** The migration acquires `withLock(stateJsonPath)` which serializes STATE.json mutations across the pensmith process. But the inner per-section step `await fs.promises.readFile(planPath) → updateFrontmatter(text, …) → atomicWriteFile(planPath, next)` runs WITHOUT a per-PLAN-file lock. If the user's editor (or a parallel pensmith write verb) atomically replaces PLAN.md between read and atomicWriteFile, those edits are silently overwritten by the migration's stale text.
-
-**Why this is MEDIUM not HIGH:** Migration only runs at first boot under a single `withLock(stateJsonPath)`; concurrent writers within the same pensmith process are blocked by that lock. The exposure is only to external concurrent writers (user editor, parallel CLI session). Real-world likelihood is low (migration completes in <1s and is typically a one-time event).
-
-**Fix (recommended, lightweight):** Plan 03 line 393 — prepend `await withLock(planPath, async () => { ... })` around the 3-step compose, using the same `bin/lib/lock.ts withLock` helper. Add acceptance criterion: `grep -nE "withLock\(planPath" bin/lib/migrations/state/v1_to_v2.ts` returns ≥1 match. (Alternative: declare this an accepted risk and document in CONTEXT.md that pensmith and external editors must not concurrently edit PLAN.md during migration.)
-
-## Current LOW Concerns Worth Considering
-
-### L-1 — Plan 05 Task 5.3 has contradictory 8-key vs 9-key action body
-
-**Reviewer:** Codex (confirmed in-session against Plan 05 lines 365-378 vs 397-417).
-
-**Location:** `03-05-PLAN.md` Task 5.3 (action block).
-
-**Evidence:** Lines 365-377 read "Create `templates/presets/disciplines.json` with EXACTLY 8 presets per REQUIREMENTS.md INTK-03" and lists the 8-key JSON object with no `other` entry. Line 378 says "Other→handled by the intake-clarifier prompt as a free-text fallback (no preset entry — the workflow degrades to defaultTone='academic-formal', defaultCitationStyle='apa' when discipline ∉ presets)". Then lines 397-417 invert this with the REVIEWS-CONVERGENCE amendment: "Add an explicit `'other'` entry to disciplines.json … This makes the preset table self-documenting (9 keys now)" — and the acceptance criterion at line 415 asserts 9 keys.
-
-The amendment at lines 397-417 is correct and overrides the earlier block — but the earlier block was not removed, so an implementer who follows lines 365-377 verbatim creates an 8-key JSON, then is expected to also follow the override and add `other` afterward. The "EXACTLY 8 presets" wording at line 365 directly contradicts "9 keys now" at line 402.
-
-**Fix:** Plan 05 line 365 — change "EXACTLY 8 presets" to "EXACTLY 9 presets (8 INTK-03 disciplines + `other` per cycle-3 REVIEWS amendment)" and add the `"other"` entry inline to the JSON snippet at lines 366-377. Then mark lines 397-403 as "(applied above — leaving this block as historical context for the cycle-3 amendment trail)".
-
-### L-2 — Plan 08 threat register T-3-LEAK-01 still references removed `resumePrompt` field
-
-**Reviewer:** Codex (confirmed in-session against Plan 08 line 448).
-
-**Location:** `03-08-PLAN.md` line 448 (T-3-LEAK-01 mitigation column).
-
-**Evidence:** Line 448 reads: "HandoffSchema enforces pointers-only shape; pointer.path max 200 chars; resumePrompt max 300 chars (self-capped in assembleHandoff)." The canonical D-17 HANDOFF schema (Plan 03 lines 224-235 and Plan 08 lines 87-104) has `next_action` (max 200 chars) — NOT `resumePrompt`. The `resumePrompt` field was removed when D-17 was locked.
-
-**Fix:** Plan 08 line 448 — replace "resumePrompt max 300 chars" with "next_action max 200 chars (D-17 LOCKED schema literal). breadcrumbs[].verb is a fixed enum, not free-form text."
-
-## New Concerns Introduced by Cycle-3 Amendments
-
-1. **PENDING_HASH_PINS export/import mismatch (M-1 above).** The cycle-3 amendment to align the shape between Plan 00 and Plan 09 (4-field with `expected: string`) is correct in shape but not in module-export discipline. The `const` declaration in Plan 00 was carried forward verbatim from cycle-2 when both maps were standalone (no cross-plan dynamic import); cycle-3 introduced the `npx tsx -e "import(...)"` cross-file diff command at Plan 09 line 476 but didn't promote the const to `export const`. **Fix is one keyword edit in Plan 00 line 601.**
-
-2. **Schema-vs-prose drift on D-08-AMENDED status enum (NEW-H-3 above).** The cycle-3 amendment to add `'unverifiable'` to D-08-AMENDED was applied to `SectionStateSchema` via the cross-file import from state.ts in Plan 03 line 220, AND to handoff.ts acceptance criteria at line 256-258, AND to verify verb status enum in Plan 07 line 343 — but NOT to `PlanFrontmatterSchema.status` literal at Plan 03 line 274. The amendment broke a multi-location invariant that the cycle-3 reviewer (in-session) tracked via prose ("the D-08 enum is single-sourced from state.ts") but the schema-level reality at Plan 03 line 274 is a duplicated independent z.enum. **Fix is appending one literal to one z.enum.**
-
-3. **last_verification field claimed in Task 3.2 prose but absent from Task 3.1 schema (M-2 above).** The cycle-3 amendment added the prose at line 385 saying `PlanFrontmatterSchema.passthrough()` admits `last_verification`, but the schema snippet at line 267-280 was not amended in parallel. Same class of failure as concern #2 — a multi-location invariant was named in prose but only enforced in one location.
-
-4. **Lost-update risk on PLAN.md outside migration (M-3 above) is INTRODUCED by the cycle-3 compose pattern.** The pre-cycle-3 contract was `updateFrontmatter(path, merge)` which presumably owned its own read-write cycle. The cycle-3 pure-string-transformer split (NEW-H-2) makes the read-write atomicity the CALLER's responsibility — and the migration caller composes them under `withLock(stateJsonPath)` but not `withLock(planPath)`. This is a real downside of the cleaner pure-function contract; the fix is a per-PLAN lock at the call site.
-
-5. **No new HIGH risk from the `Cite` re-export (NEW-H-1).** In-session verification: `bin/lib/citations.ts` (Plan 02 lines 212-219) imports `citation-js` and re-exports `Cite` as a top-level export. `bin/lib/bibtex-write.ts` (Plan 04 line 613) imports `Cite` from `./citations.js`. There is no circular import: `citations.ts` does NOT import `bibtex-write.ts`. The chokepoint grep gate (`grep -c "from 'citation-js'" bin/lib/bibtex-write.ts` returns 0) is correctly phrased and enforces the D-19 chokepoint.
-
-6. **No new HIGH risk from `await import()` against `.ts` files (Plan 09 Task 9.3.5).** The cycle-3 substitution of `require()` → `await import()` driven by `npx tsx` works because tsx installs a Node loader hook that handles `.ts` extension resolution. Gemini flagged a residual LOW that internal imports within those .ts files MUST use `.js` extensions for strict ESM compatibility — the plans correctly use `.js` everywhere (e.g., Plan 04 line 613 `from './citations.js'`). Not a real gap.
-
-7. **BREADCRUMBS.jsonl Phase-4 deferral (cycle-3 LOW resolution) is safe** — Plan 08 line 286 explicitly states Phase 3 pre-compact.ts is READ-ONLY against this file with empty-array fallback. HandoffSchema (Plan 03 line 230: `breadcrumbs: z.array(...).max(5).default([])`) accepts an empty array, so the fallback parses cleanly.
-
-## Resolution Status of Cycle-3 Findings
-
-| Cycle-3 Finding | Status | Notes |
-|---|---|---|
-| **NEW-H-1** Cite re-export from bin/lib/citations.ts | **FULLY RESOLVED** | Plan 02 line 219 export; Plan 04 line 613 import; grep gates at Plan 02 lines 259/264 and Plan 04 lines 783-786 correctly phrased. Both reviewers agree. No circular import. |
-| **NEW-H-2** updateFrontmatter pure-string transformer | **FULLY RESOLVED** | Producer signature at Plan 03 Task 3.4; consumer composes `readFile → updateFrontmatter(text, mutator) → atomicWriteFile` at Plan 03 lines 392-396; grep gate at line 396 enforces "first arg is string variable, never path-typed". Both reviewers agree. **Side-effect:** introduces M-3 lost-update risk outside migration scope. |
-| M-1 atomicWriteFile canonical naming | **FULLY RESOLVED** | All plans (02/03/04/08) use `atomicWriteFile` consistently. |
-| M-2 writeBibtex retracted flag → CSL `note='RETRACTED'` | **FULLY RESOLVED** | Plan 04 lines 632-666 + test fixture lines 766-781 + acceptance grep gate. |
-| M-3 CslEntry id?: string | **FULLY RESOLVED** | Plan 04 line 619-624. |
-| M-4 D-14 fixture required fields | **FULLY RESOLVED** | Plan 04 lines 712-717. |
-| M-5 http-mock.ts canonical location bin/lib/ | **FULLY RESOLVED** | Plan 04 + Plan 09 line 40 cross-plan assertion. |
-| M-6 retraction-watch fetchById-only | **FULLY RESOLVED** | Plan 04 line 51 + grep gate. |
-| M-7 cassette try/finally + bidirectional header scrub | **FULLY RESOLVED** | Plan 04 lines 311-376; SENSITIVE_HEADERS covers all required headers. |
-| M-8 UNVERIFIABLE → Phase 7 compile deferral | **FULLY RESOLVED** | Plan 06 line 415 explicit ROADMAP pointer. |
-| M-9 D-08-AMENDED 'unverifiable' enum across schemas | **PARTIALLY RESOLVED** | Handoff schema (Plan 03 line 220-222), state.ts (via import), verify verb (Plan 07 line 343) all updated. **But `PlanFrontmatterSchema.status` at Plan 03 line 274 still missing `'unverifiable'`. This is NEW-H-3.** |
-| M-10 runPass1Unit null-safety | **FULLY RESOLVED** | Plan 07 lines 583-586 with CYCLE-3 rationale comment. |
-| M-11 PENDING_HASH_PINS shape alignment | **PARTIALLY RESOLVED** | Shape is aligned to 4-field `{slug, path, decision, expected}`. **But Plan 00 line 601 const is not exported, so Plan 09 line 476 dynamic import resolves `m.PENDING_HASH_PINS` as undefined. This is M-1 (cycle 4).** |
-| M-12 "9 keys" prose sweep | **PARTIALLY RESOLVED** | Acceptance and headline prose updated (Plan 05 lines 39, 415; Plan 06 line 258); **Plan 05 Task 5.3 action block still has the original "EXACTLY 8 presets" snippet at lines 365-378 contradicting the 9-key amendment at lines 397-417. This is L-1 (cycle 4).** |
-| L-1 BREADCRUMBS.jsonl writer deferred to Phase 4 | **FULLY RESOLVED** | Plan 08 line 286 explicit. |
-| L-2 SectionStateSchema imported from state.ts | **FULLY RESOLVED** | Plan 03 line 219. |
-| L-3 await import() vs require() in Task 9.3.5 | **FULLY RESOLVED** | Plan 09 lines 466-478 with rationale. Symbol-export discipline is M-1 (cycle 4), not this resolution itself. |
-| L-4 Task 0.2a WN-2 waiver | **FULLY RESOLVED** | Plan 00 lines 297-307 + verification line 833. |
-| L-5 stale pre-CYCLE-2 schema snippets removed | **PARTIALLY RESOLVED** | Major stale snippets removed (Plan 03 lines 37, 169, 207 explicit removal markers). **But Plan 08 line 448 still references `resumePrompt max 300` which was removed from D-17. This is L-2 (cycle 4).** |
-| L-6 Plan 08 frontmatter ownership (CONSUMES only) | **FULLY RESOLVED** | Plan 08 lines 11-14, 36-37, 64, 242 all consistent. |
-| L-7 D-15 retracted persistence (CslEntry note='RETRACTED') | **FULLY RESOLVED** | Plan 04 lines 619-624 + 632-666 + test 766-781. |
-
-**Summary:** 14 of 20 cycle-3 fix items are FULLY RESOLVED. 5 are PARTIALLY RESOLVED with the residual gap escalating to either HIGH (NEW-H-3) or MEDIUM (M-1, M-2) or LOW (L-1, L-2). 1 net new MEDIUM (M-3) is introduced by the pure-string-transformer split itself.
-
-## Recommended Cycle-5 Fix List
-
-1. **(HIGH)** Plan 03 line 274 — add `'unverifiable'` to `PlanFrontmatterSchema.status` z.enum literal. Add grep gate.
-2. **(MEDIUM)** Plan 00 line 601 — change `const PENDING_HASH_PINS` to `export const PENDING_HASH_PINS`. Add grep gate to Plan 09.
-3. **(MEDIUM)** Plan 03 lines 267-280 — add `last_verification: z.unknown().optional()` field (and optionally `was_current_at_migration: z.boolean().optional()` to match Plan 03 line 386) to `PlanFrontmatterSchema`. Either add `.passthrough()` or list all migration forensic keys explicitly.
-4. **(MEDIUM, optional/risk-accepted)** Plan 03 line 393 — wrap the 3-step compose in `withLock(planPath, async () => {...})`. Alternative: document in CONTEXT.md that pensmith requires exclusive PLAN.md access during first-boot migration.
-5. **(LOW)** Plan 05 Task 5.3 lines 365-378 — change "EXACTLY 8 presets" to "EXACTLY 9 presets" and add the `"other"` entry inline; mark the cycle-3 amendment at lines 397-417 as historical context.
-6. **(LOW)** Plan 08 line 448 — replace `resumePrompt max 300 chars` with `next_action max 200 chars (D-17 LOCKED)`.
-
-Estimated cycle-5 close-out: 30 minutes — all 6 are mechanical text edits.
-
-## Verdict
-
-**NEEDS-CYCLE-5** (1 HIGH + 3 MEDIUM + 2 LOW remain; HIGH trajectory: 5 → 4 → 2 → 1; cycle-3 NEW-H-1 and NEW-H-2 both fully closed; new HIGH is a single-literal schema-prose drift caught by Codex; all 6 cycle-5 fixes are mechanical with no decision changes).
+CYCLE_SUMMARY: current_high=0
