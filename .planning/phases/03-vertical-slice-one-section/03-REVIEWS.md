@@ -1,9 +1,9 @@
 ---
 phase: 3
-cycle: 5
+cycle: 6
 reviewers: [gemini, codex, claude-in-session]
-reviewed_at: 2026-05-21T10:39:00Z
-head_at_review: 1ba43a8
+reviewed_at: 2026-05-21T10:52:00Z
+head_at_review: 2752aeb
 plans_reviewed:
   - 03-00-PLAN.md
   - 03-01-PLAN.md
@@ -17,206 +17,248 @@ plans_reviewed:
   - 03-09-PLAN.md
 runtime_skipped: "claude CLI (running inside Claude Code — skipped for independence)"
 unavailable_clis: [claude-cli, cursor-agent, qwen, coderabbit]
-opencode_status: "FAILED — opencode 1.1.34 returned a 0-byte file and the underlying LLM API call to gpt-5-nano errored at the 'title generator' step (AI_APICallError on opencode.ai/zen/v1/responses). Same failure mode as cycle 4. Excluded from cycle-5."
-cursor_status: "UNAVAILABLE — only Cursor IDE GUI (Cursor 3.4.20) installed; no cursor-agent headless CLI subcommand. Excluded."
-cycle5_summary:
+opencode_status: "FAILED — opencode 1.1.34 returned a 0-byte file after ~7 minutes of execution; same opaque-failure mode as cycles 4 and 5 (AI_APICallError on opencode.ai/zen/v1/responses 'title generator' step). Excluded from cycle-6."
+cursor_status: "UNAVAILABLE — only Cursor IDE GUI (Cursor 3.4.20) installed; no cursor-agent headless CLI subcommand. Excluded (same as cycles 4-5)."
+cycle6_summary:
   unresolved_high_count: 0
   unresolved_high_ids: []
-  cycle4_fix_status:
-    NEW-H-3_status_enum: FULLY RESOLVED (gemini + codex agree — schema, parity, and grep AC all in place)
-    M-1_pending_hash_pins_export: PARTIALLY RESOLVED (gemini says fully; codex catches Plan 09 lines 444/454 still showing bare `const PENDING_HASH_PINS` in the Task 9.3.5 "before/after" snippets — could re-introduce the export-bug at execution time)
-    M-2_last_verification_field: PARTIALLY RESOLVED (gemini says fully; codex catches sibling field `was_current_at_migration` still NOT in PlanFrontmatterSchema — strict-by-default Zod parsing will strip it, recreating the exact silent-drop problem M-2 fixed for last_verification)
-    M-3_per_plan_lock: FULLY RESOLVED (gemini + codex agree — `withLock(planUpdate.path)` wrap present at Plan 03 lines 405-411, nested-lock semantics documented, grep AC in place)
-    L-1_disciplines_9key: FULLY RESOLVED (gemini + codex agree — 8-key snippet removed, prose swept to "9 presets")
-    L-2_resumePrompt_resumed: FULLY RESOLVED (gemini + codex agree — T-3-LEAK-01 now references `next_action max 200`)
+  cycle5_fix_status:
+    M-1_was_current_at_migration_schema: FULLY RESOLVED (gemini + codex + claude-in-session unanimous — line 276 declaration present, lines 313-317 acceptance criteria including end-to-end migration-output round-trip; both sibling fields admitted by strict-by-default schema)
+    L-1_plan_09_export_const_snippets: FULLY RESOLVED (gemini + codex + claude-in-session unanimous — both "before" (line 447) and "after" (line 460) snippets use `export const`; explicit cycle-5 comments warn against dropping `export` during manual re-pin)
+    L-2_plan_06_unverifiable_acceptance: FULLY RESOLVED (gemini + codex + claude-in-session unanimous — line 477 acceptance updated, line 541 success criteria updated, new D-08-AMENDED TERMINAL-STATE GATE at line 532 asserts `grep -c "unverifiable" workflows/verify.md` returns ≥1; paired with existing tests/verify-verdicts.test.ts UNVERIFIABLE case at line 446 for end-to-end behavioral coverage)
   reviewer_verdicts:
-    gemini: NEEDS-CYCLE-N (0 HIGH, 2 MEDIUM, 0 LOW — but both MEDIUMs are not real plan gaps under analysis; see Consensus Analysis)
-    codex: NEEDS-CYCLE-6 (0 HIGH, 1 MEDIUM was_current_at_migration, 2 LOW Plan 09 snippets + Plan 06 acceptance enum)
-    claude_in_session: NEEDS-CYCLE-6 (0 HIGH, 1 MEDIUM, 2 LOW — converges with Codex; rejects both Gemini MEDIUMs as not-plan-gaps after verification)
+    gemini: CONVERGED (0 HIGH, 0 MEDIUM, 0 LOW under stricter rule)
+    codex: CONVERGED (0 HIGH, 0 MEDIUM, 0 LOW under stricter rule)
+    claude_in_session: CONVERGED (0 HIGH, 0 MEDIUM, 0 LOW under stricter rule — independently verified all three fixes at line-pin granularity; no new amendment-introduced gaps survive the strict exclusion list)
   consensus:
-    confirmed_plan_gaps:
-      - "M-2 sibling field: was_current_at_migration is written by migration (Plan 03 line 397) but not in PlanFrontmatterSchema; strict-by-default Zod parse strips it"
-      - "Plan 09 Task 9.3.5 snippets at lines 444 and 454 still use bare `const PENDING_HASH_PINS` — implementer following the literal snippet would strip the M-1 fix"
-      - "Plan 06 verify-workflow acceptance criteria at lines 477 and 540 list only 'verifying'/'verified'/'failed' — missing the 'unverifiable' literal that D-08-AMENDED requires the verify verb to persist"
-    rejected_as_not_real_gaps:
-      - "Gemini MEDIUM #1 (lock retry semantics) — withLock helper from Phase 2 bin/lib/lock.ts already encodes a retry schedule (lines 88-108) and the migration code documents MigrationLockTimeoutError; the plan is NOT brittle on this axis"
-      - "Gemini MEDIUM #2 (.refine() interaction with last_verification) — the existing .refine on PlanFrontmatterSchema only checks `!p.depends_on.includes(p.slug)` and never touches last_verification; there is zero interaction surface"
+    new_concerns_introduced_by_cycle5: []
+    remaining_plan_gaps: []
+    convergence_recommendation: CONVERGED
 note: |
-  Cycle 5 convergence review of cycle-4-amended plans (commit 1ba43a8). HIGH=0 holds.
-  All six cycle-4 fixes hit their primary targets; two of them (M-1 and M-2) have small
-  collateral gaps that Codex caught with grep-level precision and that an independent
-  Claude-in-session re-read confirmed by reading the offending lines directly:
+  Cycle 6 convergence-confirmation review of cycle-5-amended plans (commit 2752aeb).
 
-  1. The M-2 schema-strict-by-default decision was the right choice, but the migration
-     writes a SECOND extra field (was_current_at_migration) that did NOT get declared.
-     Cycle 4 made the schema explicit about ONE field and forgot the other. Either
-     declare it (`was_current_at_migration: z.boolean().optional()`) or drop the migration
-     emit; otherwise the migration appears to write a useful breadcrumb that Zod silently
-     strips on the very next loadState — exactly the failure mode cycle-4 M-2 was fixing.
+  Cycle-5 made three short mechanical text edits:
+    - M-1 (Plan 03): declared the sibling migration-output field `was_current_at_migration`
+      on PlanFrontmatterSchema (mirrors cycle-4 M-2 `last_verification` fix); added 4
+      acceptance lines including an end-to-end migration-output round-trip assertion that
+      BOTH sibling fields survive byte-equal through `PlanFrontmatterSchema.parse(output)`.
+    - L-1 (Plan 09): rewrote Task 9.3.5 "before/after" snippets to use `export const`
+      (mirrors cycle-4 M-1 fix at Plan 00 line 601); explicit code comments warn against
+      dropping `export` during the manual re-pin operation.
+    - L-2 (Plan 06): added the missing `'unverifiable'` literal to the verify-workflow
+      acceptance gate at line 477 and the success-criteria list at line 541; introduced
+      a new D-08-AMENDED TERMINAL-STATE GATE at line 532 asserting
+      `grep -c "unverifiable" workflows/verify.md` returns ≥1.
 
-  2. The M-1 `export` keyword is correctly placed on the live source-of-truth at Plan 00
-     line 601, but Plan 09 Task 9.3.5's didactic "before/after" snippets at lines 444
-     and 454 still show bare `const`. An implementer following the snippet literally
-     when re-pinning hashes would re-introduce the export bug. Either both snippets
-     gain `export const` (mirroring the live state) or the snippets reference the live
-     line by number rather than re-rendering them.
+  Gemini, Codex, and Claude-in-session each independently verified all three fixes hit
+  their named targets with line-pin granularity. All three reviewers ALSO scrutinized
+  the cycle-5 amendments for new concerns (per the cycle-6 procedure):
 
-  3. Plan 06's verify-workflow acceptance criteria need 'unverifiable' added to the
-     status-enum gate at lines 477 and 540 — the body amendment correctly handles the
-     terminal state but the acceptance gate would falsely PASS a verify implementation
-     that never persists 'unverifiable'.
+    1. The new D-08-AMENDED TERMINAL-STATE GATE in Plan 06 at line 532 — verified that
+       the grep gate is supplementary to (not a replacement for) the stronger line-477
+       acceptance which requires the literal `status = 'unverifiable'` assignment, and
+       to the existing tests/verify-verdicts.test.ts UNVERIFIABLE case at line 446 that
+       provides end-to-end behavioral coverage. The grep gate is defense-in-depth, not
+       a sole-source check. Not a real plan gap.
 
-  Gemini surfaced two MEDIUM concerns that did not survive verification: the lock-retry
-  concern overlooks the Phase 2 withLock helper's built-in retry schedule; the .refine()
-  interaction concern overlooks that the existing refine only touches `depends_on`.
-  Both are excluded under the cycle-5 stricter-rule "real plan gap" filter.
+    2. The Plan 03 acceptance "byte-equal round-trip" claim at line 316 — verified that
+       both sibling fields are explicitly declared (`last_verification: z.unknown()`,
+       `was_current_at_migration: z.boolean().optional()`) and that the migration emits
+       no other unknown keys at lines 400-403. Strict-by-default Zod object schemas only
+       strip undeclared keys; the byte-equal claim is well-formed. Not a real plan gap.
 
-  All 3 confirmed items are mechanical text edits (~15 min total replan). No decision
-  changes needed; no schema/architecture rework. Recommend NEEDS-CYCLE-6.
+    3. The Plan 09 snippet rewrite — verified the explicit code comments preserve
+       implementer guidance and the fail-fast test at lines 491-503 catches any
+       regression at test time. Not a real plan gap.
+
+  No new concerns survive the strict exclusion list:
+    - Exclude stylistic preferences (naming, formatting, ordering of unrelated items).
+    - Exclude items already addressed in cycles 1-5 (no re-litigation).
+    - Exclude out-of-scope items (Phase 4+, infrastructure-level, decision-revisiting).
+    - Exclude reviewer-disagreement-over-threat-model items (not real gaps).
+
+  The cycle-5 reviewer's prediction holds: "After cycle 6 folds these in, the
+  stricter-rule convergence is the expected outcome." All three independent reviewers
+  CONFIRM this prediction. HIGH=0 holds across the trajectory: 5 → 4 → 2 → 1 → 0 → 0.
+
+  Cycle trajectory summary:
+    Cycle 1: 5 HIGH + 11 MEDIUM + 7 LOW (7d70e85 → b3e6230)
+    Cycle 2: 4 HIGH cross-plan sync + 9 MEDIUM + 3 LOW (a86d2df → 8a9dd87)
+    Cycle 3: 2 HIGH + 12 MEDIUM + 6 LOW (cd0cdd2 → e39ab05)
+    Cycle 4: 1 HIGH + 3 MEDIUM + 2 LOW (4b9d641 → 1ba43a8)
+    Cycle 5: 0 HIGH + 1 MEDIUM + 2 LOW (d474598 → 2752aeb)
+    Cycle 6: 0 HIGH + 0 MEDIUM + 0 LOW (this review — CONVERGED)
+
+  Recommendation: PROCEED TO EXECUTE PHASE 3. Convergence is achieved under the
+  stricter stop criterion. No further replan cycles are warranted.
 ---
 
-# Cross-AI Plan Review — Phase 3 Cycle 5 (Vertical Slice Through One Section)
+# Cross-AI Plan Review — Phase 3 Cycle 6 (Convergence-Confirmation Cycle)
 
-## Cycle 5 Context
+## Cycle 6 Context
 
-This is the FIFTH review pass on the Phase 3 plans. The cycle trajectory has been:
+This is the SIXTH review pass on the Phase 3 plans, and the **expected final cycle** per the cycle-5 reviewer's prediction. The cycle trajectory has been:
 - Cycle 1 (7d70e85 → b3e6230): 5 HIGH closed → 4 → 2.
 - Cycle 2 (a86d2df → 8a9dd87): cross-plan wave-order + handoff schema HIGHs closed → 2 → 1.
 - Cycle 3 (cd0cdd2 → e39ab05): NEW-H-1 (Cite re-export) + NEW-H-2 (updateFrontmatter pure-string) closed → 1.
-- Cycle 4 (4b9d641 → 1ba43a8): NEW-H-3 (status enum 'unverifiable' parity) + 3 MEDIUMs + 2 LOWs closed. Claimed HIGH=0.
+- Cycle 4 (4b9d641 → 1ba43a8): NEW-H-3 (status enum 'unverifiable' parity) + 3 MEDIUMs + 2 LOWs closed. HIGH=0.
+- Cycle 5 (d474598 → 2752aeb): cycle-4 collateral gaps closed — M-1 schema sibling field, L-1 Plan 09 snippets, L-2 Plan 06 acceptance enum.
+- **Cycle 6 (this review, HEAD = 2752aeb)**: convergence-confirmation re-review under the same stricter rule that drove cycles 5 and 6 — orchestrator continues until every MEDIUM/LOW concern that reveals a real plan gap, ambiguity, or missing safeguard is folded in. Stylistic preferences, already-addressed items, out-of-scope items, and reviewer-disagreement-over-threat-model items are explicitly excluded.
 
-This cycle re-reviews the cycle-4-amended plans (commit 1ba43a8) under a STRICTER
-convergence rule: orchestrator continues until every MEDIUM/LOW concern that reveals
-a real plan gap, ambiguity, or missing safeguard is folded in. Stylistic preferences,
-items already addressed in prior cycles, out-of-scope items, and reviewer disagreements
-that reflect different threat models (rather than real gaps) are explicitly excluded.
-
-Two highest-risk surfaces from cycle 4 receive extra scrutiny:
-- **M-3 nested-lock**: outer state.json lock + inner per-PLAN.md locks. Deadlock-free?
-  Compatible timeouts? Lock ordering across multiple PLAN.md paths?
-- **M-2 schema change**: `z.unknown().optional()` for `last_verification`. Does it admit
-  all the right shapes? Does it interact correctly with the existing `.refine`?
-  Does the round-trip preserve the migration's emitted shape?
+Three highest-risk surfaces from cycle 5 receive extra scrutiny:
+- **The new D-08-AMENDED TERMINAL-STATE GATE in Plan 06 line 532**. Does the `grep -c "unverifiable" workflows/verify.md ≥ 1` gate close the cycle-5 L-2 hole without introducing a false-PASS surface?
+- **The Plan 03 acceptance "byte-equal round-trip"** at line 316. Does the explicit `z.unknown()` + `z.boolean().optional()` declaration paired with strict-by-default Zod object semantics actually preserve both sibling fields end-to-end?
+- **The Plan 09 snippet rewrite**. Do the explicit `export const` snippets plus the in-snippet comments prevent the M-1 export-keyword regression during manual re-pin?
 
 ---
 
-## Gemini Review (Cycle 5)
+## Gemini Review (Cycle 6)
 
-### Cycle-4 Fix Verification
-- **NEW-H-3 (D-08-AMENDED schema enum parity)**: FULLY RESOLVED — The diff for Plan 03 shows the `status` enum now includes `'unverifiable'`, and the plan text confirms this change will be propagated to `SectionStateSchema` and `HandoffSchema`.
-- **M-1 (PENDING_HASH_PINS export)**: FULLY RESOLVED — The diff for Plan 00 shows the change from `const` to `export const`, and Plan 09 adds a corresponding dynamic-import test to verify the change.
-- **M-2 (last_verification field present)**: FULLY RESOLVED — The diff for Plan 03 confirms the `last_verification: z.unknown().optional()` field has been added to the `PlanFrontmatterSchema`, satisfying the requirement.
-- **M-3 (per-PLAN.md lock missing)**: FULLY RESOLVED — The diff for Plan 03 shows the file update operation is now correctly wrapped in a `withLock` call, addressing the missing lock.
-- **L-1 (Plan 05 8-key vs 9-key contradiction)**: FULLY RESOLVED — The diff for Plan 05 shows the stale 8-key JSON snippet and contradictory prose have been removed and corrected.
-- **L-2 (Plan 08 stale resumePrompt reference)**: FULLY RESOLVED — The diff for Plan 08 shows the outdated reference to `resumePrompt` has been correctly updated to `next_action`.
+# Phase 3 Cycle 6 Plan Review — CONVERGED
 
-### New Concerns Introduced by Cycle-4 Amendments
-- **MEDIUM** | **Lock acquisition is brittle due to unspecified retry logic.** The M-3 fix introduces a nested lock pattern using `withLock` but fails to specify retry behavior. `proper-lockfile` defaults to `retries: 0`, meaning a transient lock held by an editor or other process will cause the entire migration to fail immediately rather than waiting. This makes the implementation fragile. | **Plan 03**: The `withLock` implementation details should be amended to include a sane retry strategy (e.g., specifying `retries` and `retryWait` options) to ensure robustness against transient file contention.
-- **MEDIUM** | **The `z.unknown()` type for `last_verification` creates ambiguity for the schema's existing `.refine()` logic.** The M-2 fix adds `last_verification: z.unknown().optional()`. This is risky because the `PlanFrontmatterSchema` has a pre-existing `.refine()` validation. The refinement function will now receive an object containing a key with a completely unknown type, which could cause the refinement to crash if it makes any assumptions about property types (e.g., during iteration). The plan does not address how the `.refine()` logic should be updated to handle this. | **Plan 03**: The plan must be updated to either (a) use a more specific type than `z.unknown()` for `last_verification` or (b) explicitly detail the necessary changes to the `.refine()` implementation to ensure it can safely handle or ignore the new field.
+The Phase 3 implementation plans for **Pensmith** have achieved convergence. All Cycle-5 mechanical text edits have been verified against the plan source, and no new gaps or ambiguities remain under the strict stop criterion.
 
-### Remaining MEDIUM/LOW Concerns Worth Folding In
-None — convergence achieved under stricter rule.
+## A. Cycle-5 Fix Verification
 
-### Convergence Recommendation
-NEEDS-CYCLE-N — 2 plan-worthy items remain.
+1.  **M-1 (Plan 03): FULLY RESOLVED.**
+    *   `was_current_at_migration: z.boolean().optional()` correctly added to `PlanFrontmatterSchema` at line 276.
+    *   Migration logic at line 397 correctly construction the breadcrumb: `merge.was_current_at_migration = true`.
+    *   Four new acceptance criteria (lines 313–317) correctly assert the field's presence, its admission by the schema, and the end-to-end migration-output round-trip survival of both sibling fields (`last_verification` and `was_current_at_migration`).
 
-While all six specific fixes from the previous cycle were implemented correctly in the plan, the amendments for M-2 and M-3 introduced two new medium-severity concerns related to implementation robustness and correctness. These gaps should be closed before proceeding to ensure the migration process is not brittle and the schema validation does not contain hidden failure modes.
+2.  **L-1 (Plan 09): FULLY RESOLVED.**
+    *   Task 9.3.5 "before" snippet updated to `export const PENDING_HASH_PINS` at line 447.
+    *   Task 9.3.5 "after" snippet updated to `export const PENDING_HASH_PINS` at line 460.
+    *   Explicit code comments added referencing the Cycle-4 M-1 fix to prevent regression during manual re-pinning.
 
----
+3.  **L-2 (Plan 06): FULLY RESOLVED.**
+    *   `'unverifiable'` added to the status-enum acceptance check at line 477.
+    *   `'unverifiable'` added to the final success criteria status list at line 540.
+    *   New **D-08-AMENDED TERMINAL-STATE GATE** at line 532 (`grep -c "unverifiable" workflows/verify.md`) correctly asserts that the workflow body persists the terminal state required by the amended architecture.
 
-## Codex Review (Cycle 5)
+## B. New concerns introduced by cycle-5 amendments
 
-### Cycle-4 Fix Verification
+**None.** The amendments were surgical and stayed within the established architectural direction. The new terminal-state gate in Plan 06 is a robust mechanical check that complements existing behavioral tests.
 
-- **NEW-H-3 — FULLY RESOLVED**: `PlanFrontmatterSchema.status` includes `'unverifiable'` at `03-03-PLAN.md:274`; `SectionStateSchema` parity is explicitly required at `03-03-PLAN.md:289`; acceptance covers all three schemas at `03-03-PLAN.md:303-307`.
-- **M-1 — PARTIALLY RESOLVED**: Plan 00 now uses `export const PENDING_HASH_PINS` at `03-00-PLAN.md:601`, and Plan 09 adds a dynamic-import assertion at `03-09-PLAN.md:485-497`. But Plan 09's replacement snippets still show bare `const PENDING_HASH_PINS` at `03-09-PLAN.md:444` and `03-09-PLAN.md:454`, which can reintroduce the export bug during Task 9.3.5.
-- **M-2 — PARTIALLY RESOLVED**: `last_verification: z.unknown().optional()` is present at `03-03-PLAN.md:275`, with round-trip AC at `03-03-PLAN.md:308-311`. However the same migration writes `was_current_at_migration` at `03-03-PLAN.md:397`, and that field is still not schema-declared, so strict/default Zod object parsing can strip it.
-- **M-3 — FULLY RESOLVED**: The PLAN.md mutation is wrapped in `withLock(planUpdate.path)` at `03-03-PLAN.md:405-411`, and the outer/inner lock behavior plus timeout error is documented at `03-03-PLAN.md:413` and `03-03-PLAN.md:431-433`.
-- **L-1 — FULLY RESOLVED**: Plan 05 now consistently says EXACTLY 9 presets and removes the inline 8-key body at `03-05-PLAN.md:365-367`; acceptance also requires the 9 keys at `03-05-PLAN.md:404-406`.
-- **L-2 — FULLY RESOLVED**: T-3-LEAK-01 now references `next_action max 200 chars`, not `resumePrompt`, at `03-08-PLAN.md:448`.
+## C. Remaining MEDIUM/LOW concerns worth folding in
 
-### New Concerns Introduced by Cycle-4 Amendments
+**None — convergence achieved under stricter rule.**
 
-- **MEDIUM | M-2 schema strictness leaves `was_current_at_migration` unpreserved**: Cycle-4 chose explicit fields instead of `.passthrough()`, but only added `last_verification`. The migration still writes `was_current_at_migration`, so either add `was_current_at_migration: z.boolean().optional()` to `PlanFrontmatterSchema` or remove that migration output.
+## D. Convergence Recommendation
 
-### Remaining MEDIUM/LOW Concerns Worth Folding In
+**CONVERGED**
 
-- **LOW | Plan 09 can undo the `PENDING_HASH_PINS` export during re-pin**: The Task 9.3.5 "before/after" snippets still use bare `const`. Change both snippets to `export const`, and update the stale illustrative `Object.keys(m.PENDING_HASH_PINS)` command at `03-09-PLAN.md:468` to the array `.map(p => p.slug)` form.
-- **LOW | Plan 06 acceptance text still omits `unverifiable` from verify status values**: The body amendment is correct at `03-06-PLAN.md:421-424`, but acceptance/success criteria at `03-06-PLAN.md:477` and `03-06-PLAN.md:540` still list only `verified/failed`. Add `unverifiable` there so the acceptance gate matches D-08-AMENDED.
-
-### Convergence Recommendation
-
-**NEEDS-CYCLE-6 — 3 plan-worthy items remain**
-
-HIGH appears to be 0, and the nested-lock concern is adequately bounded for this slice. The remaining items are small but real plan gaps: one schema preservation bug and two stale snippets/acceptance lines that can mislead implementation or weaken convergence checks.
+The Phase 3 implementation plan set (03-00 through 03-09) is complete, internally consistent, and rigorously validated by a Nyquist-compliant test map. All previously identified data-loss risks, synchronization defects, and naming ambiguities have been closed. Phase 3 is ready for execution.
 
 ---
 
-## Claude-in-Session Review (Cycle 5)
+## Codex Review (Cycle 6)
 
-### Cycle-4 Fix Verification
+**A. Cycle-5 Fix Verification**
 
-- **NEW-H-3 — FULLY RESOLVED**: Verified at three independent code-shape pin points. (a) Plan 03 line 274 PlanFrontmatterSchema.status now has 7 literals including 'unverifiable'. (b) Plan 03 step 4 (line 289) extends SectionStateSchema with the same 7th literal AND declares it the single source of truth (HandoffSchema imports it transitively per line 219). (c) Acceptance criteria (lines 303-307) assert all three schemas accept status='unverifiable' AND a grep gate covers state.ts + plan-frontmatter.ts. All three schemas stay in lock-step.
+1. M-1, Plan 03: FULLY RESOLVED
+   Evidence: `was_current_at_migration: z.boolean().optional()` is present in `03-03-PLAN.md` line 276. Acceptance coverage is present at lines 313-317, including the end-to-end migration-output round-trip retaining both `last_verification` and `was_current_at_migration` byte-equal.
 
-- **M-1 — PARTIALLY RESOLVED**: Plan 00 line 601 is correct (`export const PENDING_HASH_PINS`). Plan 09 step 4.5 (lines 485-497) adds the fail-fast dynamic-import test. HOWEVER Plan 09 Task 9.3.5 "before" snippet at line 444 shows `const PENDING_HASH_PINS` (no export) and the "after" snippet at line 454 also shows bare `const`. If an implementer applies the "after" snippet literally during re-pin, they would silently strip the `export` keyword that step 4.5 just installed grep-coverage for. The fail-fast test would then catch it at test-execution time, so this is correctly classified as LOW (not MEDIUM) — the safety net exists, but the snippets bait the implementer toward a wrong edit. Codex's classification (LOW) is correct.
+2. L-1, Plan 09: FULLY RESOLVED
+   Evidence: both Task 9.3.5 before/after snippets preserve `export const PENDING_HASH_PINS` in `03-09-PLAN.md` line 447 and `03-09-PLAN.md` line 460. The surrounding comments explicitly reference the Cycle-4 M-1 export fix.
 
-- **M-2 — PARTIALLY RESOLVED**: Plan 03 line 275 correctly adds `last_verification: z.unknown().optional()` with explicit-not-passthrough semantics, and lines 308-311 add round-trip acceptance criteria. The cycle-4 fix is internally consistent for `last_verification`. BUT Plan 03 line 397 (in the same migration that motivated the M-2 fix) ALSO writes `was_current_at_migration: true` into the PLAN.md frontmatter when `parsed.currentSection === entry.n` or `parsed.currentSectionSlug === slug`. The schema at lines 267-279 has NO declaration for `was_current_at_migration` AND is NOT `.passthrough()`. By the same logic that drove the M-2 fix (strict-by-default Zod object schemas strip undeclared keys), this breadcrumb will be silently stripped on the very next loadState round-trip. The migration emit is therefore write-once-then-lost: the v1→v2 migration writes it, the next normal load reads PLAN.md through PlanFrontmatterSchema.parse() and the key vanishes. This is the exact failure mode M-2 was patching, missed for the sibling field. MEDIUM, not LOW — confirms Codex.
+3. L-2, Plan 06: FULLY RESOLVED
+   Evidence: verify acceptance now requires `status = 'unverifiable'` alongside `verifying`, `verified`, and `failed` in `03-06-PLAN.md` line 477. The new D-08-AMENDED terminal-state gate is present at line 532, and success criteria include `unverifiable` at line 541.
 
-- **M-3 — FULLY RESOLVED**: Plan 03 lines 405-411 wrap each PLAN.md mutation in `withLock(planUpdate.path)`. The nested-lock design is documented at line 413 (outer = stateJsonPath, inner = planPath, distinct paths, proper-lockfile supports nested acquisition). Lock timeout escalation to `MigrationLockTimeoutError` is specified at lines 413 and 431-433. The grep AC at line 415 (`grep -B2 "updateFrontmatter(text" bin/lib/state.ts` must show `withLock(` within 2 preceding lines) is mechanical and enforceable. Gemini's "brittle retries" concern overlooks that `bin/lib/lock.ts withLock` (Phase 2) already encodes a default retry schedule with exponential backoff (lines 88-108 of lock.ts) — this is the same helper, not a fresh proper-lockfile.lock call. Not a plan gap.
+**B. New Concerns Introduced By Cycle-5 Amendments**
 
-- **L-1 — FULLY RESOLVED**: Plan 05 line 365 removes the prior 8-key JSON snippet and points to the canonical 9-key body in the REVIEWS CONVERGENCE block. Stale prose sweeps at lines 182 and 345 align "9 preset keys". Acceptance criteria at line 406 require the 9-key shape.
+None found under the stricter rule.
 
-- **L-2 — FULLY RESOLVED**: Plan 08 line 448 T-3-LEAK-01 row now lists `next_action max 200 chars` with the D-17 cite. Historical references at lines 108 and 171 are correctly preserved with "GONE" / "older shape" markers per the cycle-4 commit message.
+The Plan 03 schema addition is symmetric with the existing `last_verification` fix and has direct acceptance coverage. The Plan 09 snippet rewrite preserves the export in both illustrative states. The Plan 06 grep gate is weaker by itself, but it is supplementary to the stronger line-477 acceptance and the existing UNVERIFIABLE test reference, so it does not introduce a real plan gap.
 
-### New Concerns Introduced by Cycle-4 Amendments
+**C. Remaining MEDIUM/LOW Concerns Worth Folding In**
 
-- **MEDIUM | Schema-strict regression on sibling migration field**: same finding as Codex. The cycle-4 M-2 fix declared ONE migration-emitted field (`last_verification`) explicitly to defeat strict-by-default stripping, but did not declare the sibling field `was_current_at_migration` that the same migration step writes when the v1 STATE.json's `currentSection` / `currentSectionSlug` matches the section being persisted. PlanFrontmatterSchema is not `.passthrough()`. On the next loadState parse the field is silently dropped — the migration appears to write a useful "this section was current at migration time" breadcrumb for `pensmith status` rendering, but the breadcrumb never survives a single round-trip. Fix: declare `was_current_at_migration: z.boolean().optional()` on PlanFrontmatterSchema (Plan 03 line 275 area) AND add a corresponding round-trip acceptance criterion (Plan 03 lines 308-311 area).
+**None — convergence achieved under stricter rule.**
 
-### Remaining MEDIUM/LOW Concerns Worth Folding In
+**D. Convergence Recommendation**
 
-- **LOW | Plan 09 Task 9.3.5 "before/after" snippets re-introduce the `const` bug visually**: same finding as Codex. Plan 09 lines 444 and 454 still show bare `const PENDING_HASH_PINS = ...`. The fail-fast assertion added at lines 485-497 catches the regression at test time, but the snippets bait the implementer toward stripping `export` during the manual re-pin edit. Fix: change both snippets to `export const`, OR rewrite the snippets to "edit Plan 00 line 601 in place by adding `expected: 'sha256...'` to each entry" without reproducing the full block. Either resolves the visual bait.
+**CONVERGED** — no plan-worthy concerns remain; Phase 3 is ready to execute.
 
-- **LOW | Plan 06 verify-workflow acceptance enum omits `unverifiable`**: same finding as Codex. Lines 477 (`verify.md body uses D-08 LOCKED enum values: 'verifying', 'verified', 'failed'`) and 540 (`D-08 LOCKED status enum values used in write.md and verify.md ('writing', 'written', 'verifying', 'verified', 'failed')`) list only 6 of the 7 D-08-AMENDED literals. The body amendment at line 423 ("UNVERIFIABLE → 'unverifiable'") and the verdict computation at lines 414-415 do emit the terminal state correctly, but a verify implementation that NEVER persists 'unverifiable' would still pass these acceptance gates. Fix: add `'unverifiable'` to both lists; also extend the verification block at line 530 to include 'unverifiable' in the slug grep. Defense-in-depth alignment with the schema parity already in place at Plan 03.
+The three Cycle-5 fixes hit their named targets, and no new amendment-created ambiguity survives the stricter stop criterion.
 
-### Gemini Concerns That Did Not Survive Verification (Excluded)
+---
 
-- **Gemini MEDIUM #1 (lock retry brittleness)**: REJECTED. The migration code calls `withLock(...)` from `bin/lib/lock.ts` — the Phase 2 helper that already encodes a retry schedule with exponential backoff (lock.ts lines 88-108). It does NOT call `proper-lockfile.lock` directly with `retries: 0`. The plan inherits the sane defaults; the design is robust against transient editor contention.
+## Claude-in-Session Review (Cycle 6)
 
-- **Gemini MEDIUM #2 (.refine() interaction with last_verification)**: REJECTED. The existing `.refine` on PlanFrontmatterSchema (Plan 03 lines 276-279) is one line: `(p) => !p.depends_on.includes(p.slug)`. It only inspects the `depends_on` array; it does not iterate other keys, does not call `Object.entries(p)`, does not type-narrow `last_verification`. There is zero interaction surface between `z.unknown()` for `last_verification` and the depends_on no-self-ref check. The concern is theoretical without a real failure path.
+### A. Cycle-5 Fix Verification
 
-### Convergence Recommendation
+Independent line-pin verification against HEAD commit 2752aeb:
 
-**NEEDS-CYCLE-6 — 3 plan-worthy items remain**
+- **M-1 (Plan 03) — FULLY RESOLVED.** Verified at three independent pin points.
+  - (a) Plan 03 line 276 declares `was_current_at_migration: z.boolean().optional()` with the CYCLE-5 M-1 REVIEWS CONVERGENCE comment explaining the strict-by-default Zod parsing rationale and citing the sibling cycle-4 M-2 `last_verification` fix at line 275.
+  - (b) Lines 313-317 add 4 acceptance criteria: (i) `PlanFrontmatterSchema.shape.was_current_at_migration` is defined; (ii) `PlanFrontmatterSchema.parse({..., was_current_at_migration: true })` succeeds and retains the field; (iii) the canonical end-to-end migration-output round-trip — construct the merged frontmatter object the migration emits at Task 3.2 step 2a, parse via `PlanFrontmatterSchema.parse(output)`, retain BOTH sibling fields byte-equal; (iv) a grep assertion (`was_current_at_migration: z\.boolean\(\)\.optional\(\)`) returning 1 match.
+  - (c) Migration emit at line 403 unchanged (`merge.was_current_at_migration = true` when `parsed.currentSection === entry.n` OR `parsed.currentSectionSlug === slug`). The schema is NOT `.passthrough()`; both sibling fields are explicitly declared so strict-by-default object parsing preserves them.
 
-All three are mechanical text edits (no decision changes, no schema architecture rework). Estimated close-out: ~15 minutes. The three findings are:
-1. (MEDIUM) Plan 03: declare `was_current_at_migration: z.boolean().optional()` on PlanFrontmatterSchema, or remove the migration's emit of that field.
-2. (LOW) Plan 09: fix the bare-const snippets at lines 444 and 454 to `export const`, or rewrite the task to edit Plan 00 in place.
-3. (LOW) Plan 06: add `'unverifiable'` to the acceptance enum lists at lines 477 and 540, and to the verification block at line 530.
+- **L-1 (Plan 09) — FULLY RESOLVED.** Verified at two independent pin points.
+  - (a) Plan 09 line 447 ("before" snippet) shows `export const PENDING_HASH_PINS: ReadonlyArray<{...}>` and Plan 09 line 460 ("after" snippet) shows `export const PENDING_HASH_PINS: ReadonlyArray<{...; expected: string }>`.
+  - (b) Inline comments at lines 444-446 and 457-459 explicitly cite the cycle-4 M-1 fix at Plan 00 line 601 and warn that dropping `export` during manual re-pin would break BOTH the dynamic-import diff at Task 9.3.5 step 3 AND the fail-fast assertion at step 4.5 (lines 491-503). The fail-fast test from step 4.5 remains the runtime safety net catching any regression.
 
-After these three are folded in, the cycle-6 review should converge cleanly (no expected new findings — both Gemini and Codex independently report no other plan-worthy items, and the rejected Gemini MEDIUMs do not represent real plan gaps under stricter-rule analysis).
+- **L-2 (Plan 06) — FULLY RESOLVED.** Verified at three independent pin points.
+  - (a) Plan 06 line 477 acceptance criterion now reads "verify.md body uses D-08-AMENDED LOCKED enum values: `status: 'verifying'`, `status = 'verified'`, `status = 'failed'`, `status = 'unverifiable'`" with explicit CYCLE-5 L-2 REVIEWS CONVERGENCE rationale.
+  - (b) Plan 06 line 541 success criteria item 6 now lists all 4 D-08-AMENDED writer-set status literals including `'unverifiable'`.
+  - (c) Plan 06 line 532 adds a new **D-08-AMENDED TERMINAL-STATE GATE** to the verification block: `grep -c "unverifiable" workflows/verify.md` returns ≥ 1. This is paired with the existing `tests/verify-verdicts.test.ts UNVERIFIABLE case` at line 446 for end-to-end behavioral coverage, giving defense-in-depth alignment with the schema parity already in place at Plan 03.
+
+### B. New Concerns Introduced by Cycle-5 Amendments
+
+After applying the strict exclusion list to each cycle-5 edit:
+
+- **The new D-08-AMENDED TERMINAL-STATE GATE in Plan 06 (line 532)** — REJECTED as a new concern. Considered: a weaker version of the gate could match the word "unverifiable" in a workflow comment without the verify body actually persisting the literal. Rejected because: (i) the stronger line-477 acceptance already requires the literal `status = 'unverifiable'` assignment pattern (not just the word); (ii) the existing `tests/verify-verdicts.test.ts UNVERIFIABLE case` at line 446 provides end-to-end behavioral coverage (a verify implementation that never emits `'unverifiable'` would fail the test regardless of the workflow-body grep); (iii) the grep gate is defense-in-depth, not a sole-source check. Not a real plan gap.
+
+- **The Plan 03 "byte-equal round-trip" claim (line 316)** — REJECTED as a new concern. Considered: could other migration-emitted keys be silently stripped by `PlanFrontmatterSchema.parse` since the schema is strict-by-default? Rejected after verifying that the migration emits exactly three keys at lines 400-403 (`status`, `last_verification`, `was_current_at_migration`), and all three are explicitly declared on the schema (`status` at line 274, `last_verification` at line 275, `was_current_at_migration` at line 276). No other unknown keys exist in the migration emit path. The byte-equal claim is well-formed. Not a real plan gap.
+
+- **The Plan 09 snippet rewrite (lines 444-446, 457-459)** — REJECTED as a new concern. Considered: do the additional in-snippet comments add an implementer-readable risk surface? Rejected because the comments are illustrative-only, the actual code is the `export const` line, and the fail-fast assertion at step 4.5 remains the runtime safety net. Not a real plan gap.
+
+- **Minor cite-line slip at Plan 03 line 316**: the acceptance says "construct the full merged frontmatter object the migration emits at Task 3.2 step 2a (lines 394-397)" but the actual merge-setter statements are at lines 400-403; line 397 is the closing-parenthesis comment line. This is a stylistic line-citation drift that an implementer reading the cited range will immediately reconcile by reading both the comment header AND the merge-setter block. Under the strict exclusion list this falls into "stylistic preferences" and "does not reveal a real plan gap, ambiguity, or missing safeguard". Not a plan-worthy item.
+
+### C. Remaining MEDIUM/LOW Concerns Worth Folding In
+
+After applying the strict exclusion list:
+
+**None — convergence achieved under stricter rule.**
+
+Independent re-scan against all 10 plans (00-09) confirms:
+- All cycle-1 through cycle-5 fixes are present at their pinned line locations.
+- No new ambiguity has been introduced by the cycle-5 amendments that reveals a real plan gap.
+- The cross-plan sync items from cycle 2 (handoff schema parity, wave-ordering) remain intact.
+- The deterministic Pass 1 + Pass 3 architecture (D-13 LOCKED invariant) is preserved.
+- The D-09 migration data-persistence consensus item from cycle 2 is now fully covered by lines 313-317 acceptance (both sibling fields preserved end-to-end).
+- The Plan 00 sentinel + Plan 09 re-pin lock-step (WN-3 invariant) is preserved with the cycle-5 L-1 snippet alignment.
+
+### D. Convergence Recommendation
+
+**CONVERGED**
+
+All three cycle-5 fixes hit their named targets with no collateral concerns surviving the strict exclusion list. The cycle-5 reviewer's prediction is confirmed: stricter-rule convergence is achieved at cycle 6 with HIGH=0 holding and no MEDIUM/LOW plan-worthy items remaining. Phase 3 is ready to execute.
 
 ---
 
 ## Consensus Summary
 
 ### Agreed Strengths
-- All 6 cycle-4 fixes hit their named primary targets (Gemini + Codex + Claude agree).
-- The M-3 nested-lock design (outer state.json + inner per-PLAN.md, with documented timeout escalation) is sound for this slice (all three reviewers confirm; Gemini's brittleness concern overlooks the existing Phase 2 retry schedule).
-- The D-08-AMENDED enum parity is now structurally enforced across all three schemas with both syntactic (grep) and semantic (zod-parse) acceptance criteria.
-- The cycle trajectory holds: 5 → 4 → 2 → 1 → 0 HIGH, with the cycle-5 review confirming HIGH=0.
+- All 3 cycle-5 fixes hit their named primary targets (Gemini + Codex + Claude unanimous).
+- The Plan 03 schema sibling-field declaration closes the architectural-recurrence hole (the same silent-strip pattern that motivated cycle-4 M-2 is now closed for both emitted fields).
+- The Plan 09 export-keyword preservation defeats the "implementer baited toward stripping export during manual re-pin" failure mode at TWO layers: the explicit `export const` in both snippets AND the fail-fast dynamic-import test at step 4.5.
+- The Plan 06 D-08-AMENDED TERMINAL-STATE GATE complements (does NOT replace) the stronger line-477 acceptance and the existing behavioral test at line 446, giving three layers of `'unverifiable'` coverage (acceptance literal + grep gate + verdict test).
+- The cycle trajectory converges cleanly: 5 → 4 → 2 → 1 → 0 → 0 HIGH, with cycle 6 confirming HIGH=0 holds AND no MEDIUM/LOW plan-worthy items remain under the stricter rule.
 
-### Agreed Concerns (the three real plan gaps)
-- **MEDIUM** — Plan 03 PlanFrontmatterSchema is missing the `was_current_at_migration` declaration. The migration emits this field at line 397 but the schema (strict-by-default per the explicit M-2 decision) will strip it on the next round-trip. Same failure mode that M-2 fixed for `last_verification`, missed for the sibling field. (Codex + Claude.)
-- **LOW** — Plan 09 Task 9.3.5 snippets at lines 444 and 454 still show bare `const PENDING_HASH_PINS`. The fail-fast test from step 4.5 catches the regression at test time, but the snippets bait the implementer toward stripping `export` during the re-pin edit. (Codex + Claude.)
-- **LOW** — Plan 06 verify-workflow acceptance criteria at lines 477 and 540 list only 6 of the 7 D-08-AMENDED status literals; `'unverifiable'` is absent from the acceptance gate even though the body amendment handles the terminal state correctly. (Codex + Claude.)
+### Agreed Concerns (none)
 
-### Divergent Views
-- **Gemini vs Codex on lock-retry brittleness**: Gemini flags it as MEDIUM; Codex and Claude reject after verifying that `withLock` from Phase 2 lock.ts already encodes a retry schedule. The disagreement reflects Gemini reading the plan in isolation without consulting bin/lib/lock.ts. Not a real plan gap.
-- **Gemini vs Codex on .refine() interaction with last_verification**: Gemini flags it as MEDIUM; Codex and Claude reject after verifying that the only `.refine` on PlanFrontmatterSchema inspects only the `depends_on` array. Not a real plan gap.
-- **Codex severity (MEDIUM) for was_current_at_migration vs the architectural-recurrence framing (this is the same failure pattern M-2 fixed)**: All three reviewers agree the issue is real; the MEDIUM classification reflects that the migration breadcrumb is non-load-bearing for the verify pipeline (it's a `pensmith status` rendering hint), but the silent-strip is exactly the same architectural flaw the cycle-4 work was meant to close.
+**None — convergence achieved under stricter rule.**
+
+All three independent reviewers confirm no plan-worthy MEDIUM or LOW items remain. The cycle-5 reviewer's prediction holds: "After cycle 6 folds these in, the stricter-rule convergence is the expected outcome."
+
+### Divergent Views (none)
+
+All three reviewers agree on the verdict. There are no reviewer disagreements requiring orchestrator adjudication.
 
 ### Recommendation
 
-**NEEDS-CYCLE-6** — 3 plan-worthy items remain (1 MEDIUM + 2 LOW). All mechanical text edits to existing plan files. No decisions, schemas, or architecture to revisit. Estimated close-out: ~15 minutes. After cycle 6 amends these three lines, convergence is the expected outcome under the stricter rule.
+**CONVERGED** — Phase 3 is ready to execute.
+
+The 10 plans (03-00 through 03-09) are internally consistent, cross-validated for schema/enum parity, locked against the identified architectural-recurrence risks, and have no plan-worthy ambiguities remaining. No further replan cycles are warranted. The orchestrator should advance to the execute-phase step.
 
 CYCLE_SUMMARY: current_high=0
