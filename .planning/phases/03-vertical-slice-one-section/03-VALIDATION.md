@@ -1,10 +1,11 @@
 ---
 phase: 3
 slug: vertical-slice-one-section
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-05-17
+approved: 2026-05-21
 ---
 
 # Phase 3 — Validation Strategy
@@ -117,4 +118,4 @@ Framework install: not needed — Node built-in `node --test` already used in Ph
 - [ ] Feedback latency < 40s (full suite, offline cassettes)
 - [ ] `nyquist_compliant: true` set in frontmatter after planner adopts validation map
 
-**Approval:** pending — planner to confirm Wave 0 coverage in PLAN.md frontmatter, then flip `nyquist_compliant: true`.
+**Approval:** APPROVED 2026-05-21 — planner adopted validation map across 10 plans (03-00..03-09) through 3 checker iterations + 1 targeted residual fix pass. Wave 0 (Plan 03-00) covers all 14 new test files + 5 extensions enumerated above. `nyquist_compliant: true`.
