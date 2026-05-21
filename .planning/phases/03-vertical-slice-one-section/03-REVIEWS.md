@@ -1,7 +1,8 @@
 ---
 phase: 3
-reviewers: [gemini, codex, opencode]
-reviewed_at: 2026-05-21T06:21:46Z
+cycle: 2
+reviewers: [gemini, codex, claude-in-session]
+reviewed_at: 2026-05-21T13:15:00Z
 plans_reviewed:
   - 03-00-PLAN.md
   - 03-01-PLAN.md
@@ -13,566 +14,385 @@ plans_reviewed:
   - 03-07-PLAN.md
   - 03-08-PLAN.md
   - 03-09-PLAN.md
-runtime_skipped: "claude (running inside Claude Code — skipped for independence)"
-unavailable_clis: [claude, cursor, qwen, coderabbit]
+runtime_skipped: "claude CLI (running inside Claude Code — skipped for independence; in-session Claude review provided instead)"
+unavailable_clis: [claude-cli, cursor-agent, qwen, coderabbit]
+opencode_status: "TIMEOUT — opencode CLI ran for 1463s and produced only a 189-byte stub before being terminated; no usable review output. Excluded from this cycle."
+prior_cycle_findings: 24
 note: |
-  Stricter-than-default convergence run. MEDIUM/LOW concerns that reveal real plan gaps
-  are surfaced verbatim — orchestrator decides which to fold in.
-  cursor-agent CLI not installed on this host; the Windows `cursor` binary is the IDE GUI.
+  Cycle 2 convergence review of AMENDED plans (commit b3e6230) that addressed the 24
+  findings from cycle 1 (commit 7d70e85). Stricter-than-default stop rule: surfaces
+  MEDIUM/LOW concerns that reveal real plan gaps, not just HIGH.
+
+  All three reviewers (Gemini, Codex, in-session Claude) independently identified the
+  SAME critical wave-ordering break (Plan 03 ↔ Plan 08 frontmatter.ts), giving high
+  confidence in that finding.
 ---
 
-# Cross-AI Plan Review — Phase 3 (Vertical Slice Through One Section)
+# Cross-AI Plan Review — Phase 3 Cycle 2 (Vertical Slice Through One Section)
 
-## Gemini Review
+## Cycle 2 Context
 
-# Phase 3 Plan Review: Vertical Slice Through One Section
+This is the SECOND review pass on the Phase 3 plans. Cycle 1 (committed 7d70e85, reviewed at 03-REVIEWS.md prior version) surfaced 5 HIGH + ~11 MEDIUM + ~7 LOW concerns spanning 24 distinct findings. The plans were AMENDED in commit b3e6230 (and refinement 3159abc) to address all 24. This cycle re-reviews the amended plans, verifying:
 
-Phase 3 is the architectural keystone for `pensmith`. It proves the "section-as-phase" directory isolation model and the "deterministic-first" verification mandate. The 10-plan sequence (03-00 through 03-09) is exceptionally well-structured, prioritizing test-bootstrap (Wave 0) and foundational primitives (Waves 1-2) before wiring the workflow surface.
-
-## Summary
-The implementation plan is high-quality, technically rigorous, and deeply aligned with the project's core mandates. It solves the "two-homes drift" (state duplication between `STATE.json` and `PLAN.md`) early via a versioned migration and enforces security chokepoints (S2 key no-leak, drafter input-contract) with both runtime and static checks. The dependency layout is realistic, and the success criteria are mapped to byte-exact assertions.
-
-## Strengths
-- **Nyquist Compliance:** Wave 0 (Plan 03-00) creates all 14 new test files and 5 extensions *before* production code lands. This prevents "blind" implementation and ensures a consistent feedback loop.
-- **Structural Invariants:** The v1→v2 migration in Plan 03-03 is the most critical design win. It moves the source of truth for section state into the section directory, enabling the mtime-based isolation test (`TEST-09`) to be meaningful rather than tautological.
-- **Deterministic Rigor:** Plans 03-01 and 03-02 hand-roll critical primitives (Jaro-Winkler, Levenshtein-substring) to avoid version-skew and sprawl, while wrapping brittle 3rd-party parsers (`pdf-parse`, `citation-js`) in strictly-enforced chokepoints.
-- **Tier Equivalence:** The use of a shared prompt loader with runtime hash-validation (Plan 03-07) and equivalent verb entrypoints for both CLI and MCP ensure the "portable CLI" remains first-class alongside the plugin.
-- **Safety Nets:** The weekly cassette-refresh cron (Plan 03-09) and the 5KB `HANDOFF.json` cap (Plan 03-08) address long-term maintenance and context-window constraints proactively.
-
-## Concerns
-
-### HIGH
-- **Citekey Collision Risk:**
-  - **Reason:** `citation-js` auto-generates citekeys during serialization. If multiple adapters return the same paper or different papers that result in the same key (e.g., `smith2024`), `CITATIONS.bib` may contain duplicates or clobbered entries.
-  - **Location:** `bin/lib/bibtex-write.ts` (Plan 03-04) and `workflows/research.md` (Plan 03-06).
-  - **Fix:** Ensure `writeBibtex` uses the unique `doi` or `arxivId` as a secondary keying mechanism, or explicitly handle key collisions in the library deduplication step (RSCH-07) before serialization.
-
-### MEDIUM
-- **Levenshtein Substring Performance:**
-  - **Reason:** A sliding-window Levenshtein across a full extracted PDF text (potentially 50k+ chars) for every quote in a section could be $O(N \cdot M)$ where $N$ is PDF length and $M$ is quote length. Without banding or early exit, this could cause significant latency in Tier 2 or hook timeouts in Tier 1.
-  - **Location:** `bin/lib/fuzzy.ts::levenshteinSubstring` (Plan 03-01).
-  - **Fix:** Implement Ukkonen’s banded distance or a search-first heuristic (find exact/fuzzy anchor indices via `indexOf` before calculating distance) to prune the search space.
-
-- **Hook Timeout Enforcement:**
-  - **Reason:** `pre-compact.ts` must finish in 10s. It reads `STATE.md`, multiple `PLAN.md` files, and the `SESSION.log`. On Windows with OneDrive sync active, disk I/O latency can be high.
-  - **Location:** `hooks/pre-compact.ts` (Plan 03-08).
-  - **Fix:** Ensure the gather logic is strictly limited to the current section and a small tail of the log. The 5-breadcrumb limit is good; ensure the `statSync` calls are parallelized if the section count grows.
-
-### LOW
-- **Image-Only / Scanned PDFs:**
-  - **Reason:** `pdf-parse` will return empty text for image-only PDFs. Pass 3 will fail (`NOT_FOUND`).
-  - **Location:** `bin/lib/pdf-text.ts` (Plan 03-02).
-  - **Fix:** Document this limitation in `VERIFICATION.md` output so users know a `NOT_FOUND` on a scanned PDF means "extraction failed," not necessarily "quote fabricated."
-
-- **Dormant Prompt Drift:**
-  - **Reason:** `pass1-fuzzy-judge.md` and `pass3-quote-checker.md` are hash-pinned but not used. They may become obsolete as the deterministic gates evolve in Phase 3.
-  - **Location:** `templates/prompts/` (Plan 03-05).
-  - **Fix:** Add a comment in `bin/cli/verify.ts` explicitly linking to these dormant prompts so that any developer changing the deterministic logic is reminded to update the future LLM-arbitration contract.
-
-## Suggestions
-1. **BibTeX Serialization Sorting:** In `bin/lib/bibtex-write.ts`, sort by `doi` or `id` before generating citekeys to ensure the generated keys are stable even if input ordering from adapters shifts.
-2. **Migration Idempotence Test:** Add a test case specifically for a "partially migrated" state (e.g., 2 sections migrated, 1 not) to ensure `loadState` handles interrupted migrations or mixed-state directories.
-3. **Discipline Fallback:** In `workflows/intake.md`, explicitly define the fallback behavior for the "Other" discipline (e.g., default to APA-7 and "academic-formal" tone).
-4. **S2 Key Scrubbing:** In the cassette-refresh cron, add a `sed` or `grep -v` step to ensure no accidental `Authorization` headers survive in the committed cassettes if the secrets are leaked into the recording.
-
-## Risk Assessment: LOW
-The phase is well-derisked. The most complex logic (fuzzy matching and state migration) is covered by property tests (`fast-check`). The use of offline cassettes as the default for CI ensures high determinism. The biggest remaining risk is the performance of the sliding-window Levenshtein on large PDFs, but this is an optimization issue rather than a structural one.
-
----
-**Review Status:** **PROCEED TO EXECUTION** (incorporate Citekey Collision and Levenshtein Optimization fixes during the respective plans).
+1. Each of the 24 prior findings is truly fixed (not just claimed-fixed)
+2. Surfaces any NEW concerns introduced by the amendments (over-fixes, contradictions, dependency-ordering breaks)
+3. Applies stricter stop rule — MEDIUM/LOW with real plan gaps must surface, not be smoothed away.
 
 ---
 
-## Codex Review
+## Gemini Review (Cycle 2)
 
-## Summary
+# Phase 3 Implementation Plan Review — Cycle 2
 
-The Phase 3 plan is ambitious and much more concrete than a typical implementation plan: it has decision traceability, wave ordering, fixtures, deterministic verifier gates, tier-contract intent, and explicit threat modeling. The strongest architectural direction is correct: canonical `.paper/CITATIONS.bib`, section-local state in `PLAN.md` frontmatter, deterministic Pass 1/Pass 3, and offline cassette-backed tests. However, several plans currently mix incompatible contracts, contain test/implementation contradictions, and overclaim end-to-end readiness before the underlying CLI behavior is realistically implementable. The biggest risks are schema drift between D-17 and Plan 03, prompt hash-pin workflow contradictions, incorrect usage of `citation-js`, lock/atomic-write flaws, weak Pass 3 quote test design, and tier-contract cases that are described as green before the app can produce real equivalent outputs.
+The amended implementation plans for Phase 3 demonstrate strong convergence and address the 24 findings from Cycle 1 with high technical fidelity. The inclusion of Ukkonen banding for Levenshtein performance, deterministic citekey collision handling, and the sophisticated D-09 migration strategy (persisting state into `PLAN.md` before slimming `STATE.json`) significantly reduces architectural risk.
 
-## Strengths
+However, the rapid replanning has introduced several **internal contradictions** between plans (specifically regarding schema field names and data shapes) and one **critical dependency break** in the wave ordering.
 
-- Clear Phase 3 boundary: one section only, APA only, deterministic Pass 1 + Pass 3 only.
-- Good section-as-phase emphasis: moving section state out of project `STATE.json` is the right invariant.
-- Good split between canonical citation metadata (`.paper/CITATIONS.bib`) and draft tokens (`[@citekey]`).
-- Offline-first adapter testing with scheduled live cassette refresh is the right CI posture.
-- D-13 dormant verifier prompts are called out repeatedly, reducing accidental LLM verdict influence.
-- Wave 0 validation-first design is directionally strong and catches missing surfaces early.
-- Retraction Watch as side-channel filter, not search adapter, is correct.
-- Drafter input strict schema is a good safeguard against source-pool leakage.
+### Strengths
+- **Robust Migration Strategy**: The D-09 implementation (Plan 03) correctly addresses the "two-homes" data loss risk by performing atomic merges into per-section `PLAN.md` files.
+- **Algorithm Precision**: Hand-rolled Jaro-Winkler and Ukkonen-banded Levenshtein (Plan 01) preserve zero-dependency discipline while meeting performance requirements.
+- **Verification Verdicts**: Clear disambiguation between `PDF_UNAVAILABLE`, `TEXT_UNAVAILABLE`, and `NOT_FOUND` (Plan 06) provides much-needed diagnostic clarity for the user.
+- **Safety Gates**: The prompt hash-pin sequencing (sentinels + env gate) and the deterministic-only verify path (no LLM at verify time) are well-guarded.
 
-## Concerns
+### Concerns
 
-- **HIGH — Handoff schema contradicts locked D-17.**  
-  Location: D-17 vs Plan 03 Task 3.1 / Plan 08.  
-  D-17 defines `.paper/HANDOFF.json` with `schema_version`, `last_updated`, `current_section`, `phase`, `next_action`, `breadcrumbs`, and `section_pointers`. Plan 03 replaces that with `schemaVersion`, `wave`, `resumePrompt`, and generic `pointers`. This drops section state snapshots, breadcrumbs, current section, and next action.  
-  Suggested fix: restore the D-17 schema exactly, or explicitly revise the locked decision. Tests should assert D-17 fields and pointer-only behavior.
+#### HIGH: Dependency Break (Wave Ordering)
+Plan 03 (Wave 2) implements the D-09 migration, which explicitly depends on calling `updateFrontmatter` from `bin/lib/frontmatter.ts`. However, `frontmatter.ts` is not created until Plan 08 (Wave 5). This prevents the migration from being implemented or tested in its assigned wave.
+- **Evidence**: Plan 03 Task 3.2 Step 2b vs. Plan 08 Task 8.1.
 
-- **HIGH — State migration does not actually move section state into `PLAN.md`.**  
-  Location: D-09 vs Plan 03 Task 3.2.  
-  D-09 says v1 state migration reads embedded section state and writes it into each section’s `PLAN.md` frontmatter atomically, then slims `STATE.json`. The plan only drops fields and synthesizes `slug`. That loses section state and violates the stated migration purpose.  
-  Suggested fix: migration must accept project root / paths, read or create target `PLAN.md`, merge frontmatter fields, atomic-write each plan, then write slim `STATE.json`. Add crash-mid-migration tests.
+#### MEDIUM: Internal Schema Contradictions (Authors Shape)
+There is a discrepancy in the author list shape across the pipeline. Plan 03/D-14 restored authors to `string[]`, but later plans still use the old object-array shape.
+- **Evidence**:
+    - **Plan 03 Task 3.1**: `SourceCandidateSchema` uses `authors: z.array(z.string())`.
+    - **Plan 04 Task 4.2**: `toCandidate` maps authors to `Array<{ family, given }>`.
+    - **Plan 07 Task 7.1**: `DrafterInputSchema` uses `authors: z.array(z.object({ family, given }))`.
+    - **Plan 07 Task 7.2**: `pass1.ts` tries to access `claimed.author[0].family`.
 
-- **HIGH — `proper-lockfile.lock(HANDOFF_PATH)` before file exists is likely wrong.**  
-  Location: Plan 08 Task 8.1.  
-  `proper-lockfile` generally locks an existing path; `realpath: false` helps symlinks but does not guarantee locking a missing file. Also locking the final file while writing a `.tmp` file can fail on first run.  
-  Suggested fix: lock the `.paper/` directory or a dedicated `.paper/HANDOFF.lock` file that is created first. Use existing `withLock` helper if available.
+#### MEDIUM: Handoff Schema Sync Failure
+Plan 08 (Handoff assembler) was not fully updated to match the amended Plan 03 (Handoff schema).
+- **Evidence**:
+    - **Plan 03 Task 3.1**: Schema uses `schema_version` (number) and `section_pointers`.
+    - **Plan 08 Task 8.1**: `assembleHandoff` constructs an object with `schemaVersion` (string) and `pointers`. This will fail validation.
 
-- **HIGH — Atomic write descriptions omit fsync despite claiming it.**  
-  Location: Plans 03, 08, 04.  
-  Plans repeatedly say “fsync + rename,” but snippets use `writeFile` then `rename` only. On crash/power loss, that is not the promised durability.  
-  Suggested fix: route all writes through existing `bin/lib/atomic-write.ts`; do not reimplement in `handoff.ts` or state migration. Add a grep test banning raw `writeFile` for state/HANDOFF/section files outside the chokepoint.
+#### MEDIUM: Missing File Implementation (`deep-equal.ts`)
+Plan 03 Task 3.2 Step 2d requires `deepEqual` from `bin/lib/deep-equal.ts` for migration idempotency, but this file is never created in any task.
 
-- **HIGH — Pass 3 quote fixture logic can create false positives/negatives and does not enforce the 10-word fuzzy minimum.**  
-  Location: D-06, Plan 00 known-bad-quotes, Plan 01 `levenshteinSubstring`, Plan 09 tests.  
-  The planned Pass 3 simply slides a character window and compares ratios. It does not mention the required ≥10-word minimum in implementation. Some fixtures use short artifact words like `ﬁnal`, `naïve`, `end—to—end`; these may be below the minimum and should not fuzzy-match.  
-  Suggested fix: implement `quoteHasMinimumWords()` and gate fuzzy matching. Known-bad fixtures should include full fabricated quoted passages ≥10 words, with artifact noise embedded.
+#### LOW: Plan 00 Task Counting
+Plan 00 Objective states exactly 7 tasks (0.1 through 0.5), but the frontmatter/body contains 6 tasks. This is minor but indicates a slight lack of final coordination.
 
-- **HIGH — `citation-js` chokepoint/export contract is inconsistent.**  
-  Location: Plan 02 says `citations.ts` exports `parseBibtex`, `renderApa` only; Plan 04 imports `{ Cite }` from `./citations.js`; Plan 07 expects hash pins via prompt-loader.  
-  This will not compile unless `citations.ts` exports `Cite`, but doing so broadens the chokepoint API.  
-  Suggested fix: add explicit wrapper functions: `cslJsonToBibtex(entries)` and `parseBibtexToCslJson(bibtex)`. Do not export `Cite` to consumers.
+### Prior Finding Verification (Gemini)
 
-- **HIGH — Prompt hash-pin plan is contradictory and likely red for multiple waves.**  
-  Location: Plan 00, Plan 05, Plan 07, Plan 09.  
-  Plan 00 adds skipped `__PENDING__` sentinels. Plan 05 says it does not edit repo-files. Plan 07 says prompt-loader has real `<sha>` placeholders and tests import them, but Plan 09 finalizes hashes. If Plan 07 tests run before Plan 09, either runtime `loadPrompt` fails or repo-files fail.  
-  Suggested fix: either pin hashes in Plan 05 immediately after writing prompts, or allow an explicit `PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1` only in tests until Plan 09. Prefer immediate pinning in Plan 05.
+1.  **D-09 migration** — **FULLY RESOLVED** (Plan 03 Task 3.2) - Logic now persists state to `PLAN.md`.
+2.  **Pass 3 verdicts** — **FULLY RESOLVED** (Plan 06 Task 6.2) - `PDF_UNAVAILABLE` etc. implemented.
+3.  **Tier-contract green semantics** — **FULLY RESOLVED** (Plan 09 Task 9.1) - Moved end-to-end green to last plan.
+4.  **Pass 3 quote extraction** — **FULLY RESOLVED** (Plan 07 Task 7.2) - `quote-extractor.ts` handles block/multi-paragraph/10-word rules.
+5.  **Citekey collisions** — **FULLY RESOLVED** (Plan 04 Task 4.4) - Deterministic generator + 'a','b','c' suffixing.
+6.  **D-17 HANDOFF schema** — **FULLY RESOLVED** (Plan 03 Task 3.1) - Fields restored (note Plan 08 assembler needs fix).
+7.  **D-14 SourceCandidate schema** — **FULLY RESOLVED** (Plan 03 Task 3.1) - Fields restored (note Plan 04/07 implementations need fix).
+8.  **First-author surname** — **FULLY RESOLVED** (Plan 01 Task 1.3) - handles particles/initials.
+9.  **Cassette refresh** — **FULLY RESOLVED** (Plan 04 Task 4.1 + Plan 09 Task 9.2).
+10. **Pass 1 AND-gate field presence** — **FULLY RESOLVED** (Plan 07 Task 7.2) - Explicit sub-gate added.
+11. **Slug-vs-directory canonical form** — **FULLY RESOLVED** (Plan 03 Task 3.3).
+12. **Prompt hash-pin sequencing** — **FULLY RESOLVED** (Plan 00/07/09).
+13. **nock as runtime dependency** — **FULLY RESOLVED** (Plan 04 Task 4.1) - Moved to `dependencies`.
+14. **Retraction Watch wiring** — **FULLY RESOLVED** (Plan 06 Task 6.1) - Surfaces at research stderr and outline gate.
+15. **Levenshtein performance** — **FULLY RESOLVED** (Plan 01 Task 1.2) - Ukkonen banding required.
+16. **Plan 09 retrofit of runPass1/runPass3** — **FULLY RESOLVED** (Moved to Plan 07).
+17. **Dormant prompts guard** — **FULLY RESOLVED** (Plan 06 Task 6.2) - Grep gate in place.
+18. **Wave 0 red tests** — **FULLY RESOLVED** (Plan 00 Task 0.4) - `it.todo()` used correctly.
+19. **"Other" discipline** — **FULLY RESOLVED** (Plan 05 Task 5.3) - Included in `disciplines.json`.
+20. **Image-only PDFs** — **FULLY RESOLVED** (Plan 02 + Plan 06) - `TEXT_UNAVAILABLE` verdict logic.
+21. **BibTeX @-split fragility** — **FULLY RESOLVED** (Plan 04 Task 4.4) - Citekey-based ordering.
+22. **Citation-render CSL pin** — **FULLY RESOLVED** (Plan 05 Task 5.3) - Provenance SHA pinned.
+23. **Jaro-Winkler floating point** — **FULLY RESOLVED** (Plan 01 Task 1.2) - Epsilon comparison requirement.
+24. **cwd resolution for .paper/** — **FULLY RESOLVED** (Plan 09 Task 9.4).
 
-- **HIGH — Tier-contract cases are declared green too early.**  
-  Location: Plan 06 acceptance, Plan 07 acceptance, Plan 09.  
-  Workflow markdown bodies alone cannot make tier-contract pass. The CLI implementations are only sketch-level in Plan 07 and likely cannot produce stable end-to-end outputs without real runtime orchestration.  
-  Suggested fix: Plan 06 should only verify workflow body static invariants. Tier-contract should become green only in Plan 09 after real fixtures and CLI/MCP handlers exist.
+### Suggestions (Gemini)
 
-- **HIGH — CLI implementation scope is underspecified relative to success criterion 1.**  
-  Location: Plan 07 Task 7.2.  
-  The task describes comments and high-level steps, not concrete deterministic behavior. Research/outline/write still require model calls or prompt execution, but the portable Node CLI against OpenAI-compatible endpoints needs runtime chat integration, cost cap, prompt calls, and yolo behavior.  
-  Suggested fix: specify exact implementation path for `runtime.chat()`, prompt inputs/outputs, JSON parsing, fallback deterministic fixture mode for tests, and cost accounting.
+1.  **Move Frontmatter Helper**: Move the creation of `bin/lib/frontmatter.ts` from Plan 08 Task 8.1 to **Plan 03 Task 3.1**. This resolves the HIGH-severity dependency cycle.
+2.  **Add Deep-Equal**: Add a new task to **Plan 03** (or include in Task 3.1) to create `bin/lib/deep-equal.ts`.
+3.  **Sync Author Shapes**:
+    - Update **Plan 04 Task 4.2** (`toCandidate` in `crossref.ts` etc.) to map authors to a simple `string[]` instead of objects.
+    - Update **Plan 07 Task 7.1** (`DrafterInputSchema`) to expect `assignedSources[].authors` as `z.array(z.string())`.
+    - Update **Plan 07 Task 7.2** (`runPass1` implementation) to call `firstAuthorSurname(claimed.authors[0])` instead of using `.family`.
+4.  **Sync Handoff Assembler**: Update **Plan 08 Task 8.1** (`assembleHandoff`) to use `schema_version: 1` (number) and `section_pointers` (key name) to match the schema defined in Plan 03.
 
-- **HIGH — `new` is used instead of `intake`, but workflow/CLI naming is inconsistent.**  
-  Location: workflows/intake.md, `bin/cli/new.ts`, tier-contract case names.  
-  The plan uses `pensmith intake` in workflow body shell fallback but registers `new`. Tier-contract uses `new`. This creates command drift.  
-  Suggested fix: choose one public verb. If public is `new`, workflow shell fallback must be `pensmith new`. If hidden/intake exists, document aliasing.
-
-- **MEDIUM — SourceCandidate schema diverges from D-14.**  
-  Location: D-14 vs Plan 03.  
-  D-14 fields are `source`, `id`, `title`, `authors: string[]`, `year?`, `doi?`, `abstract?`, `oa_pdf_url?`, `retracted`, `last_verified`, `raw`. Plan 03 uses `authors: {family,given}[]`, `doi: nullable`, `oaPdfUrl`, no `id`, no `last_verified`, no `raw`, no `retracted`.  
-  Suggested fix: either update D-14 or align schema. For adapters and BibTeX, `id`, `last_verified`, and `retracted` matter.
-
-- **MEDIUM — D-17 says HANDOFF under `.paper/HANDOFF.json`, but section-isolation claims only target section mtimes change.**  
-  Location: D-18, TEST-09, Plan 08.  
-  If hooks run during tests, HANDOFF will change. If they do not, the invariant is incomplete.  
-  Suggested fix: define TEST-09 scope precisely: command execution without hooks, or allow `.paper/HANDOFF.json` as an explicit non-section exception. Current wording conflicts.
-
-- **MEDIUM — Frontmatter helper does not actually preserve removed keys/comments reliably.**  
-  Location: Plan 08 `updateFrontmatter`.  
-  It parses to JSON, mutates plain object, then `doc.set` keys. This preserves some comments but cannot delete keys and may not preserve complex YAML nodes.  
-  Suggested fix: mutator should receive the `Document` or a helper API for set/delete. Add tests for comments, arrays, deletion, and order.
-
-- **MEDIUM — Slug regex rejects planned Phase 4 `03b-` examples only if slug includes numeric prefix handling inconsistently.**  
-  Location: D-03, paths helpers.  
-  `sectionDir(n, slug)` returns `03-${slug}`. But D-03 examples use `depends_on: [01-introduction]`, meaning `slug` may include numeric prefix. PlanFrontmatter `slug` might be `introduction` or `01-introduction`; both appear.  
-  Suggested fix: define canonical slug field: directory basename `03-foo` vs logical slug `foo`. `depends_on` should reference one, consistently. Tests must cover it.
-
-- **MEDIUM — No citekey generation/collision policy.**  
-  Location: Plan 04 BibTeX writer, Plan 06/07 drafter.  
-  DRAFT requires `[@citekey]`, but SourceCandidate has no citekey. Relying on citation-js auto-generated citekeys is unstable and collision-prone.  
-  Suggested fix: add deterministic citekey function, collision suffixing, and persist citekey in `LIBRARY.json` and BibTeX. Test same author/year/title collisions.
-
-- **MEDIUM — Multi-author and surname matching are under-specified.**  
-  Location: D-11, Plan 01/verify.  
-  Author threshold compares first surname only, but adapters return author forms inconsistently. `Vaswani, A.` vs `Ashish Vaswani` works only accidentally with full strings.  
-  Suggested fix: implement `firstAuthorSurname()` normalization, particles (`van`, `de`), initials, comma forms, and empty-author handling. Test Crossref/OpenAlex/S2 variants.
-
-- **MEDIUM — DOI fabricated fixtures may hit network behavior not represented by cassettes.**  
-  Location: Plan 00/09 known-bad-citations.  
-  10.99999 and fake 10.1145 suffixes depend on Crossref response shapes. Offline tests need exact cassettes for those lookup failures, not generic `works-attention`.  
-  Suggested fix: add Pass 1 cassettes for every known-bad DOI, or make `runPass1` accept injected fetch results.
-
-- **MEDIUM — OA PDF unavailable, paywalled, image-only, and PDF parse failure are not specified.**  
-  Location: verify workflow and Plan 07.  
-  Core value depends on blocking when quote verification cannot run. The plan does not state verdict for no OA PDF, fetch failure, image-only PDF, or parse empty text.  
-  Suggested fix: define verdicts: `PDF_UNAVAILABLE` / `TEXT_UNAVAILABLE` as blocking failures, distinct from `NOT_FOUND`. Add tests.
-
-- **MEDIUM — Retraction warnings surfaced twice is described but not wired.**  
-  Location: D-15, Plan 06 research/outline.  
-  Research flags `retracted`, but outline approval gate warning is not concrete. Verify says retracted work becomes MIS-CITED, but schema lacks `retracted`.  
-  Suggested fix: persist `retracted` and `retraction_details`; outline must render a warning section before approval; verify blocks cited retracted sources.
-
-- **MEDIUM — PII redaction ordering is weak.**  
-  Location: Plan 06 intake.  
-  It says run redactor before persisting answers, but the clarifying prompt itself may send assignment text/answers to LLM before redaction. Context requires opt-in redaction before any LLM call.  
-  Suggested fix: redact assignment and user answers before prompt interpolation/chat when opt-in is enabled. Add a test around `runtime.chat` input.
-
-- **MEDIUM — S2 key leak via cassette recorder is only mentioned late.**  
-  Location: Plan 09 threat model.  
-  The scrubber must be in `http-mock.ts`/recording path, not a late “add if not already” note.  
-  Suggested fix: Plan 04 must implement request/response header scrubbing for `Authorization`, `x-api-key`, cookies, and query secrets. Test cassette files do not contain env secret.
-
-- **MEDIUM — Cassette refresh auto-PR lacks permissions and bot safety details.**  
-  Location: Plan 09 workflow.  
-  `peter-evans/create-pull-request` needs `contents: write` and `pull-requests: write`. Branch protection behavior and fork safety are not addressed.  
-  Suggested fix: add explicit permissions, no secrets on PR events, scrub cassettes, labels, reviewers, and a dry-run/manual dispatch path.
-
-- **MEDIUM — `http-mock.ts` in production tree imports `nock`, a dev/test dependency.**  
-  Location: Plan 04.  
-  Portable Node CLI may install production deps only. Importing `nock` from production code can break runtime packaging.  
-  Suggested fix: either make `nock` a runtime dependency intentionally, or keep `http-mock.ts` dynamically imported only in tests/doctor with guarded error. Document packaging impact.
-
-- **LOW — Wave 0 intentionally red tests may break normal CI unless explicitly gated.**  
-  Location: Plan 00.  
-  Existence assertions are “expected red,” but if merged by wave, CI fails.  
-  Suggested fix: use `todo`/skip with a clear phase gate, or branch-only convergence runner. Do not make mainline tests intentionally fail.
-
-- **LOW — `citation-render` depends on fetching upstream APA CSL during Plan 05.**  
-  Location: Plan 05.  
-  Network is restricted in many environments and upstream `master` is unstable.  
-  Suggested fix: vendor a known APA CSL commit in the plan context or pin a commit SHA before implementation.
-
-- **LOW — `Other` discipline inconsistency.**  
-  Location: Context says presets include Other; Plan 05 omits Other from JSON.  
-  Suggested fix: include `"other"` preset or update INTK-03 mapping and tests to expect fallback explicitly.
-
-- **LOW — `jaroWinkler` property says symmetric, but classic Winkler prefix boost is symmetric only because common prefix is symmetric. Good, but floating tests need tolerance.**  
-  Location: Plan 01.  
-  Suggested fix: assert `Math.abs(a-b) < 1e-12`, not strict equality.
-
-- **LOW — `levenshteinSubstring` character-window matching is weak for whitespace/punctuation differences.**  
-  Location: Plan 01.  
-  Suggested fix: compare token-normalized strings or word windows for quotes, not raw characters only.
-
-## Suggestions
-
-- Add a “contract consistency pass” before implementation: reconcile D-14 SourceCandidate, D-17 HANDOFF, D-08 PlanFrontmatter, command names, and prompt hash-pin workflow.
-- Split Plan 07 into two plans: one for CLI plumbing/static commands, one for actual deterministic fixture-backed pipeline behavior.
-- Add a verifier result schema with explicit blocking verdicts: `OK`, `FABRICATED`, `MIS-CITED`, `NOT_FOUND`, `PDF_UNAVAILABLE`, `TEXT_UNAVAILABLE`, `RETRACTED`.
-- Define deterministic citekey generation early and make it part of `SourceCandidate`.
-- Make `verify.ts` export pure `runPass1`/`runPass3` from `bin/lib/verify/` instead of CLI files.
-- Add static tests that fail if `workflows/verify.md` or `bin/cli/verify.ts` references dormant prompt slugs.
-- Add fixture-level `.paper/` golden directory for SC-1 instead of trying to synthesize all prerequisites in tier-contract tests.
-- Add crash-safety tests for migration: crash after PLAN write before STATE write, rerun migration, assert idempotent repair.
-
-## Risk Assessment
-
-**Overall risk: HIGH.** The direction is sound, but the current plans contain several contract mismatches and implementation gaps that could produce a green-looking surface without proving the core value. The highest-risk areas are migration correctness, citation/citekey determinism, Pass 3 failure semantics, prompt hash-pin sequencing, and tier-contract realism. Addressing those gaps before implementation would likely reduce Phase 3 to **MEDIUM** risk; without fixes, the convergence loop will probably stall on contradictory tests and incomplete end-to-end behavior.
+### Risk Assessment (Gemini)
+**MEDIUM**. The core logic is sound and the Cycle 1 findings were robustly addressed in the "Plan" sections. The remaining risks are mostly synchronization errors between plans (naming conventions and author shapes) and a wave-order mistake. Applying the suggestions above will move the project to **LOW** risk and readiness for execution.
 
 ---
 
-## OpenCode Review
-
-# Cross-AI Plan Review — Phase 3 (Vertical Slice)
+## Codex Review (Cycle 2)
 
 ## Summary
 
-Phase 3's 10 plans are well-structured, the section-as-phase invariant is properly enforced by directory structure, and the deterministic verifier design is sound. However, I found **1 HIGH, 6 MEDIUM, and 4 LOW** concerns that need addressing before execution. The highest-risk issue is the v1→v2 migration dropping section state without writing it to PLAN.md frontmatter (D-09 implementation gap).
-
----
+The amendments substantially converged on the major cycle-1 issues: D-09 migration, D-17/D-14 schema restoration, Pass 3 unavailable-state separation, citekey determinism, cassette refresh/no-leak handling, dormant prompt guards, and Plan 09 retrofit concerns are all addressed with concrete files, tests, and code-shape commitments. However, the amended plans also introduce several new consistency and sequencing problems. The biggest remaining risks are dependency-ordering contradictions, stale schema/interface snippets that conflict with later amendments, and tests/plans that still assume helper signatures different from the code they require.
 
 ## Strengths
 
-- **Section-as-phase directory isolation** — re-doing section N genuinely cannot touch other sections. The path helpers validate slug regex, the workflow bodies reference only their sectionDir, and the test asserts mtime invariance. Clean.
+- The plans now include real contract surfaces instead of only decision references: `bin/lib/verify/pass1.ts`, `pass3.ts`, `quote-extractor.ts`, `citekey.ts`, `bibtex-write.ts`, `http-mock.ts`, `migration-d09.test.ts`, `cassette-no-leak.test.ts`, and `verify-verdicts.test.ts`.
+- The D-09 migration is no longer data-destructive in intent; it explicitly writes embedded section state into `PLAN.md` frontmatter before slimming `STATE.json`.
+- Pass 3 failure modes are now semantically distinct: `PDF_UNAVAILABLE`, `TEXT_UNAVAILABLE`, `NOT_FOUND`, and aggregate `unverifiable`.
+- The plans added good structural guardrails: no dormant prompt references, no direct `citation-js`/`pdf-parse` imports, no `@`-split BibTeX ordering, no section-1 smoke path, no raw cassette secrets.
+- The "middle section" invariant is repeatedly called out and has grep-based checks.
 
-- **D-13 deterministic verify architecture** — separating the deterministic verdict computation (Pass 1/3 via JW/Levenshtein) from the dormant LLM prompts, and encoding DORMANT status in both frontmatter and grep gates. The and-gate algebra (DOI necessary, fuzzy sufficient, AND both thresholds) is correctly spec'd.
+## Concerns (Codex)
 
-- **Offline CI via cassettes + weekly cron** — PR gate is deterministic; API drift caught on bounded cadence. Forward-port of TEST-V2-02 preserves the Phase 1 offline-default discipline.
+### Prior Findings Verification (Codex)
 
-- **WN-3 single-source-of-truth for hash-pins** — `EXPECTED_PROMPT_HASHES` in prompt-loader.ts, imported by `tests/repo-files.test.ts`. Structural impossibility of drift between the two.
+| # | Finding | Status | Evidence / Concern |
+|---|---|---|---|
+| 1 | D-09 migration writes embedded section state into `PLAN.md` frontmatter | **PARTIALLY RESOLVED** | Plan 03 Task 3.2 adds the right 4-phase migration and `migration-d09.test.ts`. But Plan 03 depends only on `03-00`, `03-01`; it calls `updateFrontmatter` from Plan 08, which has not landed yet. This is a hard dependency break unless Plan 08 frontmatter helper moves earlier or Plan 03 depends on it. |
+| 2 | Pass 3 verdicts distinct from `NOT_FOUND`; D-08 enum; cassettes | **PARTIALLY RESOLVED** | Plan 06/07 define `PDF_UNAVAILABLE`, `TEXT_UNAVAILABLE`, `UNVERIFIABLE`; Plan 03 adds `unverifiable` status. But cassette/test commitments are split and inconsistent: `verify-verdicts.test.ts` is referenced as a Plan 00 sentinel but is not listed in Plan 00 files. |
+| 3 | Tier-contract green semantics: Plan 06 static only, Plan 09 real E2E | **PARTIALLY RESOLVED** | Plan 09 explicitly separates `workflow-static.test.ts` from real tier-contract. But Plan 06 still says "Tier-contract tests for intake/research/outline pass" and "tier-contract green for all 6 cases," which contradicts the later non-overlapping contract. |
+| 4 | Dedicated quote extractor with block/multi/nested/scare-filter/citation-strip/≥10 words | **PARTIALLY RESOLVED** | Plan 07 adds `bin/lib/quote-extractor.ts` with block, inline, multi-line block, citation-token strip, ≥10 words. Missing: nested quote handling and scare-quote filter are not specified. Inline regex only captures double/smart quotes followed immediately by citekey; single quotes are mentioned but not implemented in snippet. |
+| 5 | Citekey collisions deterministic and persisted in SourceCandidate/LIBRARY/BibTeX/DRAFT | **PARTIALLY RESOLVED** | Plan 03 adds `citekey` to `SourceCandidate`; Plan 04 adds `generateCitekey` and collision suffixing in BibTeX. But adapters in Plan 04 Tasks 4.2/4.3 still show candidate mapping without `citekey`, `id`, `last_verified`, `raw`, or D-14 fields. Persistence to `LIBRARY.json` and DRAFT citation generation is asserted but not fully wired in concrete adapter/drafter steps. |
+| 6 | D-17 HANDOFF schema restored | **PARTIALLY RESOLVED** | Plan 03 restores D-17 schema. But Plan 08 still uses the old `schemaVersion`, `wave`, `resumePrompt`, `pointers` interface in its `<interfaces>` and code snippets. `assembleHandoff` therefore conflicts with `HandoffSchema` from Plan 03. |
+| 7 | D-14 SourceCandidate schema restored | **PARTIALLY RESOLVED** | Plan 03 amendment restores D-14 fields. But Plan 04 adapter snippets and `bibtex-write.ts` tests still use the old `{ authors: [{family,given}], doi: null }` shape, conflicting with D-14 `authors: string[]`, optional `doi`, required `id`, `last_verified`, `citekey`, `raw`. |
+| 8 | `firstAuthorSurname()` normalization | **FULLY RESOLVED** | Plan 01 Task 1.3 defines `bin/lib/author-normalize.ts` with particles, comma form, initials, hyphen/diacritic cases and tests. |
+| 9 | Cassette refresh: `recordCassettes`, header scrubbing, no-leak test, GH permissions | **PARTIALLY RESOLVED** | Plan 04 adds recorder and sensitive header scrub; Plan 09 adds workflow permissions and no-leak step. But Plan 04 places `http-mock.ts` in `bin/lib`, while Plan 09 text says `tests/_helpers/http-mock.ts`. Also `finalizeRecording` uses `writeFileSync`, conflicting with the project's atomic-write discipline unless explicitly exempted as test cassette tooling. |
+| 10 | Pass 1 AND-gate field presence | **FULLY RESOLVED** | Plan 06 adds step 4a; Plan 07 `runPass1` includes empty metadata, retraction, and multi-DOI redirect handling. |
+| 11 | Slug-vs-directory canonical form | **FULLY RESOLVED** | Plan 03 Task 3.3 locks bare slug vs `NN-slug` directory basename and forbids reverse parsing. |
+| 12 | Prompt hash-pin sequencing | **PARTIALLY RESOLVED** | Sentinel + env gate is a reasonable solution. But Plan 07 says Plan 05 lands sentinels in `EXPECTED_PROMPT_HASHES`, while Plan 05 explicitly does not create `prompt-loader.ts`; Plan 00 sentinel block is in `tests/repo-files.test.ts`. The ownership of sentinels is still muddled. |
+| 13 | `nock` runtime dependency or dynamic guard | **FULLY RESOLVED** | Plan 04 chooses Option A: move `nock` to `dependencies`. |
+| 14 | Retraction Watch wiring and approval warning | **FULLY RESOLVED** | Plan 06 research and outline bodies add WARN and `RETRACTED` annotation; Plan 07 Pass 1 treats retracted as `MIS-CITED`. |
+| 15 | Levenshtein performance | **PARTIALLY RESOLVED** | Plan 01 now requires Ukkonen banding and perf test. However its earlier action snippet still describes sliding-window full DP, and `levenshteinSubstring` is character-based with only whitespace collapse, which does not really address token-normalized OCR split examples. |
+| 16 | Plan 09 retrofit of `runPass1/runPass3` moved to Plan 07 | **FULLY RESOLVED** | Plan 07 creates `bin/lib/verify/pass1.ts` and `pass3.ts`; Plan 09 tests import from those modules. |
+| 17 | Dormant prompts guard | **FULLY RESOLVED** | Plan 05/06/07 add no-reference grep gates for `pass1-fuzzy-judge` and `pass3-quote-checker` in verify path. |
+| 18 | Wave 0 red tests don't fail CI | **FULLY RESOLVED** | Plan 00 uses `test.todo()` and sentinel skips. |
+| 19 | "Other" discipline | **FULLY RESOLVED** | Plan 05 adds explicit `other` preset and Plan 06 intake behavior. |
+| 20 | Image-only PDFs documented in VERIFICATION/README known issues | **PARTIALLY RESOLVED** | VERIFICATION behavior is specified via `TEXT_UNAVAILABLE` and user-facing copy. README known-issues documentation is not concretely added to any plan/file. |
+| 21 | BibTeX `@`-split fragility | **FULLY RESOLVED** | Plan 04 replaces split sorting with pre-render citekey ordering and no post-process split. |
+| 22 | CSL pin by commit/SHA before Plan 05 | **FULLY RESOLVED** | Plan 05 pins upstream APA CSL by commit URL and provenance comment. |
+| 23 | Jaro-Winkler float tolerance | **FULLY RESOLVED** | Plan 01 requires `Math.abs(...) < 1e-12`. |
+| 24 | cwd resolution for `.paper/` | **PARTIALLY RESOLVED** | Plan 09 smoke instructions clarify cwd-relative behavior. But this is only in human-verify instructions; no code/test contract is added to `paths.ts` or CLI tests to enforce cwd-relative `.paper/` resolution. |
 
-- **Wave 0 test-bootstrap pattern** — 20 test files scaffolded red before any production code, with skip-guard pattern that prevents import-time failures while producing clear MISSING messages. Nyquist-compliant.
+### New Concerns (Codex)
 
----
+**HIGH — Plan 03 depends on Plan 08 code that does not exist yet.**
+D-09 migration in Plan 03 requires `bin/lib/frontmatter.ts updateFrontmatter` and possibly `atomicWrite` behavior from Plan 08. Since Plan 03 runs before Plan 08, implementation cannot compile unless a temporary helper is added or the plan order changes.
 
-## Concerns
+**HIGH — Handoff schema remains contradictory across Plan 03 and Plan 08.**
+Plan 03 correctly restores D-17 fields: `schema_version`, `last_updated`, `current_section`, `phase`, `next_action`, `breadcrumbs`, `section_pointers`. Plan 08 still assembles `{ schemaVersion, phase, wave, resumePrompt, pointers }`. This would fail schema validation.
 
-### HIGH
+**HIGH — SourceCandidate shape conflicts across Plan 03, adapters, bibtex writer, drafter input.**
+Plan 03 locks `authors: string[]`, required `id`, `last_verified`, `citekey`, `raw`; Plan 04/07 examples still use `authors: [{ family, given }]`, nullable DOI, missing required fields. This undermines D-14 and will produce type/test failures.
 
-**1. v1→v2 migration drops section state without writing to PLAN.md frontmatter (migration data loss)**
+**HIGH — `runPass1` / `runPass3` signatures are inconsistent.**
+Plan 07 defines `runPass1(draftMd, citationsBibPath)` and `runPass3(draftMd, bibByCitekey)`. Plan 09 known-bad tests call `runPass1(fx)` and `runPass3({ claimedQuote, pdfText })`. Either add fixture-specific helper functions or align tests with real signatures.
 
-**Plan 03-03, Task 3.2 — `bin/lib/migrations/state/v1_to_v2.ts`**
+**MEDIUM — Plan 07 still names `bin/cli/new.ts` in frontmatter/artifacts despite alias amendment.**
+The amendment says canonical file is `bin/cli/intake.ts`, with `new` alias. But `files_modified`, artifact list, and earlier dispatcher text still include `bin/cli/new.ts`. This will confuse implementers and Wave 0 tests that skip on `bin/cli/new.ts`.
 
-D-09 explicitly requires: "the loader reads the embedded section state, writes it into the corresponding sections/<NN-slug>/PLAN.md frontmatter (atomic-write-protected)." But the migration implementation only drops `state`, `status`, `lastVerification` from the STATE.json; it never writes these into per-section PLAN.md files. If a v1 user had section state (planned/writing/written/verified status per section) and the section directories already exist, that state is permanently lost after migration.
+**MEDIUM — Several "Plan 00 sentinel" tests are referenced but absent from Plan 00.**
+Examples: `tests/author-normalize.test.ts`, `tests/migration-d09.test.ts`, `tests/verify-verdicts.test.ts`, `tests/quote-extractor.test.ts`, `tests/retraction-surface.test.ts`, `tests/cli-aliases.test.ts`, `tests/tier2-placeholder.test.ts`, `tests/prompts-no-pending.test.ts`, `tests/frontmatter-roundtrip.test.ts`. Some later plans create a few, but the Wave 0 contract claims tests exist up front.
 
-**When this triggers:** Any v1 state.json where `sections[]` entries have non-null `state`/`status`/`lastVerification` AND the corresponding `.paper/sections/<NN>/PLAN.md` files already exist.
+**MEDIUM — Tier 2 placeholder strategy may invalidate Phase 3 success criterion 1.**
+Plan 07 says Tier 2 LLM-required verbs write placeholders and succeed. ROADMAP SC-1 requires end-to-end in both tiers with equivalent verdicts, citation lists, and structure modulo prose. Placeholder outputs are unlikely to satisfy meaningful equivalence unless tier-contract explicitly accepts placeholders for Phase 3.
 
-**Suggested fix:** The migration must:
-1. For each section entry with existing `state`/`status`/`lastVerification` values
-2. Check if `.paper/sections/<NN>-<slug>/PLAN.md` exists
-3. If it does, read it, update its frontmatter with those values (using `bin/lib/frontmatter.ts` `updateFrontmatter`), and atomic-write it back
-4. Then write the slimmed STATE.json v2
+**MEDIUM — `writeBibtex` claims citation-js chokepoint but imports `Cite` from `./citations.js`, while Plan 02 does not export `Cite`.**
+Plan 02 says `citations.ts` exports exactly `parseBibtex`, `renderApa`. Plan 04 later imports `Cite` from it. Either export a `formatBibtex` helper from `citations.ts` or amend Plan 02 exports.
 
-Guard with: if the section directory doesn't exist (outline not yet run), it's safe to drop the state since there's no PLAN.md to write to. Add a test that migrates a v1 state with verified-status sections and asserts PLAN.md frontmatter after migration.
+**MEDIUM — `unverifiable` "does not block compile" conflicts with core value/verifier blocks export.**
+Plan 06 says `UNVERIFIABLE` does not block compile, while project core value says verifier blocks compile/export and no unverifiable quote should escape unless explicitly accepted. This needs a locked policy: is `unverifiable` allowed through compile, allowed with warning, or blocking until user approval?
 
-**2. Pass 3 OA PDF unavailability not handled — verifier cannot produce complete verdict**
+**LOW — Retraction Watch adapter contract ambiguity.**
+Plan 04 must-have says retraction-watch has search that throws/returns empty, but tests and D-15 say no `search` export. Later plan says no `export.*search`. Remove the contradictory must-have.
 
-**Plans 03-06 (workflows/verify.md), 03-07 (bin/cli/verify.ts)**
+**LOW — Citation style preset count text remains stale.**
+Plan 05 success criteria still says "8-discipline disciplines.json" in places after adding `other` as a ninth key. Not fatal, but it will cause acceptance confusion.
 
-The verify workflow body says "fetch OA PDF via sources.unpaywall.fetchById(doi)" but doesn't specify what happens when:
-- Unpaywall returns `null` (no OA version exists for this DOI)
-- The OA PDF URL returns 403/404
-- The PDF is image-only (pdf-parse returns empty string)
-- The HTTP fetch times out
+**LOW — `recordCassettes()` design is incomplete.**
+The function starts recorder and `finalizeRecording()` writes recordings, but no wrapper guarantees finalize on test completion. The adapter tests need explicit lifecycle instructions.
 
-Currently the verifier would either crash (null dereference on URL), return an empty normalized string (match succeeds trivially on empty === empty → false positive "OK" for every quote), or stall. None are acceptable for a blocking deterministic verifier.
+### Suggestions (Codex)
 
-**Suggested fix:** Define three verdict levels: OK / NOT_FOUND / UNVERIFIABLE. When OA PDF is unavailable, emit UNVERIFIABLE with the reason. The overall verdict is PASS only if every verdict is OK; FAIL if any is NOT_FOUND; UNKNOWN if any is UNVERIFIABLE and none are NOT_FOUND. Wire this into the D-08 status enum (add 'unverifiable'?) and the PASS/FAIL/UNKNOWN computation. Tests must include an Unpaywall-null-returning cassette.
+1. Move `bin/lib/frontmatter.ts` and `tests/frontmatter-roundtrip.test.ts` from Plan 08 to Plan 03 before D-09 migration, or make Plan 03 depend on Plan 08 and reorder waves.
 
----
+2. Replace Plan 08 handoff interface/code with the D-17 schema exactly:
+   `schema_version`, `last_updated`, `current_section`, `phase`, `next_action`, `breadcrumbs`, `section_pointers`.
 
-### MEDIUM
+3. Normalize `SourceCandidate` everywhere:
+   use `authors: string[]`, required `id`, `last_verified`, `citekey`, `raw`, optional `doi`, `oa_pdf_url`, `retracted`, `retraction_details`. Update adapter snippets, `DrafterInputSchema`, `bibtex-write.ts`, and tests.
 
-**3. Pass 3 quote extraction heuristic is underspecified and brittle**
+4. Add a single explicit verify helper API:
+   - `runPass1(draftMd, citationsBibPath)`
+   - `runPass1Fixture(fixture)` if needed
+   - `runPass3(draftMd, bibByCitekey)`
+   - `runPass3Fixture({ claimedQuote, pdfText })` if needed
+   Or rewrite Plan 09 tests to call the real signatures.
 
-**Plan 03-06, workflows/verify.md — Pass-3 step**
+5. Fix Plan 07 file naming: remove `bin/cli/new.ts`; use `bin/cli/intake.ts`; keep `new` only as dispatcher alias. Update Plan 00 tier-contract skip guards accordingly.
 
-The plan says: "Extract every quoted passage from DRAFT.md (heuristic: text in '...' or > 25 words on a single line)." This is not a deterministic algorithm. Academic DRAFT.md will have:
-- Block quotes (indented, no surrounding quotes)
-- Scare-quoted terms ("attention" — 1 word, missed by the heuristic)
-- Multi-paragraph quotes (opening `"` on one line, closing `"` lines later)
-- Quotes with citation tokens inside quotes (`"As [@smith2020] notes..."`)
-- Block quotes using `> ` syntax
+6. Add all referenced sentinel tests to Plan 00 or stop calling them Wave 0 sentinels. The plan should not rely on tests that are never created.
 
-The heuristic as specified would pass multi-paragraph quotes entirely unverified (false OK) and flag long sentences as quotes (false NOT_FOUND).
+7. Decide and document `unverifiable` policy: blocking, warning-with-approval, or non-blocking. Align PRD/core value, Plan 06, README known issues, and compile/export gate language.
 
-**Suggested fix:** Implement a deterministic quote extractor in `bin/lib/quote-extractor.ts` with:
-- Regex for `"..."` spans (handling nested quotes and multi-line)
-- Block-quote detection (lines starting with `>` — extract text after `>`)
-- Minimum 5-word threshold (filters scare quotes, catchphrases)
-- Strips citation tokens `[@citekey]` from the extracted text before comparison
-- Exported as a pure function so the known-bad-quotes test can unit test it separately
-- Include fixtures for each quote type (block, multi-paragraph, nested, citation-embedded)
+8. Amend Plan 02 `citations.ts` to export a safe BibTeX formatting helper or `Cite` explicitly, so Plan 04 does not break the "exactly two exports" acceptance criterion.
 
-**4. Cassette refresh cron has no recording mechanism — won't work**
+9. Add a concrete cwd-resolution unit/integration test for `.paper/`, not only human smoke instructions.
 
-**Plan 09, Task 9.2 — `.github/workflows/cassette-refresh.yml`**
+10. Add README known-issues update for image-only PDFs, as required by prior finding #20.
 
-The cron workflow runs `PENSMITH_NETWORK_TESTS=1 npm test -- --test-name-pattern="sources/"` but the adapter tests (Plan 04 Task 4.2/4.3) use cassettes via `http-mock.ts` `loadCassettes()` which calls `nock.disableNetConnect()`. With PENSMITH_NETWORK_TESTS=1, `isOfflineMode()` returns `false`, but the tests don't know how to switch to live-API mode — they still try to match against cassettes.
-
-The `http-mock.ts` from Plan 04 only implements read/load. There's no record-mode implementation (`nockBack` or equivalent). The cron will either:
-(a) Die because nock lockdown prevents live connections, or
-(b) Run against live APIs but not capture the responses to update cassette files.
-
-Research pitfall #6 ("nockBack mode confusion") explicitly flags this risk.
-
-**Suggested fix:** Implement a record-mode in `http-mock.ts`:
-```typescript
-export async function recordCassettes(adapter: string, recordFn: () => Promise<void>): Promise<void> {
-  // Use nockBack to replay existing cassettes + record missing ones
-  // On cron: use nockBack with `{ recording: true }` to overwrite
-}
-```
-The cron workflow should:
-1. Clear old cassettes
-2. Run in recording mode (nockBack record)
-3. Write updated cassettes
-4. The create-pull-request action picks up the diff
-5. Strip `x-api-key` headers from all recorded cassettes before writing
-
-Add T-3-EXFIL-01 mitigation: the recorder MUST strip Authorization/x-api-key headers. Add a test `tests/cassette-no-leak.test.ts` that godeeperate through all cassettes and asserts no `x-api-key` or `Authorization` headers.
-
-**5. AND-gate algebra underspecified for metadata field absence**
-
-**Plan 03-06, workflows/verify.md — Pass 1 step**
-
-The D-11 AND-gate: DOI resolves correctly AND titleJW ≥ 0.92 AND authorJW ≥ 0.85. But what if:
-- DOI resolves 200 but the response has no `title` field (404 page, bare landing page)?
-- DOI resolves but `author` array is empty or missing surname?
-- The Crossref response has a `title` that is itself a fabricated metadata string?
-- Two DOIs for the same paper (errata, versioning — Crossref returns the updated version, BibTeX cites the original)?
-
-The plan says "DOI integrity (Pass 1 fetch returning 200 + correct metadata field-presence)" but never defines "field-presence." Is it: response has `message.type === 'journal-article'`? Has `message.title` as non-empty array? Has `message.author[0].family` non-empty?
-
-**Suggested fix:** Define explicit field-presence criteria in the verify workflow:
-- Title must be a non-empty string after NFKC normalize (title missing → FABRICATED)
-- Author must have at least one entry with non-empty `family` (author missing → FABRICATED)
-- If DOI resolves to a redirect/403/non-200 → FABRICATED
-- If DOI resolves but has `message.retracted === true` → MIS-CITED with reason "retracted"
-- Multiple-DOI matching: if the resolved DOI differs from the claimed DOI but the fuzzy match passes → log a note but still pass (Crossref handles DOI redirects transparently via their API)
-
-**6. Pass 3 OA PDF URL from Unpaywall may be paywalled or behind CAPTCHA**
-
-**Plan 03-04, unpaywall.ts + verify.md Pass-3 step**
-
-Unpaywall's `best_oa_location.url_for_pdf` can return:
-- A publisher landing page (not a direct PDF) that requires a subscription
-- A link to a PDF that's behind a CAPTCHA
-- A link to a PDF that requires a click-through license agreement
-- A link that has since expired (broken)
-
-The plan assumes `.url_for_pdf` is always directly downloadable. When it's not, `http.get` will either get an HTML page (not PDF) or a 403. In either case, `pdf-parse` will fail or return garbage text, and the quote won't be found.
-
-**Suggested fix:** Add a `bin/lib/pdf-fetch.ts` chokepoint that:
-1. Fetches the URL with a browser-like User-Agent
-2. Checks `content-type` for `application/pdf` (if HTML, returns UNVERIFIABLE with reason)
-3. Returns the Buffer for pdf-parse
-4. Includes a timeout (10s default, matching the Phase 2 retry pattern)
-5. Logs a debug message for failed PDF fetches but does NOT fail the overall verify (marks those entries as UNVERIFIABLE)
-
-**7. Known-bad-quotes test doesn't exercise real pdf-parse pipeline**
-
-**Plan 09, Task 9.2 — known-bad-quotes.test.ts**
-
-The test feeds `claimed_quote` + `actual_pdf_snippet` directly to `runPass3()`, bypassing pdf-parse entirely. This means the pdf-parse pipeline (network → bytes → extract → normalize → match) is only exercised by the tier-contract verify case and the DOCT-05 wiring probe.
-
-If pdf-parse@1.1.1 has a regression in a future install (npm ci on a new machine), only the tier-contract test catches it. A single point of failure.
-
-**Suggested fix:** Add a `tests/pdf-extract-smoke.test.ts` that:
-- Uses `SYNTHETIC_VASWANI_FRAGMENT` from Plan 02's fixture
-- Converts it to a minimal valid PDF via a tiny PDF generator (or commits a tiny 2KB known-good PDF fixture)
-- Runs `extractPdfText` on it
-- Asserts output matches the original fragment (allowing for pdf-parse whitespace normalization)
-
-Alternatively, adds one more entry to `known-bad-quotes.json` that runs through the full pipeline (fake bytes → pdf-parse → normalize → match) to prove the chain doesn't crash.
+### Risk Assessment (Codex)
+**Overall risk: MEDIUM.** The amendments solve most conceptual gaps, but the plan set is not yet internally consistent enough to execute cleanly. The remaining issues are mostly contract and sequencing problems rather than missing architecture. Fixing Plan 03/08 ordering, D-17/D-14 schema drift, verify helper signatures, and Tier 2 placeholder semantics would likely bring the risk down to LOW.
 
 ---
 
-### LOW
+## Claude In-Session Review (Cycle 2)
 
-**8. BL-2 grep gate for D-13 enforceability is fragile**
+Performed in the same session as this REVIEWS.md authorship; provides an independent third voice. Read all 10 amended plans (03-00 through 03-09) end-to-end. Note: Claude CLI was skipped for independence (running inside Claude Code), so this is an in-session review using the same prompt as the other reviewers.
 
-**Plan 06, verify.md acceptance criteria**
+### Strengths
 
-```bash
-grep -cE "invoke .*prompt|delegate to Task|invoke verify-pass|invoke pass1|invoke pass3" workflows/verify.md
-```
+- Wave 0 sentinel pattern via `__PENDING_HASH_${slug}__` per-slug literals + env gate `PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1` is a well-engineered solution to the prompt hash-pin sequencing chicken-and-egg.
+- Plan 04 cassette no-leak test (`tests/cassette-no-leak.test.ts`) with explicit `SENSITIVE_HEADERS` set + a deliberate failing-fixture test step is genuine defense-in-depth, not theater.
+- D-09 migration in Plan 03 is decomposed into 5 explicit sub-steps (2a-2e) with crash-mid-migration idempotency via `_migration_lock`, and 5 distinct test cases in `tests/migration-d09.test.ts`. The most-agreed-on HIGH from cycle 1 is genuinely engineered, not papered over.
+- `bin/lib/verify/pass1.ts` and `pass3.ts` as Plan-07-from-inception modules (not Plan-09 retrofit) is the right architectural call and closes OpenCode's cycle-1 retrofit concern.
 
-The regex `invoke .*prompt` matches any line with "invoke" followed eventually by "prompt" anywhere on the same line — including a comment like `// do NOT invoke any prompt here`. The regex is not robust against defensive coding. A future editor could accidentally match or bypass the gate through minor phrasing changes.
+### Concerns
 
-**Suggested fix:** Use a structured frontmatter field instead: add `llm_invocations: []` to the verify.md frontmatter, and write a test that parses this field and asserts it's an empty array. The test uses YAML parsing, not grep, so comments can't false-positive.
+#### HIGH — Plan 03 → Plan 08 forward dependency on `updateFrontmatter`
 
-**9. Plan 09 verify.ts helper export should be in Plan 07, not retrofitted in Plan 09**
+Plan 03 Task 3.2 Step 2b explicitly calls `updateFrontmatter` from `bin/lib/frontmatter.ts`. Plan 08 (Wave 5) is where `frontmatter.ts` is created. Plan 03 lives in Wave 2 with `depends_on: ["03-00", "03-01"]` — it cannot import a Wave-5 artifact. This is a hard wave-ordering break. Three reviewers (Gemini, Codex, Claude in-session) independently identified this same issue, giving very high confidence.
 
-**Plan 09, Task 9.2 vs Plan 07, Task 7.2**
+**Resolution path**: Move `bin/lib/frontmatter.ts` + `tests/frontmatter-roundtrip.test.ts` from Plan 08 to Plan 03, OR add `03-08` to Plan 03's `depends_on` AND reorder waves so Plan 08 is in Wave 2 alongside Plan 03.
 
-The `runPass1` and `runPass3` helpers should be designed and exported from the beginning in Plan 07, not discovered as a need in Plan 09 and retrofitted. Retrofitting means either:
-- Plan 07's verify.ts won't be cleanly testable (you can't unit-test Pass 1/3 until Plan 09)
-- The retrofitted export API may not match what the known-bad-* tests need, causing last-minute churn
+#### HIGH — Schema drift across `SourceCandidate.authors` shape (Plan 03 vs. Plan 04 vs. Plan 07)
 
-**Suggested fix:** In Plan 07 Task 7.2, have verify.ts export `{ default, runPass1, runPass3 }` from the start. The test stubs from Plan 00 already import from this path with skip-guards, so the API contract is locked from Wave 0.
+Plan 03 amendment locks D-14: `authors: z.array(z.string())`. But Plan 04 adapter snippets still produce `{ family, given }` objects, Plan 07 `DrafterInputSchema` expects object form, and Plan 07 `runPass1` reads `claimed.author[0].family`. The single source of truth is broken across 3 plans, all of which will fail typecheck.
 
-**10. `npx tsx bin/pensmith.ts` calls across plans assume a specific working directory**
+#### HIGH — Handoff schema drift (Plan 03 vs. Plan 08)
 
-**Plan 09, Task 9.2 and 9.4**
+Plan 03 Task 3.1 restores D-17 keys: `schema_version` (number), `current_section`, `breadcrumbs`, `section_pointers`. Plan 08 Task 8.1 `assembleHandoff` still uses old keys `schemaVersion` (string), `wave`, `resumePrompt`, `pointers`. `HandoffSchema.parse()` in Plan 08 will reject Plan 08's own output.
 
-The section-isolation test and the smoke test use `{ cwd: tmpDir }` but invoke `npx tsx bin/pensmith.ts`. This assumes the pensmith project root is the current dir when spawned. If `tmpDir` is `/tmp/pensmith-smoke` but the CLI entrypoint resolves paths relative to cwd (for `.paper/` resolution), this should work. But if the CLI entrypoint resolves paths relative to `__dirname` (which is the pensmith repo root), it won't find the `.paper/` in the tmpDir.
+#### HIGH — `runPass1` / `runPass3` signature mismatch (Plan 07 vs. Plan 09 tests)
 
-The plan doesn't specify how `.paper/` is resolved relative to cwd vs the binary's location. If it's relative to cwd (as the path helpers suggest: `.paper/` is a relative path), then the cwd option is correct. This should be made explicit in the design to prevent confusion.
+Plan 07 defines:
+- `runPass1(draftMd: string, citationsBibPath: string): Promise<Pass1Result[]>`
+- `runPass3(draftMd: string, bibByCitekey: Map<string, any>): Promise<Pass3Result[]>`
 
-**Suggested fix:** Add a note to the section-isolation test and smoke test instructions: "The `.paper/` resolution is relative to cwd, so `cwd: tmpDir` correctly isolates each test run." Or, if path resolution is relative to the binary, add a `--paper-dir` flag to override.
+Plan 09 tests call:
+- `runPass1(fx)` where `fx` is a fixture object
+- `runPass3({ claimedQuote, pdfText })`
 
----
+Plan 09 will fail to compile. Either Plan 07 must add fixture-shaped overloads or Plan 09 tests must adapt to the production signatures (e.g., synthesizing a `draftMd` and `bibByCitekey` from each fixture).
 
-## Suggestions
+#### MEDIUM — `bin/lib/deep-equal.ts` referenced but never created
 
-1. **Add 'unverifiable' to D-08 status enum** for Pass 3 cases where OA PDF is unavailable (part of concern #2 fix).
+Plan 03 Task 3.2 Step 2d uses `deepEqual` from `bin/lib/deep-equal.ts` for migration idempotency. The file is mentioned as "OK to introduce here" in the action text but is NOT listed in `files_modified`, has no implementation snippet, and has no test file. Resolution: add to Plan 03 files_modified + task action, or use `node:util.isDeepStrictEqual` from the stdlib (no new file needed).
 
-2. **Pre-commit hook for prompt hash-pin updates** — when `templates/prompts/*.md` changes in staging, the commit should fail unless `EXPECTED_PROMPT_HASHES` in prompt-loader.ts also changes. Simple pre-commit grep or lint rule. Reduces risk of T-3-09 (silent drift) at the commit level, not just PR-review level.
+#### MEDIUM — `bin/cli/new.ts` vs. `bin/cli/intake.ts` inconsistency in Plan 07
 
-3. **Split verify.ts into lib/verify/pass1.ts + lib/verify/pass3.ts** — the verify verb is going to be the most complex module in pensmith. Having two library modules for the deterministic passes (plus a narration module) keeps each file under 150 LOC. The bin/cli/verify.ts entrypoint becomes a thin orchestrator (~30 LOC under ARCH-18). This also naturally resolves concern #9 (helper exports for testability) since the lib modules would export `runPass1` and `runPass3` directly.
+Plan 07 amendment says: canonical file is `bin/cli/intake.ts`; `new` is a dispatcher alias. But Plan 07's `files_modified` lists `bin/cli/intake.ts` (post-amendment), the artifact section header says "bin/cli/new.ts", the dispatcher snippet has TWO registrations pointing at `./cli/intake.js` (one keyed `intake`, one keyed `new`) — but earlier in the same plan the artifacts table still has `path: "bin/cli/new.ts"`. Plan 00 tier-contract skip guards reference `bin/cli/new.ts`. Implementation will create both files or be confused.
 
-4. **Fix the `bibtex-write.ts` sorting approach** — rather than splitting on `\n(?=@)`, which breaks on BibTeX URL fields containing `@`, use a citekey-based ordering: emit entries in sorted order by maintaining a sorted map of citekey → CSL-JSON, then constructing one Cite instance per ordered entry and concatenating. More robust, though slightly slower.
+#### MEDIUM — Plan 02 `citations.ts` export contract vs. Plan 04 `Cite` import
 
-5. **Add a `pensmith doctor --no-network` mode** that skips DOCT probes requiring live APIs (to match the offline CI invariant). The existing DOCT-05 only checks wiring, but future DOCT probes may hit external APIs.
+Plan 02 acceptance: "citations.ts exports exactly `parseBibtex`, `renderApa`." Plan 04 Task 4.4 imports `{ Cite }` from `./citations.js`. Plan 02 contract is silently broken by Plan 04. Resolution: amend Plan 02 to export `Cite` (or a wrapper `formatBibtex`), and update the acceptance criterion.
 
----
+#### MEDIUM — Plan 02 image-only PDF contract contradiction
 
-## Risk Assessment: MEDIUM
+Plan 02 says: "extractPdfText throws if input is not Buffer/Uint8Array" AND "Image-only PDF detection: result.text.replace(/\s/g, '').length < 50 → WARN log, return empty string, caller marks UNVERIFIABLE". The two are inconsistent: does the function throw or return empty? The image-only branch should NOT throw (caller decides UNVERIFIABLE); the input-type branch SHOULD throw (programmer error). Acceptance criteria need to disambiguate.
 
-**Justification:**
-- **High risk:** The v1→v2 migration data loss (concern #1) is a real data-loss bug in the current plan. If deployed as-is, any upgrade from v1 to v2 with active sections loses per-section state. Must be fixed before implementation.
-- **Medium risks:** OA PDF unavailability (concern #2) and cassette refresh recording (concern #4) are architectural gaps that will surface immediately during smoke testing. Quote extraction (concern #3) and AND-gate underspecification (concern #5) are design holes that will produce wrong verdicts for real papers.
-- **Low risks:** The remaining concerns are organizational, documentation, or testing-depth issues that can be fixed during execution without architectural change.
-- **Dependency ordering is sound:** Waves 0→5 are correctly sequenced. Wave 1 (normalize/fuzzy) must precede Wave 3 (adapters) and Wave 4 (workflows/verbs). No blocking latent serialization.
-- **Phase 3 success criteria are achievable** once the HIGH and MEDIUM concerns are resolved. SC-2 (10/10 FABRICATED) and SC-3 (10/10 NOT_FOUND) will work with synthetic data. SC-4 (mtime invariance) is structurally enforced. SC-5 (tier-contract) is a test, not a behavioral gap.
+#### MEDIUM — Plan 06 acceptance claims tier-contract green; Plan 09 says only Plan 09 is green
 
-**Recommendation:** Fix concerns #1, #2, #4, and #6 (highest impact) in the plan documents before executing. The remaining concerns can be tracked as execution tasks.
+Plan 06 Task 6.1 acceptance: "Tier-contract tests for intake/research/outline cases pass." Plan 06 Task 6.2 acceptance: "Tier-contract tests for plan-section/write-section/verify-section pass." Plan 09 Task 9.1 says workflow-static is Plan 06, real tier-contract is Plan 09 only. These are contradictory — Plan 06 cannot make tier-contract pass without the CLI verbs (Plan 07) and the MCP wiring (Plan 07) and the doctor probe (Plan 09).
 
----
+#### MEDIUM — Plan 04 retraction-watch must-have contradiction
 
-## Consensus Summary
+Plan 04 line "Each adapter exports search(query) and fetchById(id), EXCEPT retraction-watch which exports only fetchById (D-15 side-channel)" is correct. But the must_haves further down says "retraction-watch adapter has search() that throws/returns empty deliberately — only fetchById is supported (D-15)" — implying search DOES exist (just deliberately broken). Plan 00 Wave 0 sentinel test asserts `typeof adapter.search === 'undefined'`. Pick one: search export absent, or search export present-but-broken.
 
-Three independent reviewers (Gemini, Codex, OpenCode) examined the Phase 3 plan corpus (10 plans, CONTEXT, RESEARCH, VALIDATION, DISCUSSION-LOG, PATTERNS) end-to-end. The reviewers diverge on overall risk rating — Gemini says LOW ("PROCEED TO EXECUTION"), OpenCode says MEDIUM, Codex says HIGH — but they converge tightly on the specific gaps that explain the spread. The single most agreed-on issue is **the v1→v2 state migration silently drops embedded section state instead of writing it into PLAN.md frontmatter as D-09 requires.** Both Codex (HIGH) and OpenCode (HIGH) call this out as a data-loss bug; Gemini surfaces a related concern (partial-migration test coverage). Beyond migration, the cluster of concerns falls into five themes: (1) verifier failure-mode semantics (OA PDF unavailable / image-only / paywalled / fetch error all undefined as verdicts); (2) contract drift between locked decisions and plan-level schemas (D-14 SourceCandidate ↔ Plan 03; D-17 HANDOFF schema ↔ Plan 03/08; D-08 PlanFrontmatter slug vs directory basename); (3) deterministic-citekey + multi-author surname handling; (4) cassette-refresh cron workflow correctness (no actual record-mode implementation, no header-scrubbing, no auth permissions); (5) Pass-3 quote extraction underspecification (block quotes, multi-paragraph, scare quotes, citation tokens inside quotes, the unstated ≥10-word minimum). All three reviewers explicitly endorse the section-as-phase directory-isolation invariant, the deterministic-first Pass 1/3 architecture, the offline-cassette CI posture, and the Wave 0 test-bootstrap discipline.
+#### MEDIUM — `verify-verdicts.test.ts`, `quote-extractor.test.ts`, `retraction-surface.test.ts`, etc. claimed as "Plan 00 Wave 0 sentinels" but not in Plan 00 files_modified
 
-### Agreed Strengths
+Plans 06, 07 repeatedly say "tests/X.test.ts (Plan 00 Wave 0 sentinel)" but Plan 00's files_modified does not include these. Either Plan 00 needs to add these to its scaffold list, or the references need to be relocated to the plan that actually creates them.
 
-- **Section-as-phase directory isolation is structurally enforced**, not policed by careful prompting — re-doing section N cannot touch other sections by construction (Gemini, OpenCode, Codex all endorse).
-- **Deterministic-first Pass 1 + Pass 3 architecture with dormant LLM prompts for Phase 5** — D-13 split (deterministic verdicts; LLM prompts ship as locked interaction contract) is praised by all three reviewers. The AND-gate algebra (DOI integrity necessary, JW title ≥ 0.92 AND author ≥ 0.85 sufficient) is correctly spec'd at the decision level.
-- **Offline-cassette CI + weekly cron-refresh** forward-ports TEST-V2-02 cleanly; PR-gate stays deterministic, drift gets caught on a bounded cadence (Gemini, Codex, OpenCode).
-- **Wave 0 test-bootstrap discipline (Nyquist)** — 14 new test files + 5 extensions scaffolded RED before production code lands, with skip-guards so import-time doesn't fail (Gemini, OpenCode, Codex).
-- **Chokepoint discipline carried over from Phase 0/1/2** — `pdf-parse` wrapped by `bin/lib/pdf-text.ts`, source adapters route HTTP through `bin/lib/http.ts`, citation-js wrapped by `bin/lib/citations.ts`. AST/ESLint enforcement matches Phase 2 D-09/D-10/D-12 pattern (Gemini, Codex).
-- **APA-7 CSL bundling + Pandoc-token DRAFT.md** — deferring write-time render to compile/export gives token-level tier-equivalence and zero-touch multi-style support in Phase 9 (Codex, Gemini, OpenCode).
+#### MEDIUM — `unverifiable` blocking policy unspecified
 
-### Agreed Concerns (raised by 2+ reviewers — highest priority)
+Plan 06 Task 6.2 says: "UNVERIFIABLE does not block compile (per PRD §3 — README disclaimer covers this), BUT surfaces in VERIFICATION.md." CLAUDE.md project memory non-negotiable: "Verifier blocks compile and export. No FABRICATED, MIS-CITED, or quote-NOT_FOUND citation ever escapes a section." If UNVERIFIABLE passes through compile silently, a user can ship a paper where an unauditable quote is never seen as risky. Either: (a) UNVERIFIABLE blocks compile too, (b) UNVERIFIABLE compile-passes ONLY if user explicitly approves (gate analogous to `--yolo`), or (c) the non-negotiable is amended. Plan must pick one and document.
 
-1. **HIGH — v1→v2 state migration does NOT write section state into per-section PLAN.md frontmatter (D-09 implementation gap, data loss bug).** Codex + OpenCode both flag this as the most critical issue. The plan slims STATE.json but never writes the embedded `state`/`status`/`lastVerification` into the corresponding `sections/<NN-slug>/PLAN.md` files as D-09 explicitly requires. Any v1 user with active sections loses per-section state on upgrade. Gemini's "partial-migration test" suggestion is the same risk surface seen from the testing angle. Fix: migration must read embedded section state, locate the corresponding PLAN.md, merge frontmatter atomically, and only then write the slimmed STATE.json. Add a crash-mid-migration test that asserts idempotent repair.
+#### LOW — `recordCassettes()` lifecycle missing in Plan 04
 
-2. **HIGH/MEDIUM — Pass 3 verifier has no defined verdict for OA PDF unavailable / paywalled / image-only / fetch-error / parse-empty.** Codex (HIGH) + OpenCode (HIGH on PDF unavailable, MEDIUM on Unpaywall paywalled URLs). The Core Value claim ("every citation supports its claim, verified by re-fetch") collapses if there is no defined verdict when the verifier cannot actually fetch text. Suggested fix from both: add explicit blocking verdicts `PDF_UNAVAILABLE` / `TEXT_UNAVAILABLE` (or `UNVERIFIABLE`) distinct from `NOT_FOUND`. Wire them into the D-08 status enum and the PASS/FAIL computation. Add cassettes for null-Unpaywall, HTML-instead-of-PDF, and parse-empty cases.
+Plan 04 Task 4.1 amendment adds `recordCassettes()` and `finalizeRecording()` but no test/hook ensures `finalizeRecording` runs at end of every recording session. A flaky test or process kill leaves cassettes un-finalized. Add an `afterEach`/`process.on('beforeExit')` invocation pattern, or document the explicit caller responsibility.
 
-3. **HIGH — Tier-contract cases declared green too early.** Codex calls this out explicitly: workflow markdown alone cannot make tier-contract pass; the CLI implementations in Plan 07 are sketch-level. Gemini's tier-contract claim is implicit but rests on the same plumbing. Suggested fix (Codex): split into Plan 06 = workflow body static invariants only, Plan 09 = tier-contract green after real CLI/MCP handlers and fixture-backed runs exist.
+#### LOW — Plan 04 `finalizeRecording` uses `writeFileSync` (not atomic-write)
 
-4. **HIGH — Pass 3 quote extraction heuristic is brittle and underspecified.** OpenCode (MEDIUM) + Codex (HIGH). The plan says "text in quotes or > 25 words on a single line" — this misses block quotes (`> ` syntax), multi-paragraph quotes (open quote on one line, close quote later), nested quotes, scare-quotes, and quotes containing `[@citekey]` tokens. The plan also does not enforce the ≥10-word fuzzy minimum required by VRFY-05. Suggested fix: dedicated `bin/lib/quote-extractor.ts` with proper regex, block-quote detection, citation-token stripping, and unit tests with fixtures for each quote type.
+`writeFileSync(outPath, ...)` violates D-07 (atomic-write chokepoint). Cassettes are tooling, not production state, so maybe exempt — but document the exemption explicitly. Also, current code has no `nock` import for `writeFileSync`; needs explicit import.
 
-5. **HIGH/MEDIUM — Citekey generation is non-deterministic and collision-unsafe.** Gemini (HIGH) + Codex (MEDIUM). DRAFT.md emits `[@citekey]` tokens; `SourceCandidate` schema has no `citekey` field; `citation-js` auto-generates them at serialization, and the result depends on input ordering, encoding, and per-source quirks. Same-author/same-year/different-paper or duplicate-DOI inputs would clobber entries. Suggested fix: deterministic citekey function (e.g., surname+year+titleslug), collision suffixing, persist citekey in `LIBRARY.json` and BibTeX from the start.
+#### LOW — Plan 05 description still says "8-discipline" in 3+ places after `other` was added (9 total)
 
-6. **MEDIUM — D-17 HANDOFF schema diverges between CONTEXT and Plan 03/08.** Codex flags this explicitly. CONTEXT D-17 specifies fields `schema_version`, `last_updated`, `current_section`, `phase`, `next_action`, `breadcrumbs`, `section_pointers`. Plan 03 / Plan 08 substitute `schemaVersion`, `wave`, `resumePrompt`, generic `pointers`. This means HANDOFF would not carry the section state snapshot, breadcrumbs, or next action that the locked decision requires. Either restore D-17 exactly OR explicitly revise the locked decision. Tier-contract tests must assert D-17 fields.
+Plan 05 success_criteria #1 still says "8 prompts + apa.csl + 8-discipline disciplines.json", but Plan 05 acceptance_criteria for Task 5.3 says "EXACTLY 9 keys". Pick one count and propagate.
 
-7. **MEDIUM — `SourceCandidate` schema diverges between D-14 and Plan 03.** Codex notes D-14 fields `source/id/title/authors:string[]/year?/doi?/abstract?/oa_pdf_url?/retracted/last_verified/raw` vs Plan 03's `authors:{family,given}[]/doi:nullable/oaPdfUrl` with no `id`, `last_verified`, `raw`, or `retracted`. Retraction-Watch warning surfacing twice (D-15) cannot be wired without a `retracted` field. Either update D-14 or align the plan schema.
+#### LOW — Plan 00 task count vs. objective count mismatch
 
-8. **MEDIUM — Multi-author + surname matching underspecified.** Codex specifically calls out: author threshold uses "first surname only" but adapters return author forms inconsistently (`Vaswani, A.` vs `Ashish Vaswani`, particles like `van`/`de`, comma forms, initials). Add `firstAuthorSurname()` normalization with explicit handling for particles, initials, commas, and empty-author cases. Test with Crossref/OpenAlex/S2 variants.
+Plan 00 objective text says "exactly 7 tasks (0.1 through 0.5)"; actual task count is 6 (0.1-0.6). Numbering and count both inconsistent.
 
-9. **MEDIUM — Cassette refresh cron workflow will not actually record.** OpenCode + Codex both flag this. The cron runs `PENSMITH_NETWORK_TESTS=1 npm test` but `http-mock.ts` has no record-mode (`nockBack` recording) implementation. The cron will either die from nock lockdown or hit live APIs without capturing. Suggested fixes: implement `recordCassettes()` in `http-mock.ts`; strip `Authorization` / `x-api-key` / `Cookie` headers from recorded cassettes before writing; add `tests/cassette-no-leak.test.ts` enforcing zero auth-header bleed; set explicit GH Actions `permissions: contents:write, pull-requests:write`; pin branch protection bypass policy.
+#### LOW — README known-issues for image-only PDFs (prior finding #20) not added to any plan file
 
-10. **MEDIUM — Pass 1 AND-gate underspecified for metadata field-presence corner cases.** OpenCode raises this; Codex's "MIS-CITED logging" implies the same gap. What if Crossref returns 200 with empty `title` array? Empty `author[0].family`? Type other than journal-article? Retracted-flag in response? Multi-DOI redirect (errata)? Define explicit field-presence criteria in the verify workflow body so Pass 1 verdicts are reproducible byte-exactly across tiers and OSes.
+Finding #20 says: image-only PDFs trigger UNVERIFIABLE verdict — document in README known-issues. This is implemented at the algorithm level (Plan 02 + Plan 06) but no plan task adds README content. The user-facing transparency promise (per CLAUDE.md "Honest framing on detection") is partial.
 
-11. **MEDIUM — Slug/depends_on identifier conventions are inconsistent.** Codex notes `sectionDir(n, slug)` returns `03-foo` while D-03 examples cite `depends_on: [01-introduction]`. PlanFrontmatter `slug` could be either `introduction` (logical) or `01-introduction` (directory basename). Pick one canonical form and lock it; add tests covering both write and read paths.
+### Risk Assessment (Claude in-session)
 
-12. **MEDIUM — Prompt hash-pin sequencing across waves is contradictory.** Codex flags: Plan 00 adds `__PENDING__` sentinels; Plan 05 says it does not edit repo-files; Plan 07 has real `<sha>` placeholders; Plan 09 finalizes. If Plan 07 tests run before Plan 09, either runtime `loadPrompt` fails or repo-files fail. Either pin in Plan 05 immediately after the prompts are written, or gate with an explicit `PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1` test-only env var until Plan 09.
-
-13. **MEDIUM — `http-mock.ts` ships in production tree but depends on `nock` (dev dep).** Codex: the Phase 2 codex-iter-1 review concern ("production probes must not import from tests/") is addressed by moving the mock to production, but this just shifts the dep-graph violation. Either move `nock` to a runtime dep (with packaging-impact note), or use a dynamic import guarded by an env check / file-existence test.
-
-14. **MEDIUM — Retraction Watch warnings are described as "surfaced twice" but the outline-approval-gate surface is not actually wired.** Codex flags: research flags `retracted` but outline approval gate warning is described, not implemented; verify says retracted → MIS-CITED but schema lacks a `retracted` field on the candidate. Wire both surfaces concretely; persist `retracted` + `retraction_details` through to verify.
-
-15. **MEDIUM — Levenshtein sliding-window performance + token-vs-character.** Gemini (MEDIUM) + Codex (LOW). For full-extracted PDF (~50k+ chars) × N quotes × M-character window, naive O(N·M) is borderline. Codex additionally notes raw-character matching is weak for whitespace/punctuation. Suggested fixes: Ukkonen banding or anchor-then-distance heuristic; OR compare token-normalized strings/word windows for the quote tier.
-
-16. **LOW — Dormant prompts (`pass1-fuzzy-judge.md`, `pass3-quote-checker.md`) risk silent drift.** Gemini calls this out; Codex's "static tests that fail if workflows/verify.md references dormant prompt slugs" is the symmetric concern. Suggested fix: comment in `bin/cli/verify.ts` linking to the dormant prompts; a static test asserting verify.md / verify.ts contain ZERO references to dormant prompt filenames; OPTIONAL Phase 5 hash-pin diff CI alert.
-
-17. **LOW — Image-only / scanned PDFs not addressed in user-facing copy.** Gemini: `pdf-parse` returns empty for image-only PDFs; Pass 3 will produce `NOT_FOUND` without explanation. Document in `VERIFICATION.md` output the difference between "extraction failed" and "quote not in text".
-
-18. **LOW — Wave 0 intentionally-red tests can break mainline CI unless gated.** Codex: existence assertions are "expected red" but if merged by wave, CI fails. Suggested fix: use `it.todo()` / `it.skip()` with a clear phase gate or branch-only convergence runner.
-
-19. **LOW — `Other` discipline preset omission.** Codex: CONTEXT lists `Other` in INTK-03 disciplines but Plan 05 disciplines.json omits it. Either include `"other"` with explicit defaults or update INTK-03 to document the fallback.
-
-### Divergent Views (worth investigating)
-
-- **Overall risk rating spread (LOW vs MEDIUM vs HIGH):** Gemini says proceed-to-execution / LOW; OpenCode says MEDIUM (1 HIGH, 6 MEDIUM, 4 LOW); Codex says HIGH ("convergence loop will probably stall on contradictory tests and incomplete end-to-end behavior"). The disagreement is not on the existence of gaps — all three list overlapping concrete issues — but on whether the gaps are stop-ship or fix-during-execution. Codex's stricter posture is the more useful one for this convergence run, which is explicitly stricter-than-default.
-- **Citekey collision severity:** Gemini ranks HIGH; Codex ranks MEDIUM. The disagreement reflects whether `citation-js` auto-generation is "stable enough most of the time" (Codex's framing) or "stable until the first same-author/year collision" (Gemini's framing). Both agree the fix is deterministic citekey generation; the dispute is about implementation urgency.
-- **Tier-contract green semantics:** Codex says Plan 06's claim of green tier-contract is overclaimed because the CLI does not actually run end-to-end yet; Gemini accepts the Plan 06 framing. OpenCode is silent on this. Worth a planner clarification: is "tier-contract green" in Plan 06 meant to be (a) workflow body static invariants only, (b) cassette-backed mock-end-to-end, or (c) genuine CLI execution? The plans should pick exactly one and lock it.
-- **`http-mock.ts` in production tree:** Codex says this is a dep-graph violation (nock is dev); the plans treat it as the resolution to Phase 2's codex-iter-1 concern. Both are correct; resolution is to pick "move nock to runtime + accept packaging cost" OR "dynamic-import-with-guard" — not leave the contradiction unresolved.
-- **Levenshtein optimization urgency:** Gemini ranks MEDIUM (performance issue, optimize later); Codex ranks LOW (token-vs-char correctness, with performance as a side-effect). They are complaining about adjacent issues, not the same issue. Both should be addressed.
-
-### Synthesized Action Items for Plan Convergence
-
-Folding the agreed concerns into actionable plan-level edits:
-
-1. **Fix D-09 migration** — rewrite Plan 03 Task 3.2 to read embedded section state, write it to PLAN.md frontmatter atomically before slimming STATE.json. Add crash-mid-migration tests.
-2. **Add `PDF_UNAVAILABLE` / `TEXT_UNAVAILABLE` / `UNVERIFIABLE` verdicts** to the verify pipeline (Plan 06 + Plan 07 + Plan 09); update D-08 status enum if needed; add cassettes for each failure mode.
-3. **Reconcile D-17 HANDOFF schema** with Plan 03/08; restore the locked schema or revise D-17 explicitly.
-4. **Reconcile D-14 SourceCandidate schema** with Plan 03; add `id`, `last_verified`, `retracted`, `raw` fields; wire `retracted` through evaluator → outline approval gate → verify.
-5. **Add deterministic citekey generation** to `bin/lib/citekey.ts` with collision suffixing; persist in `SourceCandidate`, LIBRARY.json, BibTeX, DRAFT.md tokens.
-6. **Add explicit Pass 1 field-presence criteria** to workflows/verify.md (title non-empty, author[0].family non-empty, type=journal-article OR equivalent, retracted-flag handling, multi-DOI redirect handling).
-7. **Implement quote-extractor + ≥10-word minimum gate** in `bin/lib/quote-extractor.ts`; cover block quotes, multi-paragraph, nested, scare-quote-filter, citation-token strip.
-8. **Reconcile prompt hash-pin sequencing** across Plans 00/05/07/09 — pick "pin in Plan 05" OR "PENDING gate with env var until Plan 09" and lock.
-9. **Split Plan 07 OR redefine "tier-contract green"** in Plans 06/09 to draw a clear line between workflow-body static invariants and real end-to-end behavior.
-10. **Fix cassette-refresh cron**: implement `recordCassettes()` in `http-mock.ts`; add header scrubbing; add `tests/cassette-no-leak.test.ts`; set explicit `permissions:` block; document branch-protection bypass.
-11. **Add `firstAuthorSurname()` normalization** with particle/initial/comma handling; test across Crossref/OpenAlex/S2/arXiv author forms.
-12. **Lock slug vs directory-basename convention** in PlanFrontmatter and `depends_on`; add tests.
-13. **Resolve `http-mock.ts` + `nock` dep-graph violation** — move `nock` to runtime deps OR dynamic-import-with-guard.
-14. **Optimize `levenshteinSubstring`** with Ukkonen banding or anchor-then-distance; OR switch quote-pass to token-normalized comparison with word windows.
-15. **Add static tests** that fail if `workflows/verify.md` or `bin/cli/verify.ts` reference dormant prompt slugs (`pass1-fuzzy-judge`, `pass3-quote-checker`).
-16. **Document image-only PDF + paywalled URL** behavior in VERIFICATION.md output and README known-issues.
-17. **Add Wave-0 red-test gate** — explicit `it.todo()`/`it.skip()` with phase guards so mainline CI does not fail on the wave.
-18. **Add `Other` discipline preset** to `templates/disciplines.json` with explicit defaults; OR explicitly document the fallback path in INTK-03 tests.
+**MEDIUM.** Cycle 2 amendments demonstrably solve cycle-1 conceptual problems (the 24 findings are 15 FULLY resolved + 9 PARTIALLY resolved per my counting). However, the rapid replanning has introduced 4 NEW HIGH concerns and ~7 NEW MEDIUM concerns, almost all of which are contract/sequencing/internal-consistency mismatches across plan boundaries — exactly the failure mode the cycle-2 review was instructed to catch. None of the new HIGH concerns are unfixable; all are mechanical syncs (dependency reorder, schema field rename, signature alignment). Estimated effort to close cycle 3: 1-2 hours focused replanning.
 
 ---
 
-## Next Steps
+## Consensus Summary (Cycle 2)
 
-- To incorporate into planning: `/gsd-plan-phase 3 --reviews`
-- To re-review after convergence: `/gsd-review --phase 3 --all`
+### Cross-Reviewer Agreement on NEW HIGH Concerns
+
+| # | Concern | Gemini | Codex | Claude | Notes |
+|---|---|---|---|---|---|
+| H-1 | Plan 03 → Plan 08 frontmatter.ts dependency break | YES | YES | YES | 3/3 reviewers. Highest confidence. |
+| H-2 | SourceCandidate authors shape drift across Plan 03/04/07 | YES (MEDIUM) | YES (HIGH) | YES (HIGH) | 3/3 reviewers. Gemini called MEDIUM, others HIGH. |
+| H-3 | Handoff schema drift Plan 03 vs Plan 08 | YES (MEDIUM) | YES (HIGH) | YES (HIGH) | 3/3 reviewers. |
+| H-4 | runPass1/runPass3 signature mismatch Plan 07 vs Plan 09 | (not flagged) | YES (HIGH) | YES (HIGH) | 2/3 reviewers. Codex caught this; Gemini did not. |
+
+### Cross-Reviewer Agreement on NEW MEDIUM Concerns
+
+| # | Concern | Reviewers |
+|---|---|---|
+| M-1 | `bin/cli/new.ts` vs `bin/cli/intake.ts` inconsistency in Plan 07 | Codex + Claude |
+| M-2 | "Plan 00 Wave 0 sentinel" tests not actually in Plan 00 files_modified | Codex + Claude |
+| M-3 | Tier 2 placeholder strategy may invalidate SC-1 | Codex (Claude noted but didn't fully assess) |
+| M-4 | `writeBibtex` imports `Cite` from citations.ts but Plan 02 says only `parseBibtex`/`renderApa` exported | Codex + Claude |
+| M-5 | `unverifiable` does-not-block-compile conflicts with verifier-blocks-export non-negotiable | Codex + Claude |
+| M-6 | `bin/lib/deep-equal.ts` referenced but never created | Gemini + Claude |
+| M-7 | Plan 06 acceptance claims tier-contract green for cases Plan 09 says only Plan 09 makes green | Codex + Claude |
+| M-8 | Plan 04 retraction-watch contradictory must-have (search-throws vs search-absent) | Claude only |
+| M-9 | Plan 02 image-only-PDF: throws-on-input vs returns-empty-on-image-only contract is inconsistent | Claude only |
+
+### Resolution Status of 24 Cycle-1 Findings (Consensus)
+
+Reviewers' resolution counts:
+- Gemini: 24/24 FULLY RESOLVED
+- Codex: 14/24 FULLY RESOLVED, 10/24 PARTIALLY RESOLVED
+- Claude in-session: 15/24 FULLY RESOLVED, 9/24 PARTIALLY RESOLVED
+
+**Consensus (worst-case, conservative):** When any reviewer says PARTIAL, treat as PARTIAL. Per-finding statuses are listed in detail in the final orchestrator response.
+
+### Synthesized Action Items for Cycle 3 Replan
+
+1. **(HIGH)** Move `bin/lib/frontmatter.ts` + `tests/frontmatter-roundtrip.test.ts` from Plan 08 to Plan 03. Update Plan 03 files_modified and Plan 08 must-haves/artifacts.
+2. **(HIGH)** Normalize `SourceCandidate.authors` to `z.array(z.string())` everywhere: Plan 03 schema (already done), Plan 04 adapter snippets, Plan 04 bibtex-write fixture data, Plan 07 DrafterInputSchema, Plan 07 runPass1 implementation.
+3. **(HIGH)** Sync Plan 08 `assembleHandoff` to D-17: `schema_version: 1`, `section_pointers`, `breadcrumbs`, `current_section`, `last_updated`, `next_action`, `phase`. Remove old keys `schemaVersion`/`wave`/`resumePrompt`/`pointers`.
+4. **(HIGH)** Reconcile `runPass1`/`runPass3` signatures across Plan 07 (production) and Plan 09 (tests). Either add `runPass1Fixture(fx)` / `runPass3Fixture({ claimedQuote, pdfText })` shims to Plan 07, or rewrite Plan 09 tests to build a draftMd + bib map from each fixture.
+5. **(MEDIUM)** Add `bin/lib/deep-equal.ts` to Plan 03 files_modified with a minimal implementation (or switch to `node:util.isDeepStrictEqual` and remove the deep-equal.ts reference).
+6. **(MEDIUM)** Resolve `bin/cli/new.ts` vs `bin/cli/intake.ts` once and for all: pick `intake.ts` as the canonical file, remove all `new.ts` references from files_modified and artifacts in Plans 00/06/07, keep `new` only as a dispatcher alias in REAL_VERB_LOADERS.
+7. **(MEDIUM)** Add all "Plan 00 Wave 0 sentinel" tests to Plan 00 files_modified, OR move those test creations to the plans that actually create them. Tests referenced but not created: `tests/migration-d09.test.ts`, `tests/verify-verdicts.test.ts`, `tests/quote-extractor.test.ts`, `tests/retraction-surface.test.ts`, `tests/cli-aliases.test.ts`, `tests/tier2-placeholder.test.ts`, `tests/prompts-no-pending.test.ts`, `tests/frontmatter-roundtrip.test.ts`.
+8. **(MEDIUM)** Amend Plan 02 to export `Cite` (or a `formatBibtex` wrapper) from `bin/lib/citations.ts`. Update Plan 02 acceptance criterion. OR amend Plan 04 to delegate BibTeX formatting to a citation-js call inside citations.ts and only consume the formatted string.
+9. **(MEDIUM)** Lock `unverifiable` blocking policy explicitly: pick (a) compile-blocks, (b) compile-passes-with-explicit-approval, or (c) compile-passes-with-warning. Document in Plan 06 + ROADMAP + amend CLAUDE.md non-negotiable wording if needed.
+10. **(MEDIUM)** Resolve Plan 06 tier-contract acceptance: drop the "tier-contract green" claim from Plan 06, replace with "workflow-static.test.ts green" (the static-invariant suite); ensure only Plan 09 claims real tier-contract green.
+11. **(MEDIUM)** Resolve Plan 04 retraction-watch search export: pick "no search export" (D-15) and remove the "search throws/returns empty deliberately" must-have line.
+12. **(MEDIUM)** Disambiguate Plan 02 extractPdfText contract: throws on non-Buffer input (programmer error); returns empty string on image-only (caller logic). Add 2 distinct acceptance criteria + 2 test cases.
+13. **(LOW)** Plan 05 success criteria: replace "8-discipline" with "9-discipline (8 INTK-03 + other fallback)" consistently.
+14. **(LOW)** Plan 00 task count alignment: pick 6 or 7 and update both objective and body text.
+15. **(LOW)** Add README known-issues section update task to Plan 09 (or wherever README updates land) covering image-only PDFs → UNVERIFIABLE verdict — closes prior finding #20 honestly.
+16. **(LOW)** Document `recordCassettes()` lifecycle + atomic-write exemption explicitly in Plan 04.
+
+### Risk Assessment (Consensus)
+
+**Overall risk for execution: MEDIUM.**
+
+The cycle-2 amendments demonstrably solved the cycle-1 *conceptual* gaps but introduced *mechanical synchronization* errors across plan boundaries. None of the new HIGH concerns are architectural; all are mechanical syncs that one focused replan-phase can close. Estimated cycle-3 close-out work: 1-2 hours.
+
+If cycle 3 fully closes H-1 through H-4 plus M-1 through M-9, Phase 3 is execution-ready at **LOW** risk.
