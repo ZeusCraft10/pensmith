@@ -460,3 +460,53 @@ export async function getOpenAlexApiKey(
     `env var ${envName} is not set (OpenAlex API key is required by current config)`,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Semantic Scholar API key — Phase 3 Plan 03-03 Task 3.3 (D-16, T-01-07).
+//
+// getS2ApiKey returns a PRESENCE-ONLY descriptor: { present, name }. The
+// resolved env value is NEVER returned, never logged, never persisted —
+// the no-leak invariant (T-01-07) is enforced by the shape of the return
+// type, not by caller discipline. Callers that need the actual key value
+// MUST read process.env.PENSMITH_S2_API_KEY themselves at the HTTP-call
+// boundary (analogous to getProviderApiKey but with a no-leak result type).
+//
+// On first call when the env var is unset, emits a single WARN log
+// breadcrumb so the operator sees the keyless-mode degradation once.
+// Subsequent calls are silent (the _s2WarnedOnce flag is module-scoped).
+// ---------------------------------------------------------------------------
+
+let _s2WarnedOnce = false;
+
+/**
+ * Presence-only accessor for PENSMITH_S2_API_KEY (D-16).
+ *
+ * Returns `{ present: boolean, name: 'PENSMITH_S2_API_KEY' }`. The env
+ * VALUE is never in the returned object — T-01-07 no-leak invariant
+ * enforced by return type (the literal-typed `name` field is the only
+ * string ever surfaced).
+ *
+ * On first call with the env var missing, emits ONE WARN log:
+ * `'pensmith: PENSMITH_S2_API_KEY not set — Semantic Scholar adapter will
+ *  use keyless mode (lower rate limit). Set PENSMITH_S2_API_KEY to enable.'`
+ * Subsequent calls are silent (memoized via module-level _s2WarnedOnce).
+ *
+ * Synchronous because: (a) presence-check is process.env read, (b) the log
+ * write is fire-and-forget via the session-log's emit(), (c) callers chain
+ * it inside capabilities() which is sync.
+ */
+export function getS2ApiKey(): { present: boolean; name: 'PENSMITH_S2_API_KEY' } {
+  const raw = process.env['PENSMITH_S2_API_KEY'];
+  const present = !!(raw && raw.length > 0);
+  if (!present && !_s2WarnedOnce) {
+    _s2WarnedOnce = true;
+    log().warn({
+      event: 'runtime.s2.keyless',
+      envName: 'PENSMITH_S2_API_KEY',
+      // present:false is implicit by virtue of being a 'keyless' breadcrumb;
+      // we do NOT log the raw value (which is undefined here anyway). The
+      // event-kind is 'warn' so doctor probes can surface it to the user.
+    });
+  }
+  return { present, name: 'PENSMITH_S2_API_KEY' };
+}

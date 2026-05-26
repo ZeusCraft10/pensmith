@@ -24,6 +24,49 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
+// ---------------------------------------------------------------------------
+// Bare-slug validation (Phase 3 Plan 03-03 Task 3.3 / T-3-12 mitigation).
+//
+// Two distinct conventions live in this codebase (slug-vs-directory-basename
+// lock per CYCLE-3 Codex MEDIUM #11):
+//   - "slug" (bare, e.g. 'attention-mechanism'): used in PlanFrontmatter.slug,
+//     PlanFrontmatter.depends_on[], HANDOFF.current_section, --section CLI
+//     args, logger messages naming a section.
+//   - "directory basename" (NN-slug, e.g. '02-attention-mechanism'): computed
+//     by sectionDir(n, slug) and never round-tripped — callers always have
+//     the (n, slug) pair from PlanFrontmatter or HANDOFF.
+//
+// validateSlug is the single source of truth for "is this a bare slug?".
+// /^[a-z0-9-]+$/ matches PlanFrontmatterSchema.slug (zod) and the runtime
+// regex used by HandoffSchema.section_pointers[].slug.
+// ---------------------------------------------------------------------------
+
+const SLUG_RE = /^[a-z0-9-]+$/;
+
+/**
+ * Throw if `slug` is not a bare lowercase kebab-case slug. This is the path-
+ * traversal mitigation for any helper that joins a slug into a filesystem
+ * path (T-3-12). Used by sectionPlan / sectionDraft / sectionVerification /
+ * sectionResearch — NOT by the legacy sectionDir (which slugifies its input
+ * for the free-form-section-name convenience case; test 120 in paths.test.ts
+ * is the regression gate).
+ */
+export function validateSlug(slug: string): void {
+  if (typeof slug !== 'string' || !SLUG_RE.test(slug)) {
+    throw new Error(
+      `Invalid slug ${JSON.stringify(slug)}: must match /^[a-z0-9-]+$/ ` +
+        `(T-3-12 path traversal mitigation)`,
+    );
+  }
+}
+
+function pad2(n: number): string {
+  if (!Number.isInteger(n) || n < 0 || n > 99) {
+    throw new Error(`section number must be integer in [0,99]; got ${n}`);
+  }
+  return String(n).padStart(2, '0');
+}
+
 /**
  * Returns the platform-appropriate user-local data directory (the parent
  * of the per-app `pensmith/` subdirectory).
@@ -205,4 +248,74 @@ export function slugify(s: string): string {
     );
   }
   return truncated;
+}
+
+// ---------------------------------------------------------------------------
+// Section file helpers (Phase 3 Plan 03-03 Task 3.3).
+//
+// Each helper accepts (n, slug, root?) where slug is a BARE slug (validated
+// strictly by validateSlug — NO slugify pass; callers MUST already have a
+// regex-clean slug from PlanFrontmatter or HANDOFF). The returned path is
+// `<root>/.paper/sections/NN-slug/<FILE>.md`.
+//
+// These are the canonical accessors for a section's four artifacts:
+//   - PLAN.md         (D-08 — section state source of truth)
+//   - DRAFT.md
+//   - VERIFICATION.md
+//   - RESEARCH.md
+//
+// Why a separate strict-slug entry point (not reuse sectionDir):
+//   sectionDir(n, name) is the legacy free-form-name convenience for the
+//   doctor / outline-render path, slugifying e.g. 'Results & Discussion'
+//   for human-typed names. The new section/* helpers are the post-plan
+//   access path where slug is already kebab-case from PlanFrontmatter —
+//   passing a free-form name here would silently bypass slug normalization
+//   contract and create a second source of truth (T-3-12 hardening).
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the bare section directory `<root>/.paper/sections/NN-slug` using a
+ * STRICTLY-validated bare slug (no slugify pass). Distinct from the legacy
+ * `sectionDir` which slugifies its input. New code (post-plan, with slug
+ * pulled from PlanFrontmatter) SHOULD call this helper.
+ */
+function strictSectionDir(
+  n: number,
+  slug: string,
+  root: string = projectRoot(),
+): string {
+  validateSlug(slug);
+  return path.join(paperDir(root), 'sections', `${pad2(n)}-${slug}`);
+}
+
+export function sectionPlan(
+  n: number,
+  slug: string,
+  root: string = projectRoot(),
+): string {
+  return path.join(strictSectionDir(n, slug, root), 'PLAN.md');
+}
+
+export function sectionDraft(
+  n: number,
+  slug: string,
+  root: string = projectRoot(),
+): string {
+  return path.join(strictSectionDir(n, slug, root), 'DRAFT.md');
+}
+
+export function sectionVerification(
+  n: number,
+  slug: string,
+  root: string = projectRoot(),
+): string {
+  return path.join(strictSectionDir(n, slug, root), 'VERIFICATION.md');
+}
+
+export function sectionResearch(
+  n: number,
+  slug: string,
+  root: string = projectRoot(),
+): string {
+  return path.join(strictSectionDir(n, slug, root), 'RESEARCH.md');
 }
