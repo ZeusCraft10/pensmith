@@ -37,7 +37,6 @@ const migrateStateAvailable = await hasMigrateState();
 test('migration.property: migrate preserves all non-dropped top-level STATE fields (D-09)',
   { skip: !migrateStateAvailable },
   async () => {
-    // @ts-expect-error — migrateState lands in Wave 2 (D-09 writeBack branch)
     const { migrateState } = await import('../bin/lib/state.js');
 
     // fast-check: forall v1 state objects with arbitrary extra top-level fields,
@@ -66,7 +65,9 @@ test('migration.property: migrate preserves all non-dropped top-level STATE fiel
           ],
         };
 
-        const migrated = await migrateState(v1);
+        const migrated = (await migrateState(v1)) as Record<string, unknown> & {
+          sections: Array<Record<string, unknown>>;
+        };
 
         // Top-level fields (other than schema_version and sections) must be preserved.
         assert.equal(
