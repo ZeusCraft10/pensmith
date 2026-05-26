@@ -17,7 +17,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -301,3 +301,94 @@ test('Case D (TIER-07): fact-set equivalence with ±20% tolerance', async () => 
     { tolerance: 0.20, label: 'doctor ↔ paper_capability_probe' },
   );
 });
+
+// ============================================================================
+// Phase 3 tier-contract cases (WN-1 LOCKED)
+// ============================================================================
+//
+// These 6 cases are RED at Wave 0 — skip-guarded on each verb's bin/cli/*.ts
+// existence. They turn GREEN as Plans 04 (research+adapters), 06 (workflow
+// bodies), and 07 (verb entrypoints) land. Plan 09 Task 9.1 removes the skip
+// guards (existence assertions graduate from todo→assert).
+//
+// D-02 LOCKED: per-section verbs MUST target the MIDDLE section.
+// Section 1 is intro-only and too thin to exercise the full claim→source→verdict path.
+// The known-good fixture seeds N=5 sections so middle = 3.
+// If you change the fixture so N != 5, recompute as MIDDLE_SECTION = String(Math.ceil(N / 2))
+// and NEVER let MIDDLE_SECTION === '1'.
+const MIDDLE_SECTION = '3';  // D-02 LOCKED — derived from known-good-fixture N=5
+
+const PHASE_3_CASES = [
+  {
+    name: 'intake',
+    mcpTool: 'pensmith_new',
+    cliArgs: ['new', '--from', 'tests/fixtures/assignment.txt', '--yolo'],
+    verbFile: 'bin/cli/intake.ts',
+    // CYCLE-2 M-1: canonical filename per Plan 07; `new` stays as dispatcher alias only
+  },
+  {
+    name: 'research',
+    mcpTool: 'pensmith_research',
+    cliArgs: ['research', '--yolo'],
+    verbFile: 'bin/cli/research.ts',
+  },
+  {
+    name: 'outline',
+    mcpTool: 'pensmith_outline',
+    cliArgs: ['outline', '--yolo'],
+    verbFile: 'bin/cli/outline.ts',
+  },
+  {
+    name: 'plan-section',
+    mcpTool: 'pensmith_plan',
+    cliArgs: ['plan', MIDDLE_SECTION, '--yolo'],
+    verbFile: 'bin/cli/plan.ts',
+  },
+  {
+    name: 'write-section',
+    mcpTool: 'pensmith_write',
+    cliArgs: ['write', MIDDLE_SECTION, '--yolo'],
+    verbFile: 'bin/cli/write.ts',
+  },
+  {
+    name: 'verify-section',
+    mcpTool: 'pensmith_verify',
+    cliArgs: ['verify', MIDDLE_SECTION, '--yolo'],
+    verbFile: 'bin/cli/verify.ts',
+  },
+];
+
+for (const tc of PHASE_3_CASES) {
+  const verbExists = existsSync(new URL(`../${tc.verbFile}`, import.meta.url));
+  const skip = !verbExists;
+
+  test(`tier-contract: ${tc.name} (TIER-06, WN-1 — RED until Plans 04/06/07 land)`, { skip }, async () => {
+    // Setup: spawn temp .paper/ pre-seeded with prior-step outputs as needed.
+    // Plan 09 Task 9.1 fills in the full setup and removes the skip guard.
+    // @ts-expect-error — runMcpTool helper not yet exported from harness (Plan 07 ships it)
+    const tier1 = await runMcpTool(tc.mcpTool, /* inputs */ {});
+    // @ts-expect-error — runCli helper not yet exported from harness (Plan 07 ships it)
+    const tier2 = await runCli(tc.cliArgs);
+    // @ts-expect-error — assertTierEquivalent not yet exported (Plan 07 ships it)
+    assertTierEquivalent(tier1, tier2);  // Phase 2 helper pattern, ±20% length
+  });
+
+  // RED-existence assertion (REVIEWS CONVERGENCE — Gemini LOW "Wave 0 intentionally-red
+  // tests CI gating"): uses node:test's `todo` directive instead of a plain failing
+  // assertion. node:test reports todos with `# todo` in TAP output, and the test
+  // suite exits 0 (CI does NOT block on todo). Plan 09 Task 9.1 removes the todo
+  // wrapper once the verb file exists, restoring the assertion to a real test that
+  // either passes (file exists) or fails (file missing — a genuine regression).
+  //
+  // The wrapping is per-case so individual verbs can graduate from todo→assert as
+  // each lands in Plans 04/06/07 — no flag day.
+  if (verbExists) {
+    test(`tier-contract: ${tc.name} — verb file exists (WN-1 graduated)`, () => {
+      assert.ok(verbExists, `MISSING: ${tc.verbFile} — should not be reachable when verbExists=true`);
+    });
+  } else {
+    // node:test `todo` directive — reported in TAP as `# todo`, does NOT block CI.
+    // Plan 04/06/07 land the verb file → next CI run flips this to the assert branch above.
+    test.todo(`tier-contract: ${tc.name} — verb file exists (WN-1 RED at Wave 0; Plan 07 lands ${tc.verbFile})`);
+  }
+}
