@@ -69,9 +69,8 @@ const V2_FIXTURE = {
 test('migration: migrate v1 state → v2 round-trip (D-09)',
   { skip: !migrateStateAvailable },
   async () => {
-    // @ts-expect-error — migrateState lands in Wave 2 (D-09 writeBack branch)
     const { migrateState } = await import('../bin/lib/state.js');
-    const migrated = await migrateState(V1_FIXTURE);
+    const migrated = await migrateState(V1_FIXTURE) as Record<string, unknown> & { schema_version: number; sections: Array<Record<string, unknown>> };
     assert.equal(migrated.schema_version, 2, 'migrated schema_version must be 2');
     // After migration, sections[] must NOT have embedded state/status/lastVerification.
     for (const section of migrated.sections) {
@@ -88,10 +87,9 @@ test('migration: migrate v1 state → v2 round-trip (D-09)',
 test('migration: migrate v2 state is idempotent (v2 → v2 byte-equal) (D-09)',
   { skip: !migrateStateAvailable },
   async () => {
-    // @ts-expect-error — migrateState lands in Wave 2 (D-09 writeBack branch)
     const { migrateState } = await import('../bin/lib/state.js');
-    const once = await migrateState(V2_FIXTURE);
-    const twice = await migrateState(once);
+    const once = await migrateState(V2_FIXTURE) as Record<string, unknown> & { schema_version: number };
+    const twice = await migrateState(once) as Record<string, unknown> & { schema_version: number };
     assert.deepEqual(once, twice, 'migrate(v2) must be idempotent');
     assert.equal(twice.schema_version, 2, 'idempotent result must still be schema_version 2');
   },
@@ -100,7 +98,6 @@ test('migration: migrate v2 state is idempotent (v2 → v2 byte-equal) (D-09)',
 test('migration: migrate v3 state THROWS refuse-forward error (D-09, D-39)',
   { skip: !migrateStateAvailable },
   async () => {
-    // @ts-expect-error — migrateState lands in Wave 2 (D-09 writeBack branch)
     const { migrateState } = await import('../bin/lib/state.js');
     const v3Fixture = { ...V2_FIXTURE, schema_version: 3 };
     await assert.rejects(
