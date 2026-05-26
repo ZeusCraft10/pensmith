@@ -62,9 +62,15 @@ function countHandlerStmts(
   return results;
 }
 
-test('D-08: every mcp/tools.ts handler ≤30 statements (TIER-02 = 6 tools)', () => {
+test('D-08: every mcp/tools.ts handler ≤30 statements (Phase 2 = 6 tools + Phase 3 Plan 03-07 Task 7.3 = 3 tools = 9 total)', () => {
   const handlers = countHandlerStmts('mcp/tools.ts', 'registerTool');
-  assert.equal(handlers.length, 6, `expected 6 tools per TIER-02, got ${handlers.length}: ${JSON.stringify(handlers.map((h) => h.name))}`);
+  // Phase 2 (TIER-02): paper_init_section, paper_advance_section,
+  //   paper_record_verification, paper_set_status, paper_doi_verify,
+  //   paper_capability_probe.
+  // Phase 3 Plan 03-07 Task 7.3: pensmith_plan, pensmith_write, pensmith_verify —
+  //   Tier 1 equivalent of CLI per-section verbs; each handler imports the
+  //   same bin/cli/<verb>.ts CommandDef the dispatcher uses.
+  assert.equal(handlers.length, 9, `expected 9 tools (6 Phase 2 + 3 Phase 3 Plan 03-07), got ${handlers.length}: ${JSON.stringify(handlers.map((h) => h.name))}`);
   for (const h of handlers) {
     assert.ok(h.stmts <= 30, `${h.name}: ${h.stmts} stmts (max 30)`);
   }

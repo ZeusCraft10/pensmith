@@ -1,14 +1,25 @@
 // mcp/tools.ts
 //
-// TIER-02 + D-13: exactly 6 snake_case state-mutation tools —
-//   paper_init_section, paper_advance_section, paper_record_verification,
-//   paper_set_status, paper_doi_verify, paper_capability_probe.
+// TIER-02 + D-13: 6 Phase-2 state-mutation tools + 3 Phase-3 per-section
+// verb tools (Plan 03-07 Task 7.3) — total 9 tools:
+//   Phase 2: paper_init_section, paper_advance_section,
+//            paper_record_verification, paper_set_status,
+//            paper_doi_verify, paper_capability_probe
+//   Phase 3: pensmith_plan, pensmith_write, pensmith_verify (Tier 1
+//            equivalent of the Tier 2 CLI per-section verbs)
 // D-08: each handler body ≤30 stmts (AST-asserted in tests/mcp-server-thin-shim.test.ts).
 // D-06 / Pitfall 2: inputSchema is a flat record { field: z.<type>() } — the SDK
 //       wraps the record in z.object() internally. Passing z.object({...}) makes
 //       the schema double-wrapped and tool args arrive as { value: {...} }.
 //
 // No console.* allowed (D-07 / Pitfall 7 — corrupts stdio MCP frame).
+//
+// Tier-1 ↔ Tier-2 equivalence (D-17 contract): the 3 Phase-3 handlers
+// import the same bin/cli/{plan,write,verify}.ts CommandDef objects the
+// CLI dispatcher uses, then invoke their run() with the args translated
+// from MCP input. There is exactly one implementation per verb (no
+// shell-out, no copy-paste). tests/tier-contract.test.ts plan-section /
+// write-section / verify-section cases enforce this.
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -25,6 +36,35 @@ import {
   SectionStatusSchema,
   VerificationVerdictSchema,
 } from '../bin/lib/schemas/state.js';
+
+/**
+ * Phase 3 Plan 03-07 Task 7.3 — runVerbDirect helper.
+ *
+ * Loads a citty CommandDef via dynamic import and invokes its `run` with the
+ * given verb args. The cast through `unknown` is load-bearing — each
+ * CommandDef has a verb-specific ArgsDef (citty's ParsedArgs<...> is invariant
+ * over the args object shape), so the MCP-side args object cannot be
+ * structurally typed to satisfy every CommandDef's ParsedArgs. The runtime
+ * shape is what matters: citty resolves args positionally by name.
+ *
+ * Each handler that calls this helper stays well under the ARCH-18 30-stmt
+ * budget (`tests/mcp-server-thin-shim.test.ts` AST-counts handler bodies).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyCommandDef = { run?: (ctx: any) => any };
+async function runVerbDirect(
+  load: () => Promise<AnyCommandDef>,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const cmd = await load();
+  if (typeof cmd.run !== 'function') {
+    throw new Error('runVerbDirect: loaded CommandDef has no run() — was a stub returned?');
+  }
+  // citty's ctx shape is { args, rawArgs, cmd, subCommand? }. We don't have
+  // rawArgs from the MCP path (no shell tokenization happened), so pass an
+  // empty array — verb run() implementations don't read rawArgs in Phase 3.
+  return cmd.run({ args, rawArgs: [], cmd } as unknown as Parameters<NonNullable<typeof cmd.run>>[0]);
+}
 
 export function registerPaperTools(server: McpServer): void {
   // Tool 1: paper_init_section — initialise a section row in State (idempotent per D-08).
@@ -131,6 +171,81 @@ export function registerPaperTools(server: McpServer): void {
     async () => {
       const facts = await loadCapabilityFacts();
       return { content: [{ type: 'text' as const, text: JSON.stringify(facts, null, 2) }] };
+    },
+  );
+
+  // ===========================================================================
+  // Phase 3 Plan 03-07 Task 7.3 — 3 per-section verb tools (Tier 1 equivalent).
+  // ===========================================================================
+  // Each handler imports the SAME bin/cli/<verb>.ts CommandDef the Tier 2 CLI
+  // dispatcher uses, then invokes its run() with args translated from MCP input.
+  // tests/tier-contract.test.ts plan-section / write-section / verify-section
+  // cases enforce equivalence (±20% length tolerance per TIER-07).
+  //
+  // ARCH-18 statement budget: each handler body ≤30 statements
+  // (AST-checked in tests/mcp-server-thin-shim.test.ts).
+
+  // Tool 7: pensmith_plan — Tier 1 equivalent of `pensmith plan <N>`.
+  server.registerTool(
+    'pensmith_plan',
+    {
+      title: 'Generate a per-section PLAN.md',
+      description: 'Tier 1 equivalent of `pensmith plan <N>`. Imports bin/cli/plan.ts default export.',
+      inputSchema: {
+        n: z.number().int().min(1),
+        slug: z.string().optional(),
+        revise: z.boolean().optional(),
+        yolo: z.boolean().optional(),
+      },
+    },
+    async ({ n, slug, revise, yolo }) => {
+      const result = await runVerbDirect(
+        () => import('../bin/cli/plan.js').then((m) => m.default),
+        { n: String(n), slug: slug ?? '', revise: revise ?? false, yolo: yolo ?? false },
+      );
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  // Tool 8: pensmith_write — Tier 1 equivalent of `pensmith write <N>`.
+  server.registerTool(
+    'pensmith_write',
+    {
+      title: 'Draft a section DRAFT.md',
+      description: 'Tier 1 equivalent of `pensmith write <N>`. Imports bin/cli/write.ts default export.',
+      inputSchema: {
+        n: z.number().int().min(1),
+        slug: z.string().optional(),
+        yolo: z.boolean().optional(),
+      },
+    },
+    async ({ n, slug, yolo }) => {
+      const result = await runVerbDirect(
+        () => import('../bin/cli/write.js').then((m) => m.default),
+        { n: String(n), slug: slug ?? '', yolo: yolo ?? false },
+      );
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
+  // Tool 9: pensmith_verify — Tier 1 equivalent of `pensmith verify <N>`.
+  server.registerTool(
+    'pensmith_verify',
+    {
+      title: 'Verify a section DRAFT.md (deterministic Pass-1 + Pass-3)',
+      description: 'Tier 1 equivalent of `pensmith verify <N>`. Imports bin/cli/verify.ts default export.',
+      inputSchema: {
+        n: z.number().int().min(1),
+        slug: z.string().optional(),
+        yolo: z.boolean().optional(),
+      },
+    },
+    async ({ n, slug, yolo }) => {
+      const result = await runVerbDirect(
+        () => import('../bin/cli/verify.js').then((m) => m.default),
+        { n: String(n), slug: slug ?? '', yolo: yolo ?? false },
+      );
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },
   );
 }
