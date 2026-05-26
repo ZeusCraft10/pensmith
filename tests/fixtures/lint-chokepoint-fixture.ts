@@ -19,3 +19,15 @@ const doiPrefixRegex = /^10\./;
 // Reference the bindings so the imports are not tree-shaken away by some
 // future linter doing dead-code elimination before rule evaluation.
 export const _redTeam = { fetch, doiPrefixRegex };
+
+// === Phase 3: D-06/T-3-11 violation: pdf-parse import outside bin/lib/pdf-text.ts ===
+// RED TEAM: must lint-fail per D-06 / T-3-11 chokepoint
+// @ts-expect-error fixture only
+import pdfParse from 'pdf-parse';
+void pdfParse;
+
+// === Phase 3: D-19 violation: citation-js import outside bin/lib/citations.ts ===
+// RED TEAM: must lint-fail per D-19 chokepoint
+// @ts-expect-error fixture only
+import { Cite } from 'citation-js';
+void Cite;

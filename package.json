@@ -5,7 +5,9 @@
   "license": "MIT",
   "author": "Akhil Achanta <akhilachanta8@gmail.com>",
   "type": "module",
-  "engines": { "node": ">=20.10.0" },
+  "engines": {
+    "node": ">=20.10.0"
+  },
   "packageManager": "npm@10.9.0",
   "bin": {
     "pensmith": "dist/bin/pensmith.js"
@@ -23,19 +25,35 @@
     "check": "npm run lint && npm run typecheck && npm run build && npm run test:tier-contract && npm test && npm run validate:manifests",
     "coverage": "c8 node scripts/run-tests.mjs"
   },
-  "files": ["dist/", "skills/", "agents/", "workflows/", "templates/", "references/", "hooks/", ".claude-plugin/", ".mcp.json", "README.md", "PRIVACY.md", "LICENSE"],
+  "files": [
+    "dist/",
+    "skills/",
+    "agents/",
+    "workflows/",
+    "templates/",
+    "references/",
+    "hooks/",
+    ".claude-plugin/",
+    ".mcp.json",
+    "README.md",
+    "PRIVACY.md",
+    "LICENSE"
+  ],
   "dependencies": {
-    "undici": "^7",
-    "p-retry": "^6",
-    "proper-lockfile": "^4",
-    "zod": "^3.23",
-    "smol-toml": "^1.6.1",
-    "doi-regex": "^0.1.17",
     "@anthropic-ai/sdk": "^0.93",
-    "openai": "^4",
-    "@modelcontextprotocol/sdk": "^1.29",
     "@clack/prompts": "^0.7",
-    "citty": "^0.2.2"
+    "@modelcontextprotocol/sdk": "^1.29",
+    "citation-js": "0.7.22",
+    "citty": "^0.2.2",
+    "doi-regex": "^0.1.17",
+    "openai": "^4",
+    "p-retry": "^6",
+    "pdf-parse": "1.1.1",
+    "proper-lockfile": "^4",
+    "smol-toml": "^1.6.1",
+    "undici": "^7",
+    "yaml": "^2.9.0",
+    "zod": "^3.23"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

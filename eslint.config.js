@@ -37,6 +37,8 @@ export default [
     },
     rules: {
       // === D-06: HTTP chokepoint — applies EVERYWHERE by default ===
+      // === D-06/T-3-11 (Phase 3): pdf-parse chokepoint — applies EVERYWHERE by default ===
+      // === D-19 (Phase 3): citation-js chokepoint — applies EVERYWHERE by default ===
       'no-restricted-imports': ['error', {
         paths: [
           { name: 'undici',     message: 'Import HTTP only via bin/lib/http.ts' },
@@ -44,6 +46,18 @@ export default [
           { name: 'node:http',  message: 'Import HTTP only via bin/lib/http.ts' },
           { name: 'https',      message: 'Import HTTP only via bin/lib/http.ts' },
           { name: 'node:https', message: 'Import HTTP only via bin/lib/http.ts' },
+          {
+            name: 'pdf-parse',
+            message: 'pdf-parse must only be imported from bin/lib/pdf-text.ts (D-06, T-3-11 chokepoint). All PDF text extraction routes through that single wrapper.',
+          },
+          {
+            name: 'pdf-parse/lib/pdf-parse.js',
+            message: 'Direct sub-path import is exempt only inside bin/lib/pdf-text.ts (D-06 ENOENT workaround). Other code MUST go through bin/lib/pdf-text.ts.',
+          },
+          {
+            name: 'citation-js',
+            message: 'citation-js must only be imported from bin/lib/citations.ts (D-19 chokepoint). All BibTeX parsing and APA rendering routes through that single wrapper.',
+          },
         ],
       }],
 
@@ -90,6 +104,58 @@ export default [
   {
     files: ['bin/lib/http.ts'],
     rules: { 'no-restricted-imports': 'off' },
+  },
+
+  // === pdf-parse chokepoint EXEMPTION for bin/lib/pdf-text.ts (Phase 3, D-06/T-3-11) ===
+  // bin/lib/pdf-text.ts is the ONLY file allowed to import pdf-parse.
+  // It is still subject to: HTTP imports (undici/http/https/node:http/node:https),
+  // citation-js chokepoint, and all other project-wide restrictions.
+  {
+    files: ['bin/lib/pdf-text.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [
+          { name: 'undici',     message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'http',       message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'node:http',  message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'https',      message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'node:https', message: 'Import HTTP only via bin/lib/http.ts' },
+          {
+            name: 'citation-js',
+            message: 'citation-js must only be imported from bin/lib/citations.ts (D-19 chokepoint). All BibTeX parsing and APA rendering routes through that single wrapper.',
+          },
+          // pdf-parse is ALLOWED in this file only (exempted by omission from the list).
+        ],
+      }],
+    },
+  },
+
+  // === citation-js chokepoint EXEMPTION for bin/lib/citations.ts (Phase 3, D-19) ===
+  // bin/lib/citations.ts is the ONLY file allowed to import citation-js.
+  // It is still subject to: HTTP imports, pdf-parse chokepoint, and all other
+  // project-wide restrictions.
+  {
+    files: ['bin/lib/citations.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [
+          { name: 'undici',     message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'http',       message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'node:http',  message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'https',      message: 'Import HTTP only via bin/lib/http.ts' },
+          { name: 'node:https', message: 'Import HTTP only via bin/lib/http.ts' },
+          {
+            name: 'pdf-parse',
+            message: 'pdf-parse must only be imported from bin/lib/pdf-text.ts (D-06, T-3-11 chokepoint). All PDF text extraction routes through that single wrapper.',
+          },
+          {
+            name: 'pdf-parse/lib/pdf-parse.js',
+            message: 'Direct sub-path import is exempt only inside bin/lib/pdf-text.ts (D-06 ENOENT workaround). Other code MUST go through bin/lib/pdf-text.ts.',
+          },
+          // citation-js is ALLOWED in this file only (exempted by omission from the list).
+        ],
+      }],
+    },
   },
 
   // === DOI chokepoint EXEMPTION for bin/lib/doi.ts (lands Phase 1) ===
