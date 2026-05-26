@@ -25,18 +25,19 @@ test('section-isolation: slug regex ^[a-z0-9-]+$ is enforced by path helper (T-3
     // This test wakes up when bin/cli/plan.ts exists (which depends on bin/lib/paths.ts
     // already having the sectionDir() helper from Wave 2).
     const { sectionDir } = await import('../bin/lib/paths.js');
+    // sectionDir signature: (n: number, slug: string, root?: string)
     assert.throws(
-      () => sectionDir('../etc/passwd'),
+      () => sectionDir(1, '../etc/passwd'),
       /invalid.*slug|slug.*invalid|^[a-z0-9-]/i,
       'sectionDir must throw on path-traversal slug',
     );
     assert.throws(
-      () => sectionDir('UPPERCASE'),
+      () => sectionDir(1, 'UPPERCASE'),
       /invalid.*slug|slug.*invalid|^[a-z0-9-]/i,
       'sectionDir must throw on uppercase slug',
     );
     // Valid slug must not throw:
-    assert.doesNotThrow(() => sectionDir('01-introduction'), 'valid slug must not throw');
+    assert.doesNotThrow(() => sectionDir(1, '01-introduction'), 'valid slug must not throw');
   },
 );
 

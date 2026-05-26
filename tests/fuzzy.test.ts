@@ -50,6 +50,7 @@ const AUTHOR_FAIL_CASES = [
 test('fuzzy: jaroWinkler(a, a) === 1 for non-empty string (D-11)',
   { skip: !existsSync(fuzzyPath) },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11, VRFY-02)
     const { jaroWinkler } = await import('../bin/lib/fuzzy.js');
     assert.equal(jaroWinkler('hello', 'hello'), 1);
     assert.equal(jaroWinkler('Vaswani', 'Vaswani'), 1);
@@ -60,6 +61,7 @@ test('fuzzy: jaroWinkler(a, a) === 1 for non-empty string (D-11)',
 test('fuzzy: jaroWinkler("hello","helloo") > 0.9 (D-11)',
   { skip: !existsSync(fuzzyPath) },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11, VRFY-02)
     const { jaroWinkler } = await import('../bin/lib/fuzzy.js');
     const score = jaroWinkler('hello', 'helloo');
     assert.ok(score > 0.9, `Expected > 0.9, got ${score}`);
@@ -69,6 +71,7 @@ test('fuzzy: jaroWinkler("hello","helloo") > 0.9 (D-11)',
 test('fuzzy: title golden PASS cases at ≥ 0.92 threshold (D-11, VRFY-02)',
   { skip: !existsSync(fuzzyPath) },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11, VRFY-02)
     const { jaroWinkler, normalizeForFuzzy } = await import('../bin/lib/fuzzy.js');
     for (const [a, b] of TITLE_PASS_CASES.slice(0, 2)) {
       const score = jaroWinkler(normalizeForFuzzy(a as string), normalizeForFuzzy(b as string));
@@ -83,6 +86,7 @@ test('fuzzy: title golden PASS cases at ≥ 0.92 threshold (D-11, VRFY-02)',
 test('fuzzy: title golden FAIL cases below 0.92 threshold → MIS-CITED (D-11)',
   { skip: !existsSync(fuzzyPath) },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11, VRFY-02)
     const { jaroWinkler, normalizeForFuzzy } = await import('../bin/lib/fuzzy.js');
     for (const [a, b] of TITLE_FAIL_CASES) {
       const score = jaroWinkler(normalizeForFuzzy(a as string), normalizeForFuzzy(b as string));
@@ -97,6 +101,7 @@ test('fuzzy: title golden FAIL cases below 0.92 threshold → MIS-CITED (D-11)',
 test('fuzzy: author golden PASS cases at ≥ 0.85 threshold (D-11)',
   { skip: !existsSync(fuzzyPath) },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11, VRFY-02)
     const { jaroWinkler, normalizeForFuzzy } = await import('../bin/lib/fuzzy.js');
     // Only check the exact-match case (the diacritic variant is implementation-dependent).
     const [a, b] = AUTHOR_PASS_CASES[0] as [string, string, number];
@@ -108,9 +113,25 @@ test('fuzzy: author golden PASS cases at ≥ 0.85 threshold (D-11)',
   },
 );
 
+test('fuzzy: author golden FAIL cases below 0.85 threshold (D-11)',
+  { skip: !existsSync(fuzzyPath) },
+  async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11, VRFY-02)
+    const { jaroWinkler, normalizeForFuzzy } = await import('../bin/lib/fuzzy.js');
+    // First FAIL case: clearly distinct surnames must score below the AUTHOR_THRESHOLD.
+    const [a, b] = AUTHOR_FAIL_CASES[0] as [string, string, number];
+    const score = jaroWinkler(normalizeForFuzzy(a), normalizeForFuzzy(b));
+    assert.ok(
+      score < AUTHOR_THRESHOLD,
+      `Author pair "${a}" / "${b}" scored ${score} — expected < ${AUTHOR_THRESHOLD}`,
+    );
+  },
+);
+
 test('fuzzy: Levenshtein-substring helper returns 0 for identical strings (D-11)',
   { skip: !existsSync(fuzzyPath) },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11, VRFY-02)
     const { levenshtein } = await import('../bin/lib/fuzzy.js');
     assert.equal(levenshtein('hello', 'hello'), 0);
     assert.equal(levenshtein('', ''), 0);
@@ -120,6 +141,7 @@ test('fuzzy: Levenshtein-substring helper returns 0 for identical strings (D-11)
 test('fuzzy: Levenshtein-substring("kitten","sitting") > 0 (D-11)',
   { skip: !existsSync(fuzzyPath) },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11, VRFY-02)
     const { levenshtein } = await import('../bin/lib/fuzzy.js');
     const dist = levenshtein('kitten', 'sitting');
     assert.ok(dist > 0, `Expected distance > 0, got ${dist}`);

@@ -39,6 +39,7 @@ test('citation-render: tests/fixtures/known-good-fixture/CITATIONS.bib exists (D
 test('citation-render: citation-js parses BibTeX with accent-command and renders APA',
   { skip: shouldSkip },
   async () => {
+    // @ts-expect-error — bin/lib/citations.ts lands in Wave 1 (D-19 chokepoint)
     const { parseBib, renderApa } = await import('../bin/lib/citations.js');
     const bibContent = readFileSync(fixtureBibPath, 'utf-8');
 

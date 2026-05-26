@@ -83,6 +83,7 @@ test('known-bad-quotes: bin/cli/verify.ts production module exists (SC-3)',
 test('known-bad-quotes: Pass-3 flags 10/10 fixtures as NOT_FOUND (SC-3, VRFY-04)',
   { skip: !existsSync(fixturePath) || !existsSync(verifyCliPath) },
   async () => {
+    // @ts-expect-error — bin/lib/verifier.ts lands in Wave 4 (SC-3, VRFY-04)
     const { verifyPass3 } = await import('../bin/lib/verifier.js');
     const fixtures = JSON.parse(readFileSync(fixturePath, 'utf-8')) as Array<Record<string, unknown>>;
 

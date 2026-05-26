@@ -37,6 +37,7 @@ const migrateStateAvailable = await hasMigrateState();
 test('migration.property: migrate preserves all non-dropped top-level STATE fields (D-09)',
   { skip: !migrateStateAvailable },
   async () => {
+    // @ts-expect-error — migrateState lands in Wave 2 (D-09 writeBack branch)
     const { migrateState } = await import('../bin/lib/state.js');
 
     // fast-check: forall v1 state objects with arbitrary extra top-level fields,
@@ -46,8 +47,8 @@ test('migration.property: migrate preserves all non-dropped top-level STATE fiel
       extraNumber: fc.integer(),
     });
 
-    fc.assert(
-      fc.property(extraFieldArb, async ({ extraString, extraNumber }) => {
+    await fc.assert(
+      fc.asyncProperty(extraFieldArb, async ({ extraString, extraNumber }) => {
         const v1 = {
           schema_version: 1,
           name: 'prop-test',
@@ -90,7 +91,7 @@ test('migration.property: migrate preserves all non-dropped top-level STATE fiel
           }
         }
       }),
-      { numRuns: 50, asyncReporter: undefined },
+      { numRuns: 50 },
     );
   },
 );

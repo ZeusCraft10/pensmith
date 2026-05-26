@@ -24,6 +24,7 @@ const nonEmptyString = fc.string({ minLength: 1, maxLength: 50 });
 test('fuzzy.property: jaroWinkler(a, a) === 1 for all non-empty strings (D-11)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11)
     const { jaroWinkler } = await import('../bin/lib/fuzzy.js');
     fc.assert(
       fc.property(nonEmptyString, (a) => {
@@ -38,6 +39,7 @@ test('fuzzy.property: jaroWinkler(a, a) === 1 for all non-empty strings (D-11)',
 test('fuzzy.property: jaroWinkler is symmetric — JW(a,b) === JW(b,a) (D-11)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11)
     const { jaroWinkler } = await import('../bin/lib/fuzzy.js');
     fc.assert(
       fc.property(nonEmptyString, nonEmptyString, (a, b) => {
@@ -56,6 +58,7 @@ test('fuzzy.property: jaroWinkler is symmetric — JW(a,b) === JW(b,a) (D-11)',
 test('fuzzy.property: jaroWinkler ∈ [0,1] for all string pairs (D-11)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11)
     const { jaroWinkler } = await import('../bin/lib/fuzzy.js');
     fc.assert(
       fc.property(nonEmptyString, nonEmptyString, (a, b) => {
@@ -70,6 +73,7 @@ test('fuzzy.property: jaroWinkler ∈ [0,1] for all string pairs (D-11)',
 test('fuzzy.property: levenshtein(a,a) === 0 for all strings (D-11)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11)
     const { levenshtein } = await import('../bin/lib/fuzzy.js');
     fc.assert(
       fc.property(fc.string({ minLength: 0, maxLength: 50 }), (a) => {
@@ -83,6 +87,7 @@ test('fuzzy.property: levenshtein(a,a) === 0 for all strings (D-11)',
 test('fuzzy.property: levenshtein is symmetric (D-11)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11)
     const { levenshtein } = await import('../bin/lib/fuzzy.js');
     fc.assert(
       fc.property(fc.string({ minLength: 0, maxLength: 30 }), fc.string({ minLength: 0, maxLength: 30 }), (a, b) => {
@@ -100,6 +105,7 @@ test('fuzzy.property: levenshtein is symmetric (D-11)',
 test('fuzzy.property: levenshtein satisfies triangle inequality (D-11)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/fuzzy.ts lands in Wave 2 (D-11)
     const { levenshtein } = await import('../bin/lib/fuzzy.js');
     fc.assert(
       fc.property(

@@ -35,7 +35,9 @@ const skip = !existsSync(handoffPath) || !existsSync(preCompactPath);
 test('handoff: PreCompact hook writes HANDOFF.json that validates against HandoffSchema (D-17, D-18)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/handoff.ts lands in Wave 4 (D-17, D-18)
     const { HandoffSchema } = await import('../bin/lib/handoff.js');
+    // @ts-expect-error — onPreCompact lands in Wave 4 when pre-compact body is wired (D-17)
     const { onPreCompact } = await import('../hooks/pre-compact.js');
 
     // Minimal fixture .paper/ with STATE.json so the hook has context.
@@ -72,6 +74,7 @@ test('handoff: PreCompact hook writes HANDOFF.json that validates against Handof
 test('handoff: HandoffSchema requires schema_version=1, phase enum, next_action, bounded breadcrumbs (D-17)',
   { skip: !existsSync(handoffPath) },
   async () => {
+    // @ts-expect-error — bin/lib/handoff.ts lands in Wave 4 (D-17, D-18)
     const { HandoffSchema } = await import('../bin/lib/handoff.js');
 
     // Valid minimal payload
@@ -90,7 +93,7 @@ test('handoff: HandoffSchema requires schema_version=1, phase enum, next_action,
     // breadcrumbs must be bounded at max 5
     const tooManyBreadcrumbs = {
       ...valid,
-      breadcrumbs: Array.from({ length: 6 }, (_, i) => ({
+      breadcrumbs: Array.from({ length: 6 }, () => ({
         ts: '2026-01-01T00:00:00Z',
         verb: 'intake',
         section: null,

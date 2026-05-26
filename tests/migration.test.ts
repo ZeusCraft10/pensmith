@@ -69,6 +69,7 @@ const V2_FIXTURE = {
 test('migration: migrate v1 state → v2 round-trip (D-09)',
   { skip: !migrateStateAvailable },
   async () => {
+    // @ts-expect-error — migrateState lands in Wave 2 (D-09 writeBack branch)
     const { migrateState } = await import('../bin/lib/state.js');
     const migrated = await migrateState(V1_FIXTURE);
     assert.equal(migrated.schema_version, 2, 'migrated schema_version must be 2');
@@ -87,6 +88,7 @@ test('migration: migrate v1 state → v2 round-trip (D-09)',
 test('migration: migrate v2 state is idempotent (v2 → v2 byte-equal) (D-09)',
   { skip: !migrateStateAvailable },
   async () => {
+    // @ts-expect-error — migrateState lands in Wave 2 (D-09 writeBack branch)
     const { migrateState } = await import('../bin/lib/state.js');
     const once = await migrateState(V2_FIXTURE);
     const twice = await migrateState(once);
@@ -98,6 +100,7 @@ test('migration: migrate v2 state is idempotent (v2 → v2 byte-equal) (D-09)',
 test('migration: migrate v3 state THROWS refuse-forward error (D-09, D-39)',
   { skip: !migrateStateAvailable },
   async () => {
+    // @ts-expect-error — migrateState lands in Wave 2 (D-09 writeBack branch)
     const { migrateState } = await import('../bin/lib/state.js');
     const v3Fixture = { ...V2_FIXTURE, schema_version: 3 };
     await assert.rejects(

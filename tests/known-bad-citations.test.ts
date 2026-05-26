@@ -48,6 +48,7 @@ test('known-bad-citations: bin/cli/verify.ts production module exists (SC-2)',
 test('known-bad-citations: Pass-1 flags 10/10 fixtures as MIS-CITED (SC-2, CITE-01)',
   { skip: !existsSync(fixturePath) || !existsSync(verifyCliPath) },
   async () => {
+    // @ts-expect-error — bin/lib/verifier.ts lands in Wave 4 (SC-2, CITE-01)
     const { verifyPass1 } = await import('../bin/lib/verifier.js');
     const fixtures = JSON.parse(readFileSync(fixturePath, 'utf-8')) as Array<Record<string, unknown>>;
 

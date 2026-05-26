@@ -22,6 +22,7 @@ const skip = !existsSync(normalizePath);
 test('normalize: ligature fi (U+FB01) → "fi" via NFKC (VRFY-04)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/normalize.ts lands in Wave 2 (VRFY-04)
     const { normalizeText } = await import('../bin/lib/normalize.js');
     // U+FB01 LATIN SMALL LIGATURE FI
     const input = 'ﬁnal';
@@ -33,6 +34,7 @@ test('normalize: ligature fi (U+FB01) → "fi" via NFKC (VRFY-04)',
 test('normalize: soft hyphen (U+00AD) is stripped (VRFY-04)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/normalize.ts lands in Wave 2 (VRFY-04)
     const { normalizeText } = await import('../bin/lib/normalize.js');
     // U+00AD SOFT HYPHEN — should be stripped in quote matching context
     const input = 'trans­former';
@@ -48,6 +50,7 @@ test('normalize: soft hyphen (U+00AD) is stripped (VRFY-04)',
 test('normalize: smart quotes (“”) → straight quotes (VRFY-04)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/normalize.ts lands in Wave 2 (VRFY-04)
     const { normalizeText } = await import('../bin/lib/normalize.js');
     // U+201C LEFT DOUBLE QUOTATION MARK, U+201D RIGHT DOUBLE QUOTATION MARK
     const input = '“attention”';
@@ -62,6 +65,7 @@ test('normalize: smart quotes (“”) → straight quotes (VRFY-04)',
 test('normalize: em-dash (U+2014) → hyphen-minus (VRFY-04)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/normalize.ts lands in Wave 2 (VRFY-04)
     const { normalizeText } = await import('../bin/lib/normalize.js');
     // U+2014 EM DASH
     const input = 'end—to—end';
@@ -77,6 +81,7 @@ test('normalize: em-dash (U+2014) → hyphen-minus (VRFY-04)',
 test('normalize: diacritic é (U+00E9) → e via NFD + combining-mark strip (VRFY-04)',
   { skip },
   async () => {
+    // @ts-expect-error — bin/lib/normalize.ts lands in Wave 2 (VRFY-04)
     const { normalizeText } = await import('../bin/lib/normalize.js');
     // U+00E9 LATIN SMALL LETTER E WITH ACUTE
     const input = 'naïve';
