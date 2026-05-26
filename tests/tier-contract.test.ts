@@ -360,16 +360,26 @@ const PHASE_3_CASES = [
 
 for (const tc of PHASE_3_CASES) {
   const verbExists = existsSync(new URL(`../${tc.verbFile}`, import.meta.url));
-  const skip = !verbExists;
+  // Plan 03-07 Task 7.2 lands the bin/cli/<verb>.ts files (Tier-2 surface),
+  // and Plan 03-07 Task 7.3 lands the pensmith_<verb> MCP tools (Tier-1
+  // surface). The fixture-harness helpers (runMcpTool / runCli /
+  // assertTierEquivalent) for actually invoking BOTH tiers from this test
+  // ship in Plan 03-09 Task 9.1 — which also removes the WAITING_FOR_PLAN_09
+  // flag below. Until then, the existence assertion (`tier-contract: <name>
+  // — verb file exists`) is the only graduated test; the actual equivalence
+  // check stays skipped to avoid a `ReferenceError: runMcpTool is not
+  // defined` runtime crash.
+  const WAITING_FOR_PLAN_09 = true;
+  const skip = !verbExists || WAITING_FOR_PLAN_09;
 
-  test(`tier-contract: ${tc.name} (TIER-06, WN-1 — RED until Plans 04/06/07 land)`, { skip }, async () => {
+  test(`tier-contract: ${tc.name} (TIER-06, WN-1 — RED until Plan 03-09 lands fixture harness)`, { skip }, async () => {
     // Setup: spawn temp .paper/ pre-seeded with prior-step outputs as needed.
     // Plan 09 Task 9.1 fills in the full setup and removes the skip guard.
-    // @ts-expect-error — runMcpTool helper not yet exported from harness (Plan 07 ships it)
+    // @ts-expect-error — runMcpTool helper not yet exported from harness (Plan 09 ships it)
     const tier1 = await runMcpTool(tc.mcpTool, /* inputs */ {});
-    // @ts-expect-error — runCli helper not yet exported from harness (Plan 07 ships it)
+    // @ts-expect-error — runCli helper not yet exported from harness (Plan 09 ships it)
     const tier2 = await runCli(tc.cliArgs);
-    // @ts-expect-error — assertTierEquivalent not yet exported (Plan 07 ships it)
+    // @ts-expect-error — assertTierEquivalent not yet exported (Plan 09 ships it)
     assertTierEquivalent(tier1, tier2);  // Phase 2 helper pattern, ±20% length
   });
 

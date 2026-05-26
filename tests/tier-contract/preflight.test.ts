@@ -23,6 +23,10 @@ const CLI_BIN = 'dist/bin/pensmith.js';
 const EXPECTED_RESOURCES = ['capabilities', 'library', 'outline', 'section', 'state'];
 
 // D-13 / TIER-02: exactly 6 snake_case tools (LOCKED).
+// D-13 / TIER-02 + Plan 03-07 Task 7.3: 6 Phase-2 snake_case tools + 3 Phase-3
+// per-section verb tools = 9 total. Phase 2 names stay snake_case (D-13
+// LOCKED); Phase 3 verb tools use the `pensmith_<verb>` prefix to distinguish
+// the "Tier-1 surface of a CLI verb" from the state-mutation tools.
 const EXPECTED_TOOLS = [
   'paper_advance_section',
   'paper_capability_probe',
@@ -30,6 +34,9 @@ const EXPECTED_TOOLS = [
   'paper_init_section',
   'paper_record_verification',
   'paper_set_status',
+  'pensmith_plan',
+  'pensmith_verify',
+  'pensmith_write',
 ];
 
 let client: Client;
@@ -74,11 +81,11 @@ test('preflight: MCP server registers exactly 5 resources (D-13)', async () => {
   assert.deepEqual(names, EXPECTED_RESOURCES, 'resource name set mismatch');
 });
 
-test('preflight: MCP server registers exactly 6 tools (D-13 / TIER-02)', async () => {
+test('preflight: MCP server registers exactly 9 tools (6 Phase-2 + 3 Phase-3 Plan 03-07 Task 7.3)', async () => {
   const res = await client.listTools();
   const names = (res.tools ?? []).map((t: { name: string }) => t.name).sort();
-  assert.equal(names.length, 6, `expected 6 tools, got ${names.length}: ${JSON.stringify(names)}`);
-  assert.deepEqual(names, EXPECTED_TOOLS, 'tool name set mismatch (TIER-02 snake_case names are LOCKED)');
+  assert.equal(names.length, 9, `expected 9 tools (6 Phase-2 + 3 Phase-3), got ${names.length}: ${JSON.stringify(names)}`);
+  assert.deepEqual(names, EXPECTED_TOOLS, 'tool name set mismatch (TIER-02 snake_case + Plan 03-07 pensmith_<verb> names are LOCKED)');
 });
 
 test('preflight: CLI --version exits 0 with semver stdout', () => {
