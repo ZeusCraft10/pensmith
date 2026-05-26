@@ -1,0 +1,110 @@
+[
+  {
+    "citekey": "fake2024a",
+    "title": "Attention Mechanisms in Modern Transformer Architectures",
+    "authors": ["Smith, A.B."],
+    "year": 2024,
+    "doi": "10.99999/fake.001",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
+  },
+  {
+    "citekey": "fake2023b",
+    "title": "Deep Learning for Natural Language Processing: A Survey",
+    "authors": ["Johnson, C.D."],
+    "year": 2023,
+    "doi": "10.99999/fake.002",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
+  },
+  {
+    "citekey": "fake2022c",
+    "title": "Self-Attention Networks for Sequence Modeling",
+    "authors": ["Williams, E.F."],
+    "year": 2022,
+    "doi": "10.99999/fake.003",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
+  },
+  {
+    "citekey": "fake2021d",
+    "title": "Efficient Transformers: A Survey of Scalable Approaches",
+    "authors": ["Brown, G.H."],
+    "year": 2021,
+    "doi": "10.99999/fake.004",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
+  },
+  {
+    "citekey": "fake2020e",
+    "title": "Bidirectional Encoder Representations from Transformers",
+    "authors": ["Davis, I.J."],
+    "year": 2020,
+    "doi": "10.99999/fake.005",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
+  },
+  {
+    "citekey": "fab2024a",
+    "title": "Generative Pre-trained Transformers for Code Understanding",
+    "authors": ["Wilson, K.L."],
+    "year": 2024,
+    "doi": "10.1145/xxxxxxx.xxxxxxx",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "Real ACM prefix but fabricated suffix — DOI resolves to 404 or metadata mismatch"
+  },
+  {
+    "citekey": "fab2023b",
+    "title": "Cross-Attention Mechanisms for Multi-Modal Fusion",
+    "authors": ["Moore, M.N."],
+    "year": 2023,
+    "doi": "10.1145/yyyyyyy.yyyyyyy",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "Real ACM prefix but fabricated suffix — title/author Jaro-Winkler mismatch"
+  },
+  {
+    "citekey": "fab2022c",
+    "title": "Large Language Models and Their Applications in Science",
+    "authors": ["Taylor, O.P."],
+    "year": 2022,
+    "doi": "10.1145/zzzzzzz.zzzzzzz",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "Real ACM prefix but fabricated suffix — resolves to wrong paper"
+  },
+  {
+    "citekey": "fab2021d",
+    "title": "Sparse Transformer: Scaling Attention to Long Sequences",
+    "authors": ["Anderson, Q.R."],
+    "year": 2021,
+    "doi": "10.1145/aaaaaaa.aaaaaaa",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "Real ACM prefix but fabricated suffix — title/author Jaro-Winkler < threshold"
+  },
+  {
+    "citekey": "fab2020e",
+    "title": "Attention Is All You Need for Vision Tasks",
+    "authors": ["Thomas, S.T."],
+    "year": 2020,
+    "doi": "10.1145/bbbbbbb.bbbbbbb",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "Real ACM prefix but fabricated suffix — close title but wrong authors"
+  },
+  {
+    "citekey": "fab2019f",
+    "title": "Memory-Augmented Neural Networks with External Attention",
+    "authors": ["Jackson, U.V."],
+    "year": 2019,
+    "doi": "10.1145/ccccccc.ccccccc",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "Real ACM prefix but fabricated suffix — resolves to different paper entirely"
+  },
+  {
+    "citekey": "fake2018g",
+    "title": "Recurrent Attention for Machine Translation",
+    "authors": ["Harris, W.X."],
+    "year": 2018,
+    "doi": "10.99999/fake.012",
+    "expected_verdict": "MIS-CITED",
+    "expected_reason": "DOI prefix 10.99999 does not exist — registrar not found"
+  }
+]
