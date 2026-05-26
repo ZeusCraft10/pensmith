@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: "Phase 3 DISCUSS COMPLETE. 9 gray areas resolved, 25 decisions locked (D-01..D-25) in .planning/phases/03-vertical-slice-one-section/03-CONTEXT.md. DISCUSSION-LOG.md written. REQUIREMENTS.md updated (RSCH-05 split into 05a Phase 3 + 05b Phase 8). Next: /gsd-plan-phase 3."
-last_updated: "2026-05-26T12:52:26.682Z"
+stopped_at: Completed 03-07-PLAN.md (verb loaders + chokepoints)
+last_updated: "2026-05-26T13:33:11.634Z"
 last_activity: 2026-05-26
 progress:
   total_phases: 11
   completed_phases: 3
   total_plans: 38
-  completed_plans: 33
-  percent: 87
+  completed_plans: 34
+  percent: 89
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 3 (vertical-slice-one-section) — EXECUTING
-Plan: 5 of 10
+Plan: 6 of 10
 Status: Ready to execute
 Last activity: 2026-05-26
 
@@ -74,6 +74,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 03-vertical-slice-one-section P07 | 145 | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-07] Case D length comparison uses serialized fact-set JSON not raw full texts — doctor JSON (~3KB) vs capabilities JSON (~180B) is apples-to-oranges; fact-set text comparison enforces TIER-07 meaningfully
 - [02-07] MCP server main-guard uses pathToFileURL for Windows compatibility — naive file://${argv[1]} never matches absolute import.meta.url when argv[1] is relative
 - [02-07] Preflight resource count: listResources() (4 static) + listResourceTemplates() (1 section template) = 5 total per TIER-01
+- [Phase ?]: Plan 03-07: Naming reconciliation — bin/cli/intake.ts is canonical filename; REAL_VERB_LOADERS['new'] points to it (UX02_VERBS stays exactly 16; CYCLE-2 M-1)
+- [Phase ?]: Plan 03-07: runVerbDirect helper bridges MCP args -> citty CommandDef.run() with a single 'unknown' cast; preserves D-17 single-implementation-per-verb + ARCH-18 30-stmt budget
+- [Phase ?]: Plan 03-07: D-13 strict literal-string gate forced paraphrasing all loadPrompt mentions in verify.ts; Phase 3 verify path stays 100% deterministic
 
 ### Pending Todos
 
@@ -157,6 +161,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-17T00:00:00Z
-Stopped at: Phase 3 DISCUSS COMPLETE. 9 gray areas resolved, 25 decisions locked (D-01..D-25) in .planning/phases/03-vertical-slice-one-section/03-CONTEXT.md. DISCUSSION-LOG.md written. REQUIREMENTS.md updated (RSCH-05 split into 05a Phase 3 + 05b Phase 8). Next: /gsd-plan-phase 3.
-Resume file: .planning/phases/03-vertical-slice-one-section/03-CONTEXT.md
+Last session: 2026-05-26T13:33:11.629Z
+Stopped at: Completed 03-07-PLAN.md (verb loaders + chokepoints)
+Resume file: None

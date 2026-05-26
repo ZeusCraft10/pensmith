@@ -83,7 +83,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 
 ### Intake
 
-- [ ] **INTK-01**: Accept assignment as `@file.{pdf,md,txt}`, pasted text, or piped stdin
+- [x] **INTK-01**: Accept assignment as `@file.{pdf,md,txt}`, pasted text, or piped stdin
 - [ ] **INTK-02**: AskUserQuestion clarifying questions (or stdin fallback in Tier 2): discipline preset, mode, goal, class, counterargument, style-match opt-in, PII redaction opt-in
 - [ ] **INTK-03**: Discipline presets ship for CS, Bio, History, Lit, Psych, Econ, Philosophy, Other — each setting citation style + source preference + sectioning + counterargument default + density target
 - [ ] **INTK-04**: Print disclaimer to stdout; write `.paper/PROJECT.md` and `.paper/config.toml` atomically
@@ -106,35 +106,35 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 
 ### Outline
 
-- [ ] **OUTL-01**: Produce section structure with thesis, target word count, source-mapping per section, and `depends_on` declarations
+- [x] **OUTL-01**: Produce section structure with thesis, target word count, source-mapping per section, and `depends_on` declarations
 - [ ] **OUTL-02**: Counterargument enforcement for argumentative/persuasive papers (configurable per intake; `--no-counter` to disable)
 - [ ] **OUTL-03**: Approval gate before any section is written (skipped only with `--yolo`)
 - [ ] **OUTL-04**: Create numbered `.paper/sections/<NN-slug>/` folders with stub `PLAN.md` per section
 
 ### Plan Section
 
-- [ ] **PLAN-01**: `pensmith plan <N>` reads stub PLAN.md, maps claims → sources, identifies counterexamples
+- [x] **PLAN-01**: `pensmith plan <N>` reads stub PLAN.md, maps claims → sources, identifies counterexamples
 - [ ] **PLAN-02**: `--revise` flag re-plans based on verification feedback
 - [ ] **PLAN-03**: `--research <query>` triggers section-scoped additional research without disturbing other sections
 - [ ] **PLAN-04**: Write `.paper/sections/<N>/PLAN.md` with claim-source mapping, paragraph structure, voice hints
 
 ### Write Section
 
-- [ ] **WRTE-01**: Section drafter receives ONLY this section's mapped sources + PLAN.md + STYLE.json (when enabled) + voice hint — never the full source pool
+- [x] **WRTE-01**: Section drafter receives ONLY this section's mapped sources + PLAN.md + STYLE.json (when enabled) + voice hint — never the full source pool
 - [ ] **WRTE-02**: Style-match consumed per-section when enabled at intake; voice hint can override
 - [ ] **WRTE-03**: Auto-chain to verify after write unless `--no-verify`
-- [ ] **WRTE-04**: Lint / runtime check enforces section-drafter input contract (Pitfall 9 mitigation) `[research]`
+- [x] **WRTE-04**: Lint / runtime check enforces section-drafter input contract (Pitfall 9 mitigation) `[research]`
 
 ### Verify Section (Bounded)
 
-- [ ] **VRFY-01**: Pass 1 — DOI / arXiv / PMID re-fetch via Crossref / arXiv / PubMed; 404 → FABRICATED (deterministic, blocking)
+- [x] **VRFY-01**: Pass 1 — DOI / arXiv / PMID re-fetch via Crossref / arXiv / PubMed; 404 → FABRICATED (deterministic, blocking)
 - [ ] **VRFY-02**: Pass 1 — author / title / year fuzzy match (Jaro-Winkler / Fuse.js); mismatch → MIS-CITED (deterministic, blocking)
 - [ ] **VRFY-03**: Pass 2 — claim support (LLM-judged), verdict ∈ {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}, prompt calibrated UNCLEAR-bias (advisory)
 - [x] **VRFY-04**: Pass 3 — quotation verification, OA full-text via Unpaywall, tiered exact → Levenshtein-≥0.95 substring match with NFKC Unicode normalization both sides; PASS / NOT_FOUND / FUZZY_MATCH (deterministic, blocking)
 - [ ] **VRFY-05**: Pass 3 — strip soft hyphens, decompose known ligatures, canonicalize smart quotes / em-dash / ellipsis / diacritics; minimum quote length ≥10 words for fuzzy
 - [ ] **VRFY-06**: Pass 4 — per-paragraph orphan-claim audit. The claim-extraction step is deterministic (pure-Node, paragraph→claim regex/grammar pipeline) per PRD §14 "Determinism where it counts." The orphan-vs-cited judgment compares extracted claims to in-text citations deterministically; LLM is used only for *labeling* edge cases (e.g., "is this a claim or a definition?") and remains advisory. Verdict is written to `sections/<N>/VERIFICATION.md` and never auto-blocks compile or export — but presence of any orphan claims feeds the §7.9 export-confirmation gate (`DONE-09`).
-- [ ] **VRFY-07**: Section marked `verified` only when Pass 1 + Pass 3 are clean (Pass 2 / Pass 4 verdicts are advisory)
-- [ ] **VRFY-08**: `last_verified` timestamps written per citation; auto-recheck on stale
+- [x] **VRFY-07**: Section marked `verified` only when Pass 1 + Pass 3 are clean (Pass 2 / Pass 4 verdicts are advisory)
+- [x] **VRFY-08**: `last_verified` timestamps written per citation; auto-recheck on stale
 
 ### Compile
 
@@ -288,7 +288,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | DOCT-05 | Phase 3 | Pending (deferred from Phase 2 — see CONTEXT D-04) |
 | ARCH-02 | Phase 3 | Pending |
 | ARCH-04 | Phase 3 | Pending |
-| INTK-01 | Phase 3 | Pending |
+| INTK-01 | Phase 3 | Complete |
 | INTK-02 | Phase 3 | Pending |
 | INTK-03 | Phase 3 | Pending |
 | INTK-04 | Phase 3 | Pending |
@@ -302,21 +302,21 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | RSCH-08 | Phase 3 | Pending |
 | RSCH-09 | Phase 3 | Complete |
 | RSCH-11 | Phase 3 | Complete |
-| OUTL-01 | Phase 3 | Pending |
+| OUTL-01 | Phase 3 | Complete |
 | OUTL-02 | Phase 3 | Pending |
 | OUTL-03 | Phase 3 | Pending |
 | OUTL-04 | Phase 3 | Pending |
-| PLAN-01 | Phase 3 | Pending |
+| PLAN-01 | Phase 3 | Complete |
 | PLAN-04 | Phase 3 | Pending |
-| WRTE-01 | Phase 3 | Pending |
+| WRTE-01 | Phase 3 | Complete |
 | WRTE-03 | Phase 3 | Pending |
-| WRTE-04 | Phase 3 | Pending |
-| VRFY-01 | Phase 3 | Pending |
+| WRTE-04 | Phase 3 | Complete |
+| VRFY-01 | Phase 3 | Complete |
 | VRFY-02 | Phase 3 | Pending |
 | VRFY-04 | Phase 3 | Complete |
 | VRFY-05 | Phase 3 | Pending |
-| VRFY-07 | Phase 3 | Pending |
-| VRFY-08 | Phase 3 | Pending |
+| VRFY-07 | Phase 3 | Complete |
+| VRFY-08 | Phase 3 | Complete |
 | CITE-01 | Phase 3 | Pending |
 | CITE-04 | Phase 3 | Pending |
 | TEST-01 | Phase 3 | Pending |
