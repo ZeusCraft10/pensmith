@@ -36,6 +36,17 @@ type AnyCommandDef = CommandDef<any>;
  */
 const REAL_VERB_LOADERS: Partial<Record<Ux02Verb, () => Promise<AnyCommandDef>>> = {
   doctor: () => import('./cli/doctor.js').then((m) => m.doctorCommand),
+  // Phase 3 Plan 03-07 Task 7.2 — 6 new real verbs.
+  // CYCLE-2 M-1 reconciliation: `new` is the UX02_VERBS canonical key
+  // (README quick-start), but the implementation file is `./cli/intake.ts`
+  // (the canonical filename matching workflows/intake.md). Both point to
+  // the same CommandDef.
+  new: () => import('./cli/intake.js').then((m) => m.intakeCommand),
+  research: () => import('./cli/research.js').then((m) => m.researchCommand),
+  outline: () => import('./cli/outline.js').then((m) => m.outlineCommand),
+  plan: () => import('./cli/plan.js').then((m) => m.planCommand),
+  write: () => import('./cli/write.js').then((m) => m.writeCommand),
+  verify: () => import('./cli/verify.js').then((m) => m.verifyCommand),
 };
 
 /**
