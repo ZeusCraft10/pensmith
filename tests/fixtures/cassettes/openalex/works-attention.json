@@ -1,0 +1,60 @@
+[
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works?search=attention+mechanisms&per-page=20&mailto=akhilachanta8%40gmail.com",
+    "status": 200,
+    "response": {
+      "meta": { "count": 3 },
+      "results": [
+        {
+          "id": "https://openalex.org/W2963403868",
+          "doi": "https://doi.org/10.48550/arxiv.1706.03762",
+          "title": "Attention Is All You Need",
+          "publication_year": 2017,
+          "authorships": [
+            { "author": { "display_name": "Ashish Vaswani" } },
+            { "author": { "display_name": "Noam Shazeer" } }
+          ]
+        },
+        {
+          "id": "https://openalex.org/W2962858109",
+          "doi": "https://doi.org/10.1109/cvpr.2018.00813",
+          "title": "Non-local Neural Networks",
+          "publication_year": 2018,
+          "authorships": [
+            { "author": { "display_name": "Xiaolong Wang" } },
+            { "author": { "display_name": "Ross Girshick" } }
+          ]
+        },
+        {
+          "id": "https://openalex.org/W2978856245",
+          "doi": "https://doi.org/10.1162/neco_a_01199",
+          "title": "A Survey on Attention Mechanisms",
+          "publication_year": 2019,
+          "authorships": [
+            { "author": { "display_name": "Sneha Chaudhari" } },
+            { "author": { "display_name": "Varun Mithal" } }
+          ]
+        }
+      ]
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  },
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/W2741809807?mailto=akhilachanta8%40gmail.com",
+    "status": 200,
+    "response": {
+      "id": "https://openalex.org/W2741809807",
+      "doi": "https://doi.org/10.48550/arxiv.1706.03762",
+      "title": "Attention Is All You Need",
+      "publication_year": 2017,
+      "authorships": [
+        { "author": { "display_name": "Ashish Vaswani" } }
+      ]
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]

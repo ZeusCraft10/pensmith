@@ -1,0 +1,25 @@
+[
+  {
+    "scope": "https://api.unpaywall.org",
+    "method": "GET",
+    "path": "/v2/10.48550/arxiv.1706.03762?email=akhilachanta8%40gmail.com",
+    "status": 200,
+    "response": {
+      "doi": "10.48550/arxiv.1706.03762",
+      "title": "Attention Is All You Need",
+      "year": 2017,
+      "is_oa": true,
+      "z_authors": [
+        { "family": "Vaswani", "given": "Ashish" },
+        { "family": "Shazeer", "given": "Noam" }
+      ],
+      "best_oa_location": {
+        "url": "https://arxiv.org/abs/1706.03762",
+        "url_for_pdf": "https://arxiv.org/pdf/1706.03762.pdf",
+        "host_type": "repository",
+        "version": "submittedVersion"
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]

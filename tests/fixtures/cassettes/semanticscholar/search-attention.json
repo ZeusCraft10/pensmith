@@ -1,0 +1,84 @@
+[
+  {
+    "scope": "https://api.semanticscholar.org",
+    "method": "GET",
+    "path": "/graph/v1/paper/search?query=attention+mechanisms&limit=20&fields=title,authors,year,externalIds,abstract",
+    "status": 200,
+    "response": {
+      "total": 3,
+      "offset": 0,
+      "data": [
+        {
+          "paperId": "0796f6cd597d2b07b571e4b4ebf3e8aef0f5e3af",
+          "externalIds": { "DOI": "10.48550/arXiv.1706.03762" },
+          "title": "Attention Is All You Need",
+          "year": 2017,
+          "authors": [
+            { "authorId": "1738807", "name": "Ashish Vaswani" },
+            { "authorId": "1714449", "name": "Noam Shazeer" }
+          ],
+          "abstract": "We propose a new simple network architecture based solely on attention."
+        },
+        {
+          "paperId": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
+          "externalIds": { "DOI": "10.48550/arXiv.1810.04805" },
+          "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+          "year": 2018,
+          "authors": [
+            { "authorId": "2007644", "name": "Jacob Devlin" }
+          ],
+          "abstract": "We introduce a new language representation model called BERT."
+        },
+        {
+          "paperId": "90abbc2cf38462b954ae1b772fac9532e2ccd8b0",
+          "externalIds": { "DOI": "10.48550/arXiv.2005.14165" },
+          "title": "Language Models are Few-Shot Learners",
+          "year": 2020,
+          "authors": [
+            { "authorId": "1979477", "name": "Tom B. Brown" }
+          ],
+          "abstract": "Recent work has demonstrated substantial gains on many NLP tasks."
+        }
+      ]
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  },
+  {
+    "scope": "https://api.semanticscholar.org",
+    "method": "GET",
+    "path": "/graph/v1/paper/0796f6cd597d2b07b571e4b4ebf3e8aef0f5e3af?fields=title,authors,year,externalIds,abstract",
+    "status": 200,
+    "response": {
+      "paperId": "0796f6cd597d2b07b571e4b4ebf3e8aef0f5e3af",
+      "externalIds": { "DOI": "10.48550/arXiv.1706.03762" },
+      "title": "Attention Is All You Need",
+      "year": 2017,
+      "authors": [
+        { "authorId": "1738807", "name": "Ashish Vaswani" }
+      ],
+      "abstract": "We propose a new simple network architecture."
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  },
+  {
+    "scope": "https://api.semanticscholar.org",
+    "method": "GET",
+    "path": "/graph/v1/paper/search?query=test+query&limit=20&fields=title,authors,year,externalIds,abstract",
+    "status": 200,
+    "response": {
+      "total": 1,
+      "offset": 0,
+      "data": [
+        {
+          "paperId": "test-keyless-id",
+          "externalIds": { "DOI": "10.0000/keyless-test" },
+          "title": "Keyless Mode Test Paper",
+          "year": 2024,
+          "authors": [{ "authorId": "0", "name": "Test Author" }],
+          "abstract": "Used by the missing-API-key test to assert keyless degradation works."
+        }
+      ]
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]
