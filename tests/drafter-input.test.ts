@@ -32,7 +32,7 @@ const VALID_DRAFTER_INPUT = {
 test('drafter-input: assertDrafterInput accepts exact allowed shape (WRTE-01)',
   { skip },
   async () => {
-    // @ts-expect-error — bin/lib/drafter-input.ts lands in Wave 4 (WRTE-01)
+    // Production module now exists (Plan 03-07 Task 7.1) — @ts-expect-error removed.
     const { assertDrafterInput } = await import('../bin/lib/drafter-input.js');
     // Must NOT throw on a valid input.
     assert.doesNotThrow(
@@ -45,7 +45,7 @@ test('drafter-input: assertDrafterInput accepts exact allowed shape (WRTE-01)',
 test('drafter-input: assertDrafterInput throws on superset (extra field "cwd") (WRTE-01, T-3-10)',
   { skip },
   async () => {
-    // @ts-expect-error — bin/lib/drafter-input.ts lands in Wave 4 (WRTE-01)
+    // Production module now exists (Plan 03-07 Task 7.1) — @ts-expect-error removed.
     const { assertDrafterInput } = await import('../bin/lib/drafter-input.js');
     const supersetInput = { ...VALID_DRAFTER_INPUT, cwd: '/etc' };
     assert.throws(
@@ -59,7 +59,7 @@ test('drafter-input: assertDrafterInput throws on superset (extra field "cwd") (
 test('drafter-input: assertDrafterInput throws on missing required field "planPath" (WRTE-01)',
   { skip },
   async () => {
-    // @ts-expect-error — bin/lib/drafter-input.ts lands in Wave 4 (WRTE-01)
+    // Production module now exists (Plan 03-07 Task 7.1) — @ts-expect-error removed.
     const { assertDrafterInput } = await import('../bin/lib/drafter-input.js');
     const missingPlanPath = { sources: [], wordTarget: 300, voiceHint: '' };
     assert.throws(
@@ -73,7 +73,7 @@ test('drafter-input: assertDrafterInput throws on missing required field "planPa
 test('drafter-input: property — forall input with extra key, assertDrafterInput throws (WRTE-01)',
   { skip },
   async () => {
-    // @ts-expect-error — bin/lib/drafter-input.ts lands in Wave 4 (WRTE-01)
+    // Production module now exists (Plan 03-07 Task 7.1) — @ts-expect-error removed.
     const { assertDrafterInput } = await import('../bin/lib/drafter-input.js');
     // Known-bad extra keys that are NOT in the allowed list.
     const EXTRA_KEYS = ['cwd', 'env', 'fullSourcePool', 'paperDir', 'sessionId', 'allSections'];
