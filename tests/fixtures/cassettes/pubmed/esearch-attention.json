@@ -1,0 +1,18 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=attention+mechanisms+neural+networks&retmode=json&retmax=20",
+    "status": 200,
+    "response": {
+      "header": { "type": "esearch", "version": "0.3" },
+      "esearchresult": {
+        "count": "3",
+        "retmax": "3",
+        "retstart": "0",
+        "idlist": ["31523199", "32165635", "32721264"]
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]

@@ -177,6 +177,8 @@ export type HttpSource =
   | 'unpaywall'
   | 'arxiv'
   | 'pubmed'
+  | 'semanticscholar'
+  | 'retraction-watch'
   | 'generic';
 
 export interface HttpResponse {
@@ -215,6 +217,8 @@ const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
   arxiv: 7 * ONE_DAY_MS,
   pubmed: 7 * ONE_DAY_MS,
   unpaywall: 1 * ONE_DAY_MS,
+  semanticscholar: 7 * ONE_DAY_MS,
+  'retraction-watch': 1 * ONE_DAY_MS,
   generic: 1 * ONE_DAY_MS,
 };
 // WR-07 (cross-AI review): 404 responses are cached so the verifier doesn't
@@ -236,6 +240,12 @@ const RPS_BY_SOURCE: Record<HttpSource, number> = {
   unpaywall: 10,
   arxiv: 1,
   pubmed: 3,
+  // S2 anonymous rate-limit is 100 RPM (~1.7 RPS); keep conservative at 1 RPS.
+  // With an API key it bumps to 1 RPS per partner (same effective limit here).
+  semanticscholar: 1,
+  // Retraction Watch (Crossref Labs) — used only as a side-channel filter,
+  // call volume is minimal; mirror unpaywall budget.
+  'retraction-watch': 10,
   generic: 5,
 };
 

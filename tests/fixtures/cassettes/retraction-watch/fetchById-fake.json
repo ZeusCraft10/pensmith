@@ -1,0 +1,21 @@
+[
+  {
+    "scope": "https://api.labs.crossref.org",
+    "method": "GET",
+    "path": "/data/retractions?filter=record:10.0000/test",
+    "status": 200,
+    "response": {
+      "items": [
+        {
+          "doi": "10.0000/test",
+          "title": "A Fake Retracted Paper (Synthetic Fixture)",
+          "authors": [{ "given": "John", "family": "Doe" }],
+          "year": 2010,
+          "retractedDate": "2015-03-15",
+          "reason": "fabricated data"
+        }
+      ]
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]

@@ -91,18 +91,18 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 
 ### Research
 
-- [ ] **RSCH-01**: Topic disambiguation gate (tiny subagent) for ambiguous terms before query generation
-- [ ] **RSCH-02**: Generate 5–10 focused queries from the assignment
-- [ ] **RSCH-03**: `pensmith-source-researcher` runs in parallel per query (Tier 1) / sequentially (Tier 2)
-- [ ] **RSCH-04**: Source adapters in `bin/lib/sources.ts` for OpenAlex, Crossref, arXiv, PubMed, Semantic Scholar, Unpaywall, Retraction Watch
+- [x] **RSCH-01**: Topic disambiguation gate (tiny subagent) for ambiguous terms before query generation
+- [x] **RSCH-02**: Generate 5–10 focused queries from the assignment
+- [x] **RSCH-03**: `pensmith-source-researcher` runs in parallel per query (Tier 1) / sequentially (Tier 2)
+- [x] **RSCH-04**: Source adapters in `bin/lib/sources.ts` for OpenAlex, Crossref, arXiv, PubMed, Semantic Scholar, Unpaywall, Retraction Watch
 - [ ] **RSCH-05a**: Phase 3 subset — `pdf-parse` (pinned exact, wrapped by `bin/lib/pdf-text.ts` chokepoint) extracts text from Unpaywall-resolved OA PDFs for Pass 3 quote verification. NO BYO PDF; NO `pymupdf` fallback; NO Crossref hydration of arbitrary PDFs — those stay RSCH-05b (Phase 8). Split per Phase 3 CONTEXT D-06/D-07.
 - [ ] **RSCH-05b**: Phase 8 superset — BYO PDF ingestion (user-supplied arbitrary PDFs); `pymupdf` shellout fallback when `pdf-parse` fails; metadata hydration via Crossref. Builds on the RSCH-05a chokepoint from Phase 3.
 - [ ] **RSCH-06**: Zotero MCP source provider when detected and authenticated
-- [ ] **RSCH-07**: `pensmith-source-evaluator` scores, dedupes, tiers candidates
+- [x] **RSCH-07**: `pensmith-source-evaluator` scores, dedupes, tiers candidates
 - [ ] **RSCH-08**: Approval gate to prune / approve / add sources before research is locked
-- [ ] **RSCH-09**: Write `.paper/RESEARCH.md` and `.paper/CITATIONS.bib` with `last_verified` timestamps per source
+- [x] **RSCH-09**: Write `.paper/RESEARCH.md` and `.paper/CITATIONS.bib` with `last_verified` timestamps per source
 - [ ] **RSCH-10**: Auto-recheck sources older than `recheck_after_days` (default 30)
-- [ ] **RSCH-11**: Retraction Watch hard warnings on any retracted DOI
+- [x] **RSCH-11**: Retraction Watch hard warnings on any retracted DOI
 
 ### Outline
 
@@ -130,7 +130,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [ ] **VRFY-01**: Pass 1 — DOI / arXiv / PMID re-fetch via Crossref / arXiv / PubMed; 404 → FABRICATED (deterministic, blocking)
 - [ ] **VRFY-02**: Pass 1 — author / title / year fuzzy match (Jaro-Winkler / Fuse.js); mismatch → MIS-CITED (deterministic, blocking)
 - [ ] **VRFY-03**: Pass 2 — claim support (LLM-judged), verdict ∈ {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}, prompt calibrated UNCLEAR-bias (advisory)
-- [ ] **VRFY-04**: Pass 3 — quotation verification, OA full-text via Unpaywall, tiered exact → Levenshtein-≥0.95 substring match with NFKC Unicode normalization both sides; PASS / NOT_FOUND / FUZZY_MATCH (deterministic, blocking)
+- [x] **VRFY-04**: Pass 3 — quotation verification, OA full-text via Unpaywall, tiered exact → Levenshtein-≥0.95 substring match with NFKC Unicode normalization both sides; PASS / NOT_FOUND / FUZZY_MATCH (deterministic, blocking)
 - [ ] **VRFY-05**: Pass 3 — strip soft hyphens, decompose known ligatures, canonicalize smart quotes / em-dash / ellipsis / diacritics; minimum quote length ≥10 words for fuzzy
 - [ ] **VRFY-06**: Pass 4 — per-paragraph orphan-claim audit. The claim-extraction step is deterministic (pure-Node, paragraph→claim regex/grammar pipeline) per PRD §14 "Determinism where it counts." The orphan-vs-cited judgment compares extracted claims to in-text citations deterministically; LLM is used only for *labeling* edge cases (e.g., "is this a claim or a definition?") and remains advisory. Verdict is written to `sections/<N>/VERIFICATION.md` and never auto-blocks compile or export — but presence of any orphan claims feeds the §7.9 export-confirmation gate (`DONE-09`).
 - [ ] **VRFY-07**: Section marked `verified` only when Pass 1 + Pass 3 are clean (Pass 2 / Pass 4 verdicts are advisory)
@@ -293,15 +293,15 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | INTK-03 | Phase 3 | Pending |
 | INTK-04 | Phase 3 | Pending |
 | INTK-05 | Phase 3 | Pending |
-| RSCH-01 | Phase 3 | Pending |
-| RSCH-02 | Phase 3 | Pending |
-| RSCH-03 | Phase 3 | Pending |
-| RSCH-04 | Phase 3 | Pending |
+| RSCH-01 | Phase 3 | Complete |
+| RSCH-02 | Phase 3 | Complete |
+| RSCH-03 | Phase 3 | Complete |
+| RSCH-04 | Phase 3 | Complete |
 | RSCH-05a | Phase 3 | Pending (Phase-3 subset per CONTEXT D-06; full BYO PDF + pymupdf stays RSCH-05b in Phase 8) |
-| RSCH-07 | Phase 3 | Pending |
+| RSCH-07 | Phase 3 | Complete |
 | RSCH-08 | Phase 3 | Pending |
-| RSCH-09 | Phase 3 | Pending |
-| RSCH-11 | Phase 3 | Pending |
+| RSCH-09 | Phase 3 | Complete |
+| RSCH-11 | Phase 3 | Complete |
 | OUTL-01 | Phase 3 | Pending |
 | OUTL-02 | Phase 3 | Pending |
 | OUTL-03 | Phase 3 | Pending |
@@ -313,7 +313,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | WRTE-04 | Phase 3 | Pending |
 | VRFY-01 | Phase 3 | Pending |
 | VRFY-02 | Phase 3 | Pending |
-| VRFY-04 | Phase 3 | Pending |
+| VRFY-04 | Phase 3 | Complete |
 | VRFY-05 | Phase 3 | Pending |
 | VRFY-07 | Phase 3 | Pending |
 | VRFY-08 | Phase 3 | Pending |

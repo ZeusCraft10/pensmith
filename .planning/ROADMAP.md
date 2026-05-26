@@ -127,11 +127,11 @@ Plans:
 **Plans:** 10 plans
 
 Plans:
-- [ ] 03-00-PLAN.md (wave 0) -- Test bootstrap: pdf-parse@1.1.1 + citation-js@0.7.22 + yaml@^2 pinned, ESLint chokepoints extended, 14 new test files + 5 extensions, 3 fixture artifacts (assignment.txt, known-bad-citations.json, known-bad-quotes.json), DOCT-05 anti-drift removed
-- [ ] 03-01-PLAN.md (wave 1) -- bin/lib/normalize.ts + bin/lib/fuzzy.ts hand-rolled (NFKC, JW 0.92/0.85, Levenshtein-substring, zero-dep) (D-11, VRFY-02/04)
-- [ ] 03-02-PLAN.md (wave 1) -- bin/lib/pdf-text.ts + bin/lib/citations.ts chokepoints (D-06 sub-path import workaround, D-19 citation-js lazy plugin pattern) + synthetic PDF fixtures
-- [ ] 03-03-PLAN.md (wave 2) -- 4 zod schemas (SourceCandidate D-14, Handoff D-17/18, PlanFrontmatter D-04/10, slimmed State D-08) + CURRENT_STATE_VERSION 1->2 + v1->v2 migration wake + state.ts writeBack + paths.ts section helpers (T-3-12 slug regex) + runtime.ts getS2ApiKey (D-16, T-01-07)
-- [ ] 03-04-PLAN.md (wave 3) -- 7 source adapters (crossref/openalex/arxiv/pubmed/semanticscholar/unpaywall/retraction-watch) + http-mock cassette loader + 8 committed cassettes (D-23/24/25)
+- [x] 03-00-PLAN.md (wave 0) -- Test bootstrap: pdf-parse@1.1.1 + citation-js@0.7.22 + yaml@^2 pinned, ESLint chokepoints extended, 14 new test files + 5 extensions, 3 fixture artifacts (assignment.txt, known-bad-citations.json, known-bad-quotes.json), DOCT-05 anti-drift removed
+- [x] 03-01-PLAN.md (wave 1) -- bin/lib/normalize.ts + bin/lib/fuzzy.ts hand-rolled (NFKC, JW 0.92/0.85, Levenshtein-substring, zero-dep) (D-11, VRFY-02/04)
+- [x] 03-02-PLAN.md (wave 1) -- bin/lib/pdf-text.ts + bin/lib/citations.ts chokepoints (D-06 sub-path import workaround, D-19 citation-js lazy plugin pattern) + synthetic PDF fixtures
+- [x] 03-03-PLAN.md (wave 2) -- 4 zod schemas (SourceCandidate D-14, Handoff D-17/18, PlanFrontmatter D-04/10, slimmed State D-08) + CURRENT_STATE_VERSION 1->2 + v1->v2 migration wake + state.ts writeBack + paths.ts section helpers (T-3-12 slug regex) + runtime.ts getS2ApiKey (D-16, T-01-07)
+- [x] 03-04-PLAN.md (wave 3) -- 7 source adapters (crossref/openalex/arxiv/pubmed/semanticscholar/unpaywall/retraction-watch) + http-mock cassette loader + 8 committed cassettes (D-23/24/25)
 - [ ] 03-05-PLAN.md (wave 4) -- 8 hash-pinned prompts in templates/prompts/ + apa.csl + disciplines.json preset + 9 new hash-pins (D-12, D-13, D-19, INTK-04)
 - [ ] 03-06-PLAN.md (wave 4) -- 6 workflow bodies (intake/research/outline/plan/write/verify) with capability_checks + outline approval gate + retraction cross-check + deterministic-first verify (PRD non-negotiables)
 - [ ] 03-07-PLAN.md (wave 4) -- bin/pensmith.ts 7 verb loaders + 6 bin/cli/*.ts entrypoints + drafter-input chokepoint (T-3-10) + prompt-loader (hash-validated at runtime) + mcp/server.ts 3 new tool handlers

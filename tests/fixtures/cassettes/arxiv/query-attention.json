@@ -1,0 +1,18 @@
+[
+  {
+    "scope": "http://export.arxiv.org",
+    "method": "GET",
+    "path": "/api/query?search_query=attention+mechanisms+transformers&max_results=20",
+    "status": 200,
+    "response": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\">\n<title>arXiv Query Results</title>\n<entry>\n<id>http://arxiv.org/abs/1706.03762v5</id>\n<title>Attention Is All You Need</title>\n<published>2017-06-12T00:00:00Z</published>\n<author><name>Ashish Vaswani</name></author>\n<author><name>Noam Shazeer</name></author>\n<author><name>Niki Parmar</name></author>\n<arxiv:doi xmlns:arxiv=\"http://arxiv.org/schemas/atom\">10.48550/arXiv.1706.03762</arxiv:doi>\n</entry>\n<entry>\n<id>http://arxiv.org/abs/1810.04805v2</id>\n<title>BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding</title>\n<published>2018-10-11T00:00:00Z</published>\n<author><name>Jacob Devlin</name></author>\n<author><name>Ming-Wei Chang</name></author>\n<arxiv:doi xmlns:arxiv=\"http://arxiv.org/schemas/atom\">10.48550/arXiv.1810.04805</arxiv:doi>\n</entry>\n<entry>\n<id>http://arxiv.org/abs/2005.14165v4</id>\n<title>Language Models are Few-Shot Learners</title>\n<published>2020-05-28T00:00:00Z</published>\n<author><name>Tom B. Brown</name></author>\n<author><name>Benjamin Mann</name></author>\n<arxiv:doi xmlns:arxiv=\"http://arxiv.org/schemas/atom\">10.48550/arXiv.2005.14165</arxiv:doi>\n</entry>\n</feed>",
+    "responseHeaders": { "content-type": "application/atom+xml" }
+  },
+  {
+    "scope": "http://export.arxiv.org",
+    "method": "GET",
+    "path": "/api/query?id_list=1706.03762",
+    "status": 200,
+    "response": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\">\n<entry>\n<id>http://arxiv.org/abs/1706.03762v5</id>\n<title>Attention Is All You Need</title>\n<published>2017-06-12T00:00:00Z</published>\n<author><name>Ashish Vaswani</name></author>\n<arxiv:doi xmlns:arxiv=\"http://arxiv.org/schemas/atom\">10.48550/arXiv.1706.03762</arxiv:doi>\n</entry>\n</feed>",
+    "responseHeaders": { "content-type": "application/atom+xml" }
+  }
+]
