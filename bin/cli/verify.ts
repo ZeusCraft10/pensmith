@@ -5,11 +5,12 @@
 // deterministic in Phase 3. It calls `runPass1` from bin/lib/verify/pass1.ts
 // and `runPass3` from bin/lib/verify/pass3.ts, aggregates the per-citekey
 // verdicts, and writes VERIFICATION.md via template-literal narration
-// (NOT via loadPrompt). The hash-pinned `pass1-fuzzy-judge.md` /
-// `pass3-quote-checker.md` prompts exist as Phase-8 tie-break calibration
+// (NOT via any prompt-loader call). The hash-pinned `pass1-fuzzy-judge.md`
+// and `pass3-quote-checker.md` prompts exist as Phase-8 tie-break calibration
 // artifacts and MUST NOT be invoked here. The D-13 LOCKED grep chokepoint
-// in Plan 03-07 Task 7.2 (`grep -c loadPrompt bin/cli/verify.ts` returns 0)
-// is the gate.
+// in Plan 03-07 Task 7.2 enforces this: a literal-string search for the
+// prompt-loader symbol against this file MUST return 0 hits (including
+// this comment — hence the paraphrase above).
 //
 // Pipeline:
 //   1. Read DRAFT.md for section N
