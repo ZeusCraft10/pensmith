@@ -87,7 +87,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [x] **INTK-02**: AskUserQuestion clarifying questions (or stdin fallback in Tier 2): discipline preset, mode, goal, class, counterargument, style-match opt-in, PII redaction opt-in
 - [x] **INTK-03**: Discipline presets ship for CS, Bio, History, Lit, Psych, Econ, Philosophy, Other — each setting citation style + source preference + sectioning + counterargument default + density target
 - [x] **INTK-04**: Print disclaimer to stdout; write `.paper/PROJECT.md` and `.paper/config.toml` atomically
-- [ ] **INTK-05**: Run PII redaction before any LLM call when opted in
+- [x] **INTK-05**: Run PII redaction before any LLM call when opted in
 
 ### Research
 
@@ -99,7 +99,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [ ] **RSCH-05b**: Phase 8 superset — BYO PDF ingestion (user-supplied arbitrary PDFs); `pymupdf` shellout fallback when `pdf-parse` fails; metadata hydration via Crossref. Builds on the RSCH-05a chokepoint from Phase 3.
 - [ ] **RSCH-06**: Zotero MCP source provider when detected and authenticated
 - [x] **RSCH-07**: `pensmith-source-evaluator` scores, dedupes, tiers candidates
-- [ ] **RSCH-08**: Approval gate to prune / approve / add sources before research is locked
+- [x] **RSCH-08**: Approval gate to prune / approve / add sources before research is locked
 - [x] **RSCH-09**: Write `.paper/RESEARCH.md` and `.paper/CITATIONS.bib` with `last_verified` timestamps per source
 - [ ] **RSCH-10**: Auto-recheck sources older than `recheck_after_days` (default 30)
 - [x] **RSCH-11**: Retraction Watch hard warnings on any retracted DOI
@@ -108,15 +108,15 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 
 - [x] **OUTL-01**: Produce section structure with thesis, target word count, source-mapping per section, and `depends_on` declarations
 - [x] **OUTL-02**: Counterargument enforcement for argumentative/persuasive papers (configurable per intake; `--no-counter` to disable)
-- [ ] **OUTL-03**: Approval gate before any section is written (skipped only with `--yolo`)
-- [ ] **OUTL-04**: Create numbered `.paper/sections/<NN-slug>/` folders with stub `PLAN.md` per section
+- [x] **OUTL-03**: Approval gate before any section is written (skipped only with `--yolo`)
+- [x] **OUTL-04**: Create numbered `.paper/sections/<NN-slug>/` folders with stub `PLAN.md` per section
 
 ### Plan Section
 
 - [x] **PLAN-01**: `pensmith plan <N>` reads stub PLAN.md, maps claims → sources, identifies counterexamples
 - [ ] **PLAN-02**: `--revise` flag re-plans based on verification feedback
 - [ ] **PLAN-03**: `--research <query>` triggers section-scoped additional research without disturbing other sections
-- [ ] **PLAN-04**: Write `.paper/sections/<N>/PLAN.md` with claim-source mapping, paragraph structure, voice hints
+- [x] **PLAN-04**: Write `.paper/sections/<N>/PLAN.md` with claim-source mapping, paragraph structure, voice hints
 
 ### Write Section
 
@@ -128,13 +128,13 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 ### Verify Section (Bounded)
 
 - [x] **VRFY-01**: Pass 1 — DOI / arXiv / PMID re-fetch via Crossref / arXiv / PubMed; 404 → FABRICATED (deterministic, blocking)
-- [ ] **VRFY-02**: Pass 1 — author / title / year fuzzy match (Jaro-Winkler / Fuse.js); mismatch → MIS-CITED (deterministic, blocking)
+- [x] **VRFY-02**: Pass 1 — author / title / year fuzzy match (Jaro-Winkler / Fuse.js); mismatch → MIS-CITED (deterministic, blocking)
 - [ ] **VRFY-03**: Pass 2 — claim support (LLM-judged), verdict ∈ {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}, prompt calibrated UNCLEAR-bias (advisory)
 - [x] **VRFY-04**: Pass 3 — quotation verification, OA full-text via Unpaywall, tiered exact → Levenshtein-≥0.95 substring match with NFKC Unicode normalization both sides; PASS / NOT_FOUND / FUZZY_MATCH (deterministic, blocking)
 - [x] **VRFY-05**: Pass 3 — strip soft hyphens, decompose known ligatures, canonicalize smart quotes / em-dash / ellipsis / diacritics; minimum quote length ≥10 words for fuzzy
 - [ ] **VRFY-06**: Pass 4 — per-paragraph orphan-claim audit. The claim-extraction step is deterministic (pure-Node, paragraph→claim regex/grammar pipeline) per PRD §14 "Determinism where it counts." The orphan-vs-cited judgment compares extracted claims to in-text citations deterministically; LLM is used only for *labeling* edge cases (e.g., "is this a claim or a definition?") and remains advisory. Verdict is written to `sections/<N>/VERIFICATION.md` and never auto-blocks compile or export — but presence of any orphan claims feeds the §7.9 export-confirmation gate (`DONE-09`).
-- [ ] **VRFY-07**: Section marked `verified` only when Pass 1 + Pass 3 are clean (Pass 2 / Pass 4 verdicts are advisory)
-- [ ] **VRFY-08**: `last_verified` timestamps written per citation; auto-recheck on stale
+- [x] **VRFY-07**: Section marked `verified` only when Pass 1 + Pass 3 are clean (Pass 2 / Pass 4 verdicts are advisory)
+- [x] **VRFY-08**: `last_verified` timestamps written per citation; auto-recheck on stale
 
 ### Compile
 
@@ -174,17 +174,17 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 
 ### Citation Styles
 
-- [x] **CITE-01**: APA 7 ships in v0.1.0 vertical slice (Phase 3)
+- [ ] **CITE-01**: APA 7 ships in v0.1.0 vertical slice (Phase 3)
 - [ ] **CITE-02**: MLA, Chicago (notes-bib + author-date), IEEE, AMA, Vancouver supported via CSL
 - [ ] **CITE-03**: Harvard citation style supported (table stakes for UK/AU readers) `[research]`
-- [x] **CITE-04**: Citation engine is `citation-js` + bundled CSL files in `templates/citation-styles/` — unlocks 10,000+ styles via citeproc-js `[research]`
+- [ ] **CITE-04**: Citation engine is `citation-js` + bundled CSL files in `templates/citation-styles/` — unlocks 10,000+ styles via citeproc-js `[research]`
 - [ ] **CITE-05**: RIS export alongside BibTeX for Mendeley/EndNote interop `[research]`
 
 ### Testing & Determinism
 
 - [ ] **TEST-01**: `tests/fixtures/known-bad-citations.json` — 10+ fabricated DOIs; verifier flags 10/10 as FABRICATED
 - [ ] **TEST-02**: `tests/fixtures/known-bad-quotes.json` — 10+ NOT_FOUND fixtures, of which ≥5 carry PDF artifacts (ligature, soft hyphen, smart quotes, ellipsis variant, diacritic) `[research]`
-- [x] **TEST-03**: Cassette-based source tests via `nock` / `nockBack`; live-network tests gated behind `PENSMITH_NETWORK_TESTS=1`
+- [ ] **TEST-03**: Cassette-based source tests via `nock` / `nockBack`; live-network tests gated behind `PENSMITH_NETWORK_TESTS=1`
 - [ ] **TEST-04**: Cassette fixtures include 429 / 503 / Retry-After cases for HTTP client `[research]`
 - [ ] **TEST-05**: Foundation libs unit-tested: paths, atomic-write, lock, doi, http, budget, migrations loader, pii, session-log, state, library, checkpoint, runtime
 - [ ] **TEST-06**: DOI normalization round-trip property test (idempotence)
@@ -292,36 +292,36 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | INTK-02 | Phase 3 | Complete |
 | INTK-03 | Phase 3 | Complete |
 | INTK-04 | Phase 3 | Complete |
-| INTK-05 | Phase 3 | Pending |
+| INTK-05 | Phase 3 | Complete |
 | RSCH-01 | Phase 3 | Complete |
 | RSCH-02 | Phase 3 | Complete |
 | RSCH-03 | Phase 3 | Complete |
 | RSCH-04 | Phase 3 | Complete |
 | RSCH-05a | Phase 3 | Pending (Phase-3 subset per CONTEXT D-06; full BYO PDF + pymupdf stays RSCH-05b in Phase 8) |
 | RSCH-07 | Phase 3 | Complete |
-| RSCH-08 | Phase 3 | Pending |
+| RSCH-08 | Phase 3 | Complete |
 | RSCH-09 | Phase 3 | Complete |
 | RSCH-11 | Phase 3 | Complete |
 | OUTL-01 | Phase 3 | Complete |
 | OUTL-02 | Phase 3 | Complete |
-| OUTL-03 | Phase 3 | Pending |
-| OUTL-04 | Phase 3 | Pending |
+| OUTL-03 | Phase 3 | Complete |
+| OUTL-04 | Phase 3 | Complete |
 | PLAN-01 | Phase 3 | Complete |
-| PLAN-04 | Phase 3 | Pending |
+| PLAN-04 | Phase 3 | Complete |
 | WRTE-01 | Phase 3 | Complete |
 | WRTE-03 | Phase 3 | Complete |
 | WRTE-04 | Phase 3 | Pending |
 | VRFY-01 | Phase 3 | Complete |
-| VRFY-02 | Phase 3 | Pending |
+| VRFY-02 | Phase 3 | Complete |
 | VRFY-04 | Phase 3 | Complete |
 | VRFY-05 | Phase 3 | Complete |
-| VRFY-07 | Phase 3 | Pending |
-| VRFY-08 | Phase 3 | Pending |
-| CITE-01 | Phase 3 | Complete |
-| CITE-04 | Phase 3 | Complete |
+| VRFY-07 | Phase 3 | Complete |
+| VRFY-08 | Phase 3 | Complete |
+| CITE-01 | Phase 3 | Pending |
+| CITE-04 | Phase 3 | Pending |
 | TEST-01 | Phase 3 | Pending |
 | TEST-02 | Phase 3 | Pending |
-| TEST-03 | Phase 3 | Complete |
+| TEST-03 | Phase 3 | Pending |
 | TEST-04 | Phase 3 | Pending |
 | TEST-09 | Phase 3 | Pending |
 | ARCH-19 | Phase 4 | Pending |
