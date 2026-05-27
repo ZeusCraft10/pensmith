@@ -36,8 +36,7 @@ test('handoff-size: HANDOFF.json size < 5120 bytes after pre-compact hook runs (
       sections: [],
     }));
 
-    // Dynamically import and call the pre-compact hook.
-    // @ts-expect-error — onPreCompact lands in Wave 4 when pre-compact body is wired (D-17)
+    // Dynamically import and call the pre-compact hook (Wave 5 Plan 03-08 landed onPreCompact).
     const { onPreCompact } = await import('../hooks/pre-compact.js');
     await onPreCompact({ paperDir });
 
