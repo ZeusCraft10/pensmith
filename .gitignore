@@ -25,11 +25,15 @@ coverage/
 # in finally blocks, but a crash mid-test could leave stale files behind.
 mcp/__fixtures__/
 
-# Phase-1+ runtime artifacts (not in Phase 0 yet, but document the intent)
-# .paper/        # active paper workspace — created by `pensmith new`
-# ~/.pensmith/   # global library — outside repo, listed for awareness only
+# Runtime artifacts
+# .paper/ is the active paper workspace created by `pensmith new`.
+# ~/.pensmith/ is the global library — outside the repo, listed for awareness only.
+.paper/
 
 # Local-only
 .env
 .env.local
 *.log
+.claude/
+.planning/graphs/
+graphify-out/
