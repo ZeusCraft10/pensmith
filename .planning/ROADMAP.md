@@ -136,7 +136,7 @@ Plans:
 - [x] 03-06-PLAN.md (wave 4) -- 6 workflow bodies (intake/research/outline/plan/write/verify) with capability_checks + outline approval gate + retraction cross-check + deterministic-first verify (PRD non-negotiables)
 - [x] 03-07-PLAN.md (wave 4) -- bin/pensmith.ts 7 verb loaders + 6 bin/cli/*.ts entrypoints + drafter-input chokepoint (T-3-10) + prompt-loader (hash-validated at runtime) + mcp/server.ts 3 new tool handlers
 - [x] 03-08-PLAN.md (wave 5) -- bin/lib/handoff.ts (atomic write, 5KB cap, withLock) + bin/lib/frontmatter.ts (yaml@^2 Document API round-trip safe, D-08) + pre-compact hook + post-tool-use throttle
-- [ ] 03-09-PLAN.md (wave 5) -- DOCT-05 probe + references/doctor-output.md re-pinned + 6 new tier-contract cases + section-isolation/known-bad-* tests green + cassette-refresh.yml weekly cron + CONTRIBUTING.md docs + human-verify checkpoint (SC-1)
+- [x] 03-09-PLAN.md (wave 5) -- DOCT-05 probe + references/doctor-output.md re-pinned + 6 new tier-contract cases + section-isolation/known-bad-* tests green + cassette-refresh.yml weekly cron + CONTRIBUTING.md docs + human-verify checkpoint (SC-1)
 
 
 ### Phase 4: Breadth — N sections + compile + wave scheduling
