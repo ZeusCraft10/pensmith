@@ -1,16 +1,24 @@
 // tests/cli-stubs.test.ts
 //
-// TIER-04: 15 stub verbs exit 0 with 'not implemented yet'.
+// TIER-04: stub verbs exit 0 with 'not implemented yet'.
+//
+// Plan 03-09 Task 9.1 update: the 6 Phase-3 per-section verbs
+// (new, research, outline, plan, write, verify) graduated from stub to real
+// in Plans 03-06/07. They are exercised by tier-contract.test.ts now. This
+// test still asserts that the remaining 9 unimplemented UX-02 verbs are
+// stub-routed (TIER-04 invariant — `pensmith <unimplemented-verb>` MUST exit
+// 0 with the canonical "not implemented yet" string so users see a clean
+// landing page instead of a citty crash).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
-// 15 stubs (UX-02 minus `doctor` which is the only real verb in Phase 2).
+// 9 remaining stubs after Phase 3 (UX-02 minus the 6 real per-section verbs
+// and minus `doctor`).
 const STUBS = [
-  'new', 'next', 'status', 'research', 'outline', 'plan', 'write',
-  'verify', 'compile', 'done', 'resume', 'list', 'open', 'sketch', 'add',
+  'next', 'status', 'compile', 'done', 'resume', 'list', 'open', 'sketch', 'add',
 ];
 
 // Resolve the built binary; build is a precondition (run npm run build first).

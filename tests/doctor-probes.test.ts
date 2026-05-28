@@ -173,7 +173,7 @@ test('D-19: runDoctor is read-only — does not create files in the configured p
   assert.deepEqual(after, before, 'D-19: doctor MUST NOT create files under the paper root');
 });
 
-test('D-20: runDoctor returns Record keyed by probe.id (10 probes)', async () => {
+test('D-20: runDoctor returns Record keyed by probe.id (11 probes)', async () => {
   const r = await runDoctor();
   assert.ok(!Array.isArray(r), 'must be object, not array');
   assert.ok('node-version' in r);
@@ -186,5 +186,7 @@ test('D-20: runDoctor returns Record keyed by probe.id (10 probes)', async () =>
   assert.ok('runtime-config-presence' in r);
   assert.ok('build-artifact-resolves' in r);
   assert.ok('http-crossref-ping' in r);
-  assert.equal(Object.keys(r).length, 10, 'expected exactly 10 probes');
+  // DOCT-05 (Plan 03-09 Task 9.1) — the real intake/outline/verify wiring probe.
+  assert.ok('intake-outline-verify-wiring' in r);
+  assert.equal(Object.keys(r).length, 11, 'expected exactly 11 probes');
 });
