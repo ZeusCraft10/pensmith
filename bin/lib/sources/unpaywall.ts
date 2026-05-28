@@ -17,7 +17,14 @@ import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
 const BASE = 'https://api.unpaywall.org';
-const EMAIL = 'akhilachanta8@gmail.com';
+
+// CR-03 fix: read contact email lazily at URL-build time. When
+// PENSMITH_CONTACT_EMAIL is unset, OMIT the ?email= param entirely —
+// http.ts:166 documents the no-contact degradation banner.
+function emailParam(prefix: '&' | '?' = '?'): string {
+  const email = process.env['PENSMITH_CONTACT_EMAIL']?.trim();
+  return email ? `${prefix}email=${encodeURIComponent(email)}` : '';
+}
 
 interface UnpaywallAuthor {
   given?: string;
@@ -128,7 +135,7 @@ export async function fetchById(doi: string): Promise<SourceCandidate | null> {
     return first ? toCandidate(first.response as UnpaywallResponse) : null;
   }
 
-  const url = `${BASE}/v2/${encodeURIComponent(doi)}?email=${encodeURIComponent(EMAIL)}`;
+  const url = `${BASE}/v2/${encodeURIComponent(doi)}${emailParam('?')}`;
   try {
     const res = await httpFetch(url, { source: 'unpaywall' });
     if (res.status !== 200) return null;

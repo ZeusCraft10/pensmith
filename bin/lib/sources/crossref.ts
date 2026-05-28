@@ -22,7 +22,9 @@ import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
 const BASE = 'https://api.crossref.org';
-const UA = 'pensmith/0.x (mailto:akhilachanta8@gmail.com)';
+// CR-03 fix: remove module-level hard-coded UA. bin/lib/http.ts already
+// owns the polite-pool UA — it reads PENSMITH_CONTACT_EMAIL at request
+// time and warns once when unset.
 
 interface CrossrefItem {
   DOI?: string;
@@ -103,7 +105,6 @@ export async function search(
   try {
     const res = await httpFetch(url, {
       source: 'crossref',
-      headers: { 'user-agent': UA },
     });
     if (res.status !== 200) return [];
     const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
@@ -141,7 +142,6 @@ export async function fetchById(doi: string): Promise<SourceCandidate | null> {
   try {
     const res = await httpFetch(url, {
       source: 'crossref',
-      headers: { 'user-agent': UA },
     });
     if (res.status !== 200) return null;
     const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
