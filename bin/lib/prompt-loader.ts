@@ -85,14 +85,19 @@ const PKG_ROOT = findPkgRoot(__dirname);
  * sentinels are in place (CI sets this during Waves 1-7).
  */
 export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
-  'intake-clarifier':    '__PENDING_HASH_intake-clarifier__',     // D-12 LOCKED
-  'topic-disambiguator': '__PENDING_HASH_topic-disambiguator__',  // D-12 LOCKED (research split #1)
-  'source-evaluator':    '__PENDING_HASH_source-evaluator__',     // D-12 LOCKED (research split #2)
-  'outline-author':      '__PENDING_HASH_outline-author__',       // D-12 LOCKED
-  'section-planner':     '__PENDING_HASH_section-planner__',      // D-12 LOCKED
-  'section-drafter':     '__PENDING_HASH_section-drafter__',      // D-12 LOCKED
-  'pass1-fuzzy-judge':   '__PENDING_HASH_pass1-fuzzy-judge__',    // D-12 LOCKED + D-13 DORMANT in Phase 3
-  'pass3-quote-checker': '__PENDING_HASH_pass3-quote-checker__',  // D-12 LOCKED + D-13 DORMANT in Phase 3
+  // WN-3 sentinel-replacement (Plan 03-09 Task 9.3.5) — these 8 SHA-256
+  // values replace the per-slug __PENDING_HASH_<slug>__ sentinels in a single
+  // atomic commit (sentinel-replacement). The same commit updates the matching
+  // pins in tests/repo-files.test.ts PENDING_HASH_PINS — drift between the two
+  // surfaces is structurally impossible because both files re-pin together.
+  'intake-clarifier':    'bc93c546f5853196379c8958b1d8895b3cc3d0c2aabef94858e48638e181ba94',  // D-12 LOCKED
+  'topic-disambiguator': '165e533fa1119ffca44a4876212679207d65501d7b71d0b9ed9de123df84b96e',  // D-12 LOCKED (research split #1)
+  'source-evaluator':    '45488935a0bd44f08b4077978c66767f369b7fb4e72696ef5d17b5c6c453c762',  // D-12 LOCKED (research split #2)
+  'outline-author':      'f5124245f29c71de31ed2c330097d2141bba80c04d8a2d2cef955e0669068f42',  // D-12 LOCKED
+  'section-planner':     'e2991033be0f7e0b28a20ffc0bfa03355e999daf445070b709077c310d5ee5b5',  // D-12 LOCKED
+  'section-drafter':     'baf0172b4e2e96a2d2a1a6c35b5cf548faafd9436f1405e863060c619caa1d34',  // D-12 LOCKED
+  'pass1-fuzzy-judge':   'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e',  // D-12 LOCKED + D-13 DORMANT in Phase 3
+  'pass3-quote-checker': '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9',  // D-12 LOCKED + D-13 DORMANT in Phase 3
 };
 
 /**
