@@ -83,17 +83,23 @@ test('known-bad-quotes: bin/cli/verify.ts production module exists (SC-3)',
 test('known-bad-quotes: Pass-3 flags 10/10 fixtures as NOT_FOUND (SC-3, VRFY-04)',
   { skip: !existsSync(fixturePath) || !existsSync(verifyCliPath) },
   async () => {
-    // @ts-expect-error — bin/lib/verifier.ts lands in Wave 4 (SC-3, VRFY-04)
-    const { verifyPass3 } = await import('../bin/lib/verifier.js');
+    // CYCLE-2 H-4: known-bad-quotes.test.ts MUST import `runPass3Unit`
+    // (the fixture-shape helper that takes claimedQuote + pdfText directly),
+    // NOT `runPass3` (which expects DOIs, Unpaywall, extractPdfText). Each
+    // fixture row provides `actual_pdf_snippet` — the slice of the real
+    // paper that the claimed quote is being compared against. The claim is
+    // fabricated or distorted, so the levenshtein-substring ratio is below
+    // threshold → NOT_FOUND.
+    const { runPass3Unit } = await import('../bin/lib/verify/pass3.js');
     const fixtures = JSON.parse(readFileSync(fixturePath, 'utf-8')) as Array<Record<string, unknown>>;
 
     let notFoundCount = 0;
     for (const entry of fixtures) {
-      const verdict = await verifyPass3({
-        doi: entry['doi'] as string,
+      const result = runPass3Unit({
         claimedQuote: entry['claimed_quote'] as string,
+        pdfText: entry['actual_pdf_snippet'] as string,
       });
-      if (verdict === 'NOT_FOUND') {
+      if (result.verdict === 'NOT_FOUND') {
         notFoundCount++;
       }
     }
