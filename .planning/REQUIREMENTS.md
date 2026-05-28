@@ -18,9 +18,9 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 ### Architecture & Foundation
 
 - [ ] **ARCH-01**: Two-tier source-of-truth: workflow bodies + templates + agents shared between Tier 1 (Claude Code plugin) and Tier 2 (portable Node CLI)
-- [ ] **ARCH-02**: Section-as-phase directory layout — `.paper/sections/<NN-slug>/{PLAN,DRAFT,VERIFICATION}.md` per section
+- [x] **ARCH-02**: Section-as-phase directory layout — `.paper/sections/<NN-slug>/{PLAN,DRAFT,VERIFICATION}.md` per section
 - [ ] **ARCH-03**: `<capability_check>` blocks in every workflow body declare presence/absence of Task, MCP, AskUserQuestion, Pandoc, Zotero MCP, humanizer with inline fallbacks
-- [ ] **ARCH-04**: HANDOFF.json schema is section-granular and stays under 5KB (pointers, not content) `[research]`
+- [x] **ARCH-04**: HANDOFF.json schema is section-granular and stays under 5KB (pointers, not content) `[research]`
 - [ ] **ARCH-05**: All state-file writes are atomic — `write tmp` → `fsync(tmp)` → `rename` → `fsync(dir)` (via `bin/lib/atomic-write.ts`)
 - [ ] **ARCH-06**: Concurrent-run lock file in platform local-only data dir (NOT inside `.paper/`) with PID + timestamp + hostname + heartbeat; stale-lock auto-clear `[research]`
 - [ ] **ARCH-07**: Every state file declares `schema_version: 1` from day one; empty `migrations/` directory ships with v0.1.0 plus loader; refuse-forward-incompat on read
@@ -174,23 +174,23 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 
 ### Citation Styles
 
-- [ ] **CITE-01**: APA 7 ships in v0.1.0 vertical slice (Phase 3)
+- [x] **CITE-01**: APA 7 ships in v0.1.0 vertical slice (Phase 3)
 - [ ] **CITE-02**: MLA, Chicago (notes-bib + author-date), IEEE, AMA, Vancouver supported via CSL
 - [ ] **CITE-03**: Harvard citation style supported (table stakes for UK/AU readers) `[research]`
-- [ ] **CITE-04**: Citation engine is `citation-js` + bundled CSL files in `templates/citation-styles/` — unlocks 10,000+ styles via citeproc-js `[research]`
+- [x] **CITE-04**: Citation engine is `citation-js` + bundled CSL files in `templates/citation-styles/` — unlocks 10,000+ styles via citeproc-js `[research]`
 - [ ] **CITE-05**: RIS export alongside BibTeX for Mendeley/EndNote interop `[research]`
 
 ### Testing & Determinism
 
-- [ ] **TEST-01**: `tests/fixtures/known-bad-citations.json` — 10+ fabricated DOIs; verifier flags 10/10 as FABRICATED
-- [ ] **TEST-02**: `tests/fixtures/known-bad-quotes.json` — 10+ NOT_FOUND fixtures, of which ≥5 carry PDF artifacts (ligature, soft hyphen, smart quotes, ellipsis variant, diacritic) `[research]`
-- [ ] **TEST-03**: Cassette-based source tests via `nock` / `nockBack`; live-network tests gated behind `PENSMITH_NETWORK_TESTS=1`
-- [ ] **TEST-04**: Cassette fixtures include 429 / 503 / Retry-After cases for HTTP client `[research]`
+- [x] **TEST-01**: `tests/fixtures/known-bad-citations.json` — 10+ fabricated DOIs; verifier flags 10/10 as FABRICATED
+- [x] **TEST-02**: `tests/fixtures/known-bad-quotes.json` — 10+ NOT_FOUND fixtures, of which ≥5 carry PDF artifacts (ligature, soft hyphen, smart quotes, ellipsis variant, diacritic) `[research]`
+- [x] **TEST-03**: Cassette-based source tests via `nock` / `nockBack`; live-network tests gated behind `PENSMITH_NETWORK_TESTS=1`
+- [x] **TEST-04**: Cassette fixtures include 429 / 503 / Retry-After cases for HTTP client `[research]`
 - [ ] **TEST-05**: Foundation libs unit-tested: paths, atomic-write, lock, doi, http, budget, migrations loader, pii, session-log, state, library, checkpoint, runtime
 - [ ] **TEST-06**: DOI normalization round-trip property test (idempotence)
 - [ ] **TEST-07**: Lock conflict test — second runner detects + waits / aborts cleanly
 - [ ] **TEST-08**: Budget abort fires *before* the LLM call (verified with cost-fixture test)
-- [ ] **TEST-09**: Section-isolation mtime test — re-doing section 3 leaves sections 1, 2, 4, 5 untouched (mtime snapshot)
+- [x] **TEST-09**: Section-isolation mtime test — re-doing section 3 leaves sections 1, 2, 4, 5 untouched (mtime snapshot)
 - [ ] **TEST-10**: Zero-trace export test — every export format scanned for "pensmith" string and metadata fields, must be zero
 - [ ] **TEST-11**: CI matrix runs on linux-x64, macos-arm64, windows-x64
 
@@ -286,8 +286,8 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | DOCT-06 | Phase 2 | Pending |
 | DOCT-07 | Phase 2 | DONE — 02-05 |
 | DOCT-05 | Phase 3 | Pending (deferred from Phase 2 — see CONTEXT D-04) |
-| ARCH-02 | Phase 3 | Pending |
-| ARCH-04 | Phase 3 | Pending |
+| ARCH-02 | Phase 3 | Complete |
+| ARCH-04 | Phase 3 | Complete |
 | INTK-01 | Phase 3 | Complete |
 | INTK-02 | Phase 3 | Complete |
 | INTK-03 | Phase 3 | Complete |
@@ -317,13 +317,13 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | VRFY-05 | Phase 3 | Complete |
 | VRFY-07 | Phase 3 | Complete |
 | VRFY-08 | Phase 3 | Complete |
-| CITE-01 | Phase 3 | Pending |
-| CITE-04 | Phase 3 | Pending |
-| TEST-01 | Phase 3 | Pending |
-| TEST-02 | Phase 3 | Pending |
-| TEST-03 | Phase 3 | Pending |
-| TEST-04 | Phase 3 | Pending |
-| TEST-09 | Phase 3 | Pending |
+| CITE-01 | Phase 3 | Complete |
+| CITE-04 | Phase 3 | Complete |
+| TEST-01 | Phase 3 | Complete |
+| TEST-02 | Phase 3 | Complete |
+| TEST-03 | Phase 3 | Complete |
+| TEST-04 | Phase 3 | Complete |
+| TEST-09 | Phase 3 | Complete |
 | ARCH-19 | Phase 4 | Pending |
 | ARCH-20 | Phase 4 | Pending |
 | PLAN-02 | Phase 4 | Pending |

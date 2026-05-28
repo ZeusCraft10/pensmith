@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 0: Repo skeleton & plugin manifest** - Repo, plugin manifest, MCP entry, CI on three OSes, ban-list lints — COMPLETE 2026-05-07
 - [x] **Phase 1: Foundation NFRs** - paths → atomic-write → lock → doi → http → budget → migrations → pii → session-log → state/library/checkpoint → runtime, in strict order, all unit-tested — COMPLETE 2026-05-14 (VERIFICATION PASS 5/5 SCs)
 - [x] **Phase 2: Tier shells + doctor + tier-contract gate** - MCP server skeleton + Tier 2 CLI dispatcher + ecosystem probe + `/pensmith doctor` (with OneDrive detection) as first contract case — COMPLETE 2026-05-16
-- [ ] **Phase 3: Vertical slice through one section** - Single-fixture intake → research → outline → plan → write → verify, deterministic Pass 1 + Pass 3 only, APA only, both tiers
+- [x] **Phase 3: Vertical slice through one section** - Single-fixture intake → research → outline → plan → write → verify, deterministic Pass 1 + Pass 3 only, APA only, both tiers (completed 2026-05-28)
 - [ ] **Phase 4: Breadth — N sections + compile + wave scheduling** - Wave scheduler, compile pipeline, cross-section consistency flags, stable section numbering with letter suffixes
 - [ ] **Phase 5: Verifier completeness (Pass 2 + Pass 4)** - LLM-judged claim support and per-paragraph orphan-claim audit, advisory only
 - [ ] **Phase 6: Done / export pipeline + zero-trace gate** - Plagiarism, honesty, humanizer wrap, Pandoc exports, zero-trace verification test
@@ -124,7 +124,7 @@ Plans:
 **Plans**: see plan list below
 **UI hint**: no
 
-**Plans:** 10 plans
+**Plans:** 10/10 plans complete
 
 Plans:
 - [x] 03-00-PLAN.md (wave 0) -- Test bootstrap: pdf-parse@1.1.1 + citation-js@0.7.22 + yaml@^2 pinned, ESLint chokepoints extended, 14 new test files + 5 extensions, 3 fixture artifacts (assignment.txt, known-bad-citations.json, known-bad-quotes.json), DOCT-05 anti-drift removed
@@ -233,7 +233,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 0. Repo skeleton & plugin manifest | 4/4 | COMPLETE | 2026-05-07 |
 | 1. Foundation NFRs | 14/14 | COMPLETE (VERIFICATION PASS 5/5) | 2026-05-14 |
 | 2. Tier shells + doctor + tier-contract gate | 10/10 | COMPLETE | 2026-05-16 |
-| 3. Vertical slice through one section | 0/TBD | Not started | - |
+| 3. Vertical slice through one section | 10/10 | Complete    | 2026-05-28 |
 | 4. Breadth — N sections + compile + wave scheduling | 0/TBD | Not started | - |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 0/TBD | Not started | - |
 | 6. Done / export pipeline + zero-trace gate | 0/TBD | Not started | - |
