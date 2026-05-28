@@ -22,6 +22,7 @@
     "pensmith": "tsx bin/pensmith.ts",
     "validate:manifests": "node scripts/validate-plugin-manifest.cjs",
     "test:tier-contract": "node --import tsx --test tests/tier-contract/preflight.test.ts tests/tier-contract.test.ts",
+    "test:cassettes": "node --import tsx --test tests/tier-contract.test.ts",
     "check": "npm run lint && npm run typecheck && npm run build && npm run test:tier-contract && npm test && npm run validate:manifests",
     "coverage": "c8 node scripts/run-tests.mjs"
   },

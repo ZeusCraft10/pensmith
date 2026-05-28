@@ -53,7 +53,9 @@ jobs:
       - name: Re-record cassettes (live network — Crossref/OpenAlex/Unpaywall)
         env:
           PENSMITH_NETWORK_TESTS: '1'
-          PENSMITH_REFRESH_CASSETTES: '1'
+          # CR-01 fix: env name must match bin/lib/http-mock.ts:231
+          # (recordCassettes() checks PENSMITH_RECORD_CASSETTES, not _REFRESH_).
+          PENSMITH_RECORD_CASSETTES: '1'
           # Contact email is REQUIRED by Crossref/OpenAlex polite-pool policy
           # (D-15 / RESEARCH §RQ-3). Provided as a repo secret so the cron
           # identifies itself correctly to the registrars.
