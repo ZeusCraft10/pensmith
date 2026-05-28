@@ -82,7 +82,26 @@ export const verifyCommand = defineCommand({
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
 
+    // Empty / no-entry CITATIONS.bib is a valid Tier-2 placeholder state
+    // (research wrote an empty bib because no citations have been authored
+    // yet). parseBib throws on empty input per T-3-04 strict-parse mitigation,
+    // so we short-circuit here to "unverifiable: no citations to verify"
+    // rather than letting verify crash mid-pipeline. The DRAFT.md is read
+    // BEFORE the short-circuit so a draft with [@citekey] tokens against an
+    // empty bib still falls through to runPass1 (which will flag each as
+    // FABRICATED) — only the bib-empty + draft-citation-free intersection
+    // gets the short-circuit.
     const draftMd = readFileSync(draftPath, 'utf8');
+    const bibText = readFileSync(bibPath, 'utf8');
+    const draftHasCitekeys = /\[@[a-z][a-z0-9_-]*\]/i.test(draftMd);
+    const bibIsEmpty = bibText.trim().length === 0;
+    if (bibIsEmpty && !draftHasCitekeys) {
+      const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: CITATIONS.bib is empty and DRAFT.md has no [@citekey] references — nothing to verify (Tier-2 placeholder state).\n`;
+      await atomicWriteFile(verifPath, body);
+      process.stdout.write(`pensmith verify: empty bib + no draft citekeys — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
+      return { ok: false, status: 'unverifiable', path: verifPath };
+    }
+
     const pass1 = await runPass1(draftMd, bibPath);
     const bibEntries = await parseBibtex(readFileSync(bibPath, 'utf8'));
     const bibByCitekey = new Map<string, { DOI?: string }>(

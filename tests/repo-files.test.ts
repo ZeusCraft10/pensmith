@@ -145,7 +145,7 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   const hash = createHash('sha256').update(bytes).digest('hex');
   // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"`
   // after every intentional edit. The PR diff makes the change visible.
-  const PINNED = 'e1a00959050c56b18cc97804ab226577cbb26af9582b22717b21cb9a48386060';
+  const PINNED = '509f90add8664e559a3ab817684381777e1b624b63ebe0dfc77054267997eec0';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 
@@ -167,7 +167,7 @@ test('references/http-warnings.md hash-pin (IN-03 / D-24)', () => {
 
 // Coarse-grained content sentinel — catches gross removals even before the
 // hash pin gets a chance to re-fire (e.g., file wiped to empty).
-test('references/doctor-output.md retains the 7 Phase-2 probe section anchors', () => {
+test('references/doctor-output.md retains all probe section anchors (Phase 2 + Phase 3)', () => {
   const copy = read('references/doctor-output.md');
   assert.match(copy, /# Doctor Output Strings \(locked — D-18\)/);
   assert.match(copy, /node-version \(DOCT-01\)/);
@@ -178,9 +178,13 @@ test('references/doctor-output.md retains the 7 Phase-2 probe section anchors', 
   assert.match(copy, /zotero-mcp-presence \(DOCT-02 ecosystem\)/);
   assert.match(copy, /pandoc-presence \(DOCT-02 ecosystem\)/);
   assert.match(copy, /humanizer-skill-presence \(DOCT-02 ecosystem\)/);
-  // NOTE: Anti-drift assertion for DOCT-05 REMOVED in Phase 3 Plan 00 Task 0.3.
-  // DOCT-05 wiring-smoke is a Phase 3 carry-forward per D-04 — it WILL appear in Phase 3.
-  // DO NOT re-add: assert.equal(/wiring-smoke|DOCT-05/.test(copy), false, ...)
+  // Phase 2 probes added in 02-05:
+  assert.match(copy, /build-artifact-resolves/);
+  assert.match(copy, /http-crossref-ping/);
+  // Phase 3 Plan 03-09 Task 9.1: real DOCT-05 wiring-smoke anchor.
+  // The original "anti-drift block" that asserted DOCT-05 absence has been
+  // intentionally REMOVED — the probe is live now (intake-outline-verify-wiring).
+  assert.match(copy, /intake-outline-verify-wiring \(DOCT-05\)/);
 });
 
 // === Phase 3 Plan 00 Task 0.3: Active fixture hash-pins (D-01, SC-2, SC-3) ===
@@ -211,54 +215,52 @@ test('tests/fixtures/known-bad-quotes.json hash-pin (SC-3)', () => {
   assert.equal(hash, PINNED, `tests/fixtures/known-bad-quotes.json drifted from locked copy (SC-3). Update PINNED to ${hash} if the edit was intentional.`);
 });
 
-// === WN-3 LOCKED hash-pin sentinels (REVIEWS CONVERGENCE: per-slug literals) ===
-// These 9 PINNED values are per-slug `__PENDING_HASH_<slug>__` literals
-// (NOT a single global '__PENDING__') until Plan 09 Task 9.X replaces them
-// with real SHA-256 in ONE atomic commit. Per-slug literals let
-// prompt-loader.ts pattern-match the exact slug needing replacement and
-// emit a precise "Plan 09 must repin prompt: section-drafter" error
-// (rather than the ambiguous "some __PENDING__ remains").
+// === WN-3 LOCKED hash-pins — Plan 03-09 Task 9.3.5 sentinel-replacement ===
 //
-// Plans 05 and 07 MUST NOT touch this block. Single source of truth for
-// the prompt slugs is bin/lib/prompt-loader.ts EXPECTED_PROMPT_HASHES
-// (Plan 07) — the keys here MUST match that map. Drift between this file
-// and prompt-loader.ts is structurally impossible because Plan 07
-// refactors this block to import EXPECTED_PROMPT_HASHES and loop over it
-// (D-12 LOCKED).
+// The 9 PINNED entries below were per-slug `__PENDING_HASH_<slug>__` sentinels
+// during Waves 1-7. Plan 09 Task 9.3.5 replaces them ATOMICALLY with the real
+// SHA-256 of the matching file (sentinel-replacement). The same atomic commit
+// updates bin/lib/prompt-loader.ts EXPECTED_PROMPT_HASHES — drift between
+// the two surfaces is structurally impossible because both files re-pin in
+// the same commit (D-12 LOCKED).
 //
-// Env gate: PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1 lets prompt-loader.ts
-// run with sentinels in place during Plans 05-08 (gated CI). Plan 09's
-// pre-pin step asserts this env is UNSET so the hash mismatch surfaces.
-export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; decision: string }> = [
-  // CYCLE-4 M-1 REVIEWS CONVERGENCE — `export` keyword present so Plan 09 Task 9.X
+// Regeneration: if a prompt body is INTENTIONALLY edited, recompute the
+// hash with
+//   node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('<path>')).digest('hex'))"
+// and update BOTH this file AND bin/lib/prompt-loader.ts in the same commit.
+//
+// Env gate: PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1 was the Waves-1-7 bypass;
+// it has no effect now that real hashes are pinned. The test suite still
+// honors the env to keep historical CI commits replayable.
+export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; decision: string; hash: string }> = [
+  // CYCLE-4 M-1 REVIEWS CONVERGENCE — `export` keyword present so Plan 09 Task 9.3.5
   // dynamic-imports this array (not undefined); single source of truth for the 9 hash-pin slugs.
-  { slug: 'intake-clarifier',    path: 'templates/prompts/intake-clarifier.md',    decision: 'D-12' },
-  { slug: 'topic-disambiguator', path: 'templates/prompts/topic-disambiguator.md', decision: 'D-12' },
-  { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12' },
-  { slug: 'outline-author',      path: 'templates/prompts/outline-author.md',      decision: 'D-12' },
-  { slug: 'section-planner',     path: 'templates/prompts/section-planner.md',     decision: 'D-12' },
-  { slug: 'section-drafter',     path: 'templates/prompts/section-drafter.md',     decision: 'D-12' },
-  { slug: 'pass1-fuzzy-judge',   path: 'templates/prompts/pass1-fuzzy-judge.md',   decision: 'D-12 + D-13 DORMANT in Phase 3' },
-  { slug: 'pass3-quote-checker', path: 'templates/prompts/pass3-quote-checker.md', decision: 'D-12 + D-13 DORMANT in Phase 3' },
-  { slug: 'apa-csl',             path: 'templates/citation-styles/apa.csl',        decision: 'D-22 (different chokepoint)' },
+  { slug: 'intake-clarifier',    path: 'templates/prompts/intake-clarifier.md',    decision: 'D-12', hash: 'bc93c546f5853196379c8958b1d8895b3cc3d0c2aabef94858e48638e181ba94' },
+  { slug: 'topic-disambiguator', path: 'templates/prompts/topic-disambiguator.md', decision: 'D-12', hash: '165e533fa1119ffca44a4876212679207d65501d7b71d0b9ed9de123df84b96e' },
+  { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12', hash: '45488935a0bd44f08b4077978c66767f369b7fb4e72696ef5d17b5c6c453c762' },
+  { slug: 'outline-author',      path: 'templates/prompts/outline-author.md',      decision: 'D-12', hash: 'f5124245f29c71de31ed2c330097d2141bba80c04d8a2d2cef955e0669068f42' },
+  { slug: 'section-planner',     path: 'templates/prompts/section-planner.md',     decision: 'D-12', hash: 'e2991033be0f7e0b28a20ffc0bfa03355e999daf445070b709077c310d5ee5b5' },
+  { slug: 'section-drafter',     path: 'templates/prompts/section-drafter.md',     decision: 'D-12', hash: 'baf0172b4e2e96a2d2a1a6c35b5cf548faafd9436f1405e863060c619caa1d34' },
+  { slug: 'pass1-fuzzy-judge',   path: 'templates/prompts/pass1-fuzzy-judge.md',   decision: 'D-12 + D-13 DORMANT in Phase 3', hash: 'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e' },
+  { slug: 'pass3-quote-checker', path: 'templates/prompts/pass3-quote-checker.md', decision: 'D-12 + D-13 DORMANT in Phase 3', hash: '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9' },
+  { slug: 'apa-csl',             path: 'templates/citation-styles/apa.csl',        decision: 'D-22 (different chokepoint)',    hash: '249341f13df5cff992efdc71e12b9888678f8e4ad69e17fe12bd2c5245681094' },
 ];
 for (const pin of PENDING_HASH_PINS) {
-  const PINNED = `__PENDING_HASH_${pin.slug}__`;  // Plan 09 single re-pin task replaces atomically
-  const isSentinel = PINNED.startsWith('__PENDING_HASH_') && PINNED.endsWith('__');
-  test(`hash-pin sentinel: ${pin.path} (${pin.decision})`, { skip: isSentinel }, () => {
+  test(`hash-pin: ${pin.path} (${pin.decision})`, () => {
     const bytes = readFileSync(pin.path);
     const hash = createHash('sha256').update(bytes).digest('hex');
-    assert.equal(hash, PINNED, `${pin.path} drifted. Plan 09 re-pin task must update.`);
+    assert.equal(
+      hash,
+      pin.hash,
+      `${pin.path} drifted from locked SHA-256. If the edit was intentional, update PENDING_HASH_PINS hash to ${hash} AND the matching entry in bin/lib/prompt-loader.ts EXPECTED_PROMPT_HASHES in the same commit (D-12 single-source rule).`,
+    );
   });
 }
 
-// Guard: each sentinel pin file MUST exist by the time Plan 09 runs.
-// At Wave 0, the files don't exist yet — so this assertion is skip-guarded on file existence.
-// When Plan 05 lands them, these tests become real assertions.
-// Plan 09 re-pin task replaces the __PENDING_HASH_<slug>__ sentinels with real SHA-256.
+// Guard: each pinned file MUST exist after Plan 09 sentinel-replacement.
 for (const pin of PENDING_HASH_PINS) {
-  test(`hash-pin file exists: ${pin.path}`, { skip: !fs.existsSync(pin.path) }, () => {
-    assert.ok(fs.existsSync(pin.path), `MISSING: ${pin.path} — Plan 05 must create before Plan 09 re-pin`);
+  test(`hash-pin file exists: ${pin.path}`, () => {
+    assert.ok(fs.existsSync(pin.path), `MISSING: ${pin.path} — file removed after Plan 09 re-pin`);
   });
 }
 

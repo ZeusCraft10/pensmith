@@ -17,15 +17,22 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { assertEquivalent } from './lib/assert-tier-equivalent.js';
 
 const MCP_BIN = 'dist/mcp/server.js';
 const CLI_BIN = 'dist/bin/pensmith.js';
+
+// Absolute paths for use when spawning child processes with cwd != host repo
+// (the Phase-3 tier-contract cases below run the CLI in a temp .paper/ root,
+// so relative MCP_BIN/CLI_BIN paths no longer resolve).
+const MCP_BIN_ABS = resolve(MCP_BIN);
+const CLI_BIN_ABS = resolve(CLI_BIN);
 
 let client: Client;
 let transport: StdioClientTransport;
@@ -303,102 +310,238 @@ test('Case D (TIER-07): fact-set equivalence with ±20% tolerance', async () => 
 });
 
 // ============================================================================
-// Phase 3 tier-contract cases (WN-1 LOCKED)
+// Phase 3 tier-contract cases (WN-1 LOCKED, GREEN at Plan 03-09)
 // ============================================================================
 //
-// These 6 cases are RED at Wave 0 — skip-guarded on each verb's bin/cli/*.ts
-// existence. They turn GREEN as Plans 04 (research+adapters), 06 (workflow
-// bodies), and 07 (verb entrypoints) land. Plan 09 Task 9.1 removes the skip
-// guards (existence assertions graduate from todo→assert).
+// 6 per-section verb cases (intake, research, outline, plan-section,
+// write-section, verify-section) added by Plan 09 Task 9.1. Each case spawns
+// a temp .paper/ root, runs the Tier-2 CLI inside that root, optionally runs
+// the Tier-1 MCP tool against the same root (where a tool is registered),
+// then asserts on the produced JSON / file artifacts.
 //
 // D-02 LOCKED: per-section verbs MUST target the MIDDLE section.
-// Section 1 is intro-only and too thin to exercise the full claim→source→verdict path.
-// The known-good fixture seeds N=5 sections so middle = 3.
-// If you change the fixture so N != 5, recompute as MIDDLE_SECTION = String(Math.ceil(N / 2))
-// and NEVER let MIDDLE_SECTION === '1'.
+// Section 1 is intro-only and too thin to exercise the full claim→source→verdict
+// path. The known-good fixture seeds N=5 sections so middle = 3.
+// If you change the fixture so N != 5, recompute as MIDDLE_SECTION =
+// String(Math.ceil(N / 2)) and NEVER let MIDDLE_SECTION === '1'.
 const MIDDLE_SECTION = '3';  // D-02 LOCKED — derived from known-good-fixture N=5
 
-const PHASE_3_CASES = [
+// REVIEWS CONVERGENCE (OpenCode MEDIUM "tier-contract green semantics"):
+// these cases assert REAL CLI execution AND REAL MCP tool invocation against
+// the SAME temp .paper/ fixture, then assert ±20% length equivalence on the
+// resulting Markdown artifacts. Workflow-static invariants (`## Body`,
+// REAL_VERB_LOADERS keys) live in tests/workflow-static.test.ts (Plan 06) —
+// NON-OVERLAPPING contracts.
+//
+// The 3 interactive verbs (intake, research, outline) are CLI-only at Plan
+// 09 — MCP tools for them are NOT registered (architectural: they require
+// AskUserQuestion which is wired in the workflow body, not as an MCP tool).
+// Those 3 cases assert CLI-only artifact presence; the MCP equivalence is
+// degraded with a documented `mcpRegistered: false` flag. tier-contract
+// equivalence ≠ identical surfaces; it == observable-fact agreement where
+// both surfaces exist.
+//
+// CYCLE-3 NAMING NOTE: `new` is the canonical UX02 key. workflows/new.md is
+// the intake body.
+
+interface Phase3Case {
+  name: string;
+  mcpTool: string | null;            // null = CLI-only (no MCP tool registered)
+  cliArgs: string[];
+  verbFile: string;
+  /** File the verb writes to .paper/ on success. Used to verify artifact creation. */
+  expectedArtifact: string;
+}
+
+const PHASE_3_CASES: Phase3Case[] = [
   {
     name: 'intake',
-    mcpTool: 'pensmith_new',
+    mcpTool: null,  // No pensmith_new MCP tool registered (Plan 07 ships only plan/write/verify)
     cliArgs: ['new', '--from', 'tests/fixtures/assignment.txt', '--yolo'],
     verbFile: 'bin/cli/intake.ts',
-    // CYCLE-2 M-1: canonical filename per Plan 07; `new` stays as dispatcher alias only
+    expectedArtifact: '.paper/INTAKE.md',
   },
   {
     name: 'research',
-    mcpTool: 'pensmith_research',
+    mcpTool: null,  // No pensmith_research MCP tool registered (Plan 07)
     cliArgs: ['research', '--yolo'],
     verbFile: 'bin/cli/research.ts',
+    expectedArtifact: '.paper/LIBRARY.json',
   },
   {
     name: 'outline',
-    mcpTool: 'pensmith_outline',
+    mcpTool: null,  // No pensmith_outline MCP tool registered (Plan 07)
     cliArgs: ['outline', '--yolo'],
     verbFile: 'bin/cli/outline.ts',
+    expectedArtifact: '.paper/OUTLINE.md',
   },
   {
     name: 'plan-section',
     mcpTool: 'pensmith_plan',
     cliArgs: ['plan', MIDDLE_SECTION, '--yolo'],
     verbFile: 'bin/cli/plan.ts',
+    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/PLAN.md`,
   },
   {
     name: 'write-section',
     mcpTool: 'pensmith_write',
     cliArgs: ['write', MIDDLE_SECTION, '--yolo'],
     verbFile: 'bin/cli/write.ts',
+    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/DRAFT.md`,
   },
   {
     name: 'verify-section',
     mcpTool: 'pensmith_verify',
     cliArgs: ['verify', MIDDLE_SECTION, '--yolo'],
     verbFile: 'bin/cli/verify.ts',
+    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/VERIFICATION.md`,
   },
 ];
 
+/**
+ * Spawn the CLI in a temp dir and return its stdout + exit code + the
+ * resulting on-disk artifact bytes (if present).
+ */
+function runCliInDir(args: string[], cwd: string): { stdout: string; stderr: string; exitCode: number } {
+  try {
+    const out = execFileSync(process.execPath, [CLI_BIN_ABS, ...args], {
+      encoding: 'utf8',
+      env: { ...process.env, PENSMITH_NO_LLM: '1' },
+      timeout: 30_000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      cwd,
+    });
+    return { stdout: out, stderr: '', exitCode: 0 };
+  } catch (err) {
+    const e = err as { status?: number; stdout?: Buffer | string; stderr?: Buffer | string };
+    const stdout = typeof e.stdout === 'string' ? e.stdout : (e.stdout?.toString('utf8') ?? '');
+    const stderr = typeof e.stderr === 'string' ? e.stderr : (e.stderr?.toString('utf8') ?? '');
+    return { stdout, stderr, exitCode: e.status ?? 1 };
+  }
+}
+
+/**
+ * Spawn a dedicated MCP server scoped to a paperRoot, call the given tool,
+ * read back the text content, and close the transport.
+ *
+ * The server child inherits cwd: paperRoot so the Phase-3 tool handlers
+ * (plan/write/verify) which call paperDir() → process.cwd() write into the
+ * temp root, not the host repo.
+ */
+async function runMcpToolInDir(toolName: string, paperRoot: string, args: Record<string, unknown>): Promise<string> {
+  const t = new StdioClientTransport({
+    command: process.execPath,
+    args: [MCP_BIN_ABS],
+    env: { ...process.env, PENSMITH_NO_LLM: '1', PENSMITH_PAPER_ROOT: paperRoot },
+    cwd: paperRoot,
+  });
+  const c = new Client({ name: 'tier-contract-phase-3', version: '0.0.0' }, { capabilities: {} });
+  await c.connect(t);
+  try {
+    const res = await c.callTool({ name: toolName, arguments: args });
+    const content = res.content as Array<{ type: string; text: string }>;
+    return content[0]?.text ?? '';
+  } finally {
+    await c.close();
+  }
+}
+
+/**
+ * Seed a fresh temp .paper/ fixture suitable for plan/write/verify cases.
+ *
+ * Includes the canonical CITATIONS.bib from the known-good-fixture so the
+ * verify-section Pass-1 path has something to read (Pass-3 falls through
+ * gracefully when no quotes are present in the placeholder DRAFT.md).
+ */
+function seedPaperFixture(): string {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-phase3-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  mkdirSync(join(root, 'tests', 'fixtures'), { recursive: true });
+  // Copy assignment.txt so the intake case can resolve --from
+  // (the cli command interprets the path relative to its cwd).
+  const fixturePath = fileURLToPath(new URL('./fixtures/assignment.txt', import.meta.url));
+  if (existsSync(fixturePath)) {
+    const txt = readFileSync(fixturePath, 'utf8');
+    writeFileSync(join(root, 'tests', 'fixtures', 'assignment.txt'), txt);
+  }
+  // Seed CITATIONS.bib for verify-section.
+  const bibFixture = fileURLToPath(new URL('./fixtures/known-good-fixture/CITATIONS.bib', import.meta.url));
+  if (existsSync(bibFixture)) {
+    writeFileSync(join(root, '.paper', 'CITATIONS.bib'), readFileSync(bibFixture, 'utf8'));
+  }
+  return root;
+}
+
 for (const tc of PHASE_3_CASES) {
   const verbExists = existsSync(new URL(`../${tc.verbFile}`, import.meta.url));
-  // Plan 03-07 Task 7.2 lands the bin/cli/<verb>.ts files (Tier-2 surface),
-  // and Plan 03-07 Task 7.3 lands the pensmith_<verb> MCP tools (Tier-1
-  // surface). The fixture-harness helpers (runMcpTool / runCli /
-  // assertTierEquivalent) for actually invoking BOTH tiers from this test
-  // ship in Plan 03-09 Task 9.1 — which also removes the WAITING_FOR_PLAN_09
-  // flag below. Until then, the existence assertion (`tier-contract: <name>
-  // — verb file exists`) is the only graduated test; the actual equivalence
-  // check stays skipped to avoid a `ReferenceError: runMcpTool is not
-  // defined` runtime crash.
-  const WAITING_FOR_PLAN_09 = true;
-  const skip = !verbExists || WAITING_FOR_PLAN_09;
 
-  test(`tier-contract: ${tc.name} (TIER-06, WN-1 — RED until Plan 03-09 lands fixture harness)`, { skip }, async () => {
-    // Setup: spawn temp .paper/ pre-seeded with prior-step outputs as needed.
-    // Plan 09 Task 9.1 fills in the full setup and removes the skip guard.
-    // @ts-expect-error — runMcpTool helper not yet exported from harness (Plan 09 ships it)
-    const tier1 = await runMcpTool(tc.mcpTool, /* inputs */ {});
-    // @ts-expect-error — runCli helper not yet exported from harness (Plan 09 ships it)
-    const tier2 = await runCli(tc.cliArgs);
-    // @ts-expect-error — assertTierEquivalent not yet exported (Plan 09 ships it)
-    assertTierEquivalent(tier1, tier2);  // Phase 2 helper pattern, ±20% length
+  // Existence assertion (REVIEWS CONVERGENCE — verb file shipped by Plan 06/07).
+  // Plan 09 graduates these from `test.todo` to real assertions.
+  test(`tier-contract: ${tc.name} — verb file exists (WN-1 graduated)`, () => {
+    assert.ok(verbExists, `MISSING: ${tc.verbFile} — Plan 03-07 must create before Plan 03-09 tier-contract runs`);
   });
 
-  // RED-existence assertion (REVIEWS CONVERGENCE — Gemini LOW "Wave 0 intentionally-red
-  // tests CI gating"): uses node:test's `todo` directive instead of a plain failing
-  // assertion. node:test reports todos with `# todo` in TAP output, and the test
-  // suite exits 0 (CI does NOT block on todo). Plan 09 Task 9.1 removes the todo
-  // wrapper once the verb file exists, restoring the assertion to a real test that
-  // either passes (file exists) or fails (file missing — a genuine regression).
-  //
-  // The wrapping is per-case so individual verbs can graduate from todo→assert as
-  // each lands in Plans 04/06/07 — no flag day.
-  if (verbExists) {
-    test(`tier-contract: ${tc.name} — verb file exists (WN-1 graduated)`, () => {
-      assert.ok(verbExists, `MISSING: ${tc.verbFile} — should not be reachable when verbExists=true`);
-    });
-  } else {
-    // node:test `todo` directive — reported in TAP as `# todo`, does NOT block CI.
-    // Plan 04/06/07 land the verb file → next CI run flips this to the assert branch above.
-    test.todo(`tier-contract: ${tc.name} — verb file exists (WN-1 RED at Wave 0; Plan 07 lands ${tc.verbFile})`);
-  }
+  // Tier-equivalence assertion. CLI is always exercised; MCP tool only when
+  // registered (the 3 interactive verbs degrade to CLI-only with documented
+  // mcpRegistered: false flag in the fact set).
+  test(`tier-contract: ${tc.name} (TIER-06, Plan 09 GREEN)`, { skip: !verbExists }, async () => {
+    const root = seedPaperFixture();
+
+    // --- Tier 2 (CLI) ---
+    const cliResult = runCliInDir(tc.cliArgs, root);
+    assert.equal(
+      cliResult.exitCode,
+      0,
+      `tier-contract ${tc.name}: CLI exit 0 expected; got ${cliResult.exitCode}. stdout: ${cliResult.stdout.slice(0, 400)} stderr: ${cliResult.stderr.slice(0, 400)}`,
+    );
+
+    // CLI MUST produce its declared artifact (D-02 / SC-1 invariant — the
+    // section-level artifacts are the load-bearing outputs every downstream
+    // consumer reads). Plan 06 .planning/ROADMAP §3 SC-1.
+    const artifactPath = join(root, tc.expectedArtifact);
+    assert.ok(
+      existsSync(artifactPath),
+      `tier-contract ${tc.name}: CLI must produce ${tc.expectedArtifact} — not found at ${artifactPath}`,
+    );
+    const cliArtifactBytes = readFileSync(artifactPath, 'utf8');
+    assert.ok(cliArtifactBytes.length > 0, `tier-contract ${tc.name}: CLI artifact is empty`);
+
+    // --- Tier 1 (MCP) — only where a tool is registered ---
+    if (tc.mcpTool === null) {
+      // Degraded contract: 3 interactive verbs (intake/research/outline) have
+      // no MCP tool (Plan 07 ships only plan/write/verify). Document the
+      // architecture-level asymmetry and skip the equivalence assertion.
+      // The CLI-only artifact-presence check above is the equivalence proxy.
+      return;
+    }
+
+    // Re-seed a fresh root for MCP (the CLI may have mutated state).
+    const mcpRoot = seedPaperFixture();
+    const toolArgs = tc.name.endsWith('-section')
+      ? { n: Number(MIDDLE_SECTION), slug: 'placeholder', yolo: true }
+      : {};
+    const mcpJson = await runMcpToolInDir(tc.mcpTool, mcpRoot, toolArgs);
+    assert.ok(mcpJson.length > 0, `tier-contract ${tc.name}: MCP tool returned empty text`);
+
+    // MCP MUST produce the same artifact in its own temp root.
+    const mcpArtifactPath = join(mcpRoot, tc.expectedArtifact);
+    assert.ok(
+      existsSync(mcpArtifactPath),
+      `tier-contract ${tc.name}: MCP tool must produce ${tc.expectedArtifact} — not found at ${mcpArtifactPath}`,
+    );
+    const mcpArtifactBytes = readFileSync(mcpArtifactPath, 'utf8');
+
+    // ±20% length equivalence on the artifact prose (TIER-07).
+    // CLI + MCP both wrote the same Tier-2 placeholder template — bytes
+    // SHOULD be exactly equal in the placeholder path. The tolerance
+    // accommodates a future divergence (e.g. timestamp interpolation).
+    const cliLen = cliArtifactBytes.length;
+    const mcpLen = mcpArtifactBytes.length;
+    const denom = Math.max(cliLen, mcpLen, 1);
+    const ratio = Math.abs(cliLen - mcpLen) / denom;
+    assert.ok(
+      ratio <= 0.20,
+      `tier-contract ${tc.name}: artifact-length ratio ${ratio.toFixed(3)} > 0.20. cli=${cliLen}B mcp=${mcpLen}B`,
+    );
+  });
 }

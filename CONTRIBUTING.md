@@ -113,3 +113,73 @@ The fixes that ARE acceptable, in order of preference:
    and getting the change reviewed.
 3. Mark the test as known-failing with a tracking issue and a deadline.
    Acceptable only with maintainer sign-off; not the right path 95% of the time.
+
+## Cassette Refresh Workflow
+
+PR-time CI (`.github/workflows/ci.yml`) is OFFLINE — it runs against recorded
+HTTP cassettes under `tests/fixtures/cassettes/` for the Crossref, OpenAlex,
+and Unpaywall adapters. This keeps PR builds fast (no live network) and
+hermetic (no flaky external dependencies blocking contributor PRs).
+
+A separate workflow (`.github/workflows/cassette-refresh.yml`) re-records
+those cassettes against the live registrars on a weekly schedule and opens a
+PR with the refreshed fixtures.
+
+### When cassettes need a manual refresh
+
+- A registrar shipped a schema change (new field, renamed field, format
+  change) and the offline tests are failing locally with a parse error.
+- A new fixture row was added to `known-good-fixture/CITATIONS.bib` and the
+  adapter needs a recording for that DOI.
+- The weekly cron PR has been sitting for > 14 days without merge.
+
+### How to trigger a refresh
+
+**Option A — manual workflow dispatch (preferred):**
+
+1. Go to **Actions → Cassette Refresh → Run workflow** in the GitHub UI.
+2. Pick the `main` branch.
+3. The workflow re-records all cassettes and opens a PR. Review the diff,
+   confirm no PII / API tokens leaked into recorded headers, then merge.
+
+**Option B — local re-record (only if you have the registrar contact-email
+secret and need to inspect the diff before pushing):**
+
+```bash
+export PENSMITH_NETWORK_TESTS=1
+export PENSMITH_REFRESH_CASSETTES=1
+export PENSMITH_CONTACT_EMAIL=you@example.com  # required by Crossref/OpenAlex polite-pool
+npm run build
+npm run test:cassettes -- --refresh
+git diff tests/fixtures/cassettes/
+```
+
+### Permissions reminder
+
+The cassette-refresh workflow declares **job-level** permissions:
+
+```yaml
+permissions:
+  contents: write
+  pull-requests: write
+```
+
+This is REQUIRED — the repo-default `contents: read` would silently fail to
+push the refresh branch and the `peter-evans/create-pull-request@v6` action
+would 403 on PR open. If you fork this repo, replicate the same job-level
+permissions block; do NOT promote them to repo-wide `contents: write`.
+
+### Cassette byte-size cap (D-25)
+
+Every recorded cassette file MUST be ≤ 51200 bytes. The `cassette-size`
+test enforces this on every PR; the refresh PR will fail CI if a registrar
+returned an unexpectedly large response. If that happens, narrow the
+recording (drop irrelevant fields) rather than raising the cap.
+
+### Sensitive-header scan (T-3-02 / T-01-07)
+
+The `cassette-no-leak` test scans every committed cassette for
+`Authorization`, `Cookie`, `Set-Cookie`, and `X-Api-Key` headers. The
+refresh workflow must NEVER commit a cassette that carries one. If the
+refresh PR diff shows any such header, abort the merge and fix the
+recorder before re-running.
