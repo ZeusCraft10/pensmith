@@ -116,7 +116,21 @@ function toCandidate(entry: ArxivEntry): SourceCandidate | null {
   };
 }
 
+// CR-05 fix: hard per-adapter size cap. The `extractAll` regex is lazy
+// (linear on well-formed input) but a malformed feed without a closing
+// </entry> can devolve into O(n²) backtracking on huge bodies. Cap at
+// 10 MB — real arXiv ATOM responses for a 50-result query are < 200 KB.
+// TODO: add an upstream MAX_RESPONSE_BYTES cap inside bin/lib/http.ts.callOnce
+// (deferred — out of scope for this fix pass; see REVIEW.md CR-05).
+const ARXIV_MAX_BODY_BYTES = 10_000_000;
+
 function parseFeed(xml: string): SourceCandidate[] {
+  if (xml.length > ARXIV_MAX_BODY_BYTES) {
+    process.stderr.write(
+      `[arxiv] feed body exceeds ${ARXIV_MAX_BODY_BYTES} bytes (got ${xml.length}); bailing (CR-05)\n`,
+    );
+    return [];
+  }
   const entries = extractAll(xml, 'entry');
   return entries
     .map(parseEntry)
