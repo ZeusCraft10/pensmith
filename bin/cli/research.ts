@@ -20,6 +20,8 @@ import { loadPrompt } from '../lib/prompt-loader.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { writeBibtex } from '../lib/bibtex-write.js';
 import { paperDir } from '../lib/paths.js';
+import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js';
+import type { SourceCandidate } from '../lib/schemas/source-candidate.js';
 
 const PLACEHOLDER_LIBRARY = JSON.stringify(
   {
@@ -60,11 +62,21 @@ export const researchCommand = defineCommand({
     const libraryPath = path.join(paperDir(), 'LIBRARY.json');
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');
 
+    // CR-02 fix: cross-check every candidate against Retraction Watch BEFORE
+    // we persist LIBRARY.json or write CITATIONS.bib. Tier-2 (this codepath)
+    // currently aggregates zero candidates and writes a placeholder library,
+    // so the call is a no-op here today — but the chokepoint MUST live in
+    // the orchestrator so when Phase 4 swaps the placeholder for real
+    // discovery, the retraction mark is guaranteed to land on the array
+    // BEFORE writeBibtex reads `c.retracted` (D-15 surface-twice).
+    const candidates: SourceCandidate[] = [];
+    await crossCheckRetractions(candidates);
+
     await atomicWriteFile(libraryPath, PLACEHOLDER_LIBRARY);
     // D-19 + D-20 LOCKED: writeBibtex is the SOLE citation-js writer; emits
     // a zero-length file when given an empty array (which Plan 06 verify.md
     // reads via citations.parseBib).
-    await writeBibtex([], bibPath);
+    await writeBibtex(candidates, bibPath);
 
     process.stdout.write(
       `pensmith research: wrote Tier-2 placeholder library to ${libraryPath} and empty .bib to ${bibPath}\n`,
