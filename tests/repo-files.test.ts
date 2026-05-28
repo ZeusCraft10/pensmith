@@ -145,7 +145,7 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   const hash = createHash('sha256').update(bytes).digest('hex');
   // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"`
   // after every intentional edit. The PR diff makes the change visible.
-  const PINNED = 'e1a00959050c56b18cc97804ab226577cbb26af9582b22717b21cb9a48386060';
+  const PINNED = '509f90add8664e559a3ab817684381777e1b624b63ebe0dfc77054267997eec0';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 
@@ -167,7 +167,7 @@ test('references/http-warnings.md hash-pin (IN-03 / D-24)', () => {
 
 // Coarse-grained content sentinel — catches gross removals even before the
 // hash pin gets a chance to re-fire (e.g., file wiped to empty).
-test('references/doctor-output.md retains the 7 Phase-2 probe section anchors', () => {
+test('references/doctor-output.md retains all probe section anchors (Phase 2 + Phase 3)', () => {
   const copy = read('references/doctor-output.md');
   assert.match(copy, /# Doctor Output Strings \(locked — D-18\)/);
   assert.match(copy, /node-version \(DOCT-01\)/);
@@ -178,9 +178,13 @@ test('references/doctor-output.md retains the 7 Phase-2 probe section anchors', 
   assert.match(copy, /zotero-mcp-presence \(DOCT-02 ecosystem\)/);
   assert.match(copy, /pandoc-presence \(DOCT-02 ecosystem\)/);
   assert.match(copy, /humanizer-skill-presence \(DOCT-02 ecosystem\)/);
-  // NOTE: Anti-drift assertion for DOCT-05 REMOVED in Phase 3 Plan 00 Task 0.3.
-  // DOCT-05 wiring-smoke is a Phase 3 carry-forward per D-04 — it WILL appear in Phase 3.
-  // DO NOT re-add: assert.equal(/wiring-smoke|DOCT-05/.test(copy), false, ...)
+  // Phase 2 probes added in 02-05:
+  assert.match(copy, /build-artifact-resolves/);
+  assert.match(copy, /http-crossref-ping/);
+  // Phase 3 Plan 03-09 Task 9.1: real DOCT-05 wiring-smoke anchor.
+  // The original "anti-drift block" that asserted DOCT-05 absence has been
+  // intentionally REMOVED — the probe is live now (intake-outline-verify-wiring).
+  assert.match(copy, /intake-outline-verify-wiring \(DOCT-05\)/);
 });
 
 // === Phase 3 Plan 00 Task 0.3: Active fixture hash-pins (D-01, SC-2, SC-3) ===

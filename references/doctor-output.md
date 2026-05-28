@@ -7,11 +7,10 @@ the same Record shape (severities only — no copy strings persisted across the 
 Drift between the locked copy and the rendered output is a regression — pinned
 by sha256 hash in `tests/repo-files.test.ts`.
 
-The end-to-end fixture probe (the original Phase 1 end-to-end smoke probe —
-see CONTEXT requirement D-04 for the deferral rationale) is deferred to
-Phase 3 per CONTEXT D-04; this file does NOT contain any prose for that
-deferred probe. The tier-equivalence assertion is the tier-contract Case A
-in `tests/tier-contract.test.ts` (02-07), not a probe — also not in this file.
+The Phase-3 wiring-smoke probe (intake-outline-verify-wiring, DOCT-05) lands
+in Plan 03-09 Task 9.1 — its locked copy is the `intake-outline-verify-wiring
+(DOCT-05)` section below. The tier-equivalence assertion is the tier-contract
+Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this file.
 
 ## TTY render — header
 
@@ -51,6 +50,18 @@ in `tests/tier-contract.test.ts` (02-07), not a probe — also not in this file.
 ### humanizer-skill-presence (DOCT-02 ecosystem)
 > Humanizer skill at ~/.claude/skills/humanizer/ — WARN if missing. Optional Phase 8 dependency.
 
+### build-artifact-resolves (Phase 2 substitute for deferred DOCT-05)
+
+> Compiled dist/ build-artifact resolution probe — confirms dist/bin/pensmith.js and dist/mcp/server.js exist and are non-empty. Phase 2 substitute for the originally deferred DOCT-05; remains active in Phase 3 alongside the real DOCT-05 wiring smoke (D-15).
+
+### http-crossref-ping (D-03(d) cassette wiring)
+
+> Crossref-adapter cassette-wiring probe — exercises the recorded fixture cassette to confirm the offline HTTP path is reachable. PR-time CI runs OFFLINE; this probe is the canary for cassette parse / schema drift. PASS in CI; SKIP outside the repo where cassettes aren't shipped.
+
+### intake-outline-verify-wiring (DOCT-05)
+
+> Intake/outline/verify wiring smoke probe — confirms the 6 Phase-3 per-section verbs (new, research, outline, plan, write, verify) are wired end-to-end across the dispatcher (bin/pensmith.ts subCommands), workflow bodies (`workflows/{verb}.md` "## Body" section), and the drafter contract (bin/lib/drafter-input.ts assertDrafterInput export). FAIL lists every missing piece in `detail` so a single `pensmith doctor` invocation tells the operator exactly which wiring regressed. Probe is READ-ONLY per D-19 — no .paper/ side effects.
+
 ## JSON shape
 
 `pensmith doctor --json` emits:
@@ -66,7 +77,10 @@ in `tests/tier-contract.test.ts` (02-07), not a probe — also not in this file.
     "runtime-config-presence":  { "..." : "..." },
     "zotero-mcp-presence":      { "..." : "..." },
     "pandoc-presence":          { "..." : "..." },
-    "humanizer-skill-presence": { "..." : "..." }
+    "humanizer-skill-presence": { "..." : "..." },
+    "build-artifact-resolves":  { "..." : "..." },
+    "http-crossref-ping":       { "..." : "..." },
+    "intake-outline-verify-wiring": { "..." : "..." }
   },
   "summary": { "pass": 0, "warn": 0, "fail": 0, "skip": 0 }
 }
