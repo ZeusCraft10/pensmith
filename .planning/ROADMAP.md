@@ -158,11 +158,11 @@ Plans:
 - Wave 3: 04-05 (compile pipeline + tier-contract parity; depends 04-01, 04-02)
 
 Plans:
-- [ ] 04-01-PLAN.md (wave 1) — Wave scheduler: outline-parse + Kahn sort + wave-override validation + bounded-parallel runWave + citation-token helpers (ARCH-19, ARCH-20, PLAN-02, PLAN-03)
-- [ ] 04-02-PLAN.md (wave 1) — RSCH-10 freshness probe (WARN-only) + COMPILE-REPORT renderer/schema v1 + letter-suffix path tolerance (RSCH-10, ARCH-20, COMP-06)
+- [ ] 04-01-PLAN.md (wave 1) — Wave scheduler / computeWaves(): outline-parse + Kahn topological sort by depends_on + wave-override validation + bounded-parallel runWave + citation-token helpers (ARCH-19, ARCH-20, PLAN-02, PLAN-03, COMP-06)
+- [ ] 04-02-PLAN.md (wave 1) — RSCH-10 freshness probe (WARN-only) + COMPILE-REPORT renderer/schema v1 (D-14 layout; supporting infra for COMP-07) + letter-suffix path tolerance (RSCH-10, ARCH-20)
 - [ ] 04-03-PLAN.md (wave 2) — Multi-section write orchestration: drain waves, bounded parallel / Tier-2 serial, blocked-subtree pruning, section-isolation-N (ARCH-19, ARCH-20)
 - [ ] 04-04-PLAN.md (wave 2) — `pensmith revise --section N` citation-swap chokepoint (approval gate, --yolo cap-2) + `--research <query>` section-scoped append (WRTE-02, PLAN-02, PLAN-03, RSCH-10)
-- [ ] 04-05-PLAN.md (wave 3) — Compile pipeline: refuse-gate + outline-order concat + N-1 token-safe smoothing + bib regen + COMPILE-REPORT emission + tier-contract parity (COMP-01..07, ARCH-20)
+- [ ] 04-05-PLAN.md (wave 3) — Compile pipeline: refuse-gate (COMP-01) + outline-order concat (COMP-02) + N-1 token-safe smoothing (COMP-03) + consistency flags (COMP-04) + citation density vs discipline target (COMP-05) + bib regen + DRAFT.md/COMPILE-REPORT.md emission (COMP-07) + tier-contract parity (ARCH-20)
 **UI hint**: no
 
 ### Phase 5: Verifier completeness (Pass 2 + Pass 4)
