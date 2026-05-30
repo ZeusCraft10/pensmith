@@ -41,8 +41,10 @@ created: 2026-05-29
 
 ## Per-Task Verification Map
 
-Source: 04-RESEARCH.md § 3. Each row maps a phase requirement (or load-bearing decision) to
-its automated test. Wave 0 of each plan installs the test files marked ❌.
+Source: REQUIREMENTS.md (canonical COMP meanings) + 04-CONTEXT.md (locked decisions).
+04-RESEARCH.md's COMP-04..07 ID labels were DRIFT and are overruled here. Each row maps a
+phase requirement (or load-bearing decision) to its automated test. Wave 0 of each plan
+installs the test files marked ❌.
 
 | Req ID | Behavior | Test Type | Automated Command | File Exists |
 |--------|----------|-----------|-------------------|-------------|
@@ -57,10 +59,13 @@ its automated test. Wave 0 of each plan installs the test files marked ❌.
 | COMP-02 | Compile concat = outline order, not wave order; never modifies `sections/<N>/DRAFT.md` (mtime+hash) | unit | `node --import tsx --test tests/compile-order.test.ts` | ❌ W0 |
 | COMP-03 | Smoother runs N-1 times for N sections | integration (cassette) | `node --import tsx --test tests/compile-smoother.test.ts` | ❌ W0 |
 | COMP-03 (D-13) | Token-set drift triggers raw-concat fallback + WARN; never mutates `[@citekey]` | unit | `node --import tsx --test tests/smoother-token-protect.test.ts` | ❌ W0 |
-| COMP-04 | All compile writes route through `atomicWriteFile` (D-07 chokepoint) | unit | extend `tests/atomic-write-chokepoint.test.ts` | partial |
-| COMP-05 | `.paper/CITATIONS.bib` regenerated at compile time (citekey collisions resolved) | integration | `node --import tsx --test tests/compile-bib-regen.test.ts` | ❌ W0 |
-| COMP-06 | COMPILE-REPORT.md matches schema v1 (frontmatter + 5 body sections, fixed order) | unit | `node --import tsx --test tests/compile-report-schema.test.ts` | ❌ W0 |
-| COMP-07 | Cross-section consistency scan emits warnings, never blocks compile | unit | `node --import tsx --test tests/consistency-scan.test.ts` | ❌ W0 |
+| COMP-04 | Cross-section claim-consistency scan produces flags only, never edits, never blocks compile | unit | `node --import tsx --test tests/consistency-scan.test.ts` (04-05) | ❌ W0 |
+| COMP-05 | Citation density (per-section + paper-wide mean/stdev) vs. discipline preset target; warn-only | unit | `node --import tsx --test tests/citation-density.test.ts` (04-05) | ❌ W0 |
+| COMP-06 | Wave scheduling `computeWaves()` topologically sorts by `depends_on` (Kahn) | unit | `node --import tsx --test tests/wave-scheduler.test.ts -t topo` (04-01 Wave-0 scheduler test) | ❌ W0 |
+| COMP-07 | Compile writes `.paper/DRAFT.md` AND `.paper/COMPILE-REPORT.md` | unit / integration | `node --import tsx --test tests/compile-order.test.ts tests/compile-bib-regen.test.ts` (04-05) | ❌ W0 |
+| D-07 (atomic-write) | All compile writes route through `atomicWriteFile` sole-writer chokepoint | unit | extend `tests/atomic-write-chokepoint.test.ts` | partial |
+| D-19 / COMP-07 (bib regen) | `.paper/CITATIONS.bib` regenerated at compile time (citekey collisions resolved via base-26 suffix) | integration | `node --import tsx --test tests/compile-bib-regen.test.ts` (04-05) | ❌ W0 |
+| D-14 (report schema) | COMPILE-REPORT.md matches schema v1 (frontmatter + 5 body sections, fixed order) | unit | `node --import tsx --test tests/compile-report-schema.test.ts` | ❌ W0 |
 | D-15 (paths) | `parseSectionDirName("03b-foo")` → `{n:3, letterSuffix:'b', slug:'foo'}`; `'03' < '03b' < '04'` | unit | `node --import tsx --test tests/letter-suffix-paths.test.ts` | ❌ W0 |
 | Section isolation | Re-running section N leaves any other section's mtime+hash unchanged (Phase 3 SC-4 → N) | integration | `node --import tsx --test tests/section-isolation-n.test.ts` | ❌ W0 |
 | Tier contract (compile) | Tier 1 vs Tier 2 produce equivalent DRAFT.md + COMPILE-REPORT.md (±20% length) | tier-contract | `npm run test:tier-contract` (extend) | partial |
@@ -76,7 +81,7 @@ its automated test. Wave 0 of each plan installs the test files marked ❌.
 Wave 0 of each plan installs the test files for that plan's REQ-IDs before any production
 code lands. Listing here is canonical; per-plan PLAN.md files inherit.
 
-- [ ] `tests/wave-scheduler.test.ts` — ARCH-19
+- [ ] `tests/wave-scheduler.test.ts` — ARCH-19, COMP-06 (Kahn topo-sort case)
 - [ ] `tests/scheduler-stateless.test.ts` — ARCH-20
 - [ ] `tests/wave-override.test.ts` — PLAN-02, PLAN-03
 - [ ] `tests/write-orchestrator.test.ts` — wave-driven write orchestration
@@ -84,12 +89,13 @@ code lands. Listing here is canonical; per-plan PLAN.md files inherit.
 - [ ] `tests/freshness-probe.test.ts` — RSCH-10
 - [ ] `tests/compile-refuse.test.ts` — COMP-01 (verifier-blocks-compile)
 - [ ] `tests/compile-staleness.test.ts` — COMP-01 (staleness branch), D-08
-- [ ] `tests/compile-order.test.ts` — COMP-02
+- [ ] `tests/compile-order.test.ts` — COMP-02 + COMP-07 (DRAFT.md emission)
 - [ ] `tests/compile-smoother.test.ts` — COMP-03
 - [ ] `tests/smoother-token-protect.test.ts` — COMP-03 / D-13
-- [ ] `tests/compile-bib-regen.test.ts` — COMP-05
-- [ ] `tests/compile-report-schema.test.ts` — COMP-06
-- [ ] `tests/consistency-scan.test.ts` — COMP-07
+- [ ] `tests/citation-density.test.ts` — COMP-05 (density vs discipline preset target)
+- [ ] `tests/compile-bib-regen.test.ts` — COMP-07 / D-19 (bib regen)
+- [ ] `tests/compile-report-schema.test.ts` — D-14 (report schema v1)
+- [ ] `tests/consistency-scan.test.ts` — COMP-04 (consistency flags, never blocks)
 - [ ] `tests/letter-suffix-paths.test.ts` — D-15
 - [ ] `tests/section-isolation-n.test.ts` — section-as-phase invariant extended to N
 - [ ] Cassettes: `tests/cassettes/smoother-{clean,token-drift,multi-paragraph}.json`
