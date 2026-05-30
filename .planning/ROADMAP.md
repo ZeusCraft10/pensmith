@@ -149,7 +149,20 @@ Plans:
   3. Wave scheduler topologically sorts sections by `depends_on` and respects `--max-parallel` (default 5) in Tier 1; Tier 2 executes the same order sequentially.
   4. Stable section numbering with letter-suffix policy (`03b-validity-threats/`) is enforced — inserts never renumber existing sections; `verified_against_draft_hash` flags compile-staleness when a section's draft changes after verification.
   5. `pensmith plan <N> --revise` and `pensmith plan <N> --research <query>` modify only the target section's PLAN.md and RESEARCH additions (no cross-section disturbance).
-**Plans**: TBD
+**Plans**: 5 plans
+
+**Wave layout** (depends_on; executor reads `wave` frontmatter):
+
+- Wave 1: 04-01 (wave scheduler), 04-02 (RSCH-10 + COMPILE-REPORT + path-tolerance) — parallel
+- Wave 2: 04-03 (write orchestration; depends 04-01), 04-04 (revise-swap + --research; depends 04-02) — parallel
+- Wave 3: 04-05 (compile pipeline + tier-contract parity; depends 04-01, 04-02)
+
+Plans:
+- [ ] 04-01-PLAN.md (wave 1) — Wave scheduler: outline-parse + Kahn sort + wave-override validation + bounded-parallel runWave + citation-token helpers (ARCH-19, ARCH-20, PLAN-02, PLAN-03)
+- [ ] 04-02-PLAN.md (wave 1) — RSCH-10 freshness probe (WARN-only) + COMPILE-REPORT renderer/schema v1 + letter-suffix path tolerance (RSCH-10, ARCH-20, COMP-06)
+- [ ] 04-03-PLAN.md (wave 2) — Multi-section write orchestration: drain waves, bounded parallel / Tier-2 serial, blocked-subtree pruning, section-isolation-N (ARCH-19, ARCH-20)
+- [ ] 04-04-PLAN.md (wave 2) — `pensmith revise --section N` citation-swap chokepoint (approval gate, --yolo cap-2) + `--research <query>` section-scoped append (WRTE-02, PLAN-02, PLAN-03, RSCH-10)
+- [ ] 04-05-PLAN.md (wave 3) — Compile pipeline: refuse-gate + outline-order concat + N-1 token-safe smoothing + bib regen + COMPILE-REPORT emission + tier-contract parity (COMP-01..07, ARCH-20)
 **UI hint**: no
 
 ### Phase 5: Verifier completeness (Pass 2 + Pass 4)
@@ -234,7 +247,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 1. Foundation NFRs | 14/14 | COMPLETE (VERIFICATION PASS 5/5) | 2026-05-14 |
 | 2. Tier shells + doctor + tier-contract gate | 10/10 | COMPLETE | 2026-05-16 |
 | 3. Vertical slice through one section | 10/10 | Complete    | 2026-05-28 |
-| 4. Breadth — N sections + compile + wave scheduling | 0/TBD | Not started | - |
+| 4. Breadth — N sections + compile + wave scheduling | 0/5 | Planned | - |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 0/TBD | Not started | - |
 | 6. Done / export pipeline + zero-trace gate | 0/TBD | Not started | - |
 | 7. Single-command UX layer + hooks + flags | 0/TBD | Not started | - |
