@@ -22,6 +22,7 @@ export const UX02_VERBS = [
   'plan',
   'write',
   'verify',
+  'revise',   // Phase 4 Plan 04-04 (WRTE-02) — citation-swap section-mutation verb
   'compile',
   'done',
   'resume',

@@ -21,13 +21,13 @@ const ALLOWED_REQUIRED_TOKENS = [
   // MCP tools are matched by the prefix `MCP ` — see vocabulary check below.
 ];
 
-test('ARCH-01 / UX-02: workflows/ contains exactly 16 markdown bodies', () => {
+test('ARCH-01 / UX-02: workflows/ contains exactly the UX-02 canonical verb set of markdown bodies', () => {
   assert.ok(existsSync('workflows'), 'workflows/ directory missing');
   const files = readdirSync('workflows').filter((f) => f.endsWith('.md')).sort();
   assert.deepEqual(
     files.map((f) => f.replace(/\.md$/, '')),
     EXPECTED_16,
-    `workflows/ files must equal UX-02 canonical 16-verb list`,
+    `workflows/ files must equal UX-02 canonical verb list (Phase 4 Plan 04-04: revise added → ${EXPECTED_16.length} verbs)`,
   );
 });
 

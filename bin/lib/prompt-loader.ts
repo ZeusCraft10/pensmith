@@ -105,7 +105,7 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   'pass1-fuzzy-judge':   'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e',  // D-12 LOCKED + D-13 DORMANT in Phase 3
   'pass3-quote-checker': '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9',  // D-12 LOCKED + D-13 DORMANT in Phase 3
   // Phase-4 additions (D-05/D-12 — authorized by 04-CONTEXT.md):
-  'revise-swap':         '__PENDING_HASH_revise-swap__',  // Plan 04-04 Task 1 — re-pinned in Task 3
+  'revise-swap':         '4ff0104f8e84f88c23c9560391f21d69e5d3f67588c14a9a3dffe8b80313df22',  // D-05 Plan 04-04 Task 3 re-pin (WN-3)
   // smoother slot reserved for Plan 04-05 (D-12):
   // 'smoother':         '__PENDING_HASH_smoother__',
 };

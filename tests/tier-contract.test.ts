@@ -418,6 +418,23 @@ const PHASE_3_CASES: Phase3Case[] = [
     verbFile: 'bin/cli/verify.ts',
     expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/VERIFICATION.md`,
   },
+  {
+    // revise: Plan 04-04 D-24 tier-contract obligation (CONTRIBUTING.md D-24 LOCKED).
+    // STUB CASE: drives the --research sub-path (no LLM needed in CI) so the
+    // section RESEARCH-LOG.md is created as the artifact. The full --yolo citation-swap
+    // parity assertions are deferred to Plan 05 Task 4 (they require a fixture with a
+    // failing VERIFICATION.md and a mock LLM response).
+    //
+    // Architecture note (Tier 1): no pensmith_revise MCP tool is registered in Phase 4
+    // (the workflow body routes through the CLI chokepoint; MCP registration is Phase 7).
+    // The mcpTool field is null so the case degrades to CLI-only with documented asymmetry.
+    name: 'revise',
+    mcpTool: null,  // No pensmith_revise MCP tool registered in Phase 4 (Plan 07+ registers)
+    cliArgs: ['revise', MIDDLE_SECTION, '--research', 'test research query for tier-contract', '--yolo'],
+    verbFile: 'bin/cli/revise.ts',
+    // --research creates RESEARCH-LOG.md even when no failing citation exists (D-09)
+    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/RESEARCH-LOG.md`,
+  },
 ];
 
 /**
