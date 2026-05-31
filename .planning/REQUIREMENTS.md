@@ -101,7 +101,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [x] **RSCH-07**: `pensmith-source-evaluator` scores, dedupes, tiers candidates
 - [x] **RSCH-08**: Approval gate to prune / approve / add sources before research is locked
 - [x] **RSCH-09**: Write `.paper/RESEARCH.md` and `.paper/CITATIONS.bib` with `last_verified` timestamps per source
-- [ ] **RSCH-10**: Auto-recheck sources older than `recheck_after_days` (default 30)
+- [x] **RSCH-10**: Auto-recheck sources older than `recheck_after_days` (default 30)
 - [x] **RSCH-11**: Retraction Watch hard warnings on any retracted DOI
 
 ### Outline
@@ -114,14 +114,14 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 ### Plan Section
 
 - [x] **PLAN-01**: `pensmith plan <N>` reads stub PLAN.md, maps claims → sources, identifies counterexamples
-- [ ] **PLAN-02**: `--revise` flag re-plans based on verification feedback
-- [ ] **PLAN-03**: `--research <query>` triggers section-scoped additional research without disturbing other sections
+- [x] **PLAN-02**: `--revise` flag re-plans based on verification feedback
+- [x] **PLAN-03**: `--research <query>` triggers section-scoped additional research without disturbing other sections
 - [x] **PLAN-04**: Write `.paper/sections/<N>/PLAN.md` with claim-source mapping, paragraph structure, voice hints
 
 ### Write Section
 
 - [x] **WRTE-01**: Section drafter receives ONLY this section's mapped sources + PLAN.md + STYLE.json (when enabled) + voice hint — never the full source pool
-- [ ] **WRTE-02**: Style-match consumed per-section when enabled at intake; voice hint can override
+- [x] **WRTE-02**: Style-match consumed per-section when enabled at intake; voice hint can override
 - [x] **WRTE-03**: Auto-chain to verify after write unless `--no-verify`
 - [x] **WRTE-04**: Lint / runtime check enforces section-drafter input contract (Pitfall 9 mitigation) `[research]`
 
@@ -326,10 +326,10 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | TEST-09 | Phase 3 | Complete |
 | ARCH-19 | Phase 4 | Complete |
 | ARCH-20 | Phase 4 | Complete |
-| PLAN-02 | Phase 4 | Pending |
-| PLAN-03 | Phase 4 | Pending |
-| WRTE-02 | Phase 4 | Pending |
-| RSCH-10 | Phase 4 | Pending |
+| PLAN-02 | Phase 4 | Complete |
+| PLAN-03 | Phase 4 | Complete |
+| WRTE-02 | Phase 4 | Complete |
+| RSCH-10 | Phase 4 | Complete |
 | COMP-01 | Phase 4 | Pending |
 | COMP-02 | Phase 4 | Pending |
 | COMP-03 | Phase 4 | Pending |

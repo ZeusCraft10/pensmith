@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-03-PLAN.md (2026-05-31)
-last_updated: "2026-05-31T06:00:00.000Z"
-last_activity: 2026-05-31 -- Phase 04 Plan 03 (multi-section write orchestration + wave-mode) complete
+stopped_at: Completed 04-04-PLAN.md (2026-05-31)
+last_updated: "2026-05-31T06:30:00.000Z"
+last_activity: 2026-05-31 -- Phase 04 Plan 04 (pensmith revise + --research + tier-contract entry) complete
 progress:
   total_phases: 11
   completed_phases: 4
   total_plans: 43
-  completed_plans: 41
-  percent: 95
+  completed_plans: 42
+  percent: 98
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 4
-Plan: 04
+Plan: 05
 Status: Ready to execute
-Last activity: 2026-05-31 -- Phase 04 Plan 03 (multi-section write orchestration + wave-mode) complete
+Last activity: 2026-05-31 -- Phase 04 Plan 04 (pensmith revise + --research + tier-contract entry) complete
 
-Progress: [██████████] 95%  (Phase 0 done; Phase 1 closed; Phase 2 CLOSED; Phase 3 CLOSED; Phase 4: 3/5 plans done)
+Progress: [██████████] 98%  (Phase 0 done; Phase 1 closed; Phase 2 CLOSED; Phase 3 CLOSED; Phase 4: 4/5 plans done)
 
 Plan files (depends_on order):
 
 - 04-01 (wave 1) — ✅ DONE — Wave scheduler (6f0b4d1 / SUMMARY)
 - 04-02 (wave 1) — ✅ DONE — RSCH-10 freshness + COMPILE-REPORT schema + path tolerance (e679729 / SUMMARY)
 - 04-03 (wave 2) — ✅ DONE — Multi-section write orchestration (49eda8e / SUMMARY)
-- 04-04 (wave 3) — 📥 READY — pensmith revise + --research
+- 04-04 (wave 3) — ✅ DONE — pensmith revise + --research (271f12f / SUMMARY)
 - 04-05 (wave 4) — 📥 READY — Compile pipeline + tier-contract parity
 
 See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05-09T00:30:00Z, points at `/gsd-verify-phase 1`).
@@ -133,6 +133,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [04-02] retraction-watch offline fallback fires for any DOI without exact cassette match; freshness DOI-200 test asserts warnDoi=false only (not warnRetraction) due to documented offline fallback behavior
 - [04-02] CompileReportSchema uses z.strictObject (not z.object) to enforce ARCH-07 refuse-forward-incompat; rejects outline_hash/pandoc_target (RESEARCH.md drift keys)
 - [04-02] parseSectionDirName returns null (not throws) on traversal/invalid inputs so directory walkers can skip non-section entries gracefully (T-04-06 V12 ASVS)
+- [04-04] revise added to UX02_VERBS (17 total) — plan stated it was in locked-16 but it was absent; auto-fixed to add it
+- [04-04] normalizeExcerpt() strips leading/trailing `...` from LLM-produced excerpts for reliable before_excerpt matching in applySwapAction/applyRemoveAction
+- [04-04] tier-contract revise case uses --research path (CI-safe, no LLM) with RESEARCH-LOG.md artifact; full yolo parity deferred to Plan 05 Task 4 per D-24
 
 ### Pending Todos
 
@@ -153,6 +156,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-31T05:31:38.310Z
+Last session: 2026-05-31T05:50:34.635Z
 Stopped at: context exhaustion at 75% (2026-05-31)
 Resume file: None
