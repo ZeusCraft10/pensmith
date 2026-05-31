@@ -1,0 +1,28 @@
+[
+  {
+    "scope": "https://api.anthropic.com",
+    "method": "POST",
+    "path": "/v1/messages",
+    "status": 200,
+    "response": {
+      "id": "msg_smoother_clean_01",
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "### End of section intro\n\nThe transformer architecture has revolutionized natural language processing {{cite_1_1}}, enabling unprecedented performance on a wide range of benchmarks. Building upon these foundations, the following section presents the methodology employed in this study.\n\n### Start of section method\n\nThe methodology draws directly from the attention mechanisms described in prior work {{cite_2_1}}, adapting them for the domain-specific requirements of academic text analysis. Each experimental condition was evaluated under controlled settings to ensure reproducibility."
+        }
+      ],
+      "model": "claude-opus-4-5",
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 180,
+        "output_tokens": 95
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]
