@@ -102,7 +102,9 @@ export const verifyCommand = defineCommand({
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
 
-    const pass1 = await runPass1(draftMd, bibPath);
+    const pass1Run = await runPass1(draftMd, bibPath);
+    const pass1 = pass1Run.results;
+    const pass1Freshness = pass1Run.freshness;
     const bibEntries = await parseBibtex(readFileSync(bibPath, 'utf8'));
     const bibByCitekey = new Map<string, { DOI?: string }>(
       bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
@@ -111,12 +113,25 @@ export const verifyCommand = defineCommand({
 
     // Aggregate: any FABRICATED → status: failed; any MIS-CITED → status: failed;
     // any PDF_UNAVAILABLE/TEXT_UNAVAILABLE → status: unverifiable; else verified.
+    // Freshness (RSCH-10) is WARN-only — never changes blocking status (D-10/PRD §14).
     const hasFail = pass1.some((r) => r.verdict !== 'OK')
       || pass3.some((r) => r.verdict === 'NOT_FOUND');
     const hasUnverifiable = pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
     const status: 'verified' | 'failed' | 'unverifiable' = hasFail
       ? 'failed'
       : (hasUnverifiable ? 'unverifiable' : 'verified');
+
+    // Build VERIFICATION.md with RSCH-10 freshness table appended (WARN-only).
+    const freshnessRows = pass1Freshness
+      .filter((f) => f.doi !== null)
+      .map((f) => {
+        const probes: string[] = [];
+        if (f.warnDoi) probes.push('DOI stale');
+        if (f.warnRetraction) probes.push('retracted');
+        const statusStr = f.advisory ? 'WARN' : 'ok';
+        const detail = probes.length > 0 ? probes.join('; ') : '—';
+        return `| ${f.citekey} | ${f.doi ?? '—'} | ${statusStr} | ${detail} |`;
+      });
 
     const lines = [
       `# VERIFICATION (Section ${n}, ${slug})`,
@@ -131,10 +146,16 @@ export const verifyCommand = defineCommand({
       '',
       ...pass3.map((r) => `- ${r.citekey} ("${r.quoteSnippet}…"): **${r.verdict}** — lev=${r.levRatio.toFixed(3)} — ${r.reason}`),
       '',
+      '## Source Freshness (RSCH-10)',
+      '',
+      '| Citekey | Probe | Status | Detail |',
+      '|---------|-------|--------|--------|',
+      ...(freshnessRows.length > 0 ? freshnessRows : ['| — | — | — | No citations with DOIs to probe |']),
+      '',
     ];
     await atomicWriteFile(verifPath, lines.join('\n'));
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
-    return { ok: status !== 'failed', status, path: verifPath, pass1, pass3 };
+    return { ok: status !== 'failed', status, path: verifPath, pass1, pass1Freshness, pass3 };
   },
 });
 

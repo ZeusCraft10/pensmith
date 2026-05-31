@@ -27,6 +27,7 @@ import { firstAuthorSurname } from '../author-normalize.js';
 import { sources } from '../sources/index.js';
 import { parseBibtex } from '../citations.js';
 import { readFileSync } from 'node:fs';
+import { probeFreshness, type FreshnessResult } from './freshness.js';
 
 export type Pass1Verdict = 'OK' | 'MIS-CITED' | 'FABRICATED';
 
@@ -37,6 +38,19 @@ export interface Pass1Result {
   authorJW: number;
   reason: string;
 }
+
+/**
+ * Aggregate return type for runPass1 (Phase 4 extension — RSCH-10).
+ * The `results` array is the canonical blocking-verdict list (unchanged from
+ * Phase 3). The `freshness` array carries WARN-only advisory data for
+ * VERIFICATION.md and the COMPILE-REPORT aggregation (Plan 05).
+ */
+export interface Pass1RunResult {
+  results: Pass1Result[];
+  freshness: FreshnessResult[];
+}
+
+export type { FreshnessResult };
 
 interface BibAuthor {
   family?: string;
@@ -170,6 +184,9 @@ async function verdictForCitekey(
  *   1. Parse the BibTeX file into a citekey→entry map.
  *   2. Pull every `[@citekey]` token out of the draft (deduplicated).
  *   3. For each, call verdictForCitekey and collect the result.
+ *   4. (Phase 4 RSCH-10 extension) Probe freshness for each citekey that
+ *      resolved a DOI. Freshness results are WARN-only — they do NOT change
+ *      any blocking verdict (D-10 / PRD §14).
  *
  * 100% deterministic — no LLM, no narration, no side effects beyond the
  * Crossref HTTP read (cassette-served in offline test mode).
@@ -177,7 +194,7 @@ async function verdictForCitekey(
 export async function runPass1(
   draftMd: string,
   citationsBibPath: string,
-): Promise<Pass1Result[]> {
+): Promise<Pass1RunResult> {
   const bibText = readFileSync(citationsBibPath, 'utf8');
   const entries = await parseBibtex(bibText);
   const bibByCitekey = new Map<string, BibEntry>(
@@ -193,7 +210,18 @@ export async function runPass1(
   for (const ck of unique) {
     results.push(await verdictForCitekey(ck, bibByCitekey.get(ck)));
   }
-  return results;
+
+  // RSCH-10 freshness probe — WARN-only, never changes blocking verdicts.
+  // Probe each citekey's DOI; transport errors are silent.
+  const freshness: FreshnessResult[] = [];
+  for (const ck of unique) {
+    const entry = bibByCitekey.get(ck);
+    const doi = entry?.DOI ?? null;
+    const freshnessResult = await probeFreshness(ck, doi ?? null);
+    freshness.push(freshnessResult);
+  }
+
+  return { results, freshness };
 }
 
 /**
