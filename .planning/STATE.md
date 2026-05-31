@@ -26,16 +26,16 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 4
-Plan: 02
+Plan: 03
 Status: Ready to execute
-Last activity: 2026-05-30 -- Phase 04 Plan 01 (Wave Scheduler) complete
+Last activity: 2026-05-31 -- Phase 04 Plan 02 (RSCH-10 freshness + COMPILE-REPORT schema + path tolerance) complete
 
-Progress: [█████████░] 88%  (Phase 0 done; Phase 1 closed; Phase 2 CLOSED; Phase 3 CLOSED; Phase 4: 1/5 plans done)
+Progress: [█████████░] 90%  (Phase 0 done; Phase 1 closed; Phase 2 CLOSED; Phase 3 CLOSED; Phase 4: 2/5 plans done)
 
 Plan files (depends_on order):
 
 - 04-01 (wave 1) — ✅ DONE — Wave scheduler (6f0b4d1 / SUMMARY)
-- 04-02 (wave 1) — 📥 READY — RSCH-10 freshness + COMPILE-REPORT schema + path tolerance
+- 04-02 (wave 1) — ✅ DONE — RSCH-10 freshness + COMPILE-REPORT schema + path tolerance (e679729 / SUMMARY)
 - 04-03 (wave 2) — 📥 READY — Multi-section write orchestration
 - 04-04 (wave 3) — 📥 READY — pensmith revise + --research
 - 04-05 (wave 4) — 📥 READY — Compile pipeline + tier-contract parity
@@ -129,6 +129,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-07] Case D length comparison uses serialized fact-set JSON not raw full texts — doctor JSON (~3KB) vs capabilities JSON (~180B) is apples-to-oranges; fact-set text comparison enforces TIER-07 meaningfully
 - [02-07] MCP server main-guard uses pathToFileURL for Windows compatibility — naive file://${argv[1]} never matches absolute import.meta.url when argv[1] is relative
 - [02-07] Preflight resource count: listResources() (4 static) + listResourceTemplates() (1 section template) = 5 total per TIER-01
+- [04-02] runPass1 return type changed to Pass1RunResult {results, freshness} — preserves CYCLE-2 H-4 parameter signature while attaching RSCH-10 advisory data
+- [04-02] retraction-watch offline fallback fires for any DOI without exact cassette match; freshness DOI-200 test asserts warnDoi=false only (not warnRetraction) due to documented offline fallback behavior
+- [04-02] CompileReportSchema uses z.strictObject (not z.object) to enforce ARCH-07 refuse-forward-incompat; rejects outline_hash/pandoc_target (RESEARCH.md drift keys)
+- [04-02] parseSectionDirName returns null (not throws) on traversal/invalid inputs so directory walkers can skip non-section entries gracefully (T-04-06 V12 ASVS)
 
 ### Pending Todos
 
@@ -149,6 +153,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-30T07:47:43.832Z
-Stopped at: context exhaustion at 76% (2026-05-30)
+Last session: 2026-05-31T00:45:00.000Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None

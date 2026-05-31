@@ -182,7 +182,7 @@ Plans:
 **Wave 1**
 
 - [x] 04-01-PLAN.md (wave 1) — Wave scheduler / computeWaves(): outline-parse + Kahn topological sort by depends_on + wave-override validation + bounded-parallel runWave + citation-token helpers (ARCH-19, ARCH-20, PLAN-02, PLAN-03, COMP-06)
-- [ ] 04-02-PLAN.md (wave 1) — RSCH-10 freshness probe (WARN-only) + COMPILE-REPORT renderer/schema v1 (D-14 layout; supporting infra for COMP-07) + letter-suffix path tolerance (RSCH-10, ARCH-20)
+- [x] 04-02-PLAN.md (wave 1) — RSCH-10 freshness probe (WARN-only) + COMPILE-REPORT renderer/schema v1 (D-14 layout; supporting infra for COMP-07) + letter-suffix path tolerance (RSCH-10, ARCH-20)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
