@@ -162,10 +162,16 @@ export function paperDir(root: string = projectRoot()): string {
 }
 
 /**
- * Returns `<root>/.paper/sections/{NN-slug}` for a section index `n` in
- * `[0, 99]` and a free-form section name. The name is run through
- * `slugify`, which strips diacritics, lowercases, kebab-cases, truncates
- * to 64 chars, and rejects path-traversal patterns.
+ * Returns `<root>/.paper/sections/{NN[letter]-slug}` for a section index `n`
+ * in `[0, 99]`, a free-form section name, and an optional `letterSuffix`.
+ *
+ * - Without `opts.letterSuffix`: emits `NN-slug` (existing behavior unchanged —
+ *   D-15: Phase 4 does NOT emit suffixed paths, only tolerates them).
+ * - With `opts.letterSuffix`: emits `NNletter-slug` (e.g. '03b-validity-threats').
+ *   Existing 3-arg callers are unaffected.
+ *
+ * The name is run through `slugify`, which strips diacritics, lowercases,
+ * kebab-cases, truncates to 64 chars, and rejects path-traversal patterns.
  *
  * Throws if `n` is not a non-negative integer ≤ 99.
  */
@@ -173,13 +179,89 @@ export function sectionDir(
   n: number,
   slug: string,
   root: string = projectRoot(),
+  opts?: { letterSuffix?: string },
 ): string {
   if (!Number.isInteger(n) || n < 0 || n > 99) {
     throw new Error(`sectionDir: n must be an integer in [0,99]; got ${n}`);
   }
   const padded = String(n).padStart(2, '0');
   const safeSlug = slugify(slug);
-  return path.join(paperDir(root), 'sections', `${padded}-${safeSlug}`);
+  const suffix = opts?.letterSuffix ?? '';
+  return path.join(paperDir(root), 'sections', `${padded}${suffix}-${safeSlug}`);
+}
+
+// ---------------------------------------------------------------------------
+// parseSectionDirName (ARCH-20 / D-15 — letter-suffix path tolerance).
+//
+// Parses a directory basename of the form `NN[letter]-slug` where:
+//   - NN is a zero-padded integer in [00, 99]
+//   - [letter] is an optional single lowercase letter a-z (letter suffix)
+//   - slug is a bare lowercase-kebab-case slug matching /^[a-z0-9-]+$/
+//
+// Security (T-04-06 / V12 ASVS path-traversal mitigation):
+//   Returns null on any input that:
+//   - Contains a null byte (null-byte injection)
+//   - Is or begins with '..' (traversal)
+//   - Is or begins with '/' or '\' (absolute path / Windows traversal)
+//   - Does not match the NN[letter]-slug pattern
+//   - Has an invalid slug after the '-' separator
+//
+// Phase 4 obligation (D-15): any path-walking code that encounters a directory
+// name must tolerate letter-suffix names without error. This parser is the
+// canonical entry point for that tolerance.
+// ---------------------------------------------------------------------------
+
+export interface SectionDirParsed {
+  n: number;
+  letterSuffix?: string;
+  slug: string;
+}
+
+/**
+ * Parse a section directory basename into its numeric index, optional letter
+ * suffix, and slug. Returns null (not a throw) on invalid/traversal inputs
+ * so callers can skip non-section entries when walking a directory.
+ *
+ * Valid examples:
+ *   '03-intro'              → { n: 3, slug: 'intro' }
+ *   '03b-validity-threats'  → { n: 3, letterSuffix: 'b', slug: 'validity-threats' }
+ *
+ * Invalid (returns null):
+ *   '..'    absolute paths   null-byte strings   backslash paths
+ */
+export function parseSectionDirName(basename: string): SectionDirParsed | null {
+  // Null-byte injection guard (T-04-06 / V12 ASVS).
+  if (typeof basename !== 'string' || basename.includes('\0')) return null;
+
+  // Absolute path guard (Unix and Windows).
+  if (basename.startsWith('/') || basename.startsWith('\\')) return null;
+
+  // Traversal guard — reject '..' and any path containing a separator.
+  if (basename === '..' || basename.startsWith('../') || basename.startsWith('..\\')) return null;
+  if (basename.includes('/') || basename.includes('\\')) return null;
+  if (basename === '.') return null;
+
+  // Match NNletter?-slug pattern.
+  // ^(\d{2})([a-z])?-([a-z0-9-]+)$
+  const match = /^(\d{2})([a-z])?-([a-z0-9-]+)$/.exec(basename);
+  if (!match) return null;
+
+  const rawN = match[1];
+  const letter = match[2]; // undefined when no suffix
+  const slug = match[3];
+
+  if (!rawN || !slug) return null;
+
+  const n = parseInt(rawN, 10);
+  if (!Number.isInteger(n) || n < 0 || n > 99) return null;
+
+  // Validate the slug via SLUG_RE (same guard used by validateSlug).
+  if (!SLUG_RE.test(slug)) return null;
+
+  if (letter !== undefined) {
+    return { n, letterSuffix: letter, slug };
+  }
+  return { n, slug };
 }
 
 // Sync-folder detection patterns, per D-43.
