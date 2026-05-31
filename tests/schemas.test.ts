@@ -1,7 +1,8 @@
 // tests/schemas.test.ts — happy + sad path validation for all 5 zod schemas.
 //
 // Coverage matrix (per VALIDATION 01-07-03):
-//   - All 5 CURRENT_*_VERSION constants are 1
+//   - CURRENT_STATE_VERSION is 2 (bumped in 03-03 / D-08 / D-09); the other 4
+//     constants remain 1
 //   - state    : valid + 3 invalid (empty paperId / wrong version / bad date)
 //   - library  : valid empty, valid with entry, rejects empty-id entry
 //   - checkpoint: valid + rejects empty label
@@ -34,8 +35,8 @@ import {
 
 const ISO = '2026-05-08T00:00:00.000Z';
 
-test('CURRENT_*_VERSION constants are all 1', () => {
-  assert.equal(CURRENT_STATE_VERSION, 1);
+test('CURRENT_*_VERSION constants (state=2 per 03-03 D-08/D-09, rest=1)', () => {
+  assert.equal(CURRENT_STATE_VERSION, 2);
   assert.equal(CURRENT_LIBRARY_VERSION, 1);
   assert.equal(CURRENT_CHECKPOINT_VERSION, 1);
   assert.equal(CURRENT_SESSION_LOG_VERSION, 1);
@@ -47,7 +48,7 @@ test('CURRENT_*_VERSION constants are all 1', () => {
 test('state: valid example parses', () => {
   assert.ok(
     StateSchema.safeParse({
-      $schemaVersion: 1,
+      $schemaVersion: CURRENT_STATE_VERSION,
       paperId: 'demo',
       createdAt: ISO,
     }).success,
@@ -57,7 +58,7 @@ test('state: valid example parses', () => {
 test('state: rejects empty paperId / wrong $schemaVersion / bad createdAt', () => {
   assert.ok(
     !StateSchema.safeParse({
-      $schemaVersion: 1,
+      $schemaVersion: CURRENT_STATE_VERSION,
       paperId: '',
       createdAt: ISO,
     }).success,
@@ -65,15 +66,15 @@ test('state: rejects empty paperId / wrong $schemaVersion / bad createdAt', () =
   );
   assert.ok(
     !StateSchema.safeParse({
-      $schemaVersion: 2,
+      $schemaVersion: 1,
       paperId: 'demo',
       createdAt: ISO,
     }).success,
-    'wrong $schemaVersion must be rejected (literal-1 guard)',
+    'wrong $schemaVersion must be rejected (literal-2 guard)',
   );
   assert.ok(
     !StateSchema.safeParse({
-      $schemaVersion: 1,
+      $schemaVersion: CURRENT_STATE_VERSION,
       paperId: 'demo',
       createdAt: 'not-iso',
     }).success,

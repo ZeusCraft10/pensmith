@@ -259,13 +259,22 @@ test('Case C: paper_advance_section is idempotent (state read scoped to temp pap
     assert.ok(stateFirst != null && 'text' in stateFirst, 'paper://state must return text content');
     const stateText = (stateFirst as { text: string }).text;
     assert.ok(typeof stateText === 'string');
-    const stateJson = JSON.parse(stateText as string) as { sections?: Array<{ n: number; state: string }> };
+    const stateJson = JSON.parse(stateText as string) as { sections?: Array<{ n: number; slug: string }> };
     const section = (stateJson.sections ?? []).find((s) => s.n === 1);
     assert.ok(
       section,
       `section 1 must exist in state at temp paperRoot ${root} (HIGH #4 regression check — if missing, paper://state is reading the wrong paperRoot)`,
     );
-    assert.equal(section.state, 'writing', 'section 1 state must be "writing" after advance');
+    // D-08 (03-03): per-section state moved to PLAN.md frontmatter; STATE.json
+    // sections are { n, slug } strict and advanceSection is a documented no-op
+    // at the STATE.json layer. So we assert the slim v2 shape, not a `state`
+    // field (which no longer exists here). Idempotency is proven by the
+    // r1 === r2 deepEqual above.
+    assert.equal(section.slug, 'intro', 'section 1 slug must persist (v2 { n, slug } shape)');
+    assert.ok(
+      !('state' in section),
+      'STATE.json sections must NOT carry a per-section `state` field post-D-08',
+    );
   } finally {
     await scopedClient.close();
   }
