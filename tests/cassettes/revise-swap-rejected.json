@@ -1,0 +1,10 @@
+{
+  "action": "swap",
+  "flagged_citekey": "jones2020",
+  "replacement_citekey": "wang2018",
+  "rationale": "wang2018 covers related content and is listed in the assigned sources.",
+  "patch": {
+    "before_excerpt": "...documented in prior work [@jones2020] on this...",
+    "after_excerpt": "...documented in prior work [@wang2018] on this..."
+  }
+}

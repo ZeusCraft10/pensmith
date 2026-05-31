@@ -12,8 +12,9 @@
 //     step that rewrites a prompt) is also caught — there is no race window
 //     between PR review and execution.
 //
-// D-12 LOCKED slugs — the 8 keys below ARE the prompt slug set. Any drift
-// (adding/removing/renaming a slug) requires re-locking D-12 in CONTEXT.md.
+// D-12 LOCKED slugs — Phase 3 shipped 8 keys. Phase 4 D-05 adds `revise-swap`
+// (citation-swap revise chokepoint) and Phase 4 D-12 adds `smoother` (boundary
+// smoother, Plan 05). Any other drift requires re-locking D-12 in CONTEXT.md.
 //
 // D-13 LOCKED: pass1-fuzzy-judge + pass3-quote-checker are DORMANT in Phase 3.
 // The files exist and are hash-pinned (so the calibration artifact does not
@@ -28,6 +29,11 @@
 //   with real SHA-256 values once all 8 prompt files are byte-stable.
 //   While sentinels are in place, set PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1
 //   to bypass the runtime drift error (CI sets this during Waves 1-7).
+//
+// Phase-4 additions (D-05/D-12): `revise-swap` (Plan 04-04) and `smoother`
+// (Plan 04-05) are two new hash-pinned slugs authorized by 04-CONTEXT.md. The
+// Phase-3 "8 LOCKED slugs" comment above is intentionally updated here to
+// reflect their addition.
 //
 // `tests/repo-files.test.ts` imports `EXPECTED_PROMPT_HASHES` from this
 // module so the test pins and the runtime pins are GUARANTEED in lockstep
@@ -76,13 +82,13 @@ const PKG_ROOT = findPkgRoot(__dirname);
  * this map (single source of truth — WN-3) so drift between the runtime
  * pins and the PR-time pins is STRUCTURALLY impossible.
  *
- * D-12 LOCKED — the 8 keys here are the canonical prompt slug set.
+ * D-12 LOCKED — the 8 Phase-3 keys plus 2 Phase-4 additions (D-05/D-12):
+ *   revise-swap (Plan 04-04) + smoother (Plan 04-05).
  * D-13 LOCKED — pass1-fuzzy-judge + pass3-quote-checker DORMANT in Phase 3.
  *
- * WN-3 — values are `__PENDING_HASH_<slug>__` until Plan 03-09's single
- * re-pin commit replaces them with real SHA-256s. Set
- * PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1 to bypass the drift check while
- * sentinels are in place (CI sets this during Waves 1-7).
+ * WN-3 — values are `__PENDING_HASH_<slug>__` until the single re-pin commit
+ * replaces them with real SHA-256s. Set PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1
+ * to bypass the drift check while sentinels are in place.
  */
 export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   // WN-3 sentinel-replacement (Plan 03-09 Task 9.3.5) — these 8 SHA-256
@@ -98,6 +104,10 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   'section-drafter':     'baf0172b4e2e96a2d2a1a6c35b5cf548faafd9436f1405e863060c619caa1d34',  // D-12 LOCKED
   'pass1-fuzzy-judge':   'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e',  // D-12 LOCKED + D-13 DORMANT in Phase 3
   'pass3-quote-checker': '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9',  // D-12 LOCKED + D-13 DORMANT in Phase 3
+  // Phase-4 additions (D-05/D-12 — authorized by 04-CONTEXT.md):
+  'revise-swap':         '__PENDING_HASH_revise-swap__',  // Plan 04-04 Task 1 — re-pinned in Task 3
+  // smoother slot reserved for Plan 04-05 (D-12):
+  // 'smoother':         '__PENDING_HASH_smoother__',
 };
 
 /**

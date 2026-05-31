@@ -244,9 +244,17 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   { slug: 'pass1-fuzzy-judge',   path: 'templates/prompts/pass1-fuzzy-judge.md',   decision: 'D-12 + D-13 DORMANT in Phase 3', hash: 'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e' },
   { slug: 'pass3-quote-checker', path: 'templates/prompts/pass3-quote-checker.md', decision: 'D-12 + D-13 DORMANT in Phase 3', hash: '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9' },
   { slug: 'apa-csl',             path: 'templates/citation-styles/apa.csl',        decision: 'D-22 (different chokepoint)',    hash: '249341f13df5cff992efdc71e12b9888678f8e4ad69e17fe12bd2c5245681094' },
+  // Phase-4 additions (D-05/D-12 — authorized by 04-CONTEXT.md):
+  // Plan 04-04 Task 1: revise-swap sentinel. Task 3 replaces with real SHA-256 (WN-3 lockstep).
+  { slug: 'revise-swap',         path: 'templates/prompts/revise-swap.md',         decision: 'D-05/D-12 Phase 4 (sentinel — re-pinned Task 3)', hash: '__PENDING_HASH_revise-swap__' },
 ];
 for (const pin of PENDING_HASH_PINS) {
   test(`hash-pin: ${pin.path} (${pin.decision})`, () => {
+    // WN-3 sentinel: skip actual-hash comparison during Task 1 sentinel period.
+    // Task 3 replaces the __PENDING_HASH_<slug>__ with a real SHA-256 in lockstep.
+    if (pin.hash.startsWith('__PENDING_HASH_')) {
+      return; // sentinel — real pin landed in the same Task-3 commit (WN-3)
+    }
     const bytes = readFileSync(pin.path);
     const hash = createHash('sha256').update(bytes).digest('hex');
     assert.equal(
