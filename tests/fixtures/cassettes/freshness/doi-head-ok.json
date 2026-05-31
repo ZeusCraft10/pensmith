@@ -1,0 +1,10 @@
+[
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/10.1038/s41586-021-03819-2",
+    "status": 200,
+    "response": "",
+    "responseHeaders": { "content-type": "text/html" }
+  }
+]

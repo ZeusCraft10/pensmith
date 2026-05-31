@@ -1,0 +1,21 @@
+[
+  {
+    "scope": "https://api.labs.crossref.org",
+    "method": "GET",
+    "path": "/data/retractions?filter=record:10.1234/retracted-paper",
+    "status": 200,
+    "response": {
+      "items": [
+        {
+          "doi": "10.1234/retracted-paper",
+          "title": "A Retracted Study on Widget Mechanisms",
+          "authors": [{ "given": "Jane", "family": "Smith" }],
+          "year": 2018,
+          "retractedDate": "2022-06-01",
+          "reason": "data fabrication"
+        }
+      ]
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]
