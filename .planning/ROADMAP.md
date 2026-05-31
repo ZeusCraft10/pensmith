@@ -186,7 +186,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 04-03-PLAN.md (wave 2) — Multi-section write orchestration: drain waves, bounded parallel / Tier-2 serial, blocked-subtree pruning, section-isolation-N (ARCH-19, ARCH-20)
+- [x] 04-03-PLAN.md (wave 2) — Multi-section write orchestration: drain waves, bounded parallel / Tier-2 serial, blocked-subtree pruning, section-isolation-N (ARCH-19, ARCH-20)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -298,7 +298,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 1. Foundation NFRs | 14/14 | COMPLETE (VERIFICATION PASS 5/5) | 2026-05-14 |
 | 2. Tier shells + doctor + tier-contract gate | 10/10 | COMPLETE | 2026-05-16 |
 | 3. Vertical slice through one section | 10/10 | Complete    | 2026-05-28 |
-| 4. Breadth — N sections + compile + wave scheduling | 1/5 | In Progress|  |
+| 4. Breadth — N sections + compile + wave scheduling | 3/5 | In Progress|  |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 0/TBD | Not started | - |
 | 6. Done / export pipeline + zero-trace gate | 0/TBD | Not started | - |
 | 7. Single-command UX layer + hooks + flags | 0/TBD | Not started | - |

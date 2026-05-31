@@ -35,8 +35,8 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [ ] **ARCH-16**: Replayable session log at `.paper/SESSION.log` (jsonl); `--show-prompts` flag dumps every LLM prompt
 - [ ] **ARCH-17**: PII redaction option (intake-time, before any LLM call) via `bin/lib/pii.ts` — hand-rolled regex pass for v0.1
 - [ ] **ARCH-18**: MCP server (`mcp/server.ts`) is a thin shim — tool handlers ≤30 lines, all business logic in `bin/lib/*` `[research]`
-- [ ] **ARCH-19**: Section state machine field `state ∈ {planned, writing, written, verifying, verified, failed}` plus `verified_against_draft_hash` for compile-staleness detection `[research]`
-- [ ] **ARCH-20**: Stable section numbering — never renumber on insert; letter-suffix policy (e.g., `03b-validity-threats/`) `[research]`
+- [x] **ARCH-19**: Section state machine field `state ∈ {planned, writing, written, verifying, verified, failed}` plus `verified_against_draft_hash` for compile-staleness detection `[research]`
+- [x] **ARCH-20**: Stable section numbering — never renumber on insert; letter-suffix policy (e.g., `03b-validity-threats/`) `[research]`
 
 ### Tier Shells & Doctor
 
@@ -324,8 +324,8 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | TEST-03 | Phase 3 | Complete |
 | TEST-04 | Phase 3 | Complete |
 | TEST-09 | Phase 3 | Complete |
-| ARCH-19 | Phase 4 | Pending |
-| ARCH-20 | Phase 4 | Pending |
+| ARCH-19 | Phase 4 | Complete |
+| ARCH-20 | Phase 4 | Complete |
 | PLAN-02 | Phase 4 | Pending |
 | PLAN-03 | Phase 4 | Pending |
 | WRTE-02 | Phase 4 | Pending |
@@ -381,6 +381,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | CITE-05 | Phase 10 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 132 total
 - Mapped to phases: 132
 - Unmapped: 0 ✓
