@@ -207,22 +207,32 @@ export function registerPaperTools(server: McpServer): void {
     },
   );
 
-  // Tool 8: pensmith_write — Tier 1 equivalent of `pensmith write <N>`.
+  // Tool 8: pensmith_write — Tier 1 equivalent of `pensmith write [<N>]`.
+  // n is optional: omit for wave-mode (all sections); provide for single-section.
   server.registerTool(
     'pensmith_write',
     {
-      title: 'Draft a section DRAFT.md',
-      description: 'Tier 1 equivalent of `pensmith write <N>`. Imports bin/cli/write.ts default export.',
+      title: 'Draft section DRAFT.md(s)',
+      description: 'Tier 1 equivalent of `pensmith write [<N>]`. Without n, schedules all planned sections into waves (Plan 04-03 wave-mode). With n, drafts a single section.',
       inputSchema: {
-        n: z.number().int().min(1),
+        n: z.number().int().min(1).optional(),
         slug: z.string().optional(),
         yolo: z.boolean().optional(),
+        maxParallel: z.number().int().min(1).optional(),
       },
     },
-    async ({ n, slug, yolo }) => {
+    async ({ n, slug, yolo, maxParallel }) => {
+      const args: Record<string, unknown> = { yolo: yolo ?? false };
+      if (n !== undefined) {
+        args['n'] = String(n);
+        args['slug'] = slug ?? '';
+      }
+      if (maxParallel !== undefined) {
+        args['maxParallel'] = String(maxParallel);
+      }
       const result = await runVerbDirect(
         () => import('../bin/cli/write.js').then((m) => m.default),
-        { n: String(n), slug: slug ?? '', yolo: yolo ?? false },
+        args,
       );
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     },

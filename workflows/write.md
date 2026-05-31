@@ -1,8 +1,9 @@
 # pensmith write
 
-> Draft one section. Per-section verb — touches ONLY
-> `.paper/sections/<NN>-<slug>/` (TEST-09 section-isolation invariant).
-> Drafter input is contract-validated by `assertDrafterInput` (T-3-10).
+> Draft one section (with `<N>`) or all planned sections (without `<N>`,
+> wave-mode). Per-section verb — touches ONLY `.paper/sections/<NN>-<slug>/`
+> (TEST-09 section-isolation invariant). Drafter input is contract-validated
+> by `assertDrafterInput` (T-3-10) for every section.
 
 <capability_check>
 required:
@@ -10,6 +11,17 @@ required:
 
 degrade_if_missing:
   - if no MCP tools: direct file writes via atomicWriteFile
+  - if no Task (wave-mode parallel): invoke runAllSections in-process serially (--max-parallel 1)
+</capability_check>
+
+<capability_check name="wave-mode">
+required:
+  - Task
+
+degrade_if_missing:
+  - if no Task: wave-mode runs serially via Semaphore(1) (Tier 2 forced --max-parallel 1)
+  - Tier 2 emits one WARN: "Tier 2 runs sections serially; --max-parallel ignored" (D-02)
+  - Wave progress is streamed as JSON lines to stdout (not console.*) per T-04-13
 </capability_check>
 
 ## Overview
@@ -19,8 +31,15 @@ It is the only verb that produces narrative prose for the paper. The drafter see
 RESTRICTED VIEW of the library: only the `assigned_sources` citekeys from the section's
 PLAN.md, never the full LIBRARY.json (PRD §7.6 — Pitfall 7 chinese-wall).
 
-The implementation lives in `bin/cli/write.ts` (created by Plan 07). The workflow body
-below is the prompt that drives the verb under both Tier 1 and Tier 2.
+`pensmith write` (no `<N>`) schedules all planned sections into waves (Plan 04-03).
+Waves drain serially; within each wave sections run in bounded parallel under
+`--max-parallel` (default 5, Tier 1) or serially (Tier 2, forced `--max-parallel 1`
+with one WARN per run — D-02). Within-wave failures do not cancel siblings; downstream
+dependents of failed/missing sections are marked `blocked` (D-03).
+
+The implementation lives in `bin/cli/write.ts` (Plan 07 / Plan 04-03 wave extension)
+and `bin/lib/write-orchestrator.ts` (Plan 04-03). The workflow body below drives both
+paths under Tier 1 and Tier 2.
 
 ## Steps
 

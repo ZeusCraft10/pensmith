@@ -399,6 +399,19 @@ const PHASE_3_CASES: Phase3Case[] = [
     expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/DRAFT.md`,
   },
   {
+    // write-wave: Plan 04-03 D-24 tier-contract obligation — wave-mode write.
+    // Exercises pensmith write (no n) against a 2-section no-dep fixture seeded
+    // in seedPaperFixture (OUTLINE.md + 2 section PLAN.md files). Both tiers
+    // assert at least one DRAFT.md is produced. Plan 05 Task 4 extends with
+    // full 3-section deps parity + Tier-2 serial-WARN assertions.
+    name: 'write-wave',
+    mcpTool: 'pensmith_write',
+    cliArgs: ['write', '--max-parallel', '1', '--yolo'],
+    verbFile: 'bin/cli/write.ts',
+    // Artifact: first wave section DRAFT.md (section 1 in the 2-section fixture).
+    expectedArtifact: `.paper/sections/01-wave-sec1/DRAFT.md`,
+  },
+  {
     name: 'verify-section',
     mcpTool: 'pensmith_verify',
     cliArgs: ['verify', MIDDLE_SECTION, '--yolo'],
@@ -477,6 +490,24 @@ function seedPaperFixture(): string {
   const bibFixture = fileURLToPath(new URL('./fixtures/known-good-fixture/CITATIONS.bib', import.meta.url));
   if (existsSync(bibFixture)) {
     writeFileSync(join(root, '.paper', 'CITATIONS.bib'), readFileSync(bibFixture, 'utf8'));
+  }
+  // Seed OUTLINE.md + section PLAN.md files for write-wave (Plan 04-03 D-24).
+  // 2-section no-dep fixture so the wave scheduler can schedule both sections.
+  // Slugs must match the expectedArtifact path in the write-wave PHASE_3_CASES entry.
+  const outlineMd = [
+    '# Test Paper (tier-contract wave fixture)',
+    '| # | slug | title | depends_on | word target | assigned_sources |',
+    '|---|------|-------|-----------|-------------|------------------|',
+    '| 1 | wave-sec1 | Wave Section 1 |  | 300 |  |',
+    '| 2 | wave-sec2 | Wave Section 2 |  | 300 |  |',
+  ].join('\n') + '\n';
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outlineMd);
+  const secDirs = ['01-wave-sec1', '02-wave-sec2'];
+  for (const d of secDirs) {
+    const sd = join(root, '.paper', 'sections', d);
+    mkdirSync(sd, { recursive: true });
+    const slug = d.replace(/^\d+-/, '');
+    writeFileSync(join(sd, 'PLAN.md'), `---\nslug: ${slug}\nstatus: planned\n---\n\n# ${slug}\n`);
   }
   return root;
 }
