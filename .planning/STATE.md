@@ -4,14 +4,14 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: context exhaustion at 76% (2026-05-30)
-last_updated: "2026-05-30T14:26:33.248Z"
-last_activity: 2026-05-30 -- Phase 04 planning complete
+last_updated: "2026-05-30T15:00:00.000Z"
+last_activity: 2026-05-30 -- Phase 04 Plan 01 (Wave Scheduler) complete
 progress:
   total_phases: 11
-  completed_phases: 4
+  completed_phases: 3
   total_plans: 43
-  completed_plans: 38
-  percent: 36
+  completed_plans: 39
+  percent: 88
 ---
 
 # Project State
@@ -21,33 +21,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-06)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** Phase 3 — vertical-slice-one-section
+**Current focus:** Phase 4 — breadth-n-sections-compile-wave-scheduling
 
 ## Current Position
 
 Phase: 4
-Plan: Not started
+Plan: 02
 Status: Ready to execute
-Last activity: 2026-05-30 -- Phase 04 planning complete
+Last activity: 2026-05-30 -- Phase 04 Plan 01 (Wave Scheduler) complete
 
-Progress: [████████░░] 86%  (Phase 0 done; Phase 1 closed; Phase 2 CLOSED — 10/10 plans)
+Progress: [█████████░] 88%  (Phase 0 done; Phase 1 closed; Phase 2 CLOSED; Phase 3 CLOSED; Phase 4: 1/5 plans done)
 
 Plan files (depends_on order):
 
-- 01-00 (wave 0)  — ✅ DONE — Wave 0 prep (CI Node 20.10→20.18, deps, chokepoints, fixtures, locked WARN copy) — commits 2e109dc / f3569c3 / f1842e7
-- 01-01 (wave 1)  — ✅ DONE — paths.ts (a507cd7 recovery + 7b0869e tests + 79cf59d SUMMARY)
-- 01-02 (wave 2)  — ✅ DONE — atomic-write.ts D-07 chokepoint (908cdc2 / 53e01b5 / e1b582e)
-- 01-03 (wave 3)  — ✅ DONE — lock.ts proper-lockfile CJS shim (2a5bed4 / b250bb0 / 4599549)
-- 01-04 (wave 4)  — ✅ DONE — doi.ts + fast-check property fuzz (b915ad6 / a793506 / 479403d)
-- 01-05 (wave 5)  — ✅ DONE — http.ts undici + retry shim + 8 cassettes (a71a798 / 0a56be6 / 30f7642 / 4538b44)
-- 01-06 (wave 6)  — ✅ DONE — budget.ts cost ledger (65fb183 / 8567e88 / 795296c)
-- 01-07 (wave 4)  — ✅ DONE — migrations + 5 zod schemas + loader (8bd0a4d / 85fc938 / ed35099 / d0d955b / 4f1b11a)
-- 01-08 (wave 4)  — ✅ DONE — pii.ts D-49 redaction primitives (1c9f3af / 2a77d74 / 89d1493)
-- 01-09 (wave 9)  — ✅ DONE — session-log.ts JSONL D-49/50/51/52 (f605207 / 1334691 / 6e4b985)
-- 01-10 (wave 10) — ✅ DONE — state.ts D-58 paper-state glue (8617c63 / e475b0b / 85e2737)
-- 01-11 (wave 10) — ✅ DONE — library.ts D-59 paper-library glue (3a2e83c / fe430e3 / 9ee0aac)
-- 01-12 (wave 10) — ✅ DONE — checkpoint.ts D-60 append-only audit log (2dd174b / 24a0200 / 44bec0f)
-- 01-13 (wave 11) — ✅ DONE — runtime.ts + pricing.ts (ARCH-14, Key Finding #5 OPENALEX_API_KEY slot) — 43a1835 / adfcbc2 / b00ed17 / SUMMARY-pending
+- 04-01 (wave 1) — ✅ DONE — Wave scheduler (6f0b4d1 / SUMMARY)
+- 04-02 (wave 1) — 📥 READY — RSCH-10 freshness + COMPILE-REPORT schema + path tolerance
+- 04-03 (wave 2) — 📥 READY — Multi-section write orchestration
+- 04-04 (wave 3) — 📥 READY — pensmith revise + --research
+- 04-05 (wave 4) — 📥 READY — Compile pipeline + tier-contract parity
 
 See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05-09T00:30:00Z, points at `/gsd-verify-phase 1`).
 
