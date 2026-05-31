@@ -121,11 +121,10 @@ test('smoother-token-protect: ORDERED sequence check — reordered placeholders 
 
   // Build ordered sequence of placeholders as compile.ts would
   let counter = 0;
-  const keyToPlaceholder = new Map<string, string>();
   const inputSequence: string[] = [];
-  const _ = replaceCitekeys(text, (key) => {
+  replaceCitekeys(text, (key) => {
     const token = `{{cite_1_${++counter}}}`;
-    keyToPlaceholder.set(key, token);
+    void key;  // key is used implicitly via counter
     inputSequence.push(token);
     return token;
   });

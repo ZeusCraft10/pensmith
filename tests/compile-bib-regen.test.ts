@@ -9,7 +9,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -112,6 +112,7 @@ test('compile-bib-regen: after compile, CITATIONS.bib exists and is regenerated 
   assert.ok(result.ok, `compile must succeed: ${result.reason ?? 'unknown'}`);
 
   const bibPath = join(root, '.paper', 'CITATIONS.bib');
+  const { existsSync } = await import('node:fs');
   assert.ok(existsSync(bibPath), '.paper/CITATIONS.bib must exist after compile');
 });
 

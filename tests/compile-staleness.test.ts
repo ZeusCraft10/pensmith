@@ -92,11 +92,13 @@ test('compile-staleness: stale hash → WARN + auto re-verify (Pass 1+3); all-pa
   // and record the staleness event. We only assert result.ok is truthy here because
   // the test is primarily about the staleness path executing without block.
   if (result.ok) {
-    assert.ok(existsSync(join(root, '.paper', 'COMPILE-REPORT.md')), 'COMPILE-REPORT.md must be written');
-    const report = existsSync(join(root, '.paper', 'COMPILE-REPORT.md'))
-      ? require('node:fs').readFileSync(join(root, '.paper', 'COMPILE-REPORT.md'), 'utf8')
-      : '';
-    assert.match(report, /Compile-Staleness Resolved/i, 'staleness section must be in report');
+    const reportPath = join(root, '.paper', 'COMPILE-REPORT.md');
+    assert.ok(existsSync(reportPath), 'COMPILE-REPORT.md must be written');
+    if (existsSync(reportPath)) {
+      const { readFileSync: rfs } = await import('node:fs');
+      const report = rfs(reportPath, 'utf8');
+      assert.match(report, /Compile-Staleness Resolved/i, 'staleness section must be in report');
+    }
   }
 });
 
@@ -128,9 +130,9 @@ test('compile-staleness: stale hash + re-verify fails → compile blocks (COMP-0
 test('compile-staleness: Pass 2/4 are NEVER invoked (D-08 — re-verify uses Pass 1+3 ONLY)', async () => {
   // Grep-level assertion: compile.ts must not import pass2 or pass4.
   // This is a structural test that will pass once compile.ts exists.
-  const { readFileSync, existsSync } = await import('node:fs');
+  const { readFileSync, existsSync: fsExists } = await import('node:fs');
   const compilePath = new URL('../bin/lib/compile.ts', import.meta.url);
-  if (!existsSync(compilePath)) {
+  if (!fsExists(compilePath)) {
     throw new Error('bin/lib/compile.ts not implemented yet (RED)');
   }
   const src = readFileSync(compilePath, 'utf8');
@@ -146,9 +148,9 @@ test('compile-staleness: Pass 2/4 are NEVER invoked (D-08 — re-verify uses Pas
 
 test('compile-staleness: compile lock uses stale: 30000 (REVIEW M-03)', async () => {
   // Structural assertion: compile.ts must pass stale: 30000 to the lock call.
-  const { readFileSync, existsSync } = await import('node:fs');
+  const { readFileSync, existsSync: fsExists2 } = await import('node:fs');
   const compilePath = new URL('../bin/lib/compile.ts', import.meta.url);
-  if (!existsSync(compilePath)) {
+  if (!fsExists2(compilePath)) {
     throw new Error('bin/lib/compile.ts not implemented yet (RED)');
   }
   const src = readFileSync(compilePath, 'utf8');

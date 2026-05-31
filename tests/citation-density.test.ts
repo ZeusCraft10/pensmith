@@ -7,11 +7,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Helper: count words in markdown text
-function countWords(text: string): number {
-  return text.split(/\s+/).filter((w) => w.length > 0).length;
-}
-
 test('citation-density: per-section citations_per_1000_words computed correctly (COMP-05)', async () => {
   const { computeCitationDensity } = await import('../bin/lib/citation-density.js').catch(() => {
     throw new Error('bin/lib/citation-density.ts not implemented yet (RED)');
@@ -19,7 +14,6 @@ test('citation-density: per-section citations_per_1000_words computed correctly 
 
   // Section 1: 100 words, 5 citations → 50 citations per 1000 words
   const sec1Text = 'word '.repeat(100) + '[@a1] [@a2] [@a3] [@a4] [@a5]';
-  const sec1Words = countWords('word '.repeat(100));
   // Section 2: 200 words, 4 citations → 20 citations per 1000 words
   const sec2Text = 'word '.repeat(200) + '[@b1] [@b2] [@b3] [@b4]';
 
@@ -81,8 +75,10 @@ test('citation-density: discipline-preset-target comparison emits warn (COMP-05)
   ];
 
   const result = computeCitationDensity(sections, 'stem');
-  assert.ok(typeof result.target_comparison === 'object' || typeof result.warn === 'boolean' || typeof result.discipline_target !== 'undefined',
-    'result must include discipline-target comparison data (COMP-05)');
+  assert.ok(
+    typeof result.target_comparison === 'object' || typeof result.warn === 'boolean',
+    'result must include discipline-target comparison data (COMP-05)',
+  );
 });
 
 test('citation-density: warn-only — never throws even on edge-case inputs (COMP-05)', async () => {
