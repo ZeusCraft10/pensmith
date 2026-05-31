@@ -226,9 +226,7 @@ test('revise: --research only writes to project RESEARCH.md and section RESEARCH
 // Test 5a: REMOVE-ACTION — compound [@a; @b] — remove one key, preserve the other
 // ---------------------------------------------------------------------------
 test('revise: remove action on compound [@a; @b] leaves [@b] intact', async () => {
-  const removeResponse = loadCassetteJson('revise-swap-remove');
-
-  // Modify cassette: flag 'a' for removal in a compound token
+  // Build a cassette for compound removal (revise-swap-remove.json is the basis)
   const compoundCassette = JSON.stringify({
     action: 'remove',
     flagged_citekey: 'fabricated2021',
