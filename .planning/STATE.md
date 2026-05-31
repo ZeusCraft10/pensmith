@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-04-PLAN.md (2026-05-31)
-last_updated: "2026-05-31T06:30:00.000Z"
-last_activity: 2026-05-31 -- Phase 04 Plan 04 (pensmith revise + --research + tier-contract entry) complete
+stopped_at: Completed 04-05-PLAN.md (2026-05-31)
+last_updated: "2026-05-31T08:00:00.000Z"
+last_activity: 2026-05-31 -- Phase 04 Plan 05 (compile pipeline + tier-contract parity) complete
 progress:
   total_phases: 11
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 43
-  completed_plans: 42
-  percent: 98
+  completed_plans: 43
+  percent: 100
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 4
-Plan: 05
-Status: Ready to execute
-Last activity: 2026-05-31 -- Phase 04 Plan 04 (pensmith revise + --research + tier-contract entry) complete
+Plan: 05 (COMPLETE — phase closed)
+Status: Phase 04 complete
+Last activity: 2026-05-31 -- Phase 04 Plan 05 (compile pipeline + tier-contract parity) complete
 
 Progress: [██████████] 98%  (Phase 0 done; Phase 1 closed; Phase 2 CLOSED; Phase 3 CLOSED; Phase 4: 4/5 plans done)
 
@@ -38,7 +38,7 @@ Plan files (depends_on order):
 - 04-02 (wave 1) — ✅ DONE — RSCH-10 freshness + COMPILE-REPORT schema + path tolerance (e679729 / SUMMARY)
 - 04-03 (wave 2) — ✅ DONE — Multi-section write orchestration (49eda8e / SUMMARY)
 - 04-04 (wave 3) — ✅ DONE — pensmith revise + --research (271f12f / SUMMARY)
-- 04-05 (wave 4) — 📥 READY — Compile pipeline + tier-contract parity
+- 04-05 (wave 4) — ✅ DONE — Compile pipeline + tier-contract parity (32a4da7 / SUMMARY)
 
 See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05-09T00:30:00Z, points at `/gsd-verify-phase 1`).
 
@@ -136,6 +136,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [04-04] revise added to UX02_VERBS (17 total) — plan stated it was in locked-16 but it was absent; auto-fixed to add it
 - [04-04] normalizeExcerpt() strips leading/trailing `...` from LLM-produced excerpts for reliable before_excerpt matching in applySwapAction/applyRemoveAction
 - [04-04] tier-contract revise case uses --research path (CI-safe, no LLM) with RESEARCH-LOG.md artifact; full yolo parity deferred to Plan 05 Task 4 per D-24
+- [04-05] D-40 auto-fix: compile.ts lock moved from .paper/ to withLock('pensmith:compile:<paperRoot>') in pensmithLockDir(); per-paperRoot key prevents concurrent-test contention; staleMs:30_000 preserved (REVIEW M-03)
 
 ### Pending Todos
 

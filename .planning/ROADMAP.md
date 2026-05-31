@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation NFRs** - paths → atomic-write → lock → doi → http → budget → migrations → pii → session-log → state/library/checkpoint → runtime, in strict order, all unit-tested — COMPLETE 2026-05-14 (VERIFICATION PASS 5/5 SCs)
 - [x] **Phase 2: Tier shells + doctor + tier-contract gate** - MCP server skeleton + Tier 2 CLI dispatcher + ecosystem probe + `/pensmith doctor` (with OneDrive detection) as first contract case — COMPLETE 2026-05-16
 - [x] **Phase 3: Vertical slice through one section** - Single-fixture intake → research → outline → plan → write → verify, deterministic Pass 1 + Pass 3 only, APA only, both tiers (completed 2026-05-28)
-- [ ] **Phase 4: Breadth — N sections + compile + wave scheduling** - Wave scheduler, compile pipeline, cross-section consistency flags, stable section numbering with letter suffixes
+- [x] **Phase 4: Breadth — N sections + compile + wave scheduling** - Wave scheduler, compile pipeline, cross-section consistency flags, stable section numbering with letter suffixes (completed 2026-05-31)
 - [ ] **Phase 5: Verifier completeness (Pass 2 + Pass 4)** - LLM-judged claim support and per-paragraph orphan-claim audit, advisory only
 - [ ] **Phase 6: Done / export pipeline + zero-trace gate** - Plagiarism, honesty, humanizer wrap, Pandoc exports, zero-trace verification test
 - [ ] **Phase 7: Single-command UX layer + hooks + flags** - `/pensmith` umbrella, verb shortcuts, natural-language triggers, resume/PreCompact/PostToolUse/Stop hooks, `--yolo`/`--dry-run`/`--estimate`/`--show-prompts`
@@ -194,7 +194,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 04-05-PLAN.md (wave 4) — Compile pipeline: refuse-gate (COMP-01) + outline-order concat (COMP-02) + N-1 token-safe smoothing (COMP-03) + consistency flags (COMP-04) + citation density vs discipline target (COMP-05) + bib regen + DRAFT.md/COMPILE-REPORT.md emission (COMP-07) + tier-contract parity (ARCH-20) (depends 04-01, 04-02, 04-03, 04-04)
+- [x] 04-05-PLAN.md (wave 4) — Compile pipeline: refuse-gate (COMP-01) + outline-order concat (COMP-02) + N-1 token-safe smoothing (COMP-03) + consistency flags (COMP-04) + citation density vs discipline target (COMP-05) + bib regen + DRAFT.md/COMPILE-REPORT.md emission (COMP-07) + tier-contract parity (ARCH-20) (depends 04-01, 04-02, 04-03, 04-04)
 
 **UI hint**: no
 
@@ -298,7 +298,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 1. Foundation NFRs | 14/14 | COMPLETE (VERIFICATION PASS 5/5) | 2026-05-14 |
 | 2. Tier shells + doctor + tier-contract gate | 10/10 | COMPLETE | 2026-05-16 |
 | 3. Vertical slice through one section | 10/10 | Complete    | 2026-05-28 |
-| 4. Breadth — N sections + compile + wave scheduling | 4/5 | In Progress|  |
+| 4. Breadth — N sections + compile + wave scheduling | 5/5 | Complete   | 2026-05-31 |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 0/TBD | Not started | - |
 | 6. Done / export pipeline + zero-trace gate | 0/TBD | Not started | - |
 | 7. Single-command UX layer + hooks + flags | 0/TBD | Not started | - |
