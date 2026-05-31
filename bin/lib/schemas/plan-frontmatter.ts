@@ -34,6 +34,7 @@ export const PlanFrontmatterSchema = z.object({
   title: z.string(),
   depends_on: z.array(z.string().regex(SLUG)).default([]),
   assigned_sources: z.array(z.string()).default([]),
+  wave: z.number().int().positive().optional(),
   verified_against_draft_hash: z.string().nullable().default(null),
   // D-08-AMENDED enum (mirrors SectionStateSchema in state.ts; HandoffSchema
   // imports SectionStateSchema directly to avoid a third lock-step copy).
