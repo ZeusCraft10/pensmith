@@ -27,9 +27,7 @@ async function loadOrchestrator(): Promise<{
       writeSection: (node: import('../bin/lib/schemas/wave-graph.js').SectionNode) => Promise<void>;
     }
   ) => Promise<WaveResult[]>;
-  WaveResult: unknown;
 }> {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   return import('../bin/lib/write-orchestrator.js') as Promise<typeof import('../bin/lib/write-orchestrator.js')>;
 }
 
@@ -50,10 +48,9 @@ function makeOutline(
   return `# Test Paper\n| # | slug | title | depends_on | word target | assigned_sources |\n|---|------|-------|-----------|-------------|------------------|\n${rows}\n`;
 }
 
-import { mkdtempSync, mkdirSync, writeFileSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 
 /**
  * Seed a temp paperRoot with:
@@ -114,17 +111,11 @@ test('write-orchestrator: happy path — a, b→a, c→a all reach terminal stat
   assert.ok(results.length >= 1, 'runAllSections must return WaveResult array');
 
   // Each WaveResult holds an array of settled outcomes.
-  // Across all waves, all 3 slugs must appear in a fulfilled state.
+  // Across all waves, all 3 slugs must appear.
   const allSlugs = new Set<string>();
   for (const waveResult of results) {
-    for (const settled of waveResult.settled) {
-      if (settled.status === 'fulfilled') {
-        // fulfilled means the section completed without error
-        allSlugs.add(waveResult.wave.find((n) => true)?.slug ?? '');
-      }
-    }
-    for (const n of waveResult.wave) {
-      allSlugs.add(n.slug);
+    for (const node of waveResult.wave) {
+      allSlugs.add(node.slug);
     }
   }
   assert.ok(allSlugs.has('a'), 'section a must reach terminal state');
@@ -145,11 +136,9 @@ test('write-orchestrator: wave structure — b and c are wave-2 siblings', async
   ];
   const root = seedPaperRoot(sections);
 
-  const waveLog: string[][] = [];
-
   const results = await runAllSections(root, {
     maxParallel: 2,
-    writeSection: async (node) => {
+    writeSection: async () => {
       await Promise.resolve();
     },
   });
@@ -275,21 +264,20 @@ test('write-orchestrator: Tier-2 serial WARN — emitted exactly once across mul
   const root = seedPaperRoot(sections);
 
   // Capture stderr output to count WARNs.
-  const stderrLines: string[] = [];
   const origWrite = process.stderr.write.bind(process.stderr);
   // We monkey-patch stderr.write for the duration of the call.
   const capturedWrites: string[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (process.stderr as any).write = (chunk: string | Buffer, ...rest: unknown[]) => {
+  (process.stderr as any).write = (chunk: string | Buffer) => {
     const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
     capturedWrites.push(str);
-    return origWrite(chunk as string, ...(rest as Parameters<typeof origWrite>).slice(1));
+    return origWrite(chunk as string);
   };
 
   try {
     const results = await runAllSections(root, {
       maxParallel: 1, // Tier-2 forced-serial
-      writeSection: async (node) => {
+      writeSection: async () => {
         await Promise.resolve();
       },
     });

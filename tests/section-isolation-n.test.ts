@@ -37,7 +37,6 @@ async function loadOrchestrator(): Promise<{
     }
   ) => Promise<import('../bin/lib/write-orchestrator.js').WaveResult[]>;
 }> {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   return import('../bin/lib/write-orchestrator.js') as Promise<typeof import('../bin/lib/write-orchestrator.js')>;
 }
 
