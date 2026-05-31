@@ -49,6 +49,8 @@ const REAL_VERB_LOADERS: Partial<Record<Ux02Verb, () => Promise<AnyCommandDef>>>
   verify: () => import('./cli/verify.js').then((m) => m.verifyCommand),
   // Phase 4 Plan 04-04 (WRTE-02 / D-06): citation-swap revise verb.
   revise: () => import('./cli/revise.js').then((m) => m.reviseCommand),
+  // Phase 4 Plan 04-05 (COMP-07 / D-24): compile pipeline verb.
+  compile: () => import('./cli/compile.js').then((m) => m.compileCommand),
 };
 
 /**

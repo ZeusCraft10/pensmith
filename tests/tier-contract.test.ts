@@ -18,6 +18,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -529,6 +530,74 @@ function seedPaperFixture(): string {
   return root;
 }
 
+/**
+ * Seed a temp .paper/ fixture with verified sections suitable for `pensmith compile`.
+ *
+ * The fixture has 2 sections with no citations (so Pass-1 passes on empty bib).
+ * VERIFICATION.md is pre-written with state: verified for each section.
+ * PLAN.md has state: verified and a computed hash.
+ */
+function seedCompileFixture(): string {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-compile-'));
+  mkdirSync(join(root, '.paper', 'sections', '01-compintro'), { recursive: true });
+  mkdirSync(join(root, '.paper', 'sections', '02-compmethod'), { recursive: true });
+
+  // OUTLINE.md
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), [
+    '# Tier Contract Compile Test',
+    '| # | slug | title | depends_on | word target | assigned_sources |',
+    '|---|------|-------|-----------|-------------|------------------|',
+    '| 1 | compintro | Introduction |  | 300 |  |',
+    '| 2 | compmethod | Methodology |  | 300 |  |',
+  ].join('\n') + '\n');
+
+  // CITATIONS.bib (empty — no citations in these sections)
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+
+  const sections = [
+    { n: 1, slug: 'compintro', text: '## Introduction\n\nThis is the introduction section of the paper.\n' },
+    { n: 2, slug: 'compmethod', text: '## Methodology\n\nThis is the methodology section of the paper.\n' },
+  ];
+
+  for (const sec of sections) {
+    const pad = String(sec.n).padStart(2, '0');
+    const secDir = join(root, '.paper', 'sections', `${pad}-${sec.slug}`);
+    const draftBytes = Buffer.from(sec.text, 'utf8');
+    const hash = createHash('sha256')
+      .update(Buffer.concat([draftBytes, Buffer.from('\n[]', 'utf8')]))
+      .digest('hex');
+
+    writeFileSync(join(secDir, 'DRAFT.md'), sec.text);
+    writeFileSync(join(secDir, 'PLAN.md'), [
+      '---',
+      `slug: ${sec.slug}`,
+      'state: verified',
+      `verified_against_draft_hash: ${hash}`,
+      'assigned_sources: []',
+      '---',
+      '',
+      `# ${sec.slug}`,
+    ].join('\n') + '\n');
+    writeFileSync(join(secDir, 'VERIFICATION.md'), [
+      `# VERIFICATION (Section ${sec.n}, ${sec.slug})`,
+      '',
+      'Status: verified',
+      'state: verified',
+      'verdict: OK',
+      '',
+      '## Pass 1 — Citation Integrity',
+      '',
+      '_No citations to verify._',
+      '',
+      '## Pass 3 — Quote Integrity',
+      '',
+      '_No quotes to verify._',
+    ].join('\n') + '\n');
+  }
+
+  return root;
+}
+
 for (const tc of PHASE_3_CASES) {
   const verbExists = existsSync(new URL(`../${tc.verbFile}`, import.meta.url));
 
@@ -602,3 +671,66 @@ for (const tc of PHASE_3_CASES) {
     );
   });
 }
+
+// ============================================================================
+// Phase 4 Plan 05 tier-contract cases (D-24 obligation from Plan 05 Task 4)
+// ============================================================================
+
+// compile: D-24 obligation for workflows/compile.md (created in Plan 05 Task 4).
+// No pensmith_compile MCP tool in Phase 4 → CLI-only with documented asymmetry.
+test('tier-contract: compile — verb file exists (Plan 04-05 D-24)', () => {
+  assert.ok(
+    existsSync(new URL('../bin/cli/compile.ts', import.meta.url)),
+    'MISSING: bin/cli/compile.ts — Plan 04-05 Task 4 must create this file',
+  );
+});
+
+test('tier-contract: compile (TIER-06, Plan 04-05 GREEN)', async () => {
+  const compileVerbPath = new URL('../bin/cli/compile.ts', import.meta.url);
+  if (!existsSync(compileVerbPath)) return;  // skip if not yet implemented
+
+  const root = seedCompileFixture();
+
+  // Tier 2 (CLI): pensmith compile --yolo on verified fixture
+  const cliResult = runCliInDir(['compile', '--yolo'], root);
+  assert.equal(
+    cliResult.exitCode,
+    0,
+    `tier-contract compile: CLI exit 0 expected; got ${cliResult.exitCode}. stdout: ${cliResult.stdout.slice(0, 400)} stderr: ${cliResult.stderr.slice(0, 400)}`,
+  );
+
+  // CLI MUST produce .paper/DRAFT.md (COMP-07)
+  const draftPath = join(root, '.paper', 'DRAFT.md');
+  assert.ok(
+    existsSync(draftPath),
+    `tier-contract compile: CLI must produce .paper/DRAFT.md — not found at ${draftPath}`,
+  );
+  const cliDraft = readFileSync(draftPath, 'utf8');
+  assert.ok(cliDraft.length > 0, 'tier-contract compile: compiled DRAFT.md must be non-empty');
+
+  // CLI MUST produce .paper/COMPILE-REPORT.md (COMP-07)
+  const reportPath = join(root, '.paper', 'COMPILE-REPORT.md');
+  assert.ok(
+    existsSync(reportPath),
+    `tier-contract compile: CLI must produce .paper/COMPILE-REPORT.md — not found at ${reportPath}`,
+  );
+  const report = readFileSync(reportPath, 'utf8');
+  // Report must have the 5 D-14 body sections in fixed order
+  assert.match(report, /## Transitions Changed/, 'COMPILE-REPORT.md must have ## Transitions Changed');
+  assert.match(report, /## Cross-Section Consistency Flags/, 'COMPILE-REPORT.md must have ## Cross-Section Consistency Flags');
+  assert.match(report, /## Citation Density/, 'COMPILE-REPORT.md must have ## Citation Density');
+  assert.match(report, /## Compile-Staleness Resolved/, 'COMPILE-REPORT.md must have ## Compile-Staleness Resolved');
+  assert.match(report, /## Advisory Findings/, 'COMPILE-REPORT.md must have ## Advisory Findings');
+
+  // Compiled draft must contain both sections in outline order (COMP-02)
+  const introIdx = cliDraft.indexOf('Introduction');
+  const methodIdx = cliDraft.indexOf('Methodology');
+  assert.ok(introIdx > -1, 'compiled DRAFT.md must contain Introduction section');
+  assert.ok(methodIdx > -1, 'compiled DRAFT.md must contain Methodology section');
+  assert.ok(introIdx < methodIdx, 'Introduction must appear before Methodology (outline order, COMP-02)');
+
+  // MCP degrades to CLI-only (no pensmith_compile MCP tool in Phase 4 — Phase 7+ registers)
+  // Architecture asymmetry documented here: compile routes through CLI chokepoint;
+  // MCP registration is Phase 7 per ROADMAP.md. The CLI-only artifact check above
+  // is the equivalence proxy (TIER-06 degraded contract).
+});

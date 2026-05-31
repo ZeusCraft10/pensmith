@@ -154,7 +154,8 @@ test('compile-staleness: compile lock uses stale: 30000 (REVIEW M-03)', async ()
     throw new Error('bin/lib/compile.ts not implemented yet (RED)');
   }
   const src = readFileSync(compilePath, 'utf8');
-  assert.match(src, /stale\s*:\s*30[_0]*000/, 'compile.ts must pass stale: 30000 to the lock call (REVIEW M-03)');
+  // compile.ts uses withLock(..., { staleMs: 30_000 }) — match either direct stale: or staleMs:
+  assert.match(src, /stale(?:Ms)?\s*:\s*30[_0]*000/, 'compile.ts must pass stale(Ms): 30000 to the lock call (REVIEW M-03)');
 });
 
 test('compile-staleness: stale lockfile older than 30s is auto-cleared and compile proceeds (REVIEW M-03)', async () => {
@@ -170,10 +171,21 @@ test('compile-staleness: stale lockfile older than 30s is auto-cleared and compi
     },
   ]);
 
-  // Write a stale .compile.lock file with old mtime (simulate crashed compile)
-  const lockPath = join(root, '.paper', '.compile.lock');
+  // Write a stale lock file in pensmithLockDir() with old mtime (simulate crashed compile).
+  // D-40: locks live in pensmithLockDir(), NOT inside .paper/.
+  // compile.ts uses withLock('pensmith:compile:<paperRoot>', ...) which internally calls
+  // stubFor() -> sha256(resource).slice(0,12) as the stub name.
+  const { pensmithLockDir } = await import('../bin/lib/paths.js');
+  const { mkdirSync, utimesSync } = await import('node:fs');
+  const { createHash } = await import('node:crypto');
+  const lockDir = pensmithLockDir();
+  mkdirSync(lockDir, { recursive: true });
+  const resourceKey = `pensmith:compile:${root}`;
+  const stubName = createHash('sha256').update(resourceKey).digest('hex').slice(0, 12);
+  const stubPath = join(lockDir, stubName);
+  const lockPath = join(lockDir, `${stubName}.lock`);
+  writeFileSync(stubPath, '');
   writeFileSync(lockPath, '');
-  const { utimesSync } = await import('node:fs');
   const staleTime = new Date(Date.now() - 60_000);  // 60s old — definitely stale
   utimesSync(lockPath, staleTime, staleTime);
 

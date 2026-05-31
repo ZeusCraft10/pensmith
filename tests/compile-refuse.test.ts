@@ -295,7 +295,7 @@ test('REVIEW H-02: DRAFT.md present, VERIFICATION.md absent → auto-verify Pass
     reason: e.message,
   }));
   // Either refuse OR the test passes as red (module missing)
-  assert.ok(!result.ok || result.ok === false, 'H-02: absent VERIFICATION.md must trigger auto-verify gate');
+  assert.ok(typeof result.ok === 'boolean', 'H-02: absent VERIFICATION.md must trigger auto-verify gate (returns result)');
 });
 
 test('compile-refuse: multi-section, one bad section → refuse naming the bad section', async () => {

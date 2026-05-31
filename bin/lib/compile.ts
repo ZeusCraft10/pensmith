@@ -25,10 +25,9 @@
 // Lock: proper-lockfile over .paper/.compile.lock with stale: 30000 so a
 //   crashed compile auto-clears (REVIEW M-03 — matches handoff.ts pattern).
 
-import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { lock } from 'proper-lockfile';
 
 import { parseOutline } from './outline-parse.js';
 import { computeDraftHash } from './draft-hash.js';
@@ -40,6 +39,7 @@ import { atomicWriteFile } from './atomic-write.js';
 import { renderCompileReport } from './compile-report.js';
 import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
+import { withLock } from './lock.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -152,7 +152,8 @@ async function autoVerifySection(
   const draftCitekeys = extractCitekeys(draftMd);
   const bibText = existsSync(bibPath) ? readFileSync(bibPath, 'utf8').trim() : '';
   if (!bibText && draftCitekeys.length > 0) {
-    return { blocked: true, citekey: draftCitekeys[0], verdict: 'FABRICATED' };
+    const firstKey = draftCitekeys[0];
+    return { blocked: true, citekey: firstKey ?? 'unknown', verdict: 'FABRICATED' };
   }
 
   try {
@@ -257,26 +258,20 @@ export async function runCompile(opts: CompileOptions = {}): Promise<CompileResu
   const paperRoot = path.resolve(opts.paperRoot ?? process.cwd());
   const paperDir = path.join(paperRoot, '.paper');
   const bibPath = path.join(paperDir, 'CITATIONS.bib');
-  const compileLockPath = path.join(paperDir, '.compile.lock');
 
-  // Ensure .paper directory exists and lock sentinel file exists for proper-lockfile
+  // Ensure .paper directory exists
   await mkdir(paperDir, { recursive: true });
-  if (!existsSync(compileLockPath)) {
-    writeFileSync(compileLockPath, '');
-  }
 
-  // Acquire compile lock for the whole pipeline (REVIEW M-03 — stale: 30000)
-  const release = await lock(compileLockPath, {
-    retries: { retries: 5, minTimeout: 50 },
-    stale: 30_000,
-    realpath: false,
-  });
-
-  try {
-    return await runCompilePipeline(paperRoot, paperDir, bibPath, opts);
-  } finally {
-    await release();
-  }
+  // D-40: lock stubs MUST live in pensmithLockDir(), NEVER inside .paper/.
+  // Use withLock with a per-paperRoot resource key so concurrent test fixtures
+  // (with different paperRoot paths) do not contend on the same lock stub.
+  // staleMs: 30000 so a crashed compile auto-clears (REVIEW M-03).
+  const lockResource = `pensmith:compile:${paperRoot}`;
+  return withLock(
+    lockResource,
+    () => runCompilePipeline(paperRoot, paperDir, bibPath, opts),
+    { staleMs: 30_000, timeoutMs: 60_000 },
+  );
 }
 
 async function runCompilePipeline(

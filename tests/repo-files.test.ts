@@ -247,8 +247,8 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // Phase-4 additions (D-05/D-12 — authorized by 04-CONTEXT.md):
   // Plan 04-04 Task 3: revise-swap real SHA-256 (WN-3 lockstep with bin/lib/prompt-loader.ts).
   { slug: 'revise-swap',         path: 'templates/prompts/revise-swap.md',         decision: 'D-05/D-12 Phase 4', hash: '4ff0104f8e84f88c23c9560391f21d69e5d3f67588c14a9a3dffe8b80313df22' },
-  // Plan 04-05 Task 1a sentinel — Task 4 replaces with real SHA-256 (WN-3 lockstep):
-  { slug: 'smoother',            path: 'templates/prompts/smoother.md',            decision: 'D-12 Phase 4 Plan 05', hash: '__PENDING_HASH_smoother__' },
+  // Plan 04-05 Task 4 re-pin — real SHA-256 (WN-3 lockstep with bin/lib/prompt-loader.ts):
+  { slug: 'smoother',            path: 'templates/prompts/smoother.md',            decision: 'D-12 Phase 4 Plan 05', hash: '2556a9effc7f1a2025effed59bf24b11ce4ab4e6ef3e465ed91be2ef3e5fb925' },
 ];
 for (const pin of PENDING_HASH_PINS) {
   test(`hash-pin: ${pin.path} (${pin.decision})`, () => {
