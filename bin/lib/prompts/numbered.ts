@@ -127,11 +127,16 @@ async function readOneLine(
       action();
     }
 
+    // The timer is intentionally NOT unref'd. While a prompt is pending we are
+    // actively waiting for input, so the timeout must keep the event loop alive
+    // and fire deterministically — even when stdin is a closed / non-TTY pipe
+    // (as in CI) that does not itself hold the loop open. settle() always
+    // clearTimeout()s it, so it never outlives a resolved prompt. (An unref'd
+    // timer here caused CI-only flakiness: the loop drained before it fired,
+    // leaving the promise pending → node:test "cancelledByParent".)
     const timer = setTimeout(() => {
       settle(() => reject(new PromptTimeoutError(id, timeoutMs)));
     }, timeoutMs);
-    // Prevent the timer from blocking process exit
-    if (timer.unref) timer.unref();
 
     rl.once('line', (line: string) => {
       settle(() => resolve(line.trim()));
