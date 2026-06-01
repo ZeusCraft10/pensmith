@@ -1,0 +1,10 @@
+{
+  "action": "remove",
+  "flagged_citekey": "fabricated2021",
+  "replacement_citekey": null,
+  "rationale": "No source in the assigned list supports this specific claim; removing the citation is the safest option.",
+  "patch": {
+    "before_excerpt": "...the claim is well established [@fabricated2021] across...",
+    "after_excerpt": "...the claim is well established across..."
+  }
+}

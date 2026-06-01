@@ -1,0 +1,71 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=31523199,32165635,32721264&retmode=json",
+    "status": 200,
+    "response": {
+      "header": { "type": "esummary", "version": "0.3" },
+      "result": {
+        "uids": ["31523199", "32165635", "32721264"],
+        "31523199": {
+          "uid": "31523199",
+          "title": "Attention Is All You Need in Speech Separation",
+          "authors": [
+            { "name": "Vaswani A", "authtype": "Author" },
+            { "name": "Shazeer N", "authtype": "Author" }
+          ],
+          "pubdate": "2019 Jul",
+          "articleids": [
+            { "idtype": "pubmed", "value": "31523199" },
+            { "idtype": "doi", "value": "10.1234/example.31523199" }
+          ]
+        },
+        "32165635": {
+          "uid": "32165635",
+          "title": "Neural Attention for Image Captioning",
+          "authors": [{ "name": "Chen Q", "authtype": "Author" }],
+          "pubdate": "2020 Mar",
+          "articleids": [
+            { "idtype": "pubmed", "value": "32165635" },
+            { "idtype": "doi", "value": "10.1234/example.32165635" }
+          ]
+        },
+        "32721264": {
+          "uid": "32721264",
+          "title": "Self-Attention Mechanisms in Deep Networks",
+          "authors": [{ "name": "Smith J", "authtype": "Author" }],
+          "pubdate": "2020 Jul",
+          "articleids": [
+            { "idtype": "pubmed", "value": "32721264" },
+            { "idtype": "doi", "value": "10.1234/example.32721264" }
+          ]
+        }
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  },
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=12345678&retmode=json",
+    "status": 200,
+    "response": {
+      "header": { "type": "esummary", "version": "0.3" },
+      "result": {
+        "uids": ["12345678"],
+        "12345678": {
+          "uid": "12345678",
+          "title": "A Single Example Paper",
+          "authors": [{ "name": "Doe J", "authtype": "Author" }],
+          "pubdate": "2002 Jan",
+          "articleids": [
+            { "idtype": "pubmed", "value": "12345678" },
+            { "idtype": "doi", "value": "10.1234/example.12345678" }
+          ]
+        }
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/10.9999/does-not-exist",
+    "status": 404,
+    "response": "",
+    "responseHeaders": { "content-type": "text/html" }
+  }
+]

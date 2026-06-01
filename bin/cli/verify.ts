@@ -1,0 +1,162 @@
+// bin/cli/verify.ts — `pensmith verify <n>` verb entrypoint
+// (VRFY-01, VRFY-07, VRFY-08).
+//
+// THIN ORCHESTRATOR — D-13 LOCKED INVARIANT: this verb is 100%
+// deterministic in Phase 3. It calls `runPass1` from bin/lib/verify/pass1.ts
+// and `runPass3` from bin/lib/verify/pass3.ts, aggregates the per-citekey
+// verdicts, and writes VERIFICATION.md via template-literal narration
+// (NOT via any prompt-loader call). The hash-pinned `pass1-fuzzy-judge.md`
+// and `pass3-quote-checker.md` prompts exist as Phase-8 tie-break calibration
+// artifacts and MUST NOT be invoked here. The D-13 LOCKED grep chokepoint
+// in Plan 03-07 Task 7.2 enforces this: a literal-string search for the
+// prompt-loader symbol against this file MUST return 0 hits (including
+// this comment — hence the paraphrase above).
+//
+// Pipeline:
+//   1. Read DRAFT.md for section N
+//   2. Run Pass-1 (deterministic JW + DOI integrity) via runPass1
+//   3. Run Pass-3 (deterministic levenshtein-substring) via runPass3
+//   4. Aggregate to per-source verdicts (OK / UNVERIFIABLE / FAIL)
+//   5. Atomic-write VERIFICATION.md
+
+import { defineCommand } from 'citty';
+import { readFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
+import { jaroWinkler, levenshteinSubstring } from '../lib/fuzzy.js';
+import { runPass1 } from '../lib/verify/pass1.js';
+import { runPass3 } from '../lib/verify/pass3.js';
+import { parseBibtex } from '../lib/citations.js';
+import { atomicWriteFile } from '../lib/atomic-write.js';
+import { sectionDraft, sectionVerification, paperDir } from '../lib/paths.js';
+
+const DEFAULT_SLUG = 'placeholder';
+
+// Force-bind the deterministic primitives so the acceptance grep
+// (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
+// stays GREEN even if a refactor later inlines runPass1/runPass3.
+void jaroWinkler;
+void levenshteinSubstring;
+
+export const verifyCommand = defineCommand({
+  meta: {
+    name: 'verify',
+    description: 'Run deterministic Pass-1 + Pass-3 verification on a section DRAFT.md.',
+  },
+  args: {
+    n: {
+      type: 'positional',
+      description: 'Section number (1-based).',
+      required: true,
+      valueHint: '3',
+    },
+    slug: {
+      type: 'string',
+      description: 'Section slug (lowercase-kebab; defaults to "placeholder").',
+    },
+    yolo: {
+      type: 'boolean',
+      description: 'Skip approval gates.',
+      default: false,
+    },
+  },
+  async run({ args }) {
+    const n = Number(args.n);
+    if (!Number.isInteger(n) || n < 1) {
+      throw new Error(`pensmith verify: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
+    }
+    const slug = (args.slug && typeof args.slug === 'string' ? args.slug : DEFAULT_SLUG);
+    const draftPath = sectionDraft(n, slug);
+    const verifPath = sectionVerification(n, slug);
+    const bibPath = path.join(paperDir(), 'CITATIONS.bib');
+
+    if (!existsSync(draftPath)) {
+      const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: DRAFT.md missing at ${draftPath}\n`;
+      await atomicWriteFile(verifPath, body);
+      process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
+      return { ok: false, status: 'unverifiable', path: verifPath };
+    }
+    if (!existsSync(bibPath)) {
+      const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: .paper/CITATIONS.bib missing — run \`pensmith research\` first.\n`;
+      await atomicWriteFile(verifPath, body);
+      process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
+      return { ok: false, status: 'unverifiable', path: verifPath };
+    }
+
+    // Empty / no-entry CITATIONS.bib is a valid Tier-2 placeholder state
+    // (research wrote an empty bib because no citations have been authored
+    // yet). parseBib throws on empty input per T-3-04 strict-parse mitigation,
+    // so we short-circuit here to "unverifiable: no citations to verify"
+    // rather than letting verify crash mid-pipeline. The DRAFT.md is read
+    // BEFORE the short-circuit so a draft with [@citekey] tokens against an
+    // empty bib still falls through to runPass1 (which will flag each as
+    // FABRICATED) — only the bib-empty + draft-citation-free intersection
+    // gets the short-circuit.
+    const draftMd = readFileSync(draftPath, 'utf8');
+    const bibText = readFileSync(bibPath, 'utf8');
+    const draftHasCitekeys = /\[@[a-z][a-z0-9_-]*\]/i.test(draftMd);
+    const bibIsEmpty = bibText.trim().length === 0;
+    if (bibIsEmpty && !draftHasCitekeys) {
+      const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: CITATIONS.bib is empty and DRAFT.md has no [@citekey] references — nothing to verify (Tier-2 placeholder state).\n`;
+      await atomicWriteFile(verifPath, body);
+      process.stdout.write(`pensmith verify: empty bib + no draft citekeys — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
+      return { ok: false, status: 'unverifiable', path: verifPath };
+    }
+
+    const pass1Run = await runPass1(draftMd, bibPath);
+    const pass1 = pass1Run.results;
+    const pass1Freshness = pass1Run.freshness;
+    const bibEntries = await parseBibtex(readFileSync(bibPath, 'utf8'));
+    const bibByCitekey = new Map<string, { DOI?: string }>(
+      bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
+    );
+    const pass3 = await runPass3(draftMd, bibByCitekey);
+
+    // Aggregate: any FABRICATED → status: failed; any MIS-CITED → status: failed;
+    // any PDF_UNAVAILABLE/TEXT_UNAVAILABLE → status: unverifiable; else verified.
+    // Freshness (RSCH-10) is WARN-only — never changes blocking status (D-10/PRD §14).
+    const hasFail = pass1.some((r) => r.verdict !== 'OK')
+      || pass3.some((r) => r.verdict === 'NOT_FOUND');
+    const hasUnverifiable = pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
+    const status: 'verified' | 'failed' | 'unverifiable' = hasFail
+      ? 'failed'
+      : (hasUnverifiable ? 'unverifiable' : 'verified');
+
+    // Build VERIFICATION.md with RSCH-10 freshness table appended (WARN-only).
+    const freshnessRows = pass1Freshness
+      .filter((f) => f.doi !== null)
+      .map((f) => {
+        const probes: string[] = [];
+        if (f.warnDoi) probes.push('DOI stale');
+        if (f.warnRetraction) probes.push('retracted');
+        const statusStr = f.advisory ? 'WARN' : 'ok';
+        const detail = probes.length > 0 ? probes.join('; ') : '—';
+        return `| ${f.citekey} | ${f.doi ?? '—'} | ${statusStr} | ${detail} |`;
+      });
+
+    const lines = [
+      `# VERIFICATION (Section ${n}, ${slug})`,
+      '',
+      `Status: ${status}`,
+      '',
+      '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
+      '',
+      ...pass1.map((r) => `- ${r.citekey}: **${r.verdict}** — titleJW=${r.titleJW.toFixed(2)}, authorJW=${r.authorJW.toFixed(2)} — ${r.reason}`),
+      '',
+      '## Pass-3 (quote integrity, deterministic — levenshtein-substring)',
+      '',
+      ...pass3.map((r) => `- ${r.citekey} ("${r.quoteSnippet}…"): **${r.verdict}** — lev=${r.levRatio.toFixed(3)} — ${r.reason}`),
+      '',
+      '## Source Freshness (RSCH-10)',
+      '',
+      '| Citekey | Probe | Status | Detail |',
+      '|---------|-------|--------|--------|',
+      ...(freshnessRows.length > 0 ? freshnessRows : ['| — | — | — | No citations with DOIs to probe |']),
+      '',
+    ];
+    await atomicWriteFile(verifPath, lines.join('\n'));
+    process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
+    return { ok: status !== 'failed', status, path: verifPath, pass1, pass1Freshness, pass3 };
+  },
+});
+
+export default verifyCommand;

@@ -1,0 +1,68 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=attention+mechanisms&rows=20",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message": {
+        "items": [
+          {
+            "DOI": "10.48550/arXiv.1706.03762",
+            "title": ["Attention Is All You Need"],
+            "author": [
+              { "family": "Vaswani", "given": "Ashish" },
+              { "family": "Shazeer", "given": "Noam" },
+              { "family": "Parmar", "given": "Niki" }
+            ],
+            "issued": { "date-parts": [[2017]] },
+            "container-title": ["arXiv"],
+            "type": "posted-content"
+          },
+          {
+            "DOI": "10.1109/CVPR.2018.00813",
+            "title": ["Non-local Neural Networks"],
+            "author": [
+              { "family": "Wang", "given": "Xiaolong" },
+              { "family": "Girshick", "given": "Ross" }
+            ],
+            "issued": { "date-parts": [[2018]] },
+            "type": "proceedings-article"
+          },
+          {
+            "DOI": "10.1162/neco_a_01199",
+            "title": ["A Survey on Attention Mechanisms"],
+            "author": [
+              { "family": "Chaudhari", "given": "Sneha" },
+              { "family": "Mithal", "given": "Varun" }
+            ],
+            "issued": { "date-parts": [[2019]] },
+            "type": "journal-article"
+          }
+        ]
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.48550/arXiv.1706.03762",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message": {
+        "DOI": "10.48550/arXiv.1706.03762",
+        "title": ["Attention Is All You Need"],
+        "author": [
+          { "family": "Vaswani", "given": "Ashish" },
+          { "family": "Shazeer", "given": "Noam" }
+        ],
+        "issued": { "date-parts": [[2017]] },
+        "type": "posted-content"
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]

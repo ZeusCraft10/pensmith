@@ -1,0 +1,104 @@
+[
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "Attention is all you need to solve every NLP problem.",
+    "actual_pdf_snippet": "We propose a new simple network architecture, the Transformer, based solely on attention mechanisms",
+    "distortion": "fabrication",
+    "expected_verdict": "NOT_FOUND",
+    "note": "Completely fabricated claim — this sentence does not appear in the paper"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "Our model achieves a BLEU score of 99.9 on the WMT 2014 English-to-German translation task.",
+    "actual_pdf_snippet": "On the WMT 2014 English-to-German translation task, the big transformer model outperforms the best previously reported models",
+    "distortion": "fabrication",
+    "expected_verdict": "NOT_FOUND",
+    "note": "Fabricated BLEU score (99.9) — actual score is 28.4 for the big model"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "The Transformer is the ﬁrst sequence model to achieve state-of-the-art results without any recurrence.",
+    "actual_pdf_snippet": "the first transduction model relying entirely on self-attention to compute representations",
+    "distortion": "ligature",
+    "distortion_codepoint": "U+FB01",
+    "expected_verdict": "NOT_FOUND",
+    "note": "Contains U+FB01 LATIN SMALL LIGATURE FI (ﬁ) — normalizer must handle; quote still NOT_FOUND because content is fabricated"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "The trans­former architecture eliminates recurrence entirely and relies solely on attention mechanisms.",
+    "actual_pdf_snippet": "dispensing with recurrence and convolutions entirely",
+    "distortion": "soft_hyphen",
+    "distortion_codepoint": "U+00AD",
+    "expected_verdict": "NOT_FOUND",
+    "note": "Contains U+00AD SOFT HYPHEN in 'trans­former' — normalizer must strip; quote still NOT_FOUND because wording is fabricated"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "Queries, keys, and values are all mapped to an “attention space” where the similarity is computed.",
+    "actual_pdf_snippet": "Queries and keys of dimension dk, and values of dimension dv",
+    "distortion": "smart_quotes",
+    "distortion_codepoint": "U+201C U+201D",
+    "expected_verdict": "NOT_FOUND",
+    "note": "Contains U+201C/201D smart double quotes around 'attention space' — normalizer must canonicalize; quote NOT_FOUND because 'attention space' phrase doesn't appear"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "The model learns an end—to—end mapping from input sequences to output sequences.",
+    "actual_pdf_snippet": "an encoder-decoder structure using stacked self-attention and point-wise",
+    "distortion": "em_dash",
+    "distortion_codepoint": "U+2014",
+    "expected_verdict": "NOT_FOUND",
+    "note": "Contains U+2014 EM DASH in 'end—to—end' — normalizer must handle; quote NOT_FOUND because phrase doesn't appear verbatim"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "The naïve dot-product attention scales quadratically with sequence length.",
+    "actual_pdf_snippet": "dot products of queries with all keys, divide each by dk",
+    "distortion": "diacritic",
+    "distortion_codepoint": "U+00EF",
+    "expected_verdict": "NOT_FOUND",
+    "note": "Contains U+00EF (ï) diacritic in 'naïve' — normalizer must strip to 'naive'; quote NOT_FOUND because 'naive' doesn't appear in paper"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "Positional encodings are learned parameters that replace the need for recurrence.",
+    "actual_pdf_snippet": "we use sine and cosine functions of different frequencies",
+    "distortion": "fabrication",
+    "expected_verdict": "NOT_FOUND",
+    "note": "Misattributes learned positional encodings to base Transformer — they use sinusoidal, not learned"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "Multi-head attention allows the model to simultaneously attend to all positions in the sequence with equal weight.",
+    "actual_pdf_snippet": "Multi-head attention allows the model to jointly attend to information from different representation subspaces",
+    "distortion": "fabrication",
+    "expected_verdict": "NOT_FOUND",
+    "note": "Close paraphrase but with critical fabricated detail ('equal weight' is false — the point is different subspaces)"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "The Transformer completely eliminates the need for language-specific preprocessing such as tokenization.",
+    "actual_pdf_snippet": "we use byte-pair encoding to encode both source and target sentences",
+    "distortion": "fabrication",
+    "expected_verdict": "NOT_FOUND",
+    "note": "Fabricated claim — the paper explicitly uses BPE tokenization"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "Each decoder layer applies cross-attention over the entire encoder output in O(1) time complexity.",
+    "actual_pdf_snippet": "the encoder contains a stack of N = 6 identical layers",
+    "distortion": "fabrication",
+    "expected_verdict": "NOT_FOUND",
+    "note": "O(1) claim is fabricated — cross-attention is O(n^2) in sequence length"
+  },
+  {
+    "doi": "10.48550/arxiv.1706.03762",
+    "claimed_quote": "The ﬁnal layer norm ensures that all hidden states have unit variance before projection.",
+    "actual_pdf_snippet": "We apply dropout to the output of each sub-layer, before it is added",
+    "distortion": "ligature",
+    "distortion_codepoint": "U+FB01",
+    "expected_verdict": "NOT_FOUND",
+    "note": "Second U+FB01 LATIN SMALL LIGATURE FI entry; quote is fabricated (layer norm behavior)"
+  }
+]

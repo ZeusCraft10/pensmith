@@ -1,0 +1,10 @@
+{
+  "action": "swap",
+  "flagged_citekey": "jones2020",
+  "replacement_citekey": "smith2019",
+  "rationale": "smith2019 directly studies the same phenomenon and is listed in assigned_sources, making it a valid replacement.",
+  "patch": {
+    "before_excerpt": "...supporting evidence [@jones2020] in the context...",
+    "after_excerpt": "...supporting evidence [@smith2019] in the context..."
+  }
+}

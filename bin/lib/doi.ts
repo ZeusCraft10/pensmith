@@ -228,3 +228,42 @@ export function normalizePmcid(input: string): string | null {
 export function isPmcid(s: string): boolean {
   return normalizePmcid(s) !== null;
 }
+
+// ---------------------------------------------------------------------------
+// DOI verification — re-fetch + metadata check via Crossref (Phase 2).
+// This is the thin integration point between the normalization chokepoint
+// and bin/lib/http.ts. mcp/tools.ts paper_doi_verify delegates here.
+// ---------------------------------------------------------------------------
+
+import { fetch as httpFetch } from './http.js';
+
+export interface DoiVerifyResult {
+  readonly valid: boolean;
+  readonly canonical: string | null;
+  readonly metadata?: unknown;
+}
+
+/**
+ * Normalize `doi`, then re-fetch it from Crossref to verify it resolves to a
+ * real work. Returns `{ valid: true, canonical, metadata }` on success or
+ * `{ valid: false, canonical }` when the DOI is malformed or Crossref returns
+ * a non-200 response. Network errors propagate to the caller.
+ */
+export async function verifyDoi(doi: string): Promise<DoiVerifyResult> {
+  const canonical = normalizeDoi(doi);
+  if (!canonical) {
+    return { valid: false, canonical: null };
+  }
+  const url = `https://api.crossref.org/works/${encodeURIComponent(canonical)}`;
+  const res = await httpFetch(url, { source: 'crossref' });
+  if (res.status !== 200) {
+    return { valid: false, canonical };
+  }
+  let metadata: unknown;
+  try {
+    metadata = JSON.parse(res.body);
+  } catch {
+    metadata = undefined;
+  }
+  return { valid: true, canonical, metadata };
+}

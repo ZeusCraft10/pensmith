@@ -296,10 +296,14 @@ test('schema validation failure throws SchemaValidationError with rich issues', 
   await withTmp(async (dir) => {
     const file = path.join(dir, 's.json');
     // Bad: empty paperId AND non-iso createdAt — both fail StateSchema.
+    // Seed at CURRENT_STATE_VERSION so loadAndMigrate skips migration (none
+    // is passed here) and goes straight to zod validation — the path this
+    // test exercises. A v1 seed would instead trip the "missing migration"
+    // guard before validation ever runs (state is at v2 since 03-03).
     await seed(
       file,
       JSON.stringify({
-        $schemaVersion: 1,
+        $schemaVersion: CURRENT_STATE_VERSION,
         paperId: '',
         createdAt: 'not-a-date',
       }),

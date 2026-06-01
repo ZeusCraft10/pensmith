@@ -201,3 +201,33 @@ test('saveRuntimeConfig scope=paper without paperRoot throws', async () => {
   const cfg = await loadRuntimeConfig();
   await assert.rejects(() => saveRuntimeConfig('paper', cfg));
 });
+
+// === Phase 3 Plan 00 Task 0.3 extension: PENSMITH_S2_API_KEY no-leak (D-16, T-01-07) ===
+// The PENSMITH_S2_API_KEY value must NEVER reach disk or session log.
+// Only the env-var NAME is persisted; the resolved value stays in memory only.
+// This extends the T-01-07 no-leak property from Phase 1 to the new S2 slot.
+//
+// Skip guard: if capabilities() is not yet exported from runtime.ts (it lands in Phase 3
+// Wave 2 when the doctor probe waking happens), this test skips gracefully.
+test('runtime: PENSMITH_S2_API_KEY value never persisted to capabilities/state/handoff (T-01-07, D-16)',
+  async () => {
+    mkPaperRoot();
+    process.env['PENSMITH_S2_API_KEY'] = 'sk-test-secret-do-not-leak';
+    try {
+      const runtimeMod = await import('../bin/lib/runtime.js') as Record<string, unknown>;
+      if (typeof runtimeMod['loadRuntimeConfig'] !== 'function') return; // skip if not ready
+
+      const { loadRuntimeConfig } = runtimeMod as { loadRuntimeConfig: () => Promise<Record<string, unknown>> };
+      const cfg = await loadRuntimeConfig();
+      const serialized = JSON.stringify(cfg);
+
+      // The resolved value must NOT appear in the serialized config.
+      assert.ok(
+        !serialized.includes('sk-test-secret-do-not-leak'),
+        'PENSMITH_S2_API_KEY value LEAKED into runtime config serialization (T-01-07, D-16)',
+      );
+    } finally {
+      delete process.env['PENSMITH_S2_API_KEY'];
+    }
+  },
+);

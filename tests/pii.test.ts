@@ -13,8 +13,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { classifyPii, redactPii, redactKeys } from '../bin/lib/pii.js';
 import { POSITIVES, NEGATIVES, KEY_FIXTURES } from './fixtures/pii-corpus.js';
+import * as fc from 'fast-check';
 
 test('classifyPii: every positive fixture finds at least one matching span of the expected kind', () => {
   for (const c of POSITIVES) {
@@ -100,3 +102,49 @@ test('redactKeys defends against __proto__ payload (no pollution)', () => {
   const after = (Object.prototype as unknown as { polluted?: boolean }).polluted;
   assert.equal(after, before, 'Object.prototype must not be polluted');
 });
+
+// === Phase 3 Plan 00 Task 0.3 extension: PII redaction no-leak property (INTK-05, T-3-02) ===
+// fast-check property: original PII never appears verbatim in redacted output.
+// This test wakes up when redactPii is available (it always is from Phase 1 — skip guard
+// is for future proofing in case the module gets refactored).
+const piiRedactPath = new URL('../bin/lib/pii.ts', import.meta.url);
+
+// Arbitrary PII-like input shape: SSN + email.
+const piiArb = fc.record({
+  ssn: fc.tuple(
+    fc.integer({ min: 100, max: 999 }),
+    fc.integer({ min: 10, max: 99 }),
+    fc.integer({ min: 1000, max: 9999 }),
+  ).map(([a, b, c]) => `${a}-${b}-${c}`),
+  email: fc.tuple(
+    fc.string({ minLength: 3, maxLength: 10 }),
+    fc.string({ minLength: 3, maxLength: 10 }),
+  ).map(([user, domain]) => `${user.replace(/[^a-z]/gi, 'x')}@${domain.replace(/[^a-z]/gi, 'x')}.com`),
+});
+
+test('PII redaction: no-leak property — original PII never appears in redacted output (INTK-05)',
+  { skip: !existsSync(piiRedactPath) },
+  () => {
+    fc.assert(
+      fc.property(piiArb, ({ ssn, email }) => {
+        const input = `Patient SSN: ${ssn}, contact: ${email}, results normal.`;
+        const redacted = redactPii(input);
+        // No original SSN or email appears verbatim in redacted output.
+        assert.ok(
+          !redacted.includes(ssn),
+          `PII leak: SSN "${ssn}" appears verbatim in redacted output`,
+        );
+        // Check each segment of the email
+        const [user] = email.split('@');
+        if (user && user.length > 3) {
+          // Only check if user part is long enough to be a meaningful PII fragment
+          assert.ok(
+            !redacted.includes(email),
+            `PII leak: full email "${email}" appears verbatim in redacted output`,
+          );
+        }
+      }),
+      { numRuns: 200 },
+    );
+  },
+);

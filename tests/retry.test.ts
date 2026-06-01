@@ -21,7 +21,7 @@ import {
   getGlobalDispatcher,
   type Dispatcher,
 } from 'undici';
-import { retry, fullJitterDelayMs } from '../bin/lib/retry.js';
+import { retry, fullJitterDelayMs, parseRetryAfter } from '../bin/lib/retry.js';
 import {
   fetch,
   _resetWarnedForTest,
@@ -206,6 +206,59 @@ test('fullJitterDelayMs: large attempt does not overflow to NaN', () => {
   const d = fullJitterDelayMs(100, 200, 1000);
   assert.ok(Number.isFinite(d), `d=${d} must be finite`);
   assert.ok(d >= 0 && d <= 1000, `d=${d} must be in [0,1000]`);
+});
+
+// ==================================================================
+// parseRetryAfter unit tests (D-01, Phase 2 carry-forward)
+// ==================================================================
+
+test('parseRetryAfter: undefined returns 0', () => {
+  assert.equal(parseRetryAfter(undefined, Date.now()), 0);
+});
+
+test('parseRetryAfter: empty string returns 0', () => {
+  assert.equal(parseRetryAfter('', Date.now()), 0);
+});
+
+test('parseRetryAfter: delta-seconds "120" returns 120_000 ms', () => {
+  const anyNow = Date.now();
+  assert.equal(parseRetryAfter('120', anyNow), 120_000);
+});
+
+test('parseRetryAfter: delta-seconds "0" returns 0', () => {
+  const anyNow = Date.now();
+  assert.equal(parseRetryAfter('0', anyNow), 0);
+});
+
+test('parseRetryAfter: invalid string "not-a-number" returns 0 (never throws)', () => {
+  const anyNow = Date.now();
+  assert.equal(parseRetryAfter('not-a-number', anyNow), 0);
+});
+
+test('parseRetryAfter: negative delta "-30" returns 0 (clamped)', () => {
+  const anyNow = Date.now();
+  assert.equal(parseRetryAfter('-30', anyNow), 0);
+});
+
+test('parseRetryAfter: HTTP-date form 1-minute future returns 60_000 ms', () => {
+  const refNow = new Date('2026-10-21T07:27:00Z').getTime();
+  assert.equal(
+    parseRetryAfter('Wed, 21 Oct 2026 07:28:00 GMT', refNow),
+    60_000,
+  );
+});
+
+test('parseRetryAfter: HTTP-date form past date returns 0 (clamped)', () => {
+  const refNow = new Date('2026-10-21T08:00:00Z').getTime();
+  assert.equal(
+    parseRetryAfter('Wed, 21 Oct 2026 07:28:00 GMT', refNow),
+    0,
+  );
+});
+
+test('parseRetryAfter: invalid date string returns 0', () => {
+  const anyNow = Date.now();
+  assert.equal(parseRetryAfter('not a valid date string', anyNow), 0);
 });
 
 // ==================================================================

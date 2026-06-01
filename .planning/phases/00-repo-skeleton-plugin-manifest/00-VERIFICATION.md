@@ -1,13 +1,14 @@
 ---
 phase: 00-repo-skeleton-plugin-manifest
 verified: 2026-05-07T21:30:00Z
-status: human_needed
-score: 4/5 success criteria verified
+status: passed
+score: 5/5 success criteria verified
 overrides_applied: 0
-human_verification:
+human_verification_resolved:
   - test: "Push repo to GitHub and confirm CI matrix is green on all three OSes"
     expected: "check (ubuntu-latest, 20.10), check (macos-latest, 20.10), check (windows-latest, 20.10) all green; macos-latest Pitfall C step reports RUNNER_ARCH=ARM64"
-    why_human: "No git remote is configured — the repo has never been pushed to GitHub. ROADMAP success criterion #1 explicitly requires CI to pass on linux-x64, macos-arm64, and windows-x64. Plan 04 Task 2 is a blocking human checkpoint that was auto-approved locally but never executed remotely."
+    resolved: 2026-06-01
+    evidence: "CI run 25470909723 (push to main, 2026-05-07) completed success on all three matrix legs — check (windows-latest, 20.10), check (macos-latest, 20.10), check (ubuntu-latest, 20.10). The macOS Pitfall-C arm64 assertion step fails CI if RUNNER_ARCH != ARM64; the job's success conclusion confirms the assertion passed. Independently corroborated by run 25851071838 (2026-05-14, Node 20.18 post-bump) green on all three. Resolved during /gsd-progress CI verification."
 ---
 
 # Phase 0: Repo skeleton & plugin manifest — Verification Report
@@ -27,7 +28,7 @@ human_verification:
 | 2 | `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` validate against Claude Code plugin schema | VERIFIED | `node scripts/validate-plugin-manifest.cjs` exits 0, prints "plugin.json + marketplace.json + .mcp.json valid"; manifest.test.ts passes 6/6 manifest tests |
 | 3 | `.mcp.json` declares the pensmith MCP server entry point | VERIFIED | `.mcp.json` parses as valid JSON; `mcpServers.pensmith.command = "node"`, `args[0] = "${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"`; redundant declaration in `plugin.json.mcpServers` confirmed |
 | 4 | Lint forbids direct `fetch`/`http`/`https`/`undici` imports outside `bin/lib/http.ts`, and forbids `/^10\./` regex outside `bin/lib/doi.ts` | VERIFIED | `eslint.config.js` encodes both rules; red-team fixture triggers both; 4/4 chokepoint tests pass (positive, negative benign, project-config-loaded, documented-gap) |
-| 5 | CI matrix covers ubuntu-latest, macos-latest, windows-latest × Node 20.10 and runs all steps on all three OSes | UNCERTAIN | `.github/workflows/ci.yml` is correct and locally green; no git remote exists; repo has never been pushed to GitHub; cross-platform CI has not run |
+| 5 | CI matrix covers ubuntu-latest, macos-latest, windows-latest × Node 20.10 and runs all steps on all three OSes | VERIFIED (2026-06-01) | CI run [25470909723](https://github.com/ZeusCraft10/pensmith/actions/runs/25470909723) (push to main, 2026-05-07) succeeded on all three legs; macOS arm64 Pitfall-C assertion passed (job succeeded). Corroborated by run [25851071838](https://github.com/ZeusCraft10/pensmith/actions/runs/25851071838) (2026-05-14, Node 20.18). |
 
 **Score:** 4/5 ROADMAP success criteria verified locally. SC #1 (CI passes on all three OSes) requires GitHub execution.
 
@@ -142,3 +143,9 @@ No hard gaps — all locally verifiable must-haves are VERIFIED. The single outs
 
 _Verified: 2026-05-07T21:30:00Z_
 _Verifier: Claude (gsd-verifier)_
+
+---
+
+## Resolution Addendum (2026-06-01)
+
+**Status flipped `human_needed` → `passed`.** The sole outstanding item — the GitHub CI matrix execution — has been observed green. The repo was pushed to `origin` (`github.com/ZeusCraft10/pensmith`) on 2026-05-07, and CI run [25470909723](https://github.com/ZeusCraft10/pensmith/actions/runs/25470909723) completed `success` on `check (windows-latest, 20.10)`, `check (macos-latest, 20.10)`, and `check (ubuntu-latest, 20.10)`. The macOS arm64 Pitfall-C assertion (which hard-fails CI on `RUNNER_ARCH != ARM64`) passed implicitly via the job's success. Independently corroborated by run [25851071838](https://github.com/ZeusCraft10/pensmith/actions/runs/25851071838) (2026-05-14, post Node-20.18 bump), also green on all three legs. ROADMAP success criterion #1 is now satisfied in CI, not just locally. Score 4/5 → 5/5.

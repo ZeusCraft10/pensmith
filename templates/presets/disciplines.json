@@ -1,0 +1,11 @@
+{
+  "psychology":       { "defaultTone": "academic-formal", "defaultCitationStyle": "apa" },
+  "computer-science": { "defaultTone": "technical",       "defaultCitationStyle": "apa" },
+  "history":          { "defaultTone": "narrative",       "defaultCitationStyle": "chicago-author-date" },
+  "philosophy":       { "defaultTone": "argumentative",   "defaultCitationStyle": "chicago-author-date" },
+  "biology":          { "defaultTone": "technical",       "defaultCitationStyle": "apa" },
+  "sociology":        { "defaultTone": "academic-formal", "defaultCitationStyle": "apa" },
+  "economics":        { "defaultTone": "analytical",      "defaultCitationStyle": "apa" },
+  "literature":       { "defaultTone": "interpretive",    "defaultCitationStyle": "mla" },
+  "other":            { "defaultTone": "academic-formal", "defaultCitationStyle": "apa" }
+}

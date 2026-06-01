@@ -31,12 +31,18 @@ jobs:
 
       - run: npm ci
 
+      - name: Generate sources (version.generated.ts, verbs.json)
+        run: node scripts/prebuild.mjs
+
       - run: npm run lint
 
       - run: npx tsc --noEmit
 
       - name: Build (produces dist/mcp/server.js for manifest validation)
         run: npm run build
+
+      - name: Tier contract (Tier 1 ↔ Tier 2 equivalence — D-23 layer 1)
+        run: npm run test:tier-contract
 
       - run: npm test
 

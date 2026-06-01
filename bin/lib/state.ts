@@ -59,8 +59,26 @@ import { randomUUID } from 'node:crypto';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { loadAndMigrate } from './migrations/loader.js';
-import { Schema as StateSchema, CURRENT_STATE_VERSION, type State } from './schemas/state.js';
+import v1_to_v2_migration, {
+  migrate as migrate_v1_to_v2,
+} from './migrations/state/v1_to_v2.js';
+import {
+  Schema as StateSchema,
+  CURRENT_STATE_VERSION,
+  type State,
+  type SectionState,
+  type SectionStatus,
+  type VerificationVerdict,
+} from './schemas/state.js';
 import { openSessionLog, type SessionLogger } from './session-log.js';
+
+// Registry of state forward migrations consumed by loadAndMigrate. Keyed by
+// SOURCE disk version: migrations[N] migrates v(N) → v(N+1). Added in Phase 3
+// Plan 03-03 Task 3.2 (D-09): the writeBack branch was dormant in Phase 1
+// (registry empty) — Wave 2 lights it up.
+const STATE_MIGRATIONS: Record<number, (input: unknown) => unknown> = {
+  1: v1_to_v2_migration,
+};
 
 // ---------------------------------------------------------------------------
 // Errors (per <interfaces> in 01-10-PLAN.md).
@@ -207,6 +225,7 @@ export async function loadState(paperRoot: string): Promise<State> {
         schema: StateSchema,
         schemaName: 'state',
         currentVersion: CURRENT_STATE_VERSION,
+        migrations: STATE_MIGRATIONS,
         writeBack: true,
       })) as State,
     );
@@ -277,6 +296,7 @@ export async function updateState(
       schema: StateSchema,
       schemaName: 'state',
       currentVersion: CURRENT_STATE_VERSION,
+      migrations: STATE_MIGRATIONS,
       writeBack: false,
     })) as State;
     const candidate = await mutator(current);
@@ -291,4 +311,152 @@ export async function updateState(
   });
 
   return next;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 state-mutation helpers (D-13 / TIER-02).
+// Each is a typed convenience wrapper over updateState. Business logic
+// is HERE (bin/lib), not in mcp/ — handlers in mcp/tools.ts are thin shims
+// that call these and JSON.stringify the result.
+//
+// Phase 3 Plan 03-03 Task 3.2 amendment (D-08 / D-09):
+//   STATE.json's per-section schema is now slimmed to { n, slug } strict.
+//   The per-section state/status/verdict cursors moved to PLAN.md frontmatter
+//   (PlanFrontmatterSchema). To keep the MCP tool surface (paper_init_section,
+//   paper_advance_section, paper_set_status, paper_record_verification) wire-
+//   compatible without dragging the Phase 1 contract through a breaking
+//   change, the helpers now:
+//     - initSection: writes {n, slug} to STATE.json (drops the embedded
+//       state/status fields the Phase 1 version wrote).
+//     - advanceSection / setSectionStatus / recordVerification: are NO-OPS
+//       at the STATE.json level (they validate input, log an event-kind
+//       breadcrumb, and return the unchanged state). The "real" persistence
+//       for those mutations is PlanFrontmatter — wired in later plans that
+//       own the verb implementations (Plan 03-04+).
+//   This keeps mcp-tool-handlers TIER-06 tests passing (they only assert
+//   isError !== true on valid input) while honoring the D-08 pivot.
+// ---------------------------------------------------------------------------
+
+/**
+ * Initialise a new section row in state.sections. Idempotent per D-08:
+ * re-init on an existing section number returns the prior state unchanged.
+ *
+ * v2 shape: writes ONLY `{n, slug}` — no embedded state/status fields.
+ * Per-section state lives in PLAN.md frontmatter from v2 onward (D-08).
+ */
+export async function initSection(
+  paperRoot: string,
+  n: number,
+  slug: string,
+): Promise<State> {
+  return updateState(paperRoot, (prev) => {
+    const sections = prev.sections ?? [];
+    if (sections.some((s) => s.n === n)) return prev; // idempotent (D-08)
+    return { ...prev, sections: [...sections, { n, slug }] };
+  });
+}
+
+/**
+ * D-08 NO-OP at the STATE.json layer: per-section `state` moved to PLAN.md
+ * frontmatter (PlanFrontmatterSchema.status). Validates the toState enum,
+ * logs an event-kind breadcrumb, returns the current state unchanged.
+ *
+ * Future plans (03-04+) wire the real PLAN.md write through updateFrontmatter
+ * + atomicWriteFile per the D-09 dance. Today this exists so the MCP tool
+ * handler stays wire-compatible.
+ */
+export async function advanceSection(
+  paperRoot: string,
+  n: number,
+  toState: SectionState,
+): Promise<State> {
+  log().event({
+    event: 'state.advanceSection.noop',
+    paperRoot,
+    n,
+    toState,
+    note: 'D-08 — per-section state lives in PLAN.md frontmatter from v2; STATE.json is pointer-only',
+  });
+  // Return current state unmodified — STATE.json shape is { n, slug } strict
+  // and has no field to receive `toState`. The mutator returns the input
+  // unchanged so saveState's schema-parse round-trip succeeds.
+  return updateState(paperRoot, (prev) => prev);
+}
+
+/**
+ * D-08 NO-OP at the STATE.json layer: see advanceSection note.
+ */
+export async function setSectionStatus(
+  paperRoot: string,
+  n: number,
+  status: SectionStatus,
+): Promise<State> {
+  log().event({
+    event: 'state.setSectionStatus.noop',
+    paperRoot,
+    n,
+    status,
+    note: 'D-08 — per-section status lives in PLAN.md frontmatter from v2',
+  });
+  return updateState(paperRoot, (prev) => prev);
+}
+
+/**
+ * D-08 NO-OP at the STATE.json layer: per-section verdict moved to PLAN.md
+ * frontmatter (PlanFrontmatterSchema.last_verification). See advanceSection
+ * note.
+ */
+export async function recordVerification(
+  paperRoot: string,
+  n: number,
+  verdict: VerificationVerdict,
+): Promise<State> {
+  log().event({
+    event: 'state.recordVerification.noop',
+    paperRoot,
+    n,
+    verdict,
+    note: 'D-08 — per-section verdict lives in PLAN.md frontmatter from v2',
+  });
+  return updateState(paperRoot, (prev) => prev);
+}
+
+// ---------------------------------------------------------------------------
+// migrateState — public v1→v2 wrapper (Phase 3 Plan 03-03 Task 3.2 / D-09).
+//
+// Distinct from the migrations-loader path (which works on $schemaVersion'd
+// JSON envelopes during disk reads): migrateState is a SHAPE TRANSFORM on
+// already-parsed JS objects. It accepts the snake_case test-fixture shape
+// (`schema_version: 1, sections: [{n, slug, state, status, lastVerification}]`)
+// and returns the slimmed v2 shape per D-09.
+//
+// Idempotent on v2 inputs, throws refuse-forward on v3+. See
+// bin/lib/migrations/state/v1_to_v2.ts for the body — this wrapper exists
+// so consumers can `import { migrateState } from '@pensmith/state'` without
+// reaching into the migrations subdirectory and so we can later wire the
+// 5-step full-fidelity disk migration (PLAN.md merges + withLock) behind
+// the same export name.
+// ---------------------------------------------------------------------------
+
+/**
+ * Shape-transform v1 → v2 (D-09). Accepts an already-parsed state object
+ * (either the snake_case test fixture or the camelCase production
+ * envelope) and returns a v2-shaped object with the enumerated v1 fields
+ * dropped. Idempotent on v2; throws refuse-forward on v3+.
+ *
+ * Return type is `unknown` (not `State`) because the test-fixture shape
+ * uses snake_case `schema_version` (alongside top-level `name`/`slug` which
+ * are NOT in the production StateSchema). The production read path goes
+ * through loadAndMigrate / StateSchema.parse, which DOES enforce the
+ * camelCase $schemaVersion envelope. migrateState's contract is the
+ * SHAPE TRANSFORM only — schema validation is the caller's responsibility.
+ *
+ * Async signature is for forward-compatibility with the full-fidelity disk
+ * migration (5-step withLock dance described in Plan 03-03 Task 3.2 — wired
+ * by later plans). Today the body is sync but exposed as a Promise so the
+ * `await migrateState(v1)` callsite in tests/migration.property.test.ts
+ * never has to change when the disk dance lands.
+ */
+export async function migrateState(input: unknown): Promise<unknown> {
+  return Promise.resolve(migrate_v1_to_v2(input));
 }

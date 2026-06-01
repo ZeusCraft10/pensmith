@@ -304,6 +304,104 @@ test('http: lockdown mode — request to non-mocked URL throws (no live network)
   );
 });
 
+test('http: 429 with retry-after:1 — next attempt waits at least ~900ms', async () => {
+  // Cassette: first response is 429 with retry-after: 1, second is 200.
+  // We use a small value (1 second) to keep the test fast but still observable.
+  // The delay assertion allows ±200ms tolerance (generous for CI environments).
+  await withFreshState(
+    async () => {
+      const url = 'https://api.crossref.org/works/10.1038/retry-after-test';
+      const agent = new MockAgent();
+      agent.disableNetConnect();
+      setGlobalDispatcher(agent);
+      const u = new URL(url);
+      const pool = agent.get(u.origin);
+      // First response: 429 with retry-after header
+      pool
+        .intercept({ path: u.pathname + u.search, method: 'GET' })
+        .reply(429, { error: 'rate limited' }, { headers: { 'retry-after': '1' } });
+      // Second response: 200 success
+      pool
+        .intercept({ path: u.pathname + u.search, method: 'GET' })
+        .reply(200, { message: { DOI: '10.1038/retry-after-test' } }, { headers: {} });
+      const start = Date.now();
+      try {
+        const r = await fetch(url, { source: 'crossref' });
+        const elapsed = Date.now() - start;
+        assert.equal(r.status, 200, '429-then-200 with retry-after should resolve to 200');
+        assert.ok(
+          elapsed >= 900,
+          `expected elapsed >= 900ms (retry-after:1), got ${elapsed}ms`,
+        );
+        assert.deepEqual(agent.pendingInterceptors(), [], 'both interceptors must have fired');
+      } finally {
+        await agent.close();
+      }
+    },
+    { PENSMITH_CONTACT_EMAIL: 'test@example.org' },
+  );
+});
+
+test('http: 429 with NO retry-after header — normal jitter behavior (regression)', async () => {
+  // This ensures the existing retry path still works when retry-after is absent.
+  await withFreshState(
+    async () => {
+      const url = 'https://api.crossref.org/works/10.1038/no-retry-after';
+      const agent = new MockAgent();
+      agent.disableNetConnect();
+      setGlobalDispatcher(agent);
+      const u = new URL(url);
+      const pool = agent.get(u.origin);
+      // First response: 429 without retry-after header
+      pool
+        .intercept({ path: u.pathname + u.search, method: 'GET' })
+        .reply(429, { error: 'rate limited' }, { headers: {} });
+      // Second response: 200 success
+      pool
+        .intercept({ path: u.pathname + u.search, method: 'GET' })
+        .reply(200, { message: { DOI: '10.1038/no-retry-after' } }, { headers: {} });
+      try {
+        const r = await fetch(url, { source: 'crossref', noRetry: false });
+        assert.equal(r.status, 200, '429-then-200 without retry-after should still resolve to 200');
+        assert.deepEqual(agent.pendingInterceptors(), []);
+      } finally {
+        await agent.close();
+      }
+    },
+    { PENSMITH_CONTACT_EMAIL: 'test@example.org' },
+  );
+});
+
+test('http: 503 with retry-after:0 — next attempt fires without extra wait', async () => {
+  // retry-after:0 means parseRetryAfter returns 0, so no extra sleep is added.
+  await withFreshState(
+    async () => {
+      const url = 'https://api.crossref.org/works/10.1038/503-retry-after-zero';
+      const agent = new MockAgent();
+      agent.disableNetConnect();
+      setGlobalDispatcher(agent);
+      const u = new URL(url);
+      const pool = agent.get(u.origin);
+      // First response: 503 with retry-after: 0
+      pool
+        .intercept({ path: u.pathname + u.search, method: 'GET' })
+        .reply(503, { error: 'service unavailable' }, { headers: { 'retry-after': '0' } });
+      // Second response: 200
+      pool
+        .intercept({ path: u.pathname + u.search, method: 'GET' })
+        .reply(200, { message: { DOI: '10.1038/503-retry-after-zero' } }, { headers: {} });
+      try {
+        const r = await fetch(url, { source: 'crossref' });
+        assert.equal(r.status, 200, '503-then-200 with retry-after:0 should resolve to 200');
+        assert.deepEqual(agent.pendingInterceptors(), []);
+      } finally {
+        await agent.close();
+      }
+    },
+    { PENSMITH_CONTACT_EMAIL: 'test@example.org' },
+  );
+});
+
 test('http: clearCache removes all entries', async () => {
   await withFreshState(
     async () => {

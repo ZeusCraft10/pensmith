@@ -1,0 +1,28 @@
+[
+  {
+    "scope": "https://api.anthropic.com",
+    "method": "POST",
+    "path": "/v1/messages",
+    "status": 200,
+    "response": {
+      "id": "msg_smoother_multi_01",
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "### End of section method\n\nThe experimental design incorporated three distinct evaluation phases, each targeting a specific capability dimension {{cite_2_1}}. First, we assessed baseline performance on standard benchmarks. Second, we evaluated generalization under distribution shift. Third, we measured robustness to adversarial perturbations {{cite_2_2}}.\n\nThese phases collectively provide a comprehensive picture of model behavior across diverse conditions, forming the empirical foundation for the results presented next.\n\n### Start of section results\n\nThe results confirm the effectiveness of the proposed approach across all three evaluation phases {{cite_3_1}}. On the primary benchmark, the model achieved state-of-the-art performance, exceeding prior methods by a substantial margin. Robustness evaluations further demonstrated that performance degradation under adversarial conditions remained within acceptable bounds."
+        }
+      ],
+      "model": "claude-opus-4-5",
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 220,
+        "output_tokens": 130
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

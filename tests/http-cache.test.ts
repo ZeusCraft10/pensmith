@@ -230,6 +230,110 @@ test('http-cache: 404 GET is also cached (verifier short-circuit)', async () => 
   });
 });
 
+test('WR-07: 404 cache TTL is 1 hour, NOT the 7-day positive-TTL of crossref', async () => {
+  // WR-07 (cross-AI review): a 404 from crossref/openalex/etc. caches as a
+  // "definitely-not-found" verdict so the verifier can short-circuit. But
+  // 404s flip to 200 as soon as the publisher indexes the deposit — a
+  // 7-day TTL would make the verifier emit FABRICATED on a DOI that just
+  // landed. The fix clamps the effective TTL for cached 404s to 1 hour;
+  // 200s keep the per-source TTL. This test seeds a 404 cache file with
+  // savedAt = 2h ago and asserts the next fetch ignores it (re-dispatches).
+  await withFreshState(async () => {
+    const cassette = loadCassette('crossref-doi-404');
+    const agent = new MockAgent();
+    agent.disableNetConnect();
+    setGlobalDispatcher(agent);
+    const u = new URL(cassette.request.url);
+    const pool = agent.get(u.origin);
+    const r0 = cassette.responses[0]!;
+    // Two interceptors: first warms cache, second proves the 2h-old 404 is
+    // ignored (cache miss). If the bug regressed (404 honored 7-day TTL),
+    // the second interceptor stays pending and the assertion fires.
+    pool
+      .intercept({ path: u.pathname + u.search, method: cassette.request.method })
+      .reply(r0.status, r0.body, { headers: r0.headers });
+    pool
+      .intercept({ path: u.pathname + u.search, method: cassette.request.method })
+      .reply(r0.status, r0.body, { headers: r0.headers });
+    try {
+      const first = await fetch(cassette.request.url, { source: 'crossref' });
+      assert.equal(first.status, 404, '404 cassette must produce 404');
+      // Re-stamp the cache file to 2 hours ago — past the 1h 404-TTL but
+      // well within the 7-day crossref TTL. If the bug is fixed, this
+      // entry reads as a miss; if regressed, it reads as a hit.
+      const dir = pensmithHttpCacheDir();
+      const files = await fsp.readdir(dir);
+      assert.equal(files.length, 1, 'exactly one cache file should exist');
+      const cachePath = path.join(dir, files[0]!);
+      const raw = await fsp.readFile(cachePath, 'utf8');
+      const env = JSON.parse(raw) as {
+        savedAt: string;
+        response: { status: number };
+      };
+      assert.equal(env.response.status, 404, 'sanity: cached envelope is the 404');
+      env.savedAt = new Date(Date.now() - 2 * 3600_000).toISOString();
+      await atomicWriteFile(cachePath, JSON.stringify(env));
+      const second = await fetch(cassette.request.url, { source: 'crossref' });
+      assert.equal(
+        second.cached,
+        false,
+        'WR-07: 2h-old cached 404 must be ignored (1h TTL clamp)',
+      );
+      assert.deepEqual(
+        agent.pendingInterceptors(),
+        [],
+        'both interceptors must fire — bug regressed if the second one is still pending',
+      );
+    } finally {
+      await agent.close();
+    }
+  });
+});
+
+test('WR-07: 200 cache TTL is the per-source 7-day default (sibling assertion)', async () => {
+  // Sibling of the WR-07 test above. Same shape, but with a 200 cassette
+  // and savedAt = 2 hours ago. A 200 at 2h must STILL be a cache hit
+  // (per-source crossref TTL is 7 days). This test exists to lock in the
+  // asymmetry between 200 and 404 TTLs introduced by WR-07.
+  await withFreshState(async () => {
+    const cassette = loadCassette('crossref-doi-200');
+    const agent = new MockAgent();
+    agent.disableNetConnect();
+    setGlobalDispatcher(agent);
+    const u = new URL(cassette.request.url);
+    const pool = agent.get(u.origin);
+    const r0 = cassette.responses[0]!;
+    // ONE interceptor — if the 200 were ignored at 2h, no second interceptor
+    // exists to satisfy the dispatch and the test would error.
+    pool
+      .intercept({ path: u.pathname + u.search, method: cassette.request.method })
+      .reply(r0.status, r0.body, { headers: r0.headers });
+    try {
+      const first = await fetch(cassette.request.url, { source: 'crossref' });
+      assert.equal(first.status, 200, '200 cassette must produce 200');
+      const dir = pensmithHttpCacheDir();
+      const files = await fsp.readdir(dir);
+      assert.equal(files.length, 1);
+      const cachePath = path.join(dir, files[0]!);
+      const raw = await fsp.readFile(cachePath, 'utf8');
+      const env = JSON.parse(raw) as {
+        savedAt: string;
+        response: { status: number };
+      };
+      env.savedAt = new Date(Date.now() - 2 * 3600_000).toISOString();
+      await atomicWriteFile(cachePath, JSON.stringify(env));
+      const second = await fetch(cassette.request.url, { source: 'crossref' });
+      assert.equal(
+        second.cached,
+        true,
+        'WR-07 sibling: 2h-old cached 200 must still be a cache hit (7d TTL preserved for positives)',
+      );
+    } finally {
+      await agent.close();
+    }
+  });
+});
+
 test('FLAG-01: malformed cache envelope reads as a miss (no crash, no torn response)', async () => {
   await withFreshState(async () => {
     // Deliberately seed a parseable-but-malformed envelope at the location

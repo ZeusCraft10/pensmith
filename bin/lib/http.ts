@@ -50,13 +50,13 @@
 
 import { request, getGlobalDispatcher, setGlobalDispatcher, Agent } from 'undici';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pensmithHttpCacheDir } from './paths.js';
 import { atomicWriteFile } from './atomic-write.js';
-import { retry } from './retry.js';
+import { retry, parseRetryAfter } from './retry.js';
 
 // Touch the optional Agent reference so verbatimModuleSyntax does not strip
 // it; we may use it in Phase 2 when wiring connection pooling.
@@ -67,10 +67,33 @@ void Agent;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// IN-03 fix: this file ships at two different depths — bin/lib/http.ts under
+// tsx, dist/bin/lib/http.js after build. Fixed-depth `..` × N produced
+// `dist/references/http-warnings.md` (nonexistent) post-build, silently
+// degrading the WARN banner to the short fallback. Same defect-class as CR-02
+// for the doctor probes; same shape of fix — walk up from HERE until we hit
+// the directory that owns package.json. See bin/lib/doctor/probes/
+// build-artifact-resolves.ts for the original rationale.
+function findPkgRoot(start: string): string {
+  let cur = start;
+  for (let i = 0; i < 8; i++) {
+    try {
+      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
+    } catch {
+      // continue
+    }
+    const next = path.dirname(cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  return start;
+}
+const PKG_ROOT = findPkgRoot(__dirname);
+
 // ============================================================
 //   WARN-once for missing contact email
 // ============================================================
-const WARN_FILE = path.resolve(__dirname, '..', '..', 'references', 'http-warnings.md');
+const WARN_FILE = path.join(PKG_ROOT, 'references', 'http-warnings.md');
 
 let warnString: string | null = null;
 let warnedNoEmail = false;
@@ -123,7 +146,10 @@ let cachedVersion: string | null = null;
 function pkgVersion(): string {
   if (cachedVersion !== null) return cachedVersion;
   try {
-    const pkgPath = path.resolve(__dirname, '..', '..', 'package.json');
+    // IN-03: same off-by-one as WARN_FILE — `..` × 2 from __dirname lands at
+    // dist/ post-build, producing a path that doesn't exist and silently
+    // returning '0.0.0' in the User-Agent header. Reuse PKG_ROOT.
+    const pkgPath = path.join(PKG_ROOT, 'package.json');
     const raw = readFileSync(pkgPath, 'utf8');
     const parsed = JSON.parse(raw) as { version?: string };
     cachedVersion = parsed.version ?? '0.0.0';
@@ -151,6 +177,8 @@ export type HttpSource =
   | 'unpaywall'
   | 'arxiv'
   | 'pubmed'
+  | 'semanticscholar'
+  | 'retraction-watch'
   | 'generic';
 
 export interface HttpResponse {
@@ -182,14 +210,26 @@ export interface FetchOptions {
 //   TTL table (D-30)
 // ============================================================
 const ONE_DAY_MS = 24 * 3_600_000;
+const ONE_HOUR_MS = 3_600_000;
 const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
   crossref: 7 * ONE_DAY_MS,
   openalex: 7 * ONE_DAY_MS,
   arxiv: 7 * ONE_DAY_MS,
   pubmed: 7 * ONE_DAY_MS,
   unpaywall: 1 * ONE_DAY_MS,
+  semanticscholar: 7 * ONE_DAY_MS,
+  'retraction-watch': 1 * ONE_DAY_MS,
   generic: 1 * ONE_DAY_MS,
 };
+// WR-07 (cross-AI review): 404 responses are cached so the verifier doesn't
+// re-fetch obvious negatives on every pass. But a "not found" verdict at
+// crossref/openalex can flip to "found" as soon as the publisher's
+// metadata pipeline indexes the record — a 7-day TTL would cause the
+// verifier to keep emitting FABRICATED on a DOI that just landed.
+// 1 hour is short enough to recover from publisher-side indexing latency
+// (typically minutes) but long enough that a stuck verifier pass doesn't
+// re-hit the origin every second.
+const NEGATIVE_RESPONSE_TTL_MS = ONE_HOUR_MS;
 
 // ============================================================
 //   Per-source TokenBucket (ARCH-13)
@@ -200,6 +240,12 @@ const RPS_BY_SOURCE: Record<HttpSource, number> = {
   unpaywall: 10,
   arxiv: 1,
   pubmed: 3,
+  // S2 anonymous rate-limit is 100 RPM (~1.7 RPS); keep conservative at 1 RPS.
+  // With an API key it bumps to 1 RPS per partner (same effective limit here).
+  semanticscholar: 1,
+  // Retraction Watch (Crossref Labs) — used only as a side-channel filter,
+  // call volume is minimal; mirror unpaywall budget.
+  'retraction-watch': 10,
   generic: 5,
 };
 
@@ -331,7 +377,13 @@ async function readCache(key: string, ttlMs: number): Promise<HttpResponse | nul
   if (!isValidCacheEnvelope(parsed)) return null;
   const envelope: CacheEnvelope = parsed;
   const ageMs = Date.now() - new Date(envelope.savedAt).getTime();
-  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > ttlMs) return null;
+  // WR-07: clamp the effective TTL down to NEGATIVE_RESPONSE_TTL_MS for 404s.
+  // 404 means "this URL did not resolve at fetch time" — a verdict that
+  // can flip when the upstream catalog indexes a freshly-deposited record.
+  // Positive responses (200) keep the per-source TTL (7d for crossref, etc.).
+  const effectiveTtlMs =
+    envelope.response.status === 404 ? Math.min(ttlMs, NEGATIVE_RESPONSE_TTL_MS) : ttlMs;
+  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > effectiveTtlMs) return null;
   const out: HttpResponse = {
     status: envelope.response.status,
     headers: envelope.response.headers,
@@ -342,13 +394,45 @@ async function readCache(key: string, ttlMs: number): Promise<HttpResponse | nul
   return out;
 }
 
+// FLAG-06 / CR-03: cache files persist for up to 7 days and may be tailed
+// by debugging tools / log shippers / cloud-sync clients. Raw response
+// headers commonly carry sensitive material (Set-Cookie session tokens,
+// Authorization echoes for some misconfigured proxies, vendor-specific
+// debug headers like x-amz-* / x-aws-* / x-azure-*). We MUST persist only
+// the small set of headers needed for cache-replay semantics.
+//
+// Allowlist sources: HTTP/1.1 caching primitives (etag, last-modified,
+// cache-control, date, retry-after) + content negotiation (content-type) +
+// rate-limit budget hints the verifier consumes on cache replay
+// (x-ratelimit-remaining, x-ratelimit-reset). Anything else gets dropped.
+const CACHE_HEADER_ALLOWLIST: ReadonlySet<string> = new Set([
+  'content-type',
+  'etag',
+  'last-modified',
+  'cache-control',
+  'date',
+  'retry-after',
+  'x-ratelimit-remaining',
+  'x-ratelimit-reset',
+]);
+
+function filterHeadersForCache(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) {
+    if (CACHE_HEADER_ALLOWLIST.has(k.toLowerCase())) out[k] = v;
+  }
+  return out;
+}
+
 async function writeCache(key: string, response: HttpResponse): Promise<void> {
   const file = path.join(pensmithHttpCacheDir(), `${key}.json`);
   const envelope: CacheEnvelope = {
     savedAt: new Date().toISOString(),
     response: {
       status: response.status,
-      headers: response.headers,
+      // CR-03: ONLY allowlisted headers go to disk. Set-Cookie / Authorization /
+      // x-amz-* / opaque session tokens are dropped here, not after the fact.
+      headers: filterHeadersForCache(response.headers),
       body: response.body,
     },
   };
@@ -438,35 +522,46 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   };
 
   // --- 4. Optional retry wrap ---
+  // serverRetryDelay captures the parsed Retry-After header from the most-recent
+  // retryable response. On the next attempt, we sleep for this duration BEFORE
+  // re-acquiring the rate bucket + dispatching — honoring the server's request
+  // on top of the existing fullJitter backoff (per ARCH-13 / D-01).
+  let serverRetryDelay = 0;
+  const wrapped = async (): Promise<HttpResponse> => {
+    if (serverRetryDelay > 0) {
+      // Server asked us to wait — honor it before the next attempt.
+      const delay = serverRetryDelay;
+      serverRetryDelay = 0;
+      await new Promise<void>((r) => setTimeout(r, delay));
+    }
+    const r = await dispatch();
+    if (RETRYABLE_STATUSES.has(r.status)) {
+      const ra = r.headers['retry-after'];
+      serverRetryDelay = parseRetryAfter(typeof ra === 'string' ? ra : undefined, Date.now());
+      const err = new Error(`HTTP ${r.status}`) as Error & {
+        status?: number;
+        response?: HttpResponse;
+      };
+      err.status = r.status;
+      err.response = r;
+      throw err;
+    }
+    return r;
+  };
   const response: HttpResponse = opts.noRetry
     ? await dispatch()
-    : await retry(
-        async () => {
-          const r = await dispatch();
-          if (RETRYABLE_STATUSES.has(r.status)) {
-            const err = new Error(`HTTP ${r.status}`) as Error & {
-              status?: number;
-              response?: HttpResponse;
-            };
-            err.status = r.status;
-            err.response = r;
-            throw err;
-          }
-          return r;
+    : await retry(wrapped, {
+        maxAttempts: 5,
+        baseMs: 200,
+        capMs: 30_000,
+        retryOn: (err) => {
+          const e = err as { status?: number; code?: string } | null;
+          if (!e) return false;
+          if (typeof e.status === 'number' && RETRYABLE_STATUSES.has(e.status)) return true;
+          if (typeof e.code === 'string' && RETRYABLE_ERR_CODES.has(e.code)) return true;
+          return false;
         },
-        {
-          maxAttempts: 5,
-          baseMs: 200,
-          capMs: 30_000,
-          retryOn: (err) => {
-            const e = err as { status?: number; code?: string } | null;
-            if (!e) return false;
-            if (typeof e.status === 'number' && RETRYABLE_STATUSES.has(e.status)) return true;
-            if (typeof e.code === 'string' && RETRYABLE_ERR_CODES.has(e.code)) return true;
-            return false;
-          },
-        },
-      );
+      });
 
   // --- 5. Cache write (GET, success or definite 404) ---
   if (method === 'GET' && !opts.noCache && (response.status === 200 || response.status === 404)) {

@@ -1,0 +1,89 @@
+# .github/workflows/cassette-refresh.yml
+#
+# Weekly HTTP-cassette refresh for the Crossref / OpenAlex / Unpaywall
+# adapter fixtures in tests/fixtures/cassettes/. The PR-time `ci.yml` runs
+# OFFLINE (PENSMITH_NETWORK_TESTS unset / 0) — recorded cassettes are the
+# fast, hermetic path. This cron job is the SLOW lane that re-records them
+# against the live registrars and opens a PR if anything drifted.
+#
+# Why a separate workflow:
+#   - PR CI must remain hermetic + fast (no live HTTP from contributor PRs).
+#   - Cassette refresh needs network + write access to a branch + PR creation
+#     (peter-evans/create-pull-request@v6) — broader scope than ci.yml.
+#
+# JOB-LEVEL permissions (REQUIRED — repo-level defaults in this org are
+# `contents: read` only; the peter-evans action needs `contents: write` AND
+# `pull-requests: write` on the job to push the refresh branch and open a PR).
+# This is the constraint surfaced by the user pre-Plan-09 — DO NOT remove.
+
+name: Cassette Refresh
+
+on:
+  # Weekly: every Monday 06:00 UTC. Gives a 24h buffer before the working
+  # week starts so maintainers can review the diff during business hours.
+  schedule:
+    - cron: '0 6 * * 1'
+  # Manual dispatch for ad-hoc refreshes (e.g. when a Crossref schema change
+  # breaks a fixture mid-week).
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    # JOB-LEVEL permissions block — the peter-evans/create-pull-request@v6
+    # action below requires BOTH contents:write (to push the refresh branch)
+    # AND pull-requests:write (to open the PR). Repo-default `contents: read`
+    # would silently fail to push and the action would 403 on PR open.
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.18'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build (cassette recorder needs dist/ for the CLI bin)
+        run: npm run build
+
+      - name: Re-record cassettes (live network — Crossref/OpenAlex/Unpaywall)
+        env:
+          PENSMITH_NETWORK_TESTS: '1'
+          # CR-01 fix: env name must match bin/lib/http-mock.ts:231
+          # (recordCassettes() checks PENSMITH_RECORD_CASSETTES, not _REFRESH_).
+          PENSMITH_RECORD_CASSETTES: '1'
+          # Contact email is REQUIRED by Crossref/OpenAlex polite-pool policy
+          # (D-15 / RESEARCH §RQ-3). Provided as a repo secret so the cron
+          # identifies itself correctly to the registrars.
+          PENSMITH_CONTACT_EMAIL: ${{ secrets.PENSMITH_CONTACT_EMAIL }}
+        run: npm run test:cassettes -- --refresh
+
+      - name: Create PR with refreshed cassettes
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: |
+            chore(cassettes): weekly refresh
+
+            Re-records tests/fixtures/cassettes/ against live
+            Crossref / OpenAlex / Unpaywall endpoints. Review the diff
+            for unexpected schema drift before merging.
+          branch: cassette-refresh-${{ github.run_id }}
+          delete-branch: true
+          title: 'chore(cassettes): weekly refresh'
+          body: |
+            Automated weekly cassette refresh. The PR-time `ci.yml` runs
+            offline against recorded cassettes; this PR brings the
+            recorded fixtures back in sync with the live registrars.
+
+            **Review checklist:**
+            - [ ] Diff is purely structural (cassette IDs, timestamps, schema-stable fields)
+            - [ ] No PII or API tokens leaked into recorded headers
+            - [ ] tests/cassette-no-leak passes (T-3-02 / T-01-07 sentinel scan)
+            - [ ] Cassette byte-size remains ≤ 51200 per file (D-25)
+          labels: |
+            cassettes
+            automated
