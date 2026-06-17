@@ -35,8 +35,8 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [ ] **ARCH-16**: Replayable session log at `.paper/SESSION.log` (jsonl); `--show-prompts` flag dumps every LLM prompt
 - [ ] **ARCH-17**: PII redaction option (intake-time, before any LLM call) via `bin/lib/pii.ts` — hand-rolled regex pass for v0.1
 - [ ] **ARCH-18**: MCP server (`mcp/server.ts`) is a thin shim — tool handlers ≤30 lines, all business logic in `bin/lib/*` `[research]`
-- [ ] **ARCH-19**: Section state machine field `state ∈ {planned, writing, written, verifying, verified, failed}` plus `verified_against_draft_hash` for compile-staleness detection `[research]`
-- [ ] **ARCH-20**: Stable section numbering — never renumber on insert; letter-suffix policy (e.g., `03b-validity-threats/`) `[research]`
+- [x] **ARCH-19**: Section state machine field `state ∈ {planned, writing, written, verifying, verified, failed}` plus `verified_against_draft_hash` for compile-staleness detection `[research]`
+- [x] **ARCH-20**: Stable section numbering — never renumber on insert; letter-suffix policy (e.g., `03b-validity-threats/`) `[research]`
 
 ### Tier Shells & Doctor
 
@@ -114,8 +114,8 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 ### Plan Section
 
 - [x] **PLAN-01**: `pensmith plan <N>` reads stub PLAN.md, maps claims → sources, identifies counterexamples
-- [ ] **PLAN-02**: `--revise` flag re-plans based on verification feedback
-- [ ] **PLAN-03**: `--research <query>` triggers section-scoped additional research without disturbing other sections
+- [x] **PLAN-02**: `--revise` flag re-plans based on verification feedback
+- [x] **PLAN-03**: `--research <query>` triggers section-scoped additional research without disturbing other sections
 - [x] **PLAN-04**: Write `.paper/sections/<N>/PLAN.md` with claim-source mapping, paragraph structure, voice hints
 
 ### Write Section
@@ -143,7 +143,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [ ] **COMP-03**: Cross-section smoothing pass touches only last/first paragraph of adjacent sections; writes to `.paper/DRAFT.md`, never modifies `sections/<N>/DRAFT.md` (read-only invariant)
 - [ ] **COMP-04**: Cross-section claim-consistency check produces flags only, never edits
 - [ ] **COMP-05**: Citation density check vs. discipline preset target
-- [ ] **COMP-06**: Wave scheduling (`state.ts.computeWaves()`) topologically sorts by `depends_on` for parallel section writing in Tier 1
+- [x] **COMP-06**: Wave scheduling (`state.ts.computeWaves()`) topologically sorts by `depends_on` for parallel section writing in Tier 1
 - [ ] **COMP-07**: Compile writes `.paper/DRAFT.md` and `.paper/COMPILE-REPORT.md`
 
 ### Done (Export)
@@ -324,10 +324,10 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | TEST-03 | Phase 3 | Complete |
 | TEST-04 | Phase 3 | Complete |
 | TEST-09 | Phase 3 | Complete |
-| ARCH-19 | Phase 4 | Pending |
-| ARCH-20 | Phase 4 | Pending |
-| PLAN-02 | Phase 4 | Pending |
-| PLAN-03 | Phase 4 | Pending |
+| ARCH-19 | Phase 4 | Complete |
+| ARCH-20 | Phase 4 | Complete |
+| PLAN-02 | Phase 4 | Complete |
+| PLAN-03 | Phase 4 | Complete |
 | WRTE-02 | Phase 4 | Pending |
 | RSCH-10 | Phase 4 | Pending |
 | COMP-01 | Phase 4 | Pending |
@@ -335,7 +335,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | COMP-03 | Phase 4 | Pending |
 | COMP-04 | Phase 4 | Pending |
 | COMP-05 | Phase 4 | Pending |
-| COMP-06 | Phase 4 | Pending |
+| COMP-06 | Phase 4 | Complete |
 | COMP-07 | Phase 4 | Pending |
 | VRFY-03 | Phase 5 | Pending |
 | VRFY-06 | Phase 5 | Pending |
@@ -381,6 +381,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | CITE-05 | Phase 10 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 132 total
 - Mapped to phases: 132
 - Unmapped: 0 ✓

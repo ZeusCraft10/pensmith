@@ -4,13 +4,13 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: context exhaustion at 76% (2026-05-30)
-last_updated: "2026-05-30T07:50:10.530Z"
-last_activity: 2026-05-30 -- Phase 04 planning complete
+last_updated: "2026-06-17T09:56:01.108Z"
+last_activity: 2026-06-17
 progress:
   total_phases: 11
   completed_phases: 4
   total_plans: 43
-  completed_plans: 38
+  completed_plans: 39
   percent: 36
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-06)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** Phase 3 — vertical-slice-one-section
+**Current focus:** Phase 04 — breadth-n-sections-compile-wave-scheduling
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
+Phase: 04 (breadth-n-sections-compile-wave-scheduling) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-05-30 -- Phase 04 planning complete
+Last activity: 2026-06-17
 
 Progress: [████████░░] 86%  (Phase 0 done; Phase 1 closed; Phase 2 CLOSED — 10/10 plans)
 
@@ -75,6 +75,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 04 P01 | 10min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -138,6 +139,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-07] Case D length comparison uses serialized fact-set JSON not raw full texts — doctor JSON (~3KB) vs capabilities JSON (~180B) is apples-to-oranges; fact-set text comparison enforces TIER-07 meaningfully
 - [02-07] MCP server main-guard uses pathToFileURL for Windows compatibility — naive file://${argv[1]} never matches absolute import.meta.url when argv[1] is relative
 - [02-07] Preflight resource count: listResources() (4 static) + listResourceTemplates() (1 section template) = 5 total per TIER-01
+- [Phase ?]: [04-01] OUTLINE.md parse contract locked to workflows/outline.md GFM table; the .paper/OUTLINE.md self-build file is a Tier-2 placeholder, not canonical
+- [Phase ?]: [04-01] buildWaveGraph (canonical computeWaves/COMP-06) stays pure by taking Map<slug,PlanFrontmatter> — caller owns PLAN.md reads; satisfies D-04/ARCH-20 read-only by construction
+- [Phase ?]: [04-01] Wave-override floor = node Kahn computed_wave (=max(deps.computed_wave)+1); valid override promotes (PLAN-02), below-floor throws naming slug+floor (PLAN-03)
+- [Phase ?]: [04-01] depends_on edge to a not-yet-planned section is treated as already-satisfied for the run — partial planning never deadlocks the scheduler
 
 ### Pending Todos
 
@@ -158,6 +163,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-05-30T07:47:43.832Z
+Last session: 2026-06-17T09:55:16.552Z
 Stopped at: context exhaustion at 76% (2026-05-30)
 Resume file: None
