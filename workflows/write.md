@@ -8,14 +8,12 @@
 required:
   - MCP state.update
 
-optional:
-  - MCP scheduler (parallel waves) — bounded-parallel section drafting (Tier 1)
-
 degrade_if_missing:
   - if no MCP tools: direct file writes via atomicWriteFile
-  - if no parallel capability (Task / MCP scheduler): invoke
+  - wave mode — if no parallel capability (Task / MCP scheduler): invoke
     bin/lib/write-orchestrator.ts in-process and drain waves SERIALLY
-    (Semaphore(1)) — same code path, just a concurrency cap of 1
+    (Semaphore(1) === Tier-2 forced --max-parallel 1) — same code path,
+    just a concurrency cap of 1
 </capability_check>
 
 ## Overview
