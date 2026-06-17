@@ -47,6 +47,9 @@ const REAL_VERB_LOADERS: Partial<Record<Ux02Verb, () => Promise<AnyCommandDef>>>
   plan: () => import('./cli/plan.js').then((m) => m.planCommand),
   write: () => import('./cli/write.js').then((m) => m.writeCommand),
   verify: () => import('./cli/verify.js').then((m) => m.verifyCommand),
+  // Phase 4 Plan 04-05 — compile is one of the locked 16 (no new verb); promote
+  // the Phase-2 dispatcher stub to the real keystone pipeline loader.
+  compile: () => import('./cli/compile.js').then((m) => m.compileCommand),
 };
 
 /**

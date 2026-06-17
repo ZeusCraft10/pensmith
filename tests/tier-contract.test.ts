@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { assertEquivalent } from './lib/assert-tier-equivalent.js';
+import { computeDraftHash } from '../bin/lib/draft-hash.js';
 
 const MCP_BIN = 'dist/mcp/server.js';
 const CLI_BIN = 'dist/bin/pensmith.js';
@@ -433,6 +434,20 @@ const PHASE_3_CASES: Phase3Case[] = [
     // The patched section DRAFT.md is the load-bearing terminal artifact.
     expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/DRAFT.md`,
   },
+  {
+    // Plan 04-05 (CONTRIBUTING.md D-24): the compile body (workflows/compile.md)
+    // is created in THIS plan, so its tier-contract obligation is satisfied here.
+    // `compile` IS one of the locked UX-02 16 verbs (no new verb). There is no
+    // `pensmith_compile` MCP tool (the compile Tier-1 surface is the workflow
+    // body delegating to the SAME bin/lib/compile.ts::runCompile as the CLI), so
+    // this case is CLI-only (mcpTool: null) — exercised by the dedicated bespoke
+    // dual-tier parity test below (skipped in the generic single-section loop).
+    name: 'compile',
+    mcpTool: null,
+    cliArgs: ['compile', '--yolo'],
+    verbFile: 'bin/cli/compile.ts',
+    expectedArtifact: '.paper/DRAFT.md',
+  },
 ];
 
 /**
@@ -529,6 +544,12 @@ for (const tc of PHASE_3_CASES) {
   // would be a no-op). It is exercised by the dedicated dual-tier parity test
   // below. The registry entry above still satisfies the D-24 obligation.
   if (tc.name === 'revise') continue;
+  // The compile case ('compile') needs a bespoke multi-section verified fixture
+  // (OUTLINE.md + per-section PLAN.md/DRAFT.md/VERIFICATION.md with fresh hashes);
+  // the generic seedPaperFixture has no sections, so `pensmith compile` would
+  // emit an empty draft. It is exercised by the dedicated dual-tier parity test
+  // below. The registry entry above still satisfies the D-24 obligation.
+  if (tc.name === 'compile') continue;
 
   // Tier-equivalence assertion. CLI is always exercised; MCP tool only when
   // registered (the 3 interactive verbs degrade to CLI-only with documented
@@ -826,4 +847,199 @@ test('tier-contract: revise parity — both tiers reach the same patched termina
 
   // Both tiers reach the identical terminal patched DRAFT.md (D-06 parity).
   assert.equal(t1Draft, t2Draft, 'revise: Tier 1 and Tier 2 must produce identical patched DRAFT.md');
+
+  // Plan 04-05 extension: both tiers must ALSO reset verified_against_draft_hash
+  // to null (D-05 invalidation) — identically. The seeded PLAN.md had
+  // verified_against_draft_hash: 'stalehash'; an accepted revise clears it.
+  const planRel = join('.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`, 'PLAN.md');
+  const t1Plan = readFileSync(join(t1Root, planRel), 'utf8');
+  const t2Plan = readFileSync(join(t2Root, planRel), 'utf8');
+  for (const [tier, plan] of [['Tier 1', t1Plan], ['Tier 2', t2Plan]] as const) {
+    assert.ok(!plan.includes('stalehash'), `revise ${tier}: stale hash must be cleared from PLAN.md`);
+    assert.match(plan, /verified_against_draft_hash:\s*(null|~|)\s*$/m, `revise ${tier}: verified_against_draft_hash must be reset to null (D-05)`);
+  }
+});
+
+// ============================================================================
+// Plan 04-05 — write-wave 3-section deps parity (extends the Plan 03 stub)
+// ============================================================================
+//
+// The Plan 03 write-wave parity test used a 2-section NO-DEP fixture. Plan 04-05
+// Task 4 extends it to the full 3-section dependency fixture (deps b→a, c→a): a
+// (n=1) is wave 1; b (n=2) and c (n=3) are wave-2 siblings. Tier 1 (default
+// --max-parallel 5, b/c may run in parallel) vs Tier 2 (forced --max-parallel 1,
+// serial + WARN) must end with IDENTICAL final per-section state (assert on
+// settled state, not event order — 04-RESEARCH §O), and the Tier-2 serial WARN
+// must be emitted.
+
+/**
+ * Seed a 3-section dependency fixture: a (n=1, root), b (n=2, depends_on a),
+ * c (n=3, depends_on a). Wave 1 = {a}; wave 2 = {b, c}.
+ */
+function seedWaveDepsFixture(): string {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-wave-deps-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  const outline = [
+    '# Wave Deps Fixture',
+    '',
+    '| # | slug | title | depends_on | word target | assigned_sources |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| 1 | aaa | Aaa | | 300 |  |',
+    '| 2 | bbb | Bbb | aaa | 300 |  |',
+    '| 3 | ccc | Ccc | aaa | 300 |  |',
+    '',
+  ].join('\n');
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outline);
+  const seed = (n: number, slug: string, deps: string[]): void => {
+    const dir = join(root, '.paper', 'sections', `${String(n).padStart(2, '0')}-${slug}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'PLAN.md'),
+      [
+        '---',
+        `section: ${n}`,
+        `slug: ${slug}`,
+        `title: ${slug}`,
+        `depends_on: [${deps.map((d) => `'${d}'`).join(', ')}]`,
+        'assigned_sources: []',
+        'status: planned',
+        '---',
+        '',
+        `# ${slug}`,
+        '',
+      ].join('\n'),
+    );
+  };
+  seed(1, 'aaa', []);
+  seed(2, 'bbb', ['aaa']);
+  seed(3, 'ccc', ['aaa']);
+  return root;
+}
+
+test('tier-contract: write-wave 3-section deps parity — identical settled state + Tier-2 serial WARN (D-02, D-24)', { skip: !writeWaveVerbExists }, () => {
+  // --- Tier 2 (forced serial --max-parallel 1) ---
+  const t2Root = seedWaveDepsFixture();
+  const t2 = runCliCaptureBoth(['write', '--max-parallel', '1', '--yolo'], t2Root);
+  assert.equal(t2.exitCode, 0, `write-wave deps Tier 2: exit 0 expected; got ${t2.exitCode}. stderr: ${t2.stderr.slice(0, 400)}`);
+  assert.match(t2.stderr, /max-parallel ignored/i, 'write-wave deps Tier 2: serial WARN must be on stderr');
+
+  // --- Tier 1 (default --max-parallel 5, b/c parallel) ---
+  const t1Root = seedWaveDepsFixture();
+  const t1 = runCliCaptureBoth(['write', '--max-parallel', '5', '--yolo'], t1Root);
+  assert.equal(t1.exitCode, 0, `write-wave deps Tier 1: exit 0 expected; got ${t1.exitCode}. stderr: ${t1.stderr.slice(0, 400)}`);
+
+  // Both tiers reach IDENTICAL final per-section state (all 3 DRAFT.md written
+  // with identical bytes) regardless of wave-2 sibling ordering (settled-state
+  // assertion, not event order).
+  for (const slug of ['01-aaa', '02-bbb', '03-ccc']) {
+    const p1 = join(t1Root, '.paper', 'sections', slug, 'DRAFT.md');
+    const p2 = join(t2Root, '.paper', 'sections', slug, 'DRAFT.md');
+    assert.ok(existsSync(p1), `write-wave deps Tier 1: ${slug}/DRAFT.md must exist`);
+    assert.ok(existsSync(p2), `write-wave deps Tier 2: ${slug}/DRAFT.md must exist`);
+    assert.equal(
+      readFileSync(p1, 'utf8'),
+      readFileSync(p2, 'utf8'),
+      `write-wave deps: ${slug}/DRAFT.md must be identical across tiers`,
+    );
+  }
+});
+
+// ============================================================================
+// Plan 04-05 — compile tier-contract parity (CONTRIBUTING.md D-24)
+// ============================================================================
+//
+// The compile body (workflows/compile.md) is CREATED in this plan, so its D-24
+// tier-contract obligation lands here. `compile` is one of the locked 16 verbs;
+// there is no `pensmith_compile` MCP tool (the compile Tier-1 surface is the
+// workflow body delegating to the SAME bin/lib/compile.ts::runCompile as the
+// CLI — a documented architectural asymmetry, like write-wave). The pipeline is
+// deterministic, so this case exercises BOTH tier paths through the CLI: two
+// independent runs against the SAME seeded 3-section verified fixture must
+// produce equivalent .paper/DRAFT.md (±20% via assertEquivalent) and a
+// COMPILE-REPORT.md with the same `## Transitions Changed` body.
+
+const COMPILE_CASE = PHASE_3_CASES.find((c) => c.name === 'compile')!;
+const compileVerbExists = existsSync(new URL(`../${COMPILE_CASE.verbFile}`, import.meta.url));
+
+/**
+ * Seed a 3-section VERIFIED, FRESH-hash fixture for compile. Each section's
+ * verified_against_draft_hash matches computeDraftHash(DRAFT.md bytes, sources)
+ * so the staleness path never triggers and compile proceeds to emit.
+ */
+function seedCompileFixture(): string {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-compile-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+  const outline = [
+    '# Compile Fixture',
+    '',
+    '| # | slug | title | depends_on | word target | assigned_sources |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| 1 | one | One | | 300 |  |',
+    '| 2 | two | Two | | 300 |  |',
+    '| 3 | three | Three | | 300 |  |',
+    '',
+  ].join('\n');
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outline);
+  const seed = (n: number, slug: string, title: string): void => {
+    const dir = join(root, '.paper', 'sections', `${String(n).padStart(2, '0')}-${slug}`);
+    mkdirSync(dir, { recursive: true });
+    const draft = `# ${title}\n\nThe verified body of section ${n} with no citations.\n`;
+    writeFileSync(join(dir, 'DRAFT.md'), draft);
+    const hash = computeDraftHash(Buffer.from(draft, 'utf8'), []);
+    writeFileSync(
+      join(dir, 'PLAN.md'),
+      ['---', `section: ${n}`, `slug: ${slug}`, `title: ${title}`, 'depends_on: []', 'assigned_sources: []', `verified_against_draft_hash: '${hash}'`, 'status: verified', '---', '', `# ${title}`, ''].join('\n'),
+    );
+    writeFileSync(
+      join(dir, 'VERIFICATION.md'),
+      [`# VERIFICATION (Section ${n}, ${slug})`, '', 'Status: verified', '', '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)', '', '', ''].join('\n'),
+    );
+  };
+  seed(1, 'one', 'One');
+  seed(2, 'two', 'Two');
+  seed(3, 'three', 'Three');
+  return root;
+}
+
+/** Extract the `## Transitions Changed` body block from a COMPILE-REPORT.md. */
+function transitionsBlock(report: string): string {
+  const m = /## Transitions Changed\s*\n([\s\S]*?)(?:\n## |\s*$)/.exec(report);
+  return (m?.[1] ?? '').trim();
+}
+
+test('tier-contract: compile — verb file exists (D-24)', () => {
+  assert.ok(compileVerbExists, `MISSING: ${COMPILE_CASE.verbFile} — compile must ship its registry entry in-plan`);
+});
+
+test('tier-contract: compile parity — both tier paths produce equivalent DRAFT.md + same Transitions Changed (D-24)', { skip: !compileVerbExists }, () => {
+  const t1Root = seedCompileFixture();
+  const t1 = runCliInDir(COMPILE_CASE.cliArgs, t1Root);
+  assert.equal(t1.exitCode, 0, `compile Tier 1: exit 0 expected; got ${t1.exitCode}. stdout: ${t1.stdout.slice(0, 400)} stderr: ${t1.stderr.slice(0, 400)}`);
+
+  const t2Root = seedCompileFixture();
+  const t2 = runCliInDir(COMPILE_CASE.cliArgs, t2Root);
+  assert.equal(t2.exitCode, 0, `compile Tier 2: exit 0 expected; got ${t2.exitCode}. stderr: ${t2.stderr.slice(0, 400)}`);
+
+  const t1Draft = readFileSync(join(t1Root, '.paper', 'DRAFT.md'), 'utf8');
+  const t2Draft = readFileSync(join(t2Root, '.paper', 'DRAFT.md'), 'utf8');
+  // Outline order preserved in BOTH (One → Two → Three).
+  for (const draft of [t1Draft, t2Draft]) {
+    assert.ok(draft.indexOf('One') < draft.indexOf('Two'), 'compile: outline order One→Two');
+    assert.ok(draft.indexOf('Two') < draft.indexOf('Three'), 'compile: outline order Two→Three');
+  }
+  // ±20% length equivalence (TIER-07).
+  assertEquivalent(
+    { mcpText: t1Draft, cliText: t2Draft, mcpFacts: {}, cliFacts: {} },
+    { tolerance: 0.20, label: 'compile DRAFT.md (Tier 1 ↔ Tier 2)' },
+  );
+
+  // Same `## Transitions Changed` body (deterministic — no smoother in Tier 2).
+  const t1Report = readFileSync(join(t1Root, '.paper', 'COMPILE-REPORT.md'), 'utf8');
+  const t2Report = readFileSync(join(t2Root, '.paper', 'COMPILE-REPORT.md'), 'utf8');
+  assert.equal(
+    transitionsBlock(t1Report),
+    transitionsBlock(t2Report),
+    'compile: both tier paths must produce the same ## Transitions Changed body',
+  );
 });

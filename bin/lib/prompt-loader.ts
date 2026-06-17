@@ -113,7 +113,7 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   // Task 4 re-pins it to the SAME real SHA-256 the tests/repo-files.test.ts pin
   // already carries (the prompt body is byte-stable on creation — both surfaces
   // then agree and loadPrompt('smoother') succeeds WITHOUT the pending bypass).
-  'smoother':            '__PENDING_HASH_smoother__',  // Phase 4 D-12 (re-pinned real at Task 4)
+  'smoother':            'ee934f8eee89bf239a95bd8b3eebf04f7802eeb39b0cadb8510c5cddc49097f5',  // Phase 4 D-12 (re-pinned real at Plan 04-05 Task 4 — WN-3 lockstep with repo-files pin)
 };
 
 /**
