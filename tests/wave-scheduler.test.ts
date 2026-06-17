@@ -108,7 +108,6 @@ test('ARCH-19 / D-03: a thrown non-Error is normalized so allSettled has a reaso
   const sem = new Semaphore(1);
   const results = await runWave(['x'], sem, async () => {
     // throw a non-Error value (Research §P pitfall 5)
-    // eslint-disable-next-line no-throw-literal
     throw 'string failure';
   });
   assert.equal(results[0]!.status, 'rejected');

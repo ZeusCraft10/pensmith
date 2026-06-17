@@ -34,8 +34,8 @@ import {
 
 const ISO = '2026-05-08T00:00:00.000Z';
 
-test('CURRENT_*_VERSION constants are all 1', () => {
-  assert.equal(CURRENT_STATE_VERSION, 1);
+test('CURRENT_*_VERSION constants (state=2, others=1)', () => {
+  assert.equal(CURRENT_STATE_VERSION, 2);
   assert.equal(CURRENT_LIBRARY_VERSION, 1);
   assert.equal(CURRENT_CHECKPOINT_VERSION, 1);
   assert.equal(CURRENT_SESSION_LOG_VERSION, 1);
@@ -47,7 +47,7 @@ test('CURRENT_*_VERSION constants are all 1', () => {
 test('state: valid example parses', () => {
   assert.ok(
     StateSchema.safeParse({
-      $schemaVersion: 1,
+      $schemaVersion: 2,
       paperId: 'demo',
       createdAt: ISO,
     }).success,
@@ -57,7 +57,7 @@ test('state: valid example parses', () => {
 test('state: rejects empty paperId / wrong $schemaVersion / bad createdAt', () => {
   assert.ok(
     !StateSchema.safeParse({
-      $schemaVersion: 1,
+      $schemaVersion: 2,
       paperId: '',
       createdAt: ISO,
     }).success,
@@ -65,15 +65,15 @@ test('state: rejects empty paperId / wrong $schemaVersion / bad createdAt', () =
   );
   assert.ok(
     !StateSchema.safeParse({
-      $schemaVersion: 2,
+      $schemaVersion: 1,
       paperId: 'demo',
       createdAt: ISO,
     }).success,
-    'wrong $schemaVersion must be rejected (literal-1 guard)',
+    'wrong $schemaVersion must be rejected (literal-2 guard)',
   );
   assert.ok(
     !StateSchema.safeParse({
-      $schemaVersion: 1,
+      $schemaVersion: 2,
       paperId: 'demo',
       createdAt: 'not-iso',
     }).success,

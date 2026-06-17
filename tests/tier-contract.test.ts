@@ -259,13 +259,17 @@ test('Case C: paper_advance_section is idempotent (state read scoped to temp pap
     assert.ok(stateFirst != null && 'text' in stateFirst, 'paper://state must return text content');
     const stateText = (stateFirst as { text: string }).text;
     assert.ok(typeof stateText === 'string');
-    const stateJson = JSON.parse(stateText as string) as { sections?: Array<{ n: number; state: string }> };
+    const stateJson = JSON.parse(stateText as string) as { sections?: Array<{ n: number; slug: string }> };
     const section = (stateJson.sections ?? []).find((s) => s.n === 1);
     assert.ok(
       section,
       `section 1 must exist in state at temp paperRoot ${root} (HIGH #4 regression check — if missing, paper://state is reading the wrong paperRoot)`,
     );
-    assert.equal(section.state, 'writing', 'section 1 state must be "writing" after advance');
+    // D-08 (state v2): STATE.json sections are pointer-only { n, slug }; per-section
+    // state lives in PLAN.md frontmatter, so paper_advance_section is a deliberate
+    // NO-OP at the STATE.json layer. Assert the slim pointer round-trips (slug),
+    // NOT an embedded `state` field (which v1 had and v2 intentionally dropped).
+    assert.equal(section.slug, 'intro', 'section 1 slug must round-trip through paper://state (v2 slim pointer shape)');
   } finally {
     await scopedClient.close();
   }
