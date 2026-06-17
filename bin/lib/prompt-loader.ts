@@ -108,6 +108,12 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   // value (WN-3 lockstep — both surfaces agree). loadPrompt('revise-swap') now
   // succeeds WITHOUT PENSMITH_ALLOW_PENDING_PROMPT_HASHES.
   'revise-swap':         '835876ccd55b713b5ebb41dde741fce88fccdc67f208fe2fe20720dc9dc2c3ef',  // Phase 4 D-05
+  // Phase 4 04-CONTEXT.md D-12 — hash-pinned smoother prompt (Plan 04-05). Lands
+  // here as a __PENDING_HASH_smoother__ sentinel at Task 1a (WN-3); Plan 04-05
+  // Task 4 re-pins it to the SAME real SHA-256 the tests/repo-files.test.ts pin
+  // already carries (the prompt body is byte-stable on creation — both surfaces
+  // then agree and loadPrompt('smoother') succeeds WITHOUT the pending bypass).
+  'smoother':            '__PENDING_HASH_smoother__',  // Phase 4 D-12 (re-pinned real at Task 4)
 };
 
 /**

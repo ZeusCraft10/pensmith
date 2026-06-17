@@ -1,0 +1,19 @@
+[
+  {
+    "scope": "https://openrouter.ai",
+    "method": "POST",
+    "path": "/api/v1/chat/completions",
+    "status": 200,
+    "response": {
+      "choices": [
+        {
+          "message": {
+            "role": "assistant",
+            "content": "Taken together, these results establish the baseline against which later work is measured {{cite_0_0}}, and they surface two open questions {{cite_0_1}}.\n\nThe present section addresses the first of those questions directly {{cite_1_0}}. We adopt the same evaluation protocol {{cite_1_1}} to keep the comparison fair."
+          }
+        }
+      ]
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]

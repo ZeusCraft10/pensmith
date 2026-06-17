@@ -1,0 +1,19 @@
+[
+  {
+    "scope": "https://openrouter.ai",
+    "method": "POST",
+    "path": "/api/v1/chat/completions",
+    "status": 200,
+    "response": {
+      "choices": [
+        {
+          "message": {
+            "role": "assistant",
+            "content": "These early findings motivate a closer look at the mechanism itself.\n\nBuilding on that motivation, this section examines the mechanism in detail {{cite_9_9}}."
+          }
+        }
+      ]
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]
