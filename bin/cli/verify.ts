@@ -23,7 +23,7 @@ import { defineCommand } from 'citty';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { jaroWinkler, levenshteinSubstring } from '../lib/fuzzy.js';
-import { runPass1 } from '../lib/verify/pass1.js';
+import { runPass1, runFreshnessForDraft, renderFreshnessTable } from '../lib/verify/pass1.js';
 import { runPass3 } from '../lib/verify/pass3.js';
 import { parseBibtex } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
@@ -109,6 +109,11 @@ export const verifyCommand = defineCommand({
     );
     const pass3 = await runPass3(draftMd, bibByCitekey);
 
+    // RSCH-10 freshness probe (D-10, WARN-only). Runs AFTER the blocking
+    // verdict computation and NEVER influences `status` — a stale DOI or a
+    // retraction-watch hit surfaces as an advisory table row, not a block.
+    const freshness = await runFreshnessForDraft(draftMd, bibPath);
+
     // Aggregate: any FABRICATED → status: failed; any MIS-CITED → status: failed;
     // any PDF_UNAVAILABLE/TEXT_UNAVAILABLE → status: unverifiable; else verified.
     const hasFail = pass1.some((r) => r.verdict !== 'OK')
@@ -131,10 +136,12 @@ export const verifyCommand = defineCommand({
       '',
       ...pass3.map((r) => `- ${r.citekey} ("${r.quoteSnippet}…"): **${r.verdict}** — lev=${r.levRatio.toFixed(3)} — ${r.reason}`),
       '',
+      renderFreshnessTable(freshness),
+      '',
     ];
     await atomicWriteFile(verifPath, lines.join('\n'));
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
-    return { ok: status !== 'failed', status, path: verifPath, pass1, pass3 };
+    return { ok: status !== 'failed', status, path: verifPath, pass1, pass3, freshness };
   },
 });
 

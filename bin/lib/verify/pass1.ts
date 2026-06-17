@@ -27,6 +27,10 @@ import { firstAuthorSurname } from '../author-normalize.js';
 import { sources } from '../sources/index.js';
 import { parseBibtex } from '../citations.js';
 import { readFileSync } from 'node:fs';
+import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
+
+export type { FreshnessResult } from './freshness.js';
+export { renderFreshnessTable } from './freshness.js';
 
 export type Pass1Verdict = 'OK' | 'MIS-CITED' | 'FABRICATED';
 
@@ -194,6 +198,40 @@ export async function runPass1(
     results.push(await verdictForCitekey(ck, bibByCitekey.get(ck)));
   }
   return results;
+}
+
+/**
+ * RSCH-10 source-freshness probe for a draft (D-10, WARN-only).
+ *
+ * SEPARATE from `runPass1` by design: this never feeds the blocking verdict
+ * path. It pulls the same `[@citekey]` tokens out of the draft, resolves each
+ * to its DOI in the bib, and probes freshness (DOI HEAD + retraction-watch)
+ * advisory-only. A stale DOI or a retraction hit produces a WARN row; it can
+ * NEVER produce a FABRICATED / MIS-CITED verdict (PRD §14 / D-10).
+ *
+ * Returns one FreshnessResult per unique citekey, in draft-appearance order.
+ */
+export async function runFreshnessForDraft(
+  draftMd: string,
+  citationsBibPath: string,
+): Promise<FreshnessResult[]> {
+  const bibText = readFileSync(citationsBibPath, 'utf8');
+  const entries = await parseBibtex(bibText);
+  const doiByCitekey = new Map<string, string | null>(
+    entries.map((e) => [
+      String((e as BibEntry).id ?? ''),
+      (e as BibEntry).DOI ?? null,
+    ]),
+  );
+
+  const citekeys = [...draftMd.matchAll(/\[@([a-z][a-z0-9_-]*)\]/g)]
+    .map((m) => m[1])
+    .filter((s): s is string => Boolean(s));
+  const unique = [...new Set(citekeys)];
+
+  return probeFreshnessAll(
+    unique.map((ck) => ({ citekey: ck, doi: doiByCitekey.get(ck) ?? null })),
+  );
 }
 
 /**
