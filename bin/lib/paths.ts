@@ -161,25 +161,104 @@ export function paperDir(root: string = projectRoot()): string {
   return path.join(root, '.paper');
 }
 
+/** Options bag for sectionDir (ARCH-20 / D-15 letter-suffix reservation). */
+export interface SectionDirOpts {
+  /**
+   * A single lowercase letter inserted between the zero-padded number and the
+   * slug (e.g. `letterSuffix: 'b'` → `03b-slug`). Phase 4 does NOT emit
+   * suffixed paths (D-15); this is the reserved insertion-path hook that
+   * Phase 8's `/pensmith add` will use. When omitted, the legacy `NN-slug`
+   * form is produced and existing callers are unchanged.
+   */
+  letterSuffix?: string;
+}
+
 /**
- * Returns `<root>/.paper/sections/{NN-slug}` for a section index `n` in
- * `[0, 99]` and a free-form section name. The name is run through
- * `slugify`, which strips diacritics, lowercases, kebab-cases, truncates
- * to 64 chars, and rejects path-traversal patterns.
+ * Returns `<root>/.paper/sections/{NN[letter]-slug}` for a section index `n` in
+ * `[0, 99]` and a free-form section name. The name is run through `slugify`,
+ * which strips diacritics, lowercases, kebab-cases, truncates to 64 chars, and
+ * rejects path-traversal patterns.
  *
- * Throws if `n` is not a non-negative integer ≤ 99.
+ * The 3rd argument is overloaded for backward compatibility:
+ *   - `sectionDir(n, slug)`                       → uses projectRoot()
+ *   - `sectionDir(n, slug, root)`                 → explicit root (legacy 3-arg)
+ *   - `sectionDir(n, slug, { letterSuffix })`     → projectRoot() + suffix
+ *   - `sectionDir(n, slug, root, { letterSuffix })` → explicit root + suffix
+ *
+ * When `letterSuffix` is provided it must be a single lowercase letter
+ * (ARCH-20 / D-15). Existing 3-arg `(n, slug, root)` callers are unchanged.
+ *
+ * Throws if `n` is not a non-negative integer ≤ 99 or `letterSuffix` is invalid.
  */
 export function sectionDir(
   n: number,
   slug: string,
-  root: string = projectRoot(),
+  rootOrOpts?: string | SectionDirOpts,
+  maybeOpts?: SectionDirOpts,
 ): string {
   if (!Number.isInteger(n) || n < 0 || n > 99) {
     throw new Error(`sectionDir: n must be an integer in [0,99]; got ${n}`);
   }
+  let root: string;
+  let opts: SectionDirOpts | undefined;
+  if (typeof rootOrOpts === 'string') {
+    root = rootOrOpts;
+    opts = maybeOpts;
+  } else {
+    root = projectRoot();
+    opts = rootOrOpts;
+  }
   const padded = String(n).padStart(2, '0');
+  let suffix = '';
+  if (opts?.letterSuffix !== undefined) {
+    if (!/^[a-z]$/.test(opts.letterSuffix)) {
+      throw new Error(
+        `sectionDir: letterSuffix must be a single lowercase letter; got ${JSON.stringify(opts.letterSuffix)}`,
+      );
+    }
+    suffix = opts.letterSuffix;
+  }
   const safeSlug = slugify(slug);
-  return path.join(paperDir(root), 'sections', `${padded}-${safeSlug}`);
+  return path.join(paperDir(root), 'sections', `${padded}${suffix}-${safeSlug}`);
+}
+
+/**
+ * Defensive parser for a section directory BASENAME (`NN[letter]-slug`).
+ * Returns the parsed components, or `null` when the basename does not match
+ * the canonical shape or contains a path-traversal / null-byte payload.
+ *
+ * ARCH-20 / D-15: Phase 4 path-walking code must TOLERATE letter-suffix
+ * directories (`03b-...`) without error. This parser is the cheap insurance
+ * the research recommended (Research §K) — it exists even though Phase 4 has
+ * no caller yet, so the future `/pensmith add` command and any `fs.readdir`
+ * over the sections directory inherit traversal-safe parsing.
+ *
+ * Rejection rules (V12 ASVS path-traversal mitigation, T-04-06):
+ *   - contains a null byte
+ *   - contains a path separator (`/` or `\`) — basenames only
+ *   - is `.` or `..` or contains a `..` segment
+ *   - looks like an absolute path (leading `/` or a Windows drive `C:`)
+ *   - does not match `^(\d{2})([a-z])?-([a-z0-9-]+)$`
+ */
+export function parseSectionDirName(
+  basename: string,
+): { n: number; letterSuffix: string | undefined; slug: string } | null {
+  if (typeof basename !== 'string' || basename.length === 0) return null;
+  // Reject any path-ish / unsafe payload outright.
+  if (basename.includes('\0')) return null;
+  if (basename.includes('/') || basename.includes('\\')) return null;
+  if (basename === '.' || basename === '..') return null;
+  if (basename.includes('..')) return null;
+  if (/^[a-zA-Z]:/.test(basename)) return null; // Windows drive prefix
+  const m = /^(\d{2})([a-z])?-([a-z0-9-]+)$/.exec(basename);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isInteger(n) || n < 0 || n > 99) return null;
+  const slug = m[3] as string;
+  // Slug must survive the bare-slug contract (no leading/trailing/double dash
+  // would already be admitted by the regex, but validate to stay aligned).
+  if (!SLUG_RE.test(slug)) return null;
+  return { n, letterSuffix: m[2], slug };
 }
 
 // Sync-folder detection patterns, per D-43.
