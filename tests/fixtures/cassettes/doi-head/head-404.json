@@ -1,0 +1,10 @@
+[
+  {
+    "scope": "https://doi.org",
+    "method": "HEAD",
+    "path": "/10.0000/does-not-resolve",
+    "status": 404,
+    "response": "",
+    "responseHeaders": { "content-type": "text/html" }
+  }
+]
