@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: context exhaustion at 76% (2026-05-30)
-last_updated: "2026-06-17T09:56:01.108Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-06-17T10:12:43.269Z"
 last_activity: 2026-06-17
 progress:
   total_phases: 11
   completed_phases: 4
   total_plans: 43
-  completed_plans: 39
+  completed_plans: 40
   percent: 36
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 04 (breadth-n-sections-compile-wave-scheduling) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-06-17
 
@@ -76,6 +76,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 
 *Updated after each plan completion*
 | Phase 04 P01 | 10min | 3 tasks | 10 files |
+| Phase 04 P02 | 38min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -143,6 +144,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [04-01] buildWaveGraph (canonical computeWaves/COMP-06) stays pure by taking Map<slug,PlanFrontmatter> — caller owns PLAN.md reads; satisfies D-04/ARCH-20 read-only by construction
 - [Phase ?]: [04-01] Wave-override floor = node Kahn computed_wave (=max(deps.computed_wave)+1); valid override promotes (PLAN-02), below-floor throws naming slug+floor (PLAN-03)
 - [Phase ?]: [04-01] depends_on edge to a not-yet-planned section is treated as already-satisfied for the run — partial planning never deadlocks the scheduler
+- [Phase ?]: [04-02] D-14 (CONTEXT.md) is the LOCKED COMPILE-REPORT schema source of truth; RESEARCH §F drifted — CompileReportSchema is .strict() and rejects outline_hash/pandoc_target (ARCH-07 refuse-forward-incompat)
+- [Phase ?]: [04-02] RSCH-10 freshness wired as a SEPARATE pass1.ts function (runFreshnessForDraft), never mutating runPass1's blocking verdict path — WARN-only by construction (D-10 / PRD §14)
+- [Phase ?]: [04-02] retraction-watch.ts confirmed a REAL cassette-backed adapter (fetchById), not a Phase-3 stub — freshness probe issues a genuine offline lookup (RESEARCH §J risk A3 resolved live)
+- [Phase ?]: [04-02] freshness cassettes live under tests/fixtures/cassettes/<adapter>/ (not flat tests/cassettes/) so loadCassetteFile + cassette-size/no-leak gates cover them (Rule 3 blocking-issue fix)
+- [Phase ?]: [04-02] freshness DOI HEAD SSRF mitigation (T-04-05) — normalizeDoi before any request, HEAD target hard-coded to https://doi.org/<normalized>; sectionDir 3rd arg overloaded for ARCH-20 letter-suffix tolerance with zero break to legacy 3-arg callers
 
 ### Pending Todos
 
@@ -163,6 +169,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-17T09:55:16.552Z
-Stopped at: context exhaustion at 76% (2026-05-30)
+Last session: 2026-06-17T10:12:43.265Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None

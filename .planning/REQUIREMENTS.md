@@ -101,7 +101,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [x] **RSCH-07**: `pensmith-source-evaluator` scores, dedupes, tiers candidates
 - [x] **RSCH-08**: Approval gate to prune / approve / add sources before research is locked
 - [x] **RSCH-09**: Write `.paper/RESEARCH.md` and `.paper/CITATIONS.bib` with `last_verified` timestamps per source
-- [ ] **RSCH-10**: Auto-recheck sources older than `recheck_after_days` (default 30)
+- [x] **RSCH-10**: Auto-recheck sources older than `recheck_after_days` (default 30)
 - [x] **RSCH-11**: Retraction Watch hard warnings on any retracted DOI
 
 ### Outline
@@ -329,7 +329,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | PLAN-02 | Phase 4 | Complete |
 | PLAN-03 | Phase 4 | Complete |
 | WRTE-02 | Phase 4 | Pending |
-| RSCH-10 | Phase 4 | Pending |
+| RSCH-10 | Phase 4 | Complete |
 | COMP-01 | Phase 4 | Pending |
 | COMP-02 | Phase 4 | Pending |
 | COMP-03 | Phase 4 | Pending |
