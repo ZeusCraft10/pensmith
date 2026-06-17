@@ -121,7 +121,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 ### Write Section
 
 - [x] **WRTE-01**: Section drafter receives ONLY this section's mapped sources + PLAN.md + STYLE.json (when enabled) + voice hint — never the full source pool
-- [ ] **WRTE-02**: Style-match consumed per-section when enabled at intake; voice hint can override
+- [x] **WRTE-02**: Style-match consumed per-section when enabled at intake; voice hint can override
 - [x] **WRTE-03**: Auto-chain to verify after write unless `--no-verify`
 - [x] **WRTE-04**: Lint / runtime check enforces section-drafter input contract (Pitfall 9 mitigation) `[research]`
 
@@ -328,7 +328,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | ARCH-20 | Phase 4 | Complete |
 | PLAN-02 | Phase 4 | Complete |
 | PLAN-03 | Phase 4 | Complete |
-| WRTE-02 | Phase 4 | Pending |
+| WRTE-02 | Phase 4 | Complete |
 | RSCH-10 | Phase 4 | Complete |
 | COMP-01 | Phase 4 | Pending |
 | COMP-02 | Phase 4 | Pending |

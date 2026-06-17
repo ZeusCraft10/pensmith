@@ -4,13 +4,13 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-06-17T10:36:19.771Z"
+last_updated: "2026-06-17T10:57:24.356Z"
 last_activity: 2026-06-17
 progress:
   total_phases: 11
   completed_phases: 4
   total_plans: 43
-  completed_plans: 41
+  completed_plans: 42
   percent: 36
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 04 (breadth-n-sections-compile-wave-scheduling) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-06-17
 
@@ -78,6 +78,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 04 P01 | 10min | 3 tasks | 10 files |
 | Phase 04 P02 | 38min | 3 tasks | 12 files |
 | Phase 04 P03 | 22min | 3 tasks | 6 files |
+| Phase 04 P04 | 13min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -153,6 +154,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [04-03] runAllSections takes an injectable writeSection callback so the orchestrator stays pure/stateless (ARCH-20); the CLI supplies the real single-section path that runs assertDrafterInput per node (WRTE-04 not bypassed)
 - [Phase ?]: [04-03] Re-run isolation via graph-scoping: an optional only[] allow-list keeps untouched sections out of the wave graph entirely (writer never invoked for them) — strongest form of section-as-phase isolation
 - [Phase ?]: [04-03] write-wave tier-contract case is CLI-only (mcpTool: null) — MCP pensmith_write accepts only single-section n; both tiers exercised via CLI. D-24 obligation satisfied where workflows/write.md changed
+- [Phase ?]: [04-04] revise is NOT a locked UX-02 verb — shipped via plan --revise + bin/cli/revise.ts both delegating to the single runRevise chokepoint (D-06); locked-16 and workflow-bijection invariants preserved
+- [Phase ?]: [04-04] runRevise rejects any LLM replacement_citekey not in assigned_sources (strict zod + membership guard before mutation) — verifier-blocks-escape preserved through revise (T-04-14)
+- [Phase ?]: [04-04] revise-swap.md hash-pinned (real SHA-256); WN-3 lockstep landed byte-pin in repo-files at Task 1, prompt-loader sentinel re-pinned at Task 3
 
 ### Pending Todos
 
@@ -173,6 +177,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-17T10:35:46.088Z
+Last session: 2026-06-17T10:56:36.043Z
 Stopped at: Completed 04-02-PLAN.md
 Resume file: None
