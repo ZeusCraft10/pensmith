@@ -7,9 +7,11 @@
 required:
   - MCP state.read
   - MCP library.read
+  - AskUserQuestion
 
 degrade_if_missing:
   - if no MCP tools: direct file reads from .paper/
+  - if no AskUserQuestion: render the --revise citation-swap diff via @clack/prompts in a TTY; in a non-TTY without --yolo, exit code 3 with "use --yolo to auto-accept" (PRD §19 approval gate stays default-on)
 </capability_check>
 
 ## Overview
@@ -52,4 +54,43 @@ The implementation lives in `bin/cli/plan.ts` (created by Plan 07).
 
 6. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/`. Use `bin/lib/paths.ts sectionDir(n, slug)` (Plan 03 Wave 2) as the only filesystem-write target. The `tests/section-isolation.test.ts` mtime gate enforces this in CI.
 
-7. **Shell fallback** (TIER-06 equivalence path): `pensmith plan <N> [--revise] [--yolo]`.
+7. **Shell fallback** (TIER-06 equivalence path): `pensmith plan <N> [--revise] [--research <query>] [--yolo]`.
+
+## Revise body (PLAN-02 / D-05 / D-06 — citation repair behind the approval gate)
+
+> **Surface note**: `revise` is NOT a separate UX-02 verb (the locked 16 are
+> bijective with `workflows/*.md`). The canonical revise surface is
+> `pensmith plan <N> --revise`; both it and the thin `bin/cli/revise.ts`
+> CommandDef delegate to the SAME `bin/lib/revise.ts::runRevise` chokepoint
+> (D-06 — no divergent Tier-1/Tier-2 path). WRTE-02 is satisfied here.
+
+When invoked with `--revise` (or `--research <query>`), `pensmith plan <N>`
+repairs ONE verifier-flagged citation rather than authoring a fresh PLAN.md:
+
+1. **Parse the verdict** — read `<sectionVerification(n, slug)>` and take the
+   FIRST `FABRICATED` / `MIS-CITED` / `NOT_FOUND` citation in order of
+   appearance (one-at-a-time; re-run until clean).
+2. **Load `assigned_sources` + voice hint** from `<sectionPlan(n, slug)>`
+   frontmatter and `## Brief` (WRTE-02 per-section voice consume point — the
+   voice line is threaded into the swap prompt vars).
+3. **Propose a swap** — invoke the hash-pinned `revise-swap` prompt (D-05).
+   Parse the strict-JSON response and REJECT it if `action ∉ {swap, remove}`
+   or `replacement_citekey ∉ assigned_sources` (T-04-14 — no new citekeys ever
+   reach DRAFT.md).
+4. **Approval gate (default-on, PRD §19)** — render the before/after citation
+   diff and ask via `AskUserQuestion`; degrade to `@clack/prompts` in a TTY.
+   `--yolo` skips the gate and auto-loops the SAME path up to 2 retries, then
+   writes a `RETRY_EXHAUSTED` verdict to VERIFICATION.md (D-06). A non-TTY
+   without `--yolo` exits code 3.
+5. **On accept** — `swap` substitutes the flagged `[@k]` (via the Plan 01
+   `replaceCitekeys` token locator); `remove` mechanically deletes the bracketed
+   citation clause (NO LLM prose rewrite). The patched DRAFT.md is written via
+   `bin/lib/atomic-write.ts` and `verified_against_draft_hash` is reset to
+   `null` (D-05), so the next `pensmith verify <N>` re-runs from scratch.
+6. **`--research <query>`** (PLAN-03 / D-09) — append findings to the
+   project-level `.paper/RESEARCH.md`, merge new entries into
+   `.paper/CITATIONS.bib` (with a non-standard `from_section: <N>` annotation),
+   and append a provenance row to `sections/<N>/RESEARCH-LOG.md` (query,
+   adapter, hit-count, citekeys-added, timestamp). This is the ONLY
+   section-level file `--research` creates — NO other section's files are
+   touched (section-as-phase isolation, TEST-09).

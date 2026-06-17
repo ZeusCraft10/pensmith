@@ -417,6 +417,22 @@ const PHASE_3_CASES: Phase3Case[] = [
     verbFile: 'bin/cli/verify.ts',
     expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/VERIFICATION.md`,
   },
+  {
+    // Plan 04-04 (CONTRIBUTING.md D-24): the revise body lands in this plan, so
+    // its tier-contract obligation is satisfied here. `revise` is NOT a separate
+    // UX-02 verb (the locked 16 are bijective with workflows/*.md); the canonical
+    // revise surface is `plan <N> --revise`, which delegates to the SAME
+    // bin/lib/revise.ts::runRevise chokepoint as the thin bin/cli/revise.ts
+    // CommandDef (D-06 — no divergent Tier-1/Tier-2 path). mcpTool pensmith_plan
+    // already accepts the `revise` arg. This case has a bespoke flagged-fixture
+    // and a dedicated dual-tier parity test below (skipped in the generic loop).
+    name: 'revise',
+    mcpTool: 'pensmith_plan',
+    cliArgs: ['plan', MIDDLE_SECTION, '--revise', '--yolo'],
+    verbFile: 'bin/cli/revise.ts',
+    // The patched section DRAFT.md is the load-bearing terminal artifact.
+    expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/DRAFT.md`,
+  },
 ];
 
 /**
@@ -508,6 +524,11 @@ for (const tc of PHASE_3_CASES) {
   // single-section loop. The registry entry above still satisfies the D-24
   // obligation that every workflow-body change registers a tier-contract case.
   if (tc.name === 'write-wave') continue;
+  // The revise case ('revise') has a bespoke flagged VERIFICATION.md fixture
+  // (the generic seedPaperFixture has no failing citation, so plan --revise
+  // would be a no-op). It is exercised by the dedicated dual-tier parity test
+  // below. The registry entry above still satisfies the D-24 obligation.
+  if (tc.name === 'revise') continue;
 
   // Tier-equivalence assertion. CLI is always exercised; MCP tool only when
   // registered (the 3 interactive verbs degrade to CLI-only with documented
@@ -697,4 +718,112 @@ test('tier-contract: write-wave parity — both tiers schedule all sections to t
   const t1Last = readFileSync(join(t1Root, '.paper', 'sections', '02-beta', 'DRAFT.md'), 'utf8');
   const t2Last = readFileSync(join(t2Root, '.paper', 'sections', '02-beta', 'DRAFT.md'), 'utf8');
   assert.equal(t1Last, t2Last, 'write-wave: Tier 1 and Tier 2 must produce identical last-wave DRAFT.md');
+});
+
+// ============================================================================
+// Plan 04-04 — revise tier-contract case (CONTRIBUTING.md D-24)
+// ============================================================================
+//
+// The revise body lands in THIS plan (workflows/plan.md --revise + bin/lib/
+// revise.ts + bin/cli/revise.ts), so its tier-contract obligation is satisfied
+// here. `revise` is NOT a separate UX-02 verb; the canonical surface is
+// `plan <N> --revise`, and both it and the thin bin/cli/revise.ts CommandDef
+// delegate to the SAME bin/lib/revise.ts::runRevise chokepoint (D-06). This case
+// exercises BOTH tiers — Tier 2 via `pensmith plan <N> --revise --yolo`, Tier 1
+// via the MCP `pensmith_plan` tool with `{ revise: true, yolo: true }` — against
+// the SAME seeded flagged fixture, and asserts both reach the identical terminal
+// patched DRAFT.md (the flagged [@jones2019] token removed by the Tier-2
+// placeholder `remove`). Plan 05 Task 4 MAY extend with ±-tolerance parity.
+
+const REVISE_CASE = PHASE_3_CASES.find((c) => c.name === 'revise')!;
+
+/**
+ * Seed a section with a flagged VERIFICATION.md + matching PLAN.md/DRAFT.md so
+ * `plan <N> --revise` (and the MCP pensmith_plan revise path) have a failing
+ * citation to repair. n = MIDDLE_SECTION (3), slug 'placeholder' to match the
+ * registry expectedArtifact.
+ */
+function seedReviseFixture(): string {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-revise-'));
+  const dir = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'DRAFT.md'),
+    '# Section\n\nA claim that is well established [@jones2019].\nAnother line cites [@smith2020].\n',
+  );
+  writeFileSync(
+    join(dir, 'PLAN.md'),
+    [
+      '---',
+      `section: ${MIDDLE_SECTION}`,
+      'slug: placeholder',
+      'title: Placeholder',
+      'depends_on: []',
+      'assigned_sources:',
+      '  - smith2020',
+      '  - jones2019',
+      "verified_against_draft_hash: 'stalehash'",
+      'status: failed',
+      '---',
+      '',
+      '## Brief',
+      '',
+      'Voice: declarative.',
+      '',
+    ].join('\n'),
+  );
+  writeFileSync(
+    join(dir, 'VERIFICATION.md'),
+    [
+      `# VERIFICATION (Section ${MIDDLE_SECTION}, placeholder)`,
+      '',
+      'Status: failed',
+      '',
+      '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
+      '',
+      '- jones2019: **FABRICATED** — titleJW=0.00, authorJW=0.00 — DOI did not resolve via Crossref',
+      '',
+    ].join('\n'),
+  );
+  return root;
+}
+
+const reviseVerbExists = existsSync(new URL(`../${REVISE_CASE.verbFile}`, import.meta.url));
+
+test('tier-contract: revise — verb file exists (D-24)', () => {
+  assert.ok(
+    reviseVerbExists,
+    `MISSING: ${REVISE_CASE.verbFile} — revise must ship its registry entry in-plan`,
+  );
+});
+
+test('tier-contract: revise parity — both tiers reach the same patched terminal state (D-06, D-24)', { skip: !reviseVerbExists }, async () => {
+  const draftRel = join('.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`, 'DRAFT.md');
+
+  // --- Tier 2 (CLI): plan <N> --revise --yolo ---
+  const t2Root = seedReviseFixture();
+  const t2 = runCliInDir(REVISE_CASE.cliArgs, t2Root);
+  assert.equal(
+    t2.exitCode,
+    0,
+    `revise Tier 2: CLI exit 0 expected; got ${t2.exitCode}. stdout: ${t2.stdout.slice(0, 400)} stderr: ${t2.stderr.slice(0, 400)}`,
+  );
+  const t2Draft = readFileSync(join(t2Root, draftRel), 'utf8');
+  assert.ok(!t2Draft.includes('[@jones2019]'), 'revise Tier 2: flagged [@jones2019] must be removed');
+  assert.match(t2Draft, /\[@smith2020\]/, 'revise Tier 2: unrelated citation must survive');
+
+  // --- Tier 1 (MCP): pensmith_plan with revise:true, yolo:true ---
+  const t1Root = seedReviseFixture();
+  const mcpJson = await runMcpToolInDir(REVISE_CASE.mcpTool as string, t1Root, {
+    n: Number(MIDDLE_SECTION),
+    slug: 'placeholder',
+    revise: true,
+    yolo: true,
+  });
+  assert.ok(mcpJson.length > 0, 'revise Tier 1: MCP tool returned empty text');
+  const t1Draft = readFileSync(join(t1Root, draftRel), 'utf8');
+  assert.ok(!t1Draft.includes('[@jones2019]'), 'revise Tier 1: flagged [@jones2019] must be removed');
+
+  // Both tiers reach the identical terminal patched DRAFT.md (D-06 parity).
+  assert.equal(t1Draft, t2Draft, 'revise: Tier 1 and Tier 2 must produce identical patched DRAFT.md');
 });

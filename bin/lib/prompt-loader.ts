@@ -102,11 +102,12 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   'section-drafter':     'baf0172b4e2e96a2d2a1a6c35b5cf548faafd9436f1405e863060c619caa1d34',  // D-12 LOCKED
   'pass1-fuzzy-judge':   'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e',  // D-12 LOCKED + D-13 DORMANT in Phase 3
   'pass3-quote-checker': '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9',  // D-12 LOCKED + D-13 DORMANT in Phase 3
-  // Phase 4 04-CONTEXT.md D-05 — new hash-pinned revise-swap prompt. Lands as a
-  // __PENDING_HASH_revise-swap__ sentinel in Task 1 (prompt body not yet
-  // byte-stable); Task 3 re-pins the real SHA-256 in the SAME commit that
-  // updates tests/repo-files.test.ts PENDING_HASH_PINS (WN-3 lockstep).
-  'revise-swap':         '__PENDING_HASH_revise-swap__',  // Phase 4 D-05 (re-pinned in Task 3)
+  // Phase 4 04-CONTEXT.md D-05 — hash-pinned revise-swap prompt. Re-pinned to
+  // the real SHA-256 in Plan 04-04 Task 3 (the prompt body is byte-stable). The
+  // matching pin in tests/repo-files.test.ts PENDING_HASH_PINS carries the same
+  // value (WN-3 lockstep — both surfaces agree). loadPrompt('revise-swap') now
+  // succeeds WITHOUT PENSMITH_ALLOW_PENDING_PROMPT_HASHES.
+  'revise-swap':         '835876ccd55b713b5ebb41dde741fce88fccdc67f208fe2fe20720dc9dc2c3ef',  // Phase 4 D-05
 };
 
 /**
