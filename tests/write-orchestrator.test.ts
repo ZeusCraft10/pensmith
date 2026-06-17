@@ -193,11 +193,11 @@ test('runAllSections: Tier-2 (maxParallel 1) runs serially and emits exactly one
   // Capture stderr to count the WARN (D-02: WARN goes to stderr, not stdout).
   const warnings: string[] = [];
   const originalStderrWrite = process.stderr.write.bind(process.stderr);
-  // @ts-expect-error — test-time monkeypatch of the write signature.
-  process.stderr.write = (chunk: string | Uint8Array, ...rest: unknown[]): boolean => {
+  const patched = (chunk: string | Uint8Array, ...rest: unknown[]): boolean => {
     warnings.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'));
     return originalStderrWrite(chunk as never, ...(rest as never[]));
   };
+  process.stderr.write = patched as typeof process.stderr.write;
 
   let results: WaveResult[];
   try {
