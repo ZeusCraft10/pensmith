@@ -12,8 +12,11 @@
 //     step that rewrites a prompt) is also caught — there is no race window
 //     between PR review and execution.
 //
-// D-12 LOCKED slugs — the 8 keys below ARE the prompt slug set. Any drift
-// (adding/removing/renaming a slug) requires re-locking D-12 in CONTEXT.md.
+// D-12 LOCKED slugs — the 8 Phase-3 keys below were the original prompt slug
+// set. Phase 4 04-CONTEXT.md D-05 (revise-swap) and D-12 (smoother) EXPLICITLY
+// authorize two NEW hash-pinned prompt slugs, superseding the "8 LOCKED slugs"
+// wording. The canonical set is now whatever EXPECTED_PROMPT_HASHES enumerates;
+// adding/removing/renaming a slug still requires re-locking D-12 in CONTEXT.md.
 //
 // D-13 LOCKED: pass1-fuzzy-judge + pass3-quote-checker are DORMANT in Phase 3.
 // The files exist and are hash-pinned (so the calibration artifact does not
@@ -76,7 +79,8 @@ const PKG_ROOT = findPkgRoot(__dirname);
  * this map (single source of truth — WN-3) so drift between the runtime
  * pins and the PR-time pins is STRUCTURALLY impossible.
  *
- * D-12 LOCKED — the 8 keys here are the canonical prompt slug set.
+ * D-12 LOCKED — the keys here are the canonical prompt slug set. Phase 4
+ * 04-CONTEXT.md D-05/D-12 add `revise-swap` (and later `smoother`) to this set.
  * D-13 LOCKED — pass1-fuzzy-judge + pass3-quote-checker DORMANT in Phase 3.
  *
  * WN-3 — values are `__PENDING_HASH_<slug>__` until Plan 03-09's single
@@ -98,6 +102,11 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   'section-drafter':     'baf0172b4e2e96a2d2a1a6c35b5cf548faafd9436f1405e863060c619caa1d34',  // D-12 LOCKED
   'pass1-fuzzy-judge':   'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e',  // D-12 LOCKED + D-13 DORMANT in Phase 3
   'pass3-quote-checker': '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9',  // D-12 LOCKED + D-13 DORMANT in Phase 3
+  // Phase 4 04-CONTEXT.md D-05 — new hash-pinned revise-swap prompt. Lands as a
+  // __PENDING_HASH_revise-swap__ sentinel in Task 1 (prompt body not yet
+  // byte-stable); Task 3 re-pins the real SHA-256 in the SAME commit that
+  // updates tests/repo-files.test.ts PENDING_HASH_PINS (WN-3 lockstep).
+  'revise-swap':         '__PENDING_HASH_revise-swap__',  // Phase 4 D-05 (re-pinned in Task 3)
 };
 
 /**

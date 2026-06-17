@@ -1,0 +1,19 @@
+[
+  {
+    "scope": "https://openrouter.ai",
+    "method": "POST",
+    "path": "/api/v1/chat/completions",
+    "status": 200,
+    "response": {
+      "choices": [
+        {
+          "message": {
+            "role": "assistant",
+            "content": "{\"action\":\"swap\",\"flagged_citekey\":\"jones2019\",\"replacement_citekey\":\"smith2020\",\"rationale\":\"smith2020 directly measures the effect the sentence claims, whereas jones2019 did not resolve.\",\"patch\":{\"before_excerpt\":\"the effect is well established [@jones2019].\",\"after_excerpt\":\"the effect is well established [@smith2020].\"}}"
+          }
+        }
+      ]
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]

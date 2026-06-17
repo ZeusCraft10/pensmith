@@ -244,6 +244,11 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   { slug: 'pass1-fuzzy-judge',   path: 'templates/prompts/pass1-fuzzy-judge.md',   decision: 'D-12 + D-13 DORMANT in Phase 3', hash: 'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e' },
   { slug: 'pass3-quote-checker', path: 'templates/prompts/pass3-quote-checker.md', decision: 'D-12 + D-13 DORMANT in Phase 3', hash: '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9' },
   { slug: 'apa-csl',             path: 'templates/citation-styles/apa.csl',        decision: 'D-22 (different chokepoint)',    hash: '249341f13df5cff992efdc71e12b9888678f8e4ad69e17fe12bd2c5245681094' },
+  // Phase 4 04-CONTEXT.md D-05 — new revise-swap prompt. The byte-pin below is
+  // GREEN from Task 1 (the file is byte-stable). bin/lib/prompt-loader.ts holds
+  // a __PENDING_HASH_revise-swap__ sentinel until Plan 04-04 Task 3 re-pins the
+  // SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
+  { slug: 'revise-swap',         path: 'templates/prompts/revise-swap.md',         decision: 'Phase 4 D-05',                   hash: '835876ccd55b713b5ebb41dde741fce88fccdc67f208fe2fe20720dc9dc2c3ef' },
 ];
 for (const pin of PENDING_HASH_PINS) {
   test(`hash-pin: ${pin.path} (${pin.decision})`, () => {
