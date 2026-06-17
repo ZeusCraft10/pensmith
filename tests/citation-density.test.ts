@@ -75,5 +75,5 @@ test('COMP-05: computeCitationDensity NEVER throws and NEVER signals a block (wa
   // The report carries warnings only — there is no "blocked"/"refused" field.
   const r = computeCitationDensity([{ n: 1, slug: 's', text: 'a b c [@k]' }], 'cs');
   assert.ok(Array.isArray(r.warnings), 'warnings is an array (advisory only)');
-  assert.ok(!('refused' in (r as Record<string, unknown>)), 'density report must not carry a block/refuse signal');
+  assert.ok(!('refused' in (r as unknown as Record<string, unknown>)), 'density report must not carry a block/refuse signal');
 });
