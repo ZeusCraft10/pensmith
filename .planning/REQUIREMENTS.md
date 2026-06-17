@@ -138,13 +138,13 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 
 ### Compile
 
-- [ ] **COMP-01**: Compile refuses if any section has FABRICATED, MIS-CITED, or quote NOT_FOUND
-- [ ] **COMP-02**: Sections concatenated in outline order
-- [ ] **COMP-03**: Cross-section smoothing pass touches only last/first paragraph of adjacent sections; writes to `.paper/DRAFT.md`, never modifies `sections/<N>/DRAFT.md` (read-only invariant)
-- [ ] **COMP-04**: Cross-section claim-consistency check produces flags only, never edits
-- [ ] **COMP-05**: Citation density check vs. discipline preset target
+- [x] **COMP-01**: Compile refuses if any section has FABRICATED, MIS-CITED, or quote NOT_FOUND
+- [x] **COMP-02**: Sections concatenated in outline order
+- [x] **COMP-03**: Cross-section smoothing pass touches only last/first paragraph of adjacent sections; writes to `.paper/DRAFT.md`, never modifies `sections/<N>/DRAFT.md` (read-only invariant)
+- [x] **COMP-04**: Cross-section claim-consistency check produces flags only, never edits
+- [x] **COMP-05**: Citation density check vs. discipline preset target
 - [x] **COMP-06**: Wave scheduling (`state.ts.computeWaves()`) topologically sorts by `depends_on` for parallel section writing in Tier 1
-- [ ] **COMP-07**: Compile writes `.paper/DRAFT.md` and `.paper/COMPILE-REPORT.md`
+- [x] **COMP-07**: Compile writes `.paper/DRAFT.md` and `.paper/COMPILE-REPORT.md`
 
 ### Done (Export)
 
@@ -330,13 +330,13 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | PLAN-03 | Phase 4 | Complete |
 | WRTE-02 | Phase 4 | Complete |
 | RSCH-10 | Phase 4 | Complete |
-| COMP-01 | Phase 4 | Pending |
-| COMP-02 | Phase 4 | Pending |
-| COMP-03 | Phase 4 | Pending |
-| COMP-04 | Phase 4 | Pending |
-| COMP-05 | Phase 4 | Pending |
+| COMP-01 | Phase 4 | Complete |
+| COMP-02 | Phase 4 | Complete |
+| COMP-03 | Phase 4 | Complete |
+| COMP-04 | Phase 4 | Complete |
+| COMP-05 | Phase 4 | Complete |
 | COMP-06 | Phase 4 | Complete |
-| COMP-07 | Phase 4 | Pending |
+| COMP-07 | Phase 4 | Complete |
 | VRFY-03 | Phase 5 | Pending |
 | VRFY-06 | Phase 5 | Pending |
 | DONE-01 | Phase 6 | Pending |
