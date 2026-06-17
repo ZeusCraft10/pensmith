@@ -4,13 +4,13 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-06-17T10:12:43.269Z"
+last_updated: "2026-06-17T10:36:19.771Z"
 last_activity: 2026-06-17
 progress:
   total_phases: 11
   completed_phases: 4
   total_plans: 43
-  completed_plans: 40
+  completed_plans: 41
   percent: 36
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 04 (breadth-n-sections-compile-wave-scheduling) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-06-17
 
@@ -77,6 +77,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 *Updated after each plan completion*
 | Phase 04 P01 | 10min | 3 tasks | 10 files |
 | Phase 04 P02 | 38min | 3 tasks | 12 files |
+| Phase 04 P03 | 22min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -149,6 +150,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [04-02] retraction-watch.ts confirmed a REAL cassette-backed adapter (fetchById), not a Phase-3 stub — freshness probe issues a genuine offline lookup (RESEARCH §J risk A3 resolved live)
 - [Phase ?]: [04-02] freshness cassettes live under tests/fixtures/cassettes/<adapter>/ (not flat tests/cassettes/) so loadCassetteFile + cassette-size/no-leak gates cover them (Rule 3 blocking-issue fix)
 - [Phase ?]: [04-02] freshness DOI HEAD SSRF mitigation (T-04-05) — normalizeDoi before any request, HEAD target hard-coded to https://doi.org/<normalized>; sectionDir 3rd arg overloaded for ARCH-20 letter-suffix tolerance with zero break to legacy 3-arg callers
+- [Phase ?]: [04-03] runAllSections takes an injectable writeSection callback so the orchestrator stays pure/stateless (ARCH-20); the CLI supplies the real single-section path that runs assertDrafterInput per node (WRTE-04 not bypassed)
+- [Phase ?]: [04-03] Re-run isolation via graph-scoping: an optional only[] allow-list keeps untouched sections out of the wave graph entirely (writer never invoked for them) — strongest form of section-as-phase isolation
+- [Phase ?]: [04-03] write-wave tier-contract case is CLI-only (mcpTool: null) — MCP pensmith_write accepts only single-section n; both tiers exercised via CLI. D-24 obligation satisfied where workflows/write.md changed
 
 ### Pending Todos
 
@@ -169,6 +173,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-17T10:12:43.265Z
+Last session: 2026-06-17T10:35:46.088Z
 Stopped at: Completed 04-02-PLAN.md
 Resume file: None
