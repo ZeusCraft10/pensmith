@@ -16,7 +16,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -394,6 +394,23 @@ const PHASE_3_CASES: Phase3Case[] = [
     expectedArtifact: `.paper/sections/0${MIDDLE_SECTION}-placeholder/DRAFT.md`,
   },
   {
+    // Plan 04-03 (CONTRIBUTING.md D-24): wave-mode write registers its
+    // tier-contract case in the SAME plan that changes workflows/write.md.
+    // Wave mode is a CLI-only surface at Plan 04-03 — the MCP `pensmith_write`
+    // tool only accepts a single-section `n` (no wave invocation yet), so this
+    // case is CLI-only (mcpTool: null) with a documented asymmetry. The
+    // dedicated standalone test below ('write-wave parity ...') exercises BOTH
+    // Tier 1 (default --max-parallel) and Tier 2 (forced serial + WARN) on a
+    // 2-section no-dep fixture and asserts both reach terminal state. Plan 05
+    // Task 4 extends this with the full 3-section deps-b→a,c→a parity assertions.
+    name: 'write-wave',
+    mcpTool: null,
+    cliArgs: ['write', '--max-parallel', '1', '--yolo'],
+    verbFile: 'bin/cli/write.ts',
+    // Last-wave section DRAFT.md of the 2-section fixture seeded below.
+    expectedArtifact: '.paper/sections/02-beta/DRAFT.md',
+  },
+  {
     name: 'verify-section',
     mcpTool: 'pensmith_verify',
     cliArgs: ['verify', MIDDLE_SECTION, '--yolo'],
@@ -485,6 +502,13 @@ for (const tc of PHASE_3_CASES) {
     assert.ok(verbExists, `MISSING: ${tc.verbFile} — Plan 03-07 must create before Plan 03-09 tier-contract runs`);
   });
 
+  // The wave-mode write case ('write-wave') has a bespoke fixture (OUTLINE.md +
+  // per-section PLAN.md for the scheduler) and a bespoke dual-tier assertion;
+  // it is exercised by the dedicated standalone test below, not this generic
+  // single-section loop. The registry entry above still satisfies the D-24
+  // obligation that every workflow-body change registers a tier-contract case.
+  if (tc.name === 'write-wave') continue;
+
   // Tier-equivalence assertion. CLI is always exercised; MCP tool only when
   // registered (the 3 interactive verbs degrade to CLI-only with documented
   // mcpRegistered: false flag in the fact set).
@@ -549,3 +573,128 @@ for (const tc of PHASE_3_CASES) {
     );
   });
 }
+
+// ============================================================================
+// Plan 04-03 — wave-mode write tier-contract case (CONTRIBUTING.md D-24)
+// ============================================================================
+//
+// The wave-mode write body (workflows/write.md) changed in THIS plan, so its
+// tier-contract obligation is satisfied here (D-24). Wave mode is CLI-only at
+// Plan 04-03 (the MCP pensmith_write tool accepts only a single-section `n`),
+// so this case exercises BOTH tiers via the CLI: Tier 1 (default --max-parallel)
+// and Tier 2 (forced --max-parallel 1 + WARN). Both must reach terminal state
+// (every section's DRAFT.md written). Plan 05 Task 4 extends with the full
+// 3-section deps-b→a,c→a parity + Tier-2 serial-WARN assertions.
+
+const WRITE_WAVE_CASE = PHASE_3_CASES.find((c) => c.name === 'write-wave')!;
+
+/**
+ * Seed a 2-section NO-DEP fixture for wave mode: OUTLINE.md (locked GFM table)
+ * + one sections/<NN>-<slug>/PLAN.md per section (alpha n=1, beta n=2). Both
+ * sections are roots → a single wave with two parallel siblings.
+ */
+function seedWaveFixture(): string {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-write-wave-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  const outline = [
+    '# Wave Fixture',
+    '',
+    '| # | slug | title | depends_on | word target | assigned_sources |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| 1 | alpha | Alpha | | 300 |  |',
+    '| 2 | beta | Beta | | 300 |  |',
+    '',
+  ].join('\n');
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), outline);
+  const seed = (n: number, slug: string): void => {
+    const dir = join(root, '.paper', 'sections', `${String(n).padStart(2, '0')}-${slug}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, 'PLAN.md'),
+      [
+        '---',
+        `section: ${n}`,
+        `slug: ${slug}`,
+        `title: ${slug}`,
+        'depends_on: []',
+        'assigned_sources: []',
+        'status: planned',
+        '---',
+        '',
+        `# ${slug}`,
+        '',
+      ].join('\n'),
+    );
+  };
+  seed(1, 'alpha');
+  seed(2, 'beta');
+  return root;
+}
+
+/**
+ * Spawn the CLI capturing BOTH stdout AND stderr regardless of exit code.
+ * runCliInDir() hardcodes stderr:'' on success (execFileSync only returns
+ * stdout when the process exits 0); wave mode emits its Tier-2 WARN to stderr
+ * even on a successful run, so this case needs the always-captured variant.
+ */
+function runCliCaptureBoth(args: string[], cwd: string): { stdout: string; stderr: string; exitCode: number } {
+  const res = spawnSync(process.execPath, [CLI_BIN_ABS, ...args], {
+    encoding: 'utf8',
+    env: { ...process.env, PENSMITH_NO_LLM: '1' },
+    timeout: 30_000,
+    cwd,
+  });
+  return { stdout: res.stdout ?? '', stderr: res.stderr ?? '', exitCode: res.status ?? 1 };
+}
+
+const writeWaveVerbExists = existsSync(new URL(`../${WRITE_WAVE_CASE.verbFile}`, import.meta.url));
+
+test('tier-contract: write-wave — verb file exists (D-24)', () => {
+  assert.ok(
+    writeWaveVerbExists,
+    `MISSING: ${WRITE_WAVE_CASE.verbFile} — wave-mode write must ship the registry entry in-plan`,
+  );
+});
+
+test('tier-contract: write-wave parity — both tiers schedule all sections to terminal state (D-02, D-24)', { skip: !writeWaveVerbExists }, () => {
+  // --- Tier 2 (forced serial): the registry case's cliArgs (--max-parallel 1) ---
+  const t2Root = seedWaveFixture();
+  const t2 = runCliCaptureBoth(WRITE_WAVE_CASE.cliArgs, t2Root);
+  assert.equal(
+    t2.exitCode,
+    0,
+    `write-wave Tier 2: CLI exit 0 expected; got ${t2.exitCode}. stdout: ${t2.stdout.slice(0, 400)} stderr: ${t2.stderr.slice(0, 400)}`,
+  );
+  // Both sections reach terminal state → both DRAFT.md files exist.
+  for (const slug of ['01-alpha', '02-beta']) {
+    assert.ok(
+      existsSync(join(t2Root, '.paper', 'sections', slug, 'DRAFT.md')),
+      `write-wave Tier 2: ${slug}/DRAFT.md must exist`,
+    );
+  }
+  // D-02: Tier-2 forced-serial WARN to stderr.
+  assert.match(
+    t2.stderr,
+    /max-parallel ignored/i,
+    `write-wave Tier 2: expected "max-parallel ignored" WARN on stderr; got: ${t2.stderr.slice(0, 400)}`,
+  );
+
+  // --- Tier 1 (default --max-parallel, bounded parallel): same final state ---
+  const t1Root = seedWaveFixture();
+  const t1 = runCliCaptureBoth(['write', '--yolo'], t1Root);
+  assert.equal(
+    t1.exitCode,
+    0,
+    `write-wave Tier 1: CLI exit 0 expected; got ${t1.exitCode}. stdout: ${t1.stdout.slice(0, 400)} stderr: ${t1.stderr.slice(0, 400)}`,
+  );
+  for (const slug of ['01-alpha', '02-beta']) {
+    assert.ok(
+      existsSync(join(t1Root, '.paper', 'sections', slug, 'DRAFT.md')),
+      `write-wave Tier 1: ${slug}/DRAFT.md must exist`,
+    );
+  }
+  // Both tiers end with the SAME final per-section state (all sections written).
+  const t1Last = readFileSync(join(t1Root, '.paper', 'sections', '02-beta', 'DRAFT.md'), 'utf8');
+  const t2Last = readFileSync(join(t2Root, '.paper', 'sections', '02-beta', 'DRAFT.md'), 'utf8');
+  assert.equal(t1Last, t2Last, 'write-wave: Tier 1 and Tier 2 must produce identical last-wave DRAFT.md');
+});

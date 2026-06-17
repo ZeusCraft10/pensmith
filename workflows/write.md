@@ -8,8 +8,14 @@
 required:
   - MCP state.update
 
+optional:
+  - MCP scheduler (parallel waves) — bounded-parallel section drafting (Tier 1)
+
 degrade_if_missing:
   - if no MCP tools: direct file writes via atomicWriteFile
+  - if no parallel capability (Task / MCP scheduler): invoke
+    bin/lib/write-orchestrator.ts in-process and drain waves SERIALLY
+    (Semaphore(1)) — same code path, just a concurrency cap of 1
 </capability_check>
 
 ## Overview
@@ -18,6 +24,12 @@ degrade_if_missing:
 It is the only verb that produces narrative prose for the paper. The drafter sees a
 RESTRICTED VIEW of the library: only the `assigned_sources` citekeys from the section's
 PLAN.md, never the full LIBRARY.json (PRD §7.6 — Pitfall 7 chinese-wall).
+
+`pensmith write` with NO section number runs **wave mode** (Plan 04-03): it loads the
+outline, builds the dependency wave graph (`bin/lib/scheduler.ts::buildWaveGraph`), and
+drains the waves one at a time via `bin/lib/write-orchestrator.ts::runAllSections`, writing
+each wave's sections in bounded parallel. Every node routes through the SAME single-section
+drafter (so the `assertDrafterInput` WRTE-04 chokepoint runs per section — never bypassed).
 
 The implementation lives in `bin/cli/write.ts` (created by Plan 07). The workflow body
 below is the prompt that drives the verb under both Tier 1 and Tier 2.
@@ -54,4 +66,19 @@ below is the prompt that drives the verb under both Tier 1 and Tier 2.
 
 8. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/`. The mtime gate enforces.
 
-9. **Shell fallback** (TIER-06 equivalence path): `pensmith write <N> [--yolo]`.
+9. **Wave mode** (`pensmith write` with NO `<N>`): load the outline, build the wave graph,
+   and drain `graph.waves` serially — each wave's sections run in bounded parallel under
+   `--max-parallel` (default 5). The orchestrator persists NO wave state (ARCH-20 / D-04);
+   it only invokes the per-section writer, which performs the existing atomic writes.
+   - **Tier 1**: honors `--max-parallel` as given.
+   - **Tier 2** (portable CLI): forces `--max-parallel 1` and emits exactly ONE WARN to
+     stderr ("Tier 2 runs sections serially; --max-parallel ignored", D-02). The flag is
+     parsed, never error'd, so the same invocation works in both tiers.
+   - Within-wave failures do NOT cancel siblings; a section whose dependency failed is marked
+     `blocked` and skipped, while orthogonal subtrees still complete (D-03).
+   - Progress streams as structured JSON lines to stdout (`section_start` / `section_done` /
+     `wave_complete`); the WARN and diagnostics go to stderr to keep the MCP stdio frame clean.
+   - Approval gates are NOT prompted per section here — wave runs are batched; section-level
+     citation approval lives in `--revise` (Plan 04).
+
+10. **Shell fallback** (TIER-06 equivalence path): `pensmith write [<N>] [--max-parallel K] [--yolo]`.
