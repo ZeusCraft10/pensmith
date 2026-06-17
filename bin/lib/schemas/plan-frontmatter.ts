@@ -34,6 +34,11 @@ export const PlanFrontmatterSchema = z.object({
   title: z.string(),
   depends_on: z.array(z.string().regex(SLUG)).default([]),
   assigned_sources: z.array(z.string()).default([]),
+  // Phase 4 PLAN-02 / D-01: optional per-section wave override. When present,
+  // the wave scheduler (bin/lib/scheduler.ts) validates it against
+  // max(deps.computed_wave)+1 (PLAN-03) and promotes computed_wave to it.
+  // NO default — `undefined` means "compute the wave via Kahn topo-sort".
+  wave: z.number().int().positive().optional(),
   verified_against_draft_hash: z.string().nullable().default(null),
   // D-08-AMENDED enum (mirrors SectionStateSchema in state.ts; HandoffSchema
   // imports SectionStateSchema directly to avoid a third lock-step copy).
