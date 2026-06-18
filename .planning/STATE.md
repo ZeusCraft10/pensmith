@@ -4,13 +4,13 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-06-18T08:57:21.170Z"
+last_updated: "2026-06-18T09:10:01.794Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 53
-  completed_plans: 51
+  completed_plans: 52
   percent: 55
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 06 (Done / export pipeline + zero-trace gate) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-06-18
 
@@ -88,6 +88,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 06 P01 | 11min | 3 tasks | 18 files |
 | Phase 06 P02 | 4min | 2 tasks | 1 files |
 | Phase 06 P03 | 4min | 2 tasks | 1 files |
+| Phase 06 P04 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -182,6 +183,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [06-01] Wave-0 RED behavioral tests are RED-by-skip (skip-guarded on existsSync of the unbuilt module), mirroring known-bad-pass2 — full suite stays GREEN (681 tests, 0 fail, 19 skip) until Waves 1-2 land exporter/plagiarism/honesty/done
 - [Phase ?]: [06-01] honesty-framing.md is the LOCKED single-source transparency-only copy (improves prose, does not promise undetectable); byte-pinned GREEN-from-creation in repo-files.test.ts + CONTRIBUTING.md drift rule
 - [Phase ?]: [06-02] PlagiarismResult.matches typed as string[] (URLs) to honor the LOCKED Wave-0 RED contract + DONE-09 gate input; PlagiarismMatch { url; title? } still exported (parseDdgHtml return) for Wave-2 done.ts richness; runPlagiarism maps .url into the string array
+- [Phase ?]: [06-04] zeroTracePdf removes XMP STRUCTURALLY (context.delete(metaRef) before save) because pdf-lib serializes ALL indirect objects regardless of reachability; NO length-altering byte edits, residual-pensmith check is READ-ONLY
+- [Phase ?]: [06-04] docx literal-pensmith sweep is binary-aware (skips media/embeddings/fonts + NUL sniff) so the LIVE Pandoc docx path's binary parts are never corrupted (MEDIUM-1); exports write to a DISTINCT .paper/export/ dir so outputs never collide with source artifacts
+- [Phase ?]: [06-04] exporter.ts created in 06-04 but runHumanizer (DONE-03) added in 06-05; tightened humanizer-wrap.test.ts skip guard to require the runHumanizer export in source (not just file existence) so it stays RED-by-skip until 06-05
 
 ### Pending Todos
 
@@ -202,6 +206,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T08:57:02.235Z
+Last session: 2026-06-18T09:09:24.022Z
 Stopped at: Completed 05-04-PLAN.md
 Resume file: None

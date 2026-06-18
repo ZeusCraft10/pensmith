@@ -254,7 +254,7 @@ Plans:
 - [x] 06-01-PLAN.md (wave 0) — RED suite (zero-trace/plagiarism/honesty/exporter/gate/humanizer) + committed real-ZIP fixture .docx + DDG/GPTZero cassettes + locked references/honesty-framing.md (hash-pinned) + CONTRIBUTING.md drift rule + jszip dep (DONE-02..09, TEST-10)
 - [x] 06-02-PLAN.md (wave 1) — bin/lib/plagiarism.ts: distinctive-phrase n-gram + DuckDuckGo HTML via http.ts chokepoint, advisory-never-throws, offline-cassette-backed (DONE-02)
 - [x] 06-03-PLAN.md (wave 1) — bin/lib/honesty.ts: GPTZero before/after, framing rendered VERBATIM from locked copy, key-never-logged, pluggable backend (DONE-04, DONE-05)
-- [ ] 06-04-PLAN.md (wave 1) — bin/lib/exporter.ts: zeroTracePatch DOCX ZIP scrub (TEST-10/DONE-07, offline + Pandoc-free) + Pandoc shellout w/ md-only fallback + CITATIONS.bib bundle (DONE-06, DONE-07, DONE-08, TEST-10)
+- [x] 06-04-PLAN.md (wave 1) — bin/lib/exporter.ts: zeroTracePatch DOCX ZIP scrub (TEST-10/DONE-07, offline + Pandoc-free) + Pandoc shellout w/ md-only fallback + CITATIONS.bib bundle (DONE-06, DONE-07, DONE-08, TEST-10)
 - [ ] 06-05-PLAN.md (wave 2) — bin/cli/done.ts thin orchestrator: whole-paper Pass 4 + DONE-09 always-confirm gate + humanizer skip-clean wrap + workflows/done.md + verb-loader + tier-contract parity (DONE-01, DONE-03, DONE-09)
 
 **UI hint**: no
@@ -331,7 +331,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 3. Vertical slice through one section | 10/10 | Complete    | 2026-05-28 |
 | 4. Breadth — N sections + compile + wave scheduling | 5/5 | Complete   | 2026-06-17 |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 5/5 | Complete   | 2026-06-18 |
-| 6. Done / export pipeline + zero-trace gate | 3/5 | In Progress|  |
+| 6. Done / export pipeline + zero-trace gate | 4/5 | In Progress|  |
 | 7. Single-command UX layer + hooks + flags | 0/TBD | Not started | - |
 | 8. Style match + sketch + add + library + BYO PDF polish | 0/TBD | Not started | - |
 | 9. Educator/tutorial mode + PII polish | 0/TBD | Not started | - |
