@@ -44,6 +44,21 @@
 //        fixtures assert): count ONLY 'HIGH'-confidence claim sentences with NO
 //        in-text citation within proximity (R2). AMBIGUOUS sentences are NEVER
 //        counted toward orphanCount regardless of any later LLM Step-3 label.
+//
+// STEP 3 (advisory edge-case labeling — the ONLY LLM seam):
+//   For AMBIGUOUS sentences ONLY, the hash-pinned `orphan-label` prompt is asked
+//   for a {claim, definition, UNCLEAR} label. This is purely advisory metadata
+//   for the per-claim `label` field; it NEVER changes orphanCount (R8 invariant)
+//   and NEVER reclassifies a HIGH claim. It is gated behind assertBudget
+//   (ARCH-09/10 per-section cap) and the PENSMITH_NO_LLM guard — under
+//   PENSMITH_NO_LLM=1 (or no ANTHROPIC_API_KEY) Step 3 is skipped entirely, every
+//   AMBIGUOUS claim is labeled 'UNCLEAR', and ZERO network calls are made (CI path).
+
+import Anthropic from '@anthropic-ai/sdk';
+import { assertBudget, appendCost } from '../budget.js';
+import { estimateCost } from '../pricing.js';
+import { loadPrompt, interpolate } from '../prompt-loader.js';
+import { getProviderApiKey, loadRuntimeConfig } from '../runtime.js';
 
 // ---- Named knob constants (PINNED rule — quote-extractor.ts constant-at-top style).
 
@@ -71,6 +86,24 @@ const SENTENCE_BOUNDARY_RE = /(?<=[.!?])\s+/;
 
 /** R2 — canonical [@citekey] token regex (verbatim from pass1.ts / quote-extractor.ts). */
 const CITEKEY_RE = /\[@([a-z][a-z0-9_-]*)\]/g;
+
+// ---- Step-3 LLM constants (advisory edge-case labeling — AMBIGUOUS only) ----
+
+// Per-section Pass 4 cap (ARCH-10 per-step cap). A config knob (05-RESEARCH Open
+// Question 1) — no CONTEXT.md locks it, so default at Claude's discretion to
+// $0.50/section, matching the Pass-2 sibling and leaving ample headroom under the
+// $5 session cap even for paragraph-dense papers on claude-haiku-4.
+const PASS4_SECTION_CAP_DEFAULT = 0.5;
+
+// Conservative fixed token estimates for the pre-call budget gate. Real usage is
+// recorded by appendCost AFTER the call from the SDK's usage report; these only
+// need to be a safe upper-ish bound for the gate (DoS mitigation, T-05-03-04).
+const EST_INPUT_TOKENS = 1200;
+const EST_OUTPUT_TOKENS = 60;
+const DEFAULT_MODEL = 'claude-haiku-4';
+
+/** Step-3 advisory label vocabulary (parsed from the orphan-label response). */
+type OrphanLabel = 'claim' | 'definition' | 'UNCLEAR';
 
 // ---- Exported result interfaces (from 05-PATTERNS §pass4.ts) ----------------
 
@@ -176,10 +209,13 @@ function findCitekeys(para: string): Set<string> {
 /**
  * R2/R8 — a HIGH-confidence claim is an orphan when NO [@citekey] token appears
  * within ORPHAN_PROXIMITY_CHARS of the claim sentence's span. AMBIGUOUS claims
- * are NEVER auto-flagged here and NEVER contribute to orphanCount (R8).
+ * are NEVER auto-flagged here and NEVER contribute to orphanCount (R8). The
+ * optional `hasAnyCitekey` fast-path lets the caller skip the offset scan when
+ * the Step-2 findCitekeys set is empty (paragraph has no citations at all).
  */
-function isOrphan(offsets: number[], claim: ExtractedClaim): boolean {
+function isOrphan(offsets: number[], claim: ExtractedClaim, hasAnyCitekey = true): boolean {
   if (claim.claimConfidence !== 'HIGH') return false;
+  if (!hasAnyCitekey) return true; // R2: no [@citekey] anywhere -> uncited -> orphan
   for (const off of offsets) {
     // Distance from the citekey to the nearest edge of the sentence span.
     const distance =
@@ -247,6 +283,9 @@ function auditParagraph(para: string, paragraphIndex: number): {
   const totalSentences = splitSentences(para).length;
   const claims = extractClaimsFromParagraph(para);
   const offsets = citekeyOffsets(para);
+  // Step-2 canonical citekey set (pass1.ts dedup pattern). Its emptiness is the
+  // fast no-citation path for isOrphan (R2).
+  const hasAnyCitekey = findCitekeys(para).size > 0;
 
   const claimResults: Pass4ClaimResult[] = [];
   const ambiguous: Array<{ index: number; claim: ExtractedClaim }> = [];
@@ -254,7 +293,7 @@ function auditParagraph(para: string, paragraphIndex: number): {
 
   for (const claim of claims) {
     if (claim.claimConfidence === 'HIGH') {
-      const orphan = isOrphan(offsets, claim);
+      const orphan = isOrphan(offsets, claim, hasAnyCitekey);
       if (orphan) orphanCount += 1; // R8 — HIGH orphans ONLY
       claimResults.push({
         paragraphIndex,
@@ -291,41 +330,174 @@ function auditParagraph(para: string, paragraphIndex: number): {
 }
 
 /**
- * Pass 4 advisory orphan audit (deterministic core only — Task 1). Splits
- * `draftMd` into paragraphs on /\n{2,}/ and returns one Pass4Result per
- * paragraph. orphanCount per paragraph is the deterministic HIGH-only count (R8).
+ * Conservative offline placeholder for the Step-3 label (UNCLEAR-bias). Mirrors
+ * the revise.ts Tier-2-placeholder stance: deterministic, never confident. Used
+ * under PENSMITH_NO_LLM=1 (or no key) for every AMBIGUOUS sentence with NO
+ * network call.
+ */
+function orphanLabelPlaceholder(): OrphanLabel {
+  return 'UNCLEAR';
+}
+
+/** Resolve the anthropic model id from runtime config's defaultModel, falling
+ *  back to the cheapest priced model. Never reads the api key here. */
+async function resolveModelId(): Promise<string> {
+  try {
+    const cfg = await loadRuntimeConfig({ scope: 'auto' });
+    return cfg.providers?.['anthropic']?.defaultModel ?? DEFAULT_MODEL;
+  } catch {
+    return DEFAULT_MODEL;
+  }
+}
+
+/**
+ * Parse the orphan-label model response into the {claim, definition, UNCLEAR}
+ * enum. Defensive: anything that is not a valid enum value -> 'UNCLEAR'
+ * (UNCLEAR-bias). Never throws.
+ */
+function parseOrphanLabel(raw: string): OrphanLabel {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const label = parsed['label'];
+    if (label === 'claim' || label === 'definition' || label === 'UNCLEAR') {
+      return label;
+    }
+  } catch {
+    // Unparseable -> conservative UNCLEAR below.
+  }
+  return 'UNCLEAR';
+}
+
+/**
+ * Pass 4 advisory orphan audit. Splits `draftMd` into paragraphs on /\n{2,}/,
+ * runs the deterministic core (Step 1 extraction + Step 2 orphan detection, R1-R8)
+ * per paragraph, and returns one Pass4Result per paragraph. orphanCount is the
+ * deterministic HIGH-only count (R8) — computed in Step 2 and byte-identical
+ * whether or not the Step-3 LLM ran.
  *
- * Task 2 extends this with the advisory Step-3 LLM labeling of AMBIGUOUS
- * sentences (behind assertBudget + PENSMITH_NO_LLM guard); that seam NEVER
- * changes orphanCount. Advisory by construction — NEVER mutates hasFail/status.
+ * Step 3 (advisory, AMBIGUOUS sentences only): under PENSMITH_NO_LLM=1 (or no
+ * ANTHROPIC_API_KEY) every AMBIGUOUS claim is labeled 'UNCLEAR' with ZERO network
+ * calls (CI path). Otherwise each AMBIGUOUS sentence is sent to the hash-pinned
+ * `orphan-label` prompt behind an assertBudget pre-call gate; the parsed label
+ * populates that record's `label` (and, when confirmed 'claim', its audit-only
+ * per-claim `isOrphan`) — but NEVER changes orphanCount or reclassifies a HIGH
+ * claim (R8 invariant). Advisory by construction — NEVER mutates hasFail/status.
  */
 export async function runPass4(
   draftMd: string,
   opts: { n: number; scopeCapUsd?: number },
 ): Promise<Pass4Result[]> {
-  void opts; // Task 1: opts unused until the Task 2 Step-3 budget gate.
+  // Presence check ONLY — never reads the key VALUE (the resolved key, when the
+  // live branch is reached, comes from getProviderApiKey('anthropic')).
+  const noLlm = process.env['PENSMITH_NO_LLM'] === '1' || !process.env['ANTHROPIC_API_KEY'];
+
   const paragraphs = draftMd.split(/\n{2,}/);
-  const results: Pass4Result[] = [];
+  const audits: Array<{
+    result: Pass4Result;
+    ambiguous: Array<{ index: number; claim: ExtractedClaim }>;
+    offsets: number[];
+  }> = [];
   for (let i = 0; i < paragraphs.length; i++) {
     const para = (paragraphs[i] ?? '').trim();
     if (para.length === 0) continue;
-    const { result } = auditParagraph(para, i);
-    results.push(result);
+    audits.push(auditParagraph(para, i));
   }
+
+  const results = audits.map((a) => a.result);
+  const hasAmbiguous = audits.some((a) => a.ambiguous.length > 0);
+
+  // --- Step 3 (advisory edge-case labeling — AMBIGUOUS sentences ONLY) ---
+  if (noLlm || !hasAmbiguous) {
+    // Offline / no-ambiguous: every AMBIGUOUS claim keeps the conservative
+    // 'UNCLEAR' placeholder already set in auditParagraph. Zero network calls.
+    return results;
+  }
+
+  // Live branch (only reached with a real key + LLM enabled + >=1 AMBIGUOUS).
+  // Never reached in CI: the noLlm short-circuit above is the test path.
+  const cap = opts.scopeCapUsd ?? PASS4_SECTION_CAP_DEFAULT;
+  const scopeId = `${opts.n}-pass4`;
+  const promptTemplate = loadPrompt('orphan-label');
+  const modelId = await resolveModelId();
+  const apiKey = await getProviderApiKey('anthropic');
+  const client = new Anthropic({ apiKey });
+
+  for (const audit of audits) {
+    const paraText = (paragraphs[audit.result.paragraphIndex] ?? '').trim();
+    for (const { index, claim } of audit.ambiguous) {
+      let label: OrphanLabel = orphanLabelPlaceholder();
+      try {
+        const prompt = interpolate(promptTemplate, {
+          sentence: claim.sentence,
+          paragraph_context: paraText.slice(0, 500),
+        });
+
+        // ARCH-09/10 pre-call gate: assertBudget BEFORE the model call.
+        const estimatedCallCost = estimateCost({
+          providerId: 'anthropic',
+          modelId,
+          inputTokens: EST_INPUT_TOKENS,
+          outputTokens: EST_OUTPUT_TOKENS,
+        });
+        await assertBudget({ scope: 'section', scopeId, cap }, estimatedCallCost);
+
+        const res = await client.messages.create({
+          model: modelId,
+          max_tokens: EST_OUTPUT_TOKENS,
+          messages: [{ role: 'user', content: prompt }],
+        });
+
+        const inputTokens = res.usage?.input_tokens ?? EST_INPUT_TOKENS;
+        const outputTokens = res.usage?.output_tokens ?? EST_OUTPUT_TOKENS;
+        await appendCost({
+          ts: new Date().toISOString(),
+          scope: 'section',
+          scopeId,
+          provider: 'anthropic',
+          model: modelId,
+          inputTokens,
+          outputTokens,
+          costUsd: estimateCost({ providerId: 'anthropic', modelId, inputTokens, outputTokens }),
+        });
+
+        const textBlock = res.content.find((b) => b.type === 'text');
+        const rawText = textBlock && textBlock.type === 'text' ? textBlock.text : '';
+        label = parseOrphanLabel(rawText);
+      } catch {
+        // Any failure (budget, transport, parse) -> conservative UNCLEAR. Never
+        // thrown out of runPass4 (advisory must not crash verify).
+        label = 'UNCLEAR';
+      }
+
+      // Write ONLY the per-claim advisory label. When Step 3 confirms 'claim',
+      // populate the audit-only per-claim isOrphan (uncited -> true per R2) for
+      // audit completeness. This NEVER feeds orphanCount (R8 invariant — that was
+      // frozen in Step 2 and counts HIGH claims only).
+      const record = audit.result.claims[index];
+      if (record) {
+        record.label = label;
+        if (label === 'claim') {
+          record.isOrphan = isOrphan(audit.offsets, {
+            ...claim,
+            claimConfidence: 'HIGH', // proximity test only; does NOT promote to orphanCount
+          });
+        }
+      }
+    }
+  }
+
   return results;
 }
 
 // ---- Advisory render (deterministic, no LLM) -------------------------------
 
-/** Table-cell-safe single line of <=max chars (LLM-output-injection guard). */
-function clampCell(text: string, max: number): string {
-  return text.replace(/[\r\n|]+/g, ' ').trim().slice(0, max);
-}
-
 /**
  * Render the `## Pass-4` advisory section for VERIFICATION.md. Deterministic,
- * no LLM. Mirrors renderFreshnessTable: a per-paragraph orphan-count table.
- * Empty results -> a "no paragraphs to audit" section.
+ * no LLM. Mirrors renderFreshnessTable: a per-paragraph orphan-count table. The
+ * table carries integer counts only (no LLM-generated sentence text), so there
+ * is no Markdown/HTML injection surface from the table body itself
+ * (LLM-output-injection mitigation, T-05-03-01/02). Empty results -> a "no
+ * paragraphs to audit" section.
  */
 export function renderPass4Section(results: ReadonlyArray<Pass4Result>): string {
   if (results.length === 0) {
@@ -341,9 +513,5 @@ export function renderPass4Section(results: ReadonlyArray<Pass4Result>): string 
     lines.push(`| ${r.paragraphIndex} | ${r.totalSentences} | ${r.claimsDetected} | ${r.orphanCount} |`);
   }
   lines.push('');
-  // `findCitekeys` is part of the deterministic Step-2 surface; reference it
-  // here only to keep it linked into the module (it is used by Task 2's wiring).
-  void findCitekeys;
-  void clampCell;
   return lines.join('\n');
 }
