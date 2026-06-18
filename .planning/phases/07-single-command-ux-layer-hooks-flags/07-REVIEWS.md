@@ -1181,3 +1181,107 @@ HIGH_COUNT: 0
 ### Cycle 6 — Judge Verdict
 
 **current_high = 1.** The cycle-5 never-throw invariant for `resolveNextAction` (STATE.json catch-all + per-section PLAN.md try/catch + outer backstop + input-surface audit) is UNANIMOUSLY confirmed resolved and re-verified against the live seams; all eight prior HIGH families (H1/H2/H3/H4, C3-HIGH-1, C3-HIGH-2, C4-HIGH, C5-HIGH) remain resolved. One NEW HIGH survives (C6-HIGH), code-verified and not adjudicated before: the corrupt-PLAN.md "never crash" guarantee (SC1) is delivered only up to `resolveNextAction`'s RETURN — the bare path then dispatches `status`, whose own per-section PLAN.md walk ("reuse the router's read helpers or parseFrontmatter") re-reads the same corrupt file via a raw, unguarded `parseFrontmatter(readFileSync)` (no shared guarded read helper is exported; `dispatchVerb` has no backstop try/catch), so bare `/pensmith` still crashes end-to-end — the same never-crash family as C4→C5, one VERB downstream. No 07-01 end-to-end case drives bare `pensmith`/`status` against a corrupt PLAN.md (only against a corrupt STATE.json). Fix: export a shared guarded `readSectionState(planPath)` from router.ts and have status.ts use it, and/or give dispatchVerb a backstop try/catch, and add an end-to-end corrupt-PLAN.md RED case. The corruption-robustness family (the C4→C5→C6 never-crash arc) is therefore NOT yet fully closed end-to-end — it is closed for the resolver, open for the dispatch leg. All other findings are MEDIUM/LOW and non-blocking: codex's `list/open/sketch/add` SC2 claim is Phase-8-scoped (downgraded), the plugin-schema fallback and citty flag-stripping are repeat MEDIUMs, and the `FINAL.md`-sentinel `done` idempotency is a MEDIUM-at-most awareness note.
+
+## Cycle 7
+
+**Reviewed:** 2026-06-18. Reviewers run: codex, gemini, claude, opencode (all four available; all four returned usable output). Prompt: `/tmp/gsd-review-prompt-7.md` (GOAL + 5 SCs + 8 non-negotiables + the cycle-1..6 resolved-HIGH ledger incl. the cycle-6 C6-HIGH closure + FULL TEXT of all 4 revised plans 07-01..07-04). Focus: confirm the cycle-6 fix — the corruption never-crash family closed END-TO-END (guarded `readSectionState` used by router+status; `dispatchVerb` outer backstop; end-to-end execFileSync RED case) — is genuinely resolved, and surface any remaining/NEW in-scope HIGH.
+
+Raw HIGH_COUNT per reviewer: codex 1, gemini 0, claude 0, opencode 0.
+
+### Synthesized Findings (cycle 7)
+
+**The cycle-6 C6-HIGH end-to-end corruption never-crash closure is UNANIMOUSLY confirmed resolved.** All four reviewers independently verify that the C4→C5→C6 arc is now closed through three independent mechanisms in the revised plan text: (1) 07-02 Task 1 exports a SINGLE guarded `readSectionState(planPath)` helper (+ `SectionStateRead` type) that both `resolveNextAction`'s section walk AND `status.ts` consume — no raw unguarded `parseFrontmatter(readFileSync(planPath))` survives in either component; (2) 07-02 Task 3's `dispatchVerb` wraps the dispatched `cmd.run()` in an OUTER try/catch backstop scoped to the bare/next/resume umbrella dispatch (explicit `runMain` errors still surface); (3) 07-01 Task 1 adds the END-TO-END execFileSync bare-`pensmith` corrupt-PLAN.md no-crash RED case (driven WITHOUT `--yolo` so the cost pre-flight cannot mask the dispatch leg; accepts "clean exit, not an uncaught-exception stack"). claude re-verified the load-bearing seams against the live repo: `loadState` ENOENT-only translation, `pass2.ts:215`/`pass4.ts:392` PENSMITH_NO_LLM gate, `bin/pensmith.ts` subCommands-only/no root run(), `compile.ts:90`/`done.ts:436` `args.yolo === true`, `hooks/pre-compact.ts:178-187` identical guarded parseFrontmatter, `lock.ts:135` release-rejects-on-unheld-stub. All prior HIGH families (H1/H2/H3/H4, C3-HIGH-1, C3-HIGH-2, C4-HIGH, C5-HIGH, C6-HIGH) remain resolved.
+
+**Judge verdict: current_high = 0.** No genuine NEW in-scope HIGH survives. The single HIGH raised (codex) is the already-adjudicated M1/A2 Stop-hook lock family re-surfaced, not a new defect (see downgrade below). The corruption never-crash family (C4→C5→C6) is now CLOSED END-TO-END across router, estimator, status, and the bare-dispatch leg — by two independent guards (shared `readSectionState` + `dispatchVerb` backstop) plus an end-to-end RED case.
+
+### Downgraded / rejected (with justification)
+
+- **[codex HIGH → DOWNGRADED to already-adjudicated MEDIUM] "Stop hook hardcodes `release('.paper')` but no code acquires a `.paper`-keyed lock, so it releases nothing — SC4 'release the lock' unmet."** Factually correct about the mechanics and code-verified: pensmith locks are PER-FILE via `withLock(resource, fn)` (state/library/checkpoint/runtime-config/compile writes — `lock.ts:31-33`, `checkpoint.ts:161`, `compile.ts:253`), each acquired+released inside its OWN try/finally critical section DURING the run. There is NO long-lived `.paper`-keyed session lock that outlives a critical section for Stop to release. BUT this is the EXACT design point already adjudicated in cycles 1-6: 07-RESEARCH Assumption A2 (RESOLVED, lines 831/841) and the cycle-6 M1/C2-M2 finding explicitly establish that `release('.paper')` is a BEST-EFFORT orphaned-lock cleanup that typically rejects precisely because no `.paper`-keyed lock is held — and the `Promise.allSettled` design (07-03 Task 2, lines 160/213) exists SPECIFICALLY so that expected rejection cannot abandon the flush. The plan is internally consistent and intentional: Stop does harmless best-effort cleanup of any stale `.paper` stub and GUARANTEES the flush; per-file locks are already released by their own `withLock` finally blocks, so there is no held lock leaking past Stop. This produces no Phase-7 crash, no stdout-protocol violation, and Stop still exits 0 — it does NOT map to an in-scope SC4 failure or non-negotiable violation. Per the review instructions (do NOT re-raise already-adjudicated MEDIUMs as HIGH), held at MEDIUM/non-blocking. Worth a one-line note in the 07-03 SUMMARY clarifying that "release the lock" means best-effort orphaned-stub cleanup, not releasing a held session lock (none exists).
+- **[claude MEDIUM] Stop-hook `closeSessionLog()` flush is effectively vacuous in a fresh Stop subprocess.** `closeSessionLog()` awaits a module-scope `activeChain` that is `null` unless THIS process opened a logger; the Stop hook is a separate Claude Code subprocess that never opened the session logger, so it resolves immediately and flushes nothing real. This is the SAME M1/HOOK-04 family as the codex finding (the flush half rather than the release half) and is the previously-adjudicated design ("if no logger is active, resolve immediately," 07-03 Task 1 line 132). SC4's "always flushes the session log" is satisfied without crashing; the vacuity is an awareness note, not an SC failure. MEDIUM, non-blocking — flag in the 07-03 SUMMARY.
+- **[opencode MEDIUM + (history) cycle-4/5/6 MEDIUM] citty flag interop on the explicit-verb path (`pensmith compile --yolo` approval-gate skip / unknown-flag tolerance).** REPEAT of the already-adjudicated cycle-4..6 MEDIUM. The pre-parse applies flag EFFECTS before runMain regardless of stripping; the explicit-verb approval-gate-skip relies on citty parsing `--yolo` into the subcommand args (citty ^0.2.2 is lenient with undeclared flags by default). opencode itself states "this does not constitute an SC failure or non-negotiable violation." Non-blocking robustness note (strip the four flags from argv before runMain, declare per-subcommand, or rely on citty leniency; the RED tests guard it). MEDIUM.
+- **[claude LOW] plugin.json colon-namespace skills-array schema (A1).** REPEAT of the cycle-1..6 already-adjudicated MEDIUM, here at LOW. Primary path ships the real skills array; the CONTRIBUTING.md fallback is contingent on Assumption A1 and gated by `validate-plugin-manifest.cjs` + a blocking human-verify checkpoint. Risk contained. Not re-raised as HIGH.
+- **[claude LOW] estimator STEP_HEURISTICS are coarse.** SC3 requires only a no-LLM projection table + a correct 50%-cap predicate, both met. The heuristics are explicitly labeled estimates (07-RESEARCH A4). LOW, non-blocking.
+
+### Per-Reviewer Raw (cycle 7)
+
+#### codex (HIGH_COUNT: 1 claimed → judged 0 valid in-scope HIGH; the Stop `.paper` lock-release claim is the already-adjudicated M1/A2 family, downgraded to MEDIUM)
+
+```
+The C4→C5→C6 corruption never-crash family looks genuinely closed in the revised plans. The coverage now spans corrupt/schema-invalid `STATE.json`, corrupt per-section `PLAN.md`, shared guarded `readSectionState()`, `status.ts` reuse, and an end-to-end bare `pensmith` dispatch backstop. I do not see a remaining HIGH there.
+
+[HIGH] Stop hook does not clearly release the actual Pensmith lock  
+07-03 Task 2 hardcodes `release('.paper')`, while the same plan states locks are “per-file” and that no code acquires a `.paper`-keyed lock, so this release will typically reject and may release nothing. SC4 requires Stop to release the lock and flush the session log; `Promise.allSettled` fixes the flush survivability, but not the lock-release requirement if the wrong resource is targeted. Fix direction: identify the actual lock resource(s) Pensmith acquires during sessions, release those explicitly, and keep the release-failure test plus a positive test proving a real held Pensmith lock is gone after Stop.
+
+Everything else I’d raise is MEDIUM/LOW or already covered by the revised gates. `list/open/sketch/add` remain appropriately treated as Phase-8 stubs, HOOK-03 is only coverage, and the no-17th-verb invariant is covered.
+
+HIGH_COUNT: 1
+```
+
+#### gemini (HIGH_COUNT: 0 — all prior HIGH families confirmed resolved; C4→C5→C6 end-to-end closure confirmed)
+
+```
+The four plans are exceptionally thorough and demonstrate high technical integrity. All previous **HIGH** concerns from Cycles 1–6 have been systematically addressed and pinned with regression tests.
+
+### Confirming the Corruption Never-Crash Family (C4→C5→C6)
+The end-to-end guarantee for system resilience against corruption is now genuinely closed:
+*   **C4 (STATE.json):** Both `resolveNextAction` and `projectEstimate` now use a catch-all classification of `loadState` errors, routing malformed/invalid files to the `status/attention` disposition without throwing.
+*   **C5 (PLAN.md):** The per-section read is now try/catch-guarded inside the shared `readSectionState` helper, distinguishing between absent files (→ `plan`) and corrupt files (→ `attention`) while ensuring no parse error escapes the walk.
+*   **C6 (End-to-End):** The `status` verb consumes the same guarded helper (avoiding re-walking corruption unguarded), and `dispatchVerb` provides an outer try/catch backstop for the bare/next/umbrella dispatch. This ensures the CLI never crashes with an uncaught exception regardless of disk state.
+
+### Confirming UX and Ergonomic Correctness
+*   **H1 (Yolo Cap):** The cost-cap pre-flight is correctly placed in the dispatcher pre-dispatch seam, covering all verbs (including non-gate `write`/`plan`) and bare invocation.
+*   **H2 (Double Dispatch):** The manual argv pre-parse effectively separates flag setup and bare routing from `runMain`, preventing double-execution and ensuring flags apply to explicit verbs.
+*   **H3 (Dry-Run):** The use of `PENSMITH_NO_LLM` (honored by existing call sites) and `PENSMITH_NETWORK_TESTS` (honored by adapters) provides a zero-network guarantee without requiring risky edits to Phase 5 code.
+*   **H4 (Resume):** Decoupling routing from `HANDOFF.json` and consuming/clearing the file upon resume effectively breaks the potential infinite loop.
+*   **Totality & Forwarding:** `resolveNextAction` is now typed and implemented as total over `SectionStateSchema` (failed/unverifiable → `verify`), and `dispatchVerb` ensures global flags like `--yolo` reach manually-dispatched verbs to skip their internal approval gates.
+
+The **07-01 RED suite** is robust, utilizing the RED-by-skip pattern to ensure CI stays green while fixing exact implementation contracts.
+
+**HIGH_COUNT: 0**
+```
+
+#### claude (HIGH_COUNT: 0 — C4→C5→C6 confirmed structurally closed end-to-end against live seams; Stop flush + plugin schema + heuristics are MEDIUM/LOW non-blocking)
+
+```
+I've reviewed all four plans against the Phase 7 success criteria and non-negotiables, and traced the load-bearing claims against the actual codebase (`bin/pensmith.ts`, `hooks/*.ts`, `bin/lib/lock.ts`, `verify/pass2.ts:215`, `verify/pass4.ts:392`, `frontmatter.ts` usage in `pre-compact.ts:178-187`).
+
+## Confirmation: corruption never-crash family (C4 → C5 → C6) is genuinely closed
+
+The three-link chain holds end-to-end, and the closure is structural rather than prompt-dependent:
+
+- **C4 (corrupt/schema-invalid STATE.json).** Verified against the real `loadState` contract: only ENOENT → `StateNotFoundError`; `SyntaxError`/`SchemaValidationError`/`ForwardIncompatError`/EACCES bubble. 07-02 Task 1 widens the catch to *catch-then-classify* (StateNotFoundError→new; else→status/attention) and guards `state.sections ?? []` before `.sort()`. 07-02 Task 2 mirrors it in `projectEstimate` (empty projection on any load error). RED cases exist in both `pensmith-router.test.ts` (m/n) and `estimator.test.ts`.
+- **C5 (corrupt per-section PLAN.md).** The per-section read is factored into the exported guarded `readSectionState(planPath)` mirroring the repo's own `pre-compact.ts:178-187` try/catch around the identical `parseFrontmatter(readFileSync(...))` — which I confirmed genuinely throws on malformed YAML. Absent→plan, corrupt→status/attention+section, plus an outer resolver backstop. Router-unit cases (o/p) cover it.
+- **C6 (dispatch leg).** This is the real closure: `status.ts` is required to consume the *same* `readSectionState` (no raw `parseFrontmatter(readFileSync(planPath))` survives in either router or status), AND `dispatchVerb` wraps `cmd.run()` in an outer try/catch scoped to the bare/next/resume umbrella only (explicit `runMain` errors still surface). Two independent guards. The end-to-end `flags.test.ts` case correctly drives bare `pensmith` *without* `--yolo` so the cost pre-flight can't mask the dispatch leg, and accepts "clean exit, not an uncaught-exception stack" — which the readSectionState path satisfies with exit 0.
+
+The other SC-mapped HIGHs (H1 yolo-cap-for-any-verb incl. non-gate + paper-less guard; H2 pre-dispatch seam / no double-dispatch, consistent with citty `index.mjs:228`; H3 non-vacuous `verify --dry-run` via `PENSMITH_NO_LLM`, which I confirmed is the real gate at `pass2.ts:215`/`pass4.ts:392` with no fictional `runtime.ts` seam; H4 HANDOFF-blind resolver + HANDOFF consume; C3-HIGH-1 total switch routing failed/unverifiable→verify; C3-HIGH-2 `dispatchVerb` flag forwarding into `args.yolo` matching `compile.ts:90`/`done.ts:436`) each have a dedicated regression-gated RED assertion that would fail against the original broken design.
+
+## Non-HIGH observations (do not block)
+
+`[MEDIUM] Stop-hook session-log flush is effectively a no-op in a fresh subprocess.` 07-03 Task 1's `closeSessionLog()` awaits a module-scope `activeChain` that is `null` unless *this process* opened a logger. The Stop hook is a separate Claude Code subprocess that never opened the session logger, so `closeSessionLog()` resolves immediately and flushes nothing real; `stop.test.ts` can only assert the `allSettled` rejection-survival, not a meaningful flush. This is the previously-adjudicated HOOK-04/M1 design and the plan explicitly acknowledges "if no logger is active, resolve immediately," so it is not a new SC failure — but the "always flushes the session log" framing of SC4 is satisfied only vacuously. Worth a one-line note in the 07-03 summary rather than a code change.
+
+`[LOW] plugin.json skills-array schema (A1).` 07-04 ships a `skills` array with colon-prefixed names but the Anthropic plugin schema for this field is unverified; the plan already specifies a CONTRIBUTING.md fallback gated on `validate-plugin-manifest.cjs`, so the risk is contained.
+
+`[LOW] estimator STEP_HEURISTICS are coarse.` The `--estimate` projection may diverge materially from real cost, but SC3 only requires a no-LLM projection table and a correct 50%-cap predicate, both of which are met.
+
+No remaining or new HIGH maps to an SC failure or non-negotiable violation in this phase's scope. The corruption never-crash family is closed end-to-end across router, estimator, status, and the bare-dispatch leg.
+
+HIGH_COUNT: 0
+```
+
+#### opencode (HIGH_COUNT: 0 — all eleven+ prior HIGH genuinely resolved; only a citty-flag-interop MEDIUM remains)
+
+```
+After thorough review across all four plans (07-01 through 07-04), I find that the eleven+ HIGH concerns from earlier cycles are genuinely resolved. The C4→C5→C6 end-to-end corruption never-crash family is properly closed through three independent mechanisms:
+
+1. **Shared `readSectionState(planPath)` helper** — exported from router.ts, used by both resolveNextAction's section walk AND status.ts, so no component does a raw unguarded `parseFrontmatter(readFileSync(planPath))`
+2. **dispatchVerb outer try/catch backstop** — bare/next/resume umbrella dispatch wraps `cmd.run()` so even an unforeseen throw becomes a graceful diagnostic
+3. **End-to-end test** (07-01 C6-HIGH case) — `execFileSync` bare `pensmith` against a corrupt PLAN.md asserts clean exit with no uncaught exception
+
+All SC1-SC5 have dedicated regression gates. The one remaining concern is **MEDIUM**: whether citty will pass `--yolo` into explicit verb args (`pensmith compile --yolo`) for approval-gate skipping when flags are declared at the root level rather than on every subcommand. The pre-dispatch seam handles the cost-cap refusal correctly, but the approval-gate-skip may not engage for explicit verbs if citty doesn't propagate unknown root flags into subcommand args. This does not constitute an SC failure or non-negotiable violation.
+
+**HIGH_COUNT: 0**
+```
+
+### Cycle 7 — Judge Verdict
+
+**current_high = 0.** The cycle-6 C6-HIGH closure — the corruption never-crash family delivered END-TO-END through the bare-dispatch leg via a shared guarded `readSectionState` helper (consumed by BOTH router and status), a `dispatchVerb` outer try/catch backstop, and an end-to-end execFileSync corrupt-PLAN.md RED case — is UNANIMOUSLY confirmed resolved and re-verified against the live seams. All prior HIGH families (H1/H2/H3/H4, C3-HIGH-1, C3-HIGH-2, C4-HIGH, C5-HIGH, C6-HIGH) remain resolved. The full C4→C5→C6 never-crash arc is now closed end-to-end (resolver + estimator + status verb + dispatch leg) by two independent guards. The one HIGH raised this cycle (codex: Stop hardcodes `release('.paper')` which releases nothing because locks are per-file) is factually accurate about the mechanics but is the already-adjudicated M1/A2 design — `release('.paper')` is intentional best-effort orphaned-stub cleanup wrapped in `Promise.allSettled` so its expected rejection cannot abandon the flush; per-file locks self-release via their own `withLock` finally blocks during the run, so no held session lock leaks past Stop, and Stop exits 0 without a protocol violation. It maps to no in-scope SC4 failure or non-negotiable violation and is held at MEDIUM (worth a one-line 07-03 SUMMARY clarification that "release the lock" = orphaned-stub cleanup, not releasing a held session lock). All other findings are MEDIUM/LOW and non-blocking: the Stop-flush-vacuity (same M1/HOOK-04 family), the repeat citty-flag-interop MEDIUM, the plugin-schema fallback (A1), and the coarse estimator heuristics (A4). After seven cycles, no remaining or new in-scope HIGH survives — the four plans are ready to execute.
