@@ -4,13 +4,13 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-06-18T08:39:27.403Z"
+last_updated: "2026-06-18T08:49:55.364Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 11
   completed_phases: 6
   total_plans: 53
-  completed_plans: 49
+  completed_plans: 50
   percent: 55
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 06 (Done / export pipeline + zero-trace gate) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-06-18
 
@@ -86,6 +86,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 05 P04 | 4min | 2 tasks | 2 files |
 | Phase 05 P05 | 3min | 2 tasks | 1 files |
 | Phase 06 P01 | 11min | 3 tasks | 18 files |
+| Phase 06 P02 | 4min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -179,6 +180,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [06-01] PDF zero-trace fixture hand-authored as raw bytes (not via pdf-lib) so it is a genuine negative control; 'Trace Sentinel' sentinel in BOTH /Info AND XMP forces structural XMP-object removal, defeating a literal-pensmith byte-sweep
 - [Phase ?]: [06-01] Wave-0 RED behavioral tests are RED-by-skip (skip-guarded on existsSync of the unbuilt module), mirroring known-bad-pass2 — full suite stays GREEN (681 tests, 0 fail, 19 skip) until Waves 1-2 land exporter/plagiarism/honesty/done
 - [Phase ?]: [06-01] honesty-framing.md is the LOCKED single-source transparency-only copy (improves prose, does not promise undetectable); byte-pinned GREEN-from-creation in repo-files.test.ts + CONTRIBUTING.md drift rule
+- [Phase ?]: [06-02] PlagiarismResult.matches typed as string[] (URLs) to honor the LOCKED Wave-0 RED contract + DONE-09 gate input; PlagiarismMatch { url; title? } still exported (parseDdgHtml return) for Wave-2 done.ts richness; runPlagiarism maps .url into the string array
 
 ### Pending Todos
 
@@ -199,6 +201,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T08:39:00.557Z
+Last session: 2026-06-18T08:46:52.281Z
 Stopped at: Completed 05-04-PLAN.md
 Resume file: None
