@@ -610,3 +610,180 @@ Triple pinning: `resolveNextAction` never reads HANDOFF, never returns `'resume'
 
 **HIGH_COUNT: 0**
 ```
+
+---
+
+## Cycle 3
+
+Reviewers run (all 4 completed, exit 0): **codex** (4 HIGH claimed), **gemini** (0 HIGH), **claude** (1 HIGH), **opencode** (0 HIGH). Review prompt: `/tmp/gsd-review-prompt-7.md` (full text of all 4 revised plans + GOAL + 5 SCs + non-negotiables + the 4 prior-HIGH resolutions to confirm).
+
+### Synthesized Findings (cycle 3)
+
+**Prior-HIGH confirmation — UNANIMOUS across all 4 reviewers + verified against the codebase:**
+
+| Prior HIGH | Verdict | Codebase evidence |
+|---|---|---|
+| H2 (citty double-dispatch) | **GENUINELY RESOLVED** | `bin/pensmith.ts` currently has `subCommands` only + NO root `run()`; 07-02 Task 3 replaces `void runMain(command)` with a pre-dispatch argv pre-parse that calls `runMain` exactly once for explicit verbs and bypasses it for bare. |
+| H4 (router/resume loop) | **GENUINELY RESOLVED** | 07-02 Task 1: `resolveNextAction` does not read HANDOFF.json and never emits `resume`; resume.ts dispatches the next WORK verb then `rmSync(force)` the handoff. 07-01 H4 RED case asserts `verb !== 'resume'`. |
+| H1/C2-H1 (yolo cap scope + paper-less) | **GENUINELY RESOLVED** | 07-02 Task 3c: pre-flight runs whenever `--yolo` present, ANY verb, independent of `--estimate`, hard `exit(1)`. Cap = `PENSMITH_COST_CAP_USD` else $5 (no `cost_cap_usd` config field exists — C2-M3 honored). 07-02 Task 2: `projectEstimate` catches `StateNotFoundError` -> empty projection. |
+| H3/C2-H3 (dry-run LLM gate) | **GENUINELY RESOLVED — independently code-verified** | `runtime.ts` confirmed config/API-key load only (no model seam). pass2.ts:215 + pass4.ts:392 both gate on `PENSMITH_NO_LLM==='1' OR !ANTHROPIC_API_KEY`; `messages.create()` (pass2:255/pass4:444) AND `appendCost()` (pass2:263/pass4:452) are both inside the live branch AFTER the noLlm short-circuit. `--dry-run` sets `PENSMITH_NO_LLM='1'` (07-02 Task 3b). The 07-01 H3 test sets a FAKE `ANTHROPIC_API_KEY`, making the gate depend ENTIRELY on `PENSMITH_NO_LLM` -> non-vacuous. The fictional runtime.ts seam is removed from RESEARCH (L348/698/737) + PATTERNS (L295/919) + all 4 plans. |
+
+**NEW HIGH (judge-confirmed against the codebase):**
+
+- **[HIGH] Router decision table is not total — `failed`/`unverifiable` terminal sections yield an undefined `RouterDecision` (SC1 / SC5).** _Raised by claude; verified._ 07-02 Task 1 (line 167) walks sections treating `verified/failed/unverifiable -> continue`, and the post-walk compile branch (line 168) is guarded on **"All sections verified."** A reachable state `[verified, failed, verified]` with no DRAFT.md matches NO branch: the walk finds nothing actionable, "all verified" is false (one is `failed`), no DRAFT -> fall-through returns `undefined`, breaking the `Promise<RouterDecision>` contract and crashing the bare dispatcher's `decision.verb` access. `failed` and `unverifiable` are first-class `SectionStateSchema` states the verify verb legitimately sets (`state.ts:33-34`, `plan-frontmatter.ts:46`) — not a contrived edge. 07-01's RED suite (line 170) fixtures ONLY `planned`/`verified`/DRAFT/FINAL (no `failed`/`unverifiable`/`writing`/`written`/`verifying`), so the gap stays GREEN and SC5's "fix every contract first" misses it. Directly violates SC1's "bare /pensmith ALWAYS resolves a next action." **Fix:** add an exhaustive terminal `else` to resolveNextAction (route a `failed`/`unverifiable` section back to `verify`/`write`, or return `{verb:'status', reason}` for a stuck-needs-attention state), AND add 07-01 RED cases for `failed`/`unverifiable`/`writing`/`written`/`verifying`.
+
+- **[HIGH] Global flags (esp. `--yolo`) are not specified to propagate into manually-dispatched verbs (bare / next / resume paths) — approval-gate-skip non-negotiable at risk (SC3 / non-negotiable).** _Raised by codex; verified._ For the explicit-verb path, citty parses `--yolo` into the subcommand's `args.yolo`, and `compile.ts:90` / `done.ts:436` both read `yolo: args.yolo === true` to decide whether to skip the approval gate. But on the bare path (07-02 Task 3e: "dispatch to the resolved verb via the shared loader table and run it") and the resume/next manual-dispatch paths, the plan does not specify constructing an `args` object carrying `yolo:true` into the verb's `run()`. So `pensmith --yolo` resolving to compile/done — or `pensmith resume --yolo` — would run the cost-cap pre-flight (financial gate holds) but the verb's OWN approval-gate-skip would NOT engage, contradicting the "approval gates default-on; --yolo skips them" non-negotiable. No test covers `--yolo` propagation through the manual-dispatch path (H2(b) only checks env-based `--show-prompts`/`--dry-run`). **Fix:** define an explicit dispatch contract — the shared loader-table dispatch must forward the parsed global flags (at minimum `yolo`) into the manually-invoked verb's `args`, and add a RED case asserting `--yolo` skips the approval gate via the bare/resume path.
+
+**Downgraded / rejected from codex's claimed HIGHs:**
+
+- _Codex [HIGH] "Stop hook flush is a no-op across the hook process boundary"_ -> **MEDIUM.** Real architectural caveat: hooks run as separate subprocesses; `closeSessionLog()` awaits a module-scope `activeChain` only populated by an in-process `openSessionLog()`, and `stop.ts` opens no logger — so the flush drains only records the Stop process itself enqueued, not the main agent process's buffer (`session-log.ts:251` chain is module-scope; writes are async via `atomicAppendFile`). BUT this is the design as approved in cycles 1-2; the M1/`Promise.allSettled` gate is still correct for in-process records and the flush is best-effort by requirement framing (HOOK-04). It does not produce wrong/unsafe output -> MEDIUM. (Also raised by claude as MEDIUM.)
+- _Codex [HIGH] "lock-release target `.paper` is underspecified / likely wrong"_ -> **REJECTED (non-issue).** The plan EXPLICITLY documents that no `.paper`-keyed lock is held and that `release('.paper')` rejects — that rejection is the entire rationale for `Promise.allSettled`. By-design best-effort, not a defect. Codex misread the intent.
+- _Codex [HIGH] "07-04 doc-only fallback would not deliver the colon namespace (SC2)"_ -> **MEDIUM.** Gated by `validate-plugin-manifest.cjs` + a blocking human-verify checkpoint, so it cannot ship a broken manifest. Tier-1 namespace delivery is genuinely contingent on the unresolved Anthropic plugin-schema question (Assumption A1) — settle it before execution — but it is not a guaranteed failure. (Also raised by claude as MEDIUM.)
+
+**Consensus MEDIUMs worth carrying:**
+- PreCompact `Promise.race` timeout `setTimeout` is never cleared/`unref`'d (codex, claude, opencode) — fast writes can delay hook exit up to 10s. Clear the timer on the race winner.
+- PreCompact has no `section_pointers` size-fitting strategy (claude) — a ~25+ section paper can exceed `HANDOFF_MAX_BYTES=5120`; the `.refine` REJECTS (not truncates), so `writeHandoff` throws and NOTHING is written, silently losing resume state (SC4/HOOK-01). Add a deterministic trim/elide of pointers.
+- plugin.json colon-namespace schema validity unresolved (codex, claude) — see above.
+
+**Consensus LOWs:** keeping `{verb:'resume'}` in `RouterDecision` invites misuse (codex); `REAL_VERB_LOADERS` export creates an ES-module cycle that works only via lazy access (opencode); first-non-flag-token verb detection breaks if a value-taking flag is added (opencode); default $5 cap may make bare `--yolo` over-conservative for real papers (opencode); global flags declared root-only rely on citty's permissive unknown-flag handling (claude).
+
+### Per-Reviewer Raw (cycle 3)
+
+#### codex (HIGH_COUNT: 4 claimed -> judged 1 valid HIGH [flag propagation] + 1 reject + 2 downgrades)
+
+```text
+**Prior High Confirmation**
+1. Citty double-dispatch (H2): genuinely resolved as written. 07-02 keeps root command subCommands-only, moves flags/bare routing into a manual pre-dispatch seam, and gates explicit verbs to `runMain()` exactly once.
+2. Router/resume loop (H4): genuinely resolved as written. `resolveNextAction()` ignores `HANDOFF.json` and never emits `resume`; `resume.ts` dispatches to the next work verb and deletes HANDOFF afterward.
+3. `--yolo` cap scope + paper-less guard (H1/C2-H1): mostly resolved for cost refusal. The plan runs the cap pre-flight for any `--yolo` invocation and catches missing state via `projectEstimate()`.
+4. `--dry-run` real LLM guard (H3/C2-H3): genuinely resolved as written for current LLM call sites. The plan correctly sets `PENSMITH_NO_LLM='1'` and relies on the existing `pass2.ts` / `pass4.ts` guards, with a non-vacuous `verify --dry-run` test.
+
+**Findings**
+[HIGH] 07-02 does not specify propagating global flags when bare/`next`/`resume` manually dispatch into the resolved work verb. The pre-dispatch seam sets env flags, but for bare `pensmith --yolo` resolving to `compile`/`done`, or `pensmith resume --yolo`, the underlying command may not receive a parsed `yolo` arg. That threatens the non-negotiable “approval gates default-on (`--yolo` skips them)” even though the cost cap pre-flight runs. The plan needs an explicit dispatch contract that carries global flags into manually invoked verb runners, especially `yolo`.
+
+[HIGH] 07-03’s Stop hook plan does not actually guarantee log flushing across the hook process boundary. `closeSessionLog()` is described as a module-level `activeChain`, but Stop runs as its own hook process, so it imports a fresh module with no active logger chain from prior CLI/plugin work. As written, the flush can be a no-op while tests still pass if they only exercise same-process state. This misses SC4’s “always flushes the session log.” The plan needs a process-independent flush strategy or a clear proof that the session logger lives in the Stop hook process.
+
+[HIGH] 07-03’s lock-release target is underspecified and likely wrong. The plan repeatedly notes no code acquires a `.paper`-keyed lock and locks are per-file, then implements `release('.paper')`. That means Stop best-effort releases a lock that normally was never held and may not release the actual pensmith lock. This fails HOOK-04 unless `.paper` is proven to be the real shared lock resource.
+
+[HIGH] 07-04 allows a documented fallback if the plugin schema rejects `skills` or colon-prefixed names. That fallback would not deliver the required colon-prefix plumbing namespace routing, violating SC2, UX-04, and two-tier parity. This should be a blocking plan failure, not an accepted success path: either validate and register the namespace or redesign to a schema-valid equivalent.
+
+[MEDIUM] 07-03’s PreCompact timeout pattern uses `Promise.race()` with a raw `setTimeout()` that is never cleared on successful writes. In Node, that timer can keep the hook process alive until the 10s timeout fires, making fast PreCompact runs appear to hang near the timeout boundary. Use a cleared timer or abortable timeout helper.
+
+[MEDIUM] 07-01’s H3 dry-run network assertion is weaker than the stated contract. “Run completes without a network error” plus no `COSTS.jsonl` append is useful, but it does not directly prove zero provider egress if a call is swallowed, mocked elsewhere, or fails silently. The implementation plan is sound via `PENSMITH_NO_LLM`, but the RED test should assert the provider client/mock was not invoked.
+
+[LOW] 07-02 keeps `{ verb: 'resume' }` in `RouterDecision` while also stating `resolveNextAction()` never returns it. That is workable but invites misuse by future code. Prefer a separate `ResumeDecision` or a narrower return type for `resolveNextAction()`.
+
+HIGH_COUNT: 4
+
+```
+
+#### gemini (HIGH_COUNT: 0)
+
+```text
+This review evaluates the four execution plans (07-01 through 07-04) for Phase 7 of "pensmith." The plans are assessed against the Goal, 5 Success Criteria, and Non-Negotiables.
+
+### Prior-Cycle Resolution Confirmation
+1. **citty double-dispatch (H2):** **Resolved.** Plan 07-02 (Task 3) implements a manual `argv` pre-parse seam in `bin/pensmith.ts` before `runMain`, ensuring flags apply globally and the root command (which has no `run()`) never falls through to a second dispatch. 07-01 (Task 1) provides a RED test specifically to assert single-dispatch behavior.
+2. **router/resume loop (H4):** **Resolved.** Plan 07-02 (Task 1) implements a router that explicitly ignores `HANDOFF.json`, and Task 3 ensures `resume.ts` consumes (deletes) the handoff file after dispatching to a work verb, preventing circularity.
+3. **--yolo cap scope (H1/C2-H1):** **Resolved.** Plan 07-02 (Task 3) places the yolo cap pre-flight in the pre-dispatch seam for *any* command line containing `--yolo`, covering non-gate verbs like `write` and `plan`. Task 2 includes the `StateNotFoundError` guard in the estimator to prevent crashes in fresh directories.
+4. **--dry-run anchored to real PENSMITH_NO_LLM (H3/C2-H3):** **Resolved.** Plan 07-02 (Task 3) uses `--dry-run` to set `PENSMITH_NO_LLM='1'`, and Task 4 verifies that the existing Phase 5 LLM call sites in `pass2.ts` and `pass4.ts` already honor this variable to short-circuit to offline placeholders. 07-01 (Task 1) includes a non-vacuous RED test driving the `verify` path with a fake key to prove zero egress.
+
+### Findings
+
+- [LOW] **Circular Dependency Mitigation:** 07-02 Task 3 correctly identifies the risk of circular dependencies by exporting `REAL_VERB_LOADERS` from the entry point (`bin/pensmith.ts`) for use by the `next` and `resume` orchestrators. This maintains the single-command architecture while keeping the codebase modular.
+- [LOW] **Handoff Deletion Strategy:** In 07-02 Task 3, `resume.ts` deletes `HANDOFF.json` immediately after resolving the next work verb. This is the correct "consuming" behavior to prevent infinite resume loops if the resumed action itself is interrupted (as a fresh handoff will be written by subsequent hooks).
+- [MEDIUM] **Stop Hook Reliability:** 07-03 Task 2 correctly uses `Promise.allSettled` for the `Stop` hook. This is a critical safety feature: since no code currently acquires a `.paper` resource lock, `release('.paper')` is guaranteed to reject. `allSettled` ensures this rejection does not prevent the `session-log` flush, satisfying SC4/M1.
+- [MEDIUM] **Pre-Dispatch Seam Robustness:** 07-02 Task 3's manual `argv` scan is correctly positioned outside of `runMain`. This ensures that global flags take effect even for explicit subcommands, fixing a known limitation of the `citty` framework where root `run()` logic is bypassed when a subcommand matches.
+- [LOW] **NL Routing Descriptions:** 07-04 Task 1 adheres to the "No Vague Descriptions" rule by including the exact PRD §5.4 trigger phrases. This ensures the LLM has high-signal routing targets for phrases like "where am I?" and "redo section 3."
+- [LOW] **Plumbing Namespace Fallback:** 07-04 Task 2 includes a defensive fallback plan in case the `Claude Code` plugin schema rejects colon-prefix skill names (e.g., `pensmith:plan-section`). This demonstrates proactive risk management for Tier-1 registration.
+
+### Final Assessment
+The plans are surgically precise and strictly adhere to the project's technical integrity standards. The use of a RED-by-skip test suite in Wave 0 ensures that all regression gates for the previously identified HIGH concerns are locked in before implementation. The architecture preserves the 16-verb bijection and delivers the requested single-command UX without introducing redundant logic or "just-in-case" alternatives.
+
+**HIGH_COUNT: 0**
+
+```
+
+#### claude (HIGH_COUNT: 1 — the router-totality HIGH, judge-confirmed)
+
+```text
+# Adversarial Review — Pensmith GSD Phase 7 (cycle 3)
+
+## Prior-cycle HIGH confirmations
+
+**H2 (citty double-dispatch) — GENUINELY RESOLVED.** The root `defineCommand` keeps `subCommands` only and NO `run()` (07-02 Task 3, step 2 + closing note), so after citty dispatches the subcommand at the unconditional parent-run point there is no fall-through verb. Flag side-effects and bare routing live in the argv pre-parse before `runMain`, and bare invocation deliberately bypasses `runMain` (which would throw "No command specified"). Single-dispatch (H2a) and flags-for-explicit-verbs (H2b) are both correctly mechanized and test-gated in `flags.test.ts`.
+
+**H4 (router/resume loop) — GENUINELY RESOLVED.** `resolveNextAction` is specified to ignore `HANDOFF.json` and the `{verb:'resume'}` arm is explicitly never emitted (07-02 Task 1 behavior). `resume.ts` computes the next WORK verb via `resolveNextAction`, dispatches, then `rmSync(force)` the handoff. The 07-01 H4 fixture (non-done HANDOFF + a `planned` section) asserting `decision.verb !== 'resume'` is a valid regression gate. No self-dispatch path remains.
+
+**H1/C2-H1 (--yolo cap scope + paper-less crash) — GENUINELY RESOLVED.** The cap pre-flight runs whenever `--yolo` is present, for any verb (incl. non-gate `write`/`plan`) and bare, independent of `--estimate`, as a hard `exit(1)` in the pre-dispatch seam (07-02 Task 3, step 3c). Cap source is `PENSMITH_COST_CAP_USD` else `$5`, and `projectEstimate` catches `StateNotFoundError` → empty projection (Task 2), so a paper-less dir is under-cap. `flags.test.ts` drives both the non-gate over-cap and the paper-less no-crash cases.
+
+**H3/C2-H3 (--dry-run anchored to PENSMITH_NO_LLM) — GENUINELY RESOLVED.** No `runtime.ts` seam is invented; `--dry-run` sets `PENSMITH_NO_LLM='1'` (07-02 Task 3b), honored by the only live `messages.create()` sites (pass2/pass4), with no Phase-5 edits (Task 4). The 07-01 H3 test drives `verify <N> --dry-run` **with a fake `ANTHROPIC_API_KEY` present**, so the assertion depends entirely on `PENSMITH_NO_LLM` (non-vacuous) and asserts zero egress + no `COSTS.jsonl` append. Note the standing caveat below (L-B-adjacent): the "zero external calls" guarantee holds only while pass2/pass4 remain the sole LLM sites — true this phase, but undefended against future call sites.
+
+## New / remaining findings
+
+- **[HIGH] The router decision table is not total — `failed`/`unverifiable` terminal sections produce no matching branch (SC1 / SC5).** As written (07-02 Task 1), the section walk treats `verified | failed | unverifiable → continue`, and the post-walk branches are guarded on **"all sections verified"** (compile), then DRAFT→done, then both→status. A reachable state — e.g. sections `[verified, failed, verified]` with no DRAFT — satisfies *none* of these: the walk finds nothing actionable, "all verified" is false (one is `failed`), and no DRAFT exists. `resolveNextAction` then falls through with no defined return, so the contract `Promise<RouterDecision>` yields `undefined` and the bare dispatcher's `decision.verb` access crashes. `failed`/`unverifiable` are first-class `SectionStateSchema` states that verify legitimately produces, so this is not an edge case. This directly violates SC1's guarantee that bare `/pensmith` *always* resolves a state-aware next action. Worse, 07-01's RED suite only fixtures the `planned`/`verified`/DRAFT/FINAL branches — there is no RED case for `failed`/`unverifiable` (nor for `writing`/`written`/`verifying`), so 07-02 can implement the gap and the suite stays green. The decision table needs an exhaustive terminal else (route the failed section back to `verify`/`write`, or return `status` with a reason), plus a RED case covering it.
+
+- **[MEDIUM] Stop hook's "always flushes the session log" is likely vacuous in a subprocess, and `stop.test.ts` cannot observe a real flush (SC4 / M1).** Hooks run as separate short-lived processes (the tests `execFileSync` them). `closeSessionLog()` awaits a *module-scope* `activeChain` that is only assigned by an in-process `openSessionLog()` call — but `stop.ts` opens no logger, so `activeChain` is `null` and `closeSessionLog()` resolves immediately, draining nothing. The session log that needs flushing lives in the main agent process, which the Stop subprocess cannot reach. The whole `Promise.allSettled` framing (flush-survives-release-rejection) presumes `closeSessionLog()` does real work here; if it's a no-op, both SC4's "always flushes" half and the M1 test are theatrical. The stop.test.ts assertion ("session-log pending records were written / flush sentinel present") has no mechanism to be non-vacuous because the hook never queues records. Verify session-log's durability model against `session-log.ts`: if writes are synchronous-append the flush is moot (and the requirement should be reframed), if buffered the flush is unachievable from the hook (and SC4 is unmet). Either way the current test will pass without proving anything.
+
+- **[MEDIUM] PreCompact has no size-fitting strategy; a large paper exceeds `HANDOFF_MAX_BYTES` and writes NOTHING (SC4 / HOOK-01).** `HandoffSchema` `.refine` *rejects* (does not truncate) at >5120 bytes. `section_pointers` is the one unbounded field (slug + 3 paths per section). A many-section paper (~25+ sections) blows past 5KB, the parse throws inside `writeHandoff`, the catch routes to stderr, and no HANDOFF is written — silently losing resume state. The plan relies on the refine as a guard but specifies no fitting/truncation of `section_pointers`. SC4's "writes a ≤5KB HANDOFF" is then unmet precisely for the long-running sessions PreCompact exists to protect. Add a deterministic trim (e.g., cap/elide pointers) so a handoff always fits.
+
+- **[MEDIUM] plugin.json colon-namespace registration is unverified, and the doc-only fallback would leave the plumbing namespace non-functional in Tier 1 (SC2).** 07-04 Task 2 itself flags (Assumption A1 / Open Question 2) that the `skills` array + `pensmith:plan-section` colon names may not validate against the Anthropic plugin schema, with a fallback of "document in CONTRIBUTING.md." If that fallback triggers, the plumbing namespace is documented but not registered — so SC2's "the plumbing namespace route correctly" is not delivered in the plugin tier, and the tier-contract parity case (Task 2) would have nothing real to assert against on the Tier-1 side. This is gated by `validate-plugin-manifest.cjs` and a blocking human-verify checkpoint, so it won't ship a broken manifest — but the success criterion's delivery is genuinely contingent on an unresolved schema question that should be settled before, not during, execution.
+
+- **[LOW] Global flags are declared on the root command only; explicit-verb support relies on citty's permissive unknown-flag handling.** `write --dry-run` / `compile --show-prompts` are parsed for side-effects by the pre-parse seam, but citty's subcommand parser receives `--dry-run`/`--yolo` as undeclared. citty is non-strict by default (unknown flags are tolerated), so `flags.test.ts`'s "no unknown-flag error" assertion should pass — but the verbs' own `--help` won't document the global flags, and the design is one citty-strictness-default change away from breaking. Consider redeclaring the four flags per-subcommand or documenting the reliance.
+
+- **[LOW] `--estimate`/`--yolo` project the entire remaining workflow regardless of the invoked verb.** `projectEstimate({paperRoot, sessionCapUsd})` takes no target verb, so `write --yolo` is refused based on *total remaining paper cost*, not the write step's cost — a defensible "session cap" reading of SC3, but a possible surprising refusal on a cheap single-section write in a large paper. The semantics aren't pinned in the plan; worth an explicit decision/comment.
+
+- **[LOW] PreCompact timeout timer is not `unref`'d and the estimator's stated `resolveNextAction` reuse is inconsistent with its action body.** The `setTimeout` in the `Promise.race` (07-03 Task 1) can keep the event loop alive up to 10s after a fast `writeHandoff` if the hook ever returns without an explicit `process.exit` (the race winner is handled, so no unhandled rejection — just a minor exit delay). Separately, 07-02 Task 2 `read_first` lists reusing `resolveNextAction` while the action says "only pricing.ts and state.ts" — harmless, but clarify whether the estimator walks state directly or via the router.
+
+## Summary
+
+The four prior HIGHs are all genuinely resolved as written, with correct, test-gated mechanisms. The one new HIGH is a totality gap in the router decision table for `failed`/`unverifiable` sections — a reachable state that yields an undefined `RouterDecision` and is uncovered by the RED suite, directly threatening SC1. The Stop-flush vacuity and PreCompact size-fitting are the strongest MEDIUMs and should be resolved against the actual `session-log.ts`/handoff sizing before execution.
+
+HIGH_COUNT: 1
+
+```
+
+#### opencode (HIGH_COUNT: 0)
+
+```text
+# Pensmith Phase 7 Cross-AI Plan Review
+
+## Prior HIGH Confirmations
+
+1. **H2 (citty double-dispatch):** GENUINELY RESOLVED — the pre-parse argv seam before `runMain`, combined with no root `run()` and manual bare dispatch, prevents double routing. **Residual risk noted below.**
+
+2. **H4 (router/resume loop):** GENUINELY RESOLVED — `resolveNextAction` never reads HANDOFF.json, never returns `'resume'`; `resume.ts` dispatches to the next WORK verb then deletes HANDOFF.json. The H4 RED case (`decision.verb !== 'resume'`) guards the regression.
+
+3. **H1/C2-H1 (yolo cap scope + fresh-dir guard):** GENUINELY RESOLVED — cap pre-flight runs for ANY `--yolo` verb and bare invocation, independent of `--estimate`; `projectEstimate` catches `StateNotFoundError` → empty projection (no crash in a paper-less dir). Fresh-dir test case included.
+
+4. **H3/C2-H3 (dry-run LLM gate via PENSMITH_NO_LLM):** GENUINELY RESOLVED — `--dry-run` sets `PENSMITH_NO_LLM='1'` which the existing `pass2.ts`/`pass4.ts` call sites already honor; no `runtime.ts` edits needed. The H3 test drives the LLM-calling `verify` path with a fake `ANTHROPIC_API_KEY` (non-vacuous).
+
+---
+
+## Findings
+
+[MEDIUM] **Circular dependency via REAL_VERB_LOADERS export (07-02 Task 3).** The plan exports `REAL_VERB_LOADERS` from `bin/pensmith.ts` so that `next.ts`/`resume.ts` can use it, claiming this "avoids the circular-dep risk." In fact it creates a cycle: `pensmith.ts → next.ts` (to register) **and** `next.ts → pensmith.ts` (to get the loader table). This works with ES module lazy access (dispatch inside `run()` functions) but is fragile — a top-level access of the import would get `undefined`. **Fix:** extract the loader table to a separate module (e.g., `bin/lib/verb-loaders.ts`) that both `pensmith.ts` and the verb CLIs import without creating a cycle.
+
+[MEDIUM] **citty `undefined run()` dependency for H2 (07-02 Task 3).** The plan relies on omitting root `run()` entirely, assuming citty checks for existence before calling `parent.run()`. If citty unconditionally calls it, explicit verbs crash. The RED test guards the symptom but the plan provides no fallback. **Fix:** provide an explicit no-op `run() {}` that returns void (guaranteed safe regardless of citty behavior) or confirm citty's internals handle `undefined`.
+
+[MEDIUM] **PreCompact Promise.race timeout does not cancel writeHandoff (07-03 Task 1).** A hanging `writeHandoff` continues executing with a file lock after the 10s timeout rejects. The `stale:10_000` proper-lockfile setting mitigates crash-safety but a subsequent PreCompact call within 10s may fail to acquire the lock. **Fix:** note this limitation in a comment and/or use an AbortController pattern if the underlying I/O supports it.
+
+[LOW] **Flag-value heuristic for verb detection (07-02 Task 3e).** The "first non-flag argv token" assumes all registered flags are boolean with no values. If a future non-boolean flag is added (e.g., `--config path`), `path` would be misidentified as a verb token. **Fix:** document this constraint or add a known-flag skip-list.
+
+[LOW] **Default $5 session cap may make --yolo unusably conservative (07-02 Task 3c).** Most real academic paper sessions exceed $2.50 in projected cost, so bare `pensmith --yolo` would always exit non-zero unless the user knows to set `PENSMITH_COST_CAP_USD`. **Suggestion:** raise the default to $20–50 or make the refusal a warning (not hard exit) when using the default cap.
+
+[LOW] **"make it sound less AI" → done/humanize depends on prior-phase correctness (07-04 Task 1).** The NL routing phrase maps to a done-verb sub-path assumed implemented in a prior phase. If it doesn't exist, the skill description routes correctly but the target verb path is missing. Outside Phase 7 scope; verify during human checkpoint.
+
+---
+
+## Summary
+
+The four plans are well-structured and correctly address all five SUCCESS CRITERIA. The three MEDIUM findings (circular dep, citty run() assumption, timeout non-cancellation) should be addressed before or during implementation to avoid runtime failures. All four prior HIGH concerns are genuinely resolved as written.
+
+HIGH_COUNT: 0
+
+```
+
+### Cycle 3 — Judge Verdict
+
+**current_high = 2.** Prior H1/H2/H3/H4 unanimously + code-verified RESOLVED. Two NEW HIGHs survive judging: (A) router decision-table totality gap for failed/unverifiable sections (claude; verified against SectionStateSchema in state.ts:39-41), and (B) global-flag (yolo) propagation into manually-dispatched bare/resume verb paths (codex; verified against compile.ts:90 + done.ts:436). Gemini + opencode found 0 HIGH; codex claimed 4 but 1 was rejected (.paper lock rejection is by-design, the rationale for Promise.allSettled) and 2 downgraded to MEDIUM (Stop-flush cross-process vacuity; plugin-schema fallback). All other findings are MEDIUM/LOW and non-blocking.
