@@ -254,6 +254,13 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // holds a __PENDING_HASH_smoother__ sentinel until Plan 04-05 Task 4 re-pins the
   // SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
   { slug: 'smoother',            path: 'templates/prompts/smoother.md',            decision: 'Phase 4 D-12',                   hash: 'ee934f8eee89bf239a95bd8b3eebf04f7802eeb39b0cadb8510c5cddc49097f5' },
+  // Phase 5 05-CONTEXT.md D-12 — new claim-support + orphan-label prompts (Plans
+  // 05-02/05-03 advisory Pass 2/4). The byte-pins below are the REAL SHA-256 and are
+  // GREEN from Wave 0 (Plan 05-01) the moment the prompt files are byte-stable.
+  // bin/lib/prompt-loader.ts holds __PENDING_HASH_<slug>__ sentinels until Plan 05-05
+  // re-pins the SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
+  { slug: 'claim-support',       path: 'templates/prompts/claim-support.md',       decision: 'Phase 5 D-12',                   hash: 'ceec7601dfeaf30117091aa788d9463c01b6ca9d3a9da4b47fb0f91983c82217' },
+  { slug: 'orphan-label',        path: 'templates/prompts/orphan-label.md',        decision: 'Phase 5 D-12',                   hash: 'f8b385f3869691f4a419f35987d8b9a93018f28714519b36713fd7c2c0b829fc' },
 ];
 for (const pin of PENDING_HASH_PINS) {
   test(`hash-pin: ${pin.path} (${pin.decision})`, () => {

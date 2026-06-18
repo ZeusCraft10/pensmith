@@ -114,6 +114,21 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   // already carries (the prompt body is byte-stable on creation — both surfaces
   // then agree and loadPrompt('smoother') succeeds WITHOUT the pending bypass).
   'smoother':            'ee934f8eee89bf239a95bd8b3eebf04f7802eeb39b0cadb8510c5cddc49097f5',  // Phase 4 D-12 (re-pinned real at Plan 04-05 Task 4 — WN-3 lockstep with repo-files pin)
+  // Phase 5 05-CONTEXT.md D-12 — hash-pinned claim-support + orphan-label prompts
+  // (Plans 05-02/05-03). These are the ACTIVE Phase-5 advisory prompts: claim-support
+  // is invoked from bin/lib/verify/pass2.ts (Pass 2 claim-support) and orphan-label
+  // from bin/lib/verify/pass4.ts (Pass 4 Step-3 edge-case label) — NOT from
+  // bin/cli/verify.ts (the D-13 chokepoint file is unaffected; verify.ts never loads
+  // a prompt). pass1-fuzzy-judge + pass3-quote-checker remain D-13 DORMANT.
+  // WN-3: they land here as __PENDING_HASH_<slug>__ sentinels in Wave 0 (Plan 05-01)
+  // BEFORE the pass modules exist, so the loader can resolve the slugs the moment
+  // Plans 05-02/05-03 wire the LLM seams; Plan 05-05 re-pins them atomically to the
+  // REAL SHA-256 the tests/repo-files.test.ts byte-pins already carry (single source
+  // of truth — both surfaces then agree and loadPrompt succeeds WITHOUT the bypass).
+  // PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1 bypasses the runtime drift check while the
+  // sentinels are in place (CI sets this during Phase-5 Waves 0-1).
+  'claim-support':       '__PENDING_HASH_claim-support__',   // Phase 5 advisory Pass 2 (ACTIVE; invoked from pass2.ts)
+  'orphan-label':        '__PENDING_HASH_orphan-label__',    // Phase 5 advisory Pass 4 Step 3 (ACTIVE; invoked from pass4.ts)
 };
 
 /**
