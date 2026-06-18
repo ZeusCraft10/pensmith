@@ -25,6 +25,8 @@ import path from 'node:path';
 import { jaroWinkler, levenshteinSubstring } from '../lib/fuzzy.js';
 import { runPass1, runFreshnessForDraft, renderFreshnessTable } from '../lib/verify/pass1.js';
 import { runPass3 } from '../lib/verify/pass3.js';
+import { runPass2, renderPass2Section } from '../lib/verify/pass2.js';
+import { runPass4, renderPass4Section } from '../lib/verify/pass4.js';
 import { parseBibtex } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, paperDir } from '../lib/paths.js';
@@ -104,8 +106,17 @@ export const verifyCommand = defineCommand({
 
     const pass1 = await runPass1(draftMd, bibPath);
     const bibEntries = await parseBibtex(readFileSync(bibPath, 'utf8'));
-    const bibByCitekey = new Map<string, { DOI?: string }>(
-      bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
+    // Widened value type (additive): carries title/author/abstract so Pass 2
+    // (claim support) has source metadata. runPass3 reads only DOI, so the
+    // widening is backward-compatible with the runPass3 call below.
+    type BibValue = {
+      DOI?: string;
+      title?: string | string[];
+      author?: Array<{ family?: string; given?: string }> | string[];
+      abstract?: string;
+    };
+    const bibByCitekey = new Map<string, BibValue>(
+      bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as BibValue]),
     );
     const pass3 = await runPass3(draftMd, bibByCitekey);
 
@@ -123,6 +134,17 @@ export const verifyCommand = defineCommand({
       ? 'failed'
       : (hasUnverifiable ? 'unverifiable' : 'verified');
 
+    // Pass-2 (claim support) + Pass-4 (orphan-claim audit), advisory. Both run
+    // AFTER hasFail / hasUnverifiable / status are frozen above and NEVER feed
+    // back into them (VRFY-07) — mirroring the freshness advisory call site.
+    // Pass 2/4 load their own prompts inside their modules (the prompt-loader
+    // path lives there, not here), so verify.ts stays a 100%-deterministic
+    // orchestrator at the prompt-loader chokepoint. The results are returned for
+    // Phase 6 DONE-09 consumption and rendered as advisory VERIFICATION.md
+    // sections below.
+    const pass2 = await runPass2(draftMd, bibByCitekey, { n });
+    const pass4 = await runPass4(draftMd, { n });
+
     const lines = [
       `# VERIFICATION (Section ${n}, ${slug})`,
       '',
@@ -138,10 +160,14 @@ export const verifyCommand = defineCommand({
       '',
       renderFreshnessTable(freshness),
       '',
+      renderPass2Section(pass2),
+      '',
+      renderPass4Section(pass4),
+      '',
     ];
     await atomicWriteFile(verifPath, lines.join('\n'));
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
-    return { ok: status !== 'failed', status, path: verifPath, pass1, pass3, freshness };
+    return { ok: status !== 'failed', status, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
   },
 });
 
