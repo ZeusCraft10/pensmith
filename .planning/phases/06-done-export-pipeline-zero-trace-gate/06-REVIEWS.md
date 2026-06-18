@@ -278,3 +278,302 @@ When Pandoc is absent, `exportDraft` writes the output markdown to `outputDir/<b
 - **`renderHonestyReport` before/after-in-code** (codex HIGH) → **downgraded to MEDIUM**: the honest-framing *non-negotiable* is the `## Note`, which IS verbatim-locked; the before/after lines carry no detection claim. Real issue is a spec inconsistency, not a non-negotiable violation.
 - **before/after degrades to before-only when humanizer absent** (codex HIGH) → **downgraded to LOW**: this is the intended skip-clean behavior allowed by the criteria.
 - No reviewer found a true gate-bypass-without-`--yolo` in the gate *logic*, a 17th verb, or live network in tests — the non-negotiables on those points hold.
+
+---
+
+## Cycle 2
+
+Re-review after the three cycle-1 HIGHs were addressed. Four external reviewers
+(codex, gemini, claude, opencode) re-audited the five revised Phase-6 PLAN files
+(06-01 … 06-05) against the goal, the five success criteria, the non-negotiables,
+and the specific cycle-1 HIGH fixes. All four ran and returned usable output
+(exit 0, non-empty). Raw HIGH counts: codex 2, gemini 2, claude 1, opencode 0.
+
+The judge below dedups across reviewers, verifies each claim against the actual
+plan text (plus an empirical Node check for the `copyFile` claim and a pdf-lib
+serialization-semantics check), keeps `[HIGH]` only where a finding genuinely maps
+to a success-criterion failure or a non-negotiable violation, and downgrades
+over-escalated items with reason.
+
+### Prior-HIGH Resolution Status (cycle 2)
+
+- **HIGH-1 (PDF/.tex zero-trace) — PARTIALLY RESOLVED.** The *PDF fixture* and *coverage*
+  ARE fixed (genuine hand-authored negative control independent of pdf-lib; TEST-10
+  scans all four formats offline; SC1 not narrowed). BUT the cycle-1 fix introduced a
+  NEW HIGH: the `zeroTracePdf()` *mechanism as specified* fails its own Test D (see
+  HIGH-C2-1 below). Two residual gaps: (a) the `.tex` no-generator-comment contract is
+  only gated on the md-fallback artifact, not a real `.tex` (MEDIUM); (b) the PDF scrub
+  mechanism is broken (HIGH). So HIGH-1 is NOT fully closed.
+- **HIGH-2 (docx field coverage + sweep breadth + fixture independence) — RESOLVED.**
+  All four reviewers concur. The fixture is a genuine independent negative control
+  (trap in `cp:category` AND `_rels/.rels`); the blank set covers the full DC+cp+app
+  identifying fields; the sweep iterates ALL non-dir entries (not just `*.xml`);
+  regexes handle self-closing + attribute-bearing tags; Test B keeps a separate
+  per-field empty assertion so the literal sweep cannot mask a missing field-blank.
+- **HIGH-3 (Pass-2 → DONE-09 gate feed) — RESOLVED.** All four reviewers concur.
+  `readSectionUnsupported` fails safe (present-but-unparseable → synthetic UNSUPPORTED
+  sentinel; absent heading / `_(no citations to judge)_` / missing file → clean), pins
+  the renderPass2Section contract, and the disk→gate feed is now tested end-to-end
+  (unit parse + fail-safe + non-`--yolo` on-disk integration). One residual: the full
+  `doneCommand.run()` orchestrator wiring is still only exercised via `--yolo` at the
+  verb level (MEDIUM, claude) — the gate-feed primitives are tested, the verb-level
+  non-yolo composition is not.
+
+### Synthesized Findings (cycle 2)
+
+#### HIGH
+
+- **[HIGH] (HIGH-C2-1 — NEW) `zeroTracePdf()` as specified does not actually strip the
+  XMP stream and risks corrupting the PDF — fails its own Test D, threatening SC1.**
+  *Reviewer agreement: codex (HIGH), gemini (HIGH), claude (HIGH), opencode (LOW) — 3/4 HIGH;
+  verified against 06-04 lines 95/143/144 and pdf-lib save semantics.* Two converging
+  defects in 06-04 Task 1: **(a)** the final defense-in-depth byte sweep
+  `out.toString('latin1').replace(/pensmith/gi, '')` (line 144) DELETES bytes from the
+  already-serialized PDF, shifting every subsequent byte offset and invalidating the
+  xref table + stream `/Length` values — if it ever fires it corrupts the file, failing
+  Test D assertion (4) "still loads via PDFDocument.load". **(b)** `pdf.catalog.delete(
+  PDFName.of('Metadata'))` (lines 95/143) removes only the catalog *reference* to the XMP
+  stream, not the stream object itself; pdf-lib's `save()` serializes all indirect objects
+  in its context regardless of reachability, so the `<x:xmpmeta>` stream (carrying both
+  `pensmith` AND the non-`pensmith` identifying token `Trace Sentinel`) is still written.
+  The byte sweep only removes the literal `pensmith`, so `Trace Sentinel` survives in an
+  intact XMP block — failing Test D assertion (3) "XMP block removed OR scrubbed of
+  identifying values". Net: the MANDATORY PDF scrub cannot go green as written, and a real
+  PDF would leak non-`pensmith` identifying metadata — a direct SC1 / no-exported-trace
+  non-negotiable miss for the PDF format that the cycle-1 fix was supposed to deliver.
+  **Fix direction:** capture the metadata ref first
+  (`const ref = catalog.get(PDFName.of('Metadata'))`) and `pdf.context.delete(ref)`
+  BEFORE `save()` so the structured serializer emits clean, valid bytes; demote the
+  literal-`pensmith` byte check to a post-save *assertion* (defense-in-depth, not a
+  length-altering mutation) and, if a residual is ever found, re-run the structured strip
+  rather than editing bytes; update Test D / 06-01 acceptance so the fixture
+  `Trace Sentinel` token (not just `pensmith`) is asserted absent from the XMP after scrub.
+
+#### MEDIUM
+
+- **[MEDIUM] `.tex` zero-trace is not genuinely CI-gated on a real `.tex` artifact —
+  only the md-fallback is scanned offline.** *(codex raised HIGH; opencode MEDIUM;
+  downgraded to MEDIUM.)* 06-01 Test F permits scanning the md-fallback artifact when
+  Pandoc is absent, and 06-04 has no non-Pandoc `.tex` code path, so no real `.tex` is
+  ever produced/scanned in CI; live Pandoc `.tex` is a documented manual check. This is a
+  real gap in SC1's *automated* four-format claim, but the leak risk is low: per
+  06-RESEARCH `.tex` is "clean by construction" (pure source LaTeX, no injected metadata)
+  and the no-generator-comment contract IS enforced on the offline-producible artifact plus
+  a defensive `% Generated`/`% pensmith` strip. Downgraded because it is "untested" not
+  "broken" (the cycle-1 judge reached the same conclusion for `.tex`). **Fix:** either add
+  a tiny non-Pandoc `.tex` writer/template so a real `.tex` is produced + scanned offline,
+  or explicitly restate SC1's `.tex` clause as "CI-gated on the offline-producible
+  artifact; live Pandoc `.tex` is a manual check."
+
+- **[MEDIUM] The non-`--yolo` disk→gate feed is never exercised through the real
+  `doneCommand.run()` orchestrator.** *(claude.)* The HIGH-3 integration test composes
+  `readSectionUnsupported` + `collectGateIssues` + `runDoneGate` by hand; the only test
+  that runs the full verb (06-05 Task 3 tier-contract) uses `--yolo`, which skips the gate.
+  So if `run()` forgets to call `readSectionUnsupported(paperRoot)`, passes the wrong root,
+  or drops `pass2Results` into `collectGateIssues`, no test fails. The gate-feed
+  *primitives* are well covered (HIGH-3 resolved); the verb-level *composition* is not.
+  **Fix:** add one non-`--yolo` test that runs `doneCommand.run()` on a seeded on-disk
+  `.paper` (DRAFT.md + a section VERIFICATION.md with an UNSUPPORTED row) with an injected
+  `approve`→false, asserting the run cancels `{ ok:false }` and the per-issue summary
+  reached stdout.
+
+- **[MEDIUM] Export `outputDir = paperDir(paperRoot)` collides with the source artifacts —
+  the bib "copy" is a no-op and the md-fallback writes `DRAFT.md` onto itself, making the
+  verb-level zero-trace scan vacuous.** *(claude MEDIUM; gemini raised the same collision as
+  a HIGH `copyFile`-crash — see downgrade note.)* 06-05 calls
+  `exportDraft({ outputDir: paperDir(paperRoot) })` and 06-04 copies
+  `bibSrc = join(paperDir, 'CITATIONS.bib')` to `join(outputDir, 'CITATIONS.bib')` —
+  identical paths. On the build machine `fs.copyFile(p,p)` is a silent no-op (empirically
+  verified — it does NOT throw, so gemini's "reliably crashes" claim is FALSE here), but the
+  deeper problem stands: in the md-fallback path (humanizer absent = the default)
+  `inputPath = .paper/DRAFT.md` and the export atomic-writes `DRAFT.md` onto itself, so
+  there is no distinct deliverable and the 06-05 Task 3 tier-contract "produced artifact"
+  scan trivially re-scans the seeded input. SC2/SC4 are not violated (nothing throws, md is
+  produced, bib "present"), but the verb-level zero-trace assertion is weak and the UX is
+  confusing. **Fix:** export to a distinct name/dir (e.g. `.paper/exports/<slug>.<ext>` or
+  the project root), and/or guard the bib copy with `if (bibSrc !== bibDst)`.
+
+#### LOW
+
+- **[LOW] DOCX all-entry sweep could rewrite binary parts that happen to contain the bytes
+  `pensmith`.** *(codex.)* "attempt `.async('string')`, skip obviously-binary" is heuristic;
+  JSZip will decode arbitrary bytes as a string. Low risk but an explicit text-entry
+  allowlist (core/app/custom/rels/headers/footers/document/settings) would be safer.
+- **[LOW] `before.aiProbability ?? skip` in the 06-05 instruction reads as a null-deref.**
+  *(gemini MEDIUM; downgraded.)* The same sentence states the correct null-handling ("when
+  scoreHonesty returns null … emit the skip banner"), so an executor following the prose
+  will guard `before`; it is shorthand, not a bug, but worth tightening to an explicit
+  `if (!before)`.
+- **[LOW] `readSectionUnsupported` section iteration order is unspecified.** *(opencode.)*
+  Sort the section-dir read for deterministic gate-summary output.
+- **[LOW] `collectGateIssues` re-filters UNSUPPORTED that `readSectionUnsupported` already
+  filtered.** *(opencode.)* Harmless redundancy; single-filter-point cleanup optional.
+- **[LOW] docx byte-pin determinism across environments.** *(claude.)* JSZip DEFLATE is
+  pako-based + `{date:new Date(0)}`, so probably stable while `jszip` is lockfile-pinned;
+  consider `compression:'STORE'` for the fixture. Annoyance, not a goal failure.
+- **[LOW] "key never in stdout" is asserted by a source-text scan.** *(claude.)* A
+  behavioral assertion (sentinel key never appears in captured stdout) would be
+  refactor-proof; the source scan is acceptable belt-and-suspenders.
+- **[LOW] Wave-0 module-existence test stance still reads as internally conflicted.**
+  *(codex.)* "mirror known-bad-pass2.test.ts EXACTLY" resolves it; pick one stance.
+
+### Judge's Reconciliation Notes (cycle 2)
+
+- **Raw HIGH counts:** codex 2, gemini 2, claude 1, opencode 0. **Adjudicated: 1.**
+- **The single genuine HIGH (HIGH-C2-1)** is the `zeroTracePdf` mechanism — the only
+  finding 3/4 reviewers independently rate HIGH, verified against the plan text and pdf-lib
+  save semantics. It is a NEW HIGH introduced by the HIGH-1 fix (zeroTracePdf is new this
+  cycle) and it fails the very Test D the fix added, so it maps directly to SC1.
+- **gemini's `copyFile` same-path "reliable crash" HIGH → downgraded.** Empirically
+  `fs.copyFile(p,p)` is a silent no-op on this Node/Windows build (it does NOT throw), so
+  the crash claim is false. The real underlying path-collision concern is retained as the
+  MEDIUM above (claude's framing).
+- **codex's `.tex` HIGH → downgraded to MEDIUM**, matching opencode and the cycle-1 judge:
+  `.tex` is "clean by construction," so the gap is untested-not-broken.
+- **codex/gemini/opencode "byte-sweep corrupts PDF" + claude "XMP not actually dropped"**
+  are the SAME root finding (the `zeroTracePdf` mechanism) — merged into HIGH-C2-1.
+- HIGH-2 and HIGH-3 are confirmed RESOLVED by unanimous reviewer agreement and plan-text
+  verification. No reviewer found a 17th verb, live network in tests, a gate bypass without
+  `--yolo`, a chokepoint violation, or a honest-framing non-negotiable regression.
+
+### Per-Reviewer Raw (cycle 2)
+
+#### codex (exit 0)
+
+```
+**Prior HIGHs**
+
+HIGH-1: **NOT RESOLVED.** The PDF side is much stronger: 06-01 Task 1 requires a hand-authored PDF fixture independent of `pdf-lib`, with both `/Info` and XMP traces; 06-04 Task 1 adds `zeroTracePdf()` that clears document info, deletes catalog `/Metadata`, and tests the fixture offline. However, the `.tex` offline gate is not genuinely proven: 06-01 Test F allows “the emitted .tex … OR the md-fallback artifact when Pandoc is absent,” while 06-04 Task 2 says absent Pandoc always falls back to markdown-only. That means CI can pass without scanning a real `.tex` artifact.
+
+HIGH-2: **RESOLVED.** 06-01 Task 1 requires the DOCX fixture to include traps in `cp:category` and `_rels/.rels`, plus full DC/cp/app metadata with attribute-bearing and self-closing forms. 06-04 Task 1 requires blanking the expanded field set and sweeping every non-dir text entry, explicitly including `_rels/.rels`, with tests asserting no `pensmith` remains anywhere.
+
+HIGH-3: **RESOLVED.** 06-05 Task 2 distinguishes missing Pass-2 sections from present-but-unparseable Pass-2 tables, emits a synthetic `UNSUPPORTED` sentinel on parser desync, and adds three tests: real fixture parse, fail-safe malformed table, and non-`--yolo` on-disk gate integration that verifies the approver is called and the issue summary is shown.
+
+**Remaining Concerns**
+
+[HIGH] 06-01 Task 2 / 06-04 Task 2: The `.tex` zero-trace contract is not actually CI-gated offline. The plan permits the latex test to scan a markdown fallback artifact when Pandoc is absent, but SC1 requires scanning every export format, including `.tex`. Fix direction: add a deterministic offline `.tex` fixture or native minimal `.tex` writer/postprocessor test, and assert a real `.tex` file has no `% pensmith`, `% Generated by`, or `pensmith`.
+
+[HIGH] 06-04 Task 1: `zeroTracePdf()` includes a final length-changing byte sweep over the saved PDF bytes: `replace(/pensmith/gi, '')`. If that branch ever triggers on a real PDF, it can invalidate xref offsets or corrupt binary streams after `pdf-lib` has serialized the file. The fixture may not catch this if structured metadata removal already removes all traces. Fix direction: avoid length-changing byte edits; either replace with equal-length spaces in safe text streams before serialization, remove the owning metadata object structurally, or fail closed if residual `pensmith` remains, then reload the final bytes in production and tests.
+
+[MEDIUM] 06-04 Task 1: The DOCX all-entry sweep is described as “attempt `.async('string')` and skip obviously-binary parts.” JSZip can decode arbitrary binary as a string, so the implementation could accidentally rewrite binary media if it contains the byte sequence `pensmith`. Fix direction: use an explicit text-entry allowlist plus required OOXML metadata/rels/custom/header/footer parts, and keep the test coverage for `_rels/.rels`.
+
+[LOW] 06-01 Task 2: The RED scaffold acceptance text is internally conflicted about whether module-existence tests should fail or mirror Phase-5 skip behavior. It probably won’t threaten the phase if executors follow the “mirror existing precedent” instruction, but the plan would be clearer if it picked one exact expected Wave-0 status.
+
+HIGH_COUNT: 2
+```
+
+#### gemini (exit 0)
+
+```
+### Resolution of Cycle 1 HIGH Concerns
+
+1. **HIGH-1 (PDF/.tex zero-trace):** **RESOLVED.** The PDF fixture is explicitly required to be authored by hand (byte-level) and independent of `pdf-lib` (a genuine negative control). `zeroTracePdf` properly drops the `/Metadata` (XMP) stream via catalog deletion. The `.tex` format is tested offline for the absence of generator comments, successfully CI-gating the contract.
+2. **HIGH-2 (docx field coverage + sweep breadth + fixture independence):** **RESOLVED.** The DOCX fixture is genuinely independent, using JSZip to zip hand-authored XML, and explicitly places trap strings in `cp:category` and `_rels/.rels`. The patch sweeps all non-binary entries and robustly blanks the full, expanded field set.
+3. **HIGH-3 (Pass-2 -> DONE-09 gate feed):** **RESOLVED.** `readSectionUnsupported` explicitly fails safe by generating a synthetic UNSUPPORTED sentinel row when a table is present but unparseable, preventing silent bypasses. The end-to-end disk→gate feed is now robustly covered by a non-yolo on-disk integration test.
+
+### Remaining and NEW Concerns
+
+- **[HIGH] PDF binary corruption via literal byte sweep:** In `06-04-PLAN.md` Task 1, `zeroTracePdf` performs a literal byte sweep on the serialized PDF bytes by converting the `pdf-lib` output to a latin1 string and replacing `/pensmith/gi` with an empty string `''`. Because a PDF relies on exact byte offsets mapped in its cross-reference (`xref`) table, replacing an 8-character string with a 0-character string alters the file length and instantly invalidates all subsequent object offsets, completely corrupting the PDF structure.
+  *Fix direction:* If a defense-in-depth literal sweep is necessary on the binary PDF buffer, it MUST replace the target string with a string of exactly the same length (e.g., replacing `'pensmith'` with `'        '` - 8 spaces) to preserve all byte offsets and stream lengths. Alternatively, rely entirely on `pdf-lib` to strip the `/Info` and XMP metadata without performing a raw byte-length-altering replacement.
+
+- **[HIGH] `copyFile` crashes when `src` and `dest` are the same path:** In `06-05-PLAN.md` Task 2, the `done.ts` orchestrator calls `exportDraft` with `outputDir: paperDir(paperRoot)` (which points to the hidden `.paper/` folder). Inside `06-04-PLAN.md` Task 2, `exportDraft` attempts to copy the bibliography via `fsp.copyFile(bibSrc, join(outputDir, 'CITATIONS.bib'))`. Since `bibSrc` is also located at `.paper/CITATIONS.bib`, the source and destination paths are identical. In Node.js, `fs.copyFile` throws an error when `src` and `dest` are the exact same file, which will reliably crash the final export step.
+  *Fix direction:* Change the `done.ts` orchestrator to export the final documents to the project root (`outputDir: paperRoot`) instead of the hidden `.paper/` directory, so exports are visible to the user and the `.bib` file can be copied safely alongside them. Alternatively, inside `exportDraft`, explicitly verify `if (bibSrc !== bibDst)` before executing the copy.
+
+- **[MEDIUM] `scoreHonesty` returning `null` causes a `TypeError` in plan instructions:** In `06-05-PLAN.md` Task 2, the plan instructs the executor to build the honesty report via `renderHonestyReport(before.aiProbability ?? skip, ...)`. However, `scoreHonesty` is explicitly designed to return `null` when the API key is missing (skip-clean). Accessing `before.aiProbability` directly when `before` is `null` will throw a runtime `TypeError`.
+  *Fix direction:* Update the instructions to properly check if `before` is `null` before attempting to access its properties (e.g., `if (!before) { emit skip banner; } else { renderHonestyReport(before.aiProbability, ...) }`).
+
+HIGH_COUNT: 2
+```
+
+#### claude (exit 0)
+
+```
+I've read the five revised plans and the supporting research/pattern/validation docs. Here is my adversarial cycle-2 review.
+
+---
+
+# Cross-AI Plan Review — Phase 6 (Cycle 2)
+
+## Verdict on the 3 prior HIGH concerns
+
+### HIGH-1 (PDF/.tex zero-trace) — **PARTIALLY RESOLVED** (one genuine gap remains)
+
+What is genuinely fixed:
+- **Fixture independence:** 06-01 Task 1 hand-authors the PDF bytes via `fs.writeFileSync` of a Buffer, *not* via pdf-lib (pdf-lib is only used to *validate* loadability at the end). This is a real negative control, not a closed loop. ✓
+- **.tex no-generator-comment is CI-gated offline:** 06-04 Task 2 + zero-trace Test F drive the `.tex`/`md` artifacts from the exporter's deterministic offline path (no Pandoc), and 06-04 strips any `% pensmith`/`% Generated` line. ✓
+- **TEST-10 scans all four formats offline:** 06-01 Task 2 Tests A–F, with negative-control assertions (A/C) passing now and scrub assertions (B/D/E/F) skip-guarded. SC1 is not narrowed. ✓
+
+What is **not** genuinely resolved — see the HIGH concern below: the *mechanism* 06-04 specifies for removing the XMP stream does not actually remove it from pdf-lib's serialized output, and the byte-sweep only targets the literal `pensmith` — leaving the fixture's other identifying token (`Trace Sentinel`) in a still-serialized XMP stream. So the answer to the cycle-2 question "*Does `zeroTracePdf` actually strip the XMP stream?*" is **no, not as written.**
+
+### HIGH-2 (docx field coverage + sweep breadth + fixture independence) — **RESOLVED**
+
+- The fixture (06-01 Task 1) is a genuine independent negative control: `pensmith` is planted in `cp:category` (a field the prior narrow patch missed) **and** in `_rels/.rels` (a non-`.xml` entry). 06-04's field-blank list now includes `dc:subject/dc:description/cp:category/cp:contentStatus/cp:lastModifiedBy` + app `Company/Manager/Template`, with regexes for self-closing + attribute-bearing tags, and the sweep iterates **all** non-dir entries (explicitly `_rels/.rels`), not just `*.xml`. ✓
+- The fixture **forces** failure of a too-narrow patch in a robust way: even though the all-entry literal sweep would strip the `pensmith` substring from `cp:category` (masking the string assertion), Test B's *separate* "`cp:category` is empty" assertion still catches a missing field-blank target. The trap can't be silently swallowed by the sweep. ✓
+
+### HIGH-3 (Pass-2 → DONE-09 gate feed) — **RESOLVED** (one residual, see MEDIUM)
+
+- `readSectionUnsupported` (06-05 Task 2) genuinely fails safe: present-but-unparseable `## Pass-2` table → synthetic `<unparseable>` UNSUPPORTED sentinel (forces confirmation); absent heading / `_(no citations to judge)_` / missing file → clean. The "no Pass-2 section (clean)" vs "present-but-unparseable (issue)" distinction is explicit, and the parser keys on the `## Pass-2` prefix (so a heading-suffix drift doesn't read as "absent → clean"). ✓
+- The disk→feed is tested from real on-disk markdown, not just injected: a parse test over the committed fixture (UNSUPPORTED detected, SUPPORTED filtered), a fail-safe test (malformed table → sentinel; no-heading → clean), and a non-`--yolo` integration test driving `collectGateIssues(readSectionUnsupported(root))` + `runDoneGate(approve=false)` with a stdout summary assertion. ✓
+
+---
+
+## Concerns
+
+- **[HIGH] 06-04 Task 1 — `zeroTracePdf` does not actually remove the XMP stream; its specified mechanism fails its own Test D and risks PDF corruption.** The plan strips XMP via `pdf.catalog.delete(PDFName.of('Metadata'))`, then `pdf.save()`, then a post-save `out.toString('latin1').replace(/pensmith/gi,'')`. Two problems: (a) pdf-lib serializes **every** indirect object in its `context` on save, *reachable or not* — deleting the catalog `/Metadata` reference does **not** drop the XMP stream object, so the stream (containing `<pdf:Producer>pensmith…` **and** `<dc:creator>…Trace Sentinel`) is still written. The byte-sweep deletes only `pensmith`, so the fixture's other identifying token (`Trace Sentinel`) survives inside an intact `<x:xmpmeta>` block — which is exactly what zero-trace Test D assertion (3) ("xmpmeta block removed OR scrubbed of identifying values") checks, so the implementation as specified **fails its own gating test**. (b) The post-save `latin1` byte-deletion shifts all subsequent byte offsets, invalidating the xref table and stream `/Length` values, jeopardizing Test D assertion (4) ("still loads via `PDFDocument.load`"). Fix direction: capture the ref first (`const ref = catalog.get(PDFName.of('Metadata'))`), then `pdf.context.delete(ref)` **before** `save()` so the structured save emits clean, valid bytes; keep the literal `pensmith` byte-check as a *post-save assertion* (defense-in-depth), not a mutation — and if a residual is ever found, re-run the structured strip rather than editing bytes in place. Without this, SC1 leaks non-`pensmith` identifying metadata from PDF and the PDF scrub task cannot go green as written.
+
+- **[MEDIUM] 06-05 Task 2/Task 3 — the non-`--yolo` disk→gate feed is never exercised through the real `doneCommand.run()` orchestrator.** The new HIGH-3 integration test composes `readSectionUnsupported` + `collectGateIssues` + `runDoneGate` *by hand*; the only test that runs the full verb (`done` tier-contract, 06-05 Task 3) uses `--yolo`, which **skips** the gate (and pointlessly seeds Pass-2 data the run never reads). So if `doneCommand.run()` forgets to call `readSectionUnsupported(paperRoot)`, passes the wrong `paperRoot`, or drops `pass2Results` into `collectGateIssues`, no test fails. Fix direction: add one non-`--yolo` orchestrator-level test that runs `doneCommand.run()` on an on-disk `.paper` (seeded DRAFT.md + a section VERIFICATION.md with an UNSUPPORTED row) with an injected/stubbed `approve` returning false, asserting the run cancels with `{ ok:false }` and the per-issue summary reached stdout — closing the wiring gap end-to-end.
+
+- **[MEDIUM] 06-04 Task 2 / 06-05 Task 2 — the md-only fallback output path collides with the source `DRAFT.md`, making the verb-level "produced artifact" scan vacuous.** In the orchestrator, `outputDir = paperDir(paperRoot)` and the fallback writes `outputDir/<basename(inputPath)>.md`. With the humanizer absent (the build-machine default), `inputPath = .paper/DRAFT.md`, so the "export" atomic-writes `.paper/DRAFT.md` onto itself — there is no distinct deliverable, and the 06-05 Task 3 tier-contract zero-trace scan ends up scanning the seeded input file it just wrote (trivially clean). This doesn't violate SC2 (it doesn't throw, and md is produced), but the produced-artifact assertion is weak and the UX is confusing ("your export is the internal compile artifact"). Fix direction: write exports to a distinct name/dir (e.g. `.paper/exports/<paper-slug>.md`) so the fallback yields a separate file and the verb-level scan is meaningful.
+
+- **[LOW] 06-01 Task 1 / 06-03 — byte-pin determinism of `sample-zero-trace.docx` across environments.** The docx pin relies on JSZip producing byte-identical output everywhere. JSZip's DEFLATE is pako-based (bundled, so independent of Node's zlib) and `{date:new Date(0)}` fixes entry timestamps, so this is *probably* stable — but it is only guaranteed while `jszip` is exactly version-pinned in `package-lock.json` and contributors never regenerate. Worth an explicit note in CONTRIBUTING/the generator script that the committed binary is the source of truth and regeneration requires a re-pin; consider `compression:'STORE'` for the fixture to remove DEFLATE from the determinism surface entirely.
+
+- **[LOW] 06-03 Task 1 — the "key never interpolated into stdout" guarantee is asserted by a source-text scan.** Asserting `honesty.ts` contains no `${apiKey}` is brittle (it won't catch `'key=' + apiKey` or a logger call). It's an acceptable belt-and-suspenders given the presence-check design, but a behavioral assertion (capture stdout during a live-branch call with a sentinel key value and assert the sentinel never appears) would be stronger and refactor-proof.
+
+---
+
+HIGH_COUNT: 1
+```
+
+#### opencode (exit 0)
+
+```
+## Adversarial Plan Review — Cycle 2
+
+### HIGH-1 (PDF/.tex zero-trace): PARTIALLY RESOLVED
+
+**PDF side:** RESOLVED. The fixture is genuinely hand-authored (independent of pdf-lib), carries 'pensmith' in both `/Info` and XMP stream, `zeroTracePdf` removes both (via `setTitle('')` + `catalog.delete(PDFName.of('Metadata'))`) and does a defense-in-depth byte sweep — all OFFLINE on the engine-absent build machine. Locked by SHA-256 pin to prevent fixture drift.
+
+**.tex side:** NOT RESOLVED as claimed. HIGH-1's cycle-1 statement said ".tex no-generator-comment contract is genuinely CI-gated offline." In reality, when Pandoc is absent (CI), format `latex` falls back to md-only. Test F in 06-01 scans the md fallback artifact, NOT actual `.tex` output. The plan acknowledges this as a "documented manual check" (06-04). This means the SC1 gate for `.tex` outputs from Pandoc is NOT CI-gated — a gap HIGH-1 claimed was closed.
+
+**[MEDIUM] 06-04: The Pandoc-produced .tex generator-comment strip (defense-in-depth `% Generated by` removal in exportDraft) is untestable in CI since Pandoc is absent. The plan documents this as manual-only, which contradicts HIGH-1's "genuinely CI-gated offline" assertion for .tex. Fix: either accept the gap explicitly in SC1's docstring, or add a small offline LaTeX template renderer that emits .tex directly without Pandoc (if the architecture supports it).**
+
+### HIGH-2 (docx field coverage + sweep breadth + fixture independence): RESOLVED
+
+- Fixture carries the full Dublin-Core + cp + app set including dc:subject (attribute-bearing), cp:category, cp:contentStatus, self-closing Template
+- Trap in cp:category + _rels/.rels (non-.xml) ensures a narrow patch fails TEST-10
+- Sweep iterates ALL non-dir entries (not just *.xml), tries `.async('string')`, skips only obviously binary
+- Regexes handle both `<tag attrs>...</tag>` and `<tag/>` forms
+- Fixture is hand-authored JSZip XML, independent of the patch regexes
+- SHA-256 pinned against drift
+
+### HIGH-3 (Pass-2 → DONE-09 gate feed): RESOLVED
+
+- `readSectionUnsupported` explicitly distinguishes: absent `## Pass-2` heading → clean; present-but-unparseable → synthetic `UNSUPPORTED` sentinel; malformed table → never silent `[]`
+- `_(no citations to judge)_` is explicitly recognized as clean
+- Three new tests: (1) unit parse of fixture → correct UNSUPPORTED citekey, SUPPORTED filtered out; (2) fail-safe: malformed table → synthetic sentinel, absent heading → `[]`; (3) non-`--yolo` on-disk integration: seeds real files → gate fires, approve called, per-issue summary in stdout, `exported: false`
+- Pin on the renderPass2Section header contract as a module-level constant
+
+### Remaining concerns
+
+**[MEDIUM] 06-01/06-04, .tex CI gate gap:** As noted under HIGH-1, the .tex no-generator-comment contract is not genuinely CI-gated for Pandoc-produced .tex. Only the md-fallback is tested. The plan should either (a) add a lightweight .tex-only code path that works without Pandoc (write a LaTeX preamble template directly), or (b) explicitly mark SC1's .tex clause as "CI-gated for the fallback artifact; live Pandoc .tex verified via documented manual check per the defense-in-depth strip."
+
+**[LOW] 06-05, `collectGateIssues` redundant UNSUPPORTED filter:** `readSectionUnsupported` already returns only UNSUPPORTED rows, but `collectGateIssues` also filters by verdict. Not a bug — the function is designed to accept raw Pass2Results too — but the design is slightly inconsistent. Consider either removing the redundant filter or having `readSectionUnsupported` return all verdicts so `collectGateIssues` is the single filter point.
+
+**[LOW] 06-05, `readSectionUnsupported` section ordering:** The plan says "list section dirs" without specifying sort order. If filesystem iteration order is non-deterministic (e.g., on some OS/filesystem combos), the gate summary output order could vary. Use a sorted read (`readdirSync` + sort) for deterministic output.
+
+**[LOW] 06-04, zeroTracePdf byte-sweep on full output:** The latin1 round-trip on the entire saved PDF could corrupt binary streams if 'pensmith' appears in compressed content. However, since the structured removal (empty /Info + delete XMP) is the primary mechanism and the byte-sweep is defense-in-depth, the risk is minimal. Consider constraining the byte sweep to string objects only (via pdf-lib's object iteration) rather than the raw buffer, or keep as-is since it only triggers on actual 'pensmith' presence.
+
+---
+
+HIGH_COUNT: 0
+```
