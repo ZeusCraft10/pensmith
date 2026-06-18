@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Tier shells + doctor + tier-contract gate** - MCP server skeleton + Tier 2 CLI dispatcher + ecosystem probe + `/pensmith doctor` (with OneDrive detection) as first contract case — COMPLETE 2026-05-16
 - [x] **Phase 3: Vertical slice through one section** - Single-fixture intake → research → outline → plan → write → verify, deterministic Pass 1 + Pass 3 only, APA only, both tiers (completed 2026-05-28)
 - [x] **Phase 4: Breadth — N sections + compile + wave scheduling** - Wave scheduler, compile pipeline, cross-section consistency flags, stable section numbering with letter suffixes (completed 2026-06-17)
-- [ ] **Phase 5: Verifier completeness (Pass 2 + Pass 4)** - LLM-judged claim support and per-paragraph orphan-claim audit, advisory only
+- [x] **Phase 5: Verifier completeness (Pass 2 + Pass 4)** - LLM-judged claim support and per-paragraph orphan-claim audit, advisory only (completed 2026-06-18)
 - [ ] **Phase 6: Done / export pipeline + zero-trace gate** - Plagiarism, honesty, humanizer wrap, Pandoc exports, zero-trace verification test
 - [ ] **Phase 7: Single-command UX layer + hooks + flags** - `/pensmith` umbrella, verb shortcuts, natural-language triggers, resume/PreCompact/PostToolUse/Stop hooks, `--yolo`/`--dry-run`/`--estimate`/`--show-prompts`
 - [ ] **Phase 8: Style match + sketch + add + library + BYO PDF polish** - Style-match opt-in (per-paper, dual-use disclosed), sketch, add, library mode, PDF ingestion polish
@@ -224,7 +224,7 @@ Plans:
 - [x] 05-02-PLAN.md (wave 1) — bin/lib/verify/pass2.ts: advisory claim-support pass (UNCLEAR-bias), assertBudget pre-call gate, PENSMITH_NO_LLM placeholder, renderPass2Section (VRFY-03)
 - [x] 05-03-PLAN.md (wave 1) — bin/lib/verify/pass4.ts: deterministic pure-Node claim extraction + orphan detection, advisory Step-3 orphan-label LLM for AMBIGUOUS only, renderPass4Section (VRFY-06)
 - [x] 05-04-PLAN.md (wave 2) — wire runPass2/runPass4 into bin/cli/verify.ts below frozen status line + ## Pass-2/## Pass-4 VERIFICATION.md sections + extend verify-section tier-contract parity (VRFY-03, VRFY-06)
-- [ ] 05-05-PLAN.md (wave 3) — WN-3 atomic re-pin: replace claim-support/orphan-label sentinels with real SHA-256 in prompt-loader.ts; full-suite green-gate without pending bypass (VRFY-03, VRFY-06)
+- [x] 05-05-PLAN.md (wave 3) — WN-3 atomic re-pin: replace claim-support/orphan-label sentinels with real SHA-256 in prompt-loader.ts; full-suite green-gate without pending bypass (VRFY-03, VRFY-06)
 
 **UI hint**: no
 
@@ -315,7 +315,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 2. Tier shells + doctor + tier-contract gate | 10/10 | COMPLETE | 2026-05-16 |
 | 3. Vertical slice through one section | 10/10 | Complete    | 2026-05-28 |
 | 4. Breadth — N sections + compile + wave scheduling | 5/5 | Complete   | 2026-06-17 |
-| 5. Verifier completeness (Pass 2 + Pass 4) | 4/5 | In Progress|  |
+| 5. Verifier completeness (Pass 2 + Pass 4) | 5/5 | Complete   | 2026-06-18 |
 | 6. Done / export pipeline + zero-trace gate | 0/TBD | Not started | - |
 | 7. Single-command UX layer + hooks + flags | 0/TBD | Not started | - |
 | 8. Style match + sketch + add + library + BYO PDF polish | 0/TBD | Not started | - |
