@@ -448,6 +448,23 @@ const PHASE_3_CASES: Phase3Case[] = [
     verbFile: 'bin/cli/compile.ts',
     expectedArtifact: '.paper/DRAFT.md',
   },
+  {
+    // Plan 06-05 (CONTRIBUTING.md D-24): the done body (workflows/done.md) is
+    // filled in THIS plan, so its tier-contract obligation lands here. `done` IS
+    // one of the locked UX-02 16 verbs (no new verb). There is no `pensmith_done`
+    // MCP tool (the done Tier-1 surface is the workflow body delegating to the
+    // SAME bin/cli/done.ts → bin/lib path as the CLI — a documented architectural
+    // asymmetry, like compile/write-wave), so this case is CLI-only (mcpTool:
+    // null) and is exercised by the dedicated bespoke offline parity test below
+    // (skipped in the generic single-section loop). The artifact is the md-only
+    // deliverable in the DISTINCT export dir — `--format md` is deterministic on
+    // any machine (Pandoc-present or not), unlike the docx default.
+    name: 'done',
+    mcpTool: null,
+    cliArgs: ['done', '--yolo', '--format', 'md'],
+    verbFile: 'bin/cli/done.ts',
+    expectedArtifact: '.paper/export/DRAFT.md',
+  },
 ];
 
 /**
@@ -568,6 +585,12 @@ for (const tc of PHASE_3_CASES) {
   // emit an empty draft. It is exercised by the dedicated dual-tier parity test
   // below. The registry entry above still satisfies the D-24 obligation.
   if (tc.name === 'compile') continue;
+  // The done case ('done') needs a bespoke fixture (a compiled .paper/DRAFT.md +
+  // CITATIONS.bib + a section VERIFICATION.md so the gate has Pass-2 data); the
+  // generic seedPaperFixture has no DRAFT.md, so `pensmith done` would error
+  // out. It is exercised by the dedicated bespoke offline parity test below. The
+  // registry entry above still satisfies the D-24 obligation.
+  if (tc.name === 'done') continue;
 
   // Tier-equivalence assertion. CLI is always exercised; MCP tool only when
   // registered (the 3 interactive verbs degrade to CLI-only with documented
@@ -1116,5 +1139,111 @@ test('tier-contract: compile parity — both tier paths produce equivalent DRAFT
     transitionsBlock(t1Report),
     transitionsBlock(t2Report),
     'compile: both tier paths must produce the same ## Transitions Changed body',
+  );
+});
+
+// ============================================================================
+// Plan 06-05 — done tier-contract parity (CONTRIBUTING.md D-24)
+// ============================================================================
+//
+// The done body (workflows/done.md) is FILLED in this plan, so its D-24
+// tier-contract obligation lands here. `done` is one of the locked 16 verbs;
+// there is no `pensmith_done` MCP tool (the done Tier-1 surface is the workflow
+// body delegating to the SAME bin/cli/done.ts → bin/lib path as the CLI — a
+// documented architectural asymmetry, like compile/write-wave). The pipeline is
+// deterministic offline (PENSMITH_NO_LLM=1, Pandoc-absent fallback), so this
+// case exercises the SAME workflow-body + bin/lib path that drives both tiers:
+// a single `pensmith done --yolo --format md` run against a compiled fixture
+// must (a) exit 0, (b) produce a deterministic artifact in the DISTINCT export
+// dir (`.paper/export/`, NEVER overwriting the source `.paper/DRAFT.md`), and
+// (c) carry NO 'pensmith' string in that export-dir deliverable (the zero-trace
+// contract surfaced at the verb level — for the md deliverable this is a plain
+// string scan of a real distinct file; the .docx ZIP + .pdf /Info+XMP scans
+// live in tests/zero-trace-export.test.ts).
+
+const DONE_CASE = PHASE_3_CASES.find((c) => c.name === 'done')!;
+const doneVerbExists = existsSync(new URL(`../${DONE_CASE.verbFile}`, import.meta.url));
+
+/**
+ * Seed a fixture for `pensmith done`: a compiled `.paper/DRAFT.md`, a
+ * `.paper/CITATIONS.bib` (bundled into the export dir, DONE-08), and one section
+ * `VERIFICATION.md` whose ## Pass-2 table carries an UNSUPPORTED row (so the
+ * DONE-09 gate HAS Pass-2 data to feed — exercised under --yolo here, which
+ * bypasses the prompt while keeping the pipeline path identical).
+ */
+function seedDoneFixture(): string {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-done-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  writeFileSync(
+    join(root, '.paper', 'DRAFT.md'),
+    '# Paper\n\nThe transformer relies solely on attention mechanisms [@vaswani2017].\n',
+  );
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '@article{vaswani2017, title={Attention}}\n');
+  const sectionDir = join(root, '.paper', 'sections', '01-intro');
+  mkdirSync(sectionDir, { recursive: true });
+  writeFileSync(
+    join(sectionDir, 'VERIFICATION.md'),
+    [
+      '# Section Verification — 01-intro',
+      '',
+      '## Pass-2 (claim support, advisory — LLM-judged)',
+      '',
+      '| Citekey | Claim Sentence | Verdict | Rationale |',
+      '|---------|---------------|---------|-----------|',
+      '| smith2020 | The effect persists across all populations. | **UNSUPPORTED** | Single cohort only. |',
+      '',
+    ].join('\n'),
+  );
+  return root;
+}
+
+test('tier-contract: done — verb file exists (D-24)', () => {
+  assert.ok(doneVerbExists, `MISSING: ${DONE_CASE.verbFile} — done must ship its registry entry in-plan`);
+  // Parity assertion: there is no pensmith_done MCP tool, so the SAME workflow
+  // body + bin/lib path drives both tiers (compile precedent). Assert the
+  // workflow body exists and the CLI delegate is the documented one.
+  assert.ok(
+    existsSync(new URL('../workflows/done.md', import.meta.url)),
+    'workflows/done.md must exist (the Tier-1 surface delegating to bin/cli/done.ts)',
+  );
+});
+
+test('tier-contract: done parity — offline run produces a trace-free deliverable in the DISTINCT export dir (D-24)', { skip: !doneVerbExists }, () => {
+  const root = seedDoneFixture();
+  const sourceDraftBefore = readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8');
+
+  const r = runCliInDir(DONE_CASE.cliArgs, root);
+  assert.equal(
+    r.exitCode,
+    0,
+    `done parity: CLI exit 0 expected; got ${r.exitCode}. stdout: ${r.stdout.slice(0, 400)} stderr: ${r.stderr.slice(0, 400)}`,
+  );
+
+  // (b) deterministic artifact in the DISTINCT export dir — NEVER the source DRAFT.md.
+  const exportArtifact = join(root, DONE_CASE.expectedArtifact);
+  assert.ok(
+    existsSync(exportArtifact),
+    `done parity: must produce ${DONE_CASE.expectedArtifact} in the distinct export dir — not found at ${exportArtifact}`,
+  );
+  const sourceDraftPath = join(root, '.paper', 'DRAFT.md');
+  assert.notEqual(
+    resolve(exportArtifact),
+    resolve(sourceDraftPath),
+    'done parity: the export artifact must be a DISTINCT file from the source .paper/DRAFT.md',
+  );
+  // The source DRAFT.md must be untouched (never overwritten by the export).
+  assert.equal(
+    readFileSync(sourceDraftPath, 'utf8'),
+    sourceDraftBefore,
+    'done parity: the source .paper/DRAFT.md must NOT be overwritten by the export',
+  );
+
+  // (c) zero-trace at the verb level: the export-dir deliverable carries no
+  // 'pensmith' string (the real distinct deliverable, not the re-scanned source).
+  const exported = readFileSync(exportArtifact, 'utf8');
+  assert.equal(
+    /pensmith/i.test(exported),
+    false,
+    `done parity: the exported deliverable must contain NO 'pensmith' string (zero-trace, DONE-07)`,
   );
 });
