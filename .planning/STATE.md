@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-06-18T06:23:57.966Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-06-18T06:35:59.125Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 11
   completed_phases: 5
   total_plans: 48
-  completed_plans: 46
+  completed_plans: 47
   percent: 45
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 05 (Verifier completeness (Pass 2 + Pass 4)) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-06-18
 
@@ -83,6 +83,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 05 P01 | 8min | 2 tasks | 9 files |
 | Phase 05 P02 | 4min | 2 tasks tasks | 1 file files |
 | Phase 05 P03 | 5min | 2 tasks | 1 file |
+| Phase 05 P04 | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -171,6 +172,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [05-02] PASS2_SECTION_CAP_DEFAULT=0.50 USD/section (ARCH-10 per-step cap, config knob via opts.scopeCapUsd); model id from runtime config defaultModel falling back to claude-haiku-4
 - [Phase ?]: [05-03] Pass 4 deterministic core implements PINNED rule R1-R8 verbatim (R5 8-word floor enforced BEFORE R6 marker counting); orphanCount is HIGH-only (R8) and byte-identical with or without the LLM — every pass4-orphan.json fixture incl. canonical Climate-change =1 passed on first run, no R1-R8 re-walk needed
 - [Phase ?]: [05-03] Pass 4 Step-3 orphan-label LLM (AMBIGUOUS sentences only) gated behind assertBudget pre-call + PENSMITH_NO_LLM guard + getProviderApiKey no-leak; PASS4_SECTION_CAP_DEFAULT=0.50 (matches Pass-2); renderPass4Section is an integer-only orphan-count table (no LLM text in cells — injection surface removed); advisory by construction (no hasFail/status), VRFY-06 GREEN, full suite 649 pass / 0 skip
+- [Phase ?]: [05-04] verify.ts wires runPass2/runPass4 strictly below the frozen hasFail/status block (freshness call-site mirror); advisory-only by construction (VRFY-07). D-13 held by import-and-call — the new imports carry no loadPrompt literal and Pass 2/4 load their prompts in their own modules, so the verify.ts whole-file loadPrompt count stays 0 (comments included), re-asserted by Guard B. Tier parity scoped to PENSMITH_NO_LLM=1: both tiers assert ## Pass-2 + ## Pass-4 + an UNCLEAR row; live verdict parity out of CI scope.
 
 ### Pending Todos
 
@@ -191,6 +193,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T06:23:57.961Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-06-18T06:35:59.120Z
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None
