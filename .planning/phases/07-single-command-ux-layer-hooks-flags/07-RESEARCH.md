@@ -444,6 +444,8 @@ skills/
 
 ### Router — State-Aware Decision
 
+**NEVER-THROW INVARIANT (C5-HIGH — load-bearing).** `resolveNextAction` is **TOTAL** and **NEVER throws**: every filesystem-read or parse failure across its ENTIRE input surface — `STATE.json` (loadState), each per-section `PLAN.md` (readFileSync + parseFrontmatter -> `yaml.parseDocument().toJSON()`), and the `existsSync` probes for OUTLINE/DRAFT/FINAL — resolves to a valid `RouterDecision` (`status/attention` or, for a genuinely-absent PLAN.md, `plan`) with a one-line stderr diagnostic on the corrupt path. SC1/SC5 require bare `/pensmith` to never crash on `decision.verb`; that guarantee was hardened for `STATE.json` in cycle 4 (C4-HIGH) but the per-section `PLAN.md` read was left unguarded (cycle 5, claude HIGH). Both `readFileSync` (EACCES/EISDIR/TOCTOU after the `existsSync` probe) and `parseFrontmatter` (malformed YAML, duplicate map keys) THROW; the repo's own `hooks/pre-compact.ts:178-187` wraps this IDENTICAL `parseFrontmatter(readFileSync(planPath,'utf8'))` call in try/catch precisely because it can throw. The guard below mirrors that precedent, distinguishes **file absent -> `plan`** (as today) from **file present-but-corrupt/unreadable -> `status/attention`**, and adds an OUTER try/catch backstop around the whole resolver body as defense-in-depth so NOTHING escapes (per-read guards keep diagnostics specific; the backstop guarantees totality even against an unforeseen throw).
+
 ```typescript
 // Source: codebase analysis of state.ts + schemas/state.ts + schemas/handoff.ts
 import { loadState, StateNotFoundError } from './state.js';
@@ -476,64 +478,104 @@ export type RouterDecision =
 // bin/cli/resume.ts; resolveNextAction always returns a concrete next WORK verb.
 
 export async function resolveNextAction(paperRoot: string): Promise<RouterDecision> {
-  let state;
+  // C5-HIGH OUTER BACKSTOP (defense-in-depth): wrap the WHOLE resolver body so
+  // that even an unforeseen throw from any fs/parse op resolves to a valid
+  // RouterDecision rather than escaping. The per-read guards below keep the
+  // diagnostics specific; this backstop guarantees the never-throw invariant
+  // holds no matter what. resolveNextAction is TOTAL and NEVER throws.
   try {
-    state = await loadState(paperRoot);
-  } catch (e) {
-    if (e instanceof StateNotFoundError) return { verb: 'new' };
-    throw e;
-  }
-
-  const pDir = paperDir(paperRoot);
-
-  // H4 PINNED ORDERING: resolveNextAction is the next-WORK-verb resolver and
-  // IGNORES HANDOFF.json entirely (no { verb:'resume' } is ever returned here).
-  // HANDOFF is consumed only by the SessionStart hook and the explicit `resume`
-  // verb; `resume` re-dispatches into THIS function so it always makes progress.
-  if (!existsSync(join(pDir, 'RESEARCH.md'))) return { verb: 'research' };
-  if (!existsSync(join(pDir, 'OUTLINE.md')))  return { verb: 'outline' };
-
-  const sections = state.sections ?? [];
-  if (sections.length === 0) return { verb: 'outline' };
-
-  // Walk sections in ascending n; the FIRST non-'verified' section decides the
-  // verb. C3-HIGH-1: the map below is TOTAL over SectionStateSchema
-  // (planned/writing/written/verifying/verified/failed/unverifiable) — 'verified'
-  // is the ONLY 'continue' case. 'failed'/'unverifiable' route BACK to verify
-  // (re-attempt), so the walk always RETURNS at the first stuck section and the
-  // post-walk compile branch is only reached when EVERY section is verified.
-  for (const { n, slug } of sections.sort((a, b) => a.n - b.n)) {
-    const planPath = sectionPlan(n, slug, paperRoot);
-    if (!existsSync(planPath)) return { verb: 'plan', n, slug };
-    const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
-    const status = (frontmatter as { status?: string }).status ?? 'planned';
-    switch (status) {
-      case 'verified':
-        continue;                                   // ONLY continue case
-      case 'planned':
-        return { verb: 'plan',   n, slug };
-      case 'writing':
-        return { verb: 'write',  n, slug };
-      case 'written':
-      case 'verifying':
-      case 'failed':                                // re-attempt verification
-      case 'unverifiable':                          // re-attempt verification
-        return { verb: 'verify', n, slug };
-      default:
-        // Unrecognized status (hand-edited PLAN.md). Do NOT fall through to
-        // undefined — surface a stuck-section status instead.
-        return { verb: 'status', reason: 'attention', section: { n, slug } };
+    let state;
+    try {
+      state = await loadState(paperRoot);
+    } catch (e) {
+      // C4-HIGH: loadState translates ONLY ENOENT -> StateNotFoundError. CATCH-ALL
+      // then reclassify: absent file -> new; present-but-corrupt/schema-invalid/
+      // forward-incompat/permission-denied -> status/attention. NEVER re-throw.
+      if (e instanceof StateNotFoundError) return { verb: 'new' };
+      process.stderr.write(
+        `[pensmith] STATE.json at ${paperRoot} is unreadable/corrupt: ${(e as Error).message}\n`,
+      );
+      return { verb: 'status', reason: 'attention' };
     }
-  }
 
-  // All sections verified (the walk fell through ONLY because every section was
-  // 'verified' — 'failed'/'unverifiable' would have returned 'verify' above).
-  if (!existsSync(join(pDir, 'DRAFT.md'))) return { verb: 'compile' };
-  if (!existsSync(join(pDir, 'FINAL.md'))) return { verb: 'done' };
-  return { verb: 'status', reason: 'done' };
-  // (No code path can reach here; the three returns above are exhaustive once
-  // the walk completes. The compiler-visible totality comes from the section
-  // switch's `default` + these three terminal returns.)
+    const pDir = paperDir(paperRoot);
+
+    // H4 PINNED ORDERING: resolveNextAction is the next-WORK-verb resolver and
+    // IGNORES HANDOFF.json entirely (no { verb:'resume' } is ever returned here).
+    // HANDOFF is consumed only by the SessionStart hook and the explicit `resume`
+    // verb; `resume` re-dispatches into THIS function so it always makes progress.
+    if (!existsSync(join(pDir, 'RESEARCH.md'))) return { verb: 'research' };
+    if (!existsSync(join(pDir, 'OUTLINE.md')))  return { verb: 'outline' };
+
+    const sections = state.sections ?? [];
+    if (sections.length === 0) return { verb: 'outline' };
+
+    // Walk sections in ascending n; the FIRST non-'verified' section decides the
+    // verb. C3-HIGH-1: the map below is TOTAL over SectionStateSchema
+    // (planned/writing/written/verifying/verified/failed/unverifiable) — 'verified'
+    // is the ONLY 'continue' case. 'failed'/'unverifiable' route BACK to verify
+    // (re-attempt), so the walk always RETURNS at the first stuck section and the
+    // post-walk compile branch is only reached when EVERY section is verified.
+    for (const { n, slug } of sections.sort((a, b) => a.n - b.n)) {
+      const planPath = sectionPlan(n, slug, paperRoot);
+      // C5-HIGH: distinguish a GENUINELY-ABSENT PLAN.md (-> plan, as today) from a
+      // PRESENT-but-corrupt/unreadable one. existsSync==false means absent.
+      if (!existsSync(planPath)) return { verb: 'plan', n, slug };
+
+      // C5-HIGH PER-SECTION READ GUARD (mirrors hooks/pre-compact.ts:178-187):
+      // BOTH readFileSync (EACCES/EISDIR/TOCTOU after the existsSync probe) and
+      // parseFrontmatter -> yaml.parseDocument().toJSON() (malformed YAML,
+      // duplicate map keys) can THROW. A present-but-corrupt PLAN.md routes to
+      // status/attention (matching the unrecognized-status `default` arm) WITHOUT
+      // throwing — NOT to 'plan' (that is the absent-file disposition above).
+      let status: string;
+      try {
+        const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
+        status = (frontmatter as { status?: string }).status ?? 'planned';
+      } catch (e) {
+        process.stderr.write(
+          `[pensmith] PLAN.md for section ${n} (${slug}) is unreadable/corrupt: ` +
+            `${(e as Error).message}\n`,
+        );
+        return { verb: 'status', reason: 'attention', section: { n, slug } };
+      }
+
+      switch (status) {
+        case 'verified':
+          continue;                                   // ONLY continue case
+        case 'planned':
+          return { verb: 'plan',   n, slug };
+        case 'writing':
+          return { verb: 'write',  n, slug };
+        case 'written':
+        case 'verifying':
+        case 'failed':                                // re-attempt verification
+        case 'unverifiable':                          // re-attempt verification
+          return { verb: 'verify', n, slug };
+        default:
+          // Unrecognized status (hand-edited PLAN.md). Do NOT fall through to
+          // undefined — surface a stuck-section status instead.
+          return { verb: 'status', reason: 'attention', section: { n, slug } };
+      }
+    }
+
+    // All sections verified (the walk fell through ONLY because every section was
+    // 'verified' — 'failed'/'unverifiable' would have returned 'verify' above).
+    if (!existsSync(join(pDir, 'DRAFT.md'))) return { verb: 'compile' };
+    if (!existsSync(join(pDir, 'FINAL.md'))) return { verb: 'done' };
+    return { verb: 'status', reason: 'done' };
+  } catch (e) {
+    // C5-HIGH BACKSTOP: any fs/parse op that throws despite the per-read guards
+    // above lands here. Never let it escape -> status/attention keeps the
+    // never-throw invariant total. (Should be unreachable by construction.)
+    process.stderr.write(
+      `[pensmith] router resolveNextAction hit an unexpected error: ${(e as Error).message}\n`,
+    );
+    return { verb: 'status', reason: 'attention' };
+  }
+  // (Unreachable: the try body's branches are exhaustive once the walk completes,
+  // and the catch backstop covers every throw — resolveNextAction is provably
+  // TOTAL and never returns undefined / never throws.)
 }
 ```
 
