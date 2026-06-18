@@ -209,7 +209,23 @@ Plans:
   2. Pass 4 flags orphan claims per paragraph, with verdicts written to `sections/<N>/VERIFICATION.md`. Claim extraction is deterministic (pure-Node) per PRD §14 + VRFY-06; LLM is used only for advisory labeling of edge cases. Pass 4 never auto-blocks compile or export, but any orphan claim feeds the Phase 6 export-confirmation gate (DONE-09 / PRD §7.9).
   3. `tier-contract.test.js` confirms equivalent verdicts (modulo prose) for Pass 2 and Pass 4 across both tiers on the fixture set.
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+**Wave layout** (depends_on; executor reads `wave` frontmatter):
+
+- Wave 0: 05-01 (RED scaffold + WN-3 sentinels + D-13 comment)
+- Wave 1: 05-02 (Pass 2), 05-03 (Pass 4) — parallel (no file overlap)
+- Wave 2: 05-04 (verify.ts wiring + tier-contract parity; depends 05-01/02/03)
+- Wave 3: 05-05 (WN-3 atomic re-pin; depends 05-01/02/03/04)
+
+Plans:
+
+- [ ] 05-01-PLAN.md (wave 0) — RED suite (known-bad-pass2/pass4 + advisory-isolation) + pass2-adversarial/pass4-orphan fixtures + claim-support/orphan-label stub prompts + WN-3 sentinels in EXPECTED_PROMPT_HASHES + repo-files byte-pins + D-13 comment permit (VRFY-03, VRFY-06)
+- [ ] 05-02-PLAN.md (wave 1) — bin/lib/verify/pass2.ts: advisory claim-support pass (UNCLEAR-bias), assertBudget pre-call gate, PENSMITH_NO_LLM placeholder, renderPass2Section (VRFY-03)
+- [ ] 05-03-PLAN.md (wave 1) — bin/lib/verify/pass4.ts: deterministic pure-Node claim extraction + orphan detection, advisory Step-3 orphan-label LLM for AMBIGUOUS only, renderPass4Section (VRFY-06)
+- [ ] 05-04-PLAN.md (wave 2) — wire runPass2/runPass4 into bin/cli/verify.ts below frozen status line + ## Pass-2/## Pass-4 VERIFICATION.md sections + extend verify-section tier-contract parity (VRFY-03, VRFY-06)
+- [ ] 05-05-PLAN.md (wave 3) — WN-3 atomic re-pin: replace claim-support/orphan-label sentinels with real SHA-256 in prompt-loader.ts; full-suite green-gate without pending bypass (VRFY-03, VRFY-06)
+
 **UI hint**: no
 
 ### Phase 6: Done / export pipeline + zero-trace gate
