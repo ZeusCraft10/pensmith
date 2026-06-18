@@ -11,6 +11,33 @@ Two lint-enforced chokepoints exist from Phase 0 onward. Violating them fails CI
 
 See `eslint.config.js` for the rules and `tests/lint-chokepoint.test.ts` for the regression gate.
 
+## Locked copy files (SHA-256 byte-pinned)
+
+Some `references/*.md` files are the SINGLE source of truth for user-facing prose
+that production code renders verbatim. Each is byte-pinned by SHA-256 in
+`tests/repo-files.test.ts`. Editing one without re-pinning the hash fails CI.
+
+### Honesty framing copy is LOCKED
+
+`references/honesty-framing.md` is the single source of the GPTZero honest-framing
+prose. `bin/lib/honesty.ts` reads and renders it VERBATIM — the copy is never
+inlined in code. This file is byte-pinned in `tests/repo-files.test.ts`.
+
+Any wording change is a deliberate PR that MUST also re-pin the SHA-256 in
+`tests/repo-files.test.ts` (the test message prints the new hash to paste). The
+framing MUST remain transparency-only: it states what the GPTZero score means and
+that the humanizer "improves prose" — it NEVER claims to make output undetectable
+and is NEVER framed as a detection-avoidance tool. This is the CLAUDE.md
+non-negotiable ("improves prose, does not evade detection"); a PR that turns the
+framing into an undetectability claim must not be merged.
+
+The committed zero-trace negative-control fixtures
+(`tests/fixtures/sample-zero-trace.docx` and `.pdf`) are likewise SHA-256
+byte-pinned in `tests/repo-files.test.ts`. They are regenerated via
+`node scripts/make-zero-trace-fixture.mjs` / `node scripts/make-zero-trace-pdf-fixture.mjs`;
+re-pin the hash in the same PR if a regeneration is intentional. A silently
+changed fixture could mask a real zero-trace regression, so drift is a CI failure.
+
 ## Quick checklist before opening a PR
 
 - `npm run check` is green locally

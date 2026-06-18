@@ -165,6 +165,45 @@ test('references/http-warnings.md hash-pin (IN-03 / D-24)', () => {
   assert.equal(hash, PINNED, `references/http-warnings.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 
+// Phase 6 DONE-04: references/honesty-framing.md is the SINGLE source of truth
+// for the GPTZero honest-framing copy. bin/lib/honesty.ts renders it VERBATIM.
+// The non-negotiable (CLAUDE.md: "improves prose, does not evade detection") is
+// enforced by this byte-pin: any wording change shows up in PR diff and must
+// re-pin the hash. GREEN from creation (static copy file, WN-3 single-source).
+test('references/honesty-framing.md hash-pin (Phase 6 DONE-04 LOCKED)', () => {
+  const bytes = readFileSync('references/honesty-framing.md');  // raw bytes, no BOM strip
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/honesty-framing.md')).digest('hex'))"
+  const PINNED = '549bdecbfc0f167aa17fc542146fcdfa58117686a7a9ab2cb58e0db633fa3b0b';
+  assert.equal(hash, PINNED, `references/honesty-framing.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional (and review the transparency-only constraint in CONTRIBUTING.md).`);
+});
+
+// Phase 6 TEST-10 fixture: tests/fixtures/sample-zero-trace.docx is the offline
+// real-ZIP negative control. A silently-changed fixture could remove the trace it
+// is meant to carry, masking a real zero-trace regression. Deterministic generator
+// (`{ date: new Date(0) }`) makes the re-pin reproducible.
+test('tests/fixtures/sample-zero-trace.docx hash-pin (Phase 6 TEST-10 fixture)', () => {
+  const bytes = readFileSync('tests/fixtures/sample-zero-trace.docx');
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  // Regenerate the fixture with `node scripts/make-zero-trace-fixture.mjs`, then
+  // recompute: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('tests/fixtures/sample-zero-trace.docx')).digest('hex'))"
+  const PINNED = '84654d3bd9409f1e79e72cfd0259c3a3cb4aaa7c1bfd7ae637097c1193789a7e';
+  assert.equal(hash, PINNED, `tests/fixtures/sample-zero-trace.docx drifted from locked fixture. Update PINNED to ${hash} if the edit was intentional.`);
+});
+
+// Phase 6 TEST-10 fixture (HIGH-1): tests/fixtures/sample-zero-trace.pdf is the
+// offline real-PDF negative control. A changed PDF fixture could mask a PDF
+// zero-trace regression. Hand-authored bytes with fixed /ID + offsets are
+// deterministic; regenerate via the committed generator.
+test('tests/fixtures/sample-zero-trace.pdf hash-pin (Phase 6 TEST-10 fixture, HIGH-1)', () => {
+  const bytes = readFileSync('tests/fixtures/sample-zero-trace.pdf');
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  // Regenerate the fixture with `node scripts/make-zero-trace-pdf-fixture.mjs`, then
+  // recompute: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('tests/fixtures/sample-zero-trace.pdf')).digest('hex'))"
+  const PINNED = '0e8b47cb90464c0ec6ac3bee48a91c72e5059170bd0eb68981e6cd199516e8a7';
+  assert.equal(hash, PINNED, `tests/fixtures/sample-zero-trace.pdf drifted from locked fixture. Update PINNED to ${hash} if the edit was intentional.`);
+});
+
 // Coarse-grained content sentinel — catches gross removals even before the
 // hash pin gets a chance to re-fire (e.g., file wiped to empty).
 test('references/doctor-output.md retains all probe section anchors (Phase 2 + Phase 3)', () => {
