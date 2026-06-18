@@ -577,3 +577,338 @@ HIGH_COUNT: 1
 
 HIGH_COUNT: 0
 ```
+
+---
+
+## Cycle 3
+
+Re-review after the cycle-2 HIGH (HIGH-C2-1, the `zeroTracePdf` mechanism) was
+fixed. Four external reviewers (codex, gemini, claude, opencode) re-audited the
+five revised Phase-6 PLAN files (06-01 … 06-05) against the goal, the five success
+criteria, the non-negotiables, and the four prior-cycle HIGH fixes. All four ran
+and returned usable output (exit 0, non-empty). Raw HIGH counts: codex 0,
+gemini 1, claude 0, opencode 0.
+
+The judge below dedups across reviewers, verifies each claim against the actual
+plan text plus pdf-lib serialization semantics, keeps `[HIGH]` only where a
+finding genuinely maps to a success-criterion failure or a non-negotiable
+violation, and downgrades over-escalated items with reason.
+
+### Prior-HIGH Resolution Status (cycle 3)
+
+- **HIGH-1 (PDF/.tex zero-trace not delivered/tested) — RESOLVED.** Unanimous (4/4).
+  06-04 ships `zeroTracePdf` (pure-JS pdf-lib) as the mandatory last step of every
+  `.pdf` export; 06-01 commits an independent hand-authored PDF negative-control
+  fixture; TEST-10 Test D scrubs+scans it offline; Test F scans a REAL
+  offline-produced `.tex` from the deterministic md→tex writer (no longer "clean by
+  construction"). All four formats are CI-gated offline. The two cycle-2 residual
+  MEDIUMs (the `.tex` real-artifact gate; the `zeroTracePdf` mechanism) are both now
+  closed.
+- **HIGH-2 (docx field coverage + sweep breadth + fixture independence) — RESOLVED.**
+  Unanimous (4/4). Full Dublin-Core+cp+app field set in both fixture and scrub;
+  sweep over ALL non-dir entries incl. `_rels/.rels`; regexes tolerant of
+  self-closing + attribute-bearing tags; genuine independent negative control with
+  traps in `cp:category` AND `_rels/.rels`.
+- **HIGH-3 (Pass-2 → DONE-09 gate feed) — RESOLVED.** Unanimous (4/4).
+  `readSectionUnsupported` fails safe (present-but-unparseable → synthetic
+  `<unparseable>` UNSUPPORTED sentinel; absent / `_(no citations to judge)_` /
+  missing file → clean), pinned to the `renderPass2Section` contract, and the
+  disk→gate feed is tested end-to-end (unit parse + fail-safe + non-`--yolo` on-disk
+  integration).
+- **HIGH-C2-1 (`zeroTracePdf` mechanism broken) — RESOLVED.** Unanimous (4/4),
+  with pdf-lib serialization semantics verified by codex, gemini, claude, AND
+  opencode. The catalog-only delete + length-altering byte-sweep is GONE; replaced
+  with `pdf.context.delete(metaRef)` on the indirect XMP STREAM object BEFORE
+  `save()` (so the serializer — which enumerates `context.indirectObjects` — never
+  emits it), then the catalog `/Metadata` entry removal, `/Info` cleared via
+  pdf-lib setters, and a READ-ONLY post-save literal check (no mutation). Test D
+  asserts BOTH `pensmith` AND the non-`pensmith` `Trace Sentinel` token are absent
+  AND the PDF still loads — a genuine negative control proving structural removal,
+  not literal masking. See the mechanism verdict below.
+
+### `zeroTracePdf` Mechanism Verdict (cycle 3): TECHNICALLY SOUND
+
+All four reviewers independently confirm the corrected mechanism is correct, and
+the judge concurs after verifying against pdf-lib internals:
+
+1. `catalog.get(PDFName.of('Metadata'))` returns the indirect `PDFRef` (PDFDict
+   `.get()` does NOT follow references — only `.lookup()` does), and the PDF spec +
+   the fixture both make `/Metadata` indirect. The plan correctly uses `.get`.
+2. `pdf.context.delete(metaRef)` removes the entry from `indirectObjects`; pdf-lib's
+   writer serializes by enumerating exactly that map, so the deleted XMP stream
+   object is never emitted. Deleting the catalog `/Metadata` entry too leaves no
+   dangling ref → the rebuilt xref is valid → the PDF still loads.
+3. NO length-altering byte edit: the byte-sweep is removed; the literal-`pensmith`
+   check is an explicit READ-ONLY post-save assertion (optionally throwing, never
+   mutating).
+4. Test D is a genuine negative control: because XMP is a *stream* object it can
+   never be packed into a pdf-lib object stream, so a failed deletion would leave
+   `Trace Sentinel` *literally* in the bytes — Test D would catch it. The
+   still-loads assertion confirms no corruption.
+   (Confirming detail the plan got right: `load(..., { updateMetadata: false })`
+   suppresses pdf-lib's constructor-time `updateInfoDict()` Producer/ModDate
+   injection; and the subsequent `setProducer('')` would overwrite it regardless.)
+
+### Synthesized Findings (cycle 3)
+
+#### HIGH
+
+None. No reviewer found a residual or new goal-threatening defect that survives
+adjudication. (gemini raised one [HIGH] — the DOCX binary-sweep heuristic — which
+3/4 reviewers rated LOW and the judge downgrades to MEDIUM; see below.)
+
+#### MEDIUM
+
+- **[MEDIUM] Test D's `/Info` coverage can be defeated by pdf-lib's default
+  `useObjectStreams: true` — a test-STRENGTH gap, not a delivered-property gap.**
+  *(claude MEDIUM; codex MEDIUM — convergent, sharpest finding.)* `pdf.save()`
+  defaults to object streams (PDF 1.5 compressed xref), which Flate-compresses all
+  NON-stream objects — including the `/Info` dictionary — into a binary object
+  stream. A `bytes.toString('latin1')` literal scan therefore cannot see `/Info`
+  contents, so a future regression that broke the `/Info` setters (but kept XMP
+  deletion) could pass a literal-only Test D falsely. The load-bearing
+  `Trace Sentinel`/XMP assertion is UNAFFECTED (stream objects stay uncompressed),
+  so structural XMP removal IS genuinely proven and SC1's delivered property holds —
+  this is why it is MEDIUM (test strength) not HIGH (delivery). **Fix direction:**
+  make Test D assertion (3) reload the scrubbed PDF via `PDFDocument.load` and
+  inspect `getProducer()/getAuthor()/…` STRUCTURALLY (not a byte scan), OR have
+  `zeroTracePdf` save with `{ useObjectStreams: false }` so `/Info` stays literally
+  scannable — and state which in the plan so the executor does not implement (3) as
+  a latin1 scan and inherit the blind spot.
+
+- **[MEDIUM] The DOCX defense-in-depth sweep's text-vs-binary heuristic
+  (`attempt .async('string')`; skip only `word/media/*`) can corrupt binary parts on
+  the LIVE Pandoc path.** *(gemini HIGH; claude LOW; codex LOW — downgraded from HIGH
+  to MEDIUM.)* JSZip's `.async('string')` does NOT throw on binary data — it blindly
+  coerces bytes to a string — so the only real protection against corrupting a
+  non-`media` binary part (embedded fonts under `word/fonts/`, `docProps/thumbnail.*`,
+  OLE objects, `.bin` printer settings) is the name-based `media/*` skip. A
+  re-encode-on-rewrite of such a part would produce an unopenable `.docx`. **Why
+  NOT HIGH:** the committed offline fixture contains no such binary parts, so the
+  CI-gated zero-trace test (the SC1 proof) is safe and passes; the corruption risk
+  only materializes on the live Pandoc export path, which is a documented manual
+  check, not CI-gated. So SC1's delivered/tested property is not threatened — but a
+  real user export could break. **Fix direction:** replace the `async('string')` +
+  `media/*` heuristic with a strict text-entry ALLOWLIST (`.xml`, `.rels`, known
+  text parts: core/app/custom/document/settings/headers/footers) before any
+  string-replace + rewrite; harden this before the live Pandoc path ships.
+
+#### LOW
+
+- **[LOW] The optional post-save residual assertion names only `pensmith`, not the
+  equally load-bearing `Trace Sentinel`.** *(codex.)* If a read-only post-save
+  assertion is added inside `zeroTracePdf`, assert BOTH tokens absent (Test D already
+  does; mirror it in the production assertion).
+- **[LOW] `context.delete(metaRef)` should be `instanceof PDFRef`-guarded.**
+  *(claude, opencode.)* `PDFDict.get` is typed `PDFObject | undefined`; guard with
+  `if (metaRef instanceof PDFRef)` so an unexpectedly-inline `/Metadata` is a clean
+  no-op rather than a type error / wrong delete. The plan already says "wrap in
+  try/catch"; the `instanceof PDFRef` guard is the precise contract (and resolves the
+  TS cast opencode flagged).
+- **[LOW] The PDF-fixture generator should additionally assert
+  `catalog.get(/Metadata) instanceof PDFRef`, not just that `load` succeeds.**
+  *(claude.)* So a botched hand-authored xref/`/Length` that makes pdf-lib silently
+  rebuild the xref (and not expose `/Metadata` as a ref) is caught at fixture
+  creation — guaranteeing the fixture provably exercises the structural-delete path.
+- **[LOW] Pin BOTH `## Pass-2` heading variants in the contract constant.**
+  *(claude.)* `renderPass2Section` emits `advisory — LLM-judged` (non-empty) vs.
+  `advisory` + `_(no citations to judge)_` (empty); ensure the pinned constant covers
+  both so a clean empty section is not misclassified as present-but-unparseable
+  (which would spuriously trip the fail-safe sentinel on every clean section). The
+  plan already recognizes the empty marker; make the constant explicit.
+- **[LOW] `readSectionUnsupported` treats an UNREADABLE (vs. absent)
+  `VERIFICATION.md` as clean.** *(codex.)* Consider treating a read error on an
+  EXISTING file as the synthetic UNSUPPORTED sentinel (keeping a genuinely missing
+  file clean), to avoid a permissions/partial-write silent drop.
+- **[LOW] `--raw` flag name is unintuitive for "skip humanizer."** *(opencode.)*
+  Consider `--no-humanize`. Cosmetic.
+- **[LOW] `collectGateIssues` Pass-4 aggregation is correct but should be
+  test-asserted for the multi-paragraph case.** *(opencode.)* `some(orphanCount>0)`
+  over `Pass4Result[]` is right; add a test that one clean + one orphaned paragraph
+  still trips `hasIssues`.
+
+#### Dismissed (not a real finding)
+
+- **gemini's "[MEDIUM] typo in `extractDistinctivePhrases` citation stripping" —
+  FALSE / relay artifact.** The actual 06-02 plan text reads `[@citekey]` correctly
+  at Task 1 behavior, action, and acceptance lines (verified: 06-02-PLAN.md lines
+  98, 103, 113). The mangled rendering gemini saw is a prompt-relay auto-link
+  artifact, not a planner hallucination — the plan's intent ("strip `[@citekey]`
+  markdown citation tokens before windowing") is unambiguous.
+
+### Judge's Reconciliation Notes (cycle 3)
+
+- **Raw HIGH counts:** codex 0, gemini 1, claude 0, opencode 0. **Adjudicated: 0.**
+- **All four prior HIGHs (HIGH-1, HIGH-2, HIGH-3, HIGH-C2-1) are confirmed
+  GENUINELY RESOLVED** by unanimous reviewer agreement plus plan-text + pdf-lib
+  semantics verification. HIGH-C2-1 — the cycle-2 broken `zeroTracePdf` — is the
+  headline: the structural `context.delete(metaRef)` before `save()` is the correct
+  fix, there is no length-altering byte edit, and Test D is a real negative control.
+- **gemini's lone [HIGH] (DOCX binary-sweep heuristic) → downgraded to MEDIUM.**
+  Real correctness bug for the LIVE Pandoc `.docx` path, but the CI-gated zero-trace
+  test (the SC1 proof) is safe because the committed fixture has no vulnerable binary
+  parts; 3/4 reviewers rated it LOW. It threatens a real user export, not the
+  delivered/tested success criterion — MEDIUM, fix before the live Pandoc path ships.
+- **The convergent `/Info`-literal-scan-under-object-streams finding (claude+codex)
+  is the sharpest residual**, but it is a test-STRENGTH gap (the load-bearing XMP
+  assertion is unaffected; structural removal is genuinely proven), so MEDIUM not
+  HIGH.
+- No reviewer found a 17th verb, live network in tests, a gate bypass without
+  `--yolo`, a chokepoint violation, or an honest-framing non-negotiable regression.
+  The non-negotiables hold.
+
+### Per-Reviewer Raw (cycle 3)
+
+#### codex (exit 0)
+
+```
+Prior HIGH status:
+
+- HIGH-1: GENUINELY RESOLVED. 06-01 and 06-04 now cover `.pdf` and `.tex` offline: committed PDF fixture, structural PDF scrub test, and a real offline-produced `.tex` artifact scanned by TEST-10.
+- HIGH-2: GENUINELY RESOLVED. 06-01 and 06-04 expand DOCX coverage to the full Dublin Core/cp/app field set, tolerate self-closing/attribute-bearing tags, and sweep all non-dir ZIP entries including `_rels/.rels`.
+- HIGH-3: GENUINELY RESOLVED. 06-05 adds `readSectionUnsupported` pinned to `renderPass2Section`, distinguishes absent vs present-unparseable Pass-2 sections, fails safe with a synthetic UNSUPPORTED sentinel, and tests the non-`--yolo` on-disk gate path.
+- HIGH-C2-1: GENUINELY RESOLVED. 06-04 specifies deleting the catalog `/Metadata` indirect object from `pdf.context` before `save()`, then deleting the catalog entry, with no post-save byte mutation; Test D checks both `pensmith` and `Trace Sentinel` absence plus `PDFDocument.load`.
+
+Corrected `zeroTracePdf` verdict: technically sound. Given pdf-lib’s serializer walks `context.indirectObjects`, `pdf.context.delete(metaRef)` on the actual XMP stream ref before `save()` should prevent that object from being serialized. The plan also correctly removes the unsafe length-altering byte sweep and makes any residual string check read-only. Test D is now a real negative control because `Trace Sentinel` is planted outside the literal `pensmith` token and must disappear too.
+
+Remaining concerns:
+
+[MEDIUM] 06-04 Task 1: The PDF scan is raw-byte based after `pdf.save()`, but pdf-lib may serialize with object streams/compression by default. If a future residual metadata stream were compressed, a literal byte scan for `pensmith` / `Trace Sentinel` could miss it. Fix direction: save scrubbed PDFs with `useObjectStreams: false` in testable paths, or add a PDF-structure inspection after reload that confirms the catalog has no `/Metadata` and document-info values are empty.
+
+[LOW] 06-04 Task 1: The optional residual assertion only names `pensmith`, while the negative-control token `Trace Sentinel` is equally load-bearing for proving structural removal. Fix direction: if adding a post-save read-only assertion, assert both `pensmith` and `Trace Sentinel` are absent.
+
+[LOW] 06-05 Task 2: `readSectionUnsupported` skips unreadable `VERIFICATION.md` files as clean. That is probably acceptable for I/O robustness, but it creates a small silent-drop case if permissions or partial writes hide Pass-2 data. Fix direction: consider treating read errors on an existing `VERIFICATION.md` as the same synthetic UNSUPPORTED sentinel, while keeping missing files clean.
+
+HIGH_COUNT: 0
+
+```
+
+#### gemini (exit 0)
+
+```
+### Assessment of Prior HIGH Concerns
+
+- **HIGH-1 (PDF/.tex zero-trace tests):** GENUINELY RESOLVED. The plan explicitly introduces hand-authored, offline `.pdf` and `.docx` negative-control fixtures (06-01), implements an offline `.tex` writer, and rigorously scans all four formats offline without relying on Pandoc.
+- **HIGH-2 (DOCX sweep scope & fixture):** GENUINELY RESOLVED. The DOCX negative-control fixture is independently constructed with varied tag structures and a `_rels/.rels` trap, and `zeroTracePatch` is correctly expanded to sweep the full Dublin-Core/app field set + non-XML entries.
+- **HIGH-3 (Pass-2 → Gate feed untested & unsafe):** GENUINELY RESOLVED. `readSectionUnsupported` implements a strict fail-safe for unparseable tables, and the data feed is proven via unit parse tests, fail-safe tests, and a non-`--yolo` on-disk integration test.
+- **HIGH-C2-1 (PDF scrub broken mechanism):** GENUINELY RESOLVED. The scrub correctly utilizes `pdf-lib`'s structural deletion capabilities rather than relying on flawed regex byte-replacements.
+
+### Verdict on `zeroTracePdf` Mechanism
+
+The corrected `zeroTracePdf` mechanism is **technically sound**.
+- **Context Deletion:** Yes, calling `pdf.context.delete(metaRef)` removes the XMP stream object from the `pdf-lib` indirect object map entirely. Because `save()` serializes only what exists in this context map, the stream will not be written to the output bytes. Deleting the catalog entry simultaneously ensures no dangling references remain.
+- **No Byte Edits:** Yes, the plan strictly forbids length-altering byte edits on the serialized PDF, opting instead for a safe, read-only post-save assertion.
+- **Test D Asserts:** Yes, Test D explicitly asserts the absence of the literal `'pensmith'` and the `'Trace Sentinel'` token, proving structural removal, while also guaranteeing the output remains a valid, loadable PDF via `PDFDocument.load`.
+
+---
+
+### Review Concerns
+
+- `[HIGH]` **Plan 06-04 Task 1: DOCX text-entry sweep risks binary corruption.** 
+  - **Problem:** The instructions for the `zeroTracePatch` defense-in-depth sweep tell the executor to identify text entries by "attempting `.async('string')` and skipping entries that are clearly binary (e.g. `media/*`)". JSZip's `async('string')` does **not** throw an error on binary data; it blindly coerces the bytes into a UTF-8 string. If the routine reads embedded fonts, OLE objects, or `.bin` printer settings as a string, runs a replace, and writes them back, it will permanently corrupt the binary structure, making the resulting `.docx` unopenable. 
+  - **Fix Direction:** Do not use `media/*` or `async('string')` exceptions as a heuristic. The sweep MUST use a strict allow-list of known text extensions (e.g., `.xml`, `.rels`, `.txt`) when performing string-based replacements.
+
+- `[MEDIUM]` **Plan 06-02 Task 1: Typo in `extractDistinctivePhrases` citation stripping instruction.** 
+  - **Problem:** The plan instructs the executor to strip "`[ @bin\lib\citekey.ts]` tokens" from candidate phrases. This is a planner hallucination (likely an auto-complete injection). If the executor follows this literally, they will search for that exact string instead of actual markdown citations, causing actual citekeys (e.g., `[@smith2020]`) to be included in DuckDuckGo plagiarism searches.
+  - **Fix Direction:** Correct the instruction to explicitly strip standard markdown citation tokens (e.g., `\[@[^\]]+\]`).
+
+HIGH_COUNT: 1
+
+```
+
+#### claude (exit 0)
+
+```
+I've reviewed all five revised plans against the codebase context (PROJECT.md, ROADMAP.md, 06-RESEARCH.md, 06-PATTERNS.md), the success criteria, and the prior-cycle HIGH history. Here is the cycle-3 review.
+
+---
+
+# Cross-AI Plan Review — Pensmith Phase 6 — CYCLE 3
+
+## Status of the four prior HIGH concerns
+
+- **HIGH-1 (cycle 1 — PDF/.tex zero-trace not delivered/tested): GENUINELY RESOLVED.** 06-04 now ships `zeroTracePdf` (pure-JS pdf-lib, no engine) as the mandatory last step of every `.pdf` export; 06-01 commits an independent PDF negative-control fixture; TEST-10 Test D scrubs+scans it offline, and Test F scans a REAL offline-produced `.tex` from the deterministic md→tex writer (not "clean by construction"). All four formats are CI-gated offline.
+
+- **HIGH-2 (cycle 1 — docx field-set/sweep too narrow + fixture co-authored with patch): GENUINELY RESOLVED.** Full Dublin-Core+cp+app field set enumerated in both fixture (06-01) and scrub (06-04); sweep iterates ALL non-dir entries incl. `_rels/.rels`; regexes specified tolerant of self-closing + attribute-bearing tags; fixture hand-authored independently with literal-`pensmith` traps in `cp:category` AND `_rels/.rels`, plus an attribute-bearing `dc:subject` and self-closing `<Template/>`. Genuine negative control.
+
+- **HIGH-3 (cycle 1 — Pass-2→gate feed untested + silent swallow + only `--yolo` test): GENUINELY RESOLVED.** `readSectionUnsupported` is pinned to the `renderPass2Section` contract and fails safe (present-but-unparseable → synthetic `<unparseable>` UNSUPPORTED sentinel; absent heading / `_(no citations to judge)_` → clean). 06-05 adds the three missing tests: unit parse over the committed fixture, fail-safe-on-malformed, and a NON-`--yolo` on-disk integration test asserting the gate fires (per-issue summary before approve, `exported:false`).
+
+- **HIGH-C2-1 (cycle 2 — `zeroTracePdf` mechanism broken): GENUINELY RESOLVED.** The catalog-only delete + length-altering byte-sweep is gone; replaced with `context.delete(metaRef)` on the indirect XMP stream object before `save()`, catalog `/Metadata` entry removal, `/Info` cleared via setters, and a READ-ONLY post-save assertion. See mechanism verdict below.
+
+## Verdict on the corrected `zeroTracePdf` mechanism: TECHNICALLY SOUND
+
+Checking against pdf-lib internals:
+
+1. **`catalog.get(PDFName.of('Metadata'))` returns the indirect ref, not the resolved stream.** `PDFDict.get()` does NOT follow references (only `.lookup()` does), so it returns the `PDFRef`. Per the PDF spec the catalog `/Metadata` entry MUST be indirect, and the fixture authors it as such. Correct — the plan explicitly uses `.get` (not `.lookup`), which is the load-bearing distinction.
+
+2. **`pdf.context.delete(metaRef)` before `save()` prevents serialization.** `PDFContext.delete(ref)` removes the entry from `indirectObjects`; pdf-lib's writer serializes by enumerating exactly that map, so a deleted object is never emitted. The only reference to the XMP stream is the catalog entry, which is also deleted → no dangling ref → file stays valid; the rebuilt xref represents the gap correctly. Correct.
+
+3. **No length-altering byte edit.** The byte-sweep is removed; the literal-`pensmith` check is an explicit READ-ONLY assertion (optionally throwing, never mutating). Correct.
+
+4. **Test D is a genuine negative control.** It asserts BOTH `pensmith` AND the non-`pensmith` `Trace Sentinel` are absent AND `PDFDocument.load` still succeeds. The `Trace Sentinel`/XMP path is the meaningful one — since XMP is a *stream* object it can never be packed into a pdf-lib object stream, so a failed deletion would leave it **literally** in the bytes and Test D would catch it. This correctly proves structural removal, not literal masking.
+
+One confirming detail the plan got right: `updateMetadata: false` on `load` suppresses pdf-lib's constructor-time `updateInfoDict()` (which would otherwise inject `Producer: pdf-lib …` + a `new Date()` ModDate). Even if omitted, the subsequent `setProducer('')` would overwrite it — so the design is resilient here.
+
+## Remaining concerns
+
+- `[MEDIUM]` **06-04 / 06-01 — Test D's `/Info` coverage can be defeated by pdf-lib's default `useObjectStreams: true`.** `pdf.save()` defaults to object streams (PDF 1.5 compressed xref), which Flate-compresses all NON-stream objects — including the `/Info` dictionary — into a binary object stream. A `bytes.toString('latin1')` literal scan therefore *cannot* see `/Info` contents, so a future regression that broke the `/Info` setters (but kept XMP deletion) would pass a literal-only Test D falsely. The `Trace Sentinel`/XMP assertion is unaffected (streams stay uncompressed), but the `/Info` path is not genuinely scanned. Fix direction: make Test D assertion (3) reload the scrubbed PDF via `PDFDocument.load` and inspect `getProducer()/getAuthor()/…` structurally (NOT a byte scan), **or** call `zeroTracePdf`'s `save({ useObjectStreams: false })` so `/Info` stays literally scannable. State which in the plan so the executor doesn't implement (3) as a latin1 scan and inherit the blind spot.
+
+- `[LOW]` **06-04 — `context.delete(metaRef)` should be type/instance-guarded.** `PDFDict.get` is typed `PDFObject | undefined`, while `PDFContext.delete` expects a `PDFRef`. Guard with `if (metaRef instanceof PDFRef)` before deleting (and skip otherwise) so a fixture/real-PDF that stores `/Metadata` unexpectedly inline becomes a clean no-op rather than a type error or wrong delete. The plan already says "wrap in try/catch," but an explicit `instanceof PDFRef` guard is the precise contract.
+
+- `[LOW]` **06-04 — docx defense-in-depth sweep's text-vs-binary heuristic is name-based only.** `.async('string')` never throws on binary (JSZip decodes bytes regardless), so the only real protection against corrupting a binary part is the `word/media/*` name skip. The committed fixture contains no binary parts, so the gated test is safe; but for live docx (embedded fonts under `word/fonts/`, `docProps/thumbnail.*`) a re-encode-on-rewrite could corrupt non-`media` binary parts. Tighten the skip list (or gate on a content-type/extension allowlist) before the live Pandoc path is exercised. Not a gating-test threat.
+
+- `[LOW]` **06-01 — hand-authoring a byte-exact uncompressed PDF with a correct xref + indirect XMP `/Length` is fragile.** A wrong stream `/Length` or xref offset can make pdf-lib silently rebuild the xref or fail to expose `/Metadata` as a ref. This is an execution risk, not a contract gap — the generator's `PDFDocument.load` + `catalog.get(/Metadata) instanceof PDFRef` validation gate catches a botched fixture at creation. Recommend the generator additionally assert `pdf.catalog.get(PDFName.of('Metadata'))` is a `PDFRef` (not just that load succeeds), so the fixture provably exercises the structural-delete path.
+
+- `[LOW]` **06-05 — `## Pass-2` empty-variant heading divergence is handled but worth pinning explicitly.** `renderPass2Section` emits two different headings (`advisory — LLM-judged` for non-empty vs. `advisory` + `_(no citations to judge)_` for empty). The plan correctly says match the `## Pass-2` prefix and recognize the empty marker before failing safe; ensure the pinned-contract constant covers BOTH heading variants so the empty-but-clean case is not misclassified as "present-but-unparseable" (which would spuriously trip the fail-safe sentinel on every clean section).
+
+## Summary
+
+The four prior HIGHs are all genuinely resolved, and the rewritten `zeroTracePdf` is technically correct against pdf-lib's serialization model — the structural `context.delete` before `save()` is the right fix, there is no length-altering byte edit, and Test D is a real negative control. The only sharp residual issue is a test-robustness gap (`/Info` invisible to a literal scan under pdf-lib's default object streams), which threatens test *strength* rather than the delivered zero-trace property, so it is MEDIUM, not HIGH.
+
+HIGH_COUNT: 0
+
+```
+
+#### opencode (exit 0)
+
+```
+Here is my Cycle 3 adversarial review of the five revised Phase 6 plans.
+
+## Prior HIGH — GENUINELY RESOLVED
+
+1. **HIGH-1 (PDF/.tex zero-trace not delivered/tested)**: RESOLVED. Offline-compatible real PDF fixture (hand-authored, independent of pdf-lib), `zeroTracePdf` structural XMP-object delete, a deterministic offline `md→tex` writer, and TEST-10 scanning all 4 formats offline (no Pandoc, no engine). The .tex is a real scanned artifact, not "clean by construction."
+
+2. **HIGH-2 (docx scrub field-set too narrow)**: RESOLVED. Full Dublin-Core + `cp:` + `app:` field set (includes `cp:category`, `Company`, `Manager`, `Template`, attribute-bearing `dc:subject`). Sweep covers ALL non-dir entries including `_rels/.rels`. Regexes handle self-closing and attribute-bearing forms. The fixture is independently authored with traps (`cp:category` + `_rels/.rels` both carry `'pensmith'`).
+
+3. **HIGH-3 (Pass-2→gate feed untested/silently swallowed)**: RESOLVED. `readSectionUnsupported` fails safe: present-but-unparseable → synthetic `<unparseable>` UNSUPPORTED sentinel (never silent `[]`); genuinely absent → clean. Pinned to `renderPass2Section` contract via module-level constant. Tested end-to-end (unit parse + fail-safe + non-`--yolo` on-disk integration).
+
+4. **HIGH-C2-1 (zeroTracePdf mechanism broken)**: RESOLVED. Corrected mechanism captures catalog `/Metadata` indirect ref and calls `pdf.context.delete(metaRef)` on the XMP stream **indirect object** BEFORE `save()` — the stream is removed from `indirectObjects` so the serializer never emits it. No length-altering byte edits (the `replace(/pensmith/gi, '')` removal is explicit). Test D asserts both `'pensmith'` AND `'Trace Sentinel'` absence AND still-loads — a genuine negative control.
+
+## zeroTracePdf technical assessment
+
+**Sound.** The chain is correct:
+- `pdf-lib`'s `PDFContext.delete(ref)` removes the ref from `indirectObjects` → `save()` iterates `enumerateIndirectObjects` which reads from that map → the deleted stream object is never serialized.
+- `/Info` is cleared via pdf-lib's public setters (`setTitle('')`, etc.), so `(Trace Sentinel)` in `/Author` becomes `()`.
+- The byte-level scan (`toString('latin1')`) is read-only; no xref-offset-altering mutation.
+- Test D's assertion on `'Trace Sentinel'` (the non-pensmith token) proves STRUCTURAL removal (XMP stream object gone from bytes) not mere literal masking. The "still loads via `PDFDocument.load`" assertion confirms no corruption.
+
+One micro-implementation risk: `pdf.catalog.get(PDFName.of('Metadata'))` returns `PDFObject | undefined`, not `PDFRef | undefined`. At runtime the value IS a `PDFRef`, but TypeScript may require a cast before passing to `context.delete()`. This is a trivial line-level fix, not a design concern.
+
+## NEW concerns
+
+**[MEDIUM] The `collectGateIssues` function buckets Pass4 `orphanCount>0` results, but `Pass4Result` has an array of per-paragraph results. The plan uses `orphanCount>0` as the per-result gate flag, not aggregated across paragraphs.** If one paragraph has 0 orphans and another has 2, and the user passes `collectGateIssues` with the per-paragraph `Pass4Result[]`, the plan says to filter `orphanCount>0`. This works — any paragraph with orphans triggers the gate. But the plan should clarify it aggregates across all paragraphs (any `orphanCount>0` → `hasIssues = true`). Currently `collectGateIssues` takes `pass4Results: Pass4Result[]` — a `some()` check is correct. **Fix:** already implied by type; just ensure the test asserts multi-paragraph aggregation too.
+
+**[LOW] The done pipeline writes `.paper/VERIFICATION.md` (whole-paper level) which could conceptually collide if section-level VERIFICATION.md files are later restructured.** Current paths are distinct (`.paper/VERIFICATION.md` vs `.paper/sections/N/VERIFICATION.md`). No actual risk.
+
+**[LOW] The `--raw` flag name is unintuitive for "skip humanizer"** — users might expect it to mean "skip formatting" or "raw markdown." Consider renaming to `--no-humanize`. Not a HIGH; easily changed.
+
+**[LOW] The `exportDraft` Pandoc-latex path says "defensively strip any `% pensmith`/`% Generated` line"** — this IS a byte edit on the .tex, but since .tex is plaintext with no xref offsets, a line-based strip is safe. And the CI-tested offline path produces a clean .tex by construction with no stripping needed.
+
+## Verdict
+
+All four prior HIGHs are genuinely resolved. The corrected `zeroTracePdf` mechanism is technically sound. No new HIGH concerns. The plans deliver the Phase 6 success criteria including the non-negotiable zero-trace gate.
+
+HIGH_COUNT: 0
+
+```
+
