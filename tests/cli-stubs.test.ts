@@ -10,7 +10,12 @@
 // pipeline — bin/cli/compile.ts delegating to bin/lib/compile.ts::runCompile),
 // so it is REMOVED from the stub list and is exercised by tier-contract.test.ts.
 //
-// This test still asserts that the remaining 8 unimplemented UX-02 verbs are
+// Plan 06-05 Task 2 update: `done` graduated from stub to real (the export
+// pipeline — bin/cli/done.ts delegating to bin/lib/* runPass4/runPlagiarism/
+// scoreHonesty/exportDraft), so it is REMOVED from the stub list and is
+// exercised by tier-contract.test.ts.
+//
+// This test still asserts that the remaining 7 unimplemented UX-02 verbs are
 // stub-routed (TIER-04 invariant — `pensmith <unimplemented-verb>` MUST exit
 // 0 with the canonical "not implemented yet" string so users see a clean
 // landing page instead of a citty crash).
@@ -20,10 +25,10 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
-// 8 remaining stubs after Plan 04-05 (UX-02 minus the 6 real per-section verbs,
-// minus `doctor`, minus the now-real `compile`).
+// 7 remaining stubs after Plan 06-05 (UX-02 minus the 6 real per-section verbs,
+// minus `doctor`, minus the now-real `compile` and `done`).
 const STUBS = [
-  'next', 'status', 'done', 'resume', 'list', 'open', 'sketch', 'add',
+  'next', 'status', 'resume', 'list', 'open', 'sketch', 'add',
 ];
 
 // Resolve the built binary; build is a precondition (run npm run build first).
