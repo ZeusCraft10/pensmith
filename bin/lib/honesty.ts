@@ -16,6 +16,9 @@
 //     log payload, the cost ledger, stdout, or a return value (presence-check
 //     only at the call boundary).
 
+import { readFileSync, statSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { fetch as httpFetch } from './http.js';
 import { isOfflineMode, loadCassetteFile } from './http-mock.js';
 import { assertBudget, appendCost } from './budget.js';
@@ -39,6 +42,74 @@ export interface HonestyScore {
 export interface HonestyBackend {
   name: string;
   score(text: string): Promise<HonestyScore | null>;
+}
+
+// ============================================================
+//   Locked honest-framing copy (read VERBATIM — never inlined)
+// ============================================================
+// This module ships at two depths: bin/lib/honesty.ts under tsx, and
+// dist/bin/lib/honesty.js after build. Fixed-depth `..` × N would land in the
+// wrong dir post-build (IN-03 defect class). Walk up from HERE until we find
+// the directory that owns package.json, then resolve references/ relative to
+// that. EXACT shape copied from bin/lib/http.ts findPkgRoot + loadWarnString.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function findPkgRoot(start: string): string {
+  let cur = start;
+  for (let i = 0; i < 8; i++) {
+    try {
+      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
+    } catch {
+      // continue
+    }
+    const next = path.dirname(cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  return start;
+}
+const PKG_ROOT = findPkgRoot(__dirname);
+const FRAMING_FILE = path.join(PKG_ROOT, 'references', 'honesty-framing.md');
+
+let framingNote: string | null = null;
+
+/**
+ * Read the '## Note' blockquote text VERBATIM from references/honesty-framing.md
+ * (the locked, hash-pinned copy). Mirrors http.ts loadWarnString: scan for the
+ * '## Note' heading, return the following `> ` blockquote line with the markdown
+ * marker stripped. Memoized. The copy is NEVER inlined in this module — drift
+ * between code and the locked file is a CI failure (repo-files.test.ts pin).
+ *
+ * Defensive fallback only if the references file is unreadable (should never
+ * happen — references/ ships in package.json files[]). The fallback is still
+ * transparency-only and carries no detection-avoidance wording.
+ */
+function loadFramingNote(): string {
+  if (framingNote !== null) return framingNote;
+  let md: string;
+  try {
+    md = readFileSync(FRAMING_FILE, 'utf8');
+  } catch {
+    framingNote =
+      'Note: this score reflects prose patterns. The humanizer improves readability; it does not promise to make output undetectable.';
+    return framingNote;
+  }
+  const lines = md.split(/\r?\n/);
+  let inSection = false;
+  for (const line of lines) {
+    if (line.startsWith('## Note')) {
+      inSection = true;
+      continue;
+    }
+    if (inSection && line.startsWith('> ')) {
+      framingNote = line.slice(2).trim();
+      return framingNote;
+    }
+  }
+  framingNote =
+    'Note: this score reflects prose patterns. The humanizer improves readability; it does not promise to make output undetectable.';
+  return framingNote;
 }
 
 // ============================================================
@@ -169,17 +240,95 @@ const gptzeroBackend: HonestyBackend = {
 };
 
 // ============================================================
-//   Public: scoreHonesty (backend selection lands in Task 2)
+//   Pluggable backend selection (DONE-05)
 // ============================================================
 
 /**
- * Compute the detection-aware honesty score for `text`. Delegates to the
- * selected backend (DONE-05). Absent key / offline-no-cassette / unexpected
- * response → null (clean skip). Advisory by construction — never throws.
- *
- * NOTE: backend selection (selectBackend) is wired in Task 2; for now this
- * delegates to the GPTZero backend directly.
+ * Build a not-implemented stub backend for a configured-but-unshipped provider
+ * (Originality / Sapling — 06-RESEARCH Open Question 3). score() returns null
+ * with a one-line stdout banner rather than fabricating a score or throwing
+ * (advisory-never-crash consistency). No network call, no key read.
  */
-export async function scoreHonesty(text: string): Promise<HonestyScore | null> {
-  return gptzeroBackend.score(text);
+function notImplementedBackend(name: string): HonestyBackend {
+  return {
+    name,
+    score: async (): Promise<HonestyScore | null> => {
+      process.stdout.write(
+        `pensmith: ${name} honesty backend not implemented — score skipped.\n`,
+      );
+      return null;
+    },
+  };
+}
+
+/**
+ * Resolve the honesty backend from config (DONE-05). GPTZero is the default and
+ * the only shipped backend; 'originality' / 'sapling' return not-implemented
+ * stubs that skip cleanly; any unknown / undefined value falls back to GPTZero.
+ * This is a pure selector — it reads no key and issues no network call.
+ */
+export function selectBackend(config?: { honestyBackend?: string }): HonestyBackend {
+  switch (config?.honestyBackend) {
+    case 'originality':
+      return notImplementedBackend('originality');
+    case 'sapling':
+      return notImplementedBackend('sapling');
+    case 'gptzero':
+    case undefined:
+    default:
+      return gptzeroBackend;
+  }
+}
+
+// ============================================================
+//   Public: scoreHonesty
+// ============================================================
+
+/**
+ * Compute the detection-aware honesty score for `text`. Resolves the backend
+ * via selectBackend (DONE-05) and delegates to it. Absent key / offline-no-
+ * cassette / unexpected response → null (clean skip). Advisory by construction
+ * — never throws, never blocks export.
+ */
+export async function scoreHonesty(
+  text: string,
+  config?: { honestyBackend?: string },
+): Promise<HonestyScore | null> {
+  return selectBackend(config).score(text);
+}
+
+// ============================================================
+//   Public: renderHonestyReport (before/after; verbatim framing note)
+// ============================================================
+
+/**
+ * Render the before/after honesty report. The before/after percentages come
+ * from two scoreHonesty calls (done.ts calls scoreHonesty twice per paper —
+ * pre- and post-humanize). `after === null` renders the 'N/A (humanizer not
+ * installed)' variant. The trailing note is read VERBATIM from the locked
+ * references/honesty-framing.md — it is NEVER an inlined literal, so any drift
+ * in the locked copy is caught by the repo-files.test.ts hash pin and the
+ * verbatim-render assertion in tests/honesty.test.ts.
+ *
+ * Transparency-only by construction: the rendered prose states what the score
+ * means and that the humanizer improves readability; it carries zero
+ * detection-avoidance wording (PROJECT.md non-negotiable).
+ */
+export function renderHonestyReport(
+  before: number,
+  after: number | null,
+  backend: string,
+): string {
+  const beforePct = Math.round(before * 100);
+  const afterLine =
+    after === null
+      ? `Pensmith honesty check (after humanize):  N/A (humanizer not installed).`
+      : `Pensmith honesty check (after humanize):  reads as ${Math.round(after * 100)}% AI-generated (${backend}).`;
+  const lines = [
+    `Pensmith honesty check (before humanize): reads as ${beforePct}% AI-generated (${backend}).`,
+    afterLine,
+    '',
+    loadFramingNote(),
+  ];
+  return lines.join('\n');
 }
