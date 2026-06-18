@@ -13,14 +13,33 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { isHumanizerSkillPresent } from '../bin/lib/ecosystem-presence.js';
 
 // The Wave-2 runHumanizer wrap is exported from bin/lib/exporter.ts (the
 // done-orchestrator humanize step). Pin the symbol name `runHumanizer`.
+//
+// NOTE: bin/lib/exporter.ts is created by Plan 06-04 (zeroTracePatch/zeroTracePdf/
+// exportDraft) BEFORE Plan 06-05 adds runHumanizer to it. So file existence alone
+// is NOT a sufficient skip guard — between 06-04 and 06-05 the file exists but
+// runHumanizer does not. The behavioral test below additionally guards on the
+// runHumanizer export actually being present in source, so it stays RED-by-skip
+// (its intended Wave-0 state) until 06-05 lands the wrap — mirroring how
+// export-gate.test.ts guards on its own owner module (bin/cli/done.ts).
 const exporterSrcPath = fileURLToPath(new URL('../bin/lib/exporter.ts', import.meta.url));
 const exporterModUrl = new URL('../bin/lib/exporter.js', import.meta.url);
+
+function runHumanizerExported(): boolean {
+  if (!existsSync(exporterSrcPath)) return false;
+  try {
+    return /export\s+(?:async\s+)?function\s+runHumanizer\b/.test(
+      readFileSync(exporterSrcPath, 'utf8'),
+    );
+  } catch {
+    return false;
+  }
+}
 
 test('humanizer-wrap: machine baseline — isHumanizerSkillPresent() is false (DONE-03 skip-clean path under test)', () => {
   // Documents the test precondition; if the humanizer is later installed this
@@ -39,7 +58,7 @@ test('humanizer-wrap: module presence is consistent with Wave-0 RED state (DONE-
 });
 
 test('humanizer-wrap: runHumanizer absent-skill → no throw, returns null, banner "humanizer skill not found" (DONE-03)',
-  { skip: !existsSync(exporterSrcPath) },
+  { skip: !runHumanizerExported() },
   async () => {
     const mod = await import(exporterModUrl.href) as {
       runHumanizer: (draftMd: string) => Promise<string | null>;
