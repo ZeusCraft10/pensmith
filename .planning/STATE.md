@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-06-17T11:26:31.751Z"
-last_activity: 2026-06-17
+status: executing
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-06-18T06:02:54.354Z"
+last_activity: 2026-06-18 -- Completed 05-01-PLAN.md (Wave 0 RED scaffold)
 progress:
   total_phases: 11
   completed_phases: 5
-  total_plans: 43
-  completed_plans: 43
-  percent: 45
+  total_plans: 48
+  completed_plans: 44
+  percent: 92
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-06)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** Phase 04 — breadth-n-sections-compile-wave-scheduling
+**Current focus:** Phase 05 — Verifier completeness (Pass 2 + Pass 4)
 
 ## Current Position
 
-Phase: 04 (breadth-n-sections-compile-wave-scheduling) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-06-17
+Phase: 05 (Verifier completeness (Pass 2 + Pass 4)) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute (05-01 Wave 0 RED scaffold done)
+Last activity: 2026-06-18 -- Completed 05-01-PLAN.md (Wave 0 RED scaffold)
 
-Progress: [████████░░] 86%  (Phase 0 done; Phase 1 closed; Phase 2 CLOSED — 10/10 plans)
+Progress: [█████████░] 92%  (44/48 plans; Phase 5 Wave 0 RED scaffold landed)
 
 Plan files (depends_on order):
 
@@ -80,6 +80,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 04 P03 | 22min | 3 tasks | 6 files |
 | Phase 04 P04 | 13min | 3 tasks | 12 files |
 | Phase 04 P05 | 21min | 4 tasks | 24 files |
+| Phase 05 P01 | 8min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [04-05] runCompile refuse-gate collects ALL blocking verdicts across ALL sections before any write, then refuses without writing DRAFT.md — verifier-blocks-compile is structurally unbypassable (COMP-01)
 - [Phase ?]: [04-05] compile tier-contract parity is CLI-only (no pensmith_compile MCP tool; Tier-1 surface is the workflow body delegating to the same runCompile) — documented asymmetry, locked UX-02 16 verbs preserved
 - [Phase ?]: [04-05] smoother citation protection by construction (D-13): pre-call [@key]->{{cite_K_M}} mask + post-call placeholder-set equality; drift rejects the boundary keeping original prose (raw-concat fallback); compile never refuses on smoothing rejection (COMP-03)
+- [Phase ?]: [05-01] Wave-0 RED behavioral tests are RED-by-skip (skip-guarded on existsSync of pass2.ts/pass4.ts) so the suite reports skips with ZERO failures — diverges from the known-bad-citations analog which hard-fails on a missing module
+- [Phase ?]: [05-01] pass4-orphan.json orphan counts derived by mechanically walking pinned rule R1-R8 (R5 >=8-word floor applied BEFORE R6 marker counting); canonical Climate-change example = 1 (S2 lone HIGH orphan); cited-vs-uncited isolated via paired single-sentence entries to remove R2 proximity ambiguity
+- [Phase ?]: [05-01] claim-support + orphan-label registered as __PENDING_HASH_ sentinels in EXPECTED_PROMPT_HASHES (WN-3) BEFORE pass modules exist so loadPrompt resolves the slugs; real SHA-256 byte-pins in repo-files from creation; verify.ts byte-unchanged and its whole-file loadPrompt==0 D-13 chokepoint pinned by a committed regression test
 
 ### Pending Todos
 
@@ -181,6 +185,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-17T11:25:46.396Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-06-18T06:02:54.348Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
