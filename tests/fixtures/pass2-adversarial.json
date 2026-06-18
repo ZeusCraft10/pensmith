@@ -1,0 +1,98 @@
+[
+  {
+    "citekey": "smith2023",
+    "claim_sentence": "Climate change accelerates sea level rise dramatically along coastal megacities.",
+    "source_title": "Atmospheric CO2 and global mean temperature trends 1950-2023",
+    "source_abstract": "This paper investigates the correlation between atmospheric carbon dioxide concentration and long-term global mean surface temperature data from 1950 to 2023. We find a strong positive correlation across all measured decades.",
+    "expected_verdict": "UNCLEAR",
+    "adversarial_reason": "Abstract is thematically adjacent (climate, CO2, temperature) but says nothing about sea level rise or coastal cities — a faithful judge must return UNCLEAR, not infer SUPPORTED from topic overlap."
+  },
+  {
+    "citekey": "jones2021",
+    "claim_sentence": "Deep neural networks outperform random forests on tabular medical datasets.",
+    "source_title": "A survey of gradient-boosted decision trees in industry",
+    "source_abstract": "We review the deployment of gradient-boosted decision tree ensembles across financial and retail prediction tasks, with attention to training cost and interpretability tradeoffs.",
+    "expected_verdict": "UNCLEAR",
+    "adversarial_reason": "Same machine-learning topic family but the abstract concerns boosted trees in finance/retail, never compares neural networks to random forests on medical data — thematic adjacency must NOT yield SUPPORTED."
+  },
+  {
+    "citekey": "garcia2020",
+    "claim_sentence": "Intermittent fasting reduces all-cause mortality in adults over sixty.",
+    "source_title": "Caloric restriction and lifespan in laboratory mice",
+    "source_abstract": "In a controlled rodent study, animals on a thirty percent caloric-restriction diet exhibited extended median lifespan relative to ad libitum controls.",
+    "expected_verdict": "UNCLEAR",
+    "adversarial_reason": "Adjacent nutrition/longevity theme but the source studies caloric restriction in mice, not intermittent fasting nor human mortality — extrapolating across species and intervention is exactly the inference the prompt forbids."
+  },
+  {
+    "citekey": "lee2019",
+    "claim_sentence": "Remote work increases individual software-engineering productivity by roughly twenty percent.",
+    "source_title": "Team communication patterns in distributed engineering organizations",
+    "source_abstract": "We analyze message-graph topology across forty distributed engineering teams and characterize how communication latency varies with timezone spread.",
+    "expected_verdict": "UNCLEAR",
+    "adversarial_reason": "Same remote/distributed-work theme but the abstract studies communication topology, never measures individual productivity changes — no basis to confirm or deny the specific quantitative claim."
+  },
+  {
+    "citekey": "patel2022",
+    "claim_sentence": "Microplastic ingestion impairs cognitive development in human infants.",
+    "source_title": "Microplastic concentrations in coastal marine sediment cores",
+    "source_abstract": "We quantify microplastic particle density in sediment cores sampled from twelve estuarine sites and report a rising trend over the past two decades.",
+    "expected_verdict": "UNCLEAR",
+    "adversarial_reason": "Adjacent microplastics theme but the source measures environmental sediment concentrations, with nothing on human cognition or infants — topical overlap is not support."
+  },
+  {
+    "citekey": "nguyen2018",
+    "claim_sentence": "Bilingual education improves standardized math scores in primary schools.",
+    "source_title": "Second-language acquisition and working-memory capacity",
+    "source_abstract": "This study measures working-memory span in early bilingual and monolingual children and reports modestly higher span among the bilingual group.",
+    "expected_verdict": "PARTIAL",
+    "adversarial_reason": "The source supports the broader topic (bilingualism confers a cognitive working-memory edge) but does not address standardized math scores specifically — PARTIAL: topic supported, the precise assertion is not."
+  },
+  {
+    "citekey": "okeke2024",
+    "claim_sentence": "Solar photovoltaic capacity grew worldwide between 2010 and 2020.",
+    "source_title": "Global renewable energy deployment statistics 2010-2020",
+    "source_abstract": "We compile installed-capacity figures for solar photovoltaic, onshore wind, and hydroelectric generation. Installed solar photovoltaic capacity rose more than tenfold globally over the reporting decade.",
+    "expected_verdict": "SUPPORTED",
+    "adversarial_reason": "The abstract explicitly states solar photovoltaic capacity rose more than tenfold over the decade — direct, near-verbatim support for the claim. SUPPORTED."
+  },
+  {
+    "citekey": "rossi2017",
+    "claim_sentence": "Vitamin D supplementation prevents seasonal influenza in healthy adults.",
+    "source_title": "Randomized trial of vitamin D supplementation on respiratory infection",
+    "source_abstract": "In a randomized placebo-controlled trial, daily vitamin D supplementation produced no statistically significant reduction in laboratory-confirmed influenza incidence among healthy adults.",
+    "expected_verdict": "UNSUPPORTED",
+    "adversarial_reason": "The abstract directly contradicts the claim — the trial found no significant effect. This is explicit contradiction, so UNSUPPORTED."
+  },
+  {
+    "citekey": "abbas2016",
+    "claim_sentence": "Urban green space reduces measured ambient summer temperatures in city centers.",
+    "source_title": "Land-surface temperature and vegetation cover in metropolitan areas",
+    "source_abstract": "Using satellite thermal imagery across thirty metropolitan areas, we find that districts with higher vegetation cover register measurably lower land-surface temperatures than adjacent low-vegetation districts in summer months.",
+    "expected_verdict": "SUPPORTED",
+    "adversarial_reason": "The abstract reports higher-vegetation districts measure lower temperatures in summer — directly supportive of the claim. SUPPORTED."
+  },
+  {
+    "citekey": "delgado2015",
+    "claim_sentence": "Early childhood music training causally improves later reading fluency.",
+    "source_title": "Correlations between extracurricular activities and academic outcomes",
+    "source_abstract": "We report cross-sectional correlations between participation in music, sports, and drama programs and later academic achievement, noting that causal direction cannot be established from the observational design.",
+    "expected_verdict": "PARTIAL",
+    "adversarial_reason": "The source supports an association between music participation and academic outcomes but explicitly cannot establish causation — the claim asserts a causal link, so PARTIAL (topic/association supported, the causal assertion is not)."
+  },
+  {
+    "citekey": "haruki2014",
+    "claim_sentence": "Quantum annealing solves large logistics routing problems faster than classical solvers.",
+    "source_title": "Benchmarking quantum annealers on small combinatorial instances",
+    "source_abstract": "We benchmark a commercial quantum annealer on combinatorial optimization instances of up to sixty-four variables and observe no consistent runtime advantage over tuned classical heuristics at this scale.",
+    "expected_verdict": "UNSUPPORTED",
+    "adversarial_reason": "The abstract reports no runtime advantage at the tested scale, contradicting the claim of faster large-problem solving — explicit contradiction yields UNSUPPORTED."
+  },
+  {
+    "citekey": "varga2013",
+    "claim_sentence": "Social media usage among teenagers is the primary driver of rising anxiety rates.",
+    "source_title": "Screen-time trends and self-reported wellbeing in adolescents",
+    "source_abstract": "We survey adolescent self-reported screen time and wellbeing across three cohorts and note a weak negative association whose magnitude and direction vary substantially across measurement instruments.",
+    "expected_verdict": "UNCLEAR",
+    "adversarial_reason": "Adjacent theme (adolescents, screen time, wellbeing) but the source reports only a weak, instrument-dependent association and never identifies a primary causal driver — the strong causal claim is neither supported nor flatly contradicted, so UNCLEAR."
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "paragraph": "The collected experimental data demonstrates that the catalyst reveals a stronger binding affinity. Independent replication consequently confirms that the observed effect proves highly reproducible across laboratories.",
+    "in_text_citekeys": [],
+    "expected_orphan_count": 2,
+    "description": "Shape (a): zero citations + two HIGH-confidence claims, both orphaned. S1 'The collected experimental data demonstrates that the catalyst reveals a stronger binding affinity.' [13 words] survives R5; R3 not a question; R4 not a definition; R6 markers matched {demonstrates, reveals} = 2 distinct surface forms; R7 -> HIGH; R2 paragraph contains no [@citekey] -> uncited -> R8 orphan. S2 'Independent replication consequently confirms that the observed effect proves highly reproducible across laboratories.' [13 words] survives R5; R3 not a question; R4 not a definition; R6 markers matched {consequently, confirms, proves} = 3 distinct surface forms; R7 -> HIGH; R2 uncited -> R8 orphan. Both sentences clear the R5 8-word floor and are HIGH; neither is cited; orphanCount = 2 per R8."
+  },
+  {
+    "paragraph": "The experimental data demonstrates that the catalyst reveals a stronger binding affinity than the predicted baseline value here [@brown2020].",
+    "in_text_citekeys": ["brown2020"],
+    "expected_orphan_count": 0,
+    "description": "Shape (c) cited-control single-claim: one HIGH claim WITH a citation in the same (only) sentence -> not an orphan. S1 'The experimental data demonstrates that the catalyst reveals a stronger binding affinity than the predicted baseline value here [@brown2020].' [18 words, [@brown2020] counted as one word] survives R5; R3 not a question; R4 not a definition; R6 markers {demonstrates, reveals} = 2 distinct surface forms; R7 -> HIGH; R2 the paragraph contains [@brown2020] within ORPHAN_PROXIMITY_CHARS=500 of the sentence span -> cited -> NOT an orphan per R8. orphanCount = 0."
+  },
+  {
+    "paragraph": "The experimental data demonstrates that the catalyst reveals a stronger binding affinity than the predicted baseline value here.",
+    "in_text_citekeys": [],
+    "expected_orphan_count": 1,
+    "description": "Shape (b)/(a) uncited single-claim companion to the cited control: identical sentence WITHOUT the citation -> one orphan. S1 'The experimental data demonstrates that the catalyst reveals a stronger binding affinity than the predicted baseline value here.' [17 words] survives R5; R3 not a question; R4 not a definition; R6 markers {demonstrates, reveals} = 2 distinct surface forms; R7 -> HIGH; R2 the paragraph contains NO [@citekey] token -> uncited -> orphan per R8. orphanCount = 1. Together with the prior cited-control entry this isolates R2 cited-vs-uncited deterministically (same sentence, only the [@citekey] differs)."
+  },
+  {
+    "paragraph": "Every HIGH claim in this paragraph carries its own citation marker. The data demonstrates that the catalyst reveals a stronger binding affinity than predicted [@brown2020]. A second run consequently confirms that the effect proves stable across replicates [@chen2019].",
+    "in_text_citekeys": ["brown2020", "chen2019"],
+    "expected_orphan_count": 0,
+    "description": "Shape (c) control: every HIGH claim cited -> orphanCount 0. S1 'Every HIGH claim in this paragraph carries its own citation marker.' [11 words] survives R5; R3 not a question; R4 not a definition; R6 markers — scanning {is,are,demonstrates,shows,proves,indicates,suggests,reveals,confirms,establishes,argues,claims,because,therefore,thus,hence,consequently}: 'carries' is not a marker, no marker words present -> 0 distinct; R7 -> 0 markers -> NOT a claim (dropped). S2 'The data demonstrates that the catalyst reveals a stronger binding affinity than predicted [@brown2020].' [14 words, [@brown2020]=1 word] survives R5; R6 markers {demonstrates, reveals} = 2 distinct; R7 -> HIGH; R2 [@brown2020] present within 500 chars -> cited -> not orphan. S3 'A second run consequently confirms that the effect proves stable across replicates [@chen2019].' [14 words, [@chen2019]=1 word] survives R5; R6 markers {consequently, confirms, proves} = 3 distinct; R7 -> HIGH; R2 [@chen2019] present within 500 chars -> cited -> not orphan. Both HIGH claims are cited; the lone non-marker sentence is not a claim; orphanCount = 0 per R8."
+  },
+  {
+    "paragraph": "Photosynthesis is defined as the biochemical conversion of light energy into stored chemical energy within plants.",
+    "in_text_citekeys": [],
+    "expected_orphan_count": 0,
+    "description": "Shape (d) definition non-claim: dropped at R4 before any marker counting -> contributes 0. S1 'Photosynthesis is defined as the biochemical conversion of light energy into stored chemical energy within plants.' [16 words] R3 not a question; R4 matches DEFINITION_MARKERS /\\b(defined as|refers to|known as)\\b/i ('defined as') -> discarded as NOT a claim BEFORE R5/R6. Even though the sentence contains the marker 'is', it is removed at R4 and never marker-counted (R4 sits in the same skip stage as R3/R5, ahead of R6). orphanCount = 0 per R8."
+  },
+  {
+    "paragraph": "Climate change demonstrates accelerating ice loss across both polar regions. This clearly proves that the climate feedback loop is intensifying rapidly. Ice sheets are retreating globally according to recent satellite measurements.",
+    "in_text_citekeys": [],
+    "expected_orphan_count": 1,
+    "description": "CANONICAL example (byte-identical to Plan 05-03's worked example). S1 'Climate change demonstrates accelerating ice loss across both polar regions.' [10 words] survives R5; R3 not a question; R4 not a definition; R6 markers {demonstrates} = 1 distinct; R7 -> AMBIGUOUS -> NOT counted by R8. S2 'This clearly proves that the climate feedback loop is intensifying rapidly.' [11 words] survives R5; R3 not a question; R4 not a definition; R6 markers {proves, is} = 2 distinct; R7 -> HIGH; R2 no [@citekey] within proximity -> uncited -> the one orphan. S3 'Ice sheets are retreating globally according to recent satellite measurements.' [10 words] survives R5; R3 not a question; R4 not a definition; R6 markers {are} = 1 distinct; R7 -> AMBIGUOUS -> NOT counted by R8. S1 [10 words] survives R5, AMBIGUOUS (1 marker: demonstrates); S2 [11 words] survives R5, HIGH (2 distinct markers: proves, is), uncited -> the one orphan; S3 [10 words] survives R5, AMBIGUOUS (1 marker: are). All three clear the R5 8-word floor; only S2 is HIGH; orphanCount = 1 per R8 (S1 and S3 excluded as AMBIGUOUS)."
+  },
+  {
+    "paragraph": "Is the catalyst effective? The short fragment fails. The longer analysis demonstrates that the new catalyst reveals a substantially stronger binding affinity than the legacy reagent baseline.",
+    "in_text_citekeys": [],
+    "expected_orphan_count": 1,
+    "description": "Mixed skips exercising R3 (rhetorical) and R5 (length floor) before the one true HIGH orphan. S1 'Is the catalyst effective?' [4 words] R3 ends in '?' -> rhetorical, discarded before marker counting (also under 8 words, but R3 fires first in the skip stage). S2 'The short fragment fails.' [4 words] R3 not a question; R4 not a definition; R5 word count = 4 (< 8) -> dropped at R5 before R6, never marker-counted. S3 'The longer analysis demonstrates that the new catalyst reveals a substantially stronger binding affinity than the legacy reagent baseline.' [19 words] survives R5; R3 not a question; R4 not a definition; R6 markers {demonstrates, reveals} = 2 distinct; R7 -> HIGH; R2 no [@citekey] -> uncited -> orphan. orphanCount = 1 per R8 (S1 dropped at R3, S2 dropped at R5, only S3 is a HIGH orphan)."
+  }
+]
