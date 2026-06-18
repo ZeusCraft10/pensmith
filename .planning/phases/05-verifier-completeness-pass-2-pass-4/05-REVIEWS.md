@@ -311,3 +311,233 @@ The regex includes \bis\b and \bare\b, which match in nearly every English sente
 HIGH_COUNT: 0
 No plan violates a non-negotiable or would cause the phase to deliver incorrectly, unsafely, or incompletely. The four MEDIUM concerns (missing Semaphore, noLlm check not using getProviderApiKey, naive sentence splitter, unspecified bib-normalization error handling) are real quality/robustness gaps that should be addressed before or during execution — the Semaphore gap is the most impactful since concurrent unbounded LLM calls will hit rate limits on real papers. All non-negotiables (advisory isolation, Pass 4 determinism, budget gates, CI offline path, locked-16 bijection, WN-3 hash lockstep, D-13 invariant) are correctly preserved across all five plans.
 ```
+
+
+---
+
+# Phase 5 Plan Review — Cycle 2
+
+**Cycle:** 2
+**Reviewers run:** codex (OK), claude (OK), opencode (OK), gemini (TIMED OUT — exit 124, 0 bytes; unavailable this cycle)
+**Date:** 2026-06-18
+
+Re-review after the two cycle-1 HIGH concerns were addressed. Three of four external
+reviewers produced output (gemini hit the 360s hard timeout). Reviewer-raw HIGH counts:
+codex=1, claude=1, opencode=0. After adjudication against the live codebase
+(`bin/cli/verify.ts` confirmed `grep -c loadPrompt == 0`) and an independent word-count
+re-walk of the pinned R1-R8 rule, the judge keeps **1 genuine HIGH**.
+
+## Cycle-1 HIGH status
+
+- **HIGH-1 (D-13 0-hit invariant): RESOLVED.** Independently confirmed: `bin/cli/verify.ts`
+  currently contains 0 occurrences of the literal `loadPrompt` (the comment paraphrases as
+  "prompt-loader symbol"). 05-01 removed `bin/cli/verify.ts` from `files_modified` and the
+  old verify.ts-editing task; 05-01 Task 2 guard (B) adds a committed whole-file regression
+  `(text.match(/loadPrompt/g) ?? []).length === 0` (comments included); 05-04 Task 1
+  forbids writing the literal `loadPrompt` anywhere in verify.ts and re-asserts the
+  whole-file count post-wiring; the `runPass2`/`runPass4` import strings carry no
+  `loadPrompt` literal. All three reviewers independently confirm RESOLVED.
+
+- **HIGH-2 (Pass-4 fixture vs deterministic algorithm): NOT FULLY RESOLVED.** The R1-R8
+  rule is now pinned verbatim and substantively identical across 05-01 Task 1 and 05-03
+  Task 1 (05-03 adds only a clarifying "dedupe case-insensitively" note to R6, consistent
+  with 05-01), `orphanCount` is HIGH-only and LLM-independent, and the canonical example
+  was changed 2->1 in both plans. codex and opencode read this as resolved. HOWEVER, claude
+  caught — and the judge independently verified by word count — that the *corrected*
+  canonical example still contradicts the rule via a DIFFERENT clause (R5 length floor),
+  reintroducing the same fixture-vs-algorithm divergence class. Kept as the one remaining
+  HIGH below. The fix changed the value (2->1) but did not make the canonical walk
+  rule-faithful end-to-end.
+
+---
+
+## Synthesized Findings (cycle 2)
+
+### HIGH
+
+- **[HIGH] 05-01 Task 1 (fixture entry (e)) + 05-03 Task 1 (canonical worked example) — the
+  "corrected" canonical Climate-change example violates R5 (CLAIM_MIN_WORDS=8); a faithful
+  R1-R8 extractor yields orphanCount = 0, not 1, so the mandated fixture is unsatisfiable
+  by a correct implementation.**
+  Raised by: claude (HIGH). Independently verified by the judge via word count.
+  R5 ("a sentence with word count < 8 is NOT a claim") is a pre-filter applied before R6
+  marker counting (R3/R4 are explicitly "discarded before marker counting"; R5 sits in the
+  same skip stage). Word counts of the canonical paragraph:
+  - S1 "Climate change demonstrates accelerating ice loss" = **6 words** -> dropped by R5.
+  - S2 "This proves the feedback loop is intensifying" = **7 words** -> dropped by R5 (so it
+    can never become the HIGH orphan the example asserts).
+  - S3 "Ice sheets are retreating globally" = **5 words** -> dropped by R5.
+  A faithful R1-R8 extractor drops all three sentences -> **orphanCount = 0**. Yet both
+  plans hard-code the walk as S1->AMBIGUOUS / S2->HIGH->orphan / S3->AMBIGUOUS ->
+  `expected_orphan_count: 1`, and BOTH per-sentence walks silently skip the R5 check. This
+  re-creates exactly the fixture-vs-algorithm divergence HIGH-2 was meant to eliminate. It
+  is acute because 05-03 Task 1 instructs the executor: "if a fixture appears to fail, the
+  bug is in this extractor — re-walk R1-R8 ... do NOT lower the HIGH threshold." Here the
+  extractor would be CORRECT and the FIXTURE is wrong, steering the executor into either
+  hacking the deterministic core (breaking VRFY-06 / SC2 determinism) or leaving
+  `tests/known-bad-pass4.test.ts` permanently RED — blocking the phase GREEN gate.
+  Fix direction: rewrite the canonical paragraph so the intended HIGH sentence clears BOTH
+  the >=8-word floor AND 2+ distinct markers — e.g. S2 -> "This clearly proves that the
+  climate feedback loop is intensifying over time" ("proves"+"is" = 2 markers, >=8 words ->
+  legitimately HIGH and uncited -> orphan), re-derive the full walk THROUGH R5 (showing the
+  word count of each sentence), and update the value identically in BOTH 05-01 (entry (e))
+  and 05-03 (worked example). Additionally, instruct the fixture author of shapes (a)/(b)
+  that EVERY intended claim sentence must clear R5's 8-word floor (state the word count in
+  each `description` walk), so no other authored fixture repeats this defect.
+
+### MEDIUM
+
+- **[MEDIUM] 05-02 Task 1 — Pass 2 returns "one Pass2Result per UNIQUE [@citekey]", but
+  SC1/VRFY-03 specifies a verdict "per in-text citation"; a citekey reused across multiple
+  distinct claim sentences collapses to a single verdict, losing advisory coverage.**
+  Raised by: codex (as HIGH). DOWNGRADED to MEDIUM by the judge. This is advisory output,
+  not a blocking gate; SC1's load-bearing property is the UNCLEAR-bias calibration and the
+  four-value enum, both preserved. Collapsing multiple occurrences of the same citekey is a
+  real coverage/precision gap but does not violate a non-negotiable or fail the success
+  criterion's core property. (05-RESEARCH frames Pass 2 as "a pure LLM call per in-text
+  citation ... regex over [@citekey] occurrences," so per-occurrence granularity is the
+  intended model.) Fix direction: extract one (claim-sentence, citekey) pair per in-text
+  occurrence and return one Pass2Result per occurrence, not per unique citekey; or
+  explicitly document the per-unique-citekey scoping as a deliberate Phase-5 simplification.
+
+- **[MEDIUM] 05-01/05-03 R6 "distinct marker LEMMAS" is ambiguous (surface form vs.
+  grammatical lemma); the human-authored fixtures (05-01) and the independently-implemented
+  extractor (05-03) can desync.** Raised by: claude (MEDIUM). The examples use clearly
+  distinct words (proves/is) and never resolve whether `is`/`are` (both "be") collapse to
+  one lemma or count as two. A different reading flips HIGH/AMBIGUOUS classification and
+  thus orphan counts across the two plans. Fix direction: pin the operational definition
+  concretely — "distinct = number of unique case-insensitively-matched marker STRINGS
+  (surface-form dedup)" — in BOTH plans, and avoid is/are co-occurrence in HIGH fixtures.
+
+- **[MEDIUM] 05-01/05-03 R5 word-count basis is unspecified relative to [@citekey] tokens.**
+  Raised by: claude (MEDIUM). R5 says "word count" with no `stripCites` step, while the
+  cited analog quote-extractor.ts counts words AFTER stripping cites. For fixture shape (b)
+  (sentence containing a [@citekey]), whether the citation token counts as a word can flip
+  a borderline 8-word sentence across the R5 threshold. Fix direction: pin in R5 whether
+  word count is computed on the raw sentence or after stripping [@citekey] tokens, applied
+  identically in fixtures and extractor. (Directly compounds the HIGH above — fixing the
+  HIGH should also nail down this basis.)
+
+- **[MEDIUM] 05-04 Task 2 — tier-contract explicitly asserts the `**UNCLEAR**` row only on
+  the CLI artifact, not the MCP artifact, despite the must-have implying both tiers show the
+  no-LLM UNCLEAR row.** Raised by: codex (MEDIUM). Because MCP and CLI likely share the
+  verifier path it may pass in practice, but the test does not pin the full SC3 observable.
+  Fix direction: assert `assert.match(mcpArtifactBytes, /\*\*UNCLEAR\*\*/)` as well.
+
+- **[MEDIUM] 05-02/05-03 — the `noLlm` guard checks `process.env['ANTHROPIC_API_KEY']`
+  directly, but the live key is resolved via `getProviderApiKey` which may source keys from
+  config/scoped storage; a config-only key makes the live LLM path unreachable.**
+  Raised by: codex (MEDIUM). CARRIED OVER from cycle 1 (still unaddressed). Fix direction:
+  use `PENSMITH_NO_LLM` as the hard offline switch, then let `getProviderApiKey` (or a
+  `hasProviderKey` helper) determine availability in the live branch.
+
+### LOW
+
+- **[LOW] 05-04 — verify.ts return value widened with `pass2`/`pass4`; if the MCP tool
+  response serializer is strict-schema it could reject the new keys.** Raised by: opencode.
+  Standard practice is schema-permissive; confirm or add the properties to the MCP schema.
+
+- **[LOW] 05-02 — `@anthropic-ai/sdk` must already be in package.json (first live model seam);
+  "no new packages" forbids adding it.** Raised by: opencode. 05-RESEARCH Package Legitimacy
+  Audit asserts it is already declared+installed (0.104.2). Executor should confirm before
+  05-02; harmless if present.
+
+- **[LOW] 05-03 R1/R3 — splitting "on terminator" can drop the `?`, defeating the
+  rhetorical-skip rule unless the terminator is retained/recorded.** Raised by: codex.
+  Fix direction: state that sentence spans must retain (or separately record) the terminator
+  so R3 can test for a trailing `?`.
+
+- **[LOW] 05-01 — the `assertBudget`-before-LLM source proxy checks presence
+  (`indexOf('assertBudget') >= 0`), not ORDER.** Raised by: opencode, codex (touches).
+  CARRIED OVER from cycle 1. Acceptable (ordering is architecturally enforced) but the test
+  description overstates what it verifies; an order-aware assertion would harden it.
+
+- **[LOW] 05-02/05-03 — LLM `rationale` text is not sanitized for pipe `|`/newline chars
+  that could break the VERIFICATION.md Markdown table.** Raised by: opencode. Cosmetic;
+  advisory output only.
+
+- **[LOW] 05-01/05-05 — WN-3 cross-check loop sentinel-awareness is assumed but not stated.**
+  Raised by: claude. During waves 0-2 the loader holds sentinels while repo-files holds real
+  hashes; if a cross-check asserts strict equality without sentinel-tolerance it would fail.
+  Adjudicated in cycle 1 as benign (live repo-files.test.ts has NO such strict cross-check —
+  per-pin loop only recomputes on-disk SHA-256 vs PENDING_HASH_PINS; mirrors GREEN Phase-4
+  precedent). Kept LOW: a one-line confirmation in 05-01 would remove the ambiguity.
+
+### Adjudicated DOWN (raised as HIGH, judged NOT HIGH)
+
+- **codex [HIGH] "05-02 returns one result per unique citekey, violating SC1 per-citation"**
+  — DOWNGRADED to MEDIUM (see MEDIUM section). Advisory coverage/precision gap, not a
+  non-negotiable break or a failure of SC1's load-bearing UNCLEAR-bias property.
+
+---
+
+## Per-Reviewer Raw (cycle 2)
+
+### codex
+
+```
+[RESOLVED] HIGH-1 D-13 0-hit invariant is genuinely resolved. 05-01 no longer modifies bin/cli/verify.ts, adds a whole-file regression test counting loadPrompt, and 05-04 explicitly forbids adding that literal in code or comments. The plans mention the token in plan prose, but do not instruct writing it into verify.ts.
+
+[RESOLVED] HIGH-2 Pass-4 fixture/algorithm mismatch is genuinely resolved. The R1-R8 rule is substantively identical in 05-01 and 05-03, orphanCount is HIGH-only and LLM-independent, and the canonical climate-change example correctly computes to 1: S1 ambiguous, S2 HIGH orphan, S3 ambiguous.
+
+[HIGH] 05-02 Task 1: Pass 2 is specified as "one result per unique [@citekey]", which violates SC1's "per in-text citation" requirement. If the same citekey appears in multiple claim sentences, this plan would collapse distinct claims into one verdict, losing advisory coverage. Fix direction: extract citation occurrences or citekey-plus-claim-sentence pairs, and return one Pass2Result per in-text citation occurrence, not per unique citekey.
+
+[MEDIUM] 05-04 Task 2: tier-contract only explicitly asserts **UNCLEAR** in the CLI artifact, not the MCP artifact, despite the must-have saying both tiers should show the no-LLM UNCLEAR row. Because MCP and CLI likely share the same verifier path this may pass in practice, but the test does not pin the full SC3 observable. Fix direction: assert **UNCLEAR** for mcpArtifactBytes too.
+
+[MEDIUM] 05-02/05-03 live-path gating checks process.env['ANTHROPIC_API_KEY'] before using getProviderApiKey('anthropic'). If the project supports API keys from non-env runtime sources, the advisory LLM path will incorrectly fall back to offline placeholders. Fix direction: use PENSMITH_NO_LLM as the hard offline switch, then let getProviderApiKey determine availability in the live branch.
+
+[LOW] 05-03 R1/R3 implementation guidance is slightly underspecified: splitting "on terminator" can accidentally remove ?, making the rhetorical-skip rule ineffective unless the implementation preserves terminators or tracks them separately. Fix direction: state that sentence spans must retain the terminator or otherwise record it before trimming.
+
+HIGH_COUNT: 1
+```
+
+### claude
+
+```
+HIGH-1 (D-13 0-hit invariant) — GENUINELY RESOLVED.
+- 05-01 files_modified no longer lists bin/cli/verify.ts; the old verify.ts-editing task is gone.
+- 05-01 Task 2 guard (B): (text.match(/loadPrompt/g) ?? []).length === 0 against the FULL verify.ts source, comments included.
+- 05-04 Task 1 adds only runPass2/renderPass2Section/runPass4/renderPass4Section imports (no loadPrompt literal), explicitly forbids writing loadPrompt anywhere in verify.ts, leaves the D-13 comment block untouched, re-asserts guard (B) post-wiring.
+- No plan instructs writing the literal loadPrompt token into verify.ts. The hyphenated prompt-loader token is correctly left ungated.
+
+HIGH-2 (Pass-4 fixture vs algorithm) — NOT FULLY RESOLVED. R1-R8 is now identical verbatim across 05-01 and 05-03, but the "corrected" canonical example contradicts the rule it is supposed to validate (see HIGH).
+
+[HIGH] 05-01 Task 1 + 05-03 Task 1 — the "corrected" canonical Climate-change example violates R5 (CLAIM_MIN_WORDS=8); its true orphanCount is 0, not 1, making the mandated fixture (e) unsatisfiable by a correct R1-R8 implementation.
+  S1 "Climate change demonstrates accelerating ice loss" = 6 words -> dropped by R5.
+  S2 "This proves the feedback loop is intensifying" = 7 words -> dropped by R5 (cannot be the HIGH orphan the example claims).
+  S3 "Ice sheets are retreating globally" = 5 words -> dropped by R5.
+  All three under 8 words -> faithful extractor yields orphanCount = 0. Both plans hard-code (e) / the worked walk as expected_orphan_count 1 and silently skip the R5 check, reintroducing the fixture-vs-algorithm divergence HIGH-2 was meant to eliminate. 05-03 Task 1 tells the executor "if a fixture fails, the bug is in this extractor — re-walk R1-R8 ... do NOT lower the HIGH threshold," steering them into hacking the deterministic core (breaking VRFY-06/SC2) or leaving the suite RED. Fix: rewrite the paragraph so the intended HIGH sentence has >=8 words AND 2+ markers (e.g. S2 -> "This clearly proves that the climate feedback loop is intensifying over time"), re-derive the walk through R5, update both plans identically; remind the fixture author that every intended claim sentence must clear R5's 8-word floor.
+
+[MEDIUM] 05-01/05-03 R6 "distinct marker LEMMAS" is ambiguous (surface form vs. grammatical lemma) and could desync the human-authored fixtures from the implemented extractor. Fix: define "distinct = number of unique case-insensitively-matched marker strings" in both plans; avoid is/are co-occurrence in HIGH fixtures.
+
+[MEDIUM] R5 word-count basis is unspecified relative to [@citekey] tokens. quote-extractor.ts counts words after stripCites; R5 says "word count" with no strip step. For shape (b) the citation token can flip a borderline 8-word sentence. Fix: pin whether word count is raw or post-strip, identically in fixtures and extractor.
+
+[LOW] WN-3 cross-check loop timing (05-01 vs 05-05). 05-05 references a loader/PIN cross-check loop; during waves 0-2 the loader holds sentinels while repo-files holds real hashes. Presumably sentinel-tolerant (Phase-4 precedent) but the plans never state the cross-check skips sentinel-valued slugs. Worth a one-line confirmation in 05-01.
+
+HIGH_COUNT: 1
+```
+
+### opencode
+
+```
+HIGH-1 (D-13 0-hit invariant): RESOLVED. 05-01 removes bin/cli/verify.ts from files_modified (byte-untouched) + committed regression guard B asserts (text.match(/loadPrompt/g) ?? []).length === 0 over the full source, comments included. 05-02/05-03 call loadPrompt only from their own modules. 05-04 forbids writing loadPrompt anywhere in verify.ts (code OR comments), imports carry no loadPrompt literal, D-13 comment block unchanged, acceptance re-checks grep -c "loadPrompt" bin/cli/verify.ts == 0. 05-05 touches only prompt-loader.ts.
+
+HIGH-2 (Pass-4 fixture vs deterministic algorithm): RESOLVED. R1-R8 verbatim the same (05-03 adds a clarifying "dedupe case-insensitively" to R6, consistent). Canonical example = 1 in both (S1 {demonstrates}=1 AMBIGUOUS; S2 {proves,is}=2 HIGH orphan; S3 {are}=1 AMBIGUOUS). R8 HIGH-only in both. Every expected_orphan_count derived by mechanically walking R1-R8 with a per-sentence walk in description.
+
+[MEDIUM] 05-02/05-03 depend on @anthropic-ai/sdk pre-installed (first live model seam); "no new packages" prohibits adding it if missing. Executor must verify package.json contains it before 05-02.
+
+[MEDIUM] 05-04 widens verify.ts return value with pass2/pass4 for Phase 6 DONE-09. The MCP tool response schema must accept the new keys; if strict it could break the MCP tier. Verify schema-permissive or add properties.
+
+[LOW] 05-01 Task 1 assertBudget source-order proxy checks only presence (indexOf >= 0), not order. Acceptable but the description overstates it.
+
+[LOW] Neither 05-02 nor 05-03 sanitizes LLM rationale for pipe/newline chars that could break the Markdown table. Advisory/cosmetic.
+
+HIGH_COUNT: 0
+```
+
+### gemini
+
+```
+UNAVAILABLE — timed out at the 360s hard limit (exit 124), produced 0 bytes. stderr tail
+showed only environment warnings (no true-color, ripgrep fallback). No usable review this cycle.
+```
