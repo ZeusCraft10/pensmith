@@ -116,10 +116,24 @@ state.phase === 'outline' / OUTLINE.md exists +
 All sections in STATE.sections have status='verified' → run `compile`
 DRAFT.md exists + FINAL.md missing                 → run `done`
 DRAFT.md + FINAL.md both exist                     → print status (done)
-HANDOFF.json exists + phase != 'done'              → run `resume` (auto-resume)
 Default (sections in progress)                     → plan → write → verify
   next incomplete section (lowest n where status ∉
   {written, verified})
+
+PINNED ORDERING (review H4 — ONE ordering, used by BOTH this file and 07-02):
+  resolveNextAction is a PURE next-WORK-verb resolver and IGNORES HANDOFF.json.
+  Order of checks:
+    1. STATE.json absent                  → { verb:'new' }
+    2. RESEARCH.md absent                 → { verb:'research' }
+    3. OUTLINE.md absent / zero sections  → { verb:'outline' }
+    4. section walk (plan/write/verify)   → first incomplete section
+    5. all verified, no DRAFT.md          → { verb:'compile' }
+    6. DRAFT.md, no FINAL.md              → { verb:'done' }
+    7. both present                       → { verb:'status', reason:'done' }
+  resolveNextAction NEVER returns { verb:'resume' }. HANDOFF.json is consumed
+  ONLY by the SessionStart hook (emit resume context) and the explicit `resume`
+  verb — and `resume` dispatches to resolveNextAction's next WORK verb, never to
+  itself. See HANDOFF lifecycle below.
 ```
 
 [VERIFIED: codebase grep — STATE.json schema + SectionStateSchema + HANDOFF schema]
@@ -205,6 +219,28 @@ process.exit(0);
 
 The systemMessage field in hook stdout JSON is injected into Claude's context window at session start. This is the official mechanism — no separate "resume" invocation needed in Claude Code Tier 1. [VERIFIED: Claude Code hooks docs — exit 0 JSON.systemMessage is passed to Claude]
 
+### HANDOFF.json Lifecycle (review H4 — consume/clear so resume always advances)
+
+`HANDOFF.json` is a crash-resilience POINTER, not a routing source. A non-`done`
+HANDOFF must NOT trap bare `/pensmith` (or `next`/`resume`) in an infinite resume.
+The lifecycle:
+
+1. **Write** — `hooks/pre-compact.ts` writes HANDOFF.json (pointers, ≤5KB).
+2. **Surface (read-only)** — `hooks/session-start.ts` reads HANDOFF and emits the
+   resume context frame. SessionStart does NOT route; it only injects context.
+3. **Consume + clear** — the explicit `resume` verb (and SessionStart-driven
+   resume in Tier 1) computes the NEXT WORK VERB via `resolveNextAction()`
+   (which ignores HANDOFF), prints the resume summary, dispatches to that work
+   verb, and then DELETES `.paper/HANDOFF.json` (best-effort `rmSync(..., {force:true})`)
+   so a stale HANDOFF cannot re-trigger resume on the next bare invocation.
+4. **Routing ignores HANDOFF** — `resolveNextAction()` never reads HANDOFF, so
+   bare `/pensmith` always resolves a real work verb (plan/write/verify/compile/done),
+   never `resume`. This is the SC1 correctness property.
+
+Net effect: `resume` is one-shot — it hands off to plan/write/verify and clears the
+pointer. There is no resume→resume re-entry because `resume` dispatches into the
+HANDOFF-blind resolver, and the cleared file is gone for the next bare call.
+
 ### Stop Hook — Lock Release + Log Flush
 
 Stop fires when the main agent finishes its reply. The hook must:
@@ -237,7 +273,7 @@ if (args.dryRun) {
 }
 ```
 
-The LLM client also needs to check `PENSMITH_DRY_RUN` and return stub responses instead of making real API calls. [VERIFIED: isOfflineMode() implementation in http-mock.ts; ASSUMED for LLM stub behavior]
+The LLM client also needs to check `PENSMITH_DRY_RUN` and return stub responses instead of making real API calls. **This is REQUIRED, not optional (review H3):** `isOfflineMode()` only gates the SOURCE adapters (crossref/openalex/etc.); it does NOT gate the LLM runtime. Without an explicit dry-run guard in the LLM-client seam, `pensmith write --dry-run` can still hit a live LLM provider, violating ERGO-01 "zero external calls." The fix has two parts: (1) add a dry-run guard at the single LLM-call seam (the runtime client / model-invocation chokepoint) so that when `PENSMITH_DRY_RUN==='1'` the client returns a canned/cassette response and makes ZERO network calls; (2) the dry-run RED test must DRIVE A VERB PATH under `--dry-run` and assert zero network egress (e.g. the runtime client resolves to the stub, or any network attempt throws / is counted 0) — NOT merely assert env state. [VERIFIED: isOfflineMode() implementation in http-mock.ts; the LLM-client seam guard is the H3 fix target]
 
 ### --estimate Flag Implementation
 
@@ -323,11 +359,15 @@ skills/
 **How to avoid:** In `estimator.ts`, after computing the total projected cost: if `projected > (cost_cap_usd * 0.5)` AND `--yolo` is true → print warning + exit non-zero (refuse). This is a pre-flight check, not a mid-run check.
 **Warning signs:** `--yolo` proceeding despite a very large estimate.
 
-### Pitfall 4: Verb `next` vs. bare `/pensmith`
-**What goes wrong:** `next` and bare `/pensmith` (no verb) should be identical. But citty routes bare invocation to the root command's `run()`, not to a `next` subcommand. If `next` is wired as a subcommand, bare `/pensmith` goes nowhere.
-**Why it happens:** citty's `defineCommand` with `subCommands` dispatches a subcommand key when a verb is given; if no verb is given, it runs the root command's `run()`. So bare `/pensmith` must implement its own `run()` that calls the router.
-**How to avoid:** The root `command` in `bin/pensmith.ts` needs a `run()` handler that calls `router.resolve()`. The `next` verb can then be a thin alias that calls the same function.
-**Warning signs:** Bare `pensmith` exits 0 with no output.
+### Pitfall 4: citty root `run()` double-executes verbs + applies global flags too late (CORRECTED — prior text was FACTUALLY INVERTED, see review H2)
+**What goes wrong (CORRECTED):** The earlier model in this section was WRONG. Verified directly against `node_modules/citty/dist/index.mjs:209-228`: `runCommand` runs a matched subcommand at line 217 and then **falls through and UNCONDITIONALLY runs the parent command's `run()` at line 228** — there is NO early return. So a root `run()` is NOT an either/or with subcommands; it fires *after every explicit verb*. Two concrete failures result:
+  (a) **Double execution.** `pensmith compile` runs `compile` (217), then falls into root `run()` (228); a root `run()` whose "bare invocation" branch dispatches the router would resolve and execute a SECOND verb. citty has no built-in "a subcommand already ran" guard.
+  (b) **Flags applied too late.** `setMirrorPromptsToStderr(true)` and the `PENSMITH_DRY_RUN` / `PENSMITH_NETWORK_TESTS` env mutations placed inside root `run()` execute AFTER the subcommand already ran its LLM/adapter calls — so `--show-prompts` (ERGO-04) and `--dry-run` (ERGO-01) are **no-ops for any explicit verb**.
+**Why it happens:** citty's `runCommand` executes child then parent with no short-circuit. Two earlier-firing seams ARE available, though: `setup(context)` (line 209) runs BEFORE any subcommand dispatch, and the `default` subcommand mechanism (lines 218-224) runs a chosen subcommand ONLY when no explicit verb was given (and citty forbids declaring both `run` and `default` on the same command — line 221).
+**How to avoid (CORRECTED):** Do NOT put global-flag wiring or bare-routing inside a root `run()`. Instead:
+  1. **Global-flag setup goes in a shared PRE-DISPATCH seam** that runs before any subcommand: either citty's root `setup(context)` hook, OR (preferred for robustness, since global flags may appear after the verb, e.g. `pensmith write --dry-run`) a manual argv pre-parse in `bin/pensmith.ts` BEFORE `runMain` that scans `process.argv` for `--show-prompts`/`--dry-run`/`--estimate`/`--yolo` and applies the env + mirror setup first.
+  2. **Bare routing is gated on "no subcommand matched."** The argv pre-parse detects the no-verb case and dispatches `resolveNextAction()` directly (NOT via a root `run()`); when a verb IS present it calls `runMain(command)` exactly once. This keeps bare `/pensmith` working without ever letting a second verb fire after an explicit one.
+**Warning signs:** `pensmith compile` runs compile then ALSO runs a router-resolved verb (double execution); `pensmith write --dry-run` still makes live calls because the env was set after the verb ran.
 
 ### Pitfall 5: State-aware routing before any paper exists
 **What goes wrong:** `loadState()` throws `StateNotFoundError` when `.paper/STATE.json` doesn't exist. The router must catch this and treat it as "no active paper → run intake", NOT as a crash.
@@ -384,8 +424,10 @@ export type RouterDecision =
   | { verb: 'verify'; n: number; slug: string }
   | { verb: 'compile' }
   | { verb: 'done' }
-  | { verb: 'status'; reason: 'done' }
-  | { verb: 'resume'; handoff: Handoff };
+  | { verb: 'status'; reason: 'done' };
+// NOTE (H4): resolveNextAction does NOT emit a 'resume' decision. The { verb:'resume' }
+// arm lives only for the explicit `resume` VERB's own return typing, handled in
+// bin/cli/resume.ts; resolveNextAction always returns a concrete next WORK verb.
 
 export async function resolveNextAction(paperRoot: string): Promise<RouterDecision> {
   let state;
@@ -398,15 +440,10 @@ export async function resolveNextAction(paperRoot: string): Promise<RouterDecisi
 
   const pDir = paperDir(paperRoot);
 
-  // Check HANDOFF.json first — indicates interrupted session
-  const handoffPath = join(pDir, 'HANDOFF.json');
-  if (existsSync(handoffPath)) {
-    try {
-      const h = JSON.parse(readFileSync(handoffPath, 'utf8')) as Handoff;
-      if (h.phase !== 'done') return { verb: 'resume', handoff: h };
-    } catch { /* malformed handoff — fall through */ }
-  }
-
+  // H4 PINNED ORDERING: resolveNextAction is the next-WORK-verb resolver and
+  // IGNORES HANDOFF.json entirely (no { verb:'resume' } is ever returned here).
+  // HANDOFF is consumed only by the SessionStart hook and the explicit `resume`
+  // verb; `resume` re-dispatches into THIS function so it always makes progress.
   if (!existsSync(join(pDir, 'RESEARCH.md'))) return { verb: 'research' };
   if (!existsSync(join(pDir, 'OUTLINE.md')))  return { verb: 'outline' };
 

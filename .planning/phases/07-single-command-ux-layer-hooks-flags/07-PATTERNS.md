@@ -186,17 +186,13 @@ const STEP_HEURISTICS = Object.freeze({
 } as const);
 ```
 
-**50% cap check pattern** (RESEARCH.md Pitfall 3 / ARCH-11): This check lives in `estimator.ts`, NOT in `assertBudget`. After computing `totalProjectedUsd`:
+**50% cap PREDICATE pattern** (RESEARCH.md Pitfall 3 / ARCH-11, split per review H1): `estimator.ts` computes the PREDICATE only (a pure `exceedsHalfCap` boolean on EstimateResult); it does NOT call `process.exit`. The REFUSAL (hard exit) lives in the dispatcher PRE-DISPATCH seam (see the bin/pensmith.ts H1 pre-flight) so it fires WHENEVER `--yolo` is active, independent of `--estimate`. The cap lives in `estimator.ts`, NOT in `assertBudget`:
 ```typescript
-// ERGO-03 + ARCH-11: refuse --yolo when estimate >50% of session cap.
-const sessionCap = config.cost_cap_usd ?? 5.0;
-if (totalProjectedUsd > sessionCap * 0.5 && flags.yolo) {
-  process.stdout.write(
-    `pensmith --estimate: projected cost $${totalProjectedUsd.toFixed(2)} exceeds ` +
-    `50% of session cap ($${sessionCap.toFixed(2)}). Refusing --yolo. Rerun without --yolo to confirm.\n`
-  );
-  process.exit(1);
-}
+// estimator.ts — PURE predicate; pass the configured cap so a lowered cap tightens the threshold (L1):
+const sessionCap = args.sessionCapUsd ?? 5.0;        // caller passes config.cost_cap_usd when available
+const exceedsHalfCap = totalUsd > sessionCap * 0.5;  // boolean only — no exit, no stdout here
+return { rows, totalUsd, exceedsHalfCap };
+// The dispatcher H1 pre-flight reads exceedsHalfCap and does process.exit(1) when --yolo is active.
 ```
 
 ---
@@ -382,10 +378,23 @@ function safeReadHandoff() {
 **Thin orchestrator imports** (`bin/cli/compile.ts` lines 22-30):
 ```typescript
 import { defineCommand } from 'citty';
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { paperDir } from '../lib/paths.js';
+import { resolveNextAction } from '../lib/router.js';
 ```
+
+**H4 RESUME LIFECYCLE (no resume->resume loop):** `resume` reads HANDOFF (above) for the SUMMARY only, then dispatches to the next WORK verb via `resolveNextAction` (which IGNORES HANDOFF and never returns 'resume'), then CLEARS HANDOFF so a stale pointer cannot re-trigger resume:
+```typescript
+const handoff = safeReadHandoff();
+if (handoff && handoff.phase !== 'done') {
+  // print one-line resume summary (stdout or stderr per parity)
+}
+const decision = await resolveNextAction(process.cwd()); // returns plan/write/verify/compile/done — NEVER resume
+// dispatch decision.verb via the exported REAL_VERB_LOADERS table (shared dispatch — no re-import cycle)
+try { rmSync(join(paperDir(process.cwd()), 'HANDOFF.json'), { force: true }); } catch { /* best-effort consume */ }
+```
+This is the H4 fix: resume hands off into the HANDOFF-blind resolver and consumes the pointer, so bare `/pensmith`, `next`, and `resume` always make progress.
 
 ---
 
