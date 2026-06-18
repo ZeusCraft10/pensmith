@@ -541,3 +541,226 @@ HIGH_COUNT: 0
 UNAVAILABLE — timed out at the 360s hard limit (exit 124), produced 0 bytes. stderr tail
 showed only environment warnings (no true-color, ripgrep fallback). No usable review this cycle.
 ```
+
+---
+
+# Phase 5 Plan Review — Cycle 3
+
+**Cycle:** 3
+**Reviewers run:** codex (OK), gemini (OK), opencode (OK), claude (TIMED OUT — exit 124, 0 bytes; unavailable this cycle)
+**Date:** 2026-06-18
+
+Re-review to confirm the two prior HIGH concerns are genuinely resolved and to surface any
+remaining/NEW HIGH. Gemini was given 480s (it returned this cycle, ~1.8 KB); claude hit the
+360s hard timeout (exit 124, 0 bytes). Three of four reviewers produced usable output.
+Reviewer-raw HIGH counts: codex=2, gemini=0, opencode=0. After adjudication against the live
+codebase (`grep -c "loadPrompt" bin/cli/verify.ts == 0` confirmed; D-13 comment paraphrases as
+"prompt-loader symbol") and an INDEPENDENT Node re-walk of the canonical Pass-4 fixture through
+R1–R8, the judge keeps **0 genuine HIGH**.
+
+## Cycle-1/2 HIGH status — both now FULLY RESOLVED
+
+- **HIGH-1 (D-13 0-hit invariant): RESOLVED (re-confirmed).** Live `grep -c "loadPrompt"
+  bin/cli/verify.ts` returns **0** (verified this cycle); the only `prompt-loader` hits are the
+  hyphenated token in the paraphrased comment (lines 8, 12), which is explicitly NOT gated.
+  05-01 does not list `bin/cli/verify.ts` in `files_modified`; 05-01 Task 2 guard (B) commits a
+  whole-file regression `(text.match(/loadPrompt/g) ?? []).length === 0` (comments included);
+  05-04 Task 1 adds only `runPass2`/`renderPass2Section`/`runPass4`/`renderPass4Section` imports
+  (no `loadPrompt` literal), forbids writing the literal anywhere in verify.ts, leaves the D-13
+  comment block untouched, and re-asserts the count post-wiring. All three usable reviewers
+  (codex, gemini, opencode) independently confirm RESOLVED.
+
+- **HIGH-2 (Pass-4 fixture/algorithm agreement incl. R5 word-floor): RESOLVED.** The R1–R8 rule
+  is pinned byte-identical in 05-01 Task 1 and 05-03 Task 1. The judge INDEPENDENTLY re-walked
+  the canonical Climate-change paragraph in Node (full R1→R8, counting words at R5 with NO
+  stripCites): S1 = 10 words → survives R5 → {demonstrates} = 1 distinct → AMBIGUOUS → not
+  counted; S2 = 11 words → survives R5 → {proves, is} = 2 distinct → HIGH → uncited → orphan;
+  S3 = 10 words → survives R5 → {are} = 1 distinct → AMBIGUOUS → not counted. **Computed
+  orphanCount = 1, matching the asserted `expected_orphan_count: 1`.** All three sentences clear
+  the >=8-word floor, so none is dropped at R5 — the exact defect cycle 2 flagged (6/7/5-word
+  sentences yielding a true count of 0) is gone. R8 counts HIGH-confidence orphans ONLY and is
+  LLM-independent in both plans. The fixture-authoring task now requires every claim sentence to
+  clear the 8-word floor and to record word counts in the `description` walk. codex, gemini, and
+  opencode all read HIGH-2 as RESOLVED this cycle.
+
+---
+
+## Synthesized Findings (cycle 3)
+
+### HIGH
+
+None. No usable reviewer's HIGH survives adjudication; the two prior HIGHs are confirmed
+resolved and no NEW non-negotiable violation or success-criterion failure was found.
+
+### MEDIUM
+
+- **[MEDIUM] 05-04 Task 2 — tier-contract SC3 proof asserts `## Pass-2`/`## Pass-4` presence in
+  both tiers + the `**UNCLEAR**` row on the CLI artifact only + ±20% length equivalence; it does
+  NOT parse-and-compare Pass-2 verdict rows / Pass-4 orphan counts across CLI and MCP, nor assert
+  `**UNCLEAR**` on the MCP artifact.** Raised by: codex (as HIGH this cycle). DOWNGRADED to
+  MEDIUM by the judge — CARRIED OVER from cycles 1 and 2 (adjudicated MEDIUM both times). In the
+  only CI-exercised path both tiers run under `PENSMITH_NO_LLM=1`, so both deterministically emit
+  all-UNCLEAR Pass-2 placeholders and identical deterministic Pass-4 orphan counts; presence +
+  the all-UNCLEAR row + ±20% length pins the scoped (no-LLM) SC3, and the plan documents that
+  live-path verdict parity is out of CI scope by design. Real coverage gap, not an SC failure for
+  the tested scope. Fix direction: also assert `assert.match(mcpArtifactBytes, /\*\*UNCLEAR\*\*/)`
+  and compare the Pass-2 verdict tokens + Pass-4 orphan-count rows between the two artifacts
+  (allowing prose-only differences in rationale).
+
+- **[MEDIUM] 05-02 Task 1 — Pass 2 returns one `Pass2Result` per UNIQUE `[@citekey]`, but
+  SC1/VRFY-03 phrases the verdict as "per in-text citation"; a citekey reused across distinct
+  claim sentences collapses to one verdict, losing advisory coverage.** Raised by: codex (as HIGH
+  this cycle). DOWNGRADED to MEDIUM — CARRIED OVER from cycle 2 (adjudicated MEDIUM). This is
+  advisory output, not a blocking gate; SC1's load-bearing properties (UNCLEAR-bias calibration +
+  the four-value enum) are preserved, and 05-RESEARCH frames Pass 2 as "a pure LLM call per
+  in-text citation … regex over `[@citekey]` occurrences," so per-occurrence granularity is the
+  intended model. Coverage/precision gap, not a non-negotiable break or SC1 core-property failure.
+  Fix direction: return one result per (claim-sentence, citekey) occurrence, or explicitly
+  document per-unique-citekey scoping as a deliberate Phase-5 simplification.
+
+- **[MEDIUM] 05-02/05-03 — the `noLlm` guard tests `process.env['ANTHROPIC_API_KEY']` directly
+  for presence, but the live key is resolved via `getProviderApiKey` which may source keys from
+  config/scoped storage; a config-only key makes the live LLM path unreachable.** Raised by:
+  codex. CARRIED OVER from cycles 1 and 2 (still unaddressed; advisory-only, not phase-failing).
+  Fix direction: use `PENSMITH_NO_LLM` as the hard offline switch, then let `getProviderApiKey`
+  (or a `hasProviderKey` helper) determine availability in the live branch.
+
+- **[MEDIUM] 05-02/05-03 — bib-metadata normalization may pass `undefined` to `interpolate()`
+  (which throws on missing vars) for entries lacking title/author; the per-citation try/catch
+  converts the throw to a silent UNCLEAR rather than surfacing the root cause.** Raised by:
+  opencode. Real robustness gap (metadata-poor citations silently collapse to UNCLEAR), but
+  advisory-only and self-contained behind the try/catch. Fix direction: normalize every prompt
+  var to a guaranteed string (`${field ?? ''}`) BEFORE the `interpolate()` call in both modules.
+
+- **[MEDIUM] 05-03 Task 1 — R5 mandates "NO stripCites" (so `[@citekey]` tokens count as words),
+  but the plan also says "reuse a wordCount helper modeled on quote-extractor.ts," whose helper
+  DOES call stripCites; a copy-paste of that helper would change R5 word counts and desync the
+  extractor from the fixtures.** Raised by: gemini. Real implementation-trap, but the plan text
+  explicitly states the NO-stripCites requirement, so a careful executor avoids it. Fix
+  direction: state in 05-03 that the Pass-4 `wordCount` must be a raw trimmed-whitespace split
+  WITHOUT the `stripCites` step (a distinct helper, not a verbatim copy of quote-extractor.ts).
+
+### LOW
+
+- **[LOW] 05-04 — `renderPass2Section`/`renderPass4Section` render aggregate/summary tables only;
+  per-claim `isOrphan`/`label` detail is in the typed return (for Phase-6 DONE-09) but not in the
+  rendered VERIFICATION.md, so a reader cannot see which specific sentences are orphans from the
+  Markdown alone.** Raised by: opencode. Acceptable for an advisory pass.
+
+- **[LOW] 05-02 — `extractClaimSentences` returns ALL sentences containing a `[@citekey]`,
+  including non-claim/methods sentences; the no-LLM path labels them all UNCLEAR without
+  differentiating.** Raised by: opencode. Expected advisory behavior, not a correctness issue.
+
+- **[LOW] 05-02/05-03 — the live per-call try/catch wraps the whole body, so an `appendCost`
+  failure AFTER a successful model call is swallowed as UNCLEAR, risking unrecorded spend.**
+  Raised by: codex. Live branch never runs in CI; advisory-only. Fix direction: structure
+  try/finally so cost-recording failures are not silently merged with model-call errors.
+
+- **[LOW] 05-04 — the SC3 success-criterion wording still says "proves Pass 2/4 parity" broadly
+  while the test only pins no-LLM parity.** Raised by: codex. Fix direction: tighten the wording
+  to "proves no-LLM tier parity" (the plan already documents the scoping in a comment).
+
+- **[LOW] 05-04 Task 1 — IDE auto-import could suggest the `loadPrompt` symbol while wiring the
+  pass imports.** Raised by: gemini. The plan explicitly warns against it; cosmetic reminder.
+
+### Adjudicated DOWN (raised as HIGH, judged NOT HIGH)
+
+- **codex [HIGH] "05-04 Task 2 tier-contract too weak for SC3"** — DOWNGRADED to MEDIUM (see
+  MEDIUM section). Scoped (no-LLM) SC3 is pinned by presence + all-UNCLEAR + ±20% length; live
+  parity is out of CI scope by design and documented. Consistent with cycles 1–2 adjudication.
+
+- **codex [HIGH] "05-02 returns one result per unique citekey, violating SC1 per-citation"** —
+  DOWNGRADED to MEDIUM (see MEDIUM section). Advisory coverage/precision gap, not a non-negotiable
+  break or a failure of SC1's load-bearing UNCLEAR-bias + enum property. Consistent with cycle 2.
+
+---
+
+## Per-Reviewer Raw (cycle 3)
+
+### codex
+
+```
+HIGH-1 is genuinely resolved in the plans: bin/cli/verify.ts is explicitly left untouched until 05-04, 05-04 forbids the literal loadPrompt anywhere in that file, and 05-01 adds a whole-file regression asserting (text.match(/loadPrompt/g) ?? []).length === 0, comments included.
+
+HIGH-2 is genuinely resolved in the plans: 05-01 and 05-03 pin the same R1-R8 rule, keep R5 before marker counting, and the canonical fixture sentences now clear the 8-word floor with expected orphan count mechanically derived as 1.
+
+- [HIGH] 05-04 Task 2: the tier-contract proof is too weak for SC3. It asserts ## Pass-2/## Pass-4 in both artifacts, but only checks **UNCLEAR** on the CLI artifact and does not compare Pass-4 orphan counts or Pass-2 verdict rows across CLI and MCP. Faithful execution could let MCP emit different advisory verdicts/counts while still passing presence and length checks. Fix direction: assert **UNCLEAR** in both artifacts and parse/compare the Pass-2 verdict tokens plus Pass-4 orphan count table rows, allowing prose differences only in rationale text.
+
+- [HIGH] 05-02 Task 1: Pass 2 is specified as "for each in-text citation," but the implementation instruction extracts unique citekeys and returns one result per unique [@citekey]. That drops repeated citations where the same source supports different claims, making Pass 2 incomplete. Fix direction: build one result per citation occurrence or per citekey-claim-sentence pair, not per unique citekey; dedupe only exact duplicate pairs if desired.
+
+- [MEDIUM] 05-01 Task 2: the advisory-isolation regex guard is narrow. It only catches direct same-line assignments like hasFail = ...pass2, and could miss indirect flows such as const advisoryFail = pass2...; status = advisoryFail ? .... Fix direction: strengthen the test to assert the frozen hasFail/hasUnverifiable/status block appears textually before any runPass2/runPass4 call and that no identifier derived from pass2/pass4 is referenced in that block.
+
+- [MEDIUM] 05-02 Task 1/2 and 05-03 Task 2: the no-LLM gate checks !process.env['ANTHROPIC_API_KEY'] before using getProviderApiKey('anthropic'). If the project supports configured credentials outside env, the live branch will never run in that valid setup. Fix direction: determine availability through the same runtime key accessor, or attempt getProviderApiKey in the live path and fall back to placeholders only when it cannot resolve a key.
+
+- [MEDIUM] 05-02 Task 2 and 05-03 Task 2: the live LLM branches catch "any error" around the per-call body, which can mask appendCost failures after a successful model call. That risks unrecorded spend despite the ARCH-09/10 cost-ledger intent. Fix direction: keep model-call errors advisory, but make cost-recording failures explicit, or structure the try/finally so successful calls cannot silently skip cost accounting.
+
+- [LOW] 05-04 Task 2: the plan says to document the no-LLM scope of SC3 in a comment, but the success criterion wording still says "proves Pass 2/4 parity" broadly. Fix direction: tighten the wording to "proves no-LLM tier parity" unless live-path parity tests are added.
+
+HIGH_COUNT: 2
+```
+
+### gemini
+
+```
+Explicit confirmation:
+- HIGH-1 (D-13 0-hit invariant): Resolved. Plan 05-01 Task 2 adds a committed regression test tests/verify-advisory-isolation.test.ts asserting the whole-file loadPrompt literal count is 0. Plan 05-04 Task 1 wires the imports and call sites while explicitly forbidding the literal symbol in code or comments.
+- HIGH-2 (Pass-4 fixture/algorithm agreement): Resolved. Plan 05-01 Task 1 derives all fixture expected_orphan_count values by mechanically executing the pinned R1–R8 rules, including the R5 8-word floor (where citation tokens count as words). Plan 05-03 Task 1 implements exactly those rules and references the same canonical Climate-change example (3 sentences, all >=8 words, orphanCount=1).
+
+New and remaining concerns:
+
+- [MEDIUM] 05-03 Task 1: Word count implementation. The plan correctly mandates "NO stripCites" for the R5 word-count floor (so [@citekey] tokens are counted as words, ensuring fixture agreement), but then suggests "reuse a wordCount helper modeled on quote-extractor.ts". Since the quote-extractor.ts version *does* call stripCites, there is a risk of a copy-paste regression. Fix: Ensure the executor understands that for Pass 4, the wordCount helper must be a raw whitespace split *without* the stripCites call.
+- [LOW] 05-04 Task 1: Import strings. The plan specifies importing from ../lib/verify/pass2.js and ../lib/verify/pass4.js. While correct, ensure the executor does not accidentally auto-import the loadPrompt symbol itself if their IDE suggests it during wiring (though the plan warns against it).
+- [LOW] 05-01 Task 1: Fixture derivation audit. The canonical example (e) in pass4-orphan.json is correctly derived (S1=10, S2=11, S3=10 words; only S2 is HIGH and uncited; total=1). This is a strong anchor for the phase.
+
+HIGH_COUNT: 0
+```
+
+### opencode
+
+```
+## Cross-AI Plan Review — Phase 5 (Cycle 3)
+
+### HIGH-1 and HIGH-2 confirmation
+
+HIGH-1 (D-13 0-hit invariant): Resolved. Every plan respects the invariant. Plan 05-01 adds a committed whole-file loadPrompt-count==0 regression test. Plan 05-04's verify.ts wiring (imports from pass2.js/pass4.js, call-site comments) contains zero loadPrompt literals. Plan 05-05 touches only prompt-loader.ts. The living invariant (grep -c "loadPrompt" bin/cli/verify.ts == 0 comments included) is preserved at every step.
+
+HIGH-2 (Pass-4 fixture/algorithm R5 floor agreement): Resolved. The pinned R1–R8 rule is byte-identical across Plans 05-01 and 05-03. The canonical example uses sentences >=8 words (10/11/10). R5 is applied BEFORE R6 marker counting in both plans. Fixture expected_orphan_count values are mechanically derived from R1->R8. The canonical walk (S1 AMBIGUOUS -> 0, S2 HIGH+uncited -> 1, S3 AMBIGUOUS -> 0) is identical in both plans.
+
+### NEW/MEDIUM concerns
+
+- [MEDIUM] Plans 05-02/05-03: Bib metadata normalization to interpolate() doesn't handle undefined fields. When parseBibtex returns entries without title or author, the normalization described (string|string[] -> string, {family,given}[]|string[] -> comma-joined) would pass undefined to interpolate(), which throws on missing vars. The per-citation try/catch converts this to UNCLEAR (so the pass doesn't crash), but every metadata-poor citation silently produces UNCLEAR instead of surfacing the root cause. Fix: normalize all prompt vars to guaranteed strings (${field ?? ''}) before the interpolate() call in both pass2.ts and pass4.ts, and add a one-line comment noting the defensive fallback.
+
+- [MEDIUM] Plan 05-01 Task 2: orphan-label prompt output contract uses a different enum than the constraint in Plan 05-03. Plan 05-01 specifies the orphan-label prompt returns {'claim', 'definition', 'UNCLEAR'}. Plan 05-03 Step 3 parses into {'claim','definition','UNCLEAR'} — correct alignment here. But Plan 05-03's Pass4ClaimResult interface includes label: 'claim' | 'definition' | 'UNCLEAR', while the equivalent Step-3 expectation in Plan 05-02 (for Pass 2) has no such ambiguity since it's direct verdict parsing. No actual misalignment, but the plan cross-references should be more explicit that these enums are the same across plans.
+
+- [LOW] Plan 05-04: renderPass2Section/renderPass4Section render aggregate counts only, losing per-claim orphan detail. Pass4ClaimResult.isOrphan and label are available in the typed return for Phase 6 DONE-09 consumers, but the VERIFICATION.md markdown shows only summary tables (paragraph-level orphan counts). Users cannot see which specific sentences are flagged orphans from the rendered output alone — they'd need to inspect the typed return or re-run with debug. This is acceptable for an advisory pass.
+
+- [LOW] Plan 05-02: extractClaimSentences returns ALL sentences containing [@citekey], including non-claim sentences (e.g., a methods section sentence like "We used the apparatus from Smith [@smith2020]"). The advisory pass tolerates this — the LLM (when available) would judge it as PARTIAL/UNCLEAR — but the no-LLM path produces UNCLEAR for all such entries without differentiating. Expected behavior for an advisory pass, not a correctness issue.
+
+### HIGH concerns count
+
+H_COUNT: 0
+```
+
+### claude
+
+```
+UNAVAILABLE — timed out at the 360s hard limit (exit 124), produced 0 bytes (stdout and
+stderr both empty). No usable review this cycle. (codex, gemini, and opencode all produced
+usable output; >=1 usable reviewer requirement satisfied with three.)
+```
+
+### Judge's independent Pass-4 re-walk (cycle 3)
+
+```
+Re-walked the canonical Climate-change paragraph through R1->R8 in Node
+(/tmp/walk-pass4.mjs), counting words at R5 with NO stripCites:
+  R1 split -> 3 sentences.
+  S1 "Climate change demonstrates accelerating ice loss across both polar regions."
+     = 10 words -> survives R5; markers {demonstrates} = 1 distinct -> AMBIGUOUS -> not counted.
+  S2 "This clearly proves that the climate feedback loop is intensifying rapidly."
+     = 11 words -> survives R5; markers {proves, is} = 2 distinct -> HIGH; no [@citekey] -> uncited -> ORPHAN.
+  S3 "Ice sheets are retreating globally according to recent satellite measurements."
+     = 10 words -> survives R5; markers {are} = 1 distinct -> AMBIGUOUS -> not counted.
+  COMPUTED orphanCount = 1  ==  asserted expected_orphan_count = 1  (MATCH).
+Confirms HIGH-2 fully resolved: all three sentences clear the R5 8-word floor; only S2 is HIGH.
+```
