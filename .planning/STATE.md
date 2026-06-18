@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: verifying
+status: executing
 stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-06-18T09:32:06.707Z"
+last_updated: "2026-06-18T13:07:20.195Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 11
   completed_phases: 7
-  total_plans: 53
-  completed_plans: 53
+  total_plans: 57
+  completed_plans: 54
   percent: 64
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-06)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** Phase 06 — Done / export pipeline + zero-trace gate
+**Current focus:** Phase 07 — Single-command UX layer + hooks + flags
 
 ## Current Position
 
-Phase: 06 (Done / export pipeline + zero-trace gate) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
+Phase: 07 (Single-command UX layer + hooks + flags) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-06-18
 
 Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
@@ -90,6 +90,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 06 P03 | 4min | 2 tasks | 1 files |
 | Phase 06 P04 | 8min | 2 tasks | 2 files |
 | Phase 06 P05 | 20min | 3 tasks | 7 files |
+| Phase 07 P01 | 28min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -190,6 +191,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [06-05] runDoneGate accepts the FLAT input shape { pass2Results, pass4Results, plagiarismResults, yolo, approve } (locked Wave-0 export-gate test) with collectGateIssues internal; runHumanizer lives in bin/lib/exporter.ts (locked humanizer-wrap test imports + greps it there). Rule-1 reconciliations honoring locked contracts (PlagiarismResult precedent)
 - [Phase ?]: [06-05] readSectionUnsupported FAILS SAFE — present-but-unparseable ## Pass-2 table → synthetic <unparseable> UNSUPPORTED sentinel (NEVER a silent clean); absent heading / missing file = clean; I/O errors skipped. Pinned to renderPass2Section via module-level constants (PASS2_HEADING/PASS2_TABLE_HEADER/PASS2_EMPTY_MARKER/VALID_VERDICTS) so a future writer desync is caught
 - [Phase ?]: [06-05] done.ts leaves exportDraft outputDir UNSET → exports land in the distinct .paper/export/ dir, source DRAFT.md never overwritten; honesty report null-guards a missing GPTZero key (skip banner, never a fabricated percent). done graduated from cli-stubs to a real REAL_VERB_LOADERS loader (compile precedent); DONE-09 gate always-confirms (generic confirm even when clean), only --yolo skips
+- [Phase ?]: [07-01] Corrupt-PLAN.md RED fixture uses an alias to a missing YAML anchor (status: *missing_anchor) — yaml@^2 toJSON() tolerates duplicate keys without throwing, so the plan's duplicate-key example would make the C5/C6 RED gate vacuous; the alias fixture genuinely throws ReferenceError through parseFrontmatter
+- [Phase ?]: [07-01] Hook/CLI subprocess tests pin tsx via import.meta.resolve('tsx') absolute file URL — a bare --import tsx resolves relative to the child's tmpdir cwd (no node_modules) and crashes ERR_MODULE_NOT_FOUND
+- [Phase ?]: [07-01] Source-grep skip predicates (flagsWired/emissionWired/stopWired/timeoutWired) gate RED-by-skip for files that already exist as stubs — existsSync alone cannot detect not-yet-wired behavior
 
 ### Pending Todos
 
@@ -210,6 +214,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T09:32:06.700Z
+Last session: 2026-06-18T13:06:47.064Z
 Stopped at: Completed 05-04-PLAN.md
 Resume file: None
