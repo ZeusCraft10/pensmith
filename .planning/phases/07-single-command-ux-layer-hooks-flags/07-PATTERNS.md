@@ -25,14 +25,12 @@
 | `skills/write-section.md` | config | — | `skills/.gitkeep` (placeholder) | no analog (new content type) |
 | `skills/verify-section.md` | config | — | `skills/.gitkeep` (placeholder) | no analog (new content type) |
 | `.claude-plugin/plugin.json` (modify) | config | — | `.claude-plugin/plugin.json` | exact |
-| `tests/router.test.ts` | test | CRUD | `tests/state.test.ts` | role-match |
+| `tests/pensmith-router.test.ts` | test | CRUD | `tests/state.test.ts` | role-match |
 | `tests/estimator.test.ts` | test | transform | `tests/pricing.test.ts` | exact |
 | `tests/hooks/session-start.test.ts` | test | event-driven | `tests/hooks-noop.test.ts` | exact |
 | `tests/hooks/stop.test.ts` | test | event-driven | `tests/hooks-noop.test.ts` | exact |
 | `tests/hooks/pre-compact.test.ts` | test | event-driven | `tests/hooks-noop.test.ts` | exact |
-| `tests/dry-run.test.ts` | test | request-response | `tests/http.test.ts` | role-match |
-| `tests/yolo-cap.test.ts` | test | transform | `tests/budget.test.ts` | role-match |
-| `tests/show-prompts.test.ts` | test | event-driven | `tests/session-log.test.ts` | role-match |
+| `tests/flags.test.ts` | test | request-response | `tests/http.test.ts` + `tests/budget.test.ts` | role-match |
 | `tests/skill-descriptions.test.ts` | test | — | `tests/repo-files.test.ts` | role-match |
 
 ---
@@ -66,8 +64,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { paperDir, sectionPlan } from './paths.js';
 import { parseFrontmatter } from './frontmatter.js';
-import { HandoffSchema } from './schemas/handoff.js';
 import type { Handoff } from './schemas/handoff.js';
+// NOTE (H4): router does NOT import or read HandoffSchema — it IGNORES HANDOFF.json.
+// The Handoff type import is only for the { verb:'resume'; handoff } member of
+// RouterDecision, which is produced by bin/cli/resume.ts, never by resolveNextAction.
 ```
 
 **Error typing pattern** (`bin/lib/state.ts` lines 87-101):
@@ -135,7 +135,7 @@ if (existsSync(planPath)) {
   }
 ```
 
-**Key pitfall for router (Pitfall 4 from RESEARCH.md):** The root `bin/pensmith.ts` command's `run()` handler calls `router.resolve()`. The `next` subcommand is a thin alias calling the same function. Do NOT make `next` the only entry point.
+**Key pitfall for router (Pitfall 4/5 from RESEARCH.md):** bare `/pensmith` routing lives in the `bin/pensmith.ts` PRE-DISPATCH argv pre-parse (NOT a root `run()` — see the corrected dispatcher section below). The `next` subcommand is a thin alias calling the same `resolveNextAction()`. `resolveNextAction` IGNORES HANDOFF.json (H4).
 
 ---
 
@@ -167,7 +167,21 @@ export function estimateCost(args: {
 }
 ```
 
-For `estimator.ts`, the key pattern is: import `estimateCost` from `pricing.ts` and `loadState` from `state.ts`. Zero LLM calls. Zero network calls. Set `PENSMITH_DRY_RUN=1` before any other code runs.
+For `estimator.ts`, the key pattern is: import `estimateCost` from `pricing.ts` and `loadState` from `state.ts`. Zero LLM calls. Zero network calls. Import ONLY `pricing.ts` + `state.ts` — NEVER `verify/pass2.ts` / `verify/pass4.ts` / the Anthropic SDK (those are the only live model-call paths; importing them would risk Pitfall 8).
+
+**StateNotFoundError guard (C2-H1 fresh-dir crash):** `projectEstimate` calls `loadState`, which throws `StateNotFoundError` in a paper-less dir. Catch it and return an empty projection so the yolo pre-flight never crashes:
+```typescript
+let state;
+try {
+  state = await loadState(args.paperRoot);
+} catch (e) {
+  if (e instanceof StateNotFoundError) {
+    // No active paper → nothing to estimate → treat as under-cap (never crash).
+    return { rows: [], totalUsd: 0, exceedsHalfCap: false };
+  }
+  throw e;
+}
+```
 
 **Static heuristics table pattern** (modeled on `MODEL_PRICES` frozen table in `pricing.ts` lines 59-95):
 ```typescript
@@ -186,10 +200,10 @@ const STEP_HEURISTICS = Object.freeze({
 } as const);
 ```
 
-**50% cap PREDICATE pattern** (RESEARCH.md Pitfall 3 / ARCH-11, split per review H1): `estimator.ts` computes the PREDICATE only (a pure `exceedsHalfCap` boolean on EstimateResult); it does NOT call `process.exit`. The REFUSAL (hard exit) lives in the dispatcher PRE-DISPATCH seam (see the bin/pensmith.ts H1 pre-flight) so it fires WHENEVER `--yolo` is active, independent of `--estimate`. The cap lives in `estimator.ts`, NOT in `assertBudget`:
+**50% cap PREDICATE pattern** (RESEARCH.md Pitfall 3 / ARCH-11, split per review H1): `estimator.ts` computes the PREDICATE only (a pure `exceedsHalfCap` boolean on EstimateResult); it does NOT call `process.exit`. The REFUSAL (hard exit) lives in the dispatcher PRE-DISPATCH seam (see the bin/pensmith.ts H1 pre-flight) so it fires WHENEVER `--yolo` is active, independent of `--estimate`, for ANY verb (incl. non-gate verbs like write/plan — C2-H1). The cap lives in `estimator.ts`, NOT in `assertBudget`:
 ```typescript
 // estimator.ts — PURE predicate; pass the configured cap so a lowered cap tightens the threshold (L1):
-const sessionCap = args.sessionCapUsd ?? 5.0;        // caller passes config.cost_cap_usd when available
+const sessionCap = args.sessionCapUsd ?? 5.0;        // dispatcher passes the configured cap (see below)
 const exceedsHalfCap = totalUsd > sessionCap * 0.5;  // boolean only — no exit, no stdout here
 return { rows, totalUsd, exceedsHalfCap };
 // The dispatcher H1 pre-flight reads exceedsHalfCap and does process.exit(1) when --yolo is active.
@@ -197,12 +211,14 @@ return { rows, totalUsd, exceedsHalfCap };
 
 ---
 
-### `bin/pensmith.ts` (modify — add global flags + root `run()`)
+### `bin/pensmith.ts` (modify — add global flags + PRE-DISPATCH argv pre-parse, NOT a root `run()`)
 
 **Status:** MODIFY existing file
 **Analog:** `bin/pensmith.ts` itself + `bin/cli/compile.ts` (flag wiring)
 
-**Existing global-flag slot pattern** (`bin/pensmith.ts` lines 72-82):
+**CORRECTED (review H2 — RESOLVED): do NOT add a root `run()`.** Verified against `node_modules/citty/dist/index.mjs:209-228`: citty runs a matched subcommand AND then unconditionally falls through to the parent `run()` — a root `run()` would (a) double-execute every explicit verb and (b) apply global flags too late. The current `bin/pensmith.ts` already has NO root `run()` (only `subCommands`); KEEP it that way. All global-flag setup, the yolo cap pre-flight, and bare routing live in a manual argv pre-parse BEFORE `runMain`.
+
+**Existing root command (no run())** (`bin/pensmith.ts` lines 72-82):
 ```typescript
 export const command = defineCommand({
   meta: {
@@ -211,6 +227,7 @@ export const command = defineCommand({
     description: 'Pensmith — Tier 2 portable CLI. Section-as-phase academic writing.',
   },
   subCommands: buildSubCommands(),
+  // NO run() — bare routing happens in the pre-dispatch wrapper below.
 });
 ```
 
@@ -230,10 +247,10 @@ args: {
 },
 ```
 
-For the root command, add four global flags:
+For the root command, declare four global flags (so `--help` documents them; the LOAD-BEARING application is the argv pre-parse):
 ```typescript
 args: {
-  'dry-run':      { type: 'boolean', description: 'Zero external API calls; use cassette fixtures.', default: false },
+  'dry-run':      { type: 'boolean', description: 'Zero external API calls; use cassette fixtures + offline LLM placeholder.', default: false },
   'estimate':     { type: 'boolean', description: 'Project token + USD cost; do not execute.', default: false },
   'yolo':         { type: 'boolean', description: 'Skip outline + export approval gates.', default: false },
   'show-prompts': { type: 'boolean', description: 'Echo every LLM prompt to stderr.', default: false },
@@ -248,32 +265,61 @@ export function setMirrorPromptsToStderr(enabled: boolean): void {
   mirrorPromptsToStderr = !!enabled;
 }
 ```
-In `bin/pensmith.ts` root `run()`:
+In the argv pre-parse (BEFORE `runMain`):
 ```typescript
 import { setMirrorPromptsToStderr } from './lib/session-log.js';
 // ...
-if (args['show-prompts']) setMirrorPromptsToStderr(true);
+if (hasFlag('show-prompts')) setMirrorPromptsToStderr(true);
 ```
 
-**--dry-run wiring pattern** (`bin/lib/http-mock.ts` lines 139-141):
+**--dry-run wiring pattern (CORRECTED — gates BOTH source adapters AND the LLM call sites):**
+Source-adapter gate (`bin/lib/http-mock.ts` lines 139-141):
 ```typescript
 export function isOfflineMode(): boolean {
   return process.env['PENSMITH_NETWORK_TESTS'] !== '1';
 }
 ```
-In root `run()`, BEFORE dispatching to any subcommand:
+LLM-call-site gate (the REAL gate — `bin/lib/verify/pass2.ts:215` + `bin/lib/verify/pass4.ts:392` already honor this):
 ```typescript
-if (args['dry-run']) {
-  process.env['PENSMITH_NETWORK_TESTS'] = '';  // not '1' → isOfflineMode() returns true
-  process.env['PENSMITH_DRY_RUN'] = '1';
+const noLlm = process.env['PENSMITH_NO_LLM'] === '1' || !process.env['ANTHROPIC_API_KEY'];
+// noLlm === true → return the offline UNCLEAR placeholder; ZERO messages.create() calls.
+```
+In the argv pre-parse, BEFORE dispatching to any subcommand (H2 — must be before, not after):
+```typescript
+if (hasFlag('dry-run')) {
+  process.env['PENSMITH_NETWORK_TESTS'] = '';  // not '1' → isOfflineMode() returns true (source adapters → cassettes)
+  process.env['PENSMITH_NO_LLM'] = '1';        // the LLM call sites (pass2/pass4) → offline placeholder, ZERO egress
+  process.env['PENSMITH_DRY_RUN'] = '1';       // advisory marker only (doctor/diagnostics); NOT itself a gate
 }
 ```
+**There is NO model-invocation seam in `runtime.ts`** (it is config/API-key load only). Do NOT add one and do NOT claim `PENSMITH_DRY_RUN` gates an LLM client in runtime.ts — the load-bearing LLM gate is `PENSMITH_NO_LLM`, which the existing pass2/pass4 sites already check (C2-H3). No Phase-5 verify code needs to change.
 
-**Bare `/pensmith` routing (Pitfall 4 from RESEARCH.md):** The root `defineCommand` needs its own `run()` that calls `router.resolveNextAction()`. This is separate from the `next` subcommand — citty dispatches bare invocation to the root `run()`, not to `next`.
-
-**REAL_VERB_LOADERS pattern** (`bin/pensmith.ts` lines 37-56):
+**H1 yolo cap pre-flight (C2-H1 — runs for ANY --yolo command line, before dispatch):**
 ```typescript
-const REAL_VERB_LOADERS: Partial<Record<Ux02Verb, () => Promise<AnyCommandDef>>> = {
+import { projectEstimate } from './lib/estimator.js';
+// Configured cap source (C2-M3): env override PENSMITH_COST_CAP_USD (D-32) else $5 default.
+// Do NOT reference a `cost_cap_usd` runtime-config field — the schema has none today.
+function configuredCapUsd(): number {
+  const raw = process.env['PENSMITH_COST_CAP_USD'];
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 5.0;
+}
+// In the argv pre-parse, whenever --yolo is present (ANY verb, incl. write/plan, AND bare):
+if (hasFlag('yolo')) {
+  const est = await projectEstimate({ paperRoot: process.cwd(), sessionCapUsd: configuredCapUsd() });
+  if (est.exceedsHalfCap) {
+    process.stderr.write('pensmith: REFUSED — --yolo estimate exceeds 50% of session cap (ARCH-11).\n');
+    process.exit(1);  // HARD refusal, not advisory; not nested inside --estimate
+  }
+}
+```
+The pre-flight is NOT scoped to gate-skipping verbs — the non-negotiable is unqualified, so `pensmith write --yolo` / `plan --yolo` over-cap MUST also be refused. `projectEstimate` is StateNotFoundError-guarded (above), so `--yolo` in a paper-less dir sees an empty estimate (`exceedsHalfCap:false`) and does NOT crash.
+
+**Bare `/pensmith` routing (CORRECTED Pitfall 4):** determine whether the first non-flag argv token is a verb in `UX02_VERBS`. If a verb IS present → `runMain(command)` exactly once (citty dispatches the verb; no root `run()` to double-fire). If NO verb is present (bare) → call `resolveNextAction(process.cwd())` and dispatch via the shared `REAL_VERB_LOADERS` table — do NOT also call `runMain` (citty would `throw 'No command specified'` on bare, and a second dispatch would double-run).
+
+**REAL_VERB_LOADERS pattern** (`bin/pensmith.ts` lines 37-56) — EXPORT it so next/resume reuse it (avoids the circular-dep risk M7):
+```typescript
+export const REAL_VERB_LOADERS: Partial<Record<Ux02Verb, () => Promise<AnyCommandDef>>> = {
   doctor: () => import('./cli/doctor.js').then((m) => m.doctorCommand),
   new:    () => import('./cli/intake.js').then((m) => m.intakeCommand),
   // ... existing entries ...
@@ -316,24 +362,26 @@ export const compileCommand = defineCommand({
 export default compileCommand;
 ```
 
-For `next.ts`:
+For `next.ts` — dispatch via the SHARED REAL_VERB_LOADERS table; route the "resolved verb" diagnostic to STDERR so stdout stays byte-equivalent to the underlying verb (parity, M7):
 ```typescript
 import { defineCommand } from 'citty';
 import { resolveNextAction } from '../lib/router.js';
+import { REAL_VERB_LOADERS } from '../pensmith.js';
 
 export const nextCommand = defineCommand({
   meta: { name: 'next', description: 'Resolve and execute the next pending action for the active paper.' },
   async run() {
     const paperRoot = process.cwd();
     const decision = await resolveNextAction(paperRoot);
-    // dispatch to the appropriate subcommand
-    process.stdout.write(`pensmith next: → ${decision.verb}\n`);
+    process.stderr.write(`pensmith next: → ${decision.verb}\n`);  // diagnostic to STDERR (parity)
+    const loader = REAL_VERB_LOADERS[decision.verb];
+    if (loader) { /* load + run the resolved verb (pass n/slug where applicable) */ }
   },
 });
 export default nextCommand;
 ```
 
-**stdout-only rule** (`bin/cli/compile.ts` line 10): "stdout-only (no console.* — keeps a future stdio/MCP frame clean)"
+**stdout-only rule** (`bin/cli/compile.ts` line 10): "stdout-only (no console.* — keeps a future stdio/MCP frame clean)" — for `next`, the resolved-verb diagnostic goes to STDERR (not stdout) so `next` output equals the underlying verb's output.
 
 ---
 
@@ -342,7 +390,7 @@ export default nextCommand;
 **Status:** NEW FILE — promotes stub to real state display
 **Analog:** `bin/cli/compile.ts` (thin orchestrator); `bin/lib/state.ts` (loadState)
 
-Same thin-orchestrator pattern as `next.ts`. Reads STATE.json via `loadState()`, reads section PLAN.md frontmatter via `parseFrontmatter()`, prints a status table to stdout.
+Same thin-orchestrator pattern as `next.ts`. Reads STATE.json via `loadState()`, reads section PLAN.md frontmatter via `parseFrontmatter()`, prints a status table to stdout. Handle `StateNotFoundError` → print "no active paper — run pensmith new".
 
 **loadState + section-walk pattern** (`hooks/pre-compact.ts` lines 44-68):
 ```typescript
@@ -382,13 +430,14 @@ import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { paperDir } from '../lib/paths.js';
 import { resolveNextAction } from '../lib/router.js';
+import { REAL_VERB_LOADERS } from '../pensmith.js';
 ```
 
 **H4 RESUME LIFECYCLE (no resume->resume loop):** `resume` reads HANDOFF (above) for the SUMMARY only, then dispatches to the next WORK verb via `resolveNextAction` (which IGNORES HANDOFF and never returns 'resume'), then CLEARS HANDOFF so a stale pointer cannot re-trigger resume:
 ```typescript
 const handoff = safeReadHandoff();
 if (handoff && handoff.phase !== 'done') {
-  // print one-line resume summary (stdout or stderr per parity)
+  // print one-line resume summary (stderr per parity)
 }
 const decision = await resolveNextAction(process.cwd()); // returns plan/write/verify/compile/done — NEVER resume
 // dispatch decision.verb via the exported REAL_VERB_LOADERS table (shared dispatch — no re-import cycle)
@@ -466,7 +515,7 @@ const out = execFileSync(process.execPath, [
 // Must produce no stdout (would corrupt hook-protocol frame).
 assert.equal(out, '', `${hook} stdout MUST be empty, got: ${out}`);
 ```
-IMPORTANT: the `hooks-noop.test.ts` assertion `out === ''` currently applies to ALL four hooks. Once session-start emits JSON stdout, this test MUST be updated to allow session-start's stdout to be a valid JSON object OR MUST be removed from the `out === ''` assert for session-start (the other three hooks stay exit-0 with empty stdout).
+IMPORTANT: the `hooks-noop.test.ts` assertion `out === ''` currently applies to ALL four hooks. With NO HANDOFF.json present in the test cwd, session-start still emits NOTHING (the noop path), so the empty-stdout assert can stay for session-start in the no-HANDOFF case; the JSON-frame case is covered by `tests/hooks/session-start.test.ts`. Keep the empty-stdout assert for pre-compact / post-tool-use / stop unconditionally.
 
 ---
 
@@ -480,10 +529,10 @@ IMPORTANT: the `hooks-noop.test.ts` assertion `out === ''` currently applies to 
 // release() is already exported — used by Stop hook directly.
 export async function release(resource: string): Promise<void> {
   const stub = await stubFor(resource);
-  await lockfile.unlock(stub);
+  await lockfile.unlock(stub);  // REJECTS when the resource is NOT locked
 }
 ```
-Note: `bin/lib/lock.ts` already exports `release()` (line 135). The Stop hook can call it directly. No new export needed.
+Note: `bin/lib/lock.ts` already exports `release()` (line 135). The Stop hook calls it directly. No new export needed. CRITICAL caveat: `release` REJECTS on an unheld lock (no code acquires a `.paper`-keyed resource lock — locks are per-file), so the Stop hook must NOT use `Promise.all` (a rejection there abandons the log flush).
 
 **try/finally silent pattern** (`hooks/post-tool-use.ts` lines 83-85):
 ```typescript
@@ -499,7 +548,7 @@ close: async () => {
 },
 ```
 
-**Full upgrade pattern** (from RESEARCH.md Code Examples — Stop hook):
+**Full upgrade pattern (CORRECTED — Promise.allSettled, review M1 / C2-M2):**
 ```typescript
 #!/usr/bin/env node
 // hooks/stop.ts — Phase 7 upgrade.
@@ -509,16 +558,20 @@ import { closeSessionLog } from '../bin/lib/session-log.js';
 import { release } from '../bin/lib/lock.js';
 
 try {
-  await Promise.all([
-    release('.paper'),    // PID lock release (best-effort)
-    closeSessionLog(),    // flush write chain
+  // Promise.allSettled (NOT Promise.all): release('.paper') REJECTS when the
+  // resource is not locked (lock.ts:135 — proper-lockfile.unlock of an unheld
+  // stub rejects). With Promise.all that rejection ABANDONS closeSessionLog();
+  // allSettled guarantees the log flush ALWAYS runs to completion (M1/C2-M2 fix).
+  await Promise.allSettled([
+    release('.paper'),    // best-effort lock release; may reject on an unheld lock
+    closeSessionLog(),    // flush write chain — must ALWAYS complete
   ]);
 } catch {
   /* silent — hooks must not crash session */
 }
 process.exit(0);
 ```
-Note: `session-log.ts` does NOT export `closeSessionLog()` by name. The Stop hook should call `openSessionLog({ scope: 'auto' }).close()` or the module needs to export a top-level `closeSessionLog()` convenience function. Verify `session-log.ts` line 371 — `close: async () => { await chain; }` — the chain is module-scope, not per-handle. Adding `export async function closeSessionLog() { await chain; }` to `session-log.ts` is the correct approach.
+Note: `session-log.ts` does NOT yet export `closeSessionLog()` by name — add it (see "session-log.ts needs one new export" below). The chain is module-scope; `closeSessionLog()` awaits the active chain.
 
 ---
 
@@ -580,7 +633,7 @@ The timeout rejection is caught by this existing catch block — no changes to t
 - Acquires `proper-lockfile` lock before read-decide-append (CR-04 fix)
 - Silent on all errors (`catch { /* silent */ }`)
 
-Planner only needs to verify test coverage for HOOK-03 in `tests/hooks-noop.test.ts` and optionally add `tests/hooks/post-tool-use.test.ts`.
+Planner only needs to verify test coverage for HOOK-03 in `tests/hooks/post-tool-use.test.ts` and `tests/hooks-noop.test.ts`.
 
 ---
 
@@ -599,7 +652,7 @@ description: |
   Use this when the user wants to work on their academic paper. Handles:
   "start my paper", "begin writing", "what's next?", "where am I?",
   "continue where I left off", "resume my paper".
-  
+
   Also use for bare /pensmith with no verb — routes to the correct next step
   automatically based on paper state.
 ---
@@ -665,7 +718,7 @@ Add a `skills` array alongside `mcpServers`. The exact field name needs verifica
 
 ---
 
-### `tests/router.test.ts` (test, CRUD)
+### `tests/pensmith-router.test.ts` (test, CRUD)
 
 **Status:** NEW FILE
 **Analog:** `tests/state.test.ts` (tmpdir fixture + loadState pattern)
@@ -696,10 +749,14 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 ```
 
-**Decision table coverage**: Three cases required (per RESEARCH.md Validation Architecture):
+**Decision table coverage** (per RESEARCH.md PINNED ORDERING + Validation Architecture):
 1. No STATE.json → `{ verb: 'new' }`
-2. Sections in-progress → `{ verb: 'plan' | 'write' | 'verify', n, slug }`
-3. All sections verified + no DRAFT.md → `{ verb: 'compile' }`
+2. STATE.json + no RESEARCH.md → `{ verb: 'research' }`
+3. RESEARCH.md + no OUTLINE.md / zero sections → `{ verb: 'outline' }`
+4. Sections in-progress → `{ verb: 'plan' | 'write' | 'verify', n, slug }` (fixtures MUST also create RESEARCH.md + OUTLINE.md per M5)
+5. All sections verified + no DRAFT.md → `{ verb: 'compile' }`
+6. DRAFT.md + no FINAL.md → `{ verb: 'done' }`
+7. **H4 case:** a valid non-done HANDOFF.json present (alongside STATE+RESEARCH+OUTLINE+a planned PLAN.md) → `{ verb: 'plan', ... }` AND `decision.verb !== 'resume'` (regression gate against the original resume loop)
 
 ---
 
@@ -721,7 +778,7 @@ test('estimateCost: known anthropic/claude-sonnet-4 input/output', () => {
 });
 ```
 
-For `estimator.ts` tests: assert projection table prints to stdout, assert no network calls (use `PENSMITH_DRY_RUN=1`), assert 50%-cap refusal when projected > 50% of session cap.
+For `estimator.ts` tests: assert `totalUsd === sum(rows[].usd)`, assert `exceedsHalfCap` flips at 50% of `sessionCapUsd`, assert no COSTS.jsonl written during projection (set `PENSMITH_DRY_RUN=1`). The END-TO-END refusal exit-code (H1) lives in `tests/flags.test.ts`, not here.
 
 ---
 
@@ -741,9 +798,9 @@ test(`TIER-03/07: ${hook} exists and exits 0`, () => {
 });
 ```
 
-For `session-start.test.ts`: the stdout assertion changes — with no HANDOFF.json present, stdout must be empty (exit 0). With a valid HANDOFF.json fixture, stdout must be valid JSON with a `systemMessage` field.
+For `session-start.test.ts`: with no HANDOFF.json present, stdout must be empty (exit 0). With a valid HANDOFF.json fixture, stdout must be valid JSON with a `systemMessage` field.
 
-For `stop.test.ts`: assert exit 0, assert empty stdout, assert the lock was released (verify lock file absent after run).
+For `stop.test.ts`: assert exit 0, assert empty stdout, assert the lock was released. **ALSO (M1/C2-M2 regression gate):** assert the session-log flush STILL happens even when `release('.paper')` rejects on an unheld lock — i.e. run stop with NO lock held and assert the session log was flushed (allSettled, not all). The flush-survives-rejection assertion is the M1 gate.
 
 ---
 
@@ -756,17 +813,15 @@ For `stop.test.ts`: assert exit 0, assert empty stdout, assert the lock was rele
 The HANDOFF.json size assertion (`≤5KB`) already exists in `tests/handoff-size.test.ts`. The new `pre-compact.test.ts` adds:
 1. Assert HANDOFF.json written within 10s (`Promise.race` working correctly)
 2. Assert HANDOFF.json size ≤ 5120 bytes (HANDOFF_MAX_BYTES from schemas/handoff.ts)
-3. Assert timeout path: inject a slow `writeHandoff` and assert the timeout fires
+3. Timeout-path assertion is RED-by-skip guarded on a `PRECOMPACT_TIMEOUT_MS` token in hooks/pre-compact.ts (the race lands in 07-03)
 
 ---
 
-### `tests/dry-run.test.ts`, `tests/yolo-cap.test.ts`, `tests/show-prompts.test.ts`, `tests/skill-descriptions.test.ts` (tests)
+### `tests/flags.test.ts`, `tests/skill-descriptions.test.ts` (tests)
 
 **Status:** NEW FILES
 **Analogs:**
-- `dry-run.test.ts` → `tests/http.test.ts` (network-gate assertion pattern)
-- `yolo-cap.test.ts` → `tests/budget.test.ts` (BudgetExceededError pattern)
-- `show-prompts.test.ts` → `tests/session-log.test.ts` (setMirrorPromptsToStderr)
+- `flags.test.ts` → `tests/http.test.ts` (network-gate assertion pattern) + `tests/budget.test.ts` (cap pattern) — owns H1 (yolo cap exit-code), H2 (single dispatch + flags-for-explicit-verb), H3 (dry-run zero network on a real LLM-calling verb path)
 - `skill-descriptions.test.ts` → `tests/repo-files.test.ts` (file-existence + content assertions)
 
 **repo-files.test.ts content assertion pattern** (`tests/repo-files.test.ts` lines 14-17):
@@ -779,12 +834,9 @@ assert.match(read('skills/pensmith.md'), /where am I/);
 assert.match(read('skills/pensmith.md'), /what's next/);
 ```
 
-**Budget test pattern** (`tests/budget.test.ts` — via its analog to yolo-cap):
-```typescript
-import { BudgetExceededError, assertBudget } from '../bin/lib/budget.js';
-// For yolo-cap: test the 50%-cap check in estimator.ts
-// assert that { yolo: true, projected > 50% of cap } → process.exit(1) or throws
-```
+**H1 cap test pattern** (`tests/budget.test.ts` analog): drive the CLI as a child process; assert `pensmith write --yolo` AND `pensmith compile --yolo` over 50% cap exit NON-ZERO (status 1), and that a paper-less dir `pensmith --yolo` does NOT crash (exit 0, no StateNotFoundError).
+
+**H3 dry-run test pattern (NON-VACUOUS — C2-H3):** drive `pensmith verify <N> --dry-run` WITH a (fake) `ANTHROPIC_API_KEY` present in env (a path that WOULD call `messages.create()` absent the guard), and assert ZERO network egress AND no `COSTS.jsonl` line appended. Do NOT drive `write`/`research` — they make zero LLM calls in any mode and would pass vacuously.
 
 ---
 
@@ -802,7 +854,7 @@ import { BudgetExceededError, assertBudget } from '../bin/lib/budget.js';
 ```typescript
 // All diagnostic output:
 process.stderr.write(`[hook-name] message\n`);
-// Only intentional protocol JSON goes to stdout:
+// Only intentional protocol JSON goes to stdout (session-start only):
 process.stdout.write(JSON.stringify({ systemMessage: msg }) + '\n');
 // All hooks exit 0 on success:
 process.exit(0);
@@ -822,7 +874,7 @@ process.exit(0);
 ### proper-lockfile pattern (cross-process lock in hooks)
 
 **Source:** `hooks/post-tool-use.ts` lines 38-52
-**Apply to:** Any hook that needs a cross-process lock (Stop hook for session lock)
+**Apply to:** Any hook that needs a cross-process lock (Stop hook uses the higher-level `release()` wrapper, not raw lock())
 
 ```typescript
 import { lock } from 'proper-lockfile';
@@ -847,34 +899,42 @@ try {
 }
 ```
 
-### isOfflineMode() gate (applies to all adapters and --dry-run)
+### isOfflineMode() + PENSMITH_NO_LLM gates (applies to --dry-run)
 
-**Source:** `bin/lib/http-mock.ts` lines 139-141
-**Apply to:** `bin/lib/estimator.ts` (must set env BEFORE any adapter), `bin/pensmith.ts` root `run()`
+**Source:** `bin/lib/http-mock.ts` lines 139-141 (source adapters) + `bin/lib/verify/pass2.ts:215` / `pass4.ts:392` (LLM call sites)
+**Apply to:** `bin/lib/estimator.ts` (must NOT import LLM paths), `bin/pensmith.ts` argv pre-parse
 
 ```typescript
+// Source-adapter gate:
 export function isOfflineMode(): boolean {
   return process.env['PENSMITH_NETWORK_TESTS'] !== '1';
 }
-// --dry-run sets PENSMITH_NETWORK_TESTS='' (not '1') so isOfflineMode() returns true
+// LLM-call-site gate (already present in pass2/pass4):
+const noLlm = process.env['PENSMITH_NO_LLM'] === '1' || !process.env['ANTHROPIC_API_KEY'];
+
+// --dry-run sets BOTH:
+//   PENSMITH_NETWORK_TESTS='' → isOfflineMode() true → source adapters use cassettes
+//   PENSMITH_NO_LLM='1'       → pass2/pass4 short-circuit to placeholder, ZERO egress
+// (PENSMITH_DRY_RUN='1' is an advisory marker only — NOT itself a gate. There is NO
+//  model-invocation seam in runtime.ts; do not invent one.)
 ```
 
 ### setMirrorPromptsToStderr (applies to --show-prompts flag)
 
 **Source:** `bin/lib/session-log.ts` lines 82-86
-**Apply to:** `bin/pensmith.ts` root `run()` global flag handler
+**Apply to:** `bin/pensmith.ts` argv pre-parse (BEFORE runMain)
 
 ```typescript
 export function setMirrorPromptsToStderr(enabled: boolean): void {
   mirrorPromptsToStderr = !!enabled;
 }
-// Call BEFORE any LLM invocation: if (args['show-prompts']) setMirrorPromptsToStderr(true);
+// Call BEFORE any LLM invocation, in the pre-dispatch seam: if (hasFlag('show-prompts')) setMirrorPromptsToStderr(true);
 ```
 
 ### Zod safeParse for untrusted files (applies to hooks reading .paper files)
 
 **Source:** `hooks/pre-compact.ts` lines 179-190 (parseFrontmatter + try/catch); `bin/lib/handoff.ts` lines 60-62 (HandoffSchema.parse)
-**Apply to:** `hooks/session-start.ts` (reading HANDOFF.json), `hooks/stop.ts` (if reading HANDOFF.json)
+**Apply to:** `hooks/session-start.ts` (reading HANDOFF.json), `bin/cli/resume.ts` (reading HANDOFF.json)
 
 ```typescript
 const r = HandoffSchema.safeParse(raw);
@@ -901,10 +961,10 @@ All files in this phase have real analogs in the codebase. The only "no-analog" 
 ### HOOK-03 is complete
 `hooks/post-tool-use.ts` already implements the full HOOK-03 requirement. Planner should NOT re-implement it. The only work is:
 - Verify `tests/hooks-noop.test.ts` covers exit-0 (it does, line 14-23)
-- Optionally add `tests/hooks/post-tool-use.test.ts` for throttle-gate assertion
+- Add `tests/hooks/post-tool-use.test.ts` for the throttle-gate assertion (coverage only)
 
-### lock.ts already exports `release()`
-`bin/lib/lock.ts` line 135 already exports `async function release(resource: string)`. The Stop hook can use this directly. No new export needed.
+### lock.ts already exports `release()` — and it REJECTS on an unheld lock
+`bin/lib/lock.ts` line 135 already exports `async function release(resource: string)`. The Stop hook can use this directly — no new export needed. The load-bearing subtlety (M1/C2-M2): `release` calls `proper-lockfile.unlock`, which REJECTS when the resource is not locked (no code acquires a `.paper`-keyed resource lock). The Stop hook MUST therefore use `Promise.allSettled` (NOT `Promise.all`) so the rejected release cannot abandon `closeSessionLog()`.
 
 ### session-log.ts needs one new export for Stop hook
 `bin/lib/session-log.ts` exposes `close()` only on the per-handle `SessionLogger` interface (line 371). The Stop hook needs a module-level `closeSessionLog()` that awaits the module-scope `chain` promise. This is a 3-line addition to `session-log.ts`:
@@ -915,14 +975,11 @@ export async function closeSessionLog(): Promise<void> {
 }
 ```
 
-### hooks-noop.test.ts must be updated for session-start stdout
-The current assertion `assert.equal(out, '', ...)` applies to ALL four hooks. Once `session-start.ts` emits JSON stdout (when HANDOFF.json exists), this test will fail for session-start. The test must be updated to:
-1. Assert session-start exits 0 (always)
-2. Assert session-start stdout is either empty (no HANDOFF.json) or valid JSON with `systemMessage` key
-3. Keep the empty-stdout assertion for pre-compact, post-tool-use, stop (they never write stdout)
+### hooks-noop.test.ts handling for session-start stdout
+With no HANDOFF.json present in the test cwd, session-start emits nothing (noop path), so the existing `assert.equal(out, '')` can stay for session-start in the no-HANDOFF case. The JSON-frame case is covered by `tests/hooks/session-start.test.ts`. Keep the empty-stdout assert unconditionally for pre-compact, post-tool-use, stop.
 
-### Verb `next` vs bare `/pensmith` (Pitfall 4)
-The root `defineCommand` in `bin/pensmith.ts` MUST have its own `run()` handler. Bare `pensmith` dispatches to root `run()`, NOT to the `next` subcommand. The `next` subcommand calls the SAME `resolveNextAction()` function. Both paths must produce equivalent output.
+### Bare `/pensmith` routing — pre-dispatch seam, NOT a root run() (CORRECTED, H2)
+Do NOT add a root `run()` to `bin/pensmith.ts` (citty would double-fire it after every verb — verified at `index.mjs:228`). Bare routing + global-flag setup + the yolo cap pre-flight all live in a manual argv pre-parse BEFORE `runMain`. When a verb is present → `runMain(command)` exactly once. When bare → `resolveNextAction()` + dispatch via the exported `REAL_VERB_LOADERS` (do NOT also call `runMain`). The `next` subcommand calls the SAME `resolveNextAction()`.
 
 ---
 
@@ -930,4 +987,4 @@ The root `defineCommand` in `bin/pensmith.ts` MUST have its own `run()` handler.
 
 **Analog search scope:** `bin/lib/`, `bin/cli/`, `hooks/`, `tests/`, `.claude-plugin/`, `skills/`
 **Files scanned:** 15 source files read in full; 5 test files read in full
-**Pattern extraction date:** 2026-06-18
+**Pattern extraction date:** 2026-06-18 (updated cycle-2: dry-run LLM gate via PENSMITH_NO_LLM, no runtime.ts seam; Stop Promise.allSettled; no root run(); yolo cap for any verb)
