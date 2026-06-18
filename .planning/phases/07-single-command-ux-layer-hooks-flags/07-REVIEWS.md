@@ -1035,3 +1035,149 @@ HIGH_COUNT: 0
 ### Cycle 5 — Judge Verdict
 
 **current_high = 1.** The cycle-4 STATE.json robustness fix is UNANIMOUSLY confirmed resolved and re-verified against the live `loadState` contract — absent → new/empty, well-typed → correct verb/projection, malformed/schema-invalid → status/attention/empty, neither throws; `state.sections ?? []` guarded. One NEW HIGH survives, code-verified and not adjudicated in any prior cycle: the router's per-section walk reads `parseFrontmatter(readFileSync(planPath))` with NO try/catch (07-RESEARCH lines 505-508; 07-02 Task 1), so a present-but-corrupt/unparseable PLAN.md throws before the switch's `default` arm and crashes bare `/pensmith` on `decision.verb` — the exact SC1 "never crash" guarantee the C4 fix hardened for STATE.json, one file over. The repo's own `hooks/pre-compact.ts:178-187` wraps the identical call in try/catch, confirming the throw is real; no 07-01 RED case fixtures a malformed PLAN.md. Fix: guard the per-section read in router.ts (route to status/attention or default to 'planned'), update the RESEARCH code example + 07-02 Task 1, and add a corrupt-PLAN.md RED case. The estimator is unaffected (it counts sections from STATE.json, never reads PLAN.md). All other findings are MEDIUM/LOW and non-blocking — argv.slice(2) tightening, the repeat import-cycle MEDIUM (works in ESM, fragility note only), the repeat section-arg-mapping MEDIUM, the by-design UX-04 human-verify checkpoint, and several LOW tidiness/test-fixture notes. The four cross-AI HIGH families resolved across cycles 1-4 (H1/H2/H3/H4, C3-HIGH-1/2, C4-HIGH) remain resolved.
+
+---
+
+## Cycle 6
+
+**Reviewed:** 2026-06-18. Reviewers run: codex, gemini, claude, opencode (all four available; all returned usable output). Prompt: `/tmp/gsd-review-prompt-7.md` (GOAL + 5 SCs + 8 non-negotiables + the cycle-1..5 resolved-HIGH ledger + FULL TEXT of all 4 revised plans 07-01..07-04). Focus: confirm the cycle-5 fix — `resolveNextAction` given a NEVER-THROW invariant over its ENTIRE input surface (STATE.json catch-all + per-section PLAN.md try/catch + outer backstop + input-surface audit) — is genuinely resolved, and surface any remaining/NEW HIGH.
+
+Raw HIGH_COUNT per reviewer: codex 1, gemini 0, claude 1, opencode 0.
+
+### Synthesized Findings (cycle 6)
+
+**The cycle-5 PLAN.md never-throw fix is UNANIMOUSLY + code-verified RESOLVED for `resolveNextAction`.** All four reviewers independently confirm 07-02 Task 1 + the 07-RESEARCH router code example now wrap each per-section `readFileSync`+`parseFrontmatter` in try/catch (absent→plan, present-but-corrupt→status/attention+section+stderr), add an OUTER backstop around the whole resolver body, and carry an input-surface audit (loadState catch-all, `state.sections ?? []`, per-section read guard, existsSync probes confirmed non-throwing, no stray JSON.parse). claude re-verified the load-bearing seams against the live repo: `pass2.ts:215`/`pass4.ts:392` (PENSMITH_NO_LLM gate), `bin/pensmith.ts` subCommands-only/no root run(), `compile.ts:88` (`args.yolo === true`), `hooks/pre-compact.ts:178-187` (the identical guarded parseFrontmatter call), `lock.ts:135` (release rejects on an unheld stub → Promise.allSettled). All eight prior HIGH families (H1/H2/H3/H4, C3-HIGH-1, C3-HIGH-2, C4-HIGH, C5-HIGH) remain resolved.
+
+**Judge verdict: current_high = 1.** One genuine NEW HIGH survives — code-verified against the plan text + repo, NOT adjudicated in any prior cycle. It is the SAME never-crash family as C4→C5, moved ONE VERB DOWNSTREAM (router→status dispatch), exactly as C4→C5 was the same family one FILE over.
+
+- **[HIGH] (C6-HIGH; 07-02 Task 3 status.ts + step 3e dispatch, bin/cli/status.ts + bin/pensmith.ts) — SC1's "never crash on a present-but-corrupt per-section PLAN.md" is proven only for `resolveNextAction`, NOT for the bare-dispatch leg that follows it; the `status` verb the router routes corruption INTO re-walks the same corrupt PLAN.md unguarded, so bare `/pensmith` still crashes end-to-end.** Raised by claude; judge-confirmed against the plan text + repo. The C4→C5 arc made `resolveNextAction` never throw so `decision.verb` cannot crash the bare dispatcher. But for a corrupt PLAN.md the resolver returns `{verb:'status', reason:'attention', section}` (07-02 Task 1, lines 200/227), and the bare path (07-02 Task 3 step 3e, line 312) then `dispatchVerb('status', …)` → `statusCommand.run()`. Per 07-02 Task 3 (line 301), `status.ts` is specified to "walk section PLAN.md frontmatter (**reuse the router's read helpers or parseFrontmatter**)" to print its per-section table — re-reading the SAME corrupt PLAN.md the router just flagged. Two facts turn this into an unguarded throw: (1) **the suggested reuse target does not exist** — 07-02 Task 1 exports only `resolveNextAction` + `RouterDecision` (line 33), there is NO exported per-section `readSectionState()` helper, so the executor falls to the "or parseFrontmatter" alternative = a raw `parseFrontmatter(readFileSync(planPath))`, which `hooks/pre-compact.ts:178-187` proves throws on malformed YAML; (2) **`dispatchVerb` is not specified to wrap `cmd.run()` in try/catch**, so the throw propagates to the top level and crashes bare `/pensmith`. And **no test pins it**: the router RED suite exercises `resolveNextAction` in isolation (07-01 T-07-26 / line 342 asserts the RESOLVER's return, not the dispatch); `flags.test.ts`'s existing end-to-end (execFileSync child) bare-dispatch no-crash case (07-01 line 229) drives bare `pensmith --yolo` against a corrupt **STATE.json** — there is NO analogous case driving bare `pensmith` (or `pensmith status`) against a corrupt **PLAN.md** asserting the full router→status dispatch exits cleanly. `status.ts`'s acceptance criterion (07-02 line 320) hardens only "BOTH StateNotFoundError and a corrupt-STATE load error" — the per-section corrupt PLAN.md (C5) is absent from status's contract and coverage. This directly fails SC1, which explicitly enumerates "on a present-but-corrupt per-section PLAN.md AND it must NEVER crash" — a guarantee currently delivered only up to `resolveNextAction`'s return, not through the dispatch bare `/pensmith` actually performs. **Fix direction:** (a) have 07-02 Task 1 export a shared guarded `readSectionState(planPath)` helper (the per-section try/catch the router already uses) so "reuse the router's read helpers" is literally achievable, and require status.ts (and any verb that walks PLAN.md frontmatter) to use it; AND/OR (b) have `dispatchVerb` wrap the dispatched `cmd.run()` in a backstop try/catch (stderr diagnostic + clean exit); AND (c) add a `flags.test.ts` end-to-end RED case driving bare `pensmith` against a corrupt PLAN.md asserting the full invocation does not crash — the missing twin of the existing corrupt-STATE bare-dispatch case.
+
+### Downgraded / rejected (with justification)
+
+- **[codex HIGH → DOWNGRADED to scoping observation] "07-02/07-04 do not make `list`/`open`/`sketch`/`add` work in both tiers (SC2)."** Factually correct that the live dispatcher (`bin/pensmith.ts:37-56`) leaves `list/open/sketch/add` on `makeStub()` and the plans promote only `next`/`status`/`resume`. BUT the real implementations of these four verbs are EXPLICITLY scoped to **Phase 8**, not Phase 7: ROADMAP Phase 8 GOAL (line 294: "`/pensmith sketch` thinking-partner mode, `/pensmith add <doi|pdf|url>`, library mode polish") and Phase 8 Success Criteria (line 299 `/pensmith list` + `/pensmith open <name>`; line 301 `/pensmith sketch`; line 302 `/pensmith add`). 07-RESEARCH line 27 also states these "stay stubs per Phase 8 scope." Phase 7's SC2 contract is the 16-verb registration/dispatch bijection (every verb is reachable, dispatches, is visible in both tiers) — which the stubs satisfy — NOT the feature implementation of the four Phase-8 verbs. This is the established, approved phase decomposition, not a Phase 7 SC failure. Not a HIGH.
+- **[codex MEDIUM] plugin.json colon-namespace doc-only fallback (UX-03/SC2).** REPEAT of the cycle-1 M2 / cycle-2..5 already-adjudicated MEDIUM. The plan's PRIMARY path ships the real skills array; the fallback is contingent on Assumption A1 (verify the Anthropic plugin schema FIRST) and gated by `validate-plugin-manifest.cjs` + a blocking human-verify checkpoint. Held at MEDIUM. Not re-raised as HIGH per the review instructions.
+- **[opencode + (history) codex/gemini MEDIUM] citty unknown-flag stripping on the explicit-verb path.** REPEAT of the cycle-4 already-adjudicated MEDIUM. The pre-parse applies the flag EFFECTS before runMain regardless of stripping; citty ^0.2.2 is lenient with undeclared flags by default. Non-blocking robustness note (strip the four flags from argv before runMain, or declare per-subcommand, and add an explicit `pensmith write --dry-run` parse case). MEDIUM.
+- **[claude MEDIUM-at-most note] `done` terminus keys on `FINAL.md` presence, but per STATE.md [06-05] `done.ts` writes exports to `.paper/export/` and may not write a `FINAL.md` sentinel — bare `/pensmith` after a completed export may keep resolving to `done`.** An idempotency/UX concern (the export gate re-confirms; only `--yolo` would silently re-export), not a crash. MEDIUM at most; flagged for awareness, non-blocking. Worth confirming the `FINAL.md` sentinel contract before execution.
+- **[opencode LOW] SessionStart JSON.parse needs a surrounding try/catch (the hooks silent-try/catch pattern covers it); closeSessionLog tracks only the most-recent logger (sequential-session-safe).** LOW, observational, already covered.
+
+### Per-Reviewer Raw (cycle 6)
+
+#### codex (HIGH_COUNT: 1 claimed → judged 0 valid HIGH; the SC2 list/open/sketch/add claim downgraded to a Phase-8-scope observation)
+
+```
+[HIGH] 07-02/07-04 still do not make the full locked shortcut set “work” in both tiers. The live dispatcher currently leaves `list`, `open`, `sketch`, and `add` on `makeStub()` after prior phases, and the plans only promote `next`, `status`, and `resume`. 07-04’s tier-contract extension is likewise scoped to `next/status/resume + plumbing`, not all named shortcuts. That misses Success Criterion 2 for `list`, `open`, `sketch`, and `add`. Code seams: [bin/pensmith.ts](</mnt/c/Users/akhil/OneDrive - Roanoke College/Documents/Github/pensmith/bin/pensmith.ts:37>) loader map, [bin/cli/stubs.ts](</mnt/c/Users/akhil/OneDrive - Roanoke College/Documents/Github/pensmith/bin/cli/stubs.ts:9>), [tests/cli-stubs.test.ts](</mnt/c/Users/akhil/OneDrive - Roanoke College/Documents/Github/pensmith/tests/cli-stubs.test.ts:31>).
+
+[MEDIUM] The plugin.json colon namespace fallback remains a real delivery risk, but not a new HIGH per the review instructions. 07-04 still allows a documented fallback if the schema rejects colon names or `skills`; that would not make `/pensmith:plan-section` available for scripting. Keep the schema validation gate, but do not accept documentation-only fallback as satisfying Phase 7.
+
+[LOW] The previously resolved HIGHs look genuinely addressed in plan text: `--yolo` preflight is any-verb and independent of `--estimate`; pre-dispatch avoids citty double-dispatch; `--dry-run` sets `PENSMITH_NO_LLM`; router ignores HANDOFF; manual dispatch forwards global flags; router totality covers all section states, corrupt STATE.json, corrupt per-section PLAN.md, and has an outer backstop; estimator stays unaffected by PLAN.md.
+
+[LOW] HOOK-03 is correctly treated as coverage-only. I did not flag it.
+
+HIGH_COUNT: 1
+```
+
+#### gemini (HIGH_COUNT: 0 — all eight prior HIGH families confirmed resolved)
+
+```
+The four revised plans (**07-01..07-04**) for Phase 7 have been thoroughly reviewed against the Phase Goal, the 5 Success Criteria, the Project Non-Negotiables, and the 10+ resolved HIGH concerns from previous cycles.
+
+The plans collectively deliver a robust, state-aware single-command UX while ensuring safety and totality over a corrupt input surface. 
+
+### Key Resolution Confirmations:
+
+*   **H1 (Yolo Cap Scope & Safety):** `07-02` Task 3 correctly implements the `>50%` cap refusal in a pre-dispatch seam that fires for **any** command line where `--yolo` is present (including non-gate verbs like `write`/`plan` and bare invocation), independent of `--estimate`. `07-02` Task 2 ensures the estimator returns an empty projection on `StateNotFoundError`, preventing a crash in paper-less directories (**C2-H1**).
+*   **H2 (Single Dispatch & Pre-dispatch Flags):** `07-02` Task 3 implements a manual argv pre-parse BEFORE `runMain`. This ensures global flags (`--dry-run`, `--show-prompts`) are applied before subcommands execute and prevents double-execution by bypassing `runMain` on bare routing.
+*   **H3 (Dry-run LLM Gate):** `07-02` Task 4 confirms that `--dry-run` achieves zero network egress by setting `PENSMITH_NO_LLM='1'`, which the existing Phase 5 verifier call sites already honor. `07-01` Task 1 adds a non-vacuous RED test driving the LLM-calling `verify` path with a fake key present.
+*   **H4 (Resume Circularity & Hand-off Lifecycle):** `07-02` Task 1 pins the router to ignore `HANDOFF.json` and never return `resume`. `07-02` Task 3 ensures the `resume` verb hand-off clears the `HANDOFF.json` file, guaranteeing progress.
+*   **C3-HIGH-1 (Router Totality):** `07-02` Task 1 ensures `resolveNextAction` is total over `SectionStateSchema`, specifically routing `failed`/`unverifiable` back to `verify` so the walk returns a concrete verb for the first non-verified section.
+*   **C3-HIGH-2 (Flag Forwarding):** `07-02` Task 3 exports a `dispatchVerb` helper that merges parsed global flags into the `args` object for manually-dispatched verbs (bare, `next`, `resume`). This ensures `compile`/`done` correctly skip their own approval gates.
+*   **C4-HIGH & C5-HIGH (Corrupt Input Safety):** `07-02` Task 1 implements a catch-all classification for `loadState` and a guarded read for per-section `PLAN.md` frontmatter, both resolving to `status/attention` without throwing. An outer try/catch backstop in the resolver body provides defense-in-depth, fulfilling the "never crash" non-negotiable across the full failure surface.
+
+### Additional Validations:
+
+*   **16-Verb Bijection:** Plans rigorously maintain the locked 16-verb set. Plumbing namespace skills route to existing verbs, and `07-01` Task 3 adds an invariant check for `UX02_VERBS.length === 16`.
+*   **Hook Integrity:** `07-03` correctly upgrades the hooks, with `Stop` using `Promise.allSettled` to protect the session-log flush from a rejected lock release (**M1/C2-M2**), and `PreCompact` implementing the self-imposed 10s timeout.
+
+The plans are idiomatically aligned with the project's engineering standards and the two-tier architecture.
+
+HIGH_COUNT: 0
+```
+
+#### claude (HIGH_COUNT: 1 — NEW C6-HIGH: corrupt-PLAN.md never-crash not delivered through the router→status dispatch; judge-confirmed)
+
+```
+I've reviewed the four plans against the cited code seams. Let me confirm my reading of the key seams before finalizing.
+
+The seams check out as the plans describe:
+- `pass2.ts:215` and `pass4.ts:392` both gate on `PENSMITH_NO_LLM === '1' || !ANTHROPIC_API_KEY` → H3's dry-run gate is real, not fictional.
+- `bin/pensmith.ts` has `subCommands` only, no root `run()` → H2's pre-dispatch seam premise holds.
+- `compile.ts:88` reads `yolo: args.yolo === true` → C3-HIGH-2's forwarding target is real.
+- `hooks/pre-compact.ts:178-187` wraps `parseFrontmatter(readFileSync(planPath))` in try/catch → C5's "the throw is real, and the repo already guards it" claim is accurate.
+- `lock.ts:135` `release()` calls `lockfile.unlock` which rejects on an unheld stub → M1's `Promise.allSettled` requirement is correct.
+
+# Cross-AI Plan Review — Phase 7, Cycle 6
+
+## Confirmation of prior resolutions (all genuinely resolved)
+
+- **H1 / C2-H1, H2, H3 / C2-H3, H4, C3-HIGH-1, C3-HIGH-2, C4-HIGH, C5-HIGH** — all verified against plan text + seams. The C5 never-throw invariant over `resolveNextAction`'s input surface (loadState catch-all, `state.sections ?? []`, per-section `readFileSync`/`parseFrontmatter` try/catch, outer backstop, audited `existsSync` probes) is total and the RED gate in 07-01 (case (o) corrupt-frontmatter → status/attention; case (p) absent → plan) would catch the unguarded walk. The estimator-unaffected claim is correct (it counts sections from STATE.json, never reads PLAN.md).
+
+## New HIGH
+
+**[HIGH] SC1's "never crash on a present-but-corrupt per-section PLAN.md" is proven only for `resolveNextAction`, not for the bare-dispatch leg that follows it — the `status` verb the router routes corruption to is not guaranteed (nor tested) to guard its OWN per-section PLAN.md walk, so a corrupt PLAN.md still crashes bare `/pensmith` end-to-end.**
+
+The whole C4→C5 arc made `resolveNextAction` never throw so that `decision.verb` can't crash the bare dispatcher. But for the C5 corrupt-PLAN.md case the resolver returns `{ verb:'status', reason:'attention', section }`, and the bare path (07-02 Task 3 step 3e) then calls `dispatchVerb('status', …)` → `statusCommand.run()`. Per 07-02 Task 3, `status.ts` is specified to "**walk section PLAN.md frontmatter (reuse the router's read helpers or parseFrontmatter)**" to print its per-section table. That walk re-reads the *same* corrupt PLAN.md the router just flagged. Two problems make this an unguarded throw:
+
+1. **The suggested reuse target doesn't exist.** 07-02 Task 1 exports only `resolveNextAction` + `RouterDecision` — there is no exported per-section `readSectionState()` helper to "reuse." So the executor falls to the "or parseFrontmatter" alternative, i.e. a raw `parseFrontmatter(readFileSync(planPath))`, which `hooks/pre-compact.ts:178-187` proves throws on malformed YAML. `dispatchVerb` is not specified to wrap `cmd.run()` in try/catch, so the throw propagates to the top level and crashes bare `/pensmith` — the exact SC1 failure mode, just moved one layer downstream (the same "sibling, one file over" pattern as C4→C5, now "one verb over").
+
+2. **No test pins it.** The router RED suite (`pensmith-router.test.ts`) exercises `resolveNextAction` in isolation. `flags.test.ts`'s C4-HIGH case drives bare `pensmith --yolo` against a corrupt **STATE.json** (where `status.ts`'s STATE-level guard is explicitly required) but there is **no** case driving bare `pensmith` (or `pensmith status`) against a corrupt **PLAN.md** asserting the full router→status dispatch exits cleanly. So the only place SC1's corrupt-PLAN.md guarantee is gated is the router unit test, which cannot observe the status verb's own walk. 07-02's status acceptance criterion mentions only "handles BOTH StateNotFoundError and a corrupt-STATE load error" — the per-section corrupt PLAN.md (C5) is absent from status's contract and coverage.
+
+**Fix:** (a) require `status.ts` (and any verb that walks PLAN.md frontmatter) to use the same per-section try/catch guard the router uses — ideally by having 07-02 Task 1 export a shared guarded `readSectionState(planPath)` helper so "reuse the router's read helpers" is literally possible; and/or (b) have `dispatchVerb` wrap the dispatched `cmd.run()` in a backstop try/catch that prints to stderr and exits cleanly; and (c) add a `flags.test.ts` (or router-dispatch) RED case driving bare `pensmith` against a corrupt PLAN.md asserting the end-to-end invocation does not crash — the missing twin of the existing corrupt-STATE bare-dispatch case.
+
+This is HIGH because SC1 explicitly enumerates "on a present-but-corrupt per-section PLAN.md AND it must NEVER crash," and that guarantee is currently delivered only up to `resolveNextAction`'s return — not through the dispatch that bare `/pensmith` actually performs.
+
+## Notes (not HIGH)
+- The router's "done" terminus keys on `FINAL.md` presence, but per STATE.md [06-05] `done.ts` writes exports to `.paper/export/` and "leaves exportDraft outputDir UNSET" — it's not established that any `FINAL.md` sentinel is ever written, so bare `/pensmith` after a completed export may keep resolving to `done`. This is an idempotency/UX concern, not a crash, and the export gate re-confirms (only `--yolo` would silently re-export). MEDIUM at most; flagging for awareness, not blocking.
+
+HIGH_COUNT: 1
+```
+
+#### opencode (HIGH_COUNT: 0 — all eight prior HIGH families confirmed genuinely resolved)
+
+```
+## Cross-AI Plan Review — Cycle 6
+
+### Previously resolved HIGH concerns (verified against plan text)
+
+| ID | Plan source | Status |
+|---|---|---|
+| **H1** — yolo >50%-cap for ANY verb, paper-less no-crash | 07-02 Task 3.c + must_haves truths | ✓ Genuinely resolved. Pre-flight runs for ANY verb (incl. non-gate write/plan/verify) and bare, independent of --estimate, hard exit(1). projectEstimate returns empty projection on StateNotFoundError (C2-H1) AND on any other load error (C4-HIGH). |
+| **H2** — no double-dispatch + flags on explicit verbs | 07-02 Task 3 + must_haves truths | ✓ Genuinely resolved. Root has subCommands only, NO run(). Pre-dispatch argv pre-parse applies flags BEFORE dispatch. Explicit verbs run via runMain exactly once. Bare routes separately. |
+| **H3** — dry-run gates LLM on verify path (non-vacuous) | 07-02 Task 3.b + Task 4 | ✓ Genuinely resolved. --dry-run sets PENSMITH_NO_LLM='1' which pass2.ts:215 + pass4.ts:392 already honor (zero messages.create, zero COSTS.jsonl). No runtime.ts edit, no pass2/pass4 edit. H3 test drives `verify --dry-run` WITH fake ANTHROPIC_API_KEY. |
+| **H4** — resolveNextAction ignores HANDOFF | 07-02 Task 1 behavior | ✓ Genuinely resolved. Router never reads HANDOFF.json. RouterDecision 'resume' arm exists only for resume.ts typing, never emitted by resolveNextAction. |
+| **C3-HIGH-1** — router totality over SectionStateSchema | 07-02 Task 1 COMPLETE SECTION-STATE→VERB MAP | ✓ Genuinely resolved. Exhaustive switch over all SectionStateSchema values. failed/unverifiable → verify (NOT continue). Mixed [verified,failed,verified] → verify. default arm + guaranteed terminal returns. |
+| **C3-HIGH-2** — --yolo forwarded into manual-dispatch verbs | 07-02 Task 3 (dispatchVerb helper) | ✓ Genuinely resolved. Shared dispatchVerb helper MERGES globalFlags (≥ yolo) into dispatched verb's args. Bare/next/resume ALL dispatch through dispatchVerb. Explicit verb path uses citty native parsing. |
+| **C4-HIGH** — corrupt STATE.json never throws | 07-02 Task 1 (loadState catch-all) + Task 2 (estimator catch-all) | ✓ Genuinely resolved. loadState catch-all: StateNotFoundError → new; ANY OTHER error → status/attention + stderr (never re-throws). state.sections ?? [] before .sort(). Estimator catch-all returns empty projection on any load error. |
+| **C5-HIGH** — corrupt per-section PLAN.md never throws | 07-02 Task 1 (per-section try/catch + outer backstop + input-surface audit) | ✓ Genuinely resolved. Per-section readFileSync+parseFrontmatter wrapped in try/catch: absent → plan, present-but-corrupt → status/attention+section+stderr. Outer backstop wraps whole resolver. Input-surface audit confirms all fs/parse ops guarded (loadState, .sort guard, per-section read, existsSync probes). |
+
+### New/remaining concerns
+
+**[MEDIUM] M1: citty flag compatibility on explicit-verb path.** The pre-parse scans argv for --dry-run/--estimate/--yolo/--show-prompts but does NOT strip them before calling runMain. If citty subcommands don't declare these flags in their own `args`, citty may reject "unknown flag" errors on paths like `pensmith write --dry-run` or `pensmith compile --yolo`. The --estimate path exits before citty runs (safe), but --yolo under-cap, --dry-run, and --show-prompts still have untripped argv entries when runMain processes them. The plan's tests assert these work, so the implementation must handle this (strip argv, declare flags per subcommand, or use ignoreUnknown). The plan doesn't specify which mechanism. Document in the 07-02-SUMMARY that this is an implementation detail the RED tests guard.
+
+**[MEDIUM] M2: citty `--show-prompts` flag parsing on explicit subcommands.** Same structural issue as M1 — `pensmith write --show-prompts` must work without citty erroring. The pre-parse has already called `setMirrorPromptsToStderr(true)` by the time it reaches runMain, so the EFFECT is applied regardless of whether citty errors. But if citty throws on unknown flag, the process still crashes before the verb runs, and the user sees an error. Same mitigation as M1.
+
+**[LOW] L1: SessionStart HANDOFF.json parsing.** The plan says "existsSync → JSON.parse → HandoffSchema.safeParse (never throw on malformed)" but JSON.parse itself throws on invalid JSON. The behavior description implies a surrounding try/catch but doesn't spell it. Minor clarity gap — the hooks pattern (silent try/catch, exit 0) inherently covers this.
+
+**[LOW] L2: closeSessionLog only tracks the most recent logger.** The module-scope `activeChain` approach only captures the latest openSessionLog() chain. Acceptable for sequential sessions, but if a concurrent or overlapping openSessionLog occurs, the earlier chain is orphaned. Not a real concern in current architecture (sessions are sequential).
+
+### Summary
+
+All 8 previously resolved HIGHs (H1-H4, C3-HIGH-1, C3-HIGH-2, C4-HIGH, C5-HIGH) are **genuinely resolved** in the plan text — each has explicit design decisions, code seams, guard patterns, and regression-gate tests that would catch the original failure. The plans correctly and completely deliver the Phase 7 goal across all 5 success criteria and all project non-negotiables.
+
+Two MEDIUM concerns around citty flag interoperability on the explicit-verb path — these are implementation risks the RED tests guard, not design gaps.
+
+HIGH_COUNT: 0
+```
+
+### Cycle 6 — Judge Verdict
+
+**current_high = 1.** The cycle-5 never-throw invariant for `resolveNextAction` (STATE.json catch-all + per-section PLAN.md try/catch + outer backstop + input-surface audit) is UNANIMOUSLY confirmed resolved and re-verified against the live seams; all eight prior HIGH families (H1/H2/H3/H4, C3-HIGH-1, C3-HIGH-2, C4-HIGH, C5-HIGH) remain resolved. One NEW HIGH survives (C6-HIGH), code-verified and not adjudicated before: the corrupt-PLAN.md "never crash" guarantee (SC1) is delivered only up to `resolveNextAction`'s RETURN — the bare path then dispatches `status`, whose own per-section PLAN.md walk ("reuse the router's read helpers or parseFrontmatter") re-reads the same corrupt file via a raw, unguarded `parseFrontmatter(readFileSync)` (no shared guarded read helper is exported; `dispatchVerb` has no backstop try/catch), so bare `/pensmith` still crashes end-to-end — the same never-crash family as C4→C5, one VERB downstream. No 07-01 end-to-end case drives bare `pensmith`/`status` against a corrupt PLAN.md (only against a corrupt STATE.json). Fix: export a shared guarded `readSectionState(planPath)` from router.ts and have status.ts use it, and/or give dispatchVerb a backstop try/catch, and add an end-to-end corrupt-PLAN.md RED case. The corruption-robustness family (the C4→C5→C6 never-crash arc) is therefore NOT yet fully closed end-to-end — it is closed for the resolver, open for the dispatch leg. All other findings are MEDIUM/LOW and non-blocking: codex's `list/open/sketch/add` SC2 claim is Phase-8-scoped (downgraded), the plugin-schema fallback and citty flag-stripping are repeat MEDIUMs, and the `FINAL.md`-sentinel `done` idempotency is a MEDIUM-at-most awareness note.
