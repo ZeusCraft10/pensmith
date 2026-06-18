@@ -787,3 +787,133 @@ HIGH_COUNT: 0
 ### Cycle 3 — Judge Verdict
 
 **current_high = 2.** Prior H1/H2/H3/H4 unanimously + code-verified RESOLVED. Two NEW HIGHs survive judging: (A) router decision-table totality gap for failed/unverifiable sections (claude; verified against SectionStateSchema in state.ts:39-41), and (B) global-flag (yolo) propagation into manually-dispatched bare/resume verb paths (codex; verified against compile.ts:90 + done.ts:436). Gemini + opencode found 0 HIGH; codex claimed 4 but 1 was rejected (.paper lock rejection is by-design, the rationale for Promise.allSettled) and 2 downgraded to MEDIUM (Stop-flush cross-process vacuity; plugin-schema fallback). All other findings are MEDIUM/LOW and non-blocking.
+
+---
+
+## Cycle 4
+
+**Reviewed:** 2026-06-18. Reviewers run: codex, gemini, claude, opencode (all four available and returned usable output). Prompt: `/tmp/gsd-review-prompt-7.md` (GOAL + 5 SCs + 8 non-negotiables + FULL TEXT of all 4 revised plans 07-01..07-04). Focus: confirm the two cycle-3 fixes — (1) resolveNextAction made TOTAL over SectionStateSchema, (2) global flags forwarded through bare/next/resume manual dispatch via dispatchVerb — are genuinely resolved, and surface any remaining/NEW HIGH.
+
+Raw HIGH_COUNT per reviewer: codex 2, gemini 0, claude 0, opencode 1.
+
+### Synthesized Findings (cycle 4)
+
+**Both cycle-3 fixes UNANIMOUSLY + code-verified RESOLVED.** All four reviewers independently confirm:
+- **C3-HIGH-1 (router totality):** the exhaustive `switch` over all 7 SectionStateSchema states (`planned/writing/written/verifying/verified/failed/unverifiable`) + `default:` arm + three post-walk returns is provably total. `failed`/`unverifiable` route to `verify`; `verified` is the only `continue`; compile is reached only when every section is verified. The mixed `[verified,failed,verified]`-no-DRAFT case returns `verify` at the failed section and can never fall through to `undefined`. Verified against the RESEARCH.md code example and 07-02 Task 1 behavior.
+- **C3-HIGH-2 (flag propagation):** `dispatchVerb()` merges `yolo: globalFlags.yolo === true` into the dispatched verb's args and calls `cmd.run({args: mergedArgs})`; bare (3e), next, and resume all route through it. Re-verified against the live repo: `compile.ts:90` and `done.ts:436` read exactly `args.yolo === true`, so the forwarded value reaches the gate-skip read on the bare AND resume paths. Ordering is sound — the C3-HIGH-2 RED fixtures keep projected cost under the 50% cap so the step-3c pre-flight does not mask the gate-skip assertion. The explicit-verb path correctly relies on citty parsing `--yolo` directly (no manual forwarding needed) with a single dispatch (no root `run()`).
+
+**Judge verdict: current_high = 1.** One genuine NEW HIGH survives, code-verified and not adjudicated in any prior cycle.
+
+- **[HIGH] (07-02 Task 1, router.ts) — `resolveNextAction` crashes on a malformed-but-present STATE.json, violating SC1's "never crash" guarantee.** Raised by codex; sub-case (state.sections undefined → `.sort()`) raised by opencode (LOW). VERIFIED against the repo: `loadState` calls `StateSchema.parse` (state.ts:259 and migration path :303), which throws a Zod/SchemaValidationError on a corrupt or schema-invalid STATE.json (e.g. bad JSON, a `sections` entry missing `slug`, a non-numeric `n`, or `sections` absent). The router (07-02 Task 1) catches ONLY `StateNotFoundError instanceof` and re-throws everything else, so the exception bubbles out of `resolveNextAction` before any `RouterDecision` exists — the bare dispatcher fails before `decision.verb`. This is distinct from the cycle-3 totality HIGH (which was the well-typed SectionStateSchema state space, genuinely fixed); it is the OTHER half of "router is total over real inputs" — robustness against a corrupted/hand-edited STATE.json. SC1 says bare `/pensmith` must NEVER crash, and the review prompt explicitly asked about "any STATE.json shape." **Fix direction:** widen the router's catch (and the estimator's, which has the identical `StateNotFoundError`-only catch — 07-02 Task 2) to also handle malformed/schema-invalid state — return `{ verb:'status', reason:'attention' }` (router) / the empty projection (estimator) with a stderr diagnostic, and guard `state.sections` for null/undefined before `.sort()`. Add a RED case in `pensmith-router.test.ts` fixturing a corrupt STATE.json and asserting a valid non-undefined decision (no throw).
+
+**Downgraded / rejected (with justification):**
+- **[MEDIUM] (07-02 Task 3, bin/pensmith.ts) — pre-parse scans but does not STRIP the four global flags from `process.argv` before `runMain`, so `pensmith write --dry-run` may hit a citty "unknown flag" error** (the `write` subcommand does not declare those flags). Raised independently by codex (LOW), gemini (LOW), opencode (MEDIUM), claude (LOW) — strong cross-reviewer signal. Maps to SC3 / H2(b) (flags must take effect for explicit verbs) and the H2/H3 RED tests that drive explicit-verb paths. NOT a HIGH because citty ^0.2.2 is lenient with undeclared flags by default (collects them rather than erroring) and the pre-parse applies the flag EFFECTS regardless of stripping — so this is an untested robustness assumption, not a proven SC failure. **Recommend (non-blocking):** strip the four flags from argv before `runMain`, or declare them on every subcommand's args, and add an explicit `pensmith write --dry-run` RED case so the assumption is tested rather than relied upon.
+- **[MEDIUM] (07-04 Task 2) — plugin.json CONTRIBUTING.md fallback does not deliver a working `/pensmith:plan-section` in Tier 1 if the schema rejects colon names.** Raised as HIGH by codex. This is a REPEAT of the cycle-3 already-adjudicated MEDIUM ("plugin-schema fallback" — see Cycle 3 Judge Verdict). The plan's PRIMARY path ships the real skills array; the fallback is a conditional contingency gated on Assumption A1 (verify the Anthropic plugin schema FIRST) with a SUMMARY deviation note. Keeping at MEDIUM. **Recommend:** the planner resolve A1 (confirm `skills` array + colon-name support) before execution so the fallback branch is provably unreachable; if the schema does reject it, that is a genuine UX-03 gap to escalate then — but as written the plan does not commit to the lossy branch.
+- **[REJECTED → non-issue] (opencode HIGH) — circular ESM dependency / TDZ crash for `dispatchVerb` between `bin/pensmith.ts` and `bin/cli/{next,resume}.ts`.** The plan (07-02 Task 3, line 265) ALREADY specifies `async function dispatchVerb(...)` — a hoisted function declaration, which is exactly opencode's own recommended fix (a). ESM circular imports with hoisted function declarations do not hit TDZ at module-eval time, and `dispatchVerb` is only invoked at runtime (inside `run()`), after both modules finish loading. The plan also already names the circular-dep risk (M7) and chose to export REAL_VERB_LOADERS + dispatchVerb from pensmith.ts. The hazard is pre-empted by design; not a defect.
+- **[REJECTED → non-issue] (claude MEDIUM) — `done`/humanize could issue an LLM call not gated on PENSMITH_NO_LLM, so `pensmith done --dry-run` would egress.** VERIFIED against the repo: the ONLY `messages.create()` / `new Anthropic()` sites in `bin/` and `hooks/` are `verify/pass2.ts` (255/230) and `verify/pass4.ts` (444/423) — both gated on `PENSMITH_NO_LLM`. The humanizer is the user's external Tier-1 skill, not a Tier-2 LLM call site; `done` in Tier 2 makes no `messages.create()`. The "two call sites" claim IS exhaustive for the current codebase, so `--dry-run` zero-egress (SC3) holds. (Claude's own suggestion of a one-line confirmation is reasonable but the claim is already true.)
+- **[LOW, observational] (claude) — Stop hook's `closeSessionLog()` may be a no-op in a fresh hook subprocess** (the writes happened in the main CLI process, so module-scope `activeChain` is null). The `Promise.allSettled` fix genuinely resolves the M1 concern (release rejection cannot abandon the call); whether the flush moves real bytes depends on whether the logger is re-opened in the hook process. The "resolve immediately if no logger active" design avoids a crash. Observational, not a defect — same disposition as cycle-3's "Stop-flush cross-process vacuity" MEDIUM.
+
+### Per-Reviewer Raw (cycle 4)
+
+#### codex (HIGH_COUNT: 2 claimed -> judged 1 valid HIGH [malformed STATE.json] + 1 downgrade [plugin fallback, repeat MEDIUM])
+```
+[LOW] Router totality fix looks genuinely resolved for valid `SectionStateSchema` states. The revised decision table is exhaustive over `planned/writing/written/verifying/verified/failed/unverifiable`, routes `failed` and `unverifiable` back to `verify`, treats only `verified` as continue, and has defensive `status/attention` fallbacks. The mixed `[verified, failed, verified]` case is now explicitly covered.
+
+[LOW] Flag propagation through manual dispatch also looks genuinely resolved. The shared `dispatchVerb()` contract forwards parsed global flags into the dispatched verb args, and the bare, `next`, and `resume` paths are all required to use it. The ordering also looks right: `--yolo` cap pre-flight runs first, then under-cap bare/resume dispatch forwards `yolo:true` so `compile.ts` / `done.ts` see `args.yolo === true`.
+
+[HIGH] `resolveNextAction` is still allowed to crash on malformed-but-present `STATE.json`. The plan catches `StateNotFoundError` only and rethrows any other `loadState()` error. SC1 says bare `/pensmith` must never crash, and your review prompt explicitly asks about “any STATE.json shape.” A corrupt JSON file, schema-invalid sections array, missing `slug`, nonnumeric `n`, or other validation error can still bubble out before a `RouterDecision` exists, so the bare dispatcher can fail before `decision.verb`. Fix: make router total over state-load failures too, probably returning `status/attention` with a diagnostic reason for invalid state rather than throwing.
+
+[HIGH] 07-04 permits a manifest fallback that does not deliver the plumbing namespace. Task 2 says if the plugin schema rejects `skills` or colon-prefix names, fall back to documenting the namespace in `CONTRIBUTING.md`. That is not equivalent to `/pensmith:plan-section` working in Tier 1, so it fails SC2 / cross-tier parity if the schema rejects the proposed shape. The fallback must be an actually supported registration mechanism or the plan must block until one is found.
+
+HIGH_COUNT: 2
+```
+
+#### gemini (HIGH_COUNT: 0 — both fixes confirmed resolved; 1 LOW flag-stripping)
+```
+An exhaustive architectural review of the four revised execution plans (07-01 to 07-04) for GSD Phase 7 has been completed. Both recent high-priority concerns from Cycle 3 have been completely and robustly resolved, and the plans meet all success criteria and non-negotiables.
+
+### Resolution Verification
+
+*   **Router Totality (C3-HIGH-1): Genuinely Resolved.** The implementation of `resolveNextAction` in 07-02 Task 1 enforces a strict, exhaustive `switch` over the entire `SectionStateSchema`. By explicitly routing both `failed` and `unverifiable` states back to the `verify` verb (instead of continuing), and providing a guaranteed terminal fallback via `default`, the function achieves true mathematical totality. It is impossible for any reachable state combination—including the mixed `[verified, failed, verified]` case—to return `undefined` or cause a crash during property access on `decision.verb`.
+*   **Flag Propagation & Ordering (C3-HIGH-2): Genuinely Resolved.** The introduction of the shared `dispatchVerb` orchestrator in 07-02 Task 3 perfectly bridges the gap between manual dispatch paths (bare invocation, `next`, and `resume`) and `citty`'s explicit verb handling. By cleanly injecting the parsed global flags directly into the constructed `args` object before calling `cmd.run()`, gate-bearing commands like `compile` and `done` correctly receive `args.yolo === true` and skip their internal approval gates. The execution ordering is sound: the pre-flight check executes first across all paths, followed by flag propagation during manual dispatch, aligning perfectly with `citty`'s native parsing behavior for explicit verbs.
+
+### Findings
+
+*   [LOW] **Citty Subcommand Argument Tolerance:** In 07-02 Task 3, global flags are declared on the root command, but the pre-dispatch seam pre-parses them from any position in `process.argv`. Since explicit verbs are handed off to `runMain()`, if a global flag appears *after* an explicit subcommand (e.g., `pensmith write --dry-run`), `citty` might pass an unparsed or unexpected flag warning depending on its strictness settings. To maximize robustness, consider having the pre-dispatch seam slice out the four global flags from `process.argv` before passing the remaining tokens to `runMain()`.
+
+HIGH_COUNT: 0
+```
+
+#### claude (HIGH_COUNT: 0 — both fixes genuinely resolved; 2 MEDIUM [done-egress rejected, section-arg], 2 LOW)
+```
+I've reviewed all four plans against the success criteria and the two most recent fixes. I reasoned from the plan text and the cited code seams (the live repo isn't part of this working directory, and the review history states the seams were verified against it across prior cycles).
+
+## Verdict on the two most recent fixes
+
+**C3-HIGH-1 (router totality) — GENUINELY RESOLVED.**
+`resolveNextAction` in 07-02 Task 1 is provably total:
+- Pre-section gates (`new`/`research`/`outline`/zero-sections) each return concretely.
+- The section walk uses an exhaustive `switch` over the full `SectionStateSchema` where **every** non-`verified` arm `return`s (`planned`/missing-PLAN → plan; `writing` → write; `written`/`verifying`/`failed`/`unverifiable` → verify), `verified` is the only `continue`, and `default:` returns `status/attention`.
+- Because every non-`verified` branch returns, the post-walk `compile → done → status(done)` chain is reached only when all sections are verified, and it is exhaustive over that case.
+- The mixed `[verified, failed, verified]`-no-DRAFT case correctly returns `verify` for the failed section (ascending walk hits it first) — it cannot fall through to `compile` or to `undefined`. `decision.verb` therefore cannot crash the bare dispatcher (SC1/SC5 held). The RED suite (07-01 cases g–l + mixed-stuck) fixtures every state and would catch a regression.
+
+**C3-HIGH-2 (flag propagation through bare/resume) — GENUINELY RESOLVED.**
+- `dispatchVerb` merges `yolo: globalFlags.yolo === true` into `mergedArgs` and invokes `cmd.run?.({ args: mergedArgs, ... })`. compile.ts:90 / done.ts:436 read exactly `args.yolo === true`, so the forwarded value reaches the gate-skip read site.
+- Bare path (07-02 Task 3 step 3e) and resume path (resume.ts) both route through the single `dispatchVerb` helper, forwarding parsed flags. No manual path calls `cmd.run()` with a bare args object.
+- **Ordering vs. cost-cap pre-flight is sound:** the C3-HIGH-2 RED fixtures deliberately keep projected cost *under* the 50% cap, so the step-3c pre-flight passes and does not mask the gate-skip assertion. For `pensmith resume --yolo`, resume is an explicit verb → seam pre-flight (3c) runs, then runMain → resume → `dispatchVerb('compile'|'done', {yolo:true})`. The forwarded `yolo` reaches the inner gate.
+- **Explicit-verb path** correctly relies on citty parsing `--yolo` into the subcommand args directly (no manual forwarding needed), and compile/done already read it — consistent and single-dispatch (no root `run()`, verified at index.mjs).
+
+Both fixes are coherent, internally consistent, and backed by RED regression gates that would fail against the prior broken designs.
+
+## Remaining / new concerns (none rise to HIGH)
+
+- **[MEDIUM]** `--dry-run` zero-egress is only *exercised* on the verify path (pass2/pass4). The plans assert pass2.ts:215 + pass4.ts:392 are the *only* `messages.create()` sites "verified against the live repo," but the `done` verb folds in the humanizer ("make it sound less AI"), which is exactly where an LLM call could live. If `done`/humanize (or any compile path) issues an LLM call **not** gated on `PENSMITH_NO_LLM`, `pensmith done --dry-run` would egress and violate SC3 (ERGO-01). No test drives a non-verify LLM verb under `--dry-run`. This is fully resolved *only if* the "two call sites" claim is exhaustive across `done`/humanize — worth a one-line confirmation before relying on it.
+
+- **[MEDIUM]** Section-arg forwarding for manually-dispatched *work* verbs (plan/write/verify) is underspecified and untested. The C3-HIGH-2 tests only drive bare/resume → compile/done (which take no positional). For bare/resume → write/plan/verify, `dispatchVerb` must build `mergedArgs` in the exact shape the verb's `run()` reads its section identifier (positional `n` vs. `args.n`/`args.slug`). The plans say dispatchVerb "BUILDS the args object the verb's run() will read" but never pin the key mapping, and no RED case asserts a bare→write dispatch actually targets the right section. A mismatch would silently break SC1's "resolves a next WORK action" for the common plan/write/verify states.
+
+- **[LOW]** Explicit-verb flag parsing for the 14 verbs that don't declare the four global flags (only next/resume are specified to declare them) depends on citty tolerating undeclared flags rather than erroring "unknown flag." citty's parser is lenient by default, so `pensmith compile --show-prompts` should parse — but the plans neither state this assumption nor add the declarations to compile/write/verify/etc. The flag *effects* are applied by the pre-dispatch argv scan regardless; the only risk is citty rejecting the token during `runMain`. Worth an explicit note.
+
+- **[LOW]** Stop-hook `closeSessionLog()` runs in a fresh hook subprocess where the module-scope `activeChain` will be `null` (the writes happened in the main CLI process), so the flush may be a no-op. The `Promise.allSettled` fix correctly prevents the release rejection from *abandoning* the call (the M1 concern is genuinely resolved), but whether the flush moves real bytes depends on whether the session logger is (re)opened within the hook process. The "resolve immediately if no logger active" design avoids a crash, so this is observational, not a defect.
+
+All four non-negotiables (section isolation, two-tier parity, single-command UX, verifier-blocks-compile, no exported trace, gates-default-on, 16-verb bijection) are preserved by the plans as written.
+
+HIGH_COUNT: 0
+```
+
+#### opencode (HIGH_COUNT: 1 claimed -> judged 0 valid [ESM TDZ pre-empted by async-function decl]; MEDIUM flag-stripping carried)
+```
+## Review of Phase 7 Plans (07-01..07-04)
+
+### C3-HIGH-1 (Router Totality) — RESOLVED ✓
+Exhaustive switch over all 7 `SectionStateSchema` states (including `failed`/`unverifiable` → `verify`), a `default` arm, 3 post-walk returns, and `StateNotFoundError` catch. The RED suite fixtures every state plus the mixed `[verified,failed,verified]` stuck case. `resolveNextAction` can never return `undefined`.
+
+### C3-HIGH-2 (Flag Propagation) — Partially Resolved ✓ in design, ⚠️ implementation risk
+
+The `dispatchVerb()` helper design is correct: bare/next/resume all merge forwarded global flags into the dispatched verb's args. Explicit verbs use citty's direct parse. A dispatched `compile`/`done` receives `args.yolo === true` and skips its approval gate.
+
+---
+
+### [HIGH] Circular ESM dependency for `dispatchVerb` between `bin/pensmith.ts` and `bin/cli/{next,resume}.ts`
+
+**Why**: `bin/pensmith.ts` imports `next.ts`/`resume.ts` for `REAL_VERB_LOADERS`, while `next.ts`/`resume.ts` import `dispatchVerb` from `pensmith.ts` — creating `pensmith.ts → next.ts → pensmith.ts`. If `dispatchVerb` is a `const` arrow function, ESM's TDZ semantics crash at runtime (`ReferenceError`), collapsing the entire C3-HIGH-2 fix.
+
+**Fix**: Either (a) declare as `async function dispatchVerb(...)` (hoisted in ESM) or (b) extract to `bin/lib/dispatch.ts`.
+
+### [MEDIUM] Citty unknown-flag errors on subcommand invocations with global flags
+
+**Why**: The pre-parse scans `process.argv` for `--dry-run`/`--estimate`/`--yolo`/`--show-prompts` but does not strip them. When citty dispatches `pensmith write --dry-run` via `runMain`, the `write` subcommand's `defineCommand` may not declare `--dry-run`. Citty may reject it as unknown, failing the H2/H3 RED tests that drive explicit-verb paths.
+
+**Fix**: Strip the four flags from `argv` before `runMain`, or add them to every subcommand's args.
+
+### [LOW] `state.sections` undefined/null with OUTLINE.md present → `.sort()` crash or `compile`-with-no-sections
+
+No RED test covers this hand-editing edge case.
+
+---
+
+**HIGH_COUNT: 1**
+```
+
+### Cycle 4 — Judge Verdict
+
+**current_high = 1.** Both cycle-3 fixes (router totality over SectionStateSchema; flag forwarding through bare/next/resume dispatch) are UNANIMOUSLY confirmed resolved and re-verified against the live repo (compile.ts:90, done.ts:436, pass2.ts:255, pass4.ts:444). One NEW HIGH survives: `resolveNextAction` (and `projectEstimate`) catch only `StateNotFoundError` and re-throw on a malformed/schema-invalid STATE.json (loadState → StateSchema.parse throws), so the bare dispatcher can crash before `decision.verb` — violating SC1's "never crash" guarantee for "any STATE.json shape." codex flagged it; opencode's `.sort()` LOW is the same root cause. Fix: widen both catches to handle malformed state (router → status/attention, estimator → empty projection) and guard `state.sections` before `.sort()`, with a corrupt-STATE.json RED case. Remaining items are MEDIUM/LOW: the citty unknown-flag stripping robustness gap (4 reviewers, non-blocking — citty is lenient by default) and the already-adjudicated plugin-schema fallback (repeat MEDIUM). The ESM-TDZ and done-egress candidate HIGHs were rejected as pre-empted/false against the plan text and the repo.
