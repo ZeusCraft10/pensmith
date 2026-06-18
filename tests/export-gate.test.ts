@@ -23,13 +23,21 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Pass2Result } from '../bin/lib/verify/pass2.js';
 import type { Pass4Result } from '../bin/lib/verify/pass4.js';
 
 const doneSrcPath = fileURLToPath(new URL('../bin/cli/done.ts', import.meta.url));
 const doneModUrl = new URL('../bin/cli/done.js', import.meta.url);
+
+// The committed renderPass2Section-shaped fixture (06-01): one **UNSUPPORTED**
+// row + one **SUPPORTED** row. The HIGH-3 disk→gate feed tests consume it.
+const PASS2_FIXTURE = fileURLToPath(
+  new URL('./fixtures/section-pass2-unsupported/VERIFICATION.md', import.meta.url),
+);
 
 interface GateInput {
   pass2Results: Pass2Result[];
@@ -111,5 +119,155 @@ test('export-gate: zero issues + approve=true → generic confirm STILL runs, { 
     });
     assert.equal(called, 1, 'the generic gate must fire even on a clean paper (PRD §7.9)');
     assert.equal(result.exported, true, 'confirmed clean paper must yield exported:true');
+  },
+);
+
+// ============================================================================
+// HIGH-3 — the disk→gate feed (readSectionUnsupported over real on-disk
+// section VERIFICATION.md) + the fail-safe + the non-yolo on-disk integration.
+// These are the tests Plan 06-05 adds (the Wave-0 file pinned the gate LOGIC;
+// these pin the DISK-FEED contract that the gate logic actually consumes).
+// ============================================================================
+
+type ReadSectionUnsupported = (paperRoot: string) => Pass2Result[];
+type CollectGateIssues = (input: {
+  pass2Results: Pass2Result[];
+  pass4Results: Pass4Result[];
+  plagiarismResults: Array<{ phrase: string; matches: string[] }>;
+}) => { unsupported: Pass2Result[]; hasIssues: boolean };
+
+/** Seed an mkdtemp paper root with one section VERIFICATION.md. */
+function seedSection(verificationMd: string, sectionDir = '01-intro'): string {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-export-gate-'));
+  const dir = join(root, '.paper', 'sections', sectionDir);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'VERIFICATION.md'), verificationMd);
+  return root;
+}
+
+test('export-gate HIGH-3: readSectionUnsupported parses the renderPass2Section UNSUPPORTED row, filters SUPPORTED',
+  { skip: !existsSync(doneSrcPath) },
+  async () => {
+    const mod = await import(doneModUrl.href) as { readSectionUnsupported: ReadSectionUnsupported };
+    const fixture = readFileSync(PASS2_FIXTURE, 'utf8');
+    const root = seedSection(fixture);
+    const rows = mod.readSectionUnsupported(root);
+    // The fixture has smith2020 **UNSUPPORTED** + vaswani2017 **SUPPORTED**.
+    assert.ok(rows.length >= 1, 'at least one UNSUPPORTED row must be detected');
+    assert.ok(
+      rows.every((r) => r.verdict === 'UNSUPPORTED'),
+      'only UNSUPPORTED rows are returned (SUPPORTED must be filtered out)',
+    );
+    assert.ok(
+      rows.some((r) => r.citekey === 'smith2020'),
+      'the fixture UNSUPPORTED citekey smith2020 must be present',
+    );
+    assert.ok(
+      !rows.some((r) => r.citekey === 'vaswani2017'),
+      'the SUPPORTED citekey vaswani2017 must NOT be returned (verdict-cell filter, not row count)',
+    );
+  },
+);
+
+test('export-gate HIGH-3: readSectionUnsupported FAILS SAFE on a present-but-unparseable Pass-2 table; absent heading is clean',
+  { skip: !existsSync(doneSrcPath) },
+  async () => {
+    const mod = await import(doneModUrl.href) as { readSectionUnsupported: ReadSectionUnsupported };
+
+    // (a) present ## Pass-2 heading but a DELIBERATELY MALFORMED (3-column) table.
+    const malformed = [
+      '# Section Verification — 02-x',
+      '',
+      '## Pass-2 (claim support, advisory — LLM-judged)',
+      '',
+      '| Citekey | Verdict | Rationale |',
+      '|---------|---------|-----------|',
+      '| smith2020 | **UNSUPPORTED** | desynced table |',
+      '',
+    ].join('\n');
+    const malRoot = seedSection(malformed, '02-x');
+    const malRows = mod.readSectionUnsupported(malRoot);
+    assert.ok(
+      malRows.length >= 1,
+      'an unparseable-but-present Pass-2 table must yield a NON-empty result (fail safe)',
+    );
+    assert.ok(
+      malRows.some((r) => r.citekey === '<unparseable>' && r.verdict === 'UNSUPPORTED'),
+      'the fail-safe synthetic <unparseable> UNSUPPORTED sentinel must be present (never a silent clean)',
+    );
+
+    // (b) a VERIFICATION.md with NO ## Pass-2 heading → contributes nothing (clean).
+    const noPass2 = [
+      '# Section Verification — 03-clean',
+      '',
+      '## Pass-1 (citation integrity, blocking)',
+      '',
+      'Status: PASS.',
+      '',
+    ].join('\n');
+    const cleanRoot = seedSection(noPass2, '03-clean');
+    assert.deepEqual(
+      mod.readSectionUnsupported(cleanRoot),
+      [],
+      'a section with no ## Pass-2 heading must contribute nothing (absent = clean)',
+    );
+  },
+);
+
+test('export-gate HIGH-3: NON-yolo on-disk gate integration — gate fires from real Pass-2 data, does NOT auto-proceed',
+  { skip: !existsSync(doneSrcPath) },
+  async () => {
+    const mod = await import(doneModUrl.href) as {
+      readSectionUnsupported: ReadSectionUnsupported;
+      collectGateIssues: CollectGateIssues;
+      runDoneGate: RunDoneGate;
+    };
+    const fixture = readFileSync(PASS2_FIXTURE, 'utf8');
+    const root = seedSection(fixture);
+
+    // Drive the gate from the ON-DISK Pass-2 data (the load-bearing feed).
+    const pass2Results = mod.readSectionUnsupported(root);
+    const issues = mod.collectGateIssues({
+      pass2Results,
+      pass4Results: [],
+      plagiarismResults: [],
+    });
+    assert.equal(issues.hasIssues, true, 'on-disk UNSUPPORTED row must make hasIssues true');
+
+    // Capture stdout so we can assert the per-issue summary precedes the approver.
+    const stdoutLines: string[] = [];
+    const origWrite = process.stdout.write.bind(process.stdout);
+    (process.stdout as unknown as { write: (s: string) => boolean }).write = (s: string) => {
+      stdoutLines.push(s);
+      return true;
+    };
+    let approverCalled = 0;
+    let summaryAtCallTime = '';
+    let result: GateResult;
+    try {
+      result = await mod.runDoneGate({
+        pass2Results,
+        pass4Results: [],
+        plagiarismResults: [],
+        yolo: false,
+        approve: async () => {
+          approverCalled++;
+          summaryAtCallTime = stdoutLines.join('');
+          return false; // user declines export
+        },
+      });
+    } finally {
+      (process.stdout as unknown as { write: typeof origWrite }).write = origWrite;
+    }
+
+    // (a) the gate did NOT auto-proceed — the approver WAS called.
+    assert.equal(approverCalled, 1, 'non-yolo gate must call the approver (no auto-proceed)');
+    // (b) a per-issue summary mentioning the UNSUPPORTED citekey printed BEFORE approve().
+    assert.ok(
+      /smith2020/.test(summaryAtCallTime),
+      'the per-issue summary (mentioning smith2020) must print BEFORE the approver is called',
+    );
+    // (c) declining yields exported:false.
+    assert.equal(result.exported, false, 'declined non-yolo gate must yield exported:false');
   },
 );
