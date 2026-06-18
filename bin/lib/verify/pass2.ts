@@ -19,6 +19,18 @@
 // Offline guard (Pattern 4 — analog: bin/cli/revise.ts): under PENSMITH_NO_LLM=1
 // (or when ANTHROPIC_API_KEY is absent) Pass 2 returns a conservative UNCLEAR
 // placeholder for every citation and issues NO network call. This is the CI path.
+//
+// Budget gate (ARCH-09/10 — analog: bin/lib/budget.ts): the live branch calls
+// assertBudget BEFORE every model call and appendCost AFTER it, scoped to a
+// per-section cap (PASS2_SECTION_CAP). The api key is resolved ONLY through the
+// no-leak runtime chokepoint (getProviderApiKey); the value never reaches a log
+// or the cost ledger (T-05-02-02).
+
+import Anthropic from '@anthropic-ai/sdk';
+import { assertBudget, appendCost } from '../budget.js';
+import { estimateCost } from '../pricing.js';
+import { loadPrompt, interpolate } from '../prompt-loader.js';
+import { getProviderApiKey, loadRuntimeConfig } from '../runtime.js';
 
 export type Pass2Verdict = 'SUPPORTED' | 'PARTIAL' | 'UNSUPPORTED' | 'UNCLEAR';
 
@@ -102,6 +114,92 @@ function collectClaimPairs(draftMd: string): ClaimPair[] {
   });
 }
 
+// Per-section Pass 2 cap (ARCH-10 per-step cap). A config knob (05-RESEARCH Open
+// Question 1) — no CONTEXT.md locks it, so default at Claude's discretion to
+// $0.50/section, which leaves ample headroom under the $5 session cap even for
+// many-citation sections using claude-haiku-4 (~$0.007/call).
+const PASS2_SECTION_CAP_DEFAULT = 0.5;
+
+// Conservative fixed token estimates for the pre-call budget gate. The real
+// usage is recorded by appendCost AFTER the call from the SDK's usage report;
+// these only need to be a safe upper-ish bound for the gate (DoS mitigation,
+// T-05-02-04). claude-haiku-4 at 1500/300 tok ≈ $0.0024 — well under the cap.
+const EST_INPUT_TOKENS = 1500;
+const EST_OUTPUT_TOKENS = 300;
+const DEFAULT_MODEL = 'claude-haiku-4';
+
+/** Normalize a CSL-style title (string | string[]) to a single string. */
+function normalizeTitle(title: Pass2BibEntry['title']): string {
+  if (Array.isArray(title)) return title.filter(Boolean).join(' ');
+  return title ?? '';
+}
+
+/** Normalize a CSL-style author list to a comma-joined display string. */
+function normalizeAuthors(author: Pass2BibEntry['author']): string {
+  if (!author) return '';
+  return author
+    .map((a) => {
+      if (typeof a === 'string') return a;
+      const family = a.family ?? '';
+      const given = a.given ?? '';
+      return [given, family].filter(Boolean).join(' ').trim();
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
+/** Clamp a free-text field to a table-cell-safe single line of <=max chars. */
+function clampText(text: string, max: number): string {
+  return text.replace(/[\r\n|]+/g, ' ').trim().slice(0, max);
+}
+
+/**
+ * Parse the model's JSON response into a validated Pass2Result. Defensive:
+ *   - verdict must be one of the four enum values, else UNCLEAR (UNCLEAR-bias)
+ *   - rationale clamped to <=200 chars, newline/pipe-stripped
+ *   - evidence must be a verbatim substring of the abstract, else '' (anti-fab)
+ */
+function parsePass2Response(
+  raw: string,
+  citekey: string,
+  claimSentence: string,
+  abstract: string,
+): Pass2Result {
+  let verdict: Pass2Verdict = 'UNCLEAR';
+  let rationale = '';
+  let evidence = '';
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const v = parsed['verdict'];
+    if (v === 'SUPPORTED' || v === 'PARTIAL' || v === 'UNSUPPORTED' || v === 'UNCLEAR') {
+      verdict = v;
+    }
+    if (typeof parsed['rationale'] === 'string') {
+      rationale = clampText(parsed['rationale'], 200);
+    }
+    if (typeof parsed['evidence'] === 'string' && parsed['evidence'].length > 0) {
+      // Anti-fabrication (T-05-02-01): evidence MUST be a substring of the abstract.
+      evidence = abstract.includes(parsed['evidence']) ? parsed['evidence'] : '';
+    }
+  } catch {
+    // Unparseable response → conservative UNCLEAR (UNCLEAR-bias).
+    verdict = 'UNCLEAR';
+    rationale = 'LLM response was not valid JSON; defaulting to UNCLEAR.';
+  }
+  return { citekey, claimSentence, verdict, rationale, evidence };
+}
+
+/** Resolve the anthropic model id from runtime config's defaultModel, falling
+ *  back to the cheapest priced model. Never reads the api key here. */
+async function resolveModelId(): Promise<string> {
+  try {
+    const cfg = await loadRuntimeConfig({ scope: 'auto' });
+    return cfg.providers?.['anthropic']?.defaultModel ?? DEFAULT_MODEL;
+  } catch {
+    return DEFAULT_MODEL;
+  }
+}
+
 /**
  * Pass 2 advisory claim-support run. Returns one Pass2Result per UNIQUE
  * [@citekey] in `draftMd`. Under PENSMITH_NO_LLM=1 (or no ANTHROPIC_API_KEY)
@@ -114,8 +212,6 @@ export async function runPass2(
   bibByCitekey: Map<string, Pass2BibEntry>,
   opts: { n: number; scopeCapUsd?: number },
 ): Promise<Pass2Result[]> {
-  void bibByCitekey;
-  void opts;
   const noLlm = process.env['PENSMITH_NO_LLM'] === '1' || !process.env['ANTHROPIC_API_KEY'];
   const pairs = collectClaimPairs(draftMd);
   if (pairs.length === 0) return [];
@@ -124,7 +220,96 @@ export async function runPass2(
     return pairs.map((p) => pass2Placeholder(p.claimSentence, p.citekey));
   }
 
-  // Live branch (Task 2) — wired below. Until then the offline path is the only
-  // reachable branch in CI (noLlm short-circuit above).
-  return pairs.map((p) => pass2Placeholder(p.claimSentence, p.citekey));
+  // ---- Live claim-support branch (only reached with a real key + LLM enabled).
+  // Never reached in CI: the noLlm short-circuit above is the test path.
+  const cap = opts.scopeCapUsd ?? PASS2_SECTION_CAP_DEFAULT;
+  const scopeId = `${opts.n}-pass2`;
+  const promptTemplate = loadPrompt('claim-support');
+  const modelId = await resolveModelId();
+  const apiKey = await getProviderApiKey('anthropic');
+  const client = new Anthropic({ apiKey });
+
+  const results: Pass2Result[] = [];
+  for (const pair of pairs) {
+    const bibEntry = bibByCitekey.get(pair.citekey);
+    const abstract = bibEntry?.abstract ?? '';
+    try {
+      const prompt = interpolate(promptTemplate, {
+        citekey: pair.citekey,
+        claim_sentence: pair.claimSentence,
+        source_abstract: abstract,
+        source_title: normalizeTitle(bibEntry?.title),
+        source_authors: normalizeAuthors(bibEntry?.author),
+      });
+
+      // ARCH-10 pre-call gate: assertBudget BEFORE the model call. A
+      // BudgetExceededError here aborts the call (financial-safety boundary).
+      const estimatedCallCost = estimateCost({
+        providerId: 'anthropic',
+        modelId,
+        inputTokens: EST_INPUT_TOKENS,
+        outputTokens: EST_OUTPUT_TOKENS,
+      });
+      await assertBudget({ scope: 'section', scopeId, cap }, estimatedCallCost);
+
+      const res = await client.messages.create({
+        model: modelId,
+        max_tokens: EST_OUTPUT_TOKENS,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      const inputTokens = res.usage?.input_tokens ?? EST_INPUT_TOKENS;
+      const outputTokens = res.usage?.output_tokens ?? EST_OUTPUT_TOKENS;
+      await appendCost({
+        ts: new Date().toISOString(),
+        scope: 'section',
+        scopeId,
+        provider: 'anthropic',
+        model: modelId,
+        inputTokens,
+        outputTokens,
+        costUsd: estimateCost({ providerId: 'anthropic', modelId, inputTokens, outputTokens }),
+      });
+
+      const textBlock = res.content.find((b) => b.type === 'text');
+      const rawText = textBlock && textBlock.type === 'text' ? textBlock.text : '';
+      results.push(parsePass2Response(rawText, pair.citekey, pair.claimSentence, abstract));
+    } catch (err) {
+      // Any failure (budget, transport, parse) surfaces as a conservative
+      // UNCLEAR — never thrown out of runPass2 (advisory must not crash verify).
+      results.push({
+        citekey: pair.citekey,
+        claimSentence: pair.claimSentence,
+        verdict: 'UNCLEAR',
+        rationale: clampText(`LLM error: ${String(err)}`, 200),
+        evidence: '',
+      });
+    }
+  }
+  return results;
+}
+
+/**
+ * Render the `## Pass-2` advisory section for VERIFICATION.md. Deterministic,
+ * no LLM. Mirrors renderFreshnessTable. Emits table-cell-safe text only (no
+ * HTML; claim sentence truncated to ~60 chars) — LLM-output-injection
+ * mitigation (T-05-02-03). Empty results → a "no citations" section.
+ */
+export function renderPass2Section(results: ReadonlyArray<Pass2Result>): string {
+  if (results.length === 0) {
+    return '## Pass-2 (claim support, advisory)\n\n_(no citations to judge)_\n';
+  }
+  const lines = [
+    '## Pass-2 (claim support, advisory — LLM-judged)',
+    '',
+    '| Citekey | Claim Sentence | Verdict | Rationale |',
+    '|---------|---------------|---------|-----------|',
+  ];
+  for (const r of results) {
+    const sentence = clampText(r.claimSentence, 60);
+    const rationale = clampText(r.rationale, 200);
+    lines.push(`| ${r.citekey} | ${sentence} | **${r.verdict}** | ${rationale} |`);
+  }
+  lines.push('');
+  return lines.join('\n');
 }
