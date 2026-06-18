@@ -518,27 +518,19 @@ export async function resolveNextAction(paperRoot: string): Promise<RouterDecisi
     // post-walk compile branch is only reached when EVERY section is verified.
     for (const { n, slug } of sections.sort((a, b) => a.n - b.n)) {
       const planPath = sectionPlan(n, slug, paperRoot);
+      // C5-HIGH + C6-HIGH: read each PLAN.md through the SHARED guarded helper
+      // readSectionState (defined below) — the ONE guarded per-section read path,
+      // exported and reused by bin/cli/status.ts so NO component (router OR status)
+      // ever does a raw unguarded parseFrontmatter(readFileSync(planPath)).
+      const r = readSectionState(planPath);
       // C5-HIGH: distinguish a GENUINELY-ABSENT PLAN.md (-> plan, as today) from a
-      // PRESENT-but-corrupt/unreadable one. existsSync==false means absent.
-      if (!existsSync(planPath)) return { verb: 'plan', n, slug };
-
-      // C5-HIGH PER-SECTION READ GUARD (mirrors hooks/pre-compact.ts:178-187):
-      // BOTH readFileSync (EACCES/EISDIR/TOCTOU after the existsSync probe) and
-      // parseFrontmatter -> yaml.parseDocument().toJSON() (malformed YAML,
-      // duplicate map keys) can THROW. A present-but-corrupt PLAN.md routes to
-      // status/attention (matching the unrecognized-status `default` arm) WITHOUT
-      // throwing — NOT to 'plan' (that is the absent-file disposition above).
-      let status: string;
-      try {
-        const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
-        status = (frontmatter as { status?: string }).status ?? 'planned';
-      } catch (e) {
-        process.stderr.write(
-          `[pensmith] PLAN.md for section ${n} (${slug}) is unreadable/corrupt: ` +
-            `${(e as Error).message}\n`,
-        );
-        return { verb: 'status', reason: 'attention', section: { n, slug } };
-      }
+      // PRESENT-but-corrupt/unreadable one.
+      if (r.absent) return { verb: 'plan', n, slug };
+      // C6/C5-HIGH: present-but-corrupt PLAN.md routes to status/attention (matching
+      // the unrecognized-status `default` arm) WITHOUT throwing — readSectionState
+      // already caught the throw and emitted the stderr diagnostic.
+      if (r.corrupt) return { verb: 'status', reason: 'attention', section: { n, slug } };
+      const status = r.status;
 
       switch (status) {
         case 'verified':
@@ -577,6 +569,55 @@ export async function resolveNextAction(paperRoot: string): Promise<RouterDecisi
   // and the catch backstop covers every throw — resolveNextAction is provably
   // TOTAL and never returns undefined / never throws.)
 }
+
+// C6-HIGH: the SINGLE guarded per-section PLAN.md read helper. resolveNextAction's
+// walk uses it AND bin/cli/status.ts imports + consumes it (see the status snippet
+// below) so there is ONE guarded read path and NO raw parseFrontmatter(readFileSync)
+// on a per-section PLAN.md survives anywhere. It NEVER throws.
+export interface SectionStateRead {
+  status: string;     // parsed `status` frontmatter, defaulted to 'planned' when absent
+  corrupt: boolean;   // true if PRESENT but readFileSync/parseFrontmatter threw
+  absent: boolean;    // true if the file does not exist on disk
+}
+
+export function readSectionState(planPath: string): SectionStateRead {
+  if (!existsSync(planPath)) return { status: 'planned', corrupt: false, absent: true };
+  // Mirrors hooks/pre-compact.ts:178-187: BOTH readFileSync (EACCES/EISDIR/TOCTOU
+  // after the existsSync probe) and parseFrontmatter -> yaml.parseDocument().toJSON()
+  // (malformed YAML, duplicate map keys) can THROW. Catch -> corrupt, never re-throw.
+  try {
+    const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
+    return {
+      status: (frontmatter as { status?: string }).status ?? 'planned',
+      corrupt: false,
+      absent: false,
+    };
+  } catch (e) {
+    process.stderr.write(
+      `[pensmith] PLAN.md at ${planPath} is unreadable/corrupt: ${(e as Error).message}\n`,
+    );
+    return { status: 'planned', corrupt: true, absent: false };
+  }
+}
+```
+
+### Status Verb — Reuse the Shared Guarded Read (C6-HIGH)
+
+**C6-HIGH (load-bearing).** Bare `/pensmith` against a corrupt per-section `PLAN.md` resolves to `{ verb:'status', reason:'attention', section }` and then DISPATCHES `status`. `status.ts` MUST walk per-section frontmatter through the SAME exported `readSectionState` helper — NOT a raw `parseFrontmatter(readFileSync(planPath))`, which `hooks/pre-compact.ts:178-187` proves throws on malformed YAML. Combined with the `dispatchVerb` outer try/catch backstop, this is what makes the never-crash guarantee hold END-TO-END (through the dispatch leg), not just up to `resolveNextAction`'s return.
+
+```typescript
+// bin/cli/status.ts (excerpt) — per-section walk reuses the SHARED guarded read.
+import { resolveNextAction, readSectionState } from '../lib/router.js';
+import { sectionPlan } from '../lib/paths.js';
+
+// for each { n, slug } in the loaded state's sections:
+const r = readSectionState(sectionPlan(n, slug, paperRoot)); // NEVER throws
+const cell = r.absent
+  ? 'not planned'
+  : r.corrupt
+    ? 'corrupt/unreadable PLAN.md — needs attention' // C6: render, do NOT throw
+    : r.status;
+// ...render `cell` in the status table; the walk cannot crash on a malformed PLAN.md.
 ```
 
 ### SessionStart Hook — Emit Resume Context
