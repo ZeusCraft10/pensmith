@@ -1,0 +1,24 @@
+[
+  {
+    "scope": "https://api.gptzero.me",
+    "method": "POST",
+    "path": "/v2/predict/text",
+    "status": 200,
+    "response": {
+      "documents": [
+        {
+          "class_probabilities": {
+            "ai": 0.82,
+            "human": 0.15,
+            "mixed": 0.03
+          },
+          "document_classification": "AI_ONLY",
+          "predicted_class": "ai"
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

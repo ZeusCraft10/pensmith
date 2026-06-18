@@ -1,0 +1,12 @@
+[
+  {
+    "scope": "https://html.duckduckgo.com",
+    "method": "GET",
+    "path": "/html/?q=the%20transformer%20relies%20solely%20on%20attention%20mechanisms",
+    "status": 200,
+    "response": "<!DOCTYPE html><html><head><title>the transformer relies solely on attention mechanisms at DuckDuckGo</title></head><body><div class=\"serp__results\"><div class=\"results\"><div class=\"result results_links results_links_deep web-result\"><div class=\"links_main\"><a class=\"result__a\" href=\"https://example.com/papers/attention-is-all-you-need\">Attention Is All You Need — example.com</a><a class=\"result__snippet\" href=\"https://example.com/papers/attention-is-all-you-need\">The transformer relies solely on attention mechanisms, dispensing with recurrence entirely.</a></div></div><div class=\"result results_links results_links_deep web-result\"><div class=\"links_main\"><a class=\"result__a\" href=\"https://scholar.example.org/abs/1706.03762\">Transformer architecture overview — scholar.example.org</a><a class=\"result__snippet\" href=\"https://scholar.example.org/abs/1706.03762\">A survey noting the transformer relies solely on attention mechanisms.</a></div></div><div class=\"result result--ad\"><div class=\"links_main\"><a class=\"result--ad__a\" href=\"https://ad.example.net/sponsored\">Sponsored: writing tools</a></div></div></div></div></body></html>",
+    "responseHeaders": {
+      "content-type": "text/html; charset=UTF-8"
+    }
+  }
+]
