@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Vertical slice through one section** - Single-fixture intake → research → outline → plan → write → verify, deterministic Pass 1 + Pass 3 only, APA only, both tiers (completed 2026-05-28)
 - [x] **Phase 4: Breadth — N sections + compile + wave scheduling** - Wave scheduler, compile pipeline, cross-section consistency flags, stable section numbering with letter suffixes (completed 2026-06-17)
 - [x] **Phase 5: Verifier completeness (Pass 2 + Pass 4)** - LLM-judged claim support and per-paragraph orphan-claim audit, advisory only (completed 2026-06-18)
-- [ ] **Phase 6: Done / export pipeline + zero-trace gate** - Plagiarism, honesty, humanizer wrap, Pandoc exports, zero-trace verification test
+- [x] **Phase 6: Done / export pipeline + zero-trace gate** - Plagiarism, honesty, humanizer wrap, Pandoc exports, zero-trace verification test (completed 2026-06-18)
 - [ ] **Phase 7: Single-command UX layer + hooks + flags** - `/pensmith` umbrella, verb shortcuts, natural-language triggers, resume/PreCompact/PostToolUse/Stop hooks, `--yolo`/`--dry-run`/`--estimate`/`--show-prompts`
 - [ ] **Phase 8: Style match + sketch + add + library + BYO PDF polish** - Style-match opt-in (per-paper, dual-use disclosed), sketch, add, library mode, PDF ingestion polish
 - [ ] **Phase 9: Educator/tutorial mode + PII polish** - Tutorial-mode end-state, intake `goal=learning`, PII polish
@@ -255,7 +255,7 @@ Plans:
 - [x] 06-02-PLAN.md (wave 1) — bin/lib/plagiarism.ts: distinctive-phrase n-gram + DuckDuckGo HTML via http.ts chokepoint, advisory-never-throws, offline-cassette-backed (DONE-02)
 - [x] 06-03-PLAN.md (wave 1) — bin/lib/honesty.ts: GPTZero before/after, framing rendered VERBATIM from locked copy, key-never-logged, pluggable backend (DONE-04, DONE-05)
 - [x] 06-04-PLAN.md (wave 1) — bin/lib/exporter.ts: zeroTracePatch DOCX ZIP scrub (TEST-10/DONE-07, offline + Pandoc-free) + Pandoc shellout w/ md-only fallback + CITATIONS.bib bundle (DONE-06, DONE-07, DONE-08, TEST-10)
-- [ ] 06-05-PLAN.md (wave 2) — bin/cli/done.ts thin orchestrator: whole-paper Pass 4 + DONE-09 always-confirm gate + humanizer skip-clean wrap + workflows/done.md + verb-loader + tier-contract parity (DONE-01, DONE-03, DONE-09)
+- [x] 06-05-PLAN.md (wave 2) — bin/cli/done.ts thin orchestrator: whole-paper Pass 4 + DONE-09 always-confirm gate + humanizer skip-clean wrap + workflows/done.md + verb-loader + tier-contract parity (DONE-01, DONE-03, DONE-09)
 
 **UI hint**: no
 
@@ -331,7 +331,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 3. Vertical slice through one section | 10/10 | Complete    | 2026-05-28 |
 | 4. Breadth — N sections + compile + wave scheduling | 5/5 | Complete   | 2026-06-17 |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 5/5 | Complete   | 2026-06-18 |
-| 6. Done / export pipeline + zero-trace gate | 4/5 | In Progress|  |
+| 6. Done / export pipeline + zero-trace gate | 5/5 | Complete   | 2026-06-18 |
 | 7. Single-command UX layer + hooks + flags | 0/TBD | Not started | - |
 | 8. Style match + sketch + add + library + BYO PDF polish | 0/TBD | Not started | - |
 | 9. Educator/tutorial mode + PII polish | 0/TBD | Not started | - |

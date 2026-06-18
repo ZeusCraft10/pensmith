@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: executing
+status: verifying
 stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-06-18T09:10:01.794Z"
+last_updated: "2026-06-18T09:32:06.707Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 11
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 53
-  completed_plans: 52
-  percent: 55
+  completed_plans: 53
+  percent: 64
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 Phase: 06 (Done / export pipeline + zero-trace gate) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-18
 
 Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
@@ -89,6 +89,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 06 P02 | 4min | 2 tasks | 1 files |
 | Phase 06 P03 | 4min | 2 tasks | 1 files |
 | Phase 06 P04 | 8min | 2 tasks | 2 files |
+| Phase 06 P05 | 20min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -186,6 +187,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [06-04] zeroTracePdf removes XMP STRUCTURALLY (context.delete(metaRef) before save) because pdf-lib serializes ALL indirect objects regardless of reachability; NO length-altering byte edits, residual-pensmith check is READ-ONLY
 - [Phase ?]: [06-04] docx literal-pensmith sweep is binary-aware (skips media/embeddings/fonts + NUL sniff) so the LIVE Pandoc docx path's binary parts are never corrupted (MEDIUM-1); exports write to a DISTINCT .paper/export/ dir so outputs never collide with source artifacts
 - [Phase ?]: [06-04] exporter.ts created in 06-04 but runHumanizer (DONE-03) added in 06-05; tightened humanizer-wrap.test.ts skip guard to require the runHumanizer export in source (not just file existence) so it stays RED-by-skip until 06-05
+- [Phase ?]: [06-05] runDoneGate accepts the FLAT input shape { pass2Results, pass4Results, plagiarismResults, yolo, approve } (locked Wave-0 export-gate test) with collectGateIssues internal; runHumanizer lives in bin/lib/exporter.ts (locked humanizer-wrap test imports + greps it there). Rule-1 reconciliations honoring locked contracts (PlagiarismResult precedent)
+- [Phase ?]: [06-05] readSectionUnsupported FAILS SAFE — present-but-unparseable ## Pass-2 table → synthetic <unparseable> UNSUPPORTED sentinel (NEVER a silent clean); absent heading / missing file = clean; I/O errors skipped. Pinned to renderPass2Section via module-level constants (PASS2_HEADING/PASS2_TABLE_HEADER/PASS2_EMPTY_MARKER/VALID_VERDICTS) so a future writer desync is caught
+- [Phase ?]: [06-05] done.ts leaves exportDraft outputDir UNSET → exports land in the distinct .paper/export/ dir, source DRAFT.md never overwritten; honesty report null-guards a missing GPTZero key (skip banner, never a fabricated percent). done graduated from cli-stubs to a real REAL_VERB_LOADERS loader (compile precedent); DONE-09 gate always-confirms (generic confirm even when clean), only --yolo skips
 
 ### Pending Todos
 
@@ -206,6 +210,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T09:09:24.022Z
+Last session: 2026-06-18T09:32:06.700Z
 Stopped at: Completed 05-04-PLAN.md
 Resume file: None

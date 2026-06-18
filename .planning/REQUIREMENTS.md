@@ -148,7 +148,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 
 ### Done (Export)
 
-- [ ] **DONE-01**: Whole-paper Pass 4 audit on the compiled draft
+- [x] **DONE-01**: Whole-paper Pass 4 audit on the compiled draft
 - [x] **DONE-02**: Free distinctive-phrase plagiarism check via DuckDuckGo HTML (n-gram extraction in `bin/lib/plagiarism.ts`)
 - [x] **DONE-03**: Humanizer pass wraps user's installed `~/.claude/skills/humanizer/`; skips cleanly with banner if absent
 - [x] **DONE-04**: Detection-aware honesty score before AND after humanize via GPTZero (default), with framing "improves prose, not evades detection" `[research]`
@@ -339,7 +339,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | COMP-07 | Phase 4 | Complete |
 | VRFY-03 | Phase 5 | Complete |
 | VRFY-06 | Phase 5 | Complete |
-| DONE-01 | Phase 6 | Pending |
+| DONE-01 | Phase 6 | Complete |
 | DONE-02 | Phase 6 | Complete |
 | DONE-03 | Phase 6 | Complete |
 | DONE-04 | Phase 6 | Complete |
