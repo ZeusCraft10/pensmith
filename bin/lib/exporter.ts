@@ -35,7 +35,7 @@ import { promisify } from 'node:util';
 import JSZip from 'jszip';
 import { PDFDocument, PDFName } from 'pdf-lib';
 import { atomicWriteFile } from './atomic-write.js';
-import { isPandocPresent } from './ecosystem-presence.js';
+import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
 import { paperDir } from './paths.js';
 
 const execFileAsync = promisify(execFile);
@@ -44,6 +44,60 @@ const execFileAsync = promisify(execFile);
 // scrubbed .docx deterministic (Pitfall 6) and strips authoring-time metadata.
 const EPOCH = new Date(0);
 const EPOCH_W3CDTF = '1970-01-01T00:00:00Z';
+
+// ---------------------------------------------------------------------------
+// runHumanizer — DONE-03 humanizer wrap (skip-clean, never-throws)
+// ---------------------------------------------------------------------------
+
+/**
+ * DONE-03 humanizer wrap — the done-orchestrator humanize step (the symbol the
+ * Wave-0 tests/humanizer-wrap.test.ts pins to this module).
+ *
+ * Behavior (T-06-05-03 — a missing skill must NEVER fail the export):
+ *   - isHumanizerSkillPresent() === false → print a clear stdout banner
+ *     ('humanizer skill not found at ~/.claude/skills/humanizer/ — skipping
+ *     humanize step.') and return null. The export proceeds on DRAFT.md.
+ *   - present (Tier 1) → the humanizer is invoked via the Claude Code Task
+ *     transport, which writes `.paper/FINAL.md` and returns its path. There is
+ *     no Task transport in Tier 2 / the current era (06-RESEARCH A7), so a
+ *     present-but-no-transport skill is treated the SAME as the skip path with a
+ *     distinct banner: the export still proceeds on DRAFT.md and null is
+ *     returned. A FINAL.md path is returned ONLY when a real humanized artifact
+ *     was written.
+ *
+ * NEVER throws — any unexpected error degrades to a clean null skip (advisory).
+ * `paperRoot` is accepted for the present-path FINAL.md resolution; it is unused
+ * on the skip path (Tier-2 era).
+ */
+export async function runHumanizer(
+  draftMd: string,
+  paperRoot?: string,
+): Promise<string | null> {
+  void draftMd; // present-path Task transport will consume this in Tier 1.
+  try {
+    if (!isHumanizerSkillPresent()) {
+      process.stdout.write(
+        'pensmith done: humanizer skill not found at ~/.claude/skills/humanizer/ — skipping humanize step.\n',
+      );
+      return null;
+    }
+    // Present-but-no-transport (Tier 2 / current era): the @clack/CLI surface
+    // has no Task transport to invoke the skill, so skip cleanly with a distinct
+    // banner and let the export proceed on DRAFT.md. paperRoot is the FINAL.md
+    // anchor the Tier-1 Task path will use once a transport is wired.
+    void paperRoot;
+    process.stdout.write(
+      'pensmith done: humanizer skill present but no Task transport in this tier — skipping humanize step (export proceeds on DRAFT.md).\n',
+    );
+    return null;
+  } catch {
+    // Advisory — the humanize step must NEVER fail the export (Pitfall 7).
+    process.stdout.write(
+      'pensmith done: humanizer skill not found at ~/.claude/skills/humanizer/ — skipping humanize step.\n',
+    );
+    return null;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // zeroTracePatch — DOCX ZIP scrub (DONE-07 / T-06-04-01)
