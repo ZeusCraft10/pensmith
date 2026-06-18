@@ -241,7 +241,22 @@ Plans:
   4. Free distinctive-phrase plagiarism check via DuckDuckGo HTML produces an n-gram report; never blocks export by itself but warns user.
   5. Export confirmation gate prompts the user before writing exports. Per PRD §7.9 + REQUIREMENTS DONE-09, when any UNSUPPORTED claim, orphan claim (Pass 4), or plagiarism hit (DONE-02) is present, the gate shows a per-issue summary and requires explicit user confirmation before export. Generic confirmation also runs even with no issues. Skipped only with `--yolo`.
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+**Wave layout** (depends_on; executor reads `wave` frontmatter):
+
+- Wave 0: 06-01 (RED scaffold + fixture .docx + cassettes + locked honesty-framing copy + jszip dep)
+- Wave 1: 06-02 (plagiarism), 06-03 (honesty), 06-04 (exporter + zero-trace patch) — parallel (no file overlap)
+- Wave 2: 06-05 (done orchestrator + DONE-09 gate + humanizer wrap + workflow body + tier-contract; depends 06-01/02/03/04)
+
+Plans:
+
+- [ ] 06-01-PLAN.md (wave 0) — RED suite (zero-trace/plagiarism/honesty/exporter/gate/humanizer) + committed real-ZIP fixture .docx + DDG/GPTZero cassettes + locked references/honesty-framing.md (hash-pinned) + CONTRIBUTING.md drift rule + jszip dep (DONE-02..09, TEST-10)
+- [ ] 06-02-PLAN.md (wave 1) — bin/lib/plagiarism.ts: distinctive-phrase n-gram + DuckDuckGo HTML via http.ts chokepoint, advisory-never-throws, offline-cassette-backed (DONE-02)
+- [ ] 06-03-PLAN.md (wave 1) — bin/lib/honesty.ts: GPTZero before/after, framing rendered VERBATIM from locked copy, key-never-logged, pluggable backend (DONE-04, DONE-05)
+- [ ] 06-04-PLAN.md (wave 1) — bin/lib/exporter.ts: zeroTracePatch DOCX ZIP scrub (TEST-10/DONE-07, offline + Pandoc-free) + Pandoc shellout w/ md-only fallback + CITATIONS.bib bundle (DONE-06, DONE-07, DONE-08, TEST-10)
+- [ ] 06-05-PLAN.md (wave 2) — bin/cli/done.ts thin orchestrator: whole-paper Pass 4 + DONE-09 always-confirm gate + humanizer skip-clean wrap + workflows/done.md + verb-loader + tier-contract parity (DONE-01, DONE-03, DONE-09)
+
 **UI hint**: no
 
 ### Phase 7: Single-command UX layer + hooks + flags
@@ -316,7 +331,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 3. Vertical slice through one section | 10/10 | Complete    | 2026-05-28 |
 | 4. Breadth — N sections + compile + wave scheduling | 5/5 | Complete   | 2026-06-17 |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 5/5 | Complete   | 2026-06-18 |
-| 6. Done / export pipeline + zero-trace gate | 0/TBD | Not started | - |
+| 6. Done / export pipeline + zero-trace gate | 0/5 | Planned | - |
 | 7. Single-command UX layer + hooks + flags | 0/TBD | Not started | - |
 | 8. Style match + sketch + add + library + BYO PDF polish | 0/TBD | Not started | - |
 | 9. Educator/tutorial mode + PII polish | 0/TBD | Not started | - |
