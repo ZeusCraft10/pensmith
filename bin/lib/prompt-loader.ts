@@ -120,15 +120,16 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   // from bin/lib/verify/pass4.ts (Pass 4 Step-3 edge-case label) — NOT from
   // bin/cli/verify.ts (the D-13 chokepoint file is unaffected; verify.ts never loads
   // a prompt). pass1-fuzzy-judge + pass3-quote-checker remain D-13 DORMANT.
-  // WN-3: they land here as __PENDING_HASH_<slug>__ sentinels in Wave 0 (Plan 05-01)
-  // BEFORE the pass modules exist, so the loader can resolve the slugs the moment
-  // Plans 05-02/05-03 wire the LLM seams; Plan 05-05 re-pins them atomically to the
-  // REAL SHA-256 the tests/repo-files.test.ts byte-pins already carry (single source
-  // of truth — both surfaces then agree and loadPrompt succeeds WITHOUT the bypass).
-  // PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1 bypasses the runtime drift check while the
-  // sentinels are in place (CI sets this during Phase-5 Waves 0-1).
-  'claim-support':       '__PENDING_HASH_claim-support__',   // Phase 5 advisory Pass 2 (ACTIVE; invoked from pass2.ts)
-  'orphan-label':        '__PENDING_HASH_orphan-label__',    // Phase 5 advisory Pass 4 Step 3 (ACTIVE; invoked from pass4.ts)
+  // WN-3: they landed here as __PENDING_HASH_<slug>__ sentinels in Wave 0 (Plan 05-01)
+  // BEFORE the pass modules existed, so the loader could resolve the slugs the moment
+  // Plans 05-02/05-03 wired the LLM seams. Plan 05-05 Task 1 now re-pins them
+  // ATOMICALLY to the SAME real SHA-256 the tests/repo-files.test.ts byte-pins have
+  // carried since creation (single source of truth — both surfaces now agree and
+  // loadPrompt('claim-support') / loadPrompt('orphan-label') succeed WITHOUT
+  // PENSMITH_ALLOW_PENDING_PROMPT_HASHES; runtime drift detection is restored).
+  // Mirrors the Phase-4 smoother re-pin precedent exactly (Plan 04-05 Task 4).
+  'claim-support':       'ceec7601dfeaf30117091aa788d9463c01b6ca9d3a9da4b47fb0f91983c82217',   // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 2 via pass2.ts)
+  'orphan-label':        'f8b385f3869691f4a419f35987d8b9a93018f28714519b36713fd7c2c0b829fc',   // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 4 Step 3 via pass4.ts)
 };
 
 /**
