@@ -19,6 +19,10 @@
 // cap (10/paper) + Semaphore(5) + the http.ts generic TokenBucket (5 RPS) +
 // browser-like headers; rate-limit / transport errors are swallowed advisory.
 
+import { fetch as httpFetch } from './http.js';
+import { isOfflineMode, loadCassetteFile } from './http-mock.js';
+import { Semaphore } from './budget.js';
+
 // ============================================================
 //   Public types
 // ============================================================
@@ -143,4 +147,183 @@ export function extractDistinctivePhrases(
     }
   }
   return phrases;
+}
+
+// ============================================================
+//   Advisory debug helper (mirrors verify/freshness.ts)
+// ============================================================
+function debug(msg: string): void {
+  if (process.env['PENSMITH_DEBUG'] === '1') {
+    process.stderr.write(`[plagiarism] ${msg}\n`);
+  }
+}
+
+// ============================================================
+//   DuckDuckGo HTML query + parse
+// ============================================================
+
+// Hard-coded host (T-06-02-01 SSRF mitigation): the ONLY dynamic component of
+// the query URL is the `q` param, which is encodeURIComponent-escaped below.
+const DDG_HTML_ENDPOINT = 'https://html.duckduckgo.com/html/';
+
+// Browser-like headers reduce DDG's burst-blocking (06-RESEARCH Pitfall 5 /
+// T-06-02-03). They are advisory hints only; a block still degrades to an empty
+// match array, never a throw.
+const DDG_HEADERS: Record<string, string> = {
+  'Accept-Language': 'en-US,en;q=0.9',
+  Accept: 'text/html',
+};
+
+const DDG_FAN_OUT = 5;
+
+/**
+ * Build the DDG HTML search URL for a phrase. Host is hard-coded; the phrase is
+ * URL-encoded as the sole dynamic component (T-06-02-01 SSRF/injection
+ * mitigation — no arbitrary host can be reached through this function).
+ */
+function ddgUrl(phrase: string): string {
+  return `${DDG_HTML_ENDPOINT}?q=${encodeURIComponent(phrase)}`;
+}
+
+/**
+ * Parse DuckDuckGo HTML into the list of organic result links. Pure function,
+ * shared by BOTH the offline-cassette and the live-network branches so they
+ * cannot diverge.
+ *
+ * Implementation is regex/String ONLY — no DOM, no eval, no innerHTML
+ * (T-06-02-02 / V5 input validation). Matches the organic `result__a` anchor
+ * class exactly so sponsored `result--ad__a` and snippet `result__snippet`
+ * anchors are excluded. Malformed HTML simply yields zero matches.
+ */
+export function parseDdgHtml(html: string): PlagiarismMatch[] {
+  if (typeof html !== 'string' || html.length === 0) return [];
+  const matches: PlagiarismMatch[] = [];
+  // class="result__a" (exact token, not a prefix — excludes result__a-foo and
+  // result--ad__a) with an href; capture the URL and the anchor text.
+  const re = /<a\b[^>]*\bclass=["'][^"']*\bresult__a\b[^"']*["'][^>]*\bhref=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  const seen = new Set<string>();
+  while ((m = re.exec(html)) !== null) {
+    const url = (m[1] ?? '').trim();
+    if (url.length === 0) continue;
+    // Exclude the sponsored ad anchor class defensively (its class token is
+    // result--ad__a, which the result__a word-boundary above already rejects;
+    // this is belt-and-suspenders against attribute-order variance).
+    if (/\bresult--ad__a\b/.test(m[0])) continue;
+    if (seen.has(url)) continue;
+    seen.add(url);
+    const rawTitle = (m[2] ?? '')
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    matches.push(rawTitle.length > 0 ? { url, title: rawTitle } : { url });
+  }
+  return matches;
+}
+
+/**
+ * Read the duckduckgo cassette and return its response HTML string, or null when
+ * no usable cassette entry exists. Prefers an entry whose path matches the live
+ * query (`?q=<encoded-phrase>`); otherwise falls back to the single committed
+ * entry for deterministic offline behavior.
+ */
+function offlineDdgHtml(phrase: string): string | null {
+  const cassettes = loadCassetteFile('duckduckgo', 'html-search');
+  if (!cassettes || cassettes.length === 0) return null;
+  const wantQ = `q=${encodeURIComponent(phrase)}`;
+  const match =
+    cassettes.find((c) => typeof c.path === 'string' && c.path.includes(wantQ)) ??
+    cassettes[0];
+  if (!match || typeof match.response !== 'string') return null;
+  return match.response;
+}
+
+/**
+ * Query one phrase against DuckDuckGo (offline cassette or live http.ts), parse
+ * the result anchors, and return the result URLs. Never throws — transport
+ * errors are swallowed to DEBUG and yield an empty array for that phrase
+ * (advisory contract, mirrors verify/freshness.ts).
+ */
+async function queryPhrase(phrase: string): Promise<string[]> {
+  try {
+    let html: string | null;
+    if (isOfflineMode()) {
+      // Offline branch MUST NOT touch the network.
+      html = offlineDdgHtml(phrase);
+      if (html === null) {
+        debug(`no cassette entry for phrase=${JSON.stringify(phrase)} — empty matches`);
+        return [];
+      }
+    } else {
+      const resp = await httpFetch(ddgUrl(phrase), {
+        source: 'generic',
+        noCache: true,
+        headers: DDG_HEADERS,
+      });
+      html = resp.body;
+    }
+    return parseDdgHtml(html).map((hit) => hit.url);
+  } catch (err) {
+    // Transport / parse error is scrape noise, NOT a plagiarism signal. Swallow
+    // advisory — the check never throws and never blocks export by itself.
+    debug(`phrase=${JSON.stringify(phrase)} transport error: ${String(err)} — swallowed`);
+    return [];
+  }
+}
+
+/**
+ * Run the free distinctive-phrase plagiarism check over a compiled draft.
+ *
+ * Extracts distinctive phrases (extractDistinctivePhrases), queries DDG for each
+ * under a Semaphore(5) fan-out cap (so the http.ts generic TokenBucket is not
+ * overrun), and returns one PlagiarismResult per queried phrase (including
+ * phrases with zero matches). Advisory by construction: never throws, never
+ * blocks export — an empty `matches` array means no signal for that phrase.
+ */
+export async function runPlagiarism(
+  draftMd: string,
+  opts?: { maxPhrases?: number },
+): Promise<PlagiarismResult[]> {
+  const maxPhrases = opts?.maxPhrases ?? 10;
+  const phrases = extractDistinctivePhrases(draftMd, 5, maxPhrases);
+  if (phrases.length === 0) return [];
+  const sem = new Semaphore(DDG_FAN_OUT);
+  return Promise.all(
+    phrases.map((phrase) =>
+      sem.withLock(async () => ({ phrase, matches: await queryPhrase(phrase) })),
+    ),
+  );
+}
+
+/**
+ * Render the `## Plagiarism Check (DONE-02)` section for VERIFICATION.md.
+ * Deterministic, no LLM. Mirrors the verify/freshness.ts renderFreshnessTable
+ * shape (06-PATTERNS). Carries a one-line advisory note: this check never blocks
+ * export — it only feeds the DONE-09 export-confirmation gate.
+ */
+export function renderPlagiarismSection(
+  results: ReadonlyArray<PlagiarismResult>,
+): string {
+  const lines = [
+    '## Plagiarism Check (DONE-02)',
+    '',
+    'Advisory only — never blocks export; feeds the export-confirmation gate (DONE-09).',
+    '',
+    '| Phrase | Matches |',
+    '|--------|---------|',
+  ];
+  if (results.length === 0) {
+    lines.push('| _(none)_ | no distinctive phrases probed |');
+    return lines.join('\n');
+  }
+  for (const r of results) {
+    const cell =
+      r.matches.length === 0
+        ? '_(no matches)_'
+        : r.matches.map((u) => `<${u}>`).join('<br>');
+    // Escape pipes in the phrase so a literal `|` cannot break the table.
+    const phraseCell = r.phrase.replace(/\|/g, '\\|');
+    lines.push(`| ${phraseCell} | ${cell} |`);
+  }
+  return lines.join('\n');
 }
