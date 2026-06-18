@@ -127,14 +127,37 @@ PINNED ORDERING (review H4 — ONE ordering, used by BOTH this file and 07-02):
     1. STATE.json absent                  → { verb:'new' }
     2. RESEARCH.md absent                 → { verb:'research' }
     3. OUTLINE.md absent / zero sections  → { verb:'outline' }
-    4. section walk (plan/write/verify)   → first incomplete section
-    5. all verified, no DRAFT.md          → { verb:'compile' }
+    4. section walk (plan/write/verify)   → first NON-terminal-OR-stuck section (TOTAL map below)
+    5. all sections verified, no DRAFT.md → { verb:'compile' }
     6. DRAFT.md, no FINAL.md              → { verb:'done' }
     7. both present                       → { verb:'status', reason:'done' }
+    8. guaranteed terminal fallback       → { verb:'status', reason:'attention' }
   resolveNextAction NEVER returns { verb:'resume' }. HANDOFF.json is consumed
   ONLY by the SessionStart hook (emit resume context) and the explicit `resume`
   verb — and `resume` dispatches to resolveNextAction's next WORK verb, never to
   itself. See HANDOFF lifecycle below.
+
+  COMPLETE SECTION-STATE -> VERB MAP (C3-HIGH-1 — TOTAL over SectionStateSchema;
+  the function can NEVER fall through to `undefined`). For each section walked in
+  ascending `n`, the FIRST section whose state is not 'verified' decides the verb:
+    - PLAN.md missing on disk     → { verb:'plan',   n, slug }   (no frontmatter yet)
+    - status 'planned'            → { verb:'plan',   n, slug }
+    - status 'writing'            → { verb:'write',  n, slug }
+    - status 'written'            → { verb:'verify', n, slug }
+    - status 'verifying'          → { verb:'verify', n, slug }
+    - status 'failed'             → { verb:'verify', n, slug }   (re-attempt verification — NOT 'continue')
+    - status 'unverifiable'       → { verb:'verify', n, slug }   (re-attempt verification — NOT 'continue')
+    - status 'verified'           → CONTINUE to the next section (the ONLY continue case)
+    - any unrecognized status     → { verb:'status', reason:'attention', section:{n,slug} } (defensive; SectionStateSchema is the source of truth, but a hand-edited PLAN.md must not crash routing)
+  CRITICAL CHANGE vs. the prior spec: 'failed' and 'unverifiable' are NO LONGER
+  treated as 'continue'. Routing a failed/unverifiable section to `verify` means
+  the walk RETURNS at the first non-verified section, so the post-walk compile
+  branch (step 5) is only ever reached when EVERY section is 'verified'. This
+  closes the totality gap where `[verified, failed, verified]` with no DRAFT
+  matched NO branch and returned `undefined` (crashing the bare dispatcher's
+  decision.verb access — SC1/SC5). Step 8 is an unreachable-by-construction
+  belt-and-suspenders terminal return so the TS compiler + runtime both prove
+  totality.
 ```
 
 [VERIFIED: codebase grep — STATE.json schema + SectionStateSchema + HANDOFF schema]
@@ -440,7 +463,14 @@ export type RouterDecision =
   | { verb: 'verify'; n: number; slug: string }
   | { verb: 'compile' }
   | { verb: 'done' }
-  | { verb: 'status'; reason: 'done' };
+  // C3-HIGH-1: `status.reason` is widened so the resolver is TOTAL — it has a
+  // valid return for BOTH the all-done terminus AND a stuck-section terminus,
+  // and therefore never falls through to `undefined`.
+  //   reason:'done'      → DRAFT.md + FINAL.md both present (nothing left to do)
+  //   reason:'attention' → a section is in an unrecognized state, or the
+  //                        guaranteed terminal fallback fired (should be
+  //                        unreachable by construction, but proves totality)
+  | { verb: 'status'; reason: 'done' | 'attention'; section?: { n: number; slug: string } };
 // NOTE (H4): resolveNextAction does NOT emit a 'resume' decision. The { verb:'resume' }
 // arm lives only for the explicit `resume` VERB's own return typing, handled in
 // bin/cli/resume.ts; resolveNextAction always returns a concrete next WORK verb.
@@ -466,23 +496,44 @@ export async function resolveNextAction(paperRoot: string): Promise<RouterDecisi
   const sections = state.sections ?? [];
   if (sections.length === 0) return { verb: 'outline' };
 
-  // Walk sections in order; find first incomplete
+  // Walk sections in ascending n; the FIRST non-'verified' section decides the
+  // verb. C3-HIGH-1: the map below is TOTAL over SectionStateSchema
+  // (planned/writing/written/verifying/verified/failed/unverifiable) — 'verified'
+  // is the ONLY 'continue' case. 'failed'/'unverifiable' route BACK to verify
+  // (re-attempt), so the walk always RETURNS at the first stuck section and the
+  // post-walk compile branch is only reached when EVERY section is verified.
   for (const { n, slug } of sections.sort((a, b) => a.n - b.n)) {
     const planPath = sectionPlan(n, slug, paperRoot);
     if (!existsSync(planPath)) return { verb: 'plan', n, slug };
     const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
     const status = (frontmatter as { status?: string }).status ?? 'planned';
-    if (status === 'planned')   return { verb: 'plan',   n, slug };
-    if (status === 'writing')   return { verb: 'write',  n, slug };
-    if (status === 'written')   return { verb: 'verify', n, slug };
-    if (status === 'verifying') return { verb: 'verify', n, slug };
-    // verified / failed / unverifiable — continue to next section
+    switch (status) {
+      case 'verified':
+        continue;                                   // ONLY continue case
+      case 'planned':
+        return { verb: 'plan',   n, slug };
+      case 'writing':
+        return { verb: 'write',  n, slug };
+      case 'written':
+      case 'verifying':
+      case 'failed':                                // re-attempt verification
+      case 'unverifiable':                          // re-attempt verification
+        return { verb: 'verify', n, slug };
+      default:
+        // Unrecognized status (hand-edited PLAN.md). Do NOT fall through to
+        // undefined — surface a stuck-section status instead.
+        return { verb: 'status', reason: 'attention', section: { n, slug } };
+    }
   }
 
-  // All sections verified
+  // All sections verified (the walk fell through ONLY because every section was
+  // 'verified' — 'failed'/'unverifiable' would have returned 'verify' above).
   if (!existsSync(join(pDir, 'DRAFT.md'))) return { verb: 'compile' };
   if (!existsSync(join(pDir, 'FINAL.md'))) return { verb: 'done' };
   return { verb: 'status', reason: 'done' };
+  // (No code path can reach here; the three returns above are exhaustive once
+  // the walk completes. The compiler-visible totality comes from the section
+  // switch's `default` + these three terminal returns.)
 }
 ```
 
