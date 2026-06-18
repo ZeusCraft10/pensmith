@@ -222,7 +222,7 @@ Plans:
 
 - [x] 05-01-PLAN.md (wave 0) — RED suite (known-bad-pass2/pass4 + advisory-isolation) + pass2-adversarial/pass4-orphan fixtures + claim-support/orphan-label stub prompts + WN-3 sentinels in EXPECTED_PROMPT_HASHES + repo-files byte-pins + D-13 comment permit (VRFY-03, VRFY-06)
 - [x] 05-02-PLAN.md (wave 1) — bin/lib/verify/pass2.ts: advisory claim-support pass (UNCLEAR-bias), assertBudget pre-call gate, PENSMITH_NO_LLM placeholder, renderPass2Section (VRFY-03)
-- [ ] 05-03-PLAN.md (wave 1) — bin/lib/verify/pass4.ts: deterministic pure-Node claim extraction + orphan detection, advisory Step-3 orphan-label LLM for AMBIGUOUS only, renderPass4Section (VRFY-06)
+- [x] 05-03-PLAN.md (wave 1) — bin/lib/verify/pass4.ts: deterministic pure-Node claim extraction + orphan detection, advisory Step-3 orphan-label LLM for AMBIGUOUS only, renderPass4Section (VRFY-06)
 - [ ] 05-04-PLAN.md (wave 2) — wire runPass2/runPass4 into bin/cli/verify.ts below frozen status line + ## Pass-2/## Pass-4 VERIFICATION.md sections + extend verify-section tier-contract parity (VRFY-03, VRFY-06)
 - [ ] 05-05-PLAN.md (wave 3) — WN-3 atomic re-pin: replace claim-support/orphan-label sentinels with real SHA-256 in prompt-loader.ts; full-suite green-gate without pending bypass (VRFY-03, VRFY-06)
 
@@ -315,7 +315,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 2. Tier shells + doctor + tier-contract gate | 10/10 | COMPLETE | 2026-05-16 |
 | 3. Vertical slice through one section | 10/10 | Complete    | 2026-05-28 |
 | 4. Breadth — N sections + compile + wave scheduling | 5/5 | Complete   | 2026-06-17 |
-| 5. Verifier completeness (Pass 2 + Pass 4) | 2/5 | In Progress|  |
+| 5. Verifier completeness (Pass 2 + Pass 4) | 3/5 | In Progress|  |
 | 6. Done / export pipeline + zero-trace gate | 0/TBD | Not started | - |
 | 7. Single-command UX layer + hooks + flags | 0/TBD | Not started | - |
 | 8. Style match + sketch + add + library + BYO PDF polish | 0/TBD | Not started | - |

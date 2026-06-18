@@ -132,7 +132,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [x] **VRFY-03**: Pass 2 — claim support (LLM-judged), verdict ∈ {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}, prompt calibrated UNCLEAR-bias (advisory)
 - [x] **VRFY-04**: Pass 3 — quotation verification, OA full-text via Unpaywall, tiered exact → Levenshtein-≥0.95 substring match with NFKC Unicode normalization both sides; PASS / NOT_FOUND / FUZZY_MATCH (deterministic, blocking)
 - [x] **VRFY-05**: Pass 3 — strip soft hyphens, decompose known ligatures, canonicalize smart quotes / em-dash / ellipsis / diacritics; minimum quote length ≥10 words for fuzzy
-- [ ] **VRFY-06**: Pass 4 — per-paragraph orphan-claim audit. The claim-extraction step is deterministic (pure-Node, paragraph→claim regex/grammar pipeline) per PRD §14 "Determinism where it counts." The orphan-vs-cited judgment compares extracted claims to in-text citations deterministically; LLM is used only for *labeling* edge cases (e.g., "is this a claim or a definition?") and remains advisory. Verdict is written to `sections/<N>/VERIFICATION.md` and never auto-blocks compile or export — but presence of any orphan claims feeds the §7.9 export-confirmation gate (`DONE-09`).
+- [x] **VRFY-06**: Pass 4 — per-paragraph orphan-claim audit. The claim-extraction step is deterministic (pure-Node, paragraph→claim regex/grammar pipeline) per PRD §14 "Determinism where it counts." The orphan-vs-cited judgment compares extracted claims to in-text citations deterministically; LLM is used only for *labeling* edge cases (e.g., "is this a claim or a definition?") and remains advisory. Verdict is written to `sections/<N>/VERIFICATION.md` and never auto-blocks compile or export — but presence of any orphan claims feeds the §7.9 export-confirmation gate (`DONE-09`).
 - [x] **VRFY-07**: Section marked `verified` only when Pass 1 + Pass 3 are clean (Pass 2 / Pass 4 verdicts are advisory)
 - [x] **VRFY-08**: `last_verified` timestamps written per citation; auto-recheck on stale
 
@@ -338,7 +338,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | COMP-06 | Phase 4 | Complete |
 | COMP-07 | Phase 4 | Complete |
 | VRFY-03 | Phase 5 | Complete |
-| VRFY-06 | Phase 5 | Pending |
+| VRFY-06 | Phase 5 | Complete |
 | DONE-01 | Phase 6 | Pending |
 | DONE-02 | Phase 6 | Pending |
 | DONE-03 | Phase 6 | Pending |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-06-18T06:14:54.993Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-06-18T06:23:57.966Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 11
   completed_phases: 5
   total_plans: 48
-  completed_plans: 45
+  completed_plans: 46
   percent: 45
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 05 (Verifier completeness (Pass 2 + Pass 4)) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-06-18
 
-Progress: [█████████░] 92%  (44/48 plans; Phase 5 Wave 0 RED scaffold landed)
+Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
 
 Plan files (depends_on order):
 
@@ -82,6 +82,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 04 P05 | 21min | 4 tasks | 24 files |
 | Phase 05 P01 | 8min | 2 tasks | 9 files |
 | Phase 05 P02 | 4min | 2 tasks tasks | 1 file files |
+| Phase 05 P03 | 5min | 2 tasks | 1 file |
 
 ## Accumulated Context
 
@@ -168,6 +169,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [05-01] claim-support + orphan-label registered as __PENDING_HASH_ sentinels in EXPECTED_PROMPT_HASHES (WN-3) BEFORE pass modules exist so loadPrompt resolves the slugs; real SHA-256 byte-pins in repo-files from creation; verify.ts byte-unchanged and its whole-file loadPrompt==0 D-13 chokepoint pinned by a committed regression test
 - [Phase ?]: [05-02] Pass 2 claim-support advisory module — runPass2 returns Pass2Result[] only, never touches hasFail/status (VRFY-07); assertBudget pre-call gate + getProviderApiKey no-leak resolution; UNCLEAR-bias preserved offline and on unparseable LLM responses
 - [Phase ?]: [05-02] PASS2_SECTION_CAP_DEFAULT=0.50 USD/section (ARCH-10 per-step cap, config knob via opts.scopeCapUsd); model id from runtime config defaultModel falling back to claude-haiku-4
+- [Phase ?]: [05-03] Pass 4 deterministic core implements PINNED rule R1-R8 verbatim (R5 8-word floor enforced BEFORE R6 marker counting); orphanCount is HIGH-only (R8) and byte-identical with or without the LLM — every pass4-orphan.json fixture incl. canonical Climate-change =1 passed on first run, no R1-R8 re-walk needed
+- [Phase ?]: [05-03] Pass 4 Step-3 orphan-label LLM (AMBIGUOUS sentences only) gated behind assertBudget pre-call + PENSMITH_NO_LLM guard + getProviderApiKey no-leak; PASS4_SECTION_CAP_DEFAULT=0.50 (matches Pass-2); renderPass4Section is an integer-only orphan-count table (no LLM text in cells — injection surface removed); advisory by construction (no hasFail/status), VRFY-06 GREEN, full suite 649 pass / 0 skip
 
 ### Pending Todos
 
@@ -188,6 +191,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T06:11:50.526Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-06-18T06:23:57.961Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
