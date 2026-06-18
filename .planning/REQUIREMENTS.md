@@ -149,14 +149,14 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 ### Done (Export)
 
 - [ ] **DONE-01**: Whole-paper Pass 4 audit on the compiled draft
-- [ ] **DONE-02**: Free distinctive-phrase plagiarism check via DuckDuckGo HTML (n-gram extraction in `bin/lib/plagiarism.ts`)
-- [ ] **DONE-03**: Humanizer pass wraps user's installed `~/.claude/skills/humanizer/`; skips cleanly with banner if absent
-- [ ] **DONE-04**: Detection-aware honesty score before AND after humanize via GPTZero (default), with framing "improves prose, not evades detection" `[research]`
-- [ ] **DONE-05**: Honesty backend pluggable to Originality / Sapling via config
-- [ ] **DONE-06**: Export to `.docx` / `.pdf` / `.tex` / `.md` (Pandoc when present; markdown-only fallback when absent)
-- [ ] **DONE-07**: Zero pensmith trace in exported document — no metadata stamp, no footer, no fingerprint; verified by zero-trace test (grep `.docx` ZIP entries for "pensmith" → must be zero)
-- [ ] **DONE-08**: Bundle `.paper/CITATIONS.bib` in configured citation style
-- [ ] **DONE-09**: Export confirmation gate. PRD §7.9: when any UNSUPPORTED claim, orphan claim (Pass 4), or plagiarism hit (DONE-02) exists, the user MUST be shown a per-issue summary and confirm before export proceeds. The gate also wraps the generic "ready to export?" approval. Skipped only with `--yolo`. The confirmation is the SOLE escape valve for the Core Value claim "every citation supports the claim it's attached to" when Pass 2 / Pass 4 surface advisory issues — without this gate, the Core Value would force compile/export to block automatically, contradicting `VRFY-07`.
+- [x] **DONE-02**: Free distinctive-phrase plagiarism check via DuckDuckGo HTML (n-gram extraction in `bin/lib/plagiarism.ts`)
+- [x] **DONE-03**: Humanizer pass wraps user's installed `~/.claude/skills/humanizer/`; skips cleanly with banner if absent
+- [x] **DONE-04**: Detection-aware honesty score before AND after humanize via GPTZero (default), with framing "improves prose, not evades detection" `[research]`
+- [x] **DONE-05**: Honesty backend pluggable to Originality / Sapling via config
+- [x] **DONE-06**: Export to `.docx` / `.pdf` / `.tex` / `.md` (Pandoc when present; markdown-only fallback when absent)
+- [x] **DONE-07**: Zero pensmith trace in exported document — no metadata stamp, no footer, no fingerprint; verified by zero-trace test (grep `.docx` ZIP entries for "pensmith" → must be zero)
+- [x] **DONE-08**: Bundle `.paper/CITATIONS.bib` in configured citation style
+- [x] **DONE-09**: Export confirmation gate. PRD §7.9: when any UNSUPPORTED claim, orphan claim (Pass 4), or plagiarism hit (DONE-02) exists, the user MUST be shown a per-issue summary and confirm before export proceeds. The gate also wraps the generic "ready to export?" approval. Skipped only with `--yolo`. The confirmation is the SOLE escape valve for the Core Value claim "every citation supports the claim it's attached to" when Pass 2 / Pass 4 surface advisory issues — without this gate, the Core Value would force compile/export to block automatically, contradicting `VRFY-07`.
 
 ### Resume / Hooks (Tier 1)
 
@@ -191,7 +191,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [ ] **TEST-07**: Lock conflict test — second runner detects + waits / aborts cleanly
 - [ ] **TEST-08**: Budget abort fires *before* the LLM call (verified with cost-fixture test)
 - [x] **TEST-09**: Section-isolation mtime test — re-doing section 3 leaves sections 1, 2, 4, 5 untouched (mtime snapshot)
-- [ ] **TEST-10**: Zero-trace export test — every export format scanned for "pensmith" string and metadata fields, must be zero
+- [x] **TEST-10**: Zero-trace export test — every export format scanned for "pensmith" string and metadata fields, must be zero
 - [ ] **TEST-11**: CI matrix runs on linux-x64, macos-arm64, windows-x64
 
 ## v2 Requirements
@@ -340,15 +340,15 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | VRFY-03 | Phase 5 | Complete |
 | VRFY-06 | Phase 5 | Complete |
 | DONE-01 | Phase 6 | Pending |
-| DONE-02 | Phase 6 | Pending |
-| DONE-03 | Phase 6 | Pending |
-| DONE-04 | Phase 6 | Pending |
-| DONE-05 | Phase 6 | Pending |
-| DONE-06 | Phase 6 | Pending |
-| DONE-07 | Phase 6 | Pending |
-| DONE-08 | Phase 6 | Pending |
-| DONE-09 | Phase 6 | Pending |
-| TEST-10 | Phase 6 | Pending |
+| DONE-02 | Phase 6 | Complete |
+| DONE-03 | Phase 6 | Complete |
+| DONE-04 | Phase 6 | Complete |
+| DONE-05 | Phase 6 | Complete |
+| DONE-06 | Phase 6 | Complete |
+| DONE-07 | Phase 6 | Complete |
+| DONE-08 | Phase 6 | Complete |
+| DONE-09 | Phase 6 | Complete |
+| TEST-10 | Phase 6 | Complete |
 | UX-01 | Phase 7 | Pending |
 | UX-02 | Phase 7 | Pending |
 | UX-03 | Phase 7 | Pending |

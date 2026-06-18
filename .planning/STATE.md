@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: verifying
+status: executing
 stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-06-18T06:42:05.800Z"
+last_updated: "2026-06-18T08:39:27.403Z"
 last_activity: 2026-06-18
 progress:
   total_phases: 11
   completed_phases: 6
-  total_plans: 48
-  completed_plans: 48
+  total_plans: 53
+  completed_plans: 49
   percent: 55
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-06)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** Phase 05 — Verifier completeness (Pass 2 + Pass 4)
+**Current focus:** Phase 06 — Done / export pipeline + zero-trace gate
 
 ## Current Position
 
-Phase: 05 (Verifier completeness (Pass 2 + Pass 4)) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
+Phase: 06 (Done / export pipeline + zero-trace gate) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-06-18
 
 Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
@@ -85,6 +85,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 05 P03 | 5min | 2 tasks | 1 file |
 | Phase 05 P04 | 4min | 2 tasks | 2 files |
 | Phase 05 P05 | 3min | 2 tasks | 1 files |
+| Phase 06 P01 | 11min | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -175,6 +176,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [05-03] Pass 4 Step-3 orphan-label LLM (AMBIGUOUS sentences only) gated behind assertBudget pre-call + PENSMITH_NO_LLM guard + getProviderApiKey no-leak; PASS4_SECTION_CAP_DEFAULT=0.50 (matches Pass-2); renderPass4Section is an integer-only orphan-count table (no LLM text in cells — injection surface removed); advisory by construction (no hasFail/status), VRFY-06 GREEN, full suite 649 pass / 0 skip
 - [Phase ?]: [05-04] verify.ts wires runPass2/runPass4 strictly below the frozen hasFail/status block (freshness call-site mirror); advisory-only by construction (VRFY-07). D-13 held by import-and-call — the new imports carry no loadPrompt literal and Pass 2/4 load their prompts in their own modules, so the verify.ts whole-file loadPrompt count stays 0 (comments included), re-asserted by Guard B. Tier parity scoped to PENSMITH_NO_LLM=1: both tiers assert ## Pass-2 + ## Pass-4 + an UNCLEAR row; live verdict parity out of CI scope.
 - [Phase ?]: [05-05] WN-3 atomic re-pin: claim-support + orphan-label sentinels replaced with real SHA-256 in prompt-loader.ts (matching repo-files pins from creation); loadPrompt succeeds without the pending bypass — Phase 5 advisory passes production-real
+- [Phase ?]: [06-01] PDF zero-trace fixture hand-authored as raw bytes (not via pdf-lib) so it is a genuine negative control; 'Trace Sentinel' sentinel in BOTH /Info AND XMP forces structural XMP-object removal, defeating a literal-pensmith byte-sweep
+- [Phase ?]: [06-01] Wave-0 RED behavioral tests are RED-by-skip (skip-guarded on existsSync of the unbuilt module), mirroring known-bad-pass2 — full suite stays GREEN (681 tests, 0 fail, 19 skip) until Waves 1-2 land exporter/plagiarism/honesty/done
+- [Phase ?]: [06-01] honesty-framing.md is the LOCKED single-source transparency-only copy (improves prose, does not promise undetectable); byte-pinned GREEN-from-creation in repo-files.test.ts + CONTRIBUTING.md drift rule
 
 ### Pending Todos
 
@@ -195,6 +199,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T06:41:58.006Z
+Last session: 2026-06-18T08:39:00.557Z
 Stopped at: Completed 05-04-PLAN.md
 Resume file: None
