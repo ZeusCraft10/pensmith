@@ -272,7 +272,21 @@ Plans:
   4. Natural-language triggers ("redo section 3", "make it sound less AI", "where am I?") route to the correct skill via skill descriptions; inline conversational corrections (length change, add/drop section, swap source, redo section) work without leaving chat.
   5. `--dry-run` runs against cassette fixtures with zero external calls; `--estimate` projects tokens + USD before executing; `--yolo` skips outline + export approval (default off and refuses when estimate exceeds 50% of session cap); `--show-prompts` echoes every LLM prompt.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave layout** (depends_on; executor reads `wave` frontmatter):
+
+- Wave 0: 07-01 (RED scaffold — router/estimator/flags/hooks/skills tests, RED-by-skip)
+- Wave 1: 07-02 (router + estimator + next/status/resume verbs + 4 global flags), 07-03 (hooks: SessionStart/Stop/PreCompact-10s + closeSessionLog; HOOK-03 coverage) — parallel (no file overlap)
+- Wave 2: 07-04 (NL skills + plumbing namespace + plugin.json + tier-contract parity; depends 07-01, 07-02)
+
+Plans:
+
+- [ ] 07-01-PLAN.md (wave 0) — RED suite for router + estimator + flags + hooks + skills (RED-by-skip, full suite stays GREEN) (UX-01..05, ERGO-01..04, HOOK-01..04)
+- [ ] 07-02-PLAN.md (wave 1) — bin/lib/router.ts state-aware bare-command pure fn + bin/lib/estimator.ts token+USD projection (50%-cap refusal) + next/status/resume real verbs + 4 global flags wired in bin/pensmith.ts (UX-01, UX-02, ERGO-01..04)
+- [ ] 07-03-PLAN.md (wave 1) — hooks upgrade: SessionStart resume emitter + Stop lock-release/log-flush + PreCompact 10s Promise.race + closeSessionLog() export; HOOK-03 coverage-check only (HOOK-01..04)
+- [ ] 07-04-PLAN.md (wave 2) — NL-routing skills (skills/pensmith.md + plumbing namespace) + plugin.json skills array + tier-contract verb-shortcut/plumbing parity; human-verify live NL routing (UX-02, UX-03, UX-04, UX-05)
+
 **UI hint**: no
 
 ### Phase 8: Style match + sketch + add + library + BYO PDF polish
@@ -332,7 +346,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 4. Breadth — N sections + compile + wave scheduling | 5/5 | Complete   | 2026-06-17 |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 5/5 | Complete   | 2026-06-18 |
 | 6. Done / export pipeline + zero-trace gate | 5/5 | Complete   | 2026-06-18 |
-| 7. Single-command UX layer + hooks + flags | 0/TBD | Not started | - |
+| 7. Single-command UX layer + hooks + flags | 0/4 | Not started | - |
 | 8. Style match + sketch + add + library + BYO PDF polish | 0/TBD | Not started | - |
 | 9. Educator/tutorial mode + PII polish | 0/TBD | Not started | - |
 | 10. Discipline + citation-style breadth + Zotero MCP | 0/TBD | Not started | - |
