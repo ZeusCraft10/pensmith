@@ -524,6 +524,24 @@ function seedPaperFixture(): string {
   return root;
 }
 
+/**
+ * verify-section-scoped DRAFT.md seed (Plan 05-04 Task 2). Writes a minimal,
+ * deterministic section DRAFT.md carrying a single [@citekey] sentence into the
+ * MIDDLE_SECTION placeholder dir so `pensmith verify` reaches the advisory Pass
+ * 2/4 passes instead of short-circuiting on a missing draft. The citekey
+ * (vaswani2017attention) is a real entry in the seeded known-good CITATIONS.bib,
+ * so Pass 1 does not flag it FABRICATED. Kept OUT of seedPaperFixture so the
+ * other PHASE_3_CASES retain their clean "no DRAFT.md → unverifiable" state.
+ */
+function seedVerifySectionDraft(root: string): void {
+  const dir = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'DRAFT.md'),
+    '# Section\n\nThe transformer architecture is a landmark result [@vaswani2017attention].\n',
+  );
+}
+
 for (const tc of PHASE_3_CASES) {
   const verbExists = existsSync(new URL(`../${tc.verbFile}`, import.meta.url));
 
@@ -556,6 +574,17 @@ for (const tc of PHASE_3_CASES) {
   // mcpRegistered: false flag in the fact set).
   test(`tier-contract: ${tc.name} (TIER-06, Plan 09 GREEN)`, { skip: !verbExists }, async () => {
     const root = seedPaperFixture();
+    // verify-section-scoped seed (Plan 05-04 Task 2): the shared seedPaperFixture
+    // deliberately seeds NO section DRAFT.md (other PHASE_3_CASES rely on the
+    // clean "no DRAFT.md → unverifiable" state). verify-section needs a DRAFT.md
+    // carrying a real [@citekey] so verify reaches the advisory Pass 2/4 passes
+    // (else it short-circuits on the missing draft and never emits ## Pass-2/4).
+    // Done here (scoped) rather than in seedPaperFixture so the other cases stay
+    // unperturbed. The citekey MUST exist in the seeded known-good CITATIONS.bib
+    // (vaswani2017attention) so Pass 1 does not flag it FABRICATED.
+    if (tc.name === 'verify-section') {
+      seedVerifySectionDraft(root);
+    }
 
     // --- Tier 2 (CLI) ---
     const cliResult = runCliInDir(tc.cliArgs, root);
@@ -576,6 +605,30 @@ for (const tc of PHASE_3_CASES) {
     const cliArtifactBytes = readFileSync(artifactPath, 'utf8');
     assert.ok(cliArtifactBytes.length > 0, `tier-contract ${tc.name}: CLI artifact is empty`);
 
+    // Plan 05-04 Task 2 (VRFY-03 / VRFY-06): the advisory Pass 2 + Pass 4
+    // sections must be present in the CLI-produced VERIFICATION.md. SC3 scope:
+    // both tiers run under PENSMITH_NO_LLM=1 here (set by runCliInDir /
+    // runMcpToolInDir), so Pass 2 emits all-UNCLEAR deterministic placeholders
+    // and Pass 4 emits identical deterministic orphan counts — section presence
+    // + the all-UNCLEAR row + the ±20% length equivalence below pin the scoped
+    // (no-LLM) parity. Live-path verdict parity is out of CI scope by design.
+    if (tc.name === 'verify-section') {
+      assert.ok(
+        cliArtifactBytes.includes('## Pass-2'),
+        `tier-contract verify-section: CLI VERIFICATION.md must contain a ## Pass-2 section (VRFY-03)`,
+      );
+      assert.ok(
+        cliArtifactBytes.includes('## Pass-4'),
+        `tier-contract verify-section: CLI VERIFICATION.md must contain a ## Pass-4 section (VRFY-06)`,
+      );
+      // No-LLM placeholder path must emit at least one UNCLEAR verdict row.
+      assert.match(
+        cliArtifactBytes,
+        /\*\*UNCLEAR\*\*/,
+        `tier-contract verify-section: Pass-2 must contain an **UNCLEAR** verdict row under PENSMITH_NO_LLM=1`,
+      );
+    }
+
     // --- Tier 1 (MCP) — only where a tool is registered ---
     if (tc.mcpTool === null) {
       // Degraded contract: 3 interactive verbs (intake/research/outline) have
@@ -587,6 +640,11 @@ for (const tc of PHASE_3_CASES) {
 
     // Re-seed a fresh root for MCP (the CLI may have mutated state).
     const mcpRoot = seedPaperFixture();
+    // Same verify-section-scoped DRAFT.md seed for the MCP tier — the MCP run
+    // operates on its own fresh paper dir, so it needs the [@citekey] draft too.
+    if (tc.name === 'verify-section') {
+      seedVerifySectionDraft(mcpRoot);
+    }
     const toolArgs = tc.name.endsWith('-section')
       ? { n: Number(MIDDLE_SECTION), slug: 'placeholder', yolo: true }
       : {};
@@ -600,6 +658,23 @@ for (const tc of PHASE_3_CASES) {
       `tier-contract ${tc.name}: MCP tool must produce ${tc.expectedArtifact} — not found at ${mcpArtifactPath}`,
     );
     const mcpArtifactBytes = readFileSync(mcpArtifactPath, 'utf8');
+
+    // Plan 05-04 Task 2 (TIER-06 cross-tier parity): the advisory Pass 2 + Pass 4
+    // sections must ALSO be present in the MCP-produced VERIFICATION.md. Combined
+    // with the CLI presence assertions above and the ±20% length equivalence
+    // below, this pins the scoped (PENSMITH_NO_LLM=1) SC3 Pass-2/4 parity across
+    // both tiers — presence + all-UNCLEAR placeholders + length tolerance. Live
+    // verdict parity (real LLM) is out of CI scope by design (documented).
+    if (tc.name === 'verify-section') {
+      assert.ok(
+        mcpArtifactBytes.includes('## Pass-2'),
+        `tier-contract verify-section: MCP VERIFICATION.md must contain a ## Pass-2 section (TIER-06 parity)`,
+      );
+      assert.ok(
+        mcpArtifactBytes.includes('## Pass-4'),
+        `tier-contract verify-section: MCP VERIFICATION.md must contain a ## Pass-4 section (TIER-06 parity)`,
+      );
+    }
 
     // ±20% length equivalence on the artifact prose (TIER-07).
     // CLI + MCP both wrote the same Tier-2 placeholder template — bytes
