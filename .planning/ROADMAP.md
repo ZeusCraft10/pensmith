@@ -305,20 +305,21 @@ Plans:
 
 **Wave layout** (depends_on; executor reads `wave` frontmatter):
 
-- Wave 0: 08-00 (RED-by-skip suites + style/PDF/cassette fixtures + README copy contract)
-- Wave 1: 08-01 (global-library + list/open), 08-02 (style-match pure-stats + fingerprint reuse), 08-03 (pymupdf shellout + pdf-text fallback) — parallel (no file overlap)
-- Wave 2: 08-04 (add + sketch verbs; depends 08-01/08-03), 08-05 (drafter STYL-03 + intake LIB-04 + README STYL-04; depends 08-01/08-02) — parallel (no file overlap)
-- Wave 3: 08-06 (workflow bodies + tier-contract parity + 16-verb bijection; depends 08-01/08-04/08-05)
+- Wave 0: 08-00 (RED-by-skip suites + style/PDF/cassette fixtures + README copy contract + intake style-producer RED test)
+- Wave 1: 08-01 (global-library + list/open + paths exports), 08-03 (pymupdf shellout + pdf-text fallback) — parallel (no file overlap)
+- Wave 2: 08-02 (style-match pure-stats + fingerprint reuse; depends 08-01 for paths exports), 08-04 (add + sketch verbs; depends 08-01/08-03) — parallel (no file overlap)
+- Wave 3: 08-05 (drafter STYL-03 consumer + intake LIB-04 registration + intake style-match opt-in PRODUCER + README STYL-04; depends 08-01/08-02)
+- Wave 4: 08-06 (workflow bodies + tier-contract parity + 16-verb bijection; depends 08-01/08-04/08-05)
 
 Plans:
 
-- [ ] 08-00-PLAN.md (wave 0) — RED-by-skip suites (global-library/style-match/sketch/add/pymupdf/write-style) + sample/PDF/cassette fixtures + README content contract (LIB/ERGO/RSCH/STYL)
+- [ ] 08-00-PLAN.md (wave 0) — RED-by-skip suites (global-library/style-match/intake-style-producer/sketch/add/pymupdf/write-style) + sample/PDF/cassette fixtures + README content contract (LIB/ERGO/RSCH/STYL)
 - [ ] 08-01-PLAN.md (wave 1) — global paper registry (separate schema) + list/open verbs + paths exports (LIB-01, LIB-02, LIB-03, LIB-05)
-- [ ] 08-02-PLAN.md (wave 1) — pure-stats style-match: STYLE.json per-paper only + fingerprint reuse detection (STYL-01, STYL-02)
 - [ ] 08-03-PLAN.md (wave 1) — pymupdf shellout (graceful-absent) + extractPdfText image-only fallback + pin guard (RSCH-05)
+- [ ] 08-02-PLAN.md (wave 2) — pure-stats style-match: STYLE.json per-paper only + fingerprint reuse detection, registry stores hashes+identity only (STYL-01, STYL-02)
 - [ ] 08-04-PLAN.md (wave 2) — add (DOI/PDF/URL + assigned_sources-only remap) + sketch (no-advance-until-confirm) verbs (ERGO-05, ERGO-06, RSCH-05)
-- [ ] 08-05-PLAN.md (wave 2) — drafter styleProfilePath + voiceHint priority + intake global-library registration + README dual-use disclosure (STYL-03, STYL-04, LIB-04)
-- [ ] 08-06-PLAN.md (wave 3) — list/open/sketch/add workflow bodies + tier-contract parity + 16-verb bijection re-assertion (LIB-02, LIB-03, ERGO-05, ERGO-06)
+- [ ] 08-05-PLAN.md (wave 3) — drafter styleProfilePath + voiceHint priority + intake global-library registration + intake style-match opt-in producer (builds STYLE.json + unconditional reuse notice) + README dual-use disclosure (STYL-03, STYL-04, LIB-04)
+- [ ] 08-06-PLAN.md (wave 4) — list/open/sketch/add workflow bodies + tier-contract parity + 16-verb bijection re-assertion (LIB-02, LIB-03, ERGO-05, ERGO-06)
 
 **UI hint**: no
 
