@@ -284,3 +284,112 @@ No HIGH issues. All four Cycle-1 fixes are genuinely resolved. The 7 plans form 
 #### gemini (UNAVAILABLE this cycle)
 
 `gemini` exited without producing output (0 bytes stdout). stderr: `IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals` — the same auth/tier failure as cycle 1 (it has NOT recovered), occurring during setup before any review ran (not a timeout). No findings from this reviewer this cycle.
+
+---
+
+## Cycle 3
+
+**Date:** 2026-06-19
+**Reviewers:** codex (ran — HIGH_COUNT 0), claude (ran — HIGH_COUNT 0), opencode (ran — HIGH_COUNT 0), gemini (UNAVAILABLE — same `IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals` auth/tier failure as cycles 1-2, NOT a timeout; it has not recovered and the CLI now points users to migrate to the Antigravity suite). Three-reviewer quorum (codex + claude + opencode) satisfied.
+**current_high: 0**
+
+Same protocol as cycles 1-2: all 7 revised PLAN files (08-00..08-06) plus GOAL + 4 SCs + non-negotiables + the two-prior-HIGH-families summary (style-match producer wiring; status lifecycle now derived at display from authoritative STATE.json) were sent to four reviewers in parallel. Three produced usable output; gemini failed at auth before any review ran.
+
+### Synthesized Findings (cycle 3)
+
+#### Prior HIGH families — adjudication
+
+Both prior HIGH families are **GENUINELY RESOLVED**, confirmed unanimously by the three reviewers that ran and by direct plan inspection:
+
+- **HIGH #1 (style-match producer wiring) — RESOLVED.** 08-05 Task 2 Part B wires the producer onto the existing `intake` verb behind opt-in `--style-samples <dir>` (NO 17th verb): `buildStyleProfile → checkAndRegisterFingerprint` (priorPapers surfaced UNCONDITIONALLY, explicitly outside any `--yolo` gate; ordered build→check→print-notice→write so a `writeStyleProfile` failure cannot swallow the already-printed notice) `→ writeStyleProfile(.paper/STYLE.json)`. The consumer half (08-05 Task 1, write.ts) reads STYLE.json and resolves voiceHint by PLAN `voice_hint` > style-match > default, on the producer/consumer-agreed `join(paperDir(paperRoot),'STYLE.json')` path. 08-00's RED test `tests/intake-style-producer.test.ts` asserts STYLE.json written + unconditional reuse notice + opt-in gating. The four library functions now have a live caller. (codex/claude/opencode all confirm.)
+- **HIGH #2 (status lifecycle stuck at intake → derive-at-display) — RESOLVED.** 08-01 builds `deriveLibraryStatus(folderPath, storedStatus?)`, a never-throw resolver that mirrors `router.resolveNextAction`'s on-disk machine onto the LIB-05 vocabulary (archived from the stored flag; else derived intake/research/outline/sectioning{X/Y}/compile/done), reusing the existing `readSectionState` never-throw helper plus an outer backstop. `list.ts` (08-01 Task 2) derives per-paper at display time with a belt-and-suspenders per-entry try/catch, rendering a real `sectioning X/Y` (X = drafted-or-beyond sections, Y = total) and never crashing on a missing/corrupt paper STATE.json. The PAPER registry retains `folderPath` (load-bearing); the FINGERPRINT registry stays features-free and path-free. 08-00's RED test covers the full lifecycle + missing/corrupt-STATE.json never-throw cases. (codex/claude/opencode all confirm.)
+
+Also re-confirmed clean against the concrete HIGH checklist: no global style-feature cache (registry hashes+identity only; RED test asserts no `features`/`folderPath` keys); cross-paper reuse surfaced unconditionally (outside `--yolo`); `add` remap touches only `assigned_sources[]` (status + `verified_against_draft_hash` asserted unchanged); no 17th verb (stub promotion via REAL_VERB_LOADERS + triple bijection guard); sketch creates no `.paper/`/STATE.json/LIBRARY.json before confirm (RED test asserts); pymupdf shellout uses `execFile` arg-array with a JSON.stringify'd internally-generated tmp path (no injection surface); pdf-parse pinned exact 1.1.1 + drift guard; all tests offline/cassette-backed.
+
+#### Remaining / NEW findings (all sub-HIGH)
+
+- **[MEDIUM] LIB-04 intake-registration and the style-producer are keyed on a `paperId`/`STATE.json` that no current intake path creates; LIB-04 also ships without its own forcing test.** (claude, with direct codebase grounding.) `initState` has zero production call sites — `bin/cli/intake.ts` is a Tier-2 placeholder that writes only `INTAKE.md` (no `initState`, no STATE.json, no paperId); the Tier-1 `new.md` body writes only `INTAKE.md`; MCP exposes only `paper_init_section` (= `initSection`, not paper-level state). **Independently verified by judge:** grep confirms `initState` appears only in `bin/lib/state.ts` (definition) and `tests/state.test.ts` (no `bin/cli/**` or `bin/lib/**` caller), and `intake.ts` references none of `initState`/`loadState`/`paperId`/`STATE.json`. Consequence: at the moment intake runs today, `loadState` throws `StateNotFoundError`, so 08-05's registration (`id = paperId from STATE.json`) and `checkAndRegisterFingerprint(fingerprint, paperId, name)` both fall into their acknowledged non-fatal "no paperId → WARN-skip" branch — the global registry stays empty (`list` shows nothing) and STYLE.json is never written in the *real* flow. The producer RED test can still pass by pre-seeding STATE.json in its tmpdir (08-00's interface block lists `initState` as a test seed), so the gap is green-but-non-functional end-to-end. **Why MEDIUM, not HIGH:** the missing STATE.json bootstrap is a pre-existing, cross-cutting property of the current build (intake/research/outline/verify are all explicit placeholder stubs that never advance authoritative on-disk paper-level state; real intake LLM wiring is flagged as Phase-4+ work in intake.ts's own comments). Phase 8 correctly targets the *same* accepted "authoritative STATE.json is the source of truth" contract that the cycle-2 derive-at-display HIGH fix was adjudicated against — both 08-05 Part A and the producer wrap registration in non-fatal try/catch with an explicit WARN-skip on absent paperId, so the plans degrade gracefully (no crash) rather than mis-deliver. Re-raising this as a Phase-8 HIGH would re-litigate an already-accepted contract boundary. *Recommended (non-blocking, for execution):* have 08-05 instruct intake to bootstrap STATE.json (so `paperId` exists before registration + producer run), and add an `intake-library.test.ts` forcing test that intake registers a paper without pre-seeding state.
+- **[MEDIUM] The Tier-1 `intake` workflow body is not modified by any of the 7 plans, so Tier-1 has no interactive style-match opt-in prompt.** (opencode.) Both tiers can use the feature via the deterministic `--style-samples` CLI flag, but Tier-1 discoverability is weaker than an `AskUserQuestion` opt-in. Not a tier-parity *violation* (the flag works in both tiers and 08-06 fills the four promoted-verb bodies), so sub-HIGH; worth a Tier-1 prompt during execution. (Note: `intake`/`new` is not one of Phase 8's four promoted verbs, so its workflow body is legitimately outside the 08-06 fill scope.)
+- **[LOW] `archived` has no producer.** (claude.) SC-1 lists `archived` and the plans represent/honor it (stored terminal flag → derived passthrough), but no Phase-8 verb sets it (there is no archive verb among the locked 16). Representable and honored, never reachable — consistent with prior scope.
+- **[LOW] `add <pdf>` fallback passes `input` (`Buffer|Uint8Array`) to `pymupdfShellout(buf: Buffer)`.** (claude.) Cosmetic type-width mismatch; `fs.writeFile` accepts both. No correctness impact.
+- **[LOW] 08-06 `workflows/list.md` Tier-1 line ("reads `paper://library` (or runs the list verb)") leaves an "or" ambiguity.** (codex.) `<capability_check>` + tier-contract parity are still required, so not HIGH; tighten the final body during execution.
+- **[LOW] `add <url>` URL safety is inherited from the `http.ts` chokepoint.** (codex.) Matches the plan's stated architecture and the non-negotiable (route through the chokepoint, never raw fetch); the plan does not bypass it, so any residual SSRF posture is an `http.ts` property, not a Phase-8 plan defect.
+
+*Carry-over from cycles 1-2 (still LOW/MEDIUM, already adjudicated — NOT re-litigated): folderPath dropped from the registry; README copy/guard reconciled; 08-02 wave/dep fixed; `--yolo` skips the add remap prompt (safe-by-default, intentional); `python3` hardcoded shellout (Windows-dead but graceful-absent by design); pin guard checks installed version not the spec string; `open <name>` resolves by a non-unique key; the image-only `extractPdfText` fallback branch lacks a driving test; write.ts STYLE.json parse try/catch; fingerprint dedup-by-paperId on re-run; intake-style-producer source-grep skip-predicate heuristic.*
+
+### Per-Reviewer Raw (cycle 3)
+
+#### codex (ran — HIGH_COUNT: 0)
+
+```
+Prior HIGH families look genuinely resolved in the revised plan text.
+
+- Style-match producer wiring is now present in 08-05: `intake --style-samples <dir>` calls `buildStyleProfile -> checkAndRegisterFingerprint -> writeStyleProfile`, writes per-paper `.paper/STYLE.json`, and surfaces `priorPapers` unconditionally before the write step can fail.
+- Status lifecycle stuck-at-intake is now resolved by 08-01: `list` calls `deriveLibraryStatus(entry.folderPath, entry.status)` per paper, derives from `STATE.json` + section `PLAN.md`, renders real `sectioning X/Y`, honors `archived`, and never crashes on missing/corrupt state.
+
+Findings:
+
+[LOW] 08-06 workflow text is slightly loose where `workflows/list.md` says Tier-1 "reads `paper://library` (or runs the list verb)." The plan still requires `<capability_check>` and tier-contract parity, so this is not a HIGH, but the executor should avoid leaving "or" ambiguity in the final workflow body.
+
+[LOW] 08-04 `add <url>` relies on the existing `httpFetch` chokepoint for URL safety. That matches the plan's stated architecture, but if `http.ts` does not already enforce SSRF protections, this feature inherits that risk. Not a Phase 8 plan HIGH because the non-negotiable only requires the chokepoint, and the plan does not bypass it.
+
+No remaining or new HIGH findings found.
+
+HIGH_COUNT: 0
+```
+
+#### claude (ran — HIGH_COUNT: 0)
+
+```
+I've now traced the load-bearing facts against the actual codebase. Key findings: `initState` has zero production call sites — neither the Tier-2 CLI verbs (`intake.ts`/`research.ts` are explicit "Tier-2 placeholder" stubs) nor the Tier-1 workflow body (`new.md` writes only `INTAKE.md`) nor the MCP tools (`paper_init_section` = `initSection`, not paper-level state) ever create a paper-level `STATE.json`/`paperId`. With that grounding, here is my review.
+
+## Verification of the two prior HIGH families
+
+Prior HIGH #1 — style-match producer wiring: GENUINELY RESOLVED (at the plan-contract level). 08-05 Task 2 Part B wires the producer onto the existing `intake` verb behind `--style-samples`, in the correct order: buildStyleProfile → checkAndRegisterFingerprint (priorPapers surfaced unconditionally, explicitly outside any `--yolo` gate, ordered build→check→print→write so a write failure can't swallow the notice) → writeStyleProfile(.paper/STYLE.json). Consumer half (08-05 Task 1, write.ts) reads .paper/STYLE.json and resolves voiceHint by PLAN voice_hint > style-match > default, on the agreed join(paperDir(paperRoot),'STYLE.json') path. RED test tests/intake-style-producer.test.ts asserts STYLE.json written + unconditional reuse notice + opt-in gating. The four library functions now have a live caller.
+
+Prior HIGH #2 — status lifecycle derive-at-display: GENUINELY RESOLVED (at the plan-contract level). 08-01 builds deriveLibraryStatus(folderPath, storedStatus?), a never-throw resolver mirroring router.resolveNextAction's on-disk machine onto LIB-05 vocab, reusing readSectionState plus an outer backstop. list.ts derives per-paper at display, with a per-entry try/catch. PAPER registry retains folderPath; FINGERPRINT registry stays path/feature-free. RED test covers the full lifecycle + missing/corrupt-STATE.json never-throw cases.
+
+Both fixes are correct against the contract "STATE.json is the authoritative per-paper source."
+
+## New / remaining findings
+
+[MEDIUM] LIB-04 (intake registers the paper in the global registry) ships with no test, and the whole library+producer chain is keyed on a paperId/STATE.json that no intake path actually creates. initState has zero production call sites: Tier-2 intake.ts writes only INTAKE.md; the Tier-1 new.md body writes only INTAKE.md; MCP exposes only paper_init_section. So at the moment intake runs, loadState throws StateNotFoundError, and 08-05's registration (id = paperId from STATE.json) and the producer's checkAndRegisterFingerprint(fingerprint, paperId, name) both fall into their acknowledged "no paperId → WARN-skip" branch — in the real flow the global registry is never populated (list shows nothing) and STYLE.json is never written. 08-00 omits the intake-library.test.ts that 08-RESEARCH itself called for, and the producer RED test can pass by pre-seeding STATE.json in the tmpdir, so the gap ships green-but-non-functional. Why MEDIUM not HIGH: the missing STATE.json bootstrap is a pre-existing, cross-cutting property of the current build (research/outline/verify are all placeholder stubs that never advance on-disk state), and Phase 8 correctly targets the accepted "authoritative STATE.json" contract — the same contract the cycle-2 derive fix was adjudicated against. Recommended (non-blocking): have 08-05 explicitly instruct intake to bootstrap STATE.json, and add a forcing test that intake registers a paper in the global registry without pre-seeding state.
+
+[LOW] archived has no producer. SC-1 lists archived and the plans represent/honor it (stored terminal flag, derived passthrough), but no Phase-8 verb sets it (no archive verb among the locked 16). Representable and honored, never reachable.
+
+[LOW] add <pdf> fallback passes input (Buffer|Uint8Array) to pymupdfShellout(buf: Buffer). Cosmetic type-width mismatch; fs.writeFile accepts both. No correctness impact.
+
+## Concrete HIGH checklist (all clear)
+Global style-feature cache — no. Cross-paper reuse hidden/conditional — no. add remap mutating status/verified_against_draft_hash — no. 17th verb — no. Sketch creating .paper/ before confirm — no. pymupdf shell injection — no. pdf-parse not pinned — no. Network in tests — no.
+
+HIGH_COUNT: 0
+```
+
+#### opencode (ran — HIGH_COUNT: 0)
+
+```
+I've reviewed all 7 plans against the success criteria and non-negotiables.
+
+Prior HIGH families:
+- Style-match producer wiring — RESOLVED. 08-05 Task 2 wires intake --style-samples → buildStyleProfile → checkAndRegisterFingerprint → unconditional reuse notice → writeStyleProfile. 08-02 provides the library functions. 08-00 encodes a RED test.
+- Status lifecycle stuck at intake — RESOLVED. 08-01 Task 1 deriveLibraryStatus maps STATE.json + section frontmatter onto LIB-05 (real X/Y sectioning, never-throw for corrupt/missing). list.ts in 08-01 Task 2 derives at display time. 08-00 RED test encodes the lifecycle + corrupt-input assertions.
+
+Zero new HIGHs. All non-negotiables respected:
+- Section-as-phase isolation (remap touches only assigned_sources[])
+- Two-tier architecture (08-06 fills workflow bodies with <capability_check> blocks)
+- Per-paper STYLE.json only (08-02 write path never imports pensmithDataDir; fingerprint registry hashes + identity ONLY)
+- Unconditional cross-paper reuse surfacing (producer path prints notice outside any --yolo gate, per 08-05 Task 2)
+- 16-verb bijection intact (UX02_VERBS verified length-16 across 08-01/04/06)
+- Honest framing enforced by content guard (forbidden substrings excluded from README)
+- Approval gates default-on (sketch confirm, add remap both require --yolo to skip)
+- pdf-parse pinned exact with drift guard
+- pymupdf shellout uses execFile arg array with internally-generated JSON.stringified path (no injection surface)
+
+One MEDIUM gap: the intake workflow body (workflows/intake.md) is not modified in any of the 7 plans, so the Tier-1 workflow path lacks an interactive style-match opt-in prompt; both tiers can use it via --style-samples, but Tier-1 discoverability is weaker. No HIGH.
+
+HIGH_COUNT: 0
+```
+
+#### gemini (UNAVAILABLE this cycle)
+
+`gemini` exited without producing output (0 bytes stdout). stderr: `IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products` — the same auth/tier failure as cycles 1-2 (it has NOT recovered), occurring during setup before any review ran (not a timeout). No findings from this reviewer this cycle.
