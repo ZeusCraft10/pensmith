@@ -57,18 +57,18 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 
 ### Single-Command UX
 
-- [ ] **UX-01**: `/pensmith` bare command resolves state-aware behavior (intake / research / outline / next section / compile / done / resume)
-- [ ] **UX-02**: Verb shortcuts work: `new`, `next`, `status`, `research`, `outline`, `plan <N>`, `write <N>`, `verify <N>`, `compile`, `done`, `resume`, `list`, `open`, `sketch`, `add`, `doctor`
+- [x] **UX-01**: `/pensmith` bare command resolves state-aware behavior (intake / research / outline / next section / compile / done / resume)
+- [x] **UX-02**: Verb shortcuts work: `new`, `next`, `status`, `research`, `outline`, `plan <N>`, `write <N>`, `verify <N>`, `compile`, `done`, `resume`, `list`, `open`, `sketch`, `add`, `doctor`
 - [ ] **UX-03**: Hidden plumbing namespace `/pensmith:plan-section` etc. for scripting
 - [ ] **UX-04**: Skill descriptions optimized for natural-language triggering — "redo section 3", "make it sound less AI", "where am I?"
 - [ ] **UX-05**: Inline conversational corrections handled — length change, add/drop section, swap source, redo section without leaving the chat
 
 ### Workflow Ergonomics
 
-- [ ] **ERGO-01**: `--dry-run` flag uses cached fixtures with no external API calls
-- [ ] **ERGO-02**: `--estimate` flag projects tokens + USD before executing
-- [ ] **ERGO-03**: `--yolo` flag skips outline + export approval gates; default off
-- [ ] **ERGO-04**: `--show-prompts` flag echoes every LLM prompt to stdout/log
+- [x] **ERGO-01**: `--dry-run` flag uses cached fixtures with no external API calls
+- [x] **ERGO-02**: `--estimate` flag projects tokens + USD before executing
+- [x] **ERGO-03**: `--yolo` flag skips outline + export approval gates; default off
+- [x] **ERGO-04**: `--show-prompts` flag echoes every LLM prompt to stdout/log
 - [ ] **ERGO-05**: `/pensmith sketch` thinking-partner mode for thesis discovery before intake
 - [ ] **ERGO-06**: `/pensmith add <doi|pdf|url>` ingests a new source mid-paper with "remap sections?" prompt
 - [ ] **ERGO-07**: Educator/tutorial mode — intake choice `goal ∈ {draft, learning, both}`; `learning` triggers tutorial-mode end-state with annotated provenance
@@ -349,15 +349,15 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | DONE-08 | Phase 6 | Complete |
 | DONE-09 | Phase 6 | Complete |
 | TEST-10 | Phase 6 | Complete |
-| UX-01 | Phase 7 | Pending |
-| UX-02 | Phase 7 | Pending |
+| UX-01 | Phase 7 | Complete |
+| UX-02 | Phase 7 | Complete |
 | UX-03 | Phase 7 | Pending |
 | UX-04 | Phase 7 | Pending |
 | UX-05 | Phase 7 | Pending |
-| ERGO-01 | Phase 7 | Pending |
-| ERGO-02 | Phase 7 | Pending |
-| ERGO-03 | Phase 7 | Pending |
-| ERGO-04 | Phase 7 | Pending |
+| ERGO-01 | Phase 7 | Complete |
+| ERGO-02 | Phase 7 | Complete |
+| ERGO-03 | Phase 7 | Complete |
+| ERGO-04 | Phase 7 | Complete |
 | HOOK-01 | Phase 7 | Pending |
 | HOOK-02 | Phase 7 | Pending |
 | HOOK-03 | Phase 7 | Pending |

@@ -4,13 +4,13 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-06-18T13:07:20.195Z"
-last_activity: 2026-06-18
+last_updated: "2026-06-19T05:01:10.636Z"
+last_activity: 2026-06-19
 progress:
   total_phases: 11
   completed_phases: 7
   total_plans: 57
-  completed_plans: 54
+  completed_plans: 55
   percent: 64
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 07 (Single-command UX layer + hooks + flags) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
-Last activity: 2026-06-18
+Last activity: 2026-06-19
 
 Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
 
@@ -91,6 +91,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 06 P04 | 8min | 2 tasks | 2 files |
 | Phase 06 P05 | 20min | 3 tasks | 7 files |
 | Phase 07 P01 | 28min | 3 tasks | 9 files |
+| Phase 07 P02 | 35min | 4 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -194,6 +195,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [07-01] Corrupt-PLAN.md RED fixture uses an alias to a missing YAML anchor (status: *missing_anchor) — yaml@^2 toJSON() tolerates duplicate keys without throwing, so the plan's duplicate-key example would make the C5/C6 RED gate vacuous; the alias fixture genuinely throws ReferenceError through parseFrontmatter
 - [Phase ?]: [07-01] Hook/CLI subprocess tests pin tsx via import.meta.resolve('tsx') absolute file URL — a bare --import tsx resolves relative to the child's tmpdir cwd (no node_modules) and crashes ERR_MODULE_NOT_FOUND
 - [Phase ?]: [07-01] Source-grep skip predicates (flagsWired/emissionWired/stopWired/timeoutWired) gate RED-by-skip for files that already exist as stubs — existsSync alone cannot detect not-yet-wired behavior
+- [Phase ?]: [07-02] Pre-dispatch argv seam (not a citty root run()) applies global flags + yolo cap + bare routing BEFORE runMain so explicit verbs run exactly once (H2)
+- [Phase ?]: [07-02] Shared dispatchVerb forwards global flags (>= yolo) into manually-dispatched verb args (C3-HIGH-2) inside an outer try/catch backstop so bare/next/resume never crash (C6-HIGH)
+- [Phase ?]: [07-02] resolveNextAction is TOTAL + never-throws (catch-all loadState, sections nullish guard, guarded readSectionState, exhaustive switch, outer backstop); ignores HANDOFF so bare /pensmith never loops on resume (H4)
+- [Phase ?]: [07-02] estimator uses module-constant default provider/model (anthropic/claude-sonnet-4) not runtime.ts — keeps projectEstimate pure/IO-light; catch-all loadState guard returns empty projection for paper-less AND corrupt STATE.json (C2-H1/C4-HIGH)
+- [Phase ?]: [07-02] section-scoped router fallback is plan+verify only (write excluded — its n is optional for the write-all wave surface); --version/--help delegate to runMain
 
 ### Pending Todos
 
@@ -214,6 +220,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-18T13:06:47.064Z
+Last session: 2026-06-19T05:00:00.919Z
 Stopped at: Completed 05-04-PLAN.md
 Resume file: None
