@@ -144,3 +144,143 @@ HIGH_COUNT: 1
 ### gemini (UNAVAILABLE this cycle)
 
 `gemini` exited without producing output. stderr: `IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals` (authentication/tier failure during setup, before any review ran — not a timeout). No findings from this reviewer this cycle.
+
+---
+
+## Cycle 2
+
+**Date:** 2026-06-19
+**Reviewers:** codex (ran — HIGH_COUNT 0), claude (ran — HIGH_COUNT 1), opencode (ran — HIGH_COUNT 0), gemini (UNAVAILABLE — same `IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals` auth/tier failure as cycle 1, not a timeout).
+**current_high: 1**
+
+Same protocol as cycle 1: all 7 revised PLAN files (08-00..08-06) plus GOAL + 4 SCs + non-negotiables + the cycle-1-fix summary were sent to four reviewers in parallel. Three produced usable output; gemini failed at auth before any review ran.
+
+### Synthesized Findings (cycle 2)
+
+#### Cycle-1 fixes — adjudication
+
+All four cycle-1 items are **GENUINELY RESOLVED**, confirmed by direct plan inspection and unanimous across the three reviewers that ran:
+
+- **HIGH (style-match producer wiring) — RESOLVED.** 08-05 Task 2 Part B wires a real run-path on the EXISTING `intake` verb behind opt-in `--style-samples <dir>` (NO 17th verb): `buildStyleProfile → checkAndRegisterFingerprint (priorPapers printed by the producer OUTSIDE any --yolo gate) → writeStyleProfile(paperDir())`. The build→check→print-notice→write ordering means a `writeStyleProfile` failure cannot swallow the already-printed reuse notice. 08-00 adds `tests/intake-style-producer.test.ts` (source-grep skip-guard on intake importing `buildStyleProfile`/referencing `styleSamples`) asserting (1) STYLE.json written + parses via StyleProfileSchema, (2) reuse notice fires unconditionally even without --yolo, (3) opt-in gating (no flag → no STYLE.json). The consumer branch in write.ts (08-05 Task 1) is now reachable because the producer writes the file. Live end-to-end chain, not a description. (codex/claude/opencode all confirm.)
+- **M1 (08-02 wave/dep) — RESOLVED.** 08-02 is now `wave: 2, depends_on: ["08-00","08-01"]`; its import of `pensmithStyleFingerprintsPath` (added by 08-01 in wave 1) is correctly ordered. Cascade verified: 08-05 wave 3, 08-06 wave 4. No intra-wave file collisions — `bin/pensmith.ts` is edited by 08-01 (wave 1) and 08-04 (wave 2) in different waves; `tests/repo-files.test.ts` by 08-03 (wave 1) and 08-05 (wave 3) in different waves.
+- **M2 (registry tightened) — RESOLVED.** `checkAndRegisterFingerprint(fingerprint, paperId, paperName)` takes no `folderPath`; the registry record is `{ "<hash>": [{paperId,paperName,addedAt}] }`. 08-02 explicitly forbids a `features` key and any path, and resolves a prior paper's folder from the global library by `paperId` when the notice needs it. 08-00 RED test asserts no `features`/`folderPath` keys. Per-paper-only STYLE.json storage preserved (writeStyleProfile must not import `pensmithDataDir`).
+- **M3 (README copy/guard) — RESOLVED.** 08-05 Task 3 supplies compliant phrasings ("passing off someone else's work," "make AI authorship invisible to detectors"), explicitly warns against the negation trap ("does not make text undetectable"), and the content guard asserts presence of `## Style Match` + a voice phrase and absence of all three forbidden substrings. Copy and guard reconciled.
+
+Also re-confirmed: **no 17th verb** (list/open/add/sketch promoted only via REAL_VERB_LOADERS; UX02_VERBS untouched; 16-verb/16-workflow bijection re-guarded three ways in 08-06).
+
+#### Remaining / NEW findings
+
+- **[HIGH] The status lifecycle never advances past `intake`, so SC-1's `list` status column and the explicitly-promised "sectioning X/Y" display are non-functional as planned.** (Raised by **claude**; **upheld by judge after direct plan inspection**.) The global registry is brand-new in 08-01, so no pre-Phase-8 verb writes it. Within Phase 8 the ONLY `registerPaperInGlobalLibrary` call that sets status is 08-05 Part A, with a hardcoded `status:'intake'`. No plan modifies the existing lifecycle verbs (`research`/`outline`/`plan`/`write`/`compile`/`done` — none appear in any `files_modified`) to UPSERT a new status or `sectioningProgress`, and 08-01's `list.ts` reads `entry.status`/`entry.sectioningProgress` STRAIGHT from the registry rather than deriving them from each paper's STATE.json. The 7-state lifecycle is round-tripped **only in tests** (08-01's global-library.test asserts the schema can hold all 7 states). Net effect as the 7 plans stand: every paper shows `intake` forever and the `status==='sectioning' && sectioningProgress` render branch is dead code. SC-1 (ROADMAP §Phase-8) promises status values that "cycle through `intake | ... | sectioning (X/Y) | ... | archived`" and that `list` "shows status (sectioning shows X/Y)" — behavioral language, not merely a representable-set requirement. This meets the HIGH bar: incomplete delivery of a success criterion. The fix is bounded — either (a) have the existing lifecycle verbs UPSERT status + sectioningProgress into the registry at each transition, or (b) have `list` derive status/progress per paper from STATE.json — but as planned the feature ships non-functional beyond the initial intake state.
+  *Judge note:* This was masked in cycle 1 because the producer-wiring HIGH dominated, and intake-registration itself did not exist until the cycle-1 replan added it to 08-05. It is a genuine NEW HIGH surfaced now that registration is in place. Not a re-raise of any cycle-1 item.
+
+- **[MEDIUM] The `extractPdfText` image-only fallback branch (the real integration point of the pymupdf fallback) has no driving test.** (claude.) 08-03 adds the lazy import + threshold check + WARN-and-degrade in the image-only branch, but `byo-text.pdf` is built to yield ≥50 chars (the SUCCESS path), and 08-03's verify runs only `pymupdf-shellout`/`add-source`/`repo-files`. `pymupdfShellout` returning null is unit-tested in isolation, but no fixture drives an image-only PDF through `extractPdfText` to confirm the graceful-degrade return + single WARN. SC-4's "degrades gracefully" at the chokepoint level is asserted only indirectly. Low blast radius (simple branch logic) → MEDIUM, not HIGH. Worth adding a near-empty/image-only PDF fixture + an extractPdfText integration assertion during execution.
+
+- **[LOW] write.ts STYLE.json parse lacks an explicit try/catch.** (claude.) T-08-05-05 promises "parse failure falls back to default tone," but Task 1's action says to parse via `StyleProfileSchema` without specifying the guard; a malformed STYLE.json could throw inside a core verb. atomicWriteFile makes corruption unlikely and the threat model states intent, so risk is low — encode the fallback during execution.
+
+- **[LOW] `checkAndRegisterFingerprint` appends without dedup, so re-running `intake --style-samples` on the same paper accumulates duplicate `{paperId}` entries under one hash.** (claude.) `priorPapers` correctly excludes the current paperId (no false self-notice), but a later third paper's notice could name a prior paper multiple times and the registry grows unbounded on repeated runs. Cosmetic/data-hygiene; dedupe-by-paperId on insert resolves it.
+
+- **[LOW] 08-00's add-source remap test references "a committed fixture `.paper/` with one section PLAN.md," but no such fixture path appears in `files_modified`.** (claude.) Either created inline in the test (fine) or an omission; reconcile so the Wave-0 fixture set is complete.
+
+- **[LOW] README guard regex `match your.*voice` is single-line (`.` excludes newline).** (claude.) The honest-framing copy must keep "match your … voice" on one line or the positive assertion fails. The plan tells the executor to re-read after writing, so it is flagged not unhandled.
+
+- **[LOW] write.ts consumer hardcodes `join(paperRoot, '.paper', 'STYLE.json')` instead of `paperDir()`.** (opencode.) Equivalent today since `paperDir(root)` resolves to `<root>/.paper`, but a subtle drift risk if the paper dir location were ever configurable. Prefer `join(paperDir(paperRoot), 'STYLE.json')` for producer/consumer consistency.
+
+- **[LOW] 08-04's `add` plan appends a `RESEARCH.md` row but is less explicit than the remap path about lock/atomic-write behavior for that file.** (codex.) Worth tightening during execution; does not break a Phase-8 SC as written.
+
+- **[LOW] The registry no-path assertion checks for `folderPath` specifically; the contract forbids filesystem paths generally.** (codex.) The narrowed API shape makes accidental path storage unlikely, but implementation review should also watch for alternate path-like keys/values.
+
+- **[LOW] `intake-style-producer` RED test uses a source-grep skip-predicate (heuristic) rather than `existsSync`.** (opencode.) If `buildStyleProfile` were imported into intake before 08-05 for any other reason, the RED test could flip GREEN prematurely. Inherent to the source-grep pattern, consistent with prior phases — acceptable.
+
+*Carry-over from cycle 1 (still LOW, already adjudicated — not re-litigated): `--yolo` skips the add remap prompt rather than auto-approving (safe-by-default, intentional); `python3` hardcoded in the pymupdf shellout (Windows-dead but graceful-absent by design); pin guard checks installed version not the spec string; `open <name>` resolves by a non-unique key; `add <url>` <meta> DOI scrape has no JS-render fallback.*
+
+### Per-Reviewer Raw (cycle 2)
+
+#### codex (ran — HIGH_COUNT: 0)
+
+[LOW] Cycle-1 HIGH producer wiring appears genuinely resolved. 08-05 wires `intake --style-samples <dir>` into the real intake path, with the live chain `buildStyleProfile → checkAndRegisterFingerprint → writeStyleProfile(.paper/STYLE.json)`, and 08-00 adds `tests/intake-style-producer.test.ts` to prove STYLE.json creation, opt-in behavior, and unconditional reuse notice.
+
+[LOW] Cycle-1 M1 wave/dependency issue appears resolved. 08-02 is now wave 2 and depends on 08-01, so its import of `pensmithStyleFingerprintsPath` is ordered correctly. 08-05 is wave 3 and 08-06 is wave 4, with no obvious intra-wave conflict.
+
+[LOW] Cycle-1 M2 registry tightening appears resolved. The revised `checkAndRegisterFingerprint(fingerprint, paperId, paperName)` signature cannot receive `folderPath` or prose features, and the planned registry stores only `fingerprint → [{paperId,paperName,addedAt}]`. The RED test also asserts no `features` or `folderPath` keys.
+
+[LOW] Cycle-1 M3 README guard/copy mismatch appears resolved. 08-05 explicitly avoids the forbidden substrings while still requiring a dual-use disclosure, and adds a content guard to keep the copy and policy aligned.
+
+[LOW] No 17th verb is introduced in the revised plans. `list`, `open`, `add`, and `sketch` are promoted through `REAL_VERB_LOADERS`, while the plans repeatedly say not to touch `UX02_VERBS`; 08-06 reasserts the 16-verb/16-workflow bijection and alias guards.
+
+[LOW] Remaining implementation risk: 08-04’s `add` plan says to append a `RESEARCH.md` row but is less explicit than the remap path about locking/atomic write behavior for that file. This is worth tightening during execution, but it does not appear to break a Phase 8 success criterion as written.
+
+[LOW] Remaining test-strength risk: the registry no-path assertion checks for `folderPath` specifically. The plan text forbids filesystem paths generally, so implementation review should also watch for alternate path-like keys or values, but the planned API shape makes the intended storage narrow enough.
+
+HIGH_COUNT: 0
+
+#### claude (ran — HIGH_COUNT: 1)
+
+# Cross-AI Plan Review — Pensmith Phase 8 (Cycle 2)
+
+## Cycle-1 fix verification
+
+**Fix 1 — HIGH producer wiring: GENUINELY RESOLVED.** 08-05 Task 2 Part B wires a real run-path: `intake --style-samples <dir>` → `buildStyleProfile` → `checkAndRegisterFingerprint` (surfaces `priorPapers` before the return) → `writeStyleProfile(paperDir())`. The opt-in is explicit (absent flag = no profiling), the notice is printed by the producer outside any `--yolo` gate, and the ordering (build → check → print notice → write) means a `writeStyleProfile` failure cannot swallow the already-printed notice. 08-00 Task 2(c) adds `tests/intake-style-producer.test.ts` with a source-grep skip-guard (`bin/cli/intake.ts` imports `buildStyleProfile`/references `styleSamples`) so it stays RED-by-skip until 08-05 lands, then asserts (1) STYLE.json written, (2) unconditional reuse notice, (3) opt-in gating. The consumer side (08-05 Task 1, write.ts existsSync branch) is now reachable because the producer writes the file. This is a live end-to-end chain, not a description.
+
+**Fix 2 — M1 wave/dep: RESOLVED.** 08-02 is `wave: 2, depends_on: ["08-00","08-01"]`; it imports `pensmithStyleFingerprintsPath` which 08-01 (wave 1) adds. Cascade checks out: 08-05 wave 3 (deps 08-01/08-02), 08-06 wave 4. No intra-wave file collisions — `bin/pensmith.ts` is edited by 08-01 (wave 1, list/open) and 08-04 (wave 2, add/sketch) in *different* waves; `tests/repo-files.test.ts` by 08-03 (wave 1) and 08-05 (wave 3) in different waves. Clean.
+
+**Fix 3 — M2 registry tightened: GENUINELY RESOLVED.** `checkAndRegisterFingerprint(fingerprint, paperId, paperName)` takes no `folderPath`; registry record is `{ "<hash>": [{paperId,paperName,addedAt}] }`. 08-02 explicitly forbids a `features` key and any path, and resolves the prior paper's folder from the global library by `paperId` when the notice needs it. 08-00's RED test asserts no `features`/`folderPath` keys. Per-paper-only STYLE.json storage preserved (writeStyleProfile must not import `pensmithDataDir`).
+
+**Fix 4 — M3 README copy/guard: RESOLVED.** 08-05 Task 3 supplies compliant phrasings ("passing off someone else's work," "make AI authorship invisible to detectors") and explicitly warns against the negation trap ("does not make text undetectable"). Guard asserts presence of `## Style Match` + a voice phrase and absence of all three forbidden substrings; copy and guard are reconciled.
+
+## Findings
+
+- **[HIGH] The status lifecycle never advances past `intake`, so `list`'s status column (and the "sectioning X/Y" display SC-1 explicitly promises) is unreachable in practice.** The global registry is brand-new in 08-01, so no pre-Phase-8 verb writes it. Within Phase 8, the *only* call that sets status is 08-05 Part A (`status:'intake'`). No plan wires `research`/`outline`/`sectioning`/`compile`/`done` to UPSERT a new status or `sectioningProgress`. 08-01 Task 2 reads status straight from the registry entry (`status==='sectioning' && sectioningProgress present`), and 08-01 round-trips the 7 states *only in tests*. Net effect: every paper shows `intake` forever and the `sectioning X/Y` branch is dead code. SC-1's "shows status (sectioning shows X/Y)" and "papers carry a 7-state lifecycle" are therefore only partially delivered — the data model and intake-registration exist, but the dynamic transitions that make the feature meaningful are absent. The fix is bounded (have the lifecycle verbs UPSERT status, or have `list` derive status/progress from each paper's STATE.json), but as planned it ships non-functional.
+
+- **[MEDIUM] The `extractPdfText` image-only fallback branch (the actual integration point of the pymupdf fallback) has no driving test.** 08-03 adds the lazy import + threshold check + WARN-and-degrade in the image-only branch, but `byo-text.pdf` is built to yield ≥50 chars (the *success* path), and the verify steps run only `pymupdf-shellout`/`add-source`/`repo-files`. `pymupdfShellout` returning null is tested in isolation, but no fixture exercises an image-only PDF through `extractPdfText` to confirm it returns the near-empty pdf-parse text with a single WARN. SC-4's "degrades gracefully" at the chokepoint level is asserted only indirectly. Low blast radius (simple logic), but it is the SC-4 integration that is unverified.
+
+- **[LOW] write.ts STYLE.json parse is not explicitly guarded.** T-08-05-05 claims "parse failure falls back to default tone," but Task 1's action says to parse via `StyleProfileSchema` and render without specifying a try/catch. A malformed/partial STYLE.json could throw inside a core verb. atomicWriteFile makes corruption unlikely and the threat model flags the intent, so risk is low — but the task body should encode the fallback the threat register promises.
+
+- **[LOW] `checkAndRegisterFingerprint` appends (never overwrites), so re-running `intake --style-samples` on the same paper accumulates duplicate `{paperId}` entries** under the same hash. `priorPapers` correctly excludes the current paperId (no false self-notice), but a later third paper's notice could name a prior paper multiple times, and the registry grows unbounded on repeated runs. Cosmetic/data-hygiene; dedupe-by-paperId on insert would resolve it.
+
+- **[LOW] 08-00's add-source remap test references "a committed fixture `.paper/` with one section PLAN.md," but no such fixture path appears in `files_modified`.** Either the fixture is created inline in the test (fine) or it's an omission; worth reconciling so the Wave-0 fixture set is complete and the test isn't relying on an unlisted artifact.
+
+- **[LOW] README guard regex `match your.*voice` is single-line (`.` excludes newline).** The honest-framing copy must keep "match your … voice" on one line, or the guard's positive assertion fails even with correct content. The plan tells the executor to re-read after writing, so this is flagged, not unhandled.
+
+## Summary
+
+All four cycle-1 fixes are genuinely resolved: the style-match producer is wired into a real `intake --style-samples` run-path with a backing RED test, the cross-paper notice fires unconditionally within the opt-in path, the registry stores only hashes + paper identity, and no 17th verb is introduced (the 16-verb bijection is re-guarded three ways in 08-06). The one remaining HIGH is pre-existing rather than introduced by the revisions: the library status lifecycle has a sound data model and intake registration but no transition wiring, leaving SC-1's status/X-Y display non-functional after intake.
+
+HIGH_COUNT: 1
+
+#### opencode (ran — HIGH_COUNT: 0)
+
+## Review: Phase 8 (Cycle 2) — Revised Plans 08-00 through 08-06
+
+### Cycle-1 Fix Verification
+
+**Fix 1 (HIGH — producer wiring): GENUINELY RESOLVED.**
+
+The producer chain is now fully live on the existing `intake` verb with `--style-samples` flag in 08-05 Task 2: `buildStyleProfile → checkAndRegisterFingerprint (surfaces priorPapers UNCONDITIONALLY) → writeStyleProfile(.paper/STYLE.json)`. The consumer path in 08-05 Task 1 (write.ts) reads STYLE.json, parses via StyleProfileSchema, resolves voiceHint with PLAN.md override priority. A RED test in 08-00 (`tests/intake-style-producer.test.ts`) asserts STYLE.json is written, the reuse notice fires unconditionally, and the flag is opt-in. No 17th verb.
+
+**Fix 2 (M1 — wave/dep): GENUINELY RESOLVED.**
+
+08-02 is wave 2 with `depends_on: ["08-00", "08-01"]` (imports 08-01's paths.ts). 08-05 is wave 3, 08-06 is wave 4. No intra-wave conflicts.
+
+**Fix 3 (M2 — registry tightened): GENUINELY RESOLVED.**
+
+Registry stores only `fingerprint → [{paperId, paperName, addedAt}]`. 08-02 explicitly forbids `features` key and `folderPath`/absolute paths. 08-00 style-match.test.ts asserts no `features`/`folderPath` keys.
+
+**Fix 4 (M3 — README copy/guard reconciled): GENUINELY RESOLVED.**
+
+08-05 Task 3 prescribes compliant phrasing avoids `impersonate`/`evade detection`/`undetectable` and adds a content guard in repo-files.test.ts. Copy and guard are explicitly reconciled.
+
+---
+
+### Remaining / New Findings
+
+**[LOW] write.ts consumer uses hardcoded `join(paperRoot, '.paper', 'STYLE.json')` instead of `paperDir()` from paths.ts.** Currently equivalent since `paperDir(root)` resolves to `<root>/.paper`, but this introduces a subtle drift risk if the paper directory location were ever configurable. Recommend using `paperDir()` or `join(paperDir(paperRoot), 'STYLE.json')` for consistency with producer.
+
+**[LOW] 08-00 creates `tests/intake-style-producer.test.ts` guarded by a "source-grep that bin/cli/intake.ts imports buildStyleProfile"** — this skip-predicate will flip GREEN once 08-05 wires the producer. However, the skip guard pattern is a heuristic grep rather than a deterministic `existsSync`. If `buildStyleProfile` happens to be imported before 08-05 for any other reason (e.g., an intermediate edit), the RED test would prematurely turn GREEN without the actual producer being wired. This is an inherent limitation of the source-grep skip pattern and is consistent with prior phases — acceptable.
+
+No HIGH issues. All four Cycle-1 fixes are genuinely resolved. The 7 plans form a coherent, non-contradictory delivery of all four SCs with no 17th verb, honest framing, per-paper-only storage, unconditional reuse notice, assigned_sources-only remap, and tier-contract parity for all promoted verbs.
+
+**HIGH_COUNT: 0**
+
+#### gemini (UNAVAILABLE this cycle)
+
+`gemini` exited without producing output (0 bytes stdout). stderr: `IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals` — the same auth/tier failure as cycle 1 (it has NOT recovered), occurring during setup before any review ran (not a timeout). No findings from this reviewer this cycle.
