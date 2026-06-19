@@ -138,6 +138,35 @@ export async function release(resource: string): Promise<void> {
 }
 
 /**
+ * Best-effort release of an ORPHANED lock for `resource` — including one held
+ * by another (now-defunct) process. proper-lockfile.unlock() only succeeds for
+ * a lock held in THIS process's in-memory registry; cross-process it throws
+ * ENOTACQUIRED and leaves the on-disk `${stub}.lock` directory in place. The
+ * Stop hook fires when the session is halting, so any pensmith lock is by
+ * definition orphaned — this clears it.
+ *
+ * Strategy: try the proper-lockfile unlock first (clean path for an
+ * in-process holder); if that rejects, remove the `${stub}.lock` directory
+ * directly. Both steps swallow their own errors — this never rejects, so the
+ * caller (Stop hook, inside Promise.allSettled) cannot be tripped by it.
+ */
+export async function forceRelease(resource: string): Promise<void> {
+  const stub = await stubFor(resource);
+  try {
+    await lockfile.unlock(stub);
+    return;
+  } catch {
+    // Not held by this process (ENOTACQUIRED) or already gone — fall through
+    // to remove the on-disk lock directory directly.
+  }
+  try {
+    await fsp.rm(`${stub}.lock`, { recursive: true, force: true });
+  } catch {
+    /* nothing to remove / inaccessible — best-effort, never throw */
+  }
+}
+
+/**
  * Returns true if `resource` is currently locked (by this or any process).
  * Non-destructive — does not acquire or modify state.
  */
