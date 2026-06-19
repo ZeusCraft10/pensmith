@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-06-19T05:13:32.817Z"
+status: verifying
+stopped_at: Completed 07-04-PLAN.md
+last_updated: "2026-06-19T05:26:30.844Z"
 last_activity: 2026-06-19
 progress:
   total_phases: 11
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 57
-  completed_plans: 56
-  percent: 64
+  completed_plans: 57
+  percent: 73
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 Phase: 07 (Single-command UX layer + hooks + flags) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-19
 
 Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
@@ -93,6 +93,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 07 P01 | 28min | 3 tasks | 9 files |
 | Phase 07 P02 | 35min | 4 tasks | 8 files |
 | Phase 07 P03 | 10min | 3 tasks | 6 files |
+| Phase 07 P04 | 12min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -205,6 +206,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [07-03] Stop resolves .paper to an ABSOLUTE cwd path before release — resource locks are keyed by absolute-path hash (lock.ts stubFor), so release('.paper') literal would target a different stub than callers who lock join(cwd,'.paper')
 - [Phase ?]: [07-03] closeSessionLog() awaits the EXISTING module-scope chain directly (no new activeChain ref) — chain is shared by every logger handle; enqueue() installs work as both fulfil+reject handlers so awaiting it never rejects; the plan's activeChain indirection was unnecessary
 - [Phase ?]: [07-03] PreCompact 10s Promise.race timeout (PRECOMPACT_TIMEOUT_MS=10_000) with the deadline timer cleared in finally; applied OUTSIDE writeHandoff's lock ownership (writeHandoff stale:10_000 auto-clears a timed-out write); rejection routed to the existing stderr catch, never stdout (HOOK-01)
+- [Phase ?]: [07-04] Skill frontmatter authored name-LAST with a single-line quoted description — satisfies BOTH 07-01 RED scanners: readDescription (/(?:^|\n)description:\s*(.+)/) captures the full §5.4 phrase line (a `|` block scalar would yield only `|`), AND the nl-trigger token scan (/pensmith[:\s]+([a-z][a-z-]*)/, where [\s] includes \n) never extracts a bogus `description` verb from a `name: pensmith`→`description:` adjacency. The PATTERNS.md block-scalar/name-first example fails both
+- [Phase ?]: [07-04] plugin.json skills array shipped (A1/Open-Q2 resolved) — validate-plugin-manifest.cjs validates only name/version/author/mcpServers and structurally TOLERATES an extra skills[] of {name,file} colon-prefix entries; it passed clean, so the colon-prefix plumbing namespace ships in the manifest, not the CONTRIBUTING.md fallback
+- [Phase ?]: [07-04] No 17th verb across THREE independent guards — 07-01 nl-triggers (length===16 + skill-targets⊆verbs), the 07-01 standing guard, and the new tier-contract case (no colon-prefix and no -section alias leaked into UX02_VERBS). The /pensmith:*-section plumbing namespace is a Tier-1-only alias onto the locked 16; redo/revise/swap-source/length-change corrections all ride plan --revise (04-04). 16-workflow bijection intact
 
 ### Pending Todos
 
@@ -225,6 +229,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-19T05:12:53.485Z
-Stopped at: Completed 07-03-PLAN.md
+Last session: 2026-06-19T05:25:51.725Z
+Stopped at: Completed 07-04-PLAN.md
 Resume file: None

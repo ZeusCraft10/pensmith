@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Breadth — N sections + compile + wave scheduling** - Wave scheduler, compile pipeline, cross-section consistency flags, stable section numbering with letter suffixes (completed 2026-06-17)
 - [x] **Phase 5: Verifier completeness (Pass 2 + Pass 4)** - LLM-judged claim support and per-paragraph orphan-claim audit, advisory only (completed 2026-06-18)
 - [x] **Phase 6: Done / export pipeline + zero-trace gate** - Plagiarism, honesty, humanizer wrap, Pandoc exports, zero-trace verification test (completed 2026-06-18)
-- [ ] **Phase 7: Single-command UX layer + hooks + flags** - `/pensmith` umbrella, verb shortcuts, natural-language triggers, resume/PreCompact/PostToolUse/Stop hooks, `--yolo`/`--dry-run`/`--estimate`/`--show-prompts`
+- [x] **Phase 7: Single-command UX layer + hooks + flags** - `/pensmith` umbrella, verb shortcuts, natural-language triggers, resume/PreCompact/PostToolUse/Stop hooks, `--yolo`/`--dry-run`/`--estimate`/`--show-prompts` (completed 2026-06-19)
 - [ ] **Phase 8: Style match + sketch + add + library + BYO PDF polish** - Style-match opt-in (per-paper, dual-use disclosed), sketch, add, library mode, PDF ingestion polish
 - [ ] **Phase 9: Educator/tutorial mode + PII polish** - Tutorial-mode end-state, intake `goal=learning`, PII polish
 - [ ] **Phase 10: Discipline + citation-style breadth + Zotero MCP** - Full CSL catalog, RIS export, remaining disciplines, Zotero MCP source provider
@@ -285,7 +285,7 @@ Plans:
 - [x] 07-01-PLAN.md (wave 0) — RED suite for router + estimator + flags + hooks + skills (RED-by-skip, full suite stays GREEN) (UX-01..05, ERGO-01..04, HOOK-01..04)
 - [x] 07-02-PLAN.md (wave 1) — bin/lib/router.ts state-aware bare-command pure fn + bin/lib/estimator.ts token+USD projection (50%-cap refusal) + next/status/resume real verbs + 4 global flags wired in bin/pensmith.ts (UX-01, UX-02, ERGO-01..04)
 - [x] 07-03-PLAN.md (wave 1) — hooks upgrade: SessionStart resume emitter + Stop lock-release/log-flush + PreCompact 10s Promise.race + closeSessionLog() export; HOOK-03 coverage-check only (HOOK-01..04)
-- [ ] 07-04-PLAN.md (wave 2) — NL-routing skills (skills/pensmith.md + plumbing namespace) + plugin.json skills array + tier-contract verb-shortcut/plumbing parity; human-verify live NL routing (UX-02, UX-03, UX-04, UX-05)
+- [x] 07-04-PLAN.md (wave 2) — NL-routing skills (skills/pensmith.md + plumbing namespace) + plugin.json skills array + tier-contract verb-shortcut/plumbing parity; human-verify live NL routing (UX-02, UX-03, UX-04, UX-05)
 
 **UI hint**: no
 
@@ -346,7 +346,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 4. Breadth — N sections + compile + wave scheduling | 5/5 | Complete   | 2026-06-17 |
 | 5. Verifier completeness (Pass 2 + Pass 4) | 5/5 | Complete   | 2026-06-18 |
 | 6. Done / export pipeline + zero-trace gate | 5/5 | Complete   | 2026-06-18 |
-| 7. Single-command UX layer + hooks + flags | 3/4 | In Progress|  |
+| 7. Single-command UX layer + hooks + flags | 4/4 | Complete   | 2026-06-19 |
 | 8. Style match + sketch + add + library + BYO PDF polish | 0/TBD | Not started | - |
 | 9. Educator/tutorial mode + PII polish | 0/TBD | Not started | - |
 | 10. Discipline + citation-style breadth + Zotero MCP | 0/TBD | Not started | - |
