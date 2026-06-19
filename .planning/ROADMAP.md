@@ -301,7 +301,25 @@ Plans:
   3. `/pensmith sketch` runs a thinking-partner thesis-discovery mode that does NOT advance state into intake until the user confirms.
   4. `/pensmith add <doi|pdf|url>` ingests a new source mid-paper and prompts "remap sections?"; ingestion accepts BYO PDFs via `pdf-parse` (pinned exact) with `pymupdf` shellout fallback, hydrating metadata via Crossref.
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+**Wave layout** (depends_on; executor reads `wave` frontmatter):
+
+- Wave 0: 08-00 (RED-by-skip suites + style/PDF/cassette fixtures + README copy contract)
+- Wave 1: 08-01 (global-library + list/open), 08-02 (style-match pure-stats + fingerprint reuse), 08-03 (pymupdf shellout + pdf-text fallback) — parallel (no file overlap)
+- Wave 2: 08-04 (add + sketch verbs; depends 08-01/08-03), 08-05 (drafter STYL-03 + intake LIB-04 + README STYL-04; depends 08-01/08-02) — parallel (no file overlap)
+- Wave 3: 08-06 (workflow bodies + tier-contract parity + 16-verb bijection; depends 08-01/08-04/08-05)
+
+Plans:
+
+- [ ] 08-00-PLAN.md (wave 0) — RED-by-skip suites (global-library/style-match/sketch/add/pymupdf/write-style) + sample/PDF/cassette fixtures + README content contract (LIB/ERGO/RSCH/STYL)
+- [ ] 08-01-PLAN.md (wave 1) — global paper registry (separate schema) + list/open verbs + paths exports (LIB-01, LIB-02, LIB-03, LIB-05)
+- [ ] 08-02-PLAN.md (wave 1) — pure-stats style-match: STYLE.json per-paper only + fingerprint reuse detection (STYL-01, STYL-02)
+- [ ] 08-03-PLAN.md (wave 1) — pymupdf shellout (graceful-absent) + extractPdfText image-only fallback + pin guard (RSCH-05)
+- [ ] 08-04-PLAN.md (wave 2) — add (DOI/PDF/URL + assigned_sources-only remap) + sketch (no-advance-until-confirm) verbs (ERGO-05, ERGO-06, RSCH-05)
+- [ ] 08-05-PLAN.md (wave 2) — drafter styleProfilePath + voiceHint priority + intake global-library registration + README dual-use disclosure (STYL-03, STYL-04, LIB-04)
+- [ ] 08-06-PLAN.md (wave 3) — list/open/sketch/add workflow bodies + tier-contract parity + 16-verb bijection re-assertion (LIB-02, LIB-03, ERGO-05, ERGO-06)
+
 **UI hint**: no
 
 ### Phase 9: Educator/tutorial mode + PII polish
@@ -347,7 +365,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 5. Verifier completeness (Pass 2 + Pass 4) | 5/5 | Complete   | 2026-06-18 |
 | 6. Done / export pipeline + zero-trace gate | 5/5 | Complete   | 2026-06-18 |
 | 7. Single-command UX layer + hooks + flags | 4/4 | Complete   | 2026-06-19 |
-| 8. Style match + sketch + add + library + BYO PDF polish | 0/TBD | Not started | - |
+| 8. Style match + sketch + add + library + BYO PDF polish | 0/7 | Not started | - |
 | 9. Educator/tutorial mode + PII polish | 0/TBD | Not started | - |
 | 10. Discipline + citation-style breadth + Zotero MCP | 0/TBD | Not started | - |
 
