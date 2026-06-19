@@ -160,10 +160,10 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 
 ### Resume / Hooks (Tier 1)
 
-- [ ] **HOOK-01**: PreCompact hook writes section-granular HANDOFF.json (configured 10s timeout)
-- [ ] **HOOK-02**: SessionStart hook auto-invokes the resume skill
-- [ ] **HOOK-03**: PostToolUse mid-session checkpoint, throttled ≤1/min via mtime gate
-- [ ] **HOOK-04**: Stop hook releases lock and flushes session log
+- [x] **HOOK-01**: PreCompact hook writes section-granular HANDOFF.json (configured 10s timeout)
+- [x] **HOOK-02**: SessionStart hook auto-invokes the resume skill
+- [x] **HOOK-03**: PostToolUse mid-session checkpoint, throttled ≤1/min via mtime gate
+- [x] **HOOK-04**: Stop hook releases lock and flushes session log
 
 ### Style Match (Opt-in)
 
@@ -358,10 +358,10 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | ERGO-02 | Phase 7 | Complete |
 | ERGO-03 | Phase 7 | Complete |
 | ERGO-04 | Phase 7 | Complete |
-| HOOK-01 | Phase 7 | Pending |
-| HOOK-02 | Phase 7 | Pending |
-| HOOK-03 | Phase 7 | Pending |
-| HOOK-04 | Phase 7 | Pending |
+| HOOK-01 | Phase 7 | Complete |
+| HOOK-02 | Phase 7 | Complete |
+| HOOK-03 | Phase 7 | Complete |
+| HOOK-04 | Phase 7 | Complete |
 | LIB-01 | Phase 8 | Pending |
 | LIB-02 | Phase 8 | Pending |
 | LIB-03 | Phase 8 | Pending |

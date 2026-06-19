@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-06-19T05:01:10.636Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-06-19T05:13:32.817Z"
 last_activity: 2026-06-19
 progress:
   total_phases: 11
   completed_phases: 7
   total_plans: 57
-  completed_plans: 55
+  completed_plans: 56
   percent: 64
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 07 (Single-command UX layer + hooks + flags) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-06-19
 
@@ -92,6 +92,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 06 P05 | 20min | 3 tasks | 7 files |
 | Phase 07 P01 | 28min | 3 tasks | 9 files |
 | Phase 07 P02 | 35min | 4 tasks | 8 files |
+| Phase 07 P03 | 10min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -200,6 +201,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [07-02] resolveNextAction is TOTAL + never-throws (catch-all loadState, sections nullish guard, guarded readSectionState, exhaustive switch, outer backstop); ignores HANDOFF so bare /pensmith never loops on resume (H4)
 - [Phase ?]: [07-02] estimator uses module-constant default provider/model (anthropic/claude-sonnet-4) not runtime.ts — keeps projectEstimate pure/IO-light; catch-all loadState guard returns empty projection for paper-less AND corrupt STATE.json (C2-H1/C4-HIGH)
 - [Phase ?]: [07-02] section-scoped router fallback is plan+verify only (write excluded — its n is optional for the write-all wave surface); --version/--help delegate to runMain
+- [Phase ?]: [07-03] forceRelease(resource) added to lock.ts for cross-process orphan-lock cleanup; Stop runs allSettled([release, forceRelease, closeSessionLog]) so a rejecting release never abandons the session-log flush (M1/C2-M2); release keeps the rejection path real, forceRelease (unlock-then-rm) guarantees actual cross-process cleanup that proper-lockfile.unlock cannot do
+- [Phase ?]: [07-03] Stop resolves .paper to an ABSOLUTE cwd path before release — resource locks are keyed by absolute-path hash (lock.ts stubFor), so release('.paper') literal would target a different stub than callers who lock join(cwd,'.paper')
+- [Phase ?]: [07-03] closeSessionLog() awaits the EXISTING module-scope chain directly (no new activeChain ref) — chain is shared by every logger handle; enqueue() installs work as both fulfil+reject handlers so awaiting it never rejects; the plan's activeChain indirection was unnecessary
+- [Phase ?]: [07-03] PreCompact 10s Promise.race timeout (PRECOMPACT_TIMEOUT_MS=10_000) with the deadline timer cleared in finally; applied OUTSIDE writeHandoff's lock ownership (writeHandoff stale:10_000 auto-clears a timed-out write); rejection routed to the existing stderr catch, never stdout (HOOK-01)
 
 ### Pending Todos
 
@@ -220,6 +225,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-19T05:00:00.919Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-06-19T05:12:53.485Z
+Stopped at: Completed 07-03-PLAN.md
 Resume file: None
