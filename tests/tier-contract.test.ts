@@ -25,6 +25,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { assertEquivalent } from './lib/assert-tier-equivalent.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { UX02_VERBS } from '../bin/lib/verbs.js';
 
 const MCP_BIN = 'dist/mcp/server.js';
 const CLI_BIN = 'dist/bin/pensmith.js';
@@ -1246,4 +1247,91 @@ test('tier-contract: done parity — offline run produces a trace-free deliverab
     false,
     `done parity: the exported deliverable must contain NO 'pensmith' string (zero-trace, DONE-07)`,
   );
+});
+
+// ============================================================================
+// Plan 07-04 — verb-shortcut + plumbing-namespace parity (UX-02 / UX-03, D-24)
+// ============================================================================
+//
+// The NL-routing skills (skills/pensmith.md + the 3 plumbing skills) and the
+// plugin.json skills array land in THIS plan, so their D-24 tier-contract
+// obligation is satisfied here. Two parity properties, plus the standing
+// no-17th-verb guard:
+//
+//   1. The verbs promoted to REAL in 07-02 (next / status / resume) are present
+//      in BOTH tier surfaces: Tier 2 = the CLI dispatcher (UX02_VERBS); Tier 1 =
+//      the porcelain NL-routing skill (skills/pensmith.md description routes the
+//      §5.4 phrases to those same verbs).
+//   2. The plumbing namespace resolves to the SAME underlying locked-16 verb in
+//      BOTH tiers: Tier 1 registers `pensmith:<verb>-section` in plugin.json's
+//      skills array (porcelain → the existing `<verb>` verb); Tier 2 exposes the
+//      same `<verb>` in UX02_VERBS. There is NO colon-prefix concept in Tier 2
+//      and NO 17th verb — the namespace is a Tier-1 alias onto the locked 16.
+//
+// This case is metadata-level (no MCP tool exists for the porcelain/plumbing
+// skills — pure Tier-1 model routing, per 07-RESEARCH); it asserts the contract
+// surfaces agree, then re-pins UX02_VERBS.length === 16.
+
+function readSkill(rel: string): string {
+  return readFileSync(fileURLToPath(new URL('../' + rel, import.meta.url)), 'utf8');
+}
+
+interface PluginSkillEntry { name: string; file: string }
+
+function readPluginSkills(): PluginSkillEntry[] {
+  const pkg = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../.claude-plugin/plugin.json', import.meta.url)), 'utf8'),
+  ) as { skills?: PluginSkillEntry[] };
+  return pkg.skills ?? [];
+}
+
+const VERB_SET = new Set<string>(UX02_VERBS as readonly string[]);
+
+test('tier-contract: verb-shortcut parity — next/status/resume live in BOTH tier surfaces (UX-02, 07-02 graduated)', () => {
+  // Tier 2 surface: the CLI dispatcher's locked-16 list.
+  for (const verb of ['next', 'status', 'resume']) {
+    assert.ok(VERB_SET.has(verb), `Tier 2: "${verb}" must be a member of UX02_VERBS (07-02 promoted it to a real verb)`);
+  }
+  // Tier 1 surface: the porcelain NL-routing skill description routes the §5.4
+  // phrases to those same verbs (status / resume / next).
+  const desc = readSkill('skills/pensmith.md');
+  assert.match(desc, /\bstatus\b/, 'Tier 1: pensmith skill must route "where am I?"/"what\'s next?" → status');
+  assert.match(desc, /\bresume\b/, 'Tier 1: pensmith skill must route "continue where I left off" → resume');
+  assert.match(desc, /\bnext\b/, 'Tier 1: pensmith skill must route "write the next section" → next');
+});
+
+test('tier-contract: plumbing-namespace parity — pensmith:<verb>-section resolves to the SAME locked-16 verb in both tiers (UX-03, D-24)', () => {
+  const skills = readPluginSkills();
+  // The colon-prefix plumbing namespace → the underlying locked-16 verb.
+  const NAMESPACE_TO_VERB: Record<string, string> = {
+    'pensmith:plan-section': 'plan',
+    'pensmith:write-section': 'write',
+    'pensmith:verify-section': 'verify',
+  };
+  for (const [pluginName, verb] of Object.entries(NAMESPACE_TO_VERB)) {
+    // Tier 1: the plumbing skill is registered in plugin.json's skills array.
+    const entry = skills.find((s) => s.name === pluginName);
+    assert.ok(entry, `Tier 1: plugin.json skills array must register "${pluginName}" (plumbing namespace)`);
+    // Tier 2: the underlying verb is a member of the locked 16 (the namespace is
+    // an alias onto it — NO colon-prefix concept and NO 17th verb in Tier 2).
+    assert.ok(VERB_SET.has(verb), `Tier 2: plumbing "${pluginName}" must alias the locked-16 verb "${verb}"`);
+    // The skill body itself maps the namespace onto that same `pensmith <verb>`.
+    const body = readSkill(entry!.file);
+    assert.match(
+      body,
+      new RegExp(`pensmith ${verb}\\b`),
+      `Tier 1↔2: ${pluginName} body must delegate to the existing "pensmith ${verb}" verb (D-06 single path)`,
+    );
+  }
+  // The primary porcelain skill is registered too (bare /pensmith).
+  assert.ok(skills.some((s) => s.name === 'pensmith'), 'plugin.json skills array must register the primary "pensmith" skill');
+});
+
+test('tier-contract: no 17th verb — adding the skills/plumbing namespace keeps UX02_VERBS at exactly 16 (T-07-02)', () => {
+  assert.equal(UX02_VERBS.length, 16, 'the locked-16 bijection must stay at exactly 16 verbs after the namespace lands');
+  // No colon-prefix verb leaked into the Tier-2 locked-16 list.
+  for (const v of UX02_VERBS) {
+    assert.ok(!v.includes(':'), `UX02_VERBS must not contain a colon-prefix plumbing name, got "${v}"`);
+    assert.ok(!/-section$/.test(v), `UX02_VERBS must not contain a "-section" plumbing alias, got "${v}"`);
+  }
 });

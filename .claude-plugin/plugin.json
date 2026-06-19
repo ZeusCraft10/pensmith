@@ -9,6 +9,12 @@
   },
   "repository": "https://github.com/akhilachanta/pensmith",
   "keywords": ["academic-writing", "citation-verification", "research", "papers"],
+  "skills": [
+    { "name": "pensmith", "file": "skills/pensmith.md" },
+    { "name": "pensmith:plan-section", "file": "skills/plan-section.md" },
+    { "name": "pensmith:write-section", "file": "skills/write-section.md" },
+    { "name": "pensmith:verify-section", "file": "skills/verify-section.md" }
+  ],
   "mcpServers": {
     "pensmith": {
       "type": "stdio",
