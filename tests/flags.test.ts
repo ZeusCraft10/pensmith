@@ -26,6 +26,12 @@ import { fileURLToPath } from 'node:url';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 
+// Resolve tsx's loader to an ABSOLUTE file URL so the CLI subprocess can load it
+// regardless of cwd — a bare `--import tsx` resolves relative to the child's
+// tmpdir cwd (no node_modules) and crashes ERR_MODULE_NOT_FOUND (07-01-SUMMARY
+// hook-driver fix, mirrored here for the flags execFileSync driver).
+const TSX_LOADER = import.meta.resolve('tsx');
+
 // RED-by-skip predicate: the four global flags + argv pre-parse + yolo cap
 // pre-flight + dispatchVerb backstop all land in 07-02. We detect that wiring
 // by greping bin/pensmith.ts for a 'dry-run' token (absent today). existsSync
@@ -44,7 +50,7 @@ function runCli(args: string[], cwd: string, extraEnv: Record<string, string | u
   try {
     const stdout = execFileSync(
       process.execPath,
-      ['--import', 'tsx', PENSMITH_TS, ...args],
+      ['--import', TSX_LOADER, PENSMITH_TS, ...args],
       { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
     );
     return { status: 0, stdout, stderr: '' };
