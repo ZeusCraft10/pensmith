@@ -25,6 +25,13 @@ import type { Handoff } from '../bin/lib/schemas/handoff.js';
 type Phase = Handoff['phase'];
 type SectionState = Handoff['section_pointers'][number]['state'];
 
+// HOOK-01 (T-07-11): self-imposed deadline so a hung HANDOFF write can never
+// block a context compaction indefinitely. writeHandoff owns its own
+// proper-lockfile with stale:10_000, which auto-clears a timed-out write
+// (Pitfall 2) — so the timeout applies OUTSIDE lock ownership and the rejected
+// race is routed to stderr by the existing catch (never stdout).
+const PRECOMPACT_TIMEOUT_MS = 10_000;
+
 const VALID_PHASES: ReadonlyArray<Phase> = [
   'intake', 'research', 'outline', 'plan',
   'write', 'verify', 'compile', 'done',
@@ -63,7 +70,24 @@ export async function onPreCompact(input: PreCompactInput = {}): Promise<void> {
       breadcrumbs,
       sectionPointers,
     });
-    await writeHandoff(handoff, paperDir);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        writeHandoff(handoff, paperDir),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error('pre-compact: HANDOFF write timed out after 10s'),
+              ),
+            PRECOMPACT_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } finally {
+      // Clear the deadline timer so a fast write leaves no dangling timeout.
+      if (timer !== undefined) clearTimeout(timer);
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     process.stderr.write(`[pre-compact] HANDOFF write failed: ${msg}\n`);
