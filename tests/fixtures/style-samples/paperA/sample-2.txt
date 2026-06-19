@@ -1,0 +1,23 @@
+The Limits of the Filter
+
+This essay extends the argument begun earlier. The filter model was built to
+explain how irrelevant material is excluded. It was not built to explain how
+relevant material is selected when relevance itself is uncertain. That second
+problem is harder, and it has been neglected.
+
+Consider a reader scanning a crowded page. The eyes move in short jumps,
+fixating briefly, then leaping ahead. Between fixations, little is encoded. The
+text that falls outside the narrow window of high acuity is blurred, and yet
+the reader rarely notices the blur. This is because the visual system fills in
+the gaps from expectation, and expectation is shaped by context.
+
+In a series of careful studies, words were briefly flashed and then masked.
+When the words were predictable from the surrounding sentence, they were
+recognized faster. When they were anomalous, recognition was slowed and errors
+were more frequent. These results were replicated across languages, and the
+effect was robust. The conclusion was straightforward. Prediction is not a
+luxury layered atop perception; prediction is perception, run forward in time.
+
+This is the thesis. Attention is not a single gate but a continuous wager on
+what comes next, and the wager is settled, again and again, against the
+incoming evidence.

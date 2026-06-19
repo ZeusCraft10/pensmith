@@ -1,0 +1,48 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1038/nphys1170",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message": {
+        "DOI": "10.1038/nphys1170",
+        "title": ["Quantum coherence in photosynthetic complexes"],
+        "author": [
+          { "family": "Engel", "given": "Gregory" },
+          { "family": "Calhoun", "given": "Tessa" }
+        ],
+        "issued": { "date-parts": [[2009]] },
+        "container-title": ["Nature Physics"],
+        "type": "journal-article"
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=quantum+coherence+photosynthesis&rows=1",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message": {
+        "items": [
+          {
+            "DOI": "10.1038/nphys1170",
+            "title": ["Quantum coherence in photosynthetic complexes"],
+            "author": [
+              { "family": "Engel", "given": "Gregory" },
+              { "family": "Calhoun", "given": "Tessa" }
+            ],
+            "issued": { "date-parts": [[2009]] },
+            "container-title": ["Nature Physics"],
+            "type": "journal-article"
+          }
+        ]
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]
