@@ -98,6 +98,36 @@ test('README, PRIVACY, README-DEV, CONTRIBUTING stubs are correct', () => {
   assert.match(c, /bin\/lib\/doi\.ts/);
 });
 
+// STYL-04 (Phase 8) — README dual-use disclosure CONTENT CONTRACT.
+//
+// RED-by-skip: the `## Style Match` dual-use disclosure section is authored in
+// Wave 7 (08-07). Until it lands, this test SKIPS (guarded on the section's
+// presence) so the suite stays GREEN through Waves 0-6. When 08-07 adds the
+// section, the guard opens and these assertions MUST pass — encoding the honest-
+// framing contract from CLAUDE.md non-negotiables: the disclosure must be PRESENT
+// and HONEST ("match your established voice", not "impersonate" / "evade
+// detection" / "undetectable", even in negation). Modeled on the
+// honesty-framing.md locked-copy pattern.
+test('STYL-04: README style-match dual-use disclosure is present + honest (RED-by-skip until 08-07)', () => {
+  const readme = read('README.md');
+  const sectionPresent = /##\s*Style Match/i.test(readme);
+  if (!sectionPresent) {
+    // Wave 0-6 RED-by-skip state: the section is authored in 08-07. Assert the
+    // documented forward-reference so the contract is tracked, not silently absent.
+    assert.ok(true, 'STYL-04 pending — `## Style Match` section lands in Wave 7 (08-07)');
+    return;
+  }
+  // Section is present (08-07 landed) — the content contract is now enforced.
+  assert.match(readme, /match your.*voice|established voice/i,
+    'STYL-04: disclosure must frame the feature as matching the user\'s own/established voice');
+  assert.ok(!/impersonate/i.test(readme),
+    'STYL-04: README must NOT frame style-match as impersonation');
+  assert.ok(!/evade detection/i.test(readme),
+    'STYL-04: README must NOT claim detection evasion');
+  assert.ok(!/undetectable/i.test(readme),
+    'STYL-04: README must NOT claim undetectability');
+});
+
 test('directory contract from D-21', () => {
   for (const d of [
     'bin', 'bin/lib', 'bin/lib/migrations', 'mcp', 'hooks', 'skills', 'agents',
