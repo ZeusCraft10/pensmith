@@ -26,3 +26,9 @@ current task's changes). The cli-stubs TIER-04 cases should be retired/updated t
 these four verbs are now real (likely a wrap-up task for plan 08-06 or a phase-cleanup plan).
 The pensmith verifier for Phase 8 should reconcile cli-stubs.test.ts with the verbs that 08-01
 through 08-04 graduated from stubs to real implementations.
+
+**✅ RESOLVED (orchestrator test-maintenance commit):** `STUBS` in `tests/cli-stubs.test.ts`
+emptied (`const STUBS: string[] = []`) with a graduation comment matching the compile/done/
+next/status/resume precedent — after Phase 8 ALL 16 UX-02 verbs are real, zero stubs remain.
+The TIER-04 stub-invariant loop is retained structurally for any future stub. Full suite
+776/776 green, lint + tsc clean.

@@ -31,12 +31,15 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
-// 4 remaining stubs after Plan 07-02 (UX-02 minus `doctor`, minus the 6 real
-// per-section verbs, minus the now-real compile/done, minus the now-real
-// next/status/resume).
-const STUBS = [
-  'list', 'open', 'sketch', 'add',
-];
+// Plan 08-01/08-04 update: `list` / `open` (08-01) and `sketch` / `add` (08-04)
+// graduated from stub to real (the library/sketch/add surface — bin/cli/list.ts
+// + open.ts + sketch.ts + add.ts, promoted via REAL_VERB_LOADERS), so they are
+// REMOVED from the stub list and exercised by their own unit suites +
+// tier-contract.test.ts. After Phase 8 ALL 16 UX-02 verbs are real — zero stubs
+// remain. The TIER-04 stub invariant (`pensmith <unimplemented-verb>` exits 0
+// with 'not implemented yet') is retained structurally for any FUTURE stub; the
+// list is intentionally empty.
+const STUBS: string[] = [];
 
 // Resolve the built binary; build is a precondition (run npm run build first).
 // Path locked by CONTRIBUTING.md D-24 LOCKED block + 02-07 preflight.
