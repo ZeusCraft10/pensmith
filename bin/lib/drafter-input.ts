@@ -39,6 +39,8 @@ import { z } from 'zod';
  *   - outlinePrev:     OPTIONAL previous-section outline context
  *   - outlineNext:     OPTIONAL next-section outline context
  *   - authors:         D-14 LOCKED author shape — z.array(z.string()) of "Family, Given"
+ *   - styleProfilePath: STYL-03 (08-05) — ADDITIVE path to the paper's STYLE.json
+ *                       (supplementary; voiceHint is the load-bearing signal)
  *
  * `.strict()` is the load-bearing chokepoint: it converts extra top-level
  * fields from a silent no-op (Zod default for unknown keys is "strip") into
@@ -68,6 +70,13 @@ export const DrafterInputSchema = z.object({
   outlineNext: z.string().optional(),
   // D-14 LOCKED — authors: z.array(z.string()), NEVER z.array(z.object({family, given})).
   authors: z.array(z.string()).optional(),
+  // STYL-03 (Phase 8 / 08-05) — ADDITIVE optional path to the paper's
+  // STYLE.json. voiceHint remains the LOAD-BEARING style signal the drafter
+  // consumes; styleProfilePath is supplementary, letting a capable Tier-1
+  // drafter fetch the raw pure-stats profile JSON when it wants more than the
+  // rendered hint. No existing field is touched and `.strict()` still throws on
+  // any unknown field (T-08-05-01 — the WRTE-04 / T-3-10 chokepoint is intact).
+  styleProfilePath: z.string().optional(),
 }).strict();
 
 export type DrafterInput = z.infer<typeof DrafterInputSchema>;

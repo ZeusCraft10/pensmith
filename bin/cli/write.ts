@@ -19,11 +19,15 @@
 // Phase 3 Tier-2 fallback: see Plan 07 amendment.
 
 import { defineCommand } from 'citty';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { atomicWriteFile } from '../lib/atomic-write.js';
-import { sectionDraft } from '../lib/paths.js';
+import { sectionDraft, sectionPlan, paperDir } from '../lib/paths.js';
 import { assertDrafterInput } from '../lib/drafter-input.js';
 import { runAllSections } from '../lib/write-orchestrator.js';
 import type { SectionNode } from '../lib/schemas/wave-graph.js';
+import { styleMatchToVoiceHint } from '../lib/style-match.js';
+import { StyleProfileSchema, type StyleProfile } from '../lib/schemas/style.js';
 
 const TIER2_DRAFT = [
   '# Section DRAFT (Tier-2 placeholder)',
@@ -36,6 +40,81 @@ const TIER2_DRAFT = [
 const DEFAULT_SLUG = 'placeholder';
 const DEFAULT_MAX_PARALLEL = 5;
 
+// STYL-03 default tone — the never-empty fallback when neither a PLAN.md voice
+// line nor a style-match profile is available.
+const DEFAULT_VOICE_HINT = 'Formal academic tone (Tier-2 placeholder).';
+
+// STYL-03 / Pitfall 7 — extract an EXPLICIT per-section voice direction from a
+// section PLAN.md. A user can pin the section's voice either in frontmatter
+// (`voice_hint: …`) or as a `Voice:` line inside the ## Brief body. Either form
+// is the user's explicit per-section direction and MUST win over the inferred
+// style-match render. Returns the trimmed direction, or '' when absent.
+function planVoiceDirection(planMd: string): string {
+  if (typeof planMd !== 'string' || planMd.length === 0) return '';
+  // (a) frontmatter `voice_hint:` (the artifact contract names this token).
+  const fmMatch = /(?:^|\n)voice_hint:\s*(.+)/.exec(planMd);
+  if (fmMatch && typeof fmMatch[1] === 'string') {
+    const v = fmMatch[1].replace(/^["']|["']$/g, '').trim();
+    if (v.length > 0) return v;
+  }
+  // (b) a body `Voice: …` line (the ## Brief convention the RED test pins).
+  const bodyMatch = /(?:^|\n)\s*Voice:\s*(.+)/.exec(planMd);
+  if (bodyMatch && typeof bodyMatch[1] === 'string') {
+    const v = bodyMatch[1].trim();
+    if (v.length > 0) return v;
+  }
+  return '';
+}
+
+/**
+ * STYL-03 / Pitfall 7 — resolve the drafter's effective voice hint by STRICT
+ * priority:
+ *
+ *   1. an EXPLICIT PLAN.md voice direction (frontmatter `voice_hint:` or a
+ *      `Voice:` line in the body) ALWAYS wins — the user's per-section
+ *      direction is never overridden by the inferred style profile (T-08-05-02);
+ *   2. else, when a style profile is present, the style-match render
+ *      (styleMatchToVoiceHint — PURE, no I/O);
+ *   3. else, the non-empty DEFAULT_VOICE_HINT.
+ *
+ * PURE — no I/O. The caller (writeOneSection) reads the section PLAN.md +
+ * STYLE.json from disk and passes the parsed values in. Exported so the
+ * write-style-integration contract test can pin the precedence directly.
+ */
+export function resolveVoiceHint(input: {
+  planMd: string;
+  styleProfile?: StyleProfile;
+}): string {
+  const planVoice = planVoiceDirection(input.planMd);
+  if (planVoice.length > 0) return planVoice; // (1) section override WINS.
+  if (input.styleProfile) return styleMatchToVoiceHint(input.styleProfile); // (2)
+  return DEFAULT_VOICE_HINT; // (3) never empty.
+}
+
+/**
+ * STYL-03 consumer — load the paper's STYLE.json (when present) and parse it via
+ * StyleProfileSchema INSIDE a try/catch. A malformed/partial STYLE.json must
+ * fall back to the default tone, NEVER throw inside the write verb (T-08-05-05).
+ * Returns the parsed profile + its path, or { profile: undefined } when the file
+ * is absent or unparseable.
+ */
+function loadStyleProfile(
+  paperRoot: string,
+): { profile?: StyleProfile; styleProfilePath?: string } {
+  // Resolve via paperDir() for producer/consumer path consistency — NOT a
+  // hardcoded join(paperRoot, '.paper', 'STYLE.json').
+  const stylePath = path.join(paperDir(paperRoot), 'STYLE.json');
+  if (!existsSync(stylePath)) return {};
+  try {
+    const raw = readFileSync(stylePath, 'utf8');
+    const profile = StyleProfileSchema.parse(JSON.parse(raw));
+    return { profile, styleProfilePath: stylePath };
+  } catch {
+    // Malformed / partial STYLE.json — fall back to the default tone.
+    return {};
+  }
+}
+
 /**
  * Write ONE section's DRAFT.md. This is the single-section drafter path,
  * factored out so BOTH `pensmith write <n>` and the wave orchestrator's
@@ -44,15 +123,38 @@ const DEFAULT_MAX_PARALLEL = 5;
  * never bypass it.
  */
 async function writeOneSection(n: number, slug: string): Promise<string> {
+  const paperRoot = process.cwd();
+
+  // STYL-03 — resolve the effective voiceHint by strict priority BEFORE the
+  // chokepoint: PLAN.md voice direction > style-match render > default. Read the
+  // section PLAN.md (best-effort) for the per-section override, and load
+  // STYLE.json (when the producer wrote one) for the style-match render. A
+  // malformed STYLE.json or missing PLAN.md degrades to the default tone —
+  // never throws (T-08-05-05).
+  const planPath = sectionPlan(n, slug, paperRoot);
+  let planMd = '';
+  try {
+    planMd = readFileSync(planPath, 'utf8');
+  } catch {
+    planMd = ''; // PLAN.md may not exist in Tier-2 placeholder mode.
+  }
+  const { profile, styleProfilePath } = loadStyleProfile(paperRoot);
+  const voiceHint = resolveVoiceHint({
+    planMd,
+    ...(profile ? { styleProfile: profile } : {}),
+  });
+
   // T-3-10 / WRTE-04 chokepoint: validate the drafter input shape BEFORE any
   // prompt invocation. Strict-schema throws on extra fields, missing fields, or
   // wrong types. In Tier 2 placeholder mode we still call this to exercise the
-  // chokepoint code-path and surface any drift at runtime.
+  // chokepoint code-path and surface any drift at runtime. styleProfilePath is
+  // passed ONLY when a STYLE.json was successfully loaded (additive optional).
   assertDrafterInput({
     planPath: `.paper/sections/${String(n).padStart(2, '0')}-${slug}/PLAN.md`,
     sources: [],
     wordTarget: 300,
-    voiceHint: 'Formal academic tone (Tier-2 placeholder).',
+    voiceHint,
+    ...(styleProfilePath ? { styleProfilePath } : {}),
   });
 
   const targetPath = sectionDraft(n, slug);
