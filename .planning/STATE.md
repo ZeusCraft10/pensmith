@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: verifying
+status: executing
 stopped_at: Completed 07-04-PLAN.md
-last_updated: "2026-06-19T05:26:30.844Z"
-last_activity: 2026-06-19
+last_updated: "2026-06-20T05:26:01.453Z"
+last_activity: 2026-06-20
 progress:
   total_phases: 11
   completed_phases: 8
-  total_plans: 57
-  completed_plans: 57
+  total_plans: 64
+  completed_plans: 58
   percent: 73
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-06)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** Phase 07 — Single-command UX layer + hooks + flags
+**Current focus:** Phase 08 — Style match + sketch + add + library + BYO PDF polish
 
 ## Current Position
 
-Phase: 07 (Single-command UX layer + hooks + flags) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-06-19
+Phase: 08 (Style match + sketch + add + library + BYO PDF polish) — EXECUTING
+Plan: 2 of 7
+Status: Ready to execute
+Last activity: 2026-06-20
 
 Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
 
@@ -94,6 +94,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 07 P02 | 35min | 4 tasks | 8 files |
 | Phase 07 P03 | 10min | 3 tasks | 6 files |
 | Phase 07 P04 | 12min | 2 tasks | 6 files |
+| Phase 08 P00 | 35min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -209,6 +210,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [07-04] Skill frontmatter authored name-LAST with a single-line quoted description — satisfies BOTH 07-01 RED scanners: readDescription (/(?:^|\n)description:\s*(.+)/) captures the full §5.4 phrase line (a `|` block scalar would yield only `|`), AND the nl-trigger token scan (/pensmith[:\s]+([a-z][a-z-]*)/, where [\s] includes \n) never extracts a bogus `description` verb from a `name: pensmith`→`description:` adjacency. The PATTERNS.md block-scalar/name-first example fails both
 - [Phase ?]: [07-04] plugin.json skills array shipped (A1/Open-Q2 resolved) — validate-plugin-manifest.cjs validates only name/version/author/mcpServers and structurally TOLERATES an extra skills[] of {name,file} colon-prefix entries; it passed clean, so the colon-prefix plumbing namespace ships in the manifest, not the CONTRIBUTING.md fallback
 - [Phase ?]: [07-04] No 17th verb across THREE independent guards — 07-01 nl-triggers (length===16 + skill-targets⊆verbs), the 07-01 standing guard, and the new tier-contract case (no colon-prefix and no -section alias leaked into UX02_VERBS). The /pensmith:*-section plumbing namespace is a Tier-1-only alias onto the locked 16; redo/revise/swap-source/length-change corrections all ride plan --revise (04-04). 16-workflow bijection intact
+- [Phase ?]: [08-00] RED-by-skip imports the unbuilt module via a runtime URL.href specifier (await import(MOD.href)) with a local type interface — keeps tsc --noEmit clean while the target module is absent (known-bad-pass2 precedent applied to all 7 Phase-8 suites)
+- [Phase ?]: [08-00] deriveLibraryStatus test asserts the DERIVED on-disk value (sectioning {done:2,total:3}) NOT the stored entry.status — cycle-2 HIGH 'status stuck at intake' fix as a live Wave-0 assertion; archived from stored flag, intake/unknown from absent/corrupt STATE.json (never-throw)
+- [Phase ?]: [08-00] STYL-04 README dual-use disclosure is a Wave-7 (08-07) deliverable; Wave 0 encodes only its CONTENT CONTRACT as a RED-by-skip assertion in repo-files.test.ts (guarded on '## Style Match' presence) — README.md NOT modified in Wave 0
 
 ### Pending Todos
 
@@ -229,6 +233,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-19T05:25:51.725Z
+Last session: 2026-06-20T05:25:01.895Z
 Stopped at: Completed 07-04-PLAN.md
 Resume file: None

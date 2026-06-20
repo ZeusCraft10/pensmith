@@ -69,17 +69,17 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [x] **ERGO-02**: `--estimate` flag projects tokens + USD before executing
 - [x] **ERGO-03**: `--yolo` flag skips outline + export approval gates; default off
 - [x] **ERGO-04**: `--show-prompts` flag echoes every LLM prompt to stdout/log
-- [ ] **ERGO-05**: `/pensmith sketch` thinking-partner mode for thesis discovery before intake
-- [ ] **ERGO-06**: `/pensmith add <doi|pdf|url>` ingests a new source mid-paper with "remap sections?" prompt
+- [x] **ERGO-05**: `/pensmith sketch` thinking-partner mode for thesis discovery before intake
+- [x] **ERGO-06**: `/pensmith add <doi|pdf|url>` ingests a new source mid-paper with "remap sections?" prompt
 - [ ] **ERGO-07**: Educator/tutorial mode — intake choice `goal ∈ {draft, learning, both}`; `learning` triggers tutorial-mode end-state with annotated provenance
 
 ### Library Mode
 
-- [ ] **LIB-01**: Global library at `~/.pensmith/library/index.json` (or platform equivalent), JSON file + `proper-lockfile` for v0.1
-- [ ] **LIB-02**: `/pensmith list` shows all papers grouped by class
-- [ ] **LIB-03**: `/pensmith open <name>` switches active paper
+- [x] **LIB-01**: Global library at `~/.pensmith/library/index.json` (or platform equivalent), JSON file + `proper-lockfile` for v0.1
+- [x] **LIB-02**: `/pensmith list` shows all papers grouped by class
+- [x] **LIB-03**: `/pensmith open <name>` switches active paper
 - [ ] **LIB-04**: Class assignment at intake (free-form string; defaults to "Unfiled")
-- [ ] **LIB-05**: Status values per paper: `intake | research | outline | sectioning (X/Y) | compile | done | archived`
+- [x] **LIB-05**: Status values per paper: `intake | research | outline | sectioning (X/Y) | compile | done | archived`
 
 ### Intake
 
@@ -167,9 +167,9 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 
 ### Style Match (Opt-in)
 
-- [ ] **STYL-01**: Intake folder of past writing samples → `.paper/STYLE.json` per-paper profile (no global cache) `[research]`
-- [ ] **STYL-02**: Sample-set fingerprint stored; cross-paper reuse detected and surfaced to user `[research]`
-- [ ] **STYL-03**: Section drafter consumes profile; per-section voice hints override
+- [x] **STYL-01**: Intake folder of past writing samples → `.paper/STYLE.json` per-paper profile (no global cache) `[research]`
+- [x] **STYL-02**: Sample-set fingerprint stored; cross-paper reuse detected and surfaced to user `[research]`
+- [x] **STYL-03**: Section drafter consumes profile; per-section voice hints override
 - [ ] **STYL-04**: README ships dual-use disclosure for style-match feature
 
 ### Citation Styles
@@ -362,17 +362,17 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | HOOK-02 | Phase 7 | Complete |
 | HOOK-03 | Phase 7 | Complete |
 | HOOK-04 | Phase 7 | Complete |
-| LIB-01 | Phase 8 | Pending |
-| LIB-02 | Phase 8 | Pending |
-| LIB-03 | Phase 8 | Pending |
+| LIB-01 | Phase 8 | Complete |
+| LIB-02 | Phase 8 | Complete |
+| LIB-03 | Phase 8 | Complete |
 | LIB-04 | Phase 8 | Pending |
-| LIB-05 | Phase 8 | Pending |
-| ERGO-05 | Phase 8 | Pending |
-| ERGO-06 | Phase 8 | Pending |
+| LIB-05 | Phase 8 | Complete |
+| ERGO-05 | Phase 8 | Complete |
+| ERGO-06 | Phase 8 | Complete |
 | RSCH-05b | Phase 8 | Pending (Phase-8 superset: BYO PDF + pymupdf shellout + Crossref hydration; builds on RSCH-05a) |
-| STYL-01 | Phase 8 | Pending |
-| STYL-02 | Phase 8 | Pending |
-| STYL-03 | Phase 8 | Pending |
+| STYL-01 | Phase 8 | Complete |
+| STYL-02 | Phase 8 | Complete |
+| STYL-03 | Phase 8 | Complete |
 | STYL-04 | Phase 8 | Pending |
 | ERGO-07 | Phase 9 | Pending |
 | RSCH-06 | Phase 10 | Pending |
