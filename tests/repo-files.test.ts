@@ -331,9 +331,25 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // re-pins the SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
   { slug: 'claim-support',       path: 'templates/prompts/claim-support.md',       decision: 'Phase 5 D-12',                   hash: 'ceec7601dfeaf30117091aa788d9463c01b6ca9d3a9da4b47fb0f91983c82217' },
   { slug: 'orphan-label',        path: 'templates/prompts/orphan-label.md',        decision: 'Phase 5 D-12',                   hash: 'f8b385f3869691f4a419f35987d8b9a93018f28714519b36713fd7c2c0b829fc' },
+  // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts (Plan 09-00). These land as
+  // __PENDING_HASH_<slug>__ SENTINELS in lockstep with bin/lib/prompt-loader.ts
+  // EXPECTED_PROMPT_HASHES; Plan 09-03 re-pins BOTH surfaces to the real SHA-256 in one
+  // atomic commit once the prompt bodies are byte-stable. While the sentinel is in place the
+  // hash-pin test below compares the on-disk SHA-256 against the sentinel and is EXPECTED to
+  // be replaced (not GREEN) until 09-03 — so it is registered as a PENDING entry, not a
+  // byte-pin. The hash-pin loop skips entries whose hash starts with __PENDING_HASH_.
+  { slug: 'tutorial-section-provenance', path: 'templates/prompts/tutorial-section-provenance.md', decision: 'Phase 9 D-12', hash: '__PENDING_HASH_tutorial-section-provenance__' },
+  { slug: 'tutorial-research-rationale', path: 'templates/prompts/tutorial-research-rationale.md', decision: 'Phase 9 D-12', hash: '__PENDING_HASH_tutorial-research-rationale__' },
 ];
 for (const pin of PENDING_HASH_PINS) {
-  test(`hash-pin: ${pin.path} (${pin.decision})`, () => {
+  // WN-3 sentinel entries (hash === `__PENDING_HASH_<slug>__`) are NOT yet
+  // byte-pinned — their real SHA-256 is locked in a later plan's single atomic
+  // re-pin commit (e.g. Phase 9 tutorial prompts re-pin in 09-03). The byte-pin
+  // assertion is RED-by-skip for these until the re-pin lands; the file-exists
+  // loop below still guards their presence. A test{skip} keeps the suite GREEN
+  // while the sentinel is in place, exactly like the loadPrompt sentinel bypass.
+  const isSentinel = pin.hash.startsWith('__PENDING_HASH_');
+  test(`hash-pin: ${pin.path} (${pin.decision})`, { skip: isSentinel }, () => {
     const bytes = readFileSync(pin.path);
     const hash = createHash('sha256').update(bytes).digest('hex');
     assert.equal(
