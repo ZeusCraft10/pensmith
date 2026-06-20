@@ -96,7 +96,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [x] **RSCH-03**: `pensmith-source-researcher` runs in parallel per query (Tier 1) / sequentially (Tier 2)
 - [x] **RSCH-04**: Source adapters in `bin/lib/sources.ts` for OpenAlex, Crossref, arXiv, PubMed, Semantic Scholar, Unpaywall, Retraction Watch
 - [ ] **RSCH-05a**: Phase 3 subset — `pdf-parse` (pinned exact, wrapped by `bin/lib/pdf-text.ts` chokepoint) extracts text from Unpaywall-resolved OA PDFs for Pass 3 quote verification. NO BYO PDF; NO `pymupdf` fallback; NO Crossref hydration of arbitrary PDFs — those stay RSCH-05b (Phase 8). Split per Phase 3 CONTEXT D-06/D-07.
-- [ ] **RSCH-05b**: Phase 8 superset — BYO PDF ingestion (user-supplied arbitrary PDFs); `pymupdf` shellout fallback when `pdf-parse` fails; metadata hydration via Crossref. Builds on the RSCH-05a chokepoint from Phase 3.
+- [x] **RSCH-05b**: Phase 8 superset — BYO PDF ingestion (user-supplied arbitrary PDFs); `pymupdf` shellout fallback when `pdf-parse` fails; metadata hydration via Crossref. Builds on the RSCH-05a chokepoint from Phase 3.
 - [ ] **RSCH-06**: Zotero MCP source provider when detected and authenticated
 - [x] **RSCH-07**: `pensmith-source-evaluator` scores, dedupes, tiers candidates
 - [x] **RSCH-08**: Approval gate to prune / approve / add sources before research is locked

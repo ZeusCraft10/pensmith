@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-06-20T07:20:05.370Z"
+stopped_at: Completed 08-04-PLAN.md
+last_updated: "2026-06-20T07:40:05.634Z"
 last_activity: 2026-06-20
 progress:
   total_phases: 11
   completed_phases: 8
   total_plans: 64
-  completed_plans: 61
+  completed_plans: 62
   percent: 73
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 08 (Style match + sketch + add + library + BYO PDF polish) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-06-20
 
@@ -98,6 +98,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 08 P01 | 22min | 2 tasks | 7 files |
 | Phase 08 P03 | 12min | 2 tasks | 3 files |
 | Phase 08 P02 | 4min | 2 tasks | 2 files |
+| Phase 08 P04 | 55 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -227,6 +228,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [08-02] StyleProfileSchema is FLAT per the authoritative test, not nested features (RED test wins over PLAN/PATTERNS)
 - [Phase ?]: [08-02] Fingerprint registry is path-free (hash to paperId/paperName/addedAt only, no features, no folderPath); detection-only, returns priorPapers for the caller's unconditional reuse notice
 - [Phase ?]: [08-02] generatedAt derived from the fingerprint (not Date.now) so identical samples yield byte-identical profiles for the determinism test
+- [Phase 08]: add <doi|pdf|url> ingests mid-paper; remap touches ONLY assigned_sources[] (verified sections stay verified)
+- [Phase 08]: sketch enforces no-advance-until-confirm; dispatches new with thesis seed (intake --thesis, not a 17th verb)
+- [Phase 08]: loadCassetteDir merges all adapter cassettes; parseWithRetry stabilizes pdf-parse transient PDF.js lexer faults
 
 ### Pending Todos
 
@@ -247,6 +251,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T07:20:05.364Z
-Stopped at: Completed 08-03-PLAN.md
+Last session: 2026-06-20T07:39:56.655Z
+Stopped at: Completed 08-04-PLAN.md
 Resume file: None
