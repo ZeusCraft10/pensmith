@@ -4,13 +4,13 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-06-20T07:11:59.897Z"
+last_updated: "2026-06-20T07:20:05.370Z"
 last_activity: 2026-06-20
 progress:
   total_phases: 11
   completed_phases: 8
   total_plans: 64
-  completed_plans: 60
+  completed_plans: 61
   percent: 73
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 08 (Style match + sketch + add + library + BYO PDF polish) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-06-20
 
@@ -97,6 +97,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 08 P00 | 35min | 3 tasks | 9 files |
 | Phase 08 P01 | 22min | 2 tasks | 7 files |
 | Phase 08 P03 | 12min | 2 tasks | 3 files |
+| Phase 08 P02 | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -223,6 +224,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 08]: [08-03] pymupdf tmpfile bytes written via atomicWriteFile (D-07 chokepoint) not direct fs.writeFile — chose routing through the sanctioned chokepoint over a new per-file ESLint exemption so D-07 stays intact
 - [Phase 08]: [08-03] pdf-parse pin guard asserts BOTH the declared package.json pin (literal 1.1.1, no range) AND the installed require(pdf-parse/package.json).version (T-08-03-04 dual-surface drift guard)
 - [Phase 08]: [08-03] extractPdfText pymupdf fallback gates on fallbackText non-null AND >=50 non-whitespace chars — a partially-failing fitz falls through to the same WARN+degrade path as null, never returning garbage that masks the image-only signal (RSCH-05b)
+- [Phase ?]: [08-02] StyleProfileSchema is FLAT per the authoritative test, not nested features (RED test wins over PLAN/PATTERNS)
+- [Phase ?]: [08-02] Fingerprint registry is path-free (hash to paperId/paperName/addedAt only, no features, no folderPath); detection-only, returns priorPapers for the caller's unconditional reuse notice
+- [Phase ?]: [08-02] generatedAt derived from the fingerprint (not Date.now) so identical samples yield byte-identical profiles for the determinism test
 
 ### Pending Todos
 
@@ -243,6 +247,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T07:11:59.889Z
+Last session: 2026-06-20T07:20:05.364Z
 Stopped at: Completed 08-03-PLAN.md
 Resume file: None
