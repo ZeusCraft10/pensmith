@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 08-04-PLAN.md
-last_updated: "2026-06-20T09:58:06.576Z"
+status: verifying
+stopped_at: Completed 09-03-PLAN.md
+last_updated: "2026-06-20T10:25:25.284Z"
 last_activity: 2026-06-20
 progress:
   total_phases: 11
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 68
-  completed_plans: 67
-  percent: 82
+  completed_plans: 68
+  percent: 91
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 Phase: 09 (Educator/tutorial mode + PII polish) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-20
 
 Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
@@ -104,6 +104,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 09 P00 | 11min | 3 tasks | 18 files |
 | Phase 09 P01 | 14 | 2 tasks | 2 files |
 | Phase 09 P02 | 18 | 2 tasks | 4 files |
+| Phase 09 P03 | 42min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -248,6 +249,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: 09-02: research.done render merges sources[].supportedClaim + sibling claims[] keyed by citekey (H2 fixture shape)
 - [Phase ?]: 09-02: TUTORIAL.md render is idempotent overwrite (ordered block Map + full-doc atomicWriteFile), never blind append
 - [Phase ?]: 09-02: onSectionWritten? is a goal-UNAWARE callback seam; all goal logic confined to write.ts CLI tier (zero-branch intact)
+- [Phase ?]: [09-03] router stays goal-AGNOSTIC: resolveNextAction gains a plain stopAfterResearch DI param; the goal->stop mapping lives ONLY in bin/cli/goal.ts (CLI tier) so the zero-branch invariant scans router.ts clean (H1)
+- [Phase ?]: [09-03] PII egress proven BY CONTENT via an in-module __setInterpolateForTest seam — native ESM module namespaces are sealed under Node 24; redacted egressSeed is the interpolate payload (H3); intake-clarifier template var is {{assignment}} (Rule 1 fix)
+- [Phase ?]: [09-03] config.toml [project] goal is the canonical goal store (no STATE.json field); persist best-effort with WARN + in-memory fallback (M1); learning hard-stop reuses status/done; WN-3 tutorial prompts re-pinned to real SHA-256 (no pending bypass)
 
 ### Pending Todos
 
@@ -268,6 +272,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T09:58:00.259Z
-Stopped at: Completed 08-04-PLAN.md
+Last session: 2026-06-20T10:25:25.277Z
+Stopped at: Completed 09-03-PLAN.md
 Resume file: None

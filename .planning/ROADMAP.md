@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Done / export pipeline + zero-trace gate** - Plagiarism, honesty, humanizer wrap, Pandoc exports, zero-trace verification test (completed 2026-06-18)
 - [x] **Phase 7: Single-command UX layer + hooks + flags** - `/pensmith` umbrella, verb shortcuts, natural-language triggers, resume/PreCompact/PostToolUse/Stop hooks, `--yolo`/`--dry-run`/`--estimate`/`--show-prompts` (completed 2026-06-19)
 - [x] **Phase 8: Style match + sketch + add + library + BYO PDF polish** - Style-match opt-in (per-paper, dual-use disclosed), sketch, add, library mode, PDF ingestion polish (completed 2026-06-20)
-- [ ] **Phase 9: Educator/tutorial mode + PII polish** - Tutorial-mode end-state, intake `goal=learning`, PII polish
+- [x] **Phase 9: Educator/tutorial mode + PII polish** - Tutorial-mode end-state, intake `goal=learning`, PII polish (completed 2026-06-20)
 - [ ] **Phase 10: Discipline + citation-style breadth + Zotero MCP** - Full CSL catalog, RIS export, remaining disciplines, Zotero MCP source provider
 
 ## Phase Details
@@ -347,7 +347,7 @@ Plans:
 - [x] 09-00-PLAN.md (wave 0) — RED-by-skip scaffold + fixtures + tutorial.ts stub + WN-3 tutorial-prompt sentinels + .gitignore (ERGO-07)
 - [x] 09-01-PLAN.md (wave 1) — pii.ts polish: IP/IBAN patterns + ~500-token NAME suppression dictionary + pure deterministic diffPii (ERGO-07)
 - [x] 09-02-PLAN.md (wave 1) — observer/DI: full TutorialSubscriber + additive onSectionWritten? seam in write-orchestrator + goal-aware subscriber?.emit in write.ts (ERGO-07)
-- [ ] 09-03-PLAN.md (wave 2) — intake --goal + config.toml persistence + PII opt-in diff before loadPrompt + router goal=learning hard-stop-after-research + TUTORIAL.md export-exclusion + WN-3 hash re-pin (ERGO-07)
+- [x] 09-03-PLAN.md (wave 2) — intake --goal + config.toml persistence + PII opt-in diff before loadPrompt + router goal=learning hard-stop-after-research + TUTORIAL.md export-exclusion + WN-3 hash re-pin (ERGO-07)
 
 **UI hint**: no
 
@@ -381,7 +381,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 6. Done / export pipeline + zero-trace gate | 5/5 | Complete   | 2026-06-18 |
 | 7. Single-command UX layer + hooks + flags | 4/4 | Complete   | 2026-06-19 |
 | 8. Style match + sketch + add + library + BYO PDF polish | 7/7 | Complete   | 2026-06-20 |
-| 9. Educator/tutorial mode + PII polish | 3/4 | In Progress|  |
+| 9. Educator/tutorial mode + PII polish | 4/4 | Complete   | 2026-06-20 |
 | 10. Discipline + citation-style breadth + Zotero MCP | 0/TBD | Not started | - |
 
 ## Coverage
