@@ -225,6 +225,27 @@ export default [
     },
   },
 
+  // === Path chokepoint EXEMPTION for Phase 8 Wave-0 RED-by-skip env-override tests ===
+  // tests/global-library.test.ts, tests/style-match.test.ts,
+  // tests/intake-style-producer.test.ts, and tests/write-style-integration.test.ts
+  // all override process.env.LOCALAPPDATA / XDG_DATA_HOME / HOME to redirect
+  // pensmithDataDir() (where the global library index + the style-fingerprint
+  // registry live) into a per-test tmpdir — the IDENTICAL isolation pattern as
+  // tests/library.test.ts / tests/state.test.ts above. Scoped to these four
+  // files only. (tests/pymupdf-shellout.test.ts is NOT listed: it overrides only
+  // PENSMITH_PYTHON, which is not a D-41 chokepoint env var.)
+  {
+    files: [
+      'tests/global-library.test.ts',
+      'tests/style-match.test.ts',
+      'tests/intake-style-producer.test.ts',
+      'tests/write-style-integration.test.ts',
+    ],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
+
   // === atomic-write + thin-shim EXEMPTION for tests/lint-thin-shim.test.ts (Phase 2, Wave 1) ===
   // tests/lint-thin-shim.test.ts (Test 2) MUST write a temporary copy of the
   // D-09 fixture under mcp/ so the file-scoped no-restricted-imports rule fires
