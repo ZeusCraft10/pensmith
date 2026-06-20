@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: executing
+status: verifying
 stopped_at: Completed 08-04-PLAN.md
-last_updated: "2026-06-20T07:58:02.187Z"
+last_updated: "2026-06-20T08:15:20.824Z"
 last_activity: 2026-06-20
 progress:
   total_phases: 11
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 64
-  completed_plans: 63
-  percent: 73
+  completed_plans: 64
+  percent: 82
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 Phase: 08 (Style match + sketch + add + library + BYO PDF polish) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-20
 
 Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
@@ -100,6 +100,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 08 P02 | 4min | 2 tasks | 2 files |
 | Phase 08 P04 | 55 | 2 tasks | 7 files |
 | Phase 08 P05 | 30min | 3 tasks | 4 files |
+| Phase 08 P06 | 18 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -235,6 +236,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [08-05] resolveVoiceHint priority: explicit PLAN voice direction > style-match render > default (Pitfall 7); RED test signature/source-of-voice wins over plan wording
 - [Phase ?]: [08-05] intake --style-samples is the live style-match PRODUCER (build->check->print unconditional reuse notice->write); registration + producer non-fatal, graceful-degrade on absent STATE.json; status:'intake' seeded once, live status DERIVED by list
 - [Phase ?]: [08-05] LIB-04 intake registration retains absolute folderPath; STYL-04 README guard pre-existed (08-00), Task 3 authored README only, no hash-pin (not locked-copy)
+- [Phase ?]: [08-06] list/open are CLI-only at the tier-contract layer (no MCP tool); parity = two CLI runs with ±20% length equivalence (compile precedent). sketch/add parity is a presence/shape contract (UX02_VERBS member + verb file + workflow body + documented CLI-only interactive/network asymmetry)
+- [Phase ?]: [08-06] sketch no-advance observable uses a STDIN-CLOSED spawn (not undeclared --confirm): citty does not bind test-seam args; a spawned sketch with stdin closed aborts the prompt and creates NO .paper/ — load-bearing assertion is absence of state mutation (Pitfall 6), not exit code
+- [Phase ?]: [08-06] seedGlobalRegistry STATE.json fixture uses schemaVersion 2 (CURRENT_STATE_VERSION) not 1 — deriveLibraryStatus does a RAW StateSchema.parse via loadStateSync (no migration), so a v1 envelope fails z.literal(2) and classifies as unknown(corrupt) instead of live intake
+- [Phase ?]: [08-06] add.md capability_check corrected to required AskUserQuestion only — the real bin/cli/add.ts ingests via Crossref/PDF/URL (http.ts D-06), never Zotero MCP; the stub Zotero/library/state tokens removed (accuracy correction, all stayed W4-valid)
 
 ### Pending Todos
 
@@ -255,6 +260,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T07:58:02.181Z
+Last session: 2026-06-20T08:14:37.619Z
 Stopped at: Completed 08-04-PLAN.md
 Resume file: None

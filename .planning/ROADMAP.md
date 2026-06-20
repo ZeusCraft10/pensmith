@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Verifier completeness (Pass 2 + Pass 4)** - LLM-judged claim support and per-paragraph orphan-claim audit, advisory only (completed 2026-06-18)
 - [x] **Phase 6: Done / export pipeline + zero-trace gate** - Plagiarism, honesty, humanizer wrap, Pandoc exports, zero-trace verification test (completed 2026-06-18)
 - [x] **Phase 7: Single-command UX layer + hooks + flags** - `/pensmith` umbrella, verb shortcuts, natural-language triggers, resume/PreCompact/PostToolUse/Stop hooks, `--yolo`/`--dry-run`/`--estimate`/`--show-prompts` (completed 2026-06-19)
-- [ ] **Phase 8: Style match + sketch + add + library + BYO PDF polish** - Style-match opt-in (per-paper, dual-use disclosed), sketch, add, library mode, PDF ingestion polish
+- [x] **Phase 8: Style match + sketch + add + library + BYO PDF polish** - Style-match opt-in (per-paper, dual-use disclosed), sketch, add, library mode, PDF ingestion polish (completed 2026-06-20)
 - [ ] **Phase 9: Educator/tutorial mode + PII polish** - Tutorial-mode end-state, intake `goal=learning`, PII polish
 - [ ] **Phase 10: Discipline + citation-style breadth + Zotero MCP** - Full CSL catalog, RIS export, remaining disciplines, Zotero MCP source provider
 
@@ -319,7 +319,7 @@ Plans:
 - [x] 08-02-PLAN.md (wave 2) — pure-stats style-match: STYLE.json per-paper only + fingerprint reuse detection, registry stores hashes+identity only (STYL-01, STYL-02)
 - [x] 08-04-PLAN.md (wave 2) — add (DOI/PDF/URL + assigned_sources-only remap) + sketch (no-advance-until-confirm) verbs (ERGO-05, ERGO-06, RSCH-05)
 - [x] 08-05-PLAN.md (wave 3) — drafter styleProfilePath + voiceHint priority + intake global-library registration + intake style-match opt-in producer (builds STYLE.json + unconditional reuse notice) + README dual-use disclosure (STYL-03, STYL-04, LIB-04)
-- [ ] 08-06-PLAN.md (wave 4) — list/open/sketch/add workflow bodies + tier-contract parity + 16-verb bijection re-assertion (LIB-02, LIB-03, ERGO-05, ERGO-06)
+- [x] 08-06-PLAN.md (wave 4) — list/open/sketch/add workflow bodies + tier-contract parity + 16-verb bijection re-assertion (LIB-02, LIB-03, ERGO-05, ERGO-06)
 
 **UI hint**: no
 
@@ -366,7 +366,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 5. Verifier completeness (Pass 2 + Pass 4) | 5/5 | Complete   | 2026-06-18 |
 | 6. Done / export pipeline + zero-trace gate | 5/5 | Complete   | 2026-06-18 |
 | 7. Single-command UX layer + hooks + flags | 4/4 | Complete   | 2026-06-19 |
-| 8. Style match + sketch + add + library + BYO PDF polish | 6/7 | In Progress|  |
+| 8. Style match + sketch + add + library + BYO PDF polish | 7/7 | Complete   | 2026-06-20 |
 | 9. Educator/tutorial mode + PII polish | 0/TBD | Not started | - |
 | 10. Discipline + citation-style breadth + Zotero MCP | 0/TBD | Not started | - |
 
