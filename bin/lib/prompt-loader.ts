@@ -131,13 +131,16 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   'claim-support':       'ceec7601dfeaf30117091aa788d9463c01b6ca9d3a9da4b47fb0f91983c82217',   // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 2 via pass2.ts)
   'orphan-label':        'f8b385f3869691f4a419f35987d8b9a93018f28714519b36713fd7c2c0b829fc',   // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 4 Step 3 via pass4.ts)
   // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts (Plan 09-02 wires the
-  // TutorialSubscriber render seam; Plan 09-03 re-pins these to real SHA-256). They land
-  // here as __PENDING_HASH_<slug>__ sentinels in Wave 0 (Plan 09-00) BEFORE the subscriber
-  // loads them, so loadPrompt resolves the slugs under PENSMITH_ALLOW_PENDING_PROMPT_HASHES=1.
-  // The matching pins in tests/repo-files.test.ts PENDING_HASH_PINS carry the SAME sentinel
-  // string (WN-3 lockstep — both surfaces re-pin to the real SHA-256 together in 09-03).
-  'tutorial-section-provenance': '__PENDING_HASH_tutorial-section-provenance__', // Phase 9 D-12
-  'tutorial-research-rationale': '__PENDING_HASH_tutorial-research-rationale__', // Phase 9 D-12
+  // TutorialSubscriber render seam). RE-PINNED to the real SHA-256 in Plan 09-03 Task 3
+  // (the prompt bodies are byte-stable since 09-00 — see the byte-identical guard in
+  // tests/repo-files.test.ts PENDING_HASH_PINS, which re-pins the SAME hashes in this
+  // SAME commit; WN-3 lockstep — drift between the two surfaces is structurally
+  // impossible). After this re-pin loadPrompt('tutorial-section-provenance') /
+  // loadPrompt('tutorial-research-rationale') resolve WITHOUT
+  // PENSMITH_ALLOW_PENDING_PROMPT_HASHES — runtime drift detection is restored.
+  // Mirrors the Phase-4 smoother + Phase-5 claim-support/orphan-label re-pin precedent.
+  'tutorial-section-provenance': 'de2ef68930504c74381c8f2fcec7b10ca911fd2b617ebb58fa9d5f4bb267168f', // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
+  'tutorial-research-rationale': 'c39d74a3a1c5a848045345e04ac572c11efd54fe06bf3bb4967a344872e4968e', // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
 };
 
 /**

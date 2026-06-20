@@ -331,15 +331,16 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // re-pins the SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
   { slug: 'claim-support',       path: 'templates/prompts/claim-support.md',       decision: 'Phase 5 D-12',                   hash: 'ceec7601dfeaf30117091aa788d9463c01b6ca9d3a9da4b47fb0f91983c82217' },
   { slug: 'orphan-label',        path: 'templates/prompts/orphan-label.md',        decision: 'Phase 5 D-12',                   hash: 'f8b385f3869691f4a419f35987d8b9a93018f28714519b36713fd7c2c0b829fc' },
-  // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts (Plan 09-00). These land as
-  // __PENDING_HASH_<slug>__ SENTINELS in lockstep with bin/lib/prompt-loader.ts
-  // EXPECTED_PROMPT_HASHES; Plan 09-03 re-pins BOTH surfaces to the real SHA-256 in one
-  // atomic commit once the prompt bodies are byte-stable. While the sentinel is in place the
-  // hash-pin test below compares the on-disk SHA-256 against the sentinel and is EXPECTED to
-  // be replaced (not GREEN) until 09-03 — so it is registered as a PENDING entry, not a
-  // byte-pin. The hash-pin loop skips entries whose hash starts with __PENDING_HASH_.
-  { slug: 'tutorial-section-provenance', path: 'templates/prompts/tutorial-section-provenance.md', decision: 'Phase 9 D-12', hash: '__PENDING_HASH_tutorial-section-provenance__' },
-  { slug: 'tutorial-research-rationale', path: 'templates/prompts/tutorial-research-rationale.md', decision: 'Phase 9 D-12', hash: '__PENDING_HASH_tutorial-research-rationale__' },
+  // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts. RE-PINNED to the real
+  // SHA-256 in Plan 09-03 Task 3 (WN-3 lockstep — the SAME commit re-pins bin/lib/
+  // prompt-loader.ts EXPECTED_PROMPT_HASHES, so drift between the two surfaces is
+  // structurally impossible). GUARD (L3): both prompt files MUST remain BYTE-IDENTICAL
+  // to their 09-00 committed form — these hashes were computed against that exact byte
+  // content. Any intentional edit to the prompt bodies requires recomputing BOTH hashes
+  // here AND in prompt-loader.ts in one commit (D-12 single-source rule). The byte-pin
+  // loop now runs (no longer skipped) and the file-exists loop still guards presence.
+  { slug: 'tutorial-section-provenance', path: 'templates/prompts/tutorial-section-provenance.md', decision: 'Phase 9 D-12', hash: 'de2ef68930504c74381c8f2fcec7b10ca911fd2b617ebb58fa9d5f4bb267168f' },
+  { slug: 'tutorial-research-rationale', path: 'templates/prompts/tutorial-research-rationale.md', decision: 'Phase 9 D-12', hash: 'c39d74a3a1c5a848045345e04ac572c11efd54fe06bf3bb4967a344872e4968e' },
 ];
 for (const pin of PENDING_HASH_PINS) {
   // WN-3 sentinel entries (hash === `__PENDING_HASH_<slug>__`) are NOT yet
