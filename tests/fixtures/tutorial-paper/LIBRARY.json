@@ -1,0 +1,25 @@
+[
+  {
+    "id": "10.1234/smith.2021.001",
+    "title": "Sub-Quadratic Attention Scaling in Transformers",
+    "authors": ["Smith, Jane", "Doe, Alex"],
+    "year": 2021,
+    "doi": "10.1234/smith.2021.001",
+    "retracted": false,
+    "last_verified": "2026-06-01T00:00:00.000Z",
+    "citekey": "smith2021",
+    "source": "crossref",
+    "raw": null
+  },
+  {
+    "id": "arXiv:1901.00001",
+    "title": "A Long-Context Benchmark for Sequence Models",
+    "authors": ["Jones, Robin"],
+    "year": 2019,
+    "retracted": false,
+    "last_verified": "2026-06-01T00:00:00.000Z",
+    "citekey": "jones2019",
+    "source": "arxiv",
+    "raw": null
+  }
+]
