@@ -43,7 +43,13 @@ export type Migration = (input: unknown) => unknown;
 export interface LoadOptions<TSchema extends z.ZodTypeAny> {
   file: string;
   schema: TSchema;
-  schemaName: 'state' | 'library' | 'checkpoint' | 'session-log' | 'runtime-config';
+  schemaName:
+    | 'state'
+    | 'library'
+    | 'global-library'
+    | 'checkpoint'
+    | 'session-log'
+    | 'runtime-config';
   currentVersion: number;
   migrations?: Record<number, Migration>;
   writeBack?: boolean; // default false

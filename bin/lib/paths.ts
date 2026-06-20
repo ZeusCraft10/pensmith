@@ -133,6 +133,46 @@ export function pensmithHttpCacheDir(): string {
 }
 
 /**
+ * Returns `<pensmithDataDir>/library/index.json` — the GLOBAL PAPER registry
+ * (LIB-01). One entry per paper across all projects. This is SEPARATE from the
+ * per-paper `.paper/LIBRARY.json` (D-59 source/citation store) AND from the
+ * path-free `style-fingerprints.json` registry. LIB-01: it lives in
+ * pensmithDataDir(), NEVER inside a sync-folder-risk `.paper/`.
+ */
+export function pensmithGlobalLibraryIndexPath(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return path.join(pensmithDataDir(platform, env), 'library', 'index.json');
+}
+
+/**
+ * Returns `<pensmithDataDir>/active.json` — the active-paper pointer (LIB-03).
+ * Written by `open` to switch the active paper; read by callers that need the
+ * active paperRoot from a different cwd. Lives in pensmithDataDir(), never
+ * inside a `.paper/`.
+ */
+export function pensmithActivePointerPath(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return path.join(pensmithDataDir(platform, env), 'active.json');
+}
+
+/**
+ * Returns `<pensmithDataDir>/style-fingerprints.json` — the cross-paper style
+ * reuse-detection registry (STYL-02, wired in 08-02). It stores fingerprint →
+ * paper-identity ONLY and is DELIBERATELY path-free (no folderPath / prose
+ * features) — distinct from the PAPER registry above, which retains folderPath.
+ */
+export function pensmithStyleFingerprintsPath(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return path.join(pensmithDataDir(platform, env), 'style-fingerprints.json');
+}
+
+/**
  * Resolves the project root to an absolute, normalized path. Defaults to
  * `process.cwd()`. Used as the input to `projectHash` and as the base of
  * `paperDir` / `sectionDir`.
