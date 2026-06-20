@@ -258,6 +258,7 @@ export default [
       'tests/intake-pii-ordering.test.ts',
       'tests/intake-pii-egress.test.ts',
       'tests/tutorial-provenance.test.ts',
+      'tests/tutorial-observer.test.ts',
       'tests/goal-routing.test.ts',
       'tests/goal-learning-endstate.test.ts',
     ],
