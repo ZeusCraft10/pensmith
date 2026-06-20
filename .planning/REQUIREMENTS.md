@@ -78,7 +78,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [x] **LIB-01**: Global library at `~/.pensmith/library/index.json` (or platform equivalent), JSON file + `proper-lockfile` for v0.1
 - [x] **LIB-02**: `/pensmith list` shows all papers grouped by class
 - [x] **LIB-03**: `/pensmith open <name>` switches active paper
-- [ ] **LIB-04**: Class assignment at intake (free-form string; defaults to "Unfiled")
+- [x] **LIB-04**: Class assignment at intake (free-form string; defaults to "Unfiled")
 - [x] **LIB-05**: Status values per paper: `intake | research | outline | sectioning (X/Y) | compile | done | archived`
 
 ### Intake
@@ -170,7 +170,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [x] **STYL-01**: Intake folder of past writing samples → `.paper/STYLE.json` per-paper profile (no global cache) `[research]`
 - [x] **STYL-02**: Sample-set fingerprint stored; cross-paper reuse detected and surfaced to user `[research]`
 - [x] **STYL-03**: Section drafter consumes profile; per-section voice hints override
-- [ ] **STYL-04**: README ships dual-use disclosure for style-match feature
+- [x] **STYL-04**: README ships dual-use disclosure for style-match feature
 
 ### Citation Styles
 
@@ -365,7 +365,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | LIB-01 | Phase 8 | Complete |
 | LIB-02 | Phase 8 | Complete |
 | LIB-03 | Phase 8 | Complete |
-| LIB-04 | Phase 8 | Pending |
+| LIB-04 | Phase 8 | Complete |
 | LIB-05 | Phase 8 | Complete |
 | ERGO-05 | Phase 8 | Complete |
 | ERGO-06 | Phase 8 | Complete |
@@ -373,7 +373,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | STYL-01 | Phase 8 | Complete |
 | STYL-02 | Phase 8 | Complete |
 | STYL-03 | Phase 8 | Complete |
-| STYL-04 | Phase 8 | Pending |
+| STYL-04 | Phase 8 | Complete |
 | ERGO-07 | Phase 9 | Pending |
 | RSCH-06 | Phase 10 | Pending |
 | CITE-02 | Phase 10 | Pending |

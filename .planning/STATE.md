@@ -4,13 +4,13 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 08-04-PLAN.md
-last_updated: "2026-06-20T07:40:05.634Z"
+last_updated: "2026-06-20T07:58:02.187Z"
 last_activity: 2026-06-20
 progress:
   total_phases: 11
   completed_phases: 8
   total_plans: 64
-  completed_plans: 62
+  completed_plans: 63
   percent: 73
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 08 (Style match + sketch + add + library + BYO PDF polish) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-06-20
 
@@ -99,6 +99,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 08 P03 | 12min | 2 tasks | 3 files |
 | Phase 08 P02 | 4min | 2 tasks | 2 files |
 | Phase 08 P04 | 55 | 2 tasks | 7 files |
+| Phase 08 P05 | 30min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -231,6 +232,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 08]: add <doi|pdf|url> ingests mid-paper; remap touches ONLY assigned_sources[] (verified sections stay verified)
 - [Phase 08]: sketch enforces no-advance-until-confirm; dispatches new with thesis seed (intake --thesis, not a 17th verb)
 - [Phase 08]: loadCassetteDir merges all adapter cassettes; parseWithRetry stabilizes pdf-parse transient PDF.js lexer faults
+- [Phase ?]: [08-05] resolveVoiceHint priority: explicit PLAN voice direction > style-match render > default (Pitfall 7); RED test signature/source-of-voice wins over plan wording
+- [Phase ?]: [08-05] intake --style-samples is the live style-match PRODUCER (build->check->print unconditional reuse notice->write); registration + producer non-fatal, graceful-degrade on absent STATE.json; status:'intake' seeded once, live status DERIVED by list
+- [Phase ?]: [08-05] LIB-04 intake registration retains absolute folderPath; STYL-04 README guard pre-existed (08-00), Task 3 authored README only, no hash-pin (not locked-copy)
 
 ### Pending Todos
 
@@ -251,6 +255,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T07:39:56.655Z
+Last session: 2026-06-20T07:58:02.181Z
 Stopped at: Completed 08-04-PLAN.md
 Resume file: None
