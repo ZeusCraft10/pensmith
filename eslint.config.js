@@ -259,6 +259,7 @@ export default [
       'tests/intake-pii-egress.test.ts',
       'tests/tutorial-provenance.test.ts',
       'tests/goal-routing.test.ts',
+      'tests/goal-learning-endstate.test.ts',
     ],
     rules: {
       'no-restricted-syntax': 'off',

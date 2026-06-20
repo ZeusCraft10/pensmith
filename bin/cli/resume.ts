@@ -17,6 +17,7 @@ import { paperDir } from '../lib/paths.js';
 import { resolveNextAction } from '../lib/router.js';
 import { HandoffSchema, type Handoff } from '../lib/schemas/handoff.js';
 import { dispatchVerb } from '../pensmith.js';
+import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './goal.js';
 
 function safeReadHandoff(paperRoot: string): Handoff | null {
   const handoffPath = join(paperDir(paperRoot), 'HANDOFF.json');
@@ -55,7 +56,23 @@ export const resumeCommand = defineCommand({
 
     // Compute the next WORK verb via the HANDOFF-BLIND resolver — returns
     // plan/write/verify/compile/done (or a status terminus), NEVER 'resume'.
-    const decision = await resolveNextAction(paperRoot);
+    // Goal-aware tier: map goal → the router's goal-AGNOSTIC stopAfterResearch.
+    const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
+    const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
+
+    // Learning hard-stop: render the per-claim learning end-state to TUTORIAL.md
+    // INSTEAD OF dispatching the status verb's generic "ready to export" message.
+    // Still CONSUME the HANDOFF afterward so a stale pointer cannot re-trigger.
+    if (stop && decision.verb === 'status' && decision.reason === 'done') {
+      await renderLearningEndState(paperRoot);
+      try {
+        rmSync(join(paperDir(paperRoot), 'HANDOFF.json'), { force: true });
+      } catch {
+        /* best-effort consume */
+      }
+      return { ok: true, mode: 'learning-end-state' };
+    }
+
     process.stderr.write(`pensmith resume: → ${decision.verb}\n`);
 
     const verbArgs: Record<string, unknown> = {};

@@ -13,6 +13,7 @@
 import { defineCommand } from 'citty';
 import { resolveNextAction } from '../lib/router.js';
 import { dispatchVerb } from '../pensmith.js';
+import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './goal.js';
 
 export const nextCommand = defineCommand({
   meta: {
@@ -29,7 +30,19 @@ export const nextCommand = defineCommand({
   },
   async run({ args }) {
     const paperRoot = process.cwd();
-    const decision = await resolveNextAction(paperRoot);
+    // Goal-aware tier: read goal and map it to the router's goal-AGNOSTIC
+    // stopAfterResearch flag (H1 — the mapping lives in goal.ts, not the router).
+    const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
+    const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
+
+    // Learning hard-stop: when the stop fired (status/done reached via the stop),
+    // render the per-claim learning end-state to TUTORIAL.md INSTEAD OF dispatching
+    // the status verb's generic "ready to export" message.
+    if (stop && decision.verb === 'status' && decision.reason === 'done') {
+      await renderLearningEndState(paperRoot);
+      return { ok: true, mode: 'learning-end-state' };
+    }
+
     process.stderr.write(`pensmith next: → ${decision.verb}\n`);
 
     // Build the per-verb args from the decision (n/slug where applicable).

@@ -19,6 +19,7 @@ import { loadState, StateNotFoundError } from '../lib/state.js';
 import type { State } from '../lib/schemas/state.js';
 import { resolveNextAction, readSectionState } from '../lib/router.js';
 import { sectionPlan } from '../lib/paths.js';
+import { readGoalFromConfig, stopAfterResearchFor } from './goal.js';
 
 export const statusCommand = defineCommand({
   meta: {
@@ -63,7 +64,12 @@ export const statusCommand = defineCommand({
     }
 
     // resolveNextAction NEVER throws (C4/C5-HIGH); surface the next action.
-    const decision = await resolveNextAction(paperRoot);
+    // Goal-aware tier: pass the goal→stopAfterResearch mapping so the surfaced
+    // "next" line reflects the learning hard-stop. status is a READ-ONLY view —
+    // it does NOT render TUTORIAL.md (rendering belongs to the action-taking
+    // callers next/resume/bare; status only reports).
+    const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
+    const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
     const next =
       decision.verb === 'status'
         ? `status (${decision.reason})`

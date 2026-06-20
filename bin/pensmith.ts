@@ -34,6 +34,7 @@ import { UX02_VERBS, type Ux02Verb } from './lib/verbs.js';
 import { setMirrorPromptsToStderr } from './lib/session-log.js';
 import { projectEstimate } from './lib/estimator.js';
 import { resolveNextAction } from './lib/router.js';
+import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
 // strongly-typed ArgsDef (e.g., doctor declares { json: BooleanArgDef }),
@@ -304,7 +305,19 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   // C4/C5-HIGH) and dispatch via the shared helper, forwarding the parsed
   // global flags (C3-HIGH-2). Do NOT also call runMain (citty would throw
   // 'No command specified' on bare, or reject the missing required positional).
-  const decision = await resolveNextAction(process.cwd());
+  //
+  // Goal-aware tier: map goal → the router's goal-AGNOSTIC stopAfterResearch.
+  const paperRoot = process.cwd();
+  const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
+  const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
+
+  // Learning hard-stop: render the per-claim learning end-state to TUTORIAL.md
+  // INSTEAD OF dispatching the status verb's generic "ready to export" message.
+  if (stop && decision.verb === 'status' && decision.reason === 'done') {
+    await renderLearningEndState(paperRoot);
+    return;
+  }
+
   const verbArgs: Record<string, unknown> = {};
   if ('n' in decision) verbArgs.n = decision.n;
   if ('slug' in decision) verbArgs.slug = decision.slug;

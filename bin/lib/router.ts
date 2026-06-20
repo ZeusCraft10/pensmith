@@ -111,14 +111,38 @@ export function readSectionState(planPath: string): SectionStateRead {
 }
 
 /**
+ * Behavior options for resolveNextAction. opts is a plain, FEATURE-AGNOSTIC
+ * behavior surface — NOT a workflow-mode token. `stopAfterResearch` is a
+ * dependency-injected flag the CLI caller sets; the router never reads any
+ * config and never knows WHY the caller wants to stop. Keeping the router
+ * unaware of the caller's intent is what keeps Foundation free of the
+ * educator-mode vocabulary the zero-branch invariant forbids (H1).
+ */
+export interface ResolveOptions {
+  /**
+   * When true AND RESEARCH.md exists, halt at the research stage and return the
+   * existing `{ verb:'status', reason:'done' }` terminal instead of advancing to
+   * outline. The CLI caller decides when to set this; the router stays agnostic.
+   */
+  stopAfterResearch?: boolean;
+}
+
+/**
  * Resolve the next WORK action for the active paper at `paperRoot`.
  *
  * TOTAL and NEVER-THROWS over its ENTIRE input surface (STATE.json AND each
  * per-section PLAN.md). NEVER returns undefined. NEVER returns { verb:'resume' }
  * (H4). See the file header for the full invariant and the COMPLETE
  * SECTION-STATE → VERB MAP (C3-HIGH-1).
+ *
+ * `opts.stopAfterResearch` is a FEATURE-AGNOSTIC behavior flag (DI) — the router
+ * never reads config and never knows the caller's intent. Default `{}` (no stop)
+ * is byte-identical to the prior no-arg behavior (back-compat — no regression).
  */
-export async function resolveNextAction(paperRoot: string): Promise<RouterDecision> {
+export async function resolveNextAction(
+  paperRoot: string,
+  opts: ResolveOptions = {},
+): Promise<RouterDecision> {
   // C5-HIGH OUTER BACKSTOP (defense-in-depth): wrap the WHOLE resolver body so
   // even an unforeseen throw from any fs/parse op resolves to a valid
   // RouterDecision rather than escaping. The per-read guards below keep the
@@ -143,6 +167,15 @@ export async function resolveNextAction(paperRoot: string): Promise<RouterDecisi
 
     // H4 PINNED ORDERING: HANDOFF.json is NOT read here. existsSync never throws.
     if (!existsSync(join(pDir, 'RESEARCH.md'))) return { verb: 'research' };
+
+    // DI HARD-STOP (feature-agnostic): once RESEARCH.md exists, a caller that
+    // requested stopAfterResearch halts here — reuse the existing status/done
+    // terminal rather than widening RouterDecision. The caller is responsible
+    // for any stage-appropriate end-state message it wants to print.
+    if (opts.stopAfterResearch && existsSync(join(pDir, 'RESEARCH.md'))) {
+      return { verb: 'status', reason: 'done' };
+    }
+
     if (!existsSync(join(pDir, 'OUTLINE.md'))) return { verb: 'outline' };
 
     // C4-HIGH SECTIONS-NULL GUARD: schema makes sections .optional().

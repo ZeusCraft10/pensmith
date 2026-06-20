@@ -62,9 +62,15 @@ function seedResearchedPaper(): string {
   const state = {
     $schemaVersion: 2,
     paperId: '11111111-1111-4111-8111-111111111111',
+    createdAt: '2026-06-20T00:00:00.000Z', // StateSchema requires createdAt (D-58)
     sections: [],
   };
-  fs.writeFileSync(path.join(paper, 'STATE.json'), JSON.stringify(state, null, 2));
+  // LAYOUT CONTRACT (pensmith-router.test.ts:43-45): STATE.json lives at
+  // <root>/STATE.json (stateFile()); RESEARCH.md/OUTLINE.md live under
+  // <root>/.paper/ (paperDir()). The 09-00 scaffold placed STATE.json under
+  // .paper/, where loadState() never looks → the router returned { verb:'new' }
+  // and the DI never engaged. Place it at the root so the DI is exercised.
+  fs.writeFileSync(path.join(root, 'STATE.json'), JSON.stringify(state, null, 2));
   fs.writeFileSync(path.join(paper, 'RESEARCH.md'), '# Research\n\nPresent.\n');
   return root;
 }

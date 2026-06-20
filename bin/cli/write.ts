@@ -21,8 +21,8 @@
 import { defineCommand } from 'citty';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { parse as parseToml } from 'smol-toml';
 import { atomicWriteFile } from '../lib/atomic-write.js';
+import { readGoalFromConfig } from './goal.js';
 import { sectionDraft, sectionPlan, paperDir } from '../lib/paths.js';
 import { assertDrafterInput } from '../lib/drafter-input.js';
 import { runAllSections } from '../lib/write-orchestrator.js';
@@ -120,34 +120,13 @@ function loadStyleProfile(
 }
 
 /**
- * Read the educator-mode `goal` from `config.toml` `[project] goal`. Best-effort:
- * a missing/malformed config.toml or an unrecognized value defaults to 'draft'.
- * Mirrors resolvePaperMeta's try/catch read in intake.ts.
- *
- * GOAL-AWARENESS LIVES HERE, in the CLI tier — this is the H1 boundary. The same
- * goal-read drives the 09-03 router-DI mechanism; keep the parse logic identical
- * so a future shared util (L5) collapses cleanly.
- */
-function readGoalFromConfig(cwd: string): 'draft' | 'learning' | 'both' {
-  try {
-    const cfgPath = path.join(cwd, 'config.toml');
-    if (!existsSync(cfgPath)) return 'draft';
-    const cfg = parseToml(readFileSync(cfgPath, 'utf8')) as {
-      project?: { goal?: unknown };
-    };
-    const g = cfg.project?.goal;
-    if (g === 'learning' || g === 'both' || g === 'draft') return g;
-    return 'draft';
-  } catch {
-    return 'draft';
-  }
-}
-
-/**
  * Construct the educator-mode subscriber in the CLI tier (the SOLE goal-aware
  * seam — Foundation never imports this). Returns `undefined` for goal=draft (the
  * zero-activation contract) and on any construction error (non-fatal, mirrors
  * runStyleProducerNonFatal): a bad subscriber must never break `write`.
+ *
+ * goal is read via the SHARED readGoalFromConfig from bin/cli/goal.ts (L5 dedup —
+ * one helper, two consumers: this file + the four goal-aware router callers).
  */
 function makeSubscriberNonFatal(paperRoot: string): TutorialSubscriber | undefined {
   const goal = readGoalFromConfig(paperRoot);
