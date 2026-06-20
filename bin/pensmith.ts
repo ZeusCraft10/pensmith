@@ -81,6 +81,10 @@ export const REAL_VERB_LOADERS: Partial<Record<Ux02Verb, () => Promise<AnyComman
   // both are already members of the locked-16 UX02_VERBS).
   list: () => import('./cli/list.js').then((m) => m.listCommand),
   open: () => import('./cli/open.js').then((m) => m.openCommand),
+  // Phase 8 Plan 08-04 — sketch/add promoted from Phase-2 stubs (no 17th verb;
+  // both are already members of the locked-16 UX02_VERBS).
+  sketch: () => import('./cli/sketch.js').then((m) => m.sketchCommand),
+  add: () => import('./cli/add.js').then((m) => m.addCommand),
 };
 
 /** Parsed global-flag bundle forwarded into a manually-dispatched verb. */

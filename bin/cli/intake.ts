@@ -46,6 +46,14 @@ export const intakeCommand = defineCommand({
       type: 'string',
       description: 'Path to an assignment file to seed the intake (optional).',
     },
+    // Phase 8 ERGO-05 / Open-Q2: an OPTIONAL thesis seed (NOT a new verb). The
+    // `sketch` verb dispatches `new` with this pre-filled after the user
+    // confirms a candidate thesis; a manual `pensmith new --thesis "…"` works
+    // identically. When set, it pre-fills the intake placeholder.
+    thesis: {
+      type: 'string',
+      description: 'A candidate thesis to pre-fill the intake (optional; supplied by `sketch`).',
+    },
     yolo: {
       type: 'boolean',
       description: 'Skip the approval gate (auto-accept the intake).',
@@ -55,15 +63,21 @@ export const intakeCommand = defineCommand({
   async run({ args }) {
     const targetPath = path.join(paperDir(), 'INTAKE.md');
     const noLlm = process.env['PENSMITH_NO_LLM'] === '1' || !process.env['ANTHROPIC_API_KEY'];
+    const thesisSeed = typeof args.thesis === 'string' && args.thesis.trim()
+      ? args.thesis.trim()
+      : '';
 
     if (noLlm) {
       // Phase 3 Tier-2 fallback: see Plan 07 amendment.
       const fromText = args.from && existsSync(args.from)
         ? readFileSync(args.from, 'utf8')
         : '';
-      const body = fromText
+      let body = fromText
         ? `${TIER2_PLACEHOLDER}\n## Seed (from --from ${args.from})\n\n${fromText}\n`
         : TIER2_PLACEHOLDER;
+      if (thesisSeed) {
+        body = `${body}\n## Candidate thesis (from sketch)\n\n${thesisSeed}\n`;
+      }
       await atomicWriteFile(targetPath, body);
       process.stdout.write(`pensmith new: wrote Tier-2 placeholder to ${targetPath}\n`);
       return { ok: true, path: targetPath, mode: 'tier2-placeholder' };
