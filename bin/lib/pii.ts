@@ -17,9 +17,23 @@
 //                                   length cap [A-Z][a-z]{1,20}, no nested
 //                                   quantifiers
 //
-// Pure module: NO I/O, NO fs, NO fetch, NO logging. Imports nothing.
+// Pure module: NO I/O, NO fs, NO fetch, NO logging. The only import is a
+// statically-bundled JSON data file (name-suppression.json) resolved at
+// module load — this is NOT runtime I/O (no fs.readFile / fetch / Date.now /
+// Math.random anywhere). diffPii is the new pure, deterministic export added
+// in Phase 9.
+//
+// Phase 9 additions (09-01 / ERGO-07):
+//   - IP   (dotted-quad IPv4) and IBAN-like classes, added BEFORE NAME in the
+//     scan order so they win overlap resolution against the looser NAME regex.
+//   - NAME_SUPPRESSION dictionary (~500 curated capitalized non-name tokens)
+//     drops academic/section/month NAME false positives WITHOUT any NLP
+//     dependency (Presidio/NLP deferred to v2 per PII-V2-01).
+//   - diffPii(): pure positional reviewable diff derived from classifyPii.
 
-export type PiiKind = 'EMAIL' | 'PHONE' | 'SSN' | 'NAME' | 'DATE';
+import nameSuppression from './name-suppression.json' with { type: 'json' };
+
+export type PiiKind = 'EMAIL' | 'PHONE' | 'SSN' | 'NAME' | 'DATE' | 'IP' | 'IBAN';
 
 export interface PiiMatch {
   kind: PiiKind;
@@ -45,10 +59,34 @@ const RE_PHONE = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
 // spaceless 9-digit form has too high a false-positive rate to redact.
 const RE_SSN = /\b\d{3}-\d{2}-\d{4}\b/g;
 
+// IP (kind: IP) — Phase 9. Dotted-quad IPv4 literal. Fixed-shape: exactly
+// four 1-3 digit groups separated by dots. Intentionally not range-validated
+// (e.g. 999.999.999.999 still matches) — "false positives acceptable, false
+// negatives are the failure mode" (D-49). No nested quantifiers, so the
+// T-01-REDOS-01 bounded-backtracking guarantee holds.
+const RE_IP = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+
+// IBAN-like (kind: IBAN) — Phase 9. Country code (2 letters) + 2 check digits
+// + BBAN (4-30 alphanumerics). The {4,30} upper cap preserves the
+// T-01-REDOS-01 bounded-quantifier guarantee (real IBANs are ≤34 chars; the
+// 4-char floor avoids matching bare 2-letter+2-digit codes). Check-digit/MOD-97
+// validation is NOT performed — this is a redaction heuristic, not a validator.
+const RE_IBAN_LIKE = /\b[A-Z]{2}\d{2}[A-Z0-9]{4,30}\b/g;
+
 // NAME — two-or-three capitalized tokens (handles middle name and
 // hyphenated surnames). Token length cap of 20 lowercase chars after the
 // initial capital prevents pathological backtracking (T-01-REDOS-01).
 const RE_NAME = /\b[A-Z][a-z]{1,20}(?:[ -][A-Z][a-z]{1,20}){1,2}\b/g;
+
+// NAME suppression dictionary (Phase 9 / ERGO-07). ~500 curated capitalized
+// tokens that the loose two-cap-token NAME regex over-matches (months,
+// weekdays, section headings, sentence-leading function words, common
+// academic terms). Bundled JSON, NOT a runtime dependency — read once at
+// module load via a static import, which keeps this module pure. A NAME
+// candidate is suppressed ONLY when EVERY token in the match is a member of
+// this set (RESEARCH Pitfall 6: a multi-token name whose last token is a real
+// surname — "In Smith" — survives because "Smith" is not in the set).
+const NAME_SUPPRESSION: ReadonlySet<string> = new Set<string>(nameSuppression);
 
 // DATE — union of three sub-patterns: ISO, US, EU.
 const RE_DATE_ISO = /\b\d{4}-\d{2}-\d{2}\b/g;
@@ -62,11 +100,62 @@ const PATTERNS: ReadonlyArray<{ kind: PiiKind; re: RegExp }> = [
   { kind: 'EMAIL', re: RE_EMAIL },
   { kind: 'PHONE', re: RE_PHONE },
   { kind: 'SSN', re: RE_SSN },
+  // IP + IBAN inserted BEFORE NAME so they win the exact-tie overlap pass
+  // against the looser NAME regex (earlier insertion = higher priority).
+  { kind: 'IP', re: RE_IP },
+  { kind: 'IBAN', re: RE_IBAN_LIKE },
   { kind: 'NAME', re: RE_NAME },
   { kind: 'DATE', re: RE_DATE_ISO },
   { kind: 'DATE', re: RE_DATE_US },
   { kind: 'DATE', re: RE_DATE_EU },
 ];
+
+// ---------------------------------------------------------------------------
+// NAME suppression helper (Phase 9 / RESEARCH Pitfall 6). The loose NAME regex
+// greedily matches 2-3 capitalized tokens, so it over-grabs sentence-leading
+// function words ("Author Jane Smith", "Results Section"). This helper applies
+// the curated NAME_SUPPRESSION dictionary in two stages and returns the
+// trimmed match — or null if the whole thing should be dropped:
+//
+//   1. DROP entirely if EVERY token is suppressed ("Results Section",
+//      "January March").
+//   2. Otherwise strip leading suppressed tokens, but ONLY while the remainder
+//      still forms a valid NAME (≥2 tokens — the NAME regex never matches a
+//      single token). So "Author Jane Smith" → "Jane Smith", while "In Smith"
+//      keeps both tokens because stripping "In" would leave a lone "Smith".
+//
+// Returns { raw, startDelta } where startDelta is the byte offset to add to the
+// original span start (0 when nothing was trimmed). Pure — no I/O, no mutable
+// closure state.
+// ---------------------------------------------------------------------------
+function resolveSuppressedName(raw: string): { raw: string; startDelta: number } | null {
+  const tokens = raw.split(/[ -]/);
+  if (tokens.length === 0) return { raw, startDelta: 0 };
+
+  // Stage 1: all tokens suppressed → drop.
+  if (tokens.every((t) => NAME_SUPPRESSION.has(t))) return null;
+
+  // Stage 2: strip leading suppressed tokens while ≥2 tokens remain valid.
+  let start = 0;
+  while (
+    start < tokens.length &&
+    NAME_SUPPRESSION.has(tokens[start] as string) &&
+    tokens.length - start - 1 >= 2
+  ) {
+    start++;
+  }
+
+  if (start === 0) return { raw, startDelta: 0 };
+
+  // Compute the byte offset of the kept span: skip `start` leading tokens plus
+  // their following single separator char each. Slicing the ORIGINAL raw (vs.
+  // a re-join) preserves the exact separators inside the kept span.
+  let offset = 0;
+  for (let i = 0; i < start; i++) {
+    offset += (tokens[i] as string).length + 1; // token + one separator char
+  }
+  return { raw: raw.slice(offset), startDelta: offset };
+}
 
 // ---------------------------------------------------------------------------
 // classifyPii — returns spans in source order, no overlaps.
@@ -82,8 +171,19 @@ export function classifyPii(text: string): PiiMatch[] {
     for (const m of text.matchAll(re)) {
       const start = m.index ?? -1;
       if (start < 0) continue;
-      const raw = m[0];
-      candidates.push({ kind, span: [start, start + raw.length], raw });
+      let raw = m[0];
+      let matchStart = start;
+      // NAME suppression (Phase 9): drop / trim NAME candidates against the
+      // curated non-name dictionary. Only NAME is filtered — IP/IBAN/EMAIL/
+      // PHONE/SSN/DATE are never suppressed. resolveSuppressedName returns
+      // null (drop entirely) or a possibly-trimmed match with a span delta.
+      if (kind === 'NAME') {
+        const resolved = resolveSuppressedName(raw);
+        if (resolved === null) continue;
+        raw = resolved.raw;
+        matchStart += resolved.startDelta;
+      }
+      candidates.push({ kind, span: [matchStart, matchStart + raw.length], raw });
     }
   }
 
