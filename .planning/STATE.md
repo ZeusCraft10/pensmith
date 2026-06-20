@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: verifying
+status: executing
 stopped_at: Completed 08-04-PLAN.md
-last_updated: "2026-06-20T08:15:20.824Z"
+last_updated: "2026-06-20T09:38:22.184Z"
 last_activity: 2026-06-20
 progress:
   total_phases: 11
   completed_phases: 9
-  total_plans: 64
-  completed_plans: 64
+  total_plans: 68
+  completed_plans: 65
   percent: 82
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-06)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** Phase 08 — Style match + sketch + add + library + BYO PDF polish
+**Current focus:** Phase 09 — Educator/tutorial mode + PII polish
 
 ## Current Position
 
-Phase: 08 (Style match + sketch + add + library + BYO PDF polish) — EXECUTING
-Plan: 7 of 7
-Status: Phase complete — ready for verification
+Phase: 09 (Educator/tutorial mode + PII polish) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-06-20
 
 Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
@@ -101,6 +101,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 08 P04 | 55 | 2 tasks | 7 files |
 | Phase 08 P05 | 30min | 3 tasks | 4 files |
 | Phase 08 P06 | 18 | 2 tasks | 5 files |
+| Phase 09 P00 | 11min | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -260,6 +261,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T08:14:37.619Z
+Last session: 2026-06-20T09:38:22.178Z
 Stopped at: Completed 08-04-PLAN.md
 Resume file: None
