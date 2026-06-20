@@ -1250,6 +1250,272 @@ test('tier-contract: done parity — offline run produces a trace-free deliverab
 });
 
 // ============================================================================
+// Plan 08-06 — list / open / sketch / add tier-contract parity (CONTRIBUTING.md D-24)
+// ============================================================================
+//
+// The four library/ergonomics workflow bodies (workflows/{list,open,sketch,add}.md)
+// are FILLED in THIS plan, so their D-24 tier-contract obligation lands here.
+// All four are members of the locked UX-02 16 verbs (verbs 13-16) — NO 17th verb.
+// None has an MCP tool: the Tier-1 surface for each is the workflow body
+// delegating to the SAME bin/cli/<verb>.ts path as the Tier-2 CLI — the documented
+// compile/done/write-wave asymmetry that keeps the locked 16 verbs bijective with
+// the 16 workflow bodies.
+//
+// PARITY MODEL (08-06 convergence):
+//   - list + open are PURE-LOCAL and deterministic → run the SAME bin/cli path
+//     twice (the two tier paths) against the SAME seeded global-registry fixture
+//     and assert ±20% length equivalence on the produced artifact (the compile
+//     precedent: two CLI runs exercise the single tier path both tiers share).
+//   - sketch + add have interactive (AskUserQuestion / @clack stdin) and network
+//     (Crossref / PDF / URL) parts that are not offline-deterministic → assert a
+//     PRESENCE/SHAPE contract: the verb is dispatchable in BOTH tiers (verb file
+//     + workflow body present + a member of UX02_VERBS + the same bin/cli path),
+//     documenting the CLI-only asymmetry exactly as compile/done did.
+
+const PROMOTED_VERBS = ['list', 'open', 'sketch', 'add'] as const;
+
+/**
+ * Spawn the CLI with the pensmithDataDir() env scoped to a temp dir (so the
+ * GLOBAL registry / active pointer land in the fixture, not the host machine's
+ * real data dir). Sets all three resolution env vars cross-platform
+ * (LOCALAPPDATA / XDG_DATA_HOME / HOME) — the tests/library.test.ts precedent.
+ */
+function runCliWithDataDir(
+  args: string[],
+  cwd: string,
+  dataDir: string,
+): { stdout: string; stderr: string; exitCode: number } {
+  const res = spawnSync(process.execPath, [CLI_BIN_ABS, ...args], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PENSMITH_NO_LLM: '1',
+      LOCALAPPDATA: dataDir,
+      XDG_DATA_HOME: dataDir,
+      HOME: dataDir,
+    },
+    timeout: 30_000,
+    cwd,
+  });
+  return { stdout: res.stdout ?? '', stderr: res.stderr ?? '', exitCode: res.status ?? 1 };
+}
+
+/**
+ * Seed a temp pensmithDataDir() with a GLOBAL registry index containing one
+ * paper whose folderPath points at a real project dir carrying a STATE.json (so
+ * deriveLibraryStatus derives a real 'intake' status at display time). Returns
+ * { dataDir, paperRoot, paperName }.
+ *
+ * Layout: dataDir is the localDataDir root; the registry index lives at
+ * dataDir/pensmith/library/index.json (pensmithDataDir() = <localDataDir>/pensmith).
+ */
+function seedGlobalRegistry(): { dataDir: string; paperRoot: string; paperName: string } {
+  const dataDir = mkdtempSync(join(tmpdir(), 'pensmith-tier-lib-data-'));
+  const paperRoot = mkdtempSync(join(tmpdir(), 'pensmith-tier-lib-paper-'));
+  // A real v2 STATE.json so deriveLibraryStatus reads it (status → 'intake':
+  // STATE.json present, no RESEARCH.md). stateFile(paperRoot) = <paperRoot>/STATE.json.
+  // deriveLibraryStatus does a RAW StateSchema.parse (no migration), so the
+  // fixture MUST be the CURRENT state version (2) — a v1 envelope would fail
+  // parse and classify as 'unknown' (corrupt) rather than the live 'intake'.
+  writeFileSync(
+    join(paperRoot, 'STATE.json'),
+    JSON.stringify({
+      $schemaVersion: 2,
+      paperId: 'tier-lib-paper',
+      createdAt: new Date().toISOString(),
+      sections: [],
+    }),
+  );
+  const indexDir = join(dataDir, 'pensmith', 'library');
+  mkdirSync(indexDir, { recursive: true });
+  const now = new Date().toISOString();
+  const paperName = 'Tier Contract Paper';
+  writeFileSync(
+    join(indexDir, 'index.json'),
+    JSON.stringify(
+      {
+        $schemaVersion: 1,
+        entries: [
+          {
+            id: 'tier-lib-paper',
+            name: paperName,
+            folderPath: paperRoot,
+            class: 'Tier Tests',
+            status: 'intake',
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  return { dataDir, paperRoot, paperName };
+}
+
+// --- Existence assertions: each promoted verb ships a verb file + workflow body
+//     (D-24: every workflow body added gets a tier-contract entry). ---
+for (const verb of PROMOTED_VERBS) {
+  const verbFile = `bin/cli/${verb}.ts`;
+  const verbExists = existsSync(new URL(`../${verbFile}`, import.meta.url));
+  const bodyExists = existsSync(new URL(`../workflows/${verb}.md`, import.meta.url));
+
+  test(`tier-contract: ${verb} — verb file + workflow body exist (D-24)`, () => {
+    assert.ok(verbExists, `MISSING: ${verbFile} — ${verb} must ship its registry entry in-plan`);
+    assert.ok(
+      bodyExists,
+      `MISSING: workflows/${verb}.md — the Tier-1 surface delegating to bin/cli/${verb}.ts`,
+    );
+    // Tier-2 surface: the verb is a member of the locked-16 dispatcher list.
+    assert.ok(
+      (UX02_VERBS as readonly string[]).includes(verb),
+      `Tier 2: "${verb}" must be a member of UX02_VERBS (08-01/08-04 promoted it to a real verb)`,
+    );
+  });
+}
+
+const listVerbExists = existsSync(new URL('../bin/cli/list.ts', import.meta.url));
+const openVerbExists = existsSync(new URL('../bin/cli/open.ts', import.meta.url));
+
+test('tier-contract: list parity — both tier paths produce equivalent grouped listing (D-24)', { skip: !listVerbExists }, () => {
+  // list is pure-local + deterministic: two runs of the SAME bin/cli/list.ts path
+  // (the single path both tiers share — no pensmith_list MCP tool) against the
+  // SAME seeded registry must produce equivalent stdout (±20%, TIER-07).
+  const a = seedGlobalRegistry();
+  const t1 = runCliWithDataDir(['list'], a.paperRoot, a.dataDir);
+  assert.equal(t1.exitCode, 0, `list Tier 1: exit 0 expected; got ${t1.exitCode}. stderr: ${t1.stderr.slice(0, 400)}`);
+
+  const b = seedGlobalRegistry();
+  const t2 = runCliWithDataDir(['list'], b.paperRoot, b.dataDir);
+  assert.equal(t2.exitCode, 0, `list Tier 2: exit 0 expected; got ${t2.exitCode}. stderr: ${t2.stderr.slice(0, 400)}`);
+
+  // Both surface the registered paper + its class bucket + a DERIVED status.
+  for (const out of [t1.stdout, t2.stdout]) {
+    assert.match(out, /Tier Contract Paper/, 'list: the registered paper name must appear');
+    assert.match(out, /\[Tier Tests\]/, 'list: the class bucket must appear');
+    assert.match(out, /\bintake\b/, 'list: the DERIVED lifecycle status must appear (DERIVE-AT-DISPLAY)');
+  }
+  // ±20% length equivalence on the listing prose (TIER-07). The two fixtures use
+  // distinct temp folderPaths, so the path tail differs slightly — the tolerance
+  // absorbs that while still catching a structural divergence.
+  assertEquivalent(
+    { mcpText: t1.stdout, cliText: t2.stdout, mcpFacts: {}, cliFacts: {} },
+    { tolerance: 0.20, label: 'list grouped listing (Tier 1 ↔ Tier 2)' },
+  );
+});
+
+test('tier-contract: open parity — both tier paths switch the active paper + write an equivalent pointer (D-24)', { skip: !openVerbExists }, () => {
+  // open is pure-local + deterministic: two runs of the SAME bin/cli/open.ts path
+  // against the SAME registered paper-name must each write the active pointer
+  // (pensmithDataDir()/active.json) and report the switch (±20%, TIER-07).
+  const a = seedGlobalRegistry();
+  const t1 = runCliWithDataDir(['open', a.paperName], a.paperRoot, a.dataDir);
+  assert.equal(t1.exitCode, 0, `open Tier 1: exit 0 expected; got ${t1.exitCode}. stderr: ${t1.stderr.slice(0, 400)}`);
+  const t1Ptr = join(a.dataDir, 'pensmith', 'active.json');
+  assert.ok(existsSync(t1Ptr), `open Tier 1: active pointer must be written at ${t1Ptr}`);
+
+  const b = seedGlobalRegistry();
+  const t2 = runCliWithDataDir(['open', b.paperName], b.paperRoot, b.dataDir);
+  assert.equal(t2.exitCode, 0, `open Tier 2: exit 0 expected; got ${t2.exitCode}. stderr: ${t2.stderr.slice(0, 400)}`);
+  const t2Ptr = join(b.dataDir, 'pensmith', 'active.json');
+  assert.ok(existsSync(t2Ptr), `open Tier 2: active pointer must be written at ${t2Ptr}`);
+
+  // The pointer carries the same identity shape in both tiers (paperId echoed).
+  for (const ptr of [t1Ptr, t2Ptr]) {
+    const parsed = JSON.parse(readFileSync(ptr, 'utf8')) as { paperId?: string; folderPath?: string };
+    assert.equal(parsed.paperId, 'tier-lib-paper', 'open: active pointer must echo the paperId');
+    assert.ok(typeof parsed.folderPath === 'string' && parsed.folderPath.length > 0, 'open: active pointer must carry folderPath');
+  }
+  // ±20% length equivalence on the switch confirmation (TIER-07).
+  assertEquivalent(
+    { mcpText: t1.stdout, cliText: t2.stdout, mcpFacts: {}, cliFacts: {} },
+    { tolerance: 0.20, label: 'open switch confirmation (Tier 1 ↔ Tier 2)' },
+  );
+});
+
+test('tier-contract: sketch parity — dispatchable in both tiers (no-advance shape), CLI-only interactive asymmetry documented (D-24)', () => {
+  // sketch has an interactive Socratic loop + confirm gate (AskUserQuestion in
+  // Tier 1, @clack stdin in Tier 2) → not offline-deterministic. The parity is a
+  // PRESENCE/SHAPE contract (the compile/done CLI-only precedent): the verb is a
+  // member of the locked-16, ships a verb file + a workflow body whose Tier-1
+  // surface delegates to the SAME bin/cli/sketch.ts as Tier 2, and the
+  // no-advance-until-confirm invariant (ERGO-05 / Pitfall 6) is observable.
+  assert.ok((UX02_VERBS as readonly string[]).includes('sketch'), 'Tier 2: sketch is a locked-16 verb');
+  const body = readFileSync(fileURLToPath(new URL('../workflows/sketch.md', import.meta.url)), 'utf8');
+  // Tier-1 surface: the workflow body names AskUserQuestion (required) and the
+  // @clack stdin degrade — the documented dual-tier path.
+  assert.match(body, /AskUserQuestion/, 'sketch Tier-1: workflow body must require AskUserQuestion');
+  assert.match(body, /@clack\/prompts|stdin/i, 'sketch Tier-2: workflow body must degrade to @clack/stdin');
+  // The no-advance invariant must be stated in the body (Pitfall 6 / ERGO-05).
+  assert.match(body, /no-advance|never create|never creates|NEVER create|byte-unchanged/i, 'sketch: workflow body must state the no-advance-until-confirm invariant');
+
+  // Observable no-advance: run the SAME bin/cli/sketch.ts both tiers share with
+  // stdin CLOSED (no TTY, no confirm). The Socratic prompt aborts cleanly — and
+  // CRITICALLY, no .paper/ / STATE.json is created in the cwd. A non-zero exit on
+  // an aborted prompt is expected; the load-bearing assertion is the absence of
+  // any state mutation (no-advance-until-confirm — ERGO-05 / Pitfall 6). State
+  // creation lives ONLY in the `new` verb sketch dispatches to AFTER a confirm.
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-sketch-'));
+  const r = spawnSync(process.execPath, [CLI_BIN_ABS, 'sketch'], {
+    encoding: 'utf8',
+    env: { ...process.env, PENSMITH_NO_LLM: '1' },
+    timeout: 30_000,
+    cwd: root,
+    stdio: ['ignore', 'pipe', 'pipe'], // stdin closed → prompt aborts, no advance
+  });
+  assert.ok(typeof r.status === 'number', 'sketch: the verb must terminate (no hang)');
+  assert.ok(
+    !existsSync(join(root, '.paper')),
+    'sketch: an unconfirmed sketch must NOT create .paper/ (no-advance invariant — Pitfall 6)',
+  );
+  assert.ok(
+    !existsSync(join(root, 'STATE.json')) && !existsSync(join(root, '.paper', 'STATE.json')),
+    'sketch: an unconfirmed sketch must NOT create STATE.json (single-init-site contract)',
+  );
+});
+
+test('tier-contract: add parity — dispatchable in both tiers, assigned_sources-only remap + CLI-only network asymmetry documented (D-24)', () => {
+  // add has network ingestion (Crossref / PDF / URL) + an interactive remap gate
+  // → not offline-deterministic for the generic loop. The parity is a
+  // PRESENCE/SHAPE contract (compile/done precedent): the verb is a member of the
+  // locked-16, ships a verb file + a workflow body whose Tier-1 surface delegates
+  // to the SAME bin/cli/add.ts as Tier 2, and the verifier-preserving
+  // assigned_sources-only remap invariant (ERGO-06 / Pitfall 3) is observable.
+  assert.ok((UX02_VERBS as readonly string[]).includes('add'), 'Tier 2: add is a locked-16 verb');
+  const body = readFileSync(fileURLToPath(new URL('../workflows/add.md', import.meta.url)), 'utf8');
+  // Tier-1 surface: AskUserQuestion (remap gate) + the @clack stdin degrade.
+  assert.match(body, /AskUserQuestion/, 'add Tier-1: workflow body must require AskUserQuestion (remap gate)');
+  assert.match(body, /@clack\/prompts|stdin/i, 'add Tier-2: workflow body must degrade to @clack/stdin');
+  // The verifier-preserving remap invariant must be stated (ERGO-06 / Pitfall 3):
+  // remap touches assigned_sources[] only; status / verified hash untouched.
+  assert.match(body, /assigned_sources/, 'add: workflow body must state the assigned_sources-only remap');
+  assert.match(body, /verified_against_draft_hash|stays verified|STAYS verified/i, 'add: workflow body must state that a verified section stays verified');
+});
+
+// --- Bijection re-assertion (T-08-06-01): exactly 16 verbs, the four promoted
+//     verbs present, and NO colon-prefix or -section alias leaked into the
+//     Tier-2 locked-16 (the [07-04] three-guard pattern — the plumbing namespace
+//     stays a Tier-1-only alias onto the locked 16). ---
+test('tier-contract: 16-verb bijection re-asserted — list/open/sketch/add present, no alias leak (T-08-06-01)', () => {
+  assert.equal(UX02_VERBS.length, 16, 'the locked-16 bijection must stay at exactly 16 verbs after the four bodies land');
+  for (const verb of PROMOTED_VERBS) {
+    assert.ok(
+      (UX02_VERBS as readonly string[]).includes(verb),
+      `UX02_VERBS must contain the promoted verb "${verb}" (verbs 13-16)`,
+    );
+  }
+  // No colon-prefix plumbing name and no "-section" alias may leak into Tier 2.
+  for (const v of UX02_VERBS) {
+    assert.ok(!v.includes(':'), `UX02_VERBS must not contain a colon-prefix plumbing name, got "${v}"`);
+    assert.ok(!/-section$/.test(v), `UX02_VERBS must not contain a "-section" plumbing alias, got "${v}"`);
+  }
+  // No duplicates — the set size equals the list length (a 17th verb sneaking in
+  // as a dup would be caught here too).
+  assert.equal(new Set(UX02_VERBS).size, 16, 'UX02_VERBS must contain 16 DISTINCT verbs (no duplicate/17th leak)');
+});
+
+// ============================================================================
 // Plan 07-04 — verb-shortcut + plumbing-namespace parity (UX-02 / UX-03, D-24)
 // ============================================================================
 //
