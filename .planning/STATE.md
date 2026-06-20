@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-06-20T05:42:00.172Z"
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-06-20T07:11:59.897Z"
 last_activity: 2026-06-20
 progress:
   total_phases: 11
   completed_phases: 8
   total_plans: 64
-  completed_plans: 59
+  completed_plans: 60
   percent: 73
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 08 (Style match + sketch + add + library + BYO PDF polish) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-06-20
 
@@ -96,6 +96,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 07 P04 | 12min | 2 tasks | 6 files |
 | Phase 08 P00 | 35min | 3 tasks | 9 files |
 | Phase 08 P01 | 22min | 2 tasks | 7 files |
+| Phase 08 P03 | 12min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -218,6 +219,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [08-01] deriveLibraryStatus is SYNCHRONOUS (test calls without await) — a guarded synchronous loadStateSync shim mirrors the async loadState absent-vs-corrupt classification (ENOENT→intake, any other failure→unknown)
 - [Phase ?]: [08-01] DERIVE-AT-DISPLAY: list computes each paper's lifecycle status from its authoritative STATE.json at display time, never from the stored entry.status (consulted only for the terminal archived flag) — resolves Open-Q4
 - [Phase ?]: [08-01] 'global-library' added to loadAndMigrate schemaName union (Rule 3 blocking) — the typed literal union would otherwise reject the new schemaName and break tsc
+- [Phase 08]: [08-03] pymupdfShellout honors PENSMITH_PYTHON env override (default python3) — the locked 08-00 Wave-0 RED test forces the ENOENT/null path via a nonexistent PENSMITH_PYTHON; the override is the resolved interpreter source (load-bearing test contract over the literal hardcoded-python3 action)
+- [Phase 08]: [08-03] pymupdf tmpfile bytes written via atomicWriteFile (D-07 chokepoint) not direct fs.writeFile — chose routing through the sanctioned chokepoint over a new per-file ESLint exemption so D-07 stays intact
+- [Phase 08]: [08-03] pdf-parse pin guard asserts BOTH the declared package.json pin (literal 1.1.1, no range) AND the installed require(pdf-parse/package.json).version (T-08-03-04 dual-surface drift guard)
+- [Phase 08]: [08-03] extractPdfText pymupdf fallback gates on fallbackText non-null AND >=50 non-whitespace chars — a partially-failing fitz falls through to the same WARN+degrade path as null, never returning garbage that masks the image-only signal (RSCH-05b)
 
 ### Pending Todos
 
@@ -238,6 +243,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T05:42:00.164Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-06-20T07:11:59.889Z
+Stopped at: Completed 08-03-PLAN.md
 Resume file: None
