@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import fs, { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 
 function read(rel: string): string {
   return fs.readFileSync(path.resolve(rel), 'utf-8');
@@ -379,4 +380,33 @@ test('CF-D24: CONTRIBUTING.md has Tier contract — do not skip section with loc
   assert.match(src, /prose|this section/i, 'merge-gate layer 4 (prose) must be named');
   // Phase 0 chokepoints section preserved:
   assert.match(src, /Architectural chokepoints \(Phase 0\+\)/, 'Phase 0 chokepoints section must be preserved');
+});
+
+// === pdf-parse exact-pin guard (Phase 8, 08-03, T-08-03-04) ===========
+// pdf-parse MUST stay pinned EXACT at 1.1.1. A lockfile refresh that drifts the
+// pin would break the bin/lib/pdf-text.ts sub-path import workaround (D-06
+// Pitfall #1 — only 1.1.1's lib/pdf-parse.js is known to skip the debug shim)
+// AND could silently change extraction behavior under the RSCH-05b fallback.
+// This guards BOTH the declared pin in package.json and the installed version.
+test('pdf-parse stays pinned exact at 1.1.1 (T-08-03-04 version-drift guard)', () => {
+  // 1. Declared pin in package.json must be the literal "1.1.1" (no ^/~ range).
+  const pkg = JSON.parse(read('package.json')) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  const declared = pkg.dependencies?.['pdf-parse'] ?? pkg.devDependencies?.['pdf-parse'];
+  assert.equal(
+    declared,
+    '1.1.1',
+    `pdf-parse must be pinned EXACT at "1.1.1" in package.json (found: ${String(declared)}). A range/drift breaks the D-06 sub-path import workaround and the RSCH-05b fallback contract.`,
+  );
+
+  // 2. Installed version on disk must also resolve to exactly 1.1.1.
+  const require = createRequire(import.meta.url);
+  const installed = (require('pdf-parse/package.json') as { version: string }).version;
+  assert.equal(
+    installed,
+    '1.1.1',
+    `installed pdf-parse drifted to ${installed} — re-pin to 1.1.1 (T-08-03-04).`,
+  );
 });

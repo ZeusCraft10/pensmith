@@ -92,10 +92,28 @@ export async function extractPdfText(buf: Buffer | Uint8Array): Promise<string> 
     const text: string = typeof result.text === 'string' ? result.text : '';
     const numpages: number = typeof result.numpages === 'number' ? result.numpages : 0;
     if (isImageOnlyResult(text, numpages)) {
+      // RSCH-05b: pdf-parse returned near-empty text (image-only / scanned PDF).
+      // Attempt the higher-fidelity PyMuPDF fallback ONLY here — never on every
+      // PDF (a subprocess spawn per healthy PDF would blow the budget on large
+      // research passes; T-08-03-03). The module is imported LAZILY so the
+      // child_process surface isn't loaded on the common (healthy-PDF) path.
+      const { pymupdfShellout } = await import('./pymupdf-shellout.js');
+      const fallbackText = await pymupdfShellout(input);
+      if (
+        fallbackText !== null &&
+        fallbackText.replace(/\s/g, '').length >= IMAGE_ONLY_TEXT_THRESHOLD
+      ) {
+        // PyMuPDF recovered real text from the scanned/image-only PDF.
+        return fallbackText;
+      }
+      // PyMuPDF absent (the path THIS build machine + CI exercises) or it too
+      // returned near-empty. Degrade gracefully: keep the near-empty pdf-parse
+      // text + a single WARN so the source stays usable; Pass 3 marks it
+      // UNVERIFIABLE rather than failed (D-08-AMENDED, Pitfall 5).
       // TODO(Phase 4): route through bin/lib/logger.ts (Plan 04). Using
       // console.warn for now so tests can spy via process.stderr stub.
       console.warn(
-        `extractPdfText: PDF appears to be image-only or scanned (text body <${IMAGE_ONLY_TEXT_THRESHOLD} non-whitespace chars across ${numpages} pages). Pass 3 quote verification will mark this source UNVERIFIABLE rather than failed.`,
+        `extractPdfText: PDF appears to be image-only or scanned (text body <${IMAGE_ONLY_TEXT_THRESHOLD} non-whitespace chars across ${numpages} pages); pymupdf unavailable or returned empty, continuing with near-empty text. Pass 3 quote verification will mark this source UNVERIFIABLE rather than failed.`,
       );
     }
     return text;
