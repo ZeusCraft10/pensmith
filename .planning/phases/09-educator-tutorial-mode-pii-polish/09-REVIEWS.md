@@ -193,3 +193,165 @@ HIGH_COUNT: 3
 ### gemini
 
 unavailable this cycle — `IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals` (free-tier `UNSUPPORTED_CLIENT`). Empty output; not counted toward quorum.
+
+---
+
+## Cycle 2
+
+```yaml
+phase: 9
+cycle: 2
+reviewers: [codex, claude, opencode]
+reviewers_unavailable: [gemini]
+date: 2026-06-20
+quorum: 3/4 (gemini IneligibleTierError — unavailable, consistent with cycle 1)
+current_high: 0
+prior_highs_resolved: [H1, H2, H3]
+```
+
+Re-review of the revised `09-00..09-03 PLAN.md` after the cycle-1 replan that targeted the 3 HIGH concerns. Reviewers run: **codex**, **claude**, **opencode** (quorum reached). **gemini** again failed with `IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals` (free-tier `UNSUPPORTED_CLIENT`) — unavailable, not counted toward quorum.
+
+Raw HIGH counts as reported: **codex=0, claude=0, opencode=0**. After judging, the converged count is **0 HIGH**. All three reviewers independently and explicitly marked H1, H2, and H3 as RESOLVED.
+
+### Synthesized Findings (cycle 2)
+
+#### Status of the 3 cycle-1 HIGHs — all RESOLVED (unanimous)
+
+**[RESOLVED] H1 — router.ts goal-leak / SC-2.**
+*Agreement: all three reviewers.* Verified against live source: `bin/lib/router.ts` `resolveNextAction(paperRoot: string)` currently takes ONE arg and contains ZERO `goal`/`learning`/`educator` tokens (the only `bin/lib/**` match is a `// word-count goal` comment in drafter-input.ts, which the comment-strip in the lint test removes). The replan changes the signature to a goal-AGNOSTIC `resolveNextAction(paperRoot, opts: { stopAfterResearch?: boolean } = {})` and inserts `if (opts.stopAfterResearch && existsSync(join(pDir,'RESEARCH.md'))) return { verb:'status', reason:'done' }` between the RESEARCH.md and OUTLINE.md checks (reuses the existing terminal; no RouterDecision widening). The goal→behavior mapping lives ONLY in the new `bin/cli/goal.ts:stopAfterResearchFor(goal)` (CLI tier, not scanned). 09-03 Task 2 explicitly REMOVES `readGoalBestEffort`, the `goal === 'learning'` branch, the `const LEARNING` dodge, and the router lint exclusion. 09-00 Task 2's `lint-tutorial-no-branch.test.ts` now scans ALL `bin/lib/**` INCLUDING router.ts (only `tutorial.ts` excluded), uses one authoritative pattern matching the BARE `goal`/`learning`/`educator` token (defeats const-hoist + helper-extraction), strips comments first, and is non-skip. The 4 real callers (pensmith.ts:307, next.ts:32, resume.ts:58, status.ts:66 — all confirmed present in source) read goal and pass the flag; draft/both omit it (default `{}` → no stop → byte-identical routing). Genuine DI, not a renamed goal read.
+
+**[RESOLVED] H2 — hard-stop kills per-claim provenance / SC-1.**
+*Agreement: all three reviewers.* Learning-mode provenance no longer depends on `section.written` events. 09-02 Task 1 adds `_emitResearchProvenance(payload)` rendering one per-claim line per source from a `research.done` payload. 09-03 Task 2's `goal.ts:renderLearningEndState(paperRoot)` builds that payload from `LIBRARY.json` + `RESEARCH.md` `supports:` lines at the hard-stop, emits `research.done`, flushes, and prints a learning-appropriate end-state message (also addressing cycle-1 M8). 09-00 establishes the RED contract: ≥1 per-claim line naming a citekey + its supported claim, asserted with NO `section.written` ever emitted. goal=both/draft section path unchanged.
+
+**[RESOLVED] H3 — PII proven only by ordering / SC-3.**
+*Agreement: all three reviewers.* Verified against live source: the model-bound payload seam is `interpolate(prompt, { seed })` in intake.ts (Tier-1 path, line 269). The replan binds `const egressSeed = piiRedact ? redacted : rawAnswers` and feeds `egressSeed` into `interpolate(...)`. 09-00 Task 3's `intake-pii-egress.test.ts` captures the interpolated payload, seeds `PII_EGRESS_SENTINELS`, asserts NO raw sentinel survives AND that `[REDACTED:...]` tags ARE present (defeats a vacuous pass). The plan correctly notes the test FAILS for a verbatim implementer who passes `rawAnswers` while the ordering grep still passes — exactly the gap H3 closes. Ordering grep retained as the necessary-but-insufficient companion.
+
+#### Remaining concerns (MEDIUM/LOW — none HIGH)
+
+- **[MEDIUM] RESEARCH.md→payload parse glue is thinly tested (converged: codex + claude + opencode).** The RESEARCH-stage test feeds a hand-built `research.done` payload to the subscriber, so the `### <citekey>` / `supports:`-line → `{citekey, supportedClaim}` parse inside `renderLearningEndState` lacks a dedicated end-to-end assertion. A parse bug (e.g., empty `supportedClaim`) could ship green. Not HIGH: fixtures pin the shape, the render contract is tested, and `renderLearningEndState` is non-fatal. Recommend an execution-level parse test in 09-03.
+- **[MEDIUM] `renderLearningEndState` is not idempotent across invocations (claude).** Every status-bearing command re-fires the stop and appends another provenance block via `atomicAppendFile` with no dedup, so TUTORIAL.md grows on each run. Not HIGH: SC-1 needs only ≥1 per-claim line; determinism is required only for diffPii. Recommend overwrite semantics for the single research end-state block.
+- **[MEDIUM] PII diff printed for review but not a blocking confirmation gate (codex).** Adjudicated DOWN: the "approval gates default-on" non-negotiable is scoped to *outline approval and export confirmation* only — NOT PII preview. PII redaction is opt-in; SC-3 (redacted content crosses the boundary) is already proven by the egress test. UX hardening, not an SC/non-negotiable failure.
+- **[MEDIUM] `INTAKE.raw.local` persists on disk (opencode).** Accepted per threat model: opt-in, double-gitignored (`**/INTAKE.raw.local` + `.paper/`).
+- **[LOW] PII redaction seam is Tier-2 (CLI) only (claude).** Architecturally appropriate — Tier-1 has no discrete pre-API payload seam. Worth a scope note; no code change.
+- **[LOW] skip-guards / lint couple to identifier names (claude); `\bgoal\b` future false-positive (opencode); export-exclusion md-only (codex); goal=both section-stage depth (opencode); clean-tree assumption asserted-not-shown (claude).** All polish; none affect an SC.
+
+#### Judge notes (cycle 2)
+
+- All three usable reviewers reported HIGH_COUNT: 0. The only judging move was downgrading codex's PII-gate item to MEDIUM against the actual (narrower) scope of the "approval gates default-on" non-negotiable.
+- Cycle-1 already-adjudicated MEDIUMs (M1 config-persist robustness, M2 dead prompts, M5 lint breadth, M6 workflow recursion, M7 diffPii redacted arg, M8 status/done messaging, M9 planPath exposure) were either addressed by the replan (M1 visible WARN + in-memory goal; M5 single authoritative bare-token pattern; M6 recursive `workflows/**`; M8 learning message in goal.ts) or remain MEDIUM/LOW; none made worse, none re-raised as HIGH.
+- gemini remains structurally unavailable (free-tier UNSUPPORTED_CLIENT); 3/4 quorum holds, consistent with all prior cycles.
+
+### Per-Reviewer Raw (cycle 2)
+
+#### codex (HIGH_COUNT: 0)
+
+```
+[LOW] H1 is RESOLVED. The replan keeps `bin/lib/router.ts` goal-unaware: `resolveNextAction(paperRoot, opts?: { stopAfterResearch?: boolean })`, with goal mapping isolated in `bin/cli/goal.ts` via `stopAfterResearchFor(goal)`. The zero-branch invariant scans all `bin/lib/**` including `router.ts`, with only `tutorial.ts` excluded. The prior router exclusion and goal-read dodge are explicitly removed.
+
+[LOW] H2 is RESOLVED. The learning path no longer depends on section events. `renderLearningEndState()` emits `research.done` at the hard-stop, and `TutorialSubscriber` renders per-claim provenance from `LIBRARY.json` plus `RESEARCH.md` `supports:` lines. The RED test requires at least one citekey plus supported claim with no `section.written` event, which directly covers the old contradiction.
+
+[LOW] H3 is RESOLVED. The plan now binds `egressSeed = piiRedact ? redacted : rawAnswers` and requires `egressSeed` to be passed into `interpolate(...)`. The new egress test captures the model-bound payload and asserts raw sentinels are absent while `[REDACTED:...]` tags are present. That is a content proof, not just an ordering proof.
+
+[MEDIUM] The learning provenance design depends on real `RESEARCH.md` files containing parseable `supports:` claim lines. The fixtures and tests pin that shape, and `renderLearningEndState()` consumes it, but the plans do not modify or explicitly verify the actual research workflow output contract. If existing research output already has this structure, this is fine; if not, goal=learning could produce an empty or degraded tutorial in real projects despite fixture tests passing.
+
+[MEDIUM] The PII diff is “printed for review,” but the plan does not clearly say the default approval gate pauses before proceeding unless `--yolo` is used. Since approval gates default-on is a non-negotiable, implementation should make the review step an actual confirmation gate, not just console output.
+
+[LOW] The export-exclusion test is scoped to markdown export. The plan’s structural argument is credible because `exportDraft` reads only `inputPath`, but if other export paths have separate wrapping/conversion behavior, adding coverage for those formats would reduce residual risk.
+
+HIGH_COUNT: 0
+```
+
+#### claude (HIGH_COUNT: 0)
+
+```
+# GSD Phase 9 — Cycle 2 Plan Review
+
+I read all four revised plans in full. Verdicts on the three prior HIGHs, then remaining/new concerns.
+
+## Adjudication of the 3 prior HIGHs
+
+### H1 — Router goal-leak / SC-2 → **RESOLVED**
+The replan genuinely removes the dodge rather than renaming it.
+- 09-03 Task 2 changes `resolveNextAction(paperRoot, opts: { stopAfterResearch?: boolean } = {})` — a plain boolean behavior flag. The stop is `if (opts.stopAfterResearch && existsSync(join(pDir,'RESEARCH.md'))) return { verb:'status', reason:'done' }`, reusing the existing terminal (no RouterDecision widening).
+- The text explicitly states: "REMOVE any prior plan's `readGoalBestEffort`, `goal === 'learning'` branch, `const LEARNING` dodge, and router exclusion — none of those exist anymore." The goal→behavior mapping lives ONLY in `bin/cli/goal.ts:stopAfterResearchFor(goal)` (`goal === 'learning'`), which is in the unscanned CLI tier.
+- 09-00 Task 2 makes `lint-tutorial-no-branch.test.ts` scan ALL of `bin/lib/**` (incl router.ts), only `tutorial.ts` excluded, with one authoritative pattern matching the **bare** `\bgoal\b|\blearning\b|\beducator\b` token (defeats const-hoist/helper-extraction), comments stripped first. This is a non-skip invariant that must pass on the clean tree.
+- No regression: draft/both pass `{}`/`stop=false` → default `{}` → identical routing. This is genuine dependency injection, not a goal read. **Resolved.**
+
+### H2 — Hard-stop kills per-claim provenance / SC-1 → **RESOLVED**
+The architecture no longer depends on section events for learning provenance.
+- 09-02 Task 1 adds `_emitResearchProvenance(payload)` rendering one per-claim line per source (`**${citekey}** supports the claim that ${supportedClaim}.`) from a `research.done` payload, asserted with **no `section.written` ever emitted**.
+- 09-03 Task 2 adds `goal.ts:renderLearningEndState` which builds the `research.done` payload from `LIBRARY.json` + `RESEARCH.md` `supports:` lines at the hard-stop, emits, flushes, then prints a learning-appropriate message (addressing the M8 "ready to export" mismatch in the action callers).
+- 09-00 establishes the RED contract: ≥1 per-claim line naming a citekey + its supported claim, no section written. The data source (research-stage) genuinely exists at the hard-stop. **Resolved.**
+
+### H3 — PII proven only by ordering / SC-3 → **RESOLVED**
+The egress test now proves content, not order.
+- 09-03 Task 1 binds `const egressSeed = piiRedact ? redacted : rawAnswers` and passes `egressSeed` into `interpolate(...)` in **both** the noLlm and Tier-1 branches.
+- 09-00 Task 3's `intake-pii-egress.test.ts` captures the interpolated payload, seeds `PII_EGRESS_SENTINELS`, asserts **no raw sentinel survives** AND that `[REDACTED:...]` tags **are present**. The second assertion is important: it defeats a vacuous pass (empty/uncaptured payload would fail the "tag present" check), so an ESM-monkeypatch-that-captured-nothing can't silently pass. The plan correctly notes this test FAILS for a verbatim implementer who passes `rawAnswers`, while the ordering grep still passes — exactly the gap. Ordering grep retained as the necessary-but-insufficient companion. **Resolved.**
+
+## Remaining / new concerns (none HIGH)
+
+- **[MEDIUM] `renderLearningEndState` is not idempotent across invocations.** For goal=learning, every `pensmith`/`next`/`resume` invocation re-fires (stop=true whenever RESEARCH.md exists → status/done → `renderLearningEndState`), and the subscriber appends via `atomicAppendFile` with no dedup/truncate. Re-running in learning mode accumulates duplicate "Research Provenance" blocks in TUTORIAL.md. SC-1's "≥1 per-claim line" still holds and determinism is only required for diffPii, so this is not HIGH — but the sidecar grows on each status-bearing command. Consider overwrite semantics for the single research end-state block.
+
+- **[MEDIUM] The goal.ts parse glue is only pinned at the subscriber layer.** The `tutorial-provenance` RESEARCH-stage test feeds a hand-built `research.done` payload; `stopAfterResearchFor` and the `RESEARCH.md` `supports:`-line → `{citekey, supportedClaim}` parsing inside `renderLearningEndState` lack a dedicated end-to-end assertion (config goal → router stop → parse → TUTORIAL.md). 09-03's acceptance claims this behavior but routes the proof through the subscriber-level test. A parse bug (e.g., empty `supportedClaim`) could ship green. Architecture is sound; verification is thin.
+
+- **[LOW] PII redaction seam is Tier-2 (CLI) only.** The redact+egressSeed mechanism lives in `bin/cli/intake.ts`; the Tier-1 plugin intake path isn't covered. This is architecturally appropriate (a conversational plugin tier has no discrete pre-API payload seam — the orchestrating model already holds the input), but SC-3's literal "before ANY LLM call" is met only for the programmatic tier. Worth an explicit scope note in the summary rather than a code change.
+
+- **[LOW] `piiEgressWired()` skip-guard couples to a variable name.** It greps for `redactPii` plus "interpolate fed a redacted variable." A differently-named binding than `egressSeed` could leave the test inert. The "[REDACTED:...] present" assertion prevents a vacuous pass *when it runs*, but the guard could keep it from running. Minor; same skip-predicate fragility class as the established intake-style-producer pattern.
+
+- **[LOW] Clean-tree assumption for the non-skip lint invariant.** 09-00's claim that the entire existing `bin/lib/**` already contains zero bare `goal`/`learning`/`educator` tokens is verified only at execution time. If any legitimate pre-existing identifier matches, 09-00 Task 2 fails loudly (good failure mode), but the plan asserts cleanliness without showing the grep.
+
+## Summary
+All three prior HIGHs are genuinely resolved — H1 via real goal-agnostic DI with the invariant now scanning router.ts, H2 via research-stage `research.done` provenance independent of sections, H3 via a content-asserting egress test with a non-vacuous guard. Remaining items are MEDIUM/LOW (idempotency of the learning end-state render, thin coverage of the parse glue, Tier-1 PII scope).
+
+HIGH_COUNT: 0
+```
+
+#### opencode (HIGH_COUNT: 0)
+
+```
+## Cycle 2 Plan Review
+
+### H1 (Router goal-leak / SC-2) — **RESOLVED** ✓
+
+The plan delivers a genuinely goal-agnostic DI architecture:
+- `resolveNextAction(paperRoot, { stopAfterResearch? })` — the param is a plain boolean behavior flag, NOT a goal enum. Router.ts contains zero `goal`/`learning`/`educator_mode` tokens (confirmed: the plan explicitly removes `readGoalBestEffort`, the `goal === 'learning'` branch, and the `const LEARNING` dodge).
+- `bin/cli/goal.ts` is the sole home of `goal === 'learning'` mapping, inside `stopAfterResearchFor()`. This file is in the CLI tier (not scanned by the invariant).
+- The zero-branch invariant (`lint-tutorial-no-branch.test.ts`) scans ALL of `bin/lib/**` INCLUDING `router.ts` — no exclusion. Only `tutorial.ts` is exempted. The pattern `\bgoal\b|\blearning\b` catches const-hoisting, helper-extraction, and enum-rename evasion.
+- Comment stripping before matching prevents doc-comment false positives.
+
+### H2 (Hard-stop kills per-claim provenance / SC-1) — **RESOLVED** ✓
+
+Per-claim provenance for `goal=learning` is produced from RESEARCH-stage data before any section is written:
+- `research.done` event carries `sources: Array<{ citekey, supportedClaim }>` built by `renderLearningEndState` in `goal.ts` from `LIBRARY.json` (SourceCandidate[]) + `RESEARCH.md` (`supports:` claim lines).
+- `TutorialSubscriber._emitResearchProvenance()` renders `**${citekey}** supports the claim that ${supportedClaim}.` — per-claim granularity.
+- The test (`tutorial-provenance.test.ts`) asserts ≥1 citekey+claim line in TUTORIAL.md with `NO section.written` ever emitted. `goal=both/draft` section path unchanged.
+
+### H3 (PII proven only by ordering / SC-3) — **RESOLVED** ✓
+
+Egress-by-content replaces the ordering-only gap:
+- `egressSeed = piiRedact ? redacted : rawAnswers` is the value fed to `interpolate(...)` — the model-bound payload is the REDACTED text.
+- `intake-pii-egress.test.ts` captures the live interpolated payload (via spy on `interpolate` or http mock), seeds `PII_EGRESS_SENTINELS` (fake email/ssn/name), asserts NO raw sentinel survives AND `[REDACTED:...]` tags ARE present. The test explicitly FAILS if an implementer passes `rawAnswers` to interpolate.
+- Ordering grep (`intake-pii-ordering.test.ts`) retained as a necessary-but-insufficient companion.
+
+### Remaining/New HIGH Concerns
+
+**None.** No remaining or new HIGH concerns.
+
+### Medium/Low Observations
+
+[MEDIUM] `renderLearningEndState`'s RESEARCH.md parsing (`### <citekey>` → extract `supports:` line) has no dedicated end-to-end integration test. The tutorial-provenance test directly feeds a pre-built payload to the subscriber (testing the render, not the parse-then-render pipeline). A malformed RESEARCH.md silently degrades via try/catch non-fatal. The plan's contracts cover the subscriber render but not the RESEARCH.md→payload build step.
+
+[MEDIUM] The lint pattern `\bgoal\b` could false-positive on a legitimate non-educator variable named `goal` added to Foundation in the future. Currently the codebase is clean and the invariant is load-bearing for SC-2 enforcement. Acceptable as-designed since the test strips comments and only matches code.
+
+[LOW] `goal=both` TUTORIAL.md contains only section-stage provenance (citekeys per section from `assigned_sources`), not RESEARCH-stage per-claim provenance. This satisfies SC-1 ("TUTORIAL.md sidecar") but means the "both" mode tutorial has less teaching depth than `learning` mode. Not a HIGH since the requirement only mandates the sidecar, not per-claim depth for `both`.
+
+[MEDIUM] `INTAKE.raw.local` being defensive (gitignored via both `**/INTAKE.raw.local` and the existing `.paper/` line) is good, but the raw local file persists on disk indefinitely. If the user's `.gitignore` is misconfigured or they use `git add --force`, raw PII could still leak. Acceptable per the threat model (opt-in, documented).
+
+---
+
+**HIGH_COUNT: 0**
+```
+
+#### gemini
+
+unavailable this cycle — `IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals` (free-tier `UNSUPPORTED_CLIENT`). Empty output; not counted toward quorum.
