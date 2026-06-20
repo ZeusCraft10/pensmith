@@ -246,6 +246,25 @@ export default [
     },
   },
 
+  // === Path chokepoint EXEMPTION for Phase 9 educator/tutorial + PII tests ===
+  // These four suites override process.env.LOCALAPPDATA / XDG_DATA_HOME / HOME
+  // to redirect pensmithDataDir() / paperDir() into a per-test tmpdir — the
+  // IDENTICAL isolation pattern as the Phase-8 group above (and library/state).
+  // intake-pii-{ordering,egress} drive the live intake verb (PII redaction +
+  // config.toml persistence) in a tmp root; tutorial-provenance + goal-routing
+  // seed a tmp paper. Scoped to these four files only.
+  {
+    files: [
+      'tests/intake-pii-ordering.test.ts',
+      'tests/intake-pii-egress.test.ts',
+      'tests/tutorial-provenance.test.ts',
+      'tests/goal-routing.test.ts',
+    ],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
+
   // === atomic-write + thin-shim EXEMPTION for tests/lint-thin-shim.test.ts (Phase 2, Wave 1) ===
   // tests/lint-thin-shim.test.ts (Test 2) MUST write a temporary copy of the
   // D-09 fixture under mcp/ so the file-scoped no-restricted-imports rule fires

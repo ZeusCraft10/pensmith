@@ -58,9 +58,20 @@ function mkProjectRoot(): string {
 }
 
 /**
- * Run intake with `interpolate` spied. Returns every payload string interpolate
- * produced during the run. The spy wraps the REAL interpolate so the verb's
- * behavior is unchanged — we only RECORD what crossed the egress seam.
+ * Run intake with the model-bound `interpolate` spied. Returns every payload
+ * string interpolate produced during the run. The spy wraps the REAL
+ * interpolate so the verb's behavior is unchanged — we only RECORD what crossed
+ * the egress seam.
+ *
+ * INTERCEPTION (runtime-portable): native ESM module namespaces are SEALED
+ * under Node 20.18+/24 — `Object.defineProperty(promptLoader, 'interpolate', …)`
+ * throws "Cannot redefine property" and an assignment is a spec no-op, so the
+ * prompt-loader export cannot be monkeypatched from outside. intake therefore
+ * routes its model-bound interpolate through an in-module seam
+ * (`__setInterpolateForTest`) that wraps the REAL prompt-loader interpolate —
+ * the only interception point that observes the EXACT payload intake hands the
+ * model. This still captures the LIVE egress by content (H3), not merely the
+ * source ordering (which intake-pii-ordering.test.ts covers).
  */
 async function runIntakeCapturingEgress(
   cwd: string,
@@ -69,6 +80,7 @@ async function runIntakeCapturingEgress(
   const captured: string[] = [];
   const promptLoader = await import('../bin/lib/prompt-loader.js');
   const realInterpolate = promptLoader.interpolate;
+  const intake = await import('../bin/cli/intake.js');
 
   // Spy: record the interpolated payload AND the raw vars values (both are
   // candidate egress strings). Then delegate to the real implementation.
@@ -78,20 +90,16 @@ async function runIntakeCapturingEgress(
     captured.push(out);
     return out;
   };
-  // Patch the live module binding. ESM named exports are configurable in the
-  // tsx loader; if not writable in a future runtime this throws and the test
-  // surfaces it rather than silently capturing nothing.
-  Object.defineProperty(promptLoader, 'interpolate', { value: spy, configurable: true });
+  const restore = intake.__setInterpolateForTest(spy);
 
   const prevCwd = process.cwd();
   process.chdir(cwd);
   try {
-    const { intakeCommand } = await import('../bin/cli/intake.js');
-    const run = (intakeCommand as { run: (ctx: { args: Record<string, unknown> }) => Promise<unknown> }).run;
+    const run = (intake.intakeCommand as { run: (ctx: { args: Record<string, unknown> }) => Promise<unknown> }).run;
     await run({ args });
   } finally {
     process.chdir(prevCwd);
-    Object.defineProperty(promptLoader, 'interpolate', { value: realInterpolate, configurable: true });
+    restore();
   }
   return captured;
 }
