@@ -165,6 +165,33 @@ export function loadCassetteFile(adapter: string, basename: string): Cassette[] 
 }
 
 /**
+ * Merge EVERY committed cassette JSON in tests/fixtures/cassettes/<adapter>/
+ * into one flat entry array. Used by the offline adapters when a request must
+ * resolve against a DOI/query that may live in ANY committed cassette — not
+ * just one hard-coded basename (ERGO-06 `add <doi>`: the committed add-doi.json
+ * carries 10.1038/nphys1170, distinct from works-attention.json). Returns null
+ * when the adapter dir does not exist; throws (loudly) on a corrupt cassette so
+ * CI never silently degrades to "no data". Order follows readdirSync (locale-
+ * sorted on most platforms) — adapters that need a deterministic first-match
+ * should path-match a specific entry rather than rely on dir order.
+ */
+export function loadCassetteDir(adapter: string): Cassette[] | null {
+  const dir = join(CASSETTES_ROOT, adapter);
+  if (!existsSync(dir)) return null;
+  const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+  const out: Cassette[] = [];
+  for (const f of files) {
+    const raw = readFileSync(join(dir, f), 'utf8');
+    const parsed = JSON.parse(raw) as Cassette[];
+    if (!Array.isArray(parsed)) {
+      throw new Error(`Cassette ${join(dir, f)} is not a JSON array (got ${typeof parsed})`);
+    }
+    out.push(...parsed);
+  }
+  return out;
+}
+
+/**
  * Register nock interceptors for every cassette in
  * tests/fixtures/cassettes/<adapter>/. Used by the cron-refresh tooling
  * (Plan 09) to ensure existing cassettes still apply during re-record

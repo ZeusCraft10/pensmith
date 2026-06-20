@@ -17,7 +17,7 @@
 // gracefully when a single adapter fails.
 
 import { fetch as httpFetch } from '../http.js';
-import { isOfflineMode, loadCassetteFile, type Cassette } from '../http-mock.js';
+import { isOfflineMode, loadCassetteDir, type Cassette } from '../http-mock.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -88,8 +88,11 @@ export async function search(
   const limit = opts.limit ?? 20;
 
   // Offline path: serve from cassette (PR-time CI default — see http-mock.ts header).
+  // Scan EVERY committed crossref cassette (not just works-attention) so a query
+  // hydrated by add.ts (ERGO-06 PDF path) resolves against whichever cassette
+  // carries it (e.g. add-doi.json).
   if (isOfflineMode()) {
-    const cassette = loadCassetteFile('crossref', 'works-attention');
+    const cassette = loadCassetteDir('crossref');
     if (!cassette) return [];
     const searchEntry = cassette.find(
       (c) => c.method === 'GET' && c.path.includes('/works?query='),
@@ -117,7 +120,10 @@ export async function search(
 
 export async function fetchById(doi: string): Promise<SourceCandidate | null> {
   if (isOfflineMode()) {
-    const cassette: Cassette[] | null = loadCassetteFile('crossref', 'works-attention');
+    // Scan EVERY committed crossref cassette so a DOI carried by a non-default
+    // cassette (e.g. add-doi.json → 10.1038/nphys1170 for ERGO-06 `add <doi>`)
+    // resolves by direct path-match without a per-DOI basename lookup.
+    const cassette: Cassette[] | null = loadCassetteDir('crossref');
     if (!cassette) return null;
     // First try a direct path-match cassette for this DOI.
     const direct = cassette.find(

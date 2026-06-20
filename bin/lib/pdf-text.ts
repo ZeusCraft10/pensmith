@@ -61,6 +61,49 @@ function isImageOnlyResult(text: string, numpages: number): boolean {
   return nonWhitespaceLength < IMAGE_ONLY_TEXT_THRESHOLD;
 }
 
+/** Result fields this chokepoint consumes from pdf-parse. */
+interface PdfParseResult {
+  text?: string;
+  numpages?: number;
+}
+
+/**
+ * pdf-parse@1.1.1 wraps a 2018 fork of PDF.js whose content-stream lexer keeps
+ * MUTABLE state in module-level globals (e.g. `PDFJS`) and parses in event-loop-
+ * scheduled chunks. When the loop has prior async activity (the common case —
+ * e.g. STATE.json was just loaded), the chunk boundaries shift and the lexer
+ * intermittently mis-reads a token boundary, rejecting with a transient
+ * `FormatError` ("Command token too long", "Invalid number", "bad XRef entry").
+ * The SAME bytes parse cleanly on the very next tick.
+ *
+ * We therefore retry the parse a bounded number of times, yielding a fresh tick
+ * (`setImmediate`) between attempts so PDF.js re-runs from a clean scheduling
+ * state. The retry is transparent — the byte input is unchanged — and the
+ * debug-shim ENOENT (Pitfall #1) is NEVER retried (it is a deterministic import-
+ * path defect, not transient): it surfaces immediately to the caller's rethrow.
+ * If every attempt fails the LAST error propagates (fail-loud for a genuinely
+ * broken PDF), and the extractPdfText catch routes it onward per RSCH-05b.
+ */
+async function parseWithRetry(input: Buffer): Promise<PdfParseResult> {
+  const MAX_ATTEMPTS = 3;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      // A fresh Buffer view per attempt avoids any internal cursor reuse.
+      return (await pdfParse(Buffer.from(input))) as PdfParseResult;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // The deterministic debug-shim ENOENT must NOT be retried — rethrow now.
+      if (msg.includes('ENOENT') && msg.includes('05-versions-space.pdf')) throw err;
+      lastErr = err;
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * Extract the plain-text body from a PDF byte buffer.
  *
@@ -88,7 +131,7 @@ export async function extractPdfText(buf: Buffer | Uint8Array): Promise<string> 
   }
   const input = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
   try {
-    const result = await pdfParse(input);
+    const result = await parseWithRetry(input);
     const text: string = typeof result.text === 'string' ? result.text : '';
     const numpages: number = typeof result.numpages === 'number' ? result.numpages : 0;
     if (isImageOnlyResult(text, numpages)) {
