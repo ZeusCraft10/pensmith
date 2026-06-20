@@ -30,6 +30,16 @@ mcp/__fixtures__/
 # ~/.pensmith/ is the global library — outside the repo, listed for awareness only.
 .paper/
 
+# Phase 9 tutorial/PII outputs
+# The .paper/ line above already ignores these (they live under .paper/), but we
+# list them DEFENSIVELY with **/ globs so the guarantee survives if .paper/ is
+# ever un-ignored — and so RESEARCH Pitfall 7 (TUTORIAL.md not gitignored) is
+# structurally satisfied. TUTORIAL.md is the educator-mode learning artifact;
+# INTAKE.raw.local holds UNREDACTED intake answers (PII opt-in) and must NEVER
+# be committed.
+**/TUTORIAL.md
+**/INTAKE.raw.local
+
 # Local-only
 .env
 .env.local
