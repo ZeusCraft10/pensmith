@@ -1,10 +1,12 @@
 ---
 phase: 10
-cycle: 1
+cycle: 2
 reviewers: [codex, claude, opencode]
 reviewers_unavailable: [gemini]
 date: 2026-06-20
-current_high: 2
+current_high: 1
+cycle_1_high: 2
+cycle_2_high: 1
 ---
 
 # Phase 10 — Cross-AI Plan Review (Cycle 1)
@@ -152,5 +154,113 @@ HIGH_COUNT: 1
 ```
 
 ### gemini
+
+unavailable this cycle (`IneligibleTierError: UNSUPPORTED_CLIENT` — free-tier Gemini Code Assist client no longer supported; attempted, produced empty output).
+
+---
+
+## Cycle 2
+
+**Reviewers run:** codex, claude, opencode (3-way quorum). **gemini unavailable again** (`IneligibleTierError: UNSUPPORTED_CLIENT` — free-tier Gemini Code Assist client no longer supported; attempted, empty output).
+
+Re-review of the revised plans after cycle 1 addressed 2 HIGH (H1 Zotero used-as-source via injectable client seam + normalization + tests; H2 renderApa mandatory delegation to renderStyle('apa')).
+
+Raw HIGH_COUNT per reviewer: codex=1, claude=1, opencode=1.
+After careful judging (all three independently found the SAME single new HIGH; full agreement): **current HIGH = 1**.
+
+### Synthesized Findings (cycle 2)
+
+#### Prior-HIGH resolution status
+
+- **H2 (renderApa double-registration) — RESOLVED.** Unanimous (codex, claude, opencode). 10-01 makes `renderApa` MANDATORILY delegate to `renderStyle(entries,'apa')`; deletes the standalone `apaRegistered` boolean + `ensureApaTemplate`; routes all registration through the single Map-guarded `ensureStyleTemplate` (sole registrar of `'pensmith-apa'`); re-points `_resetApaTemplateForTest` to `registeredStyles.delete('apa')` so it stays in lockstep with `_resetStyleTemplatesForTest`; and pins it with a same-process `renderApa`↔`renderStyle('apa')` byte-parity + no-collision regression test (10-01 Task 2). The "either is acceptable" defect (PATTERNS.md line 168) is explicitly overridden. The second `templates.add('pensmith-apa')` collision is genuinely eliminated. **Confirmed resolved.**
+
+- **H1 (Zotero MCP used-as-source) — INTENT delivered, but the executable PROOF is broken by a 10-00 ↔ 10-03 contract contradiction (re-raised as new HIGH H3).** The cycle-1 fix added the right pieces (injectable `ZoteroClient`/`ZoteroItem` seam, `setZoteroClientForTest`, `toCandidate` normalizer mirroring semanticscholar, D-14 `'zotero-mcp'` variant, registry wiring, 10-04 production client wiring). Production-path used-as-source works because a real configured Zotero makes `isZoteroMcpPresent()` true. BUT the *tested, executable* proof the cycle-1 fix promised does not run as specified — see H3. So H1 is resolved on paper / in production, **not in its CI-executable test**, which was the whole point of the cycle-1 fix.
+
+#### HIGH (genuine SC failure)
+
+- **[HIGH] H3 — 10-00 ↔ 10-03 gating contradiction: the Zotero "used-as-source" proof test cannot pass on CI as written (SC3 executable coverage broken; blocks the required all-green `npm run check`).**
+  *Plans 10-00 Task 2 leg (c) vs. 10-03 Task 1 STEP B.* **Full agreement: codex (HIGH), claude (HIGH), opencode (HIGH).**
+  10-00's injected-client test (the H1 executable proof) runs on CI where `isZoteroMcpPresent()` is filesystem-gated to **false** (the plan says so explicitly: "unforceable from env on CI"). To still reach the pull→normalize path, 10-00 Task 2 (lines 218–220) mandates the 10-03 adapter use a pull-gate of **`isZoteroMcpPresent() || _client !== null`**, with `isZoteroAuthenticated()` requiring only `ZOTERO_API_KEY`. But 10-03 Task 1 STEP B (lines 214–223) specifies the OPPOSITE: `if (!isZoteroMcpPresent()) return [];` as the FIRST gate (no `|| _client` override), AND `isZoteroAuthenticated()` defined as `isZoteroMcpPresent() && !!process.env['ZOTERO_API_KEY']` — a SECOND gate that is also false on CI. Following 10-03's literal code, `search()` returns `[]` before reaching the injected client, so the test's `≥1 normalized SourceCandidate (.source==='zotero-mcp')` assertion FAILS. Because 10-04 requires a fully-green `npm run check` as the phase gate, the contradiction either fails the phase or forces an autonomous executor to silently deviate from 10-03's spec. The two plans disagree on the single most load-bearing piece of the H1 fix.
+  **Fix direction:** make 10-03 STEP B's gating IDENTICAL to the contract 10-00's test encodes — pull-gate `if (!isZoteroMcpPresent() && !_client) return [];`, and decouple the auth check from FS presence when a client is injected (e.g. `isZoteroAuthenticated()` = `_client !== null ? !!process.env['ZOTERO_API_KEY'] : isZoteroMcpPresent() && !!process.env['ZOTERO_API_KEY']`, or a separate pull-path auth predicate that only needs the key). State that single gate definition in ONE place both plans cite, so the executor cannot implement the failing variant. (This is the minimal change; it preserves the absent/unauth/no-client → `[]` contract on every other path.)
+
+#### MEDIUM (real risk; not a goal-threat)
+
+- **[MEDIUM] M8 — Doctor tri-state PASS branch (configured+authenticated) remains unprovable on CI.** *10-03 Task 2.* codex + claude. `isZoteroAuthenticated()`'s FS-presence coupling means the probe's PASS path (and the adapter's authenticated path in isolation) can never be exercised on CI; 10-03 Task 2 correctly tests only ABSENT + the load-bearing no-leak sentinel. The no-leak non-negotiable IS proven; only the PASS branch is unverified. (Carried over from cycle-1 M5; still MEDIUM. A presence-injection seam for the probe, or documenting PASS as manual-only, would close it. NOTE: the H3 fix that decouples auth-from-presence on the client path would ALSO make this probe branch forceable if extended to the probe.)
+
+- **[MEDIUM] M9 — `ris-write.ts` duplicates `CslAuthor`/`CslEntry`/`parseAuthor`/`toCsl` verbatim from `bibtex-write.ts`.** *10-02.* opencode. Future CSL-mapping changes must touch both files. Maintenance liability, not a goal-threat; the plan deliberately chose verbatim-copy for structural fidelity to a tested analog, which is defensible.
+
+#### LOW (nits / quality)
+
+- **[LOW] L7 — `setZoteroClientForTest` is the production injection point (10-04 wires the real MCP client through it) but the `*ForTest` name makes the production contract look accidental.** codex + claude. A clearer name or production alias would reduce future misuse. (10-03 already documents in the header that it is the production seam.)
+- **[LOW] L8 — `.csl` procurement (10-00 Task 1) has no pinned commit/checksum** — committed bytes are whatever `styles-distribution@master` served. The XML/404 validator catches a bad fetch loudly, and once committed the bytes are frozen, so this is reproducibility hygiene, not a goal-threat (carried from cycle-1 L2). codex/claude.
+- **[LOW] L9 — Cross-plan test coupling:** 10-00 leg (c) encodes 10-03's internal gate logic as a test contract in a different plan — brittle even after H3 is fixed; a single shared interface note would reduce coupling. claude.
+- **[LOW] L10 — `CUSTOM_APA_NAME` may become dead code** after `renderApa` delegates (10-01 says "MAY keep" it; nothing imports it). opencode.
+- **[LOW] L11 — zero-trace export test mechanism assumed, not confirmed:** 10-02 claims the test scans artifacts for the `'pensmith'` string (so a new `.ris` is covered); if it instead enumerates expected filenames, the `.ris` would trip it. Worth a one-line confirmation. opencode.
+
+#### Adjudication notes (downgrades / dismissals)
+
+- Cycle-1 H1 and H2 are **not** re-counted as current HIGHs: H2 is fully resolved; H1's residual risk is captured precisely by H3 (the proof-doesn't-run defect), not double-counted.
+- Cycle-1 MEDIUMs M1 (resolveStyleName vs disciplines.json two-sources-of-truth), M2 (stale `.ris` after `pensmith add`), M3 (8th-adapter enumeration), M4 (`risCopied` required-field consumers), M6 (compile/export `citation_style` wiring), M7 (render-time locale fetch) were raised in cycle 1 and are NOT re-escalated by cycle-2 reviewers; they remain previously-adjudicated MEDIUM/LOW and out of the current HIGH count.
+- opencode's L11 (zero-trace mechanism) and M9 (duplication) are genuine but non-goal-threatening; kept at LOW/MEDIUM.
+
+### Per-Reviewer Raw (cycle 2)
+
+#### codex (HIGH_COUNT: 1)
+
+```
+H1 is not resolved. H2 is resolved.
+
+- [HIGH] H1 remains broken because the revised plans contradict themselves on the injected-client presence path. 10-00 correctly says the fake injected client must be treated as sufficient presence for CI: isZoteroMcpPresent() || _client !== null. But 10-03 Task 1 then instructs the actual adapter to do `if (!isZoteroMcpPresent()) return []` before checking auth/client, and isZoteroAuthenticated() also returns isZoteroMcpPresent() && !!ZOTERO_API_KEY. On CI, where filesystem presence is false, the injected-client test can never reach normalization. That means the executable used-as-source proof still fails or gets "fixed" only by deviating from the implementation plan. This is a direct SC3 threat.
+
+- [LOW] The production injection API is named setZoteroClientForTest while 10-04 says Tier 1 uses it to wire the real MCP-backed client. That is confusing and makes the production contract look accidental. Not a launch blocker if implemented consistently, but a clearer name or alias would reduce future misuse.
+
+- [LOW] Doctor tri-state coverage is mostly implementation-trusting because the configured-but-no-auth branch cannot be forced in CI. The plan still implements the branch, so this is not a success-criteria blocker, but it leaves one state weakly tested.
+
+H2 resolution: 10-01 explicitly removes the independent APA registration path, requires renderApa(entries) to delegate to renderStyle(entries, 'apa'), replaces the standalone boolean with the shared registeredStyles Map, and adds same-process byte-parity/no-double-registration tests. That genuinely addresses the prior double-registration finding.
+
+HIGH_COUNT: 1
+```
+
+#### claude (HIGH_COUNT: 1)
+
+```
+H2 (renderApa double-registration) — RESOLVED.
+- renderApa keeps export name/async/single-arg signature + Array.isArray guard, then delegates with return renderStyle(entries, 'apa').
+- ensureStyleTemplate is the SOLE registrar of 'pensmith-apa' (Map-guarded templates.add); standalone apaRegistered boolean + ensureApaTemplate deleted.
+- _resetApaTemplateForTest re-pointed to registeredStyles.delete('apa'), so it and _resetStyleTemplatesForTest operate on one registry (no de-sync).
+- Byte-parity structurally guaranteed + pinned by Task-2 renderApa↔renderStyle('apa') byte-identical + no-collision regression test. 10-01 explicitly overrides PATTERNS.md line 168's "either is acceptable" defect. Resolved.
+
+H1 (Zotero MCP used-as-source) — NOT GENUINELY RESOLVED.
+- [HIGH] The 10-00 used-as-source test cannot pass against the 10-03 adapter as written — the H1 proof is broken. 10-00 Task 2 leg (c) runs on CI where isZoteroMcpPresent() is FS-gated false (plan says so, calls it "unforceable from env on CI"). To reach the pull path, 10-00 mandates a present-gate of isZoteroMcpPresent() || _client !== null. But 10-03 Task 1 STEP B specifies the opposite — if (!isZoteroMcpPresent()) return []; as the FIRST guard, no || _client override. The injected-client test returns [] and the ≥1 normalized SourceCandidate assertion fails. Worse, a SECOND blocking gate: 10-03 defines isZoteroAuthenticated() as isZoteroMcpPresent() && !!process.env['ZOTERO_API_KEY'], so even if presence were overridden, if (!isZoteroAuthenticated()) return []; still returns [] on CI. 10-00's prose only addresses the presence gate and does not reconcile the auth gate's presence dependency. Net: the adapter spec fails its own RSCH-06 SC3 test, the phase cannot reach all-green npm run check (10-04), and "used-as-source when present" is asserted by a test that never exercises it. Fix: make 10-03 STEP B's gating identical to 10-00's contract — pull-gate isZoteroMcpPresent() || _client !== null, auth check that passes on !!ZOTERO_API_KEY when a client is injected — stated in one place both plans cite.
+
+- [MEDIUM] 10-03's isZoteroAuthenticated() requiring isZoteroMcpPresent() leaves "authenticated" untestable in isolation on CI — doctor-probe PASS branch likewise never exercised on CI. 10-03 Task 2 asserts only PASS∈{PASS,WARN} + no-leak sentinel (acceptable), but PASS path unproven. Consider a presence-injection seam for the probe, or document PASS as manual-only.
+- [LOW] 10-00 Task 1: 7 styles-distribution URLs "CONFIRMED HTTP 200 at planning time" but build-time curl has no pinned commit/checksum; XML/404 validator catches bad fetch, so acceptable for CC-BY-SA corpus; noting it.
+- [LOW] 10-00 leg (c) encodes the adapter's internal gate logic as a cross-plan test contract — brittle; a shared interface note would reduce coupling.
+
+Verdict: H2 resolved. H1 NOT genuinely resolved — 10-00's proof test and 10-03's adapter gating are mutually contradictory; the executable used-as-source assertion fails as specified.
+
+HIGH_COUNT: 1
+```
+
+#### opencode (HIGH_COUNT: 1)
+
+```
+H1 Resolution: RESOLVED (intent) — adds setZoteroClientForTest, ZoteroClient/ZoteroItem, toCandidate normalizer, search() pulls+normalizes on present+auth+client and returns [] otherwise; D-14 union gains 'zotero-mcp'; used-as-source path executable + tested via injected fake client in 10-00.
+H2 Resolution: RESOLVED — 10-01 rewrites renderApa to delegate to renderStyle(entries,'apa'), removes standalone apaRegistered/ensureApaTemplate, routes all registration through single Map-guarded ensureStyleTemplate; _resetApaTemplateForTest clears Map's 'apa'; byte-parity + collision tests prove lockstep.
+
+NEW FINDING
+[HIGH] 10-00 ↔ 10-03 contract mismatch: Zotero MCP present+authenticated test cannot pass on CI as written. 10-00 (Task 2 leg c) requires that when setZoteroClientForTest(client) is called AND ZOTERO_API_KEY is set, search() reaches the client pull path and returns normalized SourceCandidate[]. To make this work on CI (isZoteroMcpPresent() false), 10-00 encodes: present-gate = isZoteroMcpPresent() || _client !== null, auth = !!process.env.ZOTERO_API_KEY (standalone). But 10-03 Task 1 defines TWO gates that independently block on CI:
+  if (!isZoteroMcpPresent()) return [];          // blocks when FS absent
+  if (!isZoteroAuthenticated()) return [];        // isZoteroAuth = isZoteroMcpPresent() && !!ZOTERO_API_KEY → false on CI
+Neither gate accounts for an injected _client. After 10-03 ships, the test un-skips (feature-detects setZoteroClientForTest) and then FAILS because search() returns [] at the first gate. SC3's "used-as-source when present" proof cannot be verified on CI. Fix: change presence gate to `!isZoteroMcpPresent() && !_client` and decouple isZoteroAuthenticated() from FS presence, matching the contract 10-00's test encodes.
+
+[MEDIUM] Code duplication in 10-02: ris-write.ts copies CslAuthor, CslEntry, parseAuthor, toCsl verbatim from bibtex-write.ts instead of extracting to a shared module.
+[LOW] 10-02 asserts zero-trace test stays green with .ris in export dir but doesn't verify the test's actual assertion mechanism (scan-for-'pensmith' vs filename enumeration) — confirm rather than assume.
+[LOW] 10-01 CUSTOM_APA_NAME may become dead code after renderApa delegates.
+
+HIGH_COUNT: 1
+```
+
+#### gemini
 
 unavailable this cycle (`IneligibleTierError: UNSUPPORTED_CLIENT` — free-tier Gemini Code Assist client no longer supported; attempted, produced empty output).
