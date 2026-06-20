@@ -314,7 +314,7 @@ Plans:
 Plans:
 
 - [x] 08-00-PLAN.md (wave 0) — RED-by-skip suites (global-library/style-match/intake-style-producer/sketch/add/pymupdf/write-style) + sample/PDF/cassette fixtures + README content contract (LIB/ERGO/RSCH/STYL)
-- [ ] 08-01-PLAN.md (wave 1) — global paper registry (separate schema) + list/open verbs + paths exports (LIB-01, LIB-02, LIB-03, LIB-05)
+- [x] 08-01-PLAN.md (wave 1) — global paper registry (separate schema) + list/open verbs + paths exports (LIB-01, LIB-02, LIB-03, LIB-05)
 - [ ] 08-03-PLAN.md (wave 1) — pymupdf shellout (graceful-absent) + extractPdfText image-only fallback + pin guard (RSCH-05)
 - [ ] 08-02-PLAN.md (wave 2) — pure-stats style-match: STYLE.json per-paper only + fingerprint reuse detection, registry stores hashes+identity only (STYL-01, STYL-02)
 - [ ] 08-04-PLAN.md (wave 2) — add (DOI/PDF/URL + assigned_sources-only remap) + sketch (no-advance-until-confirm) verbs (ERGO-05, ERGO-06, RSCH-05)
@@ -366,7 +366,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 5. Verifier completeness (Pass 2 + Pass 4) | 5/5 | Complete   | 2026-06-18 |
 | 6. Done / export pipeline + zero-trace gate | 5/5 | Complete   | 2026-06-18 |
 | 7. Single-command UX layer + hooks + flags | 4/4 | Complete   | 2026-06-19 |
-| 8. Style match + sketch + add + library + BYO PDF polish | 1/7 | In Progress|  |
+| 8. Style match + sketch + add + library + BYO PDF polish | 2/7 | In Progress|  |
 | 9. Educator/tutorial mode + PII polish | 0/TBD | Not started | - |
 | 10. Discipline + citation-style breadth + Zotero MCP | 0/TBD | Not started | - |
 

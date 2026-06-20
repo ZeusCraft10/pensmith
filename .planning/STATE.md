@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-04-PLAN.md
-last_updated: "2026-06-20T05:26:01.453Z"
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-06-20T05:42:00.172Z"
 last_activity: 2026-06-20
 progress:
   total_phases: 11
   completed_phases: 8
   total_plans: 64
-  completed_plans: 58
+  completed_plans: 59
   percent: 73
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 08 (Style match + sketch + add + library + BYO PDF polish) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-06-20
 
@@ -95,6 +95,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 07 P03 | 10min | 3 tasks | 6 files |
 | Phase 07 P04 | 12min | 2 tasks | 6 files |
 | Phase 08 P00 | 35min | 3 tasks | 9 files |
+| Phase 08 P01 | 22min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -213,6 +214,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [08-00] RED-by-skip imports the unbuilt module via a runtime URL.href specifier (await import(MOD.href)) with a local type interface — keeps tsc --noEmit clean while the target module is absent (known-bad-pass2 precedent applied to all 7 Phase-8 suites)
 - [Phase ?]: [08-00] deriveLibraryStatus test asserts the DERIVED on-disk value (sectioning {done:2,total:3}) NOT the stored entry.status — cycle-2 HIGH 'status stuck at intake' fix as a live Wave-0 assertion; archived from stored flag, intake/unknown from absent/corrupt STATE.json (never-throw)
 - [Phase ?]: [08-00] STYL-04 README dual-use disclosure is a Wave-7 (08-07) deliverable; Wave 0 encodes only its CONTENT CONTRACT as a RED-by-skip assertion in repo-files.test.ts (guarded on '## Style Match' presence) — README.md NOT modified in Wave 0
+- [Phase ?]: [08-01] GlobalLibraryEntry.id is z.string().min(1) not uuid() — the registry decouples from the id generator; the global-library.test.ts contract registers bare ids
+- [Phase ?]: [08-01] deriveLibraryStatus is SYNCHRONOUS (test calls without await) — a guarded synchronous loadStateSync shim mirrors the async loadState absent-vs-corrupt classification (ENOENT→intake, any other failure→unknown)
+- [Phase ?]: [08-01] DERIVE-AT-DISPLAY: list computes each paper's lifecycle status from its authoritative STATE.json at display time, never from the stored entry.status (consulted only for the terminal archived flag) — resolves Open-Q4
+- [Phase ?]: [08-01] 'global-library' added to loadAndMigrate schemaName union (Rule 3 blocking) — the typed literal union would otherwise reject the new schemaName and break tsc
 
 ### Pending Todos
 
@@ -233,6 +238,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T05:25:01.895Z
-Stopped at: Completed 07-04-PLAN.md
+Last session: 2026-06-20T05:42:00.164Z
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None
