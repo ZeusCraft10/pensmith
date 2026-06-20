@@ -362,7 +362,21 @@ Plans:
   2. RIS export ships alongside BibTeX with the `.bib`/`.ris` files bundled into the export package for Mendeley/EndNote interop.
   3. Zotero MCP is detected, authenticated, and used as a source provider when present; doctor reports auth state; absence does not break research.
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+**Wave layout** (depends_on; executor reads `wave` frontmatter):
+
+- Wave 0: 10-00 (RED scaffold + procure/commit 7 CSL files + RIS/zotero/disciplines RED tests)
+- Wave 1: 10-01 (CSL multi-style renderStyle), 10-02 (RIS writer + exporter bundle + research emit), 10-03 (zotero-mcp adapter + tri-state doctor probe + disciplines.json completion) — parallel (no file overlap)
+- Wave 2: 10-04 (intake-clarifier 8-style + WN-3 hash re-pin + research.md Zotero fallback + tier-contract parity / 16-verb bijection; depends 10-01/02/03)
+
+Plans:
+
+- [ ] 10-00-PLAN.md (wave 0) — RED scaffold: commit 7 bundled CSL files + ris-write/zotero-mcp/disciplines-schema RED tests + per-style citation-render tests (CITE-02, CITE-03, CITE-05, RSCH-06)
+- [ ] 10-01-PLAN.md (wave 1) — citations.ts renderStyle + resolveStyleName + Map memoization for all 8 styles, deterministic + offline (CITE-02, CITE-03)
+- [ ] 10-02-PLAN.md (wave 1) — ris-write.ts writeRis (D-19/D-07) + exporter risCopied + research-time CITATIONS.ris emission (CITE-05)
+- [ ] 10-03-PLAN.md (wave 1) — zotero-mcp source adapter (absence-non-breaking) + tri-state doctor probe (no key leak) + disciplines.json 6-field completion + CS apa→ieee (RSCH-06, CITE-02)
+- [ ] 10-04-PLAN.md (wave 2) — intake-clarifier 8-style prompt + atomic WN-3 hash re-pin + research.md Zotero fallback + tier-contract RIS parity + 16-verb bijection (CITE-02, CITE-03, RSCH-06)
 **UI hint**: no
 
 ## Progress
@@ -382,7 +396,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 7. Single-command UX layer + hooks + flags | 4/4 | Complete   | 2026-06-19 |
 | 8. Style match + sketch + add + library + BYO PDF polish | 7/7 | Complete   | 2026-06-20 |
 | 9. Educator/tutorial mode + PII polish | 4/4 | Complete   | 2026-06-20 |
-| 10. Discipline + citation-style breadth + Zotero MCP | 0/TBD | Not started | - |
+| 10. Discipline + citation-style breadth + Zotero MCP | 0/5 | Planned | - |
 
 ## Coverage
 
