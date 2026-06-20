@@ -245,6 +245,40 @@ export function redactPii(text: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// diffPii — pure, deterministic, reviewable diff (Phase 9 / ERGO-07, SC-3).
+//
+// Derives one PiiDiff per classified span from classifyPii(original) — which is
+// already deterministic and overlap-resolved — and tags each with the SAME
+// `[REDACTED:${kind}]` literal redactPii would splice in. The optional
+// `redacted` arg is accepted only for API symmetry with redactPii callers; the
+// diff is computed from `original` alone. We deliberately do NOT diff the two
+// strings character-by-character: under tied spans that would be ambiguous and
+// thus non-deterministic. Spans inherit classifyPii's start-ascending order.
+//
+// Idempotence: feeding already-redacted text yields an empty diff, because the
+// `[REDACTED:KIND]` tags contain no classifiable PII (the redaction tag is not
+// itself an EMAIL/PHONE/SSN/NAME/DATE/IP/IBAN). Pure — purely positional math,
+// no Date.now / Math.random / randomUUID / I/O.
+// ---------------------------------------------------------------------------
+
+export interface PiiDiff {
+  span: [number, number];
+  kind: PiiKind;
+  raw: string;
+  tag: string;
+}
+
+export function diffPii(original: string, _redacted?: string): PiiDiff[] {
+  void _redacted; // accepted for API symmetry; diff is derived from `original`.
+  return classifyPii(original).map((m) => ({
+    span: m.span,
+    kind: m.kind,
+    raw: m.raw,
+    tag: `[REDACTED:${m.kind}]`,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // redactKeys — recursive deep-clone with sensitive-key value replacement.
 // ---------------------------------------------------------------------------
 
