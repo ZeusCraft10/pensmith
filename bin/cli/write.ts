@@ -21,6 +21,7 @@
 import { defineCommand } from 'citty';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { parse as parseToml } from 'smol-toml';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionPlan, paperDir } from '../lib/paths.js';
 import { assertDrafterInput } from '../lib/drafter-input.js';
@@ -28,6 +29,9 @@ import { runAllSections } from '../lib/write-orchestrator.js';
 import type { SectionNode } from '../lib/schemas/wave-graph.js';
 import { styleMatchToVoiceHint } from '../lib/style-match.js';
 import { StyleProfileSchema, type StyleProfile } from '../lib/schemas/style.js';
+import { TutorialSubscriber } from '../lib/tutorial.js';
+import { parseFrontmatter } from '../lib/frontmatter.js';
+import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
 
 const TIER2_DRAFT = [
   '# Section DRAFT (Tier-2 placeholder)',
@@ -112,6 +116,67 @@ function loadStyleProfile(
   } catch {
     // Malformed / partial STYLE.json — fall back to the default tone.
     return {};
+  }
+}
+
+/**
+ * Read the educator-mode `goal` from `config.toml` `[project] goal`. Best-effort:
+ * a missing/malformed config.toml or an unrecognized value defaults to 'draft'.
+ * Mirrors resolvePaperMeta's try/catch read in intake.ts.
+ *
+ * GOAL-AWARENESS LIVES HERE, in the CLI tier — this is the H1 boundary. The same
+ * goal-read drives the 09-03 router-DI mechanism; keep the parse logic identical
+ * so a future shared util (L5) collapses cleanly.
+ */
+function readGoalFromConfig(cwd: string): 'draft' | 'learning' | 'both' {
+  try {
+    const cfgPath = path.join(cwd, 'config.toml');
+    if (!existsSync(cfgPath)) return 'draft';
+    const cfg = parseToml(readFileSync(cfgPath, 'utf8')) as {
+      project?: { goal?: unknown };
+    };
+    const g = cfg.project?.goal;
+    if (g === 'learning' || g === 'both' || g === 'draft') return g;
+    return 'draft';
+  } catch {
+    return 'draft';
+  }
+}
+
+/**
+ * Construct the educator-mode subscriber in the CLI tier (the SOLE goal-aware
+ * seam — Foundation never imports this). Returns `undefined` for goal=draft (the
+ * zero-activation contract) and on any construction error (non-fatal, mirrors
+ * runStyleProducerNonFatal): a bad subscriber must never break `write`.
+ */
+function makeSubscriberNonFatal(paperRoot: string): TutorialSubscriber | undefined {
+  const goal = readGoalFromConfig(paperRoot);
+  if (goal !== 'learning' && goal !== 'both') return undefined;
+  try {
+    return new TutorialSubscriber({
+      tutorialPath: path.join(paperDir(paperRoot), 'TUTORIAL.md'),
+      goal,
+    });
+  } catch (e) {
+    process.stderr.write(
+      `pensmith write: WARN — tutorial subscriber construction failed (non-fatal): ${(e as Error).message}\n`,
+    );
+    return undefined;
+  }
+}
+
+/**
+ * Best-effort read of a section PLAN.md's `assigned_sources` citekeys for the
+ * single-section provenance emit. Returns [] when the PLAN.md is absent or
+ * unparseable — never throws (mirrors loadStyleProfile's degrade-to-default).
+ */
+function readAssignedSources(planPath: string): string[] {
+  try {
+    if (!existsSync(planPath)) return [];
+    const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
+    return PlanFrontmatterSchema.parse(frontmatter).assigned_sources;
+  } catch {
+    return [];
   }
 }
 
@@ -201,6 +266,10 @@ export const writeCommand = defineCommand({
       const maxParallel = Number.isInteger(rawMax) && rawMax >= 1 ? rawMax : DEFAULT_MAX_PARALLEL;
 
       const paperRoot = process.cwd();
+      // Goal awareness is confined to the CLI tier. goal=draft yields undefined,
+      // so the `subscriber ? … : undefined` below makes the Foundation callback a
+      // no-op — the zero-branch mechanism. Foundation never imports tutorial.ts.
+      const subscriber = makeSubscriberNonFatal(paperRoot);
       const results = await runAllSections(paperRoot, {
         maxParallel,
         writeSection: async (node: SectionNode) => {
@@ -212,7 +281,25 @@ export const writeCommand = defineCommand({
             JSON.stringify({ event: 'section_done', wave: node.computed_wave, section: node.slug, status: 'done' }) + '\n',
           );
         },
+        // Additive observer: the key is present ONLY when a subscriber was
+        // constructed (goal ∈ {learning, both}). goal=draft omits it entirely →
+        // the Foundation guard is a no-op (zero-branch). The conditional spread
+        // satisfies exactOptionalPropertyTypes (never pass an explicit undefined).
+        ...(subscriber
+          ? {
+              onSectionWritten: (evt: {
+                n: number;
+                slug: string;
+                planPath: string;
+                assignedSources: string[];
+              }) => subscriber.emit({ kind: 'section.written', payload: evt }),
+            }
+          : {}),
       });
+
+      // Drain the subscriber so TUTORIAL.md is complete before returning. No-op
+      // when no subscriber was constructed (goal=draft).
+      await subscriber?.flush();
 
       for (const wave of results) {
         const counts = wave.sections.reduce<Record<string, number>>((acc, s) => {
@@ -235,7 +322,28 @@ export const writeCommand = defineCommand({
     }
     const slug = (args.slug && typeof args.slug === 'string' ? args.slug : DEFAULT_SLUG);
 
+    const paperRoot = process.cwd();
+    // Construct the goal-aware subscriber for a single-section re-do too, so a
+    // re-write in learning/both mode still re-annotates TUTORIAL.md. goal=draft
+    // yields undefined → the emit/flush below are no-ops and DRAFT.md is
+    // byte-unchanged for every goal (the writer never sees the subscriber).
+    const subscriber = makeSubscriberNonFatal(paperRoot);
+
     const targetPath = await writeOneSection(n, slug);
+
+    if (subscriber) {
+      subscriber.emit({
+        kind: 'section.written',
+        payload: {
+          n,
+          slug,
+          planPath: sectionPlan(n, slug, paperRoot),
+          assignedSources: readAssignedSources(sectionPlan(n, slug, paperRoot)),
+        },
+      });
+      await subscriber.flush();
+    }
+
     process.stdout.write(`pensmith write: wrote Tier-2 placeholder DRAFT.md to ${targetPath}\n`);
     return { ok: true, path: targetPath, mode: 'tier2-placeholder' };
   },

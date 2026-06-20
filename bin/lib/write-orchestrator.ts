@@ -54,6 +54,20 @@ export interface WaveResult {
   sections: SectionResult[];
 }
 
+/**
+ * Additive, GOAL-UNAWARE observer seam (Plan 09-02). Invoked once after each
+ * FULFILLED section with the section's identity + its assigned source citekeys.
+ * Foundation knows NOTHING about who consumes this or why — the CLI tier wires a
+ * consumer (or leaves it `undefined`). This is a callback-invocation seam, NOT a
+ * mode/branch check: the only guard this module adds is `if (opts.onSectionWritten)`.
+ */
+export type SectionWrittenCallback = (opts: {
+  n: number;
+  slug: string;
+  planPath: string;
+  assignedSources: string[];
+}) => void;
+
 export interface RunAllSectionsOpts {
   /** Per-wave concurrency cap. Tier 2 forces 1 (with a single WARN). */
   maxParallel: number;
@@ -66,6 +80,12 @@ export interface RunAllSectionsOpts {
    * section-as-phase isolation invariant holds by construction.
    */
   only?: string[];
+  /**
+   * Optional additive observer (09-02). When set, invoked once after each
+   * fulfilled section. Foundation stays GOAL-UNAWARE — it never inspects this
+   * callback's behavior; a goal-aware CLI caller decides whether to supply one.
+   */
+  onSectionWritten?: SectionWrittenCallback;
 }
 
 /**
@@ -163,6 +183,18 @@ export async function runAllSections(
       if (r.status === 'fulfilled') {
         node.status = 'done';
         sections.push({ slug: node.slug, n: node.n, status: 'done' });
+        // Additive observer seam (09-02): the ONE callback-invocation guard this
+        // module adds. Pass the section identity + its assigned source citekeys
+        // (already in the `plans` map — no re-read). This is NOT a mode check;
+        // Foundation never learns what the consumer does with it.
+        if (opts.onSectionWritten) {
+          opts.onSectionWritten({
+            n: node.n,
+            slug: node.slug,
+            planPath: sectionPlan(node.n, node.slug, paperRoot),
+            assignedSources: plans.get(node.slug)?.assigned_sources ?? [],
+          });
+        }
       } else {
         node.status = 'failed';
         failedOrBlocked.add(node.slug);
