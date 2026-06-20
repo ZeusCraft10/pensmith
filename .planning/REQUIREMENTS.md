@@ -71,7 +71,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [x] **ERGO-04**: `--show-prompts` flag echoes every LLM prompt to stdout/log
 - [x] **ERGO-05**: `/pensmith sketch` thinking-partner mode for thesis discovery before intake
 - [x] **ERGO-06**: `/pensmith add <doi|pdf|url>` ingests a new source mid-paper with "remap sections?" prompt
-- [ ] **ERGO-07**: Educator/tutorial mode — intake choice `goal ∈ {draft, learning, both}`; `learning` triggers tutorial-mode end-state with annotated provenance
+- [x] **ERGO-07**: Educator/tutorial mode — intake choice `goal ∈ {draft, learning, both}`; `learning` triggers tutorial-mode end-state with annotated provenance
 
 ### Library Mode
 
@@ -374,7 +374,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | STYL-02 | Phase 8 | Complete |
 | STYL-03 | Phase 8 | Complete |
 | STYL-04 | Phase 8 | Complete |
-| ERGO-07 | Phase 9 | Pending |
+| ERGO-07 | Phase 9 | Complete |
 | RSCH-06 | Phase 10 | Pending |
 | CITE-02 | Phase 10 | Pending |
 | CITE-03 | Phase 10 | Pending |
