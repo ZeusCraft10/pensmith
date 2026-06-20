@@ -77,6 +77,10 @@ export const REAL_VERB_LOADERS: Partial<Record<Ux02Verb, () => Promise<AnyComman
   next: () => import('./cli/next.js').then((m) => m.nextCommand),
   status: () => import('./cli/status.js').then((m) => m.statusCommand),
   resume: () => import('./cli/resume.js').then((m) => m.resumeCommand),
+  // Phase 8 Plan 08-01 — list/open promoted from Phase-2 stubs (no 17th verb;
+  // both are already members of the locked-16 UX02_VERBS).
+  list: () => import('./cli/list.js').then((m) => m.listCommand),
+  open: () => import('./cli/open.js').then((m) => m.openCommand),
 };
 
 /** Parsed global-flag bundle forwarded into a manually-dispatched verb. */
