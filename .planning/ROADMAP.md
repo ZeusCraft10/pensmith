@@ -334,7 +334,21 @@ Plans:
   2. Educator-mode is implemented as an event/wrapper architecture (observer pattern); workflow bodies and Foundation libs contain zero `if (educator_mode)` branches.
   3. PII redaction at intake-time honors the opt-in flag, runs before any LLM call, and produces a deterministic diff the user can review.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+**Wave layout** (depends_on; executor reads `wave` frontmatter):
+
+- Wave 0: 09-00 (RED scaffold — pii-polish/tutorial-observer/goal-routing/provenance/intake-ordering/zero-branch tests + fixtures + tutorial.ts stub + 2 tutorial prompts as WN-3 sentinels + .gitignore)
+- Wave 1: 09-01 (PII polish: IP/IBAN + NAME suppression + pure diffPii), 09-02 (TutorialSubscriber + onSectionWritten? Foundation seam + write.ts goal-aware emit) — parallel (no file overlap)
+- Wave 2: 09-03 (intake --goal + config.toml + PII-before-loadPrompt; router goal=learning hard-stop; TUTORIAL.md export-exclusion; WN-3 hash re-pin; depends 09-00/01/02)
+
+Plans:
+
+- [ ] 09-00-PLAN.md (wave 0) — RED-by-skip scaffold + fixtures + tutorial.ts stub + WN-3 tutorial-prompt sentinels + .gitignore (ERGO-07)
+- [ ] 09-01-PLAN.md (wave 1) — pii.ts polish: IP/IBAN patterns + ~500-token NAME suppression dictionary + pure deterministic diffPii (ERGO-07)
+- [ ] 09-02-PLAN.md (wave 1) — observer/DI: full TutorialSubscriber + additive onSectionWritten? seam in write-orchestrator + goal-aware subscriber?.emit in write.ts (ERGO-07)
+- [ ] 09-03-PLAN.md (wave 2) — intake --goal + config.toml persistence + PII opt-in diff before loadPrompt + router goal=learning hard-stop-after-research + TUTORIAL.md export-exclusion + WN-3 hash re-pin (ERGO-07)
+
 **UI hint**: no
 
 ### Phase 10: Discipline + citation-style breadth + Zotero MCP
@@ -367,7 +381,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 →
 | 6. Done / export pipeline + zero-trace gate | 5/5 | Complete   | 2026-06-18 |
 | 7. Single-command UX layer + hooks + flags | 4/4 | Complete   | 2026-06-19 |
 | 8. Style match + sketch + add + library + BYO PDF polish | 7/7 | Complete   | 2026-06-20 |
-| 9. Educator/tutorial mode + PII polish | 0/TBD | Not started | - |
+| 9. Educator/tutorial mode + PII polish | 0/4 | Planned | - |
 | 10. Discipline + citation-style breadth + Zotero MCP | 0/TBD | Not started | - |
 
 ## Coverage
