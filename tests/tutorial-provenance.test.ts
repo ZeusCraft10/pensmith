@@ -135,6 +135,34 @@ test('TUTORIAL.md never references .paper/sections/ paths', { skip: !RENDER_READ
   assert.ok(!/\.paper[\\/]sections[\\/]/.test(md), `TUTORIAL.md must not reference .paper/sections/ paths; got:\n${md}`);
 });
 
+test('idempotence: re-emitting the same events produces byte-stable TUTORIAL.md (overwrite, not grow)', { skip: !RENDER_READY }, async () => {
+  const root = mkPaperRoot();
+  const tutorialPath = path.join(root, '.paper', 'TUTORIAL.md');
+  fs.mkdirSync(path.dirname(tutorialPath), { recursive: true });
+
+  const { TutorialSubscriber } = (await import(TUTORIAL_MOD.href)) as TutorialMod;
+
+  async function renderOnce(): Promise<string> {
+    const sub = new TutorialSubscriber({ tutorialPath, goal: 'both' });
+    sub.emit({ kind: 'research.done', payload: researchDonePayload() });
+    sub.emit({
+      kind: 'section.written',
+      payload: { n: 1, slug: 'background', assignedSources: ['smith2021', 'jones2019'] },
+    });
+    await sub.flush();
+    return fs.readFileSync(tutorialPath, 'utf8');
+  }
+
+  const first = await renderOnce();
+  const second = await renderOnce();
+  assert.equal(second, first, 're-running with the same events must produce identical TUTORIAL.md (idempotent overwrite, not append-duplicate)');
+  // And a single source line is not duplicated within one render.
+  const smithCount = (first.match(/smith2021/g) ?? []).length;
+  assert.ok(smithCount >= 1, 'expected smith2021 to appear');
+  const secondSmithCount = (second.match(/smith2021/g) ?? []).length;
+  assert.equal(secondSmithCount, smithCount, 're-render must not grow the smith2021 occurrence count');
+});
+
 // Export-exclusion is STRUCTURAL: exporter reads only inputPath. This test wakes
 // up on exporter presence (it already exists from Phase 6) and proves a sibling
 // TUTORIAL.md does NOT leak into an export.
