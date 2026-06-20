@@ -4,13 +4,13 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 08-04-PLAN.md
-last_updated: "2026-06-20T09:38:22.184Z"
+last_updated: "2026-06-20T09:47:16.462Z"
 last_activity: 2026-06-20
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 68
-  completed_plans: 65
+  completed_plans: 66
   percent: 82
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 09 (Educator/tutorial mode + PII polish) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-06-20
 
@@ -102,6 +102,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 08 P05 | 30min | 3 tasks | 4 files |
 | Phase 08 P06 | 18 | 2 tasks | 5 files |
 | Phase 09 P00 | 11min | 3 tasks | 18 files |
+| Phase 09 P01 | 14 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -241,6 +242,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [08-06] sketch no-advance observable uses a STDIN-CLOSED spawn (not undeclared --confirm): citty does not bind test-seam args; a spawned sketch with stdin closed aborts the prompt and creates NO .paper/ — load-bearing assertion is absence of state mutation (Pitfall 6), not exit code
 - [Phase ?]: [08-06] seedGlobalRegistry STATE.json fixture uses schemaVersion 2 (CURRENT_STATE_VERSION) not 1 — deriveLibraryStatus does a RAW StateSchema.parse via loadStateSync (no migration), so a v1 envelope fails z.literal(2) and classifies as unknown(corrupt) instead of live intake
 - [Phase ?]: [08-06] add.md capability_check corrected to required AskUserQuestion only — the real bin/cli/add.ts ingests via Crossref/PDF/URL (http.ts D-06), never Zotero MCP; the stub Zotero/library/state tokens removed (accuracy correction, all stayed W4-valid)
+- [Phase ?]: 09-01: NAME suppression uses two-stage DROP-if-all-suppressed + TRIM-leading-while->=2-remain (Author Jane Smith->Jane Smith, In Smith kept, Results Section dropped)
+- [Phase ?]: 09-01: diffPii derives spans from classifyPii(original) only; optional unused _redacted param for API symmetry; no char-by-char diff (determinism)
 
 ### Pending Todos
 
@@ -261,6 +264,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-20T09:38:22.178Z
+Last session: 2026-06-20T09:46:57.492Z
 Stopped at: Completed 08-04-PLAN.md
 Resume file: None
