@@ -1,11 +1,74 @@
 {
-  "psychology":       { "defaultTone": "academic-formal", "defaultCitationStyle": "apa" },
-  "computer-science": { "defaultTone": "technical",       "defaultCitationStyle": "apa" },
-  "history":          { "defaultTone": "narrative",       "defaultCitationStyle": "chicago-author-date" },
-  "philosophy":       { "defaultTone": "argumentative",   "defaultCitationStyle": "chicago-author-date" },
-  "biology":          { "defaultTone": "technical",       "defaultCitationStyle": "apa" },
-  "sociology":        { "defaultTone": "academic-formal", "defaultCitationStyle": "apa" },
-  "economics":        { "defaultTone": "analytical",      "defaultCitationStyle": "apa" },
-  "literature":       { "defaultTone": "interpretive",    "defaultCitationStyle": "mla" },
-  "other":            { "defaultTone": "academic-formal", "defaultCitationStyle": "apa" }
+  "psychology": {
+    "defaultTone": "academic-formal",
+    "defaultCitationStyle": "apa",
+    "sourcePreference": ["pubmed", "openalex", "semanticscholar"],
+    "sectioningConvention": ["Introduction", "Method", "Results", "Discussion", "References"],
+    "counterargDefault": "optional",
+    "densityTarget": { "low": 12, "center": 22, "high": 32 }
+  },
+  "computer-science": {
+    "defaultTone": "technical",
+    "defaultCitationStyle": "ieee",
+    "sourcePreference": ["arxiv", "semanticscholar", "openalex"],
+    "sectioningConvention": ["Introduction", "Related Work", "Method", "Evaluation", "Conclusion", "References"],
+    "counterargDefault": "optional",
+    "densityTarget": { "low": 10, "center": 20, "high": 30 }
+  },
+  "history": {
+    "defaultTone": "narrative",
+    "defaultCitationStyle": "chicago-author-date",
+    "sourcePreference": ["crossref", "openalex"],
+    "sectioningConvention": ["Introduction", "Background", "Analysis", "Conclusion", "Bibliography"],
+    "counterargDefault": "required",
+    "densityTarget": { "low": 4, "center": 12, "high": 22 }
+  },
+  "philosophy": {
+    "defaultTone": "argumentative",
+    "defaultCitationStyle": "chicago-author-date",
+    "sourcePreference": ["crossref", "openalex"],
+    "sectioningConvention": ["Introduction", "Argument", "Objections", "Reply", "Conclusion", "Bibliography"],
+    "counterargDefault": "required",
+    "densityTarget": { "low": 4, "center": 12, "high": 22 }
+  },
+  "biology": {
+    "defaultTone": "technical",
+    "defaultCitationStyle": "apa",
+    "sourcePreference": ["pubmed", "openalex", "crossref"],
+    "sectioningConvention": ["Introduction", "Materials and Methods", "Results", "Discussion", "References"],
+    "counterargDefault": "optional",
+    "densityTarget": { "low": 15, "center": 25, "high": 35 }
+  },
+  "sociology": {
+    "defaultTone": "academic-formal",
+    "defaultCitationStyle": "apa",
+    "sourcePreference": ["openalex", "crossref", "semanticscholar"],
+    "sectioningConvention": ["Introduction", "Literature Review", "Methods", "Findings", "Discussion", "References"],
+    "counterargDefault": "optional",
+    "densityTarget": { "low": 7, "center": 15, "high": 25 }
+  },
+  "economics": {
+    "defaultTone": "analytical",
+    "defaultCitationStyle": "apa",
+    "sourcePreference": ["openalex", "crossref", "semanticscholar"],
+    "sectioningConvention": ["Introduction", "Literature Review", "Model", "Results", "Conclusion", "References"],
+    "counterargDefault": "optional",
+    "densityTarget": { "low": 9, "center": 18, "high": 28 }
+  },
+  "literature": {
+    "defaultTone": "interpretive",
+    "defaultCitationStyle": "mla",
+    "sourcePreference": ["crossref", "openalex"],
+    "sectioningConvention": ["Introduction", "Close Reading", "Discussion", "Conclusion", "Works Cited"],
+    "counterargDefault": "optional",
+    "densityTarget": { "low": 3, "center": 10, "high": 20 }
+  },
+  "other": {
+    "defaultTone": "academic-formal",
+    "defaultCitationStyle": "apa",
+    "sourcePreference": ["crossref", "openalex"],
+    "sectioningConvention": ["Introduction", "Body", "Conclusion", "References"],
+    "counterargDefault": "optional",
+    "densityTarget": { "low": 7, "center": 15, "high": 25 }
+  }
 }
