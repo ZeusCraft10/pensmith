@@ -50,7 +50,13 @@ Full phase goals, success criteria, and per-plan detail are preserved in the arc
   2. All LLM calls route through `bin/lib/anthropic.ts` (a single import chokepoint); no key value appears in the session log or stdout.
   3. When no LLM key is configured, each generative verb prints a clear error banner and exits with a non-zero code — it never silently returns `ok:true` with an empty result.
   4. The transport is budget-gated: `assertBudget` is called before every LLM call and the hard cost cap is respected.
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 11-01-PLAN.md — Wave-0 RED-by-skip transport test scaffold (chokepoint, no-leak, budget-gate, fail-loud, offline seam, provider shapes)
+- [ ] 11-02-PLAN.md — bin/lib/anthropic.ts transport chokepoint (provider dispatch, budget gate, http.ts POST, no-leak)
+- [ ] 11-03-PLAN.md — wire intake + outline + write to complete() with fail-loud on missing key
+- [ ] 11-04-PLAN.md — wire research + plan + revise (shared proposeSwap) with fail-loud; research defensive parse
 **UI hint**: no
 
 ### Phase 12: Live research + intake bootstrap + humanizer Task
@@ -136,7 +142,7 @@ Full phase goals, success criteria, and per-plan detail are preserved in the arc
 | 8. Style match + sketch + add + library + BYO PDF polish | v0.1.0 | 7/7 | Complete | 2026-06-20 |
 | 9. Educator/tutorial mode + PII polish | v0.1.0 | 4/4 | Complete | 2026-06-20 |
 | 10. Discipline + citation-style breadth + Zotero MCP | v0.1.0 | 5/5 | Complete | 2026-06-22 |
-| 11. Tier-2 LLM transport | v0.2.0 | 0/TBD | Not started | - |
+| 11. Tier-2 LLM transport | v0.2.0 | 0/4 | Planned | - |
 | 12. Live research + intake bootstrap + humanizer Task | v0.2.0 | 0/TBD | Not started | - |
 | 13. Citation rendering at export | v0.2.0 | 0/TBD | Not started | - |
 | 14. Fail-closed verifier gate | v0.2.0 | 0/TBD | Not started | - |
