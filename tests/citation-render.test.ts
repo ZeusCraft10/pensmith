@@ -123,3 +123,94 @@ for (const style of stylesToTest) {
     },
   );
 }
+
+// ====================================================================
+//   Phase 10 Plan 01 Task 2 — determinism, single-registration, mapping
+// ====================================================================
+// These three tests prove the load-bearing CITE-02 properties beyond
+// "non-empty": deterministic+offline render (byte-identical double call),
+// the H2 single-registration fix (renderApa delegates → 'pensmith-apa'
+// added at most once), and the resolveStyleName discipline→style table.
+// They feature-detect renderStyle the same way the per-style loop does so
+// the suite stays GREEN if run against a citations.ts that predates 10-01.
+
+const ieeeCslPath = new URL('../templates/citation-styles/ieee.csl', import.meta.url);
+
+// 1. Determinism + collision guard (CITE-02): two back-to-back renderStyle
+//    calls for the same style yield byte-identical output and the second
+//    call never throws "template already registered" (Pitfall 1 guard).
+test('citation-render: renderStyle is deterministic + no re-registration collision (CITE-02)',
+  { skip: shouldSkip || !existsSync(ieeeCslPath) },
+  async (t) => {
+    const mod = await import('../bin/lib/citations.js');
+    const renderStyle = (mod as { renderStyle?: unknown }).renderStyle;
+    if (typeof renderStyle !== 'function') {
+      t.skip('renderStyle not yet exported (Plan 10-01)');
+      return;
+    }
+    const render = renderStyle as (e: unknown, s: string) => Promise<string>;
+    const { parseBib } = mod;
+    const bibContent = readFileSync(fixtureBibPath, 'utf-8');
+    const entries = await parseBib(bibContent);
+
+    const first = await render(entries, 'ieee');
+    // Second call must not reject with "template already registered".
+    await assert.doesNotReject(() => render(entries, 'ieee'));
+    const second = await render(entries, 'ieee');
+    assert.equal(first, second, 'renderStyle(ieee) must be byte-identical across calls (deterministic + offline)');
+  },
+);
+
+// 2. renderApa ↔ renderStyle('apa') single-registration parity (H2 regression
+//    guard): in ONE process call renderApa() THEN renderStyle(entries,'apa').
+//    Both consume the 'pensmith-apa' template. This would THROW "template
+//    already registered" on the ORIGINAL self-contained renderApa +
+//    independent renderStyle('apa') design — it is the executable proof the
+//    H2 single-registration fix landed, plus a byte-parity check that the
+//    delegation preserves the locked Wave-0 renderApa output bytes.
+test('citation-render: renderApa delegates to renderStyle(apa) — byte-identical, single registration (H2)',
+  { skip: shouldSkip },
+  async (t) => {
+    const mod = await import('../bin/lib/citations.js');
+    const renderStyle = (mod as { renderStyle?: unknown }).renderStyle;
+    const resetApa = (mod as { _resetApaTemplateForTest?: unknown })._resetApaTemplateForTest;
+    if (typeof renderStyle !== 'function' || typeof resetApa !== 'function') {
+      t.skip('renderStyle / _resetApaTemplateForTest not yet exported (Plan 10-01)');
+      return;
+    }
+    const render = renderStyle as (e: unknown, s: string) => Promise<string>;
+    const { parseBib, renderApa } = mod;
+    const bibContent = readFileSync(fixtureBibPath, 'utf-8');
+    const entries = await parseBib(bibContent);
+
+    // Clean slate so this test owns the 'pensmith-apa' registration lifecycle.
+    (resetApa as () => void)();
+
+    // Both calls register/consume 'pensmith-apa'; neither may collide.
+    let a = '';
+    await assert.doesNotReject(async () => { a = await renderApa(entries); });
+    let b = '';
+    await assert.doesNotReject(async () => { b = await render(entries, 'apa'); });
+
+    assert.ok(a.length > 0, 'renderApa must return a non-empty string');
+    assert.equal(a, b, 'renderApa(entries) must be byte-identical to renderStyle(entries,"apa")');
+  },
+);
+
+// 3. resolveStyleName discipline→style table (CITE-02/03 downstream contract).
+test('citation-render: resolveStyleName maps disciplines to styles (CITE-02/03)',
+  { skip: shouldSkip },
+  async (t) => {
+    const mod = await import('../bin/lib/citations.js');
+    const resolveStyleName = (mod as { resolveStyleName?: unknown }).resolveStyleName;
+    if (typeof resolveStyleName !== 'function') {
+      t.skip('resolveStyleName not yet exported (Plan 10-01)');
+      return;
+    }
+    const resolve = resolveStyleName as (d: string) => string;
+    assert.equal(resolve('computer-science'), 'ieee', 'computer-science → ieee');
+    assert.equal(resolve('literature'), 'mla', 'literature → mla');
+    assert.equal(resolve('history'), 'chicago-author-date', 'history → chicago-author-date');
+    assert.equal(resolve('unknown'), 'apa', 'unknown → apa fallback');
+  },
+);
