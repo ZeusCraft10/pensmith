@@ -26,6 +26,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { assertEquivalent } from './lib/assert-tier-equivalent.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
+import { pensmithDataDir } from '../bin/lib/paths.js';
 import { sources } from '../bin/lib/sources/index.js';
 
 const MCP_BIN = 'dist/mcp/server.js';
@@ -1310,9 +1311,22 @@ function runCliWithDataDir(
  * Layout: dataDir is the localDataDir root; the registry index lives at
  * dataDir/pensmith/library/index.json (pensmithDataDir() = <localDataDir>/pensmith).
  */
-function seedGlobalRegistry(): { dataDir: string; paperRoot: string; paperName: string } {
+function seedGlobalRegistry(): { dataDir: string; resolvedDataDir: string; paperRoot: string; paperName: string } {
   const dataDir = mkdtempSync(join(tmpdir(), 'pensmith-tier-lib-data-'));
   const paperRoot = mkdtempSync(join(tmpdir(), 'pensmith-tier-lib-paper-'));
+  // Resolve the EXACT pensmithDataDir() the spawned CLI will read, given the
+  // LOCALAPPDATA/XDG_DATA_HOME/HOME overrides runCliWithDataDir sets. This is
+  // platform-correct: Windows → <dataDir>/pensmith, Linux → <dataDir>/pensmith,
+  // macOS → <dataDir>/Library/Application Support/pensmith. Seeding via the
+  // resolver (instead of hardcoding <dataDir>/pensmith) is what makes the
+  // fixture land where the darwin subprocess actually looks (the prior hardcode
+  // only matched win/linux, so list/open failed on macOS CI).
+  const resolvedDataDir = pensmithDataDir(process.platform, {
+    ...process.env,
+    LOCALAPPDATA: dataDir,
+    XDG_DATA_HOME: dataDir,
+    HOME: dataDir,
+  });
   // A real v2 STATE.json so deriveLibraryStatus reads it (status → 'intake':
   // STATE.json present, no RESEARCH.md). stateFile(paperRoot) = <paperRoot>/STATE.json.
   // deriveLibraryStatus does a RAW StateSchema.parse (no migration), so the
@@ -1327,7 +1341,7 @@ function seedGlobalRegistry(): { dataDir: string; paperRoot: string; paperName: 
       sections: [],
     }),
   );
-  const indexDir = join(dataDir, 'pensmith', 'library');
+  const indexDir = join(resolvedDataDir, 'library');
   mkdirSync(indexDir, { recursive: true });
   const now = new Date().toISOString();
   const paperName = 'Tier Contract Paper';
@@ -1352,7 +1366,7 @@ function seedGlobalRegistry(): { dataDir: string; paperRoot: string; paperName: 
       2,
     ) + '\n',
   );
-  return { dataDir, paperRoot, paperName };
+  return { dataDir, resolvedDataDir, paperRoot, paperName };
 }
 
 // --- Existence assertions: each promoted verb ships a verb file + workflow body
@@ -1413,13 +1427,13 @@ test('tier-contract: open parity — both tier paths switch the active paper + w
   const a = seedGlobalRegistry();
   const t1 = runCliWithDataDir(['open', a.paperName], a.paperRoot, a.dataDir);
   assert.equal(t1.exitCode, 0, `open Tier 1: exit 0 expected; got ${t1.exitCode}. stderr: ${t1.stderr.slice(0, 400)}`);
-  const t1Ptr = join(a.dataDir, 'pensmith', 'active.json');
+  const t1Ptr = join(a.resolvedDataDir, 'active.json');
   assert.ok(existsSync(t1Ptr), `open Tier 1: active pointer must be written at ${t1Ptr}`);
 
   const b = seedGlobalRegistry();
   const t2 = runCliWithDataDir(['open', b.paperName], b.paperRoot, b.dataDir);
   assert.equal(t2.exitCode, 0, `open Tier 2: exit 0 expected; got ${t2.exitCode}. stderr: ${t2.stderr.slice(0, 400)}`);
-  const t2Ptr = join(b.dataDir, 'pensmith', 'active.json');
+  const t2Ptr = join(b.resolvedDataDir, 'active.json');
   assert.ok(existsSync(t2Ptr), `open Tier 2: active pointer must be written at ${t2Ptr}`);
 
   // The pointer carries the same identity shape in both tiers (paperId echoed).

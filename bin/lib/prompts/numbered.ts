@@ -130,8 +130,14 @@ async function readOneLine(
     const timer = setTimeout(() => {
       settle(() => reject(new PromptTimeoutError(id, timeoutMs)));
     }, timeoutMs);
-    // Prevent the timer from blocking process exit
-    if (timer.unref) timer.unref();
+    // The timer is intentionally REFFED (not unref'd): when stdin is the only
+    // other handle and never delivers (a closed/non-TTY pipe, a never-written
+    // PassThrough in tests, CI), an unref'd timer can be starved — the event
+    // loop drains before it fires, so the timeout never rejects and the awaiting
+    // promise hangs (node:test then reports "still pending" → cancelledByParent
+    // for this test and its concurrent siblings). The timer always self-clears
+    // on settle (line / EOF / fire), so reffing it never delays exit beyond the
+    // timeout window — which is precisely when the timeout is meant to fire.
 
     rl.once('line', (line: string) => {
       settle(() => resolve(line.trim()));
