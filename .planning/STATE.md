@@ -4,14 +4,14 @@ milestone: v0.2.0
 milestone_name: End-to-End
 status: planning
 stopped_at: Completed 12-03-PLAN.md (GEN-04 intake bootstrap)
-last_updated: "2026-06-22T12:58:24.575Z"
+last_updated: "2026-06-22T13:10:30.305Z"
 last_activity: 2026-06-22 — v0.2.0 roadmap created (Phases 11–16, 25 requirements)
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
-  percent: 17
+  completed_plans: 8
+  percent: 33
 ---
 
 # Project State
@@ -92,6 +92,7 @@ Last activity: 2026-06-22 — v0.2.0 roadmap created (Phases 11–16, 25 require
 | Phase 11-tier-2-llm-transport P04 | 90min | 2 tasks | 5 files |
 | Phase 12-live-research-intake-bootstrap-humanizer-task P01 | 18min | 3 tasks | 3 files |
 | Phase 12-live-research-intake-bootstrap-humanizer-task P03 | 5min | 1 task | 1 file |
+| Phase 12 P04 | 10m | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -252,6 +253,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [10-04] intake-clarifier re-pinned DIRECTLY to real SHA-256 e2fa74ba (no sentinel) — byte-stable in-place edit follows the Phase-9/Phase-5 re-pin precedent; loadPrompt resolves with no PENSMITH_ALLOW_PENDING_PROMPT_HASHES bypass
 - [Phase ?]: [10-04] Zotero used-as-source path + absent/no-auth fallback declared in workflows/research.md (executable seam shipped in 10-03); W4 required: list untouched so no new capability_check top-level key
 - [Phase ?]: [10-04] RIS exercised as a library surface through the research verb (not a 17th verb); tier-contract bijection guard forbids zotero/zotero-mcp/ris/style from UX02_VERBS while confirming zotero-mcp lives only in the sources registry
+- [Phase ?]: _taskRunner checked before isHumanizerSkillPresent — injected non-null runner bypasses skill-gate, enables call-through test on machines without humanizer installed
 
 ### Pending Todos
 
@@ -272,7 +274,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T12:58:24.566Z
+Last session: 2026-06-22T13:10:19.916Z
 Stopped at: Completed 12-03-PLAN.md (GEN-04 intake bootstrap)
 Resume file: None
 
