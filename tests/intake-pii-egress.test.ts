@@ -106,10 +106,14 @@ async function runIntakeCapturingEgress(
 
 test('EGRESS-BY-CONTENT: no raw PII sentinel survives in the model-bound interpolate payload', { skip: !READY }, async () => {
   const root = mkProjectRoot();
-  // Drive the Tier-1 interpolate egress (PENSMITH_NO_LLM unset, fake key set so
-  // intake reaches the loadPrompt → interpolate call offline).
+  // Phase 11: intake now calls complete() via the real transport. Set
+  // PENSMITH_NO_LLM=1 so complete() short-circuits to the offline mock BEFORE
+  // any HTTP call (key is not needed for the offline path). The spy still
+  // captures the _interpolate egress because _interpolate(prompt, {assignment:
+  // egressSeed}) is called BEFORE complete() in intake.ts — offline mode does
+  // NOT prevent the egress capture (the spy observes the REDACTED content).
   process.env.ANTHROPIC_API_KEY = 'sk-test-offline-egress';
-  delete process.env.PENSMITH_NO_LLM;
+  process.env.PENSMITH_NO_LLM = '1';
   process.env.PENSMITH_PII_REDACT = '1';
 
   const fromPath = path.join(root, 'assignment.txt');
@@ -125,6 +129,7 @@ test('EGRESS-BY-CONTENT: no raw PII sentinel survives in the model-bound interpo
     captured = await runIntakeCapturingEgress(root, { from: fromPath, redactPii: true, yolo: true });
   } finally {
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.PENSMITH_NO_LLM;
     delete process.env.PENSMITH_PII_REDACT;
   }
 

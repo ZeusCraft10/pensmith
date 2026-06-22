@@ -2,8 +2,8 @@
 //
 // Plan 03-07 Task 7.2 — Tier-2 thin orchestrator. In Tier 1 the workflow
 // body delegates to the model with the `section-drafter` prompt
-// (D-12 LOCKED slug). In Tier 2 (portable CLI) the verb writes a
-// placeholder `.paper/sections/<NN>-<slug>/DRAFT.md`.
+// (D-12 LOCKED slug). In Tier 2 (portable CLI) the verb calls complete()
+// via the Phase 11 transport (GEN-02).
 //
 // Plan 04-03 — wave mode. When invoked WITHOUT a positional <n>, the verb
 // schedules ALL planned sections into waves and writes them wave-by-wave via
@@ -16,7 +16,11 @@
 // caller-injected fields from widening the drafter's context. Both the
 // single-section path AND the per-node wave writer route through it.
 //
-// Phase 3 Tier-2 fallback: see Plan 07 amendment.
+// Phase 11 wiring: complete() handles isNoLlmMode() short-circuit before
+// key resolution. MissingApiKeyError propagates from writeOneSection so the
+// wave orchestrator surfaces it per-section (existing error-propagation contract
+// preserved). The verb-level run() translates it to a fail-loud banner + non-zero
+// exit for the single-section path.
 
 import { defineCommand } from 'citty';
 import { existsSync, readFileSync } from 'node:fs';
@@ -32,14 +36,13 @@ import { StyleProfileSchema, type StyleProfile } from '../lib/schemas/style.js';
 import { TutorialSubscriber } from '../lib/tutorial.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
+import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
+import { complete, MissingApiKeyError } from '../lib/anthropic.js';
 
-const TIER2_DRAFT = [
-  '# Section DRAFT (Tier-2 placeholder)',
-  '',
-  '[Pensmith Tier 2: this section requires LLM drafting. Run in Claude Code,',
-  ' or set ANTHROPIC_API_KEY for direct API access (Phase 4 work).]',
-  '',
-].join('\n');
+// Phase 11 — the section-draft placeholder constant has been removed. write now
+// calls complete() for real generation (GEN-02). With no key configured:
+// MissingApiKeyError propagates from complete() → fail-loud banner (GEN-06).
+// With PENSMITH_NO_LLM=1: complete() returns offline mock transparently.
 
 const DEFAULT_SLUG = 'placeholder';
 const DEFAULT_MAX_PARALLEL = 5;
@@ -189,10 +192,10 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
   });
 
   // T-3-10 / WRTE-04 chokepoint: validate the drafter input shape BEFORE any
-  // prompt invocation. Strict-schema throws on extra fields, missing fields, or
-  // wrong types. In Tier 2 placeholder mode we still call this to exercise the
-  // chokepoint code-path and surface any drift at runtime. styleProfilePath is
-  // passed ONLY when a STYLE.json was successfully loaded (additive optional).
+  // prompt invocation or complete() call. Strict-schema throws on extra fields,
+  // missing fields, or wrong types. assertDrafterInput MUST precede complete()
+  // (invariant 3 in 11-PATTERNS — WRTE-04 ordering preserved, T-11-07).
+  // styleProfilePath is passed ONLY when a STYLE.json was successfully loaded.
   assertDrafterInput({
     planPath: `.paper/sections/${String(n).padStart(2, '0')}-${slug}/PLAN.md`,
     sources: [],
@@ -201,8 +204,29 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
     ...(styleProfilePath ? { styleProfilePath } : {}),
   });
 
+  // ── Phase 11: call complete() AFTER assertDrafterInput (WRTE-04 preserved) ──
+  // MissingApiKeyError propagates upward — the wave orchestrator surfaces it
+  // per-section (runAllSections existing error-propagation contract; see the
+  // writeOneSection caller in run() which translates it to a fail-loud banner
+  // for the single-section path). Wave mode: each section's error is isolated.
+  // PENSMITH_NO_LLM=1: complete() short-circuits before key resolution (offline mock).
+  const drafterPrompt = loadPrompt('section-drafter');
+  const interpolatedDrafterPrompt = interpolate(drafterPrompt, {
+    section: JSON.stringify({ number: n, slug, title: slug, depends_on: [], estimated_word_count: 300 }),
+    brief: planMd || `Section ${n}: ${slug}`,
+    assignedSources: '[]',
+    voiceHint,
+  });
+
+  const result = await complete({
+    system: interpolatedDrafterPrompt,
+    messages: [{ role: 'user', content: `Write section ${n} (${slug}).` }],
+    scope: 'section',
+    scopeId: `write-${n}`,
+  });
+
   const targetPath = sectionDraft(n, slug);
-  await atomicWriteFile(targetPath, TIER2_DRAFT);
+  await atomicWriteFile(targetPath, result.text);
   return targetPath;
 }
 
@@ -308,7 +332,21 @@ export const writeCommand = defineCommand({
     // byte-unchanged for every goal (the writer never sees the subscriber).
     const subscriber = makeSubscriberNonFatal(paperRoot);
 
-    const targetPath = await writeOneSection(n, slug);
+    let targetPath: string;
+    try {
+      targetPath = await writeOneSection(n, slug);
+    } catch (e) {
+      if (e instanceof MissingApiKeyError) {
+        process.stderr.write(
+          'pensmith write: ERROR — no LLM key configured.\n' +
+          'Set ANTHROPIC_API_KEY to enable real generation.\n' +
+          'Run inside Claude Code (Tier 1) for key-free operation.\n',
+        );
+        process.exitCode = 1;
+        return { ok: false, mode: 'no-key-configured' };
+      }
+      throw e;
+    }
 
     if (subscriber) {
       subscriber.emit({
@@ -323,8 +361,8 @@ export const writeCommand = defineCommand({
       await subscriber.flush();
     }
 
-    process.stdout.write(`pensmith write: wrote Tier-2 placeholder DRAFT.md to ${targetPath}\n`);
-    return { ok: true, path: targetPath, mode: 'tier2-placeholder' };
+    process.stdout.write(`pensmith write: wrote DRAFT.md to ${targetPath}\n`);
+    return { ok: true, path: targetPath, mode: 'real' };
   },
 });
 

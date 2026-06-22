@@ -3,15 +3,14 @@
 //
 // Plan 03-07 Task 7.2 — Tier-2 thin orchestrator. The Tier-1 (MCP plugin)
 // path delegates to the model via the workflow body's <capability_check>
-// branch; the Tier-2 (portable Node CLI) path runs in deterministic-only
-// mode and writes a placeholder INTAKE.md so downstream verbs (research,
-// outline) have a file to read.
+// branch; the Tier-2 (portable Node CLI) path calls complete() via the
+// Tier-2 LLM transport (GEN-02, Phase 11).
 //
-// Phase 3 Tier-2 fallback: see Plan 07 amendment.
-//   When PENSMITH_NO_LLM=1 OR no ANTHROPIC_API_KEY is set, this verb does
-//   NOT invoke a model. It writes `.paper/INTAKE.md` with a placeholder
-//   string the operator can hand-edit, then exits 0. Phase 4 adds
-//   bin/lib/anthropic.ts with a real chat() helper.
+// Phase 11 wiring: complete() handles isNoLlmMode() short-circuit before
+// key resolution, so verbs do NOT check PENSMITH_NO_LLM themselves.
+//   - With PENSMITH_NO_LLM=1: complete() returns offline mock (no key needed).
+//   - With ANTHROPIC_API_KEY set: complete() makes real API call.
+//   - With no key: getProviderApiKey() throws MissingApiKeyError → fail-loud.
 //
 // D-12 LOCKED prompt slug: `intake-clarifier` (registered in
 // bin/lib/prompt-loader.ts EXPECTED_PROMPT_HASHES).
@@ -23,6 +22,8 @@ import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { redactPii, diffPii } from '../lib/pii.js';
+import { complete, MissingApiKeyError } from '../lib/anthropic.js';
+import { getProviderApiKey } from '../lib/runtime.js';
 
 // EGRESS SEAM (H3 — test-observable model-bound payload). intake calls the
 // model-bound interpolate THROUGH this module-local indirection so the egress
@@ -52,18 +53,9 @@ import {
   writeStyleProfile,
 } from '../lib/style-match.js';
 
-const TIER2_PLACEHOLDER = [
-  '# Pensmith Intake (Tier-2 placeholder)',
-  '',
-  '[Pensmith Tier 2: this section requires LLM drafting. Run in Claude Code,',
-  ' or set ANTHROPIC_API_KEY for direct API access (Phase 4 work).]',
-  '',
-  '## Topic',
-  '',
-  '(hand-edit this file or re-run inside the Claude Code plugin so the',
-  ' `intake-clarifier` prompt can populate it.)',
-  '',
-].join('\n');
+// Phase 11 — the intake placeholder constant has been removed. intake now calls
+// complete() for real generation (GEN-02). With no key configured: fail-loud
+// (GEN-06). With PENSMITH_NO_LLM=1: complete() returns offline mock transparently.
 
 /**
  * Resolve the paper's display name + class. `name` falls back to the project
@@ -334,7 +326,6 @@ export const intakeCommand = defineCommand({
     const cwd = process.cwd();
     const targetPath = path.join(paperDir(), 'INTAKE.md');
     const rawLocalPath = path.join(paperDir(), 'INTAKE.raw.local');
-    const noLlm = process.env['PENSMITH_NO_LLM'] === '1' || !process.env['ANTHROPIC_API_KEY'];
     const thesisSeed = typeof args.thesis === 'string' && args.thesis.trim()
       ? args.thesis.trim()
       : '';
@@ -403,45 +394,65 @@ export const intakeCommand = defineCommand({
       }
     };
 
-    if (noLlm) {
-      // Phase 3 Tier-2 fallback: see Plan 07 amendment. egressSeed is the
-      // redacted text when PII opt-in is on (so INTAKE.md never carries raw PII).
-      let body = egressSeed
-        ? `${TIER2_PLACEHOLDER}\n## Seed (from --from ${args.from})\n\n${egressSeed}\n`
-        : TIER2_PLACEHOLDER;
-      if (thesisSeed && !piiRedact) {
-        // When redacting, thesisSeed is already folded into egressSeed (redacted);
-        // only append the raw thesis section in the opt-out path.
-        body = `${body}\n## Candidate thesis (from sketch)\n\n${thesisSeed}\n`;
+    // ── Phase 11: GEN-06 fail-loud probe (BEFORE any prompt/complete() work) ──
+    // getProviderApiKey() is used here as a PRESENCE PROBE only — the resolved
+    // key value is never bound to a variable used outside this block (T-01-07).
+    // complete() re-resolves the key internally when it makes the HTTP call.
+    // NOTE: complete() calls isNoLlmMode() BEFORE getProviderApiKey(), so when
+    // PENSMITH_NO_LLM=1 is set, the probe below throws MissingApiKeyError but
+    // complete() never reaches key resolution — the offline mock fires first.
+    // To preserve this ordering, we call getProviderApiKey ONLY when NOT in
+    // offline mode (isNoLlmMode is checked inside complete()). We let complete()
+    // handle the offline path transparently. We call the probe for fail-loud only.
+    {
+      // Only probe for key presence when we are NOT in offline mode.
+      // complete() handles PENSMITH_NO_LLM=1 internally (before key resolution).
+      const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
+      if (!noLlm) {
+        try {
+          await getProviderApiKey('anthropic');
+        } catch (e) {
+          if (e instanceof MissingApiKeyError) {
+            process.stderr.write(
+              'pensmith new: ERROR — no LLM key configured.\n' +
+              'Set ANTHROPIC_API_KEY to enable real generation.\n' +
+              'Run inside Claude Code (Tier 1) for key-free operation.\n',
+            );
+            process.exitCode = 1;
+            return { ok: false, mode: 'no-key-configured' };
+          }
+          throw e;
+        }
       }
-      await atomicWriteFile(targetPath, body);
-      process.stdout.write(`pensmith new: wrote Tier-2 placeholder to ${targetPath}\n`);
-      await runSideEffects();
-      return { ok: true, path: targetPath, mode: 'tier2-placeholder' };
     }
 
-    // Tier-1 path: load the prompt (hash-validated by prompt-loader)
-    // and hand it to the model. In Phase 3 the actual model invocation
-    // lives in the workflow body — this branch is reached only when an
-    // operator runs the CLI verb directly with an API key, which is a
-    // Phase-4 path. For now: load the prompt to fail-fast on hash drift,
-    // then emit the placeholder.
+    // ── CRITICAL (H3 / Pitfall 3): the value interpolated into the model-bound ──
+    // payload is `egressSeed` — the REDACTED text when PII opt-in is on (never
+    // the raw --from contents). The PII block above already ran, so redaction is
+    // by CONTENT here, not merely ordered before this call.
     //
-    // CRITICAL (H3): the value interpolated into the model-bound payload is
-    // `egressSeed` — the REDACTED text when PII opt-in is on (never the raw
-    // --from contents). The PII block above already ran, so redaction is by
-    // CONTENT here, not merely ordered before this call.
+    // egressSeed (REDACTED when piiRedact=true) flows into the prompt via
+    // _interpolate seam (test-observable) AND into complete() as the user message.
+    // rawAnswers MUST NEVER appear in the complete() call args (T-11-06 / GEN-06).
     const prompt = loadPrompt('intake-clarifier');
-    // The intake-clarifier template interpolates {{assignment}} (D-12 LOCKED) —
-    // egressSeed (REDACTED when PII opt-in is on) is the value handed to the
-    // model. Routed through the _interpolate seam so the egress is test-observable.
-    const _interpolated = _interpolate(prompt, { assignment: egressSeed });
-    void _interpolated; // referenced for D-12 hash-pin enforcement at runtime
-    // INTAKE.md carries the redacted text when PII opt-in is on (raw → .raw.local).
-    await atomicWriteFile(targetPath, egressSeed ? `${TIER2_PLACEHOLDER}\n## Seed\n\n${egressSeed}\n` : TIER2_PLACEHOLDER);
-    process.stdout.write(`pensmith new: wrote Tier-2 placeholder to ${targetPath} (Phase 4 will wire real chat())\n`);
+    // The intake-clarifier template interpolates {{assignment}} (D-12 LOCKED).
+    // Routed through the _interpolate seam so the egress is test-observable (H3).
+    const interpolatedPrompt = _interpolate(prompt, { assignment: egressSeed });
+
+    // content is egressSeed (redacted when piiRedact=true) — never rawAnswers (Pitfall 3).
+    const result = await complete({
+      system: interpolatedPrompt,
+      messages: [{ role: 'user', content: egressSeed }],
+      scope: 'task',
+      scopeId: 'intake',
+    });
+
+    // INTAKE.md carries the redacted text via the model result when PII opt-in
+    // is on (raw → .raw.local). The model output is the artifact; no placeholder.
+    await atomicWriteFile(targetPath, result.text);
+    process.stdout.write(`pensmith new: wrote INTAKE.md to ${targetPath}\n`);
     await runSideEffects();
-    return { ok: true, path: targetPath, mode: 'tier2-placeholder' };
+    return { ok: true, path: targetPath, mode: 'real' };
   },
 });
 
