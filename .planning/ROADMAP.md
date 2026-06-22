@@ -74,7 +74,15 @@ Plans:
   2. `pensmith intake` writes `STATE.json` with a `paperId` so that global-library registration and style-match proceed in the real flow without WARN-skipping.
   3. In Tier 1, the humanizer wrap calls the humanizer skill via Task and records a real before/after GPTZero honesty score; when the skill is absent it prints a clear skip banner and continues.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+
+- [ ] 12-01-PLAN.md — Wave-0 RED-by-skip scaffolds (research-discovery, intake-bootstrap, humanizer-task; fileURLToPath spaced-path safe; offline cassettes + PENSMITH_NO_LLM + injected TaskRunner)
+- [ ] 12-02-PLAN.md — GEN-03 live research: extract research-orchestrator (adapter fan-out + DOI/title dedup + source-evaluator), wire INTAKE.md vars + approval gates, replace research.ts swap-seam, preserve D-15 ordering
+- [ ] 12-03-PLAN.md — GEN-04 intake bootstrap: idempotent initState(paperDir(cwd)) before runSideEffects so resolvePaperId is non-null and the WARN-skip guards flip active
+- [ ] 12-04-PLAN.md — GEN-05 humanizer Task: injectable __setTaskRunnerForTest seam, Tier-1 Task invocation -> .paper/FINAL.md, null-runner clean skip; locked honest framing preserved
+
 **UI hint**: no
 
 ### Phase 13: Citation rendering at export
@@ -157,7 +165,7 @@ Plans:
 | 9. Educator/tutorial mode + PII polish | v0.1.0 | 4/4 | Complete | 2026-06-20 |
 | 10. Discipline + citation-style breadth + Zotero MCP | v0.1.0 | 5/5 | Complete | 2026-06-22 |
 | 11. Tier-2 LLM transport | v0.2.0 | 4/4 | Complete   | 2026-06-22 |
-| 12. Live research + intake bootstrap + humanizer Task | v0.2.0 | 0/TBD | Not started | - |
+| 12. Live research + intake bootstrap + humanizer Task | v0.2.0 | 0/4 | Planned | - |
 | 13. Citation rendering at export | v0.2.0 | 0/TBD | Not started | - |
 | 14. Fail-closed verifier gate | v0.2.0 | 0/TBD | Not started | - |
 | 15. Foundation & security hardening | v0.2.0 | 0/TBD | Not started | - |
