@@ -89,37 +89,37 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GEN-01 | TBD | Pending |
-| GEN-02 | TBD | Pending |
-| GEN-03 | TBD | Pending |
-| GEN-04 | TBD | Pending |
-| GEN-05 | TBD | Pending |
-| GEN-06 | TBD | Pending |
-| REND-01 | TBD | Pending |
-| REND-02 | TBD | Pending |
-| REND-03 | TBD | Pending |
-| GATE-01 | TBD | Pending |
-| GATE-02 | TBD | Pending |
-| GATE-03 | TBD | Pending |
-| GATE-04 | TBD | Pending |
-| HARD-01 | TBD | Pending |
-| HARD-02 | TBD | Pending |
-| HARD-03 | TBD | Pending |
-| HARD-04 | TBD | Pending |
-| HARD-05 | TBD | Pending |
-| HARD-06 | TBD | Pending |
-| CI-01 | TBD | Pending |
-| CI-02 | TBD | Pending |
-| CI-03 | TBD | Pending |
-| DOCS-01 | TBD | Pending |
-| DOCS-02 | TBD | Pending |
-| DOCS-03 | TBD | Pending |
+| GEN-01 | Phase 11 | Pending |
+| GEN-02 | Phase 11 | Pending |
+| GEN-03 | Phase 12 | Pending |
+| GEN-04 | Phase 12 | Pending |
+| GEN-05 | Phase 12 | Pending |
+| GEN-06 | Phase 11 | Pending |
+| REND-01 | Phase 13 | Pending |
+| REND-02 | Phase 13 | Pending |
+| REND-03 | Phase 13 | Pending |
+| GATE-01 | Phase 14 | Pending |
+| GATE-02 | Phase 14 | Pending |
+| GATE-03 | Phase 14 | Pending |
+| GATE-04 | Phase 14 | Pending |
+| HARD-01 | Phase 15 | Pending |
+| HARD-02 | Phase 15 | Pending |
+| HARD-03 | Phase 15 | Pending |
+| HARD-04 | Phase 15 | Pending |
+| HARD-05 | Phase 15 | Pending |
+| HARD-06 | Phase 15 | Pending |
+| CI-01 | Phase 16 | Pending |
+| CI-02 | Phase 16 | Pending |
+| CI-03 | Phase 16 | Pending |
+| DOCS-01 | Phase 16 | Pending |
+| DOCS-02 | Phase 16 | Pending |
+| DOCS-03 | Phase 16 | Pending |
 
 **Coverage:**
 - v1 requirements: 25 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 25 ⚠️ (resolved when the roadmapper runs)
+- Mapped to phases: 25 ✓
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-06-22 (from the 2026-06-22 improvement-review backlog)*
-*Last updated: 2026-06-22 after milestone v0.2.0 initialization*
+*Last updated: 2026-06-22 — traceability filled after roadmap creation (Phases 11–16)*
