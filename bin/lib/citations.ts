@@ -27,13 +27,16 @@
 // requiring every caller to read+pass it.
 //
 // =====================================================================
-//   citation-js lazy CSL plugin (RESEARCH.md Pitfall #4)
+//   citation-js lazy CSL plugin (RESEARCH.md Pitfall #4 / Phase-10 Pitfall 1)
 // =====================================================================
 // `citation-js >= 0.7` lazy-loads CSL templates. A custom template must
 // be registered via `plugins.config.get('@csl').templates.add(name, csl)`
-// BEFORE the first `Cite.format()` call referencing it. We memoize
-// registration via `apaRegistered` so multiple renderApa() calls in a
-// single process register once, not per-call.
+// BEFORE the first `Cite.format()` call referencing it. citeproc's
+// registry has NO idempotency — a second templates.add(name, ...) with the
+// same name throws "template already registered" (Phase-10 RESEARCH
+// Pitfall 1). We memoize registration via the `registeredStyles` Map so
+// each style template (apa + the 7 new styles) is added at most once per
+// process. The Map check BEFORE every templates.add is the collision guard.
 //
 // =====================================================================
 //   Re-export Cite (CYCLE-3 NEW-H-1)
@@ -97,28 +100,76 @@ function findPkgRoot(start: string): string {
 }
 
 const PKG_ROOT = findPkgRoot(__dirname);
-const APA_CSL_PATH = path.join(PKG_ROOT, 'templates', 'citation-styles', 'apa.csl');
 
 // =====================================================================
-//   Memoized custom-template registration (Pitfall #4)
+//   Memoized N-style custom-template registration (Pitfall #4 / Pitfall 1)
 // =====================================================================
-const CUSTOM_APA_NAME = 'pensmith-apa';
-let apaRegistered = false;
+// CITE-02 / CITE-03: generalized from the single APA boolean to a Map so all
+// 8 styles (apa + the 7 new bundled CSL files) share ONE memoization
+// mechanism. The Map check before every templates.add is the Phase-10
+// Pitfall-1 collision guard ("template already registered").
+//
+// SINGLE registration path for 'pensmith-apa' (H2 fix): renderApa delegates
+// to renderStyle(entries,'apa'), so ensureStyleTemplate('apa') is the SOLE
+// registrar of the 'pensmith-apa' citeproc template name. There is no longer
+// an independent apa boolean / standalone ensureApaTemplate — calling both
+// renderApa() and renderStyle(entries,'apa') in one process registers
+// 'pensmith-apa' exactly once.
+const registeredStyles = new Map<string, boolean>();
 
-function ensureApaTemplate(cslTemplateString: string): void {
-  if (apaRegistered) return;
-  const cslPlugin = plugins.config.get('@csl');
-  cslPlugin.templates.add(CUSTOM_APA_NAME, cslTemplateString);
-  apaRegistered = true;
+// On-disk filename per style key (value === key for all 8 — Plan 10-00 Task 1
+// saved the files under these exact names; apa shipped in Phase 3).
+const STYLE_FILENAMES: Readonly<Record<string, string>> = {
+  'apa': 'apa',
+  'mla': 'mla',
+  'chicago-notes-bib': 'chicago-notes-bib',
+  'chicago-author-date': 'chicago-author-date',
+  'ieee': 'ieee',
+  'ama': 'ama',
+  'vancouver': 'vancouver',
+  'harvard': 'harvard',
+};
+
+// Register the bundled CSL template for `style` under the citeproc name
+// `pensmith-${style}` exactly once per process. Reads the committed .csl via
+// readFileSync (OFFLINE — never fetches). For style==='apa' this resolves to
+// templates/citation-styles/apa.csl and registers 'pensmith-apa', the same
+// name+bytes the old renderApa used → byte-identical output. Throws a clear Error naming the
+// path when the .csl is absent (no silent empty bibliography — T-10-01-01).
+function ensureStyleTemplate(style: string): void {
+  if (registeredStyles.get(style)) return;
+  const filename = STYLE_FILENAMES[style] ?? style;
+  const cslPath = path.join(PKG_ROOT, 'templates', 'citation-styles', `${filename}.csl`);
+  if (!existsSync(cslPath)) {
+    throw new Error(
+      `renderStyle: CSL file not found for style '${style}' at ${cslPath}`,
+    );
+  }
+  const cslString = readFileSync(cslPath, 'utf8');
+  plugins.config.get('@csl').templates.add(`pensmith-${style}`, cslString);
+  registeredStyles.set(style, true);
+}
+
+/**
+ * Test-only — clear ALL registered style templates so a second test run in
+ * the same process re-registers cleanly. NEVER call from production code.
+ */
+export function _resetStyleTemplatesForTest(): void {
+  registeredStyles.clear();
 }
 
 /**
  * Test-only — clear the apa-template registration memo so a second test
  * run in the same process re-registers (e.g. if a test mutates the CSL).
+ *
+ * H2 fix: apa now shares the registeredStyles Map (renderApa delegates to
+ * renderStyle(entries,'apa')), so this deletes the single 'apa' entry rather
+ * than flipping a stale separate boolean — keeping it in lockstep with
+ * _resetStyleTemplatesForTest (both operate on the one Map).
  * NEVER call from production code.
  */
 export function _resetApaTemplateForTest(): void {
-  apaRegistered = false;
+  registeredStyles.delete('apa');
 }
 
 // =====================================================================
@@ -162,38 +213,92 @@ export async function parseBib(bibtex: string): Promise<Array<Record<string, unk
 export const parseBibtex = parseBib;
 
 // =====================================================================
-//   Public: renderApa
+//   Public: renderStyle (CITE-02 / CITE-03 — generic N-style renderer)
+// =====================================================================
+/**
+ * Render the supplied parsed entries as a reference list in the given
+ * `style` using the bundled `templates/citation-styles/<style>.csl`.
+ *
+ * Supported styles: apa, mla, chicago-notes-bib, chicago-author-date,
+ * ieee, ama, vancouver, harvard.
+ *
+ * Accepts the array returned from `parseBib`. Registration is memoized via
+ * the registeredStyles Map (Pitfall 1 collision guard) so back-to-back
+ * calls for the same style never throw "template already registered".
+ *
+ * DETERMINISTIC + OFFLINE: format:'text' + lang:'en-US' make citeproc use
+ * the bundled en-US locale (no fetch) and emit byte-identical output for
+ * identical input. The .csl is read via readFileSync — no render-time
+ * network access (T-10-01-04).
+ *
+ * Throws a clear Error naming the missing path for an unknown style (no
+ * silent empty output — T-10-01-01).
+ */
+export async function renderStyle(
+  entries: Array<Record<string, unknown>>,
+  style: string,
+): Promise<string> {
+  if (!Array.isArray(entries)) {
+    throw new TypeError('renderStyle: input must be an array of parsed entries (from parseBib)');
+  }
+  ensureStyleTemplate(style);
+  const cite = new Cite(entries, { forceType: '@csl/object' });
+  return cite.format('bibliography', {
+    format: 'text',
+    template: `pensmith-${style}`,
+    lang: 'en-US',
+  });
+}
+
+// =====================================================================
+//   Public: resolveStyleName (discipline → CSL style name)
+// =====================================================================
+/**
+ * Map a discipline key (from disciplines.json / PROJECT.md) to its default
+ * citation style name (the key `renderStyle` expects). Callers that already
+ * know the style can pass it directly; this is a lookup convenience for
+ * workflow bodies. Unknown disciplines fall back to 'apa'.
+ */
+export function resolveStyleName(discipline: string): string {
+  const map: Readonly<Record<string, string>> = {
+    'computer-science': 'ieee',
+    'biology': 'apa',
+    'psychology': 'apa',
+    'sociology': 'apa',
+    'economics': 'apa',
+    'history': 'chicago-author-date',
+    'philosophy': 'chicago-author-date',
+    'literature': 'mla',
+    'other': 'apa',
+  };
+  return map[discipline.toLowerCase()] ?? 'apa';
+}
+
+// =====================================================================
+//   Public: renderApa (locked Wave-0 contract — delegates to renderStyle)
 // =====================================================================
 /**
  * Render the supplied parsed entries as an APA-7 reference list using
  * the bundled apa.csl template.
  *
  * Accepts the array returned from `parseBib` (the Wave 0 test contract).
- * Reads apa.csl from `templates/citation-styles/apa.csl` lazily on first
- * call and memoizes the registered template across the process.
+ * This is the LOCKED Wave-0 export: its name, async-ness, and single-array
+ * argument signature are unchanged.
  *
- * Until Plan 05 lands apa.csl, this function throws a clear diagnostic
- * naming the blocking plan rather than silently producing empty output.
- * The Wave 0 test guards this call with a `shouldSkip` check on
- * apa.csl's existence so the test does not invoke renderApa before
- * Plan 05.
+ * H2 single-registration fix: the body delegates to renderStyle(entries,'apa')
+ * after the array guard, so 'pensmith-apa' has exactly ONE registrar
+ * (ensureStyleTemplate). Output is byte-identical to the previous
+ * self-contained implementation — same apa.csl (via the 'apa'
+ * STYLE_FILENAMES entry), same 'pensmith-apa' template name, same
+ * format:'text' / lang:'en-US' options. Calling renderApa() and
+ * renderStyle(entries,'apa') in one process no longer collides.
+ *
+ * The not-yet-present apa.csl case is handled inside ensureStyleTemplate,
+ * which throws a clear Error naming the path (no silent empty output).
  */
 export async function renderApa(entries: Array<Record<string, unknown>>): Promise<string> {
   if (!Array.isArray(entries)) {
     throw new TypeError('renderApa: input must be an array of parsed entries (from parseBib)');
   }
-  if (!existsSync(APA_CSL_PATH)) {
-    throw new Error(
-      `renderApa: apa.csl not yet present at ${APA_CSL_PATH} — Plan 03-05 ships the bundled CSL template (D-22). ` +
-        `If you are seeing this error during Phase 3 Wave 4 or later, run the build and confirm templates/citation-styles/apa.csl is on disk.`,
-    );
-  }
-  const cslString = readFileSync(APA_CSL_PATH, 'utf8');
-  ensureApaTemplate(cslString);
-  const cite = new Cite(entries, { forceType: '@csl/object' });
-  return cite.format('bibliography', {
-    format: 'text',
-    template: CUSTOM_APA_NAME,
-    lang: 'en-US',
-  });
+  return renderStyle(entries, 'apa');
 }
