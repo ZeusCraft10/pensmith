@@ -104,7 +104,6 @@ Target discipline: computer science / machine learning.
 // the skip-guard is active, so they are never imported (and thus never throw) when
 // SEAM_WIRED is false.
 const orchestratorModUrl = new URL('../bin/lib/research-orchestrator.js', import.meta.url);
-const researchModUrl = new URL('../bin/cli/research.js', import.meta.url);
 
 // ---- Helper: check a LIBRARY.json file has NO forbidden placeholder tokens ------
 function assertNoPlaceholderTokens(libraryJson: string): void {

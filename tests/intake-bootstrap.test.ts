@@ -94,7 +94,6 @@ function writeFixtureAssignment(root: string): string {
 
 // ---- Module URLs (resolved after env overrides) --------------------------------
 const intakeModUrl = new URL('../bin/cli/intake.js', import.meta.url);
-const stateModUrl = new URL('../bin/lib/state.js', import.meta.url);
 const globalLibModUrl = new URL('../bin/lib/global-library.js', import.meta.url);
 
 // ---- Helper: run intake.run() with a given args / cwd --------------------------

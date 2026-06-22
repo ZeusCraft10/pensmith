@@ -118,7 +118,7 @@ test(
     );
 
     const fakeOutput = '# Humanized Draft\n\nThis prose has been improved for clarity.\n';
-    const injectedRunner: TaskRunner = (_skill, _input) =>
+    const injectedRunner: TaskRunner = () =>
       Promise.resolve({ output: fakeOutput });
 
     mod.__setTaskRunnerForTest(injectedRunner);

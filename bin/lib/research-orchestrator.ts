@@ -312,7 +312,6 @@ export async function runResearchOrchestrator(
   let queries: string[];
   let topic: string;
   let discipline: string;
-  let assignment: string;
   let scopeLabel: string;
   let adapterRegistry: AdapterRegistry;
   let forceCandidates: SourceCandidate[] | undefined;
@@ -322,7 +321,6 @@ export async function runResearchOrchestrator(
     queries = queriesOrOpts;
     topic = optsArg!.topic;
     discipline = optsArg!.discipline;
-    assignment = optsArg?.assignment ?? '';
     scopeLabel = optsArg?.scopeLabel ?? 'auto';
     adapterRegistry = optsArg?.__adapterRegistry ?? (sources as AdapterRegistry);
     forceCandidates = undefined;
@@ -331,7 +329,6 @@ export async function runResearchOrchestrator(
     const singleOpts = queriesOrOpts;
     topic = singleOpts.topic;
     discipline = singleOpts.discipline;
-    assignment = singleOpts.assignment;
     scopeLabel = 'auto';
     adapterRegistry = singleOpts.__adapterRegistry ?? (sources as AdapterRegistry);
     forceCandidates = singleOpts.__forceCandidates;

@@ -267,6 +267,23 @@ export default [
     },
   },
 
+  // === Path chokepoint EXEMPTION for Phase 12 live-research / intake-bootstrap / humanizer-task tests ===
+  // These three suites override process.env.LOCALAPPDATA / XDG_DATA_HOME / HOME to
+  // redirect pensmithDataDir() / paperDir() into a per-test tmpdir — the IDENTICAL
+  // isolation pattern as the Phase-8/9 groups above. research-discovery drives the
+  // live adapter fan-out (cassette-backed) + intake STATE.json bootstrap + humanizer
+  // Task seam in a tmp root. Scoped to these three files only.
+  {
+    files: [
+      'tests/research-discovery.test.ts',
+      'tests/intake-bootstrap.test.ts',
+      'tests/humanizer-task.test.ts',
+    ],
+    rules: {
+      'no-restricted-syntax': 'off',
+    },
+  },
+
   // === atomic-write + thin-shim EXEMPTION for tests/lint-thin-shim.test.ts (Phase 2, Wave 1) ===
   // tests/lint-thin-shim.test.ts (Test 2) MUST write a temporary copy of the
   // D-09 fixture under mcp/ so the file-scoped no-restricted-imports rule fires
