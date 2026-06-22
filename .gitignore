@@ -40,6 +40,12 @@ mcp/__fixtures__/
 **/TUTORIAL.md
 **/INTAKE.raw.local
 
+# intake writes config.toml at the paper-dir cwd; when a verb/test runs with the
+# repo root as cwd it leaks a /config.toml ([project] goal=...) into the source
+# tree. It is a paper-workspace artifact, never a repo file (the repo uses
+# .planning/config.json). Root-anchored so legit nested config.toml stays trackable.
+/config.toml
+
 # Local-only
 .env
 .env.local
