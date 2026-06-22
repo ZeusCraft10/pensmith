@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.1.0
-milestone_name: milestone
-status: Shipped to GitHub (origin/main) — 3-OS CI matrix GREEN (run 27936480412)
+milestone_name: Foundation
+status: v0.1.0 Foundation shipped + archived — planning v0.2.0
 stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-06-22T07:27:55.009Z"
-last_activity: 2026-06-22 -- shipped + CI green on linux/macos/windows
+last_updated: "2026-06-22T09:43:59.422Z"
+last_activity: 2026-06-22 — Milestone v0.1.0 completed and archived
 progress:
   total_phases: 11
   completed_phases: 11
@@ -18,38 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-06)
+See: .planning/PROJECT.md (updated 2026-06-22 after v0.1.0 Foundation milestone)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** Phase 10 — Discipline + citation-style breadth + Zotero MCP
+**Current focus:** Planning v0.2.0 — make pensmith end-to-end usable (Tier-2 LLM transport, live research discovery, citation-at-export, fail-closed gate/security hardening; from the 2026-06-22 improvement review)
 
 ## Current Position
 
-Phase: 10 (Discipline + citation-style breadth + Zotero MCP) — EXECUTING
-Plan: 5 of 5
-Status: Shipped to GitHub (origin/main) — 3-OS CI matrix GREEN (run 27936480412)
-Last activity: 2026-06-22 -- shipped + CI green on linux/macos/windows
-
-Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
-
-Plan files (depends_on order):
-
-- 01-00 (wave 0)  — ✅ DONE — Wave 0 prep (CI Node 20.10→20.18, deps, chokepoints, fixtures, locked WARN copy) — commits 2e109dc / f3569c3 / f1842e7
-- 01-01 (wave 1)  — ✅ DONE — paths.ts (a507cd7 recovery + 7b0869e tests + 79cf59d SUMMARY)
-- 01-02 (wave 2)  — ✅ DONE — atomic-write.ts D-07 chokepoint (908cdc2 / 53e01b5 / e1b582e)
-- 01-03 (wave 3)  — ✅ DONE — lock.ts proper-lockfile CJS shim (2a5bed4 / b250bb0 / 4599549)
-- 01-04 (wave 4)  — ✅ DONE — doi.ts + fast-check property fuzz (b915ad6 / a793506 / 479403d)
-- 01-05 (wave 5)  — ✅ DONE — http.ts undici + retry shim + 8 cassettes (a71a798 / 0a56be6 / 30f7642 / 4538b44)
-- 01-06 (wave 6)  — ✅ DONE — budget.ts cost ledger (65fb183 / 8567e88 / 795296c)
-- 01-07 (wave 4)  — ✅ DONE — migrations + 5 zod schemas + loader (8bd0a4d / 85fc938 / ed35099 / d0d955b / 4f1b11a)
-- 01-08 (wave 4)  — ✅ DONE — pii.ts D-49 redaction primitives (1c9f3af / 2a77d74 / 89d1493)
-- 01-09 (wave 9)  — ✅ DONE — session-log.ts JSONL D-49/50/51/52 (f605207 / 1334691 / 6e4b985)
-- 01-10 (wave 10) — ✅ DONE — state.ts D-58 paper-state glue (8617c63 / e475b0b / 85e2737)
-- 01-11 (wave 10) — ✅ DONE — library.ts D-59 paper-library glue (3a2e83c / fe430e3 / 9ee0aac)
-- 01-12 (wave 10) — ✅ DONE — checkpoint.ts D-60 append-only audit log (2dd174b / 24a0200 / 44bec0f)
-- 01-13 (wave 11) — ✅ DONE — runtime.ts + pricing.ts (ARCH-14, Key Finding #5 OPENALEX_API_KEY slot) — 43a1835 / adfcbc2 / b00ed17 / SUMMARY-pending
-
-See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05-09T00:30:00Z, points at `/gsd-verify-phase 1`).
+Phase: Milestone v0.1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-22 — Milestone v0.1.0 completed and archived
 
 ## Performance Metrics
 
@@ -293,3 +272,7 @@ Items acknowledged and carried forward from previous milestone close:
 Last session: 2026-06-22T06:19:50.380Z
 Stopped at: Completed 10-02-PLAN.md
 Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd:new-milestone

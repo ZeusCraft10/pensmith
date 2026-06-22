@@ -1,21 +1,19 @@
 ---
 phase: 00-repo-skeleton-plugin-manifest
 verified: 2026-05-07T21:30:00Z
-status: human_needed
-score: 4/5 success criteria verified
+status: verified
+score: 5/5 success criteria verified
 overrides_applied: 0
-human_verification:
-  - test: "Push repo to GitHub and confirm CI matrix is green on all three OSes"
-    expected: "check (ubuntu-latest, 20.10), check (macos-latest, 20.10), check (windows-latest, 20.10) all green; macos-latest Pitfall C step reports RUNNER_ARCH=ARM64"
-    why_human: "No git remote is configured — the repo has never been pushed to GitHub. ROADMAP success criterion #1 explicitly requires CI to pass on linux-x64, macos-arm64, and windows-x64. Plan 04 Task 2 is a blocking human checkpoint that was auto-approved locally but never executed remotely."
+resolved: 2026-06-22T09:39:32Z
+resolution: "REPO-04 / SC#1 (the sole human_needed item) is satisfied. Repo pushed to github.com/ZeusCraft10/pensmith; the 3-OS CI matrix (ubuntu-latest, macos-latest, windows-latest × Node 20.10) is green at commit 58e8574 — Actions run 27936641705 completed 'success' on 2026-06-22T07:27:59Z, including the macOS Pitfall-C ARM64 assertion and the Windows lint/typecheck/test steps. The blocking human checkpoint from Plan 04 Task 2 has now been executed remotely. (Five OS-specific CI failures surfaced by the matrix were diagnosed and fixed en route — see commits a99391c, f894917, fcbcc88.)"
 ---
 
 # Phase 0: Repo skeleton & plugin manifest — Verification Report
 
 **Phase Goal:** Repository, plugin manifest, MCP entry, and CI discipline are in place before any code that needs them.
 **Verified:** 2026-05-07T21:30:00Z
-**Status:** human_needed
-**Re-verification:** No — initial verification
+**Status:** verified (resolved 2026-06-22 — see resolution note in frontmatter)
+**Re-verification:** No — initial verification; the lone `human_needed` item (GitHub CI matrix) was executed and confirmed green on 2026-06-22
 
 ## Goal Achievement
 
@@ -27,9 +25,9 @@ human_verification:
 | 2 | `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` validate against Claude Code plugin schema | VERIFIED | `node scripts/validate-plugin-manifest.cjs` exits 0, prints "plugin.json + marketplace.json + .mcp.json valid"; manifest.test.ts passes 6/6 manifest tests |
 | 3 | `.mcp.json` declares the pensmith MCP server entry point | VERIFIED | `.mcp.json` parses as valid JSON; `mcpServers.pensmith.command = "node"`, `args[0] = "${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js"`; redundant declaration in `plugin.json.mcpServers` confirmed |
 | 4 | Lint forbids direct `fetch`/`http`/`https`/`undici` imports outside `bin/lib/http.ts`, and forbids `/^10\./` regex outside `bin/lib/doi.ts` | VERIFIED | `eslint.config.js` encodes both rules; red-team fixture triggers both; 4/4 chokepoint tests pass (positive, negative benign, project-config-loaded, documented-gap) |
-| 5 | CI matrix covers ubuntu-latest, macos-latest, windows-latest × Node 20.10 and runs all steps on all three OSes | UNCERTAIN | `.github/workflows/ci.yml` is correct and locally green; no git remote exists; repo has never been pushed to GitHub; cross-platform CI has not run |
+| 5 | CI matrix covers ubuntu-latest, macos-latest, windows-latest × Node 20.10 and runs all steps on all three OSes | VERIFIED | Repo pushed to github.com/ZeusCraft10/pensmith; Actions run 27936641705 at `58e8574` is green on all three OSes × Node 20.10 (incl. macOS Pitfall-C ARM64 assertion + Windows lint/typecheck/test) — resolved 2026-06-22 |
 
-**Score:** 4/5 ROADMAP success criteria verified locally. SC #1 (CI passes on all three OSes) requires GitHub execution.
+**Score:** 5/5 ROADMAP success criteria verified. SC #1 (CI green on all three OSes) was confirmed on GitHub on 2026-06-22 (originally deferred locally as `human_needed`).
 
 ### Required Artifacts
 
@@ -38,7 +36,7 @@ human_verification:
 | `package.json` | TypeScript+ESM, Node>=20.10, all scripts | VERIFIED | `type:module`, `engines.node>=20.10.0`, `packageManager:npm@10.9.0`, all 7 scripts present, `scripts.test = "node scripts/run-tests.mjs"`, no `eslint-plugin-import`, no `bin` field |
 | `tsconfig.json` | ES2022 NodeNext strict with fixtures excluded | VERIFIED | `module:NodeNext`, `strict:true`, `noUncheckedIndexedAccess:true`, `exactOptionalPropertyTypes:true`, `verbatimModuleSyntax:true`, `exclude` contains `tests/fixtures/**/*` |
 | `eslint.config.js` | Flat config with HTTP+DOI chokepoints | VERIFIED | Both `no-restricted-imports` (5 HTTP modules) and `no-restricted-syntax` (DOI regex AST selector) present; per-file exemptions for `bin/lib/http.ts` and `bin/lib/doi.ts`; fixture ignored by project lint; no `eslint-plugin-import` |
-| `.github/workflows/ci.yml` | 3-OS matrix, fail-fast:false, full step order | VERIFIED (file) / UNCERTAIN (execution) | All required strings present; step order correct (lint→tsc→build→test→validate); `fail-fast:false`; `cache:npm`; Pitfall C ARM64 assertion; no remote push yet |
+| `.github/workflows/ci.yml` | 3-OS matrix, fail-fast:false, full step order | VERIFIED (file + execution) | All required strings present; step order correct (prebuild→lint→tsc→build→test→validate); `fail-fast:false`; `cache:npm`; Pitfall C ARM64 assertion; **green on GitHub at `58e8574` across all 3 OSes (run 27936641705)** |
 | `.claude-plugin/plugin.json` | Pensmith plugin manifest | VERIFIED | `name:pensmith`, `version:0.1.0-dev`, `license:MIT`, `author.email:akhilachanta8@gmail.com`, `mcpServers.pensmith` with `command:node` and `${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js` |
 | `.claude-plugin/marketplace.json` | Marketplace manifest | VERIFIED | `name:pensmith`, `owner.name:Akhil Achanta`, `plugins[0].name:pensmith`, `plugins[0].source:./` |
 | `.mcp.json` | MCP server declaration | VERIFIED | `mcpServers.pensmith.command:node`, `args[0]` ends in `dist/mcp/server.js` |
@@ -87,7 +85,7 @@ Not applicable — Phase 0 ships no business logic that renders dynamic data. Al
 | Test runner discovers 3 test files and runs all 18 assertions | `npm test` | exit 0, "discovered 3 test files", 18 pass 0 fail | PASS |
 | ESLint exits 0 on project source | `npm run lint` | exit 0, no violations | PASS |
 | TypeScript strict noEmit exits 0 | `tsc --noEmit` | exit 0 | PASS |
-| Cross-platform CI matrix (all 3 OSes) | GitHub Actions push | SKIP — no remote configured | SKIP — human verification required |
+| Cross-platform CI matrix (all 3 OSes) | GitHub Actions push | run 27936641705 success at `58e8574` (ubuntu+macos+windows × 20.10) | PASS — confirmed green 2026-06-22 |
 
 ### Requirements Coverage
 
@@ -96,7 +94,7 @@ Not applicable — Phase 0 ships no business logic that renders dynamic data. Al
 | REPO-01 | 00-01 | package.json, tsconfig.json, ESLint config, .gitignore, LICENSE, README skeleton, PRIVACY.md skeleton | SATISFIED | All files present with correct content; `npm run check` passes |
 | REPO-02 | 00-03 | plugin.json and marketplace.json validate against Claude Code plugin schema | SATISFIED | Structural assertions pass; validator exits 0; manifest.test.ts 6/6 pass |
 | REPO-03 | 00-01, 00-03 | .mcp.json declares pensmith MCP server entry point | SATISFIED | .mcp.json present with correct `mcpServers.pensmith` shape; confirmed in both `.mcp.json` and `plugin.json.mcpServers` |
-| REPO-04 | 00-04 | CI on linux-x64, macos-arm64, windows-x64 | NEEDS HUMAN | `.github/workflows/ci.yml` is structurally correct and locally green; has never run on GitHub — no git remote exists |
+| REPO-04 | 00-04 | CI on linux-x64, macos-arm64, windows-x64 | SATISFIED | `.github/workflows/ci.yml` is green on GitHub across all 3 OSes at `58e8574` (run 27936641705, 2026-06-22) — confirmed remotely, not just locally |
 | REPO-05 | 00-02 | Lint forbids HTTP imports outside bin/lib/http.ts; DOI regex outside bin/lib/doi.ts | SATISFIED | ESLint flat config encodes both rules; red-team fixture triggers both; 4 regression tests pass |
 
 ### Anti-Patterns Found
@@ -105,13 +103,20 @@ Not applicable — Phase 0 ships no business logic that renders dynamic data. Al
 |------|------|---------|----------|--------|
 | `mcp/server.ts` | 11 | `export {}` — intentional stub | INFO | Deliberate Phase 0 stub; real server lands Phase 2 per D-18; documented in CONTEXT.md and ROADMAP |
 | `tests/lint-chokepoint.test.ts` | 132-156 | 4th test documents a known gap: global `fetch()` not caught by `no-restricted-imports` | INFO | Intentional; gap explicitly documented in test body and accepted for Phase 0; Phase 1 closes with `no-restricted-globals` if needed |
-| `.github/workflows/ci.yml` | — | CI workflow exists but repo has no git remote | WARNING | Workflow can never trigger until repo is pushed to GitHub; not a code defect but a deployment gap |
+| `.github/workflows/ci.yml` | — | CI workflow exists but repo had no git remote (at initial verification) | RESOLVED | Repo pushed to github.com/ZeusCraft10/pensmith on 2026-06-22; workflow now triggers and is green on all 3 OSes (run 27936641705) |
 
 No stubs that render dynamic data found. All `return {}` / `export {}` patterns are intentional Phase 0 scaffolding with explicit future-phase pointers.
 
-### Human Verification Required
+### Human Verification Required — ✅ RESOLVED 2026-06-22
 
-#### 1. GitHub CI Matrix — First Push
+> **Resolution:** The single item below was executed. The repo was pushed to
+> github.com/ZeusCraft10/pensmith and the 3-OS CI matrix is green at `58e8574`
+> (Actions run 27936641705, all of ubuntu-latest / macos-latest / windows-latest
+> × Node 20.10 — including the macOS Pitfall-C ARM64 assertion). Five OS-specific
+> failures the matrix surfaced were fixed en route (commits a99391c, f894917,
+> fcbcc88). No outstanding human verification remains for Phase 0.
+
+#### 1. GitHub CI Matrix — First Push  *(done)*
 
 **Test:** Create a GitHub repository for this project, push the current `main` branch to `origin`, and observe the Actions tab.
 
@@ -132,13 +137,20 @@ No stubs that render dynamic data found. All `return {}` / `export {}` patterns 
 
 ## Gaps Summary
 
-No hard gaps — all locally verifiable must-haves are VERIFIED. The single outstanding item is the GitHub CI matrix execution (ROADMAP success criterion #1 explicitly requires CI green on three OSes in CI, not just locally). The `.github/workflows/ci.yml` is structurally complete and the full pipeline runs correctly on the dev machine; the gap is purely a deployment action.
+**No gaps remain.** All five ROADMAP success criteria are VERIFIED. At initial
+verification (2026-05-07) the one outstanding item was the GitHub CI matrix
+execution (SC #1 requires CI green on three OSes *in CI*, not just locally).
 
-**Root cause of human_needed status:** Plan 04 Task 2 (`checkpoint:human-verify`, gate=blocking) was auto-approved via `auto_advance: true` based on local pipeline success. The task's `how-to-verify` section explicitly requires a GitHub push and observation of all three matrix entries. That step was documented as "Pending" in the SUMMARY.md and has not been performed.
-
-**Recommendation:** This is a low-risk completion action. The pipeline is fully green locally. Proceed with the GitHub push to satisfy ROADMAP success criterion #1, then verify green on all three OSes. Phase 1 can begin immediately after that confirmation.
+**Resolution (2026-06-22):** The repo was pushed to
+github.com/ZeusCraft10/pensmith and the 3-OS matrix is green at `58e8574`
+(run 27936641705). The original `human_needed` root cause — Plan 04 Task 2
+(`checkpoint:human-verify`, gate=blocking) auto-approved on local success without
+a remote push — is now closed: the push happened, CI ran on real GitHub runners
+across all three OSes, and the five OS-specific failures it surfaced were fixed
+(a99391c, f894917, fcbcc88) until the matrix went fully green.
 
 ---
 
 _Verified: 2026-05-07T21:30:00Z_
+_Resolved: 2026-06-22T09:39:32Z (GitHub CI matrix confirmed green at 58e8574)_
 _Verifier: Claude (gsd-verifier)_

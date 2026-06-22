@@ -8,161 +8,129 @@
 
 Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
 
+> **Still the right priority after v0.1.0.** Shipping the full architecture confirmed the section-as-phase / bounded-verifier model is the load-bearing idea. The v0.2.0 work doesn't change the core value — it makes the generative pipeline that *feeds* the verifier actually run end-to-end (Tier-2 transport, live source discovery, citations rendered at export).
+
 ## Requirements
 
 ### Validated
 
-<!-- Shipped and confirmed valuable. -->
+<!-- Shipped in v0.1.0 and confirmed working (tests green, 3-OS CI green). -->
 
-(None yet — ship to validate)
+**Architecture & foundation** — all proved out and unit-tested:
+- ✓ Two-tier source-of-truth: workflow bodies + templates shared between Tier 1 plugin and Tier 2 CLI, drift-gated by `tests/tier-contract.test.ts` — v0.1.0
+- ✓ Section-as-phase directory layout (`.paper/sections/<NN-slug>/{PLAN,DRAFT,VERIFICATION}.md`) with mtime-proven isolation — v0.1.0
+- ✓ `<capability_check>` blocks in every workflow body (Task / MCP / AskUserQuestion / Pandoc / Zotero / humanizer) — v0.1.0
+- ✓ HANDOFF.json (section-granular, <5KB) + atomic write-then-rename chokepoint (`bin/lib/atomic-write.ts`, D-07) — v0.1.0
+- ✓ Concurrent-run lock (`bin/lib/lock.ts`, proper-lockfile) with stale-lock auto-clear — v0.1.0 *(see v0.2.0: lock-key canonicalization hardening)*
+- ✓ Schema versioning + migrations from day one (state v1→v2 shipped) — v0.1.0
+- ✓ Cross-platform paths (Windows %LOCALAPPDATA%, macOS Application Support, Linux XDG) via sole-call-site `paths.ts` (D-41) — v0.1.0
+- ✓ Hard cost cap with pre-call `assertBudget` gate + cost ledger — v0.1.0
+- ✓ HTTP client (`bin/lib/http.ts` chokepoint, D-06): undici, per-source TokenBucket, full-jitter retry, TTL cache, polite UA WARN — v0.1.0
+- ✓ Replayable session log (JSONL) + `--show-prompts` — v0.1.0
+
+**Single-command UX & ergonomics**:
+- ✓ Bare `/pensmith` state-aware router; 16 locked verbs (bijective with 16 workflow bodies); hidden plumbing namespace; NL triggers; inline corrections — v0.1.0
+- ✓ Global flags: `--dry-run` (cassette-only), `--estimate` (tokens+USD, 50%-cap refusal), `--yolo` (default off), `--show-prompts` — v0.1.0
+- ✓ `/pensmith doctor` (10 probes: OneDrive/iCloud/Dropbox/GDrive sync detection, Pandoc, Zotero MCP auth, humanizer skill, contact-email WARN) — v0.1.0
+
+**Verifier (the gate)** — deterministic + blocking:
+- ✓ Pass 1: DOI/arXiv/PMID integrity re-fetch (404 → FABRICATED) + author/title/year fuzzy match (→ MIS-CITED) — v0.1.0
+- ✓ Pass 3: quotation verification against OA full text (PASS/NOT_FOUND/FUZZY) — v0.1.0
+- ✓ Section marked `verified` only when Pass 1 + Pass 3 clean; Pass 2 (claim support) + Pass 4 (orphan audit) advisory only — v0.1.0
+- ✓ DOI/arXiv/PMID normalization (`bin/lib/doi.ts`, D-07) with idempotence property test — v0.1.0
+- ✓ Compile refuse-gate (FABRICATED/MIS-CITED/NOT_FOUND blocks compile), outline-order concat, read-only cross-section smoothing, consistency flags, density check — v0.1.0
+- ✓ `verified_against_draft_hash` compile-staleness flagging — v0.1.0
+
+**Export**:
+- ✓ Zero-trace export — verified by test across `.docx`/`.pdf`/`.tex`/`.md` (zero "pensmith" occurrences, incl. ZIP entries + PDF metadata) — v0.1.0
+- ✓ Free distinctive-phrase plagiarism check (DuckDuckGo HTML, advisory) — v0.1.0
+- ✓ GPTZero honesty score before/after, framing rendered verbatim from a locked copy — v0.1.0
+- ✓ DONE-09 export confirmation gate (per-issue summary; only `--yolo` skips) — v0.1.0
+- ✓ Pandoc export with md-only fallback; `.bib` + `.ris` sidecar bundle — v0.1.0
+
+**Differentiated / breadth**:
+- ✓ Library mode: `list` / `open`, class grouping, derive-at-display status lifecycle — v0.1.0
+- ✓ Style-match opt-in: per-paper `.paper/STYLE.json` only (no global cache), fingerprint reuse surfaced unconditionally, dual-use disclosure — v0.1.0
+- ✓ Educator/tutorial mode (`goal=learning`) as observer/wrapper (zero `if(educator_mode)` branches) — v0.1.0
+- ✓ PII redaction polish (IP/IBAN/NAME) running before any LLM call, deterministic diff — v0.1.0
+- ✓ 8-style CSL rendering library (APA/MLA/Chicago×2/IEEE/AMA/Vancouver/Harvard) + RIS writer — v0.1.0 *(see v0.2.0: not yet applied at export)*
+- ✓ Zotero MCP source adapter (absence non-breaking) + tri-state doctor probe (no key leak) — v0.1.0
+- ✓ BYO PDF ingestion (`pdf-parse` pinned + `pymupdf` shellout fallback) — v0.1.0
+
+**Resume / hooks (Tier 1)**:
+- ✓ PreCompact HANDOFF (10s race), SessionStart auto-resume, PostToolUse checkpoint (≤1/min), Stop lock-release + log-flush (allSettled) — v0.1.0
+
+**Testing & determinism**:
+- ✓ `known-bad-citations.json` (10/10 FABRICATED), `known-bad-quotes.json` (10/10 NOT_FOUND), tier-contract cases, offline cassettes, full Foundation unit suite — 3-OS CI green — v0.1.0
 
 ### Active
 
-<!-- Current scope. Building toward v0.1.0. -->
+<!-- v0.2.0 scope. From the 2026-06-22 improvement review: connecting the verified machinery to a real end-to-end deliverable. -->
 
-#### Architecture & foundation
-- [ ] Two-tier source-of-truth: workflow bodies + templates shared between Tier 1 plugin and Tier 2 CLI
-- [ ] Section-as-phase directory layout (`.paper/sections/<N>/{PLAN,DRAFT,VERIFICATION}.md`)
-- [ ] `<capability_check>` blocks in every workflow body (Task / MCP / AskUserQuestion / Pandoc / Zotero / humanizer detection)
-- [ ] HANDOFF.json schema (section-granular) + atomic write-then-rename for all state files
-- [ ] Concurrent-run lock file (`bin/lib/lock.js`) with stale-lock auto-clear
-- [ ] Schema versioning + migrations directory from day one
-- [ ] Cross-platform paths (Windows %APPDATA%, macOS Application Support, Linux XDG)
-- [ ] Hard cost cap (`cost_cap_usd`, default $5/session) with abort + running cost meter
-- [ ] HTTP client with response cache (TTL per source), exponential backoff with jitter, polite User-Agent
-- [ ] Replayable session log (`.paper/SESSION.log` jsonl), `--show-prompts` flag
+**The unlock (make pensmith actually generate a paper):**
+- [ ] **Tier-2 LLM transport** (`bin/lib/anthropic.ts`) — the six generative verbs (intake/research/outline/plan/write/revise) currently emit `tier2-placeholder` artifacts because the transport module doesn't exist; Tier 2 cannot generate anything today (PRD §1/SC-7)
+- [ ] **Live research source discovery** wired into `pensmith research` — the 8 adapters + dedup + retraction cross-check exist, but `research.ts` hardcodes zero candidates and writes a placeholder library
+- [ ] **Citation style + `[@key]` resolution at export** — wire `resolveStyleName` + `--citeproc/--csl/--bibliography` so exports carry formatted cites + a bibliography instead of literal `[@key]` tokens (the 8-style CSL catalog already exists but has no production consumer)
+- [ ] **Intake paper-level bootstrap** — write `STATE.json`/paperId at intake so global-library registration + style-match stop WARN-skipping in the real flow
+- [ ] **Humanizer Task transport** in Tier 1 (detection ships; the wrap currently returns null, so no "after" score)
 
-#### Single-command UX
-- [ ] `/pensmith` bare command resolves state-aware behavior (intake / research / outline / next section / compile / done / resume)
-- [ ] Verb shortcuts (`/pensmith new|next|status|research|outline|plan <N>|write <N>|verify <N>|compile|done|resume|list|open|sketch|add|doctor`)
-- [ ] Hidden plumbing namespace (`/pensmith:plan-section`, etc.) for scripting
-- [ ] Natural-language skill triggers ("redo section 3", "make it sound less AI", "where am I?")
-- [ ] Inline conversational corrections (length change, add/drop section, swap source, redo section)
+**Fail-closed correctness hardening (the core guarantee, end-to-end):**
+- [ ] Missing `VERIFICATION.md` must fail the compile refuse-gate (currently reads as clean)
+- [ ] Shared render+parse pair for the refuse-gate verdict rows + writer→parser round-trip test
+- [ ] Re-query Retraction Watch at verify time (blocking), not only the WARN-only freshness channel
+- [ ] Re-verify humanizer `FINAL.md` (deterministic Pass-3 + citekey diff) before export — it currently bypasses all verification
 
-#### Library mode (multi-paper)
-- [ ] Global library at `~/.pensmith/library/index.json` (or platform equivalent)
-- [ ] `/pensmith list` with class grouping; `/pensmith open <name>` to switch active paper
-- [ ] Class assignment at intake (free-form strings; defaults to "Unfiled")
-- [ ] Status values: intake / research / outline / sectioning (X/Y) / compile / done / archived
+**Foundation & security hardening:**
+- [ ] Canonicalize lock keys (`path.resolve`+`realpath`) before hashing in `lock.ts` (callers pass inconsistent conventions → same file, different lock)
+- [ ] Real SSRF guards in `http.ts` (scheme allowlist + DNS-resolved RFC1918/loopback block); the `add <url>` "mitigation" comment is currently false
+- [ ] Recursive PII redaction on nested leaves before `SESSION.log` writes (only top-level keys today)
+- [ ] Run the deferred secure-phase audit → per-phase SECURITY.md; pin/replace `pdf-parse@1.1.1`; prompt-injection delimiting in advisory Pass 2/4
 
-#### Intake
-- [ ] Accept assignment as `@file.{pdf,md,txt}`, pasted text, or piped stdin
-- [ ] AskUserQuestion clarifying questions (or stdin fallback in Tier 2): discipline preset, mode, goal, class, counterargument, style-match opt-in, PII redaction opt-in
-- [ ] Discipline presets (CS, Bio, History, Lit, Psych, Econ, Philosophy, Other) — citation style + source preference + sectioning + counterargument default + density target
-- [ ] Print disclaimer; write `.paper/PROJECT.md` and `.paper/config.toml`
-- [ ] PII redaction option (intake-time) before any LLM call
-
-#### Research
-- [ ] Topic disambiguation gate (tiny subagent for ambiguous terms)
-- [ ] Generate 5–10 focused queries from assignment
-- [ ] Parallel `pensmith-source-researcher` per query (Tier 1) / sequential (Tier 2)
-- [ ] BYO PDF ingestion (pdf-parse, GROBID/heuristic metadata, Crossref hydration)
-- [ ] Zotero MCP source provider when detected and authenticated
-- [ ] `pensmith-source-evaluator` scores, dedupes, tiers candidates
-- [ ] Approval gate to prune/approve/add sources
-- [ ] Write `.paper/RESEARCH.md` and `.paper/CITATIONS.bib` with `last_verified` timestamps
-
-#### Outline
-- [ ] Produce section structure with thesis, target word count, source mapping per section, dependencies
-- [ ] Counterargument enforcement for argumentative/persuasive papers (configurable per intake / `--no-counter`)
-- [ ] Approval gate before any section is written
-- [ ] Create numbered `.paper/sections/<NN-slug>/` folders with stub PLAN.md per section
-
-#### Plan section
-- [ ] `pensmith plan <N>` reads stub PLAN.md, maps claims → sources, identifies counterexamples
-- [ ] `--revise` flag for re-planning based on verification feedback
-- [ ] `--research <query>` for section-scoped additional research
-- [ ] Write `.paper/sections/<N>/PLAN.md` with claim-source mapping, paragraph structure, voice hints
-
-#### Write section
-- [ ] Section drafter receives ONLY this section's mapped sources (source isolation by directory)
-- [ ] Style-match consumption per-section (when enabled at intake)
-- [ ] Auto-chain to verify after write (unless `--no-verify`)
-
-#### Verify section (bounded)
-- [ ] Pass 1: DOI/arXiv/PMID integrity — re-fetch via Crossref/arXiv/PubMed; 404 → FABRICATED
-- [ ] Pass 1 (cont.): author/title/year fuzzy match → MIS-CITED on mismatch
-- [ ] Pass 2: claim support (LLM-judged) — verdict ∈ {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}, prompt biased to UNCLEAR
-- [ ] Pass 3: quotation verification — fetch OA full text, PASS/NOT_FOUND/FUZZY_MATCH
-- [ ] Pass 4: per-paragraph claim audit (orphan claims flagged)
-- [ ] Section marked `verified` only when Pass 1 + Pass 3 are clean
-- [ ] DOI / arXiv ID / PMID normalization in `bin/lib/doi.js`
-- [ ] Last-verified timestamps + auto-recheck after `recheck_after_days`
-- [ ] Retraction Watch hard warnings
-
-#### Compile
-- [ ] Refuse if any section has FABRICATED / MIS-CITED / quote NOT_FOUND
-- [ ] Concatenate sections in outline order
-- [ ] Cross-section smoothing pass (last/first paragraph of adjacent sections only)
-- [ ] Cross-section claim consistency check (flag contradictions)
-- [ ] Citation density check vs. discipline preset target
-- [ ] Write `.paper/DRAFT.md` and `.paper/COMPILE-REPORT.md`
-
-#### Done (export)
-- [ ] Whole-paper Pass 4 audit on compiled draft
-- [ ] Free distinctive-phrase plagiarism check (DuckDuckGo HTML)
-- [ ] Humanizer pass (wraps user's installed `humanizer` skill; skip cleanly if absent)
-- [ ] Detection-aware honesty score (GPTZero/Originality/Sapling) before AND after humanize, framed as "improves prose, not evades detection"
-- [ ] Export to `.docx` / `.pdf` / `.tex` / `.md` (pandoc when present)
-- [ ] **Zero metadata, zero footer, zero pensmith trace in exported document**
-- [ ] Bundle `.paper/CITATIONS.bib` in configured citation style
-
-#### Workflow ergonomics
-- [ ] `/pensmith --dry-run` (cached fixtures, no external calls)
-- [ ] `/pensmith --estimate` (project tokens + cost before executing)
-- [ ] `--yolo` flag (skips outline + export approval; default off)
-- [ ] `/pensmith doctor` health check (API connectivity, keys, ecosystem detection, fixture E2E)
-- [ ] `/pensmith sketch` thinking-partner mode for thesis discovery
-- [ ] `/pensmith add <doi|pdf|url>` with "remap sections?" prompt
-- [ ] Educator/tutorial mode (intake choice: draft / learning / both)
-
-#### Resume / hooks (Tier 1)
-- [ ] PreCompact hook writes section-granular HANDOFF.json
-- [ ] SessionStart hook auto-invokes resume
-- [ ] PostToolUse mid-session checkpoint (≤1/min)
-
-#### Style match (opt-in)
-- [ ] Intake folder of past writing samples → `.paper/STYLE.json` profile
-- [ ] Section drafter consumes profile; per-section voice hints override
-
-#### Testing & determinism
-- [ ] `tests/fixtures/known-bad-citations.json` — 10+ fabricated DOIs; verifier flags 10/10 as FABRICATED
-- [ ] `tests/fixtures/known-bad-quotes.json` — 10+ NOT_FOUND in cited source
-- [ ] `tests/tier-contract.test.js` — every workflow body runs in both Tier 1 and Tier 2 against same fixtures, equivalent outputs (modulo prose)
-- [ ] Cassette-based source tests; live-network gated behind `PENSMITH_NETWORK_TESTS=1`
-- [ ] DOI normalization, HTTP cache, lock, budget, paths, migrations all unit-tested
+**CI / DX parity:**
+- [ ] `npm run check` prebuild-first so local == CI; fresh-clone CI job + `git status --porcelain` clean assertion (3 of 5 ship breaks were stale-artifact); coverage gate; non-TTY stdin test run
+- [ ] Ship the real README (install, `/pensmith` quickstart, PRD §3 disclaimer); fill the 4 stub workflow bodies; refresh stale "Phase 3+/ships in Phase 6" copy
 
 ### Out of Scope
 
 - Inline LaTeX equation rendering — export to `.tex`; user runs LaTeX themselves
 - Paywalled full-text parsing — only legitimate OA via Unpaywall, arXiv, PubMed Central
 - Automatic Turnitin/GPTZero submission for certification — score for honesty display only
-- Cross-paper "literature comparison" mode — scope creep beyond v0.1.0
+- Cross-paper "literature comparison" mode — scope creep beyond the current direction
 - Multi-author / collaboration features — local single-user tool
 - Cloud-hosted state — everything is local-only
 - Paid plagiarism services — free distinctive-phrase check only
 - Voice/speech UI — text-only
-- Per-section research as primary mode — research is whole-paper upfront; sections can request additions via `plan <N> --research <query>`
+- Per-section research as primary mode — research is whole-paper upfront; sections request additions via `plan <N> --research <query>`
 - Metadata stamp / visible footer / any pensmith trace in exported documents — explicit user-facing choice; README disclaimer is the only disclosure mechanism
+
+## Current State
+
+**Shipped: v0.1.0 Foundation (2026-06-22).** 11 phases, 73 plans, ~43k LOC TypeScript (ESM/NodeNext strict), 856 tests, 3-OS CI matrix (ubuntu/macos/windows × Node 20.18) green on `origin/main`. Repo: github.com/ZeusCraft10/pensmith.
+
+The full two-tier architecture, the deterministic verifier gate, the compile/export pipeline (zero-trace verified), the single-command UX, and the citation/style libraries all shipped and are green. The known limitation — surfaced by the 2026-06-22 multi-dimension review — is that the **generative pipeline is scaffolded but not yet end-to-end**: the Tier-2 LLM transport doesn't exist, `research` discovers zero live sources, and exports still emit literal `[@key]` tokens. v0.2.0 connects these seams.
+
+**Tech stack:** Node ≥20.10, TypeScript (NodeNext, strict), undici, proper-lockfile, citation-js, pdf-parse/pdf-lib, jszip, Pandoc (optional shellout), MCP SDK. Knowledge graph: 6,398 nodes / 7,606 edges (gitignored, rebuild via `/gsd:graphify build`).
+
+## Next Milestone Goals (v0.2.0)
+
+Make pensmith produce a submission-ready, sourced, citation-formatted paper end-to-end. Sequencing: the Tier-2 transport + live research are the unlock (most other gaps become testable once the CLI can generate and discover); the S-effort fail-closed gate + lock-key + CI-parity fixes run in parallel; citation-at-export is the highest-visibility self-contained correctness win. Full backlog: the 2026-06-22 improvement review.
 
 ## Context
 
 **Inspiration:** Architecturally modeled on [Get Shit Done](https://github.com/gsd-build/get-shit-done) by TÂCHES and the [gsd-plugin](https://github.com/jnuyens/gsd-plugin) repackaging by Jasper Nuyens. The skill / agent / MCP / workflow-body / HANDOFF.json patterns are theirs; pensmith adapts (not copies) them to academic writing. Required README credit per PRD §18.
 
-**Load-bearing mental model:** A paper is a project, a section is a phase, the outline is the roadmap, compile is milestone completion, done is ship. State isolation is enforced by directory structure (`.paper/sections/<N>/`), not careful prompting. Re-doing section 3 never disturbs sections 1, 2, 4, 5. The verifier runs bounded per-section (~20–40 LLM calls instead of ~200 across the whole paper). This is the load-bearing design choice — every architectural decision flows from it.
+**Load-bearing mental model:** A paper is a project, a section is a phase, the outline is the roadmap, compile is milestone completion, done is ship. State isolation is enforced by directory structure (`.paper/sections/<N>/`), not careful prompting. Re-doing section 3 never disturbs sections 1, 2, 4, 5. The verifier runs bounded per-section (~20–40 LLM calls instead of ~200 across the whole paper). **This proved out across all 11 v0.1.0 phases** — re-doing a section never touched its siblings, and the per-section verifier stayed bounded.
 
-**Two-tier requirement:** Both Claude Code plugin (Tier 1, parallel subagents + MCP) and portable Node CLI (Tier 2, sequential, OpenAI-compatible endpoint) must work. Workflow bodies and templates are the shared source of truth. `tests/tier-contract.test.js` gates drift between tiers.
+**Two-tier requirement:** Both Claude Code plugin (Tier 1, parallel subagents + MCP) and portable Node CLI (Tier 2, sequential, OpenAI-compatible endpoint) must work. Workflow bodies and templates are the shared source of truth. `tests/tier-contract.test.ts` gates drift. *(v0.1.0 caveat: Tier-2's generative path is a placeholder until the v0.2.0 LLM transport lands.)*
 
-**External APIs (all free, no keys for basics):** OpenAlex (primary), Crossref (DOI verification), arXiv, PubMed, Semantic Scholar, Unpaywall (OA full-text), GPTZero (honesty score, free tier), Retraction Watch, DuckDuckGo HTML (free plagiarism check). Polite User-Agent with `PENSMITH_CONTACT_EMAIL`.
+**External APIs (all free, no keys for basics):** OpenAlex, Crossref, arXiv, PubMed, Semantic Scholar, Unpaywall, GPTZero (free tier), Retraction Watch, DuckDuckGo HTML. Polite User-Agent with `PENSMITH_CONTACT_EMAIL`.
 
-**Ecosystem composition:** Pensmith probes for and adapts to Zotero MCP (with auth check), Pandoc (better exports), and the user's installed `humanizer` skill at `~/.claude/skills/humanizer/`. Detection cached in `.paper/CAPABILITIES.json` per run.
-
-**Build approach:** GSD will orchestrate this build. PRD §17 leaves several decisions for per-phase discuss-phase: verifier subagent prompt wording, section-dependency syntax, wave scheduling algorithm, MCP SDK choice, PDF parsing library, style-match implementation, library index format, section renumbering policy.
+**Ecosystem composition:** Probes for and adapts to Zotero MCP (with auth check), Pandoc, and the user's installed `humanizer` skill at `~/.claude/skills/humanizer/`.
 
 ## Constraints
 
 - **License**: MIT — open-source from day one
-- **Two-tier**: Both Tier 1 (Claude Code plugin) and Tier 2 (portable Node CLI) must work from the same workflow files. Non-negotiable.
+- **Two-tier**: Both Tier 1 and Tier 2 must work from the same workflow files. Non-negotiable.
 - **Single-command UX**: README quick start teaches `/pensmith` and only `/pensmith`. Verbs are power-user fallback.
 - **Verifier gates compile and export**: No FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes a section. Author/title fuzzy match is part of Pass 1, not optional.
 - **No exported-document trace**: Zero metadata stamp, zero footer, zero pensmith fingerprint in exported docs. Explicit user choice.
@@ -171,37 +139,30 @@ Every citation in every exported paper is real and supports the claim it's attac
 - **Local-only state**: No cloud, no telemetry. Documented in PRIVACY.md.
 - **No paywall bypass**: Full-text only via legitimate OA channels.
 - **Hard cost cap**: `cost_cap_usd` default $5/session aborts overruns.
-- **Cross-platform paths**: Windows / macOS / Linux must all resolve data dir correctly via `bin/lib/paths.js`.
-- **Schema versioning from day one**: Every state file has `schema_version`; migrations live in `bin/lib/migrations/<from>-to-<to>.js`.
+- **Cross-platform paths**: Windows / macOS / Linux all resolve the data dir via `bin/lib/paths.ts`.
+- **Schema versioning from day one**: Every state file has a schema version; migrations live in `bin/lib/migrations/`.
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Section-as-phase as load-bearing model | Maps GSD's structured-workflow primitives 1:1 onto academic writing; enables bounded verification, isolated re-do, parallel writing | — Pending |
-| Two-tier from one source of truth | Avoid duplicate logic between plugin and CLI; workflow bodies + templates are shared and use `<capability_check>` blocks | — Pending |
-| Single-command UX (`/pensmith`) | User remembers one thing; tool tracks state. Verb shortcuts are fallback, not primary | — Pending |
-| Free-only plagiarism check (DuckDuckGo distinctive phrases) | Paid services rejected; lower recall acceptable; free + no API key + demonstrably about catching plagiarism not enabling evasion | — Pending |
-| No exported-document metadata or footer | Deliberate user-facing choice (against initial recommendation); README disclaimer is the only disclosure | — Pending |
-| Style-match shipped (opt-in) with dual-use disclosure | Legitimate uses (consistency across thesis/dissertation); user takes responsibility per README | — Pending |
-| GSD orchestrates the build | Use `/gsd-new-project --auto @PRD.md` flow; don't try to build outside the orchestrator | — Pending |
+| Section-as-phase as load-bearing model | Maps GSD's structured-workflow primitives 1:1 onto academic writing; enables bounded verification, isolated re-do, parallel writing | ✓ Good — held across all 11 phases; section isolation + bounded verifier proven by mtime tests |
+| Two-tier from one source of truth | Avoid duplicate logic between plugin and CLI; workflow bodies + templates shared via `<capability_check>` blocks | ✓ Good — tier-contract gate caught drift repeatedly; (Tier-2 generative transport deferred to v0.2.0) |
+| Single-command UX (`/pensmith`) | User remembers one thing; tool tracks state. Verb shortcuts are fallback | ✓ Good — 16-verb/16-body bijection enforced by three independent guards |
+| Free-only plagiarism check (DuckDuckGo distinctive phrases) | Paid services rejected; lower recall acceptable; free + no key + clearly about catching plagiarism | ✓ Good — advisory, never blocks, offline-cassette tested |
+| No exported-document metadata or footer | Deliberate user-facing choice (against initial recommendation); README disclaimer is the only disclosure | ✓ Good — zero-trace verified by test across all 4 formats |
+| Style-match shipped (opt-in) with dual-use disclosure | Legitimate uses (consistency across thesis/dissertation); user takes responsibility per README | ⚠️ Revisit — shipped per-paper-only (no global cache); novel dual-use territory, watch real usage |
+| Deterministic Pass 1 + Pass 3 blocking; Pass 2 + Pass 4 advisory | Re-fetch-the-source integrity can't be left to an LLM; claim-support judgment is advisory by nature | ✓ Good — known-bad fixtures flag 10/10; advisory passes never auto-block |
+| GSD orchestrates the build | Use the GSD plan→converge→execute→verify flow; don't build outside the orchestrator | ✓ Good — all 11 phases shipped via GSD; 0-HIGH convergence + per-phase verification |
+| Accept v0.1.0 tech-debt, roll into v0.2.0 | Generative seams (Tier-2 transport, live research, citation-at-export) scaffolded not wired; ship architecture, fix end-to-end next | — Pending — v0.2.0 milestone |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
-**After each phase transition** (via `/gsd-transition`):
-1. Requirements invalidated? → Move to Out of Scope with reason
-2. Requirements validated? → Move to Validated with phase reference
-3. New requirements emerged? → Add to Active
-4. Decisions to log? → Add to Key Decisions
-5. "What This Is" still accurate? → Update if drifted
+**After each phase transition** (via `/gsd:transition`): requirements invalidated → Out of Scope; validated → Validated; new → Active; decisions → Key Decisions; "What This Is" accuracy.
 
-**After each milestone** (via `/gsd-complete-milestone`):
-1. Full review of all sections
-2. Core Value check — still the right priority?
-3. Audit Out of Scope — reasons still valid?
-4. Update Context with current state
+**After each milestone** (via `/gsd:complete-milestone`): full review of all sections; Core Value check; audit Out of Scope; update Context + Current State.
 
 ---
-*Last updated: 2026-05-06 after initialization from PRD.md (auto mode)*
+*Last updated: 2026-06-22 after v0.1.0 Foundation milestone (initialized 2026-05-06 from PRD.md)*
