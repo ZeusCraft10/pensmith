@@ -111,9 +111,20 @@ The full two-tier architecture, the deterministic verifier gate, the compile/exp
 
 **Tech stack:** Node ≥20.10, TypeScript (NodeNext, strict), undici, proper-lockfile, citation-js, pdf-parse/pdf-lib, jszip, Pandoc (optional shellout), MCP SDK. Knowledge graph: 6,398 nodes / 7,606 edges (gitignored, rebuild via `/gsd:graphify build`).
 
-## Next Milestone Goals (v0.2.0)
+## Current Milestone: v0.2.0
 
-Make pensmith produce a submission-ready, sourced, citation-formatted paper end-to-end. Sequencing: the Tier-2 transport + live research are the unlock (most other gaps become testable once the CLI can generate and discover); the S-effort fail-closed gate + lock-key + CI-parity fixes run in parallel; citation-at-export is the highest-visibility self-contained correctness win. Full backlog: the 2026-06-22 improvement review.
+**Goal:** Make pensmith produce a submission-ready, sourced, citation-formatted paper end-to-end — close the generative seams the Foundation milestone scaffolded but left unwired.
+
+**Target features:**
+- **Tier-2 LLM transport** (`bin/lib/anthropic.ts`) wired into all six generative verbs — the portable CLI can finally generate intake/research/outline/plan/draft/revision.
+- **Live research source discovery** wired into `pensmith research` — real candidates from the 8 existing adapters (dedup + retraction cross-check), replacing the zero-candidate placeholder.
+- **Citation rendering at export** — `--citeproc/--csl/--bibliography` so exports carry formatted cites + a bibliography instead of literal `[@key]` tokens.
+- **Intake paper-level bootstrap** (STATE.json/paperId) so library registration + style-match stop WARN-skipping.
+- **Fail-closed gate hardening** — missing-VERIFICATION refuse, verdict-parser round-trip, blocking live retraction re-query, post-humanize re-verification.
+- **Foundation & security hardening** — lock-key canonicalization, real SSRF guards, recursive PII redaction, deferred secure-phase audit.
+- **CI/DX parity** — prebuild-first `npm run check`, fresh-clone CI gate, coverage gate, real README + stub-body fill.
+
+**Key context:** Scope is the full 2026-06-22 improvement-review backlog. Sequencing — the Tier-2 transport + live research are the unlock (most other gaps become testable once the CLI can generate and discover); the S-effort fail-closed/lock/CI fixes run in parallel; citation-at-export is the highest-visibility self-contained correctness win.
 
 ## Context
 

@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1.0
-milestone_name: Foundation
-status: v0.1.0 Foundation shipped + archived — planning v0.2.0
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-06-22T09:43:59.422Z"
-last_activity: 2026-06-22 — Milestone v0.1.0 completed and archived
+milestone: v0.2.0
+milestone_name: End-to-End
+status: planning
+last_updated: "2026-06-22T09:53:07.623Z"
+last_activity: 2026-06-22
 progress:
-  total_phases: 11
-  completed_phases: 11
-  total_plans: 73
-  completed_plans: 73
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-22 after v0.1.0 Foundation milestone)
 
 ## Current Position
 
-Phase: Milestone v0.1.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-22 — Milestone v0.1.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-06-22 — Milestone v0.2.0 started
 
 ## Performance Metrics
 
