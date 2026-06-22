@@ -11,12 +11,12 @@ Requirements for the v0.2.0 release. Each maps to exactly one roadmap phase.
 
 ### Generative pipeline (GEN) — the unlock
 
-- [ ] **GEN-01**: A Tier-2 LLM transport module (`bin/lib/anthropic.ts`) is the single chokepoint for LLM calls against an Anthropic / OpenAI-compatible endpoint — streaming, budget-gated via `assertBudget`, key resolved from runtime config, no key value logged
-- [ ] **GEN-02**: The six generative verbs (intake, research, outline, plan, write, revise) call the transport and produce real artifacts in Tier 2 when a key is configured (no more `tier2-placeholder` output)
+- [x] **GEN-01**: A Tier-2 LLM transport module (`bin/lib/anthropic.ts`) is the single chokepoint for LLM calls against an Anthropic / OpenAI-compatible endpoint — streaming, budget-gated via `assertBudget`, key resolved from runtime config, no key value logged
+- [x] **GEN-02**: The six generative verbs (intake, research, outline, plan, write, revise) call the transport and produce real artifacts in Tier 2 when a key is configured (no more `tier2-placeholder` output)
 - [ ] **GEN-03**: `pensmith research` discovers real source candidates by querying the registered adapters, dedupes them, and runs the retraction cross-check — replacing the hardcoded zero-candidate placeholder library
 - [ ] **GEN-04**: Intake bootstraps a paper-level STATE.json + paperId so global-library registration and style-match run in the real flow instead of WARN-skipping
 - [ ] **GEN-05**: The Tier-1 humanizer wrap invokes the humanizer skill via Task and records a real before/after honesty score, skipping cleanly with a banner when the skill is absent
-- [ ] **GEN-06**: When no LLM key is configured, the generative verbs fail loud (clear banner + explicit non-success signal) instead of returning `ok:true` with an empty library
+- [x] **GEN-06**: When no LLM key is configured, the generative verbs fail loud (clear banner + explicit non-success signal) instead of returning `ok:true` with an empty library
 
 ### Citation rendering at export (REND)
 
@@ -89,12 +89,12 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GEN-01 | Phase 11 | Pending |
-| GEN-02 | Phase 11 | Pending |
+| GEN-01 | Phase 11 | Complete |
+| GEN-02 | Phase 11 | Complete |
 | GEN-03 | Phase 12 | Pending |
 | GEN-04 | Phase 12 | Pending |
 | GEN-05 | Phase 12 | Pending |
-| GEN-06 | Phase 11 | Pending |
+| GEN-06 | Phase 11 | Complete |
 | REND-01 | Phase 13 | Pending |
 | REND-02 | Phase 13 | Pending |
 | REND-03 | Phase 13 | Pending |
@@ -116,6 +116,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | DOCS-03 | Phase 16 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 25 total
 - Mapped to phases: 25 ✓
 - Unmapped: 0 ✓

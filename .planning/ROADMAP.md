@@ -46,17 +46,21 @@ Full phase goals, success criteria, and per-plan detail are preserved in the arc
 **Depends on**: Phase 10 (v0.1.0 complete)
 **Requirements**: GEN-01, GEN-02, GEN-06
 **Success Criteria** (what must be TRUE):
+
   1. Running any generative verb (`intake`, `research`, `outline`, `plan`, `write`, `revise`) in Tier 2 with a valid key configured produces a real artifact — no more `tier2-placeholder` output.
   2. All LLM calls route through `bin/lib/anthropic.ts` (a single import chokepoint); no key value appears in the session log or stdout.
   3. When no LLM key is configured, each generative verb prints a clear error banner and exits with a non-zero code — it never silently returns `ok:true` with an empty result.
   4. The transport is budget-gated: `assertBudget` is called before every LLM call and the hard cost cap is respected.
+
 **Plans**: 4 plans
 
 Plans:
-- [ ] 11-01-PLAN.md — Wave-0 RED-by-skip transport test scaffold (chokepoint, no-leak, budget-gate, fail-loud, offline seam, provider shapes)
+
+- [x] 11-01-PLAN.md — Wave-0 RED-by-skip transport test scaffold (chokepoint, no-leak, budget-gate, fail-loud, offline seam, provider shapes)
 - [ ] 11-02-PLAN.md — bin/lib/anthropic.ts transport chokepoint (provider dispatch, budget gate, http.ts POST, no-leak)
 - [ ] 11-03-PLAN.md — wire intake + outline + write to complete() with fail-loud on missing key
 - [ ] 11-04-PLAN.md — wire research + plan + revise (shared proposeSwap) with fail-loud; research defensive parse
+
 **UI hint**: no
 
 ### Phase 12: Live research + intake bootstrap + humanizer Task
@@ -65,9 +69,11 @@ Plans:
 **Depends on**: Phase 11
 **Requirements**: GEN-03, GEN-04, GEN-05
 **Success Criteria** (what must be TRUE):
+
   1. `pensmith research` queries the registered adapters and returns at least one real deduplicated candidate with a retraction check — the zero-candidate placeholder library is gone.
   2. `pensmith intake` writes `STATE.json` with a `paperId` so that global-library registration and style-match proceed in the real flow without WARN-skipping.
   3. In Tier 1, the humanizer wrap calls the humanizer skill via Task and records a real before/after GPTZero honesty score; when the skill is absent it prints a clear skip banner and continues.
+
 **Plans**: TBD
 **UI hint**: no
 
@@ -77,9 +83,11 @@ Plans:
 **Depends on**: Phase 10 (REND is self-contained at the exporter boundary; can run in parallel with Phases 11–12, but sequenced here after the generative unlock for testability)
 **Requirements**: REND-01, REND-02, REND-03
 **Success Criteria** (what must be TRUE):
+
   1. An exported `.docx`, `.pdf`, `.tex`, or `.md` contains formatted in-text citations (e.g. "(Vaswani et al., 2017)") in place of every `[@key]` token.
   2. Every export includes a formatted bibliography / reference list in the paper's selected CSL style, rendered via `--citeproc --csl --bibliography`.
   3. An automated exporter test asserts a formatted author-year or numeric reference appears in the output — not merely that a `.bib`/`.ris` sidecar was copied.
+
 **Plans**: TBD
 **UI hint**: no
 
@@ -89,10 +97,12 @@ Plans:
 **Depends on**: Phase 12
 **Requirements**: GATE-01, GATE-02, GATE-03, GATE-04
 **Success Criteria** (what must be TRUE):
+
   1. `pensmith compile` refuses when any section's `VERIFICATION.md` is absent or contains no parseable status verdict — a never-verified section can never compile.
   2. A round-trip test asserts that the verdict-row writer and parser agree: writing a set of blocking citekeys through the shared render+parse pair and reading them back yields an identical set (writer drift cannot silently yield zero blocking keys).
   3. When `pensmith verify <N>` encounters a DOI that is live-retracted on Retraction Watch, it escalates that citation to MIS-CITED (blocking in Pass 1), not merely a freshness WARN.
   4. Running `pensmith done` re-checks `FINAL.md` (Pass-3 re-fetch + citekey-set diff) before export; if humanization altered or introduced a citation the re-check fails and export is blocked.
+
 **Plans**: TBD
 **UI hint**: no
 
@@ -102,11 +112,13 @@ Plans:
 **Depends on**: Phase 11 (HARD-06 concurrency fairness is most relevant once real LLM calls exist; HARD-01..05 can run in parallel with Phases 11–14 but are sequenced here for clean wave scheduling)
 **Requirements**: HARD-01, HARD-02, HARD-03, HARD-04, HARD-05, HARD-06
 **Success Criteria** (what must be TRUE):
+
   1. Two callers targeting the same file via different path conventions (relative vs absolute, symlinked) acquire the same lock — a test asserts lock-key collision is impossible after `path.resolve` + `realpath` canonicalization.
   2. `http.ts` rejects any request to an RFC1918 / loopback / link-local address (DNS-resolved) and any non-`https:` scheme — a test asserts the SSRF guard fires before any network byte is sent.
   3. A nested-object PII fixture (e.g. `{ user: { email: "..." } }`) is fully redacted before any `SESSION.log` write — top-level-only redaction is no longer sufficient.
   4. A per-phase `SECURITY.md` marks each threat PROVEN or UNPROVEN against a test; `pdf-parse` input is size-capped and wall-clock-bounded; advisory Pass-2/Pass-4 prompts wrap untrusted text in fenced delimiters.
   5. Before `pensmith done` POSTs the paper body to GPTZero, the user sees a disclosure (external service, full-text transmission) and must confirm — this consent gate is skippable only with `--yolo`.
+
 **Plans**: TBD
 **UI hint**: no
 
@@ -116,11 +128,13 @@ Plans:
 **Depends on**: Phase 15
 **Requirements**: CI-01, CI-02, CI-03, DOCS-01, DOCS-02, DOCS-03
 **Success Criteria** (what must be TRUE):
+
   1. `npm run check` runs `prebuild` first; a developer who sees green locally will not encounter a red CI run caused by stale derived artifacts.
   2. The CI pipeline includes a fresh-clone job that runs the full build, then asserts `git status --porcelain` is empty — any stale derived-file drift causes CI to fail.
   3. CI runs the test suite with non-TTY / detached stdin and enforces a `c8` coverage gate, so flaky TTY-dependent tests and coverage regressions are caught automatically.
   4. The README ships real install instructions, the `/pensmith` quickstart, and the PRD §3 dual-use disclaimer verbatim; the disclaimer also surfaces at intake.
   5. The four stub workflow bodies (doctor, status, next, resume) are filled with real `## Body` content and accurate `<capability_check>` blocks; stale "Phase 3+ / ships in Phase 6" copy in doctor probes, PRIVACY.md, and CONTRIBUTING.md is updated to reflect shipped reality.
+
 **Plans**: TBD
 **UI hint**: no
 
@@ -142,7 +156,7 @@ Plans:
 | 8. Style match + sketch + add + library + BYO PDF polish | v0.1.0 | 7/7 | Complete | 2026-06-20 |
 | 9. Educator/tutorial mode + PII polish | v0.1.0 | 4/4 | Complete | 2026-06-20 |
 | 10. Discipline + citation-style breadth + Zotero MCP | v0.1.0 | 5/5 | Complete | 2026-06-22 |
-| 11. Tier-2 LLM transport | v0.2.0 | 0/4 | Planned | - |
+| 11. Tier-2 LLM transport | v0.2.0 | 1/4 | In Progress|  |
 | 12. Live research + intake bootstrap + humanizer Task | v0.2.0 | 0/TBD | Not started | - |
 | 13. Citation rendering at export | v0.2.0 | 0/TBD | Not started | - |
 | 14. Fail-closed verifier gate | v0.2.0 | 0/TBD | Not started | - |
