@@ -726,7 +726,11 @@ type GenerativeVerb = typeof VERBS_FOR_INTEGRATION[number];
 // Minimal args needed to make each verb not crash on missing args before reaching the key check
 const VERB_REQUIRED_ARGS: Record<GenerativeVerb, string[]> = {
   intake: [],
-  research: [],
+  // research has a default-on approval gate (CLAUDE.md non-negotiable) that exits 3
+  // in a non-TTY spawn. PENSMITH_NO_LLM mocks the LLM, NOT the approval gate, so the
+  // non-interactive integration spawn must pass --yolo to reach the artifact-write path.
+  // (Phase 12 / GEN-03 introduced the scope-select + candidate-prune approval gates.)
+  research: ['--yolo'],
   // outline has a default-on approval gate (CLAUDE.md non-negotiable) that exits 3
   // in a non-TTY spawn. PENSMITH_NO_LLM mocks the LLM, NOT the approval gate, so the
   // non-interactive integration spawn must pass --yolo to reach the artifact-write path.

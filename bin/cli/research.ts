@@ -1,62 +1,74 @@
 // bin/cli/research.ts — `pensmith research` verb entrypoint (RSCH-01).
 //
-// Phase 11 (GEN-02 / GEN-06): Wired to the Tier-2 LLM transport.
-//   - The placeholder library constant (the old Tier-2 shim) is gone.
-//   - A fail-loud probe fires at the top of run(): MissingApiKeyError →
-//     stderr banner + exitCode=1 + ok:false. Never ok:true on missing key.
-//   - complete() is called with the 'topic-disambiguator' prompt (D-12 LOCKED).
-//   - The model response is DEFENSIVELY PARSED into SourceCandidate[] via
-//     SourceCandidateSchema.safeParse (T-11-10 trust boundary). On any parse
-//     failure: WARN to stderr + fall back to candidates=[] (not a crash, not a
-//     placeholder with _note — Open Question 2 resolution).
-//   - The EXISTING chokepoints are preserved in LOCKED order:
-//       crossCheckRetractions(candidates)  ← D-15 BEFORE writeBibtex
-//       writeBibtex(candidates, bibPath)   ← D-19 / D-20
-//       writeRis(candidates, risPath)
-//   - LIBRARY.json is written as real content (no placeholder _note strings).
+// Phase 12 (GEN-03): Live-adapter discovery wired. The swap-seam block from
+// Phase 11 has been replaced with real source-discovery via research-orchestrator.
 //
-// SCOPE FENCE (CRITICAL — Phase 11 / GEN-02 only):
-//   The FULL live-adapter candidate discovery + dedup + retraction cross-check
-//   that POPULATES LIBRARY.json from real adapters (crossref, openalex, arxiv,
-//   pubmed, semanticscholar, unpaywall, retraction-watch) is GEN-03 / Phase 12.
-//   Do NOT build it here. Phase 11 research wires the transport and removes the
-//   silent placeholder path. The defensive parse function below is the Phase-12
-//   / GEN-03 swap seam — Phase 12 replaces it with live-adapter discovery.
+// What this verb does:
+//   1. Hash-pin both D-12 LOCKED slugs at startup.
+//   2. GEN-06 fail-loud probe: assert LLM key configured (non-offline only).
+//   3. Read INTAKE.md → parseIntakeMd → topic/discipline/assignment.
+//   4. Call topic-disambiguator complete() → defensively parse scopes.
+//   5. Scope approval gate (default-ON): select one scope; --yolo → scope[0];
+//      non-TTY → ApprovalUnavailableError / exit-3.
+//   6. Call runResearchOrchestrator (adapter fan-out + dedup + source-evaluator).
+//   7. Candidate approval gate (default-ON): multiselect prune; --yolo → keep all;
+//      zero-candidates → skip gate; non-TTY → ApprovalUnavailableError / exit-3.
+//   8. D-15 LOCKED: crossCheckRetractions BEFORE writeBibtex BEFORE writeRis BEFORE
+//      LIBRARY.json write.
 //
 // D-12 LOCKED prompt slugs: 'topic-disambiguator' + 'source-evaluator'.
 // D-15 LOCKED ordering: crossCheckRetractions BEFORE writeBibtex.
 // D-19 LOCKED chokepoint: bib output goes through writeBibtex (citation-js).
 // D-20 LOCKED chokepoint: canonical .bib path is `.paper/CITATIONS.bib`.
-// T-11-10: malformed LLM JSON → WARN + empty candidates, never a crash.
+// T-11-10: malformed LLM JSON → WARN + fallback, never a crash.
 // T-11-12: key value never logged here — complete() owns the no-leak header path.
 
 import { defineCommand } from 'citty';
 import path from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';
+import { z } from 'zod';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { writeBibtex } from '../lib/bibtex-write.js';
 import { writeRis } from '../lib/ris-write.js';
 import { paperDir } from '../lib/paths.js';
 import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js';
-import { SourceCandidateSchema, type SourceCandidate } from '../lib/schemas/source-candidate.js';
+import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
+import { ask } from '../lib/prompts.js';
+import { parseIntakeMd } from '../lib/intake-parse.js';
+import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
 
 // ---------------------------------------------------------------------------
 // Hash-pin enforcement (D-12 defense-in-depth).
-// Load both slugs eagerly at module-load time so any on-disk hash drift
-// surfaces IMMEDIATELY (before run() is invoked), mirroring the intent of
-// the original research.ts comment. The body values are unused here —
-// this is a side-effect-only call for the hash validation.
+// Keep void loadPrompt reference to prevent unused-import elision.
+// The actual pin calls happen inside run() to catch drift before any network.
 // ---------------------------------------------------------------------------
-// Note: Both slugs are still pinned in EXPECTED_PROMPT_HASHES (prompt-loader.ts).
-// 'topic-disambiguator' is the Phase-11 call slug; 'source-evaluator' is Phase-12.
-// We load both eagerly so drift in EITHER slug surfaces at startup.
-
-// Defer the eager load until module is first imported (dynamic — avoids blocking
-// the import graph during testing). The hash check still fires on first use.
-// (The original code used `void loadPrompt` — we keep the same guard approach.)
 void loadPrompt; // reference kept to prevent unused-import elision
+
+// ---------------------------------------------------------------------------
+// ApprovalUnavailableError — mirrors outline.ts exactly (CLAUDE.md non-negotiable:
+// approval gates default-on; non-TTY without --yolo → exit 3).
+// ---------------------------------------------------------------------------
+class ApprovalUnavailableError extends Error {
+  exitCode = 3 as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApprovalUnavailableError';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Topic-disambiguator response schema (T-12-01 trust boundary).
+// ---------------------------------------------------------------------------
+const ScopeSchema = z.object({
+  label: z.string().min(1),
+  queries: z.array(z.string().min(1)).min(1),
+});
+const DisambiguatorResponseSchema = z.object({
+  scopes: z.array(ScopeSchema).min(1),
+});
 
 export const researchCommand = defineCommand({
   meta: {
@@ -74,11 +86,10 @@ export const researchCommand = defineCommand({
       default: false,
     },
   },
-  async run() {
+  async run({ args }) {
+    const yolo = args.yolo === true;
+
     // Validate both D-12 LOCKED slugs at startup (hash-pin defense-in-depth).
-    // Calling loadPrompt here catches any on-disk drift before we make any
-    // network call or write any artifact. 'source-evaluator' is Phase-12 runtime;
-    // we pin it now so drift surfaces before the phase lands.
     loadPrompt('topic-disambiguator');
     loadPrompt('source-evaluator');
 
@@ -114,17 +125,33 @@ export const researchCommand = defineCommand({
       }
     }
 
-    // Call complete() with the 'topic-disambiguator' prompt (D-12 LOCKED slug).
-    // Phase 12 / GEN-03 will wire topic + discipline + assignment from INTAKE.md.
-    // For now (Phase 11 scope fence) we supply placeholder values; the offline
-    // mock (PENSMITH_NO_LLM=1) returns a deterministic string that the defensive
-    // parse below will fail to parse as JSON — yielding candidates=[] with a WARN.
+    // ── Step 1: Read INTAKE.md and parse → topic/discipline/assignment ──
+    // D-07: read via readFileSync; WARN + empty string if absent.
+    const intakePath = path.join(paperDir(), 'INTAKE.md');
+    let intakeText = '';
+    if (existsSync(intakePath)) {
+      try {
+        intakeText = readFileSync(intakePath, 'utf8');
+      } catch (err) {
+        process.stderr.write(
+          `pensmith research: WARN — could not read INTAKE.md (${String(err)}); ` +
+          `continuing with empty assignment context.\n`,
+        );
+      }
+    } else {
+      process.stderr.write(
+        `pensmith research: WARN — INTAKE.md not found at ${intakePath}; ` +
+        `continuing with empty assignment context (run \`pensmith intake\` first).\n`,
+      );
+    }
+    const { topic, discipline, assignment } = parseIntakeMd(intakeText);
+
+    // ── Step 2: topic-disambiguator complete() (D-12 LOCKED slug) ──
     const topicDisambiguatorPrompt = loadPrompt('topic-disambiguator');
-    // Phase 12 / GEN-03 will extract these vars from INTAKE.md / OUTLINE.md.
     const interpolatedPrompt = interpolate(topicDisambiguatorPrompt, {
-      topic: '(topic from INTAKE.md — wire via Phase 12 / GEN-03)',
-      discipline: 'other',
-      assignment: '(assignment text from INTAKE.md — wire via Phase 12 / GEN-03)',
+      topic: topic || '(unknown topic — run pensmith intake first)',
+      discipline: discipline,
+      assignment: assignment || '(no assignment text — run pensmith intake first)',
     });
     const llmResult = await complete({
       system:
@@ -136,86 +163,136 @@ export const researchCommand = defineCommand({
       scopeId: 'research',
     });
 
-    // -------------------------------------------------------------------------
-    // Phase-12 / GEN-03 swap seam — REPLACE THIS ENTIRE BLOCK in Phase 12.
-    //
-    // Phase 11 scope: parse the model response defensively into SourceCandidate[].
-    // Phase 12 / GEN-03: replace this with live-adapter discovery + dedup +
-    // retraction cross-check using the scopes/queries from the disambiguator response.
-    // The live adapters (crossref, openalex, arxiv, pubmed, semanticscholar,
-    // unpaywall, retraction-watch) will populate a real SourceCandidate[] from
-    // network calls; this parse-from-LLM block is a temporary Phase-11 shim.
-    //
-    // T-11-10 trust boundary: the model's JSON is UNTRUSTED input. We use
-    // SourceCandidateSchema.safeParse per element so a malformed or hostile
-    // LLM response never injects an unvalidated entry into LIBRARY.json.
-    // -------------------------------------------------------------------------
-    let candidates: SourceCandidate[] = [];
+    // ── Step 3: Defensively parse topic-disambiguator response (T-12-01) ──
+    // On any parse failure: WARN + fall back to a single auto scope.
+    let scopes: Array<{ label: string; queries: string[] }>;
     try {
-      // Attempt to parse the LLM response as a JSON array of SourceCandidate objects.
-      // The topic-disambiguator prompt returns scopes/queries, not candidates —
-      // so this will normally fail and fall back to candidates=[] with a WARN.
-      // Phase 12 / GEN-03 replaces this block with live adapter discovery that
-      // actually populates candidates from network calls.
-      const raw: unknown = JSON.parse(llmResult.text);
-      if (!Array.isArray(raw)) {
-        process.stderr.write(
-          `pensmith research: WARN — model response is not a JSON array; ` +
-          `falling back to empty candidates. Phase 12 / GEN-03 will wire live discovery.\n`,
-        );
-        candidates = [];
+      const rawParsed: unknown = JSON.parse(llmResult.text);
+      const zodResult = DisambiguatorResponseSchema.safeParse(rawParsed);
+      if (zodResult.success) {
+        scopes = zodResult.data.scopes;
       } else {
-        const validated: SourceCandidate[] = [];
-        for (const item of raw) {
-          const parsed = SourceCandidateSchema.safeParse(item);
-          if (parsed.success) {
-            validated.push(parsed.data);
-          }
-          // Silently skip invalid elements — T-11-10 boundary enforcer.
-        }
-        if (validated.length < raw.length) {
-          process.stderr.write(
-            `pensmith research: WARN — ${raw.length - validated.length} of ${raw.length} ` +
-            `candidate(s) failed schema validation and were dropped. ` +
-            `Phase 12 / GEN-03 will wire live adapter discovery.\n`,
-          );
-        }
-        candidates = validated;
+        process.stderr.write(
+          `pensmith research: WARN — topic-disambiguator response failed schema validation ` +
+          `(${zodResult.error.message.slice(0, 120)}); ` +
+          `falling back to single-scope with topic as query.\n`,
+        );
+        scopes = [{ label: 'auto', queries: [topic || 'research'] }];
       }
     } catch {
-      // JSON.parse threw — the model response was not valid JSON.
-      // This is expected during Phase 11 (topic-disambiguator returns scopes/queries,
-      // not SourceCandidate arrays). Emit a WARN and continue with empty candidates.
-      // Phase 12 / GEN-03 replaces this entire block with live adapter discovery.
       process.stderr.write(
-        `pensmith research: WARN — model response could not be parsed as JSON ` +
-        `(expected in Phase 11; Phase 12 / GEN-03 will wire live adapter discovery). ` +
-        `Continuing with empty candidates.\n`,
+        `pensmith research: WARN — topic-disambiguator response is not valid JSON; ` +
+        `falling back to single-scope with topic as query.\n`,
       );
-      candidates = [];
+      scopes = [{ label: 'auto', queries: [topic || 'research'] }];
     }
-    // ---- end Phase-12 / GEN-03 swap seam ----
 
-    // D-15 LOCKED ordering: crossCheckRetractions MUST run BEFORE writeBibtex.
+    // ── Step 4: Scope approval gate (default-ON) ──
+    // When scopes.length > 1 and not --yolo: ask() a kind:'select' over scope labels.
+    // --yolo: auto-select scopes[0].
+    // non-TTY: ApprovalUnavailableError → exit-3 (outline precedent).
+    let chosenScope = scopes[0]!;
+    if (scopes.length > 1 && !yolo) {
+      if (!process.stdout.isTTY || !process.stdin.isTTY) {
+        const err = new ApprovalUnavailableError(
+          'research: scope selection requires an interactive terminal. ' +
+          'Use --yolo to auto-select the first scope (CLAUDE.md non-negotiable: approval-gates default-on).',
+        );
+        process.stderr.write(`pensmith ${err.message}\n`);
+        process.exitCode = err.exitCode;
+        return { ok: false, mode: 'approval-unavailable' };
+      }
+
+      const answer = await ask({
+        id: 'scope',
+        kind: 'select',
+        label: 'Which research scope should I use?',
+        options: scopes.map((s) => ({
+          value: s.label,
+          label: s.label,
+          hint: s.queries.slice(0, 2).join(', '),
+        })),
+        default: scopes[0]!.label,
+      });
+
+      const selected = scopes.find((s) => s.label === (answer as { value: string }).value);
+      if (selected) chosenScope = selected;
+    }
+
+    // ── Step 5: Live discovery — runResearchOrchestrator ──
+    const candidates: SourceCandidate[] = await runResearchOrchestrator(
+      chosenScope.queries,
+      {
+        topic,
+        discipline,
+        assignment,
+        scopeLabel: chosenScope.label,
+      },
+    );
+
+    // ── Step 6: Candidate approval gate (default-ON) ──
+    // Zero-candidate path: skip the gate (nothing to prune).
+    // non-TTY and not --yolo: ApprovalUnavailableError → exit-3.
+    let finalCandidates: SourceCandidate[] = candidates;
+    if (candidates.length > 0 && !yolo) {
+      if (!process.stdout.isTTY || !process.stdin.isTTY) {
+        const err = new ApprovalUnavailableError(
+          'research: candidate approval requires an interactive terminal. ' +
+          'Use --yolo to auto-accept all candidates (CLAUDE.md non-negotiable: approval-gates default-on).',
+        );
+        process.stderr.write(`pensmith ${err.message}\n`);
+        process.exitCode = err.exitCode;
+        return { ok: false, mode: 'approval-unavailable' };
+      }
+
+      const pruneAnswer = await ask({
+        id: 'candidates',
+        kind: 'multiselect',
+        label: `Select candidates to keep (${candidates.length} found):`,
+        options: candidates.map((c) => ({
+          value: c.citekey,
+          label: `[${c.source}] ${c.title.slice(0, 60)}${c.title.length > 60 ? '…' : ''} (${c.year ?? '?'})`,
+          hint: c.authors.slice(0, 2).join(', '),
+        })),
+        default: candidates.map((c) => c.citekey),
+      });
+
+      const keepKeys = new Set(
+        Array.isArray((pruneAnswer as { value: unknown }).value)
+          ? (pruneAnswer as { value: string[] }).value
+          : candidates.map((c) => c.citekey),
+      );
+      finalCandidates = candidates.filter((c) => keepKeys.has(c.citekey));
+    }
+
+    if (finalCandidates.length === 0) {
+      process.stderr.write(
+        `pensmith research: WARN — 0 candidates remain after discovery ` +
+        `(${candidates.length > 0 ? 'all pruned by approval gate' : 'no results from adapters'}); ` +
+        `writing empty LIBRARY.json.\n`,
+      );
+    }
+
+    // ── D-15 LOCKED ordering: crossCheckRetractions BEFORE writeBibtex ──
     // Marks any retracted candidates so writeBibtex persists retracted=true.
-    await crossCheckRetractions(candidates);
+    await crossCheckRetractions(finalCandidates);
 
     // D-19 + D-20 LOCKED: writeBibtex is the SOLE citation-js writer.
-    await writeBibtex(candidates, bibPath);
+    await writeBibtex(finalCandidates, bibPath);
     // CITE-05: emit CITATIONS.ris alongside CITATIONS.bib at the SAME call site.
-    await writeRis(candidates, risPath);
+    await writeRis(finalCandidates, risPath);
 
     // Write a real LIBRARY.json (no placeholder _note strings).
     // Content: { $schemaVersion: 1, entries: SourceCandidate[] }
     const libraryContent = JSON.stringify(
-      { $schemaVersion: 1, entries: candidates },
+      { $schemaVersion: 1, entries: finalCandidates },
       null,
       2,
     );
     await atomicWriteFile(libraryPath, libraryContent);
 
     process.stdout.write(
-      `pensmith research: wrote LIBRARY.json (${candidates.length} candidate(s)) to ${libraryPath}` +
+      `pensmith research: wrote LIBRARY.json (${finalCandidates.length} candidate(s)) to ${libraryPath}` +
       ` and .bib/.ris to ${bibPath} / ${risPath}\n`,
     );
     return {
