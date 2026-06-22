@@ -4,13 +4,13 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-06-22T06:00:21.878Z"
+last_updated: "2026-06-22T06:10:18.210Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 11
   completed_phases: 10
   total_plans: 73
-  completed_plans: 71
+  completed_plans: 72
   percent: 91
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 10 (Discipline + citation-style breadth + Zotero MCP) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-06-22
 
@@ -108,6 +108,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 10 P00 | 9min | 3 tasks | 11 files |
 | Phase 10 P01 | 6min | 2 tasks | 2 files |
 | Phase 10 P02 | 3 | 2 tasks | 4 files |
+| Phase 10 P03 | 6min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -262,6 +263,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: 10-01: all 8 citation styles render offline + deterministically via a registeredStyles Map memoization over bundled CSL files (no render-time fetch)
 - [Phase ?]: 10-02: ris-write.ts is a verbatim structural copy of bibtex-write.ts; sole divergence is cite.format('ris', {spec:'new'}); imports {Cite} from ./citations.js (D-19) + atomicWriteFile (D-07) + shared suffixForCollision
 - [Phase ?]: 10-02: CITATIONS.ris emitted at research time symmetric with .bib; exporter bundles it (ExportResult.risCopied) via existsSync-guarded copy, never re-serializes
+- [Phase ?]: [10-03] zotero-mcp adapter isZoteroAuthenticated is KEY-ONLY (decoupled from FS-presence, H3) so the injected-client CI path is authorizable with just ZOTERO_API_KEY; doctor probe deliberately does NOT reuse it — composes isZoteroMcpPresent() && key inline to distinguish ABSENT from CONFIGURED_NO_AUTH
+- [Phase ?]: [10-03] D-12 chokepoint forces DOT-ACCESS env reads in doctor probes (process.env.ZOTERO_API_KEY); both computed-literal and variable subscripts trip no-restricted-syntax — matched contact-email-presence.ts pattern
+- [Phase ?]: [10-03] injected _client is a valid presence signal (canonical gate 1) so the offline test drives the present+auth branch without writing a real mcp_servers.json; live MCP transport remains MANUAL-only (no CI), client injection wired in 10-04
 
 ### Pending Todos
 
@@ -282,6 +286,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T06:00:21.869Z
+Last session: 2026-06-22T06:09:16.169Z
 Stopped at: Completed 10-02-PLAN.md
 Resume file: None
