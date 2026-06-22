@@ -264,3 +264,43 @@ HIGH_COUNT: 1
 #### gemini
 
 unavailable this cycle (`IneligibleTierError: UNSUPPORTED_CLIENT` — free-tier Gemini Code Assist client no longer supported; attempted, produced empty output).
+
+---
+
+## Cycle 3
+
+**Reviewers:** codex, claude, opencode ran (3-way quorum). gemini UNAVAILABLE (IneligibleTierError: UNSUPPORTED_CLIENT — free-tier client retired). Aggregated by the orchestrator from captured raw outputs (the review subagent dropped its connection after the CLIs completed but before writing this section).
+
+**current_high: 0 — CONVERGED.**
+
+### Synthesized Findings (cycle 3)
+
+All three usable reviewers independently returned HIGH_COUNT: 0. The 3 prior HIGHs are confirmed GENUINELY RESOLVED (claude traced all 4 Zotero gates against live source):
+
+- **H2 (renderApa single registration): RESOLVED** — renderApa delegates to renderStyle(entries,'apa'); apaRegistered boolean + ensureApaTemplate deleted; single Map-guarded ensureStyleTemplate; _resetApaTemplateForTest clears the Map; byte-parity + no-collision regression test (10-01 Task 2).
+- **H1 (Zotero used-as-source normalization): RESOLVED** — injectable ZoteroClient seam + setZoteroClientForTest + toCandidate (mirrors semanticscholar) + 'zotero-mcp' D-14 union variant + registry wiring; 10-00 Task 2 leg (c) injected-client+key test proves ≥1 normalized candidate (fails against the old []-everywhere stub).
+- **H3 (10-00↔10-03 canonical gate): RESOLVED** — one 4-gate predicate owned by 10-03 STEP B, quoted verbatim in 10-00 leg (c); claude path-traced CI(inject+key)→normalize, absent→[], present+unwired→[], stray-key+absent→[]; doctor keeps its own FS+key tri-state (no contradiction).
+
+Non-negotiables all hold (claude verified against source): D-19 ({Cite} from ./citations.js; suffixForCollision exported), D-07 (writeRis→atomicWriteFile), 16-verb bijection (Zotero stays source provider + probe), zero-trace (.ris plain text covered by existing scan), no-leak (key boolean-only), no new npm deps, offline/deterministic render.
+
+### Remaining MEDIUM/LOW (carried to execution — non-blocking)
+
+- [MEDIUM, codex] 10-00 ris-write.test.ts RED stub: use DYNAMIC import inside skipped behavioral tests (static ESM import of ../bin/lib/ris-write.js resolves before the skip-guard → would hard-crash Wave-0). Honor the "skip cleanly / no hard crash" Wave-0 contract.
+- [MEDIUM, opencode] Committed CSL files parent <link> risk: if any of the 7 styles-distribution CSL files contain a <link> to a parent style, citation-js plugin-csl may attempt a NETWORK fetch at templates.add (breaking the offline-render non-negotiable). Executor must add a post-download validation asserting no external-URL <link> elements (the determinism/offline test is the safety net).
+- [LOW] CUSTOM_APA_NAME may become an unused const after the H2 deletion → delete it or no-unused-vars fails the eslint gate (self-correcting at execution).
+- [LOW] Zotero adapter search(query, limit) positional vs semanticscholar search(query, opts:{limit}) — cosmetic/forward-risk; single-arg orchestrator + leg-(c) test unaffected.
+- [LOW] isZoteroAuthenticated() (key-only) vs doctor probe (FS+key) asymmetry — add a comment in the doctor probe pointing to the adapter definition to reduce future-maintainer confusion.
+- [LOW] tier-contract negative-token list could add renderStyle/writeRis for thoroughness (length=16 is the primary guard).
+
+All prior MEDIUMs M1-M9 correctly not re-litigated. No manufactured HIGHs.
+
+### Per-Reviewer Raw (cycle 3)
+
+#### codex (HIGH_COUNT: 0)
+3 prior HIGHs genuinely resolved. [MEDIUM] ris-write.test.ts static-import-before-skip-guard → use dynamic import. [LOW] 10-04 live MCP end-to-end remains manual-only — make explicit in the implementation summary.
+
+#### claude (HIGH_COUNT: 0)
+Source-grounded verification of all 3 HIGHs + full 4-gate path trace + non-negotiables check (D-19/D-07/16-verb/zero-trace/no-leak/no-deps all hold). LOWs: search signature drift; CUSTOM_APA_NAME possibly-unused; CSL 200-status unverifiable-at-review (backstopped by Task 1 CSL-XML/404 validation gate).
+
+#### opencode (HIGH_COUNT: 0)
+H1/H2/H3 CONFIRMED RESOLVED. [MEDIUM] CSL parent <link> offline-fetch risk → post-download validation. [LOW] tier-contract negative list; isZoteroAuthenticated vs doctor duplication comment.
