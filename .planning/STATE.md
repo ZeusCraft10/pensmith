@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 09-03-PLAN.md
-last_updated: "2026-06-22T05:52:00.456Z"
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-06-22T06:00:21.878Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 11
   completed_phases: 10
   total_plans: 73
-  completed_plans: 70
+  completed_plans: 71
   percent: 91
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 10 (Discipline + citation-style breadth + Zotero MCP) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-06-22
 
@@ -107,6 +107,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 09 P03 | 42min | 3 tasks | 16 files |
 | Phase 10 P00 | 9min | 3 tasks | 11 files |
 | Phase 10 P01 | 6min | 2 tasks | 2 files |
+| Phase 10 P02 | 3 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -259,6 +260,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [10-00] RED-by-skip dynamic imports use a runtime URL .href specifier (08-00 pattern) + symbol feature-detect (typeof renderStyle/setZoteroClientForTest === 'function') so tsc stays clean and behavioral tests skip cleanly while target modules/exports are absent
 - [Phase ?]: 10-01: renderApa delegates to renderStyle(entries,'apa') — single Map-guarded 'pensmith-apa' registration (H2 fix)
 - [Phase ?]: 10-01: all 8 citation styles render offline + deterministically via a registeredStyles Map memoization over bundled CSL files (no render-time fetch)
+- [Phase ?]: 10-02: ris-write.ts is a verbatim structural copy of bibtex-write.ts; sole divergence is cite.format('ris', {spec:'new'}); imports {Cite} from ./citations.js (D-19) + atomicWriteFile (D-07) + shared suffixForCollision
+- [Phase ?]: 10-02: CITATIONS.ris emitted at research time symmetric with .bib; exporter bundles it (ExportResult.risCopied) via existsSync-guarded copy, never re-serializes
 
 ### Pending Todos
 
@@ -279,6 +282,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T05:51:34.292Z
-Stopped at: Completed 09-03-PLAN.md
+Last session: 2026-06-22T06:00:21.869Z
+Stopped at: Completed 10-02-PLAN.md
 Resume file: None

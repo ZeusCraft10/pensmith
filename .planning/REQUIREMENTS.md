@@ -178,7 +178,7 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 - [x] **CITE-02**: MLA, Chicago (notes-bib + author-date), IEEE, AMA, Vancouver supported via CSL
 - [x] **CITE-03**: Harvard citation style supported (table stakes for UK/AU readers) `[research]`
 - [x] **CITE-04**: Citation engine is `citation-js` + bundled CSL files in `templates/citation-styles/` — unlocks 10,000+ styles via citeproc-js `[research]`
-- [ ] **CITE-05**: RIS export alongside BibTeX for Mendeley/EndNote interop `[research]`
+- [x] **CITE-05**: RIS export alongside BibTeX for Mendeley/EndNote interop `[research]`
 
 ### Testing & Determinism
 
@@ -378,7 +378,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | RSCH-06 | Phase 10 | Pending |
 | CITE-02 | Phase 10 | Complete |
 | CITE-03 | Phase 10 | Complete |
-| CITE-05 | Phase 10 | Pending |
+| CITE-05 | Phase 10 | Complete |
 
 **Coverage:**
 
