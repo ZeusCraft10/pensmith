@@ -13,7 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +48,16 @@ function runHook(cwd: string): RunResult {
 }
 
 function freshCwd(): string {
-  return mkdtempSync(join(tmpdir(), 'pensmith-stop-'));
+  // Canonicalize via realpathSync: on macOS tmpdir() is /var/folders/... which
+  // is a symlink to /private/var/folders/.... The Stop subprocess derives its
+  // .paper lock resource from process.cwd(), which Node canonicalizes to the
+  // realpath — but lock.ts keys the lock on the RAW resource string
+  // (sha256(resource), by design). If this test acquired the lock via the
+  // /var symlink path while the subprocess released via the /private/var
+  // realpath, the hashes (hence lock stubs) would differ and the release-check
+  // would spuriously fail on macOS. Acquiring under the realpath matches what
+  // the subprocess actually uses. No-op on Linux/Windows (no symlinked tmpdir).
+  return realpathSync(mkdtempSync(join(tmpdir(), 'pensmith-stop-')));
 }
 
 // === exit 0 + empty stdout always (un-skipped: stub satisfies it) ===
