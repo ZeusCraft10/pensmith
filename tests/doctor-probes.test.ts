@@ -45,6 +45,37 @@ test('DOCT-02b zotero-mcp-presence returns one of {PASS,WARN}', async () => {
   if (r.severity === 'WARN') assert.match(r.detail ?? '', /Checked:/);
 });
 
+test('DOCT-02b zotero-mcp-presence tri-state contract + T-01-07 no-leak (RSCH-06)', async () => {
+  // The probe is now tri-state: ABSENT (WARN), CONFIGURED_NO_AUTH (WARN), and
+  // configured+authenticated (PASS). CONFIGURED_NO_AUTH can't be forced when
+  // Zotero is genuinely absent on CI (isZoteroMcpPresent() is false), so we
+  // assert the contract that holds on ANY machine:
+  //   - severity ∈ {PASS, WARN}
+  //   - when severity === 'WARN', detail contains 'Checked:'
+  //   - the ZOTERO_API_KEY VALUE never appears anywhere in the result (no-leak).
+  const SENTINEL = 'sk-zotero-LEAK-SENTINEL-67890';
+  const savedKey = process.env['ZOTERO_API_KEY'];
+  // Set a sentinel value: the probe must check presence as a boolean only and
+  // NEVER interpolate the value into summary/detail/fix (T-01-07 carry-forward).
+  process.env['ZOTERO_API_KEY'] = SENTINEL;
+  try {
+    const r = await zoteroMcpPresenceProbe.run();
+    assert.equal(r.id, 'zotero-mcp-presence');
+    assert.ok(['PASS', 'WARN'].includes(r.severity), 'tri-state collapses to PASS|WARN severities');
+    if (r.severity === 'WARN') assert.match(r.detail ?? '', /Checked:/);
+    // Load-bearing no-leak assertion: the sentinel value must NOT appear in the
+    // serialized probe output (mirrors the DOCT-07 SENTINEL pattern).
+    assert.equal(
+      JSON.stringify(r).includes(SENTINEL),
+      false,
+      'T-01-07: probe must NEVER include the ZOTERO_API_KEY value',
+    );
+  } finally {
+    if (savedKey === undefined) delete process.env['ZOTERO_API_KEY'];
+    else process.env['ZOTERO_API_KEY'] = savedKey;
+  }
+});
+
 test('DOCT-02c pandoc-presence returns one of {PASS,WARN}', async () => {
   const r = await pandocPresenceProbe.run();
   assert.equal(r.id, 'pandoc-presence');
