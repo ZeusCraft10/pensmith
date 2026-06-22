@@ -252,7 +252,7 @@ bin/
 │   ├── exporter.ts       # FILL runHumanizer body with Task seam
 │   └── research-orchestrator.ts  # NEW — extracted fan-out logic (keeps research.ts thin)
 tests/
-└── research-orchestrator.test.ts  # NEW — offline unit tests for fan-out + dedup
+└── research-discovery.test.ts  # NEW — offline unit tests for fan-out + dedup
 ```
 
 The `research-orchestrator.ts` extraction is recommended (not mandatory) to keep `research.ts` under 200 lines and make the orchestration unit-testable in isolation.
@@ -789,38 +789,38 @@ This phase does not rename, rebrand, or migrate existing data. Step 2.5 is not a
 |----------|-------|
 | Framework | Node.js built-in `node:test` + `assert/strict` |
 | Config file | none — `package.json` test script: `node --test 'tests/**/*.test.ts' --require tsx/esm` |
-| Quick run command | `npx tsx --test tests/research-orchestrator.test.ts` |
+| Quick run command | `npx tsx --test tests/research-discovery.test.ts` |
 | Full suite command | `npm test` |
 
 ### Phase Requirements → Test Map
 
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| GEN-03 | Fan-out returns SourceCandidate[] from at least 1 adapter under offline cassettes | unit | `npx tsx --test tests/research-orchestrator.test.ts` | NO — Wave 0 |
+| GEN-03 | Fan-out returns SourceCandidate[] from at least 1 adapter under offline cassettes | unit | `npx tsx --test tests/research-discovery.test.ts` | NO — Wave 0 |
 | GEN-03 | DOI dedup: two candidates with same DOI → 1 in output | unit | same | NO — Wave 0 |
 | GEN-03 | PENSMITH_NO_LLM: source-evaluator parse failure → keeps all candidates | unit | same | NO — Wave 0 |
 | GEN-03 | Zero-candidate path: WARN + empty LIBRARY.json written | unit | same | NO — Wave 0 |
 | GEN-03 | Approval gate: --yolo skips both scope selection and candidate prune | integration | `PENSMITH_NO_LLM=1 node dist/bin/pensmith.js research --yolo` | NO — Wave 0 |
 | GEN-03 | Approval gate: non-TTY exits 3 (ApprovalUnavailableError) | integration | same without --yolo | NO — Wave 0 |
-| GEN-04 | initState() writes STATE.json with $schemaVersion:2 and paperId | unit | `npx tsx --test tests/intake-state-bootstrap.test.ts` | NO — Wave 0 |
+| GEN-04 | initState() writes STATE.json with $schemaVersion:2 and paperId | unit | `npx tsx --test tests/intake-bootstrap.test.ts` | NO — Wave 0 |
 | GEN-04 | initState() idempotent: second call with existing STATE.json → StateAlreadyExistsError caught, paperId unchanged | unit | same | NO — Wave 0 |
 | GEN-04 | After initState(), registerPaperNonFatal proceeds (not WARN-skipped) | unit | same | NO — Wave 0 |
 | GEN-05 | runHumanizer: absent skill → null + banner 'humanizer skill not found' | unit | `npx tsx --test tests/humanizer-wrap.test.ts` | YES (tests pass today) |
-| GEN-05 | runHumanizer: injectable TaskRunner returns output → FINAL.md written, path returned | unit | `npx tsx --test tests/humanizer-wrap-task.test.ts` | NO — Wave 0 |
+| GEN-05 | runHumanizer: injectable TaskRunner returns output → FINAL.md written, path returned | unit | `npx tsx --test tests/humanizer-task.test.ts` | NO — Wave 0 |
 | GEN-05 | runHumanizer: null TaskRunner (Tier-2) → null + 'no Task transport' banner | unit | same | NO — Wave 0 |
 | GEN-05 | scoreHonesty before/after wired in done.ts (existing test passes) | unit | `npx tsx --test tests/honesty.test.ts` | YES |
 
 ### Sampling Rate
 
-- **Per task commit:** `npx tsx --test tests/research-orchestrator.test.ts tests/intake-state-bootstrap.test.ts tests/humanizer-wrap.test.ts tests/humanizer-wrap-task.test.ts`
+- **Per task commit:** `npx tsx --test tests/research-discovery.test.ts tests/intake-bootstrap.test.ts tests/humanizer-wrap.test.ts tests/humanizer-task.test.ts`
 - **Per wave merge:** `npm test`
 - **Phase gate:** Full suite green before `/gsd:verify-work`
 
 ### Wave 0 Gaps
 
-- [ ] `tests/research-orchestrator.test.ts` — covers GEN-03 fan-out, dedup, offline fallback, zero-candidate
-- [ ] `tests/intake-state-bootstrap.test.ts` — covers GEN-04 STATE.json write, idempotency, WARN-skip flip
-- [ ] `tests/humanizer-wrap-task.test.ts` — covers GEN-05 injectable seam, FINAL.md write, Tier-2 skip
+- [ ] `tests/research-discovery.test.ts` — covers GEN-03 fan-out, dedup, offline fallback, zero-candidate
+- [ ] `tests/intake-bootstrap.test.ts` — covers GEN-04 STATE.json write, idempotency, WARN-skip flip
+- [ ] `tests/humanizer-task.test.ts` — covers GEN-05 injectable seam, FINAL.md write, Tier-2 skip
 
 Existing test infrastructure: `tests/humanizer-wrap.test.ts` already covers the absent-skill skip path (GEN-05 base). `tests/honesty.test.ts` and `tests/export-gate.test.ts` cover the surrounding done.ts flow. `tests/state.test.ts` covers `initState()` exhaustively — Phase 12 tests can import and reuse.
 
@@ -880,7 +880,14 @@ Existing test infrastructure: `tests/humanizer-wrap.test.ts` already covers the 
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> Resolved at Phase-12 planning (commit 4b176a6):
+> 1. **INTAKE.md parsing** — confirmed `intake-clarifier.md` produces free-form prose (no stable `## Topic`/`## Discipline` headings). Resolution: a shared `bin/lib/intake-parse.ts` (`parseIntakeMd`) uses the heuristic fallback — full INTAKE.md text as `{{assignment}}`, `discipline = 'other'`, first heading/sentence as `{{topic}}`.
+> 2. **Scope-selection gate** — confirmed `bin/lib/prompts/schema.ts` `ask()` DOES support `kind:'select'` AND `kind:'multiselect'` (lines 33, 46, 85-86) with a built-in non-TTY numbered fallback. Resolution: both research approval gates use `ask()` directly; no new prompt plumbing, no direct `@clack/prompts` import needed.
+> 3. **Shared `parseIntakeMd()`** — resolved YES; extracted to `bin/lib/intake-parse.ts` as the interface-first task of plan 12-02 (Phase 12 is the first consumer).
+>
+> **Wave-0 test file names** (authoritative, matching the PLANs + VALIDATION.md): `tests/research-discovery.test.ts`, `tests/intake-bootstrap.test.ts`, `tests/humanizer-task.test.ts`. (Earlier draft names in this doc — research-orchestrator / intake-state-bootstrap / humanizer-wrap-task — have been reconciled to these.)
 
 1. **INTAKE.md parsing for `{{topic}}`, `{{discipline}}`, `{{assignment}}`**
    - What we know: INTAKE.md is generated by `complete()` from the `intake-clarifier` prompt. The `intake-clarifier.md` template (verified at `templates/prompts/intake-clarifier.md`) determines the structure of INTAKE.md's content.

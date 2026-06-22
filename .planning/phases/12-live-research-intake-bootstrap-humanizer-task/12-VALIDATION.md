@@ -2,7 +2,7 @@
 phase: 12
 slug: live-research-intake-bootstrap-humanizer-task
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-06-22
 ---
