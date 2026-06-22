@@ -251,41 +251,41 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | REPO-03 | Phase 0 | Complete (00-03) |
 | REPO-04 | Phase 0 | Complete (00-04) |
 | REPO-05 | Phase 0 | Complete (00-02) |
-| ARCH-05 | Phase 1 | Pending |
-| ARCH-06 | Phase 1 | Pending |
-| ARCH-07 | Phase 1 | Pending |
-| ARCH-08 | Phase 1 | Pending |
-| ARCH-09 | Phase 1 | Pending |
-| ARCH-10 | Phase 1 | Pending |
-| ARCH-11 | Phase 1 | Pending |
-| ARCH-12 | Phase 1 | Pending |
-| ARCH-13 | Phase 1 | Pending |
-| ARCH-14 | Phase 1 | Pending |
-| ARCH-15 | Phase 1 | Pending |
-| ARCH-16 | Phase 1 | Pending |
-| ARCH-17 | Phase 1 | Pending |
-| TEST-05 | Phase 1 | Pending |
-| TEST-06 | Phase 1 | Pending |
-| TEST-07 | Phase 1 | Pending |
-| TEST-08 | Phase 1 | Pending |
-| TEST-11 | Phase 1 | Pending |
-| ARCH-01 | Phase 2 | Pending |
-| ARCH-03 | Phase 2 | Pending |
-| ARCH-18 | Phase 2 | Pending |
-| TIER-01 | Phase 2 | Pending |
-| TIER-02 | Phase 2 | Pending |
-| TIER-03 | Phase 2 | Pending |
+| ARCH-05 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-06 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-07 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-08 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-09 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-10 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-11 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-12 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-13 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-14 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-15 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-16 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-17 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| TEST-05 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| TEST-06 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| TEST-07 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| TEST-08 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| TEST-11 | Phase 1 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-01 | Phase 2 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-03 | Phase 2 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| ARCH-18 | Phase 2 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| TIER-01 | Phase 2 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| TIER-02 | Phase 2 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| TIER-03 | Phase 2 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
 | TIER-04 | Phase 2 | DONE — 02-05 |
 | TIER-05 | Phase 2 | DONE — 02-09 |
-| TIER-06 | Phase 2 | Pending |
-| TIER-07 | Phase 2 | Pending |
+| TIER-06 | Phase 2 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
+| TIER-07 | Phase 2 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
 | DOCT-01 | Phase 2 | DONE — 02-05 |
 | DOCT-02 | Phase 2 | DONE — 02-05 |
 | DOCT-03 | Phase 2 | DONE — 02-05 |
 | DOCT-04 | Phase 2 | DONE — 02-05 |
-| DOCT-06 | Phase 2 | Pending |
+| DOCT-06 | Phase 2 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
 | DOCT-07 | Phase 2 | DONE — 02-05 |
-| DOCT-05 | Phase 3 | Pending (deferred from Phase 2 — see CONTEXT D-04) |
+| DOCT-05 | Phase 3 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
 | ARCH-02 | Phase 3 | Complete |
 | ARCH-04 | Phase 3 | Complete |
 | INTK-01 | Phase 3 | Complete |
@@ -297,7 +297,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | RSCH-02 | Phase 3 | Complete |
 | RSCH-03 | Phase 3 | Complete |
 | RSCH-04 | Phase 3 | Complete |
-| RSCH-05a | Phase 3 | Pending (Phase-3 subset per CONTEXT D-06; full BYO PDF + pymupdf stays RSCH-05b in Phase 8) |
+| RSCH-05a | Phase 3 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
 | RSCH-07 | Phase 3 | Complete |
 | RSCH-08 | Phase 3 | Complete |
 | RSCH-09 | Phase 3 | Complete |
@@ -369,7 +369,7 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | LIB-05 | Phase 8 | Complete |
 | ERGO-05 | Phase 8 | Complete |
 | ERGO-06 | Phase 8 | Complete |
-| RSCH-05b | Phase 8 | Pending (Phase-8 superset: BYO PDF + pymupdf shellout + Crossref hydration; builds on RSCH-05a) |
+| RSCH-05b | Phase 8 | Complete (audit-reconciled v0.1.0 — phase VERIFICATION.md passed; green at HEAD)|
 | STYL-01 | Phase 8 | Complete |
 | STYL-02 | Phase 8 | Complete |
 | STYL-03 | Phase 8 | Complete |
