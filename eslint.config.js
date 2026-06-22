@@ -478,6 +478,20 @@ export default [
     ],
   },
 
+  // === HTTP/path chokepoint EXEMPTION for tests/llm-transport.test.ts (Phase 11) ===
+  // tests/llm-transport.test.ts MUST import undici (MockAgent / setGlobalDispatcher)
+  // to intercept LLM REST calls routed through bin/lib/http.ts (same as http.test.ts).
+  // It also MUST use fsp.writeFile directly to seed COSTS.jsonl for the budget-gate
+  // test (T-11-02) — this is test-only setup code, not production artifact I/O.
+  // Scoped to this test file only.
+  {
+    files: ['tests/llm-transport.test.ts'],
+    rules: {
+      'no-restricted-imports': 'off',
+      'no-restricted-syntax': 'off',
+    },
+  },
+
   // === CommonJS validator script + test-helper exemption (D-17) ===
   // scripts/validate-plugin-manifest.cjs is intentionally CommonJS (uses require())
   // because package.json has "type":"module" — the .cjs extension is mandatory so

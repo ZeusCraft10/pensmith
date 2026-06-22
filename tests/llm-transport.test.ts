@@ -287,15 +287,6 @@ function cliBin(): string {
   return path.join(repoRoot(), 'dist', 'bin', 'pensmith.js');
 }
 
-// tsx loader for spawning in dev mode (no build needed for the source-grep guard)
-function tsxLoaderArg(): string {
-  try {
-    // Resolve tsx from the repo's node_modules so it's the project-local copy.
-    return require.resolve('tsx/esm');
-  } catch {
-    return 'tsx';
-  }
-}
 
 // ---------------------------------------------------------------------------
 // isNoLlmMode unit test (not skip-guarded — isNoLlmMode is a pure predicate and
@@ -334,7 +325,7 @@ test('T-11-01: complete() returns offline mock text under PENSMITH_NO_LLM=1 with
     t.skip('anthropic.ts not yet built — skip T-11-01');
     return;
   }
-  await withFreshState(async (tmpRoot, _agent) => {
+  await withFreshState(async () => {
     process.env['PENSMITH_NO_LLM'] = '1';
     delete process.env['ANTHROPIC_API_KEY'];
 
@@ -368,7 +359,7 @@ test('T-11-02: complete() raises BudgetExceededError BEFORE any HTTP call when b
     t.skip('anthropic.ts not yet built — skip T-11-02');
     return;
   }
-  await withFreshState(async (tmpRoot, _agent) => {
+  await withFreshState(async (tmpRoot) => {
     // Ensure PENSMITH_NO_LLM is NOT set so the transport would normally attempt a call
     delete process.env['PENSMITH_NO_LLM'];
     // Set a key so MissingApiKeyError is not the failure mode
@@ -439,8 +430,8 @@ test('T-11-03: API key value never leaks to disk files, stdout, or stderr (no-le
     // Install an intercept on the Anthropic API endpoint that records the request.
     // The transport routes all HTTP through http.ts which uses undici — so the
     // MockAgent captures the request before it reaches the wire.
-    let capturedRequestHeaders: Record<string, string> = {};
-    let capturedRequestBody = '';
+    const capturedRequestHeaders: Record<string, string> = {};
+    const capturedRequestBody = '';
     const intercepted: boolean[] = [];
 
     const pool = agent.get('https://api.anthropic.com');
@@ -538,7 +529,7 @@ test('T-11-04: complete() rejects with MissingApiKeyError when no API key is con
     t.skip('anthropic.ts not yet built — skip T-11-04');
     return;
   }
-  await withFreshState(async (_tmpRoot, _agent) => {
+  await withFreshState(async () => {
     delete process.env['PENSMITH_NO_LLM'];
     delete process.env['ANTHROPIC_API_KEY'];
     delete process.env['OPENAI_API_KEY'];
