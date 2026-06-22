@@ -13,7 +13,9 @@ required:
 
 degrade_if_missing:
   - if no Task: run sequentially (slower)
-  - if no MCP library / Zotero MCP: read .paper/library.json directly (Phase 3+)
+  - if no MCP library: read .paper/library.json directly (Phase 3+)
+  - if Zotero MCP present AND authenticated (ZOTERO_API_KEY set): wire the real MCP-backed Zotero client into the zotero-mcp adapter (setZoteroClientForTest) so its search() pulls + normalizes Zotero items into SourceCandidate[] — Zotero is USED AS A SOURCE alongside the other 7 adapters
+  - if Zotero MCP absent OR configured-without-ZOTERO_API_KEY: SKIP the Zotero pull, note the skip in the research log, and continue on the other 7 adapters — research is NOT broken (RSCH-06 / ARCH-03 absence-non-breaking)
 </capability_check>
 
 ## Overview
@@ -44,8 +46,10 @@ workflow body below is the prompt that drives the verb under both Tier 1
 2. **Disambiguate topic + generate queries** (RSCH-02): invoke `templates/prompts/topic-disambiguator.md` (D-12 LOCKED slug per Plan 03 CONTEXT D-12) → `{scopes: [{label, queries}]}` JSON. In `--yolo` mode, pick scope #1; otherwise present to user for selection (via `AskUserQuestion` if available, else stdin via `@clack/prompts`).
 
 3. **Run adapters in parallel** (RSCH-03 / RSCH-04):
-   - `import { sources } from 'bin/lib/sources/index.ts'` (the Wave-3 7-adapter registry: `crossref`, `openalex`, `arxiv`, `pubmed`, `semanticscholar`, `unpaywall`, `retraction-watch`).
+   - `import { sources } from 'bin/lib/sources/index.ts'` (the registry now has 8 entries: `crossref`, `openalex`, `arxiv`, `pubmed`, `semanticscholar`, `unpaywall`, `retraction-watch`, and `zotero-mcp`).
    - For each `query × each adapter`, call `sources[adapter].search(query)`.
+   - **Zotero as a source (RSCH-06):** the `zotero-mcp` adapter's `search()` returns `[]` UNLESS Zotero MCP is present AND authenticated (`ZOTERO_API_KEY` set) AND a client is wired. When present + authenticated, the Tier-1 workflow body wires the real MCP-backed Zotero client INTO the adapter via `setZoteroClientForTest(client)`; the adapter's `search()` then PULLS from that client and NORMALIZES the results to `SourceCandidate[]` (`source: 'zotero-mcp'`). Those candidates flow through the SAME dedup + scoring + Retraction-Watch cross-check (Step 5) as every other adapter — i.e. Zotero is actually USED AS A SOURCE, not a documentation-only stub. In Tier 2 (no MCP transport) or when Zotero is absent / unauthenticated, `search()` returns `[]` and research proceeds on the other 7 adapters (the declared `capability_check` fallback above — research is never broken by Zotero's absence).
+   - **Zotero is a SOURCE PROVIDER, not a verb.** It adds an 8th entry to the `sources` registry and a doctor presence probe; it does NOT add a 17th verb. The UX-02 locked-16 set is unchanged (`bin/lib/verbs.ts` UX02_VERBS stays at exactly 16).
    - Deduplicate by DOI; preserve provenance (which adapter found it first).
    - Emit a UNION `SourceCandidate[]` (D-14).
 
