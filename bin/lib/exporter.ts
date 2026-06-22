@@ -323,6 +323,7 @@ export interface ExportResult {
   format: ExportFormat;
   pandocUsed: boolean;
   bibCopied: boolean;
+  risCopied: boolean; // CITE-05 — CITATIONS.ris bundled alongside .bib
 }
 
 /**
@@ -525,5 +526,18 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     bibCopied = true;
   }
 
-  return { outputPath, format, pandocUsed, bibCopied };
+  // CITE-05 (DONE-08 extension): copy CITATIONS.ris into the export dir
+  // alongside .bib. Same pattern as bibCopied — same-path guard + existsSync
+  // guard so it never throws when the .ris is absent and never overwrites the
+  // source. RIS is plain-text bibliographic data with NO pensmith fingerprint
+  // (same zero-trace posture as .bib — no metadata to scrub).
+  let risCopied = false;
+  const risSrc = join(paperDir(opts.paperRoot), 'CITATIONS.ris');
+  const risDst = join(exportDir, 'CITATIONS.ris');
+  if (risSrc !== risDst && existsSync(risSrc)) {
+    await fsp.copyFile(risSrc, risDst);
+    risCopied = true;
+  }
+
+  return { outputPath, format, pandocUsed, bibCopied, risCopied };
 }

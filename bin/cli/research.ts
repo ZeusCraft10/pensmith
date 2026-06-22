@@ -19,6 +19,7 @@ import path from 'node:path';
 import { loadPrompt } from '../lib/prompt-loader.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { writeBibtex } from '../lib/bibtex-write.js';
+import { writeRis } from '../lib/ris-write.js';
 import { paperDir } from '../lib/paths.js';
 import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js';
 import type { SourceCandidate } from '../lib/schemas/source-candidate.js';
@@ -61,6 +62,7 @@ export const researchCommand = defineCommand({
 
     const libraryPath = path.join(paperDir(), 'LIBRARY.json');
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');
+    const risPath = path.join(paperDir(), 'CITATIONS.ris');
 
     // CR-02 fix: cross-check every candidate against Retraction Watch BEFORE
     // we persist LIBRARY.json or write CITATIONS.bib. Tier-2 (this codepath)
@@ -77,11 +79,22 @@ export const researchCommand = defineCommand({
     // a zero-length file when given an empty array (which Plan 06 verify.md
     // reads via citations.parseBib).
     await writeBibtex(candidates, bibPath);
+    // CITE-05: emit CITATIONS.ris alongside CITATIONS.bib at the SAME call site
+    // (symmetric — RESEARCH Open Question 1). writeRis is the RIS sibling of
+    // writeBibtex (same D-19 + D-07 chokepoints); given this empty candidates
+    // array it emits a zero-length .ris (parity with the empty .bib above).
+    await writeRis(candidates, risPath);
 
     process.stdout.write(
-      `pensmith research: wrote Tier-2 placeholder library to ${libraryPath} and empty .bib to ${bibPath}\n`,
+      `pensmith research: wrote Tier-2 placeholder library to ${libraryPath} and empty .bib/.ris to ${bibPath} / ${risPath}\n`,
     );
-    return { ok: true, library: libraryPath, bib: bibPath, mode: 'tier2-placeholder' };
+    return {
+      ok: true,
+      library: libraryPath,
+      bib: bibPath,
+      ris: risPath,
+      mode: 'tier2-placeholder',
+    };
   },
 });
 

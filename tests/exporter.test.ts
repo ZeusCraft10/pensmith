@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 const exporterSrcPath = fileURLToPath(new URL('../bin/lib/exporter.ts', import.meta.url));
 const exporterModUrl = new URL('../bin/lib/exporter.js', import.meta.url);
 
-interface ExportResult { outputPath: string }
+interface ExportResult { outputPath: string; bibCopied?: boolean; risCopied?: boolean }
 type ExportDraft = (opts: {
   inputPath: string; format: string; paperRoot: string; pandocPresent?: boolean;
 }) => Promise<ExportResult>;
@@ -85,6 +85,40 @@ test('exporter: CITATIONS.bib copied into export dir alongside the output, disti
     const srcBib = join(root, '.paper', 'CITATIONS.bib');
     assert.notEqual(resolve(copiedBib), resolve(srcBib), 'copy dest must be distinct from source');
     assert.equal(readFileSync(copiedBib, 'utf8'), readFileSync(srcBib, 'utf8'), 'copied bib must match source bytes');
+  },
+);
+
+// CITE-05 — mirror of the DONE-08 bib-copy test for the RIS sibling artifact.
+test('exporter: CITATIONS.ris copied into export dir alongside the output, distinct source/dest, risCopied=true (CITE-05)',
+  { skip: !existsSync(exporterSrcPath) },
+  async () => {
+    const mod = await import(exporterModUrl.href) as { exportDraft: ExportDraft };
+    const { root, inputPath } = seedPaper('riscopy');
+    // Seed a CITATIONS.ris fixture alongside the .bib the helper already wrote.
+    const srcRis = join(root, '.paper', 'CITATIONS.ris');
+    writeFileSync(srcRis, 'TY  - JOUR\nTI  - X\nER  -\n');
+
+    const res = await mod.exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false });
+
+    const exportDir = dirname(res.outputPath);
+    const copiedRis = join(exportDir, 'CITATIONS.ris');
+    assert.ok(existsSync(copiedRis), 'CITATIONS.ris must be copied alongside the export output');
+    assert.notEqual(resolve(copiedRis), resolve(srcRis), 'copy dest must be distinct from source');
+    assert.equal(readFileSync(copiedRis, 'utf8'), readFileSync(srcRis, 'utf8'), 'copied ris must match source bytes');
+    assert.equal(res.risCopied, true, 'res.risCopied must be true when the source .ris is present');
+  },
+);
+
+// CITE-05 — absent .ris must not throw; risCopied=false. The seed helper writes
+// a .bib but NOT a .ris, so this exercises the existsSync guard.
+test('exporter: absent CITATIONS.ris → no throw, risCopied=false (CITE-05)',
+  { skip: !existsSync(exporterSrcPath) },
+  async () => {
+    const mod = await import(exporterModUrl.href) as { exportDraft: ExportDraft };
+    const { root, inputPath } = seedPaper('nori');
+    const res = await mod.exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false });
+    assert.ok(!existsSync(join(dirname(res.outputPath), 'CITATIONS.ris')), 'no .ris copied when source absent');
+    assert.equal(res.risCopied, false, 'res.risCopied must be false when the source .ris is absent');
   },
 );
 
