@@ -28,7 +28,7 @@
 import { defineCommand } from 'citty';
 import { runRevise } from '../lib/revise.js';
 import { proposeSwap } from '../lib/revise-swap.js';
-import { MissingApiKeyError } from '../lib/anthropic.js';
+import { MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 
 const DEFAULT_SLUG = 'placeholder';
@@ -81,7 +81,11 @@ export const reviseCommand = defineCommand({
     const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
     if (!noLlm) {
       try {
-        await getProviderApiKey('anthropic');
+        // CR-01: resolve provider ID dynamically so OpenAI-only configs don't
+        // false-positive with "no config for 'anthropic'". resolveProviderId()
+        // is the single source of truth (shared with complete()).
+        const providerId = await resolveProviderId();
+        await getProviderApiKey(providerId);
       } catch (e) {
         if (e instanceof MissingApiKeyError) {
           process.stderr.write(

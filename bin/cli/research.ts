@@ -39,7 +39,7 @@ import { writeRis } from '../lib/ris-write.js';
 import { paperDir } from '../lib/paths.js';
 import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js';
 import { SourceCandidateSchema, type SourceCandidate } from '../lib/schemas/source-candidate.js';
-import { complete, MissingApiKeyError } from '../lib/anthropic.js';
+import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 
 // ---------------------------------------------------------------------------
@@ -95,7 +95,11 @@ export const researchCommand = defineCommand({
     const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
     if (!noLlm) {
       try {
-        await getProviderApiKey('anthropic');
+        // CR-01: resolve provider ID dynamically so OpenAI-only configs don't
+        // false-positive with "no config for 'anthropic'". resolveProviderId()
+        // is the single source of truth (shared with complete()).
+        const providerId = await resolveProviderId();
+        await getProviderApiKey(providerId);
       } catch (e) {
         if (e instanceof MissingApiKeyError) {
           process.stderr.write(

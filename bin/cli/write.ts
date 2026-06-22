@@ -37,7 +37,8 @@ import { TutorialSubscriber } from '../lib/tutorial.js';
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { complete, MissingApiKeyError } from '../lib/anthropic.js';
+import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
+import { getProviderApiKey } from '../lib/runtime.js';
 
 // Phase 11 — the section-draft placeholder constant has been removed. write now
 // calls complete() for real generation (GEN-02). With no key configured:
@@ -265,6 +266,29 @@ export const writeCommand = defineCommand({
     // the WRTE-04 chokepoint per section — no bypass). Progress streams as
     // structured JSON lines to stdout (04-RESEARCH §L); WARN goes to stderr.
     if (args.n === undefined || args.n === null || args.n === '') {
+      // CR-02: GEN-06 fail-loud probe for wave mode.
+      // Single-section path catches MissingApiKeyError from writeOneSection,
+      // but wave mode routes it per-section via runAllSections — by then
+      // disabling the whole wave is not possible. Probe here, before dispatch.
+      const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
+      if (!noLlm) {
+        try {
+          const providerId = await resolveProviderId();
+          await getProviderApiKey(providerId);
+        } catch (e) {
+          if (e instanceof MissingApiKeyError) {
+            process.stderr.write(
+              'pensmith write: ERROR — no LLM key configured.\n' +
+              'Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n' +
+              'Run inside Claude Code (Tier 1) for key-free operation.\n',
+            );
+            process.exitCode = 1;
+            return { ok: false, mode: 'no-key-configured' };
+          }
+          throw e;
+        }
+      }
+
       const rawMax = typeof args['max-parallel'] === 'string' ? Number(args['max-parallel']) : DEFAULT_MAX_PARALLEL;
       const maxParallel = Number.isInteger(rawMax) && rawMax >= 1 ? rawMax : DEFAULT_MAX_PARALLEL;
 
@@ -315,6 +339,9 @@ export const writeCommand = defineCommand({
       }
 
       const anyFailed = results.some((w) => w.sections.some((s) => s.status === 'failed'));
+      // CR-02: set exitCode when any section failed so the process exits non-zero.
+      // citty does not map verb return values to exit codes; we must set it here.
+      if (anyFailed) process.exitCode = 1;
       return { ok: !anyFailed, mode: 'wave', waves: results };
     }
 

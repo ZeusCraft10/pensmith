@@ -20,7 +20,7 @@ import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionPlan } from '../lib/paths.js';
 import { runRevise } from '../lib/revise.js';
 import { proposeSwap } from '../lib/revise-swap.js';
-import { complete, MissingApiKeyError } from '../lib/anthropic.js';
+import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 
@@ -73,7 +73,11 @@ export const planCommand = defineCommand({
     const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
     if (!noLlm) {
       try {
-        await getProviderApiKey('anthropic');
+        // CR-01: resolve provider ID dynamically so OpenAI-only configs don't
+        // false-positive with "no config for 'anthropic'". resolveProviderId()
+        // is the single source of truth (shared with complete()).
+        const providerId = await resolveProviderId();
+        await getProviderApiKey(providerId);
       } catch (e) {
         if (e instanceof MissingApiKeyError) {
           process.stderr.write(

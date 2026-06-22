@@ -22,7 +22,7 @@ import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { redactPii, diffPii } from '../lib/pii.js';
-import { complete, MissingApiKeyError } from '../lib/anthropic.js';
+import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 
 // EGRESS SEAM (H3 — test-observable model-bound payload). intake calls the
@@ -410,12 +410,16 @@ export const intakeCommand = defineCommand({
       const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
       if (!noLlm) {
         try {
-          await getProviderApiKey('anthropic');
+          // CR-01: resolve provider ID dynamically so OpenAI-only configs don't
+          // false-positive with "no config for 'anthropic'". resolveProviderId()
+          // is the single source of truth (shared with complete()).
+          const providerId = await resolveProviderId();
+          await getProviderApiKey(providerId);
         } catch (e) {
           if (e instanceof MissingApiKeyError) {
             process.stderr.write(
               'pensmith new: ERROR — no LLM key configured.\n' +
-              'Set ANTHROPIC_API_KEY to enable real generation.\n' +
+              'Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n' +
               'Run inside Claude Code (Tier 1) for key-free operation.\n',
             );
             process.exitCode = 1;

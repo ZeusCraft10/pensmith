@@ -111,6 +111,27 @@ export function isNoLlmMode(): boolean {
 }
 
 // ============================================================
+//   Provider-ID resolution (GEN-06 probe helper)
+// ============================================================
+
+/**
+ * Resolve the active provider ID from runtime config.
+ *
+ * This is the SINGLE source of truth for provider-ID resolution.
+ * Both the verb-level GEN-06 fail-loud probes and complete() use this
+ * function so that switching from 'anthropic' to 'openai' in runtime.json
+ * updates the probe and the completion call site simultaneously.
+ *
+ * Returns the first configured provider ID, or 'anthropic' as default
+ * (matching the runtime.ts schema defaults that seed 'anthropic' on first run).
+ */
+export async function resolveProviderId(): Promise<string> {
+  const cfg = await loadRuntimeConfig();
+  const providerIds = Object.keys(cfg.providers ?? {});
+  return providerIds[0] ?? 'anthropic';
+}
+
+// ============================================================
 //   Provider request/response shapes
 // ============================================================
 
@@ -174,13 +195,28 @@ function buildOpenAiRequest(opts: {
  * Throws a descriptive Error on malformed / unexpected shapes.
  */
 function parseAnthropicResponse(rawBody: string): { text: string; inputTokens: number; outputTokens: number } {
-  let parsed: AnthropicMessage;
+  let parsed: AnthropicMessage & { type?: string; error?: unknown };
   try {
-    parsed = JSON.parse(rawBody) as AnthropicMessage;
+    parsed = JSON.parse(rawBody) as AnthropicMessage & { type?: string; error?: unknown };
   } catch {
     throw new Error(
       `anthropic.ts: failed to parse Anthropic response body as JSON (length=${rawBody.length})`,
     );
+  }
+
+  // WR-01: handle HTTP-200 Anthropic error-type responses
+  // (e.g. {"type":"error","error":{"type":"overloaded_error","message":"..."}}).
+  // These have status 200 but signal failure — content[] is absent, so
+  // proceeding to contentBlock extraction would produce a misleading error.
+  // Cast through unknown to satisfy TS: AnthropicMessage does not have an index
+  // signature, so we widen to unknown first before narrowing to Record<string, unknown>.
+  const parsedAsRecord = parsed as unknown as Record<string, unknown>;
+  if (parsedAsRecord['type'] === 'error') {
+    const errDetail = parsedAsRecord['error'];
+    const detail = typeof errDetail === 'object' && errDetail !== null
+      ? JSON.stringify(errDetail)
+      : String(errDetail);
+    throw new Error(`anthropic.ts: Anthropic returned an API error response: ${detail}`);
   }
 
   const contentBlock = parsed.content?.[0];
@@ -224,9 +260,13 @@ function parseOpenAiResponse(rawBody: string): { text: string; inputTokens: numb
 
   const choice = parsed.choices?.[0];
   const content = choice?.message?.content;
-  if (typeof content !== 'string' || content.length === 0) {
+  // WR-05: treat whitespace-only content as unusable (same as empty/null).
+  // OpenAI types content as string|null; typeof null !== 'string' handles null.
+  if (typeof content !== 'string' || content.trim().length === 0) {
     throw new Error(
-      `anthropic.ts: OpenAI response missing choices[0].message.content — got: ${JSON.stringify(parsed.choices?.slice(0, 1))}`,
+      content === null
+        ? `anthropic.ts: OpenAI response has null choices[0].message.content (finish_reason: ${JSON.stringify(choice?.finish_reason)})`
+        : `anthropic.ts: OpenAI response missing choices[0].message.content — got: ${JSON.stringify(parsed.choices?.slice(0, 1))}`,
     );
   }
 
@@ -270,6 +310,19 @@ function parseOpenAiResponse(rawBody: string): { text: string; inputTokens: numb
  * @throws Error — on HTTP 4xx/5xx or unparseable response body
  */
 export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
+  // ── Pre-flight: validate message-list invariants (WR-03) ──
+  // Enforce the CompleteOptions.messages invariants documented in the JSDoc
+  // so callers get a comprehensible programmer error instead of an opaque HTTP 400.
+  if (opts.messages.length === 0) {
+    throw new Error('anthropic.ts: complete() requires at least one message');
+  }
+  const lastMsg = opts.messages[opts.messages.length - 1];
+  if (lastMsg?.role !== 'user') {
+    throw new Error(
+      `anthropic.ts: the last message must have role 'user'; got '${lastMsg?.role}'`,
+    );
+  }
+
   // ── Step 1: offline short-circuit (MUST be first — before key resolution) ──
   // The tier-contract suite runs with PENSMITH_NO_LLM=1 and NO API key set.
   // Checking here (not at the call site) keeps MissingApiKeyError out of
@@ -284,11 +337,10 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
   }
 
   // ── Step 2: provider + model resolution via runtime config ──
+  // Load config once; resolveProviderId() also calls loadRuntimeConfig() but
+  // the verb-level probes (CR-01) call it in isolation. Inside complete() we
+  // load directly to avoid two round-trips.
   const cfg = await loadRuntimeConfig();
-
-  // The default provider is 'anthropic' (runtime.ts defaults() seeds it).
-  // Pick the first configured provider by key order; callers that need a
-  // specific provider can set it via loadRuntimeConfig scope/paperRoot.
   const providerIds = Object.keys(cfg.providers ?? {});
   const providerId = providerIds[0] ?? 'anthropic';
   const providerCfg = cfg.providers?.[providerId];

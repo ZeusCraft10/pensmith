@@ -382,27 +382,26 @@ test('T-11-03: API key value never leaks to disk files, stdout, or stderr (no-le
     // Install an intercept on the Anthropic API endpoint that records the request.
     // The transport routes all HTTP through http.ts which uses undici — so the
     // MockAgent captures the request before it reaches the wire.
-    const capturedRequestHeaders: Record<string, string> = {};
-    const capturedRequestBody = '';
+    // IN-01: undici v7 reply(fn) receives request headers as opts.headers,
+    // so we can capture them and add a POSITIVE assertion that the key
+    // appears in the x-api-key header (not just that it's absent from disk/stdout/stderr).
+    let capturedRequestHeaders: Record<string, string | string[]> = {};
     const intercepted: boolean[] = [];
 
     const pool = agent.get('https://api.anthropic.com');
     pool
       .intercept({ path: '/v1/messages', method: 'POST' })
-      .reply(200, JSON.stringify({
-        id: 'msg_test',
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'text', text: 'Test response for no-leak assertion.' }],
-        usage: { input_tokens: 10, output_tokens: 8 },
-      }), { headers: { 'content-type': 'application/json' } });
-    // Note: undici MockScope does not expose an .on() event handler in its
-    // public types. We instead verify the no-leak property via the disk-sweep
-    // after the call (the sentinel must be absent from all files/stdout/stderr).
-    // The captured variables are left at their defaults for this test.
-    void capturedRequestHeaders;
-    void capturedRequestBody;
-    void intercepted;
+      .reply(200, (_opts?: { headers?: Record<string, string | string[]>; body?: string }) => {
+        capturedRequestHeaders = (_opts?.headers ?? {}) as Record<string, string | string[]>;
+        intercepted.push(true);
+        return JSON.stringify({
+          id: 'msg_test',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Test response for no-leak assertion.' }],
+          usage: { input_tokens: 10, output_tokens: 8 },
+        });
+      }, { headers: { 'content-type': 'application/json' } });
 
     // Also enable the pool so disableNetConnect doesn't block our mocked route
     // (undici MockAgent allows the registered intercepts even with disableNetConnect).
@@ -468,6 +467,19 @@ test('T-11-03: API key value never leaks to disk files, stdout, or stderr (no-le
         `T-11-03: KEY_SENTINEL found in file ${f.path} — key leaked to disk`,
       );
     }
+
+    // 4. IN-01: POSITIVE assertion — the KEY_SENTINEL MUST appear in the
+    // outgoing x-api-key request header. Without this, T-11-03 would pass
+    // even if the transport made an unauthenticated POST with no x-api-key.
+    // undici v7 reply(fn) delivers request headers in opts.headers.
+    assert.ok(
+      intercepted.length > 0,
+      'T-11-03: MockAgent intercept was never triggered — complete() did not POST',
+    );
+    assert.ok(
+      JSON.stringify(capturedRequestHeaders).includes(KEY_SENTINEL),
+      'T-11-03: KEY_SENTINEL must appear in the outbound x-api-key request header',
+    );
   }, {
     ANTHROPIC_API_KEY: KEY_SENTINEL,
   });
@@ -576,11 +588,19 @@ test('T-11-07: Anthropic provider sends correct POST body and headers to api.ant
     assert.ok('system' in body, 'Anthropic body must include "system"');
     assert.ok(Array.isArray(body['messages']), 'Anthropic body must include "messages" array');
 
-    // Validate required headers: x-api-key + anthropic-version + content-type
+    // WR-02: Validate BOTH required headers must be present (AND, not OR).
+    // 'anthropic-version' is always set unconditionally, so an OR would pass
+    // even if the key-injection at line ~394 were removed. Using AND ensures
+    // removing x-api-key injection would fail this test.
     const headerStr = JSON.stringify(capturedHeaders).toLowerCase();
     assert.ok(
-      headerStr.includes('x-api-key') || headerStr.includes('anthropic-version'),
-      `T-11-07: Anthropic request headers must include x-api-key and anthropic-version; got ${JSON.stringify(capturedHeaders)}`,
+      headerStr.includes('x-api-key') && headerStr.includes('anthropic-version'),
+      `T-11-07: Anthropic request headers must include BOTH x-api-key and anthropic-version; got ${JSON.stringify(capturedHeaders)}`,
+    );
+    // Also assert the key value itself is present in the headers.
+    assert.ok(
+      JSON.stringify(capturedHeaders).includes('sk-ant-test-body-shape-key'),
+      'T-11-07: x-api-key header must carry the configured API key value',
     );
   }, {
     ANTHROPIC_API_KEY: 'sk-ant-test-body-shape-key',
