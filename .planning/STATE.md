@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: verifying
+status: Shipped to GitHub (origin/main) — 3-OS CI matrix GREEN (run 27936480412)
 stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-06-22T06:57:16.185Z"
-last_activity: 2026-06-22 -- shipped all phases to GitHub (main pushed; 363 commits)
+last_updated: "2026-06-22T07:27:55.009Z"
+last_activity: 2026-06-22 -- shipped + CI green on linux/macos/windows
 progress:
   total_phases: 11
   completed_phases: 11
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 Phase: 10 (Discipline + citation-style breadth + Zotero MCP) — EXECUTING
 Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-06-22 -- shipped all phases to GitHub (main pushed; 363 commits)
+Status: Shipped to GitHub (origin/main) — 3-OS CI matrix GREEN (run 27936480412)
+Last activity: 2026-06-22 -- shipped + CI green on linux/macos/windows
 
 Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
 
