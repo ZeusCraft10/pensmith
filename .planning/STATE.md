@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.1.0
 milestone_name: milestone
-status: executing
+status: verifying
 stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-06-22T06:10:18.210Z"
+last_updated: "2026-06-22T06:20:24.886Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 11
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 73
-  completed_plans: 72
-  percent: 91
+  completed_plans: 73
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 
 Phase: 10 (Discipline + citation-style breadth + Zotero MCP) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-22
 
 Progress: [██████████] 96%  (46/48 plans; Phase 5 Wave 1 — Pass 4 deterministic orphan audit landed, VRFY-06 GREEN)
@@ -109,6 +109,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 10 P01 | 6min | 2 tasks | 2 files |
 | Phase 10 P02 | 3 | 2 tasks | 4 files |
 | Phase 10 P03 | 6min | 3 tasks | 6 files |
+| Phase 10 P04 | 5min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -266,6 +267,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [10-03] zotero-mcp adapter isZoteroAuthenticated is KEY-ONLY (decoupled from FS-presence, H3) so the injected-client CI path is authorizable with just ZOTERO_API_KEY; doctor probe deliberately does NOT reuse it — composes isZoteroMcpPresent() && key inline to distinguish ABSENT from CONFIGURED_NO_AUTH
 - [Phase ?]: [10-03] D-12 chokepoint forces DOT-ACCESS env reads in doctor probes (process.env.ZOTERO_API_KEY); both computed-literal and variable subscripts trip no-restricted-syntax — matched contact-email-presence.ts pattern
 - [Phase ?]: [10-03] injected _client is a valid presence signal (canonical gate 1) so the offline test drives the present+auth branch without writing a real mcp_servers.json; live MCP transport remains MANUAL-only (no CI), client injection wired in 10-04
+- [Phase ?]: [10-04] intake-clarifier re-pinned DIRECTLY to real SHA-256 e2fa74ba (no sentinel) — byte-stable in-place edit follows the Phase-9/Phase-5 re-pin precedent; loadPrompt resolves with no PENSMITH_ALLOW_PENDING_PROMPT_HASHES bypass
+- [Phase ?]: [10-04] Zotero used-as-source path + absent/no-auth fallback declared in workflows/research.md (executable seam shipped in 10-03); W4 required: list untouched so no new capability_check top-level key
+- [Phase ?]: [10-04] RIS exercised as a library surface through the research verb (not a 17th verb); tier-contract bijection guard forbids zotero/zotero-mcp/ris/style from UX02_VERBS while confirming zotero-mcp lives only in the sources registry
 
 ### Pending Todos
 
@@ -286,6 +290,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T06:09:16.169Z
+Last session: 2026-06-22T06:19:50.380Z
 Stopped at: Completed 10-02-PLAN.md
 Resume file: None
