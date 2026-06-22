@@ -35,6 +35,7 @@ import * as path from 'node:path';
 import * as fsp from 'node:fs/promises';
 import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
 
 // ---------------------------------------------------------------------------
@@ -194,90 +195,41 @@ async function walkAndReadAll(dir: string): Promise<Array<{ path: string; text: 
 // against a verb that hasn't had complete() wired yet — mirrors the 07-01
 // source-grep skip-predicate pattern.
 // ---------------------------------------------------------------------------
+// Read a verb's .ts source via the repo root. Uses fileURLToPath so a repo path
+// containing spaces (e.g. ".../OneDrive - Roanoke College/...") is %20-DECODED —
+// the prior `.pathname`/regex-strip approach left %20 in the path, so readFileSync
+// threw on spaced dev paths and every per-verb test silently skipped locally while
+// running for the first time on CI (the exact local-vs-CI gap we're closing).
+function verbSrc(verb: string): string {
+  return readFileSync(path.join(repoRoot(), 'bin', 'cli', `${verb}.ts`), 'utf8');
+}
+
 const VERB_WIRED_PREDICATES: Record<string, () => boolean> = {
   intake: () => {
-    try {
-      const src = readFileSync(
-        new URL('../bin/cli/intake.js', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'),
-        'utf8',
-      );
-      return !src.includes('tier2-placeholder') && !src.includes('TIER2_PLACEHOLDER');
-    } catch {
-      try {
-        // Fall back to .ts source for dev environments
-        const src = readFileSync(
-          path.join(process.cwd().replace(/[\\/]tests$/, ''), 'bin', 'cli', 'intake.ts'),
-          'utf8',
-        );
-        return !src.includes('tier2-placeholder') && !src.includes('TIER2_PLACEHOLDER');
-      } catch {
-        return false;
-      }
-    }
+    try { const s = verbSrc('intake'); return !s.includes('tier2-placeholder') && !s.includes('TIER2_PLACEHOLDER'); } catch { return false; }
   },
   research: () => {
-    try {
-      const src = readFileSync(
-        path.resolve(import.meta.url.replace(/^file:[/\\]+/, '').replace(/tests[\\/].*$/, ''), 'bin', 'cli', 'research.ts'),
-        'utf8',
-      );
-      return !src.includes('PLACEHOLDER_LIBRARY') && !src.includes('tier2-placeholder');
-    } catch {
-      return false;
-    }
+    try { const s = verbSrc('research'); return !s.includes('PLACEHOLDER_LIBRARY') && !s.includes('tier2-placeholder'); } catch { return false; }
   },
   outline: () => {
-    try {
-      const src = readFileSync(
-        path.resolve(import.meta.url.replace(/^file:[/\\]+/, '').replace(/tests[\\/].*$/, ''), 'bin', 'cli', 'outline.ts'),
-        'utf8',
-      );
-      return !src.includes('TIER2_OUTLINE') && !src.includes('tier2-placeholder');
-    } catch {
-      return false;
-    }
+    try { const s = verbSrc('outline'); return !s.includes('TIER2_OUTLINE') && !s.includes('tier2-placeholder'); } catch { return false; }
   },
   plan: () => {
-    try {
-      const src = readFileSync(
-        path.resolve(import.meta.url.replace(/^file:[/\\]+/, '').replace(/tests[\\/].*$/, ''), 'bin', 'cli', 'plan.ts'),
-        'utf8',
-      );
-      return !src.includes('TIER2_PLAN') && !src.includes('tier2-placeholder');
-    } catch {
-      return false;
-    }
+    try { const s = verbSrc('plan'); return !s.includes('TIER2_PLAN') && !s.includes('tier2-placeholder'); } catch { return false; }
   },
   write: () => {
-    try {
-      const src = readFileSync(
-        path.resolve(import.meta.url.replace(/^file:[/\\]+/, '').replace(/tests[\\/].*$/, ''), 'bin', 'cli', 'write.ts'),
-        'utf8',
-      );
-      return !src.includes('TIER2_DRAFT') && !src.includes('tier2-placeholder');
-    } catch {
-      return false;
-    }
+    try { const s = verbSrc('write'); return !s.includes('TIER2_DRAFT') && !s.includes('tier2-placeholder'); } catch { return false; }
   },
   revise: () => {
-    try {
-      const src = readFileSync(
-        path.resolve(import.meta.url.replace(/^file:[/\\]+/, '').replace(/tests[\\/].*$/, ''), 'bin', 'cli', 'revise.ts'),
-        'utf8',
-      );
-      return !src.includes('tier2ProposeSwap') && !src.includes('tier2-placeholder');
-    } catch {
-      return false;
-    }
+    try { const s = verbSrc('revise'); return !s.includes('tier2ProposeSwap') && !s.includes('tier2-placeholder'); } catch { return false; }
   },
 };
 
 // Resolve the repo root from import.meta.url so we can locate the built CLI.
-// Handles both Windows (file:///C:/...) and POSIX (file:///home/...) paths.
+// fileURLToPath decodes %20 (and other escapes) and yields a native path on both
+// Windows (file:///C:/...) and POSIX (file:///home/...).
 function repoRoot(): string {
-  // import.meta.url is e.g. file:///C:/Users/.../tests/llm-transport.test.ts
-  const fileUrl = new URL(import.meta.url);
-  const filePath = fileUrl.pathname.replace(/^\/([A-Za-z]:)/, '$1').replace(/\//g, path.sep);
+  const filePath = fileURLToPath(import.meta.url);
   // Go up one directory from tests/ to get the repo root
   return path.resolve(path.dirname(filePath), '..');
 }
@@ -755,7 +707,10 @@ type GenerativeVerb = typeof VERBS_FOR_INTEGRATION[number];
 const VERB_REQUIRED_ARGS: Record<GenerativeVerb, string[]> = {
   intake: [],
   research: [],
-  outline: [],
+  // outline has a default-on approval gate (CLAUDE.md non-negotiable) that exits 3
+  // in a non-TTY spawn. PENSMITH_NO_LLM mocks the LLM, NOT the approval gate, so the
+  // non-interactive integration spawn must pass --yolo to reach the artifact-write path.
+  outline: ['--yolo'],
   plan: ['1'],
   write: ['1'],
   revise: ['1'],
