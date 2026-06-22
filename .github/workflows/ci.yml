@@ -31,6 +31,15 @@ jobs:
 
       - run: npm ci
 
+      # Generate the gitignored derived sources (bin/lib/version.generated.ts +
+      # verbs.json) BEFORE lint/typecheck. They are produced by build's prebuild
+      # hook, but lint + `tsc --noEmit` run before `npm run build` and import
+      # version.generated.js — on a fresh checkout those files don't exist yet,
+      # so typecheck fails with TS2307. (Local `npm run check` is green only
+      # because the files persist on disk between builds.)
+      - name: Generate derived sources (prebuild — version.generated.ts + verbs.json)
+        run: npm run prebuild
+
       - run: npm run lint
 
       - run: npx tsc --noEmit
