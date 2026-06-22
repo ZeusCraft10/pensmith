@@ -50,42 +50,80 @@ const EPOCH_W3CDTF = '1970-01-01T00:00:00Z';
 // ---------------------------------------------------------------------------
 
 /**
+ * Injectable TaskRunner seam (GEN-05). Mirrors the __setInterpolateForTest
+ * pattern in bin/cli/intake.ts and the setZoteroClientForTest pattern in
+ * bin/lib/sources/zotero-mcp.ts.
+ *
+ * In Tier 1 production, the Claude Code Task transport is the runner.
+ * In Tier 2 (or when no transport is available), this stays null and
+ * runHumanizer cleanly skips.
+ */
+export type TaskRunner = (skill: string, input: Record<string, string>) => Promise<{ output: string }>;
+
+let _taskRunner: TaskRunner | null = null;
+
+/**
+ * Test-only seam: override the module-level TaskRunner. Pass null to clear
+ * (restores Tier-2 / no-transport behaviour). Double-underscore prefix marks
+ * this as test-only (mirrors __setInterpolateForTest in intake.ts).
+ */
+export function __setTaskRunnerForTest(fn: TaskRunner | null): void {
+  _taskRunner = fn;
+}
+
+/**
  * DONE-03 humanizer wrap — the done-orchestrator humanize step (the symbol the
  * Wave-0 tests/humanizer-wrap.test.ts pins to this module).
  *
  * Behavior (T-06-05-03 — a missing skill must NEVER fail the export):
- *   - isHumanizerSkillPresent() === false → print a clear stdout banner
- *     ('humanizer skill not found at ~/.claude/skills/humanizer/ — skipping
- *     humanize step.') and return null. The export proceeds on DRAFT.md.
- *   - present (Tier 1) → the humanizer is invoked via the Claude Code Task
- *     transport, which writes `.paper/FINAL.md` and returns its path. There is
- *     no Task transport in Tier 2 / the current era (06-RESEARCH A7), so a
- *     present-but-no-transport skill is treated the SAME as the skip path with a
- *     distinct banner: the export still proceeds on DRAFT.md and null is
- *     returned. A FINAL.md path is returned ONLY when a real humanized artifact
- *     was written.
+ *   - _taskRunner !== null (Tier 1 / injected runner): invoke the runner with
+ *     the draft, write the output to `.paper/FINAL.md` via atomicWriteFile, and
+ *     return the FINAL.md path. This is the only path that returns a non-null
+ *     value — a FINAL.md path is returned ONLY when a real humanized artifact
+ *     was written. The skill-presence check is bypassed when a runner is
+ *     explicitly wired (the runner IS the transport + skill).
+ *   - _taskRunner === null AND isHumanizerSkillPresent() === false → print a
+ *     clear stdout banner ('humanizer skill not found at
+ *     ~/.claude/skills/humanizer/ — skipping humanize step.') and return null.
+ *     The export proceeds on DRAFT.md.
+ *   - _taskRunner === null AND skill present (Tier 2 / no transport): the
+ *     @clack/CLI surface has no Task transport to invoke the skill, so skip
+ *     cleanly with a distinct banner and let the export proceed on DRAFT.md.
  *
  * NEVER throws — any unexpected error degrades to a clean null skip (advisory).
- * `paperRoot` is accepted for the present-path FINAL.md resolution; it is unused
- * on the skip path (Tier-2 era).
+ * `paperRoot` is the FINAL.md anchor; always resolves via paperDir(paperRoot)
+ * (never cwd-relative — Pitfall 8; Phase 14 GATE-04 expects FINAL.md in
+ * .paper/).
+ *
+ * done.ts OWNS the before/after scoreHonesty + renderHonestyReport flow —
+ * this function must NOT call scoreHonesty.
  */
 export async function runHumanizer(
   draftMd: string,
   paperRoot?: string,
 ): Promise<string | null> {
-  void draftMd; // present-path Task transport will consume this in Tier 1.
   try {
+    // Tier-1 path: an injectable TaskRunner is present (live Task API or test
+    // seam). Invoke the runner, write the output to .paper/FINAL.md, and return
+    // its path. The skill-presence check is bypassed — the runner IS the
+    // transport; callers that wire it have already confirmed availability.
+    if (_taskRunner !== null) {
+      const { output } = await _taskRunner('humanizer', { draft: draftMd });
+      const finalPath = join(paperDir(paperRoot), 'FINAL.md');
+      await atomicWriteFile(finalPath, output);
+      return finalPath;
+    }
+
+    // No runner wired (Tier 2 / no transport): check skill presence.
     if (!isHumanizerSkillPresent()) {
       process.stdout.write(
         'pensmith done: humanizer skill not found at ~/.claude/skills/humanizer/ — skipping humanize step.\n',
       );
       return null;
     }
-    // Present-but-no-transport (Tier 2 / current era): the @clack/CLI surface
-    // has no Task transport to invoke the skill, so skip cleanly with a distinct
-    // banner and let the export proceed on DRAFT.md. paperRoot is the FINAL.md
-    // anchor the Tier-1 Task path will use once a transport is wired.
-    void paperRoot;
+
+    // Skill present but no Task transport (Tier-2 era): skip cleanly with a
+    // distinct banner; the export proceeds on DRAFT.md.
     process.stdout.write(
       'pensmith done: humanizer skill present but no Task transport in this tier — skipping humanize step (export proceeds on DRAFT.md).\n',
     );
