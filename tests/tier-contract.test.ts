@@ -26,6 +26,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { assertEquivalent } from './lib/assert-tier-equivalent.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
+import { sources } from '../bin/lib/sources/index.js';
 
 const MCP_BIN = 'dist/mcp/server.js';
 const CLI_BIN = 'dist/bin/pensmith.js';
@@ -1600,4 +1601,73 @@ test('tier-contract: no 17th verb — adding the skills/plumbing namespace keeps
     assert.ok(!v.includes(':'), `UX02_VERBS must not contain a colon-prefix plumbing name, got "${v}"`);
     assert.ok(!/-section$/.test(v), `UX02_VERBS must not contain a "-section" plumbing alias, got "${v}"`);
   }
+});
+
+// ============================================================================
+// Plan 10-04 — research .ris parity + 16-verb bijection re-assertion (D-24)
+// ============================================================================
+//
+// The research body (workflows/research.md) changed in THIS plan (the Zotero
+// MCP used-as-source path + absent-fallback), so its D-24 tier-contract
+// obligation is re-exercised here. RIS is a LIBRARY surface reached THROUGH the
+// research verb (CITE-05), not a verb of its own — so rather than add a 17th
+// verb case, this block (1) asserts the research path emits CITATIONS.ris
+// ALONGSIDE CITATIONS.bib in a temp .paper/ root (both tiers run the SAME
+// bin/cli/research.ts → writeRis path, mcpTool:null — the documented
+// compile/done CLI-only asymmetry), and (2) re-asserts the 16-verb bijection:
+// exactly 16 verbs and NO Phase-10 surface (zotero/ris/style) leaked into the
+// locked set, while 'zotero-mcp' lives ONLY in the sources registry.
+
+const researchVerbExists = existsSync(new URL('../bin/cli/research.ts', import.meta.url));
+
+test('tier-contract: research — emits CITATIONS.ris alongside CITATIONS.bib (CITE-05, D-24)', { skip: !researchVerbExists }, () => {
+  // research is CLI-only at the tier-contract layer (no pensmith_research MCP
+  // tool); the Tier-1 surface is the workflow body delegating to the SAME
+  // bin/cli/research.ts → writeRis path. Run it once in a temp root and assert
+  // BOTH library files land (Tier-2 placeholder path emits zero-length .ris/.bib
+  // when no candidates — parity with the empty .bib). This proves the CITE-05
+  // RIS surface is reached through the research verb on both tiers.
+  const root = seedPaperFixture();
+  const r = runCliInDir(['research', '--yolo'], root);
+  assert.equal(
+    r.exitCode,
+    0,
+    `research RIS parity: CLI exit 0 expected; got ${r.exitCode}. stdout: ${r.stdout.slice(0, 400)} stderr: ${r.stderr.slice(0, 400)}`,
+  );
+  const bibPath = join(root, '.paper', 'CITATIONS.bib');
+  const risPath = join(root, '.paper', 'CITATIONS.ris');
+  assert.ok(existsSync(bibPath), `research RIS parity: CITATIONS.bib must exist at ${bibPath}`);
+  assert.ok(
+    existsSync(risPath),
+    `research RIS parity: CITATIONS.ris must land ALONGSIDE CITATIONS.bib at ${risPath} (CITE-05)`,
+  );
+});
+
+test('tier-contract: 16-verb bijection re-asserted — no zotero/ris/style verb leak, zotero-mcp confined to the sources registry (T-10-04-03)', () => {
+  // The locked-16 set is unchanged by the Phase-10 library/source surfaces.
+  assert.equal(UX02_VERBS.length, 16, 'the locked-16 bijection must stay at exactly 16 verbs after the Phase-10 surfaces land');
+  assert.equal(new Set(UX02_VERBS).size, 16, 'UX02_VERBS must contain 16 DISTINCT verbs (no duplicate/17th leak)');
+
+  // NO Phase-10 library/source token leaked into the verb set. zotero-mcp,
+  // zotero, ris, and style are surfaces (a source provider, a library writer,
+  // and a render style) — NONE is a verb.
+  const FORBIDDEN_VERB_TOKENS = ['zotero-mcp', 'zotero', 'ris', 'style'] as const;
+  for (const tok of FORBIDDEN_VERB_TOKENS) {
+    assert.ok(
+      !(UX02_VERBS as readonly string[]).includes(tok),
+      `UX02_VERBS must NOT contain the Phase-10 surface "${tok}" (it is a source/library/style surface, not a verb)`,
+    );
+  }
+
+  // 'zotero-mcp' IS a key of the sources registry (a source provider) — confirming
+  // it lives there and NOT in the verb set (the bijection-preserving placement).
+  assert.ok(
+    'zotero-mcp' in sources,
+    "'zotero-mcp' must be registered in the sources registry (a source provider, not a verb)",
+  );
+  // Its registry presence does NOT promote it to a verb.
+  assert.ok(
+    !(UX02_VERBS as readonly string[]).includes('zotero-mcp'),
+    "'zotero-mcp' is a sources-registry key, NOT a UX-02 verb",
+  );
 });
