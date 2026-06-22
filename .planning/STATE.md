@@ -4,13 +4,13 @@ milestone: v0.1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 09-03-PLAN.md
-last_updated: "2026-06-22T05:41:46.872Z"
+last_updated: "2026-06-22T05:52:00.456Z"
 last_activity: 2026-06-22
 progress:
   total_phases: 11
   completed_phases: 10
   total_plans: 73
-  completed_plans: 69
+  completed_plans: 70
   percent: 91
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-06)
 ## Current Position
 
 Phase: 10 (Discipline + citation-style breadth + Zotero MCP) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-06-22
 
@@ -106,6 +106,7 @@ See `.planning/HANDOFF.json` for the next-executor handoff (last_updated 2026-05
 | Phase 09 P02 | 18 | 2 tasks | 4 files |
 | Phase 09 P03 | 42min | 3 tasks | 16 files |
 | Phase 10 P00 | 9min | 3 tasks | 11 files |
+| Phase 10 P01 | 6min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -256,6 +257,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [10-00] Wave-0 RED gates are RED-by-skip (skip, not assertion-fail) so the full suite stays GREEN with 0 failures — matches locked 05-01/06-01/08-00 convention; diverges from plan-body 'fire RED' wording (Rule 3) because run-tests.mjs has no expected-RED allowlist
 - [Phase ?]: [10-00] 7 bundled CSL files fetched from citation-style-language/styles-distribution master (fully-resolved independent styles, HTTP 200, no rel='independent-parent' <link> so no render-time fetch); upstream bytes kept verbatim to preserve CC-BY-SA attribution and diffability
 - [Phase ?]: [10-00] RED-by-skip dynamic imports use a runtime URL .href specifier (08-00 pattern) + symbol feature-detect (typeof renderStyle/setZoteroClientForTest === 'function') so tsc stays clean and behavioral tests skip cleanly while target modules/exports are absent
+- [Phase ?]: 10-01: renderApa delegates to renderStyle(entries,'apa') — single Map-guarded 'pensmith-apa' registration (H2 fix)
+- [Phase ?]: 10-01: all 8 citation styles render offline + deterministically via a registeredStyles Map memoization over bundled CSL files (no render-time fetch)
 
 ### Pending Todos
 
@@ -276,6 +279,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-22T05:41:06.011Z
+Last session: 2026-06-22T05:51:34.292Z
 Stopped at: Completed 09-03-PLAN.md
 Resume file: None

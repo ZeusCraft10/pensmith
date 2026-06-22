@@ -175,8 +175,8 @@ Requirements for v0.1.0 (initial release). 132 atomic, testable requirements. Ea
 ### Citation Styles
 
 - [x] **CITE-01**: APA 7 ships in v0.1.0 vertical slice (Phase 3)
-- [ ] **CITE-02**: MLA, Chicago (notes-bib + author-date), IEEE, AMA, Vancouver supported via CSL
-- [ ] **CITE-03**: Harvard citation style supported (table stakes for UK/AU readers) `[research]`
+- [x] **CITE-02**: MLA, Chicago (notes-bib + author-date), IEEE, AMA, Vancouver supported via CSL
+- [x] **CITE-03**: Harvard citation style supported (table stakes for UK/AU readers) `[research]`
 - [x] **CITE-04**: Citation engine is `citation-js` + bundled CSL files in `templates/citation-styles/` — unlocks 10,000+ styles via citeproc-js `[research]`
 - [ ] **CITE-05**: RIS export alongside BibTeX for Mendeley/EndNote interop `[research]`
 
@@ -376,8 +376,8 @@ Maps requirements to roadmap phases. Empty initially, populated by the roadmappe
 | STYL-04 | Phase 8 | Complete |
 | ERGO-07 | Phase 9 | Complete |
 | RSCH-06 | Phase 10 | Pending |
-| CITE-02 | Phase 10 | Pending |
-| CITE-03 | Phase 10 | Pending |
+| CITE-02 | Phase 10 | Complete |
+| CITE-03 | Phase 10 | Complete |
 | CITE-05 | Phase 10 | Pending |
 
 **Coverage:**
