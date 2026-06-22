@@ -45,7 +45,7 @@ export function __setInterpolateForTest(
   };
 }
 import { paperDir } from '../lib/paths.js';
-import { loadState } from '../lib/state.js';
+import { initState, loadState } from '../lib/state.js';
 import { registerPaperInGlobalLibrary } from '../lib/global-library.js';
 import {
   buildStyleProfile,
@@ -450,6 +450,19 @@ export const intakeCommand = defineCommand({
       scope: 'task',
       scopeId: 'intake',
     });
+
+    // GEN-04 — Bootstrap STATE.json BEFORE writing INTAKE.md and running
+    // side effects, so resolvePaperId() returns a non-null paperId and the
+    // global-library registration + style-match producer proceed (not WARN-skip).
+    // initState(cwd) writes <cwd>/STATE.json (same path loadState(cwd) reads).
+    // StateAlreadyExistsError is caught and silently skipped — idempotent.
+    // Any other error re-throws (fail-loud: bootstrap failure is real).
+    try {
+      await initState(cwd);
+    } catch (e) {
+      if ((e as { code?: string }).code !== 'STATE_ALREADY_EXISTS') throw e;
+      // else: STATE.json already present — paperId is unchanged (idempotent skip)
+    }
 
     // INTAKE.md carries the redacted text via the model result when PII opt-in
     // is on (raw → .raw.local). The model output is the artifact; no placeholder.
