@@ -47,5 +47,10 @@ export const SourceCandidateSchema = z.discriminatedUnion('source', [
   z.object({ ...BaseFields, source: z.literal('semanticscholar') }),
   z.object({ ...BaseFields, source: z.literal('unpaywall') }),
   z.object({ ...BaseFields, source: z.literal('retraction-watch') }),
+  // RSCH-06: Zotero MCP is a normalizable source provider. Items pulled via the
+  // injectable Zotero client (bin/lib/sources/zotero-mcp.ts) normalize to this
+  // variant so they validate against the locked D-14 schema and flow through the
+  // SAME scoring + RSCH-11 retraction cross-check as every other adapter.
+  z.object({ ...BaseFields, source: z.literal('zotero-mcp') }),
 ]);
 export type SourceCandidate = z.infer<typeof SourceCandidateSchema>;

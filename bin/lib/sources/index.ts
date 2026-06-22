@@ -16,6 +16,7 @@ import * as pubmed from './pubmed.js';
 import * as semanticscholar from './semanticscholar.js';
 import * as unpaywall from './unpaywall.js';
 import * as retractionWatch from './retraction-watch.js';
+import * as zoteroMcp from './zotero-mcp.js';
 
 export const sources = {
   crossref,
@@ -25,6 +26,11 @@ export const sources = {
   semanticscholar,
   unpaywall,
   'retraction-watch': retractionWatch,
+  // RSCH-06: Zotero MCP source provider. Unlike 'retraction-watch', this key
+  // DOES expose `search` — generic iterators that guard `if ('search' in
+  // adapter)` include it. On CI (absent + no client wired) search() safely
+  // returns [] (absence-non-breaking, ARCH-03).
+  'zotero-mcp': zoteroMcp,
 } as const;
 
 export type AdapterName = keyof typeof sources;
