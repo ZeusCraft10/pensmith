@@ -94,7 +94,7 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   // atomic commit (sentinel-replacement). The same commit updates the matching
   // pins in tests/repo-files.test.ts PENDING_HASH_PINS — drift between the two
   // surfaces is structurally impossible because both files re-pin together.
-  'intake-clarifier':    'bc93c546f5853196379c8958b1d8895b3cc3d0c2aabef94858e48638e181ba94',  // D-12 LOCKED
+  'intake-clarifier':    'e2fa74ba6add0cac5f2fae1cb285d1023ed3e7057fa46f69320b38e207be9a39',  // D-12 LOCKED (re-pinned Plan 10-04 Task 1 — Q3 now offers all 8 citation styles; WN-3 lockstep with repo-files pin)
   'topic-disambiguator': '165e533fa1119ffca44a4876212679207d65501d7b71d0b9ed9de123df84b96e',  // D-12 LOCKED (research split #1)
   'source-evaluator':    '45488935a0bd44f08b4077978c66767f369b7fb4e72696ef5d17b5c6c453c762',  // D-12 LOCKED (research split #2)
   'outline-author':      'f5124245f29c71de31ed2c330097d2141bba80c04d8a2d2cef955e0669068f42',  // D-12 LOCKED

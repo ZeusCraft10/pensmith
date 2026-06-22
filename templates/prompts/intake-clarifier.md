@@ -31,9 +31,12 @@ Cover, in this order:
    defaults until a real preset lands.
 2. Target length — word count or page count. If the assignment text already
    states one, confirm rather than re-ask.
-3. Citation style — propose `APA` as the default (Phase 3 ships only
-   `templates/citation-styles/apa.csl`; `chicago-author-date` and `mla` are
-   referenced by the preset table but their CSL files are deferred).
+3. Citation style — propose the discipline preset default from
+   `templates/presets/disciplines.json` as the suggested value. All 8 styles
+   are now available: `APA`, `MLA`, `Chicago (Notes-Bibliography)`,
+   `Chicago (Author-Date)`, `IEEE`, `AMA`, `Vancouver`, `Harvard`.
+   If the user picks a style not listed, record it verbatim and the workflow
+   will fall back to `APA` at render time.
 4. Audience / venue — undergraduate course, graduate seminar, journal
    submission, conference, blog. Drives tone calibration downstream.
 5. Counterargument expectation — required, optional, or not applicable.
@@ -58,7 +61,7 @@ commentary. Example:
 ```
 1. Which discipline best fits this assignment? Suggested: CS, Bio, History, Lit, Psych, Econ, Philosophy, Other.
 2. What length target should I plan for? (word count or page count)
-3. Which citation style? (APA is the default in this build)
+3. Which citation style? (APA is the discipline default; options: APA, MLA, Chicago NB, Chicago AD, IEEE, AMA, Vancouver, Harvard)
 4. Who is the audience? (undergraduate course, graduate seminar, journal, conference)
 5. Should the paper include a counterargument section?
 ```
