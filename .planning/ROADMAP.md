@@ -31,7 +31,7 @@ Full phase goals, success criteria, and per-plan detail are preserved in the arc
 
 ### v0.2.0 End-to-End (Phases 11–16)
 
-- [ ] **Phase 11: Tier-2 LLM transport** — `bin/lib/anthropic.ts` transport chokepoint + six generative verbs wired + fail-loud on missing key
+- [x] **Phase 11: Tier-2 LLM transport** — `bin/lib/anthropic.ts` transport chokepoint + six generative verbs wired + fail-loud on missing key (completed 2026-06-22)
 - [ ] **Phase 12: Live research + intake bootstrap + humanizer Task** — real source candidates from adapters, paper-level STATE.json at intake, Tier-1 humanizer wrap with real before/after score
 - [ ] **Phase 13: Citation rendering at export** — `[@key]` tokens resolved to formatted in-text citations + bibliography in the paper's CSL style at export time
 - [ ] **Phase 14: Fail-closed verifier gate** — missing VERIFICATION.md blocks compile, shared verdict render/parse pair, live retraction re-query at verify time, post-humanize re-verification
@@ -59,7 +59,7 @@ Plans:
 - [x] 11-01-PLAN.md — Wave-0 RED-by-skip transport test scaffold (chokepoint, no-leak, budget-gate, fail-loud, offline seam, provider shapes)
 - [x] 11-02-PLAN.md — bin/lib/anthropic.ts transport chokepoint (provider dispatch, budget gate, http.ts POST, no-leak)
 - [x] 11-03-PLAN.md — wire intake + outline + write to complete() with fail-loud on missing key
-- [ ] 11-04-PLAN.md — wire research + plan + revise (shared proposeSwap) with fail-loud; research defensive parse
+- [x] 11-04-PLAN.md — wire research + plan + revise (shared proposeSwap) with fail-loud; research defensive parse
 
 **UI hint**: no
 
@@ -156,7 +156,7 @@ Plans:
 | 8. Style match + sketch + add + library + BYO PDF polish | v0.1.0 | 7/7 | Complete | 2026-06-20 |
 | 9. Educator/tutorial mode + PII polish | v0.1.0 | 4/4 | Complete | 2026-06-20 |
 | 10. Discipline + citation-style breadth + Zotero MCP | v0.1.0 | 5/5 | Complete | 2026-06-22 |
-| 11. Tier-2 LLM transport | v0.2.0 | 3/4 | In Progress|  |
+| 11. Tier-2 LLM transport | v0.2.0 | 4/4 | Complete   | 2026-06-22 |
 | 12. Live research + intake bootstrap + humanizer Task | v0.2.0 | 0/TBD | Not started | - |
 | 13. Citation rendering at export | v0.2.0 | 0/TBD | Not started | - |
 | 14. Fail-closed verifier gate | v0.2.0 | 0/TBD | Not started | - |
