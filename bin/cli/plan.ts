@@ -1,50 +1,30 @@
 // bin/cli/plan.ts — `pensmith plan <n>` verb entrypoint (PLAN-01).
 //
-// Plan 03-07 Task 7.2 — Tier-2 thin orchestrator. In Tier 1 the workflow
-// body delegates to the model with the `section-planner` prompt
-// (D-12 LOCKED slug). In Tier 2 (portable CLI) the verb writes a
-// placeholder `.paper/sections/<NN>-<slug>/PLAN.md` so downstream
-// `write`/`verify` verbs have something to read.
+// Phase 11 (GEN-02 / GEN-06): Wired to the Tier-2 LLM transport.
+//   - The local deterministic-remove proposeSwap stub is REMOVED.
+//   - The placeholder PLAN.md constant is REMOVED.
+//   - A fail-loud probe fires at the top of run(): MissingApiKeyError →
+//     stderr banner + exitCode=1 + ok:false. Never ok:true on missing key.
+//   - The normal plan path calls complete() with the 'section-planner' prompt
+//     (D-12 LOCKED slug) and writes the model output as a real PLAN.md.
+//   - The --revise path imports the shared proposeSwap from bin/lib/revise-swap.ts
+//     (ONE implementation; no duplication with revise.ts — GEN-02).
 //
-// Phase 3 Tier-2 fallback: see Plan 07 amendment.
+// D-12 LOCKED prompt slug: 'section-planner'.
+// D-06 LOCKED chokepoint: --revise delegates to runRevise (bin/lib/revise.ts).
+// T-11-09: runRevise's membership guard rejects replacement_citekey ∉ assigned_sources.
+// T-11-12: key value never logged here — complete() owns the no-leak header path.
 
 import { defineCommand } from 'citty';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionPlan } from '../lib/paths.js';
-import { runRevise, type ReviseSwapVars } from '../lib/revise.js';
-
-const TIER2_PLAN = [
-  '---',
-  'phase: section',
-  'plan: 01',
-  'type: section',
-  "status: 'planned'",
-  '---',
-  '',
-  '# Section Plan (Tier-2 placeholder)',
-  '',
-  '[Pensmith Tier 2: this section requires LLM planning. Run in Claude Code,',
-  ' or set ANTHROPIC_API_KEY for direct API access (Phase 4 work).]',
-  '',
-].join('\n');
+import { runRevise } from '../lib/revise.js';
+import { proposeSwap } from '../lib/revise-swap.js';
+import { complete, MissingApiKeyError } from '../lib/anthropic.js';
+import { getProviderApiKey } from '../lib/runtime.js';
+import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 
 const DEFAULT_SLUG = 'placeholder';
-
-/**
- * Tier-2 placeholder proposeSwap for the `plan --revise` chokepoint. Identical
- * to bin/cli/revise.ts's seam: deterministic `remove` (no model transport wired
- * yet). The hash-pinned `revise-swap` prompt + a real model client supersede
- * this in a later phase.
- */
-function tier2ProposeSwap(vars: ReviseSwapVars): Promise<string> {
-  return Promise.resolve(JSON.stringify({
-    action: 'remove',
-    flagged_citekey: vars.flagged_citekey,
-    replacement_citekey: null,
-    rationale: 'Tier-2 placeholder: no model transport wired; recommending mechanical removal of the flagged citation.',
-    patch: { before_excerpt: `[@${vars.flagged_citekey}]`, after_excerpt: '' },
-  }));
-}
 
 export const planCommand = defineCommand({
   meta: {
@@ -84,6 +64,30 @@ export const planCommand = defineCommand({
     }
     const slug = (args.slug && typeof args.slug === 'string' ? args.slug : DEFAULT_SLUG);
 
+    // GEN-06 fail-loud probe: assert a key is configured before doing any LLM work.
+    // CRITICAL ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE
+    // getProviderApiKey. When PENSMITH_NO_LLM=1 is set, complete() short-circuits to
+    // the offline mock — MissingApiKeyError is never thrown. The probe here is ONLY
+    // for the non-offline case: if no key and no offline mode, we fail loud.
+    // NEVER log the resolved key value — T-11-12 / T-01-07.
+    const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
+    if (!noLlm) {
+      try {
+        await getProviderApiKey('anthropic');
+      } catch (e) {
+        if (e instanceof MissingApiKeyError) {
+          process.stderr.write(
+            `pensmith plan: ERROR — no LLM key configured.\n` +
+            `Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n` +
+            `Run inside Claude Code (Tier 1) for key-free operation.\n`,
+          );
+          process.exitCode = 1;
+          return { ok: false, mode: 'no-key-configured' };
+        }
+        throw e;
+      }
+    }
+
     // PLAN-02 / D-05: `pensmith plan <N> --revise` (and `--research`) is the
     // canonical revise surface. Both route through the single runRevise
     // chokepoint (D-06) — identical to bin/cli/revise.ts. This keeps the locked
@@ -96,17 +100,44 @@ export const planCommand = defineCommand({
         slug,
         yolo: args.yolo === true,
         ...(research ? { research } : {}),
-        proposeSwap: tier2ProposeSwap,
+        // Real shared proposeSwap from bin/lib/revise-swap.ts (GEN-02).
+        // runRevise owns parsing the returned JSON + the membership guard that
+        // rejects any replacement_citekey ∉ assigned_sources (T-04-14 / T-11-09).
+        proposeSwap,
       });
       process.stdout.write(`pensmith plan --revise: ${result.message}\n`);
       return { ok: !result.retryExhausted, mode: 'revise', ...result };
     }
 
-    // Phase 3 Tier-2 fallback: see Plan 07 amendment.
+    // Normal plan path: call complete() with the 'section-planner' prompt
+    // (D-12 LOCKED slug). The prompt expects {{section}}, {{candidateSources}},
+    // {{topic}}, {{discipline}}, and {{upstreamPlans}}.
+    // Phase 12 / GEN-03 will wire these vars from the real LIBRARY.json + OUTLINE.md.
+    // For now (Phase 11 scope fence) we supply placeholder values that let complete()
+    // succeed with the offline mock (PENSMITH_NO_LLM=1) and produce a real output
+    // file (not a placeholder constant) that downstream verbs can read.
+    const planPrompt = loadPrompt('section-planner');
+    // Provide minimal var values; Phase 12 will populate from LIBRARY.json + OUTLINE.md.
+    const interpolatedPlan = interpolate(planPrompt, {
+      section: JSON.stringify({ number: n, slug, title: slug, depends_on: [], estimated_word_count: 400 }),
+      candidateSources: '(no sources loaded yet — wire via Phase 12 / GEN-03)',
+      topic: '(topic from INTAKE.md — wire via Phase 12)',
+      discipline: 'other',
+      upstreamPlans: '[]',
+    });
     const targetPath = sectionPlan(n, slug);
-    await atomicWriteFile(targetPath, TIER2_PLAN);
-    process.stdout.write(`pensmith plan: wrote Tier-2 placeholder PLAN.md to ${targetPath}\n`);
-    return { ok: true, path: targetPath, mode: 'tier2-placeholder' };
+    const result = await complete({
+      system:
+        'You are an academic section planner. Generate a PLAN.md document in the ' +
+        'exact YAML frontmatter + ## Brief format specified in the prompt. ' +
+        'Your output is the PLAN.md file content only — no prose outside the document.',
+      messages: [{ role: 'user', content: interpolatedPlan }],
+      scope: 'section',
+      scopeId: `plan-${n}`,
+    });
+    await atomicWriteFile(targetPath, result.text);
+    process.stdout.write(`pensmith plan: wrote PLAN.md to ${targetPath}\n`);
+    return { ok: true, path: targetPath };
   },
 });
 

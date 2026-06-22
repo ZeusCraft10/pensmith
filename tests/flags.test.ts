@@ -205,18 +205,27 @@ test('H1: a --yolo verb UNDER the 50% cap exits 0 (no false refusal)',
     writePaperFile(root, 'RESEARCH.md');
     writePaperFile(root, 'OUTLINE.md');
     writeSectionPlan(root, 1, 'intro', 'planned');
-    const res = runCli(['plan', '--yolo'], root, { PENSMITH_COST_CAP_USD: '1000000' });
+    // Phase 11 (GEN-06): all generative verbs (plan, write, research) now require
+    // either a real API key OR PENSMITH_NO_LLM=1 (offline mode). The H1 test is
+    // testing budget-gate behavior (under-cap → exit 0), not LLM key behavior.
+    // Set PENSMITH_NO_LLM=1 so complete() short-circuits without a key, which
+    // is the correct offline test pattern per 11-PATTERNS.md §Fail-Loud Pitfall 6.
+    const res = runCli(['plan', '--yolo'], root, { PENSMITH_COST_CAP_USD: '1000000', PENSMITH_NO_LLM: '1' });
     assert.equal(res.status, 0, `H1: a small projection under a huge cap must NOT be refused; stderr=${res.stderr}`);
   });
 
 test('C2-H1: `pensmith --yolo` and `write --yolo` in a paper-less dir do NOT crash (no StateNotFoundError)',
   { skip: !flagsWired }, () => {
     const root = freshRoot(); // no STATE.json
-    const a = runCli(['--yolo'], root);
+    // Phase 11 (GEN-06): all generative verbs now require either a real API key OR
+    // PENSMITH_NO_LLM=1 (offline mode). Set it so the bare dispatch (intake) and
+    // write don't fail-loud on missing key. This tests StateNotFoundError handling,
+    // not LLM key behavior — see 11-PATTERNS.md §Fail-Loud Pitfall 6.
+    const a = runCli(['--yolo'], root, { PENSMITH_NO_LLM: '1' });
     assert.equal(a.status, 0,
       `C2-H1: bare \`--yolo\` in a fresh dir must exit 0 (empty projection, under-cap); stderr=${a.stderr}`);
     assert.ok(!/StateNotFoundError/.test(a.stderr), 'C2-H1: must not surface StateNotFoundError');
-    const b = runCli(['write', '--yolo'], root);
+    const b = runCli(['write', '--yolo'], root, { PENSMITH_NO_LLM: '1' });
     assert.ok(!/StateNotFoundError/.test(b.stderr),
       'C2-H1: `write --yolo` in a fresh dir must not crash with StateNotFoundError');
   });

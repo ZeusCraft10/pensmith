@@ -13,36 +13,25 @@
 // so the chokepoint has a citty CommandDef surface (and so future top-level
 // promotion is a one-line dispatcher edit) without expanding the locked 16.
 //
-// LLM seam: bin/lib has no model-transport client yet (Tier-2 placeholder era —
-// same stance as bin/cli/{plan,write}.ts). Under PENSMITH_NO_LLM (or when no
-// transport is wired) the verb supplies a DETERMINISTIC Tier-2 proposeSwap that
-// recommends `action: "remove"` — always membership-valid (no replacement
-// needed) and reproducible, so both tiers reach the same terminal state. When a
-// real model client lands, it replaces this seam with loadPrompt('revise-swap')
-// + interpolate + the model call (the prompt is hash-pinned and ready).
+// Phase 11 (GEN-02 / GEN-06): the local deterministic-remove proposeSwap stub is REMOVED.
+// The shared real proposeSwap from bin/lib/revise-swap.ts calls complete() with
+// the hash-pinned 'revise-swap' prompt. A fail-loud probe fires BEFORE runRevise:
+// if no API key is configured (and PENSMITH_NO_LLM=1 is not set), the verb
+// prints a banner to stderr + sets exitCode=1 + returns ok:false without calling
+// runRevise. The membership guard in runRevise (T-04-14 / T-11-09) is untouched.
+//
+// Key ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE
+// getProviderApiKey — so PENSMITH_NO_LLM=1 bypasses MissingApiKeyError.
+// The fail-loud probe here uses the same try/catch idiom as the other wired verbs
+// (intake.ts, outline.ts, write.ts — Phase 11 plan 11-03).
 
 import { defineCommand } from 'citty';
-import { runRevise, type ReviseSwapVars } from '../lib/revise.js';
+import { runRevise } from '../lib/revise.js';
+import { proposeSwap } from '../lib/revise-swap.js';
+import { MissingApiKeyError } from '../lib/anthropic.js';
+import { getProviderApiKey } from '../lib/runtime.js';
 
 const DEFAULT_SLUG = 'placeholder';
-
-/**
- * Tier-2 placeholder proposeSwap. Recommends a mechanical `remove` of the
- * flagged citation — deterministic and always membership-valid. The hash-pinned
- * `revise-swap` prompt + a real model transport supersede this in a later phase.
- */
-function tier2ProposeSwap(vars: ReviseSwapVars): Promise<string> {
-  return Promise.resolve(JSON.stringify({
-    action: 'remove',
-    flagged_citekey: vars.flagged_citekey,
-    replacement_citekey: null,
-    rationale: 'Tier-2 placeholder: no model transport wired; recommending mechanical removal of the flagged citation.',
-    patch: {
-      before_excerpt: `[@${vars.flagged_citekey}]`,
-      after_excerpt: '',
-    },
-  }));
-}
 
 export const reviseCommand = defineCommand({
   meta: {
@@ -83,14 +72,40 @@ export const reviseCommand = defineCommand({
     const slug = args.slug && typeof args.slug === 'string' ? args.slug : DEFAULT_SLUG;
     const research = typeof args.research === 'string' && args.research.length > 0 ? args.research : undefined;
 
+    // GEN-06 fail-loud probe: assert a key is configured BEFORE calling runRevise.
+    // CRITICAL ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE
+    // getProviderApiKey. When PENSMITH_NO_LLM=1 is set, complete() short-circuits to
+    // the offline mock — MissingApiKeyError is never thrown. The probe here is ONLY
+    // for the non-offline case: if no key and no offline mode, we fail loud.
+    // NEVER log the resolved key value — T-11-12 / T-01-07.
+    const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
+    if (!noLlm) {
+      try {
+        await getProviderApiKey('anthropic');
+      } catch (e) {
+        if (e instanceof MissingApiKeyError) {
+          process.stderr.write(
+            `pensmith revise: ERROR — no LLM key configured.\n` +
+            `Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n` +
+            `Run inside Claude Code (Tier 1) for key-free operation.\n`,
+          );
+          process.exitCode = 1;
+          return { ok: false, mode: 'no-key-configured' };
+        }
+        throw e;
+      }
+    }
+
     const result = await runRevise({
       paperRoot: process.cwd(),
       n,
       slug,
       yolo: args.yolo === true,
       ...(research ? { research } : {}),
-      // Tier-2 placeholder transport (PENSMITH_NO_LLM / no model client yet).
-      proposeSwap: tier2ProposeSwap,
+      // Real proposeSwap from bin/lib/revise-swap.ts (GEN-02).
+      // runRevise owns parsing the returned JSON + the membership guard that
+      // rejects any replacement_citekey ∉ assigned_sources (T-04-14 / T-11-09).
+      proposeSwap,
     });
 
     process.stdout.write(`pensmith revise: ${result.message}\n`);
