@@ -26,7 +26,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { atomicAppendFile, atomicWriteFile } from './atomic-write.js';
-import { redactPii, redactKeys } from './pii.js';
+import { redactKeys, deepRedactPii } from './pii.js';
 import { paperDir, pensmithDataDir } from './paths.js';
 
 // ---------------------------------------------------------------------------
@@ -141,12 +141,12 @@ function resolveRoot(scope: NonNullable<OpenSessionLogOptions['scope']>, cwd: st
 //   1. Merge bindings + payload (payload wins on key clash).
 //   2. redactKeys(merged) — produces a fresh structurally-cloned object
 //      (per W8 — uses Object.create(null) containers internally; we receive
-//      it as a fresh container we may mutate in place).
-//   3. Walk the cloned top-level keys; for each string-typed leaf, run
-//      redactPii on it. (Nested object strings are NOT walked here —
-//      that's redactKeys' domain via its sensitive-key set; non-sensitive
-//      nested strings are intentionally not auto-redacted to avoid
-//      corrupting non-PII telemetry like { method: 'POST' }.)
+//      it as a fresh container we may mutate in place). Replaces VALUES
+//      under SENSITIVE key names (authorization, token, secret, …) at
+//      ANY depth.
+//   3. deepRedactPii per key — recurses into every string leaf at any depth
+//      so PII (phone, email, SSN, name, …) under non-sensitive nested keys
+//      is also redacted (HARD-03 / T-15-03). Includes top-level strings.
 //   4. Return `{at, kind, run_id, ...redactedFields}`.
 // ---------------------------------------------------------------------------
 
@@ -166,13 +166,20 @@ function buildRecord(
   const merged: Record<string, unknown> = { ...bindings, ...payload };
   const safe = redactKeys(merged) as Record<string, unknown>;
 
-  // Top-level string leaves: redactPii. Nested structures are already
-  // walked by redactKeys for sensitive-key replacement.
+  // Two-stage redaction (HARD-03 / T-15-03):
+  //   Stage 1 — redactKeys (above): replaces VALUES under SENSITIVE key names
+  //             (authorization, token, secret, api_key, …) at ANY depth via
+  //             walkAndRedact's recursion. Already done by redactKeys().
+  //   Stage 2 — deepRedactPii (below): walks EVERY remaining string leaf at
+  //             any depth and applies redactPii so PII (email, phone, SSN,
+  //             name, …) under non-sensitive nested keys is also redacted.
+  //             Top-level strings are included — deepRedactPii handles them
+  //             identically to the old top-level-only loop.
+  // The spill payload in writeLineOrTruncate is built FROM the `record`
+  // returned below, which already incorporates both stages — no raw payload
+  // ever bypasses redaction (invariant T-01-LOG-03 preserved).
   for (const k of Object.keys(safe)) {
-    const v = safe[k];
-    if (typeof v === 'string') {
-      safe[k] = redactPii(v);
-    }
+    safe[k] = deepRedactPii(safe[k]);
   }
 
   return {

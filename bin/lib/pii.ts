@@ -372,3 +372,61 @@ export function redactKeys<T>(obj: T): T {
   walkAndRedact(cloned);
   return cloned as T;
 }
+
+// ---------------------------------------------------------------------------
+// deepRedactPii — recursive string-leaf redactor (HARD-03 / T-15-03).
+//
+// Complements redactKeys: redactKeys replaces VALUES under SENSITIVE key names
+// at any depth, but does NOT apply redactPii to non-sensitive nested string
+// leaves. deepRedactPii fills that gap by walking every node in the structure
+// and applying redactPii to every string leaf.
+//
+// Structural rules (mirror walkAndRedact / deepClone patterns above):
+//   - string  → redactPii(node)               (apply PII redaction)
+//   - Array   → node.map(deepRedactPii)        (recurse into every element)
+//   - plain object → recurse into a fresh Object.create(null) container so
+//                    __proto__ keys stay inert (T-15-03c proto-pollution guard)
+//   - anything else (number, boolean, null, class instance, Map, Set, …) →
+//               returned unchanged; isPlainObject rejects opaque objects so
+//               their internals are never traversed (matches deepClone sentinel)
+//
+// Output: always a NEW structure — the input is never mutated (same invariant
+// as deepClone). Circular plain objects are not expected in log payloads;
+// isPlainObject rejects class instances/Maps/Sets so the blast radius is
+// bounded without needing a WeakSet visited-guard (Pitfall 4 in PLAN.md).
+//
+// Called by session-log.ts buildRecord AFTER redactKeys so the two stages
+// compose without overlap: redactKeys (sensitive keys at depth) then
+// deepRedactPii (PII in remaining non-sensitive string leaves).
+// ---------------------------------------------------------------------------
+
+export function deepRedactPii(node: unknown): unknown {
+  if (typeof node === 'string') return redactPii(node);
+  if (Array.isArray(node)) return node.map(deepRedactPii);
+  if (isPlainObject(node)) {
+    const out: Record<string, unknown> = Object.create(null);
+    for (const k of Object.keys(node)) {
+      const lower = k.toLowerCase();
+      if (SENSITIVE.has(lower)) {
+        // Sensitive key: replace value wholesale (mirrors walkAndRedact logic).
+        // If the value is a string with classifiable PII, keep the redactPii
+        // form; otherwise use the literal sentinel. Either branch erases the raw
+        // secret — matching the walkAndRedact contract exactly.
+        const val = node[k];
+        if (typeof val === 'string') {
+          const redacted = redactPii(val);
+          out[k] = redacted !== val ? redacted : '[REDACTED]';
+        } else {
+          out[k] = '[REDACTED]';
+        }
+        // Do NOT recurse into a redacted subtree (mirrors walkAndRedact).
+      } else {
+        out[k] = deepRedactPii(node[k]);
+      }
+    }
+    return out;
+  }
+  // Non-string scalars (number, boolean, null, undefined) and opaque objects
+  // (class instances, Map, Set, Date, Buffer, Error, …) — returned as-is.
+  return node;
+}
