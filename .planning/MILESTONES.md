@@ -1,5 +1,34 @@
 # Milestones
 
+## v0.2.0 End-to-End (Shipped: 2026-06-24)
+
+**Phases completed:** 6 phases, 26 plans, 33 tasks
+
+**Key accomplishments:**
+
+- 19-test RED-by-skip scaffold enumerating all Phase-11 behavioral contracts via dynamic URL.href feature-detect guard; full suite stays GREEN (19 skips, 0 failures) before bin/lib/anthropic.ts exists
+- Implemented `bin/lib/anthropic.ts` as the single LLM completion chokepoint — offline seam, budget gate, no-leak key routing, and anthropic/openai provider dispatch via http.ts POST only.
+- intake/outline/write wired to complete() with fail-loud key probe, offline mock transparency, and WRTE-04/approval gate invariants preserved
+- 1. [Rule 1 - Bug] isNoLlmMode guard missing from fail-loud probe
+- Three offline skip-guarded test scaffolds locking executable behavioral contracts for live research fan-out (GEN-03), intake STATE.json bootstrap (GEN-04), and injectable TaskRunner humanizer (GEN-05) — all using fileURLToPath path resolution for the spaced-path repo.
+- 1. [Rule 1 - Bug] Called initState(cwd) instead of initState(paperDir(cwd))
+- Injectable TaskRunner seam + filled runHumanizer body — Tier-1 invokes humanizer skill via _taskRunner, writes .paper/FINAL.md; Tier-2 / no runner cleanly skips with banner.
+- RED-by-skip REND-01/02/03 offline citation assertions on vaswani2017attention fixture, skip-gated by source-grep predicate on resolveAndRenderCitations.
+- Wire `renderInText` + `resolveAndRenderCitations` into the export path so every `[@key]` token resolves to a formatted in-text citation and `## References` bibliography in the paper's CSL style (APA/IEEE/MLA/etc.), fully offline on the md/Pandoc-absent path.
+- RED-by-skip Wave-0 scaffolds for all four gate test contracts (GATE-01/02/03/04) with the GATE-03 live-retraction cassette — 19 tests total, 9 pass, 10 skip, 0 fail
+- Live Retraction Watch re-query at verify time — non-null hit on confirmed DOI → MIS-CITED (blocking); transport/no-hit → silent skip; cassette adapter fixed to use dir-scan for per-DOI matching.
+- 7-file RED-by-skip test scaffold covering all 6 HARD security items: injected-resolver SSRF, FIFO TokenBucket, byte-cap PDF bounds, UUID-fenced prompt injection, deep-PII redaction, and GPTZero consent/cap — 0 failures, 21 skips, full suite stays GREEN.
+- `bin/lib/lock.ts`
+- A new exported function that recursively walks any JSON-serializable node and applies `redactPii` to every string leaf. When recursing into a plain object it checks each key against the `SENSITIVE` set (same set `walkAndRedact` uses) so sensitive-key values are also redacted in-place — making the function correct when called standalone, not just as a post-`redactKeys` step. Output containers use `Object.create(null)` (matches `deepClone`'s proto-pollution defense). Opaque values (class instances, Map, Set, Date, Buffer, null, numbers, booleans) are returned unchanged.
+- GPTZero POST now guarded by verbatim disclosure from locked framing file + ask() consent gate (yolo-skippable, non-TTY silent-decline) + 50 KB size cap, with WN-3 standalone hash-pin re-pinned atomically.
+- 24-row PROVEN/UNPROVEN threat audit in `.planning/SECURITY.md` + Semaphore bare-caller try/finally doc + FIFO/permit-leak regression tests in `budget.test.ts`.
+- c8 ratchet gate (.c8rc.json at 85/72/82/85) + two RED-by-skip contracts that lock DOCS-03 (lazy-nock supply-chain fail-safe) and DOCS-02 (four workflow body non-stub assertions) before any production code changes
+- Prebuild-first `npm run check`, porcelain-clean CI gate, non-TTY coverage step, and lazy nock import in http-mock.ts moving nock to devDependencies.
+- 1. [Rule 1 - Bug] DISCLAIMER array literal split "not a guarantee against AI detectors" across two elements
+- Four stub workflow bodies filled (doctor/status/next/resume) with real runDoctor/loadState/resolveNextAction/H4-resume body content; stale "Phase 3 deferred" http-crossref-ping copy refreshed and doctor-output.md SHA-256 re-pinned; PRIVACY.md placeholder replaced with real shipped data-flow content.
+
+---
+
 ## v0.1.0 Foundation (Shipped: 2026-06-22)
 
 **Phases completed:** 11 phases, 73 plans, 126 tasks

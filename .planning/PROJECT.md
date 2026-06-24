@@ -63,32 +63,29 @@ Every citation in every exported paper is real and supports the claim it's attac
 **Testing & determinism**:
 - ✓ `known-bad-citations.json` (10/10 FABRICATED), `known-bad-quotes.json` (10/10 NOT_FOUND), tier-contract cases, offline cassettes, full Foundation unit suite — 3-OS CI green — v0.1.0
 
+**v0.2.0 End-to-End** — shipped + verified (25/25 reqs, 3-OS CI green):
+- ✓ Tier-2 LLM transport (`bin/lib/anthropic.ts`) — single chokepoint; all 6 generative verbs call it; fail-loud on missing key; budget-gated; no key leak; all LLM I/O via `http.ts` — v0.2.0 (GEN-01/02/06)
+- ✓ Live research source discovery in `pensmith research` (adapter fan-out + DOI/title dedup + source-evaluator + retraction cross-check → real LIBRARY.json) — v0.2.0 (GEN-03)
+- ✓ Intake paper-level STATE.json/paperId bootstrap (library registration + style-match now run, no WARN-skip) — v0.2.0 (GEN-04)
+- ✓ Tier-1 humanizer Task seam (injectable; real before/after honesty score; clean skip when absent) — v0.2.0 (GEN-05)
+- ✓ Citation rendering at export: `[@key]` → formatted in-text cites + bibliography in the paper's CSL style (Pandoc citeproc + offline citation-js path; zero-trace preserved) — v0.2.0 (REND-01/02/03)
+- ✓ Fail-closed verifier gate: missing-VERIFICATION refuse, shared verdict render/parse pair + round-trip test, blocking live retraction re-query, post-humanize FINAL.md re-verify (unconditional — no `--yolo` escape) — v0.2.0 (GATE-01/02/03/04)
+- ✓ Security hardening: lock-key canonicalization, real SSRF guards (DNS-resolved private-range block), recursive PII redaction, pdf-parse input bounds, Pass-2/4 prompt fencing, GPTZero consent gate, FIFO TokenBucket, + `.planning/SECURITY.md` audit — v0.2.0 (HARD-01..06)
+- ✓ CI/DX parity: prebuild-first `npm run check`, fresh-clone porcelain gate, coverage gate, non-TTY stdin run, real README + §3 disclaimer at intake, filled workflow bodies, nock→devDep — v0.2.0 (CI/DOCS)
+
 ### Active
 
-<!-- v0.2.0 scope. From the 2026-06-22 improvement review: connecting the verified machinery to a real end-to-end deliverable. -->
+<!-- v0.3.0 scope. Carried forward from the v0.2.0 audit (tech_debt) + the v2/Future backlog. -->
 
-**The unlock (make pensmith actually generate a paper):**
-- [ ] **Tier-2 LLM transport** (`bin/lib/anthropic.ts`) — the six generative verbs (intake/research/outline/plan/write/revise) currently emit `tier2-placeholder` artifacts because the transport module doesn't exist; Tier 2 cannot generate anything today (PRD §1/SC-7)
-- [ ] **Live research source discovery** wired into `pensmith research` — the 8 adapters + dedup + retraction cross-check exist, but `research.ts` hardcodes zero candidates and writes a placeholder library
-- [ ] **Citation style + `[@key]` resolution at export** — wire `resolveStyleName` + `--citeproc/--csl/--bibliography` so exports carry formatted cites + a bibliography instead of literal `[@key]` tokens (the 8-style CSL catalog already exists but has no production consumer)
-- [ ] **Intake paper-level bootstrap** — write `STATE.json`/paperId at intake so global-library registration + style-match stop WARN-skipping in the real flow
-- [ ] **Humanizer Task transport** in Tier 1 (detection ships; the wrap currently returns null, so no "after" score)
+**Make the pipeline truly end-to-end (the v0.2.0 carried-forward headline):**
+- [ ] Feed discovered `LIBRARY.json` sources into the plan/outline/write prompts — research discovers sources (GEN-03 ✓) but the section planner/writer still receive placeholder context, so a full-pipeline paper's planner is blind to the sourced research
+- [ ] Live-path smoke CI (real Pandoc export asserting a formatted ref; live pymupdf extraction; one live adapter round-trip)
 
-**Fail-closed correctness hardening (the core guarantee, end-to-end):**
-- [ ] Missing `VERIFICATION.md` must fail the compile refuse-gate (currently reads as clean)
-- [ ] Shared render+parse pair for the refuse-gate verdict rows + writer→parser round-trip test
-- [ ] Re-query Retraction Watch at verify time (blocking), not only the WARN-only freshness channel
-- [ ] Re-verify humanizer `FINAL.md` (deterministic Pass-3 + citekey diff) before export — it currently bypasses all verification
+**Breadth (v2/Future from the 2026-06-22 review):**
+- [ ] Reference dedup/merge across BYO/add/Zotero/live-search; figure/table/caption handling; partial-draft/mid-section resume; unverifiable-quote 4th DONE-09 advisory bucket; verb/flag reference card; pay down the 13 deferred Phase-1 Foundation FLAGs
 
-**Foundation & security hardening:**
-- [ ] Canonicalize lock keys (`path.resolve`+`realpath`) before hashing in `lock.ts` (callers pass inconsistent conventions → same file, different lock)
-- [ ] Real SSRF guards in `http.ts` (scheme allowlist + DNS-resolved RFC1918/loopback block); the `add <url>` "mitigation" comment is currently false
-- [ ] Recursive PII redaction on nested leaves before `SESSION.log` writes (only top-level keys today)
-- [ ] Run the deferred secure-phase audit → per-phase SECURITY.md; pin/replace `pdf-parse@1.1.1`; prompt-injection delimiting in advisory Pass 2/4
-
-**CI / DX parity:**
-- [ ] `npm run check` prebuild-first so local == CI; fresh-clone CI job + `git status --porcelain` clean assertion (3 of 5 ship breaks were stale-artifact); coverage gate; non-TTY stdin test run
-- [ ] Ship the real README (install, `/pensmith` quickstart, PRD §3 disclaimer); fill the 4 stub workflow bodies; refresh stale "Phase 3+/ships in Phase 6" copy
+**Security residuals (documented in `.planning/SECURITY.md`):**
+- [ ] DNS-rebind socket-pinning (undici connect callback) for the SSRF guard (WR-03); worker-thread PDF-parse abort on timeout (WR-05)
 
 ### Out of Scope
 
@@ -105,26 +102,22 @@ Every citation in every exported paper is real and supports the claim it's attac
 
 ## Current State
 
-**Shipped: v0.1.0 Foundation (2026-06-22).** 11 phases, 73 plans, ~43k LOC TypeScript (ESM/NodeNext strict), 856 tests, 3-OS CI matrix (ubuntu/macos/windows × Node 20.18) green on `origin/main`. Repo: github.com/ZeusCraft10/pensmith.
+**Shipped: v0.2.0 End-to-End (2026-06-24).** Two milestones complete (v0.1.0 Foundation + v0.2.0 End-to-End): 17 phases, 99 plans, ~966 tests, 3-OS CI matrix (ubuntu/macos/windows × Node 20.18) GREEN on `origin/main` (run 28093018921). Repo: github.com/ZeusCraft10/pensmith.
 
-The full two-tier architecture, the deterministic verifier gate, the compile/export pipeline (zero-trace verified), the single-command UX, and the citation/style libraries all shipped and are green. The known limitation — surfaced by the 2026-06-22 multi-dimension review — is that the **generative pipeline is scaffolded but not yet end-to-end**: the Tier-2 LLM transport doesn't exist, `research` discovers zero live sources, and exports still emit literal `[@key]` tokens. v0.2.0 connects these seams.
+The generative seams the Foundation milestone scaffolded are now connected: the Tier-2 LLM transport exists and the six verbs call it; `research` discovers real sources via the adapters; exports render formatted citations + a bibliography; the verifier gate is fail-closed end-to-end (incl. post-humanize re-verify); and the security/CI hardening landed (SSRF, recursive PII, lock-key canon, prompt fencing, GPTZero consent, porcelain + coverage CI gates).
 
-**Tech stack:** Node ≥20.10, TypeScript (NodeNext, strict), undici, proper-lockfile, citation-js, pdf-parse/pdf-lib, jszip, Pandoc (optional shellout), MCP SDK. Knowledge graph: 6,398 nodes / 7,606 edges (gitignored, rebuild via `/gsd:graphify build`).
+**Known limitation (v0.2.0 audit `tech_debt`, carried to v0.3.0):** the discovered `LIBRARY.json` sources don't yet flow into the plan/outline/write prompts — so a paper run through the *full* pipeline has its section planner/writer blind to the sourced research. The verbs generate real artifacts; they just don't yet consume the discovered candidates. This is the v0.3.0 headline.
 
-## Current Milestone: v0.2.0
+**Tech stack:** Node ≥20.10, TypeScript (NodeNext, strict), undici, proper-lockfile, citation-js, pdf-parse/pdf-lib, jszip, Pandoc (optional shellout), MCP SDK, c8 coverage. Live LLM via `bin/lib/anthropic.ts` (Anthropic/OpenAI-compatible, through `http.ts`). Knowledge graph: gitignored, rebuild via `/gsd:graphify build`.
 
-**Goal:** Make pensmith produce a submission-ready, sourced, citation-formatted paper end-to-end — close the generative seams the Foundation milestone scaffolded but left unwired.
+## Next Milestone Goals (v0.3.0)
 
-**Target features:**
-- **Tier-2 LLM transport** (`bin/lib/anthropic.ts`) wired into all six generative verbs — the portable CLI can finally generate intake/research/outline/plan/draft/revision.
-- **Live research source discovery** wired into `pensmith research` — real candidates from the 8 existing adapters (dedup + retraction cross-check), replacing the zero-candidate placeholder.
-- **Citation rendering at export** — `--citeproc/--csl/--bibliography` so exports carry formatted cites + a bibliography instead of literal `[@key]` tokens.
-- **Intake paper-level bootstrap** (STATE.json/paperId) so library registration + style-match stop WARN-skipping.
-- **Fail-closed gate hardening** — missing-VERIFICATION refuse, verdict-parser round-trip, blocking live retraction re-query, post-humanize re-verification.
-- **Foundation & security hardening** — lock-key canonicalization, real SSRF guards, recursive PII redaction, deferred secure-phase audit.
-- **CI/DX parity** — prebuild-first `npm run check`, fresh-clone CI gate, coverage gate, real README + stub-body fill.
+**Goal:** Make the pipeline *truly* end-to-end — close the v0.2.0 carried-forward gap so the discovered research actually informs drafting.
 
-**Key context:** Scope is the full 2026-06-22 improvement-review backlog. Sequencing — the Tier-2 transport + live research are the unlock (most other gaps become testable once the CLI can generate and discover); the S-effort fail-closed/lock/CI fixes run in parallel; citation-at-export is the highest-visibility self-contained correctness win.
+- **Wire `LIBRARY.json` → plan/outline/write prompts** (the tech-debt headline): the section planner + drafter receive the discovered/assigned sources, not placeholder context.
+- **Live-path smoke CI** (real Pandoc/pymupdf/one live adapter round-trip) so the manual-only verifications get automated coverage.
+- **v2/Future breadth:** reference dedup, figure/table/caption handling, partial-draft resume, unverifiable-quote advisory bucket, verb reference card, Phase-1 FLAG paydown.
+- **Security residuals:** DNS-rebind socket-pinning (WR-03), worker-thread PDF abort (WR-05).
 
 ## Context
 
@@ -165,7 +158,11 @@ The full two-tier architecture, the deterministic verifier gate, the compile/exp
 | Style-match shipped (opt-in) with dual-use disclosure | Legitimate uses (consistency across thesis/dissertation); user takes responsibility per README | ⚠️ Revisit — shipped per-paper-only (no global cache); novel dual-use territory, watch real usage |
 | Deterministic Pass 1 + Pass 3 blocking; Pass 2 + Pass 4 advisory | Re-fetch-the-source integrity can't be left to an LLM; claim-support judgment is advisory by nature | ✓ Good — known-bad fixtures flag 10/10; advisory passes never auto-block |
 | GSD orchestrates the build | Use the GSD plan→converge→execute→verify flow; don't build outside the orchestrator | ✓ Good — all 11 phases shipped via GSD; 0-HIGH convergence + per-phase verification |
-| Accept v0.1.0 tech-debt, roll into v0.2.0 | Generative seams (Tier-2 transport, live research, citation-at-export) scaffolded not wired; ship architecture, fix end-to-end next | — Pending — v0.2.0 milestone |
+| Accept v0.1.0 tech-debt, roll into v0.2.0 | Generative seams (Tier-2 transport, live research, citation-at-export) scaffolded not wired; ship architecture, fix end-to-end next | ✓ Good — v0.2.0 shipped all carried items (25/25 reqs); 3-OS CI green |
+| LLM transport routes through `http.ts`, not a vendor SDK's own fetch | Keep the single network chokepoint (D-06) + SSRF guard + rate bucket over every call; import SDK types only | ✓ Good — non-streaming POST via http.ts; no chokepoint bypass; provider-agnostic (anthropic/openai) |
+| Verifier gate is `--yolo`-UNskippable (GATE-04) | `--yolo` is for the advisory export-confirmation gate only; citation-integrity is the #1 non-negotiable and must never be bypassable | ✓ Good — code-review caught a --yolo escape; fixed to unconditional hard-block |
+| SSRF: fail-closed on private/reserved IP, but document the residuals honestly | Real DNS-resolved range block beats a false "mitigation" comment; the TOCTOU/worker-abort residuals need bigger changes | ⚠️ Revisit — DNS-rebind + worker-PDF residuals documented in SECURITY.md, carried to v0.3.0 |
+| Accept v0.2.0 tech-debt (LIBRARY.json→prompt feed), roll into v0.3.0 | The 25 committed reqs are done + CI-green; the discovered-sources→drafting feed is beyond scope but is the natural "truly end-to-end" next step | — Pending — v0.3.0 milestone |
 
 ## Evolution
 
@@ -176,4 +173,4 @@ This document evolves at phase transitions and milestone boundaries.
 **After each milestone** (via `/gsd:complete-milestone`): full review of all sections; Core Value check; audit Out of Scope; update Context + Current State.
 
 ---
-*Last updated: 2026-06-22 after v0.1.0 Foundation milestone (initialized 2026-05-06 from PRD.md)*
+*Last updated: 2026-06-24 after v0.2.0 End-to-End milestone (initialized 2026-05-06 from PRD.md)*

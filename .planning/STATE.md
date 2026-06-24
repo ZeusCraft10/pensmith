@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v0.2.0
 milestone_name: End-to-End
-status: executing
+status: Awaiting next milestone
 stopped_at: Completed 15-08-PLAN.md (SECURITY.md audit + Semaphore bare-caller doc, Phase 15 Wave 4 complete)
-last_updated: "2026-06-24T10:04:50.704Z"
-last_activity: "2026-06-24 — 16-01 complete: .c8rc.json (85/72/82/85 ratchet) + RED-by-skip guards (http-mock.test.ts, workflow-bodies.test.ts)"
+last_updated: "2026-06-24T11:06:00.822Z"
+last_activity: 2026-06-24 — Milestone v0.2.0 completed and archived
 progress:
   total_phases: 6
   completed_phases: 6
@@ -18,17 +18,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-22 after v0.1.0 Foundation milestone)
+See: .planning/PROJECT.md (updated 2026-06-24 after v0.2.0 End-to-End milestone)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** Planning v0.2.0 — make pensmith end-to-end usable (Tier-2 LLM transport, live research discovery, citation-at-export, fail-closed gate/security hardening; from the 2026-06-22 improvement review)
+**Current focus:** Planning v0.3.0 — wire discovered LIBRARY.json sources into the plan/outline/write prompts (the v0.2.0 carried-forward tech-debt headline) + v2/Future breadth + the documented security residuals. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
 
 ## Current Position
 
-Phase: 16-ci-dx-parity-docs-packaging
-Plan: 01 complete (Wave 1 of N)
-Status: Executing
-Last activity: 2026-06-24 — 16-01 complete: .c8rc.json (85/72/82/85 ratchet) + RED-by-skip guards (http-mock.test.ts, workflow-bodies.test.ts)
+Phase: Milestone v0.2.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-24 — Milestone v0.2.0 completed and archived
 
 ## Performance Metrics
 
@@ -281,11 +281,15 @@ None yet.
 
 ## Deferred Items
 
-Items acknowledged and carried forward from previous milestone close:
+Items acknowledged and carried forward at the v0.2.0 milestone close (2026-06-24):
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| *(none — fresh init)* | | | |
+| tech-debt (v0.3.0 headline) | Wire discovered LIBRARY.json sources into the plan/outline/write prompts (research discovers sources but the section planner/writer get placeholder context) | carried to v0.3.0 | v0.2.0 close |
+| manual-verify | Live LLM-key generation (GEN-02) + live adapter network round-trip (GEN-03) — Phase 12 | deferred (manual-only; offline cassette/PENSMITH_NO_LLM verified) | v0.2.0 close |
+| manual-verify | Live Retraction Watch re-query (GATE-03) — Phase 14 | deferred (manual-only; cassette verified) | v0.2.0 close |
+| manual-verify | Live-DNS SSRF block (HARD-02) + live GPTZero consent/cap (HARD-05) — Phase 15 | deferred (manual-only; injected-resolver/offline verified) | v0.2.0 close |
+| security-residual | DNS-rebind socket-pinning (WR-03) + worker-thread PDF abort (WR-05) — SECURITY.md | carried to v0.3.0 (PROVEN-with-residual) | v0.2.0 close |
 
 ## Session Continuity
 
@@ -295,4 +299,4 @@ Resume file: None
 
 ## Operator Next Steps
 
-- Start Phase 11 planning with /gsd:plan-phase 11
+- Start the next milestone with /gsd:new-milestone
