@@ -189,7 +189,7 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   const hash = createHash('sha256').update(bytes).digest('hex');
   // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"`
   // after every intentional edit. The PR diff makes the change visible.
-  const PINNED = '509f90add8664e559a3ab817684381777e1b624b63ebe0dfc77054267997eec0';
+  const PINNED = 'e43c0cd7fd8b04cd079ace0f56e7d7d67d871ab3e04fbdaef0eb29a599aa020a';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

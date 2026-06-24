@@ -138,15 +138,14 @@ test('DOCT-05 build-artifact-resolves returns one of {PASS,FAIL}', async () => {
   assert.ok(['PASS', 'FAIL'].includes(r.severity));
 });
 
-test('D-03(d) http-crossref-ping returns SKIP in Phase 2 (cassette wiring deferred to Phase 3)', async () => {
-  // Cross-AI review HIGH (Codex iter 1): production probes must NOT import
-  // from tests/. Phase 2 ships the probe with a stable id but a
-  // structurally fixed SKIP severity. Phase 3 will land bin/lib/http-mock.ts
-  // (production-tree chokepoint) and re-enable PASS/FAIL discrimination.
+test('D-03(d) http-crossref-ping returns SKIP (shipped reality — cassette path active, SKIP outside repo)', async () => {
+  // bin/lib/http-mock.ts shipped in Phase 3 as the production-tree cassette chokepoint.
+  // The probe returns SKIP when cassettes are not shipped (i.e. outside the repo).
+  // PASS/FAIL discrimination is active in CI (OFFLINE mode with cassettes present).
   const r = await httpCrossrefPingProbe.run();
   assert.equal(r.id, 'http-crossref-ping');
-  assert.equal(r.severity, 'SKIP', 'Phase 2 contract: this probe is SKIP-only by construction');
-  assert.match(r.summary, /Phase 3|deferred/i, 'summary must explain the Phase 2 deferral');
+  assert.equal(r.severity, 'SKIP', 'probe returns SKIP outside the repo where cassettes are not shipped');
+  assert.match(r.summary, /cassette-wiring probe|SKIP outside the repo/i, 'summary must describe the shipped cassette-wiring probe');
 });
 
 test('DOCT-07 runtime-config-presence WARN when no provider keys present + no value leak', async () => {

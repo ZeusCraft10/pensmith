@@ -56,7 +56,7 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
 
 ### http-crossref-ping (D-03(d) cassette wiring)
 
-> Crossref-adapter cassette-wiring probe — exercises the recorded fixture cassette to confirm the offline HTTP path is reachable. PR-time CI runs OFFLINE; this probe is the canary for cassette parse / schema drift. PASS in CI; SKIP outside the repo where cassettes aren't shipped.
+> D-03(d) Crossref-adapter cassette-wiring probe — exercises the recorded fixture cassette to confirm the offline HTTP path is reachable. PR-time CI runs OFFLINE; this probe is the canary for cassette parse / schema drift. PASS in CI; SKIP outside the repo where cassettes are not shipped.
 
 ### intake-outline-verify-wiring (DOCT-05)
 
