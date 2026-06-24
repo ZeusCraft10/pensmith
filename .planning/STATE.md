@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v0.2.0
 milestone_name: End-to-End
 status: planning
-stopped_at: Completed 13-02-PLAN.md (REND-01/02/03 citation rendering at export)
+stopped_at: Completed 14-01-PLAN.md (Wave-0 RED-by-skip scaffolds for GATE-01/02/03/04)
 last_updated: "2026-06-24T00:00:00.000Z"
-last_activity: 2026-06-24 — Phase 13 Plan 02 complete: renderInText + resolveAndRenderCitations wired, 901/901 tests green
+last_activity: 2026-06-24 — Phase 14 Plan 01 complete: Wave-0 gate scaffolds, 907 pass/10 skip/0 fail
 progress:
   total_phases: 6
   completed_phases: 3
@@ -95,6 +95,7 @@ Last activity: 2026-06-22 — v0.2.0 roadmap created (Phases 11–16, 25 require
 | Phase 12 P04 | 10m | 1 tasks | 1 files |
 | Phase 13-citation-rendering-at-export P01 | 8m | 3 tasks | 1 files |
 | Phase 13-citation-rendering-at-export P02 | 18m | 3 tasks | 4 files |
+| Phase 14-fail-closed-verifier-gate P01 | 25min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -261,6 +262,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [13-02]: bib-copy (DONE-08) moved BEFORE all pandoc execFileAsync calls (Pitfall-4) so --bibliography bibDst resolves at call time
 - [13-02]: done.ts reads discipline from INTAKE.md via parseIntakeMd + resolveStyleName; empty catch leaves style undefined → exportDraft defaults APA (never-throw pattern)
 - [13-02]: exactOptionalPropertyTypes:true requires spread conditional ...(style !== undefined ? { style } : {}) when passing optional fields from let-initialized variables
+- [14-01]: GATE-01 Wave-0 tests use tolerant 'no verifiable' phrase guards (not RED-by-skip) because compile.ts exists — the specific refuse message is what's unshipped
+- [14-01]: GATE-03 source-grep skip predicate on pass1.ts for retraction-watch import — existsSync alone vacuously true for an existing file (07-01 pattern reapplied)
+- [14-01]: gate03-blocking-doi.json DOI 10.0000/gate03-retracted — distinct from fetchById-fake (10.0000/test) and freshness-hit (10.0000/retracted) cassettes
 
 ### Pending Todos
 
@@ -282,7 +286,7 @@ Items acknowledged and carried forward from previous milestone close:
 ## Session Continuity
 
 Last session: 2026-06-24
-Stopped at: Completed 13-02-PLAN.md (citation rendering at export, REND-01/02/03)
+Stopped at: Completed 14-01-PLAN.md (Wave-0 gate scaffolds for GATE-01/02/03/04)
 Resume file: None
 
 ## Operator Next Steps
