@@ -137,7 +137,17 @@ Plans:
   4. A per-phase `SECURITY.md` marks each threat PROVEN or UNPROVEN against a test; `pdf-parse` input is size-capped and wall-clock-bounded; advisory Pass-2/Pass-4 prompts wrap untrusted text in fenced delimiters.
   5. Before `pensmith done` POSTs the paper body to GPTZero, the user sees a disclosure (external service, full-text transmission) and must confirm — this consent gate is skippable only with `--yolo`.
 
-**Plans**: TBD
+**Plans**: 8 plans (4 waves)
+
+- [ ] 15-01-PLAN.md — Wave 1: RED-by-skip scaffolds for all six HARD items (SSRF / TokenBucket-FIFO / PDF-bounds / Pass-2/4 fence / lock-canon / deep-PII / GPTZero-consent; fileURLToPath spaced-path safe; injected resolver + deterministic timers)
+- [ ] 15-02-PLAN.md — Wave 2: HARD-02 SSRF guard (checkSsrf DNS-preflight + redirect re-check) + HARD-06 FIFO TokenBucket — both in http.ts (one plan, no parallel same-file edits)
+- [ ] 15-03-PLAN.md — Wave 2: HARD-01 lock.ts stubFor canonicalization (resolve + realpath + win32 case-fold) + compile.ts 'compile:' de-prefix
+- [ ] 15-04-PLAN.md — Wave 2: HARD-03 pii.ts deepRedactPii + session-log.ts buildRecord recursive string-leaf redaction before write
+- [ ] 15-05-PLAN.md — Wave 2: HARD-04b pdf-text.ts byte cap + Promise.race wall-clock timeout around the pdf-parse call
+- [ ] 15-06-PLAN.md — Wave 2: HARD-04c Pass-2/Pass-4 prompt-injection fencing + WN-3 lockstep re-pin (repo-files.test.ts + prompt-loader.ts)
+- [ ] 15-07-PLAN.md — Wave 3: HARD-05 GPTZero disclosure + consent gate + size cap (honesty.ts) + honesty-framing.md disclosure + standalone re-pin
+- [ ] 15-08-PLAN.md — Wave 4: HARD-06 Semaphore bare-caller try/finally doc + HARD-04a .planning/SECURITY.md milestone audit (authored last, cites each enforcing test)
+
 **UI hint**: no
 
 ### Phase 16: CI/DX parity + docs & packaging
@@ -178,7 +188,7 @@ Plans:
 | 12. Live research + intake bootstrap + humanizer Task | v0.2.0 | 4/4 | Complete   | 2026-06-22 |
 | 13. Citation rendering at export | v0.2.0 | 1/2 | In Progress|  |
 | 14. Fail-closed verifier gate | v0.2.0 | 4/4 | Complete   | 2026-06-24 |
-| 15. Foundation & security hardening | v0.2.0 | 0/TBD | Not started | - |
+| 15. Foundation & security hardening | v0.2.0 | 0/8 | Not started | - |
 | 16. CI/DX parity + docs & packaging | v0.2.0 | 0/TBD | Not started | - |
 
 ---
