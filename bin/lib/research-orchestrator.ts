@@ -32,6 +32,7 @@ import { normalizeDoi } from './doi.js';
 import { jaroWinkler, TITLE_JW_THRESHOLD } from './fuzzy.js';
 import { complete } from './anthropic.js';
 import { loadPrompt, interpolate } from './prompt-loader.js';
+import { escapeTemplateTokens } from './intake-parse.js';
 
 // ---------------------------------------------------------------------------
 // Injectable adapter registry seam (mirrors zotero-mcp.ts setZoteroClientForTest).
@@ -100,6 +101,10 @@ function dedupCandidates(raw: SourceCandidate[]): SourceCandidate[] {
 
     // Check against DOI-deduped set first.
     for (const existing of doiMap.values()) {
+      // WR-02: skip title comparison when either title is empty/whitespace.
+      // jaroWinkler("","") === 1 >= threshold, which would falsely drop a second
+      // empty-title candidate as a duplicate. DOI dedup still applies above.
+      if (!c.title.trim() || !existing.title.trim()) continue;
       if (jaroWinkler(c.title, existing.title) >= TITLE_JW_THRESHOLD) {
         isDuplicate = true;
         break;
@@ -109,6 +114,8 @@ function dedupCandidates(raw: SourceCandidate[]): SourceCandidate[] {
     if (!isDuplicate) {
       // Check against already-accepted no-DOI candidates.
       for (const accepted of titleDeduped) {
+        // WR-02: same empty-title guard as above.
+        if (!c.title.trim() || !accepted.title.trim()) continue;
         if (jaroWinkler(c.title, accepted.title) >= TITLE_JW_THRESHOLD) {
           isDuplicate = true;
           break;
@@ -145,6 +152,8 @@ async function evaluateCandidates(
   try {
     const evaluatorPrompt = loadPrompt('source-evaluator');
     const interpolatedEvaluator = interpolate(evaluatorPrompt, {
+      // T-12-02: structured JSON encoding prevents direct prompt injection from
+      // abstract/title content. candidateSources is safe in the JSON context.
       candidateSources: JSON.stringify(
         candidates.map((c) => ({
           source: c.source,
@@ -153,16 +162,20 @@ async function evaluateCandidates(
           authors: c.authors,
           year: c.year,
           doi: c.doi,
-          abstract: c.abstract,
+          // WR-03: cap abstracts at 500 chars to prevent arbitrarily large prompts.
+          // 20-50 candidates × 3000-5000 char abstracts → 60K-150K chars without cap.
+          abstract: c.abstract ? c.abstract.slice(0, 500) : undefined,
           retracted: c.retracted,
           citekey: c.citekey,
         })),
         null,
         2,
       ),
-      topic: opts.topic,
-      scope: opts.scope,
-      discipline: opts.discipline,
+      // CR-01: escape user-controlled strings before interpolation so {{...}} tokens
+      // in topic/discipline/scope cannot cause secondary template expansion.
+      topic: escapeTemplateTokens(opts.topic),
+      scope: escapeTemplateTokens(opts.scope),
+      discipline: escapeTemplateTokens(opts.discipline),
     });
 
     const result = await complete({

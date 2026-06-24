@@ -37,7 +37,7 @@ import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { ask } from '../lib/prompts.js';
-import { parseIntakeMd } from '../lib/intake-parse.js';
+import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
 import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
 
 // ---------------------------------------------------------------------------
@@ -147,11 +147,13 @@ export const researchCommand = defineCommand({
     const { topic, discipline, assignment } = parseIntakeMd(intakeText);
 
     // ── Step 2: topic-disambiguator complete() (D-12 LOCKED slug) ──
+    // CR-01: sanitize user-controlled strings before interpolation so that
+    // {{...}} tokens in INTAKE.md cannot cause secondary template expansion.
     const topicDisambiguatorPrompt = loadPrompt('topic-disambiguator');
     const interpolatedPrompt = interpolate(topicDisambiguatorPrompt, {
-      topic: topic || '(unknown topic — run pensmith intake first)',
-      discipline: discipline,
-      assignment: assignment || '(no assignment text — run pensmith intake first)',
+      topic: escapeTemplateTokens(topic || '(unknown topic — run pensmith intake first)'),
+      discipline: escapeTemplateTokens(discipline),
+      assignment: escapeTemplateTokens(assignment || '(no assignment text — run pensmith intake first)'),
     });
     const llmResult = await complete({
       system:
@@ -215,8 +217,19 @@ export const researchCommand = defineCommand({
         default: scopes[0]!.label,
       });
 
-      const selected = scopes.find((s) => s.label === (answer as { value: string }).value);
-      if (selected) chosenScope = selected;
+      const answerValue = (answer as { value: string }).value;
+      const selected = scopes.find((s) => s.label === answerValue);
+      if (selected) {
+        chosenScope = selected;
+      } else {
+        // WR-01: the ask() return value did not match any scope label.
+        // Emit a WARN rather than silently falling through to the pre-gate default.
+        process.stderr.write(
+          `pensmith research: WARN — scope selection returned unrecognised value ` +
+          `"${answerValue}"; falling back to first scope "${scopes[0]!.label}".\n`,
+        );
+        // chosenScope is already scopes[0] — no assignment needed.
+      }
     }
 
     // ── Step 5: Live discovery — runResearchOrchestrator ──

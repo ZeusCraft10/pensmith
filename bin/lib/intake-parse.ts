@@ -55,6 +55,21 @@ const DISCIPLINE_MAP: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
+ * Escape `{{` and `}}` sequences in a user-controlled string so they cannot
+ * act as template placeholders when the string is passed to interpolate().
+ *
+ * This is the shared sanitizer for the topic-disambiguator and source-evaluator
+ * interpolate() call sites (research.ts and research-orchestrator.ts).
+ * Exported so both call sites share ONE implementation (CR-01 fix).
+ *
+ * @param s  Any user-derived string (topic, discipline, assignment, abstract …)
+ */
+export function escapeTemplateTokens(s: string): string {
+  // Replace {{ and }} with visually similar but non-functional sequences.
+  return s.replace(/\{\{/g, '{ {').replace(/\}\}/g, '} }');
+}
+
+/**
  * Normalize a raw discipline answer string to an INTK-03 canonical slug.
  * Returns 'other' if no known mapping exists.
  */
@@ -66,11 +81,18 @@ function normalizeDiscipline(raw: string): string {
       return slug;
     }
   }
-  // Substring match as a fallback.
+  // Substring match as a fallback — MUST use word boundaries for short patterns
+  // like 'ai', 'ml', 'cs', 'lit', 'soc' to avoid false positives on substrings.
+  // e.g. 'ai' must NOT match 'email', 'rain'; 'lit' must NOT match 'political'.
   for (const [pattern, slug] of DISCIPLINE_MAP) {
-    if (key.includes(pattern)) {
-      return slug;
-    }
+    // Build a word-boundary regex. Escape regex metacharacters in the pattern
+    // and treat hyphens in compound patterns (e.g. 'computer-science') as
+    // matching either a hyphen or whitespace.
+    const escapedPattern = pattern
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/-/g, '[-\\s]');
+    const wordRe = new RegExp(`\\b${escapedPattern}\\b`, 'i');
+    if (wordRe.test(key)) return slug;
   }
   return 'other';
 }

@@ -45,7 +45,7 @@ export function __setInterpolateForTest(
   };
 }
 import { paperDir } from '../lib/paths.js';
-import { initState, loadState } from '../lib/state.js';
+import { initState, loadState, StateAlreadyExistsError } from '../lib/state.js';
 import { registerPaperInGlobalLibrary } from '../lib/global-library.js';
 import {
   buildStyleProfile,
@@ -460,7 +460,10 @@ export const intakeCommand = defineCommand({
     try {
       await initState(cwd);
     } catch (e) {
-      if ((e as { code?: string }).code !== 'STATE_ALREADY_EXISTS') throw e;
+      // WR-04: use instanceof (canonical Pensmith pattern per state.ts:177) rather
+      // than raw .code check, which could swallow unrelated errors that happen to
+      // carry a matching .code field (e.g. mocks or future migration paths).
+      if (!(e instanceof StateAlreadyExistsError)) throw e;
       // else: STATE.json already present — paperId is unchanged (idempotent skip)
     }
 
