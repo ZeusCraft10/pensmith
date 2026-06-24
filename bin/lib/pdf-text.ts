@@ -55,6 +55,20 @@ import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 /** Minimum non-whitespace character count below which a PDF is treated as image-only. */
 const IMAGE_ONLY_TEXT_THRESHOLD = 50;
 
+/**
+ * Maximum PDF input size in bytes (50 MB). Any Buffer larger than this is rejected
+ * BEFORE parsing so an attacker-supplied PDF cannot OOM the process (HARD-04b / T-15-04b).
+ * Exported so the test scaffold can construct an over-cap buffer without hard-coding the value.
+ */
+export const MAX_PDF_BYTES = 50 * 1024 * 1024; // 50 MB
+
+/**
+ * Wall-clock timeout for the pdf-parse call in milliseconds (30 s). If the parse does not
+ * resolve within this window, extractPdfText rejects with a clear timeout error (no hang).
+ * Exported so the test scaffold can exercise the timeout path with a tiny injected value.
+ */
+export const PDF_TIMEOUT_MS = 30_000;
+
 function isImageOnlyResult(text: string, numpages: number): boolean {
   if (numpages < 1) return false;
   const nonWhitespaceLength = text.replace(/\s/g, '').length;
@@ -130,8 +144,31 @@ export async function extractPdfText(buf: Buffer | Uint8Array): Promise<string> 
     );
   }
   const input = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
+
+  // HARD-04b: byte-cap guard — reject BEFORE parsing to prevent OOM on attacker-supplied input.
+  if (input.length > MAX_PDF_BYTES) {
+    throw new Error(
+      `extractPdfText: PDF exceeds the ${MAX_PDF_BYTES}-byte cap (${input.length} bytes received). ` +
+      `Max allowed is ${MAX_PDF_BYTES / (1024 * 1024)} MB.`,
+    );
+  }
+
   try {
-    const result = await parseWithRetry(input);
+    // HARD-04b: wall-clock timeout — Promise.race prevents a pathological PDF from hanging.
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, rej) => {
+      timeoutHandle = setTimeout(
+        () => rej(new Error(`extractPdfText: parse timed out after ${PDF_TIMEOUT_MS}ms`)),
+        PDF_TIMEOUT_MS,
+      );
+    });
+    let result: PdfParseResult;
+    try {
+      result = await Promise.race([parseWithRetry(input), timeoutPromise]);
+    } finally {
+      // Clear the timer so the timeout promise does not keep the event loop alive on success.
+      clearTimeout(timeoutHandle);
+    }
     const text: string = typeof result.text === 'string' ? result.text : '';
     const numpages: number = typeof result.numpages === 'number' ? result.numpages : 0;
     if (isImageOnlyResult(text, numpages)) {
