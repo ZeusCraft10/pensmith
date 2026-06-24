@@ -198,7 +198,9 @@ export const addCommand = defineCommand({
         candidate = hits[0] ?? null;
       }
     } else {
-      // URL path — D-06 chokepoint, NEVER raw fetch (T-08-04-02 SSRF mitigation).
+      // URL path — D-06 chokepoint routes through http.ts checkSsrf (T-08-04-02).
+      // checkSsrf resolves the hostname via DNS and blocks RFC1918/loopback/link-local
+      // addresses before the socket connects. source:'generic' triggers the guard.
       try {
         const res = await httpFetch(source, { source: 'generic' });
         const ct = (res.headers['content-type'] ?? '').toLowerCase();

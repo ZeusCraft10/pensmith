@@ -50,6 +50,7 @@
 
 import { request, getGlobalDispatcher, setGlobalDispatcher, Agent } from 'undici';
 import { createHash } from 'node:crypto';
+import { lookup as dnsLookup } from 'node:dns/promises';
 import { readFileSync, statSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -63,6 +64,94 @@ import { retry, parseRetryAfter } from './retry.js';
 void getGlobalDispatcher;
 void setGlobalDispatcher;
 void Agent;
+
+// ============================================================
+//   SSRF guard — HARD-02 (T-15-02)
+// ============================================================
+// Mirrors CACHE_HEADER_ALLOWLIST pattern (http.ts:408) for scheme enforcement.
+const SSRF_ALLOWED_SCHEMES: ReadonlySet<string> = new Set(['https:', 'http:']);
+
+/**
+ * Classify an IP address (v4 or v6) as private/reserved.
+ *
+ * Covers (per RESEARCH A6 / RFC1918 / IANA reserved ranges):
+ *   IPv4 : 10/8, 172.16-31, 192.168/16, 127/8, 169.254/16, 0.x
+ *   IPv6 : ::1 (loopback), fe80::/10 (link-local), fc/fd::/7 (ULA)
+ *   IPv4-mapped IPv6 (::ffff:x.x.x.x) — extracts the embedded v4 and re-checks.
+ */
+function isPrivateIp(addr: string): boolean {
+  // Handle IPv4-mapped IPv6 (::ffff:a.b.c.d or ::ffff:0xhhhh)
+  const mapped = addr.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (mapped) return isPrivateIp(mapped[1]!);
+
+  // IPv4
+  const v4 = addr.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (v4) {
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    if (a === 10) return true;                      // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;         // 192.168.0.0/16
+    if (a === 127) return true;                      // 127.0.0.0/8 loopback
+    if (a === 169 && b === 254) return true;         // 169.254.0.0/16 link-local
+    if (a === 0) return true;                        // 0.0.0.0/8
+    return false;
+  }
+
+  // IPv6
+  const lc = addr.toLowerCase();
+  if (lc === '::1') return true;             // loopback
+  if (lc.startsWith('fe80:') || lc.startsWith('fe8') || lc.startsWith('fe9') ||
+      lc.startsWith('fea') || lc.startsWith('feb')) return true; // fe80::/10 link-local
+  if (lc.startsWith('fc') || lc.startsWith('fd')) return true;   // fc00::/7 ULA
+  return false;
+}
+
+/**
+ * SSRF pre-flight guard (HARD-02 / T-15-02).
+ *
+ * Resolves the hostname via DNS and throws if any resolved address is in a
+ * private/reserved range. Also rejects non-http(s) schemes. Fail-CLOSED:
+ * a DNS resolver error for an untrusted URL is treated as a block, not a pass.
+ *
+ * @param url       The URL to check (must be valid http/https).
+ * @param resolveFn Injectable DNS resolver — defaults to node:dns/promises
+ *                  lookup with {all:true}. Override in tests to avoid real DNS.
+ */
+export async function checkSsrf(
+  url: string,
+  resolveFn: (hostname: string) => Promise<Array<{ address: string; family: number }>> = (h) =>
+    dnsLookup(h, { all: true }),
+): Promise<void> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`SSRF guard: invalid URL "${url}"`);
+  }
+
+  if (!SSRF_ALLOWED_SCHEMES.has(parsed.protocol)) {
+    throw new Error(`SSRF guard: scheme "${parsed.protocol}" not allowed — only http/https permitted`);
+  }
+
+  let addrs: Array<{ address: string; family: number }>;
+  try {
+    addrs = await resolveFn(parsed.hostname);
+  } catch (e) {
+    // Fail-CLOSED for untrusted URLs: resolver error → block, not pass.
+    throw new Error(
+      `SSRF guard: DNS lookup failed for "${parsed.hostname}" (blocked, fail-closed): ${String(e)}`,
+    );
+  }
+
+  for (const { address } of addrs) {
+    if (isPrivateIp(address)) {
+      throw new Error(
+        `SSRF guard: "${parsed.hostname}" resolves to private/reserved IP ${address} — blocked (RFC1918/loopback/link-local)`,
+      );
+    }
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -249,9 +338,27 @@ const RPS_BY_SOURCE: Record<HttpSource, number> = {
   generic: 5,
 };
 
+// HARD-06 (T-15-06): FIFO-fair TokenBucket.
+//
+// Design: single grant timer + explicit waiter queue (Array<()=>void>).
+// Fast-path: if tokens>=1 AND no waiters, consume immediately (no queuing).
+// Slow-path: push resolver onto waiters, kick _scheduleGrant() if no timer
+//   is already pending. _scheduleGrant() fires once, shifts the oldest waiter
+//   (FIFO), grants it one token, then reschedules if more waiters remain.
+//   This eliminates the per-waiter-setTimeout race (Pitfall 7 from RESEARCH).
+//
+// Semantic note: tokens are consumed permanently and refill over time (rate
+// bucket, not semaphore). There is NO release()/return-token path — that is
+// intentional. Token return-on-exception is the Semaphore's concern (budget.ts),
+// not the rate bucket's. See RESEARCH A5.
 class TokenBucket {
   private tokens: number;
   private lastRefillMs: number;
+  // FIFO waiter queue — each entry is the resolve() of a queued acquire() Promise.
+  private waiters: Array<() => void> = [];
+  // Guard: only one _scheduleGrant timer runs at a time (no timer storm).
+  private timerPending = false;
+
   constructor(
     private readonly capacity: number,
     private readonly refillPerSec: number,
@@ -259,6 +366,7 @@ class TokenBucket {
     this.tokens = capacity;
     this.lastRefillMs = Date.now();
   }
+
   private refill(): void {
     const now = Date.now();
     const elapsedSec = (now - this.lastRefillMs) / 1000;
@@ -266,23 +374,44 @@ class TokenBucket {
     this.tokens = Math.min(this.capacity, this.tokens + elapsedSec * this.refillPerSec);
     this.lastRefillMs = now;
   }
+
   async acquire(): Promise<void> {
-    // Loop because setTimeout granularity may leave us slightly short on
-    // the first wakeup; we refill again and try once more.
-    for (;;) {
-      this.refill();
-      if (this.tokens >= 1) {
-        this.tokens -= 1;
-        return;
-      }
-      const deficit = 1 - this.tokens;
-      const waitMs = Math.ceil((deficit / this.refillPerSec) * 1000);
-      await new Promise<void>((r) => {
-        setTimeout(r, Math.max(1, waitMs));
-      });
+    this.refill();
+    // Fast-path: tokens available AND no one waiting ahead of us.
+    if (this.tokens >= 1 && this.waiters.length === 0) {
+      this.tokens -= 1;
+      return;
     }
+    // Slow-path: enqueue and wait for the single grant timer to fire.
+    return new Promise<void>((resolve) => {
+      this.waiters.push(resolve);
+      if (!this.timerPending) this._scheduleGrant();
+    });
+  }
+
+  private _scheduleGrant(): void {
+    this.timerPending = true;
+    const deficit = Math.max(0, 1 - this.tokens);
+    const waitMs = Math.max(1, Math.ceil((deficit / this.refillPerSec) * 1000));
+    setTimeout(() => {
+      this.timerPending = false;
+      this.refill();
+      const next = this.waiters.shift(); // FIFO: oldest waiter first
+      if (next) {
+        this.tokens -= 1;
+        next(); // resolve the waiting Promise
+        if (this.waiters.length > 0) this._scheduleGrant(); // chain for remaining waiters
+      }
+    }, waitMs);
   }
 }
+
+/**
+ * Test-only seam — exports the TokenBucket class so FIFO-fairness tests
+ * can construct controlled instances. NEVER use in production code.
+ * Wave-0 scaffold (token-bucket-fairness.test.ts) probes for this export.
+ */
+export { TokenBucket as __TokenBucketForTest };
 
 const BUCKETS: Partial<Record<HttpSource, TokenBucket>> = {};
 function bucketFor(src: HttpSource): TokenBucket {
@@ -492,7 +621,22 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   }
 
   // --- 2. Single dispatch helper (excluding bucket / retry) ---
+  // HARD-02: for untrusted (source==='generic') URLs, run the SSRF pre-flight
+  // guard before connecting. Trusted hardcoded API hosts (crossref/openalex/
+  // arxiv/pubmed/s2/unpaywall/retraction-watch/gptzero/ddg) bypass the guard
+  // so offline cassette tests and internal calls are unaffected.
+  //
+  // Redirect handling: undici request() does NOT auto-follow redirects by default
+  // (confirmed: it returns 301/302 as normal responses). Any redirect-following
+  // done by callers routes back through fetch() → callOnce, so checkSsrf re-fires
+  // on each hop URL automatically. maxRedirections is NOT set here — the existing
+  // behavior (callers handle 3xx manually) is the correct approach.
+  const untrusted = source === 'generic' || (opts as { untrusted?: boolean }).untrusted === true;
   const callOnce = async (): Promise<HttpResponse> => {
+    if (untrusted) {
+      // SSRF pre-flight: throws on private IP / bad scheme / resolver error.
+      await checkSsrf(url);
+    }
     const reqInit: Parameters<typeof request>[1] = {
       method,
       headers,
