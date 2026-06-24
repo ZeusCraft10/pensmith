@@ -36,6 +36,7 @@ import * as fsp from 'node:fs/promises';
 import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { pensmithDataDir } from '../bin/lib/paths.js';
 import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
 
 // ---------------------------------------------------------------------------
@@ -622,8 +623,15 @@ test('T-11-08: OpenAI provider sends correct POST body and Authorization header 
     process.env['OPENAI_API_KEY'] = 'sk-openai-test-body-shape-key';
     delete process.env['ANTHROPIC_API_KEY'];
 
-    // Write a runtime config that sets the default provider to openai
-    const runtimeConfigDir = path.join(tmpRoot, 'pensmith');
+    // Write a runtime config that sets the default provider to openai.
+    // CRITICAL (macOS CI fix): write to the REAL pensmithDataDir() — NOT a
+    // hardcoded `tmpRoot/pensmith`. On linux (XDG_DATA_HOME) + win32
+    // (LOCALAPPDATA) those happen to coincide, but on macOS the data dir is
+    // $HOME/Library/Application Support/pensmith, so a hardcoded tmpRoot/pensmith
+    // is never read by loadRuntimeConfig → resolveProviderId falls back to
+    // 'anthropic' → "ANTHROPIC_API_KEY not set". pensmithDataDir() reads the env
+    // vars withFreshState already set, so it resolves correctly per-platform.
+    const runtimeConfigDir = pensmithDataDir();
     await fsp.mkdir(runtimeConfigDir, { recursive: true });
     const runtimeConfig = {
       $schemaVersion: 1,
