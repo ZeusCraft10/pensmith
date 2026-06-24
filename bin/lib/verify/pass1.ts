@@ -28,6 +28,7 @@ import { sources } from '../sources/index.js';
 import { parseBibtex } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
+import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
 
 export type { FreshnessResult } from './freshness.js';
 export { renderFreshnessTable } from './freshness.js';
@@ -128,6 +129,25 @@ async function verdictForCitekey(
     return {
       citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
       reason: `DOI ${claimed.DOI} did not resolve via Crossref`,
+    };
+  }
+
+  // GATE-03: live retraction re-query at verify time (Phase 14, Plan 03).
+  // Re-query Retraction Watch on the Crossref-confirmed DOI. A confirmed hit
+  // (non-null) escalates to MIS-CITED (blocking). A transport error or no-hit
+  // (fetchById returns null — never throws) is a silent skip; the verdict falls
+  // through to the normal JW path. No try/catch needed: the adapter already
+  // catches all transport errors and returns null (retraction-watch.ts:122-126).
+  // Placed AFTER the Crossref null-guard so FABRICATED citations (unresolved DOI)
+  // never reach this check (Pitfall 1 — avoids cassette-fallback false positives).
+  const liveRetraction = await retractionWatchFetchById(claimed.DOI);
+  if (liveRetraction !== null) {
+    const why = liveRetraction.retraction_details
+      ? `: ${liveRetraction.retraction_details}`
+      : '';
+    return {
+      citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
+      reason: `cited work appears in Retraction Watch (live re-query at verify time)${why}`,
     };
   }
 

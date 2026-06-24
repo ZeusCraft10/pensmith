@@ -17,7 +17,7 @@
 //   fetchById:  GET https://api.labs.crossref.org/data/retractions?filter=record:<doi>
 
 import { fetch as httpFetch } from '../http.js';
-import { isOfflineMode, loadCassetteFile } from '../http-mock.js';
+import { isOfflineMode, loadCassetteDir } from '../http-mock.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -92,23 +92,19 @@ function toCandidate(item: RWItem): SourceCandidate | null {
  */
 export async function fetchById(doi: string): Promise<SourceCandidate | null> {
   if (isOfflineMode()) {
-    const cassette = loadCassetteFile('retraction-watch', 'fetchById-fake');
-    if (!cassette) return null;
-    // Direct cassette match: path contains filter=record:<doi>.
-    const direct = cassette.find(
+    // Scan ALL committed retraction-watch cassettes for a direct DOI match.
+    // Using loadCassetteDir (not a single fetchById-fake file) ensures new per-DOI
+    // cassettes (e.g. gate03-blocking-doi.json) are found without changing this code.
+    // Only a DIRECT path match (filter=record:<doi>) returns a hit; there is NO
+    // fallback to the first-any-retractions entry — that fallback caused false positives
+    // for DOIs not present in any cassette (GATE-03 blocking test deviation fix).
+    const cassettes = loadCassetteDir('retraction-watch');
+    if (!cassettes) return null;
+    const direct = cassettes.find(
       (c) => c.method === 'GET' && c.path.includes(`filter=record:${doi}`),
     );
-    if (direct) {
-      const body = direct.response as RWResponse;
-      const first = body.items?.[0];
-      return first ? toCandidate(first) : null;
-    }
-    // Fallback: first retractions entry from the cassette.
-    const any = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('/data/retractions'),
-    );
-    if (!any) return null;
-    const body = any.response as RWResponse;
+    if (!direct) return null;
+    const body = direct.response as RWResponse;
     const first = body.items?.[0];
     return first ? toCandidate(first) : null;
   }
