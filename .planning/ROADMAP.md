@@ -115,7 +115,13 @@ Plans:
   3. When `pensmith verify <N>` encounters a DOI that is live-retracted on Retraction Watch, it escalates that citation to MIS-CITED (blocking in Pass 1), not merely a freshness WARN.
   4. Running `pensmith done` re-checks `FINAL.md` (Pass-3 re-fetch + citekey-set diff) before export; if humanization altered or introduced a citation the re-check fails and export is blocked.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+- [ ] 14-01-PLAN.md — Wave 1: RED-by-skip scaffolds for all four gates (verdict-rows round-trip + compile-refuse GATE-01 + gate-retraction GATE-03 + done-recheck GATE-04) + the GATE-03 blocking cassette
+- [ ] 14-02-PLAN.md — Wave 2: GATE-01 + GATE-02 — shared verdict-rows.ts render+parse pair, compile.ts hasStatus fail-closed guard + parseVerdictRows wiring, verify.ts writer delegation (output byte-unchanged)
+- [ ] 14-03-PLAN.md — Wave 2: GATE-03 — live Retraction Watch re-query in pass1.ts verdictForCitekey (blocking on confirmed hit, silent on transport error)
+- [ ] 14-04-PLAN.md — Wave 2: GATE-04 — reCheckFinalMd (citekey-set diff + Pass-3) hard-blocks export in done.ts before runDoneGate
+
 **UI hint**: no
 
 ### Phase 15: Foundation & security hardening
