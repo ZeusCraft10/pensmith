@@ -30,6 +30,8 @@ import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '.
 import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
 import { exportDraft, runHumanizer, type ExportFormat } from '../lib/exporter.js';
 import { paperDir } from '../lib/paths.js';
+import { parseIntakeMd } from '../lib/intake-parse.js';
+import { resolveStyleName } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { ask } from '../lib/prompts.js';
 
@@ -455,10 +457,25 @@ export const doneCommand = defineCommand({
     const format: ExportFormat = VALID_FORMATS.has(String(args.format))
       ? (String(args.format) as ExportFormat)
       : 'docx';
+
+    // Resolve discipline → CSL style from INTAKE.md (never-throw: missing or
+    // unparseable INTAKE.md leaves style undefined; exportDraft defaults to APA).
+    // Mirrors the draft-read never-throw at lines 388-399.
+    const intakePath = join(paperDir(paperRoot), 'INTAKE.md');
+    let style: string | undefined;
+    try {
+      const intakeText = readFileSync(intakePath, 'utf8');
+      const { discipline } = parseIntakeMd(intakeText);
+      style = resolveStyleName(discipline);
+    } catch {
+      // Missing or unparseable INTAKE.md → style undefined → exportDraft defaults to APA.
+    }
+
     const result = await exportDraft({
       inputPath: finalPath ?? draftPath,
       format,
       paperRoot,
+      style,
     });
 
     // Write the whole-paper VERIFICATION.md (a SOURCE artifact, not the export dir).
