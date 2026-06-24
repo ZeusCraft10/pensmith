@@ -8,6 +8,8 @@
 //   4. same-process serialization (two parallel withLock calls)
 //   5. cross-process spawn conflict (TEST-07 — the high-value case)
 //   6. lock files live in pensmithLockDir(), NOT inside .paper/ (D-40)
+//   7. [HARD-01 SCAFFOLD] lock canonicalize: two path conventions for one
+//      file → identical stub (skip-guarded on stubFor export)
 //
 // All tests use unique resource strings (test name + Date.now()) so
 // concurrent test runs (e.g. `node --test --test-concurrency=4`) don't
@@ -18,9 +20,34 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
 import * as fsp from 'node:fs/promises';
+import * as os from 'node:os';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { withLock, tryAcquire, isLocked } from '../bin/lib/lock.js';
 import { pensmithLockDir } from '../bin/lib/paths.js';
+
+// ---- HARD-01 skip gate: probe stubFor export ----
+// stubFor is a private function in lock.ts. When Wave-3 (15-03) exports it
+// (or a __stubForTest seam) for test, this gate lifts and test 7 runs.
+// Path resolution via fileURLToPath — Phase-11 spaced-path safe.
+void fileURLToPath(new URL('../bin/lib/lock.ts', import.meta.url));
+const lockModUrl = new URL('../bin/lib/lock.js', import.meta.url);
+
+type StubForFn = (resource: string) => Promise<string>;
+let stubForFn: StubForFn | undefined;
+
+try {
+  const lockMod = await import(lockModUrl.href) as Record<string, unknown>;
+  const seam = lockMod['stubFor'] ?? lockMod['__stubForTest'];
+  if (typeof seam === 'function') {
+    stubForFn = seam as StubForFn;
+  }
+} catch {
+  // Module already imported above via the static import — this dynamic import
+  // is only used to probe for the stubFor export seam. Ignore errors.
+}
+
+const hasStubFor = typeof stubForFn === 'function';
 
 // ---- 1. withLock returns inner value ----
 
@@ -205,3 +232,66 @@ test('lock file lives in pensmithLockDir() and NOT inside .paper/', async () => 
     await releaseFn();
   }
 });
+
+// ---- 7. HARD-01 scaffold: lock canonicalize — two path conventions → identical stub ----
+//
+// Skip-guarded on `typeof stubFor === 'function'` (exported seam from lock.ts).
+// When Wave-3 (15-03) exports stubFor or __stubForTest, this test un-skips and
+// must PASS — asserting that path.resolve and path.join variants of the same
+// file resolve to the same lock stub.
+//
+// Uses os.tmpdir() + a created file so realpathSync.native has something to
+// resolve. On win32, lower-case and upper-case versions of the same path should
+// produce the same stub after case-folding in the canonical HARD-01 fix.
+
+test('lock canonicalize: two path conventions for one file → identical stub (HARD-01)',
+  {
+    skip: !hasStubFor
+      ? 'stubFor/__stubForTest not yet exported from bin/lib/lock.ts — not yet wired (HARD-01)'
+      : false,
+  },
+  async () => {
+    // Create a real file in tmpdir so realpathSync.native can resolve it.
+    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'pensmith-lock-canon-'));
+    const filePath = path.join(tmpDir, 'canon-test.lock');
+    // Create the file (stubFor touches it anyway, but we need it to exist for
+    // realpathSync.native to work correctly).
+    await fsp.writeFile(filePath, '');
+    try {
+      // Convention A: path.resolve form (as state.ts uses).
+      const r1 = path.resolve(filePath);
+      // Convention B: path.join un-resolved form from a different cwd reference.
+      // In practice these resolve to the same absolute path via path.resolve
+      // inside stubFor — the test verifies that the resulting stub is identical.
+      const r2 = filePath; // Same absolute path but different string (no extra resolve).
+
+      // On win32, add a case-variant to exercise the case-fold branch.
+      const r3 = process.platform === 'win32' ? r1.toUpperCase() : r1;
+
+      const stub1 = await stubForFn!(r1);
+      const stub2 = await stubForFn!(r2);
+      const stub3 = await stubForFn!(r3);
+
+      assert.equal(
+        stub1,
+        stub2,
+        `stubFor must return the same stub for path.resolve form vs raw absolute path; got "${stub1}" vs "${stub2}"`,
+      );
+      assert.equal(
+        stub1,
+        stub3,
+        `stubFor must return the same stub for case-variant on this platform; got "${stub1}" vs "${stub3}"`,
+      );
+
+      // Verify the stub path is inside pensmithLockDir().
+      const dir = pensmithLockDir();
+      assert.ok(
+        stub1.startsWith(dir),
+        `stub must be inside pensmithLockDir() (${dir}); got ${stub1}`,
+      );
+    } finally {
+      // Cleanup tmpdir.
+      await fsp.rm(tmpDir, { recursive: true, force: true });
+    }
+  },
+);

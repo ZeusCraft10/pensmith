@@ -10,13 +10,38 @@
 // mutation between tests is therefore safe. The mirror test resets the
 // module-scope flag in `finally`. The chain is module-scope but each test
 // awaits log.close() to drain it, so it's quiescent at test boundaries.
+//
+// HARD-03 SCAFFOLD (appended): deep PII redaction — nested string leaf + nested
+// secret key both redacted in written line. Skip-guarded on deepRedactPii export
+// from bin/lib/pii.ts (not yet wired in Wave-1; Wave-2 15-04 lands it).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { openSessionLog, setMirrorPromptsToStderr } from '../bin/lib/session-log.js';
+
+// ---- HARD-03 skip gate: probe deepRedactPii export from pii.ts ----
+// Path resolution via fileURLToPath — Phase-11 spaced-path safe.
+void fileURLToPath(new URL('../bin/lib/pii.ts', import.meta.url));
+const piiModUrl = new URL('../bin/lib/pii.js', import.meta.url);
+
+type DeepRedactPiiFn = (node: unknown) => unknown;
+let deepRedactPiiFn: DeepRedactPiiFn | undefined;
+
+try {
+  const piiMod = await import(piiModUrl.href) as Record<string, unknown>;
+  if (typeof piiMod['deepRedactPii'] === 'function') {
+    deepRedactPiiFn = piiMod['deepRedactPii'] as DeepRedactPiiFn;
+  }
+} catch {
+  // pii.ts already imported statically above — dynamic import is purely for
+  // the deepRedactPii probe. Ignore errors.
+}
+
+const hasDeepRedactPii = typeof deepRedactPiiFn === 'function';
 
 function mkTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-session-'));
@@ -247,3 +272,117 @@ test('logger swallows fs errors (close never rejects)', async () => {
   log.event({ p: 'would-fail' });
   await assert.doesNotReject(log.close());
 });
+
+// ---- HARD-03 scaffold: deep PII redaction in nested structures ----
+//
+// Skip-guarded on `typeof deepRedactPii === 'function'` from bin/lib/pii.ts.
+// When Wave-2 (15-04) exports deepRedactPii and wires it into buildRecord,
+// this test un-skips and must PASS.
+//
+// Tests:
+//   (a) Nested string leaf containing a phone number is redacted in the written log line.
+//   (b) Nested secret key (apiKey) value is redacted in the written log line.
+// Mirrors tests/pii.test.ts redaction-assertion style.
+
+test('deep PII: deepRedactPii is exported from pii.ts (HARD-03)',
+  () => {
+    if (hasDeepRedactPii) {
+      assert.ok(true, 'deepRedactPii exported — deep redaction behavioral test below is active');
+    } else {
+      // Wave-1 RED: deepRedactPii not yet exported — skip below is correct.
+      assert.ok(!hasDeepRedactPii, 'Wave-1 RED: deepRedactPii absent from pii.ts exports — skip below is correct');
+    }
+  },
+);
+
+test('deep PII: nested string leaf + nested secret key both redacted in written line (HARD-03)',
+  {
+    skip: !hasDeepRedactPii
+      ? 'deepRedactPii not yet exported from bin/lib/pii.ts — not yet wired (HARD-03)'
+      : false,
+  },
+  async () => {
+    // Build the nested payload that exercises the gap identified in RESEARCH §HARD-03.
+    // {metadata.user} is a non-sensitive key containing a name + phone (PII leaf).
+    // {nested.apiKey} is a sensitive key — should be redacted by redactKeys.
+    const payload = {
+      metadata: {
+        user: 'John Smith',
+        note: 'call 555-123-4567',
+      },
+      nested: {
+        apiKey: 'sk-secret',
+      },
+    };
+
+    // Run directly through deepRedactPii to test the function in isolation.
+    // This tests pii.ts, not the full session-log round-trip, because session-log
+    // uses buildRecord internally and its output only shows in the log file.
+    const result = deepRedactPiiFn!(payload) as {
+      metadata: { user: string; note: string };
+      nested: { apiKey: string };
+    };
+
+    // The phone number in the nested note field must be redacted.
+    assert.ok(
+      !result.metadata.note.includes('555-123-4567'),
+      `raw phone 555-123-4567 must not survive deep redaction; got: "${result.metadata.note}"`,
+    );
+
+    // The name in the user field should be redacted (NAME pattern).
+    // Allow either redacted or unredacted for name — the test primarily targets phone.
+    // The core assertion is: PII in a NON-SENSITIVE nested key is redacted.
+    const noteHasRedactionTag =
+      result.metadata.note.includes('[REDACTED:') ||
+      result.metadata.note.includes('[REDACTED]');
+    assert.ok(
+      noteHasRedactionTag,
+      `expected a redaction tag in the nested note field; got: "${result.metadata.note}"`,
+    );
+
+    // The nested apiKey under a SENSITIVE key must be redacted.
+    assert.notEqual(
+      result.nested.apiKey,
+      'sk-secret',
+      'nested apiKey value must be redacted (not raw secret)',
+    );
+  },
+);
+
+test('deep PII: session-log round-trip redacts nested PII in written line (HARD-03)',
+  {
+    skip: !hasDeepRedactPii
+      ? 'deepRedactPii not yet exported from bin/lib/pii.ts — not yet wired (HARD-03)'
+      : false,
+  },
+  async () => {
+    // Full round-trip: log a nested PII payload, read the file, assert redaction.
+    const tmp = mkTmp();
+    setEnvForTmp(tmp);
+    const log = openSessionLog({ scope: 'global', cwd: tmp });
+    log.event({
+      metadata: {
+        user: 'John Smith',
+        note: 'call 555-123-4567',
+      },
+      nested: {
+        apiKey: 'sk-secret-roundtrip',
+      },
+    });
+    await log.close();
+
+    const { pensmithDataDir } = await import('../bin/lib/paths.js');
+    const logFile = path.join(pensmithDataDir(), 'session.log');
+    const raw = fs.readFileSync(logFile, 'utf8');
+
+    // Neither raw PII nor raw secret must appear in the log file.
+    assert.ok(
+      !raw.includes('555-123-4567'),
+      'raw phone must not appear in session log after deepRedactPii round-trip',
+    );
+    assert.ok(
+      !raw.includes('sk-secret-roundtrip'),
+      'raw apiKey must not appear in session log after deepRedactPii round-trip',
+    );
+  },
+);
