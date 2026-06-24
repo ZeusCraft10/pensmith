@@ -1,13 +1,11 @@
 ---
 phase: 16-ci-dx-parity-docs-packaging
 verified: 2026-06-24T00:00:00Z
-status: human_needed
+status: passed
 score: 6/6
 overrides_applied: 0
-human_verification:
-  - test: "Push the current commit to origin/main and confirm the GitHub Actions 3-OS matrix (ubuntu/macos/windows) is green, including the new 'Test suite + coverage gate (non-TTY stdin — CI-03)' step and the 'Assert working tree is clean after build (stale-derived-file guard — CI-02)' step"
-    expected: "All 3 OS jobs complete green; the porcelain gate prints 'OK: working tree is clean.' and the coverage step exits 0 with all thresholds met"
-    why_human: "The CI-02 porcelain gate and CI-03 coverage-under-non-TTY-stdin steps only run inside GitHub Actions — there is no local equivalent that exercises the actual fresh-clone checkout path on all 3 OSes. Local simulation (git status --porcelain + npm run test:coverage < /dev/null) passes and was verified, but the final 3-OS matrix confirmation requires a real push."
+resolved: 2026-06-24
+resolution: "The sole human_needed item (real 3-OS CI matrix green on the new CI-02 porcelain + CI-03 coverage/non-TTY gates) is RESOLVED. Pushed to origin/main; Actions run 28093018921 at commit 2218510 is green on all three jobs — check (ubuntu-latest, 20.18), check (macos-latest, 20.18), check (windows-latest, 20.18) — including the porcelain gate and the `test:coverage < /dev/null` non-TTY coverage step. (A pre-existing macOS-only T-11-08 failure surfaced during this confirmation and was fixed in the same push — fix(ci) 2218510.)"
 ---
 
 # Phase 16: CI/DX Parity + Docs & Packaging — Verification Report
