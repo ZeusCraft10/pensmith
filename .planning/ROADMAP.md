@@ -34,7 +34,7 @@ Full phase goals, success criteria, and per-plan detail are preserved in the arc
 - [x] **Phase 11: Tier-2 LLM transport** — `bin/lib/anthropic.ts` transport chokepoint + six generative verbs wired + fail-loud on missing key (completed 2026-06-22)
 - [x] **Phase 12: Live research + intake bootstrap + humanizer Task** — real source candidates from adapters, paper-level STATE.json at intake, Tier-1 humanizer wrap with real before/after score (completed 2026-06-22)
 - [ ] **Phase 13: Citation rendering at export** — `[@key]` tokens resolved to formatted in-text citations + bibliography in the paper's CSL style at export time
-- [ ] **Phase 14: Fail-closed verifier gate** — missing VERIFICATION.md blocks compile, shared verdict render/parse pair, live retraction re-query at verify time, post-humanize re-verification
+- [x] **Phase 14: Fail-closed verifier gate** — missing VERIFICATION.md blocks compile, shared verdict render/parse pair, live retraction re-query at verify time, post-humanize re-verification (completed 2026-06-24)
 - [ ] **Phase 15: Foundation & security hardening** — lock-key canonicalization, real SSRF guards, recursive PII redaction, secure-phase audit + pdf-parse bounds + prompt-injection delimiting, GPTZero consent gate, FIFO-fair concurrency primitives
 - [ ] **Phase 16: CI/DX parity + docs & packaging** — prebuild-first `npm run check`, fresh-clone CI gate, coverage gate, real README + disclaimer, stub workflow bodies filled, packaging cleanup
 
@@ -119,7 +119,7 @@ Plans:
 
 - [x] 14-01-PLAN.md — Wave 1: RED-by-skip scaffolds for all four gates (verdict-rows round-trip + compile-refuse GATE-01 + gate-retraction GATE-03 + done-recheck GATE-04) + the GATE-03 blocking cassette
 - [x] 14-02-PLAN.md — Wave 2: GATE-01 + GATE-02 — shared verdict-rows.ts render+parse pair, compile.ts hasStatus fail-closed guard + parseVerdictRows wiring, verify.ts writer delegation (output byte-unchanged)
-- [ ] 14-03-PLAN.md — Wave 2: GATE-03 — live Retraction Watch re-query in pass1.ts verdictForCitekey (blocking on confirmed hit, silent on transport error)
+- [x] 14-03-PLAN.md — Wave 2: GATE-03 — live Retraction Watch re-query in pass1.ts verdictForCitekey (blocking on confirmed hit, silent on transport error)
 - [x] 14-04-PLAN.md — Wave 2: GATE-04 — reCheckFinalMd (citekey-set diff + Pass-3) hard-blocks export in done.ts before runDoneGate
 
 **UI hint**: no
@@ -177,7 +177,7 @@ Plans:
 | 11. Tier-2 LLM transport | v0.2.0 | 4/4 | Complete   | 2026-06-22 |
 | 12. Live research + intake bootstrap + humanizer Task | v0.2.0 | 4/4 | Complete   | 2026-06-22 |
 | 13. Citation rendering at export | v0.2.0 | 1/2 | In Progress|  |
-| 14. Fail-closed verifier gate | v0.2.0 | 3/4 | In Progress|  |
+| 14. Fail-closed verifier gate | v0.2.0 | 4/4 | Complete   | 2026-06-24 |
 | 15. Foundation & security hardening | v0.2.0 | 0/TBD | Not started | - |
 | 16. CI/DX parity + docs & packaging | v0.2.0 | 0/TBD | Not started | - |
 
