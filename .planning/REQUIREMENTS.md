@@ -26,8 +26,8 @@ Requirements for the v0.2.0 release. Each maps to exactly one roadmap phase.
 
 ### Fail-closed verifier gate (GATE)
 
-- [ ] **GATE-01**: Compile refuses when a section's `VERIFICATION.md` is missing or has no parseable status (fail-closed — a never-verified section can never compile)
-- [ ] **GATE-02**: The refuse-gate verdict rows are produced and parsed by a shared render+parse pair, guarded by a writer→parser round-trip test (writer drift cannot silently yield zero blocking citekeys)
+- [x] **GATE-01**: Compile refuses when a section's `VERIFICATION.md` is missing or has no parseable status (fail-closed — a never-verified section can never compile)
+- [x] **GATE-02**: The refuse-gate verdict rows are produced and parsed by a shared render+parse pair, guarded by a writer→parser round-trip test (writer drift cannot silently yield zero blocking citekeys)
 - [ ] **GATE-03**: Verification re-queries Retraction Watch on the resolved DOI at verify time and escalates a live retraction hit to MIS-CITED (blocking), not only via the WARN-only freshness channel
 - [ ] **GATE-04**: The humanized `FINAL.md` is re-checked (deterministic Pass-3 + citekey-set diff) before export, so humanization cannot introduce an unverified or altered citation
 
@@ -98,8 +98,8 @@ Which phases cover which requirements. Populated during roadmap creation.
 | REND-01 | Phase 13 | Complete |
 | REND-02 | Phase 13 | Complete |
 | REND-03 | Phase 13 | Complete |
-| GATE-01 | Phase 14 | Pending |
-| GATE-02 | Phase 14 | Pending |
+| GATE-01 | Phase 14 | Complete |
+| GATE-02 | Phase 14 | Complete |
 | GATE-03 | Phase 14 | Pending |
 | GATE-04 | Phase 14 | Pending |
 | HARD-01 | Phase 15 | Pending |
