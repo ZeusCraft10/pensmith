@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.2.0
 milestone_name: End-to-End
 status: planning
-stopped_at: Completed 15-08-PLAN.md (SECURITY.md audit + Semaphore bare-caller doc, Phase 15 Wave 4 complete)
+stopped_at: Completed 16-01-PLAN.md (c8 ratchet gate + RED-by-skip scaffolds for DOCS-02/DOCS-03, Phase 16 Wave 1)
 last_updated: "2026-06-24T00:00:00.000Z"
-last_activity: 2026-06-22 — v0.2.0 roadmap created (Phases 11–16, 25 requirements)
+last_activity: 2026-06-24 — Phase 16 Plan 01 complete (.c8rc.json + RED-by-skip guards for lazy-nock + workflow-bodies)
 progress:
   total_phases: 6
-  completed_phases: 4
-  total_plans: 22
-  completed_plans: 22
-  percent: 100
+  completed_phases: 5
+  total_plans: 26
+  completed_plans: 24
+  percent: 85
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-06-22 after v0.1.0 Foundation milestone)
 
 ## Current Position
 
-Phase: Not started (roadmap created, planning Phase 11)
-Plan: —
-Status: Planning
-Last activity: 2026-06-22 — v0.2.0 roadmap created (Phases 11–16, 25 requirements)
+Phase: 16-ci-dx-parity-docs-packaging
+Plan: 01 complete (Wave 1 of N)
+Status: Executing
+Last activity: 2026-06-24 — 16-01 complete: .c8rc.json (85/72/82/85 ratchet) + RED-by-skip guards (http-mock.test.ts, workflow-bodies.test.ts)
 
 ## Performance Metrics
 
@@ -266,6 +266,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [14-01]: GATE-01 Wave-0 tests use tolerant 'no verifiable' phrase guards (not RED-by-skip) because compile.ts exists — the specific refuse message is what's unshipped
 - [14-01]: GATE-03 source-grep skip predicate on pass1.ts for retraction-watch import — existsSync alone vacuously true for an existing file (07-01 pattern reapplied)
 - [14-01]: gate03-blocking-doi.json DOI 10.0000/gate03-retracted — distinct from fetchById-fake (10.0000/test) and freshness-hit (10.0000/retracted) cassettes
+- [16-01]: .c8rc.json thresholds 85/72/82/85 are baseline-minus-5pp from measured 2026-06-24 run (90.3/77.26/87.28/90.3); dist/** excluded to prevent double-count of compiled output — ratchet not aspirational (CI-03)
+- [16-01]: RED-by-skip guard in http-mock.test.ts keys on `^import nock from 'nock'` at line-start — source-grep proxy for prod-install nock absence; true uninstall test not feasible in-suite (DOCS-03 / T-16-DEP)
+- [16-01]: workflow-bodies.test.ts splits into three independent sub-tests (A=sections, B=no-sentinels, C=capability_check) under one shared SKIP_REASON so each dimension reports separately in CI when Plan 04 partially lands (DOCS-02)
 
 ### Pending Todos
 
