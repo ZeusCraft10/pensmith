@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.2.0
 milestone_name: End-to-End
 status: planning
-stopped_at: Completed 12-03-PLAN.md (GEN-04 intake bootstrap)
-last_updated: "2026-06-24T05:10:38.334Z"
-last_activity: 2026-06-22 — v0.2.0 roadmap created (Phases 11–16, 25 requirements)
+stopped_at: Completed 13-02-PLAN.md (REND-01/02/03 citation rendering at export)
+last_updated: "2026-06-24T00:00:00.000Z"
+last_activity: 2026-06-24 — Phase 13 Plan 02 complete: renderInText + resolveAndRenderCitations wired, 901/901 tests green
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 10
-  completed_plans: 9
-  percent: 33
+  completed_plans: 10
+  percent: 50
 ---
 
 # Project State
@@ -94,6 +94,7 @@ Last activity: 2026-06-22 — v0.2.0 roadmap created (Phases 11–16, 25 require
 | Phase 12-live-research-intake-bootstrap-humanizer-task P03 | 5min | 1 task | 1 file |
 | Phase 12 P04 | 10m | 1 tasks | 1 files |
 | Phase 13-citation-rendering-at-export P01 | 8m | 3 tasks | 1 files |
+| Phase 13-citation-rendering-at-export P02 | 18m | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -255,6 +256,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase ?]: [10-04] Zotero used-as-source path + absent/no-auth fallback declared in workflows/research.md (executable seam shipped in 10-03); W4 required: list untouched so no new capability_check top-level key
 - [Phase ?]: [10-04] RIS exercised as a library surface through the research verb (not a 17th verb); tier-contract bijection guard forbids zotero/zotero-mcp/ris/style from UX02_VERBS while confirming zotero-mcp lives only in the sources registry
 - [Phase ?]: _taskRunner checked before isHumanizerSkillPresent — injected non-null runner bypasses skill-gate, enables call-through test on machines without humanizer installed
+- [13-02]: exporter.ts imports only { parseBib, renderStyle, renderInText } from ./citations.js (D-19 chokepoint) — Cite never imported in exporter.ts
+- [13-02]: resolveAndRenderCitations calls renderStyle FIRST to prime pensmith-${style} template registration before the per-entry renderInText loop (memoized registration ordering pattern)
+- [13-02]: bib-copy (DONE-08) moved BEFORE all pandoc execFileAsync calls (Pitfall-4) so --bibliography bibDst resolves at call time
+- [13-02]: done.ts reads discipline from INTAKE.md via parseIntakeMd + resolveStyleName; empty catch leaves style undefined → exportDraft defaults APA (never-throw pattern)
+- [13-02]: exactOptionalPropertyTypes:true requires spread conditional ...(style !== undefined ? { style } : {}) when passing optional fields from let-initialized variables
 
 ### Pending Todos
 
@@ -275,8 +281,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-24T05:10:38.327Z
-Stopped at: Completed 12-03-PLAN.md (GEN-04 intake bootstrap)
+Last session: 2026-06-24
+Stopped at: Completed 13-02-PLAN.md (citation rendering at export, REND-01/02/03)
 Resume file: None
 
 ## Operator Next Steps
