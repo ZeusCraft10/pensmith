@@ -36,7 +36,7 @@ Full phase goals, success criteria, and per-plan detail are preserved in the arc
 - [ ] **Phase 13: Citation rendering at export** — `[@key]` tokens resolved to formatted in-text citations + bibliography in the paper's CSL style at export time
 - [x] **Phase 14: Fail-closed verifier gate** — missing VERIFICATION.md blocks compile, shared verdict render/parse pair, live retraction re-query at verify time, post-humanize re-verification (completed 2026-06-24)
 - [ ] **Phase 15: Foundation & security hardening** — lock-key canonicalization, real SSRF guards, recursive PII redaction, secure-phase audit + pdf-parse bounds + prompt-injection delimiting, GPTZero consent gate, FIFO-fair concurrency primitives
-- [ ] **Phase 16: CI/DX parity + docs & packaging** — prebuild-first `npm run check`, fresh-clone CI gate, coverage gate, real README + disclaimer, stub workflow bodies filled, packaging cleanup
+- [x] **Phase 16: CI/DX parity + docs & packaging** — prebuild-first `npm run check`, fresh-clone CI gate, coverage gate, real README + disclaimer, stub workflow bodies filled, packaging cleanup (completed 2026-06-24)
 
 ## Phase Details
 
@@ -170,7 +170,7 @@ Plans:
 - [x] 16-01-PLAN.md — Wave 1: scaffold — .c8rc.json (CI-03) + RED-by-skip tests/http-mock.test.ts (DOCS-03 lazy-nock) + tests/workflow-bodies.test.ts (DOCS-02 non-stub guard); no shared-file edits
 - [x] 16-02-PLAN.md — Wave 2: CI + packaging — prebuild-first check + test:coverage rename + nock to devDeps (package.json), porcelain gate + non-TTY coverage step (ci.yml), lazy nock import (http-mock.ts), CI-01/DOCS-03 asserts (repo-files.test.ts)
 - [x] 16-03-PLAN.md — Wave 3: DOCS-01 — real README (install + /pensmith quickstart + §18 credit + §3 disclaimer verbatim + Style Match) + §3 disclaimer at intake + new.md Body; stale README asserts removed atomically (repo-files.test.ts)
-- [ ] 16-04-PLAN.md — Wave 4: DOCS-02 — fill doctor/status/next/resume bodies + refresh http-crossref-ping/doctor-output.md (WN-3 re-pin) + PRIVACY.md; bijection + tier-contract intact
+- [x] 16-04-PLAN.md — Wave 4: DOCS-02 — fill doctor/status/next/resume bodies + refresh http-crossref-ping/doctor-output.md (WN-3 re-pin) + PRIVACY.md; bijection + tier-contract intact
 
 **UI hint**: no
 
@@ -197,7 +197,7 @@ Plans:
 | 13. Citation rendering at export | v0.2.0 | 1/2 | In Progress|  |
 | 14. Fail-closed verifier gate | v0.2.0 | 4/4 | Complete   | 2026-06-24 |
 | 15. Foundation & security hardening | v0.2.0 | 7/8 | In Progress|  |
-| 16. CI/DX parity + docs & packaging | v0.2.0 | 3/4 | In Progress|  |
+| 16. CI/DX parity + docs & packaging | v0.2.0 | 4/4 | Complete   | 2026-06-24 |
 
 ---
 *Roadmap initialized: 2026-05-06 from PRD.md + research/SUMMARY.md (auto mode)*

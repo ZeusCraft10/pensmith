@@ -4,14 +4,14 @@ milestone: v0.2.0
 milestone_name: End-to-End
 status: executing
 stopped_at: Completed 15-08-PLAN.md (SECURITY.md audit + Semaphore bare-caller doc, Phase 15 Wave 4 complete)
-last_updated: "2026-06-24T09:50:28.633Z"
+last_updated: "2026-06-24T10:04:50.704Z"
 last_activity: "2026-06-24 — 16-01 complete: .c8rc.json (85/72/82/85 ratchet) + RED-by-skip guards (http-mock.test.ts, workflow-bodies.test.ts)"
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 26
-  completed_plans: 25
-  percent: 83
+  completed_plans: 26
+  percent: 100
 ---
 
 # Project State
@@ -289,7 +289,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-24T09:50:28.624Z
+Last session: 2026-06-24T10:04:50.696Z
 Stopped at: Completed 15-08-PLAN.md (SECURITY.md audit + Semaphore bare-caller doc, Phase 15 Wave 4 complete)
 Resume file: None
 

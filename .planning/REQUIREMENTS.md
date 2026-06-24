@@ -49,7 +49,7 @@ Requirements for the v0.2.0 release. Each maps to exactly one roadmap phase.
 ### Docs & packaging (DOCS)
 
 - [x] **DOCS-01**: README ships real install instructions + `/pensmith` quick start + the PRD §3 dual-use disclaimer; the §3 disclaimer also surfaces at intake
-- [ ] **DOCS-02**: The four stub workflow bodies (doctor/status/next/resume) are filled, and stale "Phase 3+ / ships in Phase 6" copy in the doctor probes, PRIVACY.md, and CONTRIBUTING.md is refreshed to shipped reality
+- [x] **DOCS-02**: The four stub workflow bodies (doctor/status/next/resume) are filled, and stale "Phase 3+ / ships in Phase 6" copy in the doctor probes, PRIVACY.md, and CONTRIBUTING.md is refreshed to shipped reality
 - [x] **DOCS-03**: Test-only dependencies (e.g. `nock`) move out of `dependencies`; `http-mock.ts` is excluded from the shipped `dist/` tree
 
 ## v2 Requirements
@@ -112,7 +112,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | CI-02 | Phase 16 | Complete |
 | CI-03 | Phase 16 | Complete |
 | DOCS-01 | Phase 16 | Complete |
-| DOCS-02 | Phase 16 | Pending |
+| DOCS-02 | Phase 16 | Complete |
 | DOCS-03 | Phase 16 | Complete |
 
 **Coverage:**
