@@ -92,13 +92,21 @@ test('LICENSE is MIT 2026 Akhil Achanta', () => {
   assert.match(lic, /Copyright \(c\) 2026 Akhil Achanta/);
 });
 
-test('README, PRIVACY, README-DEV, CONTRIBUTING stubs are correct', () => {
-  assert.match(read('README.md'), /v0\.1\.0 in development/);
-  assert.match(read('README.md'), /Phase 6/);
+test('PRIVACY and README-DEV structure checks (README stubs removed — Phase 16 DOCS-01)', () => {
+  // README DOCS-01 — real content assertions (replaces stale stub assertions)
+  assert.match(read('README.md'), /pensmith is a structured research/i,
+    'README must contain the PRD §3 disclaimer opening sentence');
+  assert.match(read('README.md'), /not a guarantee against AI detectors/i,
+    'README must contain the PRD §3 honest-framing sentence');
+  assert.match(read('README.md'), /Get Shit Done/,
+    'README must contain the PRD §18 GSD credit');
+  // PRIVACY — substring assertions unchanged
   assert.match(read('PRIVACY.md'), /local-only/i);
   assert.match(read('PRIVACY.md'), /No telemetry/i);
+  // README-DEV — unchanged
   assert.match(read('README-DEV.md'), /npm run build/);
   assert.match(read('README-DEV.md'), /dist\/mcp\/server\.js/);
+  // CONTRIBUTING — unchanged
   const c = read('CONTRIBUTING.md');
   assert.match(c, /bin\/lib\/http\.ts/);
   assert.match(c, /bin\/lib\/doi\.ts/);
