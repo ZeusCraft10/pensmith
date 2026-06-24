@@ -33,12 +33,12 @@ Requirements for the v0.2.0 release. Each maps to exactly one roadmap phase.
 
 ### Foundation & security hardening (HARD)
 
-- [ ] **HARD-01**: Lock keys are canonicalized (resolve + realpath, case-normalized on win32) before hashing, so two callers targeting the same file always acquire the same lock
-- [ ] **HARD-02**: `http.ts` enforces SSRF guards — scheme allowlist + DNS-resolved RFC1918 / loopback / link-local block — on `add <url>`, fetched DOIs, and the DuckDuckGo path
-- [ ] **HARD-03**: PII redaction recurses into nested string leaves before any `SESSION.log` write (not only top-level keys)
-- [ ] **HARD-04**: A secure-phase audit produces a per-phase SECURITY.md marking each threat PROVEN/UNPROVEN against a test; `pdf-parse` is pinned/replaced with input size + wall-clock bounds; advisory Pass-2/Pass-4 prompts wrap untrusted source/draft text in fenced delimiters
-- [ ] **HARD-05**: The GPTZero honesty check discloses (and size-caps + consent-gates) that it POSTs the full paper body to an external service
-- [ ] **HARD-06**: The `TokenBucket` / `Semaphore` concurrency primitives are FIFO-fair (no slot leak) so concurrent paid LLM calls respect the configured `--max-parallel` cap
+- [x] **HARD-01**: Lock keys are canonicalized (resolve + realpath, case-normalized on win32) before hashing, so two callers targeting the same file always acquire the same lock
+- [x] **HARD-02**: `http.ts` enforces SSRF guards — scheme allowlist + DNS-resolved RFC1918 / loopback / link-local block — on `add <url>`, fetched DOIs, and the DuckDuckGo path
+- [x] **HARD-03**: PII redaction recurses into nested string leaves before any `SESSION.log` write (not only top-level keys)
+- [x] **HARD-04**: A secure-phase audit produces a per-phase SECURITY.md marking each threat PROVEN/UNPROVEN against a test; `pdf-parse` is pinned/replaced with input size + wall-clock bounds; advisory Pass-2/Pass-4 prompts wrap untrusted source/draft text in fenced delimiters
+- [x] **HARD-05**: The GPTZero honesty check discloses (and size-caps + consent-gates) that it POSTs the full paper body to an external service
+- [x] **HARD-06**: The `TokenBucket` / `Semaphore` concurrency primitives are FIFO-fair (no slot leak) so concurrent paid LLM calls respect the configured `--max-parallel` cap
 
 ### CI / DX parity (CI)
 
@@ -102,12 +102,12 @@ Which phases cover which requirements. Populated during roadmap creation.
 | GATE-02 | Phase 14 | Complete |
 | GATE-03 | Phase 14 | Complete |
 | GATE-04 | Phase 14 | Pending |
-| HARD-01 | Phase 15 | Pending |
-| HARD-02 | Phase 15 | Pending |
-| HARD-03 | Phase 15 | Pending |
-| HARD-04 | Phase 15 | Pending |
-| HARD-05 | Phase 15 | Pending |
-| HARD-06 | Phase 15 | Pending |
+| HARD-01 | Phase 15 | Complete |
+| HARD-02 | Phase 15 | Complete |
+| HARD-03 | Phase 15 | Complete |
+| HARD-04 | Phase 15 | Complete |
+| HARD-05 | Phase 15 | Complete |
+| HARD-06 | Phase 15 | Complete |
 | CI-01 | Phase 16 | Pending |
 | CI-02 | Phase 16 | Pending |
 | CI-03 | Phase 16 | Pending |

@@ -139,7 +139,7 @@ Plans:
 
 **Plans**: 8 plans (4 waves)
 
-- [ ] 15-01-PLAN.md — Wave 1: RED-by-skip scaffolds for all six HARD items (SSRF / TokenBucket-FIFO / PDF-bounds / Pass-2/4 fence / lock-canon / deep-PII / GPTZero-consent; fileURLToPath spaced-path safe; injected resolver + deterministic timers)
+- [x] 15-01-PLAN.md — Wave 1: RED-by-skip scaffolds for all six HARD items (SSRF / TokenBucket-FIFO / PDF-bounds / Pass-2/4 fence / lock-canon / deep-PII / GPTZero-consent; fileURLToPath spaced-path safe; injected resolver + deterministic timers)
 - [ ] 15-02-PLAN.md — Wave 2: HARD-02 SSRF guard (checkSsrf DNS-preflight + redirect re-check) + HARD-06 FIFO TokenBucket — both in http.ts (one plan, no parallel same-file edits)
 - [ ] 15-03-PLAN.md — Wave 2: HARD-01 lock.ts stubFor canonicalization (resolve + realpath + win32 case-fold) + compile.ts 'compile:' de-prefix
 - [ ] 15-04-PLAN.md — Wave 2: HARD-03 pii.ts deepRedactPii + session-log.ts buildRecord recursive string-leaf redaction before write
@@ -188,7 +188,7 @@ Plans:
 | 12. Live research + intake bootstrap + humanizer Task | v0.2.0 | 4/4 | Complete   | 2026-06-22 |
 | 13. Citation rendering at export | v0.2.0 | 1/2 | In Progress|  |
 | 14. Fail-closed verifier gate | v0.2.0 | 4/4 | Complete   | 2026-06-24 |
-| 15. Foundation & security hardening | v0.2.0 | 0/8 | Not started | - |
+| 15. Foundation & security hardening | v0.2.0 | 1/8 | In Progress|  |
 | 16. CI/DX parity + docs & packaging | v0.2.0 | 0/TBD | Not started | - |
 
 ---
