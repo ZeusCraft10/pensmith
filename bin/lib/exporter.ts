@@ -29,14 +29,40 @@
 
 import { execFile } from 'node:child_process';
 import * as fsp from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { basename, extname, join } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
+import path, { basename, extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import JSZip from 'jszip';
 import { PDFDocument, PDFName } from 'pdf-lib';
+import { parseBib, renderStyle, renderInText } from './citations.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
 import { paperDir } from './paths.js';
+
+// =====================================================================
+//   PKG_ROOT — locate templates/citation-styles/ relative to this file
+//   (same pattern as bin/lib/citations.ts lines 84-102)
+// =====================================================================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function findPkgRoot(start: string): string {
+  let cur = start;
+  for (let i = 0; i < 8; i++) {
+    try {
+      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
+    } catch {
+      // continue
+    }
+    const next = path.dirname(cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  return start;
+}
+
+const PKG_ROOT = findPkgRoot(__dirname);
 
 const execFileAsync = promisify(execFile);
 
@@ -354,6 +380,11 @@ export interface ExportOptions {
   paperRoot?: string;
   /** Injectable Pandoc-presence flag (deterministic tests); defaults to live probe. */
   pandocPresent?: boolean;
+  /** CSL style key for citation rendering (e.g. 'apa', 'ieee'). Resolved by
+   *  caller via resolveStyleName(discipline). Undefined → defaults to 'apa'
+   *  when the offline rendering path runs. When absent, citation rendering
+   *  is skipped (back-compat: existing callers without style pass through). */
+  style?: string;
 }
 
 export interface ExportResult {
@@ -445,12 +476,89 @@ async function writeMarkdown(md: string, outputPath: string): Promise<void> {
   await atomicWriteFile(outputPath, md);
 }
 
+// ---------------------------------------------------------------------------
+// resolveAndRenderCitations — offline fallback inline-cite resolver (REND-01/02)
+// ---------------------------------------------------------------------------
+
+/**
+ * Replace `[@key]` / `[@key1; @key2]` Pandoc citation tokens in `md` with
+ * CSL-formatted in-text citations and append a `## References` bibliography.
+ *
+ * D-19: all citation-js usage is delegated to `parseBib`, `renderStyle`, and
+ * `renderInText` imported from `./citations.js`. No direct `citation-js` import.
+ *
+ * Pitfall-5 guards: missing/empty bib → return md unchanged (no throw).
+ * Pitfall-1 guard: one `renderInText([entry], style)` call per entry so each
+ *   citekey gets its own in-text string (not one combined string for all).
+ * Pitfall-2 guard: `renderStyle(entries, style)` is called FIRST so
+ *   `ensureStyleTemplate` registers `pensmith-${style}` before the in-text
+ *   loop begins (ordering requirement — memoized via the registeredStyles Map
+ *   in citations.ts; never throws "template already registered").
+ * Pitfall-6 guard: multi-cite `[@a; @b]` regex splits on ';' and wraps in one
+ *   paren pair.
+ * Zero-trace: the `## References` heading contains no 'pensmith' literal.
+ */
+async function resolveAndRenderCitations(
+  md: string,
+  bibPath: string,
+  style: string,
+): Promise<string> {
+  // Pitfall-5: missing bib → pass through unchanged.
+  if (!existsSync(bibPath)) return md;
+  const bibText = await fsp.readFile(bibPath, 'utf8');
+  if (!bibText.trim()) return md;
+
+  const entries = await parseBib(bibText);
+
+  // Memoized Style Template Registration ordering (PATTERNS.md):
+  // Call renderStyle FIRST so ensureStyleTemplate(style) runs before the
+  // per-key in-text loop — guarantees pensmith-${style} is registered.
+  const bibliography = await renderStyle(entries, style);
+
+  // Build a per-citekey in-text citation map (Pitfall-1: one entry at a time).
+  const intextMap = new Map<string, string>();
+  for (const entry of entries) {
+    const id = String((entry as { id?: unknown }).id ?? '');
+    if (!id) continue;
+    const formatted = (await renderInText([entry], style)).trim();
+    intextMap.set(id, formatted);
+  }
+
+  // Replace [@key] and [@key1; @key2] tokens (Pitfall-6: multi-cite).
+  const resolved = md.replace(/\[(@[^\]]+)\]/g, (_match, inner: string) => {
+    const keys = inner.split(';').map((k) => k.trim().replace(/^@/, ''));
+    if (keys.length === 1) {
+      const key = keys[0]!;
+      return intextMap.get(key) ?? `[@${key}]`; // unknown key: leave as-is
+    }
+    // Multi-key: strip outer parens from each formatted cite, wrap in one pair.
+    const parts = keys.map((k) => (intextMap.get(k) ?? k).replace(/^[(]|[)]$/g, ''));
+    return '(' + parts.join('; ') + ')';
+  });
+
+  // Append bibliography under ## References only when non-empty (Pitfall-5).
+  // ZERO-TRACE: heading is '## References' — never any 'pensmith' literal.
+  if (bibliography.trim()) {
+    return resolved + '\n\n## References\n\n' + bibliography;
+  }
+  return resolved;
+}
+
 /**
  * Build the Pandoc argv (array — never a shell string; T-06-04 command-injection
  * mitigation). Base args carry zero-trace metadata flags as defense-in-depth;
  * the in-process scrub is the actual guarantee.
+ *
+ * Optional `citeOpts` appends `--citeproc --csl <path> --bibliography <path>`
+ * when both fields are present. --citeproc precedes --csl/--bibliography
+ * (Pitfall-3 ordering requirement).
  */
-function buildPandocArgs(inputPath: string, outputPath: string, format: ExportFormat): string[] {
+function buildPandocArgs(
+  inputPath: string,
+  outputPath: string,
+  format: ExportFormat,
+  citeOpts?: { cslPath: string; bibPath: string },
+): string[] {
   const to = format === 'latex' ? 'latex' : format;
   const args = [
     inputPath,
@@ -463,6 +571,10 @@ function buildPandocArgs(inputPath: string, outputPath: string, format: ExportFo
   ];
   if (format === 'pdf') {
     args.push('--variable', 'pdfcreator=', '--variable', 'pdfproducer=', '--variable', 'pdfauthor=');
+  }
+  // REND-01/02 Pandoc path: --citeproc MUST precede --csl and --bibliography (Pitfall-3).
+  if (citeOpts?.cslPath && citeOpts?.bibPath) {
+    args.push('--citeproc', '--csl', citeOpts.cslPath, '--bibliography', citeOpts.bibPath);
   }
   return args;
 }
@@ -482,9 +594,14 @@ function buildPandocArgs(inputPath: string, outputPath: string, format: ExportFo
  *   - 'docx'/'pdf' with Pandoc (or the PDF engine) absent: md-only fallback +
  *     banner mentioning Pandoc; NEVER throws ENOENT.
  *
- * CITATIONS.bib is ALWAYS copied into the export dir (DONE-08) when the source
- * exists, guarded `bibSrc !== bibDst` (the distinct dir guarantees this is never
- * a same-path no-op).
+ * CITATIONS.bib is copied into the export dir BEFORE any pandoc shellout
+ * (Pitfall-4 ordering) so --bibliography bibDst resolves. The copy guard
+ * `bibSrc !== bibDst` + `existsSync(bibSrc)` stays unchanged (DONE-08).
+ *
+ * opts.style enables citation rendering: on the md-only/Pandoc-absent path
+ * resolveAndRenderCitations resolves [@key] tokens and appends ## References.
+ * On the Pandoc path --citeproc/--csl/--bibliography args are appended when
+ * both style and bibCopied are true. (REND-01/02)
  */
 export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   const { inputPath, format } = opts;
@@ -494,6 +611,26 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   const pandoc = opts.pandocPresent ?? isPandocPresent();
   const stem = basename(inputPath, extname(inputPath));
 
+  // DONE-08 — copy CITATIONS.bib into the export dir BEFORE any pandoc shellout
+  // (Pitfall-4: --bibliography bibDst must resolve at pandoc call time).
+  // Guard: bibSrc !== bibDst && existsSync(bibSrc) — same as before, reordered.
+  let bibCopied = false;
+  const bibSrc = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
+  const bibDst = join(exportDir, 'CITATIONS.bib');
+  if (bibSrc !== bibDst && existsSync(bibSrc)) {
+    await fsp.copyFile(bibSrc, bibDst);
+    bibCopied = true;
+  }
+
+  // Compute CSL path for Pandoc citeproc args and offline rendering.
+  // style is only meaningful when bibCopied (no bib → no citation rendering).
+  const style = opts.style;
+  const cslPath = style ? path.join(PKG_ROOT, 'templates', 'citation-styles', `${style}.csl`) : '';
+  const citeOpts =
+    style && bibCopied && cslPath
+      ? { cslPath, bibPath: bibDst }
+      : undefined;
+
   let outputPath: string;
   let pandocUsed = false;
 
@@ -502,7 +639,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     outputPath = join(exportDir, `${stem}.tex`);
     if (pandoc) {
       try {
-        await execFileAsync('pandoc', buildPandocArgs(inputPath, outputPath, 'latex'), {
+        await execFileAsync('pandoc', buildPandocArgs(inputPath, outputPath, 'latex', citeOpts), {
           timeout: 60_000,
         });
         // Defensively strip any generator/provenance comment line Pandoc emits.
@@ -528,14 +665,19 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
       process.stdout.write('pensmith export: Pandoc not found — markdown-only fallback.\n');
     }
     outputPath = join(exportDir, `${stem}.md`);
-    const md = await fsp.readFile(inputPath, 'utf8');
+    let md = await fsp.readFile(inputPath, 'utf8');
+    // REND-01/02 offline path: resolve [@key] tokens + append ## References.
+    // Only when style is set AND bib was copied (no bib → pass through unchanged).
+    if (style && bibCopied) {
+      md = await resolveAndRenderCitations(md, bibDst, style);
+    }
     await writeMarkdown(md, outputPath);
   } else {
     // Pandoc present + format is docx/pdf.
     const ext = format === 'docx' ? 'docx' : 'pdf';
     outputPath = join(exportDir, `${stem}.${ext}`);
     try {
-      await execFileAsync('pandoc', buildPandocArgs(inputPath, outputPath, format), {
+      await execFileAsync('pandoc', buildPandocArgs(inputPath, outputPath, format, citeOpts), {
         timeout: 60_000,
       });
       // MANDATORY per-format zero-trace scrub — the actual guarantee.
@@ -548,20 +690,14 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
         `pensmith export: ${format === 'pdf' ? 'PDF engine' : 'Pandoc'} not available — markdown-only fallback.\n`,
       );
       outputPath = join(exportDir, `${stem}.md`);
-      const md = await fsp.readFile(inputPath, 'utf8');
+      let md = await fsp.readFile(inputPath, 'utf8');
+      // REND-01/02 fallback from Pandoc failure: resolve citations offline.
+      if (style && bibCopied) {
+        md = await resolveAndRenderCitations(md, bibDst, style);
+      }
       await writeMarkdown(md, outputPath);
       pandocUsed = false;
     }
-  }
-
-  // DONE-08 — copy CITATIONS.bib into the export dir (every path), guarded so it
-  // is never a same-path no-op and never throws when the source bib is absent.
-  let bibCopied = false;
-  const bibSrc = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
-  const bibDst = join(exportDir, 'CITATIONS.bib');
-  if (bibSrc !== bibDst && existsSync(bibSrc)) {
-    await fsp.copyFile(bibSrc, bibDst);
-    bibCopied = true;
   }
 
   // CITE-05 (DONE-08 extension): copy CITATIONS.ris into the export dir
