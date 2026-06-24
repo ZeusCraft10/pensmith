@@ -228,6 +228,12 @@ export async function loadCassettes(adapter: string): Promise<void> {
  * between tests (or after a recorder run) to leave the global state clean.
  */
 export async function clearCassettes(): Promise<void> {
+  // WR-01 (16 review): guard BEFORE the lazy nock import — symmetric with
+  // loadCassettes(). nock is a devDependency now (DOCS-03); in a prod install
+  // (--omit=dev) it is absent. In non-offline mode no nock was ever installed,
+  // so there is nothing to clear — return before `await import('nock')` so a
+  // stray production caller never hits ERR_MODULE_NOT_FOUND.
+  if (!isOfflineMode()) return;
   const { default: nock } = await import('nock');
   nock.cleanAll();
   nock.enableNetConnect();
