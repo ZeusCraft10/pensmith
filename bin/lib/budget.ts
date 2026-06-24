@@ -155,13 +155,31 @@ export async function appendCost(record: CostRecord): Promise<void> {
  * non-integer floats — these all indicate caller bugs).
  *
  * acquire() returns immediately if a slot is free, else queues a waiter
- * resolver. release() pops the next waiter (FIFO) and grants its slot.
- * release() throws if called more times than acquire — this catches
- * paired-call bugs early rather than silently letting concurrency drift
- * above max.
+ * resolver. release() pops the next waiter (FIFO via waiters.shift()) and
+ * grants its slot. release() throws if called more times than acquire —
+ * this catches paired-call bugs early rather than silently letting
+ * concurrency drift above max.
  *
  * withLock(fn) is the recommended call site: it pairs acquire+release in a
- * try/finally so an exception in fn cannot leak a slot.
+ * try/finally so an exception in fn cannot leak a slot (HARD-06 / T-15-06b).
+ *
+ * FIFO guarantee: waiters are resolved in strict FIFO order (waiters.shift()
+ * pops the oldest waiter). No starvation under concurrent load.
+ *
+ * ── BARE-CALLER WARNING (T-15-06b) ──────────────────────────────────────────
+ * If you call acquire()/release() directly (outside withLock), YOU MUST wrap
+ * the held section in try/finally to avoid a permit leak on exception:
+ *
+ *   await sem.acquire();
+ *   try {
+ *     await doWork();          // any throw here …
+ *   } finally {
+ *     sem.release();           // … is caught; permit always returned
+ *   }
+ *
+ * A leaked permit permanently reduces the pool below maxConcurrency.
+ * withLock() already does this; prefer it over bare acquire/release.
+ * ────────────────────────────────────────────────────────────────────────────
  */
 export class Semaphore {
   private max: number;

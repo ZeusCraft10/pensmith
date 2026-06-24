@@ -151,3 +151,41 @@ test('Semaphore: invalid maxConcurrency throws', () => {
   assert.throws(() => new Semaphore(1.5 as unknown as number), /positive integer/);
   assert.throws(() => new Semaphore(NaN as unknown as number), /positive integer/);
 });
+
+// HARD-06 / T-15-06b regressions: FIFO grant order + permit-released-on-exception
+
+test('Semaphore FIFO: grant order matches acquisition order (HARD-06)', async () => {
+  // One slot. Schedule N acquirers in order; verify they complete in that order.
+  const sem = new Semaphore(1);
+  const order: number[] = [];
+  // Pre-acquire to force subsequent acquires to queue.
+  await sem.acquire();
+  const tasks = [1, 2, 3].map((n) =>
+    sem.acquire().then(() => {
+      order.push(n);
+      sem.release();
+    }),
+  );
+  // Let the event loop process the pending acquires before releasing the initial slot.
+  await new Promise<void>((r) => setImmediate(r));
+  sem.release(); // releases initial hold → should grant to waiter 1 first (FIFO)
+  await Promise.all(tasks);
+  assert.deepEqual(order, [1, 2, 3], `FIFO violated: got order ${JSON.stringify(order)}`);
+});
+
+test('Semaphore: withLock releases permit when fn throws (bare-caller doc regression, HARD-06)', async () => {
+  // Verifies the try/finally in withLock returns the permit even on exception,
+  // allowing the NEXT acquire to succeed (no slot leak).
+  const sem = new Semaphore(1);
+  // Consume the slot with a throwing fn.
+  await assert.rejects(
+    () => sem.withLock(async () => { throw new Error('test-throw'); }),
+    /test-throw/,
+  );
+  // If the permit leaked, this would deadlock. It must resolve immediately.
+  const done = await Promise.race([
+    sem.withLock(async () => 'ok'),
+    new Promise<string>((_, rej) => setTimeout(() => rej(new Error('deadlock: permit leaked')), 500)),
+  ]);
+  assert.equal(done, 'ok', 'withLock did not release permit after fn threw');
+});
