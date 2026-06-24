@@ -1,0 +1,21 @@
+[
+  {
+    "scope": "https://api.labs.crossref.org",
+    "method": "GET",
+    "path": "/data/retractions?filter=record:10.0000/gate03-retracted",
+    "status": 200,
+    "response": {
+      "items": [
+        {
+          "doi": "10.0000/gate03-retracted",
+          "title": "A Gate-03 Live-Retraction Fixture (Phase-14 Synthetic)",
+          "authors": [{ "given": "Alice", "family": "Retracted" }],
+          "year": 2018,
+          "retractedDate": "2022-09-01",
+          "reason": "data manipulation identified post-publication"
+        }
+      ]
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]
