@@ -25,15 +25,17 @@ import { defineCommand } from 'citty';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
+import { runPass3 } from '../lib/verify/pass3.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
 import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
 import { exportDraft, runHumanizer, type ExportFormat } from '../lib/exporter.js';
 import { paperDir } from '../lib/paths.js';
-import { parseIntakeMd } from '../lib/intake-parse.js';
-import { resolveStyleName } from '../lib/citations.js';
+import { parseIntakeMd, } from '../lib/intake-parse.js';
+import { resolveStyleName, parseBibtex } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { ask } from '../lib/prompts.js';
+import { extractCitekeys } from '../lib/citation-token.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -337,6 +339,88 @@ export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
 }
 
 // ---------------------------------------------------------------------------
+// GATE-04 reCheckFinalMd — re-verify the humanized FINAL.md before export
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-verify the humanized FINAL.md immediately before export (GATE-04).
+ *
+ * (a) Citekey-set diff: the set of [@key] tokens in finalMd MUST equal the
+ *     set in draftMd. Any add/drop/swap is a HARD block.
+ * (b) Pass-3 quote re-check on finalMd: absent or empty bib → skip-clean
+ *     (no quotes to check); else build bibByCitekey from the FULL CITATIONS.bib
+ *     (Pitfall 4 — NOT filtered by DRAFT keys) and run runPass3. Any NOT_FOUND
+ *     verdict → HARD block.
+ *
+ * Never throws. Returns { passed: boolean; reason: string }.
+ */
+export async function reCheckFinalMd(
+  finalMd: string,
+  draftMd: string,
+  bibPath: string,
+): Promise<{ passed: boolean; reason: string }> {
+  // Step (a): citekey-set diff (runs FIRST — Pitfall 5).
+  const finalKeys = new Set(extractCitekeys(finalMd));
+  const draftKeys = new Set(extractCitekeys(draftMd));
+
+  const added = [...finalKeys].filter((k) => !draftKeys.has(k));
+  const dropped = [...draftKeys].filter((k) => !finalKeys.has(k));
+
+  if (added.length > 0 || dropped.length > 0) {
+    const parts: string[] = [];
+    if (added.length > 0) parts.push(`added: [${added.join(', ')}]`);
+    if (dropped.length > 0) parts.push(`dropped: [${dropped.join(', ')}]`);
+    return {
+      passed: false,
+      reason: `citekey-set mismatch after humanization — ${parts.join('; ')}`,
+    };
+  }
+
+  // Step (b): Pass-3 quote re-check only when citekey sets match.
+  // Absent or empty bib → skip-clean (no quotes to check).
+  let bibText: string;
+  try {
+    if (!existsSync(bibPath)) return { passed: true, reason: '' };
+    bibText = readFileSync(bibPath, 'utf8');
+  } catch {
+    return { passed: true, reason: '' };
+  }
+  if (bibText.trim().length === 0) return { passed: true, reason: '' };
+
+  // Build bibByCitekey from the FULL CITATIONS.bib (Pitfall 4).
+  let bibByCitekey: Map<string, { DOI?: string }>;
+  try {
+    const bibEntries = await parseBibtex(bibText);
+    bibByCitekey = new Map(
+      bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
+    );
+  } catch {
+    // Unparseable bib → skip-clean (no DOIs to check against).
+    return { passed: true, reason: '' };
+  }
+
+  let pass3Results;
+  try {
+    pass3Results = await runPass3(finalMd, bibByCitekey);
+  } catch {
+    return { passed: true, reason: '' };
+  }
+
+  const notFound = pass3Results.filter((r) => r.verdict === 'NOT_FOUND');
+  if (notFound.length > 0) {
+    const detail = notFound
+      .map((r) => `[@${r.citekey}] "${r.quoteSnippet}"`)
+      .join('; ');
+    return {
+      passed: false,
+      reason: `Pass-3 quote NOT_FOUND in humanized FINAL.md: ${detail}`,
+    };
+  }
+
+  return { passed: true, reason: '' };
+}
+
+// ---------------------------------------------------------------------------
 // doneCommand — the thin orchestrator (DONE-01 + DONE-02 + DONE-03 + DONE-04/05
 //               + DONE-06/07/08 + DONE-09)
 // ---------------------------------------------------------------------------
@@ -427,6 +511,20 @@ export const doneCommand = defineCommand({
       before === null
         ? 'Pensmith honesty check: skipped (no GPTZero API key set or backend unavailable).'
         : renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
+
+    // GATE-04: re-verify humanized FINAL.md before export (HARD block, BEFORE runDoneGate).
+    // Skip when no humanizer ran (finalPath === null) or --yolo (the only override).
+    if (finalPath !== null && args.yolo !== true) {
+      const finalMd = readFileSync(finalPath, 'utf8');
+      const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
+      const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath);
+      if (!gate4.passed) {
+        process.stdout.write(
+          `pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification: ${gate4.reason}\n`,
+        );
+        return { ok: false };
+      }
+    }
 
     // 6. DONE-09 export-confirmation gate. Pass-2 UNSUPPORTED is read from the
     //    section VERIFICATION.md files (the load-bearing disk→gate feed, HIGH-3).
