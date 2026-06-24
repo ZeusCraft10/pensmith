@@ -205,7 +205,7 @@ test('references/honesty-framing.md hash-pin (Phase 6 DONE-04 LOCKED)', () => {
   const bytes = readFileSync('references/honesty-framing.md');  // raw bytes, no BOM strip
   const hash = createHash('sha256').update(bytes).digest('hex');
   // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/honesty-framing.md')).digest('hex'))"
-  const PINNED = '549bdecbfc0f167aa17fc542146fcdfa58117686a7a9ab2cb58e0db633fa3b0b';
+  const PINNED = '9f894ea88129e2b43975de5e1179180d4dc71d70e3959f33ee02601986009707';
   assert.equal(hash, PINNED, `references/honesty-framing.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional (and review the transparency-only constraint in CONTRIBUTING.md).`);
 });
 

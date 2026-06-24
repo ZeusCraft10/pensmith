@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { fetch as httpFetch } from './http.js';
 import { isOfflineMode, loadCassetteFile } from './http-mock.js';
 import { assertBudget, appendCost } from './budget.js';
+import { ask } from './prompts.js';
 
 // ============================================================
 //   Public types
@@ -113,6 +114,72 @@ function loadFramingNote(): string {
 }
 
 // ============================================================
+//   GPTZero size cap (HARD-05)
+// ============================================================
+
+/**
+ * Maximum bytes of paper text sent to GPTZero per call (HARD-05). Inputs
+ * exceeding this cap are truncated before the POST body is constructed.
+ * ~50 KB is a practical upper bound for a single API call; the truncation
+ * is announced on stdout with a note (never silently discards data).
+ * Exported for tests/honesty.test.ts HARD-05 seam probing.
+ */
+export const GPTZERO_MAX_BYTES = 50_000;
+
+/**
+ * Truncate `text` so its UTF-8 byte length does not exceed GPTZERO_MAX_BYTES.
+ * Exported as `__truncateForGptzeroTest` for the HARD-05 test seam.
+ */
+export function __truncateForGptzeroTest(text: string): string {
+  if (Buffer.byteLength(text, 'utf8') <= GPTZERO_MAX_BYTES) return text;
+  // Slice by character count until the byte length fits. We over-slice slightly
+  // via byte-length and then trim — safe because UTF-8 chars are at most 4 bytes.
+  const buf = Buffer.from(text, 'utf8');
+  return buf.slice(0, GPTZERO_MAX_BYTES).toString('utf8');
+}
+
+// ============================================================
+//   GPTZero disclosure copy (HARD-05)
+// ============================================================
+
+let disclosureNote: string | null = null;
+
+/**
+ * Read the GPTZero full-text-transmission disclosure line from the
+ * "## GPTZero Data Transmission Disclosure" section in references/honesty-framing.md.
+ * Same verbatim-read pattern as loadFramingNote. Memoized.
+ * Transparency-only — NEVER implies detection avoidance.
+ */
+function loadDisclosureNote(): string {
+  if (disclosureNote !== null) return disclosureNote;
+  let md: string;
+  try {
+    md = readFileSync(FRAMING_FILE, 'utf8');
+  } catch {
+    disclosureNote =
+      'Disclosure: the honesty check sends your full paper text to GPTZero (api.gptzero.me), an external service, for AI-detection scoring. This is for your transparency only — it does NOT make your output undetectable. No data is sent without your consent.';
+    return disclosureNote;
+  }
+  const lines = md.split(/\r?\n/);
+  let inSection = false;
+  for (const line of lines) {
+    if (line.startsWith('## GPTZero Data Transmission Disclosure')) {
+      inSection = true;
+      continue;
+    }
+    if (inSection && line.startsWith('> ')) {
+      disclosureNote = line.slice(2).trim();
+      return disclosureNote;
+    }
+    // Stop scanning at next top-level heading (not the paragraph text below the blockquote)
+    if (inSection && line.startsWith('## ')) break;
+  }
+  disclosureNote =
+    'Disclosure: the honesty check sends your full paper text to GPTZero (api.gptzero.me), an external service, for AI-detection scoring. This is for your transparency only — it does NOT make your output undetectable. No data is sent without your consent.';
+  return disclosureNote;
+}
+
+// ============================================================
 //   GPTZero backend (DONE-04)
 // ============================================================
 
@@ -168,9 +235,27 @@ function offlineGptzeroResponse(): unknown {
   return match?.response ?? null;
 }
 
+/** Options for scoreWithGptzero (HARD-05 consent seam). */
+export interface GptzeroScoringOptions {
+  /** When true, skip the consent gate (approval-gates design: --yolo skips). */
+  yolo?: boolean;
+  /**
+   * Injected consent decision (for tests). When provided, the ask() gate is
+   * bypassed and this value is used directly. undefined → run the gate normally.
+   */
+  consentGranted?: boolean;
+}
+
 /**
  * Score `text` against GPTZero. Behavior:
  *   - GPTZERO_API_KEY absent → null (skip-clean banner; key never logged).
+ *   - Disclosure (HARD-05) — always shown before any POST attempt.
+ *   - Consent gate (HARD-05) — ask() before POST; declined → null, no POST.
+ *     --yolo (opts.yolo) skips the gate (disclosure still shown).
+ *     non-TTY and not-yolo → SILENT decline (null) — honesty is advisory,
+ *     NEVER exit-3/block (Pitfall 6 / RESEARCH A4).
+ *     opts.consentGranted bypasses ask() for test injection.
+ *   - Size cap (HARD-05) — input truncated to GPTZERO_MAX_BYTES with a note.
  *   - offline (PENSMITH_NETWORK_TESTS !== '1') → read the gptzero cassette and
  *     parse it defensively; no network call is made.
  *   - live → assertBudget BEFORE the call (paper-scoped cap), then httpFetch
@@ -179,7 +264,10 @@ function offlineGptzeroResponse(): unknown {
  *
  * NEVER throws and NEVER logs the resolved key value (presence-check only).
  */
-async function scoreWithGptzero(text: string): Promise<HonestyScore | null> {
+async function scoreWithGptzero(
+  text: string,
+  opts?: GptzeroScoringOptions,
+): Promise<HonestyScore | null> {
   // Key-absence guard FIRST. Presence-check only — the value is never printed.
   const apiKey = process.env['GPTZERO_API_KEY'];
   if (!apiKey) {
@@ -187,9 +275,60 @@ async function scoreWithGptzero(text: string): Promise<HonestyScore | null> {
     return null;
   }
 
-  // Offline branch MUST NOT touch the network.
+  // HARD-05 Step 2a: Explicit test-injection decline. When consentGranted is
+  // explicitly false (injected by tests), return null immediately — no offline
+  // branch, no POST, no disclosure printed (decline takes priority over display).
+  if (opts?.consentGranted === false) {
+    return null;
+  }
+
+  // Offline branch MUST NOT touch the network (no disclosure/consent needed —
+  // cassette replay involves zero data egress to any external service).
   if (isOfflineMode()) {
     return parseGptzeroResponse(offlineGptzeroResponse());
+  }
+
+  // Live branch only beyond this point (PENSMITH_NETWORK_TESTS=1).
+
+  // HARD-05 Step 1: Disclosure — always shown before a live POST attempt,
+  // even if the user later declines. Copy is read VERBATIM from the locked
+  // references/honesty-framing.md (never inlined — loadDisclosureNote).
+  process.stdout.write(`pensmith: ${loadDisclosureNote()}\n`);
+
+  // HARD-05 Step 2: Consent gate — before any live POST.
+  const isYolo = opts?.yolo === true;
+  if (!isYolo) {
+    let consented: boolean;
+    if (opts?.consentGranted === true) {
+      // Explicit test injection of consent=true: bypass ask().
+      consented = true;
+    } else if (!process.stdout.isTTY) {
+      // Non-TTY (CI/piped): silently decline — honesty is advisory and must
+      // NEVER break automated export (Pitfall 6 / RESEARCH A4 / open-Q2).
+      return null;
+    } else {
+      // TTY: show the interactive consent gate (approval-gates default-on).
+      const answer = await ask({
+        id: 'honesty-gptzero-consent',
+        kind: 'confirm',
+        label: 'Send paper text to GPTZero for honesty scoring?',
+        default: true,
+      });
+      consented = answer.kind === 'confirm' ? answer.value : false;
+    }
+    if (!consented) {
+      process.stdout.write('pensmith: GPTZero honesty scoring declined — skipped.\n');
+      return null;
+    }
+  }
+
+  // HARD-05 Step 3: Size cap — truncate over-cap input before POST body.
+  let postText = text;
+  if (Buffer.byteLength(text, 'utf8') > GPTZERO_MAX_BYTES) {
+    postText = __truncateForGptzeroTest(text);
+    process.stdout.write(
+      `pensmith: paper text truncated to ${GPTZERO_MAX_BYTES} bytes for GPTZero scoring.\n`,
+    );
   }
 
   // Live branch — only reached with PENSMITH_NETWORK_TESTS=1 (never in CI).
@@ -212,7 +351,7 @@ async function scoreWithGptzero(text: string): Promise<HonestyScore | null> {
         'x-api-key': apiKey,
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ document: text }),
+      body: JSON.stringify({ document: postText }),
     });
 
     if (resp.status !== 200) return null; // non-200 (incl. 429) → skip, no fabrication.
@@ -236,7 +375,7 @@ async function scoreWithGptzero(text: string): Promise<HonestyScore | null> {
 /** The shipped GPTZero backend (DONE-04). */
 const gptzeroBackend: HonestyBackend = {
   name: 'gptzero',
-  score: scoreWithGptzero,
+  score: (text: string) => scoreWithGptzero(text),
 };
 
 // ============================================================
@@ -295,6 +434,20 @@ export async function scoreHonesty(
   config?: { honestyBackend?: string },
 ): Promise<HonestyScore | null> {
   return selectBackend(config).score(text);
+}
+
+/**
+ * Score `text` with explicit HARD-05 consent/yolo options (test seam + caller
+ * override). Delegates to scoreWithGptzero directly (GPTZero is the only
+ * backend with a consent gate; other backends are advisory stubs with no egress).
+ * opts.consentGranted bypasses ask() for test injection; opts.yolo skips the
+ * consent gate entirely (disclosure still shown). Non-TTY + not-yolo → null.
+ */
+export async function scoreHonestyWithOptions(
+  text: string,
+  opts?: GptzeroScoringOptions,
+): Promise<HonestyScore | null> {
+  return scoreWithGptzero(text, opts);
 }
 
 // ============================================================
