@@ -140,6 +140,110 @@ test('SSRF guard: non-https/http scheme (file:) is rejected (HARD-02)',
   },
 );
 
+// ---- WR-01 / WR-02 new range coverage (skip-guarded same as above) ----
+
+test('SSRF guard: CGNAT 100.64.x.x (RFC 6598) is rejected (WR-01)',
+  { skip: !hasCheckSsrf ? 'checkSsrf not yet exported from bin/lib/http.ts' : false },
+  async () => {
+    const resolve = makeResolver({ 'cgnat.example': '100.64.0.1' });
+    await assert.rejects(
+      () => checkSsrfFn!('https://cgnat.example/api', resolve),
+      (err: Error) => {
+        assert.ok(err.message.toLowerCase().includes('ssrf') || err.message.toLowerCase().includes('private') || err.message.toLowerCase().includes('blocked'), `expected SSRF-related error, got: ${err.message}`);
+        return true;
+      },
+      'CGNAT 100.64.0.1 must be rejected by the SSRF guard',
+    );
+  },
+);
+
+test('SSRF guard: CGNAT 100.127.255.255 (RFC 6598 upper bound) is rejected (WR-01)',
+  { skip: !hasCheckSsrf ? 'checkSsrf not yet exported from bin/lib/http.ts' : false },
+  async () => {
+    const resolve = makeResolver({ 'cgnat2.example': '100.127.255.255' });
+    await assert.rejects(
+      () => checkSsrfFn!('https://cgnat2.example/api', resolve),
+      (err: Error) => {
+        assert.ok(err.message.toLowerCase().includes('ssrf') || err.message.toLowerCase().includes('private') || err.message.toLowerCase().includes('blocked'), `expected SSRF-related error, got: ${err.message}`);
+        return true;
+      },
+      'CGNAT 100.127.255.255 must be rejected by the SSRF guard',
+    );
+  },
+);
+
+test('SSRF guard: 100.63.255.255 (just outside CGNAT range) passes (WR-01)',
+  { skip: !hasCheckSsrf ? 'checkSsrf not yet exported from bin/lib/http.ts' : false },
+  async () => {
+    // 100.63.x.x is NOT in 100.64.0.0/10 — must be allowed
+    const resolve = makeResolver({ 'not-cgnat.example': '100.63.255.255' });
+    await assert.doesNotReject(
+      () => checkSsrfFn!('https://not-cgnat.example/api', resolve),
+      '100.63.255.255 is outside the CGNAT range and must pass the SSRF guard',
+    );
+  },
+);
+
+test('SSRF guard: IPv6 multicast ff02::1 is rejected (WR-01)',
+  { skip: !hasCheckSsrf ? 'checkSsrf not yet exported from bin/lib/http.ts' : false },
+  async () => {
+    const resolve = makeResolver({ 'mcast.example': 'ff02::1' });
+    await assert.rejects(
+      () => checkSsrfFn!('https://mcast.example/api', resolve),
+      (err: Error) => {
+        assert.ok(err.message.toLowerCase().includes('ssrf') || err.message.toLowerCase().includes('private') || err.message.toLowerCase().includes('blocked'), `expected SSRF-related error, got: ${err.message}`);
+        return true;
+      },
+      'IPv6 multicast ff02::1 must be rejected by the SSRF guard',
+    );
+  },
+);
+
+test('SSRF guard: IPv6 unspecified :: is rejected (WR-01)',
+  { skip: !hasCheckSsrf ? 'checkSsrf not yet exported from bin/lib/http.ts' : false },
+  async () => {
+    const resolve = makeResolver({ 'unspec.example': '::' });
+    await assert.rejects(
+      () => checkSsrfFn!('https://unspec.example/api', resolve),
+      (err: Error) => {
+        assert.ok(err.message.toLowerCase().includes('ssrf') || err.message.toLowerCase().includes('private') || err.message.toLowerCase().includes('blocked'), `expected SSRF-related error, got: ${err.message}`);
+        return true;
+      },
+      'IPv6 unspecified :: must be rejected by the SSRF guard',
+    );
+  },
+);
+
+test('SSRF guard: IPv4-mapped IPv6 hex-colon ::ffff:7f00:0001 (127.0.0.1) is rejected (WR-02)',
+  { skip: !hasCheckSsrf ? 'checkSsrf not yet exported from bin/lib/http.ts' : false },
+  async () => {
+    const resolve = makeResolver({ 'hexmapped.example': '::ffff:7f00:0001' });
+    await assert.rejects(
+      () => checkSsrfFn!('https://hexmapped.example/api', resolve),
+      (err: Error) => {
+        assert.ok(err.message.toLowerCase().includes('ssrf') || err.message.toLowerCase().includes('private') || err.message.toLowerCase().includes('blocked'), `expected SSRF-related error, got: ${err.message}`);
+        return true;
+      },
+      '::ffff:7f00:0001 (hex-colon IPv4-mapped 127.0.0.1) must be rejected by the SSRF guard',
+    );
+  },
+);
+
+test('SSRF guard: IPv4-mapped IPv6 hex-colon ::ffff:0a00:0001 (10.0.0.1) is rejected (WR-02)',
+  { skip: !hasCheckSsrf ? 'checkSsrf not yet exported from bin/lib/http.ts' : false },
+  async () => {
+    const resolve = makeResolver({ 'hexmapped2.example': '::ffff:0a00:0001' });
+    await assert.rejects(
+      () => checkSsrfFn!('https://hexmapped2.example/api', resolve),
+      (err: Error) => {
+        assert.ok(err.message.toLowerCase().includes('ssrf') || err.message.toLowerCase().includes('private') || err.message.toLowerCase().includes('blocked'), `expected SSRF-related error, got: ${err.message}`);
+        return true;
+      },
+      '::ffff:0a00:0001 (hex-colon IPv4-mapped 10.0.0.1) must be rejected by the SSRF guard',
+    );
+  },
+);
+
 // ---- Wave-0 module-presence consistency (mirrors known-bad-pass2 pattern) ----
 
 test('HARD-02: http.ts exists at expected src path (module-presence sanity)',

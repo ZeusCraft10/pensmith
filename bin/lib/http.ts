@@ -75,32 +75,55 @@ const SSRF_ALLOWED_SCHEMES: ReadonlySet<string> = new Set(['https:', 'http:']);
  * Classify an IP address (v4 or v6) as private/reserved.
  *
  * Covers (per RESEARCH A6 / RFC1918 / IANA reserved ranges):
- *   IPv4 : 10/8, 172.16-31, 192.168/16, 127/8, 169.254/16, 0.x
- *   IPv6 : ::1 (loopback), fe80::/10 (link-local), fc/fd::/7 (ULA)
- *   IPv4-mapped IPv6 (::ffff:x.x.x.x) — extracts the embedded v4 and re-checks.
+ *   IPv4 : 10/8, 172.16-31, 192.168/16, 127/8, 169.254/16, 0.x,
+ *           100.64.0.0/10 CGNAT (RFC 6598)
+ *   IPv6 : ::1 (loopback), :: (unspecified), fe80::/10 (link-local),
+ *           fc/fd::/7 (ULA), ff00::/8 (multicast)
+ *   IPv4-mapped IPv6 (::ffff:x.x.x.x dotted OR ::ffff:hhhh:hhhh hex-colon) —
+ *   extracts the embedded v4 and re-checks.
  */
 function isPrivateIp(addr: string): boolean {
-  // Handle IPv4-mapped IPv6 (::ffff:a.b.c.d or ::ffff:0xhhhh)
-  const mapped = addr.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
-  if (mapped) return isPrivateIp(mapped[1]!);
+  // Handle IPv4-mapped IPv6.
+  // Dotted form:     ::ffff:127.0.0.1
+  // Hex-colon form:  ::ffff:7f00:0001  (e.g. returned by some DNS resolvers)
+  const mapped = addr.match(
+    /^::ffff:(?:(\d+\.\d+\.\d+\.\d+)|([0-9a-f]{1,4}:[0-9a-f]{1,4}))$/i,
+  );
+  if (mapped) {
+    if (mapped[1]) return isPrivateIp(mapped[1]);      // dotted form — recurse
+    // Hex-colon form: split on ':', parse two 16-bit halves into a 32-bit int,
+    // then decompose into four octets and recurse as a dotted-quad.
+    const hexParts = (mapped[2] as string).split(':');
+    const hi = parseInt(hexParts[0] as string, 16);
+    const lo = parseInt(hexParts[1] as string, 16);
+    const n = (hi << 16) | lo;
+    const a = (n >>> 24) & 0xff;
+    const b = (n >>> 16) & 0xff;
+    const c = (n >>> 8) & 0xff;
+    const d = n & 0xff;
+    return isPrivateIp(`${a}.${b}.${c}.${d}`);
+  }
 
   // IPv4
   const v4 = addr.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (v4) {
     const a = Number(v4[1]);
     const b = Number(v4[2]);
-    if (a === 10) return true;                      // 10.0.0.0/8
-    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
-    if (a === 192 && b === 168) return true;         // 192.168.0.0/16
-    if (a === 127) return true;                      // 127.0.0.0/8 loopback
-    if (a === 169 && b === 254) return true;         // 169.254.0.0/16 link-local
-    if (a === 0) return true;                        // 0.0.0.0/8
+    if (a === 10) return true;                           // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true;   // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;             // 192.168.0.0/16
+    if (a === 127) return true;                          // 127.0.0.0/8 loopback
+    if (a === 169 && b === 254) return true;             // 169.254.0.0/16 link-local
+    if (a === 0) return true;                            // 0.0.0.0/8
+    if (a === 100 && b >= 64 && b <= 127) return true;  // 100.64.0.0/10 CGNAT (RFC 6598)
     return false;
   }
 
   // IPv6
   const lc = addr.toLowerCase();
-  if (lc === '::1') return true;             // loopback
+  if (lc === '::1') return true;                         // loopback
+  if (lc === '::' || lc === '0:0:0:0:0:0:0:0') return true; // unspecified (RFC 4291)
+  if (lc.startsWith('ff')) return true;                  // ff00::/8 multicast
   if (lc.startsWith('fe80:') || lc.startsWith('fe8') || lc.startsWith('fe9') ||
       lc.startsWith('fea') || lc.startsWith('feb')) return true; // fe80::/10 link-local
   if (lc.startsWith('fc') || lc.startsWith('fd')) return true;   // fc00::/7 ULA
@@ -293,6 +316,14 @@ export interface FetchOptions {
   noCache?: boolean;
   /** Skip the retry wrapper (fire-and-fail). */
   noRetry?: boolean;
+  /**
+   * Override the SSRF pre-flight trust decision.
+   *   - undefined (default): trust inferred from `source` (generic → untrusted).
+   *   - true:  force SSRF guard ON even for non-generic sources.
+   *   - false: bypass SSRF guard for hardcoded trusted URLs (IN-02).
+   *            NEVER set to false for user-supplied URLs.
+   */
+  untrusted?: boolean;
 }
 
 // ============================================================
@@ -626,12 +657,18 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   // arxiv/pubmed/s2/unpaywall/retraction-watch/gptzero/ddg) bypass the guard
   // so offline cassette tests and internal calls are unaffected.
   //
+  // IN-02: an explicit `untrusted: false` in opts overrides the source==='generic'
+  // default. This lets callers that use source='generic' for rate-bucket purposes
+  // but have a hardcoded trusted URL (e.g. honesty.ts → GPTZERO_URL) bypass the
+  // unnecessary SSRF DNS pre-flight. NEVER set untrusted:false for user-supplied URLs.
+  //
   // Redirect handling: undici request() does NOT auto-follow redirects by default
   // (confirmed: it returns 301/302 as normal responses). Any redirect-following
   // done by callers routes back through fetch() → callOnce, so checkSsrf re-fires
   // on each hop URL automatically. maxRedirections is NOT set here — the existing
   // behavior (callers handle 3xx manually) is the correct approach.
-  const untrusted = source === 'generic' || (opts as { untrusted?: boolean }).untrusted === true;
+  const untrusted = opts.untrusted === false ? false
+    : (source === 'generic' || opts.untrusted === true);
   const callOnce = async (): Promise<HttpResponse> => {
     if (untrusted) {
       // SSRF pre-flight: throws on private IP / bad scheme / resolver error.

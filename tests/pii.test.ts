@@ -14,7 +14,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { classifyPii, redactPii, redactKeys } from '../bin/lib/pii.js';
+import { classifyPii, redactPii, redactKeys, deepRedactPii } from '../bin/lib/pii.js';
 import { POSITIVES, NEGATIVES, KEY_FIXTURES } from './fixtures/pii-corpus.js';
 import * as fc from 'fast-check';
 
@@ -102,6 +102,57 @@ test('redactKeys defends against __proto__ payload (no pollution)', () => {
   const after = (Object.prototype as unknown as { polluted?: boolean }).polluted;
   assert.equal(after, before, 'Object.prototype must not be polluted');
 });
+
+// === IN-01: deepRedactPii circular-reference guard (WeakSet) ===
+
+test('IN-01: deepRedactPii does not stack-overflow on a circular plain object',
+  () => {
+    type CyclicObj = { self?: CyclicObj; name: string };
+    const a: CyclicObj = { name: 'test@example.com' };
+    a.self = a; // circular reference
+    // Must not throw (no stack overflow) and must return '[CIRCULAR]' for the cycle.
+    let result: unknown;
+    assert.doesNotThrow(() => {
+      result = deepRedactPii(a);
+    }, 'deepRedactPii must not throw on a circular plain object');
+    // The top-level object is processed — name should be redacted.
+    assert.ok(
+      typeof result === 'object' && result !== null,
+      'deepRedactPii must return an object for a plain-object input',
+    );
+    const r = result as Record<string, unknown>;
+    assert.ok(
+      !String(r['name'] ?? '').includes('test@example.com'),
+      'The email in the circular object must be redacted',
+    );
+    // The circular ref slot must be '[CIRCULAR]', not a recursive expansion.
+    assert.strictEqual(
+      r['self'],
+      '[CIRCULAR]',
+      'Circular reference must be replaced with [CIRCULAR]',
+    );
+  },
+);
+
+test('IN-01: deepRedactPii does not stack-overflow on a circular array',
+  () => {
+    const arr: unknown[] = ['user@domain.org'];
+    arr.push(arr); // circular reference
+    let result: unknown;
+    assert.doesNotThrow(() => {
+      result = deepRedactPii(arr);
+    }, 'deepRedactPii must not throw on a circular array');
+    assert.ok(Array.isArray(result), 'deepRedactPii must return an array for array input');
+    const r = result as unknown[];
+    // First element should be redacted (email).
+    assert.ok(
+      !String(r[0] ?? '').includes('user@domain.org'),
+      'Email in the circular array must be redacted',
+    );
+    // The circular ref slot must be '[CIRCULAR]'.
+    assert.strictEqual(r[1], '[CIRCULAR]', 'Circular array reference must be replaced with [CIRCULAR]');
+  },
+);
 
 // === Phase 3 Plan 00 Task 0.3 extension: PII redaction no-leak property (INTK-05, T-3-02) ===
 // fast-check property: original PII never appears verbatim in redacted output.

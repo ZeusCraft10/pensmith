@@ -400,10 +400,18 @@ export function redactKeys<T>(obj: T): T {
 // deepRedactPii (PII in remaining non-sensitive string leaves).
 // ---------------------------------------------------------------------------
 
-export function deepRedactPii(node: unknown): unknown {
+export function deepRedactPii(node: unknown, _seen = new WeakSet()): unknown {
   if (typeof node === 'string') return redactPii(node);
-  if (Array.isArray(node)) return node.map(deepRedactPii);
+  if (Array.isArray(node)) {
+    // IN-01: guard against circular arrays to prevent stack overflow.
+    if (_seen.has(node)) return '[CIRCULAR]';
+    _seen.add(node);
+    return node.map((el) => deepRedactPii(el, _seen));
+  }
   if (isPlainObject(node)) {
+    // IN-01: guard against circular plain objects to prevent stack overflow.
+    if (_seen.has(node)) return '[CIRCULAR]';
+    _seen.add(node);
     const out: Record<string, unknown> = Object.create(null);
     for (const k of Object.keys(node)) {
       const lower = k.toLowerCase();
@@ -421,7 +429,7 @@ export function deepRedactPii(node: unknown): unknown {
         }
         // Do NOT recurse into a redacted subtree (mirrors walkAndRedact).
       } else {
-        out[k] = deepRedactPii(node[k]);
+        out[k] = deepRedactPii(node[k], _seen);
       }
     }
     return out;

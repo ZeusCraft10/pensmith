@@ -32,6 +32,27 @@ import { estimateCost } from '../pricing.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
 import { getProviderApiKey, loadRuntimeConfig } from '../runtime.js';
 
+// WR-04 (HARD-04c fence-marker breakout mitigation).
+//
+// The fence delimiter is in public source, so untrusted text that contains the
+// exact CLOSE marker could break out of the data block and inject instructions.
+// Strip/neutralize any occurrence of the fence open/close substrings from
+// user-supplied variables BEFORE interpolation. The prompt template bodies are
+// NOT changed by this fix, so no WN-3 re-pin is needed.
+const FENCE_UUID = '7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a';
+const FENCE_OPEN  = `<<<PENSMITH_UNTRUSTED_DATA_${FENCE_UUID}>>>`;
+const FENCE_CLOSE = `<<<END_PENSMITH_UNTRUSTED_DATA_${FENCE_UUID}>>>`;
+
+/**
+ * Remove any occurrence of the fence open/close markers from a string that
+ * is about to be interpolated into an LLM prompt. This prevents a crafted
+ * source abstract or draft sentence from breaking out of the data fence.
+ */
+function stripFenceMarkers(s: string): string {
+  return s.replaceAll(FENCE_OPEN, '[REDACTED-FENCE-MARKER]')
+          .replaceAll(FENCE_CLOSE, '[REDACTED-FENCE-MARKER]');
+}
+
 export type Pass2Verdict = 'SUPPORTED' | 'PARTIAL' | 'UNSUPPORTED' | 'UNCLEAR';
 
 export interface Pass2Result {
@@ -234,12 +255,17 @@ export async function runPass2(
     const bibEntry = bibByCitekey.get(pair.citekey);
     const abstract = bibEntry?.abstract ?? '';
     try {
+      // WR-04: sanitize untrusted variables (claim_sentence comes from draft
+      // text; source_abstract comes from CrossRef API) before interpolation
+      // so neither can embed the fence close marker and break out of the
+      // data block. Trusted metadata fields (citekey, title, authors) are
+      // sanitized as well for defense-in-depth.
       const prompt = interpolate(promptTemplate, {
-        citekey: pair.citekey,
-        claim_sentence: pair.claimSentence,
-        source_abstract: abstract,
-        source_title: normalizeTitle(bibEntry?.title),
-        source_authors: normalizeAuthors(bibEntry?.author),
+        citekey: stripFenceMarkers(pair.citekey),
+        claim_sentence: stripFenceMarkers(pair.claimSentence),
+        source_abstract: stripFenceMarkers(abstract),
+        source_title: stripFenceMarkers(normalizeTitle(bibEntry?.title)),
+        source_authors: stripFenceMarkers(normalizeAuthors(bibEntry?.author)),
       });
 
       // ARCH-10 pre-call gate: assertBudget BEFORE the model call. A

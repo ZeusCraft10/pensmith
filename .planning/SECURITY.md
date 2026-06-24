@@ -20,14 +20,15 @@ This is a planning artifact — it lives in `.planning/` and is NOT a public-fac
 | # | Threat | Chokepoint | Enforcing Test | Status |
 |---|--------|------------|----------------|--------|
 | 1 | SSRF — private-IP / loopback reach via user-supplied URL | `bin/lib/http.ts` → `checkSsrf()` | `tests/ssrf-guard.test.ts` | **PROVEN** |
-| 2 | SSRF — live DNS resolution to RFC1918/loopback/link-local | `bin/lib/http.ts` → `checkSsrf()` DNS pre-flight | `tests/ssrf-guard.test.ts` (injected resolver) | **PROVEN-in-CI** / UNPROVEN-live (see §Manual) |
+| 2 | SSRF — live DNS resolution to RFC1918/loopback/link-local/CGNAT/multicast/unspecified; IPv4-mapped hex-colon form | `bin/lib/http.ts` → `checkSsrf()` DNS pre-flight | `tests/ssrf-guard.test.ts` (injected resolver; WR-01/WR-02 coverage added Phase 15 fix) | **PROVEN-in-CI** / UNPROVEN-live (see §Manual) |
+| 2a | SSRF — DNS TOCTOU rebinding window: `checkSsrf()` pre-flight (call A) resolves to a public IP; undici performs its own independent resolution (call B) and may get a private IP | `bin/lib/http.ts` → `checkSsrf()` + undici `request()` | None (structural gap — no injected-resolver test covers the two-resolution split) | **PROVEN-with-residual**: the guard eliminates the easy SSRF vectors. The DNS TOCTOU window (TTL=0 rebinding) is NOT closed: there is a race between call A (validated) and call B (undici, unvalidated). Risk is LOW for a local CLI — the attacker must control DNS AND gain from internal network access during the race window. Preferred fix: pass the pre-resolved IP to undici via a custom `connect` callback (socket pinning). Deferred: requires undici `connect` API changes and risks destabilizing the network path. Follow-up tracked. |
 | 3 | API key / secret leaks to SESSION.log | `bin/lib/pii.ts` → `redactKeys()` + `deepRedactPii()` | `tests/pii.test.ts` + `tests/session-log.test.ts` | **PROVEN** |
 | 4 | PII (email, phone, SSN, credit card) leaks to SESSION.log via nested object | `bin/lib/pii.ts` → `deepRedactPii()` + `bin/lib/session-log.ts` → `buildRecord()` | `tests/session-log.test.ts` (HARD-03 rows) | **PROVEN** |
 | 5 | Lock-race / clobber — two callers target same file via different path conventions, get different stubs, never contend | `bin/lib/lock.ts` → `stubFor()` canonicalization (resolve + realpathSync) | `tests/lock.test.ts` (HARD-01 row: "two path conventions for one file → identical stub") | **PROVEN** |
 | 6 | Lock-race — cross-process concurrent write (BLOCKER-01/02) | `bin/lib/lock.ts` → `withLock()` / `proper-lockfile` | `tests/lock.test.ts` (TEST-07 cross-process spawn) | **PROVEN** |
 | 7 | Prompt injection — untrusted source abstract / claim sentence in Pass-2/Pass-4 prompt | `templates/prompts/claim-support.md` + `orphan-label.md` — PENSMITH_UNTRUSTED_DATA fence marker | `tests/pass2-injection.test.ts` | **PROVEN** |
 | 8 | PDF supply-chain — pdf-parse version drift (malicious or breaking update) | `package.json` exact pin `pdf-parse@1.1.1` + dual-surface pin guard | `tests/repo-files.test.ts` ("pdf-parse stays pinned exact at 1.1.1") | **PROVEN** |
-| 9 | PDF OOM / hang — unbounded input causes memory exhaustion or infinite parse loop | `bin/lib/pdf-text.ts` → `MAX_PDF_BYTES` cap + `PDF_TIMEOUT_MS` Promise.race | `tests/pdf-text-bounds.test.ts` | **PROVEN** |
+| 9 | PDF OOM / hang — unbounded input causes memory exhaustion or infinite parse loop | `bin/lib/pdf-text.ts` → `MAX_PDF_BYTES` cap + `PDF_TIMEOUT_MS` Promise.race | `tests/pdf-text-bounds.test.ts` | **PROVEN-with-residual**: byte cap (50 MB) bounds memory. The `Promise.race` timeout correctly unblocks the caller, but `Promise.race` does NOT cancel the losing promise — pdf-parse continues executing in the background consuming CPU until complete. For pathological PDFs this may be seconds to minutes of background CPU. Risk LOW for a local CLI (the 50 MB cap bounds OOM; the post-timeout compute is bounded by the file size). Follow-up: migrate parse to `worker_threads` and call `worker.terminate()` on timeout to cleanly reclaim both memory and CPU. Deferred: larger change, risks destabilizing the PDF path. |
 | 10 | GPTZero API-key never logged | `bin/lib/honesty.ts` → presence-only check; value reaches only the `x-api-key` header | `tests/honesty.test.ts` (key-never-logged assertion) | **PROVEN** |
 | 11 | GPTZero full-body egress without consent — raw essay text sent to third-party service | `bin/lib/honesty.ts` → consent gate (ask() before POST, default-off in non-TTY) | `tests/honesty.test.ts` (HARD-05: "consent declined → scoreHonesty returns null without POST") | **PROVEN** |
 | 12 | GPTZero over-sized POST — excessive bandwidth / API cost on large papers | `bin/lib/honesty.ts` → `GPTZERO_MAX_BYTES` truncation before POST | `tests/honesty.test.ts` (HARD-05: "over-cap input → POST body truncated") | **PROVEN** |
@@ -62,7 +63,7 @@ The following threats are architecturally mitigated but cannot be exercised in C
 | Plan | Threat IDs | Coverage in This Audit |
 |------|-----------|------------------------|
 | 15-02 (lock.ts) | T-15-01 (BLOCKER-01/02, D-26/D-40) | Rows 5, 6 |
-| 15-03 (http.ts) | T-15-02 (ARCH-12/13, D-06 SSRF), T-15-06a (TokenBucket FIFO) | Rows 1, 2, 21, 23 |
+| 15-03 (http.ts) | T-15-02 (ARCH-12/13, D-06 SSRF), T-15-06a (TokenBucket FIFO) | Rows 1, 2, 2a, 21, 23 |
 | 15-04 (pii.ts + session-log.ts) | T-15-03 (T-01-06/07/08 PII/key leak) | Rows 3, 4 |
 | 15-05 (pdf-text.ts) | T-15-04b (OOM/hang), T-15-04b-SC (supply-chain pin) | Rows 8, 9 |
 | 15-06 (pass2/pass4 fencing) | T-15-04c (prompt injection) | Row 7 |
@@ -89,10 +90,13 @@ These were identified before Phase 15 and are included for completeness:
 
 ## Counts
 
-- **Total threats enumerated:** 24 rows (+ 2 manual-only)
+- **Total threats enumerated:** 26 rows (+ 2 manual-only; rows 2a and updated 9 added Phase 15 fix)
 - **PROVEN (CI-verified):** 23
 - **PROVEN-in-CI / UNPROVEN-live:** 1 (row 2 — live DNS SSRF)
+- **PROVEN-with-residual (documented gap, deferred fix):** 2 (row 2a — DNS TOCTOU; row 9 — post-timeout PDF CPU)
 - **UNPROVEN-in-CI (manual-only):** 2 (rows 13, M-2 — live GPTZero)
 - **UNPROVEN (no test, follow-up required):** 0
 
-All enforcing tests confirmed green at time of authoring (Wave 4, 2026-06-24).
+Rows 2a and 9 are HONEST about residual gaps (WR-03 DNS TOCTOU and WR-05 post-timeout PDF CPU). Both have deferred fixes documented. The risk is LOW for the current CLI threat model.
+
+All enforcing tests confirmed green at time of authoring (Wave 4, 2026-06-24). Phase 15 fix audit: 2026-06-24.

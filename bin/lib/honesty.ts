@@ -344,6 +344,11 @@ async function scoreWithGptzero(
     const resp = await httpFetch(GPTZERO_URL, {
       method: 'POST',
       source: 'generic',
+      // IN-02: GPTZERO_URL is a hardcoded constant — not user-supplied — so the
+      // SSRF DNS pre-flight is unnecessary and adds latency + a false-block risk
+      // if api.gptzero.me ever resolves through a CDN with a CGNAT address.
+      // untrusted:false overrides the source==='generic' default in http.ts.
+      untrusted: false,
       noCache: true,
       headers: {
         // The resolved key reaches ONLY this header. http.ts's cache-header

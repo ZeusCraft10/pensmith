@@ -60,6 +60,27 @@ import { estimateCost } from '../pricing.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
 import { getProviderApiKey, loadRuntimeConfig } from '../runtime.js';
 
+// WR-04 (HARD-04c fence-marker breakout mitigation).
+//
+// The fence delimiter is in public source, so untrusted text that contains the
+// exact CLOSE marker could break out of the data block and inject instructions.
+// Strip/neutralize any occurrence of the fence open/close substrings from
+// user-supplied variables BEFORE interpolation. The prompt template bodies are
+// NOT changed by this fix, so no WN-3 re-pin is needed.
+const FENCE_UUID  = '7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a';
+const FENCE_OPEN  = `<<<PENSMITH_UNTRUSTED_DATA_${FENCE_UUID}>>>`;
+const FENCE_CLOSE = `<<<END_PENSMITH_UNTRUSTED_DATA_${FENCE_UUID}>>>`;
+
+/**
+ * Remove any occurrence of the fence open/close markers from a string that
+ * is about to be interpolated into an LLM prompt. This prevents a crafted
+ * draft sentence or paragraph context from breaking out of the data fence.
+ */
+function stripFenceMarkers(s: string): string {
+  return s.replaceAll(FENCE_OPEN, '[REDACTED-FENCE-MARKER]')
+          .replaceAll(FENCE_CLOSE, '[REDACTED-FENCE-MARKER]');
+}
+
 // ---- Named knob constants (PINNED rule — quote-extractor.ts constant-at-top style).
 
 /** R5 — minimum word count for a sentence to be a candidate claim. */
@@ -427,9 +448,13 @@ export async function runPass4(
     for (const { index, claim } of audit.ambiguous) {
       let label: OrphanLabel = orphanLabelPlaceholder();
       try {
+        // WR-04: sanitize untrusted variables (sentence comes from draft text;
+        // paragraph_context is a slice of the same draft) before interpolation
+        // so neither can embed the fence close marker and break out of the
+        // data block.
         const prompt = interpolate(promptTemplate, {
-          sentence: claim.sentence,
-          paragraph_context: paraText.slice(0, 500),
+          sentence: stripFenceMarkers(claim.sentence),
+          paragraph_context: stripFenceMarkers(paraText.slice(0, 500)),
         });
 
         // ARCH-09/10 pre-call gate: assertBudget BEFORE the model call.
