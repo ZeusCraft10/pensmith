@@ -96,7 +96,9 @@ Plans:
   2. Every export includes a formatted bibliography / reference list in the paper's selected CSL style, rendered via `--citeproc --csl --bibliography`.
   3. An automated exporter test asserts a formatted author-year or numeric reference appears in the output — not merely that a `.bib`/`.ris` sidecar was copied.
 
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 13-01-PLAN.md — Wave 0: RED-by-skip exporter-citation scaffold (offline REND-01/02/03 assertions on the known-good fixture + Pandoc-args/ordering + zero-trace guards)
+- [ ] 13-02-PLAN.md — Wave 1: wire renderInText (citations.ts) + resolveAndRenderCitations/citeproc args/bib-reorder (exporter.ts) + discipline→style (done.ts)
 **UI hint**: no
 
 ### Phase 14: Fail-closed verifier gate
