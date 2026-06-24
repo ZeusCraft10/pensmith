@@ -18,7 +18,8 @@ It calls `resolveNextAction()` (`bin/lib/router.ts`) — a pure function over ST
 returns `{ verb:'resume' }`. It dispatches the resolved verb via `dispatchVerb()`.
 
 State machine: `new → research → outline → (plan → write → verify per section) → compile → done`.
-Goal-aware: `stopAfterResearch` maps `goal:'learning'` → hard-stop after research verb.
+The resolver reads the configured paper mode and may halt early for mode-specific termination
+states (`{ verb:'status', reason:'done' }` or `{ verb:'status', reason:'attention' }`).
 
 ## Outputs
 
@@ -26,7 +27,7 @@ Goal-aware: `stopAfterResearch` maps `goal:'learning'` → hard-stop after resea
 
 ## Body
 
-1. **Resolve goal** via `readGoalFromConfig(paperRoot)` + `stopAfterResearchFor(goal)`.
+1. **Read the paper mode** via `readGoalFromConfig(paperRoot)` + `stopAfterResearchFor(config)`.
 
 2. **Call `resolveNextAction(paperRoot, { stopAfterResearch })`** (`bin/lib/router.ts`). NEVER throws (C3-HIGH-1 + C4-HIGH + C5-HIGH totality invariant — every fs/parse op is guarded with catch-all backstop).
 
@@ -39,7 +40,7 @@ Goal-aware: `stopAfterResearch` maps `goal:'learning'` → hard-stop after resea
    - `{ verb:'verify', n, slug }` → run verify for section N
    - `{ verb:'compile' }` → run compile
    - `{ verb:'done' }` → print "paper complete; run `pensmith compile` to export"
-   - `{ verb:'status', reason:'done' }` → learning hard-stop (render TUTORIAL.md end-state if goal='learning')
+   - `{ verb:'status', reason:'done' }` → mode-specific end-state termination
    - `{ verb:'status', reason:'attention' }` → print the attention terminus (STATE.json or section corrupt)
 
 4. **Dispatch** via `dispatchVerb(decision.verb, verbArgs)` forwarding `yolo` + other global flags (C3-HIGH-2).

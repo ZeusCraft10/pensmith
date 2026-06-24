@@ -28,11 +28,11 @@ structurally incapable of returning `{ verb:'resume' }`.
 
 1. **Read HANDOFF.json** (summary only, via `safeReadHandoff()` — `existsSync` + `JSON.parse` + `HandoffSchema.safeParse`, never throws). Print to stderr: `pensmith resume: last at phase='X', section='Y'. Next: Z`. If HANDOFF absent or done, skip the summary print.
 
-2. **Resolve goal** via `readGoalFromConfig(paperRoot)` + `stopAfterResearchFor(goal)`.
+2. **Read the paper mode** via `readGoalFromConfig(paperRoot)` + `stopAfterResearchFor(config)`.
 
 3. **Call `resolveNextAction(paperRoot, { stopAfterResearch })`** (HANDOFF-blind resolver — C3-HIGH-1 totality guaranteed). Returns the concrete next WORK verb.
 
-4. **Learning hard-stop check**: if `stopAfterResearch && decision.verb === 'status' && decision.reason === 'done'`, call `renderLearningEndState(paperRoot)` → writes `TUTORIAL.md`. Then consume HANDOFF.json (best-effort rmSync) and return.
+4. **Mode-specific end-state check**: if `stopAfterResearch` is active and the resolved action is `{ verb:'status', reason:'done' }`, call the mode end-state renderer → writes `TUTORIAL.md`. Then consume HANDOFF.json (best-effort rmSync) and return.
 
 5. **Dispatch** via `dispatchVerb(decision.verb, verbArgs)` forwarding `--dry-run`, `--estimate`, `--yolo`, `--show-prompts` flags (C3-HIGH-2).
 
