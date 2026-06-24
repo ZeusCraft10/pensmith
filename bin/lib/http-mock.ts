@@ -50,7 +50,6 @@
 // tests/cassette-no-leak.test.ts sentinel scans both `responseHeaders`
 // AND any stray `reqheaders`/`requestHeaders` keys in committed JSON.
 
-import nock from 'nock';
 import {
   existsSync,
   readdirSync,
@@ -202,8 +201,9 @@ export function loadCassetteDir(adapter: string): Cassette[] | null {
  * lockdown defense-in-depth at the node:http layer (catches any future
  * dep that bypasses our undici chokepoint).
  */
-export function loadCassettes(adapter: string): void {
+export async function loadCassettes(adapter: string): Promise<void> {
   if (!isOfflineMode()) return;
+  const { default: nock } = await import('nock');
   const dir = join(CASSETTES_ROOT, adapter);
   if (!existsSync(dir)) {
     throw new Error(
@@ -216,7 +216,8 @@ export function loadCassettes(adapter: string): void {
     for (const c of cassettes) {
       nock(c.scope)
         .intercept(c.path, c.method)
-        .reply(c.status, c.response as nock.Body, c.responseHeaders ?? {});
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .reply(c.status, c.response as any, c.responseHeaders ?? {});
     }
   }
   nock.disableNetConnect();
@@ -226,7 +227,8 @@ export function loadCassettes(adapter: string): void {
  * Tear down every nock interceptor and re-enable network connect. Called
  * between tests (or after a recorder run) to leave the global state clean.
  */
-export function clearCassettes(): void {
+export async function clearCassettes(): Promise<void> {
+  const { default: nock } = await import('nock');
   nock.cleanAll();
   nock.enableNetConnect();
 }
@@ -264,7 +266,7 @@ export async function recordCassettes(adapter: string): Promise<void> {
   // mkdir is done at finalizeRecording time; opening the recorder is
   // synchronous, but the public surface is async so callers don't have
   // to special-case open/teardown — see lifecycle docblock above.
-  await Promise.resolve();
+  const { default: nock } = await import('nock');
   nock.recorder.rec({
     output_objects: true,
     dont_print: true,
@@ -285,11 +287,12 @@ export async function recordCassettes(adapter: string): Promise<void> {
  * of write success. Leaving the recorder in 'recording' state across
  * runs poisons subsequent invocations.
  */
-export function finalizeRecording(adapter: string): void {
+export async function finalizeRecording(adapter: string): Promise<void> {
   // nock.recorder.play() returns Array<string | Definition>; with
   // output_objects:true (passed in recordCassettes) every element is a
   // Definition. We cast through unknown so TS accepts the recorder's
   // structural shape (the runtime keys we read are guarded below).
+  const { default: nock } = await import('nock');
   const recorded = nock.recorder.play() as unknown as Array<{
     scope: string;
     method: string;

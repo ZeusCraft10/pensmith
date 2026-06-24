@@ -62,6 +62,11 @@ test('package.json contract', () => {
   const deps = pkg['dependencies'] as Record<string, string> | undefined;
   assert.ok(deps && deps['citty'], 'package.json must declare citty dependency (D-14)');
   assert.match(deps?.['citty'] ?? '', /\^0\.2/, 'citty pin must satisfy ^0.2.2 (D-14)');
+  // CI-01: check script must start with npm run prebuild (local==CI ordering)
+  assert.ok(scripts?.['check']?.startsWith('npm run prebuild'), 'CI-01: scripts.check must start with "npm run prebuild" (local==CI ordering)');
+  // DOCS-03: nock must be in devDependencies, not dependencies
+  assert.ok(!deps?.['nock'], 'DOCS-03: nock must NOT be in dependencies (it is test/dev-only)');
+  assert.ok(dev?.['nock'], 'DOCS-03: nock must be in devDependencies');
 });
 
 test('tsconfig contract (D-03)', () => {
