@@ -163,7 +163,15 @@ Plans:
   4. The README ships real install instructions, the `/pensmith` quickstart, and the PRD §3 dual-use disclaimer verbatim; the disclaimer also surfaces at intake.
   5. The four stub workflow bodies (doctor, status, next, resume) are filled with real `## Body` content and accurate `<capability_check>` blocks; stale "Phase 3+ / ships in Phase 6" copy in doctor probes, PRIVACY.md, and CONTRIBUTING.md is updated to reflect shipped reality.
 
-**Plans**: TBD
+**Plans**: 4 plans (4 waves)
+
+Plans:
+
+- [ ] 16-01-PLAN.md — Wave 1: scaffold — .c8rc.json (CI-03) + RED-by-skip tests/http-mock.test.ts (DOCS-03 lazy-nock) + tests/workflow-bodies.test.ts (DOCS-02 non-stub guard); no shared-file edits
+- [ ] 16-02-PLAN.md — Wave 2: CI + packaging — prebuild-first check + test:coverage rename + nock to devDeps (package.json), porcelain gate + non-TTY coverage step (ci.yml), lazy nock import (http-mock.ts), CI-01/DOCS-03 asserts (repo-files.test.ts)
+- [ ] 16-03-PLAN.md — Wave 3: DOCS-01 — real README (install + /pensmith quickstart + §18 credit + §3 disclaimer verbatim + Style Match) + §3 disclaimer at intake + new.md Body; stale README asserts removed atomically (repo-files.test.ts)
+- [ ] 16-04-PLAN.md — Wave 4: DOCS-02 — fill doctor/status/next/resume bodies + refresh http-crossref-ping/doctor-output.md (WN-3 re-pin) + PRIVACY.md; bijection + tier-contract intact
+
 **UI hint**: no
 
 ## Progress
@@ -189,7 +197,7 @@ Plans:
 | 13. Citation rendering at export | v0.2.0 | 1/2 | In Progress|  |
 | 14. Fail-closed verifier gate | v0.2.0 | 4/4 | Complete   | 2026-06-24 |
 | 15. Foundation & security hardening | v0.2.0 | 7/8 | In Progress|  |
-| 16. CI/DX parity + docs & packaging | v0.2.0 | 0/TBD | Not started | - |
+| 16. CI/DX parity + docs & packaging | v0.2.0 | 0/4 | Planned | - |
 
 ---
 *Roadmap initialized: 2026-05-06 from PRD.md + research/SUMMARY.md (auto mode)*
