@@ -20,9 +20,9 @@ Requirements for the v0.2.0 release. Each maps to exactly one roadmap phase.
 
 ### Citation rendering at export (REND)
 
-- [ ] **REND-01**: Exports resolve `[@key]` tokens into formatted in-text citations in the paper's discipline citation style
-- [ ] **REND-02**: Exports include a rendered bibliography / reference list in the selected CSL style (Pandoc `--citeproc --csl --bibliography`)
-- [ ] **REND-03**: An exporter test asserts a *formatted* reference appears in output (e.g. "Vaswani et al."), not merely a copied `.bib`/`.ris` sidecar
+- [x] **REND-01**: Exports resolve `[@key]` tokens into formatted in-text citations in the paper's discipline citation style
+- [x] **REND-02**: Exports include a rendered bibliography / reference list in the selected CSL style (Pandoc `--citeproc --csl --bibliography`)
+- [x] **REND-03**: An exporter test asserts a *formatted* reference appears in output (e.g. "Vaswani et al."), not merely a copied `.bib`/`.ris` sidecar
 
 ### Fail-closed verifier gate (GATE)
 
@@ -95,9 +95,9 @@ Which phases cover which requirements. Populated during roadmap creation.
 | GEN-04 | Phase 12 | Complete |
 | GEN-05 | Phase 12 | Complete |
 | GEN-06 | Phase 11 | Complete |
-| REND-01 | Phase 13 | Pending |
-| REND-02 | Phase 13 | Pending |
-| REND-03 | Phase 13 | Pending |
+| REND-01 | Phase 13 | Complete |
+| REND-02 | Phase 13 | Complete |
+| REND-03 | Phase 13 | Complete |
 | GATE-01 | Phase 14 | Pending |
 | GATE-02 | Phase 14 | Pending |
 | GATE-03 | Phase 14 | Pending |

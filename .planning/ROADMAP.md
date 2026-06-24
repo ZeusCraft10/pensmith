@@ -97,8 +97,10 @@ Plans:
   3. An automated exporter test asserts a formatted author-year or numeric reference appears in the output — not merely that a `.bib`/`.ris` sidecar was copied.
 
 **Plans**: 2 plans
-- [ ] 13-01-PLAN.md — Wave 0: RED-by-skip exporter-citation scaffold (offline REND-01/02/03 assertions on the known-good fixture + Pandoc-args/ordering + zero-trace guards)
+
+- [x] 13-01-PLAN.md — Wave 0: RED-by-skip exporter-citation scaffold (offline REND-01/02/03 assertions on the known-good fixture + Pandoc-args/ordering + zero-trace guards)
 - [ ] 13-02-PLAN.md — Wave 1: wire renderInText (citations.ts) + resolveAndRenderCitations/citeproc args/bib-reorder (exporter.ts) + discipline→style (done.ts)
+
 **UI hint**: no
 
 ### Phase 14: Fail-closed verifier gate
@@ -168,7 +170,7 @@ Plans:
 | 10. Discipline + citation-style breadth + Zotero MCP | v0.1.0 | 5/5 | Complete | 2026-06-22 |
 | 11. Tier-2 LLM transport | v0.2.0 | 4/4 | Complete   | 2026-06-22 |
 | 12. Live research + intake bootstrap + humanizer Task | v0.2.0 | 4/4 | Complete   | 2026-06-22 |
-| 13. Citation rendering at export | v0.2.0 | 0/TBD | Not started | - |
+| 13. Citation rendering at export | v0.2.0 | 1/2 | In Progress|  |
 | 14. Fail-closed verifier gate | v0.2.0 | 0/TBD | Not started | - |
 | 15. Foundation & security hardening | v0.2.0 | 0/TBD | Not started | - |
 | 16. CI/DX parity + docs & packaging | v0.2.0 | 0/TBD | Not started | - |
