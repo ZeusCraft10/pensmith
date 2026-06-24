@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.2.0
 milestone_name: End-to-End
 status: planning
-stopped_at: Completed 14-01-PLAN.md (Wave-0 gate scaffolds for GATE-01/02/03/04)
-last_updated: "2026-06-24T07:53:03.270Z"
+stopped_at: Completed 15-08-PLAN.md (SECURITY.md audit + Semaphore bare-caller doc, Phase 15 Wave 4 complete)
+last_updated: "2026-06-24T00:00:00.000Z"
 last_activity: 2026-06-22 — v0.2.0 roadmap created (Phases 11–16, 25 requirements)
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 22
-  completed_plans: 19
-  percent: 67
+  completed_plans: 22
+  percent: 100
 ---
 
 # Project State
@@ -96,6 +96,7 @@ Last activity: 2026-06-22 — v0.2.0 roadmap created (Phases 11–16, 25 require
 | Phase 13-citation-rendering-at-export P01 | 8m | 3 tasks | 1 files |
 | Phase 13-citation-rendering-at-export P02 | 18m | 3 tasks | 4 files |
 | Phase 14-fail-closed-verifier-gate P01 | 25min | 2 tasks | 5 files |
+| Phase 15-foundation-security-hardening P08 | 15min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -285,8 +286,8 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-24T07:53:03.264Z
-Stopped at: Completed 14-01-PLAN.md (Wave-0 gate scaffolds for GATE-01/02/03/04)
+Last session: 2026-06-24T00:00:00.000Z
+Stopped at: Completed 15-08-PLAN.md (SECURITY.md audit + Semaphore bare-caller doc, Phase 15 Wave 4 complete)
 Resume file: None
 
 ## Operator Next Steps
