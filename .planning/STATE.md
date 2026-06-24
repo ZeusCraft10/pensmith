@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.2.0
 milestone_name: End-to-End
-status: planning
-stopped_at: Completed 16-01-PLAN.md (c8 ratchet gate + RED-by-skip scaffolds for DOCS-02/DOCS-03, Phase 16 Wave 1)
-last_updated: "2026-06-24T00:00:00.000Z"
-last_activity: 2026-06-24 — Phase 16 Plan 01 complete (.c8rc.json + RED-by-skip guards for lazy-nock + workflow-bodies)
+status: executing
+stopped_at: Completed 15-08-PLAN.md (SECURITY.md audit + Semaphore bare-caller doc, Phase 15 Wave 4 complete)
+last_updated: "2026-06-24T09:41:00.072Z"
+last_activity: "2026-06-24 — 16-01 complete: .c8rc.json (85/72/82/85 ratchet) + RED-by-skip guards (http-mock.test.ts, workflow-bodies.test.ts)"
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 26
   completed_plans: 24
-  percent: 85
+  percent: 83
 ---
 
 # Project State
@@ -289,7 +289,7 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-24T00:00:00.000Z
+Last session: 2026-06-24T09:41:00.063Z
 Stopped at: Completed 15-08-PLAN.md (SECURITY.md audit + Semaphore bare-caller doc, Phase 15 Wave 4 complete)
 Resume file: None
 

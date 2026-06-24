@@ -42,15 +42,15 @@ Requirements for the v0.2.0 release. Each maps to exactly one roadmap phase.
 
 ### CI / DX parity (CI)
 
-- [ ] **CI-01**: `npm run check` mirrors CI exactly (prebuild-first), so a green local run implies a green CI run
-- [ ] **CI-02**: A fresh-clone CI job asserts `git status --porcelain` is clean after build, catching stale derived-file drift
-- [ ] **CI-03**: CI runs the suite under non-TTY / detached stdin and adds a coverage gate (c8 thresholds)
+- [x] **CI-01**: `npm run check` mirrors CI exactly (prebuild-first), so a green local run implies a green CI run
+- [x] **CI-02**: A fresh-clone CI job asserts `git status --porcelain` is clean after build, catching stale derived-file drift
+- [x] **CI-03**: CI runs the suite under non-TTY / detached stdin and adds a coverage gate (c8 thresholds)
 
 ### Docs & packaging (DOCS)
 
 - [ ] **DOCS-01**: README ships real install instructions + `/pensmith` quick start + the PRD §3 dual-use disclaimer; the §3 disclaimer also surfaces at intake
 - [ ] **DOCS-02**: The four stub workflow bodies (doctor/status/next/resume) are filled, and stale "Phase 3+ / ships in Phase 6" copy in the doctor probes, PRIVACY.md, and CONTRIBUTING.md is refreshed to shipped reality
-- [ ] **DOCS-03**: Test-only dependencies (e.g. `nock`) move out of `dependencies`; `http-mock.ts` is excluded from the shipped `dist/` tree
+- [x] **DOCS-03**: Test-only dependencies (e.g. `nock`) move out of `dependencies`; `http-mock.ts` is excluded from the shipped `dist/` tree
 
 ## v2 Requirements
 
@@ -108,12 +108,12 @@ Which phases cover which requirements. Populated during roadmap creation.
 | HARD-04 | Phase 15 | Complete |
 | HARD-05 | Phase 15 | Complete |
 | HARD-06 | Phase 15 | Complete |
-| CI-01 | Phase 16 | Pending |
-| CI-02 | Phase 16 | Pending |
-| CI-03 | Phase 16 | Pending |
+| CI-01 | Phase 16 | Complete |
+| CI-02 | Phase 16 | Complete |
+| CI-03 | Phase 16 | Complete |
 | DOCS-01 | Phase 16 | Pending |
 | DOCS-02 | Phase 16 | Pending |
-| DOCS-03 | Phase 16 | Pending |
+| DOCS-03 | Phase 16 | Complete |
 
 **Coverage:**
 
