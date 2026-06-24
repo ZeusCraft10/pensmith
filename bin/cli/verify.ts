@@ -30,6 +30,7 @@ import { runPass4, renderPass4Section } from '../lib/verify/pass4.js';
 import { parseBibtex } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, paperDir } from '../lib/paths.js';
+import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
 
 const DEFAULT_SLUG = 'placeholder';
 
@@ -152,11 +153,11 @@ export const verifyCommand = defineCommand({
       '',
       '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
       '',
-      ...pass1.map((r) => `- ${r.citekey}: **${r.verdict}** — titleJW=${r.titleJW.toFixed(2)}, authorJW=${r.authorJW.toFixed(2)} — ${r.reason}`),
+      ...pass1.map((r) => renderPass1VerdictRow(r.citekey, r.verdict, r.titleJW, r.authorJW, r.reason)),
       '',
       '## Pass-3 (quote integrity, deterministic — levenshtein-substring)',
       '',
-      ...pass3.map((r) => `- ${r.citekey} ("${r.quoteSnippet}…"): **${r.verdict}** — lev=${r.levRatio.toFixed(3)} — ${r.reason}`),
+      ...pass3.map((r) => renderPass3VerdictRow(r.citekey, r.quoteSnippet, r.verdict, r.levRatio, r.reason)),
       '',
       renderFreshnessTable(freshness),
       '',

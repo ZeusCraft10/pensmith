@@ -57,9 +57,7 @@ import {
   type StalenessEntry,
 } from './compile-report.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
-
-/** Verifier verdicts that BLOCK compile (COMP-01). */
-const REFUSING_VERDICTS = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND']);
+import { parseVerdictRows } from './verify/verdict-rows.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
@@ -129,21 +127,6 @@ interface LoadedSection {
   draftBytes: Buffer;
   assignedSources: string[];
   storedHash: string | null;
-}
-
-/** Collect EVERY failing-verdict citekey from a VERIFICATION.md (refuse-gate). */
-function failingCitekeys(verificationMd: string): string[] {
-  const out: string[] = [];
-  for (const line of verificationMd.split(/\r?\n/)) {
-    // `- <citekey>: **VERDICT**` OR `- <citekey> ("quote…"): **VERDICT**`
-    const m = /^\s*-\s*([a-z][a-z0-9_-]*)\s*[:(].*?\*\*([A-Z_-]+)\*\*/.exec(line);
-    if (!m) continue;
-    const citekey = m[1];
-    const verdict = m[2];
-    if (citekey === undefined || verdict === undefined) continue;
-    if (REFUSING_VERDICTS.has(verdict)) out.push(citekey);
-  }
-  return out;
 }
 
 /** Normalize a draft to end in exactly one '\n' (§F). */
@@ -273,8 +256,20 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       );
       const verificationMd = existsSync(verifPath) ? readFileSync(verifPath, 'utf8') : '';
 
-      // Refuse-gate (COMP-01): any fresh failing verdict blocks.
-      for (const ck of failingCitekeys(verificationMd)) {
+      // GATE-01 (Phase 14): fail closed on missing/empty/unparseable VERIFICATION.md.
+      // A section that was never verified must NEVER compile.
+      // 'Status: unverifiable' passes this check (Pitfall 3) — those sections
+      // proceed with zero verdict rows (no blocking citekeys) and compile normally.
+      const hasStatus = /^Status:\s*\S/m.test(verificationMd);
+      if (!hasStatus) {
+        refuseReasons.push(
+          `section ${os.n} (${os.slug}): no verifiable VERIFICATION.md (section never verified or verifier output unreadable)`,
+        );
+        continue; // skip the failing-citekey parse AND staleness check; section is already refused
+      }
+
+      // Refuse-gate (COMP-01 / GATE-02): any failing verdict blocks.
+      for (const ck of parseVerdictRows(verificationMd)) {
         refuseReasons.push(`section ${os.n} (${os.slug}): citation [@${ck}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND)`);
       }
 
