@@ -329,8 +329,8 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // GREEN from Wave 0 (Plan 05-01) the moment the prompt files are byte-stable.
   // bin/lib/prompt-loader.ts holds __PENDING_HASH_<slug>__ sentinels until Plan 05-05
   // re-pins the SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
-  { slug: 'claim-support',       path: 'templates/prompts/claim-support.md',       decision: 'Phase 5 D-12',                   hash: 'ceec7601dfeaf30117091aa788d9463c01b6ca9d3a9da4b47fb0f91983c82217' },
-  { slug: 'orphan-label',        path: 'templates/prompts/orphan-label.md',        decision: 'Phase 5 D-12',                   hash: 'f8b385f3869691f4a419f35987d8b9a93018f28714519b36713fd7c2c0b829fc' },
+  { slug: 'claim-support',       path: 'templates/prompts/claim-support.md',       decision: 'Phase 5 D-12 / Phase 15 HARD-04c', hash: '38a28b6b8c997e56951799705b2337f2cdb24fe6c97fae4c631fd30f0fedaa26' },
+  { slug: 'orphan-label',        path: 'templates/prompts/orphan-label.md',        decision: 'Phase 5 D-12 / Phase 15 HARD-04c', hash: '68330195e2cf4109d40ffbaf366e8d800d395153cb6add2cadbb0f244aefe974' },
   // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts. RE-PINNED to the real
   // SHA-256 in Plan 09-03 Task 3 (WN-3 lockstep — the SAME commit re-pins bin/lib/
   // prompt-loader.ts EXPECTED_PROMPT_HASHES, so drift between the two surfaces is
