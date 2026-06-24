@@ -475,7 +475,7 @@ export const doneCommand = defineCommand({
       inputPath: finalPath ?? draftPath,
       format,
       paperRoot,
-      style,
+      ...(style !== undefined ? { style } : {}),
     });
 
     // Write the whole-paper VERIFICATION.md (a SOURCE artifact, not the export dir).
