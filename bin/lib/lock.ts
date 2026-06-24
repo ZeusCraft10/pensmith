@@ -36,6 +36,7 @@
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
+import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import { pensmithLockDir } from './paths.js';
 
@@ -67,13 +68,33 @@ const DEFAULT_OPTS: Required<LockOptions> = {
 /**
  * Resolve the lock-stub path for a given resource. proper-lockfile.lock(file)
  * requires `file` to exist on disk (it then creates `${file}.lock` alongside);
- * we touch a per-resource stub at `${pensmithLockDir()}/${sha256(resource).slice(0,12)}`
+ * we touch a per-resource stub at `${pensmithLockDir()}/${sha256(canonical).slice(0,12)}`
  * to satisfy that precondition. The stub itself holds no content.
+ *
+ * HARD-01 / BLOCKER-01/02 (macOS /var→/private/var hazard + cross-convention race):
+ * The resource is canonicalized BEFORE hashing so that two callers targeting
+ * the same underlying file via different path strings always produce the same
+ * stub. Canonicalization: path.resolve (makes absolute) → best-effort
+ * fs.realpathSync.native (resolves symlinks, e.g. /var→/private/var on macOS)
+ * → toLowerCase on win32 (case-insensitive filesystem). ENOENT from
+ * realpathSync.native is caught and falls back to the resolve result —
+ * STATE.json is locked BEFORE initState creates it (Pitfall 2), so a
+ * not-yet-created file must not crash the lock acquisition.
  */
-async function stubFor(resource: string): Promise<string> {
+export async function stubFor(resource: string): Promise<string> {
   const dir = pensmithLockDir();
   await fsp.mkdir(dir, { recursive: true });
-  const hash = createHash('sha256').update(resource).digest('hex').slice(0, 12);
+
+  // Canonicalize: resolve → realpath (best-effort) → case-fold on win32.
+  let canonical = path.resolve(resource);
+  try {
+    canonical = fs.realpathSync.native(canonical);
+  } catch {
+    // Not-yet-created file (ENOENT) or other FS error — resolved path is canonical.
+  }
+  if (process.platform === 'win32') canonical = canonical.toLowerCase();
+
+  const hash = createHash('sha256').update(canonical).digest('hex').slice(0, 12);
   const stub = path.join(dir, hash);
   // 'a' = O_WRONLY|O_CREAT|O_APPEND — create-if-missing without truncating.
   // We don't actually write anything; the stub's existence is the only

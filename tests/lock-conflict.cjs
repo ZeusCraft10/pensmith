@@ -50,7 +50,15 @@ function pensmithLockDir() {
 function stubFor(resource) {
   const dir = pensmithLockDir();
   fs.mkdirSync(dir, { recursive: true });
-  const hash = createHash('sha256').update(resource).digest('hex').slice(0, 12);
+  // HARD-01: canonicalize before hashing (mirrors bin/lib/lock.ts stubFor).
+  let canonical = path.resolve(resource);
+  try {
+    canonical = fs.realpathSync.native(canonical);
+  } catch {
+    // not-yet-created file — use resolved path
+  }
+  if (process.platform === 'win32') canonical = canonical.toLowerCase();
+  const hash = createHash('sha256').update(canonical).digest('hex').slice(0, 12);
   const stub = path.join(dir, hash);
   fs.closeSync(fs.openSync(stub, 'a'));
   return stub;

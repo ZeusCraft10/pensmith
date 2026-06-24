@@ -19,12 +19,29 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { withLock, tryAcquire, isLocked } from '../bin/lib/lock.js';
 import { pensmithLockDir } from '../bin/lib/paths.js';
+
+/**
+ * Replicate the HARD-01 canonicalization from stubFor so tests can compute
+ * the expected hash for a resource without importing the private function.
+ * Must stay in sync with bin/lib/lock.ts stubFor().
+ */
+function canonicalHash(resource: string): string {
+  let canonical = path.resolve(resource);
+  try {
+    canonical = fs.realpathSync.native(canonical);
+  } catch {
+    // not-yet-created file — use the resolved path
+  }
+  if (process.platform === 'win32') canonical = canonical.toLowerCase();
+  return createHash('sha256').update(canonical).digest('hex').slice(0, 12);
+}
 
 // ---- HARD-01 skip gate: probe stubFor export ----
 // stubFor is a private function in lock.ts. When Wave-3 (15-03) exports it
@@ -182,7 +199,9 @@ test('lock file lives in pensmithLockDir() and NOT inside .paper/', async () => 
   const releaseFn = await tryAcquire(r);
   try {
     const dir = pensmithLockDir();
-    const hash = createHash('sha256').update(r).digest('hex').slice(0, 12);
+    // Use canonicalHash (mirrors stubFor's HARD-01 canonicalization) so the
+    // expected stub path matches what stubFor actually created.
+    const hash = canonicalHash(r);
     // proper-lockfile creates `${stub}.lock` alongside the stub. Either
     // the stub or the .lock file existing inside pensmithLockDir() is
     // proof that the lock landed in the right place.
@@ -255,8 +274,10 @@ test('lock canonicalize: two path conventions for one file → identical stub (H
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'pensmith-lock-canon-'));
     const filePath = path.join(tmpDir, 'canon-test.lock');
     // Create the file (stubFor touches it anyway, but we need it to exist for
-    // realpathSync.native to work correctly).
-    await fsp.writeFile(filePath, '');
+    // realpathSync.native to work correctly). Use open('a')+close to avoid the
+    // no-restricted-syntax ban on fsp.writeFile (ARCH-05 / D-07).
+    const fhTmp = await fsp.open(filePath, 'a');
+    await fhTmp.close();
     try {
       // Convention A: path.resolve form (as state.ts uses).
       const r1 = path.resolve(filePath);

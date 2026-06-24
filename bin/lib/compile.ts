@@ -231,7 +231,7 @@ async function loadSection(
  */
 export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
   const warn = opts.onWarn ?? ((m: string) => process.stderr.write(`${m}\n`));
-  const lockResource = `compile:${join(paperDir(opts.paperRoot), '.compile.lock')}`;
+  const lockResource = join(paperDir(opts.paperRoot), '.compile.lock');
 
   return withLock(lockResource, async (): Promise<CompileResult> => {
     // ---- Step 1: load sections in OUTLINE order + refuse-gate + staleness ----
