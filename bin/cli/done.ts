@@ -459,7 +459,7 @@ export const doneCommand = defineCommand({
       : 'docx';
 
     // Resolve discipline → CSL style from INTAKE.md (never-throw: missing or
-    // unparseable INTAKE.md leaves style undefined; exportDraft defaults to APA).
+    // unparseable INTAKE.md leaves style undefined; citation rendering is skipped).
     // Mirrors the draft-read never-throw at lines 388-399.
     const intakePath = join(paperDir(paperRoot), 'INTAKE.md');
     let style: string | undefined;
@@ -468,7 +468,7 @@ export const doneCommand = defineCommand({
       const { discipline } = parseIntakeMd(intakeText);
       style = resolveStyleName(discipline);
     } catch {
-      // Missing or unparseable INTAKE.md → style undefined → exportDraft defaults to APA.
+      // Missing or unparseable INTAKE.md → style undefined → citation rendering is skipped.
     }
 
     const result = await exportDraft({

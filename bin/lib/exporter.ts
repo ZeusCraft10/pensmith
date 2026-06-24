@@ -381,9 +381,9 @@ export interface ExportOptions {
   /** Injectable Pandoc-presence flag (deterministic tests); defaults to live probe. */
   pandocPresent?: boolean;
   /** CSL style key for citation rendering (e.g. 'apa', 'ieee'). Resolved by
-   *  caller via resolveStyleName(discipline). Undefined → defaults to 'apa'
-   *  when the offline rendering path runs. When absent, citation rendering
-   *  is skipped (back-compat: existing callers without style pass through). */
+   *  caller via resolveStyleName(discipline). When absent, citation rendering
+   *  is skipped entirely (back-compat: existing callers without style pass through
+   *  unchanged). */
   style?: string;
 }
 
@@ -525,14 +525,22 @@ async function resolveAndRenderCitations(
   }
 
   // Replace [@key] and [@key1; @key2] tokens (Pitfall-6: multi-cite).
+  // Strip locator suffix (e.g. [@smith2020 p. 5] → key 'smith2020') per Pandoc
+  // citation syntax: citekey ends at the first whitespace after the sigil.
   const resolved = md.replace(/\[(@[^\]]+)\]/g, (_match, inner: string) => {
-    const keys = inner.split(';').map((k) => k.trim().replace(/^@/, ''));
+    const keys = inner.split(';').map((k) => k.trim().replace(/^@/, '').replace(/\s.*$/, ''));
     if (keys.length === 1) {
       const key = keys[0]!;
       return intextMap.get(key) ?? `[@${key}]`; // unknown key: leave as-is
     }
     // Multi-key: strip outer parens from each formatted cite, wrap in one pair.
-    const parts = keys.map((k) => (intextMap.get(k) ?? k).replace(/^[(]|[)]$/g, ''));
+    // Unknown key: preserve [@key] sentinel (not bare word) so unresolved citations
+    // are visibly wrong, not silently misrepresented as resolved surnames (WR-01).
+    const parts = keys.map((k) => {
+      const hit = intextMap.get(k);
+      if (!hit) return `[@${k}]`; // preserve the unresolved signal
+      return hit.replace(/^[(]|[)]$/g, '');
+    });
     return '(' + parts.join('; ') + ')';
   });
 
@@ -627,7 +635,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   const style = opts.style;
   const cslPath = style ? path.join(PKG_ROOT, 'templates', 'citation-styles', `${style}.csl`) : '';
   const citeOpts =
-    style && bibCopied && cslPath
+    style && bibCopied && existsSync(cslPath)
       ? { cslPath, bibPath: bibDst }
       : undefined;
 
@@ -669,7 +677,15 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     // REND-01/02 offline path: resolve [@key] tokens + append ## References.
     // Only when style is set AND bib was copied (no bib → pass through unchanged).
     if (style && bibCopied) {
-      md = await resolveAndRenderCitations(md, bibDst, style);
+      try {
+        md = await resolveAndRenderCitations(md, bibDst, style);
+      } catch {
+        // Malformed BibTeX or unknown style → skip citation rendering, leave tokens raw.
+        // Never-throw guarantee: export proceeds on the unprocessed draft.
+        process.stderr.write(
+          'pensmith export: citation rendering failed — exporting without inline citations.\n',
+        );
+      }
     }
     await writeMarkdown(md, outputPath);
   } else {
@@ -693,7 +709,15 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
       let md = await fsp.readFile(inputPath, 'utf8');
       // REND-01/02 fallback from Pandoc failure: resolve citations offline.
       if (style && bibCopied) {
-        md = await resolveAndRenderCitations(md, bibDst, style);
+        try {
+          md = await resolveAndRenderCitations(md, bibDst, style);
+        } catch {
+          // Malformed BibTeX or unknown style → skip citation rendering, leave tokens raw.
+          // Never-throw guarantee: export proceeds on the unprocessed draft.
+          process.stderr.write(
+            'pensmith export: citation rendering failed — exporting without inline citations.\n',
+          );
+        }
       }
       await writeMarkdown(md, outputPath);
       pandocUsed = false;

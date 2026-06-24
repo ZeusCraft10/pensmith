@@ -373,3 +373,54 @@ test(
     );
   },
 );
+
+// ---------------------------------------------------------------------------
+// CR-02 regression: Pandoc locator syntax [@key p. N] must not leave raw [@...]
+// The fixture section.md contains [@vaswani2017attention p. 2] — a locator cite.
+// The key-extraction must strip the locator suffix so the map lookup succeeds.
+// ---------------------------------------------------------------------------
+test(
+  'exporter: REND-01 locator citation [@key p. N] — no raw [@...] survives, formatted author present (CR-02)',
+  { skip: !renderCitationsWired },
+  async () => {
+    const mod = await import(exporterModUrl.href) as { exportDraft: ExportDraft };
+
+    const fixtureMd = readFileSync(join(FIXTURE_DIR, 'section.md'), 'utf8');
+    const fixtureBib = readFileSync(join(FIXTURE_DIR, 'CITATIONS.bib'), 'utf8');
+
+    // Confirm the fixture actually contains a locator citation (regression guard
+    // against fixture being updated without this test knowing).
+    assert.ok(
+      fixtureMd.includes('[@vaswani2017attention p. 2]'),
+      'fixture section.md must contain [@vaswani2017attention p. 2] for this test to be meaningful',
+    );
+
+    const root = mkdtempSync(join(tmpdir(), 'pensmith-rend-locator-'));
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    const inputPath = join(root, '.paper', 'DRAFT.md');
+    writeFileSync(inputPath, fixtureMd);
+    writeFileSync(join(root, '.paper', 'CITATIONS.bib'), fixtureBib);
+
+    const res = await mod.exportDraft({
+      inputPath,
+      format: 'md',
+      paperRoot: root,
+      pandocPresent: false,
+      style: 'apa',
+    });
+
+    const rendered = readFileSync(res.outputPath, 'utf8');
+
+    // REND-01: No raw [@...] token survives — locator must be stripped before lookup.
+    assert.ok(
+      !rendered.includes('[@'),
+      `CR-02 FAIL: raw [@...] token survived in rendered output (locator not stripped):\n${rendered}`,
+    );
+
+    // Formatted author must appear (locator cite resolved to a real in-text reference).
+    assert.ok(
+      rendered.includes('Vaswani'),
+      `CR-02 FAIL: "Vaswani" not found — locator citation was not resolved:\n${rendered}`,
+    );
+  },
+);
