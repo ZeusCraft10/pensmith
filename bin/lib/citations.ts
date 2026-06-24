@@ -7,6 +7,22 @@
 // tests/fixtures/lint-chokepoint-fixture.ts is the regression gate.
 //
 // =====================================================================
+//   renderInText — in-text sibling of renderStyle (Phase 13 / REND-01)
+// =====================================================================
+// renderInText(entries, style) is the per-entry in-text CSL renderer. It
+// is the D-19-compliant delegate for exporter.ts: exporter.ts imports
+// { parseBib, renderStyle, renderInText } from './citations.js' — it
+// NEVER imports Cite or any citation-js symbol directly. All citation-js /
+// Cite usage stays inside this file (the D-19 chokepoint).
+//
+// Implementation note: renderInText calls ensureStyleTemplate(style) for
+// Pitfall-2 memoization, then constructs a new Cite([entries], …) and
+// calls .format('citation', …). One combined in-text string is returned
+// for the provided entries group (callers pass ONE entry per call to get
+// a per-key string — Pitfall 1). Offline + deterministic: same
+// format:'text' / lang:'en-US' options as renderStyle.
+//
+// =====================================================================
 //   Why parseBib is async, parseBibtex is the alias (executor reconciliation)
 // =====================================================================
 // Plan 03-02 specifies `parseBibtex`. Wave 0's tests/citation-render.test.ts
@@ -244,6 +260,45 @@ export async function renderStyle(
   ensureStyleTemplate(style);
   const cite = new Cite(entries, { forceType: '@csl/object' });
   return cite.format('bibliography', {
+    format: 'text',
+    template: `pensmith-${style}`,
+    lang: 'en-US',
+  });
+}
+
+// =====================================================================
+//   Public: renderInText (REND-01 / Phase 13 — per-entry in-text renderer)
+// =====================================================================
+/**
+ * Render the supplied parsed entries as an in-text citation in the given
+ * `style` using the bundled `templates/citation-styles/<style>.csl`.
+ *
+ * This is the in-text SIBLING of renderStyle (which renders a full bibliography).
+ * Pass ONE entry at a time to get a per-key in-text string that can be
+ * substituted token-by-token into a document (Pitfall 1 guard — passing all
+ * entries at once yields one combined string for the entire group). For a
+ * single-entry group in numeric styles (IEEE, Vancouver, AMA) the result
+ * is always [1] or "1" — correct for single-entry groups; correct sequential
+ * numbering for a full document requires the Pandoc citeproc path.
+ *
+ * Accepts the array returned from `parseBib` (or a one-element slice of it).
+ * Registration is memoized via ensureStyleTemplate (Pitfall 2 collision guard).
+ *
+ * DETERMINISTIC + OFFLINE: format:'text' + lang:'en-US' (same as renderStyle).
+ * No wall-clock, no fetch — byte-stable for identical input.
+ *
+ * Throws a clear TypeError on a non-array input (mirrors renderStyle's guard).
+ */
+export async function renderInText(
+  entries: Array<Record<string, unknown>>,
+  style: string,
+): Promise<string> {
+  if (!Array.isArray(entries)) {
+    throw new TypeError('renderInText: input must be an array of parsed entries (from parseBib)');
+  }
+  ensureStyleTemplate(style);
+  const cite = new Cite(entries, { forceType: '@csl/object' });
+  return cite.format('citation', {
     format: 'text',
     template: `pensmith-${style}`,
     lang: 'en-US',

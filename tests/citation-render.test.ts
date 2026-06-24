@@ -214,3 +214,64 @@ test('citation-render: resolveStyleName maps disciplines to styles (CITE-02/03)'
     assert.equal(resolve('unknown'), 'apa', 'unknown → apa fallback');
   },
 );
+
+// ====================================================================
+//   Phase 13 Plan 02 Task 1 — renderInText behavioral assertions (REND-01)
+// ====================================================================
+// Feature-detect renderInText the same way the per-style loop detects
+// renderStyle — resolves as `undefined` until Plan 13-02 ships it, so
+// the suite stays GREEN if run against a citations.ts that predates 13-02.
+
+// 1. APA in-text form for the known-good fixture (vaswani2017attention)
+//    and memoization guard: calling renderInText twice for 'apa' must not
+//    throw "template already registered" (Pitfall-2 guard).
+test('citation-render: renderInText(entries, "apa") returns "(Vaswani et al., 2017)" + no template collision (REND-01)',
+  { skip: shouldSkip },
+  async (t) => {
+    const mod = await import('../bin/lib/citations.js');
+    const renderInText = (mod as { renderInText?: unknown }).renderInText;
+    if (typeof renderInText !== 'function') {
+      t.skip('renderInText not yet exported (Plan 13-02)');
+      return;
+    }
+    const render = renderInText as (e: unknown, s: string) => Promise<string>;
+    const { parseBib } = mod;
+    const bibContent = readFileSync(fixtureBibPath, 'utf-8');
+    const entries = await parseBib(bibContent);
+
+    // Single-entry APA in-text must be "(Vaswani et al., 2017)" (trimmed).
+    const result = (await render(entries, 'apa')).trim();
+    assert.equal(
+      result,
+      '(Vaswani et al., 2017)',
+      `renderInText(entries,'apa') must return "(Vaswani et al., 2017)", got: ${result}`,
+    );
+
+    // Second call for the same style must NOT throw "template already registered".
+    await assert.doesNotReject(
+      () => render(entries, 'apa'),
+      'renderInText called twice for "apa" must not throw (Pitfall-2 memoization guard)',
+    );
+  },
+);
+
+// 2. TypeError on non-array input (mirrors renderStyle guard).
+test('citation-render: renderInText throws TypeError on non-array input (REND-01)',
+  { skip: shouldSkip },
+  async (t) => {
+    const mod = await import('../bin/lib/citations.js');
+    const renderInText = (mod as { renderInText?: unknown }).renderInText;
+    if (typeof renderInText !== 'function') {
+      t.skip('renderInText not yet exported (Plan 13-02)');
+      return;
+    }
+    const render = renderInText as (e: unknown, s: string) => Promise<string>;
+    await assert.rejects(
+      () => render('not-an-array' as unknown, 'apa'),
+      (err: unknown) => {
+        assert.ok(err instanceof TypeError, 'must throw TypeError on non-array input');
+        return true;
+      },
+    );
+  },
+);
