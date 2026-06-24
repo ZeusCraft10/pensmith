@@ -324,6 +324,24 @@ export const intakeCommand = defineCommand({
   },
   async run({ args }) {
     const cwd = process.cwd();
+
+    // DOCS-01: PRD §3 disclaimer — print at intake start so CLI-only users see it.
+    // Static copy — sourced verbatim from PRD §3 (non-negotiable per CLAUDE.md).
+    // Must appear before any ask() or model call (PATTERNS.md placement constraint).
+    const DISCLAIMER = [
+      'pensmith is a structured research-and-drafting assistant for academic writing.',
+      'It helps you turn an assignment prompt into a sourced outline or, optionally, a full draft,',
+      'using only verifiable peer-reviewed and configurable academic sources. It includes a citation',
+      'verifier that re-fetches every cited DOI and flags unsupported claims for human review,',
+      'and a humanizer pass that improves readability.',
+      '',
+      'This tool is for your own writing, research, and learning. It is not a guarantee against AI detectors',
+      'and it is not a substitute for doing the reading. Submitting fully tool-generated',
+      'work as your own is, in many institutions, a violation of academic integrity policy.',
+      'You are responsible for the work you submit.',
+    ].join('\n');
+    process.stdout.write(DISCLAIMER + '\n\n');
+
     const targetPath = path.join(paperDir(), 'INTAKE.md');
     const rawLocalPath = path.join(paperDir(), 'INTAKE.raw.local');
     const thesisSeed = typeof args.thesis === 'string' && args.thesis.trim()

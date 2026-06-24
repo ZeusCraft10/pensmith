@@ -41,19 +41,21 @@ equivalence.
 
 ## Body
 
-1. **Read inputs**:
+1. **Print §3 disclaimer** (DOCS-01): at the top of the run, before any prompts or model calls, print the PRD §3 dual-use disclaimer verbatim to stdout. This ensures CLI-only users who never read the README still see the disclosure. Static copy — no user input needed. Implemented via `process.stdout.write` in `bin/cli/intake.ts` immediately after `const cwd = process.cwd()`.
+
+2. **Read inputs**:
    - Assignment text from `.paper/INTAKE.md` if present, else prompt user (or read `--from <file>`).
    - `templates/presets/disciplines.json` (the 9 INTK-03 keys: 8 disciplines + explicit `other` fallback per Plan 05 Task 5.3).
    - `templates/prompts/intake-clarifier.md` (D-12 LOCKED slug — the prompt template; interpolate `{{assignment}}`).
 
-2. **Detect discipline** (heuristic match assignment keywords against the 9 disciplines.json keys; fall back to `"other"` → which itself maps to `tone: "academic-formal"` + `citation_style: "apa"` for unrecognized inputs).
+3. **Detect discipline** (heuristic match assignment keywords against the 9 disciplines.json keys; fall back to `"other"` → which itself maps to `tone: "academic-formal"` + `citation_style: "apa"` for unrecognized inputs).
 
-3. **Run clarifying battery** (INTK-02):
+4. **Run clarifying battery** (INTK-02):
    - If Task/MCP available (Tier 1): delegate to model with `templates/prompts/intake-clarifier.md` (D-12 LOCKED slug — the canonical slug per Plan 03 CONTEXT D-12).
    - If `AskUserQuestion` available (Tier 1): present 3–5 questions via that tool.
    - Tier 2 fallback: write questions to stdout, read answers from stdin via `@clack/prompts` (`bin/lib/prompts.ts` from Phase 2).
 
-4. **Apply PII redaction** (INTK-05): before persisting answers, run the user's RAW ANSWERS through `bin/lib/pii.ts redactPII(answer)`.
+5. **Apply PII redaction** (INTK-05): before persisting answers, run the user's RAW ANSWERS through `bin/lib/pii.ts redactPII(answer)`.
 
    PII redaction ordering (Codex MEDIUM consensus #18 — locked):
    - PII redaction operates on the **user's answers only**, NEVER on the prompt template or the LLM-generated questions (those are pensmith-controlled strings with no user PII).
@@ -64,6 +66,6 @@ equivalence.
      ```
      Multi-pattern coverage matters: redacting EMAIL last would cause `foo@bar.com` in a URL to slip through PHONE-shaped regex; processing EMAIL first ensures clean tokenization. `tests/pii.test.ts` asserts ordering by feeding `foo@bar.com (+1-555-555-5555)` and asserting the result is `[REDACTED-EMAIL] (+[REDACTED-PHONE])` (NOT `[REDACTED-PHONE]` swallowing the email).
 
-5. **Write `.paper/INTAKE.md`** (atomic via `bin/lib/atomic-write.ts`, the D-07 chokepoint) with the clarified assignment + discipline + tone + citation style. Persist the un-redacted RAW answers to `.paper/INTAKE.raw.local` (gitignored).
+6. **Write `.paper/INTAKE.md`** (atomic via `bin/lib/atomic-write.ts`, the D-07 chokepoint) with the clarified assignment + discipline + tone + citation style. Persist the un-redacted RAW answers to `.paper/INTAKE.raw.local` (gitignored).
 
-6. **Shell fallback** (TIER-06 equivalence path): `pensmith intake [--from <file>] [--yolo]` (alias: `pensmith new [--from <file>] [--yolo]` — both invocations dispatch to the same `bin/cli/intake.ts` handler).
+7. **Shell fallback** (TIER-06 equivalence path): `pensmith intake [--from <file>] [--yolo]` (alias: `pensmith new [--from <file>] [--yolo]` — both invocations dispatch to the same `bin/cli/intake.ts` handler).
