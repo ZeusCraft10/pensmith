@@ -64,6 +64,16 @@ export function parseVerdictRows(verificationMd: string): string[] {
   const out: string[] = [];
   for (const line of verificationMd.split(/\r?\n/)) {
     // `- <citekey>: **VERDICT**` OR `- <citekey> ("quote…"): **VERDICT**`
+    //
+    // LOWERCASE-CITEKEY CONSTRAINT: the citekey group `[a-z][a-z0-9_-]*` matches
+    // only lowercase-first citekeys. This is a bijection WITHIN the lowercase-citekey
+    // namespace — it is correct because pensmith's citekeys are generated lowercase
+    // (see bin/lib/citekey.ts and CITATION_TOKEN_RE in citation-token.ts, which uses
+    // the same `[a-z]` anchor). A mixed-case citekey like `Smith2020` would be silently
+    // skipped by this parser (and by extractCitekeys in GATE-04). Do NOT widen the
+    // charset unless the project's citekey generation is changed to allow uppercase;
+    // doing so without auditing all extraction points would create a charset mismatch
+    // between the writer and parser that breaks the round-trip guarantee.
     const m = /^\s*-\s*([a-z][a-z0-9_-]*)\s*[:(].*?\*\*([A-Z_-]+)\*\*/.exec(line);
     if (!m) continue;
     const citekey = m[1];

@@ -280,6 +280,21 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         const reVerify =
           opts.reVerify ??
           (async () => ({ passed: false, failingCitekeys: [] } as ReVerifyResult));
+        // SEAM DESIGN NOTE (WR-03 / Phase 14): the staleness re-verify path trusts
+        // the seam's boolean `result.passed` rather than routing fresh verdicts through
+        // parseVerdictRows / GATE-02. This means a production reVerify implementation
+        // with a bug that returns { passed: true, failingCitekeys: [] } when there are
+        // actually failing citekeys (e.g. a network timeout misclassified as clean)
+        // would bypass GATE-02 for the re-verified section.
+        //
+        // The seam contract requires that a production reVerify:
+        //   (a) writes updated verdict rows to the section's VERIFICATION.md, AND
+        //   (b) only returns { passed: true } when parseVerdictRows on the written
+        //       VERIFICATION.md would return an empty failing-citekey set.
+        // Enforce this in integration tests: assert that a passing reVerify produces
+        // a VERIFICATION.md whose verdict rows parse clean through parseVerdictRows.
+        // A buggy reVerify that skips (b) can bypass GATE-02 — it is a contractual
+        // obligation of the production implementation, not enforced here structurally.
         const result = await reVerify({ n: os.n, slug: os.slug });
         if (!result.passed) {
           const named =

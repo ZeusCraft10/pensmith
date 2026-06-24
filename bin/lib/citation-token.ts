@@ -25,6 +25,15 @@
  * replace-all semantics). Callers that need a fresh `lastIndex` should build a
  * new RegExp from `.source` rather than reusing this shared instance with
  * `.test()` (a stateful global regex carries lastIndex across calls).
+ *
+ * LOWERCASE-CITEKEY CONSTRAINT: the `[a-z]` first-character anchor restricts
+ * extraction to lowercase-first citekeys. Pensmith generates all citekeys in
+ * lowercase (see bin/lib/citekey.ts), so this is intentional and the regex forms
+ * a bijection within that namespace. A mixed-case citekey like `Smith2020` in a
+ * [@Smith2020] token would be silently skipped. The same `[a-z]` anchor is used
+ * in parseVerdictRows (verdict-rows.ts), keeping the extraction and parse sides
+ * consistent. Do NOT widen to `[a-zA-Z]` unless the citekey generator is updated
+ * and all extraction points are audited for consistency.
  */
 export const CITATION_TOKEN_RE = /\[@([a-z][a-z0-9_-]*)\]/g;
 

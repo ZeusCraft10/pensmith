@@ -31,7 +31,7 @@ import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '.
 import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
 import { exportDraft, runHumanizer, type ExportFormat } from '../lib/exporter.js';
 import { paperDir } from '../lib/paths.js';
-import { parseIntakeMd, } from '../lib/intake-parse.js';
+import { parseIntakeMd } from '../lib/intake-parse.js';
 import { resolveStyleName, parseBibtex } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { ask } from '../lib/prompts.js';
@@ -402,8 +402,21 @@ export async function reCheckFinalMd(
   let pass3Results;
   try {
     pass3Results = await runPass3(finalMd, bibByCitekey);
-  } catch {
-    return { passed: true, reason: '' };
+  } catch (err) {
+    // GATE-04 FAIL-CLOSED: an unexpected runPass3 error is NOT a clean pass.
+    // We already have a valid bibByCitekey map here, so an exception is unexpected
+    // (not a "nothing to do" case like the bib-parse catch above). Fail closed so
+    // a humanizer-introduced NOT_FOUND quote that also triggers a runPass3 bug
+    // cannot silently escape the gate. Log to stderr and block export.
+    process.stderr.write(
+      `pensmith done: GATE-04 Pass-3 re-check failed unexpectedly (${
+        err instanceof Error ? err.message : String(err)
+      }) — blocking export (fail-closed verifier gate).\n`,
+    );
+    return {
+      passed: false,
+      reason: `Pass-3 re-check threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 
   const notFound = pass3Results.filter((r) => r.verdict === 'NOT_FOUND');
@@ -513,8 +526,10 @@ export const doneCommand = defineCommand({
         : renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
 
     // GATE-04: re-verify humanized FINAL.md before export (HARD block, BEFORE runDoneGate).
-    // Skip when no humanizer ran (finalPath === null) or --yolo (the only override).
-    if (finalPath !== null && args.yolo !== true) {
+    // Skip only when no humanizer ran (finalPath === null) — i.e. no humanized artifact exists.
+    // --yolo NEVER bypasses this gate (per PRD §14 non-negotiable: verifier gates are unconditional).
+    // --yolo belongs ONLY on the advisory runDoneGate (DONE-09) confirmation below.
+    if (finalPath !== null) {
       const finalMd = readFileSync(finalPath, 'utf8');
       const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
       const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath);

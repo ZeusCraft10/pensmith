@@ -143,3 +143,30 @@ test('GATE-02: freshness-table immunity — table rows are NOT matched by parseV
     'parseVerdictRows must return [] for a body containing only table rows (no list-item verdict rows)',
   );
 });
+
+// ---------------------------------------------------------------------------
+// Test 4 (WR-02): Uppercase-first citekey is silently skipped — documents the
+// lowercase-citekey constraint.
+//
+// The `[a-z]` first-character anchor in the parseVerdictRows regex is a
+// documented constraint: pensmith generates all citekeys lowercase, so the
+// bijection holds within the lowercase namespace. A citekey like `Smith2020`
+// (capital S) is NOT matched and will be silently skipped — this is correct
+// behavior given the project's citekey convention. This test documents that
+// guarantee so a future reader knows widening to `[a-zA-Z]` requires auditing
+// all extraction points (including CITATION_TOKEN_RE in citation-token.ts).
+// ---------------------------------------------------------------------------
+test('GATE-02 WR-02: uppercase-first citekey (Smith2020) is NOT parsed — lowercase-citekey bijection constraint', {
+  skip: !moduleLoaded ? skipReason : false,
+}, () => {
+  // A verdict row with an uppercase-first citekey. This would be produced by a
+  // BibTeX entry with @article{Smith2020,...} — not the pensmith convention.
+  const rowWithUpperCase = '- Smith2020: **FABRICATED** — titleJW=0.00, authorJW=0.00 — not in bib';
+
+  const failing = parseVerdictRows!(rowWithUpperCase);
+  assert.deepEqual(
+    failing,
+    [],
+    'parseVerdictRows must return [] for an uppercase-first citekey (Smith2020) — the bijection holds only within the lowercase-citekey namespace',
+  );
+});

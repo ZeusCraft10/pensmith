@@ -170,3 +170,39 @@ test('GATE-04: absent CITATIONS.bib → { passed: true } (skip-clean — no quot
   const result = await reCheckFinalMd!(finalMd, draftMd, bibPath);
   assert.equal(result.passed, true, 'Absent bib → no quotes to check → must pass cleanly');
 });
+
+// ---------------------------------------------------------------------------
+// Test 6 (CR-01): reCheckFinalMd is unconditional — it has no --yolo escape.
+//
+// The GATE-04 condition in done.ts was `if (finalPath !== null && args.yolo !== true)`.
+// After the CR-01 fix it is `if (finalPath !== null)` (yolo bypass removed).
+// This test proves reCheckFinalMd returns { passed: false } for a citekey mismatch
+// regardless of any flag — reCheckFinalMd has no yolo parameter and must ALWAYS
+// run the full check. A caller that bypasses this via a condition flag is the bug
+// (now fixed in done.ts). If someone re-introduces a yolo arm in done.ts, the
+// GATE-04 integration test (below) would detect it.
+// ---------------------------------------------------------------------------
+test('GATE-04 CR-01: reCheckFinalMd has no --yolo escape — citekey mismatch always returns { passed: false }', {
+  skip: !moduleLoaded ? skipReason : false,
+}, async () => {
+  const root = makePaperRoot(''); // Empty bib — citekey diff fires before Pass-3.
+  const bibPath = join(root, '.paper', 'CITATIONS.bib');
+
+  const draftMd = 'A claim [@smith2020].';
+  // Simulates a humanizer that swapped a citekey (the exact bypass scenario from CR-01).
+  const finalMd = 'A claim [@fabricated2099].';
+
+  // reCheckFinalMd must return passed:false. It has no yolo parameter;
+  // the verifier gate is unconditional by design.
+  const result = await reCheckFinalMd!(finalMd, draftMd, bibPath);
+  assert.equal(
+    result.passed,
+    false,
+    'GATE-04 must block a citekey mismatch unconditionally — there is no --yolo bypass in reCheckFinalMd',
+  );
+  assert.match(
+    result.reason,
+    /citekey-set mismatch/,
+    'Failure reason must describe the citekey-set mismatch',
+  );
+});

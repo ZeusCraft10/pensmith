@@ -99,7 +99,11 @@ export async function fetchById(doi: string): Promise<SourceCandidate | null> {
     // fallback to the first-any-retractions entry — that fallback caused false positives
     // for DOIs not present in any cassette (GATE-03 blocking test deviation fix).
     const cassettes = loadCassetteDir('retraction-watch');
-    if (!cassettes) return null;
+    // Treat an empty cassette array the same as a missing directory (null).
+    // loadCassetteDir returns [] when the directory exists but has no .json files;
+    // allowing [] through causes every DOI to look un-retracted (silent GATE-03
+    // bypass) in an environment where the cassette dir was created but files deleted.
+    if (!cassettes || cassettes.length === 0) return null;
     const direct = cassettes.find(
       (c) => c.method === 'GET' && c.path.includes(`filter=record:${doi}`),
     );
