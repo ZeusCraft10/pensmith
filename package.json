@@ -23,8 +23,8 @@
     "validate:manifests": "node scripts/validate-plugin-manifest.cjs",
     "test:tier-contract": "node --import tsx --test tests/tier-contract/preflight.test.ts tests/tier-contract.test.ts",
     "test:cassettes": "node --import tsx --test tests/tier-contract.test.ts",
-    "check": "npm run lint && npm run typecheck && npm run build && npm run test:tier-contract && npm test && npm run validate:manifests",
-    "coverage": "c8 node scripts/run-tests.mjs"
+    "check": "npm run prebuild && npm run lint && npm run typecheck && npm run build && npm run test:tier-contract && npm test && npm run validate:manifests",
+    "test:coverage": "c8 node scripts/run-tests.mjs"
   },
   "files": [
     "dist/",
@@ -48,7 +48,6 @@
     "citty": "^0.2.2",
     "doi-regex": "^0.1.17",
     "jszip": "^3.10.1",
-    "nock": "^14",
     "openai": "^4",
     "p-retry": "^6",
     "pdf-lib": "^1.17.1",
@@ -61,6 +60,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "nock": "^14",
     "@types/proper-lockfile": "^4",
     "c8": "^11.0.0",
     "eslint": "^9.0.0",

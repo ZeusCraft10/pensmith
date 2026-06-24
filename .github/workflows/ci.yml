@@ -50,7 +50,20 @@ jobs:
       - name: Tier contract (Tier 1 ↔ Tier 2 equivalence — D-23 layer 1)
         run: npm run test:tier-contract
 
-      - run: npm test
+      - name: Test suite + coverage gate (non-TTY stdin — CI-03)
+        shell: bash
+        run: npm run test:coverage < /dev/null
 
       - name: Validate plugin manifests
         run: node scripts/validate-plugin-manifest.cjs
+
+      - name: Assert working tree is clean after build (stale-derived-file guard — CI-02)
+        shell: bash
+        run: |
+          status=$(git status --porcelain)
+          if [ -n "$status" ]; then
+            echo "FAIL: build/prebuild produced untracked or modified files:"
+            echo "$status"
+            exit 1
+          fi
+          echo "OK: working tree is clean."
