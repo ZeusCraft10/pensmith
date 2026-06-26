@@ -185,3 +185,53 @@ test('GATE-03: no-cassette DOI (transport/no-hit → fetchById null) → NOT a f
     'A no-cassette DOI (fetchById null) must NOT produce a GATE-03 false MIS-CITED reason (transport-error-silent)',
   );
 });
+
+// ---------------------------------------------------------------------------
+// Test 3: D-15 STORED retraction (note = {RETRACTED} round-trip) → MIS-CITED
+// ---------------------------------------------------------------------------
+// Regression for the audit finding: writeBibtex serializes a retracted source as
+// BibTeX `note = {RETRACTED}` (bibtex-write.ts:93), and citation-js preserves
+// `note` verbatim but does NOT repopulate the synthetic `retracted` boolean — so
+// a bib-sourced retracted entry arrives in Pass-1 with `note:'RETRACTED'` and
+// `retracted:undefined`. Before the fix, pass1 only checked `claimed.retracted`,
+// so EVERY stored-retracted work passed Pass-1 offline (the live re-query is null
+// without a cassette). This asserts the stored flag alone blocks, with NO live
+// re-query — the entire point of D-15 "surface twice".
+test('D-15 stored retraction: a bib entry with note = {RETRACTED} → Pass-1 MIS-CITED (offline, stored path)', async () => {
+  const { runPass1 } = await import(pass1JsUrl.href) as {
+    runPass1: (draftMd: string, bibPath: string) => Promise<Array<{ citekey: string; verdict: string; reason: string }>>;
+  };
+
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-stored-retr-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  const bib = [
+    '@article{retracted2019,',
+    '  title = {A Stored-Retraction Fixture},',
+    '  author = {Doe, Jane},',
+    '  doi = {10.0000/stored-retracted-d15},',
+    '  year = {2019},',
+    '  journal = {Test Journal},',
+    '  note = {RETRACTED},',
+    '}',
+    '',
+  ].join('\n');
+  const bibPath = join(root, '.paper', 'CITATIONS.bib');
+  writeFileSync(bibPath, bib);
+  const draftMd = '# Section\n\nA claim here [@retracted2019].\n';
+
+  const results = await runPass1(draftMd, bibPath);
+  const r = results.find((x) => x.citekey === 'retracted2019');
+  assert.ok(r, 'runPass1 must return a result for the stored-retracted citekey');
+  assert.equal(
+    r.verdict,
+    'MIS-CITED',
+    'A stored note=RETRACTED bib entry must block as MIS-CITED (D-15 stored path)',
+  );
+  // Must fire via the stored fast-path, NOT the live Retraction Watch re-query
+  // (which is null offline). The stored reason references the research-time check.
+  assert.doesNotMatch(
+    r.reason,
+    /live re-query/i,
+    'stored-retraction must block via the stored note, not the live re-query',
+  );
+});

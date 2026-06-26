@@ -54,6 +54,14 @@ interface BibEntry {
   author?: BibAuthor[];
   DOI?: string;
   retracted?: boolean;
+  // D-15 retracted-flag persistence: writeBibtex serializes a retracted source
+  // as BibTeX `note = {RETRACTED}` (bibtex-write.ts:93), and citation-js
+  // preserves `note` verbatim across the round-trip — it does NOT repopulate the
+  // synthetic `retracted` boolean. So a bib-sourced retracted entry arrives here
+  // with `note: 'RETRACTED'` and `retracted: undefined`. compile.ts:482 already
+  // reads `x.note === 'RETRACTED'`; the blocking gate must do the same or the
+  // entire stored-retraction surface (D-15 "surface twice") is silently dead.
+  note?: string;
 }
 
 /**
@@ -111,7 +119,14 @@ async function verdictForCitekey(
       reason: 'claimed citation metadata incomplete (empty title or no authors)',
     };
   }
-  if (claimed.retracted) {
+  // D-15 stored-retraction gate: honor BOTH the synthetic `retracted` boolean
+  // (fixture / in-memory candidate path) AND the round-tripped BibTeX
+  // `note = {RETRACTED}` (the on-disk .paper/CITATIONS.bib path). Without the
+  // `note` check, every bib-sourced retracted work passes Pass-1 (the boolean is
+  // undefined after the citation-js round-trip) and the stored-retraction block
+  // is dead — leaving only the live Retraction Watch re-query, which is null
+  // offline. Mirrors compile.ts:482.
+  if (claimed.retracted || claimed.note === 'RETRACTED') {
     return {
       citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
       reason: 'cited a retracted work (per Retraction Watch cross-check at research time)',
