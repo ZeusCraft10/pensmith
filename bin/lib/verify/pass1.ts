@@ -29,6 +29,7 @@ import { parseBibtex } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
+import { extractCitedKeysForVerification } from '../citation-token.js';
 
 export type { FreshnessResult } from './freshness.js';
 export { renderFreshnessTable } from './freshness.js';
@@ -223,10 +224,12 @@ export async function runPass1(
     entries.map((e) => [String(e['id'] ?? ''), e as BibEntry]),
   );
 
-  const citekeys = [...draftMd.matchAll(/\[@([a-z][a-z0-9_-]*)\]/g)]
-    .map((m) => m[1])
-    .filter((s): s is string => Boolean(s));
-  const unique = [...new Set(citekeys)];
+  // FAIL-CLOSED extraction (audit #2/#20): use the BROAD verifier-side detector,
+  // not the narrow lowercase-bare `[@key]` regex. Uppercase, locator ([@k, p. 5]),
+  // and multi-cite ([@a; @b]) citations must each produce a verdict — an
+  // unparseable/out-of-namespace citation is "unverifiable", never "absent". A
+  // key not present in the (lowercase-keyed) bib falls through to FABRICATED.
+  const unique = extractCitedKeysForVerification(draftMd);
 
   const results: Pass1Result[] = [];
   for (const ck of unique) {
@@ -259,10 +262,9 @@ export async function runFreshnessForDraft(
     ]),
   );
 
-  const citekeys = [...draftMd.matchAll(/\[@([a-z][a-z0-9_-]*)\]/g)]
-    .map((m) => m[1])
-    .filter((s): s is string => Boolean(s));
-  const unique = [...new Set(citekeys)];
+  // Same broad extraction as runPass1 so the advisory freshness probe covers the
+  // identical citation set the blocking gate sees (no divergence).
+  const unique = extractCitedKeysForVerification(draftMd);
 
   return probeFreshnessAll(
     unique.map((ck) => ({ citekey: ck, doi: doiByCitekey.get(ck) ?? null })),
