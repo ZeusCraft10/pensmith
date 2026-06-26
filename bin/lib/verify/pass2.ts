@@ -26,11 +26,9 @@
 // no-leak runtime chokepoint (getProviderApiKey); the value never reaches a log
 // or the cost ledger (T-05-02-02).
 
-import Anthropic from '@anthropic-ai/sdk';
-import { assertBudget, appendCost } from '../budget.js';
-import { estimateCost } from '../pricing.js';
+import { complete } from '../anthropic.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
-import { getProviderApiKey, loadRuntimeConfig } from '../runtime.js';
+import { loadRuntimeConfig } from '../runtime.js';
 
 // WR-04 (HARD-04c fence-marker breakout mitigation).
 //
@@ -141,11 +139,10 @@ function collectClaimPairs(draftMd: string): ClaimPair[] {
 // many-citation sections using claude-haiku-4 (~$0.007/call).
 const PASS2_SECTION_CAP_DEFAULT = 0.5;
 
-// Conservative fixed token estimates for the pre-call budget gate. The real
-// usage is recorded by appendCost AFTER the call from the SDK's usage report;
-// these only need to be a safe upper-ish bound for the gate (DoS mitigation,
-// T-05-02-04). claude-haiku-4 at 1500/300 tok ≈ $0.0024 — well under the cap.
-const EST_INPUT_TOKENS = 1500;
+// Output-token cap for the claim-support call (also the budget pre-estimate
+// ceiling inside complete()). claude-haiku-4 at this size ≈ $0.0024 — well under
+// the per-section cap. complete() estimates input tokens from content length and
+// records ACTUAL cost post-call, so no fixed input estimate is needed here.
 const EST_OUTPUT_TOKENS = 300;
 const DEFAULT_MODEL = 'claude-haiku-4';
 
@@ -247,8 +244,6 @@ export async function runPass2(
   const scopeId = `${opts.n}-pass2`;
   const promptTemplate = loadPrompt('claim-support');
   const modelId = await resolveModelId();
-  const apiKey = await getProviderApiKey('anthropic');
-  const client = new Anthropic({ apiKey });
 
   const results: Pass2Result[] = [];
   for (const pair of pairs) {
@@ -268,38 +263,22 @@ export async function runPass2(
         source_authors: stripFenceMarkers(normalizeAuthors(bibEntry?.author)),
       });
 
-      // ARCH-10 pre-call gate: assertBudget BEFORE the model call. A
-      // BudgetExceededError here aborts the call (financial-safety boundary).
-      const estimatedCallCost = estimateCost({
-        providerId: 'anthropic',
-        modelId,
-        inputTokens: EST_INPUT_TOKENS,
-        outputTokens: EST_OUTPUT_TOKENS,
-      });
-      await assertBudget({ scope: 'section', scopeId, cap }, estimatedCallCost);
-
-      const res = await client.messages.create({
-        model: modelId,
-        max_tokens: EST_OUTPUT_TOKENS,
+      // Route through the http.ts (D-06) transport chokepoint. complete()
+      // applies the SSRF pre-flight guard, full-jitter retry/backoff, the polite
+      // User-Agent, the pre-call assertBudget gate (scope/scopeId/cap forwarded),
+      // and post-call appendCost with ACTUAL usage — none of which the raw SDK
+      // client received (audit #7). The prompt is the user message (no system).
+      // A BudgetExceededError or transport error is caught below → UNCLEAR.
+      const res = await complete({
+        system: '',
         messages: [{ role: 'user', content: prompt }],
-      });
-
-      const inputTokens = res.usage?.input_tokens ?? EST_INPUT_TOKENS;
-      const outputTokens = res.usage?.output_tokens ?? EST_OUTPUT_TOKENS;
-      await appendCost({
-        ts: new Date().toISOString(),
         scope: 'section',
         scopeId,
-        provider: 'anthropic',
+        scopeCapUsd: cap,
+        maxTokens: EST_OUTPUT_TOKENS,
         model: modelId,
-        inputTokens,
-        outputTokens,
-        costUsd: estimateCost({ providerId: 'anthropic', modelId, inputTokens, outputTokens }),
       });
-
-      const textBlock = res.content.find((b) => b.type === 'text');
-      const rawText = textBlock && textBlock.type === 'text' ? textBlock.text : '';
-      results.push(parsePass2Response(rawText, pair.citekey, pair.claimSentence, abstract));
+      results.push(parsePass2Response(res.text, pair.citekey, pair.claimSentence, abstract));
     } catch (err) {
       // Any failure (budget, transport, parse) surfaces as a conservative
       // UNCLEAR — never thrown out of runPass2 (advisory must not crash verify).

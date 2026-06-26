@@ -54,11 +54,9 @@
 //   PENSMITH_NO_LLM=1 (or no ANTHROPIC_API_KEY) Step 3 is skipped entirely, every
 //   AMBIGUOUS claim is labeled 'UNCLEAR', and ZERO network calls are made (CI path).
 
-import Anthropic from '@anthropic-ai/sdk';
-import { assertBudget, appendCost } from '../budget.js';
-import { estimateCost } from '../pricing.js';
+import { complete } from '../anthropic.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
-import { getProviderApiKey, loadRuntimeConfig } from '../runtime.js';
+import { loadRuntimeConfig } from '../runtime.js';
 
 // WR-04 (HARD-04c fence-marker breakout mitigation).
 //
@@ -116,10 +114,9 @@ const CITEKEY_RE = /\[@([a-z][a-z0-9_-]*)\]/g;
 // $5 session cap even for paragraph-dense papers on claude-haiku-4.
 const PASS4_SECTION_CAP_DEFAULT = 0.5;
 
-// Conservative fixed token estimates for the pre-call budget gate. Real usage is
-// recorded by appendCost AFTER the call from the SDK's usage report; these only
-// need to be a safe upper-ish bound for the gate (DoS mitigation, T-05-03-04).
-const EST_INPUT_TOKENS = 1200;
+// Output-token cap for the orphan-label call (also the budget pre-estimate
+// ceiling inside complete()). complete() estimates input tokens from content
+// length and records ACTUAL cost post-call, so no fixed input estimate is needed.
 const EST_OUTPUT_TOKENS = 60;
 const DEFAULT_MODEL = 'claude-haiku-4';
 
@@ -440,8 +437,6 @@ export async function runPass4(
   const scopeId = `${opts.n}-pass4`;
   const promptTemplate = loadPrompt('orphan-label');
   const modelId = await resolveModelId();
-  const apiKey = await getProviderApiKey('anthropic');
-  const client = new Anthropic({ apiKey });
 
   for (const audit of audits) {
     const paraText = (paragraphs[audit.result.paragraphIndex] ?? '').trim();
@@ -457,37 +452,22 @@ export async function runPass4(
           paragraph_context: stripFenceMarkers(paraText.slice(0, 500)),
         });
 
-        // ARCH-09/10 pre-call gate: assertBudget BEFORE the model call.
-        const estimatedCallCost = estimateCost({
-          providerId: 'anthropic',
-          modelId,
-          inputTokens: EST_INPUT_TOKENS,
-          outputTokens: EST_OUTPUT_TOKENS,
-        });
-        await assertBudget({ scope: 'section', scopeId, cap }, estimatedCallCost);
-
-        const res = await client.messages.create({
-          model: modelId,
-          max_tokens: EST_OUTPUT_TOKENS,
+        // Route through the http.ts (D-06) transport chokepoint. complete()
+        // applies the SSRF pre-flight guard, full-jitter retry/backoff, the
+        // polite User-Agent, the pre-call assertBudget gate (scope/scopeId/cap
+        // forwarded), and post-call appendCost with ACTUAL usage — none of which
+        // the raw SDK client received (audit #7). Errors are caught below →
+        // UNCLEAR (advisory must not crash verify).
+        const res = await complete({
+          system: '',
           messages: [{ role: 'user', content: prompt }],
-        });
-
-        const inputTokens = res.usage?.input_tokens ?? EST_INPUT_TOKENS;
-        const outputTokens = res.usage?.output_tokens ?? EST_OUTPUT_TOKENS;
-        await appendCost({
-          ts: new Date().toISOString(),
           scope: 'section',
           scopeId,
-          provider: 'anthropic',
+          scopeCapUsd: cap,
+          maxTokens: EST_OUTPUT_TOKENS,
           model: modelId,
-          inputTokens,
-          outputTokens,
-          costUsd: estimateCost({ providerId: 'anthropic', modelId, inputTokens, outputTokens }),
         });
-
-        const textBlock = res.content.find((b) => b.type === 'text');
-        const rawText = textBlock && textBlock.type === 'text' ? textBlock.text : '';
-        label = parseOrphanLabel(rawText);
+        label = parseOrphanLabel(res.text);
       } catch {
         // Any failure (budget, transport, parse) -> conservative UNCLEAR. Never
         // thrown out of runPass4 (advisory must not crash verify).
