@@ -165,14 +165,24 @@ export async function resolveNextAction(
 
     const pDir = paperDir(paperRoot);
 
-    // H4 PINNED ORDERING: HANDOFF.json is NOT read here. existsSync never throws.
-    if (!existsSync(join(pDir, 'RESEARCH.md'))) return { verb: 'research' };
+    // "Research done" sentinel (audit M1): the research verb writes LIBRARY.json
+    // (+ CITATIONS.bib) — its canonical output per workflows/research.md §Outputs —
+    // NOT RESEARCH.md (a later curated-notes artifact written by `revise
+    // --research` / learning mode). Gating on RESEARCH.md alone left bare
+    // `pensmith`/next/resume looping on `research` forever after a real research
+    // run. Accept EITHER so the canonical output advances the pipeline while the
+    // legacy RESEARCH.md still counts.
+    const researchDone =
+      existsSync(join(pDir, 'LIBRARY.json')) || existsSync(join(pDir, 'RESEARCH.md'));
 
-    // DI HARD-STOP (feature-agnostic): once RESEARCH.md exists, a caller that
+    // H4 PINNED ORDERING: HANDOFF.json is NOT read here. existsSync never throws.
+    if (!researchDone) return { verb: 'research' };
+
+    // DI HARD-STOP (feature-agnostic): once research is done, a caller that
     // requested stopAfterResearch halts here — reuse the existing status/done
     // terminal rather than widening RouterDecision. The caller is responsible
     // for any stage-appropriate end-state message it wants to print.
-    if (opts.stopAfterResearch && existsSync(join(pDir, 'RESEARCH.md'))) {
+    if (opts.stopAfterResearch && researchDone) {
       return { verb: 'status', reason: 'done' };
     }
 

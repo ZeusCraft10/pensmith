@@ -354,8 +354,13 @@ export function deriveLibraryStatus(
     const pDir = paperDir(folderPath);
 
     // (2) STATE.json present — walk the on-disk stage probes. existsSync never
-    //     throws (returns false on any error).
-    if (!existsSync(join(pDir, 'RESEARCH.md'))) return { status: 'intake' };
+    //     throws (returns false on any error). "Research done" keys on LIBRARY.json
+    //     (the research verb's canonical output) OR the legacy RESEARCH.md — see
+    //     router.ts (audit M1); gating on RESEARCH.md alone mislabelled every
+    //     post-research paper as 'intake'.
+    const researchDone =
+      existsSync(join(pDir, 'LIBRARY.json')) || existsSync(join(pDir, 'RESEARCH.md'));
+    if (!researchDone) return { status: 'intake' };
     if (!existsSync(join(pDir, 'OUTLINE.md'))) return { status: 'research' };
 
     const sections = Array.isArray(state.sections) ? state.sections : [];
