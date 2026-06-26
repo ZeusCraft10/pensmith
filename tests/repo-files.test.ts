@@ -205,7 +205,7 @@ test('references/http-warnings.md hash-pin (IN-03 / D-24)', () => {
   const hash = createHash('sha256').update(bytes).digest('hex');
   // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/http-warnings.md')).digest('hex'))"`
   // after every intentional edit. The PR diff makes the change visible.
-  const PINNED = '2ff637adb29ce2a34442ddb7472e6ad6485200717275415f022e427f00dc72e9';
+  const PINNED = 'd4bd6d2eca6448afef9a73874ba05721da32c2ad716dad53061678d6c8e0d07b';
   assert.equal(hash, PINNED, `references/http-warnings.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

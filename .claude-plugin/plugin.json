@@ -7,7 +7,7 @@
     "name": "Akhil Achanta",
     "email": "akhilachanta8@gmail.com"
   },
-  "repository": "https://github.com/akhilachanta/pensmith",
+  "repository": "https://github.com/ZeusCraft10/pensmith",
   "keywords": ["academic-writing", "citation-verification", "research", "papers"],
   "skills": [
     { "name": "pensmith", "file": "skills/pensmith.md" },

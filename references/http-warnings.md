@@ -7,7 +7,7 @@ the two is a lint failure.
 
 ## PENSMITH_CONTACT_EMAIL not set
 
-> pensmith: PENSMITH_CONTACT_EMAIL is not set. Using no-contact User-Agent. Some APIs (Crossref polite pool, OpenAlex) may rate-limit more aggressively. Set PENSMITH_CONTACT_EMAIL to your email address in your shell profile. See https://github.com/akhilachanta/pensmith#configuration
+> pensmith: PENSMITH_CONTACT_EMAIL is not set. Using no-contact User-Agent. Some APIs (Crossref polite pool, OpenAlex) may rate-limit more aggressively. Set PENSMITH_CONTACT_EMAIL to your email address in your shell profile. See https://github.com/ZeusCraft10/pensmith#configuration
 
 (One blockquote line above is the literal string. The leading `> ` is markdown
 syntax — `bin/lib/http.ts` strips it on read. Do NOT edit the wording without

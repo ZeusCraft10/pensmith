@@ -14,8 +14,8 @@
       "description": "Two-tier (Claude Code plugin + portable Node CLI) for academic paper writing with section-level citation verification",
       "version": "0.1.0-dev",
       "author": { "name": "Akhil Achanta" },
-      "homepage": "https://github.com/akhilachanta/pensmith",
-      "repository": "https://github.com/akhilachanta/pensmith",
+      "homepage": "https://github.com/ZeusCraft10/pensmith",
+      "repository": "https://github.com/ZeusCraft10/pensmith",
       "license": "MIT",
       "keywords": ["academic-writing", "citation-verification"],
       "category": "productivity"
