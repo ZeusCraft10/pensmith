@@ -269,6 +269,34 @@ async function runStyleProducerNonFatal(
   }
 }
 
+/**
+ * Audit #13 — write a .gitignore into the paper workspace so the RAW (unredacted)
+ * PII file .paper/INTAKE.raw.local (and any *.local artifact) can NEVER be
+ * committed. The intake code repeatedly documents INTAKE.raw.local as
+ * "(gitignored)", but nothing ever wrote that .gitignore into the user's
+ * workspace — so with PII redaction on, the raw answers were committable,
+ * defeating the opt-in. Best-effort + idempotent: never overwrites an existing
+ * .gitignore (the user may have customized it); a non-writable .paper/ must not
+ * break intake. Written through the atomicWriteFile (D-07) chokepoint.
+ */
+async function ensurePaperGitignore(): Promise<void> {
+  try {
+    const gi = path.join(paperDir(), '.gitignore');
+    if (existsSync(gi)) return;
+    const body = [
+      '# Written by pensmith — keep unredacted PII and local-only artifacts out of git.',
+      '# INTAKE.raw.local holds the RAW (unredacted) intake answers when PII redaction',
+      '# is enabled; it must NEVER be committed.',
+      'INTAKE.raw.local',
+      '*.local',
+      '',
+    ].join('\n');
+    await atomicWriteFile(gi, body);
+  } catch {
+    // best-effort — a workspace without a writable .paper/ must not break intake.
+  }
+}
+
 export const intakeCommand = defineCommand({
   meta: {
     name: 'new',
@@ -341,6 +369,9 @@ export const intakeCommand = defineCommand({
       'You are responsible for the work you submit.',
     ].join('\n');
     process.stdout.write(DISCLAIMER + '\n\n');
+
+    // Audit #13: protect the raw-PII file BEFORE anything could write it.
+    await ensurePaperGitignore();
 
     const targetPath = path.join(paperDir(), 'INTAKE.md');
     const rawLocalPath = path.join(paperDir(), 'INTAKE.raw.local');
