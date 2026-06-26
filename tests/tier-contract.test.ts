@@ -1189,6 +1189,11 @@ function seedDoneFixture(): string {
     [
       '# Section Verification — 01-intro',
       '',
+      // A verified section carries a Status line (GATE-01 parity); the
+      // unconditional export gate (audit #3/#14) requires it. UNSUPPORTED is an
+      // advisory Pass-2 verdict (pipe table) and is NOT a blocking verdict.
+      'Status: verified',
+      '',
       '## Pass-2 (claim support, advisory — LLM-judged)',
       '',
       '| Citekey | Claim Sentence | Verdict | Rationale |',
