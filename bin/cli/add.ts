@@ -41,6 +41,13 @@ import { ask } from '../lib/prompts.js';
 import { paperDir, sectionPlan } from '../lib/paths.js';
 import { loadState } from '../lib/state.js';
 import { fetch as httpFetch } from '../lib/http.js';
+import { isOfflineMode } from '../lib/http-mock.js';
+
+/** True for an http(s) URL — used to route URL ingestion away from the local-PDF
+ *  branch (audit #12: a URL ending in .pdf must NOT be read as a local file). */
+function isHttpUrl(s: string): boolean {
+  return /^https?:\/\//i.test(s.trim());
+}
 import type { SourceCandidate } from '../lib/schemas/source-candidate.js';
 
 /**
@@ -188,37 +195,61 @@ export const addCommand = defineCommand({
     if (isDoi(source)) {
       const norm = normalizeDoi(source);
       candidate = norm ? await crossrefFetchById(norm) : null;
-    } else if (source.toLowerCase().endsWith('.pdf') || fs.existsSync(path.resolve(source))) {
-      // BYO PDF — bytes-only chokepoint (T-08-04-03 path-traversal mitigation).
-      const buf = await fs.promises.readFile(path.resolve(source));
-      const text = await extractPdfText(buf); // pdf-parse → pymupdf fallback (08-03)
-      const title = extractTitleHeuristic(text);
-      if (title) {
-        const hits = await crossrefSearch(title, { limit: 1 });
-        candidate = hits[0] ?? null;
-      }
-    } else {
-      // URL path — D-06 chokepoint routes through http.ts checkSsrf (T-08-04-02).
-      // checkSsrf resolves the hostname via DNS and blocks RFC1918/loopback/link-local
-      // addresses before the socket connects. source:'generic' triggers the guard.
-      try {
-        const res = await httpFetch(source, { source: 'generic' });
-        const ct = (res.headers['content-type'] ?? '').toLowerCase();
-        if (ct.includes('application/pdf') || source.toLowerCase().endsWith('.pdf')) {
-          const buf = Buffer.from(res.body, 'binary');
-          const text = await extractPdfText(buf);
-          const title = extractTitleHeuristic(text);
-          if (title) {
-            const hits = await crossrefSearch(title, { limit: 1 });
-            candidate = hits[0] ?? null;
+    } else if (isHttpUrl(source)) {
+      // URL path — checked BEFORE the local-PDF branch (audit #12: a URL ending
+      // in .pdf used to fall into the local branch and crash fs.readFile with an
+      // unhandled ENOENT). D-06 chokepoint routes through http.ts checkSsrf
+      // (T-08-04-02): the hostname is DNS-resolved and RFC1918/loopback/link-local
+      // addresses are blocked before the socket connects (source:'generic').
+      if (isOfflineMode()) {
+        // audit #11: --dry-run / offline mode must make ZERO external calls. URL
+        // ingestion is the one add path with no cassette, so refuse it here.
+        process.stderr.write(
+          `pensmith add: URL ingestion requires network access and is disabled in ` +
+          `offline / --dry-run mode. Source NOT added.\n`,
+        );
+        candidate = null;
+      } else {
+        try {
+          const res = await httpFetch(source, { source: 'generic' });
+          const ct = (res.headers['content-type'] ?? '').toLowerCase();
+          if (ct.includes('application/pdf') || source.toLowerCase().endsWith('.pdf')) {
+            const buf = Buffer.from(res.body, 'binary');
+            const text = await extractPdfText(buf);
+            const title = extractTitleHeuristic(text);
+            if (title) {
+              const hits = await crossrefSearch(title, { limit: 1 });
+              candidate = hits[0] ?? null;
+            }
+          } else {
+            const doi = scrapeDoiFromHtml(res.body);
+            if (doi) candidate = await crossrefFetchById(doi);
           }
-        } else {
-          const doi = scrapeDoiFromHtml(res.body);
-          if (doi) candidate = await crossrefFetchById(doi);
+        } catch {
+          candidate = null;
         }
-      } catch {
+      }
+    } else if (source.toLowerCase().endsWith('.pdf') || fs.existsSync(path.resolve(source))) {
+      // BYO LOCAL PDF — bytes-only chokepoint (T-08-04-03 path-traversal mitigation).
+      // audit #30: guard the read so a missing/unreadable file yields a friendly
+      // diagnostic, not a raw unhandled ENOENT stack trace.
+      try {
+        const buf = await fs.promises.readFile(path.resolve(source));
+        const text = await extractPdfText(buf); // pdf-parse → pymupdf fallback (08-03)
+        const title = extractTitleHeuristic(text);
+        if (title) {
+          const hits = await crossrefSearch(title, { limit: 1 });
+          candidate = hits[0] ?? null;
+        }
+      } catch (e) {
+        process.stderr.write(
+          `pensmith add: could not read local PDF "${source}": ${(e as Error).message}\n`,
+        );
         candidate = null;
       }
+    } else {
+      // Not a DOI, an http(s) URL, or a readable local .pdf — nothing to hydrate.
+      candidate = null;
     }
 
     if (!candidate) {
