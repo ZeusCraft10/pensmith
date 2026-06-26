@@ -28,6 +28,7 @@ import path from 'node:path';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { readGoalFromConfig } from './goal.js';
 import { sectionDraft, sectionPlan, paperDir } from '../lib/paths.js';
+import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { assertDrafterInput } from '../lib/drafter-input.js';
 import { runAllSections } from '../lib/write-orchestrator.js';
 import type { SectionNode } from '../lib/schemas/wave-graph.js';
@@ -219,6 +220,13 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
     voiceHint,
   });
 
+  // Audit #9: mark the section 'writing' BEFORE drafting (D-08-AMENDED). If the
+  // drafter throws, PLAN.md is left 'writing' so the router routes back to write
+  // (retry), never silently stranding the section.
+  await updatePlanFrontmatter(planPath, (fm) => {
+    fm.status = 'writing';
+  });
+
   const result = await complete({
     system: interpolatedDrafterPrompt,
     messages: [{ role: 'user', content: `Write section ${n} (${slug}).` }],
@@ -228,6 +236,18 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
 
   const targetPath = sectionDraft(n, slug);
   await atomicWriteFile(targetPath, result.text);
+
+  // Audit #9: mark the section 'written' so the router (router.ts:202) advances
+  // to verify instead of re-routing the freshly-drafted section back to plan and
+  // re-drafting. verify owns verified_against_draft_hash — write deliberately
+  // does NOT set it, so a re-write leaves the old hash stale and compile's
+  // staleness check forces re-verification (the write<->verify cycle-break).
+  if (!(await updatePlanFrontmatter(planPath, (fm) => { fm.status = 'written'; }))) {
+    process.stderr.write(
+      `pensmith write: WARN — could not set status:'written' on ${planPath} ` +
+      `(PLAN.md absent/unwritable); the router may not advance this section to verify.\n`,
+    );
+  }
   return targetPath;
 }
 
