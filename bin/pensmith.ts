@@ -330,6 +330,26 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
   const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
 
+  // Audit #10: a section-scoped verb (plan/verify) typed WITHOUT its section
+  // number must default to the next section that needs THAT verb — it must NEVER
+  // silently run whatever DIFFERENT verb the router happens to pick. `verb` is
+  // non-null ONLY on the section-verb-without-number path here (an explicit verb
+  // with its number returned via runMain above; a bare invocation has
+  // verb === null and is unaffected). When the router's next action is not the
+  // requested verb, no section is ready for it — tell the user the real next step
+  // instead of running a command they did not ask for.
+  if (verb !== null && decision.verb !== verb) {
+    const at =
+      'n' in decision && 'slug' in decision ? ` (section ${decision.n} ${decision.slug})` : '';
+    process.stderr.write(
+      `pensmith ${verb}: no section is ready to ${verb} right now — the next step is ` +
+      `\`pensmith ${decision.verb}\`${at}. Pass a section number ` +
+      `(e.g. \`pensmith ${verb} 2\`) to ${verb} a specific section.\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   // Learning hard-stop: render the per-claim learning end-state to TUTORIAL.md
   // INSTEAD OF dispatching the status verb's generic "ready to export" message.
   if (stop && decision.verb === 'status' && decision.reason === 'done') {
