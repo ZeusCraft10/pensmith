@@ -90,6 +90,57 @@ test('COMP-07/D-19: compile regenerates CITATIONS.bib from the union of compiled
   assert.ok(ids.has('smith2020'), 'a cited key must survive bib regen');
   assert.ok(ids.has('jones2019'), 'a cited key must survive bib regen');
   assert.ok(!ids.has('unused2018'), 'an UNCITED key must be dropped (regenerated from the compiled union)');
+
+  // Audit #5: the publication year must survive regen (was stripped from every
+  // entry). citation-js parses `year` into issued.date-parts[0][0].
+  const smith = entries.find((e) => String((e as { id?: string }).id ?? '') === 'smith2020') as
+    | { issued?: { 'date-parts'?: number[][] } }
+    | undefined;
+  assert.equal(smith?.issued?.['date-parts']?.[0]?.[0], 2020, 'regen must preserve the publication year (#5)');
+  // Belt-and-suspenders: the raw bib text carries the year too.
+  assert.match(bibText, /year\s*=\s*\{?2020\}?/i, 'regenerated bib text must contain the year');
+});
+
+test('audit #17: a DOI-less source (book, ISBN only) survives bib regen', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-compile-bookregen-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  writeFileSync(
+    join(root, '.paper', 'OUTLINE.md'),
+    [
+      '# Book Regen Fixture',
+      '',
+      '| # | slug | title | depends_on | word target | assigned_sources |',
+      '| --- | --- | --- | --- | --- | --- |',
+      '| 1 | intro | Intro | | 300 | kuhn1962 |',
+      '',
+    ].join('\n'),
+  );
+  // A book entry: ISBN, no DOI. Before the fix, writeBibtex's persistent-id gate
+  // dropped it because regenerateBib never carried the ISBN.
+  writeFileSync(
+    join(root, '.paper', 'CITATIONS.bib'),
+    '@book{kuhn1962,\n  title = {The Structure of Scientific Revolutions},\n  author = {Kuhn, Thomas},\n  year = {1962},\n  isbn = {9780226458120}\n}\n',
+  );
+  const dir = join(root, '.paper', 'sections', '01-intro');
+  mkdirSync(dir, { recursive: true });
+  const draft = '# Intro\n\nA paradigm shift [@kuhn1962].\n';
+  writeFileSync(join(dir, 'DRAFT.md'), draft);
+  const hash = computeDraftHash(Buffer.from(draft, 'utf8'), ['kuhn1962']);
+  writeFileSync(
+    join(dir, 'PLAN.md'),
+    ['---', 'section: 1', 'slug: intro', 'title: intro', 'depends_on: []', "assigned_sources: ['kuhn1962']", `verified_against_draft_hash: '${hash}'`, 'status: verified', '---', '', '# intro', ''].join('\n'),
+  );
+  writeFileSync(
+    join(dir, 'VERIFICATION.md'),
+    ['# VERIFICATION (Section 1, intro)', '', 'Status: verified', '', '## Pass-1', '', '- kuhn1962: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed', '', ''].join('\n'),
+  );
+
+  const result = await runCompile({ paperRoot: root, yolo: true });
+  assert.equal(result.refused, false);
+  const bibText = readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8');
+  const ids = new Set((await parseBib(bibText)).map((e) => String((e as { id?: string }).id ?? '')));
+  assert.ok(ids.has('kuhn1962'), 'a DOI-less book (ISBN) must survive bib regen (#17)');
+  assert.match(bibText, /year\s*=\s*\{?1962\}?/i, 'the book year must survive too');
 });
 
 test('COMP-07/D-19: regenerated bib is non-empty and parseable (rides the citation-js chokepoint)', async () => {

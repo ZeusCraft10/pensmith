@@ -462,7 +462,16 @@ async function regenerateBib(compiled: string, bibPath: string): Promise<void> {
   const now = new Date().toISOString();
   const candidates: SourceCandidate[] = [];
   for (const e of entries) {
-    const x = e as { id?: string; title?: string | string[]; author?: Array<{ family?: string; given?: string }>; DOI?: string; ISBN?: string; number?: string; note?: string };
+    const x = e as {
+      id?: string;
+      title?: string | string[];
+      author?: Array<{ family?: string; given?: string }>;
+      DOI?: string;
+      ISBN?: string;
+      number?: string;
+      note?: string;
+      issued?: { 'date-parts'?: number[][] };
+    };
     const id = String(x.id ?? '');
     if (!compiledCitekeys.has(id)) continue; // keep only cited keys (the union)
     const title = Array.isArray(x.title) ? (x.title[0] ?? '') : (x.title ?? '');
@@ -473,12 +482,31 @@ async function regenerateBib(compiled: string, bibPath: string): Promise<void> {
         return giv ? `${fam}, ${giv}` : fam;
       })
       .filter(Boolean);
+
+    // Preserve the publication year (audit #5). citation-js parses BibTeX
+    // `year = {2020}` into CSL `issued.date-parts[0][0]`; the prior code never
+    // read it, so writeBibtex (which emits a year only when c.year is a number)
+    // stripped the year from EVERY regenerated citation.
+    const yearRaw = x.issued?.['date-parts']?.[0]?.[0];
+    const year = typeof yearRaw === 'number' && Number.isFinite(yearRaw) ? yearRaw : undefined;
+
+    // Preserve the persistent identifier for DOI-less sources (audit #17): a book
+    // (ISBN) or arXiv preprint (CSL `number`) carries no DOI, so writeBibtex's
+    // toCsl persistent-id gate would DROP it entirely. Carry ISBN / arXiv id
+    // (the extra fields toCsl reads) so DOI-less sources survive the round-trip.
+    const isbn = typeof x.ISBN === 'string' && x.ISBN.trim() ? x.ISBN.trim() : undefined;
+    const arxivId =
+      !x.DOI && typeof x.number === 'string' && x.number.trim() ? x.number.trim() : undefined;
+
     candidates.push({
-      source: 'crossref',
+      source: arxivId ? 'arxiv' : 'crossref',
       id: x.DOI ?? id,
       title: title || id,
       authors: authors.length > 0 ? authors : ['Unknown'],
       ...(x.DOI !== undefined ? { doi: x.DOI } : {}),
+      ...(year !== undefined ? { year } : {}),
+      ...(isbn !== undefined ? { isbn } : {}),
+      ...(arxivId !== undefined ? { arxivId } : {}),
       retracted: x.note === 'RETRACTED',
       last_verified: now,
       citekey: id,
