@@ -4,7 +4,7 @@
 
 **Project type:** greenfield Claude Code plugin + portable Node CLI.
 **Inspiration:** [Get Shit Done](https://github.com/gsd-build/get-shit-done) and [gsd-plugin](https://github.com/jnuyens/gsd-plugin) — same architectural patterns (skills, agents, MCP server, hooks, workflow bodies, HANDOFF.json), academic-paper domain instead of code.
-**License:** MIT.
+**License:** AGPL-3.0-or-later.
 **Name:** `pensmith`.
 
 ---

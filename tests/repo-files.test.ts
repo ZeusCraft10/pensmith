@@ -46,7 +46,7 @@ test('package.json contract', () => {
   const pkg = JSON.parse(read('package.json')) as Record<string, unknown>;
   assert.equal(pkg['name'], 'pensmith');
   assert.equal(pkg['type'], 'module');
-  assert.equal(pkg['license'], 'MIT');
+  assert.equal(pkg['license'], 'AGPL-3.0-or-later');
   const engines = pkg['engines'] as Record<string, string> | undefined;
   assert.equal(engines?.['node'], '>=20.10.0');
   assert.equal(pkg['packageManager'], 'npm@10.9.0');
@@ -86,10 +86,10 @@ test('tsconfig contract (D-03)', () => {
     'tsconfig.exclude must contain tests/fixtures/**/* so the @ts-nocheck red-team fixture is not type-checked');
 });
 
-test('LICENSE is MIT 2026 Akhil Achanta', () => {
+test('LICENSE is AGPL-3.0', () => {
   const lic = read('LICENSE');
-  assert.match(lic, /MIT License/);
-  assert.match(lic, /Copyright \(c\) 2026 Akhil Achanta/);
+  assert.match(lic, /GNU AFFERO GENERAL PUBLIC LICENSE/);
+  assert.match(lic, /Version 3, 19 November 2007/);
 });
 
 test('PRIVACY and README-DEV structure checks (README stubs removed — Phase 16 DOCS-01)', () => {

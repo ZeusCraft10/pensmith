@@ -133,7 +133,7 @@ The generative seams the Foundation milestone scaffolded are now connected: the 
 
 ## Constraints
 
-- **License**: MIT — open-source from day one
+- **License**: AGPL-3.0-or-later — copyleft, open-source from day one
 - **Two-tier**: Both Tier 1 and Tier 2 must work from the same workflow files. Non-negotiable.
 - **Single-command UX**: README quick start teaches `/pensmith` and only `/pensmith`. Verbs are power-user fallback.
 - **Verifier gates compile and export**: No FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes a section. Author/title fuzzy match is part of Pass 1, not optional.

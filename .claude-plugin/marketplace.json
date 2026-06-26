@@ -16,7 +16,7 @@
       "author": { "name": "Akhil Achanta" },
       "homepage": "https://github.com/ZeusCraft10/pensmith",
       "repository": "https://github.com/ZeusCraft10/pensmith",
-      "license": "MIT",
+      "license": "AGPL-3.0-or-later",
       "keywords": ["academic-writing", "citation-verification"],
       "category": "productivity"
     }

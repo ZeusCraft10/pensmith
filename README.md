@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/ZeusCraft10/pensmith/actions/workflows/ci.yml"><img src="https://github.com/ZeusCraft10/pensmith/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPLv3-blue.svg" alt="License: AGPL-3.0-or-later"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D20.10-brightgreen.svg" alt="Node >=20.10">
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg?logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/status-alpha%20(v0.1.0--dev)-orange.svg" alt="Status: alpha">
@@ -229,4 +229,4 @@ This tool is for your own writing, research, and learning. **It is not a guarant
 
 ## License
 
-[MIT](LICENSE) © Akhil Achanta
+[AGPL-3.0-or-later](LICENSE) © Akhil Achanta

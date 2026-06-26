@@ -69,7 +69,7 @@ test('plugin.json kebab-case name + semver version', () => {
   assert.equal(plugin.name, 'pensmith');
   assert.match(plugin.name!, /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/);
   assert.match(plugin.version!, /^\d+\.\d+\.\d+/);
-  assert.equal(plugin.license, 'MIT');
+  assert.equal(plugin.license, 'AGPL-3.0-or-later');
   assert.equal(plugin.author?.email, 'akhilachanta8@gmail.com');
 });
 

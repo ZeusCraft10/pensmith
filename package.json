@@ -2,7 +2,7 @@
   "name": "pensmith",
   "version": "0.1.0-dev",
   "description": "Structured research-and-drafting assistant for academic papers — verifies every citation against the live source. Two-tier: Claude Code plugin + portable Node CLI.",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "author": "Akhil Achanta <akhilachanta8@gmail.com>",
   "type": "module",
   "engines": {
