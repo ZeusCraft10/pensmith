@@ -214,6 +214,7 @@ export async function registerPaperInGlobalLibrary(
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
 
   let next!: GlobalLibrary;
+  let prunedAtWrite = 0;
 
   await withLock(file, async () => {
     let current: GlobalLibrary;
@@ -248,14 +249,28 @@ export async function registerPaperInGlobalLibrary(
           )
         : [...current.entries, validatedEntry];
 
-    next = GlobalLibrarySchema.parse({ ...current, entries: updatedEntries });
+    // Audit M3: self-healing GC. Drop entries whose folderPath no longer exists
+    // so the registry doesn't grow unbounded with deleted papers (and `list`
+    // stops showing ghosts). NEVER prune the entry just registered (its folder
+    // exists) nor an 'archived' entry (the user explicitly retained it; its
+    // folder may be gone by design). existsSync never throws; note that OneDrive
+    // "files on demand" placeholders still report as existing, so a synced paper
+    // is not pruned just because its content isn't downloaded.
+    const prunedEntries = updatedEntries.filter(
+      (e) => e.id === validatedEntry.id || e.status === 'archived' || existsSync(e.folderPath),
+    );
+    const prunedCount = updatedEntries.length - prunedEntries.length;
+
+    next = GlobalLibrarySchema.parse({ ...current, entries: prunedEntries });
     await atomicWriteFile(file, JSON.stringify(next, null, 2) + '\n');
+    prunedAtWrite = prunedCount;
   });
 
   log().event({
     event: 'global-library.register',
     id: validatedEntry.id,
     entryCount: next.entries.length,
+    pruned: prunedAtWrite,
   });
 
   return next;
