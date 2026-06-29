@@ -18,6 +18,7 @@
 import { defineCommand } from 'citty';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionPlan } from '../lib/paths.js';
+import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { runRevise } from '../lib/revise.js';
 import { proposeSwap } from '../lib/revise-swap.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
@@ -140,6 +141,16 @@ export const planCommand = defineCommand({
       scopeId: `plan-${n}`,
     });
     await atomicWriteFile(targetPath, result.text);
+
+    // Second-loop finding (Theme A): authoritatively mark the section 'writing'
+    // so the router (router.ts:201) advances plan -> write instead of looping on
+    // plan forever. The CLI owns this transition — it must NOT depend on the
+    // model emitting `status:` in the PLAN.md frontmatter (the offline placeholder
+    // has none, and the section-planner prompt does not mandate it). Mirrors how
+    // write sets 'written' (#9) and verify sets 'verified' (#8).
+    await updatePlanFrontmatter(targetPath, (fm) => {
+      fm.status = 'writing';
+    });
     process.stdout.write(`pensmith plan: wrote PLAN.md to ${targetPath}\n`);
     return { ok: true, path: targetPath };
   },

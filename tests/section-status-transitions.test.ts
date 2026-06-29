@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { initState, initSection } from '../bin/lib/state.js';
 import { parseFrontmatter } from '../bin/lib/frontmatter.js';
 import { resolveNextAction } from '../bin/lib/router.js';
+import { planCommand } from '../bin/cli/plan.js';
 import { writeCommand } from '../bin/cli/write.js';
 import { verifyCommand } from '../bin/cli/verify.js';
 
@@ -55,6 +56,37 @@ async function withEnvCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
     else process.env['PENSMITH_NO_LLM'] = prevNoLlm;
   }
 }
+
+test('section status (second-loop finding): plan sets status:writing so the router advances plan->write', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-plan-'));
+  mkdirSync(join(root, '.paper', 'sections', '01-intro'), { recursive: true });
+  await initState(root);
+  await initSection(root, 1, 'intro');
+  writeFileSync(join(root, '.paper', 'LIBRARY.json'), '{"$schemaVersion":1,"entries":[]}\n');
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), [
+    '# Paper', '',
+    '| # | slug | title | depends_on | word target | assigned_sources |',
+    '|---|------|-------|------------|-------------|------------------|',
+    '| 1 | intro | Introduction | | 300 | |',
+    '',
+  ].join('\n'));
+  // No PLAN.md yet → the router resolves to plan(1).
+  const before = await resolveNextAction(root);
+  assert.equal(before.verb, 'plan', `precondition: router should want plan; got ${JSON.stringify(before)}`);
+
+  await withEnvCwd(root, async () => {
+    const prun = planCommand.run as (ctx: { args: Record<string, unknown> }) => Promise<unknown>;
+    await prun({ args: { n: 1, slug: 'intro', yolo: true } });
+  });
+
+  const planPath = join(root, '.paper', 'sections', '01-intro', 'PLAN.md');
+  assert.ok(existsSync(planPath), 'plan must write PLAN.md');
+  assert.equal(planStatus(planPath).status, 'writing', 'plan must set PLAN.md status to writing');
+
+  // The router now advances to write instead of looping on plan.
+  const after = await resolveNextAction(root);
+  assert.equal(after.verb, 'write', `router must advance plan->write; got ${JSON.stringify(after)}`);
+});
 
 test('section status (audit #8/#9): write -> "written", verify -> "verified", router reaches compile', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-status-'));
