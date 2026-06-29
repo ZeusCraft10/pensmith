@@ -211,10 +211,13 @@ export const addCommand = defineCommand({
         candidate = null;
       } else {
         try {
-          const res = await httpFetch(source, { source: 'generic' });
+          // noCache:true guarantees a live fetch so res.bodyBytes is populated
+          // (audit #29) — a PDF must be read byte-faithfully, never via the
+          // UTF-8-decoded body string.
+          const res = await httpFetch(source, { source: 'generic', noCache: true });
           const ct = (res.headers['content-type'] ?? '').toLowerCase();
           if (ct.includes('application/pdf') || source.toLowerCase().endsWith('.pdf')) {
-            const buf = Buffer.from(res.body, 'binary');
+            const buf = res.bodyBytes ?? Buffer.from(res.body, 'binary');
             const text = await extractPdfText(buf);
             const title = extractTitleHeuristic(text);
             if (title) {
