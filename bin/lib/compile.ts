@@ -235,8 +235,34 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
 
   return withLock(lockResource, async (): Promise<CompileResult> => {
     // ---- Step 1: load sections in OUTLINE order + refuse-gate + staleness ----
+    // Audit M2: a missing / section-less OUTLINE.md is a REFUSAL (the CLI prints
+    // refuseReasons), not a raw parseOutline stack trace. loadOutline returns ''
+    // for an absent file and parseOutline throws "no section table" on '' or a
+    // placeholder, so both degenerate cases land here gracefully.
     const raw = await loadOutline(paperDir(opts.paperRoot));
-    const outline = parseOutline(raw);
+    let outline: ReturnType<typeof parseOutline>;
+    try {
+      outline = parseOutline(raw);
+    } catch {
+      return {
+        refused: true,
+        refuseReasons: [
+          "no usable outline: .paper/OUTLINE.md has no section table — run 'pensmith outline' first",
+        ],
+        sectionsCount: 0,
+        staleResolvedCount: 0,
+      };
+    }
+    if (outline.sections.length === 0) {
+      return {
+        refused: true,
+        refuseReasons: [
+          "no sections in .paper/OUTLINE.md — run 'pensmith outline' to populate the section table",
+        ],
+        sectionsCount: 0,
+        staleResolvedCount: 0,
+      };
+    }
     const ordered = outline.sections.slice().sort((a, b) => a.n - b.n);
 
     const loaded: LoadedSection[] = [];
