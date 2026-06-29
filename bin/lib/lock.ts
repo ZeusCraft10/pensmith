@@ -110,11 +110,15 @@ export async function stubFor(resource: string): Promise<string> {
  * `OperationOptions` (node-retry) object. We use the object form so we can
  * drive both the per-attempt delay and the total wait window.
  */
-function buildPlfOpts(opts: LockOptions): import('proper-lockfile').LockOptions {
+export function buildPlfOpts(opts: LockOptions): import('proper-lockfile').LockOptions {
   const o: Required<LockOptions> = { ...DEFAULT_OPTS, ...opts };
-  // Pick a retry count large enough to span timeoutMs given the
-  // exponential schedule. proper-lockfile/node-retry caps total time at
-  // maxTimeout, so this is a soft upper bound — the real limit is maxTimeout.
+  // Pick a retry count large enough to span timeoutMs given the exponential
+  // schedule. Audit #26: node-retry's `maxTimeout` caps EACH delay, NOT the
+  // total — without `maxRetryTime` the actual wait is the SUM of the geometric
+  // delays (for the defaults ≈ 131s, more than 2x the documented 60s timeoutMs).
+  // We set `maxRetryTime = timeoutMs` so the TOTAL acquisition wait is genuinely
+  // bounded by timeoutMs; `retries` is now only a soft upper bound (node-retry
+  // gives up at whichever of retries / maxRetryTime is reached first).
   const ratio = o.timeoutMs / Math.max(1, o.retryDelayMs);
   const factor = Math.max(1.0001, o.retryFactor); // log() guard
   const retries = Math.max(1, Math.ceil(Math.log(ratio) / Math.log(factor)));
@@ -125,6 +129,7 @@ function buildPlfOpts(opts: LockOptions): import('proper-lockfile').LockOptions 
       minTimeout: o.retryDelayMs,
       maxTimeout: o.timeoutMs,
       factor: o.retryFactor,
+      maxRetryTime: o.timeoutMs,
     },
   };
 }
