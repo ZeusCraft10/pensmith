@@ -130,7 +130,10 @@ export async function loadAndMigrate<TSchema extends z.ZodTypeAny>(
   // disk untouched even if migrations ran — useful for read-only replay
   // tools and dry-run validators.
   if (v !== diskVersion && opts.writeBack === true) {
-    await atomicWriteFile(opts.file, JSON.stringify(parsed.data, null, 2));
+    // Audit #35: append the trailing newline every other JSON writer emits
+    // (state.ts, library.ts) so a migrated file stays byte-consistent with a
+    // freshly-written one — no spurious "\ No newline at end of file" git diff.
+    await atomicWriteFile(opts.file, JSON.stringify(parsed.data, null, 2) + '\n');
   }
 
   return parsed.data as z.infer<TSchema>;
