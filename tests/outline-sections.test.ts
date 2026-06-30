@@ -56,7 +56,15 @@ test('outline (audit #1/#4): a valid existing OUTLINE.md is preserved and its se
       args: { yolo: true, force: false },
     }),
   );
-  assert.deepEqual(res, { ok: true, path: join(root, '.paper', 'OUTLINE.md'), mode: 'existing', sections: 2 });
+  // Assert field-wise (NOT a deepEqual on the absolute path): on macOS os.tmpdir()
+  // is a /var → /private/var symlink, so process.cwd()-derived res.path resolves
+  // differently from `root` (the documented macOS /var hazard). Compare the path
+  // by suffix instead.
+  const r = res as { ok?: boolean; mode?: string; sections?: number; path?: string };
+  assert.equal(r.ok, true);
+  assert.equal(r.mode, 'existing');
+  assert.equal(r.sections, 2);
+  assert.match(String(r.path).replace(/\\/g, '/'), /\.paper\/OUTLINE\.md$/);
 
   // #4: OUTLINE.md is byte-for-byte preserved (not overwritten).
   assert.equal(readFileSync(join(root, '.paper', 'OUTLINE.md'), 'utf8'), VALID_OUTLINE);
