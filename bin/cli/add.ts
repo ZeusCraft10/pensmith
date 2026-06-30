@@ -39,6 +39,7 @@ import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
 import { ask } from '../lib/prompts.js';
 import { paperDir, sectionPlan } from '../lib/paths.js';
+import { resolveSectionSlug } from '../lib/section-slug.js';
 import { loadState } from '../lib/state.js';
 import { fetch as httpFetch } from '../lib/http.js';
 import { isOfflineMode } from '../lib/http-mock.js';
@@ -304,16 +305,36 @@ export const addCommand = defineCommand({
 
     if (doRemap) {
       let only: { n: number; slug: string } | undefined;
+      let skipRemap = false;
       const secRaw = args.section;
       const slugRaw = args.slug;
-      if (secRaw !== undefined && typeof slugRaw === 'string' && slugRaw.length > 0) {
+      // Audit #25: when --section is given, remap ONLY that section. Resolve its
+      // slug from --slug, else from OUTLINE.md. A --section we cannot resolve to a
+      // real slug must NOT fall through to "remap every section" (the old bug) —
+      // skip the remap with a clear message instead. Omitting --section entirely
+      // (only === undefined) still remaps all sections, by design.
+      if (secRaw !== undefined) {
         const n = Number(secRaw);
-        if (Number.isInteger(n)) only = { n, slug: slugRaw };
+        const explicit = typeof slugRaw === 'string' && slugRaw.length > 0 ? slugRaw : undefined;
+        const slug =
+          Number.isInteger(n) && n >= 1 ? resolveSectionSlug(paperRoot, n, explicit) : 'placeholder';
+        if (!Number.isInteger(n) || n < 1 || (slug === 'placeholder' && explicit === undefined)) {
+          process.stdout.write(
+            `pensmith add: added ${candidate.citekey}; --section ${String(secRaw)} could not be ` +
+            `resolved to a section slug (pass --slug, or run \`pensmith outline\` first) — ` +
+            `no sections remapped.\n`,
+          );
+          skipRemap = true;
+        } else {
+          only = { n, slug };
+        }
       }
-      const count = await remapSections(paperRoot, candidate.citekey, only);
-      process.stdout.write(
-        `pensmith add: added ${candidate.citekey}; remapped ${count} section(s) (assigned_sources only).\n`,
-      );
+      if (!skipRemap) {
+        const count = await remapSections(paperRoot, candidate.citekey, only);
+        process.stdout.write(
+          `pensmith add: added ${candidate.citekey}; remapped ${count} section(s) (assigned_sources only).\n`,
+        );
+      }
     } else {
       process.stdout.write(`pensmith add: added ${candidate.citekey}.\n`);
     }
