@@ -52,13 +52,19 @@ const PYMUPDF_TIMEOUT_MS = 15_000;
 const PYMUPDF_MAX_BUFFER = 10 * 1024 * 1024;
 
 /**
- * Resolve the Python interpreter to shell out to. `PENSMITH_PYTHON` lets tests
- * (and operators on exotic setups) override the default `python3`. Tests point
- * it at a nonexistent path to force the ENOENT/null degradation path.
+ * Candidate Python interpreters to try, in order. `PENSMITH_PYTHON` (when set)
+ * is the SOLE candidate — tests point it at a nonexistent path to force the
+ * ENOENT/null degradation path; operators on exotic setups use it to pin one.
+ *
+ * Without an override we try the common interpreter names (audit #37): on
+ * Windows `python3` is usually absent and the real interpreter is `python` or
+ * the `py` launcher, so Windows tries those FIRST. The previous hardcoded
+ * `python3` meant the PyMuPDF fallback never ran on a standard Windows install.
  */
-function pythonBin(): string {
+export function pythonCandidates(): string[] {
   const override = process.env.PENSMITH_PYTHON;
-  return typeof override === 'string' && override.length > 0 ? override : 'python3';
+  if (typeof override === 'string' && override.length > 0) return [override];
+  return process.platform === 'win32' ? ['python', 'py', 'python3'] : ['python3', 'python'];
 }
 
 /**
@@ -93,14 +99,25 @@ export async function pymupdfShellout(buf: Buffer): Promise<string | null> {
       'text = "".join(page.get_text() for page in doc)',
       'sys.stdout.write(text)',
     ].join('; ');
-    const { stdout } = await execFileAsync(pythonBin(), ['-c', script], {
-      timeout: PYMUPDF_TIMEOUT_MS,
-      maxBuffer: PYMUPDF_MAX_BUFFER,
-    });
-    return typeof stdout === 'string' && stdout.length > 0 ? stdout : null;
+    // Try each candidate interpreter in order; the first that runs AND has
+    // `fitz` wins (audit #37). An absent interpreter (ENOENT), one without fitz
+    // (non-zero exit), or a timeout just advances to the next candidate. If none
+    // succeed the loop falls through to null — graceful degradation, the caller
+    // falls back to pdf-parse text.
+    for (const bin of pythonCandidates()) {
+      try {
+        const { stdout } = await execFileAsync(bin, ['-c', script], {
+          timeout: PYMUPDF_TIMEOUT_MS,
+          maxBuffer: PYMUPDF_MAX_BUFFER,
+        });
+        if (typeof stdout === 'string' && stdout.length > 0) return stdout;
+      } catch {
+        // This interpreter is absent or lacks fitz — try the next candidate.
+      }
+    }
+    return null;
   } catch {
-    // ENOENT (interpreter absent), non-zero exit (fitz unimportable), or
-    // timeout. Graceful degradation — the caller falls back to pdf-parse text.
+    // A failure OUTSIDE the per-interpreter loop (e.g. the tmpfile write).
     return null;
   } finally {
     fs.promises.unlink(tmp).catch(() => {});
