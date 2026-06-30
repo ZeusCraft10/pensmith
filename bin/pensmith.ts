@@ -219,6 +219,28 @@ function hasFlag(argv: string[], flag: string): boolean {
   return argv.includes(`--${flag}`);
 }
 
+/**
+ * Read-only verbs that incur NO model/network cost. The --yolo cap pre-flight
+ * must not hard-refuse these (audit #24): inspecting status/library/health or
+ * opening a paper should work even over an over-cap project.
+ */
+const READ_ONLY_VERBS: ReadonlySet<string> = new Set(['status', 'list', 'doctor', 'open']);
+
+/**
+ * Whether the --yolo cost-cap pre-flight should run for this argv (audit #24).
+ * It runs ONLY for cost-incurring execution: --yolo present, NOT a no-cost
+ * preview (--estimate) or citty meta (--version/--help), and NOT an explicit
+ * read-only verb. A bare invocation (no verb) runs the pipeline, so it counts.
+ */
+export function shouldRunYoloCapPreflight(argv: string[]): boolean {
+  if (!hasFlag(argv, 'yolo')) return false;
+  if (hasFlag(argv, 'estimate')) return false;
+  if (argv.includes('--version') || argv.includes('--help') || argv.includes('-h')) return false;
+  const v = firstVerb(argv);
+  if (v !== null && READ_ONLY_VERBS.has(v)) return false;
+  return true;
+}
+
 /** The configured session cap (C2-M3): PENSMITH_COST_CAP_USD if finite >0, else $5. */
 function configuredCapUsd(): number {
   const raw = process.env['PENSMITH_COST_CAP_USD'];
@@ -275,11 +297,18 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
     process.env['PENSMITH_DRY_RUN'] = '1'; // advisory marker only — NOT itself a gate
   }
 
-  // (c) H1 / C2-H1 YOLO CAP PRE-FLIGHT — runs WHENEVER --yolo is present, for
-  //     ANY verb (incl. non-gate write/plan/verify) and bare invocation,
-  //     INDEPENDENT of --estimate. projectEstimate is guarded against ALL load
-  //     errors, so a paper-less dir / corrupt STATE.json sees an empty estimate.
-  if (hasFlag(argv, 'yolo')) {
+  // (c) H1 / C2-H1 YOLO CAP PRE-FLIGHT — runs WHENEVER --yolo is present for a
+  //     COST-INCURRING execution (write/plan/verify/research/compile/done/revise,
+  //     next/resume, and bare invocation). projectEstimate is guarded against ALL
+  //     load errors, so a paper-less dir / corrupt STATE.json sees an empty
+  //     estimate.
+  //
+  //     Audit #24: a read-only verb (status/list/doctor/open) and the --estimate
+  //     preview incur NO model/network cost, so the cap must NOT hard-refuse them
+  //     — `pensmith status --yolo` or `pensmith --estimate --yolo` should still
+  //     work over an over-cap project. --version/--help are citty meta and bypass
+  //     too. Bare/cost verbs still get the refusal.
+  if (shouldRunYoloCapPreflight(argv)) {
     const est = await projectEstimate({ paperRoot: process.cwd(), sessionCapUsd: configuredCapUsd() });
     if (est.exceedsHalfCap) {
       process.stderr.write(
