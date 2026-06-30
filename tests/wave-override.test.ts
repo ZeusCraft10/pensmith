@@ -119,3 +119,54 @@ test('reject override names the violated bound in the error message', () => {
   // The minimum legal wave (3) should appear in the message.
   assert.match((err as Error).message, /3/);
 });
+
+// ---- audit #33 — a promoted dependency must lift its dependents ----
+
+test('audit #33: an override PROMOTING a dependency lifts its dependent past it (topo preserved)', () => {
+  const outline = outlineOf([
+    { n: 1, slug: 'root', depends_on: [] },
+    { n: 2, slug: 'child', depends_on: ['root'] },
+  ]);
+  const plans = new Map<string, PlanFrontmatter>([
+    ['root', planOf('root', [], 3)], // promote root from Kahn wave 1 → 3
+    ['child', planOf('child', ['root'])], // no override
+  ]);
+  const graph = buildWaveGraph(outline, plans);
+  assert.equal(graph.nodes.get('root')!.computed_wave, 3);
+  // Before the fix `child` stayed at its Kahn depth 2 — i.e. BEFORE its
+  // dependency root (wave 3). It must now be lifted to 4.
+  assert.equal(graph.nodes.get('child')!.computed_wave, 4);
+  assert.ok(
+    graph.nodes.get('child')!.computed_wave > graph.nodes.get('root')!.computed_wave,
+    'a dependent must run in a LATER wave than its promoted dependency',
+  );
+});
+
+test('audit #33: promoting an upstream dependency lifts the whole transitive chain', () => {
+  const outline = outlineOf([
+    { n: 1, slug: 'a', depends_on: [] },
+    { n: 2, slug: 'b', depends_on: ['a'] },
+    { n: 3, slug: 'c', depends_on: ['b'] },
+  ]);
+  const plans = new Map<string, PlanFrontmatter>([
+    ['a', planOf('a', [], 5)], // promote a to wave 5
+    ['b', planOf('b', ['a'])],
+    ['c', planOf('c', ['b'])],
+  ]);
+  const graph = buildWaveGraph(outline, plans);
+  assert.equal(graph.nodes.get('a')!.computed_wave, 5);
+  assert.equal(graph.nodes.get('b')!.computed_wave, 6);
+  assert.equal(graph.nodes.get('c')!.computed_wave, 7);
+});
+
+test('reject override (audit #33): a dependent override below a PROMOTED dependency floor throws', () => {
+  const outline = outlineOf([
+    { n: 1, slug: 'a', depends_on: [] },
+    { n: 2, slug: 'b', depends_on: ['a'] },
+  ]);
+  const plans = new Map<string, PlanFrontmatter>([
+    ['a', planOf('a', [], 5)], // a → wave 5, so b's floor becomes 6
+    ['b', planOf('b', ['a'], 3)], // 3 < 6 → illegal once the dependency is promoted
+  ]);
+  assert.throws(() => buildWaveGraph(outline, plans), /invalid wave override.*b/is);
+});

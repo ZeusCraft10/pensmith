@@ -86,10 +86,14 @@ export function buildWaveGraph(
   for (const slug of frontier) nodes.get(slug)!.computed_wave = 1;
 
   let processed = 0;
+  // Record the topological finalization order so override re-propagation (step 4)
+  // can walk dependencies-before-dependents (audit #33).
+  const topoOrder: string[] = [];
   while (frontier.length > 0) {
     const next: string[] = [];
     for (const slug of frontier) {
       processed += 1;
+      topoOrder.push(slug);
       const node = nodes.get(slug)!;
       for (const child of dependents.get(slug) ?? []) {
         const childNode = nodes.get(child)!;
@@ -112,21 +116,35 @@ export function buildWaveGraph(
     );
   }
 
-  // 4. Override validation (PLAN-02 / PLAN-03 / D-01). The floor for a section
-  //    is its Kahn depth (already in computed_wave at this point, which equals
-  //    max(deps.computed_wave)+1, or 1 for a root). A valid override (>= floor)
-  //    promotes computed_wave; an invalid override (< floor) throws.
-  for (const node of nodes.values()) {
-    if (node.wave_override === undefined) continue;
-    const floor = node.computed_wave; // Kahn depth = max(deps.wave)+1 (or 1)
-    if (node.wave_override < floor) {
-      throw new Error(
-        `scheduler: invalid wave override for section "${node.slug}": ` +
-          `declared wave ${node.wave_override} is below the minimum legal wave ${floor} ` +
-          `(must be >= max(deps.computed_wave) + 1) (PLAN-03 / D-01)`,
-      );
+  // 4. Override application + dependency re-propagation in TOPOLOGICAL order
+  //    (PLAN-02 / PLAN-03 / D-01, audit #33). Walking topoOrder guarantees every
+  //    dependency is FINAL before its dependents. For each node the legal floor
+  //    is max(deps.computed_wave) + 1 computed from the now-FINAL dependency
+  //    waves — so when a `wave:` override PROMOTES a dependency to a later wave,
+  //    its dependents are lifted past it and the topo invariant (dependent wave >
+  //    dependency wave) still holds. The old single pass validated each override
+  //    against its Kahn depth only and never re-propagated promotions, so a valid
+  //    override on a dependency could leave a dependent scheduled in the same or
+  //    an earlier wave. An override below the (post-override) floor is illegal.
+  for (const slug of topoOrder) {
+    const node = nodes.get(slug)!;
+    const realDeps = node.depends_on.filter((d) => nodes.has(d));
+    const depFloor =
+      realDeps.length === 0
+        ? 1
+        : Math.max(...realDeps.map((d) => nodes.get(d)!.computed_wave)) + 1;
+    if (node.wave_override !== undefined) {
+      if (node.wave_override < depFloor) {
+        throw new Error(
+          `scheduler: invalid wave override for section "${node.slug}": ` +
+            `declared wave ${node.wave_override} is below the minimum legal wave ${depFloor} ` +
+            `(must be >= max(deps.computed_wave) + 1) (PLAN-03 / D-01)`,
+        );
+      }
+      node.computed_wave = node.wave_override;
+    } else {
+      node.computed_wave = depFloor;
     }
-    node.computed_wave = node.wave_override;
   }
 
   // 5. Group into waves[] (waves[0] = wave-1 nodes). After overrides, a wave
