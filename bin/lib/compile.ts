@@ -521,8 +521,15 @@ async function regenerateBib(compiled: string, bibPath: string): Promise<void> {
     // toCsl persistent-id gate would DROP it entirely. Carry ISBN / arXiv id
     // (the extra fields toCsl reads) so DOI-less sources survive the round-trip.
     const isbn = typeof x.ISBN === 'string' && x.ISBN.trim() ? x.ISBN.trim() : undefined;
-    const arxivId =
-      !x.DOI && typeof x.number === 'string' && x.number.trim() ? x.number.trim() : undefined;
+    // CSL `number` is ALSO the generic journal issue number, so only treat it as
+    // an arXiv id when it is arXiv-SHAPED (CodeRabbit) — otherwise a DOI-less
+    // journal article with an issue number would be re-emitted as a fabricated
+    // arXiv preprint. New-style: 2305.12345 (optional vN); old-style: hep-th/9901001.
+    const numberRaw = typeof x.number === 'string' ? x.number.trim() : '';
+    const isArxivId =
+      /^\d{4}\.\d{4,5}(v\d+)?$/.test(numberRaw) ||
+      /^[a-z-]+(\.[a-z]{2})?\/\d{7}(v\d+)?$/i.test(numberRaw);
+    const arxivId = !x.DOI && isArxivId ? numberRaw : undefined;
 
     candidates.push({
       source: arxivId ? 'arxiv' : 'crossref',

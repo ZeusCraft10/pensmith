@@ -78,6 +78,30 @@ test('export gate (audit #14): a DRAFT.md with NO section VERIFICATION.md BLOCKS
   assert.ok(r.reasons.some((x) => /no verified sections/.test(x)));
 });
 
+test('export gate (CodeRabbit): a CLEAN section alongside one missing VERIFICATION.md BLOCKS', () => {
+  const root = seed([
+    { name: '01-intro', verification: CLEAN },
+    { name: '02-body', verification: null }, // section dir exists, no VERIFICATION.md
+  ]);
+  const r = runExportBlockingGate(root);
+  assert.equal(r.blocked, true);
+  assert.ok(
+    r.reasons.some((x) => /02-body/.test(x) && /missing VERIFICATION\.md/.test(x)),
+    `unverified section must block, not be invisible; got: ${r.reasons.join('; ')}`,
+  );
+});
+
+test('export gate (CodeRabbit): Status: failed with NO parseable verdict row still BLOCKS (fail-closed)', () => {
+  const failedNoRow = 'Status: failed\n\n## Pass-1\n\n(verifier hard-failed; rows did not parse)\n';
+  const root = seed([{ name: '01-intro', verification: failedNoRow }]);
+  const r = runExportBlockingGate(root);
+  assert.equal(r.blocked, true);
+  assert.ok(
+    r.reasons.some((x) => /Status is 'failed'/.test(x)),
+    `a failed section must block even with no parseable row; got: ${r.reasons.join('; ')}`,
+  );
+});
+
 test('export gate: UNSUPPORTED (advisory Pass-2 pipe row) does NOT block', () => {
   const advisory = [
     'Status: verified',

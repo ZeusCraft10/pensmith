@@ -56,7 +56,6 @@
 
 import { complete } from '../anthropic.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
-import { loadRuntimeConfig } from '../runtime.js';
 
 // WR-04 (HARD-04c fence-marker breakout mitigation).
 //
@@ -118,7 +117,6 @@ const PASS4_SECTION_CAP_DEFAULT = 0.5;
 // ceiling inside complete()). complete() estimates input tokens from content
 // length and records ACTUAL cost post-call, so no fixed input estimate is needed.
 const EST_OUTPUT_TOKENS = 60;
-const DEFAULT_MODEL = 'claude-haiku-4';
 
 /** Step-3 advisory label vocabulary (parsed from the orphan-label response). */
 type OrphanLabel = 'claim' | 'definition' | 'UNCLEAR';
@@ -357,17 +355,6 @@ function orphanLabelPlaceholder(): OrphanLabel {
   return 'UNCLEAR';
 }
 
-/** Resolve the anthropic model id from runtime config's defaultModel, falling
- *  back to the cheapest priced model. Never reads the api key here. */
-async function resolveModelId(): Promise<string> {
-  try {
-    const cfg = await loadRuntimeConfig({ scope: 'auto' });
-    return cfg.providers?.['anthropic']?.defaultModel ?? DEFAULT_MODEL;
-  } catch {
-    return DEFAULT_MODEL;
-  }
-}
-
 /**
  * Parse the orphan-label model response into the {claim, definition, UNCLEAR}
  * enum. Defensive: anything that is not a valid enum value -> 'UNCLEAR'
@@ -407,7 +394,11 @@ export async function runPass4(
 ): Promise<Pass4Result[]> {
   // Presence check ONLY — never reads the key VALUE (the resolved key, when the
   // live branch is reached, comes from getProviderApiKey('anthropic')).
-  const noLlm = process.env['PENSMITH_NO_LLM'] === '1' || !process.env['ANTHROPIC_API_KEY'];
+  // Provider-agnostic offline gate (mirrors pass2): only PENSMITH_NO_LLM
+  // short-circuits; complete() owns provider + key resolution and the per-call
+  // catch yields UNCLEAR if no key resolves. (`|| !ANTHROPIC_API_KEY` wrongly
+  // skipped valid non-Anthropic configs.)
+  const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
 
   const paragraphs = draftMd.split(/\n{2,}/);
   const audits: Array<{
@@ -436,7 +427,6 @@ export async function runPass4(
   const cap = opts.scopeCapUsd ?? PASS4_SECTION_CAP_DEFAULT;
   const scopeId = `${opts.n}-pass4`;
   const promptTemplate = loadPrompt('orphan-label');
-  const modelId = await resolveModelId();
 
   for (const audit of audits) {
     const paraText = (paragraphs[audit.result.paragraphIndex] ?? '').trim();
@@ -465,7 +455,6 @@ export async function runPass4(
           scopeId,
           scopeCapUsd: cap,
           maxTokens: EST_OUTPUT_TOKENS,
-          model: modelId,
         });
         label = parseOrphanLabel(res.text);
       } catch {

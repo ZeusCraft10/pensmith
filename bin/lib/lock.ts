@@ -119,9 +119,17 @@ export function buildPlfOpts(opts: LockOptions): import('proper-lockfile').LockO
   // We set `maxRetryTime = timeoutMs` so the TOTAL acquisition wait is genuinely
   // bounded by timeoutMs; `retries` is now only a soft upper bound (node-retry
   // gives up at whichever of retries / maxRetryTime is reached first).
-  const ratio = o.timeoutMs / Math.max(1, o.retryDelayMs);
   const factor = Math.max(1.0001, o.retryFactor); // log() guard
-  const retries = Math.max(1, Math.ceil(Math.log(ratio) / Math.log(factor)));
+  // Bound the retry COUNT so the cumulative geometric-backoff SUM stays under
+  // timeoutMs — independent of whether the resolved `retry` package honors
+  // maxRetryTime (CodeRabbit: retry <0.13 ignores it; ^0.12.0 can resolve either).
+  // Sum of n delays = retryDelayMs*(factor^n - 1)/(factor - 1) <= timeoutMs ⇒
+  //   n <= log(1 + timeoutMs*(factor-1)/retryDelayMs) / log(factor).
+  // The old count solved for the LAST delay reaching timeoutMs, which overshot
+  // the total (~131s vs the documented 60s). maxRetryTime is still set below as a
+  // second guard when the resolved retry version supports it.
+  const sumBound = 1 + (o.timeoutMs * (factor - 1)) / Math.max(1, o.retryDelayMs);
+  const retries = Math.max(1, Math.floor(Math.log(sumBound) / Math.log(factor)));
   return {
     stale: o.staleMs,
     retries: {

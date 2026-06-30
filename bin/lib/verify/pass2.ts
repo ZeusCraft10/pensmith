@@ -28,7 +28,6 @@
 
 import { complete } from '../anthropic.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
-import { loadRuntimeConfig } from '../runtime.js';
 
 // WR-04 (HARD-04c fence-marker breakout mitigation).
 //
@@ -144,7 +143,6 @@ const PASS2_SECTION_CAP_DEFAULT = 0.5;
 // the per-section cap. complete() estimates input tokens from content length and
 // records ACTUAL cost post-call, so no fixed input estimate is needed here.
 const EST_OUTPUT_TOKENS = 300;
-const DEFAULT_MODEL = 'claude-haiku-4';
 
 /** Normalize a CSL-style title (string | string[]) to a single string. */
 function normalizeTitle(title: Pass2BibEntry['title']): string {
@@ -207,30 +205,23 @@ function parsePass2Response(
   return { citekey, claimSentence, verdict, rationale, evidence };
 }
 
-/** Resolve the anthropic model id from runtime config's defaultModel, falling
- *  back to the cheapest priced model. Never reads the api key here. */
-async function resolveModelId(): Promise<string> {
-  try {
-    const cfg = await loadRuntimeConfig({ scope: 'auto' });
-    return cfg.providers?.['anthropic']?.defaultModel ?? DEFAULT_MODEL;
-  } catch {
-    return DEFAULT_MODEL;
-  }
-}
-
 /**
  * Pass 2 advisory claim-support run. Returns one Pass2Result per UNIQUE
- * [@citekey] in `draftMd`. Under PENSMITH_NO_LLM=1 (or no ANTHROPIC_API_KEY)
- * every result is the conservative UNCLEAR placeholder and no network call is
- * made. A draft with zero citations returns []. Advisory by construction — this
- * function NEVER mutates any shared blocking state.
+ * [@citekey] in `draftMd`. Under PENSMITH_NO_LLM=1 (or when complete() cannot
+ * resolve a provider key) every result is the conservative UNCLEAR placeholder
+ * and no usable network call is made. A draft with zero citations returns [].
+ * Advisory by construction — this function NEVER mutates shared blocking state.
  */
 export async function runPass2(
   draftMd: string,
   bibByCitekey: Map<string, Pass2BibEntry>,
   opts: { n: number; scopeCapUsd?: number },
 ): Promise<Pass2Result[]> {
-  const noLlm = process.env['PENSMITH_NO_LLM'] === '1' || !process.env['ANTHROPIC_API_KEY'];
+  // Provider-agnostic offline gate: only PENSMITH_NO_LLM short-circuits to the
+  // placeholder. complete() owns provider + key resolution; if no provider key
+  // is configured it throws and the per-call catch below yields UNCLEAR. (The
+  // old `|| !ANTHROPIC_API_KEY` wrongly skipped valid non-Anthropic configs.)
+  const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
   const pairs = collectClaimPairs(draftMd);
   if (pairs.length === 0) return [];
 
@@ -243,7 +234,6 @@ export async function runPass2(
   const cap = opts.scopeCapUsd ?? PASS2_SECTION_CAP_DEFAULT;
   const scopeId = `${opts.n}-pass2`;
   const promptTemplate = loadPrompt('claim-support');
-  const modelId = await resolveModelId();
 
   const results: Pass2Result[] = [];
   for (const pair of pairs) {
@@ -276,7 +266,6 @@ export async function runPass2(
         scopeId,
         scopeCapUsd: cap,
         maxTokens: EST_OUTPUT_TOKENS,
-        model: modelId,
       });
       results.push(parsePass2Response(res.text, pair.citekey, pair.claimSentence, abstract));
     } catch (err) {

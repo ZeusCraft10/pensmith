@@ -256,9 +256,16 @@ export async function registerPaperInGlobalLibrary(
     // folder may be gone by design). existsSync never throws; note that OneDrive
     // "files on demand" placeholders still report as existing, so a synced paper
     // is not pruned just because its content isn't downloaded.
-    const prunedEntries = updatedEntries.filter(
-      (e) => e.id === validatedEntry.id || e.status === 'archived' || existsSync(e.folderPath),
-    );
+    const prunedEntries = updatedEntries.filter((e) => {
+      if (e.id === validatedEntry.id || e.status === 'archived') return true;
+      if (existsSync(e.folderPath)) return true;
+      // The folder is absent — but only prune when its PARENT directory still
+      // exists, i.e. the drive/share is online and the folder was genuinely
+      // deleted. If the parent is ALSO missing, the volume is likely detached or
+      // offline (removable drive, unmounted network share); keep the entry rather
+      // than evict a valid paper during a transient outage (CodeRabbit).
+      return !existsSync(path.dirname(e.folderPath));
+    });
     const prunedCount = updatedEntries.length - prunedEntries.length;
 
     next = GlobalLibrarySchema.parse({ ...current, entries: prunedEntries });

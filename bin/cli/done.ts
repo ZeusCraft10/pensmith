@@ -228,32 +228,43 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
     dirNames = [];
   }
 
-  const sectionVerifs = dirNames
-    .map((name) => ({ name, path: join(sectionsDir, name, 'VERIFICATION.md') }))
-    .filter((s) => existsSync(s.path));
-
-  // A compiled DRAFT.md with NO verified sections was not produced by a gated
+  // A compiled DRAFT.md with NO section directories was not produced by a gated
   // compile — refuse rather than export a hand-placed / stale draft (#14).
-  if (sectionVerifs.length === 0) {
+  if (dirNames.length === 0) {
     return {
       blocked: true,
       reasons: [
-        "no verified sections found under .paper/sections/*/VERIFICATION.md — this DRAFT.md was not produced by a gated compile; run 'pensmith compile' first",
+        "no verified sections found under .paper/sections/ — this DRAFT.md was not produced by a gated compile; run 'pensmith compile' first",
       ],
     };
   }
 
-  for (const { name, path } of sectionVerifs) {
+  for (const name of dirNames) {
+    const vpath = join(sectionsDir, name, 'VERIFICATION.md');
+    // A section directory with NO VERIFICATION.md was never verified. It must
+    // BLOCK, never be invisible — filtering missing files out would let an
+    // unverified section ride alongside a clean one (CodeRabbit #14).
+    if (!existsSync(vpath)) {
+      reasons.push(`section ${name}: missing VERIFICATION.md (section never verified)`);
+      continue;
+    }
     let md = '';
     try {
-      md = readFileSync(path, 'utf8');
+      md = readFileSync(vpath, 'utf8');
     } catch {
       md = '';
     }
     // GATE-01 parity: a section with no Status line was never verified.
-    if (!/^Status:\s*\S/m.test(md)) {
+    const statusMatch = /^Status:\s*(\S+)/m.exec(md);
+    if (!statusMatch) {
       reasons.push(`section ${name}: VERIFICATION.md has no Status line (section never verified)`);
       continue;
+    }
+    // Fail CLOSED on an explicit verifier failure even if no verdict row parses
+    // — an exotic citekey or row-format drift must NOT let a `Status: failed`
+    // section export just because parseVerdictRows() returned nothing.
+    if (statusMatch[1]?.toLowerCase() === 'failed') {
+      reasons.push(`section ${name}: VERIFICATION.md Status is 'failed'`);
     }
     // Blocking verdicts — same parser + blocking set compile uses.
     for (const ck of parseVerdictRows(md)) {
