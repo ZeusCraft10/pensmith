@@ -30,6 +30,7 @@ import { sources } from './sources/index.js';
 import { SourceCandidateSchema, type SourceCandidate } from './schemas/source-candidate.js';
 import { normalizeDoi } from './doi.js';
 import { jaroWinkler, TITLE_JW_THRESHOLD } from './fuzzy.js';
+import { assignUniqueCitekeys } from './bibtex-write.js';
 import { complete } from './anthropic.js';
 import { loadPrompt, interpolate } from './prompt-loader.js';
 import { escapeTemplateTokens } from './intake-parse.js';
@@ -425,8 +426,16 @@ export async function runResearchOrchestrator(
   // Dedup: DOI first-wins (prefer abstract), then title JW >= threshold.
   const deduped = dedupCandidates(allRaw);
 
+  // Audit #21/#31/#32: assign globally-unique citekeys to the deduped set BEFORE
+  // it flows to the evaluator keep-set, the approval gate, LIBRARY.json, and
+  // CITATIONS.bib. The citekey is the primary key all of those filter on; two
+  // same-base-key papers (same first author + year) must not share one, or the
+  // keep-sets prune the wrong rows and LIBRARY.json diverges from the suffixed
+  // bib. Done here (not in each writer) so every downstream consumer agrees.
+  const uniquelyKeyed = assignUniqueCitekeys(deduped);
+
   // Source-evaluator LLM tier step (defensive: keep all on failure).
-  const evaluated = await evaluateCandidates(deduped, {
+  const evaluated = await evaluateCandidates(uniquelyKeyed, {
     topic,
     scope: scopeLabel,
     discipline,
