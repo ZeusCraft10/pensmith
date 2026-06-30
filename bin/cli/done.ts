@@ -710,6 +710,19 @@ export const doneCommand = defineCommand({
       buildVerificationReport(honestyReport, plagiarismResults, pass4Results),
     );
 
+    // Audit #15: the router's terminal sentinel is "DRAFT.md present AND FINAL.md
+    // present" (router.ts:216-218). In Tier 2 there is no humanizer, so
+    // runHumanizer returns null and FINAL.md is never written — bare `pensmith`/
+    // next/resume then re-run the WHOLE export pipeline (and re-prompt the gate)
+    // on every invocation, never reaching the {verb:'status',reason:'done'}
+    // terminus. Mark completion by writing FINAL.md from the exported source when
+    // it is absent: the humanized FINAL.md when a humanizer ran (already on disk),
+    // otherwise the compiled draft (the manuscript is final, just not humanized).
+    const finalMdPath = join(paperDir(paperRoot), 'FINAL.md');
+    if (!existsSync(finalMdPath)) {
+      await atomicWriteFile(finalMdPath, finalPath !== null ? readFileSync(finalPath, 'utf8') : draftMd);
+    }
+
     process.stdout.write(`pensmith done: exported ${result.outputPath}\n`);
     return { ok: true, ...result };
   },
