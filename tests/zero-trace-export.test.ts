@@ -121,6 +121,41 @@ test('zero-trace Test B: zeroTracePatch removes ALL trace from every docx entry 
 );
 
 // =====================================================================
+//   Test G (#18) — author body content is NOT mutated by the scrub
+// =====================================================================
+test('zero-trace Test G (#18): a "pensmith" in word/document.xml (author prose) SURVIVES; metadata trace still scrubbed',
+  { skip: !existsSync(exporterSrcPath) },
+  async () => {
+    const mod = await import(exporterModUrl.href) as {
+      zeroTracePatch: (docxPath: string) => Promise<void>;
+    };
+    const dir = mkdtempSync(join(tmpdir(), 'pensmith-zt18-'));
+    const tmpDocx = join(dir, 'authoring.docx');
+    // A paper that legitimately discusses pensmith in its body, plus the tool
+    // fingerprint in the metadata (core.xml). The body word must survive; the
+    // metadata fingerprint must not.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="x"><w:body><w:p><w:r><w:t>This study evaluates pensmith as an academic writing aid.</w:t></w:r></w:p></w:body></w:document>',
+    );
+    zip.file(
+      'docProps/core.xml',
+      '<?xml version="1.0" encoding="UTF-8"?><cp:coreProperties xmlns:cp="x" xmlns:dc="y"><dc:creator>pensmith</dc:creator><cp:lastModifiedBy>pensmith</cp:lastModifiedBy></cp:coreProperties>',
+    );
+    writeFileSync(tmpDocx, await zip.generateAsync({ type: 'nodebuffer' }));
+
+    await mod.zeroTracePatch(tmpDocx);
+
+    const out = await JSZip.loadAsync(readFileSync(tmpDocx));
+    const doc = (await out.file('word/document.xml')?.async('string')) ?? '';
+    const core = (await out.file('docProps/core.xml')?.async('string')) ?? '';
+    assert.match(doc, /pensmith/i, 'author body prose mentioning pensmith must be preserved (#18)');
+    assert.doesNotMatch(core, /pensmith/i, 'metadata fingerprint (core.xml) must still be scrubbed');
+  },
+);
+
+// =====================================================================
 //   Test C — PDF negative control (always runs)
 // =====================================================================
 test('zero-trace Test C: fixture .pdf is a valid negative control (pensmith + Trace Sentinel in /Info AND XMP)', async () => {

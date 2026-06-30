@@ -268,11 +268,20 @@ export async function zeroTracePatch(docxPath: string): Promise<void> {
     zip.file('docProps/app.xml', app, { date: EPOCH });
   }
 
-  // (3) Defense-in-depth sweep — strip the literal 'pensmith' from EVERY
-  //     non-binary entry (incl. _rels/.rels, custom.xml, headers, any text
-  //     part — NOT just *.xml). Binary parts pass through untouched.
+  // (3) Defense-in-depth sweep — strip the literal 'pensmith' from non-binary
+  //     STRUCTURAL/metadata entries (incl. _rels/.rels, custom.xml, settings,
+  //     any non-content text part). Binary parts pass through untouched.
+  //
+  //     Audit #18: the sweep must NOT touch author-CONTENT parts. The tool
+  //     fingerprint only ever lands in metadata/structural parts (handled by
+  //     steps (1)/(2) and this sweep); the document body, headers, footers,
+  //     foot/endnotes and comments are the author's own prose. A paper that
+  //     legitimately discusses (or coincidentally uses) the word "pensmith"
+  //     must keep it — silently deleting it from the manuscript is corruption.
+  const AUTHOR_CONTENT = /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/i;
   for (const [name, file] of Object.entries(zip.files)) {
     if (file.dir) continue;
+    if (AUTHOR_CONTENT.test(name)) continue;
     let text: string;
     try {
       text = await file.async('string');
