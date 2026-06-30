@@ -34,8 +34,7 @@ import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verd
 import { parseFrontmatter } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
-
-const DEFAULT_SLUG = 'placeholder';
+import { resolveSectionSlug } from '../lib/section-slug.js';
 
 // Force-bind the deterministic primitives so the acceptance grep
 // (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
@@ -70,7 +69,9 @@ export const verifyCommand = defineCommand({
     if (!Number.isInteger(n) || n < 1) {
       throw new Error(`pensmith verify: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
     }
-    const slug = (args.slug && typeof args.slug === 'string' ? args.slug : DEFAULT_SLUG);
+    // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
+    // wins; 'placeholder' only if no outline row exists).
+    const slug = resolveSectionSlug(process.cwd(), n, args.slug);
     const draftPath = sectionDraft(n, slug);
     const verifPath = sectionVerification(n, slug);
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');

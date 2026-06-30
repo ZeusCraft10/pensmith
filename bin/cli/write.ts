@@ -41,13 +41,13 @@ import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
+import { resolveSectionSlug } from '../lib/section-slug.js';
 
 // Phase 11 — the section-draft placeholder constant has been removed. write now
 // calls complete() for real generation (GEN-02). With no key configured:
 // MissingApiKeyError propagates from complete() → fail-loud banner (GEN-06).
 // With PENSMITH_NO_LLM=1: complete() returns offline mock transparently.
 
-const DEFAULT_SLUG = 'placeholder';
 const DEFAULT_MAX_PARALLEL = 5;
 
 // STYL-03 default tone — the never-empty fallback when neither a PLAN.md voice
@@ -393,9 +393,10 @@ export const writeCommand = defineCommand({
     if (!Number.isInteger(n) || n < 1) {
       throw new Error(`pensmith write: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
     }
-    const slug = (args.slug && typeof args.slug === 'string' ? args.slug : DEFAULT_SLUG);
-
+    // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
+    // wins; 'placeholder' only if no outline row exists).
     const paperRoot = process.cwd();
+    const slug = resolveSectionSlug(paperRoot, n, args.slug);
     // Construct the goal-aware subscriber for a single-section re-do too, so a
     // re-write in learning/both mode still re-annotates TUTORIAL.md. goal=draft
     // yields undefined → the emit/flush below are no-ops and DRAFT.md is
