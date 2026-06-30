@@ -297,6 +297,13 @@ export interface HttpResponse {
   status: number;
   headers: Record<string, string>;
   body: string;
+  // Raw response bytes, byte-faithful (audit #29). `body` is the UTF-8 decode of
+  // these bytes and is LOSSY for binary content (e.g. a fetched PDF), so binary
+  // consumers (add.ts URL-PDF ingestion) MUST use bodyBytes — `Buffer.from(body,
+  // 'binary')` cannot recover bytes already mangled by the UTF-8 decode. Present
+  // only on a LIVE fetch (callOnce); a cached response is text-only and omits it,
+  // so binary fetches should pass noCache:true to guarantee bodyBytes is set.
+  bodyBytes?: Buffer;
   cached: boolean;
   cachedAt?: string; // ISO8601
 }
@@ -684,7 +691,11 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
       reqInit.body = opts.body;
     }
     const { statusCode, headers: rh, body } = await request(url, reqInit);
-    const text = await body.text();
+    // Read the raw bytes ONCE (audit #29). `text` is the UTF-8 decode for text
+    // consumers (byte-identical to the prior body.text()); `bodyBytes` preserves
+    // the exact bytes for binary content (PDFs fetched by URL).
+    const bodyBytes = Buffer.from(await body.arrayBuffer());
+    const text = bodyBytes.toString('utf8');
     const flatHeaders: Record<string, string> = {};
     for (const [k, v] of Object.entries(rh)) {
       const lk = k.toLowerCase();
@@ -693,7 +704,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
       else if (v == null) flatHeaders[lk] = '';
       else flatHeaders[lk] = String(v);
     }
-    return { status: statusCode, headers: flatHeaders, body: text, cached: false };
+    return { status: statusCode, headers: flatHeaders, body: text, bodyBytes, cached: false };
   };
 
   // --- 3. Bucket-acquired single attempt ---

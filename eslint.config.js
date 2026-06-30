@@ -189,6 +189,9 @@ export default [
       'tests/http-cache.test.ts',
       'tests/http-cache-no-header-leak.test.ts',
       'tests/retry.test.ts',
+      // audit #29: must import undici MockAgent to reply with binary bytes and
+      // assert http.ts exposes byte-faithful bodyBytes (no other way to test it).
+      'tests/http-binary-body.test.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',
@@ -219,6 +222,9 @@ export default [
       'tests/library.test.ts',
       'tests/checkpoint.test.ts',
       'tests/runtime.test.ts',
+      // audit M3: overrides LOCALAPPDATA/XDG_DATA_HOME to isolate the global
+      // registry into a per-test tmpdir while exercising the dead-entry GC.
+      'tests/registry-gc.test.ts',
     ],
     rules: {
       'no-restricted-syntax': 'off',

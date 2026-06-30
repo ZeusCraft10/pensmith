@@ -23,6 +23,14 @@ import { paperDir } from '../lib/paths.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
+import { parseOutline } from '../lib/outline-parse.js';
+import {
+  initSection,
+  initState,
+  loadState,
+  StateAlreadyExistsError,
+  StateNotFoundError,
+} from '../lib/state.js';
 
 // Phase 11 — the outline placeholder constant has been removed. outline now calls
 // complete() for real generation (GEN-02). With no key configured: fail-loud
@@ -66,6 +74,54 @@ async function runApprovalGate(outlineText: string, yolo: boolean): Promise<bool
   return ok === true && !clack.isCancel(ok);
 }
 
+/**
+ * Register every section in `outlineMd` into STATE.json (audit #1). The router
+ * gates pipeline advancement on state.sections (router.ts:182-183); without this
+ * a valid OUTLINE.md leaves state.sections empty and bare `pensmith`/next/resume
+ * loop on `outline` forever. initSection is idempotent (D-08), so re-running is
+ * safe. Best-effort: an outline with no parseable section table (the offline
+ * placeholder, or a malformed model response) WARNs and registers nothing rather
+ * than crashing — the per-section pipeline simply cannot advance until the
+ * outline carries the locked section table. Returns the count registered.
+ */
+async function registerOutlineSections(paperRoot: string, outlineMd: string): Promise<number> {
+  let parsed;
+  try {
+    parsed = parseOutline(outlineMd);
+  } catch (e) {
+    process.stderr.write(
+      `pensmith outline: WARN — OUTLINE.md has no parseable section table, so no sections were ` +
+      `registered in STATE.json; the per-section pipeline (plan/write/verify) cannot advance until the ` +
+      `outline carries a "| # | slug | title | depends_on | word target | assigned_sources |" table. ` +
+      `(${(e as Error).message})\n`,
+    );
+    return 0;
+  }
+  if (parsed.sections.length === 0) return 0;
+
+  // Ensure STATE.json exists (intake normally seeds it via initState; be
+  // defensive for a hand-assembled workspace). initState is idempotent through
+  // StateAlreadyExistsError.
+  try {
+    await loadState(paperRoot);
+  } catch (e) {
+    if (e instanceof StateNotFoundError) {
+      try {
+        await initState(paperRoot);
+      } catch (e2) {
+        if (!(e2 instanceof StateAlreadyExistsError)) throw e2;
+      }
+    } else {
+      throw e;
+    }
+  }
+
+  for (const s of parsed.sections) {
+    await initSection(paperRoot, s.n, s.slug);
+  }
+  return parsed.sections.length;
+}
+
 export const outlineCommand = defineCommand({
   meta: {
     name: 'outline',
@@ -77,9 +133,38 @@ export const outlineCommand = defineCommand({
       description: 'Skip the approval gate.',
       default: false,
     },
+    force: {
+      type: 'boolean',
+      description: 'Regenerate OUTLINE.md even if a valid one already exists (audit #4).',
+      default: false,
+    },
   },
   async run({ args }) {
+    const paperRoot = process.cwd();
     const outlinePath = path.join(paperDir(), 'OUTLINE.md');
+
+    // Audit #4: NEVER clobber a valid, parseable OUTLINE.md. bare /pensmith,
+    // `next`, and `resume` re-dispatch `outline` whenever state.sections is empty
+    // (router.ts:182-183); without this guard a re-dispatch overwrites a user- or
+    // model-authored outline with the regenerated (often table-less, in offline
+    // mode) text and destroys it. When a valid outline already exists, register
+    // its sections idempotently (audit #1) and return — pass --force to redo.
+    if (args.force !== true && existsSync(outlinePath)) {
+      try {
+        const existing = readFileSync(outlinePath, 'utf8');
+        if (parseOutline(existing).sections.length > 0) {
+          const count = await registerOutlineSections(paperRoot, existing);
+          process.stdout.write(
+            `pensmith outline: OUTLINE.md already present (${count} section(s)); ` +
+            `registered in STATE.json. Not regenerating — pass --force to redo.\n`,
+          );
+          return { ok: true, path: outlinePath, mode: 'existing', sections: count };
+        }
+      } catch {
+        // Existing OUTLINE.md is not a parseable section table (e.g. an offline
+        // placeholder from a prior dry-run) — fall through and regenerate.
+      }
+    }
 
     // ── Phase 11: GEN-06 fail-loud probe (BEFORE any prompt/complete() work) ──
     // Only probe for key presence when NOT in offline mode.
@@ -153,7 +238,16 @@ export const outlineCommand = defineCommand({
 
     await atomicWriteFile(outlinePath, result.text);
     process.stdout.write(`pensmith outline: wrote OUTLINE.md to ${outlinePath}\n`);
-    return { ok: true, path: outlinePath, mode: 'real' };
+
+    // Audit #1: register the outline's sections into STATE.json so the router can
+    // advance to the per-section plan/write/verify pipeline (best-effort).
+    const sectionCount = await registerOutlineSections(paperRoot, result.text);
+    if (sectionCount > 0) {
+      process.stdout.write(
+        `pensmith outline: registered ${sectionCount} section(s) in STATE.json.\n`,
+      );
+    }
+    return { ok: true, path: outlinePath, mode: 'real', sections: sectionCount };
   },
 });
 

@@ -29,6 +29,7 @@ import { parseBibtex } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
+import { extractCitedKeysForVerification } from '../citation-token.js';
 
 export type { FreshnessResult } from './freshness.js';
 export { renderFreshnessTable } from './freshness.js';
@@ -54,6 +55,14 @@ interface BibEntry {
   author?: BibAuthor[];
   DOI?: string;
   retracted?: boolean;
+  // D-15 retracted-flag persistence: writeBibtex serializes a retracted source
+  // as BibTeX `note = {RETRACTED}` (bibtex-write.ts:93), and citation-js
+  // preserves `note` verbatim across the round-trip — it does NOT repopulate the
+  // synthetic `retracted` boolean. So a bib-sourced retracted entry arrives here
+  // with `note: 'RETRACTED'` and `retracted: undefined`. compile.ts:482 already
+  // reads `x.note === 'RETRACTED'`; the blocking gate must do the same or the
+  // entire stored-retraction surface (D-15 "surface twice") is silently dead.
+  note?: string;
 }
 
 /**
@@ -111,7 +120,14 @@ async function verdictForCitekey(
       reason: 'claimed citation metadata incomplete (empty title or no authors)',
     };
   }
-  if (claimed.retracted) {
+  // D-15 stored-retraction gate: honor BOTH the synthetic `retracted` boolean
+  // (fixture / in-memory candidate path) AND the round-tripped BibTeX
+  // `note = {RETRACTED}` (the on-disk .paper/CITATIONS.bib path). Without the
+  // `note` check, every bib-sourced retracted work passes Pass-1 (the boolean is
+  // undefined after the citation-js round-trip) and the stored-retraction block
+  // is dead — leaving only the live Retraction Watch re-query, which is null
+  // offline. Mirrors compile.ts:482.
+  if (claimed.retracted || claimed.note === 'RETRACTED') {
     return {
       citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
       reason: 'cited a retracted work (per Retraction Watch cross-check at research time)',
@@ -208,10 +224,12 @@ export async function runPass1(
     entries.map((e) => [String(e['id'] ?? ''), e as BibEntry]),
   );
 
-  const citekeys = [...draftMd.matchAll(/\[@([a-z][a-z0-9_-]*)\]/g)]
-    .map((m) => m[1])
-    .filter((s): s is string => Boolean(s));
-  const unique = [...new Set(citekeys)];
+  // FAIL-CLOSED extraction (audit #2/#20): use the BROAD verifier-side detector,
+  // not the narrow lowercase-bare `[@key]` regex. Uppercase, locator ([@k, p. 5]),
+  // and multi-cite ([@a; @b]) citations must each produce a verdict — an
+  // unparseable/out-of-namespace citation is "unverifiable", never "absent". A
+  // key not present in the (lowercase-keyed) bib falls through to FABRICATED.
+  const unique = extractCitedKeysForVerification(draftMd);
 
   const results: Pass1Result[] = [];
   for (const ck of unique) {
@@ -244,10 +262,9 @@ export async function runFreshnessForDraft(
     ]),
   );
 
-  const citekeys = [...draftMd.matchAll(/\[@([a-z][a-z0-9_-]*)\]/g)]
-    .map((m) => m[1])
-    .filter((s): s is string => Boolean(s));
-  const unique = [...new Set(citekeys)];
+  // Same broad extraction as runPass1 so the advisory freshness probe covers the
+  // identical citation set the blocking gate sees (no divergence).
+  const unique = extractCitedKeysForVerification(draftMd);
 
   return probeFreshnessAll(
     unique.map((ck) => ({ citekey: ck, doi: doiByCitekey.get(ck) ?? null })),

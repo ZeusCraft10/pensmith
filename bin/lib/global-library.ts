@@ -214,6 +214,7 @@ export async function registerPaperInGlobalLibrary(
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
 
   let next!: GlobalLibrary;
+  let prunedAtWrite = 0;
 
   await withLock(file, async () => {
     let current: GlobalLibrary;
@@ -248,14 +249,35 @@ export async function registerPaperInGlobalLibrary(
           )
         : [...current.entries, validatedEntry];
 
-    next = GlobalLibrarySchema.parse({ ...current, entries: updatedEntries });
+    // Audit M3: self-healing GC. Drop entries whose folderPath no longer exists
+    // so the registry doesn't grow unbounded with deleted papers (and `list`
+    // stops showing ghosts). NEVER prune the entry just registered (its folder
+    // exists) nor an 'archived' entry (the user explicitly retained it; its
+    // folder may be gone by design). existsSync never throws; note that OneDrive
+    // "files on demand" placeholders still report as existing, so a synced paper
+    // is not pruned just because its content isn't downloaded.
+    const prunedEntries = updatedEntries.filter((e) => {
+      if (e.id === validatedEntry.id || e.status === 'archived') return true;
+      if (existsSync(e.folderPath)) return true;
+      // The folder is absent — but only prune when its PARENT directory still
+      // exists, i.e. the drive/share is online and the folder was genuinely
+      // deleted. If the parent is ALSO missing, the volume is likely detached or
+      // offline (removable drive, unmounted network share); keep the entry rather
+      // than evict a valid paper during a transient outage (CodeRabbit).
+      return !existsSync(path.dirname(e.folderPath));
+    });
+    const prunedCount = updatedEntries.length - prunedEntries.length;
+
+    next = GlobalLibrarySchema.parse({ ...current, entries: prunedEntries });
     await atomicWriteFile(file, JSON.stringify(next, null, 2) + '\n');
+    prunedAtWrite = prunedCount;
   });
 
   log().event({
     event: 'global-library.register',
     id: validatedEntry.id,
     entryCount: next.entries.length,
+    pruned: prunedAtWrite,
   });
 
   return next;
@@ -354,8 +376,13 @@ export function deriveLibraryStatus(
     const pDir = paperDir(folderPath);
 
     // (2) STATE.json present — walk the on-disk stage probes. existsSync never
-    //     throws (returns false on any error).
-    if (!existsSync(join(pDir, 'RESEARCH.md'))) return { status: 'intake' };
+    //     throws (returns false on any error). "Research done" keys on LIBRARY.json
+    //     (the research verb's canonical output) OR the legacy RESEARCH.md — see
+    //     router.ts (audit M1); gating on RESEARCH.md alone mislabelled every
+    //     post-research paper as 'intake'.
+    const researchDone =
+      existsSync(join(pDir, 'LIBRARY.json')) || existsSync(join(pDir, 'RESEARCH.md'));
+    if (!researchDone) return { status: 'intake' };
     if (!existsSync(join(pDir, 'OUTLINE.md'))) return { status: 'research' };
 
     const sections = Array.isArray(state.sections) ? state.sections : [];

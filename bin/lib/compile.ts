@@ -235,8 +235,34 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
 
   return withLock(lockResource, async (): Promise<CompileResult> => {
     // ---- Step 1: load sections in OUTLINE order + refuse-gate + staleness ----
+    // Audit M2: a missing / section-less OUTLINE.md is a REFUSAL (the CLI prints
+    // refuseReasons), not a raw parseOutline stack trace. loadOutline returns ''
+    // for an absent file and parseOutline throws "no section table" on '' or a
+    // placeholder, so both degenerate cases land here gracefully.
     const raw = await loadOutline(paperDir(opts.paperRoot));
-    const outline = parseOutline(raw);
+    let outline: ReturnType<typeof parseOutline>;
+    try {
+      outline = parseOutline(raw);
+    } catch {
+      return {
+        refused: true,
+        refuseReasons: [
+          "no usable outline: .paper/OUTLINE.md has no section table — run 'pensmith outline' first",
+        ],
+        sectionsCount: 0,
+        staleResolvedCount: 0,
+      };
+    }
+    if (outline.sections.length === 0) {
+      return {
+        refused: true,
+        refuseReasons: [
+          "no sections in .paper/OUTLINE.md — run 'pensmith outline' to populate the section table",
+        ],
+        sectionsCount: 0,
+        staleResolvedCount: 0,
+      };
+    }
     const ordered = outline.sections.slice().sort((a, b) => a.n - b.n);
 
     const loaded: LoadedSection[] = [];
@@ -462,7 +488,16 @@ async function regenerateBib(compiled: string, bibPath: string): Promise<void> {
   const now = new Date().toISOString();
   const candidates: SourceCandidate[] = [];
   for (const e of entries) {
-    const x = e as { id?: string; title?: string | string[]; author?: Array<{ family?: string; given?: string }>; DOI?: string; ISBN?: string; number?: string; note?: string };
+    const x = e as {
+      id?: string;
+      title?: string | string[];
+      author?: Array<{ family?: string; given?: string }>;
+      DOI?: string;
+      ISBN?: string;
+      number?: string;
+      note?: string;
+      issued?: { 'date-parts'?: number[][] };
+    };
     const id = String(x.id ?? '');
     if (!compiledCitekeys.has(id)) continue; // keep only cited keys (the union)
     const title = Array.isArray(x.title) ? (x.title[0] ?? '') : (x.title ?? '');
@@ -473,12 +508,38 @@ async function regenerateBib(compiled: string, bibPath: string): Promise<void> {
         return giv ? `${fam}, ${giv}` : fam;
       })
       .filter(Boolean);
+
+    // Preserve the publication year (audit #5). citation-js parses BibTeX
+    // `year = {2020}` into CSL `issued.date-parts[0][0]`; the prior code never
+    // read it, so writeBibtex (which emits a year only when c.year is a number)
+    // stripped the year from EVERY regenerated citation.
+    const yearRaw = x.issued?.['date-parts']?.[0]?.[0];
+    const year = typeof yearRaw === 'number' && Number.isFinite(yearRaw) ? yearRaw : undefined;
+
+    // Preserve the persistent identifier for DOI-less sources (audit #17): a book
+    // (ISBN) or arXiv preprint (CSL `number`) carries no DOI, so writeBibtex's
+    // toCsl persistent-id gate would DROP it entirely. Carry ISBN / arXiv id
+    // (the extra fields toCsl reads) so DOI-less sources survive the round-trip.
+    const isbn = typeof x.ISBN === 'string' && x.ISBN.trim() ? x.ISBN.trim() : undefined;
+    // CSL `number` is ALSO the generic journal issue number, so only treat it as
+    // an arXiv id when it is arXiv-SHAPED (CodeRabbit) — otherwise a DOI-less
+    // journal article with an issue number would be re-emitted as a fabricated
+    // arXiv preprint. New-style: 2305.12345 (optional vN); old-style: hep-th/9901001.
+    const numberRaw = typeof x.number === 'string' ? x.number.trim() : '';
+    const isArxivId =
+      /^\d{4}\.\d{4,5}(v\d+)?$/.test(numberRaw) ||
+      /^[a-z-]+(\.[a-z]{2})?\/\d{7}(v\d+)?$/i.test(numberRaw);
+    const arxivId = !x.DOI && isArxivId ? numberRaw : undefined;
+
     candidates.push({
-      source: 'crossref',
+      source: arxivId ? 'arxiv' : 'crossref',
       id: x.DOI ?? id,
       title: title || id,
       authors: authors.length > 0 ? authors : ['Unknown'],
       ...(x.DOI !== undefined ? { doi: x.DOI } : {}),
+      ...(year !== undefined ? { year } : {}),
+      ...(isbn !== undefined ? { isbn } : {}),
+      ...(arxivId !== undefined ? { arxivId } : {}),
       retracted: x.note === 'RETRACTED',
       last_verified: now,
       citekey: id,

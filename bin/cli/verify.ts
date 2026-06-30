@@ -29,8 +29,11 @@ import { runPass2, renderPass2Section } from '../lib/verify/pass2.js';
 import { runPass4, renderPass4Section } from '../lib/verify/pass4.js';
 import { parseBibtex } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
-import { sectionDraft, sectionVerification, paperDir } from '../lib/paths.js';
+import { sectionDraft, sectionVerification, sectionPlan, paperDir } from '../lib/paths.js';
 import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
+import { parseFrontmatter } from '../lib/frontmatter.js';
+import { computeDraftHash } from '../lib/draft-hash.js';
+import { updatePlanFrontmatter } from '../lib/plan-status.js';
 
 const DEFAULT_SLUG = 'placeholder';
 
@@ -167,6 +170,39 @@ export const verifyCommand = defineCommand({
       '',
     ];
     await atomicWriteFile(verifPath, lines.join('\n'));
+
+    // Audit #8: persist the verdict to the section PLAN.md frontmatter so the
+    // router (router.ts:188-211) advances the pipeline instead of looping on
+    // verify. verified_against_draft_hash is the D-07 per-section hash computed
+    // EXACTLY as compile.ts recomputes it (DRAFT.md bytes + sorted
+    // assigned_sources), so a verified section is recognized as fresh by the
+    // compile staleness check — and a later re-write changes the bytes, leaving
+    // the stored hash stale and forcing re-verification (the write<->verify
+    // cycle-break). Best-effort: an absent/unwritable PLAN.md WARNs, never throws.
+    const planPath = sectionPlan(n, slug);
+    let assignedSources: string[] = [];
+    try {
+      if (existsSync(planPath)) {
+        const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
+        assignedSources = Array.isArray(frontmatter['assigned_sources'])
+          ? (frontmatter['assigned_sources'] as unknown[]).map(String)
+          : [];
+      }
+    } catch {
+      assignedSources = [];
+    }
+    const draftHash = computeDraftHash(readFileSync(draftPath), assignedSources);
+    const persisted = await updatePlanFrontmatter(planPath, (fm) => {
+      fm.status = status;
+      fm.verified_against_draft_hash = draftHash;
+    });
+    if (!persisted) {
+      process.stderr.write(
+        `pensmith verify: WARN — could not persist status:'${status}' to ${planPath} ` +
+        `(PLAN.md absent/unwritable); the router may not advance this section.\n`,
+      );
+    }
+
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
     return { ok: status !== 'failed', status, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
   },

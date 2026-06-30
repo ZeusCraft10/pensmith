@@ -65,16 +65,17 @@ export function parseVerdictRows(verificationMd: string): string[] {
   for (const line of verificationMd.split(/\r?\n/)) {
     // `- <citekey>: **VERDICT**` OR `- <citekey> ("quote…"): **VERDICT**`
     //
-    // LOWERCASE-CITEKEY CONSTRAINT: the citekey group `[a-z][a-z0-9_-]*` matches
-    // only lowercase-first citekeys. This is a bijection WITHIN the lowercase-citekey
-    // namespace — it is correct because pensmith's citekeys are generated lowercase
-    // (see bin/lib/citekey.ts and CITATION_TOKEN_RE in citation-token.ts, which uses
-    // the same `[a-z]` anchor). A mixed-case citekey like `Smith2020` would be silently
-    // skipped by this parser (and by extractCitekeys in GATE-04). Do NOT widen the
-    // charset unless the project's citekey generation is changed to allow uppercase;
-    // doing so without auditing all extraction points would create a charset mismatch
-    // between the writer and parser that breaks the round-trip guarantee.
-    const m = /^\s*-\s*([a-z][a-z0-9_-]*)\s*[:(].*?\*\*([A-Z_-]+)\*\*/.exec(line);
+    // FAIL-CLOSED widening (audit #2/#20): the citekey group is `[A-Za-z0-9]...`
+    // (was `[a-z]...`) so a verdict row produced for an UPPERCASE / mixed-case key
+    // — which the broad verifier extractor (extractCitedKeysForVerification) now
+    // emits — is matched and added to the blocking set. Previously such a row was
+    // silently skipped, so a FABRICATED `[@Vaswani2017]` produced a verdict that
+    // never blocked compile. `:`/`(` are deliberately EXCLUDED from the body so the
+    // `[:(]` delimiter stays unambiguous; for an exotic key containing `:` the body
+    // captures a prefix, which is harmless because compile.ts:272 refuses on ANY
+    // matched blocking row (the exact key text is not used for the refuse decision).
+    // The `^\s*-\s*` anchor still excludes pipe-delimited freshness-table rows.
+    const m = /^\s*-\s*([A-Za-z0-9][A-Za-z0-9_-]*)\s*[:(].*?\*\*([A-Z_-]+)\*\*/.exec(line);
     if (!m) continue;
     const citekey = m[1];
     const verdict = m[2];

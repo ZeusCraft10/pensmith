@@ -75,3 +75,52 @@ export function replaceCitekeys(md: string, fn: (key: string) => string): string
   const re = new RegExp(CITATION_TOKEN_RE.source, 'g');
   return md.replace(re, (_match, key: string) => fn(key));
 }
+
+/**
+ * Broad, FAIL-CLOSED citation-key detector for the VERIFIER (Pass-1) ONLY.
+ *
+ * CITATION_TOKEN_RE above is deliberately NARROW — lowercase-first BARE `[@key]`
+ * tokens, the exact namespace the smoother and bib-regen round-trip. But the
+ * verifier has the opposite obligation: it must SEE every citation-shaped
+ * reference a draft contains, so an unrecognized one produces a BLOCKING verdict
+ * (FABRICATED) instead of silently vanishing. A citation the verifier cannot
+ * parse must be treated as "unverifiable", never as "absent / nothing to do".
+ *
+ * This detector therefore also catches the forms the narrow regex drops:
+ *   - uppercase / mixed-case keys:   [@Vaswani2017]
+ *   - Pandoc locator forms:          [@smith2020, p. 5]
+ *   - multi-citation clusters:       [@a; @b]   ·   [see @a; also @b]
+ *
+ * It returns the citekey body of every `@key` token inside a bracketed citation
+ * cluster, deduped in first-appearance order. Keys are returned VERBATIM (case
+ * preserved) so the downstream bib lookup is exact — a case-mismatch against the
+ * lowercase-generated bib then fails closed (FABRICATED), which is the point.
+ *
+ * NOT for substitution/rendering — it is intentionally permissive and is for
+ * detection/verification only. The `@` is anchored to start-of-cluster /
+ * whitespace / ';' (Pandoc grammar) so an email-style `name@host` never matches.
+ */
+export function extractCitedKeysForVerification(md: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  // A citation cluster: a bracketed run with NO nested brackets that contains an
+  // @token. `[^[\]]` = "not '[' and not ']'", so we never cross bracket bounds.
+  const clusterRe = /\[([^[\]]*@[^[\]]*)\]/g;
+  // Within a cluster, a key is `@` preceded by start / whitespace / ';'. Pandoc
+  // citekeys begin with a letter/digit/underscore and may contain internal
+  // punctuation; trailing locator punctuation is stripped after capture.
+  const keyRe = /(?:^|[\s;])@([A-Za-z0-9_][A-Za-z0-9_:.#$%&+?<>~/-]*)/g;
+  for (const cm of md.matchAll(clusterRe)) {
+    const cluster = cm[1] ?? '';
+    for (const km of cluster.matchAll(keyRe)) {
+      let key = km[1];
+      if (key === undefined) continue;
+      key = key.replace(/[.,;:]+$/, '');
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        out.push(key);
+      }
+    }
+  }
+  return out;
+}

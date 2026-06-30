@@ -56,6 +56,23 @@ const DROPPED_SECTION_FIELDS = new Set([
 ]);
 
 /**
+ * Normalize a v1 section slug to v2's strict `/^[a-z0-9-]+$/` contract (audit
+ * #28): lowercase, non-conforming runs → '-', collapse repeats, trim edges. v1
+ * allowed a slug to be missing OR non-conforming (uppercase, spaces,
+ * punctuation); v2's SectionEntrySchema rejects those, so a valid v1 state would
+ * fail v2 validation. A conforming slug is returned UNCHANGED; a missing / empty
+ * / all-invalid slug falls back to `section-<n>`.
+ */
+function normalizeSectionSlug(raw: unknown, n: number): string {
+  const s = String(raw ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return s.length > 0 ? s : `section-${n}`;
+}
+
+/**
  * Error thrown when a PLAN.md per-section lock cannot be acquired during the
  * full-fidelity v1→v2 migration (the 5-step dance described in Plan 03-03
  * Task 3.2). The current skeleton does NOT take per-PLAN.md locks because
@@ -147,11 +164,14 @@ export function migrate(input: unknown): unknown {
           if (DROPPED_SECTION_FIELDS.has(ek)) continue;
           slim[ek] = ev;
         }
-        // v1 allowed slug to be optional — synthesize a fallback so v2's
-        // strict PlanFrontmatter slug-regex contract has something to chew on.
-        if (typeof slim['slug'] !== 'string' || (slim['slug'] as string).length === 0) {
+        // Normalize the slug ALWAYS (audit #28): v1 allowed it to be missing OR
+        // non-conforming, but v2's strict SectionEntrySchema enforces
+        // /^[a-z0-9-]+$/. A present-but-invalid slug previously survived verbatim
+        // and made the migrated state fail v2 validation. A conforming slug is
+        // unchanged; a missing/empty/all-invalid one falls back to `section-<n>`.
+        {
           const n = typeof e['n'] === 'number' ? (e['n'] as number) : idx + 1;
-          slim['slug'] = `section-${n}`;
+          slim['slug'] = normalizeSectionSlug(slim['slug'], n);
         }
         return slim;
       });
@@ -164,6 +184,14 @@ export function migrate(input: unknown): unknown {
   // to `schema_version` so the migration test's V2_FIXTURE shape is matched.
   const targetField = field ?? 'schema_version';
   out[targetField] = 2;
+  // Audit #27: ALSO emit the canonical camelCase envelope. The loader
+  // (migrations/loader.ts) and StateSchema both require `$schemaVersion`; a
+  // snake-cased or pre-versioning v1 previously migrated to a snake-only output
+  // that StateSchema.parse REJECTED (missing $schemaVersion) → the state was
+  // permanently unloadable. The top-level Schema is .passthrough(), so keeping
+  // the original-naming field alongside the canonical one is safe and preserves
+  // the migrate() naming-preservation contract (snake-fixture tests).
+  out['$schemaVersion'] = 2;
   return out;
 }
 
