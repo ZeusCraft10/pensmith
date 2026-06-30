@@ -235,3 +235,35 @@ test('D-15 stored retraction: a bib entry with note = {RETRACTED} → Pass-1 MIS
     'stored-retraction must block via the stored note, not the live re-query',
   );
 });
+
+// ---------------------------------------------------------------------------
+// Test 4: #16 — claimed DOI redirects (via Crossref) to a RETRACTED canonical DOI
+// ---------------------------------------------------------------------------
+// The claimed alias DOI is NOT in Retraction Watch, but Crossref resolves it to a
+// canonical DOI that IS retracted. Querying only the claimed DOI (the original
+// bug) misses it and — because the bib metadata strict-matches the canonical —
+// the multi-DOI-redirect branch would return OK, so a retracted work escapes.
+// The fix re-queries BOTH the claimed and the canonical DOI, so it is blocked.
+test('GATE-03 (#16): claimed DOI redirecting to a retracted canonical → MIS-CITED', async () => {
+  const { runPass1 } = await import(pass1JsUrl.href) as {
+    runPass1: (draftMd: string, bibPath: string) => Promise<Array<{ citekey: string; verdict: string; reason: string }>>;
+  };
+  // bib metadata strict-matches the crossref redirect fixture (redirect-audit16.json):
+  // claimed 10.0000/alias-audit16 resolves to canonical 10.0000/retracted, which
+  // the freshness-hit retraction-watch cassette lists as retracted.
+  const { draftMd, bibPath } = makeBibFixture({
+    citekey: 'alias16',
+    title: 'A Redirect-to-Retracted Fixture (Audit 16)',
+    author: 'Roe, Jane',
+    doi: '10.0000/alias-audit16',
+  });
+
+  const results = await runPass1(draftMd, bibPath);
+  const r = results.find((x) => x.citekey === 'alias16');
+  assert.ok(r, 'runPass1 must return a result for the alias citekey');
+  assert.equal(
+    r.verdict,
+    'MIS-CITED',
+    'a claimed DOI that redirects to a retracted canonical must be blocked (#16)',
+  );
+});
