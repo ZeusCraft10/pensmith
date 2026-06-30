@@ -156,7 +156,22 @@ async function verdictForCitekey(
   // catches all transport errors and returns null (retraction-watch.ts:122-126).
   // Placed AFTER the Crossref null-guard so FABRICATED citations (unresolved DOI)
   // never reach this check (Pitfall 1 — avoids cassette-fallback false positives).
-  const liveRetraction = await retractionWatchFetchById(claimed.DOI);
+  // Audit #16: a work can be listed in Retraction Watch under EITHER the claimed
+  // DOI or the canonical DOI Crossref redirected it to. Querying only the claimed
+  // DOI misses a retraction recorded against the canonical record (the original
+  // bug); querying only the canonical DOI would miss one recorded against the
+  // claimed/alias DOI. Check BOTH (deduped) and block on the first hit.
+  const retractionDois = [...new Set(
+    [claimed.DOI, actual.doi].filter((d): d is string => typeof d === 'string' && d.length > 0),
+  )];
+  let liveRetraction: Awaited<ReturnType<typeof retractionWatchFetchById>> = null;
+  for (const d of retractionDois) {
+    const hit = await retractionWatchFetchById(d);
+    if (hit !== null) {
+      liveRetraction = hit;
+      break;
+    }
+  }
   if (liveRetraction !== null) {
     const why = liveRetraction.retraction_details
       ? `: ${liveRetraction.retraction_details}`

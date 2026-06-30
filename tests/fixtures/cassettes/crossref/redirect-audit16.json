@@ -1,0 +1,20 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/alias-audit16",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message": {
+        "DOI": "10.0000/retracted",
+        "title": ["A Redirect-to-Retracted Fixture (Audit 16)"],
+        "author": [{ "family": "Roe", "given": "Jane" }],
+        "issued": { "date-parts": [[2018]] },
+        "container-title": ["Test Journal"],
+        "type": "journal-article"
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]
