@@ -245,6 +245,40 @@ test(
 );
 
 test(
+  'exporter (#19): offline LaTeX export resolves [@key] + emits a References section (no raw token, no empty bibliography)',
+  { skip: !renderCitationsWired },
+  async () => {
+    const mod = await import(exporterModUrl.href) as { exportDraft: ExportDraft };
+
+    const fixtureMd = readFileSync(join(FIXTURE_DIR, 'section.md'), 'utf8');
+    const fixtureBib = readFileSync(join(FIXTURE_DIR, 'CITATIONS.bib'), 'utf8');
+
+    const root = mkdtempSync(join(tmpdir(), 'pensmith-rend-tex-'));
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    const inputPath = join(root, '.paper', 'DRAFT.md');
+    writeFileSync(inputPath, fixtureMd);
+    writeFileSync(join(root, '.paper', 'CITATIONS.bib'), fixtureBib);
+
+    // Fully offline LaTeX: pandocPresent:false → the deterministic md→tex writer.
+    const res = await mod.exportDraft({
+      inputPath,
+      format: 'latex',
+      paperRoot: root,
+      pandocPresent: false,
+      style: 'apa',
+    });
+    const tex = readFileSync(res.outputPath, 'utf8');
+
+    // #19: citations must be resolved — no raw [@key] token survives in the .tex.
+    assert.ok(!tex.includes('[@'), `#19 FAIL: raw [@key] token survived in .tex:\n${tex}`);
+    // The formatted reference is present (Vaswani fixture entry rendered).
+    assert.ok(tex.includes('Vaswani'), `#19 FAIL: formatted reference "Vaswani" absent in .tex:\n${tex}`);
+    // A bibliography section is emitted (## References → \section{References}).
+    assert.match(tex, /\\section\{References\}/, `#19 FAIL: no References section in .tex:\n${tex}`);
+  },
+);
+
+test(
   'exporter: REND-01 APA in-text form pin — "(Vaswani et al., 2017)" appears in offline rendered output (REND-01)',
   { skip: !renderCitationsWired },
   async () => {
