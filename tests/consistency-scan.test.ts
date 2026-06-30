@@ -79,6 +79,27 @@ test('COMP-04: heading-tense heuristic is OFF by default and ON only with lintHe
   assert.ok(on.length >= off.length, 'enabling lintHeadings must not reduce the flag set');
 });
 
+test('audit #36: heading-tense flags attribute to the correct section under CRLF line endings', () => {
+  // CRLF terminators. The buggy cursor (split on /\r?\n/ but +1 per line) would
+  // under-count the offset by 1 per line and mis-attribute the section-2 heading
+  // to section 1. The true match offset (m.index) is CRLF-safe.
+  const s1 = '# Introduction\r\n\r\nWe set up the problem here.\r\n\r\n';
+  const s2 = '# Comparing Approaches\r\n\r\nWe evaluate the methods.\r\n';
+  const md = s1 + s2;
+  const spans: Span[] = [
+    { n: 1, slug: 'intro', start: 0, end: s1.length },
+    { n: 2, slug: 'methods', start: s1.length, end: md.length },
+  ];
+  const warnings = runConsistencyScan(md, spans, { lintHeadings: true });
+  const tense = warnings.filter((w) => w.kind === 'heading-tense' && /Comparing/.test(w.detail));
+  assert.equal(tense.length, 1, 'the -ing heading must produce exactly one heading-tense flag');
+  assert.deepEqual(
+    tense[0]!.sections,
+    ['methods'],
+    'flag must attribute to section 2 (methods), not drift into section 1 under CRLF',
+  );
+});
+
 test('COMP-04: runConsistencyScan NEVER throws and returns an array (flags-only / never-blocks)', () => {
   // Pathological inputs: empty md, malformed spans — must not throw.
   assert.doesNotThrow(() => runConsistencyScan('', []));
