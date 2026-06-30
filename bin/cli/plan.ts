@@ -24,8 +24,7 @@ import { proposeSwap } from '../lib/revise-swap.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-
-const DEFAULT_SLUG = 'placeholder';
+import { resolveSectionSlug } from '../lib/section-slug.js';
 
 export const planCommand = defineCommand({
   meta: {
@@ -63,7 +62,9 @@ export const planCommand = defineCommand({
     if (!Number.isInteger(n) || n < 1) {
       throw new Error(`pensmith plan: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
     }
-    const slug = (args.slug && typeof args.slug === 'string' ? args.slug : DEFAULT_SLUG);
+    // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
+    // wins; 'placeholder' only if no outline row exists).
+    const slug = resolveSectionSlug(process.cwd(), n, args.slug);
 
     // GEN-06 fail-loud probe: assert a key is configured before doing any LLM work.
     // CRITICAL ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE
