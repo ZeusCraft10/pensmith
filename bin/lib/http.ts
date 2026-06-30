@@ -611,6 +611,18 @@ async function writeCache(key: string, response: HttpResponse): Promise<void> {
 // ============================================================
 const DEFAULT_TIMEOUT_MS = 30_000;
 const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503, 504]);
+
+// Audit #22: the Retry-After value is server-controlled, so it MUST be bounded.
+// Without a cap a hostile or misconfigured endpoint can send `Retry-After: 86400`
+// and stall the CLI for hours on a single attempt. Clamp to the same 30s ceiling
+// the fullJitter backoff uses (the retry capMs below) — a server may ask us to
+// back off, but never to hang.
+export const RETRY_AFTER_CAP_MS = 30_000;
+
+/** Parse a Retry-After header and clamp it to RETRY_AFTER_CAP_MS (audit #22). */
+export function cappedRetryAfterMs(rawHeader: string | undefined, nowMs: number): number {
+  return Math.min(parseRetryAfter(rawHeader, nowMs), RETRY_AFTER_CAP_MS);
+}
 const RETRYABLE_ERR_CODES: ReadonlySet<string> = new Set([
   'ETIMEDOUT',
   'ECONNRESET',
@@ -721,7 +733,8 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   let serverRetryDelay = 0;
   const wrapped = async (): Promise<HttpResponse> => {
     if (serverRetryDelay > 0) {
-      // Server asked us to wait — honor it before the next attempt.
+      // Server asked us to wait — honor it (already capped, audit #22) before the
+      // next attempt.
       const delay = serverRetryDelay;
       serverRetryDelay = 0;
       await new Promise<void>((r) => setTimeout(r, delay));
@@ -729,7 +742,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     const r = await dispatch();
     if (RETRYABLE_STATUSES.has(r.status)) {
       const ra = r.headers['retry-after'];
-      serverRetryDelay = parseRetryAfter(typeof ra === 'string' ? ra : undefined, Date.now());
+      serverRetryDelay = cappedRetryAfterMs(typeof ra === 'string' ? ra : undefined, Date.now());
       const err = new Error(`HTTP ${r.status}`) as Error & {
         status?: number;
         response?: HttpResponse;
