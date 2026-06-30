@@ -119,6 +119,35 @@ export function suffixForCollision(seen: number): string {
 }
 
 /**
+ * Assign collision-suffixed citekeys that are GLOBALLY UNIQUE across the set, so
+ * the citekey is a stable primary key shared by LIBRARY.json, CITATIONS.bib, the
+ * RIS export, and the research keep-sets (audit #21/#31/#32).
+ *
+ * Two candidates sharing a base key (same first-author + year) get
+ * base / base+'a' / base+'b' …. Crucially, the suffix loop also skips any value
+ * already taken, so a base key that happens to equal another candidate's
+ * suffixed form (e.g. a literal 'wu2017a' alongside a second 'wu2017') ends up
+ * unique rather than silently duplicated — the bug a naive per-base counter has.
+ *
+ * Order-preserving. A candidate whose citekey is already unique is returned by
+ * reference; others get a shallow copy with the new `citekey`.
+ */
+export function assignUniqueCitekeys(candidates: SourceCandidate[]): SourceCandidate[] {
+  const used = new Set<string>();
+  return candidates.map((c) => {
+    const base = c.citekey || generateCitekey(c);
+    let citekey = base;
+    let n = 0;
+    while (used.has(citekey)) {
+      n += 1;
+      citekey = base + suffixForCollision(n);
+    }
+    used.add(citekey);
+    return citekey === c.citekey ? c : { ...c, citekey };
+  });
+}
+
+/**
  * Serialize SourceCandidate[] to a BibTeX file at `targetPath`.
  *
  * Entries are keyed by a deterministic citekey (collision-suffixed when
@@ -135,25 +164,22 @@ export async function writeBibtex(
   candidates: SourceCandidate[],
   targetPath: string,
 ): Promise<void> {
-  const seenKeys = new Map<string, number>();
-  const entries: Array<{ citekey: string; csl: CslEntry }> = [];
-
+  // Keep only serializable candidates (toCsl drops id-less ones), THEN assign
+  // globally-unique citekeys over that surviving set. assignUniqueCitekeys is the
+  // single uniqueness authority (audit #21) — it handles base-vs-suffix collisions
+  // a per-base counter would silently duplicate. Computing toCsl once per
+  // candidate avoids re-deriving it after keying.
+  const survivors: Array<{ candidate: SourceCandidate; csl: CslEntry }> = [];
   for (const c of candidates) {
     const csl = toCsl(c);
-    if (!csl) continue;
-
-    // SourceCandidate.citekey is set by every adapter via generateCitekey()
-    // (Plan 04 Task 4.2/4.3). Fall back to a fresh generateCitekey() call
-    // for any candidate that arrived without one (defensive — schema
-    // requires it but we don't trust callers blindly).
-    const baseKey = c.citekey || generateCitekey(c);
-    const seen = seenKeys.get(baseKey) ?? 0;
-    const citekey = seen === 0 ? baseKey : baseKey + suffixForCollision(seen);
-    seenKeys.set(baseKey, seen + 1);
-
-    csl.id = citekey;
-    entries.push({ citekey, csl });
+    if (csl) survivors.push({ candidate: c, csl });
   }
+  const keyed = assignUniqueCitekeys(survivors.map((s) => s.candidate));
+  const entries: Array<{ citekey: string; csl: CslEntry }> = keyed.map((c, i) => {
+    const csl = survivors[i]!.csl;
+    csl.id = c.citekey;
+    return { citekey: c.citekey, csl };
+  });
 
   // Sort by FINAL citekey before rendering — input order is preserved by
   // citation-js, so this guarantees the output is sorted.
