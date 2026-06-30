@@ -49,8 +49,6 @@ export interface ConsistencyScanOpts {
 const PROPER_NOUN_RE = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g;
 /** Abbreviation parenthetical: `(ABBR)` where ABBR is 2+ uppercase letters. */
 const ABBR_RE = /\(([A-Z]{2,})\)/g;
-/** A markdown heading line (ATX `#`-prefixed). */
-const HEADING_RE = /^#{1,6}\s+(.+?)\s*$/;
 
 /** Which section span (slug) does a byte offset fall inside? */
 function slugAt(spans: SectionSpan[], offset: number): string | null {
@@ -143,14 +141,16 @@ export function runConsistencyScan(
     // gerund/past-participle vs bare-noun across headings is a low-confidence
     // drift signal. We emit one flag per heading that ends in -ed/-ing applied
     // to its leading word, attributed to the heading's section.
-    const lines = compiledMd.split(/\r?\n/);
-    let cursor = 0;
-    for (const line of lines) {
-      const lineStart = cursor;
-      cursor += line.length + 1; // +1 for the consumed newline
-      const hm = HEADING_RE.exec(line);
-      if (!hm) continue;
-      const headingText = hm[1] ?? '';
+    // Audit #36: match headings directly against the compiled blob and use the
+    // match's true offset (m.index) to attribute each to a section. The old code
+    // split on /\r?\n/ (consuming 1 OR 2 terminator bytes) but always re-added
+    // ONE byte per line to the cursor, so under CRLF the running offset drifted
+    // by 1 per line and slugAt() attributed headings to the wrong section span.
+    // m.index is the exact position in compiledMd regardless of \n vs \r\n.
+    const headingRe = /^#{1,6}[ \t]+(.+?)[ \t]*\r?$/gm;
+    for (const m of compiledMd.matchAll(headingRe)) {
+      const lineStart = m.index ?? 0;
+      const headingText = m[1] ?? '';
       const slug = slugAt(sectionSpans, lineStart);
       if (slug === null) continue;
       if (/\b\w+(ed|ing)\b/i.test(headingText)) {
