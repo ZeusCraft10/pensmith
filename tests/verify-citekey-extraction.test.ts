@@ -15,8 +15,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { extractCitedKeysForVerification } from '../bin/lib/citation-token.ts';
-import { runPass1 } from '../bin/lib/verify/pass1.ts';
+import { extractCitedKeysForVerification } from '../bin/lib/citation-token.js';
+import { runPass1 } from '../bin/lib/verify/pass1.js';
 
 test('extractCitedKeysForVerification: catches uppercase, locator, and multi-cite forms', () => {
   const md = [

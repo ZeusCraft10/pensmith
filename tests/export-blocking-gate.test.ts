@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runExportBlockingGate } from '../bin/cli/done.ts';
+import { runExportBlockingGate } from '../bin/cli/done.js';
 
 function seed(sections: Array<{ name: string; verification: string | null }>): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-exportgate-'));
