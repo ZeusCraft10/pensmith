@@ -422,12 +422,19 @@ export async function complete(opts: CompleteOptions): Promise<CompleteResult> {
 
   // noCache:true is MANDATORY — prevents the Authorization/x-api-key header
   // from ever reaching a cache file (defense-in-depth; T-11-01 security).
+  //
+  // Audit #34: untrusted:false bypasses the SSRF DNS pre-flight (IN-02 — same as
+  // honesty.ts → GPTZERO_URL). `url` is the configured PROVIDER endpoint from
+  // trusted runtime config, NOT data derived from an external/untrusted source,
+  // so the per-call SSRF lookup is redundant overhead. (Never set untrusted:false
+  // for a URL built from external input.)
   const httpResponse = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(requestBody),
     source: 'generic',
     noCache: true,
+    untrusted: false,
   });
 
   // Non-OK HTTP status → throw a sanitized error (key value must NOT appear
