@@ -562,6 +562,31 @@ async function resolveAndRenderCitations(
 }
 
 /**
+ * Offline citation-resolution wrapper shared by the markdown fallback and the
+ * deterministic LaTeX writer (audit #19). When a style + a copied bib are
+ * available it resolves `[@key]` tokens to CSL in-text citations and appends a
+ * `## References` section; otherwise it returns `md` unchanged. Never throws —
+ * malformed BibTeX or an unknown style logs and returns the draft as-is so
+ * export always proceeds.
+ */
+async function resolveCitationsOffline(
+  md: string,
+  style: string | undefined,
+  bibCopied: boolean,
+  bibPath: string,
+): Promise<string> {
+  if (!(style && bibCopied)) return md;
+  try {
+    return await resolveAndRenderCitations(md, bibPath, style);
+  } catch {
+    process.stderr.write(
+      'pensmith export: citation rendering failed — exporting without inline citations.\n',
+    );
+    return md;
+  }
+}
+
+/**
  * Build the Pandoc argv (array — never a shell string; T-06-04 command-injection
  * mitigation). Base args carry zero-trace metadata flags as defense-in-depth;
  * the in-process scrub is the actual guarantee.
@@ -670,11 +695,16 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
       } catch {
         // Pandoc latex path failed — fall through to the offline writer.
         const md = await fsp.readFile(inputPath, 'utf8');
-        await atomicWriteFile(outputPath, renderLatex(md));
+        const resolved = await resolveCitationsOffline(md, style, bibCopied, bibDst);
+        await atomicWriteFile(outputPath, renderLatex(resolved));
       }
     } else {
+      // Audit #19: resolve [@key] tokens + append a References section BEFORE
+      // rendering — the offline .tex writer previously left citations as literal
+      // [@key] with no bibliography. Reuses the markdown fallback's resolver.
       const md = await fsp.readFile(inputPath, 'utf8');
-      await atomicWriteFile(outputPath, renderLatex(md));
+      const resolved = await resolveCitationsOffline(md, style, bibCopied, bibDst);
+      await atomicWriteFile(outputPath, renderLatex(resolved));
     }
   } else if (format === 'md' || !pandoc) {
     // md-only path (explicit md request OR Pandoc-absent fallback for docx/pdf).
@@ -682,20 +712,10 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
       process.stdout.write('pensmith export: Pandoc not found — markdown-only fallback.\n');
     }
     outputPath = join(exportDir, `${stem}.md`);
-    let md = await fsp.readFile(inputPath, 'utf8');
+    const rawMd = await fsp.readFile(inputPath, 'utf8');
     // REND-01/02 offline path: resolve [@key] tokens + append ## References.
     // Only when style is set AND bib was copied (no bib → pass through unchanged).
-    if (style && bibCopied) {
-      try {
-        md = await resolveAndRenderCitations(md, bibDst, style);
-      } catch {
-        // Malformed BibTeX or unknown style → skip citation rendering, leave tokens raw.
-        // Never-throw guarantee: export proceeds on the unprocessed draft.
-        process.stderr.write(
-          'pensmith export: citation rendering failed — exporting without inline citations.\n',
-        );
-      }
-    }
+    const md = await resolveCitationsOffline(rawMd, style, bibCopied, bibDst);
     await writeMarkdown(md, outputPath);
   } else {
     // Pandoc present + format is docx/pdf.
