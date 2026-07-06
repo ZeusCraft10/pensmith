@@ -404,3 +404,212 @@ These are real ambiguities that the requirements / phase plans should resolve. S
 ---
 *Feature research for: AI-assisted academic paper writing*
 *Researched: 2026-05-06*
+
+---
+---
+
+# ADDENDUM (v0.3.0): Citation-Grounded Drafting Feed
+
+**Domain:** Citation-grounded LLM drafting (RAG-style source-feeding for academic paper generation) — the "FEED" workstream
+**Researched:** 2026-07-06
+**Confidence:** HIGH (codebase-verified) / MEDIUM (external grounding-technique claims)
+
+## Context: what's actually being closed here
+
+This addendum covers a narrower, later-milestone question than the section above: not
+"what should pensmith's feature set be" (already answered, above, for v0.1.0), but
+"how does feeding discovered sources into the plan/write prompts typically work, and
+what does v0.3.0 need to build to close the tech-debt gap." It is not greenfield —
+the codebase already specifies almost the entire target design in two prompt
+templates that predate the wiring:
+
+- `templates/prompts/section-planner.md` — already instructs the planner to pick
+  3-15 citekeys from `{{candidateSources}}` into `assigned_sources`, with an explicit
+  "NEVER invent a citekey" constraint and a citekey-existence requirement.
+- `templates/prompts/section-drafter.md` — already instructs the drafter to cite
+  ONLY `{{assignedSources}}` (its per-section restricted view), NEVER reach outside
+  it, and to prefer an uncited claim over a fabricated citation.
+
+The gap is **purely in the CLI wiring**, confirmed by direct code read:
+
+- `bin/cli/plan.ts:129` — `candidateSources: '(no sources loaded yet — wire via Phase 12 / GEN-03)'` (a literal placeholder string interpolated into the prompt).
+- `bin/cli/write.ts:220` — `assignedSources: '[]'` (always empty).
+- `bin/cli/write.ts:158` `readAssignedSources()` already parses `PLAN.md` frontmatter's
+  `assigned_sources` citekey array — it just isn't used to hydrate full source
+  objects from `LIBRARY.json` yet (it's currently only read at line 429 for a
+  different, unrelated purpose — tutorial provenance).
+- `LIBRARY.json` (`bin/cli/research.ts:298-309`) already has the exact shape needed:
+  `{ $schemaVersion: 1, entries: SourceCandidate[] }`, where each `SourceCandidate`
+  carries `title, authors, year, doi, abstract, citekey` (confirmed in
+  `research-orchestrator.ts`, which already caps abstracts at 500 chars for its own
+  source-evaluator prompt — precedent for the token-budgeting approach below).
+
+So this addendum treats "how does citation-grounded drafting typically work" as the
+industry frame, then maps every element onto the specific pieces pensmith already
+has (LIBRARY.json, citekey grammar, `[@citekey]` token, blocking verifier) vs. what
+v0.3.0 must still build (the two wiring points + hydration + token budget + a
+stranded-source safety net).
+
+## Feature Landscape (FEED workstream)
+
+### Table Stakes (Users Expect These)
+
+These are the load-bearing mechanics that make "the planner/drafter are no longer
+blind to research" true. Missing any of these means the feature is not actually
+shipped, just partially wired.
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **Plan step reads real `LIBRARY.json` into `{{candidateSources}}`** | The section-planner prompt already contracts on this variable; it's the entire point of the milestone | LOW | Replace `plan.ts:129`'s placeholder string with `JSON.parse(readFileSync(libraryPath))` → filtered/shaped candidate array. `LIBRARY.json` and its schema already exist; no new I/O primitive needed. |
+| **Write step hydrates `assigned_sources` citekeys into full source objects for `{{assignedSources}}`** | The section-drafter prompt already contracts on receiving full `SourceCandidate` objects, not bare citekeys — it needs title/authors/year/DOI to write real claims | LOW-MEDIUM | `readAssignedSources()` already extracts the citekey array from `PLAN.md` frontmatter; add a citekey→`LIBRARY.json`-entry lookup (Map keyed by citekey) and pass the hydrated subset. This is the second of the two literal placeholder fixes. |
+| **Section→source assignment persisted in `PLAN.md` `assigned_sources`** | Already implemented (frontmatter field + schema `bin/lib/schemas/plan-frontmatter.ts` + zod validation) | DONE | Not new work — confirm the field survives round-trip once real data flows through it. This is the persistence contract the plan/write split (below) depends on. |
+| **Field selection: title, authors, year, DOI, abstract (truncated), citekey — not full text** | This is the standard "shape retrieved docs for the prompt" step in every RAG-style writing tool (Perplexity, Elicit-style pipelines): bibliographic metadata + abstract, not full papers, keeps the prompt scoped to what a section brief needs | LOW | The 500-char abstract cap is precedent already set in `research-orchestrator.ts`'s own source-evaluator call — reuse the exact same truncation constant/helper rather than re-deriving a new budget. |
+| **Per-section citekey scoping enforced at the object level, not just by convention** | PRD §7.6 explicitly requires "source-isolation enforced by directory structure, not just prompt convention" — a prompt instruction alone ("please only use these") is a documented-insufficient mitigation (see Grounding section below); the input array itself must not contain other sections' sources | LOW | Already partly done — `assertDrafterInput` (referenced in `write.ts`) is the enforcement chokepoint; extend its validation to assert every prompt-injected source is drawn from `assigned_sources`, not merely that the shape is well-typed. |
+| **Topic/discipline context flows into planning** | `{{topic}}` and `{{discipline}}` are already contracted prompt variables (currently hardcoded placeholders `'(topic from INTAKE.md — wire via Phase 12)'` / `'other'`) — needed for the planner to judge source relevance per section, not just presence | LOW | Read from `PROJECT.md`/`config.toml`, which already exist from intake. Small, mechanical. |
+| **Upstream section plans flow into dependent sections' planning** | `{{upstreamPlans}}` is already a contracted variable (per `depends_on`) — a Discussion section needs to know what Results already claimed to avoid re-citing redundantly or contradicting | LOW-MEDIUM | Read already-written `sections/<M>/PLAN.md` briefs for `M` in `depends_on`. Read-only; does not touch upstream section files (preserves isolation). |
+| **Empty/insufficient-candidate-pool handling** | If `LIBRARY.json` has zero or too few entries (e.g., research produced nothing, or approval-gate pruning left too few), the planner must not silently assign nothing or hallucinate placeholder citekeys | LOW | `research.ts` already WARNs and writes an empty `LIBRARY.json` on zero candidates (line 283-286) — the planner needs a parallel guard: if `candidateSources` is empty, either block with a clear message routing back to `research`/`add`, or (for `outline-only` mode) proceed uncited. Small, but must not be skipped. |
+
+### Differentiators (Competitive Advantage)
+
+These go beyond "wire the placeholder" and materially improve grounding quality or
+UX. They align with the core value (every citation real + verifiable) more than
+with raw feature breadth — worth doing, but each should be sized against the
+existing verifier/citekey machinery rather than invented independently.
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|--------------------|------------|-------|
+| **Relevance-ranked candidate ordering before truncation, not just first-N** | If `candidateSources` must be token-budgeted down from (e.g.) 40 sources to a manageable prompt size, naive truncation (array order) silently drops the most relevant sources for a given section. Cheap relevance signal (keyword/embedding overlap between section title+brief-seed and each candidate's title/abstract) ordered before any cap keeps the best matches in view | MEDIUM | Elicit/Perplexity-style pipelines rank-then-truncate rather than truncate-then-rank. Pensmith doesn't need embeddings — reuse the Jaro-Winkler/lexical tooling already in `research-orchestrator.ts` for a lightweight relevance score, or let the source-evaluator's existing per-candidate scoring (already computed once at research time) double as the sort key so this is metadata reuse, not new inference. |
+| **"Stranded source" surfacing after planning** | PRD §7.15 already requires the `add` verb to ask "should I remap sections to use this?" — the inverse case (a `LIBRARY.json` source that no section ever picked up across all sections) is worth surfacing at outline/plan completion so approved research doesn't silently go unused | LOW-MEDIUM | Diff `LIBRARY.json` citekeys against the union of all sections' `assigned_sources` after all sections are planned; report unused sources in the outline/status output. Advisory only — never blocks. |
+| **Section-scoped research (`plan <N> --research <query>`) merges cleanly into the same candidate/hydration pipeline** | PRD §7.5 already specifies this flag; once real `LIBRARY.json` feeding exists, the section-scoped addition must append to `LIBRARY.json` (or a section-local extension of it) using the SAME `SourceCandidate` shape and citekey uniqueness guarantee, not a parallel ad-hoc structure | MEDIUM | Depends on the citekey-uniqueness contract (`tests/citekey-collision.test.ts` already exists) — new section-scoped candidates must run through the same dedup/citekey-assignment path as whole-paper research, or divergent citekey formats become a second class of "unresolvable citekey" the verifier has to handle. |
+| **Voice-hint + brief separation from source list in the drafter prompt structure** | Already implemented in the section-drafter template design (`{{brief}}`, `{{assignedSources}}`, `{{voiceHint}}` as distinct blocks) — worth explicitly preserving as prompt *structure* (not concatenating everything into one blob) because it lets the drafter distinguish "argument I must make" from "ground truth I may cite" | LOW | This is a documentation/structure-preservation note more than new code — the existing `interpolate()` call already keeps these as separate template variables; just don't collapse them into a single string when wiring the real data through. |
+| **Machine-readable source list format in the prompt (small JSON array, not prose paragraph)** | A structured `[{citekey, title, authors, year, doi, abstract}, ...]` block is easier for the model to enumerate exhaustively (and copy citekeys verbatim from) than a prose-rendered bibliography; reduces the chance of the model paraphrasing a citekey wrong | LOW | `research-orchestrator.ts` already serializes candidates as JSON for the source-evaluator prompt (`JSON.stringify` with the same field subset) — reuse that exact serialization helper for `candidateSources`/`assignedSources` rather than writing a second renderer. |
+
+### Anti-Features (Commonly Requested, Often Problematic)
+
+Each of these sounds like it would make drafting better-grounded or more capable,
+but actively fights either the blocking verifier, the section-isolation model, or
+the citekey-uniqueness contract. Flag these explicitly for the roadmap so they
+don't get proposed as "obvious" additions later.
+
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|------------------|-------------|
+| **Let the drafter free-cite from the full `LIBRARY.json`, not just `assigned_sources`** | "More sources visible = richer draft, fewer orphan claims" | Directly violates PRD §7.6's restricted-view contract, which is *the* load-bearing isolation mechanism (re-doing section 3 must never pull in section 5's sources or drift its argument). It also defeats the purpose of the planner step entirely — if the drafter can see everything, the plan's `assigned_sources` field becomes decorative | Keep the drafter's input hard-scoped to `assigned_sources`. If a section is under-cited, the planner re-balances (`plan <N> --revise`) and re-assigns — the fix is a re-plan, not a wider draft-time aperture. |
+| **Model self-reports which sources it "used" after drafting, and pensmith trusts that as the citation ground truth** | Feels efficient — skip parsing `[@citekey]` tokens, just ask the model to list what it cited | This inverts the trust model. The verifier's entire design (Pass 1 re-fetch, Pass 3 quote-check) exists *because* the model's self-report cannot be trusted — a model can claim it cited `[@smith2020]` correctly while emitting a typo'd or wrong key, or claim support it didn't actually establish. Self-report is exactly the failure mode RAG grounding research (see Sources) warns is insufficient on its own | Deterministic extraction of `[@citekey]` tokens from the actual draft text (`citation-token.ts`'s `extractCitekeys`, which already exists) is the only ground truth. Self-report can be an *advisory* cross-check at most, never authoritative. |
+| **Free-text citation styles in the draft (e.g., "(Smith, 2020)" or "[1]") that get normalized to `[@citekey]` post-hoc** | Feels more natural for the model to write in the target citation style directly | The section-drafter prompt already explicitly forbids this (D-21: Pandoc `[@citekey]` is the only accepted form) for good reason — normalizing free-text back to a citekey is a fuzzy-match problem (which paper does "(Smith, 2020)" mean if two assigned sources are both Smith 2020a/2020b?) that reintroduces exactly the ambiguity the citekey system exists to eliminate | Keep `[@citekey]` as the only in-draft citation form; render to the target style (APA/MLA/etc.) only at compile/export time via the existing CSL rendering library. Already the design — don't let a "nicer draft-time UX" argument erode it. |
+| **Over-stuffing: assign all/most `LIBRARY.json` sources to every section "just in case"** | Seems safer than under-citing — more sources visible means the drafter is less likely to write an orphan claim | The section-planner prompt already caps this at 3-15 for a documented reason (below 3 → too little ground truth; above 15 → drafter loses focus and sections blur together). Over-stuffing also multiplies Pass-1/Pass-3 verifier work per section (re-fetching DOIs, quote-checking) for sources that may never actually get cited, inflating verifier cost without improving correctness | Keep the 3-15 assignment band planner-side. If a section is legitimately source-poor, that's a signal for `plan <N> --research <query>` (targeted addition), not "hand it the whole library." |
+| **Silent citekey substitution when the model emits a near-miss key (e.g., auto-correct `[@smith2020]` → `[@smith-2020]`)** | Feels helpful — reduce false FABRICATED verdicts caused by trivial formatting drift | This is a fail-open behavior in a system whose #1 non-negotiable is fail-closed citation integrity (GATE-04 already treats the verifier as `--yolo`-unskippable). A "helpful" auto-correct that guesses the intended citekey is itself an unverified inference sitting upstream of the verifier — if it guesses wrong, a MIS-CITED-worthy substitution now looks clean | If the drafter emits a citekey outside `assigned_sources`, that's a hard bug in the constrained-generation step, not something to paper over with fuzzy correction. Surface it as a drafting-contract violation (retry the write step / flag in `assertDrafterInput`-style validation) rather than silently rewriting the token. |
+| **Cross-section shared source pool with mutable global "already cited" state during drafting** | Wanting to avoid two sections citing the same source in a way that reads redundant, or to enable live coordination ("section 4 already used Smith for X, so section 5 should use it differently") | This requires drafting sections to be aware of sibling section state in real time, which breaks the parallel wave-scheduling model (sections in the same wave are written concurrently with no ordering guarantee) and reintroduces the exact cross-section coupling that section-as-phase isolation was built to eliminate | Redundancy-across-sections is a `compile`-time concern (the existing cross-section claim-consistency check), not a drafting-time one. Let sections draft independently; resolve redundancy/contradiction at compile. |
+| **Token-budget the source list by truncating abstracts to near-zero or dropping them entirely to fit more citekeys in** | If the source list is "too big," cutting abstracts seems like the easy lever | Abstracts are what let the planner/drafter reason about *why* a source supports a claim, not just that it exists. Dropping them turns source selection into citekey-matching-by-title-alone, which increases the odds of assigning a topically-irrelevant source just because its title contains matching keywords | Budget by candidate *count* (rank-then-cap, per the differentiator above) before budgeting by per-field truncation. The existing 500-char abstract cap (already precedented in `research-orchestrator.ts`) is a reasonable floor — don't go lower to fit more sources; instead show fewer, better-ranked sources at full detail. |
+
+## Feature Dependencies (FEED workstream)
+
+```
+LIBRARY.json (SourceCandidate[] — EXISTS, GEN-03)
+    └──required-by──> Plan step reads candidateSources
+                           └──required-by──> assigned_sources written to PLAN.md frontmatter (EXISTS)
+                                                  └──required-by──> Write step hydrates assignedSources
+                                                                         └──required-by──> [@citekey] tokens in DRAFT.md
+                                                                                                └──verified-by──> Blocking verifier Pass 1 (DOI/author fuzzy) + Pass 3 (quote-check) (EXISTS)
+
+Citekey uniqueness contract (EXISTS — tests/citekey-collision.test.ts)
+    └──required-by──> Section-scoped research (`plan <N> --research`) merging into same pool
+    └──required-by──> Hydration lookup (citekey → SourceCandidate Map) not ambiguous
+
+assertDrafterInput chokepoint (EXISTS — write.ts)
+    └──enforces──> Per-section restricted view (drafter never receives outside-assigned_sources data)
+
+Relevance ranking (differentiator)
+    └──enhances──> Token-budgeted truncation (doesn't drop the best-fit sources first)
+
+Stranded-source surfacing (differentiator)
+    └──enhances──> Outline/plan completeness (but is advisory — never blocks compile)
+
+Anti-feature: free-cite from full library ──conflicts──> Section-as-phase isolation (PRD §7.6, load-bearing)
+Anti-feature: self-reported citations ──conflicts──> Blocking verifier's re-fetch-the-source design (Core Value)
+Anti-feature: silent citekey auto-correct ──conflicts──> Fail-closed verifier gate (GATE-04, --yolo-unskippable)
+```
+
+### Dependency Notes (FEED workstream)
+
+- **Plan step requires LIBRARY.json to exist and be non-empty (or explicitly empty with a warning)** before it can meaningfully populate `assigned_sources`. This is already the shape research.ts produces — no new upstream dependency, just a consumer that doesn't exist yet.
+- **Write step requires `assigned_sources` to already be persisted in PLAN.md** (it is, per the existing frontmatter schema) — the write step's ONLY new responsibility is the citekey→object hydration lookup against `LIBRARY.json`, not re-deciding assignment.
+- **The verifier's DOI/author/title fuzzy-match (Pass 1) and quote-check (Pass 3) are unchanged by this milestone** — they already operate on whatever `[@citekey]` tokens land in DRAFT.md, regardless of how those tokens got there. This milestone's job is entirely upstream of the verifier: make sure the tokens that land are drawn from real, resolvable, section-scoped sources so the verifier has something legitimate to check, rather than nothing (today) or something invented.
+- **Citekey uniqueness (global across LIBRARY.json) is a hard prerequisite for hydration correctness** — if two entries ever shared a citekey, a citekey→object Map lookup would be ambiguous. This is already tested (`tests/citekey-collision.test.ts`); the FEED work should add a regression test that hydration explicitly uses this map-based lookup, not an array scan that could silently pick the wrong duplicate.
+- **Relevance ranking enhances but does not gate** the table-stakes wiring — ship naive (array-order or research-time-scored) candidate lists first; ranking refinement can follow once real usage shows truncation actually drops relevant sources in practice.
+- **Anti-features conflict with existing non-negotiables**, not with each other — each one independently violates either §7.6 (section isolation), the Core Value (verifier re-fetches, doesn't trust self-report), or GATE-04 (fail-closed, unconditional). They should be called out explicitly in the roadmap/requirements doc as "considered and rejected," not silently omitted.
+
+## MVP Definition (FEED workstream)
+
+### Launch With (v0.3.0 FEED milestone)
+
+Minimum viable product — closes the exact tech-debt gap named in PROJECT.md.
+
+- [ ] `plan.ts` reads real `LIBRARY.json` and populates `{{candidateSources}}` (replacing the literal placeholder string at line 129) — this is the headline fix
+- [ ] `plan.ts` populates `{{topic}}` / `{{discipline}}` from `PROJECT.md`/`config.toml` (currently hardcoded placeholders)
+- [ ] `plan.ts` populates `{{upstreamPlans}}` from already-planned `depends_on` sections' briefs
+- [ ] `write.ts` hydrates `assigned_sources` citekeys into full `SourceCandidate` objects via a citekey→entry Map over `LIBRARY.json`, replacing `assignedSources: '[]'` at line 220
+- [ ] Field shape for both prompts: `{ citekey, title, authors, year, doi, abstract (500-char cap, reusing the existing truncation precedent) }` — no full text, no extra fields
+- [ ] `assertDrafterInput` (or an equivalent chokepoint) validates every source object passed to the drafter is a member of that section's `assigned_sources` — enforcement at the object level, not just prompt wording
+- [ ] Empty/insufficient-`LIBRARY.json` guard in the plan step (clear message + non-crashing path), mirroring the existing zero-candidate WARN already in `research.ts`
+- [ ] Regression test: hydration uses citekey-keyed lookup (not array scan) and fails loudly on a citekey present in `assigned_sources` but absent from `LIBRARY.json` (stale/edited PLAN.md case)
+
+### Add After Validation (v1.x of the FEED workstream)
+
+- [ ] Relevance-ranked candidate ordering before any truncation cap (reuse source-evaluator's existing per-candidate scoring or a lightweight lexical/keyword overlap score)
+- [ ] Stranded-source surfacing (sources in `LIBRARY.json` never picked up by any section) at outline/plan-complete time, advisory only
+- [ ] Section-scoped research (`plan <N> --research <query>`) merges new candidates into the same `LIBRARY.json`-shaped pool with the same citekey-uniqueness guarantee
+
+### Future Consideration (v2+)
+
+- [ ] Embedding-based relevance ranking (only if lexical/keyword ranking proves insufficient in real usage — don't reach for this by default; it adds an infra dependency the project doesn't currently have)
+- [ ] Cross-paper source reuse / shared candidate cache (explicitly out of scope per PROJECT.md — "Cross-paper literature comparison mode" is scope creep beyond current direction)
+
+## Feature Prioritization Matrix (FEED workstream)
+
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|----------------------|----------|
+| Plan step: real `candidateSources` from `LIBRARY.json` | HIGH | LOW | P1 |
+| Write step: hydrated `assignedSources` from citekey lookup | HIGH | LOW | P1 |
+| `assertDrafterInput`-level scoping enforcement | HIGH | LOW | P1 |
+| Empty-library guard in plan step | MEDIUM | LOW | P1 |
+| Topic/discipline/upstreamPlans real wiring | MEDIUM | LOW | P1 |
+| Relevance-ranked truncation | MEDIUM | MEDIUM | P2 |
+| Stranded-source surfacing | LOW-MEDIUM | LOW-MEDIUM | P2 |
+| Section-scoped research merge into shared pool | MEDIUM | MEDIUM | P2 |
+| Embedding-based ranking | LOW (unproven need) | HIGH | P3 |
+
+**Priority key:**
+- P1: Must have — this IS the v0.3.0 milestone (the two placeholder fixes + the enforcement/guard work that makes them safe)
+- P2: Should have, natural follow-on once P1 is proven in real usage
+- P3: Nice to have, explicitly defer until a concrete gap is observed
+
+## Competitor / Reference-Pattern Analysis (FEED workstream)
+
+| Pattern | Perplexity-style RAG pipelines | Generic "cite-only-provided-docs" LLM prompting (industry consensus) | Pensmith's approach |
+|---------|-------------------------------|------------------------------------------------------------------------|----------------------|
+| Source shaping | Structured prompt assembly with pre-embedded, numbered citations from reranked retrieval | Explicit whitelist instructions ("do NOT cite papers not in this list") + structured (JSON-like) source blocks | JSON-serialized `SourceCandidate[]` subset (citekey/title/authors/year/doi/abstract), matching the precedent already set for the source-evaluator prompt |
+| Grounding enforcement | Multi-stage rerank + citation-by-index format that structurally limits what can be cited | Prompt instructions ALONE are documented as insufficient; needs real-time/post-hoc validation against the source list | Two-layer enforcement: (1) prompt-level hard constraints already written into `section-drafter.md`/`section-planner.md`, PLUS (2) deterministic post-hoc verification — the blocking verifier (Pass 1 DOI re-fetch + author/title fuzzy match, Pass 3 quote-check) that re-fetches live sources rather than trusting the model's compliance |
+| Scope of retrieved set per generation unit | Perplexity retrieves 5-10 candidates per query/answer, filtering >50% before final synthesis | N/A (single-shot chat, not multi-section documents) | Per-*section* scoping (3-15 assigned citekeys), not per-whole-document — this is pensmith's differentiator relative to generic RAG chat tools, and is what the section-as-phase model requires |
+| Self-report vs. deterministic extraction | Perplexity embeds citations structurally at generation time (citation-by-index is part of the output format, not a separate self-report step) | Structured output / tool-calling schemas preferred over free-text self-report, because free-text citation claims are unreliable | Deterministic extraction via `extractCitekeys()`/`CITATION_TOKEN_RE` from the actual draft text — never trusts a model self-report of what it cited |
+
+## Sources (FEED workstream)
+
+- [How to Stop LLM Hallucinations in Retrieval-Augmented Generation (RAG)](https://sharur7.medium.com/how-to-stop-llm-hallucinations-in-retrieval-augmented-generation-rag-5ef2894f9cd6) — MEDIUM confidence, general RAG grounding mechanics
+- [Grounding and Evaluation for Large Language Models: Practical Challenges and Lessons Learned (arXiv survey)](https://arxiv.org/pdf/2407.12858) — MEDIUM confidence, "grounding necessary but not sufficient" framing
+- [How to Prevent AI Citation Hallucinations in 2026 — INRA.AI](https://www.inra.ai/blog/citation-accuracy) — MEDIUM confidence, closed-set whitelist prompt pattern ("do NOT cite papers not in this list") directly informs the anti-invented-citekey framing
+- [My AI Kept Hallucinating Citations. Here's the Code That Fixed It. (Medium)](https://medium.com/@taotang757/my-ai-kept-hallucinating-citations-heres-the-code-that-fixed-it-353d0dbc0d78) — LOW-MEDIUM confidence, corroborates that prompt-only constraints are insufficient without deterministic post-hoc validation; consistent with pensmith's existing blocking-verifier design (independently arrived at, verified as sound practice)
+- [How Perplexity AI Answers Work: Retrieval, Ranking, and Citation Pipeline](https://ziptie.dev/blog/how-perplexity-ai-answers-work/) — MEDIUM confidence, rank-then-truncate and structured-prompt-with-pre-embedded-citations patterns
+- [CiteCheck: Retrieval-Grounded Detection of LLM Citation Hallucinations in Scientific Text (arXiv)](https://arxiv.org/pdf/2605.27700) — LOW confidence (not deeply read, title/abstract-level only), flags citation-hallucination-in-scientific-text as an active research problem, corroborating why re-fetch-based verification (already built) is the right posture rather than prompt-trust alone
+- Direct codebase inspection (HIGH confidence, primary source for all pensmith-specific claims):
+  - `templates/prompts/section-planner.md` — existing assignment/grounding contract
+  - `templates/prompts/section-drafter.md` — existing per-section restricted-view contract
+  - `bin/cli/plan.ts` (lines 118-133) — confirmed placeholder gap for `candidateSources`/`topic`/`discipline`/`upstreamPlans`
+  - `bin/cli/write.ts` (lines 156-220, 429) — confirmed placeholder gap for `assignedSources`, existing `readAssignedSources()` helper
+  - `bin/lib/research-orchestrator.ts` — confirmed `SourceCandidate` field shape and existing 500-char abstract truncation precedent
+  - `bin/cli/research.ts` (lines 96-309) — confirmed `LIBRARY.json` schema (`{ $schemaVersion, entries }`) and empty-candidate WARN precedent
+  - `bin/lib/citation-token.ts` — confirmed deterministic `[@citekey]` extraction machinery already used by the verifier
+  - `.planning/PROJECT.md` and `PRD.md` §7.5-7.6 — confirmed the section-as-phase / restricted-view non-negotiable this milestone must not violate
+
+---
+*Feature research for: citation-grounded drafting feed (pensmith v0.3.0)*
+*Researched: 2026-07-06*
