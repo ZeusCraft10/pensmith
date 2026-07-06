@@ -110,14 +110,17 @@ The generative seams the Foundation milestone scaffolded are now connected: the 
 
 **Tech stack:** Node ≥20.10, TypeScript (NodeNext, strict), undici, proper-lockfile, citation-js, pdf-parse/pdf-lib, jszip, Pandoc (optional shellout), MCP SDK, c8 coverage. Live LLM via `bin/lib/anthropic.ts` (Anthropic/OpenAI-compatible, through `http.ts`). Knowledge graph: gitignored, rebuild via `/gsd:graphify build`.
 
-## Next Milestone Goals (v0.3.0)
+## Current Milestone: v0.3.0 Truly End-to-End
 
-**Goal:** Make the pipeline *truly* end-to-end — close the v0.2.0 carried-forward gap so the discovered research actually informs drafting.
+**Goal:** Close the v0.2.0 carried-forward gap so discovered research actually informs drafting — the section planner/drafter consume the sources `research` found (grounded, section-scoped, injection-fenced) — and turn the two systemic themes the 37-finding audit just fixed into standing CI invariants so they can't silently return.
 
-- **Wire `LIBRARY.json` → plan/outline/write prompts** (the tech-debt headline): the section planner + drafter receive the discovered/assigned sources, not placeholder context.
-- **Live-path smoke CI** (real Pandoc/pymupdf/one live adapter round-trip) so the manual-only verifications get automated coverage.
-- **v2/Future breadth:** reference dedup, figure/table/caption handling, partial-draft resume, unverifiable-quote advisory bucket, verb reference card, Phase-1 FLAG paydown.
-- **Security residuals:** DNS-rebind socket-pinning (WR-03), worker-thread PDF abort (WR-05).
+**Target features:**
+- **FEED — source→drafting feed (headline):** wire `LIBRARY.json` sources into the plan/outline/write prompts through a new pure section-scoped source-context builder (`bin/lib/source-context.ts`); the drafter cites `[@citekey]` only from its section's mapped sources; injection-fence the untrusted source abstracts in the planner/drafter prompts (currently only Pass 2/4 are fenced).
+- **HARDEN — integration & verifier invariants:** promote `scripts/e2e-smoke.mjs` to a strict required CI gate with STATE/PLAN transition asserts; add a secrets-gated live-provider CI lane; add a citation-integrity fabricated-key differential test. (Hardening on top of the already-merged audit fixes, not blocked on them.)
+- **SEC — documented residuals:** DNS-rebind socket-pinning via the undici `connect` callback (WR-03); worker-thread PDF-parse abort on timeout (WR-05).
+- **Deferred to Future:** v2 breadth — reference dedup, figure/table/caption handling, partial-draft resume, unverifiable-quote advisory bucket, verb reference card, Phase-1 FLAG paydown.
+
+Requirements: `.planning/REQUIREMENTS.md` (FEED-01..05, HARDEN-01..04, SEC-01/02 — 11 total). Research: `.planning/research/SUMMARY.md` (zero new dependencies; FEED is pure wiring of three placeholder call sites).
 
 ## Context
 
@@ -173,4 +176,4 @@ This document evolves at phase transitions and milestone boundaries.
 **After each milestone** (via `/gsd:complete-milestone`): full review of all sections; Core Value check; audit Out of Scope; update Context + Current State.
 
 ---
-*Last updated: 2026-06-24 after v0.2.0 End-to-End milestone (initialized 2026-05-06 from PRD.md)*
+*Last updated: 2026-07-06 — v0.3.0 Truly End-to-End milestone started (initialized 2026-05-06 from PRD.md)*

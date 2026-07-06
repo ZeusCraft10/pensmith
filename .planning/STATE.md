@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.2.0
-milestone_name: End-to-End
-status: Awaiting next milestone
-stopped_at: Completed 15-08-PLAN.md (SECURITY.md audit + Semaphore bare-caller doc, Phase 15 Wave 4 complete)
-last_updated: "2026-06-24T11:06:00.822Z"
-last_activity: 2026-06-24 — Milestone v0.2.0 completed and archived
+milestone: v0.3.0
+milestone_name: Truly End-to-End
+status: planning
+last_updated: "2026-07-06T09:47:31.572Z"
+last_activity: 2026-07-06
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 26
-  completed_plans: 26
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-06-24 after v0.2.0 End-to-End milestone)
 
 ## Current Position
 
-Phase: Milestone v0.2.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-06-24 — Milestone v0.2.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-06 — Milestone v0.3.0 started
 
 ## Performance Metrics
 
