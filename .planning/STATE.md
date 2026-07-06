@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: Truly End-to-End
-status: planning
-last_updated: "2026-07-06T09:47:31.572Z"
+status: roadmapped
+last_updated: "2026-07-06T00:00:00.000Z"
 last_activity: 2026-07-06
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-24 after v0.2.0 End-to-End milestone)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** Planning v0.3.0 — wire discovered LIBRARY.json sources into the plan/outline/write prompts (the v0.2.0 carried-forward tech-debt headline) + v2/Future breadth + the documented security residuals. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
+**Current focus:** v0.3.0 roadmapped (Phases 17–19). Phase 17 FEED wires discovered LIBRARY.json sources into the plan/outline/write prompts (the v0.2.0 carried-forward tech-debt headline) + injection fencing. Phase 18 SEC closes the two documented security residuals (DNS-rebind pinning, PDF worker-abort), independent of FEED. Phase 19 HARDEN promotes the audit-hardening work into standing CI invariants (strict e2e gate, live-provider lane, citation-integrity test), sequenced after FEED. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 17 — Source→Drafting Feed (FEED) (not started; next up per roadmap)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-06 — Milestone v0.3.0 started
+Status: Roadmap created, ready for `/gsd:plan-phase 17`
+Last activity: 2026-07-06 — ROADMAP.md written (Phases 17–19), 11/11 requirements mapped, REQUIREMENTS.md traceability filled
 
 ## Performance Metrics
 
@@ -268,6 +268,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [16-01]: .c8rc.json thresholds 85/72/82/85 are baseline-minus-5pp from measured 2026-06-24 run (90.3/77.26/87.28/90.3); dist/** excluded to prevent double-count of compiled output — ratchet not aspirational (CI-03)
 - [16-01]: RED-by-skip guard in http-mock.test.ts keys on `^import nock from 'nock'` at line-start — source-grep proxy for prod-install nock absence; true uninstall test not feasible in-suite (DOCS-03 / T-16-DEP)
 - [16-01]: workflow-bodies.test.ts splits into three independent sub-tests (A=sections, B=no-sentinels, C=capability_check) under one shared SKIP_REASON so each dimension reports separately in CI when Plan 04 partially lands (DOCS-02)
+- [v0.3.0 roadmap] Phase order is FEED (17) → SEC (18) → HARDEN (19), not numeric-implies-dependency: SEC is fully independent and could run in parallel with FEED; HARDEN is sequenced last because its FEED-specific e2e assertions (assigned_sources population, citekey containment) are meaningless against placeholder data
+- [v0.3.0 roadmap] AUDIT-FINDINGS.md's 37 findings are already fixed and merged (PRs #3-#19) — HARDEN's strict e2e gate and citation-integrity test are hardening ON TOP of shipped fixes, not blocked behind a router/regex-fix phase; no phase inserted for "fix the router bugs first"
+- [v0.3.0 roadmap] OUTLINE.md's `assigned_sources` column stays advisory; `plan.ts` is the single authoritative writer of PLAN.md's real `assigned_sources`, reading LIBRARY.json directly — avoids a two-writer inconsistency (research ARCHITECTURE.md Pattern 3, carried into Phase 17 scope)
 
 ### Pending Todos
 
@@ -284,18 +287,19 @@ Items acknowledged and carried forward at the v0.2.0 milestone close (2026-06-24
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| tech-debt (v0.3.0 headline) | Wire discovered LIBRARY.json sources into the plan/outline/write prompts (research discovers sources but the section planner/writer get placeholder context) | carried to v0.3.0 | v0.2.0 close |
+| tech-debt (v0.3.0 headline) | Wire discovered LIBRARY.json sources into the plan/outline/write prompts (research discovers sources but the section planner/writer get placeholder context) | now Phase 17 (FEED) in v0.3.0 roadmap | v0.2.0 close |
 | manual-verify | Live LLM-key generation (GEN-02) + live adapter network round-trip (GEN-03) — Phase 12 | deferred (manual-only; offline cassette/PENSMITH_NO_LLM verified) | v0.2.0 close |
 | manual-verify | Live Retraction Watch re-query (GATE-03) — Phase 14 | deferred (manual-only; cassette verified) | v0.2.0 close |
 | manual-verify | Live-DNS SSRF block (HARD-02) + live GPTZero consent/cap (HARD-05) — Phase 15 | deferred (manual-only; injected-resolver/offline verified) | v0.2.0 close |
-| security-residual | DNS-rebind socket-pinning (WR-03) + worker-thread PDF abort (WR-05) — SECURITY.md | carried to v0.3.0 (PROVEN-with-residual) | v0.2.0 close |
+| security-residual | DNS-rebind socket-pinning (WR-03) + worker-thread PDF abort (WR-05) — SECURITY.md | now Phase 18 (SEC) in v0.3.0 roadmap | v0.2.0 close |
 
 ## Session Continuity
 
-Last session: 2026-06-24T10:04:50.696Z
-Stopped at: Completed 15-08-PLAN.md (SECURITY.md audit + Semaphore bare-caller doc, Phase 15 Wave 4 complete)
+Last session: 2026-07-06T00:00:00.000Z
+Stopped at: ROADMAP.md written for v0.3.0 (Phases 17-19); REQUIREMENTS.md traceability filled (11/11 mapped); ready for /gsd:plan-phase 17
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd:new-milestone
+- Review .planning/ROADMAP.md Phase 17-19 detail and .planning/REQUIREMENTS.md traceability
+- Run /gsd:plan-phase 17 to begin planning Phase 17 (Source→Drafting Feed / FEED)

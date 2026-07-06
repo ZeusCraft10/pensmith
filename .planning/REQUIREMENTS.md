@@ -63,23 +63,23 @@ Which phases cover which requirements. Filled by roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FEED-01 | — | Pending |
-| FEED-02 | — | Pending |
-| FEED-03 | — | Pending |
-| FEED-04 | — | Pending |
-| FEED-05 | — | Pending |
-| HARDEN-01 | — | Pending |
-| HARDEN-02 | — | Pending |
-| HARDEN-03 | — | Pending |
-| HARDEN-04 | — | Pending |
-| SEC-01 | — | Pending |
-| SEC-02 | — | Pending |
+| FEED-01 | Phase 17 | Pending |
+| FEED-02 | Phase 17 | Pending |
+| FEED-03 | Phase 17 | Pending |
+| FEED-04 | Phase 17 | Pending |
+| FEED-05 | Phase 17 | Pending |
+| HARDEN-01 | Phase 19 | Pending |
+| HARDEN-02 | Phase 19 | Pending |
+| HARDEN-03 | Phase 19 | Pending |
+| HARDEN-04 | Phase 19 | Pending |
+| SEC-01 | Phase 18 | Pending |
+| SEC-02 | Phase 18 | Pending |
 
 **Coverage:**
 - v1 requirements: 11 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 11 ⚠️ (filled at roadmap creation)
+- Mapped to phases: 11 (Phase 17: 5, Phase 18: 2, Phase 19: 4)
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-06*
-*Last updated: 2026-07-06 — v0.3.0 Truly End-to-End milestone started*
+*Last updated: 2026-07-06 — v0.3.0 roadmap created (Phases 17–19), 11/11 requirements mapped*
