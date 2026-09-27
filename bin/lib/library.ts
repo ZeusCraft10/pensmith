@@ -49,7 +49,8 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
-import { loadAndMigrate } from './migrations/loader.js';
+import { loadAndMigrate, ForwardIncompatError } from './migrations/loader.js';
+import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 import { migrate as migrateLibraryV1toV2 } from './migrations/library/v1_to_v2.js';
 import {
   candidateToEntry,
@@ -102,6 +103,22 @@ export class LibraryAlreadyExistsError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'LibraryAlreadyExistsError';
+  }
+}
+
+/**
+ * An existing LIBRARY.json that cannot be read (bad JSON, or not the library
+ * schema) — an expected, user-fixable condition: one line naming the file and
+ * how to recover (RUN-12), never an internal-error hint.
+ */
+export class LibraryInvalidError extends PensmithError {
+  constructor(file: string, detail: string) {
+    super(
+      `${file} is not a valid pensmith library (${detail}) — repair it, or move it aside (rename it, e.g. to ` +
+        'LIBRARY.json.bak) and re-run: the library is rebuilt from research and CITATIONS.bib',
+      EXIT_ERROR,
+    );
+    this.name = 'LibraryInvalidError';
   }
 }
 
@@ -216,6 +233,24 @@ export async function loadLibrary(root: string): Promise<Library> {
   if (!value) throw new LibraryNotFoundError(`LIBRARY.json not found at ${paths.library}`);
   log().event({ event: 'library.load', entryCount: value.entries.length, schemaVersion: value.$schemaVersion });
   return value;
+}
+
+/**
+ * Check, read-only, that the paper's LIBRARY.json (when present) loads: a
+ * verb that will write the library (research) calls it BEFORE any search or
+ * model call, so a corrupt file costs nothing. Throws LibraryInvalidError
+ * (one line) for bad JSON or a schema mismatch; a newer-version file keeps its
+ * ForwardIncompatError (upgrade pensmith). Never writes, never migrates.
+ */
+export async function assertLibraryReadable(root: string): Promise<void> {
+  const paths = libraryPaths(root);
+  try {
+    await withLock(paths.library, () => readUnlocked(paths.library, false));
+  } catch (e) {
+    if (e instanceof ForwardIncompatError) throw e;
+    const detail = (e instanceof Error ? e.message : String(e)).replace(/^pensmith: /, '').split('\n')[0] ?? '';
+    throw new LibraryInvalidError(paths.library, detail.length > 200 ? `${detail.slice(0, 200)}…` : detail);
+  }
 }
 
 /** loadLibrary, or null when the paper has no LIBRARY.json yet. */

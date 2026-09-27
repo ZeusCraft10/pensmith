@@ -500,7 +500,16 @@ function pkgVersion(): string {
   return cachedVersion;
 }
 
-function userAgent(): string {
+/**
+ * The User-Agent for one request. Source hosts get the polite-pool form with
+ * PENSMITH_CONTACT_EMAIL (Crossref / OpenAlex ask for it), and its missing-email
+ * WARN. A model-provider request (opts.llm) gets the plain `pensmith/<version>`:
+ * the contact email is personal data meant for the polite pools, never for
+ * Anthropic, OpenAI or a third-party OpenAI-compatible endpoint, and a run that
+ * only called the model has no reason to warn about Crossref rate limits.
+ */
+function userAgent(llm: boolean): string {
+  if (llm) return `pensmith/${pkgVersion()}`;
   const email = process.env.PENSMITH_CONTACT_EMAIL?.trim();
   if (!email) {
     warnNoEmailOnce();
@@ -850,7 +859,17 @@ async function writeCache(key: string, response: HttpResponse): Promise<void> {
 //   Constants
 // ============================================================
 const DEFAULT_TIMEOUT_MS = 30_000;
-const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503, 504]);
+/**
+ * Transient statuses fetch() retries (5 attempts, full-jitter backoff, the
+ * server's Retry-After honoured up to RETRY_AFTER_CAP_MS). 529 is Anthropic's
+ * `overloaded_error` — a routine, momentary condition the official SDKs retry.
+ */
+const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503, 504, 529]);
+
+/** True when fetch() retried a response with this status before giving up (callers word errors by it). */
+export function isRetryableStatus(status: number): boolean {
+  return RETRYABLE_STATUSES.has(status);
+}
 
 // Audit #22: the Retry-After value is server-controlled, so it MUST be bounded.
 // Without a cap a hostile or misconfigured endpoint can send `Retry-After: 86400`
@@ -1294,7 +1313,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     try {
       const reqInit = {
         method,
-        headers: { 'user-agent': userAgent(), ...headers },
+        headers: { 'user-agent': userAgent(llm !== undefined), ...headers },
         headersTimeout: timeoutMs,
         bodyTimeout: timeoutMs,
         dispatcher,

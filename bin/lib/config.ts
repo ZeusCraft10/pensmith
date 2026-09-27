@@ -14,7 +14,10 @@
 //   4. refusals: `[verification] verify_quotes` (PRD §14: Pass 3 is blocking)
 //      and `[runtime] endpoint` / `api_key_env` (S-18: they live only in the
 //      global runtime.json);
-//   5. unknown keys: one warning per key per process, then ignored;
+//   5. unknown keys: one warning per key per process, then ignored — ignored
+//      for validation only: a write-back (migration or updatePaperConfig)
+//      keeps them in the file, so pensmith never deletes a key it does not
+//      recognise (a newer pensmith's, or the user's own note);
 //   6. zod validation (schemas/config.ts) → one-line ConfigError.
 //
 // The educator-mode [project] keys are an opaque fragment from tutorial.ts;
@@ -117,7 +120,11 @@ function normalizeTomlValues(v: unknown): unknown {
 
 interface Parsed {
   config: PaperConfig;
-  /** The raw (migrated, unknown-key-stripped) object, as it would be written back. */
+  /**
+   * The raw migrated object, as it would be written back: every key the file
+   * had (unknown keys included — they are warned about and ignored, never
+   * deleted). Validation runs on a copy with the unknown keys stripped.
+   */
   raw: Record<string, unknown>;
   migratedFrom: number | null;
   warnings: string[];
@@ -228,7 +235,7 @@ function parseAndValidate(text: string, fileLabel: string): Parsed {
   if (!parsed.success) {
     throw new ConfigError(`${fileLabel}: ${formatIssues(parsed.error.issues)}`);
   }
-  return { config: parsed.data, raw: cleaned, migratedFrom, warnings };
+  return { config: parsed.data, raw, migratedFrom, warnings };
 }
 
 function formatIssues(issues: z.ZodIssue[]): string {

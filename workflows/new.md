@@ -1,14 +1,10 @@
 # pensmith new
 
-> Start a new paper project — capture the assignment, run the clarifying battery,
-> detect the discipline, and persist a structured `INTAKE.md` for downstream verbs.
+> Start a new paper project — take in the assignment, clarify it, detect the
+> discipline, and persist a structured `.paper/INTAKE.md` for the verbs that follow.
 >
-> CYCLE-3 NAMING NOTE: per Plan 06 REVIEWS CONVERGENCE, the canonical user-facing verb is
-> `pensmith intake`; `pensmith new` is a friendly alias mapped by the bin/cli/index.ts
-> dispatcher (Plan 07). This workflow file is named `new.md` to remain bijective with the
-> UX-02 16-verb canonical list (bin/lib/verbs.ts) that ARCH-01 (workflows-keyequal.test.ts)
-> enforces; when Plan 07 renames the verb in `verbs.ts`, this file will move to
-> `workflows/intake.md`. Until then, this file *is* the intake workflow body.
+> `new` is the intake step (UX-02 verb; its implementation is `bin/cli/intake.ts`).
+> There is no `intake` verb: `pensmith intake` is an unknown command (RUN-11, exit 2).
 
 <capability_check>
 required:
@@ -20,52 +16,61 @@ degrade_if_missing:
 
 ## Overview
 
-`pensmith new` (canonical alias: `pensmith intake`) bootstraps a paper project from an
-assignment text + a discipline-aware clarifying battery. It is the front door of the
-workflow: intake → research → outline → (plan → write → verify)* → compile.
+`pensmith new` bootstraps a paper project in the current folder from an assignment
+text and a discipline-aware clarification. It is the front door of the workflow:
+new → research → outline → (plan → write → verify)* → compile → done.
 
-The implementation lives in `bin/cli/intake.ts` (created by Plan 07). The workflow body
-below is the prompt that drives the verb's behavior under both Tier 1 (Task/MCP) and
-Tier 2 (shell) — the `<capability_check>` block above degrades the Tier-1 affordances
-to a Tier-2 shell invocation when those tools are unavailable, preserving TIER-06
+The workflow body below drives the verb under both Tier 1 (Task/MCP) and Tier 2
+(shell); the `<capability_check>` block above degrades the Tier-1 affordances to the
+Tier-2 shell invocation when those tools are unavailable, preserving TIER-06
 equivalence.
-
-## Steps
-
-1. (see Body below — `## Body` is the executable prompt; the steps above are just an overview)
 
 ## Outputs
 
-- `.paper/INTAKE.md` — clarified assignment + discipline + tone + citation style (committed)
-- `.paper/INTAKE.raw.local` — raw answers before PII redaction (gitignored, never committed)
+- `.paper/STATE.json` — the paper's state (the one STATE.json location, RUN-13)
+- `.paper/INTAKE.md` — the clarified assignment: topic, discipline and the clarifying
+  questions (rendered from the validated `intake-clarifier` object, never copied from
+  model prose)
+- `.paper/config.toml` — the paper's `[project]` settings (`pii_redaction` when `--pii-redact` is given)
+- `.paper/INTAKE.raw.local` — ONLY with PII redaction on: the raw, un-redacted text
+  (gitignored via `.paper/.gitignore`, never committed, never sent to a model)
 
 ## Body
 
-1. **Print §3 disclaimer** (DOCS-01): at the top of the run, before any prompts or model calls, print the PRD §3 dual-use disclaimer verbatim to stdout. This ensures CLI-only users who never read the README still see the disclosure. Static copy — no user input needed. Implemented via `process.stdout.write` in `bin/cli/intake.ts` immediately after `const cwd = process.cwd()`.
+1. **Print the §3 disclaimer** (DOCS-01): before any prompt or model call, print the
+   PRD §3 dual-use disclaimer verbatim to stdout, so CLI-only users who never read the
+   README still see it.
 
-2. **Read inputs**:
-   - Assignment text from `.paper/INTAKE.md` if present, else prompt user (or read `--from <file>`).
-   - `templates/presets/disciplines.json` (the 9 INTK-03 keys: 8 disciplines + explicit `other` fallback per Plan 05 Task 5.3).
-   - `templates/prompts/intake-clarifier.md` (D-12 LOCKED slug — the prompt template; interpolate `{{assignment}}`).
+2. **Get the assignment** (GRND-01): `--from <file>` (.txt, .md or .pdf), else an
+   `assignment.{txt,md,pdf}` in the paper folder, else — in a terminal — the user pastes
+   it. `--thesis <text>` (supplied by `sketch`) seeds it too. With no assignment and no
+   terminal the verb exits 2 (EXIT_USAGE) and writes nothing.
 
-3. **Detect discipline** (heuristic match assignment keywords against the 9 disciplines.json keys; fall back to `"other"` → which itself maps to `tone: "academic-formal"` + `citation_style: "apa"` for unrecognized inputs).
+3. **PII redaction — opt-in only** (ERGO-07 / SC-3): when `--pii-redact` is given (or
+   `[project] pii_redaction = true` in `.paper/config.toml`; the flag wins), the
+   assignment text is redacted by `bin/lib/pii.ts` BEFORE anything reaches the model:
+   each detected span is printed as a reviewable `[kind] "raw" → tag` line, the raw
+   text goes to `.paper/INTAKE.raw.local`, and the redacted text is what the model
+   sees and what `INTAKE.md` keeps. With redaction off (the default), the assignment
+   text is used as given — nothing is redacted.
 
-4. **Run clarifying battery** (INTK-02):
-   - If Task/MCP available (Tier 1): delegate to model with `templates/prompts/intake-clarifier.md` (D-12 LOCKED slug — the canonical slug per Plan 03 CONTEXT D-12).
-   - If `AskUserQuestion` available (Tier 1): present 3–5 questions via that tool.
-   - Tier 2 fallback: write questions to stdout, read answers from stdin via `@clack/prompts` (`bin/lib/prompts.ts` from Phase 2).
+4. **Clarify** (INTK-02): the `intake-clarifier` prompt (D-12 LOCKED slug) is sent
+   through `complete()` as a STRUCTURED call that returns `{topic, discipline,
+   questions[]}` validated against its contract (one corrective retry on a schema
+   miss, RUN-25). The discipline is named from the preset list (computer-science,
+   biology, history, literature, psychology, economics, philosophy, sociology), with
+   `other` as the fallback.
+   - Tier 1 with `AskUserQuestion`: put the clarifying questions to the user and fold
+     the answers into the assignment context before writing.
+   - Tier 2: the questions (each with a suggested answer) are recorded under
+     `## Clarifying questions` in `INTAKE.md` for the user to review.
 
-5. **Apply PII redaction** (INTK-05): before persisting answers, run the user's RAW ANSWERS through `bin/lib/pii.ts redactPII(answer)`.
+5. **Write the paper** (atomic writes via `bin/lib/atomic-write.ts`): `.paper/STATE.json`
+   (idempotent — an existing paper keeps its paperId), then `.paper/INTAKE.md`, the
+   paper's `[project]` settings in `.paper/config.toml` (through `bin/lib/config.ts`),
+   and the paper's entry in the global paper registry.
+   With `--style-samples <dir>` (opt-in), a statistical style profile is written to
+   `.paper/STYLE.json`.
 
-   PII redaction ordering (Codex MEDIUM consensus #18 — locked):
-   - PII redaction operates on the **user's answers only**, NEVER on the prompt template or the LLM-generated questions (those are pensmith-controlled strings with no user PII).
-   - Sequence: (a) prompt user, (b) collect raw answer string, (c) `redactPII(answer)`, (d) persist redacted answer to `.paper/INTAKE.md` AND a separate `.paper/INTAKE.raw.local` file (gitignored — never committed) for the user's own forensics.
-   - The redactor processes input in this **deterministic order**:
-     ```
-     EMAIL → PHONE → SSN-LIKE → CREDIT-CARD-LIKE → URL_WITH_QUERY → IP_ADDRESS → IBAN_LIKE
-     ```
-     Multi-pattern coverage matters: redacting EMAIL last would cause `foo@bar.com` in a URL to slip through PHONE-shaped regex; processing EMAIL first ensures clean tokenization. `tests/pii.test.ts` asserts ordering by feeding `foo@bar.com (+1-555-555-5555)` and asserting the result is `[REDACTED-EMAIL] (+[REDACTED-PHONE])` (NOT `[REDACTED-PHONE]` swallowing the email).
-
-6. **Write `.paper/INTAKE.md`** (atomic via `bin/lib/atomic-write.ts`, the D-07 chokepoint) with the clarified assignment + discipline + tone + citation style. Persist the un-redacted RAW answers to `.paper/INTAKE.raw.local` (gitignored).
-
-7. **Shell fallback** (TIER-06 equivalence path): `pensmith intake [--from <file>] [--yolo]` (alias: `pensmith new [--from <file>] [--yolo]` — both invocations dispatch to the same `bin/cli/intake.ts` handler).
+6. **Shell fallback** (TIER-06 equivalence path): `pensmith new [--from <file>]
+   [--thesis <text>] [--pii-redact] [--style-samples <dir>] [--yolo]`.

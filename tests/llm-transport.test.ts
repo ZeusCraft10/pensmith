@@ -28,9 +28,10 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { withLlmSandbox, readJsonl } from './helpers/llm-sandbox.js';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
-import { complete, isNoLlmMode, MissingApiKeyError } from '../bin/lib/anthropic.js';
+import { complete, isNoLlmMode, MissingApiKeyError, ProviderHttpError } from '../bin/lib/anthropic.js';
 import { GateRefusedError } from '../bin/lib/gates.js';
 import { currentSessionId } from '../bin/lib/session-log.js';
+import { _resetWarnedForTest } from '../bin/lib/http.js';
 
 function repoRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -129,6 +130,25 @@ test('T-11-03: the API key value never leaks to disk, stdout or stderr — only 
   });
 });
 
+test('RUN-12: a model request carries a plain pensmith User-Agent — never the contact email, and no polite-pool WARN', async () => {
+  for (const email of ['reviewer@example.com', undefined]) {
+    await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: 'sk-test-ua-0001', PENSMITH_CONTACT_EMAIL: email } }, async (sb) => {
+      _resetWarnedForTest();
+      const cap = captureStdio();
+      let out: { stdout: string; stderr: string };
+      try {
+        await complete({ slug: 'section-drafter', system: 's', messages: [{ role: 'user', content: 'go' }] });
+      } finally {
+        out = cap.restore();
+      }
+      const ua = sb.mock!.requests[0]!.headers['user-agent'] ?? '';
+      assert.match(ua, /^pensmith\/[^\s()]+$/, `plain User-Agent, got ${JSON.stringify(ua)}`);
+      assert.ok(!ua.includes('@') && !ua.includes('no-contact'), 'no contact email (or its absence) is sent to the model provider');
+      assert.doesNotMatch(out.stderr, /PENSMITH_CONTACT_EMAIL/, 'an LLM-only run prints no polite-pool warning');
+    });
+  }
+});
+
 test('T-11-04: complete() rejects with MissingApiKeyError when no API key is configured', async () => {
   await withLlmSandbox({ mock: 'anthropic' }, async (sb) => {
     await assert.rejects(
@@ -141,6 +161,27 @@ test('T-11-04: complete() rejects with MissingApiKeyError when no API key is con
       },
     );
     assert.equal(sb.mock!.callCount(), 0);
+  });
+});
+
+test('RUN-12: a connect timeout reads "could not connect" with the time spent — never the 600s request timeout', async () => {
+  await withLlmSandbox({ env: { ANTHROPIC_API_KEY: 'sk-ant-test-connect-timeout', PENSMITH_NETWORK_TESTS: '1' } }, async () => {
+    const mock = installMockAgent();
+    try {
+      const err = Object.assign(new Error('Connect Timeout Error'), { code: 'UND_ERR_CONNECT_TIMEOUT' });
+      mock.agent.get('https://api.anthropic.com').intercept({ path: '/v1/messages', method: 'POST' }).replyWithError(err).persist();
+      await assert.rejects(
+        complete({ slug: 'section-drafter', system: 's', messages: [{ role: 'user', content: 'go' }] }),
+        (e: unknown) => {
+          assert.ok(e instanceof ProviderHttpError, String(e));
+          assert.match(e.message, /^could not connect to anthropic at https:\/\/api\.anthropic\.com\S* \(no answer after \d+(?: ms|s) of connection attempts\) — start the server or fix /);
+          assert.doesNotMatch(e.message, /600s|timed out after/);
+          return true;
+        },
+      );
+    } finally {
+      await mock.restore();
+    }
   });
 });
 

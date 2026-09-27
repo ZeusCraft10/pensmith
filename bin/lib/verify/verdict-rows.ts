@@ -63,6 +63,9 @@ export function renderPass3VerdictRow(
  * Matches list-item verdict rows in two forms:
  *   Pass-1: - citekey: **VERDICT** — titleJW=…, authorJW=… — reason
  *   Pass-3: - citekey ("quote…"): **VERDICT** — lev=… — reason
+ * The citekey is any non-space run (every CITEKEY_GRAMMAR key: dotted, colon,
+ * Unicode); a blocking row whose key cannot be read is still returned (as
+ * UNREADABLE_CITEKEY) — fail closed, never "absent".
  *
  * The `^\s*-\s*` anchor excludes pipe-delimited table rows (| citekey | ...) so
  * the Source Freshness table (RSCH-10) does NOT pollute the blocking set (Pitfall 2).
@@ -82,33 +85,60 @@ export function parseVerdictRows(verificationMd: string): string[] {
 export function parseBlockingVerdictRows(verificationMd: string): BlockingVerdictRow[] {
   const out: BlockingVerdictRow[] = [];
   for (const line of verificationMd.split(/\r?\n/)) {
-    // `- <citekey>: **VERDICT**` OR `- <citekey> ("quote…"): **VERDICT**`
-    //
-    // FAIL-CLOSED widening (audit #2/#20): the citekey group is `[A-Za-z0-9]...`
-    // (was `[a-z]...`) so a verdict row produced for an UPPERCASE / mixed-case key
-    // — which the broad verifier extractor (extractCitedKeysForVerification) now
-    // emits — is matched and added to the blocking set. Previously such a row was
-    // silently skipped, so a FABRICATED `[@Vaswani2017]` produced a verdict that
-    // never blocked compile. `:`/`(` are deliberately EXCLUDED from the body so the
-    // `[:(]` delimiter stays unambiguous; for an exotic key containing `:` the body
-    // captures a prefix, which is harmless because compile.ts:272 refuses on ANY
-    // matched blocking row (the exact key text is not used for the refuse decision).
-    // The `^\s*-\s*` anchor still excludes pipe-delimited freshness-table rows.
-    const m = /^\s*-\s*([A-Za-z0-9][A-Za-z0-9_-]*)\s*[:(].*?\*\*([A-Z_-]+)\*\*/.exec(line);
-    if (!m) continue;
-    const citekey = m[1];
-    const verdict = m[2];
-    if (citekey === undefined || verdict === undefined) continue;
-    if (BLOCKING_VERDICTS.has(verdict)) out.push({ citekey, verdict });
+    // Every `- … **VERDICT**` list item is a verdict row; the `^\s*-\s*` anchor
+    // keeps the pipe-delimited freshness / Pass-2 tables out (Pitfall 2).
+    const any = /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
+    const verdict = any?.[1];
+    if (verdict === undefined || !BLOCKING_VERDICTS.has(verdict)) continue;
+    // The citekey is ANY non-space run before the row's delimiter, so every key
+    // the library accepts (the Pandoc CITEKEY_GRAMMAR: `.:#$%&+?<>~/` and
+    // Unicode letters — `ghost.2099`, `müller2020`, `doe:2020`) is named:
+    //   Pass-3: `- <key> ("quote…"): **VERDICT**`
+    //   Pass-1: `- <key>: **VERDICT**`
+    const pass3 = /^\s*-\s*(\S+?)\s+\(".*"\):\s*\*\*[A-Z_-]+\*\*/u.exec(line);
+    const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*[A-Z_-]+\*\*/u.exec(line);
+    const citekey = pass3?.[1] ?? pass1?.[1];
+    // FAIL CLOSED (audit #2/#20, VRFY-09): a blocking verdict on a row whose key
+    // cannot be read still blocks — it is never treated as absent.
+    out.push({ citekey: citekey ?? UNREADABLE_CITEKEY, verdict });
   }
   return out;
 }
 
+/** The citekey reported for a blocking verdict row whose key could not be read (it still blocks). */
+export const UNREADABLE_CITEKEY = '(unreadable verdict row)';
+
+/**
+ * The ONE per-section verification gate compile's refuse-gate and done's
+ * export re-check share, so the two can never drift apart again. Given a
+ * section's VERIFICATION.md text, the reasons it may NOT compile or export
+ * (empty = it may):
+ *   - no `Status:` line — never verified, or the verifier output is unreadable;
+ *   - a --dry-run verification outside --dry-run (RUN-27, synthetic sources);
+ *   - `Status: failed` — blocks even when no verdict row parses (fail closed);
+ *   - every blocking verdict row (FABRICATED / MIS-CITED / NOT_FOUND /
+ *     UNVERIFIABLE), any citekey shape.
+ * `Status: unverifiable` with no blocking row passes (Pitfall 3).
+ */
+export function sectionVerificationReasons(verificationMd: string, dryRunNow: boolean): string[] {
+  const status = /^Status:\s*(\S+)/m.exec(verificationMd)?.[1];
+  if (status === undefined) {
+    return ['no verifiable VERIFICATION.md (no Status line: the section was never verified, or the verifier output is unreadable)'];
+  }
+  const dryRun = dryRunVerificationReason(verificationMd, dryRunNow);
+  if (dryRun !== null) return [dryRun];
+  const reasons: string[] = [];
+  if (status.toLowerCase() === 'failed') reasons.push("VERIFICATION.md Status is 'failed'");
+  for (const row of parseBlockingVerdictRows(verificationMd)) reasons.push(blockingRowReason(row));
+  return reasons;
+}
+
 /** The refusal wording for one blocking row (compile refuse-gate, done re-check). */
 export function blockingRowReason(row: BlockingVerdictRow): string {
+  const cite = row.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row.citekey}]`;
   return row.verdict === 'UNVERIFIABLE'
-    ? `citation [@${row.citekey}] is UNVERIFIABLE (checked offline or under --dry-run) — re-run online`
-    : `citation [@${row.citekey}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND)`;
+    ? `${cite} is UNVERIFIABLE (checked offline or under --dry-run) — re-run online`
+    : `${cite} has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND)`;
 }
 
 /**

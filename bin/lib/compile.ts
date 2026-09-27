@@ -55,7 +55,7 @@ import {
   type CitationDensityEntry,
   type StalenessEntry,
 } from './compile-report.js';
-import { parseBlockingVerdictRows, blockingRowReason, dryRunVerificationReason } from './verify/verdict-rows.js';
+import { sectionVerificationReasons } from './verify/verdict-rows.js';
 import { networkMode } from './http-mock.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
@@ -283,31 +283,16 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       );
       const verificationMd = existsSync(verifPath) ? readFileSync(verifPath, 'utf8') : '';
 
-      // GATE-01 (Phase 14): fail closed on missing/empty/unparseable VERIFICATION.md.
-      // A section that was never verified must NEVER compile.
-      // 'Status: unverifiable' passes this check (Pitfall 3) — those sections
-      // proceed with zero verdict rows (no blocking citekeys) and compile normally.
-      const hasStatus = /^Status:\s*\S/m.test(verificationMd);
-      if (!hasStatus) {
-        refuseReasons.push(
-          `section ${os.n} (${os.slug}): no verifiable VERIFICATION.md (section never verified or verifier output unreadable)`,
-        );
-        continue; // skip the failing-citekey parse AND staleness check; section is already refused
-      }
-
-      // RUN-27: a section verified under --dry-run (synthetic sources) is not
-      // verified for a real compile — refuse it until it is re-verified.
-      const dryRunReason = dryRunVerificationReason(verificationMd, networkMode().dryRun);
-      if (dryRunReason !== null) {
-        refuseReasons.push(`section ${os.n} (${os.slug}): ${dryRunReason}`);
-        continue;
-      }
-
-      // Refuse-gate (COMP-01 / GATE-02): any failing verdict blocks. An
-      // UNVERIFIABLE row (verified offline / under --dry-run, D-17-07) blocks too,
-      // with a "re-run online" message.
-      for (const row of parseBlockingVerdictRows(verificationMd)) {
-        refuseReasons.push(`section ${os.n} (${os.slug}): ${blockingRowReason(row)}`);
+      // Refuse-gate (GATE-01 / GATE-02 / COMP-01): the ONE per-section gate done
+      // shares (verdict-rows.ts sectionVerificationReasons) — no Status line,
+      // `Status: failed` (even when no verdict row parses), a --dry-run
+      // verification outside --dry-run (RUN-27), or any blocking verdict row of
+      // any citekey shape (UNVERIFIABLE says "re-run online", D-17-07).
+      // 'Status: unverifiable' with no blocking row passes (Pitfall 3).
+      const gateReasons = sectionVerificationReasons(verificationMd, networkMode().dryRun);
+      if (gateReasons.length > 0) {
+        for (const reason of gateReasons) refuseReasons.push(`section ${os.n} (${os.slug}): ${reason}`);
+        continue; // already refused: skip the staleness re-verify
       }
 
       // Staleness (COMP-01 / D-08): recompute the per-section hash.

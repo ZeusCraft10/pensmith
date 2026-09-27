@@ -421,6 +421,7 @@ For power users / batch processing / CI testing:
 | `estimate-proceed` | Proceed? | never | skip: 0 | 0 | RUN-20 |
 | `detector-consent` | Send the full paper text to GPTZero for an AI-detection score? | never | skip: 0 | 0 | EXP-17 |
 | `paper-pointer` | Continue the active paper, or start a new paper here? | never | refuse: 2 | 2 | RUN-14 |
+| `sketch-confirm` | Proceed to intake with this thesis? | skip: proceed to intake | refuse: 3 | 3 | ERGO-05 |
 | `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 (planned) |
 | `plan-research` | Run this section-scoped research? | skip: run it | refuse: 3 | 3 | GRND-17 (planned) |
 | `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |

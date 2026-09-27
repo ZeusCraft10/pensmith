@@ -140,6 +140,13 @@ test('RUN-02: the LLM STUBBED banner is independent of the network mode', () => 
     assert.equal(offlineBanner(), null, 'NO_LLM alone is not offline');
   });
   withModeEnv({}, () => assert.equal(llmStubbedBanner(), null));
+  // --dry-run sets PENSMITH_NO_LLM=1 internally: the banner names --dry-run, the reason the user gave.
+  withModeEnv({ PENSMITH_DRY_RUN: '1', PENSMITH_NO_LLM: '1' }, () => {
+    assert.equal(
+      llmStubbedBanner(),
+      'LLM STUBBED (reason: --dry-run): every model call returns a deterministic stub; no provider is contacted',
+    );
+  });
 });
 
 test('RUN-02: the artifact marker line is fixed and starts with the shared prefix', () => {

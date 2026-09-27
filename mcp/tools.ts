@@ -37,7 +37,7 @@ import {
 } from '../bin/lib/state.js';
 import { verifyDoi } from '../bin/lib/doi.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
-import { projectRoot } from '../bin/lib/paths.js';
+import { projectRoot, asProjectRoot } from '../bin/lib/paths.js';
 import { withPaperSession } from '../bin/lib/session-lock.js';
 import { runClassified, type ClassifiedOutcome } from '../bin/lib/verb-outcome.js';
 import {
@@ -101,6 +101,17 @@ function toolResult(o: ClassifiedOutcome): { content: Array<{ type: 'text'; text
   return { isError: true, content: [{ type: 'text', text: JSON.stringify(body, null, 2) }] };
 }
 
+/**
+ * The `paperRoot` argument of the paper_* state tools: the PROJECT root (the
+ * folder that contains `.paper/`). A path to the `.paper` folder itself — the
+ * pre-v1 convention — is folded to its parent by asProjectRoot before it keys
+ * the session lock or reaches state.ts, so it can never address `.paper/.paper/`.
+ */
+const PaperRootArg = z
+  .string()
+  .min(1)
+  .describe('The project root: the folder that contains .paper/ (a path to .paper itself is read as its parent).');
+
 export function registerPaperTools(server: McpServer): void {
   // Tool 1: paper_init_section — initialise a section row in State (idempotent per D-08).
   server.registerTool(
@@ -109,13 +120,13 @@ export function registerPaperTools(server: McpServer): void {
       title: 'Initialize a new section',
       description: 'Append a new section to state.sections. Idempotent: re-init on existing N returns prior state unchanged.',
       inputSchema: {
-        paperRoot: z.string().min(1),
+        paperRoot: PaperRootArg,
         n: z.number().int().min(1),
         slug: z.string().min(1),
       },
     },
     async ({ paperRoot, n, slug }) =>
-      toolResult(await mutate(paperRoot, { verb: 'paper_init_section' }, () => initSection(paperRoot, n, slug))),
+      toolResult(await mutate(asProjectRoot(paperRoot), { verb: 'paper_init_section' }, () => initSection(asProjectRoot(paperRoot), n, slug))),
   );
 
   // Tool 2: paper_advance_section — transition section state (planned→writing→written→...).
@@ -125,13 +136,13 @@ export function registerPaperTools(server: McpServer): void {
       title: 'Advance a section state machine',
       description: 'Transition section[n].state. Idempotent at the natural-key level (same args => same end state).',
       inputSchema: {
-        paperRoot: z.string().min(1),
+        paperRoot: PaperRootArg,
         n: z.number().int().min(1),
         toState: SectionStateSchema,
       },
     },
     async ({ paperRoot, n, toState }) =>
-      toolResult(await mutate(paperRoot, { verb: 'paper_advance_section', section: n }, () => advanceSection(paperRoot, n, toState))),
+      toolResult(await mutate(asProjectRoot(paperRoot), { verb: 'paper_advance_section', section: n }, () => advanceSection(asProjectRoot(paperRoot), n, toState))),
   );
 
   // Tool 3: paper_record_verification — write a verification verdict for a section.
@@ -141,13 +152,13 @@ export function registerPaperTools(server: McpServer): void {
       title: 'Record verification verdict',
       description: 'Persist a verifier verdict on section[n].lastVerification.',
       inputSchema: {
-        paperRoot: z.string().min(1),
+        paperRoot: PaperRootArg,
         n: z.number().int().min(1),
         verdict: VerificationVerdictSchema,
       },
     },
     async ({ paperRoot, n, verdict }) =>
-      toolResult(await mutate(paperRoot, { verb: 'paper_record_verification', section: n }, () => recordVerification(paperRoot, n, verdict))),
+      toolResult(await mutate(asProjectRoot(paperRoot), { verb: 'paper_record_verification', section: n }, () => recordVerification(asProjectRoot(paperRoot), n, verdict))),
   );
 
   // Tool 4: paper_set_status — set section[n].status (pending/in-progress/blocked/done).
@@ -157,13 +168,13 @@ export function registerPaperTools(server: McpServer): void {
       title: 'Set section status',
       description: 'Update section[n].status. Idempotent.',
       inputSchema: {
-        paperRoot: z.string().min(1),
+        paperRoot: PaperRootArg,
         n: z.number().int().min(1),
         status: SectionStatusSchema,
       },
     },
     async ({ paperRoot, n, status }) =>
-      toolResult(await mutate(paperRoot, { verb: 'paper_set_status', section: n }, () => setSectionStatus(paperRoot, n, status))),
+      toolResult(await mutate(asProjectRoot(paperRoot), { verb: 'paper_set_status', section: n }, () => setSectionStatus(asProjectRoot(paperRoot), n, status))),
   );
 
   // Tool 5: paper_doi_verify — DOI re-fetch + metadata check via Crossref (delegates to bin/lib/doi.ts).

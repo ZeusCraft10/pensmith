@@ -332,9 +332,41 @@ export function paperConfigFile(root: string = projectRoot()): string {
   return path.join(paperDir(path.resolve(root)), 'config.toml');
 }
 
+/** A pensmith STATE.json is tiny; anything larger is not one (never read it whole). */
+const LEGACY_STATE_MAX_BYTES = 1_048_576;
+
+/**
+ * True when `root/STATE.json` is a pre-v1 PENSMITH state file — not merely a
+ * file that happens to be called STATE.json (a web app's, a static site's).
+ * It must be a JSON object carrying pensmith's envelope: an integer
+ * `$schemaVersion` >= 1, a non-empty string `paperId` and an ISO `createdAt`.
+ * Only then does the legacy-layout move touch it (or its config.toml), and only
+ * then does the folder count as holding a paper. A `.paper` folder is never a
+ * project root, so it never has a legacy state file.
+ */
+export function isLegacyPensmithState(root: string): boolean {
+  const r = path.resolve(root);
+  if (path.basename(r) === '.paper') return false;
+  const file = legacyStateFile(r);
+  try {
+    const st = fs.statSync(file);
+    if (!st.isFile() || st.size > LEGACY_STATE_MAX_BYTES) return false;
+    const v: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (typeof v !== 'object' || v === null || Array.isArray(v)) return false;
+    const o = v as Record<string, unknown>;
+    const sv = o['$schemaVersion'];
+    return typeof sv === 'number' && Number.isInteger(sv) && sv >= 1
+      && typeof o['paperId'] === 'string' && o['paperId'].length > 0
+      && typeof o['createdAt'] === 'string' && !Number.isNaN(Date.parse(o['createdAt']));
+  } catch {
+    return false; // absent, unreadable or not JSON: not a pensmith state file
+  }
+}
+
 /**
  * True when `root` holds a paper: a `.paper/` directory, or a legacy root-level
- * STATE.json that the legacy-layout move will relocate into `.paper/`.
+ * pensmith STATE.json (isLegacyPensmithState) that the legacy-layout move will
+ * relocate into `.paper/`. Any other root-level STATE.json is the user's own.
  */
 export function hasPaper(root: string): boolean {
   // A `.paper` folder is never itself a project root (its parent is).
@@ -344,7 +376,7 @@ export function hasPaper(root: string): boolean {
   } catch {
     // no .paper/ directory
   }
-  return fs.existsSync(legacyStateFile(root));
+  return isLegacyPensmithState(root);
 }
 
 /** The assignment file names bare `pensmith` and `new` pick up (PRD §5.1 row 1). */
@@ -374,8 +406,11 @@ export function findAssignmentFile(root: string): string | null {
 // holds a paper; (3) a new paper in the cwd for `new`/`sketch`, or for a bare
 // run with an assignment file; (4) the `pensmith open` pointer — served to
 // read-only invocations with a banner, and only offered (never followed
-// silently) to mutating ones; (5) the cwd. The MCP server and the hooks never
-// follow the pointer and never read `--paper`: PENSMITH_PAPER_ROOT or the cwd.
+// silently) to mutating ones; (5) the cwd — for read-only invocations and for
+// bare/next/resume (which route to `new`) only: any other verb in a paper-less
+// folder is EXIT_USAGE, so it never builds a partial paper there. The MCP
+// server and the hooks never follow the pointer and never read `--paper`:
+// PENSMITH_PAPER_ROOT or the cwd.
 // ---------------------------------------------------------------------------
 
 export type PaperRootMode = 'cli' | 'mcp' | 'hook';
@@ -412,6 +447,29 @@ export interface ResolvePaperRootOptions {
 
 /** Verbs that start a paper in the cwd and never follow the pointer. */
 const NEW_PAPER_VERBS: ReadonlySet<string> = new Set(['new', 'sketch']);
+
+/**
+ * Verbs that may run in a paper-less cwd with no pointer (step 5): bare
+ * `pensmith`, `next` and `resume` route to `new` there (the single-command UX),
+ * and read-only invocations report "no active paper". Every other verb would
+ * build a partial `.paper/` and spend money on a paper that does not exist, so
+ * it is refused with EXIT_USAGE before anything is created (S-21).
+ */
+const PAPERLESS_CWD_VERBS: ReadonlySet<string> = new Set(['next', 'resume']);
+
+/**
+ * True when a MUTATING run of `verb` needs a paper to already exist (every verb
+ * but bare/next/resume and the new-paper verbs). Read-only runs never do.
+ */
+export function mutatingVerbNeedsPaper(verb: string | null): boolean {
+  return verb !== null && !PAPERLESS_CWD_VERBS.has(verb) && !NEW_PAPER_VERBS.has(verb);
+}
+
+/** The one-line refusal for a mutating verb in a folder with no paper. */
+export function noPaperHereMessage(cwd: string): string {
+  return `no paper in ${cwd} — run pensmith new to start one here, or pass --paper <name|path> ` +
+    '(pensmith list shows your papers)';
+}
 
 /** `(active paper "<name>" at <path>)` — the read-only pointer banner. */
 export function activePaperBanner(pointer: PaperPointer): string {
@@ -539,6 +597,9 @@ export function resolvePaperRoot(opts: ResolvePaperRootOptions): PaperRootResolu
     return opts.readOnly === true
       ? { kind: 'pointer', root: pointer.root, pointer }
       : { kind: 'ask-pointer', cwd, pointer };
+  }
+  if (opts.readOnly !== true && mutatingVerbNeedsPaper(opts.verb)) {
+    throw new PensmithError(noPaperHereMessage(cwd), EXIT_USAGE);
   }
   return { kind: 'root', root: cwd, source: 'fallback' };
 }

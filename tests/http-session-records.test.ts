@@ -170,3 +170,34 @@ test('D-17-13: live requests record cache:"miss" then cache:"hit"; secrets redac
     assert.ok(!/x-api-key|user-agent/i.test(raw), 'no header is recorded');
   });
 });
+
+test('RUN-15: an http record keeps the DOI and host it requested — secrets are stripped, the PII patterns are not applied to the URL', async () => {
+  await isolated({ paper: true }, async (logFile) => {
+    await withEnv({ PENSMITH_NETWORK_TESTS: '1' }, async () => {
+      const { agent, restore } = installMockAgent();
+      agent
+        .get('https://api.labs.crossref.org')
+        .intercept({ path: /^\/data\/retractions\?/, method: 'GET' })
+        .reply(200, { message: { items: [] } }, { headers: { 'content-type': 'application/json' } })
+        .persist();
+      try {
+        await httpFetch(
+          `https://user:pw@api.labs.crossref.org/data/retractions?filter=record%3A10.1002%2F9781118445112.ch5&mailto=someone%40example.org&api_key=${SENTINEL}`,
+          { source: 'crossref' },
+        );
+      } finally {
+        await restore();
+      }
+    });
+    const [r] = await records(logFile);
+    assert.ok(r, 'the request was recorded');
+    assert.equal(
+      r.url,
+      'https://api.labs.crossref.org/data/retractions?filter=record%3A10.1002%2F9781118445112.ch5&api_key=REDACTED',
+      'the DOI survives; userinfo, the contact email and the key do not',
+    );
+    const raw = readFileSync(logFile, 'utf8');
+    assert.ok(!raw.includes('[REDACTED:'), 'no PII-pattern marker in an http record');
+    assert.ok(!raw.includes(SENTINEL) && !raw.includes('someone') && !raw.includes('pw@'));
+  });
+});

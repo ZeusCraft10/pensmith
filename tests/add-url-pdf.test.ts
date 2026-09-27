@@ -12,7 +12,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,8 +39,18 @@ function runCli(args: string[], cwd: string): RunResult {
 
 const STACK_RE = /\n\s+at\s+\w/; // a raw Node stack-trace frame
 
+/**
+ * A paper folder: `add` runs only where a paper exists (RUN-14 / S-21 — a
+ * mutating verb in a folder with no paper is EXIT_USAGE and creates nothing).
+ */
+function paperRoot(prefix: string): string {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  return root;
+}
+
 test('audit #11/#12: `add <url>.pdf` offline is refused (no network) and does NOT crash with ENOENT', () => {
-  const root = mkdtempSync(join(tmpdir(), 'pensmith-addurl-'));
+  const root = paperRoot('pensmith-addurl-');
   const out = runCli(['add', 'https://example.com/paper.pdf', '--yolo'], root);
 
   const all = out.stdout + out.stderr;
@@ -54,14 +64,14 @@ test('audit #11/#12: `add <url>.pdf` offline is refused (no network) and does NO
 });
 
 test('audit #11: `add <url>` (non-pdf) offline is refused with no live call', () => {
-  const root = mkdtempSync(join(tmpdir(), 'pensmith-addurl2-'));
+  const root = paperRoot('pensmith-addurl2-');
   const out = runCli(['add', 'https://example.com/some/article', '--yolo'], root);
   assert.match(out.stderr, /URL ingestion requires network access/i);
   assert.ok(!STACK_RE.test(out.stdout + out.stderr));
 });
 
 test('audit #30: `add <missing>.pdf` (local) yields a friendly error, not a raw stack trace', () => {
-  const root = mkdtempSync(join(tmpdir(), 'pensmith-addpdf-'));
+  const root = paperRoot('pensmith-addpdf-');
   const missing = join(root, 'does-not-exist.pdf');
   const out = runCli(['add', missing, '--yolo'], root);
 

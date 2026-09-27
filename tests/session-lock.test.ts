@@ -220,6 +220,19 @@ test('RUN-23: a mutating MCP tool during a CLI session is a structured refusal a
     assert.match(body.message, new RegExp(`another pensmith session \\(pid ${holder.pid},`));
     const init = await client.callTool({ name: 'paper_init_section', arguments: { paperRoot: root, n: 9, slug: 'extra' } });
     assert.equal(init.isError, true, 'every mutating tool refuses');
+    // A `.paper` path names the same paper (asProjectRoot): it keys the SAME
+    // session lock, so it is refused too — never a second, unlocked route in.
+    for (const [name, args] of [
+      ['paper_init_section', { n: 9, slug: 'extra' }],
+      ['paper_set_status', { n: 1, status: 'in-progress' }],
+      ['paper_advance_section', { n: 1, toState: 'writing' }],
+      ['paper_record_verification', { n: 1, verdict: 'PASS' }],
+    ] as const) {
+      const res = await client.callTool({ name, arguments: { paperRoot: join(root, '.paper'), ...args } });
+      assert.equal(res.isError, true, `${name} with <root>/.paper is refused under the CLI session`);
+      const body = JSON.parse((res.content as Array<{ text: string }>)[0]?.text ?? '{}') as { message: string };
+      assert.match(body.message, new RegExp(`another pensmith session \\(pid ${holder.pid},`));
+    }
     // Read-only resources still work during the CLI session.
     const state = await client.readResource({ uri: 'paper://state' });
     assert.ok(state.contents.length > 0);

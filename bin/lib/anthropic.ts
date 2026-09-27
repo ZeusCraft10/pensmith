@@ -39,7 +39,7 @@
 import type Anthropic from '@anthropic-ai/sdk';                  // types only — no network
 import type { ChatCompletion } from 'openai/resources/index.js'; // types only — no network
 import { createHash } from 'node:crypto';
-import { fetch, type HttpResponse } from './http.js';
+import { fetch, isRetryableStatus, type HttpResponse } from './http.js';
 import { isOfflineMode } from './http-mock.js';
 import {
   getProviderApiKey,
@@ -51,7 +51,7 @@ import {
   type ResolvedRuntime,
   type SlugResolution,
 } from './runtime.js';
-import { appendCost, assertSessionBudget } from './budget.js';
+import { appendCost, reserveSessionBudget, type BudgetReservation } from './budget.js';
 import { costOf, resolvePrice } from './pricing.js';
 import {
   LOCAL_PROVIDERS,
@@ -158,12 +158,24 @@ export class ProviderRefusalError extends PensmithError {
 }
 
 export class ProviderTruncatedError extends PensmithError {
-  constructor(provider: string, model: string, slug: string, maxTokens: number) {
-    super(
-      `${provider} model ${model} stopped at max_tokens (${maxTokens}) twice for ${slug}; the truncated reply was ` +
-        'discarded and nothing was written — raise the effort budget with [runtime.slugs.' + slug + '] or shorten the input',
-      EXIT_ERROR,
-    );
+  /**
+   * `attempts` is 2 after the RUN-24 retry at a larger budget, or 1 when the
+   * first budget already was the model's output ceiling (no larger retry
+   * exists). `local` providers are never sent an effort, so lowering it is not
+   * offered to them. The advice is what actually helps: less thinking (lower
+   * effort) leaves more of the budget for the answer; a shorter input or a
+   * model with a larger output limit does too.
+   */
+  constructor(provider: string, model: string, slug: string, maxTokens: number, opts: { attempts?: number; local?: boolean } = {}) {
+    const attempts = opts.attempts ?? 2;
+    const what = attempts >= 2
+      ? `stopped at max_tokens (${maxTokens}) twice for ${slug}`
+      : `stopped at max_tokens (${maxTokens}, its output limit — no larger retry is possible) for ${slug}`;
+    const advice = opts.local === true
+      ? `shorten the input, or choose a model with a larger output limit ([runtime.slugs.${slug}] model)`
+      : `lower the effort ([runtime.slugs.${slug}] effort), shorten the input, or choose a model with a larger ` +
+        `output limit ([runtime.slugs.${slug}] model)`;
+    super(`${provider} model ${model} ${what}; the truncated reply was discarded and nothing was written — ${advice}`, EXIT_ERROR);
     this.name = 'ProviderTruncatedError';
   }
 }
@@ -464,10 +476,25 @@ function n(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
 }
 
+/**
+ * A reply with no stop reason is INCOMPLETE — a stream (or a proxy / an
+ * OpenAI-compatible server) that ended before the model finished. It is never
+ * accepted as a finished answer (RUN-24: always check the stop reason): a
+ * partial draft must not be written as a success.
+ */
+function incompleteReply(plan: CallPlan, field: 'stop_reason' | 'finish_reason'): ProviderHttpError {
+  return new ProviderHttpError(
+    `${plan.provider} (model ${plan.model}) returned an incomplete reply (no ${field}: the response ended before the ` +
+      'model finished); nothing was written — re-run',
+    null,
+  );
+}
+
 function normalizeAnthropic(plan: CallPlan, msg: AnthropicMessage): AttemptResult {
   if (!Array.isArray(msg.content)) {
     throw new ProviderHttpError(`${plan.provider} returned a reply without content blocks for model ${plan.model}`, null);
   }
+  if (typeof msg.stop_reason !== 'string' || msg.stop_reason.length === 0) throw incompleteReply(plan, 'stop_reason');
   // Concatenate every text block; thinking, redacted_thinking and fallback blocks are ignored.
   const text = msg.content.filter((b) => b.type === 'text' && typeof b.text === 'string').map((b) => b.text as string).join('');
   const usage = msg.usage ?? {};
@@ -489,7 +516,7 @@ function normalizeAnthropic(plan: CallPlan, msg: AnthropicMessage): AttemptResul
   }
   return {
     text,
-    stopReason: typeof msg.stop_reason === 'string' ? msg.stop_reason : 'end_turn',
+    stopReason: msg.stop_reason,
     refusalCategory: msg.stop_details?.category ?? null,
     recommendedModel: msg.stop_details?.recommended_model ?? null,
     inputTokens: n(usage.input_tokens),
@@ -513,7 +540,8 @@ function chatText(content: unknown): string {
 function normalizeChat(plan: CallPlan, resp: ChatCompletionShape): AttemptResult {
   const choice = resp.choices?.[0];
   if (!choice) throw new ProviderHttpError(`${plan.provider} returned a reply without choices for model ${plan.model}`, null);
-  const finish = choice.finish_reason ?? 'stop';
+  const finish = choice.finish_reason;
+  if (typeof finish !== 'string' || finish.length === 0) throw incompleteReply(plan, 'finish_reason');
   const refusal = choice.message?.refusal;
   const prompt = n(resp.usage?.prompt_tokens);
   const cached = Math.min(prompt, n(resp.usage?.prompt_tokens_details?.cached_tokens));
@@ -669,27 +697,49 @@ function httpError(plan: CallPlan, status: number, body: string): ProviderHttpEr
       status,
     );
   }
+  // "after retries" only when fetch() really retried this status (http.ts isRetryableStatus).
+  const retried = isRetryableStatus(status) ? ' after retries' : '';
   if (status === 429) {
-    return new ProviderHttpError(`${who} rate-limited the request (HTTP 429) after retries — wait and re-run`, status);
+    return new ProviderHttpError(`${who} rate-limited the request (HTTP 429)${retried} — wait and re-run`, status);
+  }
+  if (status === 529) {
+    return new ProviderHttpError(`${who} is overloaded (HTTP 529${type ? ` ${type}` : ''})${retried} — re-run in a few minutes`, status);
   }
   if (status >= 500) {
-    return new ProviderHttpError(`${who} failed with HTTP ${status}${type ? ` ${type}` : ''} after retries — re-run later`, status);
+    return new ProviderHttpError(`${who} failed with HTTP ${status}${type ? ` ${type}` : ''}${retried} — re-run later`, status);
   }
   return new ProviderHttpError(`${who} rejected the request (HTTP ${status}${type ? ` ${type}` : ''}: ${message})`, status);
 }
 
-function transportError(plan: CallPlan, err: unknown): PensmithError {
+/** `400 ms`, `54s`. */
+function duration(ms: number): string {
+  return ms < 1000 ? `${Math.max(0, Math.round(ms))} ms` : `${Math.round(ms / 1000)}s`;
+}
+
+function transportError(plan: CallPlan, err: unknown, elapsedMs: number): PensmithError {
   if (err instanceof PensmithError) return err;
   const e = err as { status?: number; response?: HttpResponse; code?: string; name?: string; message?: string };
   if (typeof e?.status === 'number' && e.response) return httpError(plan, e.status, e.response.body);
   const code = e?.code ?? e?.name ?? '';
-  if (/TIMEOUT/i.test(code)) {
+  const where = plan.rt.endpointSource === 'global' ? `"endpoint" in ${globalRuntimeConfigPath()}` : `the ${plan.provider} endpoint`;
+  // A CONNECT timeout means the endpoint never answered the TCP/TLS handshake
+  // (an unreachable host or port): say that, with the time actually spent
+  // across the retries — not the 600 s request timeout, which never started.
+  if (code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'ETIMEDOUT') {
     return new ProviderHttpError(
-      `${plan.provider} (model ${plan.model}) timed out after ${Math.round(plan.timeoutMs / 1000)}s at ${plan.endpoint} — re-run, or check the endpoint`,
+      `could not connect to ${plan.provider} at ${plan.endpoint} (no answer after ${duration(elapsedMs)} of connection ` +
+        `attempts) — start the server or fix ${where}`,
       null,
     );
   }
-  const where = plan.rt.endpointSource === 'global' ? `"endpoint" in ${globalRuntimeConfigPath()}` : `the ${plan.provider} endpoint`;
+  if (/TIMEOUT/i.test(code)) {
+    // Headers / body timeout: the server accepted the request and then went quiet.
+    return new ProviderHttpError(
+      `${plan.provider} (model ${plan.model}) timed out waiting for a reply (no data for ${duration(plan.timeoutMs)}) at ` +
+        `${plan.endpoint} — re-run, or check the endpoint`,
+      null,
+    );
+  }
   return new ProviderHttpError(
     `could not reach ${plan.provider} at ${plan.endpoint} (${code || (e?.message ?? 'network error').slice(0, 120)}) — start the server or fix ${where}`,
     null,
@@ -797,6 +847,7 @@ async function sendAttempt(
   stream: boolean,
 ): Promise<AttemptResult> {
   let resp: HttpResponse;
+  const started = Date.now();
   try {
     // noCache: the key header must never reach a cache file (T-11-01).
     // untrusted:false skips only the generic source-host SSRF pre-flight: the
@@ -814,7 +865,7 @@ async function sendAttempt(
       timeoutMs: plan.timeoutMs,
     });
   } catch (e) {
-    throw transportError(plan, e);
+    throw transportError(plan, e, Date.now() - started);
   }
   if (resp.status >= 400) throw httpError(plan, resp.status, resp.body);
   const isSse = stream || /text\/event-stream/i.test(resp.headers['content-type'] ?? '');
@@ -903,6 +954,9 @@ async function runWithRetry(
   let spentUsd = 0;
   const firstMax = Math.min(opts.maxTokens ?? plan.spec.maxTokens, plan.caps.maxOutputTokens);
   const retryMax = Math.min(Math.max(firstMax * 2, plan.spec.retryMaxTokens), plan.caps.maxOutputTokens);
+  // RUN-24: one retry at a larger budget — unless the first budget already is
+  // the model's output ceiling (local providers: 8192), where an identical
+  // request would only truncate again; the error then says so.
   const maxes = retryMax > firstMax ? [firstMax, retryMax] : [firstMax];
   const inputEstimate = estimateTokens(opts.system.length + messages.reduce((a, m) => a + m.content.length, 0));
   const price = resolvePrice(plan.provider, plan.model, plan.rt.priceOverride);
@@ -917,43 +971,53 @@ async function runWithRetry(
 
     let result: AttemptResult;
     let replayOf: string | undefined;
-    const logged = isReplayActive() && isOfflineMode() ? replayLookup(plan.spec.slug, requestSha) : null;
-    if (isReplayActive() && isOfflineMode()) {
-      if (!logged) throw new ReplayMissError(plan.spec.slug);
-      result = fromReplay(logged, plan);
-      replayOf = logged.id;
-    } else {
-      // RUN-18: project this attempt and check the session cap BEFORE any byte is sent.
-      const p90 = i === 0 ? p90OutputFor(root, plan.spec.slug).tokens : maxTokens;
-      const projected = projectCallUsd(price, inputEstimate, p90, maxTokens).usd;
-      await assertSessionBudget({ projectedUsd: projected, slug: plan.spec.slug, model: plan.model, root });
-      result = await sendAttempt(plan, key ?? '', body, requestText, stream);
-    }
+    // RUN-18: the projection stays reserved (in-flight spend other calls of
+    // this process see) until this attempt's cost is recorded or it fails.
+    let reservation: BudgetReservation | null = null;
+    try {
+      const logged = isReplayActive() && isOfflineMode() ? replayLookup(plan.spec.slug, requestSha) : null;
+      if (isReplayActive() && isOfflineMode()) {
+        if (!logged) throw new ReplayMissError(plan.spec.slug);
+        result = fromReplay(logged, plan);
+        replayOf = logged.id;
+      } else {
+        // RUN-18: project this attempt and check the session cap BEFORE any byte is sent.
+        const p90 = i === 0 ? p90OutputFor(root, plan.spec.slug).tokens : maxTokens;
+        const projected = projectCallUsd(price, inputEstimate, p90, maxTokens).usd;
+        reservation = await reserveSessionBudget({ projectedUsd: projected, slug: plan.spec.slug, model: plan.model, root });
+        result = await sendAttempt(plan, key ?? '', body, requestText, stream);
+      }
 
-    if (replayOf === undefined) spentUsd += result.costUsd;
-    const needsRetry = result.stopReason === 'max_tokens' && i + 1 < maxes.length;
-    // Structured slugs: parse a complete reply here so the record carries the
-    // parsed object (D-17-29) and complete() validates exactly what was logged.
-    const parsed = plan.structured && result.stopReason !== 'max_tokens' && result.stopReason !== 'refusal'
-      ? parseStructured(plan.spec.slug, result.text, { strictNulls: plan.native && plan.provider === 'openai' })
-      : null;
-    await recordAttempt(plan, opts, {
-      attempt: kind,
-      requestText,
-      requestSha,
-      body,
-      result,
-      ...(parsed?.ok ? { data: parsed.data } : {}),
-      ...(replayOf !== undefined ? { replayOf } : {}),
-    });
-    if (result.stopReason === 'refusal') {
-      throw new ProviderRefusalError(plan.provider, plan.model, result.refusalCategory, result.recommendedModel);
+      if (replayOf === undefined) spentUsd += result.costUsd;
+      const needsRetry = result.stopReason === 'max_tokens' && i + 1 < maxes.length;
+      // Structured slugs: parse a complete reply here so the record carries the
+      // parsed object (D-17-29) and complete() validates exactly what was logged.
+      const parsed = plan.structured && result.stopReason !== 'max_tokens' && result.stopReason !== 'refusal'
+        ? parseStructured(plan.spec.slug, result.text, { strictNulls: plan.native && plan.provider === 'openai' })
+        : null;
+      await recordAttempt(plan, opts, {
+        attempt: kind,
+        requestText,
+        requestSha,
+        body,
+        result,
+        ...(parsed?.ok ? { data: parsed.data } : {}),
+        ...(replayOf !== undefined ? { replayOf } : {}),
+      });
+      if (result.stopReason === 'refusal') {
+        throw new ProviderRefusalError(plan.provider, plan.model, result.refusalCategory, result.recommendedModel);
+      }
+      if (result.stopReason === 'max_tokens') {
+        if (needsRetry) continue;
+        throw new ProviderTruncatedError(plan.provider, plan.model, plan.spec.slug, maxTokens, {
+          attempts: maxes.length,
+          local: LOCAL_PROVIDERS.has(plan.provider),
+        });
+      }
+      return { result, parsed, spentUsd, body, requestText, requestSha, ...(replayOf !== undefined ? { replayOf } : {}) };
+    } finally {
+      reservation?.release();
     }
-    if (result.stopReason === 'max_tokens') {
-      if (needsRetry) continue;
-      throw new ProviderTruncatedError(plan.provider, plan.model, plan.spec.slug, maxTokens);
-    }
-    return { result, parsed, spentUsd, body, requestText, requestSha, ...(replayOf !== undefined ? { replayOf } : {}) };
   }
   // Unreachable: the loop either returns or throws.
   throw new ProviderTruncatedError(plan.provider, plan.model, plan.spec.slug, maxes[maxes.length - 1] as number);

@@ -220,10 +220,16 @@ export function offlineBanner(mode: NetworkMode = networkMode()): string | null 
 /** The reason label of a stubbed-LLM run (--dry-run sets PENSMITH_NO_LLM=1 too). */
 export const LLM_STUBBED_REASON = 'PENSMITH_NO_LLM=1';
 
-/** The stderr banner for a stubbed-LLM run, or null. Independent of the network mode. */
+/**
+ * The stderr banner for a stubbed-LLM run, or null. Independent of the network
+ * mode. It names the reason the user actually gave (RUN-02): `--dry-run` sets
+ * PENSMITH_NO_LLM=1 internally, so a dry run is labelled as a dry run, not with
+ * a variable the user never set.
+ */
 export function llmStubbedBanner(mode: NetworkMode = networkMode()): string | null {
   if (!mode.llmStubbed) return null;
-  return `LLM STUBBED (${LLM_STUBBED_REASON}): every model call returns a deterministic stub; no provider is contacted`;
+  const reason = mode.dryRun ? 'reason: --dry-run' : LLM_STUBBED_REASON;
+  return `LLM STUBBED (${reason}): every model call returns a deterministic stub; no provider is contacted`;
 }
 
 /**
@@ -274,7 +280,11 @@ export interface AnnounceOptions {
 /**
  * Print the RUN-02 banners once per process (stderr, before any other output),
  * then apply the installed-package refusal (D-17-15). Read-only verbs, the
- * citty meta flags and the --estimate preview are exempt from the refusal.
+ * citty meta flags and the --estimate preview are exempt from the refusal, and
+ * so is `resume --replay` (RUN-17): replaying a SESSION.log step serves the
+ * LOGGED model responses and needs no recorded source fixture. A source or
+ * registrar request made during a replay still fails closed on its own
+ * (http.ts: "no recorded fixture … re-run online"), so nothing is ever faked.
  */
 export function announceModes(opts: AnnounceOptions): void {
   const argv = opts.argv ?? [];
@@ -289,6 +299,7 @@ export function announceModes(opts: AnnounceOptions): void {
   }
   if (meta || argv.includes('--estimate')) return;
   if (opts.verb !== null && OFFLINE_READ_ONLY_VERBS.has(opts.verb)) return;
+  if (opts.verb === 'resume' && argv.some((a) => a === '--replay' || a.startsWith('--replay='))) return;
   if (mode.sourcesOffline && !mode.dryRun && !mode.fixturesAvailable) {
     throw new OfflineFixturesNotShippedError();
   }

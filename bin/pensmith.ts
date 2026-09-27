@@ -46,6 +46,9 @@
 //     falls through to a root run() after every verb, H2). The root command
 //     keeps subCommands ONLY and NO run().
 
+// FIRST import: filters a dependency's DEP0040 (punycode) deprecation noise
+// before any module that loads citation-js is evaluated (RUN-12).
+import './lib/node-warnings.js';
 import { defineCommand, runCommand, renderUsage, type CommandDef } from 'citty';
 import { makeStub } from './cli/stubs.js';
 import { VERSION } from './lib/version.generated.js';
@@ -56,17 +59,20 @@ import {
   resolvePaperRoot,
   setActivePaperRoot,
   activePaperBanner,
+  hasPaper,
+  mutatingVerbNeedsPaper,
+  noPaperHereMessage,
   type PaperPointer,
 } from './lib/paths.js';
 import { migrateLegacyLayout } from './lib/state.js';
 import { acquireSessionLock, releaseSessionLock } from './lib/session-lock.js';
 import { runGate, declineGate, canPrompt } from './lib/gates.js';
-import { EXIT_CODES, EXIT_USAGE, EXIT_ERROR, EXIT_COST_CAP, PensmithError } from './lib/exit-codes.js';
+import { EXIT_CODES, EXIT_USAGE, EXIT_ERROR, PensmithError } from './lib/exit-codes.js';
 import { classifyFailure, finalExitCode, failureLine, stripAnsi } from './lib/verb-outcome.js';
 import { setMirrorPromptsToStderr, setSessionArgv } from './lib/session-log.js';
 import { announceModes } from './lib/http-mock.js';
-import { projectEstimate, renderEstimate } from './lib/estimator.js';
-import { formatUsd } from './lib/budget.js';
+import { projectEstimate, renderEstimate, type EstimateScope } from './lib/estimator.js';
+import { assertInvocationBudget } from './lib/budget.js';
 import { argvFlagValue, runtimeFlagsFromArgv, setRuntimeOverride } from './lib/runtime.js';
 import { resolveNextAction } from './lib/router.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
@@ -219,7 +225,7 @@ export const command = defineCommand({
     paper: { type: 'string', description: 'Work on this paper: a name from `pensmith list`, or a folder containing .paper/.', valueHint: 'name|path' },
     'dry-run': { type: 'boolean', description: 'Preview run: makes no network or model call (sources and model replies are labelled stand-ins).', default: false },
     estimate: { type: 'boolean', description: 'Project the remaining token + USD cost, then offer to proceed.', default: false },
-    yolo: { type: 'boolean', description: 'Skip the approval gates --yolo may skip (outline approval, export confirmation, research scope/prune, add remap, revise swap). Never skips the cost cap, detector consent or the active-paper choice.', default: false },
+    yolo: { type: 'boolean', description: 'Skip the approval gates --yolo may skip (outline approval, export confirmation, research scope/prune, add remap, revise swap, sketch confirm). Never skips the cost cap, detector consent or the active-paper choice.', default: false },
     'show-prompts': { type: 'boolean', description: 'Mirror every outbound request (and full LLM prompts) to stderr before it is sent.', default: false },
     runtime: { type: 'string', description: 'LLM provider for this run: anthropic | openai | ollama | vllm | openai-compatible (overrides the config).', valueHint: 'provider' },
     model: { type: 'string', description: 'Generation model for this run (outline, plan, write); judgment steps keep their own model.', valueHint: 'id' },
@@ -319,7 +325,12 @@ function kebab(s: string): string {
 }
 
 interface VerbArgShape {
-  /** Option names (kebab-case) → true when the option takes a value. */
+  /**
+   * Option names → true when the option takes a value. Each option is listed
+   * under its declared name AND its kebab-case form: citty accepts both
+   * (`--lintHeadings` and `--lint-headings`), and its --help prints the
+   * declared (camelCase) spelling, so validation must accept that one too.
+   */
   readonly options: ReadonlyMap<string, boolean>;
   readonly positionals: number;
 }
@@ -338,7 +349,9 @@ async function verbArgShape(verb: Ux02Verb): Promise<VerbArgShape> {
       positionals += 1;
       continue;
     }
-    options.set(kebab(name), def.type === 'string' || def.type === 'enum');
+    const takesValue = def.type === 'string' || def.type === 'enum';
+    options.set(name, takesValue);
+    options.set(kebab(name), takesValue);
   }
   return { options, positionals };
 }
@@ -350,10 +363,57 @@ export interface ValidatedArgv {
   readonly paperFlag: string | undefined;
   readonly help: boolean;
   readonly version: boolean;
+  /** The verb's positional arguments, in order (e.g. the section number). */
+  readonly positionals: readonly string[];
+  /**
+   * argv with every global boolean in ONE spelling: a flag whose final value is
+   * true appears once as the bare `--<name>` (at its last position), and a false
+   * one does not appear at all. `--x=true|1`, `--x=false|0` and `--no-x` are
+   * folded here, so every later check (`hasFlag`, citty, the logged argv) sees
+   * the value the user asked for — `--dry-run=true` is a dry run.
+   */
+  readonly argv: readonly string[];
 }
 
 function usage(message: string): PensmithError {
   return new PensmithError(message, EXIT_USAGE);
+}
+
+/** The value of an inline `--<global boolean>=<v>`; anything but true/false/1/0 is EXIT_USAGE. */
+function inlineBoolean(name: string, raw: string): boolean {
+  const v = raw.toLowerCase();
+  if (v === 'true' || v === '1') return true;
+  if (v === 'false' || v === '0') return false;
+  throw usage(`option '--${name}' is a switch: use --${name} or --no-${name} (got '--${name}=${raw}')`);
+}
+
+/** Rewrite the global booleans of argv into their one canonical spelling (see ValidatedArgv.argv). */
+function normalizeGlobalBooleans(argv: readonly string[], finals: ReadonlyMap<string, { value: boolean; at: number }>): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const tok = argv[i] ?? '';
+    if (tok === '--') {
+      out.push(...argv.slice(i));
+      break;
+    }
+    const name = globalBooleanName(tok);
+    if (name === null) {
+      out.push(tok);
+      continue;
+    }
+    const final = finals.get(name);
+    if (final !== undefined && final.value && final.at === i) out.push(`--${name}`);
+  }
+  return out;
+}
+
+/** The global boolean a token spells (`--x`, `--x=v`, `--no-x`), or null. */
+function globalBooleanName(tok: string): string | null {
+  if (!tok.startsWith('--')) return null;
+  const name = flagName(tok);
+  if (GLOBAL_BOOLEAN_FLAGS.includes(name)) return name;
+  if (!tok.includes('=') && tok.startsWith('--no-') && GLOBAL_BOOLEAN_FLAGS.includes(tok.slice(5))) return tok.slice(5);
+  return null;
 }
 
 /**
@@ -382,12 +442,24 @@ export async function validateArgv(argv: readonly string[]): Promise<ValidatedAr
   let help = false;
   let version = false;
   let positionals = 0;
+  const positionalValues: string[] = [];
+  const booleans = new Map<string, { value: boolean; at: number }>();
   for (let i = 0; i < argv.length; i += 1) {
     const tok = argv[i] ?? '';
     if (tok === '--') break;
     if (i === at) continue;
+    const globalBool = globalBooleanName(tok);
+    if (globalBool !== null) {
+      // The last spelling wins: `--yolo --no-yolo` is false, `--dry-run=true` is true.
+      const value = tok.startsWith('--no-') && !tok.includes('=')
+        ? false
+        : tok.includes('=') ? inlineBoolean(globalBool, tok.slice(tok.indexOf('=') + 1)) : true;
+      booleans.set(globalBool, { value, at: i });
+      continue;
+    }
     if (!isFlagToken(tok)) {
       positionals += 1;
+      positionalValues.push(tok);
       if (verb === null || positionals > shape.positionals) {
         throw usage(
           verb === null
@@ -413,7 +485,6 @@ export async function validateArgv(argv: readonly string[]): Promise<ValidatedAr
     else if (GLOBAL_BOOLEAN_FLAGS.includes(name)) takesValue = false;
     else if (tok.startsWith('--')) takesValue = shape.options.get(name);
     if (takesValue === undefined && negated !== null && shape.options.get(negated) === false) continue;
-    if (takesValue === undefined && negated !== null && GLOBAL_BOOLEAN_FLAGS.includes(negated)) continue;
     if (takesValue === undefined) {
       const known = [...GLOBAL_BOOLEAN_FLAGS, ...GLOBAL_VALUE_FLAGS, ...shape.options.keys()];
       const hint = nearest(name, known);
@@ -433,7 +504,7 @@ export async function validateArgv(argv: readonly string[]): Promise<ValidatedAr
     }
     if (name === 'paper') paperFlag = value;
   }
-  return { verb, paperFlag, help, version };
+  return { verb, paperFlag, help, version, positionals: positionalValues, argv: normalizeGlobalBooleans(argv, booleans) };
 }
 
 /**
@@ -474,6 +545,8 @@ interface InvocationSession {
   /** The session lock is held (released when the invocation ends). */
   locked: boolean;
   readonly cwd: string;
+  /** The root is the paper-less cwd the resolver fell back to (step 5). */
+  readonly cwdFallback: boolean;
 }
 
 let currentSession: InvocationSession | null = null;
@@ -544,6 +617,29 @@ function isSectionVerbWithoutNumber(argv: string[], verb: Ux02Verb): boolean {
 }
 
 /**
+ * The steps this invocation runs, for the --yolo pre-flight: an explicit verb
+ * (with its section positional), or — for bare/next/resume and plan/verify
+ * without a section number — the step the router resolves (it never throws).
+ */
+async function invocationScope(argv: string[], checked: ValidatedArgv): Promise<EstimateScope> {
+  const verb = checked.verb;
+  if (verb !== null && verb !== 'next' && verb !== 'resume' && !isSectionVerbWithoutNumber(argv, verb)) {
+    const n = checked.positionals.find((p) => /^\d+$/.test(p));
+    return n !== undefined ? { verb, section: Number(n) } : { verb };
+  }
+  const root = projectRoot();
+  const decision = await resolveNextAction(root, { stopAfterResearch: stopAfterResearchFor(readGoalFromConfig(root)) });
+  return 'n' in decision ? { verb: decision.verb, section: decision.n } : { verb: decision.verb };
+}
+
+/** `outline`, or `write §1, write §2, write §3`, or `write §1 … write §9 (9 steps)`. */
+function describeSteps(rows: ReadonlyArray<{ step: string }>): string {
+  const steps = rows.map((r) => r.step);
+  if (steps.length <= 3) return steps.join(', ');
+  return `${steps[0]} … ${steps[steps.length - 1]} (${steps.length} steps)`;
+}
+
+/**
  * The pre-dispatch entrypoint: validates argv and resolves the paper (the
  * pre-flight), applies global-flag setup, the yolo cap pre-flight, and the
  * --estimate preview BEFORE any verb runs, then dispatches exactly once
@@ -560,6 +656,9 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   //   4. the active-paper banner for a read-only run served by the pointer;
   //   5. the session lock for a mutating run (bare/next/resume included).
   const checked = await validateArgv(argv);
+  // Every check below reads the normalized global booleans (`--dry-run=true`
+  // is a dry run, `--no-yolo` is not --yolo) — never the raw spellings.
+  argv = [...checked.argv];
   const meta = checked.help || checked.version;
   if (!meta) {
     const readOnly = (checked.verb !== null && READ_ONLY_VERBS.has(checked.verb)) || hasFlag(argv, 'estimate');
@@ -571,6 +670,7 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
       pointerConfirmed: false,
       locked: false,
       cwd,
+      cwdFallback: resolved.kind === 'root' && resolved.source === 'fallback',
     };
     currentSession = session;
     if (resolved.kind !== 'ask-pointer') {
@@ -607,14 +707,14 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   setRuntimeOverride(runtimeFlagsFromArgv(argv));
 
   // (c) --yolo COST PRE-FLIGHT (D-17-27) — runs whenever --yolo is present for a
-  //     COST-INCURRING execution (write/plan/verify/research/compile/done/revise,
-  //     next/resume, and bare invocation). It refuses (EXIT_COST_CAP) only when
-  //     the projected remaining cost exceeds the session cost cap — not 50% of
-  //     it (the ARCH-11 heuristic would refuse the default §15 paper). The
-  //     per-call cap in complete(), which --yolo cannot skip, is the hard
-  //     enforcement (RUN-18). projectEstimate never throws for on-disk paper
-  //     state (a paper-less dir or a corrupt STATE.json projects the whole
-  //     pipeline); an invalid runtime config is a one-line error.
+  //     COST-INCURRING execution (an explicit verb, next/resume, or a bare run).
+  //     It projects the steps THIS invocation runs — the named verb (and
+  //     section; `write` with no section is every section still to write), or
+  //     for bare/next/resume the step the router picks — never the rest of the
+  //     paper, which this run will not touch. Over the session cap it goes
+  //     through the same never-skippable cost-cap gate, with the same one-line
+  //     message, as the per-call check in complete() (RUN-18), which remains
+  //     the hard enforcement. An invalid runtime config is a one-line error.
   //
   //     Audit #24: read-only verbs (status/list/doctor/open), the --estimate
   //     preview and --version/--help incur no model cost and bypass it.
@@ -622,22 +722,16 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
     let est: Awaited<ReturnType<typeof projectEstimate>>;
     try {
       const from = argvFlagValue(argv, 'from');
-      est = await projectEstimate({ paperRoot: projectRoot(), ...(from !== undefined ? { from } : {}) });
+      const scope = await invocationScope(argv, checked);
+      est = await projectEstimate({ paperRoot: projectRoot(), scope, ...(from !== undefined ? { from } : {}) });
     } catch (e) {
       // An invalid runtime config (or any projection failure) is one line
       // through dispatch() — which also releases the session lock.
       if (e instanceof PensmithError) throw e;
       throw new PensmithError((e as Error).message, EXIT_ERROR);
     }
-    if (est.exceedsCap) {
-      // HARD refusal before any model call: one line and EXIT_COST_CAP through
-      // dispatch(), which also releases the session lock.
-      throw new PensmithError(
-        `REFUSED — --yolo projects ${formatUsd(est.totalUsd)} for the remaining steps, over the ` +
-          `${formatUsd(est.capUsd)} session cost cap (RUN-18). Raise [budget] cost_cap_usd or ` +
-          `PENSMITH_COST_CAP_USD, or run without --yolo to be asked before the cap is crossed.`,
-        EXIT_COST_CAP,
-      );
+    if (est.totalUsd > 0) {
+      await assertInvocationBudget({ projectedUsd: est.totalUsd, what: describeSteps(est.rows), root: projectRoot() });
     }
   }
 
@@ -682,9 +776,15 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   }
 
   // (d) may have turned an --estimate preview into a real run ("proceed"): it is
-  // mutating from here on — the paper-pointer choice and the session lock apply.
+  // mutating from here on — the paper-pointer choice, the no-paper refusal
+  // (S-21: the preview was read-only, so the resolver let a paper-less folder
+  // through) and the session lock apply.
   if (currentSession !== null && !hasFlag(argv, 'estimate') && !READ_ONLY_VERBS.has(firstVerb(argv) ?? '')) {
-    await enterMutatingSession(currentSession, firstVerb(argv), hasFlag(argv, 'yolo'));
+    const s = currentSession;
+    if (s.cwdFallback && !hasPaper(s.root) && mutatingVerbNeedsPaper(firstVerb(argv))) {
+      throw new PensmithError(noPaperHereMessage(s.cwd), EXIT_USAGE);
+    }
+    await enterMutatingSession(s, firstVerb(argv), hasFlag(argv, 'yolo'));
   }
 
   const verb = firstVerb(argv);

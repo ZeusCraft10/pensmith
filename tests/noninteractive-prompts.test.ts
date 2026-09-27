@@ -88,11 +88,19 @@ test('RUN-12: resolveMode uses clack only when stdin, stdout and stderr are all 
   }
 });
 
-test('RUN-12: `printf "…5 answers…" | pensmith sketch` answers every question and starts the paper', () => {
+test('RUN-12 / RUN-28: `printf "…5 answers…" | PENSMITH_PROMPT_MODE=numbered pensmith sketch` answers every question and starts the paper', () => {
   const sb = sandbox('sketch-pipe');
   const cwd = sb.project('p');
   const answers = 'LLMs in education\nThat they replace teachers\nUndergrad instructors\nTutors help most with feedback\ny\n';
-  const r = runCli(sb, cwd, ['sketch'], { input: answers });
+  // The confirm is the registry's `sketch-confirm` gate (PRD §7.20): a run
+  // without a terminal answers gates only with scripted numbered answers.
+  // Without them it refuses BEFORE asking anything (nothing consumed or created).
+  const unscripted = runCli(sb, cwd, ['sketch'], { input: answers });
+  assert.equal(unscripted.status, EXIT_APPROVAL, `${unscripted.stdout}\n${unscripted.stderr}`);
+  assert.match(unscripted.stderr, /^pensmith: Proceed to intake with this thesis\? \(nothing was asked or created\) needs an answer: re-run in a terminal, or pass --yolo to proceed to intake\.$/m);
+  assert.doesNotMatch(unscripted.stderr, /What interests or questions motivate this paper\?/, 'no question was asked');
+  assert.ok(!existsSync(join(cwd, '.paper')), 'nothing created');
+  const r = runCli(sb, cwd, ['sketch'], { input: answers, env: { PENSMITH_PROMPT_MODE: 'numbered' } });
   assert.equal(r.status, EXIT_OK, `${r.stdout}\n${r.stderr}`);
   const labels = [
     'What interests or questions motivate this paper?',
@@ -132,7 +140,7 @@ test('RUN-12: the interactive verbs with a non-terminal stdin — documented cod
     { name: 'outline approval', cwd: outlined, args: ['outline'], code: EXIT_APPROVAL, line: /^pensmith: Approve this outline/ },
     { name: 'done confirmation', cwd: compiled, args: ['done', '--format', 'md'], code: EXIT_APPROVAL, line: /^pensmith: Export the paper now\?/ },
     { name: 'add remap', cwd: addTo, args: ['add', '10.1038/nphys1170'], code: EXIT_OK, line: /remap skipped \(non-interactive\)/ },
-    { name: 'sketch (input ended)', cwd: sketchDir, args: ['sketch'], code: EXIT_APPROVAL, line: /^pensmith: no answer for "sketch-interests" \(input ended\)/ },
+    { name: 'sketch (no terminal)', cwd: sketchDir, args: ['sketch'], code: EXIT_APPROVAL, line: /^pensmith: Proceed to intake with this thesis\? \(nothing was asked or created\) needs an answer/ },
   ];
   for (const c of cases) {
     const r = runCli(sb, c.cwd, c.args);

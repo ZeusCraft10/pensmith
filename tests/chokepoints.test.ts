@@ -244,6 +244,28 @@ test('RUN-10: no module other than bin/lib/main-guard.ts compares with pathToFil
 // 4. Harness semantics.
 // ---------------------------------------------------------------------------
 
+test('D-07 / D-41: the doctor-probe no-restricted-syntax overrides keep the project-wide selectors (flat config last-match-wins)', async () => {
+  // A doctor probe that writes a file directly, reads the home dir or a data-dir
+  // variable and carries a DOI regex: all four project-wide selectors must fire
+  // under BOTH doctor-probe override blocks (the generic one and the
+  // runtime-config-presence one), exactly as they do elsewhere in bin/lib.
+  const violating = [
+    "import os from 'node:os';",
+    "import * as fs from 'node:fs';",
+    'export async function probe(): Promise<unknown> {',
+    "  await fs.promises.writeFile('x', '');",
+    '  const DOI = /^10\\./;',
+    '  return [os.homedir(), process.env.XDG_DATA_HOME, DOI];',
+    '}',
+    '',
+  ].join('\n');
+  for (const rel of ['bin/lib/zz-not-a-probe.ts', 'bin/lib/doctor/probes/zz-probe.ts', 'bin/lib/doctor/probes/runtime-config-presence.ts']) {
+    const result = await lintAs(violating, rel);
+    const hits = result.messages.filter((m) => m.ruleId === 'no-restricted-syntax').map((m) => m.message);
+    assert.equal(hits.length, 4, `${rel}: writeFile, the DOI regex, os.homedir() and XDG_DATA_HOME are all flagged:\n${hits.join('\n')}`);
+  }
+});
+
 test('RUN-29: globs — ** spans directories, * stays in a segment, {a,b} alternates, a trailing / covers a tree', () => {
   assert.ok(globToRegExp('bin/**/*.ts').test('bin/pensmith.ts'));
   assert.ok(globToRegExp('bin/**/*.ts').test('bin/lib/verify/pass1.ts'));

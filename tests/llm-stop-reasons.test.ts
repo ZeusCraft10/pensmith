@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { withLlmSandbox, readJsonl, type LlmSandbox } from './helpers/llm-sandbox.js';
-import { complete, ProviderRefusalError, ProviderTruncatedError } from '../bin/lib/anthropic.js';
+import { complete, ProviderRefusalError, ProviderTruncatedError, ProviderHttpError } from '../bin/lib/anthropic.js';
 import { outlineCommand } from '../bin/cli/outline.js';
 
 const KEY = 'sk-test-stop-reasons-0001';
@@ -96,7 +96,7 @@ test('RUN-24: max_tokens twice → ProviderTruncatedError (exit 1); the truncate
         !e.message.includes('\n') &&
         /stopped at max_tokens \(32000\) twice for outline-author/.test(e.message) &&
         /nothing was written/.test(e.message) &&
-        /\[runtime\.slugs\.outline-author\]/.test(e.message),
+        /lower the effort \(\[runtime\.slugs\.outline-author\] effort\), shorten the input, or choose a model with a larger output limit/.test(e.message),
     );
     assert.equal(sb.mock!.callCount('outline-author'), 2, 'never a third attempt');
     assert.equal(fs.existsSync(path.join(sb.paper, 'OUTLINE.md')), false);
@@ -133,5 +133,44 @@ test('RUN-24: OpenAI content_filter and message.refusal are refusals (exit 1)', 
       (e: unknown) => e instanceof ProviderRefusalError && /openai model gpt-6-astra declined/.test(e.message),
     );
     assert.equal(sb.mock!.callCount('section-drafter'), 2, 'refusals are not retried');
+  });
+});
+
+test('RUN-24: a reply with no stop_reason / finish_reason (a cut stream) is an incomplete-reply error, never a finished answer', async () => {
+  for (const provider of ['anthropic', 'openai'] as const) {
+    await withLlmSandbox({ mock: provider, env: provider === 'anthropic' ? { ANTHROPIC_API_KEY: KEY } : { OPENAI_API_KEY: KEY } }, async (sb) => {
+      seedIntake(sb);
+      const field = provider === 'anthropic' ? 'stop_reason' : 'finish_reason';
+      // Non-streamed (below the 16k threshold) and streamed (the 32k outline call).
+      sb.mock!.fail({ kind: 'incomplete' }, { slug: 'section-drafter' });
+      await assert.rejects(
+        complete({ slug: 'section-drafter', system: 's', messages: [{ role: 'user', content: 'x' }], maxTokens: 8000 }),
+        (e: unknown) => e instanceof ProviderHttpError && new RegExp(`returned an incomplete reply \\(no ${field}`).test(e.message) && !e.message.includes('\n'),
+      );
+      sb.mock!.fail({ kind: 'incomplete' }, { slug: 'outline-author' });
+      await assert.rejects(
+        (outlineCommand.run as Run)({ args: { yolo: true, force: true } }),
+        (e: unknown) => e instanceof ProviderHttpError && /incomplete reply/.test(e.message),
+      );
+      assert.equal(fs.existsSync(path.join(sb.paper, 'OUTLINE.md')), false, 'a partial outline is never written');
+    });
+  }
+});
+
+test('RUN-24 / RUN-12: at a local provider\'s output ceiling there is no pointless identical retry, and the advice is actionable', async () => {
+  await withLlmSandbox({ mock: 'openai-compatible', runtime: { model: 'qwen2.5' } }, async (sb) => {
+    sb.mock!.fail({ kind: 'max_tokens' }, { slug: 'section-drafter', times: 2 });
+    await assert.rejects(
+      complete({ slug: 'section-drafter', system: 's', messages: [{ role: 'user', content: 'x' }] }),
+      (e: unknown) => {
+        assert.ok(e instanceof ProviderTruncatedError);
+        assert.match(e.message, /stopped at max_tokens \(8192, its output limit — no larger retry is possible\) for section-drafter/);
+        assert.match(e.message, /shorten the input, or choose a model with a larger output limit \(\[runtime\.slugs\.section-drafter\] model\)/);
+        assert.doesNotMatch(e.message, /effort/, 'a local provider is never sent an effort, so lowering it is not advised');
+        assert.doesNotMatch(e.message, /twice/);
+        return true;
+      },
+    );
+    assert.equal(sb.mock!.callCount('section-drafter'), 1, 'no identical second request');
   });
 });

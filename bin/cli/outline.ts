@@ -15,7 +15,8 @@
 // CLAUDE.md non-negotiable: outline approval is default-ON (only skips with
 // --yolo). It is the `outline-approval` gate of the one registry
 // (bin/lib/gates.ts, RUN-28): a terminal asks; no terminal and no --yolo exits
-// EXIT_APPROVAL (3); an explicit "no" exits 3 with nothing written.
+// EXIT_APPROVAL (3) BEFORE the outline-author call (nothing sent or billed);
+// an explicit "no" exits 3 with nothing written.
 
 import { defineCommand } from 'citty';
 import { existsSync, readFileSync } from 'node:fs';
@@ -201,6 +202,14 @@ export const outlineCommand = defineCommand({
         // Existing OUTLINE.md is not a parseable section table (e.g. an offline
         // placeholder from a prior dry-run) — fall through and regenerate.
       }
+    }
+
+    // ── RUN-28: the approval gate cannot be answered without a terminal ──
+    // Known before the paid outline-author call, so refuse NOW (EXIT_APPROVAL):
+    // nothing is sent, billed or written. --yolo approves; a terminal (or
+    // scripted numbered answers) is asked after the outline is generated.
+    if (args.yolo !== true && !canPrompt()) {
+      await runGate('outline-approval', { yolo: false, detail: 'no outline was requested and no OUTLINE.md was written' });
     }
 
     // ── GEN-06 / RUN-07 fail-loud probe (BEFORE any prompt/complete() work) ──

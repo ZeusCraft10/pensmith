@@ -1,4 +1,4 @@
-// bin/cli/intake.ts — `pensmith new` / `pensmith intake` verb entrypoint
+// bin/cli/intake.ts — `pensmith new` verb entrypoint (the intake step; `intake` is not a verb, RUN-11)
 // (INTK-01, ARCH-02; CYCLE-2 M-1 canonical filename).
 //
 // Plan 03-07 Task 7.2 — Tier-2 thin orchestrator. The Tier-1 (MCP plugin)

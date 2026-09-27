@@ -65,9 +65,11 @@ test('package.json contract', () => {
   assert.match(deps?.['citty'] ?? '', /\^0\.2/, 'citty pin must satisfy ^0.2.2 (D-14)');
   // CI-01: check script must start with npm run prebuild (local==CI ordering)
   assert.ok(scripts?.['check']?.startsWith('npm run prebuild'), 'CI-01: scripts.check must start with "npm run prebuild" (local==CI ordering)');
-  // DOCS-03: nock must be in devDependencies, not dependencies
-  assert.ok(!deps?.['nock'], 'DOCS-03: nock must NOT be in dependencies (it is test/dev-only)');
-  assert.ok(dev?.['nock'], 'DOCS-03: nock must be in devDependencies');
+  // DOCS-03 / D-17-14: nock is gone — the nock-based cassette recorder was
+  // deleted in Phase 17 (fixtures are exact-match replayed by http-mock.ts and
+  // recorded by scripts/refresh-cassettes.mjs), so it is in neither list.
+  assert.ok(!deps?.['nock'], 'DOCS-03: nock must NOT be in dependencies');
+  assert.ok(!dev?.['nock'], 'D-17-14: nock has no user left, so it is not a devDependency either');
 });
 
 test('tsconfig contract (D-03)', () => {

@@ -53,6 +53,30 @@ test('RUN-17: resume --replay (sources offline) reproduces INTAKE.md byte-for-by
   });
 });
 
+test('RUN-17: a step run with --model / --runtime replays exactly (the logged runtime flags are re-applied, never passed to the verb)', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY }, paper: false }, async (sb) => {
+    fs.writeFileSync(path.join(sb.root, 'assignment.txt'), ASSIGNMENT);
+    const first = await sb.runTsx(null, ['--runtime', 'anthropic', 'new', '--from', 'assignment.txt', '--yolo', '--model', 'claude-sonnet-5']);
+    assert.equal(first.status, 0, first.stderr);
+    const intakePath = path.join(sb.paper, 'INTAKE.md');
+    const original = fs.readFileSync(intakePath, 'utf8');
+    const calls = sb.mock!.callCount();
+    const rec = llmRecords(sb).find((r) => r['slug'] === 'intake-clarifier')!;
+    assert.equal(rec['model'], 'claude-sonnet-5', 'the logged call used the --model override');
+
+    fs.rmSync(intakePath);
+    const replay = await sb.runTsx(null, ['resume', '--replay', String(rec['id'])], { env: { PENSMITH_OFFLINE: '1' } });
+    assert.equal(replay.status, 0, replay.stderr);
+    assert.match(replay.stderr, new RegExp(`replaying ${String(rec['id'])} → new --from assignment\\.txt --yolo \\(sources offline`));
+    assert.doesNotMatch(replay.stderr, /inputs changed/);
+    assert.equal(fs.readFileSync(intakePath, 'utf8'), original, 'byte-for-byte');
+    assert.equal(sb.mock!.callCount(), calls, 'the mock was not called again');
+    const replayed = llmRecords(sb).at(-1)!;
+    assert.equal(replayed['replay_of'], rec['id']);
+    assert.equal(replayed['model'], 'claude-sonnet-5');
+  });
+});
+
 test('RUN-17: an unknown id and a redacted record are refused with one line', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     sb.writePaperConfig('schema_version = 1\n[logging]\nsession_bodies = "redacted"\n');

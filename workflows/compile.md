@@ -61,13 +61,18 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    frontmatter (`assigned_sources`, `verified_against_draft_hash`), its
    `DRAFT.md` bytes, and its `VERIFICATION.md`.
 
-3. **Refuse-gate** (COMP-01): scan each `VERIFICATION.md` for a FABRICATED /
-   MIS-CITED / quote-NOT_FOUND verdict, or a Pass-1 UNVERIFIABLE verdict (the
-   re-fetch was unavailable offline or under `--dry-run`; refused with "re-run
-   online", D-17-07). Any hit is collected as a refuse reason naming the
-   section + citekey. Outside `--dry-run`, a `VERIFICATION.md` written under
-   `--dry-run` (it opens with `> OFFLINE MODE (--dry-run)`) verified synthetic
-   sources only, so the section is refused until it is re-verified (RUN-27).
+3. **Refuse-gate** (COMP-01): the one per-section gate `done` shares
+   (`bin/lib/verify/verdict-rows.ts sectionVerificationReasons`). A section is
+   refused when its `VERIFICATION.md` has no `Status:` line, says
+   `Status: failed` (fail closed, even when no verdict row parses), or carries a
+   FABRICATED / MIS-CITED / quote-NOT_FOUND verdict or a Pass-1 UNVERIFIABLE
+   verdict (the re-fetch was unavailable offline or under `--dry-run`; refused
+   with "re-run online", D-17-07) — for any citekey shape (dotted, colon or
+   Unicode keys included; a blocking row whose key cannot be read still
+   blocks). Each hit is a refuse reason naming the section + citekey. Outside
+   `--dry-run`, a `VERIFICATION.md` written under `--dry-run` (it opens with
+   `> OFFLINE MODE (--dry-run)`) verified synthetic sources only, so the section
+   is refused until it is re-verified (RUN-27).
 
 4. **Staleness re-verify** (COMP-01 / D-08): recompute
    `computeDraftHash(DRAFT.md bytes, assigned_sources)` per section. On a

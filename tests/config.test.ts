@@ -123,6 +123,29 @@ test('CONF-01: unknown keys warn once each and are ignored; invalid TOML and bad
   });
 });
 
+test('CONF-01: unknown keys are warned about but never deleted — a migration write-back and updatePaperConfig keep them', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    _resetConfigWarningsForTest();
+    // A v0 file with keys this pensmith does not know (a newer pensmith's, or the user's own).
+    sb.writePaperConfig('baseURL = "https://example.org/"\ntitle = "My site"\n[project]\ngoal = "draft"\nfavourite = 3\n[params]\ntheme = "dark"\n');
+    const file = path.join(sb.paper, 'config.toml');
+    const { stderr } = await captureStderr(() => loadPaperConfig(sb.root));
+    assert.match(stderr, /unknown key "baseURL" \(ignored\)/);
+    assert.match(stderr, /migrated from schema v0 to v1/);
+    const migrated = fs.readFileSync(file, 'utf8');
+    assert.match(migrated, /^schema_version = 1\n/);
+    for (const kept of [/baseURL = "https:\/\/example\.org\/"/, /title = "My site"/, /favourite = 3/, /\[params\]\ntheme = "dark"/]) {
+      assert.match(migrated, kept, `the migration write-back keeps ${String(kept)}`);
+    }
+    await captureStderr(() => updatePaperConfig(sb.root, (raw) => { rawTable(raw, 'budget')['cost_cap_usd'] = 2; }));
+    const updated = fs.readFileSync(file, 'utf8');
+    for (const kept of [/baseURL = /, /title = "My site"/, /favourite = 3/, /theme = "dark"/, /cost_cap_usd = 2/]) {
+      assert.match(updated, kept, `updatePaperConfig keeps ${String(kept)}`);
+    }
+    assert.equal(readPaperConfigSync(sb.root).config.budget?.cost_cap_usd, 2);
+  });
+});
+
 test('CONF-01: updatePaperConfig is the single writer (schema_version = 1, other keys kept)', async () => {
   await withLlmSandbox({}, async (sb) => {
     await updatePaperConfig(sb.root, (raw) => { rawTable(raw, 'project')['title'] = 'First'; });

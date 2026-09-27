@@ -277,8 +277,12 @@ test('UX-01 / C4-HIGH (m): invalid-JSON STATE.json → status/attention, no thro
   { skip: !built }, async () => {
     const resolveNextAction = await loadResolve();
     const root = freshRoot();
-    // Non-JSON content → JSON.parse throws a SyntaxError inside loadState.
-    writeFileSync(join(root, 'STATE.json'), '{ this is not json ');
+    // Non-JSON content → JSON.parse throws a SyntaxError inside loadState. The
+    // corrupt file sits where pensmith keeps STATE.json (.paper/, RUN-13): a
+    // root-level STATE.json that is not pensmith-shaped is the user's own file
+    // and is never read as a paper (paths.ts isLegacyPensmithState).
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    writeFileSync(join(root, '.paper', 'STATE.json'), '{ this is not json ');
     let decision: RouterDecision | undefined;
     await assert.doesNotReject(
       async () => { decision = await resolveNextAction(root); },

@@ -27,6 +27,37 @@
 import tseslint from 'typescript-eslint';
 import chokepointRule from './scripts/eslint-rules/chokepoint.mjs';
 
+// The project-wide no-restricted-syntax selectors (D-07 DOI regex, D-07
+// atomic-write, D-41 paths). Flat config lets the LAST matching block win per
+// rule name, so every file-scoped block that sets no-restricted-syntax spreads
+// this list first — one list, so the overrides can never drift out of sync.
+const PROJECT_WIDE_RESTRICTED_SYNTAX = [
+  {
+    selector: 'Literal[regex.pattern=/^\\^10\\\\\\./]',
+    message: 'DOI regex /^10\\./ is a chokepoint — use bin/lib/doi.ts only',
+  },
+  {
+    selector: "CallExpression[callee.property.name='writeFile']",
+    message: 'Direct fs.writeFile is forbidden (ARCH-05 / D-07) — use bin/lib/atomic-write.ts',
+  },
+  {
+    selector: "MemberExpression[object.name='os'][property.name='homedir']",
+    message: 'os.homedir() is a chokepoint (D-41) — use bin/lib/paths.ts',
+  },
+  {
+    selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='LOCALAPPDATA']",
+    message: 'process.env.LOCALAPPDATA is a chokepoint (D-41) — use bin/lib/paths.ts',
+  },
+  {
+    selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='APPDATA']",
+    message: 'process.env.APPDATA is a chokepoint (D-41) — use bin/lib/paths.ts (use LOCALAPPDATA, not APPDATA — Pitfall 4)',
+  },
+  {
+    selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='XDG_DATA_HOME']",
+    message: 'process.env.XDG_DATA_HOME is a chokepoint (D-41) — use bin/lib/paths.ts',
+  },
+];
+
 export default [
   ...tseslint.configs.recommended,
 
@@ -72,32 +103,7 @@ export default [
       // NOTE (Pitfall B5): D-41 is enforced via no-restricted-syntax MemberExpression
       // selectors, NOT no-restricted-globals — the latter cannot ban member access
       // patterns like process.env.X (it only bans bare global identifiers).
-      'no-restricted-syntax': ['error',
-        {
-          selector: 'Literal[regex.pattern=/^\\^10\\\\\\./]',
-          message: 'DOI regex /^10\\./ is a chokepoint — use bin/lib/doi.ts only',
-        },
-        {
-          selector: "CallExpression[callee.property.name='writeFile']",
-          message: 'Direct fs.writeFile is forbidden (ARCH-05 / D-07) — use bin/lib/atomic-write.ts',
-        },
-        {
-          selector: "MemberExpression[object.name='os'][property.name='homedir']",
-          message: 'os.homedir() is a chokepoint (D-41) — use bin/lib/paths.ts',
-        },
-        {
-          selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='LOCALAPPDATA']",
-          message: 'process.env.LOCALAPPDATA is a chokepoint (D-41) — use bin/lib/paths.ts',
-        },
-        {
-          selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='APPDATA']",
-          message: 'process.env.APPDATA is a chokepoint (D-41) — use bin/lib/paths.ts (use LOCALAPPDATA, not APPDATA — Pitfall 4)',
-        },
-        {
-          selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='XDG_DATA_HOME']",
-          message: 'process.env.XDG_DATA_HOME is a chokepoint (D-41) — use bin/lib/paths.ts',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...PROJECT_WIDE_RESTRICTED_SYNTAX],
     },
   },
 
@@ -348,13 +354,8 @@ export default [
     files: ['mcp/**/*.ts'],
     rules: {
       'no-restricted-syntax': ['error',
-        // project-wide selectors re-listed (D-07, D-41 — override-merge safety):
-        { selector: 'Literal[regex.pattern=/^\\^10\\\\\\./]', message: 'DOI regex /^10\\./ is a chokepoint — use bin/lib/doi.ts only' },
-        { selector: "CallExpression[callee.property.name='writeFile']", message: 'Direct fs.writeFile is forbidden (ARCH-05 / D-07) — use bin/lib/atomic-write.ts' },
-        { selector: "MemberExpression[object.name='os'][property.name='homedir']", message: 'os.homedir() is a chokepoint (D-41) — use bin/lib/paths.ts' },
-        { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='LOCALAPPDATA']", message: 'process.env.LOCALAPPDATA is a chokepoint (D-41) — use bin/lib/paths.ts' },
-        { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='APPDATA']", message: 'process.env.APPDATA is a chokepoint (D-41) — use bin/lib/paths.ts (use LOCALAPPDATA, not APPDATA — Pitfall 4)' },
-        { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='XDG_DATA_HOME']", message: 'process.env.XDG_DATA_HOME is a chokepoint (D-41) — use bin/lib/paths.ts' },
+        // project-wide selectors (D-07, D-41 — override-merge safety):
+        ...PROJECT_WIDE_RESTRICTED_SYNTAX,
         // D-10 stdio-only selectors:
         { selector: "CallExpression[callee.object.name='net'][callee.property.name='createServer']", message: 'D-10 stdio-only: net.createServer() is forbidden in mcp/ — only stdio transport is allowed' },
         { selector: "CallExpression[callee.object.name='http'][callee.property.name='createServer']", message: 'D-10 stdio-only: http.createServer() is forbidden in mcp/ — only stdio transport is allowed' },
@@ -394,13 +395,8 @@ export default [
     files: ['mcp/**/*.ts'],
     rules: {
       'no-restricted-syntax': ['error',
-        // project-wide selectors re-listed (D-07, D-41 — override-merge safety):
-        { selector: 'Literal[regex.pattern=/^\\^10\\\\\\./]', message: 'DOI regex /^10\\./ is a chokepoint — use bin/lib/doi.ts only' },
-        { selector: "CallExpression[callee.property.name='writeFile']", message: 'Direct fs.writeFile is forbidden (ARCH-05 / D-07) — use bin/lib/atomic-write.ts' },
-        { selector: "MemberExpression[object.name='os'][property.name='homedir']", message: 'os.homedir() is a chokepoint (D-41) — use bin/lib/paths.ts' },
-        { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='LOCALAPPDATA']", message: 'process.env.LOCALAPPDATA is a chokepoint (D-41) — use bin/lib/paths.ts' },
-        { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='APPDATA']", message: 'process.env.APPDATA is a chokepoint (D-41) — use bin/lib/paths.ts (use LOCALAPPDATA, not APPDATA — Pitfall 4)' },
-        { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='XDG_DATA_HOME']", message: 'process.env.XDG_DATA_HOME is a chokepoint (D-41) — use bin/lib/paths.ts' },
+        // project-wide selectors (D-07, D-41 — override-merge safety):
+        ...PROJECT_WIDE_RESTRICTED_SYNTAX,
         // D-10 stdio-only selectors re-listed (from 02-02, override-merge safety):
         { selector: "CallExpression[callee.object.name='net'][callee.property.name='createServer']", message: 'D-10 stdio-only: net.createServer() is forbidden in mcp/ — only stdio transport is allowed' },
         { selector: "CallExpression[callee.object.name='http'][callee.property.name='createServer']", message: 'D-10 stdio-only: http.createServer() is forbidden in mcp/ — only stdio transport is allowed' },
@@ -430,6 +426,8 @@ export default [
     ignores: ['bin/lib/doctor/probes/runtime-config-presence.ts'],
     rules: {
       'no-restricted-syntax': ['error',
+        // project-wide selectors (D-07, D-41 — override-merge safety):
+        ...PROJECT_WIDE_RESTRICTED_SYNTAX,
         {
           selector: "MemberExpression[object.object.name='process'][object.property.name='env'][computed=true]",
           message: 'D-12 (doctor-probe scope): computed process.env[…] reads are forbidden in doctor probes other than runtime-config-presence.ts. Only the runtime-config-presence probe is permitted to bind process.env[provider.apiKeyEnv] (with immediate length-test discard, T-02-05-01 sentinel-tested).',
@@ -448,6 +446,8 @@ export default [
     files: ['bin/lib/doctor/probes/runtime-config-presence.ts'],
     rules: {
       'no-restricted-syntax': ['error',
+        // project-wide selectors (D-07, D-41 — override-merge safety):
+        ...PROJECT_WIDE_RESTRICTED_SYNTAX,
         {
           selector: "CallExpression[callee.object.name='JSON'][callee.property.name='stringify'] Identifier[name=/^(v|value|secret|token|apiKey|providerKey)$/]",
           message: 'D-12: runtime-config-presence.ts must NEVER JSON.stringify a resolved-key identifier. Serialise only the {name, apiKeyEnv, present} shape.',

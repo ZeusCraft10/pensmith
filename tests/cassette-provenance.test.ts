@@ -34,11 +34,35 @@ function rel(file: string): string {
 const files = listCassetteFiles();
 const recorded = files.filter((f) => !rel(f).startsWith('synthetic/'));
 
+/**
+ * Search adapters whose real recording is still OPEN (CI-07), each with why.
+ * Listed here instead of being silently left out of the required set: the
+ * moment a recording lands, the test below fails until the adapter moves from
+ * this list into the required one.
+ */
+const OPEN_RECORDINGS: Readonly<Record<string, string>> = Object.freeze({
+  openalex:
+    'OpenAlex now bills per request (x-ratelimit-remaining-usd: 0 for a keyless caller), so ' +
+    '`npm run cassettes:refresh -- --only openalex` needs OPENALEX_API_KEY; until it is re-recorded, ' +
+    'tests/sources/openalex.test.ts parses the hand-written synthetic fixture',
+});
+
 test('CI-07: the store has real recordings (recorded cassettes exist outside synthetic/)', () => {
   assert.ok(files.length > 0, 'cassettes exist');
   assert.ok(recorded.length >= 7, `real recordings for the source adapters, got ${recorded.map(rel).join(', ')}`);
-  for (const adapter of ['crossref', 'arxiv', 'pubmed', 'unpaywall', 'retraction-watch']) {
+  for (const adapter of ['crossref', 'arxiv', 'pubmed', 'unpaywall', 'retraction-watch', 'semanticscholar']) {
     assert.ok(recorded.some((f) => rel(f).startsWith(`${adapter}/`)), `a recorded ${adapter} cassette`);
+  }
+});
+
+test('CI-07: an adapter with no real recording yet is an explicit open item, never a silent exclusion', () => {
+  for (const [adapter, why] of Object.entries(OPEN_RECORDINGS)) {
+    assert.ok(why.length > 0);
+    assert.ok(
+      !recorded.some((f) => rel(f).startsWith(`${adapter}/`)),
+      `${adapter} now has a real recording: remove it from OPEN_RECORDINGS and add it to the required list above`,
+    );
+    assert.ok(files.some((f) => rel(f).startsWith(`synthetic/${adapter}/`)), `${adapter}: its interim fixture is confined to synthetic/`);
   }
 });
 

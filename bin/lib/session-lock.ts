@@ -34,7 +34,7 @@ import * as fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { pensmithLockDir, projectHash, paperDir } from './paths.js';
+import { pensmithLockDir, projectHash, paperDir, asProjectRoot } from './paths.js';
 import { withLock } from './lock.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 
@@ -73,9 +73,13 @@ export function claudeSessionIdFromEnv(): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null;
 }
 
-/** Canonical key for a project root: resolved, symlink-free, case-folded on Windows. */
+/**
+ * Canonical key for a project root: resolved, `.paper` folded to its parent
+ * (asProjectRoot — the same paper whichever form a caller passes), symlink-free,
+ * case-folded on Windows.
+ */
 function canonicalRoot(root: string): string {
-  let r = path.resolve(root);
+  let r = asProjectRoot(root);
   try {
     r = fs.realpathSync.native(r);
   } catch {
@@ -344,7 +348,7 @@ export interface PaperSessionOptions {
 
 /** The per-section sub-lock resource (keyed by number, independent of the slug). */
 export function sectionLockResource(root: string, n: number): string {
-  return path.join(paperDir(path.resolve(root)), 'sections', `${String(n).padStart(2, '0')}.section-lock`);
+  return path.join(paperDir(asProjectRoot(root)), 'sections', `${String(n).padStart(2, '0')}.section-lock`);
 }
 
 /**

@@ -424,13 +424,44 @@ export async function runResearchOrchestrator(
 
 export async function runResearchOrchestrator(
   queriesOrOpts: string[] | ResearchOrchestratorOptions,
-  optsArg?: Omit<ResearchOrchestratorOptions, 'assignment' | 'topic' | 'discipline'> & {
-    topic: string;
-    discipline: string;
-    assignment?: string;
-    scopeLabel?: string;
-  },
+  optsArg?: DiscoverOptions,
 ): Promise<SourceCandidate[]> {
+  const discovery = await discover(queriesOrOpts, optsArg);
+  await discovery.writeLog(discovery.candidates);
+  return discovery.candidates;
+}
+
+/** The (queries, opts) options of `pensmith research`. */
+type DiscoverOptions = Omit<ResearchOrchestratorOptions, 'assignment' | 'topic' | 'discipline'> & {
+  topic: string;
+  discipline: string;
+  assignment?: string;
+  scopeLabel?: string;
+};
+
+/** Discovered candidates plus the deferred writer of their research log. */
+export interface ResearchDiscovery {
+  readonly candidates: SourceCandidate[];
+  /**
+   * Write .paper/RESEARCH.md for this discovery (a no-op when the caller has
+   * no paper root). `pensmith research` calls it only AFTER its approval gates
+   * pass (RUN-28), so a refused or aborted research writes nothing.
+   */
+  writeLog(candidates: SourceCandidate[]): Promise<void>;
+}
+
+/**
+ * Discovery WITHOUT writing the research log: `pensmith research` runs its
+ * candidate approval gate first and then calls `writeLog`.
+ */
+export async function discoverSources(queries: string[], opts: DiscoverOptions): Promise<ResearchDiscovery> {
+  return discover(queries, opts);
+}
+
+async function discover(
+  queriesOrOpts: string[] | ResearchOrchestratorOptions,
+  optsArg?: DiscoverOptions,
+): Promise<ResearchDiscovery> {
   // Normalize overloads.
   let queries: string[];
   let topic: string;
@@ -478,7 +509,7 @@ export async function runResearchOrchestrator(
         `pensmith research: WARN — 0 candidates found across all adapters (forced empty).\n`,
       );
     }
-    return forceCandidates;
+    return { candidates: forceCandidates, writeLog: async () => undefined };
   }
 
   const mode = networkMode();
@@ -582,8 +613,7 @@ export async function runResearchOrchestrator(
       `pensmith research: WARN — 0 candidates found across all adapters for queries: ` +
       `${queries.slice(0, 3).join(', ')}${queries.length > 3 ? ' ...' : ''}.\n`,
     );
-    await writeLog([]);
-    return [];
+    return { candidates: [], writeLog };
   }
 
   // Dedup: DOI first-wins (prefer abstract), then title JW >= threshold.
@@ -604,8 +634,7 @@ export async function runResearchOrchestrator(
     discipline,
   });
 
-  await writeLog(evaluated);
-  return evaluated;
+  return { candidates: evaluated, writeLog };
 }
 
 /**

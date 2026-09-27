@@ -4,8 +4,12 @@
 // Phase 11 has been replaced with real source-discovery via research-orchestrator.
 //
 // What this verb does:
+//   0. RUN-28: without a terminal and without --yolo the approval gates below
+//      can never be answered — refuse up front (EXIT_APPROVAL), before any
+//      model call, search or write.
 //   1. Hash-pin both D-12 LOCKED slugs at startup.
-//   2. GEN-06 fail-loud probe: assert LLM key configured (non-offline only).
+//   2. GEN-06 fail-loud probe: assert LLM key configured (non-offline only);
+//      an existing LIBRARY.json must load (RUN-12) — checked before any work.
 //   3. Read INTAKE.md → parseIntakeMd → topic/discipline/assignment.
 //   4. Call topic-disambiguator complete() → defensively parse scopes.
 //   5. Scope approval gate (default-ON, `research-scope`): select one scope;
@@ -16,7 +20,8 @@
 //      GateRefusedError / EXIT_APPROVAL.
 //   8. D-15 LOCKED: crossCheckRetractions BEFORE the library write — upsertSources
 //      (BRDTH-01, the one writer) merges into LIBRARY.json and renders
-//      CITATIONS.bib + CITATIONS.ris from it.
+//      CITATIONS.bib + CITATIONS.ris from it. .paper/RESEARCH.md is written only
+//      after the candidate gate passed, so a refused research leaves no file.
 //
 // D-12 LOCKED prompt slugs: 'topic-disambiguator' + 'source-evaluator'.
 // D-15 LOCKED ordering: crossCheckRetractions BEFORE upsertSources.
@@ -29,15 +34,15 @@ import { defineCommand } from 'citty';
 import path from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { upsertSources } from '../lib/library.js';
+import { upsertSources, assertLibraryReadable } from '../lib/library.js';
 import { paperDir, projectRoot } from '../lib/paths.js';
 import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js';
 import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, assertLlmConfigured, StructuredOutputError } from '../lib/anthropic.js';
 import type { TopicDisambiguation } from '../lib/llm-contracts.js';
-import { runGate } from '../lib/gates.js';
+import { runGate, canPrompt } from '../lib/gates.js';
 import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
-import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
+import { discoverSources } from '../lib/research-orchestrator.js';
 
 // ---------------------------------------------------------------------------
 // Hash-pin enforcement (D-12 defense-in-depth).
@@ -65,12 +70,25 @@ export const researchCommand = defineCommand({
   async run({ args }) {
     const yolo = args.yolo === true;
 
+    // RUN-28: research asks two approval questions (scope, then the sources to
+    // keep). Without a terminal and without --yolo neither can be answered, and
+    // that is known NOW — so refuse before the disambiguator and evaluator calls
+    // and the multi-adapter search, not after them (EXIT_APPROVAL, nothing sent,
+    // nothing written).
+    if (!yolo && !canPrompt()) {
+      await runGate('research-prune', { yolo: false, detail: 'nothing was searched, sent or written' });
+    }
+
     // Validate both D-12 LOCKED slugs at startup (hash-pin defense-in-depth).
     loadPrompt('topic-disambiguator');
     loadPrompt('source-evaluator');
 
     // GEN-06 / RUN-07 fail-loud probe: assert an LLM is configured before any LLM work.
     await assertLlmConfigured('research');
+
+    // RUN-12: an existing LIBRARY.json that cannot be read is a one-line error
+    // naming the file — found before any search or model call, not at the end.
+    await assertLibraryReadable(projectRoot());
 
     // ── Step 1: Read INTAKE.md and parse → topic/discipline/assignment ──
     // D-07: read via readFileSync; WARN + empty string if absent.
@@ -88,7 +106,7 @@ export const researchCommand = defineCommand({
     } else {
       process.stderr.write(
         `pensmith research: WARN — INTAKE.md not found at ${intakePath}; ` +
-        `continuing with empty assignment context (run \`pensmith intake\` first).\n`,
+        `continuing with empty assignment context (run \`pensmith new\` first).\n`,
       );
     }
     const { topic, discipline, assignment } = parseIntakeMd(intakeText);
@@ -98,9 +116,9 @@ export const researchCommand = defineCommand({
     // {{...}} tokens in INTAKE.md cannot cause secondary template expansion.
     const topicDisambiguatorPrompt = loadPrompt('topic-disambiguator');
     const interpolatedPrompt = interpolate(topicDisambiguatorPrompt, {
-      topic: escapeTemplateTokens(topic || '(unknown topic — run pensmith intake first)'),
+      topic: escapeTemplateTokens(topic || '(unknown topic — run pensmith new first)'),
       discipline: escapeTemplateTokens(discipline),
-      assignment: escapeTemplateTokens(assignment || '(no assignment text — run pensmith intake first)'),
+      assignment: escapeTemplateTokens(assignment || '(no assignment text — run pensmith new first)'),
     });
     // topic-disambiguator is a STRUCTURED slug (RUN-25, T-12-01 trust boundary):
     // complete() returns {scopes:[{label, queries}]} validated against the
@@ -166,16 +184,15 @@ export const researchCommand = defineCommand({
       }
     }
 
-    // ── Step 5: Live discovery — runResearchOrchestrator ──
-    const candidates: SourceCandidate[] = await runResearchOrchestrator(
-      chosenScope.queries,
-      {
-        topic,
-        discipline,
-        assignment,
-        scopeLabel: chosenScope.label,
-      },
-    );
+    // ── Step 5: Live discovery (the research log is written after the gate) ──
+    const discovery = await discoverSources(chosenScope.queries, {
+      topic,
+      discipline,
+      assignment,
+      scopeLabel: chosenScope.label,
+      paperRoot: projectRoot(),
+    });
+    const candidates: SourceCandidate[] = discovery.candidates;
 
     // ── Step 6: Candidate approval gate (default-ON) — `research-prune` (RUN-28) ──
     // Zero-candidate path: skip the gate (nothing to prune).
@@ -203,6 +220,9 @@ export const researchCommand = defineCommand({
         finalCandidates = candidates.filter((c) => keepKeys.has(c.citekey));
       }
     }
+
+    // The gate passed: record the research log (.paper/RESEARCH.md, D-17-10).
+    await discovery.writeLog(candidates);
 
     if (finalCandidates.length === 0) {
       process.stderr.write(

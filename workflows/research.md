@@ -44,6 +44,8 @@ workflow body below is the prompt that drives the verb under both Tier 1
 
 ## Body
 
+0. **Gates up front** (RUN-28): research asks two registry questions — the scope (`research-scope`, step 2) and the sources to keep (`research-prune`, before step 6). A Tier-2 run that cannot ask (no terminal, no scripted `PENSMITH_PROMPT_MODE=numbered` answers) and has no `--yolo` can answer neither, so it refuses with exit 3 before any model call, search or write. An existing `.paper/LIBRARY.json` that cannot be read is a one-line error naming the file, also before any work (RUN-12).
+
 1. **Read `.paper/INTAKE.md`** for topic + discipline + tone + citation style.
 
 2. **Disambiguate topic + generate queries** (RSCH-02): invoke `templates/prompts/topic-disambiguator.md` (D-12 LOCKED slug per Plan 03 CONTEXT D-12) → `{scopes: [{label, queries}]}` JSON. In `--yolo` mode, pick scope #1; otherwise present to user for selection (via `AskUserQuestion` if available, else stdin via `@clack/prompts`).
@@ -56,7 +58,7 @@ workflow body below is the prompt that drives the verb under both Tier 1
    - Deduplicate by DOI; preserve provenance (which adapter found it first).
    - Emit a UNION `SourceCandidate[]` (D-14).
 
-4. **Evaluate candidates** (RSCH-02 second half): invoke `templates/prompts/source-evaluator.md` (D-12 LOCKED slug) on the deduped `SourceCandidate[]` → keep/reject verdicts with rationale. Filter on `keep: true`.
+4. **Evaluate candidates** (RSCH-02 second half): invoke `templates/prompts/source-evaluator.md` (D-12 LOCKED slug) on the deduped `SourceCandidate[]` → keep/reject verdicts with rationale. Filter on `keep: true`. Then the `research-prune` question lets the user keep a subset (`--yolo` keeps every candidate); `.paper/RESEARCH.md` (the research log: scope, queries, per-adapter counts, candidates) is written only after it is answered, so an aborted research leaves no log.
 
 5. **Cross-check via Retraction Watch** (D-15): for each surviving candidate with a DOI, call `sources['retraction-watch'].fetchById(doi)`. If the call returns a record, set `retracted: true` on the candidate — do **NOT** silently drop. (The verify verb will mark uses as MIS-CITED with `reason='cited a retracted work (per Retraction Watch cross-check at research time)'`.)
 

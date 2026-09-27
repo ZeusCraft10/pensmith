@@ -106,7 +106,7 @@ test('ERGO-02 / C2-H1 (RUN-20): a paper-less dir never throws and projects the w
 test('ERGO-02 / C4-HIGH: invalid-JSON and schema-invalid STATE.json never throw (treated as no sections)', async () => {
   for (const body of ['{ not json', JSON.stringify({ $schemaVersion: 2, paperId: 'p', createdAt: new Date().toISOString(), sections: [{ n: 1 }] })]) {
     await withLlmSandbox({}, async (sb) => {
-      fs.writeFileSync(path.join(sb.root, 'STATE.json'), body);
+      fs.writeFileSync(path.join(sb.paper, 'STATE.json'), body);
       let res: Awaited<ReturnType<typeof projectEstimate>> | undefined;
       await assert.doesNotReject(async () => { res = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100 }); });
       assert.equal(res!.sectionSource, 'derived');

@@ -76,6 +76,8 @@ import {
   legacyStateFile,
   legacyConfigFile,
   paperConfigFile,
+  asProjectRoot,
+  isLegacyPensmithState,
 } from './paths.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 
@@ -115,10 +117,12 @@ export class StateAlreadyExistsError extends Error {
  * Resolve the absolute path to STATE.json for the project root `paperRoot`:
  * `<root>/.paper/STATE.json` (RUN-13, D-17-32). Resolving up-front ensures the
  * lock key (which is the file path) is identical across callers regardless of
- * relative vs. absolute input.
+ * relative vs. absolute input. A path to the `.paper` folder itself (the pre-v1
+ * MCP convention) names its parent (paths.ts asProjectRoot), so no caller can
+ * reach `.paper/.paper/`.
  */
 function stateFile(paperRoot: string): string {
-  return paperStateFile(paperRoot);
+  return paperStateFile(asProjectRoot(paperRoot));
 }
 
 // ---------------------------------------------------------------------------
@@ -133,8 +137,13 @@ function stateFile(paperRoot: string): string {
 // It runs when a root is resolved (the dispatcher, the MCP server, the hooks)
 // and inside every STATE.json accessor below, so no reader can miss it.
 //
-// The move is keyed on the legacy STATE.json: a pre-v1 paper always had one, so
-// its config.toml moves with it.
+// The move is keyed on the legacy STATE.json, and only on a PENSMITH one
+// (paths.ts isLegacyPensmithState: a `$schemaVersion` / `paperId` / `createdAt`
+// envelope). A pre-v1 paper always had one, so its config.toml moves with it;
+// any other root-level STATE.json or config.toml (a web app's, a static site's)
+// belongs to the user and is never touched. The root is normalized through
+// asProjectRoot first, so a `.paper` path can never move the real
+// `.paper/STATE.json` into `.paper/.paper/`.
 // ---------------------------------------------------------------------------
 
 /** Two different copies of a legacy-layout file: refuse rather than guess. */
@@ -174,9 +183,9 @@ async function moveLegacyFile(legacy: string, dest: string): Promise<boolean> {
  * Idempotent and cheap when there is nothing to move (one existsSync).
  */
 export async function migrateLegacyLayout(paperRoot: string): Promise<LegacyLayoutMove> {
-  const root = path.resolve(paperRoot);
+  const root = asProjectRoot(paperRoot);
   const legacyState = legacyStateFile(root);
-  if (!fs.existsSync(legacyState)) return { moved: [] };
+  if (!fs.existsSync(legacyState) || !isLegacyPensmithState(root)) return { moved: [] };
   const moved: string[] = [];
   if (await moveLegacyFile(legacyState, paperStateFile(root))) moved.push('STATE.json');
   const legacyConfig = legacyConfigFile(root);
@@ -199,11 +208,13 @@ export async function migrateLegacyLayout(paperRoot: string): Promise<LegacyLayo
  * paper has neither.
  */
 export function readStateTextSync(paperRoot: string): string {
+  const root = asProjectRoot(paperRoot);
   try {
-    return fs.readFileSync(paperStateFile(paperRoot), 'utf8');
+    return fs.readFileSync(paperStateFile(root), 'utf8');
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
-    return fs.readFileSync(legacyStateFile(paperRoot), 'utf8');
+    if (!isLegacyPensmithState(root)) throw e; // a non-pensmith STATE.json is not this paper's
+    return fs.readFileSync(legacyStateFile(root), 'utf8');
   }
 }
 

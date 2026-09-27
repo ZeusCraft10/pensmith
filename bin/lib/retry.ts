@@ -24,7 +24,7 @@
 //   4. else throw the LAST error (preserving the original stack)
 //
 // This shim is dependency-free at runtime so it can be unit-tested without
-// nock / undici.
+// undici.
 
 export interface RetryOptions {
   /** Maximum number of attempts (1-based). Default: 5. */

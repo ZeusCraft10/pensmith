@@ -27,7 +27,7 @@ import { defineCommand } from 'citty';
 import { ask } from '../lib/prompts.js';
 import { dispatchVerb, type GlobalFlags } from '../pensmith.js';
 import type { Ux02Verb } from '../lib/verbs.js';
-import { EXIT_APPROVAL } from '../lib/exit-codes.js';
+import { runGate, declineGate, canPrompt } from '../lib/gates.js';
 
 /** Dispatcher seam — matches the dispatchVerb signature the tests spy on. */
 type Dispatcher = (
@@ -51,6 +51,14 @@ export const sketchCommand = defineCommand({
     'dry-run': { type: 'boolean', description: 'Zero external API calls.', default: false },
   },
   async run({ args }) {
+    // (0) RUN-28: the confirm is the registry's `sketch-confirm` gate. Without a
+    //     terminal (and without --yolo) it can never be answered — refuse now,
+    //     before the Socratic questions consume any input (EXIT_APPROVAL,
+    //     nothing asked, nothing created).
+    if (typeof args.confirm !== 'boolean' && args.yolo !== true && !canPrompt()) {
+      await runGate('sketch-confirm', { yolo: false, detail: 'nothing was asked or created' });
+    }
+
     // (1) Synthesize a candidate thesis. If a thesis was pre-supplied (test
     //     seam or a one-shot caller) skip the Socratic loop; otherwise run it.
     //     CRITICAL: NOTHING in this block creates .paper/ / STATE.json /
@@ -70,28 +78,26 @@ export const sketchCommand = defineCommand({
 
     process.stdout.write(`\npensmith sketch:\n  ${synthesized}\n\n`);
 
-    // (2) Confirm gate (approval-gates-default-on). A pre-supplied `confirm`
-    //     (test seam) wins; --yolo skips the prompt; otherwise ask(). On
-    //     decline: print + return WITHOUT creating ANY state (no-advance).
+    // (2) Confirm gate — `sketch-confirm` in the one registry (RUN-28,
+    //     approval-gates-default-on). A pre-supplied `confirm` (test seam) wins;
+    //     --yolo takes the registry's choice (proceed to intake); otherwise the
+    //     gate asks. A decline is the registry's decline (EXIT_APPROVAL) and
+    //     creates NO state (no-advance).
     let proceed: boolean;
     if (typeof args.confirm === 'boolean') {
       proceed = args.confirm;
-    } else if (args.yolo === true) {
-      proceed = true;
     } else {
-      const answer = await ask({
-        id: 'sketch-confirm',
-        kind: 'confirm',
-        label: 'Proceed to intake with this thesis?',
-        default: false,
+      const outcome = await runGate('sketch-confirm', {
+        yolo: args.yolo === true,
+        question: { id: 'sketch-confirm', kind: 'confirm', label: 'Proceed to intake with this thesis?', default: false },
       });
-      proceed = answer.kind === 'confirm' ? answer.value : false;
+      proceed = outcome.kind === 'yolo'
+        || (outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true);
     }
 
     if (!proceed) {
-      process.stdout.write('pensmith sketch: cancelled — re-run to try again.\n');
       // RUN-09: a declined confirmation is EXIT_APPROVAL (nothing was created).
-      return { ok: false, exitCode: EXIT_APPROVAL };
+      declineGate('sketch-confirm', 'sketch cancelled — nothing was created; re-run to try again');
     }
 
     // (3) ONLY after confirm: dispatch the existing `new` verb with the thesis

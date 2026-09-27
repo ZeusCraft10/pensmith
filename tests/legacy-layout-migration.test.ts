@@ -9,6 +9,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { EXIT_ERROR } from '../bin/lib/exit-codes.js';
 import {
   ASSIGNMENT_FIXTURE,
@@ -17,6 +19,9 @@ import {
   runLibScript,
   lastJson,
   REPO,
+  MCP_BIN,
+  snapshot,
+  changedPaths,
   type Sandbox,
 } from './helpers/paper-cli-harness.js';
 import { loadChokepointRow, rowPattern, scopedFiles, violations } from './helpers/chokepoint-row.js';
@@ -141,4 +146,104 @@ test('RUN-13: the state-json chokepoint row flags its fixture and no shipped mod
     assert.ok(files.includes(f), `${f} is inside the row's scope`);
   }
   assert.deepEqual(violations(row, files), [], 'no second STATE.json resolver');
+});
+
+// ---------------------------------------------------------------------------
+// The move is keyed on a PENSMITH STATE.json only (review round 1 blocker): a
+// root-level STATE.json / config.toml that belongs to the user's own project
+// (a web app, a static site) is never moved, rewritten or read as a paper — by
+// the read-only verbs, by a mutating verb, by the MCP server boot or the hooks.
+// ---------------------------------------------------------------------------
+
+const USER_STATE = '{"counter": 3, "note": "my app state"}\n';
+const USER_CONFIG = 'baseURL = "https://example.org/"\ntitle = "My Hugo site"\n';
+
+function seedUserProject(sb: Sandbox, name: string): string {
+  const root = sb.project(name);
+  writeFileSync(join(root, 'STATE.json'), USER_STATE);
+  writeFileSync(join(root, 'config.toml'), USER_CONFIG);
+  return root;
+}
+
+function assertUntouched(root: string, label: string): void {
+  assert.equal(readFileSync(join(root, 'STATE.json'), 'utf8'), USER_STATE, `${label}: the user's STATE.json is untouched`);
+  assert.equal(readFileSync(join(root, 'config.toml'), 'utf8'), USER_CONFIG, `${label}: the user's config.toml is untouched`);
+  assert.ok(!existsSync(join(root, '.paper', 'STATE.json')), `${label}: nothing moved into .paper/`);
+  assert.ok(!existsSync(join(root, '.paper', 'config.toml')), `${label}: no config.toml under .paper/`);
+}
+
+test('RUN-13: a root-level STATE.json + config.toml that are not pensmith\'s are never moved or rewritten (doctor, status, list)', () => {
+  const sb = sandbox('layout-foreign');
+  const root = seedUserProject(sb, 'hugo');
+  for (const verb of ['doctor', 'status', 'list']) {
+    const r = runCli(sb, root, [verb]);
+    assert.doesNotMatch(r.stderr, /moved STATE\.json|one-time layout migration|unknown key "baseURL"/, `${verb}: ${r.stderr}`);
+    assertUntouched(root, verb);
+  }
+  assert.ok(!existsSync(join(root, '.paper')), 'no .paper/ was created by a read-only verb');
+  const status = runCli(sb, root, ['status']);
+  assert.match(status.stdout + status.stderr, /no active paper/, 'the folder is not a paper');
+  const direct = lastJson<{ ok: boolean; moved: string[] }>(runLibScript(sb, 'legacy-move.ts', [root]));
+  assert.deepEqual(direct, { ok: true, moved: [] }, 'migrateLegacyLayout itself refuses a non-pensmith STATE.json');
+  assertUntouched(root, 'migrateLegacyLayout');
+});
+
+test('RUN-13: the MCP server boot never moves a non-pensmith root-level STATE.json / config.toml', async () => {
+  const sb = sandbox('layout-foreign-mcp');
+  const root = seedUserProject(sb, 'site');
+  const transport = new StdioClientTransport({ command: process.execPath, args: [MCP_BIN], env: sb.env(), cwd: root, stderr: 'pipe' });
+  let stderr = '';
+  transport.stderr?.on('data', (c: Buffer) => { stderr += c.toString(); });
+  const client = new Client({ name: 'legacy-layout-test', version: '0.0.0' }, { capabilities: {} });
+  await client.connect(transport);
+  try {
+    const tools = await client.listTools();
+    assert.ok(tools.tools.length > 0, 'the server booted');
+  } finally {
+    await client.close();
+  }
+  assert.doesNotMatch(stderr, /moved STATE\.json/);
+  assertUntouched(root, 'mcp boot');
+});
+
+test('RUN-13: a `.paper` path handed to the state layer names its parent — STATE.json never moves into .paper/.paper/', async () => {
+  const sb = sandbox('layout-dotpaper');
+  const root = sb.project('p');
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  writeFileSync(join(root, '.paper', 'STATE.json'), LEGACY_STATE);
+  writeFileSync(join(root, '.paper', 'config.toml'), 'schema_version = 1\n');
+  const moved = lastJson<{ ok: boolean; moved: string[] }>(runLibScript(sb, 'legacy-move.ts', [join(root, '.paper')]));
+  assert.deepEqual(moved, { ok: true, moved: [] });
+  const routed = lastJson<{ ok: boolean; decision: unknown }>(runLibScript(sb, 'legacy-move.ts', [join(root, '.paper'), '--router']));
+  assert.ok(routed.ok, JSON.stringify(routed));
+  assert.ok(existsSync(join(root, '.paper', 'STATE.json')), '.paper/STATE.json stays in place');
+  assert.ok(existsSync(join(root, '.paper', 'config.toml')), '.paper/config.toml stays in place');
+  assert.ok(!existsSync(join(root, '.paper', '.paper')), 'no .paper/.paper/');
+
+  // The MCP paper_* state tools take the same normalization (a client-supplied paperRoot).
+  const before = snapshot(root);
+  const transport = new StdioClientTransport({ command: process.execPath, args: [MCP_BIN], env: sb.env({ PENSMITH_PAPER_ROOT: root }), cwd: root });
+  const client = new Client({ name: 'legacy-layout-test', version: '0.0.0' }, { capabilities: {} });
+  await client.connect(transport);
+  try {
+    const calls: Array<[string, Record<string, unknown>]> = [
+      ['paper_set_status', { n: 1, status: 'in-progress' }],
+      ['paper_advance_section', { n: 1, toState: 'writing' }],
+      ['paper_record_verification', { n: 1, verdict: 'PASS' }],
+      ['paper_init_section', { n: 1, slug: 'intro' }],
+    ];
+    for (const [name, args] of calls) {
+      const res = await client.callTool({ name, arguments: { paperRoot: join(root, '.paper'), ...args } });
+      assert.notEqual(res.isError, true, `${name}: ${JSON.stringify(res.content)}`);
+    }
+  } finally {
+    await client.close();
+  }
+  assert.ok(!existsSync(join(root, '.paper', '.paper')), 'no .paper/.paper/ after the MCP tools');
+  // The no-op tools re-save STATE.json in place (pretty-printed): same content, same place.
+  assert.deepEqual(changedPaths(before, snapshot(root), /^\.paper[\\/](SESSION\.log|sessions|STATE\.json)/), [], 'no other file changed');
+  assert.deepEqual(JSON.parse(readFileSync(join(root, '.paper', 'STATE.json'), 'utf8')), JSON.parse(LEGACY_STATE), 'STATE.json content unchanged');
+  const status = runCli(sb, root, ['status']);
+  assert.equal(status.status, 0, status.stderr);
+  assert.doesNotMatch(status.stdout + status.stderr, /no active paper/);
 });

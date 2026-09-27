@@ -28,6 +28,7 @@ import { dispatchVerb, REAL_VERB_LOADERS } from '../pensmith.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './goal.js';
 import { UX02_VERBS, type Ux02Verb } from '../lib/verbs.js';
 import { isOfflineMode } from '../lib/http-mock.js';
+import { getRuntimeOverride, runtimeFlagsFromArgv, setRuntimeOverride } from '../lib/runtime.js';
 import {
   activateReplay,
   deactivateReplay,
@@ -37,8 +38,34 @@ import {
   ReplayError,
 } from '../lib/replay.js';
 
-/** Global flags that never belong to a verb's own argv. */
-const REPLAY_DROPPED_FLAGS = new Set(['--replay', '--estimate', '--show-prompts', '--dry-run']);
+/** Global switches that never belong to a replayed verb's own argv. */
+const REPLAY_DROPPED_FLAGS = new Set(['--estimate', '--show-prompts', '--dry-run']);
+/**
+ * Value-taking flags stripped WITH their value: the global --paper / --runtime
+ * / --model (the dispatcher consumes them, a verb never sees them — --runtime
+ * and --model are re-applied through setRuntimeOverride instead) and --replay.
+ */
+const REPLAY_DROPPED_VALUE_FLAGS = new Set(['--paper', '--runtime', '--model', '--replay']);
+
+/** The logged argv minus the flags a replayed verb must not receive (see above). */
+function verbTokens(logged: readonly string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < logged.length; i += 1) {
+    const tok = logged[i] ?? '';
+    if (tok === '--') {
+      out.push(...logged.slice(i));
+      break;
+    }
+    const name = tok.includes('=') ? tok.slice(0, tok.indexOf('=')) : tok;
+    if (REPLAY_DROPPED_VALUE_FLAGS.has(name)) {
+      if (!tok.includes('=')) i += 1;
+      continue;
+    }
+    if (REPLAY_DROPPED_FLAGS.has(name)) continue;
+    out.push(tok);
+  }
+  return out;
+}
 
 /**
  * The argv to re-dispatch `verb` with: the logged invocation's own tokens after
@@ -46,7 +73,7 @@ const REPLAY_DROPPED_FLAGS = new Set(['--replay', '--estimate', '--show-prompts'
  * --yolo (a bare-router chain logged no verb-specific flags).
  */
 function replayArgs(verb: string, section: number | undefined, logged: string[] | null): string[] {
-  const argv = (logged ?? []).filter((a) => !REPLAY_DROPPED_FLAGS.has(a));
+  const argv = verbTokens(logged ?? []);
   const idx = argv.indexOf(verb);
   if (idx >= 0) return argv.slice(idx + 1);
   const out = section !== undefined && section > 0 ? [String(section)] : [];
@@ -70,7 +97,16 @@ async function runReplay(paperRoot: string, entryId: string): Promise<unknown> {
   }
   const loader = REAL_VERB_LOADERS[verb as Ux02Verb];
   if (!loader) throw new ReplayError(`replay: verb ${verb} has no implementation to re-dispatch`);
-  const rawArgs = replayArgs(verb, rec.section, loggedArgv(paperRoot, rec.run_id));
+  const logged = loggedArgv(paperRoot, rec.run_id);
+  const rawArgs = replayArgs(verb, rec.section, logged);
+  // The logged run's --runtime / --model chose the provider and model its
+  // requests were built for; re-apply them so the replayed request is the same
+  // request (same body hash) — otherwise every step run with --model would
+  // "miss" as if its inputs had changed.
+  const loggedRuntime = runtimeFlagsFromArgv(logged ?? []);
+  if (loggedRuntime.provider !== undefined || loggedRuntime.model !== undefined) {
+    setRuntimeOverride({ ...getRuntimeOverride(), ...loggedRuntime });
+  }
   const offline = isOfflineMode();
   process.stderr.write(
     `pensmith resume: replaying ${entryId} → ${verb} ${rawArgs.join(' ')}`.trimEnd() +

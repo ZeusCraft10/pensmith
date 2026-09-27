@@ -45,6 +45,8 @@ export type MockFailure =
   | { kind: 'timeout' }
   | { kind: 'refusal'; category?: string | null; explanation?: string; recommendedModel?: string | null; contentFilter?: boolean }
   | { kind: 'max_tokens' }
+  /** A reply that ends before the model finished: no stop_reason / finish_reason (a cut stream). */
+  | { kind: 'incomplete' }
   | { kind: 'text'; text: string };
 
 export interface MockReply {
@@ -342,6 +344,7 @@ export class MockLlm {
 
     const refusal = f?.kind === 'refusal' ? f : null;
     const truncated = f?.kind === 'max_tokens';
+    const incomplete = f?.kind === 'incomplete';
     let text = f?.kind === 'text' ? f.text : reply.text ?? (reply.data !== undefined ? JSON.stringify(reply.data) : '');
     if (truncated) text = text.slice(0, Math.max(1, Math.floor(text.length / 2)));
     if (refusal) text = '';
@@ -367,7 +370,7 @@ export class MockLlm {
         cache_read_input_tokens: reply.usage?.cacheRead ?? 0,
       };
       if (reply.iterations) usage['iterations'] = reply.iterations;
-      const message = { id: `msg_mock_${this.requests.length}`, type: 'message', role: 'assistant', model: served, content: blocks, stop_reason: stopReason, stop_sequence: null, stop_details: stopDetails, usage };
+      const message = { id: `msg_mock_${this.requests.length}`, type: 'message', role: 'assistant', model: served, content: blocks, stop_reason: incomplete ? null : stopReason, stop_sequence: null, stop_details: stopDetails, usage };
       if (!stream) {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify(message));
@@ -393,6 +396,10 @@ export class MockLlm {
         await send('content_block_stop', { type: 'content_block_stop', index });
         index += 1;
       }
+      if (incomplete) {
+        res.end(); // the stream ends cleanly at the HTTP level, before message_delta / message_stop
+        return;
+      }
       await send('message_delta', { type: 'message_delta', delta: { stop_reason: stopReason, stop_sequence: null, ...(stopDetails ? { stop_details: stopDetails } : {}) }, usage: { output_tokens: output } });
       await send('message_stop', { type: 'message_stop' });
       res.end();
@@ -415,7 +422,7 @@ export class MockLlm {
         id: `chatcmpl-mock-${this.requests.length}`,
         object: 'chat.completion',
         model: served,
-        choices: [{ index: 0, message: { role: 'assistant', content: refusal ? null : text, refusal: refusalText }, finish_reason: finish }],
+        choices: [{ index: 0, message: { role: 'assistant', content: refusal ? null : text, refusal: refusalText }, finish_reason: incomplete ? null : finish }],
         usage,
       }));
       return;
@@ -429,6 +436,10 @@ export class MockLlm {
     if (refusalText) await chunk({ ...base, choices: [{ index: 0, delta: { refusal: refusalText }, finish_reason: null }] });
     for (let i = 0; !refusal && i < text.length; i += 24) {
       await chunk({ ...base, choices: [{ index: 0, delta: { content: text.slice(i, i + 24) }, finish_reason: null }] });
+    }
+    if (incomplete) {
+      res.end(); // no finish_reason chunk and no [DONE]
+      return;
     }
     await chunk({ ...base, choices: [{ index: 0, delta: {}, finish_reason: finish }] });
     await chunk({ ...base, choices: [], usage });

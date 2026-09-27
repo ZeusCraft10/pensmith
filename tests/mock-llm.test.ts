@@ -130,7 +130,22 @@ test('RUN-21: failure injection maps to the RUN-12 / RUN-24 outcomes', async () 
     await assert.rejects(call(), (e: unknown) => e instanceof ProviderHttpError && /HTTP 429/.test(e.message));
 
     m.fail({ kind: 'http', status: 503 }, { times: 5 });
-    await assert.rejects(call(), (e: unknown) => e instanceof ProviderHttpError && /HTTP 503/.test(e.message));
+    await assert.rejects(call(), (e: unknown) => e instanceof ProviderHttpError && /HTTP 503/.test(e.message) && /after retries/.test(e.message));
+
+    // 529 overloaded_error is transient: retried like 5xx (the official SDKs do),
+    // so two overloads then a reply succeeds on the third attempt.
+    m.reset();
+    m.fail({ kind: 'http', status: 529, errorType: 'overloaded_error', message: 'Overloaded' }, { times: 2 });
+    const ok = await call();
+    assert.equal(ok.stopReason, 'end_turn');
+    assert.equal(m.callCount('section-drafter'), 3, '529 retried twice, then answered');
+    m.fail({ kind: 'http', status: 529, errorType: 'overloaded_error' }, { times: 5 });
+    await assert.rejects(call(), (e: unknown) => e instanceof ProviderHttpError && /is overloaded \(HTTP 529 overloaded_error\) after retries/.test(e.message));
+    // A non-retryable 5xx is sent once and never claims retries.
+    m.reset();
+    m.fail({ kind: 'http', status: 501, errorType: 'api_error' });
+    await assert.rejects(call(), (e: unknown) => e instanceof ProviderHttpError && /failed with HTTP 501 api_error — re-run later/.test(e.message) && !/after retries/.test(e.message));
+    assert.equal(m.callCount('section-drafter'), 1, 'a 501 is not retried');
 
     m.fail({ kind: 'timeout' });
     await assert.rejects(call('section-drafter', 400), (e: unknown) => e instanceof ProviderHttpError && /timed out/.test(e.message));

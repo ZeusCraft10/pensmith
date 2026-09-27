@@ -166,6 +166,8 @@ let warnPrinted = false;
 export function _resetCostCapForTest(): void {
   overCapApproved = false;
   warnPrinted = false;
+  reservedUsd = 0;
+  capMutex = Promise.resolve();
 }
 
 /** `$1.23`, or four decimals below one cent so a tiny cap or call never prints as $0.00. */
@@ -175,41 +177,129 @@ export function formatUsd(n: number): string {
 
 const usd = formatUsd;
 
+// In-flight reservations. A call's cost reaches COSTS.jsonl only after it
+// returns, so concurrent calls in ONE process (the MCP server runs tool calls
+// for different sections in parallel) would each read the same "spent" and all
+// pass. Every check therefore counts the projections of calls still in flight,
+// and check-then-reserve runs under a small in-process mutex so two checks can
+// never interleave between reading the ledger and reserving.
+let reservedUsd = 0;
+let capMutex: Promise<void> = Promise.resolve();
+
+async function underCapMutex<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = capMutex;
+  let unlock!: () => void;
+  capMutex = new Promise<void>((r) => { unlock = r; });
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    unlock();
+  }
+}
+
+/** A held in-flight reservation; release() once the call's cost is recorded (or it failed). */
+export interface BudgetReservation {
+  release(): void;
+}
+
+/** Test-only: the USD currently reserved by calls in flight. */
+export function _reservedUsdForTest(): number {
+  return reservedUsd;
+}
+
 /**
- * The per-call session cap check (RUN-18). Called by the transport BEFORE any
- * byte is sent. Over the cap: ask once per session in a terminal; otherwise
- * GateRefusedError(EXIT_COST_CAP) — nothing is sent.
+ * The one cost-cap check (both paths print the same one-line message): spend
+ * this session + calls in flight + `projectedUsd` over the cap runs the
+ * never-skippable `cost-cap` gate — asked once per session in a terminal,
+ * otherwise GateRefusedError(EXIT_COST_CAP) and nothing is sent.
  */
-export async function assertSessionBudget(args: {
+async function checkCap(args: {
   projectedUsd: number;
-  slug: string;
-  model: string;
-  root?: string;
+  what: string;
+  /** The terminal question, given the formatted cap and session spend. */
+  label: (cap: string, spent: string) => string;
+  root: string;
 }): Promise<void> {
-  const root = args.root ?? projectRoot();
-  const { capUsd } = resolveCostCap(root);
-  const spent = await sessionSpend(root);
+  const { capUsd } = resolveCostCap(args.root);
+  const spent = (await sessionSpend(args.root)) + reservedUsd;
   if (spent + args.projectedUsd <= capUsd || overCapApproved) return;
   const detail =
-    `${args.slug} on ${args.model}: projected ${usd(args.projectedUsd)} + ${usd(spent)} spent this session ` +
+    `${args.what}: projected ${usd(args.projectedUsd)} + ${usd(spent)} spent this session ` +
     `> cap ${usd(capUsd)}; raise [budget] cost_cap_usd or PENSMITH_COST_CAP_USD`;
   const outcome = await runGate('cost-cap', {
     yolo: false,
     detail,
-    question: {
-      id: 'cost-cap',
-      kind: 'confirm',
-      label:
-        `The next model call (${args.slug} on ${args.model}, ~${usd(args.projectedUsd)}) would exceed your ` +
-        `${usd(capUsd)} cost cap (${usd(spent)} spent this session). Continue?`,
-      default: false,
-    },
+    question: { id: 'cost-cap', kind: 'confirm', label: args.label(usd(capUsd), usd(spent)), default: false },
   });
   if (outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true) {
     overCapApproved = true;
     return;
   }
   declineGate('cost-cap', `cost cap: stopped before calling the model (${detail})`);
+}
+
+/**
+ * The per-call session cap check (RUN-18). Called by the transport BEFORE any
+ * byte is sent, and it RESERVES the projection until the caller releases it
+ * (after the call's cost is appended), so parallel calls see each other's
+ * in-flight spend. Over the cap: ask once per session in a terminal; otherwise
+ * GateRefusedError(EXIT_COST_CAP) — nothing is sent.
+ */
+export async function reserveSessionBudget(args: {
+  projectedUsd: number;
+  slug: string;
+  model: string;
+  root?: string;
+}): Promise<BudgetReservation> {
+  const root = args.root ?? projectRoot();
+  const projected = Math.max(0, args.projectedUsd);
+  return underCapMutex(async () => {
+    await checkCap({
+      projectedUsd: projected,
+      what: `${args.slug} on ${args.model}`,
+      label: (cap, spent) =>
+        `The next model call (${args.slug} on ${args.model}, ~${usd(projected)}) would exceed your ${cap} cost cap (${spent} spent this session). Continue?`,
+      root,
+    });
+    reservedUsd += projected;
+    let released = false;
+    return {
+      release(): void {
+        if (released) return;
+        released = true;
+        reservedUsd = Math.max(0, reservedUsd - projected);
+      },
+    };
+  });
+}
+
+/** The per-call check without a reservation (callers that record nothing). */
+export async function assertSessionBudget(args: {
+  projectedUsd: number;
+  slug: string;
+  model: string;
+  root?: string;
+}): Promise<void> {
+  (await reserveSessionBudget(args)).release();
+}
+
+/**
+ * The --yolo pre-flight (D-17-27): the projected cost of the steps THIS
+ * invocation runs (estimator.ts EstimateScope) against the same cap, through the
+ * same gate and the same one-line message as the per-call check.
+ */
+export async function assertInvocationBudget(args: { projectedUsd: number; what: string; root?: string }): Promise<void> {
+  const root = args.root ?? projectRoot();
+  await underCapMutex(() =>
+    checkCap({
+      projectedUsd: args.projectedUsd,
+      what: args.what,
+      label: (cap, spent) =>
+        `This run (${args.what}, ~${usd(args.projectedUsd)}) would exceed your ${cap} cost cap (${spent} spent this session). Continue?`,
+      root,
+    }),
+  );
 }
 
 /**

@@ -27,6 +27,8 @@ import {
   type Sandbox,
 } from './helpers/paper-cli-harness.js';
 import { loadChokepointRow, rowPattern, scopedFiles, violations } from './helpers/chokepoint-row.js';
+import { withLlmSandbox } from './helpers/llm-sandbox.js';
+import { readdirSync } from 'node:fs';
 
 const IGNORE_LOGS = /^\.paper[\\/](SESSION\.log|sessions)/;
 
@@ -70,6 +72,14 @@ test('RUN-14: resolver order — flag/env, the cwd paper, a new paper; MCP/hooks
     { kind: 'root', root: withPaper, source: 'env' },
   );
   assert.equal(servicePaperRoot({ PENSMITH_PAPER_ROOT: withPaper }), withPaper);
+  // Step 5 (no paper, no pointer): read-only and bare/next/resume fall back to
+  // the cwd; any other verb is EXIT_USAGE (it would build a partial paper).
+  assert.deepEqual(resolvePaperRoot({ verb: 'status', mode: 'cli', readOnly: true, cwd: empty, env: {} }), { kind: 'root', root: empty, source: 'fallback' });
+  for (const verb of [null, 'next', 'resume']) {
+    assert.deepEqual(resolvePaperRoot({ verb, mode: 'cli', cwd: empty, env: {} }), { kind: 'root', root: empty, source: 'fallback' });
+  }
+  assert.throws(() => resolvePaperRoot({ verb: 'write', mode: 'cli', cwd: empty, env: {} }),
+    (e: unknown) => (e as { exitCode?: number }).exitCode === EXIT_USAGE && /no paper in /.test((e as Error).message));
   assert.equal(activePaperBanner({ name: 'p2', root: '/x/p2' }), '(active paper "p2" at /x/p2)');
 });
 
@@ -138,6 +148,40 @@ test('RUN-14: with no assignment, bare `--yolo` and a non-interactive `write 1` 
   assert.match(yolo.stderr, /--yolo never follows the active-paper pointer/);
   assert.deepEqual(changedPaths(before, snapshot(p2), IGNORE_LOGS), [], 'p2 is untouched');
   assert.ok(!existsSync(join(empty, '.paper')), 'nothing created in the empty folder');
+});
+
+test('RUN-14 / S-21: with no paper and no pointer, a mutating verb exits 2 and creates nothing and calls no model', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: 'sk-test-no-paper-0001', PENSMITH_NO_LLM: undefined }, paper: false }, async (sb) => {
+    const cases: string[][] = [
+      ['write', '1'],
+      ['plan', '1'],
+      ['verify', '1'],
+      ['research', '--yolo'],
+      ['add', '10.1145/3442188.3445922'],
+      ['outline', '--yolo'],
+      ['compile', '--yolo'],
+      ['done', '--yolo'],
+    ];
+    for (const args of cases) {
+      const r = await sb.runTsx(null, args);
+      assert.equal(r.status, EXIT_USAGE, `${args.join(' ')}: ${r.stdout}\n${r.stderr}`);
+      assert.match(r.stderr, /^pensmith: no paper in .+ — run pensmith new to start one here, or pass --paper <name\|path>/m, args.join(' '));
+      assert.doesNotMatch(r.stderr, STACK_LINE);
+      assert.deepEqual(readdirSync(sb.root), [], `${args.join(' ')}: the folder is unchanged (no .paper/)`);
+    }
+    // An --estimate preview is read-only (it prints the projection) — but
+    // "proceed" turns it into the mutating run, which is refused the same way.
+    const est = await sb.runTsx(null, ['write', '1', '--estimate'], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: 'y\n' });
+    assert.equal(est.status, EXIT_USAGE, `${est.stdout}\n${est.stderr}`);
+    assert.match(est.stderr, /^pensmith: no paper in /m);
+    assert.deepEqual(readdirSync(sb.root), [], 'estimate → proceed created nothing');
+    assert.equal(sb.mock!.callCount(), 0, 'no model request was made');
+    // Read-only verbs still answer "no active paper", and bare/new are the way in.
+    const status = await sb.runTsx(null, ['status']);
+    assert.notEqual(status.status, EXIT_USAGE, status.stderr);
+    assert.match(status.stdout + status.stderr, /no active paper/);
+    assert.deepEqual(readdirSync(sb.root), []);
+  });
 });
 
 test('RUN-14: `--paper p2 write 1` works non-interactively from anywhere', () => {

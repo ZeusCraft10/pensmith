@@ -77,9 +77,22 @@ function realDataDirHits(sb: ReturnType<typeof sandbox>): string[] {
   return hits;
 }
 
+/**
+ * A stand-in "real" data dir that is guaranteed to lie OUTSIDE os.tmpdir(),
+ * wherever the checkout lives (a clone under the temp dir included): a
+ * non-existent folder at the filesystem root of the temp dir's volume.
+ */
+function outsideTmp(): string {
+  const p = path.join(path.parse(os.tmpdir()).root, 'pensmith-no-such-real-data-dir');
+  const rel = path.relative(fs.realpathSync.native(os.tmpdir()), p);
+  assert.ok(rel.startsWith('..') || path.isAbsolute(rel), `precondition: ${p} is outside os.tmpdir()`);
+  assert.ok(!fs.existsSync(p), `precondition: ${p} does not exist`);
+  return p;
+}
+
 test('CI-09: under a test context a platform data dir outside os.tmpdir() is never used', () => {
   const runDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-iso-run-'));
-  const outside = path.join(REPO, 'no-such-real-data-dir');
+  const outside = outsideTmp();
   // Linux/POSIX: XDG_DATA_HOME outside tmp → the runner's per-run dir.
   assert.equal(localDataDir('linux', { PENSMITH_TEST: '1', XDG_DATA_HOME: outside, PENSMITH_TEST_DATA_DIR: runDir }), runDir);
   // …and NODE_TEST_CONTEXT alone is a test context too.
@@ -107,7 +120,7 @@ test('CI-09: a platform data dir a test redirected into os.tmpdir() is honoured'
 });
 
 test('CI-09: with no per-run dir, a test context gets a private per-process temp dir', () => {
-  const outside = path.join(REPO, 'no-such-real-data-dir');
+  const outside = outsideTmp();
   const a = localDataDir('linux', { PENSMITH_TEST: '1', XDG_DATA_HOME: outside });
   const b = localDataDir('linux', { NODE_TEST_CONTEXT: 'child-v8', HOME: outside });
   assert.equal(a, b, 'one per-process dir, reused');

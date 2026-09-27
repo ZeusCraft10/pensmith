@@ -26,6 +26,9 @@
 // D-07/Pitfall 7: NEVER console.log in this file — corrupts stdio MCP frame.
 //                 Use process.stderr.write or the session-log if diagnostics needed.
 
+// FIRST import: filters a dependency's DEP0040 (punycode) deprecation noise
+// before any module that loads citation-js is evaluated (RUN-12).
+import '../bin/lib/node-warnings.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { registerPaperResources } from './resources.js';

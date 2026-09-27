@@ -275,14 +275,17 @@ test('H1 (D-17-27): a --yolo projection between 50% and 100% of the cap is NOT r
       writeState(sb.root, manySections(4));
       writePaperFile(sb.root, 'RESEARCH.md');
       writePaperFile(sb.root, 'OUTLINE.md');
-      const est = await projectEstimate({ paperRoot: sb.root });
+      // The pre-flight projects the steps THIS run makes: `write --yolo` (wave
+      // mode) is every section still to write — not the rest of the paper.
+      const est = await projectEstimate({ paperRoot: sb.root, scope: { verb: 'write' } });
       assert.ok(est.totalUsd > 0);
-      const between = sb.runCli(['compile', '--yolo'], { env: { PENSMITH_COST_CAP_USD: String(est.totalUsd / 0.67) } });
-      assert.ok(!/REFUSED — --yolo projects/.test(between.stderr),
+      assert.deepEqual(est.rows.map((r) => r.step), ['write §1', 'write §2', 'write §3', 'write §4']);
+      const between = sb.runCli(['write', '--yolo'], { env: { PENSMITH_COST_CAP_USD: String(est.totalUsd / 0.67) } });
+      assert.ok(!/would exceed your cost cap/.test(between.stderr),
         `H1: a projection at 67% of the cap must NOT be refused by the pre-flight; stderr=${between.stderr}`);
-      const over = sb.runCli(['compile', '--yolo'], { env: { PENSMITH_COST_CAP_USD: String(est.totalUsd / 1.1) } });
+      const over = sb.runCli(['write', '--yolo'], { env: { PENSMITH_COST_CAP_USD: String(est.totalUsd / 1.1) } });
       assert.equal(over.status, 5, `H1: above the cap → EXIT_COST_CAP; stderr=${over.stderr}`);
-      assert.match(over.stderr, /REFUSED — --yolo projects \$\d+\.\d\d for the remaining steps, over the \$\d+\.\d\d session cost cap/);
+      assert.match(over.stderr, /^pensmith: This call would exceed your cost cap\. Continue\? \(write §1 … write §4 \(4 steps\): projected \$\d+\.\d\d \+ \$0\.00 spent this session > cap \$\d+\.\d\d; raise \[budget\] cost_cap_usd or PENSMITH_COST_CAP_USD\)/m);
     });
   });
 
@@ -326,12 +329,14 @@ test('C2-H1: `pensmith --yolo` and `write --yolo` in a paper-less dir do NOT cra
 test('C4-HIGH: bare `pensmith --yolo` against a corrupt STATE.json does NOT crash (exit 0)',
   { skip: !flagsWired }, () => {
     const root = freshRoot();
-    writeFileSync(join(root, 'STATE.json'), '{ this is not json ');
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    writeFileSync(join(root, '.paper', 'STATE.json'), '{ this is not json ');
     const res = runCli(['--yolo'], root);
     // RUN-09: the router routes a corrupt STATE.json to `status` (attention),
     // which reports it and exits EXIT_ERROR (1) — a defined status with a
-    // one-line diagnostic, never an uncaught crash (the pre-v1 root-level file
-    // is first moved into .paper/ by the legacy-layout migration, RUN-13).
+    // one-line diagnostic, never an uncaught crash. The corrupt file is the
+    // paper's own .paper/STATE.json (RUN-13); a root-level STATE.json that is
+    // not pensmith-shaped belongs to the user and is never read or moved.
     assert.equal(res.status, 1,
       `C4-HIGH: a corrupt STATE.json must exit 1 (EXIT_ERROR) with a diagnostic; stderr=${res.stderr} stdout=${res.stdout}`);
     assert.match(res.stdout + res.stderr, /unreadable\/corrupt/, 'C4-HIGH: the corrupt STATE.json is reported');

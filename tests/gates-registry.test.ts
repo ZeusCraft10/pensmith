@@ -41,6 +41,7 @@ import {
   snapshot,
   changedPaths,
 } from './helpers/paper-cli-harness.js';
+import { withLlmSandbox } from './helpers/llm-sandbox.js';
 
 const IGNORE_LOGS = /^\.paper[\\/](SESSION\.log|sessions)/;
 const NEVER: ReadonlySet<GateId> = new Set(['cost-cap', 'estimate-proceed', 'detector-consent', 'paper-pointer']);
@@ -116,7 +117,7 @@ test('RUN-28 outline-approval: no terminal → 3 and nothing written; --yolo app
   const before = snapshot(root);
   const r = runCli(sb, root, ['outline']);
   assert.equal(r.status, EXIT_APPROVAL, `${r.stdout}\n${r.stderr}`);
-  assert.match(r.stderr, /^pensmith: Approve this outline and register its sections\? \(no OUTLINE\.md was written\) needs an answer: re-run in a terminal, or pass --yolo to approve the outline\.$/m);
+  assert.match(r.stderr, /^pensmith: Approve this outline and register its sections\? \(no outline was requested and no OUTLINE\.md was written\) needs an answer: re-run in a terminal, or pass --yolo to approve the outline\.$/m);
   assert.doesNotMatch(r.stderr, STACK_LINE);
   assert.deepEqual(changedPaths(before, snapshot(root), IGNORE_LOGS), []);
   const y = runCli(sb, root, ['outline', '--yolo']);
@@ -173,34 +174,82 @@ test('RUN-28 add-remap: no terminal → the source is added, the remap skipped w
   assert.match(y.stdout, /added [a-z0-9_-]+\.$/m);
 });
 
-test('RUN-28 research-prune: no terminal → 3 and no library written when candidates exist; --yolo keeps every candidate', () => {
+test('RUN-28 research-prune: no terminal → 3 before any search, and nothing written; --yolo keeps every candidate', () => {
   const sb = sandbox('gate-prune');
   const root = sb.project('p');
   assert.equal(runCli(sb, root, ['new', '--yolo', '--from', ASSIGNMENT_FIXTURE]).status, EXIT_OK);
   const before = snapshot(root);
   const r = runCli(sb, root, ['research']);
-  if (r.status === EXIT_APPROVAL) {
-    assert.match(r.stderr, /^pensmith: Select the candidate sources to keep \(\d+ candidates found; no library was written\) needs an answer: re-run in a terminal, or pass --yolo to keep every candidate\.$/m);
-    assert.deepEqual(changedPaths(before, snapshot(root), IGNORE_LOGS), [], 'nothing written');
-  } else {
-    // No candidate for this query in the recorded fixtures: the gate has nothing to ask.
-    assert.equal(r.status, EXIT_OK, `${r.stdout}\n${r.stderr}`);
-    assert.match(r.stderr, /0 candidates remain/);
-  }
+  assert.equal(r.status, EXIT_APPROVAL, `${r.stdout}\n${r.stderr}`);
+  assert.match(r.stderr, /^pensmith: Select the candidate sources to keep \(nothing was searched, sent or written\) needs an answer: re-run in a terminal, or pass --yolo to keep every candidate\.$/m);
+  assert.deepEqual(changedPaths(before, snapshot(root), IGNORE_LOGS), [], 'nothing written (no RESEARCH.md, no LIBRARY.json)');
   const y = runCli(sb, root, ['research', '--yolo']);
   assert.equal(y.status, EXIT_OK, `${y.stdout}\n${y.stderr}`);
   assert.ok(existsSync(join(root, '.paper', 'LIBRARY.json')));
 });
 
-test('RUN-28 research-scope: research.ts asks both research gates through the registry', () => {
-  // A multi-scope reply needs a live (or scripted) disambiguator; under the
-  // deterministic stub there is one scope, so the scope question is not asked
-  // in CI. The gate's no-terminal/--yolo behaviour is covered by the registry
-  // drive above; this pins that the verb routes it through runGate.
-  const src = readFileSync(join(REPO, 'bin', 'cli', 'research.ts'), 'utf8');
-  assert.match(src, /runGate\('research-scope'/);
-  assert.match(src, /runGate\('research-prune'/);
-  assert.doesNotMatch(src, /\bask\(/);
+// The research and outline gates through the REAL verbs against the mock LLM:
+// a refusal without a terminal is decided before any model call (0 requests,
+// no COSTS.jsonl entry, no RESEARCH.md); with scripted answers both research
+// questions are really asked (the scope choice decides the searched queries,
+// the prune choice decides what the library keeps).
+const MOCK_KEY = 'sk-test-gates-0001';
+const SEARCHABLE = 'attention mechanisms in neural networks'; // recorded in the source cassettes
+
+function seedIntake(paper: string): void {
+  writeFileSync(join(paper, 'INTAKE.md'), '---\ntopic: attention mechanisms\ndiscipline: computer-science\n---\n# Intake\n\nWrite a 1500-word review of attention mechanisms in neural networks.\n');
+}
+
+test('RUN-28: outline and research refuse without a terminal BEFORE any model call — 0 requests, nothing billed, nothing written', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: MOCK_KEY, PENSMITH_NO_LLM: undefined, PENSMITH_PROMPT_MODE: undefined } }, async (sb) => {
+    seedIntake(sb.paper);
+    const before = snapshot(sb.root);
+    for (const verb of ['outline', 'research']) {
+      const r = await sb.runTsx(null, [verb]);
+      assert.equal(r.status, EXIT_APPROVAL, `${verb}: ${r.stdout}\n${r.stderr}`);
+      assert.match(r.stderr, /needs an answer: re-run in a terminal, or pass --yolo/, verb);
+    }
+    assert.equal(sb.mock!.callCount(), 0, 'no model request');
+    assert.deepEqual(changedPaths(before, snapshot(sb.root), IGNORE_LOGS), [], 'no COSTS.jsonl, RESEARCH.md, LIBRARY.json or OUTLINE.md');
+  });
+});
+
+test('RUN-28 research-scope + research-prune: scripted answers drive both questions through the real verb', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: MOCK_KEY, PENSMITH_NO_LLM: undefined } }, async (sb) => {
+    seedIntake(sb.paper);
+    const scopes = { scopes: [{ label: 'unrelated-scope', queries: ['zz no recorded results zz'] }, { label: 'attention-scope', queries: [SEARCHABLE] }] };
+    sb.mock!.script('topic-disambiguator', { data: scopes });
+    // Scope question → option 2; prune question → keep only candidate 1.
+    const r = await sb.runTsx(null, ['research'], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '2\n1\n' });
+    assert.equal(r.status, EXIT_OK, `${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, /Which research scope should I use\?/, 'the scope question was asked');
+    assert.match(r.stderr, /Select candidates to keep \(\d+ found\)/, 'the prune question was asked');
+    const log = readFileSync(join(sb.paper, 'RESEARCH.md'), 'utf8');
+    assert.match(log, /attention-scope/, 'the chosen scope was searched');
+    assert.ok(log.includes(SEARCHABLE));
+    assert.ok(!log.includes('zz no recorded results zz'), 'the other scope was not');
+    const lib = JSON.parse(readFileSync(join(sb.paper, 'LIBRARY.json'), 'utf8')) as { entries: unknown[] };
+    assert.equal(lib.entries.length, 1, 'the prune answer kept one source');
+
+    // --yolo takes the registry choice for both: the first scope, every candidate.
+    sb.mock!.script('topic-disambiguator', { data: scopes });
+    const y = await sb.runTsx(null, ['research', '--yolo']);
+    assert.equal(y.status, EXIT_OK, y.stderr);
+    assert.doesNotMatch(y.stderr, /Which research scope should I use\?/);
+    assert.match(readFileSync(join(sb.paper, 'RESEARCH.md'), 'utf8'), /unrelated-scope/, '--yolo searched the first proposed scope');
+  });
+});
+
+test('RUN-28: research aborted at the prune question writes no RESEARCH.md and no library', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: MOCK_KEY, PENSMITH_NO_LLM: undefined } }, async (sb) => {
+    seedIntake(sb.paper);
+    sb.mock!.script('topic-disambiguator', { data: { scopes: [{ label: 'attention-scope', queries: [SEARCHABLE] }] } });
+    // One scope (no scope question); stdin closes before the prune answer.
+    const r = await sb.runTsx(null, ['research'], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '' });
+    assert.equal(r.status, EXIT_APPROVAL, `${r.stdout}\n${r.stderr}`);
+    assert.ok(!existsSync(join(sb.paper, 'RESEARCH.md')), 'no research log for a research that did not finish');
+    assert.ok(!existsSync(join(sb.paper, 'LIBRARY.json')));
+  });
 });
 
 test('RUN-28 revise-swap: no terminal → 3 and DRAFT.md unchanged; --yolo applies the swap', () => {

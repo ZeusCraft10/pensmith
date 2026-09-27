@@ -3,8 +3,9 @@
 > Verify citations + claims in one section. Per-section verb — touches ONLY
 > `.paper/sections/<NN>-<slug>/` (TEST-09 section-isolation invariant).
 >
-> **D-13 LOCKED INVARIANT — Phase 3 verify path is 100% deterministic.**
-> Zero LLM calls between Pass-1 fetch and `<sectionVerification>` write.
+> **D-13 LOCKED INVARIANT — the blocking verdict is 100% deterministic.**
+> No model call decides a Pass-1 or Pass-3 verdict or the section status; the
+> advisory Pass-2 / Pass-4 sections are added after the status is frozen.
 
 <capability_check>
 required:
@@ -41,8 +42,10 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
 
 ## Body
 
-> **D-13 LOCKED INVARIANT — Phase 3 verify path is 100% deterministic.**
-> NO LLM call SHALL be made between the Pass-1 fetch and the `sectionVerification` write.
+> **D-13 LOCKED INVARIANT — the blocking verdict is 100% deterministic.**
+> NO model call SHALL decide a Pass-1 / Pass-3 verdict or the section status (steps 4–8).
+> The advisory claim-support (Pass 2) and orphan-claim (Pass 4) sections are computed
+> after the status is frozen and never change it (VRFY-07).
 > The dormant fuzzy-judge and quote-checker prompts exist (Plan 05 hash-pins them) but are
 > DORMANT — calibrated for Phase 8 ambiguous-case tie-break only.
 > Narration in VERIFICATION.md is built from template literals embedded in this body, NOT
@@ -63,7 +66,8 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
    - For each citekey, look up the parsed `.paper/CITATIONS.bib` entry → `claimed = {title, authors, doi, retracted}`.
    - If the citekey is absent from `.paper/CITATIONS.bib` → `verdict = 'FABRICATED'`, `reason = 'citekey ${citekey} not present in .paper/CITATIONS.bib (citation invented by drafter)'`. Skip the rest of step 4 for this citekey.
    - For each DOI present in claimed: call `sources.crossref.fetchById(doi)` (cassette-backed in CI per Plan 03-04 Task 4.1) → `actual = {title, authors, doi}`.
-   - If `fetchById(doi)` returns null / 404 → `verdict = 'FABRICATED'`, `reason = 'DOI ${doi} did not resolve at Crossref'`.
+   - If `fetchById(doi)` returns null / 404 (a LIVE answer: the DOI does not exist) → `verdict = 'FABRICATED'`, `reason = 'DOI ${doi} did not resolve via Crossref'`.
+   - If the re-fetch is UNAVAILABLE because of the network mode — a sources-offline fixture miss (`PENSMITH_OFFLINE=1`, the test runner) or `--dry-run` — → `verdict = 'UNVERIFIABLE'`, `reason = 'offline: no recorded fixture — re-run online'` (or `'dry-run: no live re-fetch under --dry-run — re-run online'`). It is never OK, MIS-CITED or FABRICATED (RUN-03, D-17-07), and it BLOCKS compile and done like a failing verdict. The same holds when the live Retraction Watch re-query is unavailable offline.
    - Compute `titleJW = jaroWinkler(nfkcNormalize(actual.title), nfkcNormalize(claimed.title))` against `TITLE_JW_THRESHOLD = 0.92` (CONTEXT D-11).
    - Compute `authorJW = jaroWinkler(firstAuthorSurname(actual.authors), firstAuthorSurname(claimed.authors))` against `AUTHOR_JW_THRESHOLD = 0.85` (first-author surname via `bin/lib/author-normalize.ts` per D-11).
    - **DETERMINISTIC AND-gate verdict** (no LLM): if both `titleJW >= TITLE_JW_THRESHOLD` AND `authorJW >= AUTHOR_JW_THRESHOLD` → `verdict = 'OK'`; otherwise `verdict = 'MIS-CITED'`, `reason = 'titleJW=${...} authorJW=${...} below threshold'`.
@@ -75,11 +79,11 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
     - **Retracted-flag handling**: if `claimed.retracted === true` (from the `.paper/CITATIONS.bib` parse, propagated from research-time Retraction Watch cross-check) → `verdict = 'MIS-CITED'`, `reason = 'cited a retracted work (per Retraction Watch cross-check at research time)'`. **Override even if JW thresholds pass** — retraction is a citation-integrity failure regardless of metadata match.
     - **Multi-DOI redirect handling**: if `fetchById(claimed.doi)` returns a record whose `doi` field DIFFERS from `claimed.doi` (Crossref returns canonical DOI for redirected entries), treat as `'OK'` iff `titleJW >= 0.98` AND `authorJW >= 0.95` (stricter band to account for Crossref publishing two distinct DOIs for the same work). Otherwise `verdict = 'MIS-CITED'`, `reason = 'claimed DOI ${claimed.doi} resolves to a different work (canonical: ${actual.doi})'`.
 
-5. **Narrate Pass-1 results into VERIFICATION.md** via TEMPLATE LITERAL (no LLM): for each `pass1Result`, format as a Markdown table row:
+5. **Narrate Pass-1 results into VERIFICATION.md** via TEMPLATE LITERAL (no LLM): for each `pass1Result`, one list row (`bin/lib/verify/verdict-rows.ts renderPass1VerdictRow` — the same module parses it back for compile and done):
    ```text
-   | ${citekey} | ${verdict} | titleJW=${titleJW.toFixed(2)} authorJW=${authorJW.toFixed(2)} | ${reason} |
+   - ${citekey}: **${verdict}** — titleJW=${titleJW.toFixed(2)}, authorJW=${authorJW.toFixed(2)} — ${reason}
    ```
-   The narration is mechanical string interpolation — no model call is issued. The table is appended to `VERIFICATION.md` under `## Pass 1 — Citation Integrity`.
+   The narration is mechanical string interpolation — no model call is issued. The rows go under `## Pass-1 (citation integrity, deterministic — D-11 AND-gate)`.
 
 6. **PASS 3 — Quote Integrity (DETERMINISTIC, VRFY-04 / VRFY-05)**:
 
@@ -105,30 +109,32 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
    - Else if all quotes are `'PDF_UNAVAILABLE'` or `'TEXT_UNAVAILABLE'` → section Pass-3 is **UNVERIFIABLE** for this source (D-08-AMENDED `status: 'unverifiable'`).
    - Mixed (some `'OK'`, some `'PDF_UNAVAILABLE'`): per-source Pass-3 is **UNVERIFIABLE** overall (do NOT auto-promote to PASS — surface to writer so they can substitute a quote with available OA PDF backing).
 
-7. **Narrate Pass-3 results into VERIFICATION.md** via TEMPLATE LITERAL (no LLM): for each `pass3Result`, format as a Markdown table row:
+7. **Narrate Pass-3 results into VERIFICATION.md** via TEMPLATE LITERAL (no LLM): for each `pass3Result`, one list row (`renderPass3VerdictRow`):
    ```text
-   | ${quote.slice(0,40)}... | ${verdict} | levRatio=${ratio.toFixed(3)} |
+   - ${citekey} ("${quoteSnippet}…"): **${verdict}** — lev=${levRatio.toFixed(3)} — ${reason}
    ```
-   Appended under `## Pass 3 — Quote Integrity`.
+   The rows go under `## Pass-3 (quote integrity, deterministic — levenshtein-substring)`.
 
 8. **Compute overall verdict** (DETERMINISTIC, no LLM):
-   - **PASS** iff every Pass-1 verdict is `'OK'` AND every Pass-3 verdict is `'OK'` (NO `'unverifiable'`, NO `'NOT_FOUND'`).
-   - **UNVERIFIABLE** iff Pass-1 all `'OK'` AND Pass-3 has >= 1 `'unverifiable'` verdict AND zero `'NOT_FOUND'` verdicts → overall `status = 'unverifiable'` (D-08-AMENDED).
-     **Phase 3 policy (CYCLE-3 MEDIUM REVIEWS CONVERGENCE)**: `'unverifiable'` does NOT block compile in Phase 3 (the README disclaimer per PRD §3 covers this), but DOES surface loudly in VERIFICATION.md so the writer knows. A future approval-gate phase (DEFERRED to Phase 7 'compile + export polish' per ROADMAP.md, when `pensmith compile` lands) will optionally add a `--strict` flag that escalates `'unverifiable'` to a compile-blocking error.
-   - **FAIL** otherwise (any `'FABRICATED'` / `'MIS-CITED'` / `'NOT_FOUND'`).
+   - **FAIL** (`status: failed`) iff any `'FABRICATED'` / `'MIS-CITED'` Pass-1 verdict or any `'NOT_FOUND'` Pass-3 verdict.
+   - **UNVERIFIABLE, blocking** (`status: unverifiable`) iff no FAIL and any Pass-1 verdict is `'UNVERIFIABLE'` (checked offline or under `--dry-run`, step 4): compile and done refuse the row with "re-run online".
+   - **UNVERIFIABLE, advisory** (`status: unverifiable`) iff no FAIL, no Pass-1 UNVERIFIABLE, and a Pass-3 quote is `'PDF_UNAVAILABLE'` / `'TEXT_UNAVAILABLE'`: it surfaces loudly in VERIFICATION.md but does not block compile (Pitfall 3; the README disclaimer per PRD §3 covers it).
+   - **PASS** (`status: verified`) otherwise.
 
-9. **Write `<sectionVerification(n, slug)>`** = `.paper/sections/<NN>-<slug>/VERIFICATION.md` via `bin/lib/atomic-write.ts` (D-07 chokepoint) with:
-   - `## Pass 1 — Citation Integrity` table (step 5 narration).
-   - `## Pass 3 — Quote Integrity` table (step 7 narration).
-   - `## Overall Verdict` line (step 8).
-   - **D-13 LOCKED INVARIANT footer**: literal block `> This verification was produced by the deterministic Pass-1/Pass-3 algorithms. No LLM was invoked at verify time per D-13.`
+9. **Write `<sectionVerification(n, slug)>`** = `.paper/sections/<NN>-<slug>/VERIFICATION.md` via `bin/lib/atomic-write.ts` (D-07 chokepoint), in this order:
+   - **Offline marker** (RUN-02): when sources were offline, the FIRST line is `> OFFLINE MODE (<reason>) — recorded fixtures, not live results.` (or the `--dry-run` synthetic-sources form). A VERIFICATION.md written under `--dry-run` never lets a real compile or export through (RUN-27): re-verify without `--dry-run`.
+   - `# VERIFICATION (Section N, slug)` and the `Status: verified | failed | unverifiable` line (compile and done refuse a missing Status line and a `Status: failed` even when no row parses — fail closed).
+   - The Pass-1 rows (step 5) and the Pass-3 rows (step 7).
+   - The source-freshness table and the ADVISORY claim-support (Pass 2) and orphan-claim (Pass 4) sections. They are computed after the status above is frozen and never change it (VRFY-07).
 
 10. **Update PlanFrontmatter** per D-08-AMENDED LOCKED enum:
     - **PASS** → `status: 'verified'`.
     - **UNVERIFIABLE** → `status: 'unverifiable'`.
     - **FAIL** → `status: 'failed'`.
 
-    Set `verified_against_draft_hash = sha256(DRAFT.md)`. If the drafter is re-run, the hash changes, automatically invalidating this verification — the cycle-break between write and verify (D-08-AMENDED).
+    Set `verified_against_draft_hash` (the per-section hash compile recomputes from DRAFT.md bytes + sorted `assigned_sources`). If the drafter is re-run, the hash changes, automatically invalidating this verification — the cycle-break between write and verify (D-08-AMENDED).
+
+    **Exit code** (RUN-09): 0 for `verified` and for an advisory `unverifiable`; **4** (EXIT_BLOCKED) for `failed` and for a blocking Pass-1 UNVERIFIABLE.
 
 11. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/`.
 

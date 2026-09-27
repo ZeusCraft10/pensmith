@@ -14,7 +14,8 @@
 // It is used by the Phase 17 acceptance checks and by later phases (SWEEP-01).
 //
 // --fail kinds: 401 | 404 (model_not_found) | 429 | 500 | 503 | 529 | timeout |
-// refusal | content_filter | max_tokens — applied to every request, or to the
+// refusal | content_filter | max_tokens | incomplete (no stop reason: a cut
+// stream) — applied to every request, or to the
 // first <times> requests. Runs through tsx (the helper is TypeScript).
 
 import { appendFileSync } from 'node:fs';
@@ -33,6 +34,7 @@ function failureFor(kind) {
   if (kind === 'refusal') return { kind: 'refusal', category: 'cyber' };
   if (kind === 'content_filter') return { kind: 'refusal', contentFilter: true };
   if (kind === 'max_tokens') return { kind: 'max_tokens' };
+  if (kind === 'incomplete') return { kind: 'incomplete' };
   throw new Error(`mock-llm: unknown --fail kind "${kind}"`);
 }
 

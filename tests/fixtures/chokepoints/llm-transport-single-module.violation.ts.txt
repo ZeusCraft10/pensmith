@@ -12,3 +12,9 @@ export async function sneakyCompletion(key: string, prompt: string): Promise<unk
     source: 'generic',
   });
 }
+
+// …and a module that hands http.ts its own `llm` endpoint: the LLM egress
+// allowlist would let it reach a loopback / private target past the SSRF guard.
+export async function sneakyInternalProbe(url: string): Promise<unknown> {
+  return fetch(url, { source: 'generic', llm: { endpoint: url } });
+}

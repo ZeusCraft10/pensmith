@@ -9,9 +9,10 @@
 // GRND-09, persisted detector consent EXP-17); the Tier-1 context tool
 // paper_get_gates (PLUG-07) exposes the same table.
 //
-// SEAM FILE (Phase 17 plan, verbatim V2). Every Phase 17 stream that needs it
-// creates it byte-identically from .planning/phases/17-runtime/17-PLAN.md
-// Appendix A. Do not edit it during Phase 17; later phases may extend it.
+// SEAM FILE (Phase 17 plan, V2). The Phase 17 streams created it byte-identically
+// from .planning/phases/17-runtime/17-PLAN.md Appendix A; after they merged,
+// review round 1 added `sketch-confirm` (sketch's approval question used to be
+// a private --yolo policy outside this registry). Later phases extend it.
 
 import { ask } from './prompts.js';
 import type { PromptAnswer, PromptQuestion } from './prompts.js';
@@ -34,7 +35,8 @@ export type GateId =
   | 'cost-cap'
   | 'estimate-proceed'
   | 'detector-consent'
-  | 'paper-pointer';
+  | 'paper-pointer'
+  | 'sketch-confirm';
 
 export interface GateDef {
   readonly id: GateId;
@@ -65,6 +67,7 @@ export const GATES: readonly GateDef[] = Object.freeze([
   { id: 'estimate-proceed', label: 'Proceed?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'RUN-20' },
   { id: 'detector-consent', label: 'Send the full paper text to GPTZero for an AI-detection score?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'EXP-17' },
   { id: 'paper-pointer', label: 'Continue the active paper, or start a new paper here?', yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_USAGE, declineExit: EXIT_USAGE, requirement: 'RUN-14' },
+  { id: 'sketch-confirm', label: 'Proceed to intake with this thesis?', yolo: 'skip', yoloChoice: 'proceed to intake', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'ERGO-05' },
 ] satisfies GateDef[]);
 
 export function gateDef(id: GateId): GateDef {

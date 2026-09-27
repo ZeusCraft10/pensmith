@@ -122,7 +122,7 @@ test('known-bad-pass2: Pass 2 calls the model only via complete(), which checks 
     assert.ok(/\bcomplete(<[^>]*>)?\(\{/.test(src), 'pass2.ts calls complete()');
     assert.ok(!/from '\.\.\/http\.js'|from 'undici'/.test(src), 'pass2.ts never talks to the network directly');
     const transport = readFileSync(fileURLToPath(new URL('../bin/lib/anthropic.ts', import.meta.url)), 'utf-8');
-    const gate = transport.indexOf('await assertSessionBudget(');
+    const gate = transport.indexOf('await reserveSessionBudget(');
     const send = transport.indexOf('await sendAttempt(');
     assert.ok(gate >= 0 && send > gate, 'the session cap is checked BEFORE the attempt is sent');
   },

@@ -43,7 +43,8 @@ verbs bijective with the 16 workflow bodies).
   pointer; RUN-14), seeded with the thesis. sketch itself writes NOTHING (the
   no-advance invariant).
 - Exit code: 0 after a confirmed hand-off (or `new`'s own code); 3 (EXIT_APPROVAL)
-  on a decline or when the answers run out (RUN-09).
+  on a decline, when the answers run out, or without a terminal, scripted answers
+  or `--yolo` (RUN-09, RUN-28).
 
 ## Body
 
@@ -56,19 +57,25 @@ verbs bijective with the 16 workflow bodies).
    thesis — e.g. what motivates the paper, what conventional view the author
    disagrees with, the target audience, and the candidate thesis claim. Tier 1
    asks via `AskUserQuestion`; Tier 2 via `@clack/prompts` in a terminal, else the
-   numbered prompts over stdin — one line per question, so the answers can be
-   piped (`printf '…\n…\n' | pensmith sketch`, RUN-12). Synthesize
+   scripted numbered prompts over stdin — one line per question, so the answers
+   (the confirm included) can be piped with
+   `printf '…\n…\n' | PENSMITH_PROMPT_MODE=numbered pensmith sketch` (RUN-12).
+   Without a terminal, scripted answers or `--yolo`, the confirm below can never be
+   answered, so sketch refuses BEFORE the first question (exit 3, nothing asked or
+   created). Synthesize
    the answers into a single candidate thesis sentence and print it. (A
    pre-supplied `--thesis` skips the loop — the one-shot / test-seam path.)
    CRITICAL: nothing in this step creates `.paper/` / STATE.json / LIBRARY.json.
 
-2. **Confirm gate** (approval-gates-default-on): present the candidate thesis and
-   ask `Proceed to intake with this thesis?` (default no). `--yolo` skips the
-   prompt; a pre-supplied `--confirm` (test seam) wins over both. On DECLINE:
-   print `cancelled — re-run to try again.` and return `{ ok: false }` (exit 3)
-   WITHOUT creating ANY state (the no-advance invariant — Pitfall 6). sketch is a
-   content-question verb, so it asks directly (`ask()` — the gate-registry
-   chokepoint allows it) rather than through a registry gate.
+2. **Confirm gate** — `sketch-confirm` in the one gate registry
+   (`bin/lib/gates.ts`, RUN-28, PRD §7.20; approval-gates-default-on): present the
+   candidate thesis and ask `Proceed to intake with this thesis?` (default no).
+   `--yolo` takes the registry's choice (proceed to intake); a pre-supplied
+   `--confirm` (test seam) wins over both. On DECLINE: `sketch cancelled — nothing
+   was created; re-run to try again` (exit 3, EXIT_APPROVAL) WITHOUT creating ANY
+   state (the no-advance invariant — Pitfall 6). Only the Socratic content
+   questions of step 1 are asked directly (`ask()` — the gate-registry chokepoint
+   allows sketch that).
 
 3. **Dispatch `new` with the thesis seed** (Open-Q2): ONLY after confirm,
    dispatch the existing `new` verb via `dispatchVerb('new', { args: { thesis },

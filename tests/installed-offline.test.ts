@@ -9,17 +9,20 @@
 //     tests/fixtures, which the package does not ship;
 //   - `PENSMITH_OFFLINE=1 … verify 1` fails closed with the "not shipped"
 //     message and writes no verdicts (never 0-result research or
-//     all-FABRICATED verdicts from missing fixtures).
+//     all-FABRICATED verdicts from missing fixtures);
+//   - `PENSMITH_OFFLINE=1 … resume --replay <id>` (RUN-17) reproduces a logged
+//     step from its logged model response — it needs no source fixture.
 // The static half (no tests/ path is resolved at runtime outside http-mock.ts)
 // is the `tests-path-at-runtime` chokepoint row.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, cpSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { withLlmSandbox, readJsonl } from './helpers/llm-sandbox.js';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
 const IS_WIN = process.platform === 'win32';
@@ -120,4 +123,30 @@ test('RUN-05: `PENSMITH_OFFLINE=1 verify 1` in the installed package fails close
   assert.match(r.stderr, /offline fixtures are not shipped in the installed package; offline replay needs a source checkout/);
   assert.ok(!existsSync(join(secDir, 'VERIFICATION.md')), 'no VERIFICATION.md is written');
   assert.ok(!/FABRICATED|UNVERIFIABLE|MIS-CITED/.test(r.stdout), 'no verdicts at all');
+});
+
+test('RUN-17 / RUN-05: `PENSMITH_OFFLINE=1 resume --replay <id>` works in the installed package (logged responses, no fixtures)', async () => {
+  const { scratch } = install();
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: 'sk-test-installed-replay-0001' }, paper: false }, async (sb) => {
+    // Record the step with the source checkout against the mock LLM.
+    writeFileSync(join(sb.root, 'assignment.txt'), 'Write a 1500-word literature review on attention mechanisms in transformers, APA style.\n');
+    const first = await sb.runTsx(null, ['new', '--from', 'assignment.txt', '--yolo']);
+    assert.equal(first.status, 0, first.stderr);
+    const rec = readJsonl(join(sb.paper, 'SESSION.log')).find((r) => r['kind'] === 'llm' && r['slug'] === 'intake-clarifier');
+    assert.ok(rec, 'the intake-clarifier call was logged');
+    const original = readFileSync(join(sb.paper, 'INTAKE.md'), 'utf8');
+    const calls = sb.mock!.callCount();
+
+    // Replay it with the INSTALLED package in a copy of the paper.
+    const project = mkdtempSync(join(scratch, 'replay-'));
+    cpSync(sb.paper, join(project, '.paper'), { recursive: true });
+    writeFileSync(join(project, 'assignment.txt'), readFileSync(join(sb.root, 'assignment.txt')));
+    rmSync(join(project, '.paper', 'INTAKE.md'));
+    const r = runInstalled(['resume', '--replay', String(rec['id'])], project, { PENSMITH_OFFLINE: '1' });
+    assert.equal(r.status, 0, `installed replay: ${r.stdout}\n${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /offline fixtures are not shipped/);
+    assert.match(r.stderr, /\(sources offline: serving the logged model responses\)/);
+    assert.equal(readFileSync(join(project, '.paper', 'INTAKE.md'), 'utf8'), original, 'reproduced byte-for-byte');
+    assert.equal(sb.mock!.callCount(), calls, 'no model request');
+  });
 });

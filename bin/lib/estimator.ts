@@ -255,16 +255,58 @@ function row(rt: ResolvedRuntime, root: string, step: string, slugs: Array<[stri
 }
 
 /**
- * Project the remaining cost of the paper at `paperRoot`. Never bills, never
- * dials. A missing or corrupt STATE.json is treated as "nothing registered
- * yet" (C2-H1 / C4-HIGH: never throws for on-disk state). An invalid runtime
- * configuration DOES throw (RuntimeConfigError), because no honest price
- * exists for an unknown provider.
+ * The steps ONE invocation runs (the --yolo cost pre-flight, D-17-27): the named
+ * verb, and for plan / write / verify the named section — or, for `write` with
+ * no section (wave mode), every section still to write.
+ */
+export interface EstimateScope {
+  verb: string;
+  section?: number;
+}
+
+/** The model calls one run of each cost-incurring verb makes (other verbs make none). */
+const STEP_SLUGS: Readonly<Record<string, ReadonlyArray<readonly [string, number]>>> = Object.freeze({
+  new: [['intake-clarifier', 1]],
+  research: [['topic-disambiguator', 1], ['source-evaluator', 1]],
+  outline: [['outline-author', 1]],
+  plan: [['section-planner', 1]],
+  write: [['section-drafter', 1]],
+  verify: Object.entries(VERIFY_CALLS_PER_SECTION),
+});
+
+/**
+ * Narrow the remaining-pipeline rows to the steps of `scope`. A step that is
+ * already done but run again (re-research, a re-plan of §2) is priced anyway:
+ * this invocation will make those calls.
+ */
+function scopeRows(
+  all: readonly EstimateRow[],
+  scope: EstimateScope,
+  price: (step: string, slugs: Array<[string, number]>) => EstimateRow,
+): EstimateRow[] {
+  const slugs = STEP_SLUGS[scope.verb];
+  if (!slugs) return []; // compile, done, add, status, … make no model call
+  const calls = slugs.map(([s, c]) => [s, c] as [string, number]);
+  if (scope.verb === 'plan' || scope.verb === 'write' || scope.verb === 'verify') {
+    if (scope.section === undefined) return all.filter((r) => r.step.startsWith(`${scope.verb} §`));
+    const step = `${scope.verb} §${scope.section}`;
+    return [all.find((r) => r.step === step) ?? price(step, calls)];
+  }
+  return [all.find((r) => r.step === scope.verb) ?? price(scope.verb, calls)];
+}
+
+/**
+ * Project the remaining cost of the paper at `paperRoot` (or, with `scope`,
+ * of one invocation's steps). Never bills, never dials. A missing or corrupt
+ * STATE.json is treated as "nothing registered yet" (C2-H1 / C4-HIGH: never
+ * throws for on-disk state). An invalid runtime configuration DOES throw
+ * (RuntimeConfigError), because no honest price exists for an unknown provider.
  */
 export async function projectEstimate(args: {
   paperRoot: string;
   sessionCapUsd?: number;
   from?: string;
+  scope?: EstimateScope;
 }): Promise<EstimateResult> {
   const root = args.paperRoot;
   const stubbed = process.env['PENSMITH_NO_LLM'] === '1';
@@ -283,7 +325,7 @@ export async function projectEstimate(args: {
 
   const lengthWords = derivedLength(root, args.from);
   const sectionSource: 'state' | 'derived' = sections.length > 0 ? 'state' : 'derived';
-  const rows: EstimateRow[] = [];
+  let rows: EstimateRow[] = [];
 
   const intakeDone = existsSync(path.join(pDir, 'INTAKE.md')) || stateOk;
   if (!intakeDone) rows.push(row(rt, root, 'new', [['intake-clarifier', 1]], stubbed));
@@ -319,6 +361,8 @@ export async function projectEstimate(args: {
   if (!existsSync(path.join(pDir, 'FINAL.md'))) {
     rows.push({ step: 'done', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' });
   }
+
+  if (args.scope !== undefined) rows = scopeRows(rows, args.scope, (step, slugs) => row(rt, root, step, slugs, stubbed));
 
   const totalUsd = rows.reduce((acc, r) => acc + r.usd, 0);
   const capUsd = args.sessionCapUsd ?? resolveCostCap(root).capUsd;

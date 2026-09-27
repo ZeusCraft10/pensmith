@@ -80,6 +80,8 @@ test('RUN-09: `pensmith --help` and `<verb> --help` print the exit-code table, g
     assert.match(r.stdout, /PENSMITH_NO_LLM\s+replaces every LLM call with a deterministic stub \(testing and dry-run\)/);
     assert.match(r.stdout, /PENSMITH_OFFLINE\s+/);
     assert.ok(!/\u001b\[/.test(r.stdout), 'no ANSI colour codes when stdout is not a terminal');
+    // RUN-12 / CI-06: clean output — no dependency deprecation (DEP0040 punycode from citation-js) on stderr.
+    assert.equal(r.stderr, '', `${args.join(' ')}: stderr is empty`);
   }
   assert.ok(!existsSync(join(cwd, '.paper')), '--help creates nothing');
 });

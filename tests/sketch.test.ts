@@ -19,6 +19,8 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { GateRefusedError } from '../bin/lib/gates.js';
+import { EXIT_APPROVAL } from '../bin/lib/exit-codes.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -65,7 +67,11 @@ test('ERGO-05 / Pitfall 6: a DECLINED sketch creates NO .paper/, NO STATE.json, 
 
   // `confirm:false` simulates the user declining the "promote to a paper?" gate.
   // (The verb accepts an injectable confirm seam for testability — Tier-2 mode.)
-  await runSketch(root, { thesis: 'A rough thesis idea', confirm: false, yolo: false });
+  // A decline is the `sketch-confirm` registry gate's decline: GateRefusedError, EXIT_APPROVAL (RUN-28).
+  await assert.rejects(
+    runSketch(root, { thesis: 'A rough thesis idea', confirm: false, yolo: false }),
+    (e: unknown) => e instanceof GateRefusedError && e.gateId === 'sketch-confirm' && e.exitCode === EXIT_APPROVAL,
+  );
 
   assert.ok(!fs.existsSync(path.join(root, '.paper')), 'declined sketch must NOT create .paper/');
   assert.ok(!fs.existsSync(path.join(root, 'STATE.json')), 'declined sketch must NOT create STATE.json');

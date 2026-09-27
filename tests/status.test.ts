@@ -82,7 +82,9 @@ test('RUN-19: no paper → a one-line hint; a corrupt STATE.json never crashes s
     assert.equal(none.problem, 'no-paper');
     assert.equal(renderStatusView(none), 'pensmith status: no active paper — run `pensmith new` to start.');
     fs.mkdirSync(sb.paper, { recursive: true });
-    fs.writeFileSync(path.join(sb.root, 'STATE.json'), '{ not json');
+    // The one STATE.json location (RUN-13); a root-level non-pensmith STATE.json
+    // is the user's own file, not a corrupt paper.
+    fs.writeFileSync(path.join(sb.paper, 'STATE.json'), '{ not json');
     const corrupt = await buildStatusView(sb.root, { tier: 'cli' });
     assert.equal(corrupt.problem, 'corrupt-state');
     assert.match(renderStatusView(corrupt), /STATE\.json is unreadable\/corrupt/);

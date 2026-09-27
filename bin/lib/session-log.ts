@@ -267,10 +267,18 @@ function buildRecord(
   // redacted (stage 1 above, plus the registered-secret scrub at write time).
   // `[logging] session_bodies = "redacted"` (the payload's `session_bodies`)
   // replaces every body with its sha256 and a short preview.
+  //
+  // kind:"http" (RUN-15): the `url` is already secret-scrubbed by its writer
+  // (http.ts redactUrl: userinfo dropped, key/token params REDACTED, the
+  // contact-email params dropped). It skips the PII patterns, which would read
+  // a DOI's digits as a phone number and a loopback host as an IP and destroy
+  // the one thing the record is for — which source was requested. Its other
+  // fields still get stage 2.
   if (kind === 'llm') {
     if (safe['session_bodies'] === 'redacted') redactLlmBodies(safe);
   } else {
     for (const k of Object.keys(safe)) {
+      if (kind === 'http' && k === 'url') continue;
       safe[k] = deepRedactPii(safe[k]);
     }
   }

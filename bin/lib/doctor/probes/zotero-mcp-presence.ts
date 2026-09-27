@@ -56,9 +56,9 @@ export const zoteroMcpPresenceProbe: Probe = {
       return {
         id: 'zotero-mcp-presence',
         severity: 'WARN',
-        summary: 'Zotero MCP server not configured — citations and research verbs (Phase 3+) will be offline-only.',
+        summary: 'Zotero MCP server not configured — research will not search your Zotero library (the live scholarly sources are unaffected).',
         detail: `Checked: ${candidatePaths().join(', ')}`,
-        fix: 'See https://github.com/<zotero-mcp-org>/zotero-mcp for installation. Then add to your Claude MCP config.',
+        fix: 'Optional: install a Zotero MCP server and add it to your Claude MCP config (one of the files checked above) to include your Zotero library in research.',
       };
     }
 

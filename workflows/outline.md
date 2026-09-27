@@ -49,7 +49,7 @@ below is the prompt that drives the verb under both Tier 1 (Task/MCP) and Tier 2
      > ⚠ Section ${n} (${slug}) — ${k} of ${total} assigned sources flagged as RETRACTED. Recommend revising before approval.
      ```
 
-   - Unless `--yolo` flag is set: pause via `AskUserQuestion` (Tier 1) or `@clack/prompts` (Tier 2) and request user confirmation: `approve / edit / cancel`.
+   - Unless `--yolo` flag is set: pause via `AskUserQuestion` (Tier 1) or `@clack/prompts` (Tier 2) and request user confirmation: `approve / edit / cancel`. This is the `outline-approval` gate of the registry (RUN-28). A Tier-2 run that cannot ask (no terminal, no scripted `PENSMITH_PROMPT_MODE=numbered` answers) and has no `--yolo` refuses with exit 3 BEFORE step 2's outline-author call — nothing is sent, billed or written.
    - If `edit`: loop back to step 2 with the user's feedback appended as additional context to the `outline-author.md` prompt.
    - If `cancel`: exit non-zero, no state mutation.
    - If `--yolo` is set: skip the prompt and proceed (auto-approve — but the RETRACTED annotations are still emitted to stderr for the audit trail).
