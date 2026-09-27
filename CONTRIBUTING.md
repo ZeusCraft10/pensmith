@@ -1,15 +1,25 @@
 # Contributing to Pensmith
 
-Pensmith is in v0.1.0 development. The full CONTRIBUTING guide lands in Phase 2 alongside the tier-contract test gate.
+Pensmith is in development toward v1.0.0 (see `.planning/ROADMAP.md`). Feature work goes through the GSD phase flow; `CLAUDE.md` is the architecture guide for humans and agents alike.
+
+## Setup
+
+Requires **Node ≥ 22.12** (CI runs the Node 22 and 24 LTS lines on Ubuntu, macOS arm64 and Windows).
+
+```bash
+npm ci
+npm run build        # prebuild (version + verb table) then tsc → dist/
+npm run check        # the full local gate: prebuild · lint · typecheck · build · tier-contract · tests · manifests
+```
 
 ## Architectural chokepoints (Phase 0+)
 
-Two lint-enforced chokepoints exist from Phase 0 onward. Violating them fails CI:
+Some concerns may live in exactly one module. Violating a chokepoint fails CI, and the fix is always to restructure the code — never to silence the rule.
 
-1. **HTTP imports**: `fetch`, `http`, `https`, `node:http`, `node:https`, `undici` may only be imported from `bin/lib/http.ts`. Every other module routes through that file.
+1. **HTTP imports**: `fetch`, `http`, `https`, `node:http`, `node:https`, `undici` may only be imported from `bin/lib/http.ts`, the one egress gate. Every other module routes through that file.
 2. **DOI regex**: The literal regex `/^10\./` may only appear in `bin/lib/doi.ts`. DOI normalization is a single chokepoint per `.planning/research/PITFALLS.md` Pitfall 2.
 
-See `eslint.config.js` for the rules and `tests/lint-chokepoint.test.ts` for the regression gate.
+The full list — with the module each concern belongs to and what enforces it — is the chokepoint table in `CLAUDE.md`. The older chokepoints are `no-restricted-imports` / `no-restricted-syntax` rules in `eslint.config.js` with `tests/lint-*.test.ts` regression gates. Every chokepoint added from Phase 17 on is a **row**: a JSON file in `scripts/chokepoints/<id>.json` read by the local ESLint rule `pensmith/chokepoint` (`scripts/eslint-rules/chokepoint.mjs`). A row names its requirement, the one allowed module, the files it covers (`scope` / `allow` globs) and a matcher (`string-literal`, `import`, `call`, `member`, `file-regex` or `import-graph`). To add a chokepoint, add the row, a failing fixture `tests/fixtures/chokepoints/<id>.violation.ts.txt`, and a line in the CLAUDE.md table in the same change; `tests/chokepoints.test.ts` lints every fixture, re-checks the file-regex and import-graph rows across the tree, and fails if a row is missing from CLAUDE.md. The `no-new-eslint-disable` row forbids new inline disable directives: the 13 that predate it are its baseline.
 
 ## Locked copy files (SHA-256 byte-pinned)
 
@@ -41,8 +51,27 @@ changed fixture could mask a real zero-trace regression, so drift is a CI failur
 ## Quick checklist before opening a PR
 
 - `npm run check` is green locally
-- CI matrix (linux-x64, macos-arm64, windows-x64 × Node 20.10) is green
-- No new HTTP / DOI chokepoint violations
+- CI matrix (linux-x64, macos-arm64, windows-x64 × Node 22 and 24) is green
+- No new chokepoint violations and no new inline disable directives
+- Docs match the behavior you changed (`workflows/<verb>.md`, README, CLAUDE.md, `references/`)
+
+## Test lanes
+
+| Lane | Command | Network | Notes |
+|------|---------|---------|-------|
+| Unit + integration | `npm test` | sources **offline** (exact recorded fixtures) | `scripts/run-tests.mjs` discovers `tests/**/*.test.ts` (no shell glob, so Windows runs them too) and refuses a zero-file run. |
+| Tier contract | `npm run test:tier-contract` | offline | `tests/tier-contract.test.ts` + `tests/tier-contract/`, through the same runner. |
+| Coverage | `npm run test:coverage` | offline | c8 gate: 80% lines/statements, 66% functions/branches. |
+| Live lane | `PENSMITH_NETWORK_TESTS=1 npm test` | **live** | Maintainers only; reaches the real APIs (and, with keys, providers). |
+
+- Tests never make an external connection: under the test runner sources are offline unless `PENSMITH_NETWORK_TESTS=1`, a model call goes to the local mock LLM (`tests/helpers/local-servers/`, also runnable as `npm run mock-llm`), and the installed-package tests install from a loopback npm registry built from `package-lock.json` and your npm cache (run `npm ci` once so the cache holds the tarballs).
+- Several tests spawn the **built** CLI or MCP server (`dist/`). Run `npm run build` after changing source.
+- Run one file with `node --import tsx --test tests/<file>.test.ts`, or through the runner with `node scripts/run-tests.mjs tests/<file-or-dir>`.
+- Every local test server (mock LLM, TLS/SNI and streaming servers, MockAgent helper, npm registry) lives in `tests/helpers/local-servers/` — the only place under `tests/` allowed to import `node:http` / `undici`.
+
+### Data-dir isolation
+
+Tests never touch your real Pensmith data dir (the global paper registry, `runtime.json`, locks, the HTTP cache). `scripts/run-tests.mjs` creates one temp dir per run, points `XDG_DATA_HOME`, `LOCALAPPDATA` and `PENSMITH_TEST_DATA_DIR` at it, sets `PENSMITH_TEST=1`, and deletes it afterwards (`PENSMITH_KEEP_TEST_DATA=1` keeps it and prints the path). Under a test context `bin/lib/paths.ts` honours a platform data-dir variable only when it lies inside the OS temp dir, so a single file run with `node --test` — and every CLI it spawns — gets a private per-process temp dir even on macOS, where the data dir derives from `HOME`. CI records a fingerprint of the real data dir before the tests and fails if it changed afterwards (`scripts/data-dir-fingerprint.mjs`). A test that must spawn the CLI **without** a test context (to prove live-by-default behaviour) sets `XDG_DATA_HOME`, `LOCALAPPDATA` and, on macOS, `HOME` to a temp dir itself.
 
 ## Tier contract — do not skip
 
@@ -143,21 +172,14 @@ The fixes that ARE acceptable, in order of preference:
 
 ## Cassette Refresh Workflow
 
-PR-time CI (`.github/workflows/ci.yml`) is OFFLINE — it runs against recorded
-HTTP cassettes under `tests/fixtures/cassettes/` for the Crossref, OpenAlex,
-and Unpaywall adapters. This keeps PR builds fast (no live network) and
-hermetic (no flaky external dependencies blocking contributor PRs).
+`npm test` replays recorded HTTP fixtures under `tests/fixtures/cassettes/<adapter>/` for every source adapter (Crossref, OpenAlex, arXiv, PubMed, Semantic Scholar, Unpaywall, Retraction Watch, and the detector / plagiarism services). Replay is **exact-match**: a fixture answers only the method, origin, path and canonical query it was recorded for, and a miss fails closed (`OfflineEgressError`) instead of returning some other record. Hand-written negative-test fixtures live in `tests/fixtures/cassettes/synthetic/`; `tests/cassette-provenance.test.ts` rejects fabricated identifiers (`10.0000/`, `10.1234/example`) anywhere else. Real users never see cassettes: the CLI is live by default, and fixtures are a test and `PENSMITH_OFFLINE=1` mechanism only.
 
-A separate workflow (`.github/workflows/cassette-refresh.yml`) re-records
-those cassettes against the live registrars on a weekly schedule and opens a
-PR with the refreshed fixtures.
+A separate workflow (`.github/workflows/cassette-refresh.yml`) re-records the cassettes against the live APIs on a weekly schedule and opens a PR with the refreshed fixtures.
 
 ### When cassettes need a manual refresh
 
-- A registrar shipped a schema change (new field, renamed field, format
-  change) and the offline tests are failing locally with a parse error.
-- A new fixture row was added to `known-good-fixture/CITATIONS.bib` and the
-  adapter needs a recording for that DOI.
+- An API shipped a schema change (new field, renamed field, format change) and the offline tests fail locally with a parse error.
+- A test needs a recording for a new query or identifier.
 - The weekly cron PR has been sitting for > 14 days without merge.
 
 ### How to trigger a refresh
@@ -169,17 +191,16 @@ PR with the refreshed fixtures.
 3. The workflow re-records all cassettes and opens a PR. Review the diff,
    confirm no PII / API tokens leaked into recorded headers, then merge.
 
-**Option B — local re-record (only if you have the registrar contact-email
-secret and need to inspect the diff before pushing):**
+**Option B — local re-record:**
 
 ```bash
-export PENSMITH_NETWORK_TESTS=1
-export PENSMITH_REFRESH_CASSETTES=1
-export PENSMITH_CONTACT_EMAIL=you@example.com  # required by Crossref/OpenAlex polite-pool
-npm run build
-npm run test:cassettes -- --refresh
-git diff tests/fixtures/cassettes/
+export PENSMITH_CONTACT_EMAIL=you@example.com   # required: polite-pool contact (the recorder fails fast without it)
+npm run cassettes:refresh                        # every adapter
+npm run cassettes:refresh -- --only crossref     # one adapter
+node --import tsx --test tests/cassette-no-leak.test.ts tests/cassette-size.test.ts tests/cassette-provenance.test.ts
 ```
+
+The recorder (`scripts/refresh-cassettes.mjs`) drives each adapter's recorded query set through the real adapter code, live and outside any test context, so each stored request is exactly what the adapter sends. It keeps only the `content-type` response header, strips `mailto` / `email` / `api_key` / `key` / `tool` query parameters, redacts the contact email everywhere else, and never records a response the adapter rejected (a 429 or 5xx leaves that adapter's committed cassettes untouched — record it on a later run). Never hand-write a response the real API does not return.
 
 ### Permissions reminder
 
@@ -199,9 +220,10 @@ permissions block; do NOT promote them to repo-wide `contents: write`.
 ### Cassette byte-size cap (D-25)
 
 Every recorded cassette file MUST be ≤ 51200 bytes. The `cassette-size`
-test enforces this on every PR; the refresh PR will fail CI if a registrar
-returned an unexpectedly large response. If that happens, narrow the
-recording (drop irrelevant fields) rather than raising the cap.
+test enforces this on every PR. The recorder meets the cap by re-recording a
+search with a lower result count (and reports the new count so the test that
+replays it can be updated) — never by truncating JSON, and never by raising
+the cap.
 
 ### Sensitive-header scan (T-3-02 / T-01-07)
 

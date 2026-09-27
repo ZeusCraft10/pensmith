@@ -1,0 +1,546 @@
+// tests/library-writer.test.ts — BRDTH-01 / D-17-43: LIBRARY.json has one
+// schema (v2) and one validated writer (bin/lib/library.ts upsertSources).
+//
+// Covers:
+//   - the v1 → v2 migration of BOTH v1 shapes (the strict foundation entry and
+//     the research-written SourceCandidate entry that lacked addedAt — T-1-9),
+//     with write-back through loadLibrary;
+//   - dedup by doi.ts-normalized DOI, then arXiv id / PMID / ISBN;
+//   - merge: richer metadata wins, provenance tags are unioned, `retracted` is
+//     sticky, `last_verified` keeps the latest time;
+//   - preprint ↔ version-of-record collapse (SSRN, Research Square, arXiv),
+//     the record's DOI primary and the preprint DOI kept as a candidate only;
+//     two distinct version-of-record DOIs never collapse;
+//   - citekeys: an existing key never changes; a new work gets a unique key;
+//   - CITATIONS.bib / CITATIONS.ris are rendered from LIBRARY.json, and a
+//     bib-only key (older papers, hand edits) is imported, never dropped;
+//   - 5 concurrent upserts (in one process and across 5 processes) lose nothing;
+//   - the real user path: `research --yolo` (built CLI) writes a v2 library that
+//     paper://library (built MCP server) returns, and a re-run adds no duplicate.
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawn, spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  upsertSources,
+  loadLibrary,
+  recordLastVerified,
+  libraryPaths,
+  type LibraryCandidate,
+} from '../bin/lib/library.js';
+import { Schema as LibrarySchema } from '../bin/lib/schemas/library.js';
+import { migrate } from '../bin/lib/migrations/library/v1_to_v2.js';
+import { isPreprintDoi } from '../bin/lib/migrations/library/shape.js';
+import { parseBib } from '../bin/lib/citations.js';
+
+const REPO = fileURLToPath(new URL('..', import.meta.url));
+
+function project(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-libwriter-'));
+  fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
+  return root;
+}
+
+function cand(over: Partial<LibraryCandidate> & { title: string }): LibraryCandidate {
+  return {
+    source: 'crossref',
+    authors: ['Engel, Gregory S.'],
+    year: 2007,
+    retracted: false,
+    last_verified: '2026-01-01T00:00:00.000Z',
+    ...over,
+  };
+}
+
+const ENGEL = cand({
+  citekey: 'engel2007',
+  id: '10.1038/nature05678',
+  doi: '10.1038/nature05678',
+  title: 'Evidence for wavelike energy transfer through quantum coherence in photosynthetic systems',
+});
+
+// ---------------------------------------------------------------------------
+// Migration.
+// ---------------------------------------------------------------------------
+
+test('BRDTH-01 migration: the research-written v1 shape (SourceCandidate[], no addedAt) becomes a valid v2 library', () => {
+  const v1 = {
+    $schemaVersion: 1,
+    entries: [
+      {
+        source: 'openalex',
+        id: '10.48550/arXiv.1706.03762',
+        doi: '10.48550/arXiv.1706.03762',
+        title: 'Attention Is All You Need',
+        authors: ['Vaswani, Ashish', 'Shazeer, Noam'],
+        year: 2017,
+        abstract: 'The dominant sequence transduction models…',
+        oa_pdf_url: 'https://arxiv.org/pdf/1706.03762',
+        retracted: false,
+        last_verified: '2026-02-03T04:05:06.000Z',
+        citekey: 'vaswani2017',
+        raw: { huge: 'adapter payload' },
+      },
+      {
+        source: 'pubmed',
+        id: '34265844',
+        title: 'Highly accurate protein structure prediction with AlphaFold',
+        authors: ['Jumper, John'],
+        year: 2021,
+        retracted: true,
+        retraction_details: 'test flag',
+        last_verified: '2026-02-03T04:05:06.000Z',
+        citekey: 'jumper2021',
+        raw: {},
+      },
+    ],
+  };
+  const v2 = migrate(v1, '2026-09-27T00:00:00.000Z');
+  const lib = LibrarySchema.parse(v2);
+  assert.equal(lib.$schemaVersion, 2);
+  const [a, b] = lib.entries;
+  assert.equal(a!.citekey, 'vaswani2017');
+  assert.equal(a!.doi, '10.48550/arxiv.1706.03762', 'DOI normalized (lowercase)');
+  assert.equal(a!.arxiv, '1706.03762', 'a DataCite arXiv DOI also records the arXiv id');
+  assert.equal(a!.oa_url, 'https://arxiv.org/pdf/1706.03762', 'oa_pdf_url → oa_url');
+  assert.equal(a!.addedAt, '2026-02-03T04:05:06.000Z', 'missing addedAt ← last_verified');
+  assert.deepEqual(a!.provenance, ['research:openalex']);
+  assert.ok(!('raw' in a!), 'the adapter payload is dropped');
+  assert.equal(b!.pmid, '34265844', 'a PubMed id becomes pmid');
+  assert.equal(b!.doi, null);
+  assert.equal(b!.retracted, true);
+  assert.equal(b!.retraction_details, 'test flag');
+});
+
+test('BRDTH-01 migration: the strict v1 foundation shape migrates; duplicate keys are suffixed, nothing is dropped; v2 input is unchanged', () => {
+  const v1 = {
+    $schemaVersion: 1,
+    entries: [
+      { id: 'cite-1', doi: 'https://doi.org/10.5555/ABC', title: 'One', addedAt: '2099-01-01T00:00:00.000Z' },
+      { id: 'cite-1', pmid: '123', addedAt: '2099-01-02T00:00:00.000Z' },
+    ],
+  };
+  const lib = LibrarySchema.parse(migrate(v1, '2026-09-27T00:00:00.000Z'));
+  assert.deepEqual(lib.entries.map((e) => e.citekey), ['cite-1', 'cite-1a']);
+  assert.equal(lib.entries[0]!.doi, '10.5555/abc');
+  assert.equal(lib.entries[0]!.addedAt, '2099-01-01T00:00:00.000Z');
+  assert.deepEqual(lib.entries[1]!.provenance, ['v1']);
+  assert.equal(lib.entries[1]!.title, null);
+  const again = migrate(lib);
+  assert.deepEqual(again, lib, 'idempotent on v2');
+});
+
+test('BRDTH-01 migration: loadLibrary migrates a research-written v1 file and writes the v2 file back', async () => {
+  const root = project();
+  const file = path.join(root, '.paper', 'LIBRARY.json');
+  fs.writeFileSync(file, JSON.stringify({ $schemaVersion: 1, entries: [{ ...ENGEL, citekey: 'engel2007', raw: {} }] }, null, 2));
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 1);
+  const onDisk = JSON.parse(fs.readFileSync(file, 'utf8')) as { $schemaVersion: number; entries: Array<Record<string, unknown>> };
+  assert.equal(onDisk.$schemaVersion, 2, 'the migrated file is written back');
+  assert.ok(typeof onDisk.entries[0]!['addedAt'] === 'string');
+  LibrarySchema.parse(onDisk);
+});
+
+// ---------------------------------------------------------------------------
+// Dedup + merge.
+// ---------------------------------------------------------------------------
+
+test('BRDTH-01 dedup: a DOI in URL / doi: / upper-case form matches the stored entry; its citekey never changes', async () => {
+  const root = project();
+  await upsertSources(root, [ENGEL], { provenance: 'research' });
+  for (const doi of ['https://doi.org/10.1038/NATURE05678', 'doi:10.1038/nature05678', '10.1038/Nature05678']) {
+    const r = await upsertSources(root, [cand({ citekey: 'engel2007b', doi, title: 'x', authors: ['Other, A.'], year: 1999 })], { provenance: 'add' });
+    assert.equal(r.outcomes[0]!.citekey, 'engel2007', `${doi} is the same work`);
+    assert.notEqual(r.outcomes[0]!.status, 'added');
+    assert.equal(r.outcomes[0]!.matchedBy, 'doi');
+  }
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 1, 'no duplicate entry (RM-13: add used to create engel2009a)');
+  assert.equal(lib.entries[0]!.title, ENGEL.title, 'an existing title is not replaced by a poorer record');
+});
+
+test('BRDTH-01 dedup: arXiv id (abs URL, versioned, DataCite DOI), PMID and ISBN-10 vs ISBN-13', async () => {
+  const root = project();
+  const r1 = await upsertSources(
+    root,
+    [
+      cand({ source: 'arxiv', id: '2103.00020v2', title: 'Learning Transferable Visual Models', authors: ['Radford, Alec'], year: 2021 }),
+      cand({ source: 'pubmed', id: '34265844', title: 'AlphaFold', authors: ['Jumper, John'], year: 2021 }),
+      cand({ isbn: '0-226-45808-3', title: 'The Structure of Scientific Revolutions', authors: ['Kuhn, Thomas'], year: 1962 }),
+    ],
+    { provenance: 'research' },
+  );
+  assert.deepEqual(r1.outcomes.map((o) => o.status), ['added', 'added', 'added']);
+  const r2 = await upsertSources(
+    root,
+    [
+      cand({ arxiv: 'https://arxiv.org/abs/2103.00020', title: 'CLIP', authors: ['Radford, A.'], year: 2021 }),
+      cand({ doi: '10.48550/arXiv.2103.00020', title: 'CLIP again', authors: ['Radford, A.'], year: 2021 }),
+      cand({ pmid: 'PMID:34265844', title: 'AF2', authors: ['Jumper, J.'], year: 2021 }),
+      cand({ isbn: '978-0-226-45808-3', title: 'Structure', authors: ['Kuhn, T.'], year: 1962 }),
+    ],
+    { provenance: 'add' },
+  );
+  assert.deepEqual(r2.outcomes.map((o) => [o.status === 'added', o.matchedBy]), [
+    [false, 'arxiv'],
+    [false, 'arxiv'],
+    [false, 'pmid'],
+    [false, 'isbn'],
+  ]);
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 3);
+  const kuhn = lib.entries.find((e) => e.isbn !== null)!;
+  assert.equal(kuhn.isbn, '9780226458083', 'ISBN-10 is stored as ISBN-13');
+  const clip = lib.entries.find((e) => e.arxiv === '2103.00020')!;
+  assert.equal(clip.doi, '10.48550/arxiv.2103.00020', 'the DataCite DOI fills the missing DOI');
+});
+
+test('BRDTH-01 merge: richer metadata wins, provenance is unioned, retracted is sticky, last_verified keeps the latest', async () => {
+  const root = project();
+  await upsertSources(root, [{ ...ENGEL, last_verified: '2026-03-01T00:00:00.000Z' }], { provenance: 'research' });
+  const r = await upsertSources(
+    root,
+    [
+      {
+        ...ENGEL,
+        source: 'openalex',
+        abstract: 'Photosynthetic complexes are exquisitely tuned to capture solar light efficiently…',
+        oa_pdf_url: 'https://example.org/engel.pdf',
+        authors: ['Engel, Gregory S.', 'Calhoun, Tessa R.', 'Read, Elizabeth L.'],
+        venue: 'Nature',
+        retracted: true,
+        retraction_details: 'hypothetical flag for the merge test',
+        last_verified: '2026-04-01T00:00:00.000Z',
+      },
+      { ...ENGEL, source: 'crossref', retracted: false, last_verified: '2025-01-01T00:00:00.000Z' },
+    ],
+    { provenance: 'add' },
+  );
+  assert.deepEqual(r.outcomes.map((o) => o.status), ['merged', 'merged']);
+  const e = (await loadLibrary(root)).entries[0]!;
+  assert.match(e.abstract ?? '', /Photosynthetic complexes/);
+  assert.equal(e.oa_url, 'https://example.org/engel.pdf');
+  assert.equal(e.authors.length, 3, 'the longer author list wins');
+  assert.equal(e.venue, 'Nature');
+  assert.deepEqual(e.provenance, ['research:crossref', 'add:openalex', 'add:crossref']);
+  assert.equal(e.retracted, true, 'a retraction is never un-set by a later record');
+  assert.equal(e.last_verified, '2026-04-01T00:00:00.000Z', 'the latest verification time is kept');
+  const again = await upsertSources(root, [{ ...ENGEL, source: 'openalex' }], { provenance: 'add' });
+  assert.equal(again.outcomes[0]!.status, 'unchanged', 're-adding known metadata changes nothing');
+});
+
+// ---------------------------------------------------------------------------
+// Preprint ↔ version of record.
+// ---------------------------------------------------------------------------
+
+const VOR = cand({
+  citekey: 'smith2021',
+  doi: '10.1016/j.jfineco.2021.05.001',
+  title: 'Liquidity Risk and the Cross-Section of Expected Returns: New Evidence',
+  authors: ['Smith, Jane', 'Doe, John'],
+  year: 2021,
+  venue: 'Journal of Financial Economics',
+});
+const SSRN = cand({
+  source: 'semanticscholar',
+  citekey: 'smith2020',
+  doi: '10.2139/ssrn.3456789',
+  title: 'Liquidity risk and the cross-section of expected returns — new evidence',
+  authors: ['Smith, J.'],
+  year: 2020,
+  venue: 'SSRN Electronic Journal',
+  abstract: 'We revisit liquidity risk using a new decomposition of trading costs across forty years of data.',
+});
+
+test('BRDTH-01 collapse: an SSRN preprint then its version of record → one entry, the record DOI primary, the SSRN DOI an alternate', async () => {
+  const root = project();
+  await upsertSources(root, [SSRN], { provenance: 'research' });
+  const r = await upsertSources(root, [VOR], { provenance: 'add' });
+  assert.equal(r.outcomes[0]!.status, 'merged');
+  assert.equal(r.outcomes[0]!.matchedBy, 'version');
+  assert.equal(r.outcomes[0]!.citekey, 'smith2020', 'the existing key is kept (drafts may cite it)');
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 1);
+  const e = lib.entries[0]!;
+  assert.equal(e.doi, '10.1016/j.jfineco.2021.05.001', 'the version of record wins the primary DOI');
+  assert.deepEqual(e.alternate_dois, ['10.2139/ssrn.3456789'], 'the preprint DOI is kept as a candidate only');
+  assert.equal(e.year, 2021, "the record's year");
+  assert.equal(e.venue, 'Journal of Financial Economics', "the record's venue");
+  assert.equal(e.title, VOR.title, "the record's title");
+  assert.match(e.abstract ?? '', /forty years/, 'the richer abstract survives the collapse');
+  assert.deepEqual(e.provenance, ['research:semanticscholar', 'add:crossref'], 'both provenance tags');
+  // The rendered bib cites the version of record.
+  const bib = fs.readFileSync(path.join(root, '.paper', 'CITATIONS.bib'), 'utf8');
+  assert.match(bib, /10\.1016\/j\.jfineco\.2021\.05\.001/);
+  assert.doesNotMatch(bib, /ssrn/i);
+});
+
+test('BRDTH-01 collapse: version of record first, then Research Square / arXiv versions fold into it', async () => {
+  const root = project();
+  await upsertSources(root, [VOR], { provenance: 'research' });
+  const r = await upsertSources(
+    root,
+    [
+      { ...SSRN, doi: '10.21203/rs.3.rs-123456/v1', source: 'crossref' },
+      cand({ source: 'arxiv', id: '2012.34567', title: VOR.title!, authors: ['Jane Smith'], year: 2020 }),
+    ],
+    { provenance: 'research' },
+  );
+  assert.deepEqual(r.outcomes.map((o) => o.citekey), ['smith2021', 'smith2021']);
+  const e = (await loadLibrary(root)).entries;
+  assert.equal(e.length, 1);
+  assert.equal(e[0]!.doi, VOR.doi);
+  assert.deepEqual(e[0]!.alternate_dois, ['10.21203/rs.3.rs-123456/v1']);
+  assert.equal(e[0]!.arxiv, '2012.34567', 'the arXiv id is recorded on the one entry');
+  assert.equal(e[0]!.year, 2021);
+});
+
+test('BRDTH-01 collapse boundaries: distinct version-of-record DOIs, another first author, or years 2 apart stay separate', async () => {
+  const root = project();
+  const editorial = (doi: string, year: number): LibraryCandidate =>
+    cand({ doi, title: 'Editorial: The Year in Review', authors: ['Editor, Chief'], year });
+  const r = await upsertSources(
+    root,
+    [
+      editorial('10.1111/jae.2020.001', 2020),
+      editorial('10.1111/jae.2021.001', 2021), // both versions of record → distinct works
+      { ...SSRN, authors: ['Jones, Mary'], doi: '10.2139/ssrn.1111111' }, // same title, another first author
+      { ...SSRN, year: 2018, doi: '10.2139/ssrn.2222222' }, // years 3 apart from the record below
+      VOR,
+    ],
+    { provenance: 'research' },
+  );
+  assert.deepEqual(r.outcomes.map((o) => o.status), ['added', 'added', 'added', 'added', 'added']);
+  assert.equal(new Set(r.outcomes.map((o) => o.citekey)).size, 5, 'five distinct keys');
+});
+
+test('BRDTH-01: the preprint-server DOI table (SSRN, Research Square, arXiv, bioRxiv — not CSHL journals)', () => {
+  assert.equal(isPreprintDoi('10.2139/ssrn.3456789'), true);
+  assert.equal(isPreprintDoi('10.21203/rs.3.rs-123456/v1'), true);
+  assert.equal(isPreprintDoi('10.48550/arxiv.1706.03762'), true);
+  assert.equal(isPreprintDoi('10.1101/2020.03.21.001234'), true);
+  assert.equal(isPreprintDoi('10.1101/gad.123456.115'), false, 'Genes & Development shares the 10.1101 registrant');
+  assert.equal(isPreprintDoi('10.1038/nature05678'), false);
+  assert.equal(isPreprintDoi(null), false);
+});
+
+// ---------------------------------------------------------------------------
+// Citekeys and the rendered files.
+// ---------------------------------------------------------------------------
+
+test('BRDTH-01 citekeys: a different work with a colliding base key gets a unique suffixed key', async () => {
+  const root = project();
+  await upsertSources(root, [ENGEL], { provenance: 'research' });
+  const other = cand({ citekey: 'engel2007', doi: '10.1063/1.2800560', title: 'A completely different 2007 paper', authors: ['Engel, Gregory S.'] });
+  const r = await upsertSources(root, [other], { provenance: 'research' });
+  assert.equal(r.outcomes[0]!.status, 'added');
+  assert.equal(r.outcomes[0]!.citekey, 'engel2007a');
+  const keys = (await loadLibrary(root)).entries.map((e) => e.citekey);
+  assert.deepEqual(keys, ['engel2007', 'engel2007a']);
+});
+
+test('BRDTH-01: CITATIONS.bib and CITATIONS.ris are rendered from LIBRARY.json (same keys, same identifiers)', async () => {
+  const root = project();
+  await upsertSources(root, [ENGEL, VOR, cand({ source: 'openalex', id: 'W123', title: 'No identifier at all' })], { provenance: 'research' });
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 3, 'an identifier-less source stays in LIBRARY.json');
+  const bibText = fs.readFileSync(path.join(root, '.paper', 'CITATIONS.bib'), 'utf8');
+  const bib = await parseBib(bibText);
+  const bibKeys = bib.map((e) => String(e['id'])).sort();
+  assert.deepEqual(bibKeys, ['engel2007', 'smith2021'], 'the bib holds every citable (identified) library entry');
+  const ris = fs.readFileSync(path.join(root, '.paper', 'CITATIONS.ris'), 'utf8');
+  assert.equal((ris.match(/^TY {2}- /gm) ?? []).length, 2);
+  assert.match(ris, /10\.1038\/nature05678/);
+});
+
+test('BRDTH-01: a bib-only key (pre-BRDTH-01 add, or a hand edit) is imported, never dropped — even a legacy duplicate', async () => {
+  const root = project();
+  await upsertSources(root, [ENGEL], { provenance: 'research' });
+  const bibPath = path.join(root, '.paper', 'CITATIONS.bib');
+  const rendered = fs.readFileSync(bibPath, 'utf8');
+  fs.writeFileSync(
+    bibPath,
+    rendered +
+      '\n@article{engel2007a,\n  title = {Evidence for wavelike energy transfer through quantum coherence in photosynthetic systems},\n  author = {Engel, Gregory S.},\n  year = {2007},\n  doi = {10.1038/nature05678}\n}\n' +
+      '\n@book{Kuhn1962,\n  title = {The Structure of Scientific Revolutions},\n  author = {Kuhn, Thomas},\n  year = {1962},\n  isbn = {9780226458083}\n}\n',
+  );
+  const r = await upsertSources(root, [], { provenance: 'research' });
+  assert.deepEqual(r.imported.sort(), ['Kuhn1962', 'engel2007a']);
+  const lib = await loadLibrary(root);
+  const kuhn = lib.entries.find((e) => e.citekey === 'Kuhn1962')!;
+  assert.deepEqual(kuhn.provenance, ['bib-import'], 'a hand-made key keeps its spelling');
+  assert.equal(kuhn.isbn, '9780226458083');
+  const keys = (await parseBib(fs.readFileSync(bibPath, 'utf8'))).map((e) => String(e['id'])).sort();
+  assert.deepEqual(keys, ['Kuhn1962', 'engel2007', 'engel2007a'], 'every key a draft may cite is still in the bib');
+});
+
+test('BRDTH-01: an unparseable CITATIONS.bib is kept as a backup, then re-rendered from LIBRARY.json', async () => {
+  const root = project();
+  await upsertSources(root, [ENGEL], { provenance: 'research' });
+  const bibPath = path.join(root, '.paper', 'CITATIONS.bib');
+  fs.writeFileSync(bibPath, '@article{broken2020,\n  title = {Unclosed\n');
+  await upsertSources(root, [VOR], { provenance: 'add' });
+  const backups = fs.readdirSync(path.join(root, '.paper')).filter((f) => f.startsWith('CITATIONS.bib.unparsed-'));
+  assert.equal(backups.length, 1, 'the unreadable bib is preserved');
+  assert.match(fs.readFileSync(path.join(root, '.paper', backups[0]!), 'utf8'), /broken2020/);
+  const keys = (await parseBib(fs.readFileSync(bibPath, 'utf8'))).map((e) => String(e['id'])).sort();
+  assert.deepEqual(keys, ['engel2007', 'smith2021']);
+});
+
+test('BRDTH-01: recordLastVerified keeps the latest time per citekey through the same writer', async () => {
+  const root = project();
+  await upsertSources(root, [ENGEL], { provenance: 'research' });
+  const r = await recordLastVerified(root, { engel2007: '2026-09-01T12:00:00.000Z', nosuch2020: '2026-09-01T12:00:00.000Z' });
+  assert.deepEqual(r, { updated: ['engel2007'], unknown: ['nosuch2020'] });
+  const older = await recordLastVerified(root, { engel2007: '2020-01-01T00:00:00.000Z' });
+  assert.deepEqual(older.updated, [], 'an older time never replaces a newer one');
+  assert.equal((await loadLibrary(root)).entries[0]!.last_verified, '2026-09-01T12:00:00.000Z');
+});
+
+// ---------------------------------------------------------------------------
+// Concurrency.
+// ---------------------------------------------------------------------------
+
+test('BRDTH-01: 5 concurrent upserts in one process lose no update (disjoint adds + a shared work)', async () => {
+  const root = project();
+  await upsertSources(root, [ENGEL], { provenance: 'research' });
+  await Promise.all(
+    Array.from({ length: 5 }, (_, i) =>
+      upsertSources(
+        root,
+        [
+          cand({ doi: `10.5555/concurrent.${i}`, title: `Concurrent work ${i}`, authors: [`Writer${String.fromCharCode(97 + i)}, A.`], year: 2010 + i }),
+          { ...ENGEL, source: `worker${i}` },
+        ],
+        { provenance: `p${i}` },
+      ),
+    ),
+  );
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 6);
+  const engel = lib.entries.find((e) => e.citekey === 'engel2007')!;
+  for (let i = 0; i < 5; i += 1) assert.ok(engel.provenance.includes(`p${i}:worker${i}`), `provenance of upsert ${i} kept`);
+});
+
+test('BRDTH-01: 5 concurrent upserts from 5 processes lose no update', async () => {
+  const root = project();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-libwriter-worker-'));
+  const worker = path.join(dir, 'worker.mts');
+  fs.writeFileSync(
+    worker,
+    [
+      `import { upsertSources } from ${JSON.stringify(pathToFileURL(path.join(REPO, 'bin', 'lib', 'library.ts')).href)};`,
+      `const i = Number(process.argv[2]);`,
+      `const root = process.argv[3];`,
+      `await upsertSources(root, [`,
+      `  { source: 'crossref', doi: '10.5555/proc.' + i, title: 'Process work ' + i, authors: ['Proc' + String.fromCharCode(97 + i) + ', A.'], year: 2000 + i },`,
+      `  { source: 'crossref', doi: '10.1038/nature05678', title: 'Shared', authors: ['Engel, G.'], year: 2007, abstract: 'abstract from process ' + i + ' '.repeat(i) },`,
+      `], { provenance: 'proc' + i });`,
+      `console.log('ok ' + i);`,
+    ].join('\n'),
+  );
+  const runs = await Promise.all(
+    Array.from(
+      { length: 5 },
+      (_, i) =>
+        new Promise<{ code: number | null; out: string }>((resolve) => {
+          const child = spawn(process.execPath, ['--import', 'tsx', worker, String(i), root], {
+            cwd: REPO,
+            env: process.env,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          let out = '';
+          child.stdout.on('data', (d: Buffer) => (out += d.toString()));
+          child.stderr.on('data', (d: Buffer) => (out += d.toString()));
+          child.on('close', (code) => resolve({ code, out }));
+        }),
+    ),
+  );
+  for (const r of runs) assert.equal(r.code, 0, r.out);
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 6, `5 distinct works + 1 shared: ${lib.entries.map((e) => e.citekey).join(', ')}`);
+  const shared = lib.entries.find((e) => e.doi === '10.1038/nature05678')!;
+  assert.deepEqual([...shared.provenance].sort(), ['proc0:crossref', 'proc1:crossref', 'proc2:crossref', 'proc3:crossref', 'proc4:crossref']);
+  LibrarySchema.parse(JSON.parse(fs.readFileSync(libraryPaths(root).library, 'utf8')));
+});
+
+// ---------------------------------------------------------------------------
+// The real user path: research (built CLI) → LIBRARY.json v2 → paper://library.
+// ---------------------------------------------------------------------------
+
+const DIST_CLI = path.join(REPO, 'dist', 'bin', 'pensmith.js');
+const DIST_MCP = path.join(REPO, 'dist', 'mcp', 'server.js');
+
+async function readPaperLibraryOverMcp(cwd: string): Promise<{ entries: Array<{ citekey: string }>; $schemaVersion: number }> {
+  const env = { ...process.env };
+  delete env['PENSMITH_PAPER_ROOT'];
+  const child = spawn(process.execPath, [DIST_MCP], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
+  let buf = '';
+  child.stdout.on('data', (d: Buffer) => (buf += d.toString()));
+  let stderr = '';
+  child.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
+  const send = (msg: unknown): void => {
+    child.stdin.write(JSON.stringify(msg) + '\n');
+  };
+  const waitFor = async (id: number): Promise<Record<string, unknown>> => {
+    const t0 = Date.now();
+    for (;;) {
+      for (const line of buf.split('\n')) {
+        if (!line.trim()) continue;
+        const msg = JSON.parse(line) as { id?: number };
+        if (msg.id === id) return msg as Record<string, unknown>;
+      }
+      if (Date.now() - t0 > 30_000 || child.exitCode !== null) throw new Error(`no MCP response ${id}; stderr=${stderr}`);
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  };
+  try {
+    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'libwriter-test', version: '0' } } });
+    await waitFor(1);
+    send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    send({ jsonrpc: '2.0', id: 2, method: 'resources/read', params: { uri: 'paper://library' } });
+    const res = (await waitFor(2)) as { result?: { contents?: Array<{ text?: string }> }; error?: unknown };
+    assert.ok(res.result, `paper://library must not error: ${JSON.stringify(res.error)}`);
+    return JSON.parse(res.result.contents![0]!.text!) as { entries: Array<{ citekey: string }>; $schemaVersion: number };
+  } finally {
+    child.kill();
+  }
+}
+
+test('BRDTH-01 user path: `research --yolo` writes a v2 LIBRARY.json that paper://library returns; a re-run adds no duplicate', async () => {
+  assert.ok(fs.existsSync(DIST_CLI) && fs.existsSync(DIST_MCP), 'run `npm run build` first');
+  const root = project();
+  fs.writeFileSync(
+    path.join(root, '.paper', 'INTAKE.md'),
+    '---\ntopic: attention mechanisms in neural networks\ndiscipline: computer science\n---\n# Intake\n\nWrite a 1500-word literature review on attention mechanisms in neural networks.\n',
+  );
+  const run = (): ReturnType<typeof spawnSync> =>
+    spawnSync(process.execPath, [DIST_CLI, 'research', '--yolo'], {
+      cwd: root,
+      env: { ...process.env, PENSMITH_NO_LLM: '1' },
+      encoding: 'utf8',
+      timeout: 180_000,
+    });
+  const first = run();
+  assert.equal(first.status, 0, `research must succeed: ${String(first.stderr).slice(-1500)}`);
+  const file = libraryPaths(root).library;
+  const lib = LibrarySchema.parse(JSON.parse(fs.readFileSync(file, 'utf8')));
+  assert.ok(lib.entries.length >= 1, `the recorded fixtures yield sources (got ${lib.entries.length})`);
+  for (const e of lib.entries) {
+    assert.ok(e.provenance.some((p) => p.startsWith('research')), `${e.citekey} carries a research provenance tag`);
+  }
+  const served = await readPaperLibraryOverMcp(root);
+  assert.equal(served.$schemaVersion, 2);
+  assert.deepEqual(served.entries.map((e) => e.citekey), lib.entries.map((e) => e.citekey), 'paper://library returns the entries');
+
+  const second = run();
+  assert.equal(second.status, 0, String(second.stderr).slice(-1500));
+  const lib2 = LibrarySchema.parse(JSON.parse(fs.readFileSync(file, 'utf8')));
+  assert.deepEqual(lib2.entries.map((e) => e.citekey), lib.entries.map((e) => e.citekey), 'a re-run never duplicates a source');
+  assert.match(String(second.stdout), /0 new/);
+});

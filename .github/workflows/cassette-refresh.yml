@@ -1,10 +1,13 @@
 # .github/workflows/cassette-refresh.yml
 #
-# Weekly HTTP-cassette refresh for the Crossref / OpenAlex / Unpaywall
-# adapter fixtures in tests/fixtures/cassettes/. The PR-time `ci.yml` runs
-# OFFLINE (PENSMITH_NETWORK_TESTS unset / 0) — recorded cassettes are the
-# fast, hermetic path. This cron job is the SLOW lane that re-records them
-# against the live registrars and opens a PR if anything drifted.
+# Weekly HTTP-cassette refresh for the source-adapter fixtures in
+# tests/fixtures/cassettes/<adapter>/. `npm test` runs sources OFFLINE (the
+# test-runner lane of D-V1-01: scripts/run-tests.mjs sets PENSMITH_TEST=1 and
+# replays exact-match fixtures unless PENSMITH_NETWORK_TESTS=1), so recorded
+# cassettes are the fast, hermetic path. This cron job is the SLOW lane that
+# re-records them against the live APIs with `npm run cassettes:refresh`
+# (scripts/refresh-cassettes.mjs, CI-07 / D-17-14) and opens a PR if anything
+# drifted.
 #
 # Why a separate workflow:
 #   - PR CI must remain hermetic + fast (no live HTTP from contributor PRs).
@@ -42,25 +45,24 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: '20.18'
+          # CI-06 / D-17-39: every workflow other than the ci.yml matrix runs
+          # on Node 24 (the newest supported LTS line).
+          node-version: '24'
           cache: npm
 
       - run: npm ci
 
-      - name: Build (cassette recorder needs dist/ for the CLI bin)
-        run: npm run build
-
-      - name: Re-record cassettes (live network — Crossref/OpenAlex/Unpaywall)
+      - name: Re-record cassettes (live network — every source adapter)
         env:
-          PENSMITH_NETWORK_TESTS: '1'
-          # CR-01 fix: env name must match bin/lib/http-mock.ts:231
-          # (recordCassettes() checks PENSMITH_RECORD_CASSETTES, not _REFRESH_).
-          PENSMITH_RECORD_CASSETTES: '1'
-          # Contact email is REQUIRED by Crossref/OpenAlex polite-pool policy
-          # (D-15 / RESEARCH §RQ-3). Provided as a repo secret so the cron
-          # identifies itself correctly to the registrars.
+          # Contact email is REQUIRED by the Crossref/OpenAlex polite-pool policy
+          # (D-15 / RESEARCH §RQ-3) and by Unpaywall; the recorder fails fast
+          # without it and redacts it from every stored fixture. Provided as a
+          # repo secret so the cron identifies itself correctly to the APIs.
           PENSMITH_CONTACT_EMAIL: ${{ secrets.PENSMITH_CONTACT_EMAIL }}
-        run: npm run test:cassettes -- --refresh
+        run: npm run cassettes:refresh
+
+      - name: Validate the re-recorded cassettes (no leaked headers, ≤ 51200 bytes, provenance)
+        run: node --import tsx --test tests/cassette-no-leak.test.ts tests/cassette-size.test.ts tests/cassette-provenance.test.ts
 
       - name: Create PR with refreshed cassettes
         uses: peter-evans/create-pull-request@v6
@@ -68,16 +70,16 @@ jobs:
           commit-message: |
             chore(cassettes): weekly refresh
 
-            Re-records tests/fixtures/cassettes/ against live
-            Crossref / OpenAlex / Unpaywall endpoints. Review the diff
+            Re-records tests/fixtures/cassettes/<adapter>/ against the
+            live source APIs (npm run cassettes:refresh). Review the diff
             for unexpected schema drift before merging.
           branch: cassette-refresh-${{ github.run_id }}
           delete-branch: true
           title: 'chore(cassettes): weekly refresh'
           body: |
-            Automated weekly cassette refresh. The PR-time `ci.yml` runs
-            offline against recorded cassettes; this PR brings the
-            recorded fixtures back in sync with the live registrars.
+            Automated weekly cassette refresh. `npm test` replays recorded
+            cassettes offline (the test-runner lane); this PR brings the
+            recorded fixtures back in sync with the live APIs.
 
             **Review checklist:**
             - [ ] Diff is purely structural (cassette IDs, timestamps, schema-stable fields)

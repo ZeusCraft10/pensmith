@@ -2,8 +2,8 @@
 //
 // Phase 4 Plan 04-05 — the phase keystone. runCompile composes the Phase 1-3
 // chokepoints into a single, lock-guarded, read-only-on-sections pipeline that
-// produces .paper/DRAFT.md + .paper/COMPILE-REPORT.md and regenerates
-// .paper/CITATIONS.bib. Every write routes through the D-07 atomicWriteFile
+// produces .paper/DRAFT.md + .paper/COMPILE-REPORT.md (it never rewrites
+// .paper/CITATIONS.bib — BRDTH-01). Every write routes through the D-07 atomicWriteFile
 // sole-writer chokepoint; section files are NEVER written (ARCH-20).
 //
 // Pipeline (04-RESEARCH §F, with the CANONICAL COMP meanings from this plan):
@@ -28,8 +28,9 @@
 //      any drift REJECTS that boundary (keep original prose) and records a
 //      Transitions-Changed rejection. Then run the consistency scan (COMP-04,
 //      flags only) and citation density (COMP-05, warn-only vs discipline target).
-//   4. Regenerate .paper/CITATIONS.bib (D-19) from the union of compiled
-//      citekeys; atomicWriteFile DRAFT.md + COMPILE-REPORT.md (schema v1, D-14).
+//   4. atomicWriteFile DRAFT.md + COMPILE-REPORT.md (schema v1, D-14).
+//      .paper/CITATIONS.bib stays the full library rendered from LIBRARY.json by
+//      bin/lib/library.ts (BRDTH-01 / D-17-43); citeproc renders cited keys only.
 //
 // The smoother + re-verify transports are injectable seams so CI never touches a
 // live model/network. Production callers (bin/cli/compile.ts) wire the real
@@ -44,11 +45,9 @@ import { parseFrontmatter } from './frontmatter.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { computeDraftHash } from './draft-hash.js';
-import { extractCitekeys, replaceCitekeys } from './citation-token.js';
+import { replaceCitekeys } from './citation-token.js';
 import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
-import { writeBibtex } from './bibtex-write.js';
-import { parseBib } from './citations.js';
 import {
   renderCompileReport,
   type TransitionEntry,
@@ -56,7 +55,6 @@ import {
   type CitationDensityEntry,
   type StalenessEntry,
 } from './compile-report.js';
-import type { SourceCandidate } from './schemas/source-candidate.js';
 import { parseVerdictRows } from './verify/verdict-rows.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
@@ -444,9 +442,12 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     }));
     for (const w of densityReport.warnings) warn(`WARN: citation density — ${w.detail}`);
 
-    // ---- Step 4: regen CITATIONS.bib (D-19) + emit DRAFT + REPORT (COMP-07) -
+    // ---- Step 4: emit DRAFT + REPORT (COMP-07) -------------------------------
+    // BRDTH-01 / D-17-43: compile never rewrites .paper/CITATIONS.bib. It is the
+    // full research library, rendered from LIBRARY.json by bin/lib/library.ts
+    // (the one writer); citeproc renders only the keys the draft cites. (The old
+    // cited-only regeneration pruned the library and once emptied it — EXP-01.)
     const bibPath = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
-    await regenerateBib(compiled, bibPath);
 
     const draftPath = join(paperDir(opts.paperRoot), 'DRAFT.md');
     await atomicWriteFile(draftPath, compiled);
@@ -473,83 +474,6 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       staleResolvedCount: stalenessResolved.length,
     };
   });
-}
-
-/**
- * Regenerate .paper/CITATIONS.bib from the UNION of citekeys present in the
- * compiled manuscript (D-19 — via bibtex-write.ts / citation-js chokepoint).
- * Metadata is pulled from the existing bib; an uncited entry is dropped.
- */
-async function regenerateBib(compiled: string, bibPath: string): Promise<void> {
-  const compiledCitekeys = new Set(extractCitekeys(compiled));
-  const existing = existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '';
-  const entries = existing.trim().length > 0 ? await parseBib(existing) : [];
-
-  const now = new Date().toISOString();
-  const candidates: SourceCandidate[] = [];
-  for (const e of entries) {
-    const x = e as {
-      id?: string;
-      title?: string | string[];
-      author?: Array<{ family?: string; given?: string }>;
-      DOI?: string;
-      ISBN?: string;
-      number?: string;
-      note?: string;
-      issued?: { 'date-parts'?: number[][] };
-    };
-    const id = String(x.id ?? '');
-    if (!compiledCitekeys.has(id)) continue; // keep only cited keys (the union)
-    const title = Array.isArray(x.title) ? (x.title[0] ?? '') : (x.title ?? '');
-    const authors = (x.author ?? [])
-      .map((a) => {
-        const fam = String(a?.family ?? '').trim();
-        const giv = String(a?.given ?? '').trim();
-        return giv ? `${fam}, ${giv}` : fam;
-      })
-      .filter(Boolean);
-
-    // Preserve the publication year (audit #5). citation-js parses BibTeX
-    // `year = {2020}` into CSL `issued.date-parts[0][0]`; the prior code never
-    // read it, so writeBibtex (which emits a year only when c.year is a number)
-    // stripped the year from EVERY regenerated citation.
-    const yearRaw = x.issued?.['date-parts']?.[0]?.[0];
-    const year = typeof yearRaw === 'number' && Number.isFinite(yearRaw) ? yearRaw : undefined;
-
-    // Preserve the persistent identifier for DOI-less sources (audit #17): a book
-    // (ISBN) or arXiv preprint (CSL `number`) carries no DOI, so writeBibtex's
-    // toCsl persistent-id gate would DROP it entirely. Carry ISBN / arXiv id
-    // (the extra fields toCsl reads) so DOI-less sources survive the round-trip.
-    const isbn = typeof x.ISBN === 'string' && x.ISBN.trim() ? x.ISBN.trim() : undefined;
-    // CSL `number` is ALSO the generic journal issue number, so only treat it as
-    // an arXiv id when it is arXiv-SHAPED (CodeRabbit) — otherwise a DOI-less
-    // journal article with an issue number would be re-emitted as a fabricated
-    // arXiv preprint. New-style: 2305.12345 (optional vN); old-style: hep-th/9901001.
-    const numberRaw = typeof x.number === 'string' ? x.number.trim() : '';
-    const isArxivId =
-      /^\d{4}\.\d{4,5}(v\d+)?$/.test(numberRaw) ||
-      /^[a-z-]+(\.[a-z]{2})?\/\d{7}(v\d+)?$/i.test(numberRaw);
-    const arxivId = !x.DOI && isArxivId ? numberRaw : undefined;
-
-    candidates.push({
-      source: arxivId ? 'arxiv' : 'crossref',
-      id: x.DOI ?? id,
-      title: title || id,
-      authors: authors.length > 0 ? authors : ['Unknown'],
-      ...(x.DOI !== undefined ? { doi: x.DOI } : {}),
-      ...(year !== undefined ? { year } : {}),
-      ...(isbn !== undefined ? { isbn } : {}),
-      ...(arxivId !== undefined ? { arxivId } : {}),
-      retracted: x.note === 'RETRACTED',
-      last_verified: now,
-      citekey: id,
-      raw: {},
-    } as SourceCandidate);
-  }
-
-  // writeBibtex re-renders via the citation-js + atomic-write chokepoints and
-  // resolves any base-26 collisions (D-19). An empty union → a zero-length bib.
-  await writeBibtex(candidates, bibPath);
 }
 
 export default runCompile;

@@ -36,8 +36,8 @@ workflow body below is the prompt that drives the verb under both Tier 1
 
 ## Outputs
 
-- `.paper/LIBRARY.json` — deduped SourceCandidate[] with provenance + `retracted` flags
-- `.paper/CITATIONS.bib` — canonical BibTeX, written through `bin/lib/bibtex-write.ts` (D-19 citation-js chokepoint, D-20 canonical BibTeX, D-07 atomic-write chokepoint)
+- `.paper/LIBRARY.json` — the paper's source library (schema v2, BRDTH-01): one entry per work, deduped across runs and ingest paths, with identifiers, provenance tags, `last_verified` and `retracted` flags
+- `.paper/CITATIONS.bib` + `.paper/CITATIONS.ris` — rendered FROM LIBRARY.json by the one library writer (`bin/lib/library.ts` → `bin/lib/bibtex-write.ts` / `ris-write.ts`: D-19 citation-js chokepoint, D-20 canonical BibTeX, D-07 atomic-write chokepoint)
 
 ## Body
 
@@ -65,11 +65,10 @@ workflow body below is the prompt that drives the verb under both Tier 1
 
    This is also surfaced in the outline approval gate (see `workflows/outline.md` step 4).
 
-6. **Persist `.paper/LIBRARY.json`** (atomic via `bin/lib/atomic-write.ts`, D-07 chokepoint) with the dedup'd + filtered candidates (including any `retracted: true` survivors).
+6. **Merge into `.paper/LIBRARY.json`** (BRDTH-01 / D-17-43) through the one library writer, `upsertSources(root, candidates, { provenance: 'research' })` in `bin/lib/library.ts`, AFTER the retraction cross-check (D-15). Under one lock it dedups each candidate against the existing library — normalized DOI, then arXiv id / PMID / ISBN, then the version rule (normalized titles with Jaro-Winkler ≥ 0.95, same first-author family name, years ≤ 1 apart, when one side is a preprint) — merges the richer metadata and the provenance tags (a version of record's DOI wins over an SSRN / Research Square / arXiv DOI, which is kept in `alternate_dois` as a candidate only), and gives each new work a library-unique citekey. A re-run never duplicates a source; a known work keeps its citekey. Nothing else writes LIBRARY.json.
 
-7. **Write canonical BibTeX `.paper/CITATIONS.bib`** (RSCH-09, D-20):
-   - `import { writeBibtex } from 'bin/lib/bibtex-write.ts'` (Plan 03-04 — Wave 3).
-   - Call `writeBibtex(library.candidates, '.paper/CITATIONS.bib')`. This serializes via citation-js (D-19 chokepoint) and atomic-writes the file via `bin/lib/atomic-write.ts` (D-07 chokepoint).
-   - **`.paper/CITATIONS.bib` is the canonical citation source-of-truth (D-20)**. The verify verb reads it via `bin/lib/citations.ts` (D-19 chokepoint) at Pass-1 time. `LIBRARY.json` is NOT consulted at verify time.
+7. **Render `.paper/CITATIONS.bib` and `.paper/CITATIONS.ris`** (RSCH-09, D-20, CITE-05) — done by the same `upsertSources` call, from the validated LIBRARY.json (citation-js D-19 chokepoint, atomic writes D-07):
+   - **`.paper/CITATIONS.bib` is the canonical citation file the verifier reads (D-20)** via `bin/lib/citations.ts` (D-19 chokepoint) at Pass-1 time. `LIBRARY.json` is NOT consulted at verify time; it is the source the bib is rendered from.
+   - A bib entry that exists only in CITATIONS.bib (an older paper, or a hand edit) is imported into LIBRARY.json (`bib-import`) before re-rendering, so no cited key is ever lost.
 
 8. **Shell fallback** (TIER-06 equivalence path): `pensmith research [--queries <n>] [--yolo]`.

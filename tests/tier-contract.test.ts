@@ -45,6 +45,10 @@ before(async () => {
   transport = new StdioClientTransport({
     command: process.execPath,
     args: [MCP_BIN],
+    // CI-09: the SDK passes only HOME/PATH/… by default, which would drop the
+    // test context and the per-run data dir — the server would then write its
+    // session log and locks into the REAL user data dir. Inherit the full env.
+    env: Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === 'string')),
   });
   client = new Client(
     { name: 'tier-contract', version: '0.0.0' },

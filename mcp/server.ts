@@ -28,7 +28,6 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { pathToFileURL } from 'node:url';
 import { registerPaperResources } from './resources.js';
 import { registerPaperTools } from './tools.js';
 import { paperDir } from '../bin/lib/paths.js';
@@ -70,10 +69,10 @@ export async function main(): Promise<void> {
 
 // CLI-style invocation: `node dist/mcp/server.js` boots and connects.
 // Guarded so importing this module from tests does NOT auto-boot.
-// Rule 1 fix: use pathToFileURL to resolve process.argv[1] to a file: URL
-// before comparing — naive `file://${process.argv[1]}` fails on Windows when
-// the caller passes a relative path (argv[1]='dist/mcp/server.js' yields
-// 'file://dist/mcp/server.js' which never matches the absolute import.meta.url).
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+// RUN-10: isMainModule compares REALPATHS (relative argv[1], symlinked plugin
+// roots, Windows junctions and case all resolve), so a symlinked install boots
+// instead of exiting silently before `initialize` (T1-12).
+import { isMainModule } from '../bin/lib/main-guard.js';
+if (isMainModule(import.meta.url)) {
   void main();
 }

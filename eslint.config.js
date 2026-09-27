@@ -25,6 +25,7 @@
 // is sufficient to encode D-06.
 
 import tseslint from 'typescript-eslint';
+import chokepointRule from './scripts/eslint-rules/chokepoint.mjs';
 
 export default [
   ...tseslint.configs.recommended,
@@ -474,6 +475,15 @@ export default [
     },
   },
 
+  // === Local test servers + MockAgent seam (RUN-29; Phase 17 verbatim V6) ===
+  // The ONLY place under tests/ allowed to import undici / node:http / node:https:
+  // the RUN-21 mock LLM, the SEC-01 SNI/TLS server, the SEC-03 streaming server and
+  // the MockAgent helper. Every other test imports these helpers instead.
+  {
+    files: ['tests/helpers/local-servers/**/*.ts'],
+    rules: { 'no-restricted-imports': 'off' },
+  },
+
   // === Red-team fixture exemption (D-08 + D-09 + D-10) ===
   // Each fixture INTENTIONALLY violates a chokepoint. Fixtures are executed
   // by their corresponding lint-*.test.ts files which run ESLint
@@ -496,7 +506,11 @@ export default [
       'tests/fixtures/lint-paths-chokepoint-fixture.ts',
       'tests/fixtures/lint-thin-shim-fixture.ts',
       'mcp/__fixtures__/**',
+      // RUN-29: the chokepoint violation fixtures are linted programmatically
+      // by tests/chokepoints.test.ts (lintText under a virtual in-scope path).
+      'tests/fixtures/chokepoints/**',
       'dist/**',
+      'coverage/**',
       'node_modules/**',
     ],
   },
@@ -527,5 +541,27 @@ export default [
   {
     files: ['scripts/**/*.cjs', 'tests/**/*.cjs'],
     rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+
+  // === RUN-29 / D-17-44: the data-driven chokepoint rule ===
+  // `pensmith/chokepoint` (scripts/eslint-rules/chokepoint.mjs) enforces every
+  // row in scripts/chokepoints/*.json — the Phase 17+ chokepoints (the library
+  // writer, the main guard, no new inline disables, the prompt loader, the
+  // LLM-SDK type-only imports, and each stream's rows). A row carries its own
+  // scope/allow globs, so this block only decides which files the rule sees.
+  // It is a separate rule name, so no file-scoped override of
+  // no-restricted-syntax (the last-match-wins problem above) can drop it.
+  // tests/chokepoints.test.ts runs every row's failing fixture and re-checks
+  // the file-regex and import-graph rows outside ESLint.
+  {
+    files: [
+      'bin/**/*.{ts,mts,cts,js,mjs,cjs}',
+      'mcp/**/*.{ts,mts,cts,js,mjs,cjs}',
+      'hooks/**/*.{ts,mts,cts,js,mjs,cjs}',
+      'tests/**/*.{ts,mts,cts,js,mjs,cjs}',
+      'scripts/**/*.{ts,mts,cts,js,mjs,cjs}',
+    ],
+    plugins: { pensmith: { rules: { chokepoint: chokepointRule } } },
+    rules: { 'pensmith/chokepoint': 'error' },
   },
 ];

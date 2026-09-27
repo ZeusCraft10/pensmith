@@ -1,0 +1,10 @@
+// Chokepoint fixture (no-new-eslint-disable, RUN-29): silencing a chokepoint
+// instead of restructuring the code. Both a next-line directive and an inline
+// rule configuration comment must be flagged.
+/* eslint no-restricted-syntax: off */
+import os from 'node:os';
+
+export function sneakyHome(): string {
+  // eslint-disable-next-line no-restricted-syntax
+  return os.homedir();
+}

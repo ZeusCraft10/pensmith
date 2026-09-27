@@ -9,9 +9,10 @@
 //   - URL  → httpFetch (D-06 chokepoint, NEVER raw fetch) → sniff Content-Type:
 //            PDF bytes → PDF path; HTML → scrape a <meta> DOI → retry as DOI.
 //
-// Writes via writeBibtex (D-19 citation-js chokepoint) — never a hand-rolled
-// serializer. The remap gate (approval-gates-default-on, --yolo skips) touches
-// ONLY assigned_sources[] in each section PLAN.md — NEVER status or
+// Writes through bin/lib/library.ts upsertSources (BRDTH-01 — the one writer of
+// LIBRARY.json, which renders CITATIONS.bib/.ris via the D-19 citation-js
+// chokepoint) — never a hand-rolled serializer. The remap gate
+// (approval-gates-default-on, --yolo skips) touches ONLY assigned_sources[] in each section PLAN.md — NEVER status or
 // verified_against_draft_hash (Pitfall 3 / A6: a verified section STAYS
 // verified; the user runs `plan <N> --revise` to rebuild the claim mapping).
 //
@@ -31,14 +32,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { extractPdfText } from '../lib/pdf-text.js';
 import { search as crossrefSearch, fetchById as crossrefFetchById } from '../lib/sources/crossref.js';
-import { writeBibtex } from '../lib/bibtex-write.js';
-import { parseBibtex } from '../lib/citations.js';
+import { upsertSources } from '../lib/library.js';
 import { normalizeDoi, isDoi, verifyDoi } from '../lib/doi.js';
 import { updateFrontmatter } from '../lib/frontmatter.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
 import { ask } from '../lib/prompts.js';
-import { paperDir, sectionPlan } from '../lib/paths.js';
+import { sectionPlan } from '../lib/paths.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { loadState } from '../lib/state.js';
 import { fetch as httpFetch } from '../lib/http.js';
@@ -71,63 +71,6 @@ function scrapeDoiFromHtml(html: string): string | null {
   if (meta?.[1]) return normalizeDoi(meta[1]);
   const inline = /\b10\.\d{4,9}\/[^\s"'<>]+/.exec(html);
   return inline ? normalizeDoi(inline[0]) : null;
-}
-
-/** Reconstruct a minimal SourceCandidate from a parsed CSL-JSON bib entry. */
-function cslToCandidate(e: Record<string, unknown>): SourceCandidate | null {
-  const doi = typeof e.DOI === 'string' ? e.DOI : undefined;
-  const title = typeof e.title === 'string' ? e.title : '';
-  if (!doi || !title) return null; // writeBibtex drops id-less entries anyway
-  const authorArr = Array.isArray(e.author) ? (e.author as Array<Record<string, unknown>>) : [];
-  const authors = authorArr
-    .map((a) => {
-      const family = String(a.family ?? '').trim();
-      const given = String(a.given ?? '').trim();
-      if (!family) return '';
-      return given ? `${family}, ${given}` : family;
-    })
-    .filter(Boolean);
-  if (authors.length === 0) authors.push('Anonymous');
-  let year: number | undefined;
-  const issued = e.issued as { 'date-parts'?: number[][] } | undefined;
-  const y = issued?.['date-parts']?.[0]?.[0];
-  if (typeof y === 'number') year = y;
-  const citekey = typeof e.id === 'string' && /^[a-z][a-z0-9_-]*$/.test(e.id) ? e.id : undefined;
-  return {
-    source: 'crossref',
-    id: doi,
-    doi,
-    title,
-    authors,
-    year,
-    retracted: false,
-    last_verified: new Date().toISOString(),
-    citekey: citekey ?? 'anon',
-    raw: e,
-  };
-}
-
-/** Load the existing CITATIONS.bib (if any) as reconstructed candidates. */
-async function loadExistingCandidates(bibPath: string): Promise<SourceCandidate[]> {
-  let text: string;
-  try {
-    text = await fs.promises.readFile(bibPath, 'utf8');
-  } catch {
-    return []; // no bib yet
-  }
-  if (!text.trim()) return [];
-  try {
-    const entries = await parseBibtex(text);
-    return entries
-      .map((e) => cslToCandidate(e as Record<string, unknown>))
-      .filter((c): c is SourceCandidate => c !== null);
-  } catch {
-    // A malformed pre-existing bib must not abort the add; preserve it raw is
-    // impossible through the chokepoint, so fall back to a fresh write of the
-    // new candidate alone (the user keeps the new source; the corrupt file is
-    // surfaced by the verifier on the next compile).
-    return [];
-  }
 }
 
 /**
@@ -278,16 +221,19 @@ export const addCommand = defineCommand({
       }
     }
 
-    // (3) + (4) Write CITATIONS.bib via the writeBibtex chokepoint. Load existing
-    //     candidates, dedup the citekey, append, and re-serialize the whole file.
-    const bibPath = path.join(paperDir(paperRoot), 'CITATIONS.bib');
-    const existing = await loadExistingCandidates(bibPath);
-    if (existing.some((c) => c.citekey === candidate.citekey)) {
-      process.stdout.write(
-        `pensmith add: WARNING — citekey "${candidate.citekey}" already in CITATIONS.bib (writeBibtex will collision-suffix).\n`,
-      );
+    // (3) + (4) BRDTH-01 / D-17-43: the ONE library writer. upsertSources dedups
+    //     the source against LIBRARY.json (normalized DOI, then arXiv/PMID/ISBN,
+    //     then the preprint ↔ version-of-record rule), merges the richer
+    //     metadata, and re-renders CITATIONS.bib + CITATIONS.ris from it. A work
+    //     already in the library keeps its citekey — no engel2009a duplicate
+    //     (RM-13) — and every later message uses the REAL key.
+    const upsert = await upsertSources(paperRoot, [candidate], { provenance: 'add' });
+    const outcome = upsert.outcomes[0]!;
+    candidate = { ...candidate, citekey: outcome.citekey };
+    if (outcome.status !== 'added') {
+      process.stdout.write(`pensmith add: already in library as ${outcome.citekey}.\n`);
+      if (args.remap !== true) return { ok: true, citekey: outcome.citekey, alreadyInLibrary: true };
     }
-    await writeBibtex([...existing, candidate], bibPath);
 
     // (5) Remap gate. Remap when --remap is set OR (not --yolo AND the user
     //     confirms). When --section/--slug are supplied, remap that one section;

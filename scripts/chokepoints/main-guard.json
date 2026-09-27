@@ -1,0 +1,13 @@
+{
+  "id": "main-guard",
+  "requirement": "RUN-10",
+  "module": "bin/lib/main-guard.ts",
+  "description": "Only bin/lib/main-guard.ts compares a module with process.argv[1]. Entry points (bin/pensmith.ts, mcp/server.ts, hook entries) call isMainModule(import.meta.url), which compares realpaths (case-folded on Windows), so npm i -g, npm link, node_modules/.bin shims, symlinked plugin roots and Windows junctions run instead of exiting 0 silently; a hand-rolled `import.meta.url === pathToFileURL(process.argv[1]).href` guard is false under every symlink.",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs"],
+  "allow": ["bin/lib/main-guard.ts"],
+  "match": {
+    "kind": "member",
+    "pattern": "^process\\.argv\\[1\\]$"
+  },
+  "fixture": "tests/fixtures/chokepoints/main-guard.violation.ts.txt"
+}

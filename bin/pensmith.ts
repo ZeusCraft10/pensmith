@@ -404,9 +404,10 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
 // CLI-style invocation: `node dist/bin/pensmith.js <verb>` dispatches.
 // Guarded so importing this module from tests (WR-06: tests/cli-verbs.test.ts
 // introspects command.subCommands at runtime) does NOT auto-run.
-// Same pathToFileURL + import.meta.url comparison pattern as mcp/server.ts —
-// naive `file://${process.argv[1]}` fails on Windows for relative argv[1].
-import { pathToFileURL } from 'node:url';
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+// RUN-10: isMainModule compares REALPATHS, so `npm i -g`, `npm link`, .bin
+// shims and symlinked/junctioned roots dispatch (a plain URL comparison with
+// argv[1] was false under a symlink and the CLI silently exited 0).
+import { isMainModule } from './lib/main-guard.js';
+if (isMainModule(import.meta.url)) {
   void dispatch();
 }

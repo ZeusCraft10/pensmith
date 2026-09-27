@@ -48,7 +48,8 @@ test('package.json contract', () => {
   assert.equal(pkg['type'], 'module');
   assert.equal(pkg['license'], 'AGPL-3.0-or-later');
   const engines = pkg['engines'] as Record<string, string> | undefined;
-  assert.equal(engines?.['node'], '>=20.10.0');
+  // CI-06 / D-17-39: the supported Node LTS floor (22 and 24 are tested).
+  assert.equal(engines?.['node'], '>=22.12.0');
   assert.equal(pkg['packageManager'], 'npm@10.9.0');
   const scripts = pkg['scripts'] as Record<string, string> | undefined;
   for (const s of ['lint', 'typecheck', 'test', 'build', 'dev', 'validate:manifests', 'check']) {
@@ -189,7 +190,10 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   const hash = createHash('sha256').update(bytes).digest('hex');
   // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"`
   // after every intentional edit. The PR diff makes the change visible.
-  const PINNED = 'e43c0cd7fd8b04cd079ace0f56e7d7d67d871ab3e04fbdaef0eb29a599aa020a';
+  // Re-pinned in Phase 17 (foundations): the network-mode probe (RUN-02), the
+  // model-runtime copy of runtime-config-presence (RUN-07/08), the Node 22.12
+  // floor (CI-06), and the header/footer the renderer actually prints.
+  const PINNED = '5ed54901d537914e5f83ce2a07b67ef3b3b84c4e709fb6b5cbb04e8ecb6d767e';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

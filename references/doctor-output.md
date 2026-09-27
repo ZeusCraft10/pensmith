@@ -1,33 +1,36 @@
 # Doctor Output Strings (locked — D-18)
 
 This file is the SINGLE source of truth for `/pensmith doctor` (DOCT-01..04, DOCT-07
-+ DOCT-02 ecosystem probes) user-facing prose. `bin/cli/doctor.ts` reads these
-strings at module load. The Tier-1 MCP `paper://capabilities` resource consumes
-the same Record shape (severities only — no copy strings persisted across the wire).
++ DOCT-02 ecosystem probes) user-facing prose. The probe modules under
+`bin/lib/doctor/probes/` and the renderer `bin/lib/doctor/render.ts` implement this
+copy. The Tier-1 MCP `paper://capabilities` resource consumes the same facts
+(presence booleans only — no copy strings persisted across the wire).
 Drift between the locked copy and the rendered output is a regression — pinned
 by sha256 hash in `tests/repo-files.test.ts`.
 
-The Phase-3 wiring-smoke probe (intake-outline-verify-wiring, DOCT-05) lands
-in Plan 03-09 Task 9.1 — its locked copy is the `intake-outline-verify-wiring
-(DOCT-05)` section below. The tier-equivalence assertion is the tier-contract
-Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this file.
+The Phase-3 wiring-smoke probe (intake-outline-verify-wiring, DOCT-05) is the
+`intake-outline-verify-wiring (DOCT-05)` section below. The tier-equivalence
+assertion is the tier-contract Case A in `tests/tier-contract.test.ts` (02-07),
+not a probe — not in this file.
 
 ## TTY render — header
 
-> pensmith doctor — environment + capability probe
+> Pensmith doctor:
 
-## TTY render — footer (PASS)
+## TTY render — probe line
 
-> All probes PASS or WARN. No FAIL. Exit 0.
+> `<glyph> [<SEVERITY>] <probe-id>: <summary>` — glyph ✓ PASS, ! WARN, ✗ FAIL, — SKIP — followed by indented `detail` and `fix:` lines when present.
 
-## TTY render — footer (FAIL)
+## TTY render — footer
 
-> One or more probes FAILed. Exit 1. See detail above.
+> Doctor: <n> PASS, <n> WARN, <n> FAIL, <n> SKIP
+
+The command exits 0 when no probe FAILs and 1 otherwise.
 
 ## Probe summary copy (locked per-probe)
 
 ### node-version (DOCT-01)
-> Node.js runtime version probe — pensmith requires >=20.10.0.
+> Node.js runtime version probe — pensmith requires Node >= 22.12.0 (the Node 22 and 24 LTS lines; CI-06). PASS at or above the floor; FAIL below it, with the fix "Install Node 22.12.0 or newer (the Node 22 or 24 LTS line)".
 
 ### mcp-sdk-presence (DOCT-01 wiring)
 > MCP server build artifact presence — dist/mcp/server.js must exist and be non-empty.
@@ -35,11 +38,14 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
 ### contact-email-presence (DOCT-03)
 > PENSMITH_CONTACT_EMAIL environment variable presence — see references/http-warnings.md for the full WARN copy. (Canonical probe id per 02-05 line 45; 02-07 Case A reads `probes['contact-email-presence']`.)
 
+### network-mode (RUN-02)
+> Effective network mode and why — `network: live` by default (sources, verification, detector and plagiarism requests go to the real services), or `network: OFFLINE (<reason>)` where the reason is `PENSMITH_OFFLINE=1`, `--dry-run` or `test runner`. Offline means exact recorded fixtures or a fail-closed "unavailable (offline)"; `--dry-run` means synthetic, labelled sources and zero sockets. Informational: it reports the mode and never FAILs.
+
 ### sync-folder-detection (DOCT-04)
 > .paper/ inside cloud sync folder (OneDrive / iCloud / Dropbox / Google Drive) detection — WARN if matched.
 
 ### runtime-config-presence (DOCT-07)
-> Runtime config provider API-key resolvability — WARN if no provider has its env-var set. Per-provider `{name, apiKeyEnv, present:boolean}` shape only — the resolved value never leaves loadRuntimeConfig (symmetric to T-01-07 / D-12).
+> Model runtime probe — names the resolved provider (`anthropic`, `openai`, `ollama`, `vllm` or `openai-compatible`), the model, and the key variable in use, and reports the optional keys OPENALEX_API_KEY, PENSMITH_S2_API_KEY, GPTZERO_API_KEY, PENSMITH_CONTACT_EMAIL and ZOTERO_API_KEY as present or absent — presence booleans only; a resolved value never leaves the runtime loader (T-01-07 / D-12). WARN with "Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY (or configure a local endpoint)" when no provider can run. For a local or OpenAI-compatible endpoint it probes `GET <endpoint>/models`: PASS when it answers, WARN when it is down. An unknown provider is a FAIL that lists the valid providers. Opt-in refusal fallbacks are disclosed when enabled. PENSMITH_NO_LLM is described as: replaces every LLM call with a deterministic stub (testing and dry-run).
 
 ### zotero-mcp-presence (DOCT-02 ecosystem)
 > Zotero MCP server reachable via the user's ~/.claude/.mcp.json — WARN if not configured. Optional dependency surfaced for Phase 3+ intake.
@@ -56,7 +62,7 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
 
 ### http-crossref-ping (D-03(d) cassette wiring)
 
-> D-03(d) Crossref-adapter cassette-wiring probe — exercises the recorded fixture cassette to confirm the offline HTTP path is reachable. PR-time CI runs OFFLINE; this probe is the canary for cassette parse / schema drift. PASS in CI; SKIP outside the repo where cassettes are not shipped.
+> D-03(d) Crossref-adapter cassette-wiring probe — exercises the recorded fixture cassette to confirm the offline HTTP path is reachable. The test suite runs sources OFFLINE (exact recorded fixtures); this probe is the canary for cassette parse / schema drift. PASS in a source checkout; SKIP outside the repo, where cassettes are not shipped.
 
 ### intake-outline-verify-wiring (DOCT-05)
 
@@ -73,6 +79,7 @@ Case A in `tests/tier-contract.test.ts` (02-07), not a probe — not in this fil
     "node-version":             { "id": "...", "severity": "PASS|WARN|FAIL|SKIP", "summary": "...", "detail": "...", "fix": "..." },
     "mcp-sdk-presence":         { "..." : "..." },
     "contact-email-presence":   { "..." : "..." },
+    "network-mode":             { "..." : "..." },
     "sync-folder-detection":    { "..." : "..." },
     "runtime-config-presence":  { "..." : "..." },
     "zotero-mcp-presence":      { "..." : "..." },

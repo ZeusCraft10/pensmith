@@ -1,24 +1,46 @@
 # Pensmith — Developer Notes
 
+`CLAUDE.md` is the architecture guide (tiers, pipeline modules, chokepoints, non-negotiables) and `CONTRIBUTING.md` the contributor workflow (test lanes, cassettes, the tier contract). This page covers the mechanics you hit first.
+
+## Toolchain
+
+Node **≥ 22.12** (`engines.node`); CI runs the Node 22 and 24 LTS lines on Ubuntu, macOS arm64 and Windows. `@types/node` tracks the floor (`^22`). The lockfile is committed and CI installs with `npm ci`, so a dependency change is `npm install <pkg>` plus the regenerated `package-lock.json` in the same commit.
+
 ## Build-first dependency
 
-`.mcp.json` references `${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js`. A fresh git clone has no `dist/` (it is `.gitignore`'d per D-22). Before loading the plugin or running the manifest validator, run:
+`.mcp.json` references `${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js`. A fresh git clone has no `dist/` (it is `.gitignore`'d per D-22). Before loading the plugin, running the manifest validator, or running the tests that spawn the built CLI, run:
 
 ```bash
 npm ci
 npm run build
 ```
 
-`npm run build` invokes `tsc` and produces `dist/` from the TypeScript sources in `bin/`, `mcp/`, `hooks/`, `scripts/`, and `tests/`.
+`npm run build` runs `prebuild` (which generates the gitignored `bin/lib/version.generated.ts` and `bin/lib/verbs.json`) and then `tsc`, producing `dist/` from the TypeScript sources in `bin/`, `mcp/`, `hooks/`, `scripts/`, and `tests/`. `npm run lint` and `npm run typecheck` need the prebuild output too.
+
+## Running the CLI from a checkout
+
+```bash
+npm run pensmith -- doctor              # through tsx, from source
+node dist/bin/pensmith.js --version     # the built CLI
+npm link && pensmith --version          # a global symlink, exactly like `npm i -g`
+```
+
+Entry points use `bin/lib/main-guard.ts` `isMainModule(import.meta.url)`, which compares realpaths, so the CLI and `dist/mcp/server.js` also run through `npm link`, `npm i -g`, `node_modules/.bin` shims and symlinked (or, on Windows, junctioned) plugin roots. A hand-rolled `import.meta.url === pathToFileURL(process.argv[1]).href` guard is false under a symlink and is rejected by the `main-guard` chokepoint row.
 
 ## Test runner
 
-`npm test` runs `node scripts/run-tests.mjs`, which programmatically discovers `tests/**/*.test.ts` (no shell glob — works identically on linux, macos, and windows) and executes them via `node --import tsx --test`. The runner exits 1 if zero test files are found (avoids vacuous CI pass on Windows).
+`npm test` runs `node scripts/run-tests.mjs`, which programmatically discovers `tests/**/*.test.ts` (no shell glob — works identically on linux, macos, and windows) and executes them via `node --import tsx --test`. The runner exits 1 if zero test files are found (avoids a vacuous CI pass on Windows). Pass files or directories to run a subset (`node scripts/run-tests.mjs tests/tier-contract/`) and `--`-flags to forward them to `node --test`.
+
+The runner also isolates the data dir (CI-09): it points `XDG_DATA_HOME`, `LOCALAPPDATA` and `PENSMITH_TEST_DATA_DIR` at a per-run temp dir and sets `PENSMITH_TEST=1`, which also keeps sources offline unless `PENSMITH_NETWORK_TESTS=1`. `bin/lib/paths.ts` refuses a non-temp data dir under any test context, so `node --import tsx --test tests/<file>.test.ts` is isolated as well.
+
+## Chokepoint rule
+
+`npm run lint` includes the local rule `pensmith/chokepoint` (`scripts/eslint-rules/chokepoint.mjs`), driven by the rows in `scripts/chokepoints/*.json`. `tests/chokepoints.test.ts` lints each row's `tests/fixtures/chokepoints/<id>.violation.ts.txt` (ignored by project lint) and must see it fail. See the CLAUDE.md chokepoint table before adding code that crosses a module boundary.
 
 ## OneDrive / iCloud / Dropbox / Google Drive
 
-If your repo lives inside a sync folder (the upstream dev folder is `Documents/Github/pensmith` inside OneDrive), exclude `dist/` and `node_modules/` from sync to avoid build-time races. Phase 2's `pensmith doctor` command surfaces this warning for `.paper/` workspaces; the same advice applies to the dev tree.
+If your repo lives inside a sync folder (the upstream dev folder is `Documents/Github/pensmith` inside OneDrive), exclude `dist/` and `node_modules/` from sync to avoid build-time races. `pensmith doctor` surfaces this warning for `.paper/` workspaces; the same advice applies to the dev tree.
 
 ## Quick check
 
-`npm run check` runs lint + typecheck + tests + manifest validation in one shot.
+`npm run check` runs prebuild, lint, typecheck, build, the tier contract, the tests and the manifest validation in one shot — the same order as CI.
