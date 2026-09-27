@@ -8,14 +8,16 @@
 //   - presence booleans for the key variables and for OPENALEX_API_KEY,
 //     PENSMITH_S2_API_KEY, GPTZERO_API_KEY, PENSMITH_CONTACT_EMAIL, ZOTERO_API_KEY;
 //   - the endpoint: `GET <endpoint>/models` through anthropic.ts
-//     probeLlmEndpoint() — PASS when it answers, WARN when it is down. A hosted
-//     default endpoint is not dialed while sources are offline (test runner,
-//     PENSMITH_OFFLINE, --dry-run); a local or explicitly configured endpoint is;
+//     probeLlmEndpoint() — PASS when it answers, WARN when it is down, and WARN
+//     naming the key variable when it answers 401/403 (the key was rejected).
+//     A hosted default endpoint is not dialed while sources are offline (test
+//     runner, PENSMITH_OFFLINE, --dry-run) or when its key is absent; a local
+//     or explicitly configured endpoint is;
 //   - the refusal-fallbacks setting (off unless opted in; it can change the
 //     served model and the cost) and what PENSMITH_NO_LLM does.
 // Severity: FAIL for an invalid runtime (e.g. an unknown provider — the valid
-// values are listed), WARN for no usable key / a down endpoint / a local
-// provider without a model, PASS otherwise.
+// values are listed), WARN for no usable key / a rejected key / a down
+// endpoint / a local provider without a model, PASS otherwise.
 //
 // `detail` stays the JSON array of {name, apiKeyEnv, present} built from
 // loadCapabilityFacts() (the single env-presence composition site shared with
@@ -81,16 +83,28 @@ export const runtimeConfigPresenceProbe: Probe = {
 
     let endpointPart: string;
     let endpointDown = false;
+    let keyRejected = false;
     const dial = rt.endpoint !== null && (local || rt.endpointSource === 'global' || !isOfflineMode());
     if (rt.endpoint === null) {
       endpointPart = 'endpoint: not configured';
       endpointDown = true;
     } else if (!dial) {
       endpointPart = `endpoint ${rt.endpoint}: not probed (sources offline)`;
+    } else if (!local && !keyPresent) {
+      // A hosted provider answers 401 to a keyless request: probing proves nothing.
+      endpointPart = `endpoint ${rt.endpoint}: not probed (no key)`;
     } else {
       const probe = await probeLlmEndpoint(rt);
-      endpointPart = probe.reachable ? `endpoint ${probe.detail}: PASS` : `endpoint ${probe.detail}: WARN (not reachable)`;
-      endpointDown = !probe.reachable;
+      if (probe.reachable) {
+        endpointPart = `endpoint ${probe.detail}: PASS`;
+      } else if (probe.status === 401 || probe.status === 403) {
+        // The server answered: it is up, but it rejected the configured key.
+        endpointPart = `endpoint ${probe.detail}: WARN (the key in ${rt.apiKeyEnv ?? 'the key variable'} was rejected)`;
+        keyRejected = true;
+      } else {
+        endpointPart = `endpoint ${probe.detail}: WARN (not reachable)`;
+        endpointDown = true;
+      }
     }
 
     const summary = [
@@ -117,6 +131,15 @@ export const runtimeConfigPresenceProbe: Probe = {
         summary,
         detail,
         fix: `Set [runtime] model in .paper/config.toml or pass --model (provider ${rt.provider} has no default model).`,
+      };
+    }
+    if (keyRejected) {
+      return {
+        id: 'runtime-config-presence',
+        severity: 'WARN',
+        summary,
+        detail,
+        fix: `Check ${rt.apiKeyEnv ?? 'the key variable'}: the ${rt.provider} endpoint rejected it (a revoked, mistyped or wrong-provider key).`,
       };
     }
     if (endpointDown) {

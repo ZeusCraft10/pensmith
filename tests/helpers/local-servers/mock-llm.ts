@@ -95,6 +95,8 @@ export interface MockLlmOptions {
   port?: number;
   /** Delay every response by this many ms (a "slow" provider; used for session-lock tests). */
   delayMs?: number;
+  /** Status for GET /v1/models (default 200; e.g. 401 simulates a rejected key for the doctor probe). */
+  modelsStatus?: number;
   /** Delay between SSE chunks when streaming. */
   streamChunkDelayMs?: number;
   /** A fixture object or a path to one (scripts/extract-fixture.mjs output). */
@@ -275,6 +277,12 @@ export class MockLlm {
     }
     if (req.method === 'GET' && (p === '/v1/models' || p === '/models')) {
       this.capture({ method: 'GET', path: p, shape: 'models', slug: null, headers, rawBody, body: null });
+      const modelsStatus = this.opts.modelsStatus ?? 200;
+      if (modelsStatus !== 200) {
+        res.writeHead(modelsStatus, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }));
+        return;
+      }
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({
         object: 'list',

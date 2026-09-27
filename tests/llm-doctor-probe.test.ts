@@ -66,3 +66,34 @@ test('RUN-08: a local provider endpoint is probed with GET /models — PASS when
     assert.equal(down.fix, 'Start the ollama server or fix "endpoint" in the global runtime.json.');
   });
 });
+
+test('RUN-07: a configured endpoint that answers 401 is up but rejected the key — the fix names the key variable', async () => {
+  await withLlmSandbox({ env: { ANTHROPIC_API_KEY: SENTINEL } }, async (sb) => {
+    const mock = await startMockLlm({ modelsStatus: 401 });
+    sb.writeGlobalRuntime({ $schemaVersion: 2, provider: 'anthropic', endpoint: mock.url });
+    try {
+      const r = await runtimeConfigPresenceProbe.run();
+      assert.equal(r.severity, 'WARN');
+      assert.match(r.summary, /→ HTTP 401: WARN \(the key in ANTHROPIC_API_KEY was rejected\)/);
+      assert.equal(r.fix, 'Check ANTHROPIC_API_KEY: the anthropic endpoint rejected it (a revoked, mistyped or wrong-provider key).');
+      for (const text of [r.summary, r.detail ?? '', r.fix ?? '']) assert.equal(text.includes('SENTINEL'), false);
+    } finally {
+      await mock.close();
+    }
+  });
+});
+
+test('RUN-07: a hosted endpoint is not probed while its key is absent (a keyless request only proves a 401)', async () => {
+  await withLlmSandbox({ env: { ANTHROPIC_API_KEY: undefined } }, async (sb) => {
+    const mock = await startMockLlm();
+    sb.writeGlobalRuntime({ $schemaVersion: 2, provider: 'anthropic', endpoint: mock.url });
+    try {
+      const r = await runtimeConfigPresenceProbe.run();
+      assert.equal(r.severity, 'WARN');
+      assert.match(r.summary, /endpoint http:\/\/127\.0\.0\.1:\d+: not probed \(no key\)/);
+      assert.equal(mock.requests.length, 0, 'no keyless request is sent');
+    } finally {
+      await mock.close();
+    }
+  });
+});

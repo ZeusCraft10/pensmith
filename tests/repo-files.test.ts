@@ -192,8 +192,10 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   // after every intentional edit. The PR diff makes the change visible.
   // Re-pinned in Phase 17 (foundations): the network-mode probe (RUN-02), the
   // model-runtime copy of runtime-config-presence (RUN-07/08), the Node 22.12
-  // floor (CI-06), and the header/footer the renderer actually prints.
-  const PINNED = '5ed54901d537914e5f83ce2a07b67ef3b3b84c4e709fb6b5cbb04e8ecb6d767e';
+  // floor (CI-06), and the header/footer the renderer actually prints; then in
+  // the Phase 17 integration: a rejected key (HTTP 401/403) is reported as such
+  // and a hosted endpoint is not probed without its key (RUN-07).
+  const PINNED = 'ddaac78ad2195409885512ec022058a5c1ddb65a88add58b1dbe6af6eb31052d';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 
