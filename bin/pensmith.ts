@@ -52,6 +52,7 @@ import { VERSION } from './lib/version.generated.js';
 import { UX02_VERBS, type Ux02Verb } from './lib/verbs.js';
 import { setMirrorPromptsToStderr, setSessionArgv } from './lib/session-log.js';
 import { projectEstimate, renderEstimate } from './lib/estimator.js';
+import { formatUsd } from './lib/budget.js';
 import { argvFlagValue, runtimeFlagsFromArgv, setRuntimeOverride } from './lib/runtime.js';
 import { runGate } from './lib/gates.js';
 import { EXIT_COST_CAP, EXIT_ERROR } from './lib/exit-codes.js';
@@ -325,8 +326,8 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
     }
     if (est.exceedsCap) {
       process.stderr.write(
-        `pensmith: REFUSED — --yolo projects $${est.totalUsd.toFixed(2)} for the remaining steps, over the ` +
-          `$${est.capUsd.toFixed(2)} session cost cap (RUN-18). Raise [budget] cost_cap_usd or ` +
+        `pensmith: REFUSED — --yolo projects ${formatUsd(est.totalUsd)} for the remaining steps, over the ` +
+          `${formatUsd(est.capUsd)} session cost cap (RUN-18). Raise [budget] cost_cap_usd or ` +
           `PENSMITH_COST_CAP_USD, or run without --yolo to be asked before the cap is crossed.\n`,
       );
       process.exit(EXIT_COST_CAP); // HARD refusal before any model call

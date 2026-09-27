@@ -16,6 +16,8 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { spawn, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { startMockLlm, type MockLlm, type MockLlmOptions } from './local-servers/mock-llm.js';
 import { _resetSessionForTest } from '../../bin/lib/session-log.js';
 import { _resetCostCapForTest } from '../../bin/lib/budget.js';
@@ -56,8 +58,26 @@ export interface LlmSandbox {
   writePaperConfig(toml: string): void;
   /** An env object for spawned CLIs (data dirs + keys of this sandbox). */
   spawnEnv(extra?: Record<string, string | undefined>): NodeJS.ProcessEnv;
+  /** Run the CLI from source (tsx) with cwd = the sandbox paper root (blocks: no in-process mock). */
+  runCli(args: readonly string[], opts?: { env?: Record<string, string | undefined>; input?: string }): CliResult;
+  /**
+   * Run a TypeScript file (or the CLI when `script` is null) under tsx WITHOUT
+   * blocking the event loop, so the in-process mock LLM can answer the child.
+   */
+  runTsx(script: string | null, args: readonly string[], opts?: { env?: Record<string, string | undefined>; input?: string }): Promise<CliResult>;
   restore(): Promise<void>;
 }
+
+export interface CliResult {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+const PENSMITH_TS = fileURLToPath(new URL('../../bin/pensmith.ts', import.meta.url));
+// Absolute loader URL: a bare `--import tsx` would resolve against the child's
+// temp cwd, which has no node_modules.
+const TSX_LOADER = import.meta.resolve('tsx');
 
 export interface SandboxOptions {
   /** Start the mock LLM and point this provider's endpoint at it. */
@@ -145,6 +165,35 @@ export async function openLlmSandbox(opts: SandboxOptions = {}): Promise<LlmSand
       }
       return env;
     },
+    runTsx(script: string | null, args: readonly string[], o: { env?: Record<string, string | undefined>; input?: string } = {}): Promise<CliResult> {
+      const env = childEnv(dataDir, o.env);
+      return new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, ['--import', TSX_LOADER, script ?? PENSMITH_TS, ...args], {
+          cwd: root,
+          env,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        let stdout = '';
+        let stderr = '';
+        const timer = setTimeout(() => child.kill('SIGKILL'), 120_000);
+        child.stdout.setEncoding('utf8').on('data', (d: string) => { stdout += d; });
+        child.stderr.setEncoding('utf8').on('data', (d: string) => { stderr += d; });
+        child.on('error', (e) => { clearTimeout(timer); reject(e); });
+        child.on('close', (status) => { clearTimeout(timer); resolve({ status, stdout, stderr }); });
+        child.stdin.end(o.input ?? '');
+      });
+    },
+    runCli(args: readonly string[], o: { env?: Record<string, string | undefined>; input?: string } = {}): CliResult {
+      const env = childEnv(dataDir, o.env);
+      const r = spawnSync(process.execPath, ['--import', TSX_LOADER, PENSMITH_TS, ...args], {
+        cwd: root,
+        env,
+        encoding: 'utf8',
+        input: o.input ?? '',
+        timeout: 120_000,
+      });
+      return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+    },
     async restore(): Promise<void> {
       process.chdir(prevCwd);
       if (mock) await mock.close();
@@ -156,6 +205,15 @@ export async function openLlmSandbox(opts: SandboxOptions = {}): Promise<LlmSand
       fs.rmSync(base, { recursive: true, force: true });
     },
   };
+}
+
+function childEnv(dataDir: string, extra: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, XDG_DATA_HOME: dataDir, LOCALAPPDATA: dataDir, HOME: dataDir };
+  for (const [k, v] of Object.entries(extra)) {
+    if (v === undefined) delete env[k];
+    else env[k] = v;
+  }
+  return env;
 }
 
 /** Run `fn` inside a sandbox and always restore it. */

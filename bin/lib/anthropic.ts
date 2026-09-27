@@ -896,8 +896,10 @@ async function runWithRetry(
   key: string | null,
   messages: ChatMessage[],
   attemptKind: 'initial' | 'corrective-retry',
-): Promise<{ result: AttemptResult; body: Record<string, unknown>; requestText: string; requestSha: string; replayOf?: string }> {
+): Promise<{ result: AttemptResult; spentUsd: number; body: Record<string, unknown>; requestText: string; requestSha: string; replayOf?: string }> {
   const root = projectRoot();
+  // Every billed attempt (a truncated first attempt included) counts toward the call's cost.
+  let spentUsd = 0;
   const firstMax = Math.min(opts.maxTokens ?? plan.spec.maxTokens, plan.caps.maxOutputTokens);
   const retryMax = Math.min(Math.max(firstMax * 2, plan.spec.retryMaxTokens), plan.caps.maxOutputTokens);
   const maxes = retryMax > firstMax ? [firstMax, retryMax] : [firstMax];
@@ -927,6 +929,7 @@ async function runWithRetry(
       result = await sendAttempt(plan, key ?? '', body, requestText, stream);
     }
 
+    if (replayOf === undefined) spentUsd += result.costUsd;
     const needsRetry = result.stopReason === 'max_tokens' && i + 1 < maxes.length;
     await recordAttempt(plan, opts, {
       attempt: kind,
@@ -943,7 +946,7 @@ async function runWithRetry(
       if (needsRetry) continue;
       throw new ProviderTruncatedError(plan.provider, plan.model, plan.spec.slug, maxTokens);
     }
-    return { result, body, requestText, requestSha, ...(replayOf !== undefined ? { replayOf } : {}) };
+    return { result, spentUsd, body, requestText, requestSha, ...(replayOf !== undefined ? { replayOf } : {}) };
   }
   // Unreachable: the loop either returns or throws.
   throw new ProviderTruncatedError(plan.provider, plan.model, plan.spec.slug, maxes[maxes.length - 1] as number);
@@ -989,7 +992,7 @@ export async function complete<T = unknown>(opts: CompleteOptions): Promise<Comp
 
   let totalCost = 0;
   const first = await runWithRetry(plan, opts, key, opts.messages, 'initial');
-  totalCost += first.result.costUsd;
+  totalCost += first.spentUsd;
   let final = first;
   let data: unknown;
 
@@ -1004,7 +1007,7 @@ export async function complete<T = unknown>(opts: CompleteOptions): Promise<Comp
         { role: 'user', content: correctiveInstruction(plan.spec.slug, parsed.error) },
       ];
       const second = await runWithRetry(plan, opts, key, retryMessages, 'corrective-retry');
-      totalCost += second.result.costUsd;
+      totalCost += second.spentUsd;
       final = second;
       parsed = parseStructured(plan.spec.slug, second.result.text, { strictNulls });
       if (!parsed.ok) throw new StructuredOutputError(plan.spec.slug, plan.model, parsed.error);
@@ -1020,7 +1023,7 @@ export async function complete<T = unknown>(opts: CompleteOptions): Promise<Comp
     outputTokens: r.outputTokens,
     cacheWriteTokens: r.cacheWriteTokens,
     cacheReadTokens: r.cacheReadTokens,
-    costUsd: final.replayOf ? 0 : totalCost,
+    costUsd: totalCost,
     provider: plan.provider,
     model: plan.model,
     servedModel: r.servedModel,

@@ -390,9 +390,9 @@ If user provides a folder of their past writing samples at intake:
 
 ### 7.19 Dry-run + cost estimator + cost cap
 
-- `/pensmith --dry-run` runs the entire workflow without calling external APIs or LLMs. Uses cached fixtures and stub responses.
-- `/pensmith --estimate` runs the workflow planner only, then reports projected token counts and dollar cost (per the configured runtime's pricing) before executing. User can confirm or abort.
-- **Hard runtime cost cap.** Per `cost_cap_usd` in config (default: $5 per session). If a step would exceed it, abort with a confirmation prompt. Running cost meter shown in `/pensmith status`.
+- `/pensmith --dry-run` runs the entire workflow without calling external APIs or LLMs. Uses cached fixtures and stub responses. Sources it finds are synthetic and labelled as such (reserved `10.0000/pensmith-dryrun.*` identifiers, a `synthetic` flag and an `OFFLINE MODE (reason: --dry-run)` banner); they are accepted by the verifier only under `--dry-run` and never reach an export.
+- `/pensmith --estimate` runs the workflow planner only and makes no LLM or network call. It projects the *remaining* work with the resolved runtime's per-slug models and prices (an unknown model is marked `(fallback price)`) and recorded per-slug output-token p90s from SESSION.log (shipped defaults until 5 samples exist). Completed steps are excluded; with nothing left it prints `nothing left to run ($0.00)`. Without a paper it derives the section count from the assignment (`assignment.*`, `--from` or INTAKE.md) and the length target. It prints per-step rows, the total, the model and the cap, then asks `Proceed? [y/N]` in a terminal: yes runs the next router action, no exits 0. A non-interactive run prints and exits 0. `--yolo` never answers this prompt.
+- **Hard runtime cost cap.** Per `[budget] cost_cap_usd` in config (default: $5 per session; `PENSMITH_COST_CAP_USD` overrides). A *session* is one top-level CLI invocation (a bare-router chain included) or one Claude Code session (one MCP server process). Before every model call, the session's spend plus the call's projection (input estimate plus the slug's p90 output, never more than `max_tokens`) is compared with the cap. Over the cap, a terminal user is asked once per session whether to continue; a run that cannot prompt — `--yolo` included — sends nothing and exits 5 with one line. `warn_at_usd` prints one warning with the running total. This is the only cap: there are no per-step or per-section caps. The `--yolo` pre-flight refuses only when the projected remaining cost exceeds the cap. Running cost meter shown in `/pensmith status` (`cost: $X this session / $Y total (cap $Z)`; `n/a (Claude session)` in the plugin).
 - All three are critical for budget-conscious users.
 
 ### 7.20 `--yolo` flag (autonomous mode, default off)
@@ -470,6 +470,8 @@ Edge cases documented in PRIVACY.md: PDF contents stay local; only Crossref/Open
 
 ## 10. Per-project config (`.paper/config.toml`)
 
+`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 1`. An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
+
 ```toml
 schema_version = 1                   # MANDATORY — see §14 NFRs
 
@@ -478,9 +480,9 @@ title = "..."
 class = "PHIL 101"
 assignment_prompt = "@./assignment.pdf"
 mode = "draft"                       # draft | outline
-goal = "producing a draft"           # producing a draft | learning the topic | both
+goal = "draft"                       # draft | learning | both (the §7.13 intake choices)
 length_target_words = 2500
-citation_style = "APA"               # APA | MLA | Chicago | IEEE | AMA | Vancouver
+citation_style = "APA"               # APA | MLA | Chicago (Notes-Bibliography) | Chicago (Author-Date) | IEEE | AMA | Vancouver | Harvard
 discipline_preset = "psychology"
 due_date = "2026-05-20"
 counterargument_required = true
@@ -501,11 +503,12 @@ peer_reviewed_only = false
 [verification]
 fetch_full_text = true
 flag_threshold = "low"               # low | medium | high
-verify_quotes = true
 recheck_after_days = 30
 plagiarism_check = true              # free distinctive-phrase check
 citation_density_min = 1             # per ¶
 citation_density_max = 3             # per ¶
+# verify_quotes is NOT a key: Pass 3 quote verification is a blocking pass (§14).
+# Setting it (true or false) is a config error that explains why.
 
 [humanizer]
 enabled = true
@@ -518,15 +521,27 @@ match_past_writing = false
 samples_dir = ""
 
 [runtime]
-# Tier 2 only; ignored in Claude Code plugin
+# Tier 2 only; ignored in the Claude Code plugin. Precedence: --runtime/--model
+# flags > this table > the global runtime.json > environment detection (only
+# OPENAI_API_KEY set → openai) > anthropic.
 provider = "anthropic"               # anthropic | openai | ollama | vllm | openai-compatible
-model = "claude-sonnet-4-6"
-endpoint = ""
-api_key_env = "ANTHROPIC_API_KEY"
+model = "claude-opus-5"              # generation model; judgment slugs use the provider's small model (claude-haiku-4-5 / gpt-6-luna)
+effort = "medium"                    # low | medium | high | xhigh | max — generation slugs (the drafter defaults to high)
+price_in_per_mtok = 0.0              # USD per million input tokens for a model the price table does not know (or a priced local server)
+price_out_per_mtok = 0.0
+refusal_fallbacks = "off"            # off | default — opt-in Anthropic server-side refusal fallbacks (disclosed in SESSION.log)
+# endpoint and api_key_env are NOT allowed here: a paper's files cannot choose
+# where prompts and keys are sent. They live only in the global runtime.json
+# (pensmithDataDir()/runtime.json); api_key_env must be ANTHROPIC_API_KEY,
+# OPENAI_API_KEY or end in _API_KEY and must not name a credential of another tool.
+
+[runtime.slugs.section-drafter]      # per-prompt-slug overrides (any slug in templates/prompts/)
+model = "claude-opus-5"
+effort = "high"
 
 [budget]
-cost_cap_usd = 5.00                  # hard runtime cap; abort if a step would exceed
-warn_at_usd = 2.00                   # show running total + warning past this point
+cost_cap_usd = 5.00                  # per-session cap (one CLI invocation or one Claude session); PENSMITH_COST_CAP_USD overrides
+warn_at_usd = 2.00                   # one warning when the session total passes this
 
 [network]
 contact_email_env = "PENSMITH_CONTACT_EMAIL"
@@ -534,6 +549,9 @@ http_cache_ttl_seconds = 86400       # 24h for DOI lookups
 http_search_cache_ttl_seconds = 3600 # 1h for search queries
 http_max_retries = 5
 http_backoff_base_ms = 250           # exponential, with jitter
+
+[logging]
+session_bodies = "full"              # full | redacted — redacted keeps hashes + 200-char previews (then `resume --replay` is unavailable)
 ```
 
 ---

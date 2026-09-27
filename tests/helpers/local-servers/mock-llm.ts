@@ -350,7 +350,7 @@ export class MockLlm {
       if (!refusal) blocks.push({ type: 'text', text });
       const stopReason = refusal ? 'refusal' : truncated ? 'max_tokens' : 'end_turn';
       const stopDetails = refusal
-        ? { type: 'refusal', category: refusal.category ?? 'cyber', explanation: refusal.explanation ?? 'mock refusal', recommended_model: refusal.recommendedModel ?? null }
+        ? { type: 'refusal', category: refusal.category === undefined ? 'cyber' : refusal.category, explanation: refusal.explanation ?? 'mock refusal', recommended_model: refusal.recommendedModel ?? null }
         : null;
       const usage: Record<string, unknown> = {
         input_tokens: input,

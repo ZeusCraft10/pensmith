@@ -17,7 +17,7 @@ import path from 'node:path';
 import { loadState } from './state.js';
 import { readSectionState, resolveNextAction, type RouterDecision } from './router.js';
 import { paperDir, sectionPlan } from './paths.js';
-import { CURRENT_CONFIG_VERSION, effectiveConfigRows, tryReadPaperConfigSync } from './config.js';
+import { CURRENT_CONFIG_VERSION, effectiveConfigRows, paperConfigPath, tryReadPaperConfigSync } from './config.js';
 import { parseIntakeMd } from './intake-parse.js';
 import { parseOutline } from './outline-parse.js';
 import { resolveCostCap, sessionSpend, totalCost } from './budget.js';
@@ -229,7 +229,7 @@ export async function renderConfigView(root: string, env: NodeJS.ProcessEnv = pr
   const rows = effectiveConfigRows(root, env);
   const rt = await resolveRuntime({ paperRoot: root, env });
   const lines: string[] = [
-    `pensmith status --config (${path.join('.paper', 'config.toml')}, schema_version ${CURRENT_CONFIG_VERSION})`,
+    `pensmith status --config (${path.relative(root, paperConfigPath(root)).split(path.sep).join('/')}, schema_version ${CURRENT_CONFIG_VERSION})`,
     '  config:',
   ];
   const w = Math.max(24, ...rows.map((r) => r.key.length));

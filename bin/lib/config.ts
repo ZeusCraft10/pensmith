@@ -242,6 +242,19 @@ function emitWarnings(fileLabel: string, warnings: readonly string[]): void {
   for (const w of warnings) warnOnce(`pensmith: ${fileLabel}: ${w} (ignored)`);
 }
 
+/**
+ * Parse, migrate and validate config.toml TEXT without touching disk (the PRD
+ * §10 drift test runs the documented block through this exact path). Returns
+ * the unknown-key warnings instead of printing them.
+ */
+export function parsePaperConfigText(
+  text: string,
+  fileLabel = 'config.toml',
+): { config: PaperConfig; warnings: string[]; migratedFrom: number | null } {
+  const parsed = parseAndValidate(text, fileLabel);
+  return { config: parsed.config, warnings: [...parsed.warnings], migratedFrom: parsed.migratedFrom };
+}
+
 const EMPTY_CONFIG: PaperConfig = Object.freeze({ schema_version: CURRENT_CONFIG_VERSION }) as PaperConfig;
 
 // ---------------------------------------------------------------------------

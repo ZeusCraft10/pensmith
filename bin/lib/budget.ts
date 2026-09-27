@@ -168,9 +168,12 @@ export function _resetCostCapForTest(): void {
   warnPrinted = false;
 }
 
-function usd(n: number): string {
+/** `$1.23`, or four decimals below one cent so a tiny cap or call never prints as $0.00. */
+export function formatUsd(n: number): string {
   return n >= 0.01 || n === 0 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`;
 }
+
+const usd = formatUsd;
 
 /**
  * The per-call session cap check (RUN-18). Called by the transport BEFORE any
