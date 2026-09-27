@@ -31,7 +31,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { pathToFileURL } from 'node:url';
 import { registerPaperResources } from './resources.js';
 import { registerPaperTools } from './tools.js';
-import { paperDir } from '../bin/lib/paths.js';
+import { servicePaperRoot, setActivePaperRoot } from '../bin/lib/paths.js';
+import { migrateLegacyLayout } from '../bin/lib/state.js';
 import { VERSION } from '../bin/lib/version.generated.js';
 
 // cross-AI cycle-2 HIGH #4 fix: resolve paperRoot ONCE at boot time and
@@ -42,7 +43,14 @@ import { VERSION } from '../bin/lib/version.generated.js';
 // tool calls write to. Without this thread-through, paper://state would
 // silently read from the HOST process CWD and Case C's idempotency check
 // would compare unrelated state documents.
+//
+// RUN-13 (D-17-32): `paperRoot` is the PROJECT root — the folder that contains
+// `.paper/` — exactly what the CLI resolves, so paper://state and `pensmith
+// status` read the same `.paper/STATE.json`. buildServer also records it as the
+// active root, so the pensmith_plan / pensmith_write / pensmith_verify tools
+// (which run the CLI verbs in-process) work on the same paper.
 export function buildServer(paperRoot: string): McpServer {
+  setActivePaperRoot(paperRoot);
   const server = new McpServer({
     name: 'pensmith',
     // WR-01: VERSION is derived from package.json#version at prebuild time
@@ -56,13 +64,13 @@ export function buildServer(paperRoot: string): McpServer {
 }
 
 export async function main(): Promise<void> {
-  // Boot-time paperRoot resolution: PENSMITH_PAPER_ROOT env var wins;
-  // fallback is paperDir() (which respects the CLI's own paperRoot rules
-  // — typically the CWD). Resolving ONCE here means the resource handlers
-  // never need to call paperDir() with no args (which previously caused
-  // HIGH #4: handler would target the host CWD instead of the temp root).
-  const envRoot = process.env.PENSMITH_PAPER_ROOT;
-  const paperRoot = envRoot && envRoot.length > 0 ? envRoot : paperDir();
+  // Boot-time paperRoot resolution (RUN-13 / D-17-33): PENSMITH_PAPER_ROOT,
+  // else the working directory — the project root, never `.paper/` itself, and
+  // never the `pensmith open` pointer (the MCP server does not follow it).
+  // Resolving ONCE here means no handler re-derives it (HIGH #4). A pre-v1
+  // root-level STATE.json/config.toml is moved into .paper/ first.
+  const paperRoot = servicePaperRoot();
+  await migrateLegacyLayout(paperRoot);
   const server = buildServer(paperRoot);
   const transport = new StdioServerTransport();
   await server.connect(transport);

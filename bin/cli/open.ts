@@ -21,7 +21,7 @@ import { defineCommand } from 'citty';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadGlobalLibrary } from '../lib/global-library.js';
-import { pensmithActivePointerPath } from '../lib/paths.js';
+import { pensmithActivePointerPath, hasPaper } from '../lib/paths.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 
 export const openCommand = defineCommand({
@@ -50,7 +50,7 @@ export const openCommand = defineCommand({
 
     // T-08-01-04: never switch to a missing/relocated folder. existsSync never
     // throws (returns false on any error).
-    if (!fs.existsSync(entry.folderPath)) {
+    if (!fs.existsSync(entry.folderPath) || !hasPaper(entry.folderPath)) {
       process.stdout.write(
         `pensmith open: folder not found for "${entry.name}": ${entry.folderPath}\n`,
       );
@@ -74,8 +74,13 @@ export const openCommand = defineCommand({
       ) + '\n',
     );
 
+    // RUN-14 / D-17-33: the pointer serves read-only verbs (status, list, doctor,
+    // --estimate) from any folder; a mutating run elsewhere asks first in a
+    // terminal, and needs --paper otherwise.
     process.stdout.write(
-      `pensmith open: switched to "${entry.name}" at ${entry.folderPath}\n`,
+      `pensmith open: switched to "${entry.name}" at ${entry.folderPath}\n` +
+        `pensmith open: status/list/doctor now show it from any folder; to change it from elsewhere, ` +
+        `pass --paper ${JSON.stringify(entry.name)}.\n`,
     );
     return { ok: true, folderPath: entry.folderPath };
   },

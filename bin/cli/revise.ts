@@ -27,6 +27,7 @@
 
 import { defineCommand } from 'citty';
 import { runRevise } from '../lib/revise.js';
+import { projectRoot } from '../lib/paths.js';
 import { proposeSwap } from '../lib/revise-swap.js';
 import { MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
@@ -101,7 +102,7 @@ export const reviseCommand = defineCommand({
     }
 
     const result = await runRevise({
-      paperRoot: process.cwd(),
+      paperRoot: projectRoot(),
       n,
       slug,
       yolo: args.yolo === true,

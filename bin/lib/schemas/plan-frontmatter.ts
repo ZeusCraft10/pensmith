@@ -6,6 +6,7 @@
 // This schema validates the YAML frontmatter of each per-section PLAN.md.
 //
 // Fields:
+//   - schema_version: frontmatter version (CONF-04; CURRENT_PLAN_FRONTMATTER_VERSION).
 //   - section: 1-based section number.
 //   - slug: kebab-case slug matching /^[a-z0-9-]+$/ (T-3-12 mitigation).
 //   - title: human-readable title.
@@ -28,7 +29,20 @@ import { z } from 'zod';
 
 const SLUG = /^[a-z0-9-]+$/;
 
+/**
+ * The PLAN.md frontmatter version this build writes and reads (CONF-04,
+ * D-17-38). A file without `schema_version` is v0 and is migrated by
+ * bin/lib/migrations/plan/v0_to_v1.ts through loadFrontmatterDoc
+ * (bin/lib/frontmatter.ts); a newer file is refused with "upgrade pensmith".
+ * Adding a field bumps this and ships vN_to_vN+1.ts in the same change (S-20).
+ */
+export const CURRENT_PLAN_FRONTMATTER_VERSION = 1;
+
 export const PlanFrontmatterSchema = z.object({
+  // CONF-04: the frontmatter version. Every writer stamps it
+  // (updatePlanFrontmatter), and the loader migrates older files before this
+  // schema sees them — the default only covers in-memory objects.
+  schema_version: z.literal(CURRENT_PLAN_FRONTMATTER_VERSION).default(CURRENT_PLAN_FRONTMATTER_VERSION),
   section: z.number().int().min(1),
   slug: z.string().regex(SLUG),
   title: z.string(),

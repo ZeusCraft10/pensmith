@@ -8,6 +8,12 @@
 //   Phase 3: pensmith_plan, pensmith_write, pensmith_verify (Tier 1
 //            equivalent of the Tier 2 CLI per-section verbs)
 // D-08: each handler body ≤30 stmts (AST-asserted in tests/mcp-server-thin-shim.test.ts).
+// RUN-23: every MUTATING tool runs inside the paper's session lock (mutate()
+//         → bin/lib/session-lock.ts withPaperSession): a CLI session working
+//         on the paper turns the call into a structured isError refusal, and
+//         section tools take a per-section sub-lock.
+// RUN-09: failures are isError with the CLI's exit-code classification
+//         (bin/lib/verb-outcome.ts runClassified).
 // D-06 / Pitfall 2: inputSchema is a flat record { field: z.<type>() } — the SDK
 //       wraps the record in z.object() internally. Passing z.object({...}) makes
 //       the schema double-wrapped and tool args arrive as { value: {...} }.
@@ -31,6 +37,9 @@ import {
 } from '../bin/lib/state.js';
 import { verifyDoi } from '../bin/lib/doi.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
+import { projectRoot } from '../bin/lib/paths.js';
+import { withPaperSession } from '../bin/lib/session-lock.js';
+import { runClassified, type ClassifiedOutcome } from '../bin/lib/verb-outcome.js';
 import {
   SectionStateSchema,
   SectionStatusSchema,
@@ -66,6 +75,32 @@ async function runVerbDirect(
   return cmd.run({ args, rawArgs: [], cmd } as unknown as Parameters<NonNullable<typeof cmd.run>>[0]);
 }
 
+/**
+ * RUN-23 + RUN-09: run one MUTATING tool call inside the paper's session lock
+ * (re-entrant within this server's PID; `section` adds the per-section
+ * sub-lock, so different sections run in parallel and the same section
+ * serializes) and classify its outcome like the CLI dispatcher. A CLI session
+ * holding the paper makes this a structured refusal before anything runs.
+ */
+function mutate(
+  root: string,
+  opts: { verb: string; section?: number },
+  fn: () => Promise<unknown>,
+): Promise<ClassifiedOutcome> {
+  return runClassified(() => withPaperSession(root, opts, fn));
+}
+
+/**
+ * The MCP result for a classified outcome. Success keeps the verb's own JSON
+ * (tier parity); a failure is `isError` with the same exit-code classification
+ * the CLI exits with (tests/tier-contract/exit-parity.test.ts).
+ */
+function toolResult(o: ClassifiedOutcome): { content: Array<{ type: 'text'; text: string }>; isError?: boolean } {
+  if (!o.isError) return { content: [{ type: 'text', text: JSON.stringify(o.result ?? null, null, 2) }] };
+  const body = { exit_code: o.exitCode, classification: o.classification, message: o.message, result: o.result ?? null };
+  return { isError: true, content: [{ type: 'text', text: JSON.stringify(body, null, 2) }] };
+}
+
 export function registerPaperTools(server: McpServer): void {
   // Tool 1: paper_init_section — initialise a section row in State (idempotent per D-08).
   server.registerTool(
@@ -79,10 +114,8 @@ export function registerPaperTools(server: McpServer): void {
         slug: z.string().min(1),
       },
     },
-    async ({ paperRoot, n, slug }) => {
-      const next = await initSection(paperRoot, n, slug);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(next, null, 2) }] };
-    },
+    async ({ paperRoot, n, slug }) =>
+      toolResult(await mutate(paperRoot, { verb: 'paper_init_section' }, () => initSection(paperRoot, n, slug))),
   );
 
   // Tool 2: paper_advance_section — transition section state (planned→writing→written→...).
@@ -97,10 +130,8 @@ export function registerPaperTools(server: McpServer): void {
         toState: SectionStateSchema,
       },
     },
-    async ({ paperRoot, n, toState }) => {
-      const next = await advanceSection(paperRoot, n, toState);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(next, null, 2) }] };
-    },
+    async ({ paperRoot, n, toState }) =>
+      toolResult(await mutate(paperRoot, { verb: 'paper_advance_section', section: n }, () => advanceSection(paperRoot, n, toState))),
   );
 
   // Tool 3: paper_record_verification — write a verification verdict for a section.
@@ -115,10 +146,8 @@ export function registerPaperTools(server: McpServer): void {
         verdict: VerificationVerdictSchema,
       },
     },
-    async ({ paperRoot, n, verdict }) => {
-      const next = await recordVerification(paperRoot, n, verdict);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(next, null, 2) }] };
-    },
+    async ({ paperRoot, n, verdict }) =>
+      toolResult(await mutate(paperRoot, { verb: 'paper_record_verification', section: n }, () => recordVerification(paperRoot, n, verdict))),
   );
 
   // Tool 4: paper_set_status — set section[n].status (pending/in-progress/blocked/done).
@@ -133,10 +162,8 @@ export function registerPaperTools(server: McpServer): void {
         status: SectionStatusSchema,
       },
     },
-    async ({ paperRoot, n, status }) => {
-      const next = await setSectionStatus(paperRoot, n, status);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(next, null, 2) }] };
-    },
+    async ({ paperRoot, n, status }) =>
+      toolResult(await mutate(paperRoot, { verb: 'paper_set_status', section: n }, () => setSectionStatus(paperRoot, n, status))),
   );
 
   // Tool 5: paper_doi_verify — DOI re-fetch + metadata check via Crossref (delegates to bin/lib/doi.ts).
@@ -198,13 +225,11 @@ export function registerPaperTools(server: McpServer): void {
         yolo: z.boolean().optional(),
       },
     },
-    async ({ n, slug, revise, yolo }) => {
-      const result = await runVerbDirect(
+    async ({ n, slug, revise, yolo }) =>
+      toolResult(await mutate(projectRoot(), { verb: 'pensmith_plan', section: n }, () => runVerbDirect(
         () => import('../bin/cli/plan.js').then((m) => m.default),
         { n: String(n), slug: slug ?? '', revise: revise ?? false, yolo: yolo ?? false },
-      );
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-    },
+      ))),
   );
 
   // Tool 8: pensmith_write — Tier 1 equivalent of `pensmith write <N>`.
@@ -219,13 +244,11 @@ export function registerPaperTools(server: McpServer): void {
         yolo: z.boolean().optional(),
       },
     },
-    async ({ n, slug, yolo }) => {
-      const result = await runVerbDirect(
+    async ({ n, slug, yolo }) =>
+      toolResult(await mutate(projectRoot(), { verb: 'pensmith_write', section: n }, () => runVerbDirect(
         () => import('../bin/cli/write.js').then((m) => m.default),
         { n: String(n), slug: slug ?? '', yolo: yolo ?? false },
-      );
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-    },
+      ))),
   );
 
   // Tool 9: pensmith_verify — Tier 1 equivalent of `pensmith verify <N>`.
@@ -240,12 +263,10 @@ export function registerPaperTools(server: McpServer): void {
         yolo: z.boolean().optional(),
       },
     },
-    async ({ n, slug, yolo }) => {
-      const result = await runVerbDirect(
+    async ({ n, slug, yolo }) =>
+      toolResult(await mutate(projectRoot(), { verb: 'pensmith_verify', section: n }, () => runVerbDirect(
         () => import('../bin/cli/verify.js').then((m) => m.default),
         { n: String(n), slug: slug ?? '', yolo: yolo ?? false },
-      );
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
-    },
+      ))),
   );
 }

@@ -97,6 +97,42 @@ function readVersion(raw: unknown): number {
   return 1;
 }
 
+// ---------------------------------------------------------------------------
+// Markdown frontmatter version stamp (CONF-04, D-17-38).
+//
+// Section PLAN.md (and, as later requirements add fields, INTAKE.md, DRAFT.md
+// and VERIFICATION.md) carry a snake_case `schema_version` key in their YAML
+// frontmatter. Frontmatter migrations under bin/lib/migrations/<kind>/ are
+// TEXT transforms so a migration touches only the lines it must: this helper
+// sets (or inserts) the top-level `schema_version` line and leaves every other
+// byte — comments, key order, quoting, the body, CRLF line endings — as is.
+// ---------------------------------------------------------------------------
+
+const FRONTMATTER_BLOCK_RE = /^---(\r?\n)([\s\S]*?)(\r?\n)---(\r?\n|$)/;
+const SCHEMA_VERSION_LINE_RE = /^schema_version:[^\r\n]*$/m;
+
+/**
+ * Return `text` with its frontmatter `schema_version` set to `version`. An
+ * existing top-level `schema_version:` line is rewritten in place; otherwise
+ * one line is inserted right after the opening `---` fence. A document with no
+ * frontmatter block gains one holding only the version.
+ */
+export function setFrontmatterVersionText(text: string, version: number): string {
+  const block = FRONTMATTER_BLOCK_RE.exec(text);
+  if (!block) {
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    return `---${eol}schema_version: ${version}${eol}---${eol}${text}`;
+  }
+  const eol = block[1] ?? '\n';
+  const yaml = block[2] ?? '';
+  const start = 3 + eol.length; // just past the opening fence + its line ending
+  if (SCHEMA_VERSION_LINE_RE.test(yaml)) {
+    const next = yaml.replace(SCHEMA_VERSION_LINE_RE, `schema_version: ${version}`);
+    return text.slice(0, start) + next + text.slice(start + yaml.length);
+  }
+  return `${text.slice(0, start)}schema_version: ${version}${eol}${text.slice(start)}`;
+}
+
 export async function loadAndMigrate<TSchema extends z.ZodTypeAny>(
   opts: LoadOptions<TSchema>,
 ): Promise<z.infer<TSchema>> {

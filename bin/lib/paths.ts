@@ -21,8 +21,10 @@
 //   one of these sync roots.
 
 import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { PensmithError, EXIT_USAGE } from './exit-codes.js';
 
 // ---------------------------------------------------------------------------
 // Bare-slug validation (Phase 3 Plan 03-03 Task 3.3 / T-3-12 mitigation).
@@ -172,13 +174,46 @@ export function pensmithStyleFingerprintsPath(
   return path.join(pensmithDataDir(platform, env), 'style-fingerprints.json');
 }
 
+// ---------------------------------------------------------------------------
+// The active paper root (RUN-13 / RUN-14, D-17-32 / D-17-33).
+//
+// "Paper root" means the PROJECT folder that contains `.paper/`, everywhere:
+// the CLI, the MCP server and the hooks resolve it once (resolvePaperRoot) and
+// record it here; every later `projectRoot()` call returns it. Code must never
+// use the process working directory as a paper root directly — that is the
+// `process-cwd-paper-root` chokepoint (scripts/chokepoints/).
+// ---------------------------------------------------------------------------
+
+let activeRoot: string | null = null;
+
+/** Record the resolved paper root for this process (null clears it). */
+export function setActivePaperRoot(root: string | null): void {
+  activeRoot = root === null ? null : path.resolve(root);
+}
+
+/** The root recorded by setActivePaperRoot, or null when none was resolved. */
+export function activePaperRoot(): string | null {
+  return activeRoot;
+}
+
 /**
- * Resolves the project root to an absolute, normalized path. Defaults to
- * `process.cwd()`. Used as the input to `projectHash` and as the base of
- * `paperDir` / `sectionDir`.
+ * The folder the user ran pensmith in (absolute). Only the resolver's callers
+ * need it — to offer "start a new paper here" — never as a paper root.
  */
-export function projectRoot(cwd: string = process.cwd()): string {
-  return path.resolve(cwd);
+export function workingDirectory(): string {
+  return path.resolve(process.cwd());
+}
+
+/**
+ * Resolves the project root to an absolute, normalized path. With an explicit
+ * argument it resolves that path; with none it returns the active paper root
+ * (setActivePaperRoot), falling back to the process working directory when no
+ * root was resolved (library callers and unit tests). Used as the input to
+ * `projectHash` and as the base of `paperDir` / `sectionDir`.
+ */
+export function projectRoot(cwd?: string): string {
+  if (cwd !== undefined) return path.resolve(cwd);
+  return activeRoot ?? path.resolve(process.cwd());
 }
 
 /**
@@ -199,6 +234,241 @@ export function projectHash(root: string = projectRoot()): string {
  */
 export function paperDir(root: string = projectRoot()): string {
   return path.join(root, '.paper');
+}
+
+/** `<root>/.paper/STATE.json` — the one STATE.json location (RUN-13, D-17-32). */
+export function paperStateFile(root: string = projectRoot()): string {
+  return path.join(paperDir(path.resolve(root)), 'STATE.json');
+}
+
+/**
+ * Pre-v1 layout: STATE.json and config.toml at the project root. Only the
+ * legacy-layout move (state.ts migrateLegacyLayout) and read-only probes of
+ * papers written by an older pensmith use these.
+ */
+export function legacyStateFile(root: string): string {
+  return path.join(path.resolve(root), 'STATE.json');
+}
+
+/** Pre-v1 root-level config.toml (see legacyStateFile). */
+export function legacyConfigFile(root: string): string {
+  return path.join(path.resolve(root), 'config.toml');
+}
+
+/** `<root>/.paper/config.toml` — the destination of the legacy-layout move. */
+export function paperConfigFile(root: string = projectRoot()): string {
+  return path.join(paperDir(path.resolve(root)), 'config.toml');
+}
+
+/**
+ * True when `root` holds a paper: a `.paper/` directory, or a legacy root-level
+ * STATE.json that the legacy-layout move will relocate into `.paper/`.
+ */
+export function hasPaper(root: string): boolean {
+  // A `.paper` folder is never itself a project root (its parent is).
+  if (path.basename(path.resolve(root)) === '.paper') return false;
+  try {
+    if (fs.statSync(paperDir(path.resolve(root))).isDirectory()) return true;
+  } catch {
+    // no .paper/ directory
+  }
+  return fs.existsSync(legacyStateFile(root));
+}
+
+/** The assignment file names bare `pensmith` and `new` pick up (PRD §5.1 row 1). */
+export const ASSIGNMENT_FILE_NAMES: readonly string[] = Object.freeze([
+  'assignment.txt',
+  'assignment.md',
+  'assignment.pdf',
+]);
+
+/** The first `assignment.{txt,md,pdf}` file in `root`, or null. */
+export function findAssignmentFile(root: string): string | null {
+  for (const name of ASSIGNMENT_FILE_NAMES) {
+    const p = path.join(path.resolve(root), name);
+    try {
+      if (fs.statSync(p).isFile()) return p;
+    } catch {
+      // absent — try the next name
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Active-paper resolver (RUN-14, S-21, D-17-33).
+//
+// Order: (1) `--paper <name|path>` or PENSMITH_PAPER_ROOT; (2) the cwd when it
+// holds a paper; (3) a new paper in the cwd for `new`/`sketch`, or for a bare
+// run with an assignment file; (4) the `pensmith open` pointer — served to
+// read-only invocations with a banner, and only offered (never followed
+// silently) to mutating ones; (5) the cwd. The MCP server and the hooks never
+// follow the pointer and never read `--paper`: PENSMITH_PAPER_ROOT or the cwd.
+// ---------------------------------------------------------------------------
+
+export type PaperRootMode = 'cli' | 'mcp' | 'hook';
+
+export interface PaperPointer {
+  /** Display name from the global registry (falls back to the folder name). */
+  readonly name: string;
+  /** The pointed-at project root. */
+  readonly root: string;
+}
+
+export type PaperRootResolution =
+  | {
+      readonly kind: 'root';
+      readonly root: string;
+      readonly source: 'flag' | 'env' | 'cwd' | 'new' | 'fallback';
+    }
+  /** A read-only invocation served by the pointer (print the banner). */
+  | { readonly kind: 'pointer'; readonly root: string; readonly pointer: PaperPointer }
+  /** A mutating invocation in a paper-less cwd while a pointer is set: ask. */
+  | { readonly kind: 'ask-pointer'; readonly cwd: string; readonly pointer: PaperPointer };
+
+export interface ResolvePaperRootOptions {
+  /** The first verb of the invocation, or null for a bare run. */
+  readonly verb: string | null;
+  /** The `--paper` value, when given. */
+  readonly paperFlag?: string | undefined;
+  readonly mode: PaperRootMode;
+  /** status, list, doctor, open and `--estimate` may be served by the pointer. */
+  readonly readOnly?: boolean;
+  readonly cwd?: string;
+  readonly env?: NodeJS.ProcessEnv;
+}
+
+/** Verbs that start a paper in the cwd and never follow the pointer. */
+const NEW_PAPER_VERBS: ReadonlySet<string> = new Set(['new', 'sketch']);
+
+/** `(active paper "<name>" at <path>)` — the read-only pointer banner. */
+export function activePaperBanner(pointer: PaperPointer): string {
+  return `(active paper "${pointer.name}" at ${pointer.root})`;
+}
+
+interface RegistryEntryLite {
+  id?: unknown;
+  name?: unknown;
+  folderPath?: unknown;
+}
+
+/** Tolerant, read-only read of the global paper registry's entries. */
+function readRegistryEntries(): RegistryEntryLite[] {
+  try {
+    const raw = JSON.parse(fs.readFileSync(pensmithGlobalLibraryIndexPath(), 'utf8')) as {
+      entries?: unknown;
+    };
+    return Array.isArray(raw.entries) ? (raw.entries as RegistryEntryLite[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Read the `pensmith open` pointer. A pointer whose folder is gone (or holds no
+ * paper any more) is cleared with a one-line warning and reads as null.
+ */
+export function readActivePaperPointer(): PaperPointer | null {
+  const file = pensmithActivePointerPath();
+  let parsed: { paperId?: unknown; folderPath?: unknown };
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as typeof parsed;
+  } catch {
+    return null; // no pointer (or an unreadable one — treated as unset)
+  }
+  const folder = typeof parsed.folderPath === 'string' ? path.resolve(parsed.folderPath) : null;
+  const entry = readRegistryEntries().find(
+    (e) => (typeof parsed.paperId === 'string' && e.id === parsed.paperId)
+      || (folder !== null && typeof e.folderPath === 'string' && path.resolve(e.folderPath) === folder),
+  );
+  const name = typeof entry?.name === 'string' && entry.name
+    ? entry.name
+    : folder !== null ? path.basename(folder) : 'unknown';
+  if (folder === null || !hasPaper(folder)) {
+    try {
+      fs.rmSync(file, { force: true });
+    } catch {
+      // best-effort: a pointer we cannot remove is still ignored below
+    }
+    process.stderr.write(
+      `pensmith: cleared the active-paper pointer — "${name}"${folder ? ` at ${folder}` : ''} no longer holds a paper.\n`,
+    );
+    return null;
+  }
+  return { name, root: folder };
+}
+
+/**
+ * Resolve `--paper <name|path>`: a paper name from `pensmith list`, or a folder
+ * that contains `.paper/` (the `.paper` folder itself is accepted too). An
+ * unknown value is a usage error (EXIT_USAGE).
+ */
+export function resolvePaperFlag(value: string, cwd: string = process.cwd()): string {
+  const byName = readRegistryEntries().find((e) => e.name === value);
+  if (byName && typeof byName.folderPath === 'string') {
+    const root = path.resolve(byName.folderPath);
+    if (hasPaper(root)) return root;
+    throw new PensmithError(
+      `--paper ${value}: the paper's folder ${root} no longer holds a paper (run pensmith list)`,
+      EXIT_USAGE,
+    );
+  }
+  const asPath = asProjectRoot(path.resolve(cwd, value));
+  if (hasPaper(asPath)) return asPath;
+  throw new PensmithError(
+    `--paper ${value}: no paper by that name (run pensmith list) and no .paper/ folder at ${asPath}`,
+    EXIT_USAGE,
+  );
+}
+
+/**
+ * A path that names a project root. PENSMITH_PAPER_ROOT and `--paper` name the
+ * folder that CONTAINS `.paper/`; a path to the `.paper` folder itself (the
+ * pre-v1 MCP convention) is read as its parent, so nothing is ever written to
+ * `.paper/.paper/`.
+ */
+export function asProjectRoot(p: string): string {
+  const r = path.resolve(p);
+  return path.basename(r) === '.paper' ? path.dirname(r) : r;
+}
+
+/**
+ * The paper root for the MCP server or a hook: PENSMITH_PAPER_ROOT, else the
+ * working directory — never `--paper`, never the `open` pointer (D-17-33).
+ */
+export function servicePaperRoot(env: NodeJS.ProcessEnv = process.env): string {
+  const envRoot = env['PENSMITH_PAPER_ROOT'];
+  return envRoot ? asProjectRoot(envRoot) : workingDirectory();
+}
+
+/** Resolve the paper root for one invocation (see the section comment). */
+export function resolvePaperRoot(opts: ResolvePaperRootOptions): PaperRootResolution {
+  const cwd = path.resolve(opts.cwd ?? process.cwd());
+  const env = opts.env ?? process.env;
+  const envRoot = env['PENSMITH_PAPER_ROOT'];
+  if (opts.mode !== 'cli') {
+    return envRoot
+      ? { kind: 'root', root: servicePaperRoot(env), source: 'env' }
+      : { kind: 'root', root: cwd, source: 'cwd' };
+  }
+  if (opts.paperFlag !== undefined) {
+    return { kind: 'root', root: resolvePaperFlag(opts.paperFlag, cwd), source: 'flag' };
+  }
+  if (envRoot) return { kind: 'root', root: asProjectRoot(envRoot), source: 'env' };
+  if (hasPaper(cwd)) return { kind: 'root', root: cwd, source: 'cwd' };
+  if (
+    (opts.verb !== null && NEW_PAPER_VERBS.has(opts.verb))
+    || (opts.verb === null && findAssignmentFile(cwd) !== null)
+  ) {
+    return { kind: 'root', root: cwd, source: 'new' };
+  }
+  const pointer = readActivePaperPointer();
+  if (pointer) {
+    return opts.readOnly === true
+      ? { kind: 'pointer', root: pointer.root, pointer }
+      : { kind: 'ask-pointer', cwd, pointer };
+  }
+  return { kind: 'root', root: cwd, source: 'fallback' };
 }
 
 /** Options bag for sectionDir (ARCH-20 / D-15 letter-suffix reservation). */

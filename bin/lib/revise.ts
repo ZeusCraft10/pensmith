@@ -34,7 +34,8 @@
 import { z } from 'zod';
 import { readFileSync, existsSync } from 'node:fs';
 import { atomicWriteFile } from './atomic-write.js';
-import { updateFrontmatter, parseFrontmatter } from './frontmatter.js';
+import { updateFrontmatter, migrateFrontmatterText, loadFrontmatterDoc } from './frontmatter.js';
+import { runGate, declineGate, canPrompt } from './gates.js';
 import { withLock } from './lock.js';
 import { replaceCitekeys } from './citation-token.js';
 import { parseBibtex } from './citations.js';
@@ -117,15 +118,6 @@ export interface ReviseResult {
   researchApplied: boolean;
   /** Human-readable summary for the CLI / workflow narration. */
   message: string;
-}
-
-/** Raised when the approval gate cannot run (non-TTY without --yolo). Exit 3. */
-export class ApprovalUnavailableError extends Error {
-  exitCode = 3 as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'ApprovalUnavailableError';
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -216,22 +208,27 @@ async function defaultProposeSwap(vars: ReviseSwapVars): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// Default approval gate — @clack/prompts confirm in a TTY; exit 3 otherwise.
+// Default approval gate — the `revise-swap` gate of the registry (RUN-28,
+// bin/lib/gates.ts). --yolo is handled by the caller before this runs. A run
+// that cannot prompt refuses with EXIT_APPROVAL (GateRefusedError); an explicit
+// "no" is the registry's decline (EXIT_APPROVAL, DRAFT.md unchanged).
 // ---------------------------------------------------------------------------
 
 async function defaultApprove(proposal: ReviseSwapProposal): Promise<boolean> {
-  if (!process.stdout.isTTY || !process.stdin.isTTY) {
-    throw new ApprovalUnavailableError(
-      'revise: approval gate requires an interactive terminal. ' +
-      'Use --yolo to auto-accept (PRD §19 default-on approval).',
+  if (canPrompt()) {
+    process.stderr.write(
+      `Proposed ${proposal.action} — ${proposal.rationale}\n` +
+        `- ${proposal.patch.before_excerpt}\n+ ${proposal.patch.after_excerpt}\n`,
     );
   }
-  const clack = await import('@clack/prompts');
-  const before = proposal.patch.before_excerpt;
-  const after = proposal.patch.after_excerpt;
-  clack.note(`- ${before}\n+ ${after}`, `Proposed ${proposal.action} — ${proposal.rationale}`);
-  const ok = await clack.confirm({ message: `Apply this ${proposal.action}?` });
-  return ok === true && !clack.isCancel(ok);
+  const outcome = await runGate('revise-swap', {
+    yolo: false,
+    detail: `${proposal.action} of [@${proposal.flagged_citekey}]`,
+    question: { id: 'revise-swap', kind: 'confirm', label: `Apply this ${proposal.action}?`, default: false },
+  });
+  const yes = outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
+  if (!yes) declineGate('revise-swap', `citation ${proposal.action} declined — DRAFT.md unchanged`);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +297,8 @@ async function applyProposal(
 
   // Reset verified_against_draft_hash → null under a per-PLAN.md lock (D-05).
   await withLock(planPath, async () => {
-    const cur = readFileSync(planPath, 'utf8');
+    // CONF-04: migrate a v0 PLAN.md (stamp schema_version) before mutating it.
+    const cur = migrateFrontmatterText('plan', readFileSync(planPath, 'utf8'), planPath).text;
     const next = updateFrontmatter(cur, (fm) => {
       fm['verified_against_draft_hash'] = null;
     });
@@ -457,8 +455,9 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
   if (!existsSync(planPath) || !existsSync(draftPath)) {
     return { ...base, message: `${base.message} Section ${opts.n} is missing PLAN.md or DRAFT.md.`.trim() };
   }
-  const planMd = readFileSync(planPath, 'utf8');
-  const { frontmatter } = parseFrontmatter(planMd);
+  // CONF-04: the versioned PLAN.md reader, read-only here: a rejected proposal
+  // leaves PLAN.md byte-identical; applyProposal persists the migration.
+  const { frontmatter, text: planMd } = await loadFrontmatterDoc('plan', planPath);
   const assignedSources = Array.isArray(frontmatter['assigned_sources'])
     ? (frontmatter['assigned_sources'] as unknown[]).map(String)
     : [];

@@ -8,7 +8,9 @@
 // Tests assert this via grep (single-source-of-truth invariant, see Task 3).
 //
 // Security mitigations:
-//   T-02-09-01: Each prompt reads exactly ONE line via rl.once('line', ...).
+//   T-02-09-01: Each prompt consumes exactly ONE line — the next one from the
+//               process-wide shared line reader (RUN-12), so piped multi-answer
+//               input reaches every question in order.
 //   T-02-09-02: Index parsed with parseInt + bounds check (1 to N); out-of-range
 //               is a re-prompt, not an exception.
 //   T-02-09-03: This file never calls any logging function. No process.stdout writes.
@@ -97,10 +99,56 @@ function renderQuestion(question: PromptQuestion, stderr: NodeJS.WritableStream)
   }
 }
 
-// ── Read one line ─────────────────────────────────────────────────────────────
+// ── Shared line reader (RUN-12) ───────────────────────────────────────────────
+//
+// ONE readline interface per input stream, shared by every question of the
+// process. A per-question interface (the previous design) buffers the whole
+// piped chunk and throws the unread lines away when it closes, so
+// `printf 'a\nb\nc\n' | pensmith sketch` answered only the first question.
+// The shared reader queues every line it has read; each question takes the
+// next one. Between questions the input is paused, so a terminal stdin never
+// keeps the process alive after the last answer.
+
+interface Waiter {
+  resolve: (line: string) => void;
+  reject: (err: Error) => void;
+}
+
+interface SharedLineReader {
+  readonly rl: readline.Interface;
+  readonly queue: string[];
+  readonly waiters: Waiter[];
+  closed: boolean;
+}
+
+const LINE_READERS = new WeakMap<NodeJS.ReadableStream, SharedLineReader>();
+
+function lineReaderFor(stdin: NodeJS.ReadableStream): SharedLineReader {
+  const existing = LINE_READERS.get(stdin);
+  if (existing) return existing;
+  const rl = readline.createInterface({
+    input: stdin,
+    output: undefined,    // we manage output ourselves on stderr
+    terminal: false,      // required on Windows + piped stdin
+    crlfDelay: Infinity,  // collapse \r\n into single line event on Windows
+  });
+  const reader: SharedLineReader = { rl, queue: [], waiters: [], closed: false };
+  rl.on('line', (line: string) => {
+    const waiter = reader.waiters.shift();
+    if (waiter) waiter.resolve(line);
+    else reader.queue.push(line);
+    if (reader.waiters.length === 0) rl.pause();
+  });
+  rl.on('close', () => {
+    reader.closed = true;
+    for (const w of reader.waiters.splice(0)) w.reject(new Error('EOF'));
+  });
+  LINE_READERS.set(stdin, reader);
+  return reader;
+}
 
 /**
- * Read exactly one newline-terminated line from stdin.
+ * Read the next line from stdin through the shared reader.
  * Returns the trimmed line or rejects with PromptAbortedError (EOF) /
  * PromptTimeoutError (timeout).
  */
@@ -109,21 +157,25 @@ async function readOneLine(
   stdin: NodeJS.ReadableStream,
   timeoutMs: number,
 ): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const rl = readline.createInterface({
-      input: stdin,
-      output: undefined,    // we manage output ourselves on stderr
-      terminal: false,      // required on Windows + piped stdin
-      crlfDelay: Infinity,  // collapse \r\n into single line event on Windows
-    });
+  const reader = lineReaderFor(stdin);
+  const queued = reader.queue.shift();
+  if (queued !== undefined) return queued.trim();
+  if (reader.closed) throw new PromptAbortedError(id);
 
+  return new Promise<string>((resolve, reject) => {
     let settled = false;
+    const waiter: Waiter = {
+      resolve: (line) => settle(() => resolve(line.trim())),
+      reject: () => settle(() => reject(new PromptAbortedError(id))),
+    };
 
     function settle(action: () => void): void {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      rl.close();
+      const i = reader.waiters.indexOf(waiter);
+      if (i >= 0) reader.waiters.splice(i, 1);
+      if (reader.waiters.length === 0) reader.rl.pause();
       action();
     }
 
@@ -139,13 +191,8 @@ async function readOneLine(
     // on settle (line / EOF / fire), so reffing it never delays exit beyond the
     // timeout window — which is precisely when the timeout is meant to fire.
 
-    rl.once('line', (line: string) => {
-      settle(() => resolve(line.trim()));
-    });
-
-    rl.once('close', () => {
-      settle(() => reject(new PromptAbortedError(id)));
-    });
+    reader.waiters.push(waiter);
+    reader.rl.resume();
   });
 }
 
@@ -166,6 +213,17 @@ export async function askNumbered(
   const stdin: NodeJS.ReadableStream = opts?.stdin ?? process.stdin;
   const stderr: NodeJS.WritableStream = opts?.stderr ?? process.stderr;
   const timeoutMs = resolveTimeout(opts);
+  // A terminal echoes the user's Enter; a pipe does not — end the open prompt
+  // line ourselves so whatever is written next (the next question, or a
+  // one-line refusal) starts on its own line.
+  const echoes = Boolean((stdin as { isTTY?: boolean }).isTTY);
+  const readOneLineEchoed = async (id: string, input: NodeJS.ReadableStream, ms: number): Promise<string> => {
+    try {
+      return await readOneLine(id, input, ms);
+    } finally {
+      if (!echoes) writeStderr(stderr, '\n');
+    }
+  };
 
   renderQuestion(question, stderr);
 
@@ -173,7 +231,7 @@ export async function askNumbered(
     case 'select': {
       const maxRetries = 3;
       for (let attempt = 0; attempt < maxRetries; attempt++) {
-        const line = await readOneLine(question.id, stdin, timeoutMs);
+        const line = await readOneLineEchoed(question.id, stdin, timeoutMs);
         // Blank line → use default
         if (line === '' && question.default !== undefined) {
           return { id: question.id, kind: 'select', value: question.default };
@@ -193,7 +251,7 @@ export async function askNumbered(
     }
 
     case 'multiselect': {
-      const line = await readOneLine(question.id, stdin, timeoutMs);
+      const line = await readOneLineEchoed(question.id, stdin, timeoutMs);
       // Blank line → use default (or empty array)
       if (line === '') {
         return {
@@ -220,7 +278,7 @@ export async function askNumbered(
     }
 
     case 'text': {
-      const line = await readOneLine(question.id, stdin, timeoutMs);
+      const line = await readOneLineEchoed(question.id, stdin, timeoutMs);
       if (line === '') {
         return { id: question.id, kind: 'text', value: question.default ?? '' };
       }
@@ -228,7 +286,7 @@ export async function askNumbered(
     }
 
     case 'confirm': {
-      const line = await readOneLine(question.id, stdin, timeoutMs);
+      const line = await readOneLineEchoed(question.id, stdin, timeoutMs);
       if (line === '') {
         return { id: question.id, kind: 'confirm', value: question.default ?? false };
       }

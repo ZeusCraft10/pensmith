@@ -17,9 +17,11 @@ import {
   readdirSync,
   statSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { assembleHandoff, writeHandoff } from '../bin/lib/handoff.js';
-import { parseFrontmatter } from '../bin/lib/frontmatter.js';
+import { loadFrontmatterDocSync } from '../bin/lib/frontmatter.js';
+import { paperDir as paperDirOf, paperStateFile, servicePaperRoot } from '../bin/lib/paths.js';
+import { migrateLegacyLayout } from '../bin/lib/state.js';
 import type { Handoff } from '../bin/lib/schemas/handoff.js';
 
 type Phase = Handoff['phase'];
@@ -47,8 +49,13 @@ interface PreCompactInput {
 }
 
 export async function onPreCompact(input: PreCompactInput = {}): Promise<void> {
-  const paperDir = input.paperDir ?? '.paper';
+  // RUN-13 / D-17-33: the paper resolves like the MCP server's —
+  // PENSMITH_PAPER_ROOT, else the working directory (never the open pointer).
+  const paperDir = input.paperDir ?? paperDirOf(servicePaperRoot());
   try {
+    // A pre-v1 paper (root-level STATE.json) is moved into .paper/ first, so the
+    // handoff reads the same STATE.json every other reader does.
+    await migrateLegacyLayout(dirname(resolve(paperDir)));
     const { phase, sectionsFromState } = readState(paperDir);
     const breadcrumbs = readBreadcrumbs(paperDir);
     const { sectionPointers, currentSection } = collectSectionPointers(
@@ -102,7 +109,7 @@ function readState(paperDir: string): {
 } {
   // Prefer STATE.json (canonical in Phase 3+); fall back to STATE.md scan
   // (legacy markdown). Phase defaults to 'intake' when undeclared.
-  const jsonPath = join(paperDir, 'STATE.json');
+  const jsonPath = paperStateFile(dirname(resolve(paperDir)));
   if (existsSync(jsonPath)) {
     try {
       const raw = JSON.parse(readFileSync(jsonPath, 'utf8')) as {
@@ -201,7 +208,7 @@ function collectSectionPointers(
     let state: SectionState = 'planned';
     if (existsSync(planPath)) {
       try {
-        const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
+        const { frontmatter } = loadFrontmatterDocSync('plan', planPath);
         const fmState = (frontmatter as { status?: unknown }).status;
         if (typeof fmState === 'string' && isSectionState(fmState)) {
           state = fmState;

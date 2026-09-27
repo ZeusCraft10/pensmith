@@ -1,24 +1,34 @@
 // bin/lib/section.ts — chokepoint for reading a single section's payload.
 // mcp/ MUST NOT call node:fs directly (D-09); paper://section/{N} delegates here.
+//
+// RUN-13 (D-17-32): `paperRoot` is the PROJECT root — the folder that contains
+// `.paper/` — exactly the root loadState, loadOutline and the CLI verbs take,
+// so STATE.json (`.paper/STATE.json`) and `sections/<NN>-<slug>/` resolve from
+// the same place and `paper://section/3` on a CLI-created paper returns its
+// plan, draft and verification.
 
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { loadState } from './state.js';
+import { sectionPlan } from './paths.js';
+import { migrateFrontmatterText } from './frontmatter.js';
 
 export interface SectionPayload {
   n: number;
   slug: string | undefined;
-  state: string;    // section state enum from State.sections[n].state
+  /** The section lifecycle status from PLAN.md frontmatter (D-08), or 'unknown'. */
+  state: string;
   plan: string | undefined;    // PLAN.md raw markdown if present
   draft: string | undefined;   // DRAFT.md raw markdown if present
   verification: string | undefined; // VERIFICATION.md raw markdown if present
 }
 
 /**
- * Load the payload for section `n` from `paperRoot`.
- * If the section is not tracked in state, returns `{ n, state: 'unknown' }`.
- * Phase 2: section fields (slug, state) land via migration when Phase 3
- * ships real intake — for now the state may not carry sections[] yet.
+ * Load the payload for section `n` of the paper at project root `paperRoot`.
+ * A section not registered in STATE.json returns `{ n, state: 'unknown' }`.
+ * The section state is the PLAN.md frontmatter `status` (the per-section
+ * source of truth since state v2, D-08), read through the versioned
+ * frontmatter reader without write-back (a read-only resource).
  */
 export async function loadSection(paperRoot: string, n: number): Promise<SectionPayload> {
   let state: Awaited<ReturnType<typeof loadState>>;
@@ -37,22 +47,11 @@ export async function loadSection(paperRoot: string, n: number): Promise<Section
     return unknownPayload;
   }
 
-  // sections[] field is added by Phase 2 migration; may be absent on Phase 1 state.
-  const sections = (state as Record<string, unknown>).sections;
-  const entry = Array.isArray(sections)
-    ? (sections as Array<Record<string, unknown>>).find((s) => s.n === n)
-    : undefined;
+  const entry = (state.sections ?? []).find((s) => s.n === n);
+  if (!entry) return unknownPayload;
 
-  if (!entry) {
-    return unknownPayload;
-  }
-
-  const slug = typeof entry.slug === 'string' ? entry.slug : undefined;
-  const sectionDir = join(
-    paperRoot,
-    'sections',
-    `${String(n).padStart(2, '0')}-${slug ?? 'section'}`,
-  );
+  const planPath = sectionPlan(n, entry.slug, paperRoot);
+  const sectionDir = dirname(planPath);
 
   const read = async (name: string): Promise<string | undefined> => {
     try {
@@ -63,11 +62,22 @@ export async function loadSection(paperRoot: string, n: number): Promise<Section
     }
   };
 
+  const plan = await read('PLAN.md');
+  let status = 'unknown';
+  if (plan !== undefined) {
+    try {
+      const fm = migrateFrontmatterText('plan', plan, planPath).frontmatter;
+      status = typeof fm['status'] === 'string' ? fm['status'] : 'planned';
+    } catch {
+      status = 'unknown'; // unreadable / newer-version frontmatter — the raw text is still returned
+    }
+  }
+
   return {
     n,
-    slug,
-    state: typeof entry.state === 'string' ? entry.state : 'unknown',
-    plan: await read('PLAN.md'),
+    slug: entry.slug,
+    state: status,
+    plan,
     draft: await read('DRAFT.md'),
     verification: await read('VERIFICATION.md'),
   };

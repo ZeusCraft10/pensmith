@@ -29,12 +29,11 @@
 import { Semaphore } from './budget.js';
 import { loadOutline } from './outline.js';
 import { parseOutline } from './outline-parse.js';
-import { parseFrontmatter } from './frontmatter.js';
-import { sectionPlan, paperDir } from './paths.js';
+import { loadFrontmatterDoc } from './frontmatter.js';
+import { sectionPlan } from './paths.js';
 import { PlanFrontmatterSchema, type PlanFrontmatter } from './schemas/plan-frontmatter.js';
 import { buildWaveGraph, runWave } from './scheduler.js';
 import type { SectionNode } from './schemas/wave-graph.js';
-import { readFile } from 'node:fs/promises';
 
 /** Per-section outcome within a wave (final settled status only). */
 export interface SectionResult {
@@ -98,14 +97,16 @@ async function loadPlanFrontmatter(
   n: number,
   slug: string,
 ): Promise<PlanFrontmatter | null> {
-  let raw: string;
+  let frontmatter: Record<string, unknown>;
   try {
-    raw = await readFile(sectionPlan(n, slug, paperRoot), 'utf8');
+    // CONF-04: the versioned reader (a v0 PLAN.md is migrated in memory; the
+    // per-section writer persists it when it updates the section's status). The
+    // scheduler itself stays stateless — it writes nothing.
+    ({ frontmatter } = await loadFrontmatterDoc('plan', sectionPlan(n, slug, paperRoot)));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw err;
   }
-  const { frontmatter } = parseFrontmatter(raw);
   return PlanFrontmatterSchema.parse(frontmatter);
 }
 
@@ -129,7 +130,7 @@ export async function runAllSections(
   }
 
   // 1. Load + parse the outline (reader-order section list + dependency graph).
-  const raw = await loadOutline(paperDir(paperRoot));
+  const raw = await loadOutline(paperRoot);
   const outline = parseOutline(raw);
 
   // 2. Build the slug→PlanFrontmatter map. A section with NO PLAN.md is skipped

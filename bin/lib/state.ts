@@ -71,6 +71,13 @@ import {
   type VerificationVerdict,
 } from './schemas/state.js';
 import { openSessionLog, type SessionLogger } from './session-log.js';
+import {
+  paperStateFile,
+  legacyStateFile,
+  legacyConfigFile,
+  paperConfigFile,
+} from './paths.js';
+import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 
 // Registry of state forward migrations consumed by loadAndMigrate. Keyed by
 // SOURCE disk version: migrations[N] migrates v(N) → v(N+1). Added in Phase 3
@@ -105,12 +112,99 @@ export class StateAlreadyExistsError extends Error {
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the absolute path to STATE.json under `paperRoot`. Resolving up-
- * front ensures the lock key (which is the file path) is identical across
- * callers regardless of relative vs. absolute paperRoot input.
+ * Resolve the absolute path to STATE.json for the project root `paperRoot`:
+ * `<root>/.paper/STATE.json` (RUN-13, D-17-32). Resolving up-front ensures the
+ * lock key (which is the file path) is identical across callers regardless of
+ * relative vs. absolute input.
  */
 function stateFile(paperRoot: string): string {
-  return path.join(path.resolve(paperRoot), 'STATE.json');
+  return paperStateFile(paperRoot);
+}
+
+// ---------------------------------------------------------------------------
+// Legacy layout move (RUN-13, D-17-32).
+//
+// pensmith before v1 wrote STATE.json and config.toml at the project root while
+// every other artifact lived under `.paper/`. migrateLegacyLayout moves both
+// into `.paper/` — each one atomically (a same-directory-tree rename) under the
+// destination's per-file lock — and prints a one-time notice. It never leaves
+// two copies: an identical `.paper/` copy absorbs the root file, and two
+// DIFFERENT copies are refused with a one-line error (nothing is overwritten).
+// It runs when a root is resolved (the dispatcher, the MCP server, the hooks)
+// and inside every STATE.json accessor below, so no reader can miss it.
+//
+// The move is keyed on the legacy STATE.json: a pre-v1 paper always had one, so
+// its config.toml moves with it.
+// ---------------------------------------------------------------------------
+
+/** Two different copies of a legacy-layout file: refuse rather than guess. */
+export class LegacyLayoutConflictError extends PensmithError {
+  constructor(legacy: string, current: string) {
+    super(
+      `both ${legacy} (pre-v1 layout) and ${current} exist and differ — keep the one you want, ` +
+        `delete the other, and re-run`,
+      EXIT_ERROR,
+    );
+    this.name = 'LegacyLayoutConflictError';
+  }
+}
+
+export interface LegacyLayoutMove {
+  /** Project-relative names of the files moved into `.paper/`. */
+  readonly moved: readonly string[];
+}
+
+async function moveLegacyFile(legacy: string, dest: string): Promise<boolean> {
+  return withLock(dest, async () => {
+    if (!fs.existsSync(legacy)) return false; // another process already moved it
+    await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+    if (fs.existsSync(dest)) {
+      const [a, b] = await Promise.all([fs.promises.readFile(legacy), fs.promises.readFile(dest)]);
+      if (!a.equals(b)) throw new LegacyLayoutConflictError(legacy, dest);
+      await fs.promises.rm(legacy, { force: true });
+      return true;
+    }
+    await fs.promises.rename(legacy, dest);
+    return true;
+  });
+}
+
+/**
+ * Move a pre-v1 root-level STATE.json (and its config.toml) into `.paper/`.
+ * Idempotent and cheap when there is nothing to move (one existsSync).
+ */
+export async function migrateLegacyLayout(paperRoot: string): Promise<LegacyLayoutMove> {
+  const root = path.resolve(paperRoot);
+  const legacyState = legacyStateFile(root);
+  if (!fs.existsSync(legacyState)) return { moved: [] };
+  const moved: string[] = [];
+  if (await moveLegacyFile(legacyState, paperStateFile(root))) moved.push('STATE.json');
+  const legacyConfig = legacyConfigFile(root);
+  if (fs.existsSync(legacyConfig) && (await moveLegacyFile(legacyConfig, paperConfigFile(root)))) {
+    moved.push('config.toml');
+  }
+  if (moved.length > 0) {
+    process.stderr.write(
+      `pensmith: moved ${moved.join(' and ')} from ${root} into .paper/ (one-time layout migration).\n`,
+    );
+    log().event({ event: 'state.legacyLayoutMoved', root, moved });
+  }
+  return { moved };
+}
+
+/**
+ * Synchronous, read-only STATE.json text for probes that cannot await and must
+ * not move files of papers they merely inspect (`pensmith list`): the
+ * `.paper/STATE.json`, else a pre-v1 root-level one. Throws ENOENT when the
+ * paper has neither.
+ */
+export function readStateTextSync(paperRoot: string): string {
+  try {
+    return fs.readFileSync(paperStateFile(paperRoot), 'utf8');
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    return fs.readFileSync(legacyStateFile(paperRoot), 'utf8');
+  }
 }
 
 /**
@@ -147,6 +241,9 @@ export async function initState(
   paperRoot: string,
   seed?: { paperId?: string },
 ): Promise<State> {
+  // A legacy root-level STATE.json is this paper's state: move it first so the
+  // already-exists refusal below sees it (never a second, fresh STATE.json).
+  await migrateLegacyLayout(paperRoot);
   const file = stateFile(paperRoot);
 
   // Validate the seed against the schema BEFORE acquiring the lock. This
@@ -207,6 +304,7 @@ export async function initState(
  * so no actual write occurs.
  */
 export async function loadState(paperRoot: string): Promise<State> {
+  await migrateLegacyLayout(paperRoot);
   const file = stateFile(paperRoot);
   let value: State;
   try {
@@ -255,6 +353,7 @@ export async function loadState(paperRoot: string): Promise<State> {
  * malformed state regardless of caller discipline (T-01-08 mitigation).
  */
 export async function saveState(paperRoot: string, state: State): Promise<void> {
+  await migrateLegacyLayout(paperRoot);
   const file = stateFile(paperRoot);
   const validated = StateSchema.parse(state);
 
@@ -287,6 +386,7 @@ export async function updateState(
   paperRoot: string,
   mutator: (s: State) => State | Promise<State>,
 ): Promise<State> {
+  await migrateLegacyLayout(paperRoot);
   const file = stateFile(paperRoot);
   let next!: State;
 

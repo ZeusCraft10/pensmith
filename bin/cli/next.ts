@@ -12,6 +12,7 @@
 
 import { defineCommand } from 'citty';
 import { resolveNextAction } from '../lib/router.js';
+import { projectRoot } from '../lib/paths.js';
 import { dispatchVerb } from '../pensmith.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './goal.js';
 
@@ -29,7 +30,7 @@ export const nextCommand = defineCommand({
     'show-prompts': { type: 'boolean', description: 'Echo every LLM prompt to stderr.', default: false },
   },
   async run({ args }) {
-    const paperRoot = process.cwd();
+    const paperRoot = projectRoot();
     // Goal-aware tier: read goal and map it to the router's goal-AGNOSTIC
     // stopAfterResearch flag (H1 — the mapping lives in goal.ts, not the router).
     const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));

@@ -29,9 +29,9 @@ import { runPass2, renderPass2Section } from '../lib/verify/pass2.js';
 import { runPass4, renderPass4Section } from '../lib/verify/pass4.js';
 import { parseBibtex } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
-import { sectionDraft, sectionVerification, sectionPlan, paperDir } from '../lib/paths.js';
+import { sectionDraft, sectionVerification, sectionPlan, paperDir, projectRoot } from '../lib/paths.js';
 import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
-import { parseFrontmatter } from '../lib/frontmatter.js';
+import { loadFrontmatterDoc } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
@@ -71,7 +71,7 @@ export const verifyCommand = defineCommand({
     }
     // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
     // wins; 'placeholder' only if no outline row exists).
-    const slug = resolveSectionSlug(process.cwd(), n, args.slug);
+    const slug = resolveSectionSlug(projectRoot(), n, args.slug);
     const draftPath = sectionDraft(n, slug);
     const verifPath = sectionVerification(n, slug);
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');
@@ -184,7 +184,8 @@ export const verifyCommand = defineCommand({
     let assignedSources: string[] = [];
     try {
       if (existsSync(planPath)) {
-        const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
+        // CONF-04: the versioned PLAN.md reader (v0 migrated + written back).
+        const { frontmatter } = await loadFrontmatterDoc('plan', planPath, { writeBack: true });
         assignedSources = Array.isArray(frontmatter['assigned_sources'])
           ? (frontmatter['assigned_sources'] as unknown[]).map(String)
           : [];
@@ -205,7 +206,8 @@ export const verifyCommand = defineCommand({
     }
 
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
-    return { ok: status !== 'failed', status, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
+    // RUN-09: a failed section is a verifier refusal — `blocked` maps to EXIT_BLOCKED.
+    return { ok: status !== 'failed', status, blocked: hasFail, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
   },
 });
 

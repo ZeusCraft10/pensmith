@@ -13,7 +13,7 @@
 import { defineCommand } from 'citty';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { paperDir } from '../lib/paths.js';
+import { paperDir, projectRoot } from '../lib/paths.js';
 import { resolveNextAction } from '../lib/router.js';
 import { HandoffSchema, type Handoff } from '../lib/schemas/handoff.js';
 import { dispatchVerb } from '../pensmith.js';
@@ -43,7 +43,7 @@ export const resumeCommand = defineCommand({
     'show-prompts': { type: 'boolean', description: 'Echo every LLM prompt to stderr.', default: false },
   },
   async run({ args }) {
-    const paperRoot = process.cwd();
+    const paperRoot = projectRoot();
 
     // SUMMARY only — reading HANDOFF does NOT route (H4). safeParse never throws.
     const handoff = safeReadHandoff(paperRoot);

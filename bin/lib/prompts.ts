@@ -1,7 +1,7 @@
 // bin/lib/prompts.ts — Public entry point for TIER-05 prompt system.
 //
 // TIER-05: Tier 2 fallback for AskUserQuestion.
-//   - TTY (auto-detected via process.stdout.isTTY && process.stderr.isTTY):
+//   - TTY (auto-detected: stdin, stdout AND stderr are all terminals — RUN-12):
 //     delegate to @clack/prompts via bin/lib/prompts/clack.ts.
 //   - non-TTY (piped, CI, captured): stdin numbered-prompt mode via
 //     bin/lib/prompts/numbered.ts. Question protocol matches gsd-plugin's
@@ -11,9 +11,11 @@
 // tests if both paths went through clack — the numbered path stays
 // dependency-free for exactly this reason.
 //
-// ARCH-11 boundary: when --yolo flag lands in Phase 7, it MUST be checked by
-// the calling verb before invoking ask() — ask() itself never short-circuits.
-// The approval-skip discipline is a verb-level policy (UX-02 / ERGO-03 / PRD §14).
+// ARCH-11 boundary: ask() itself never short-circuits on --yolo. Approval
+// decisions go through the ONE gate registry, bin/lib/gates.ts runGate (RUN-28,
+// PRD §7.20), which owns the --yolo and no-terminal policy of every gate. Only
+// gates.ts and content-question verbs (sketch; intake from GRND-02) may import
+// ask() — the gate-registry chokepoint (scripts/chokepoints/gate-registry.json).
 //
 // Security: ask() never calls any logging function. PromptAnswer.value redaction
 // is the CALLER's responsibility (per bin/lib/pii.ts from Phase 1, per PRD §16).
@@ -61,11 +63,13 @@ export interface AskOptions {
 
 // ── Mode resolution ───────────────────────────────────────────────────────────
 
-function resolveMode(opts?: AskOptions): 'clack' | 'numbered' {
+export function resolveMode(opts?: AskOptions): 'clack' | 'numbered' {
   const explicit = opts?.mode ?? (process.env['PENSMITH_PROMPT_MODE'] as AskOptions['mode'] | undefined);
   if (explicit === 'clack' || explicit === 'numbered') return explicit;
-  // auto: both stdout AND stderr must be TTY for clack to render correctly
-  const isTty = Boolean(process.stdout.isTTY) && Boolean(process.stderr.isTTY);
+  // auto (RUN-12): clack only when stdin, stdout AND stderr are all terminals.
+  // Answers piped into a terminal session (`printf 'y\n' | pensmith …`) use the
+  // numbered prompts, which read one line per question from stdin.
+  const isTty = Boolean(process.stdin.isTTY) && Boolean(process.stdout.isTTY) && Boolean(process.stderr.isTTY);
   return isTty ? 'clack' : 'numbered';
 }
 

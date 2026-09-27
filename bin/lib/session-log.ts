@@ -27,7 +27,7 @@ import * as path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { atomicAppendFile, atomicWriteFile } from './atomic-write.js';
 import { redactKeys, deepRedactPii } from './pii.js';
-import { paperDir, pensmithDataDir } from './paths.js';
+import { paperDir, pensmithDataDir, projectRoot } from './paths.js';
 
 // ---------------------------------------------------------------------------
 // Public types (per D-49 / D-50 / D-51 / D-52).
@@ -343,7 +343,7 @@ function mirrorIfPrompt(record: BaseRecord): void {
 
 export function openSessionLog(opts: OpenSessionLogOptions = {}): SessionLogger {
   const scope = opts.scope ?? 'auto';
-  const cwd = opts.cwd ?? process.cwd();
+  const cwd = opts.cwd ?? projectRoot();
   const maxBytes = opts.maxBytes ?? MAX_LOG_BYTES;
   const maxBackups = opts.maxBackups ?? MAX_BACKUPS;
   const maxRecordBytes = opts.maxRecordBytes ?? MAX_RECORD_BYTES;
