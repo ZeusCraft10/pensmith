@@ -1,512 +1,521 @@
-// bin/lib/runtime.ts — runtime SDK config loader (ARCH-14, D-61, D-65) +
-// OPENALEX_API_KEY slot per RESEARCH §Key Finding #5.
+// bin/lib/runtime.ts — LLM runtime resolution (RUN-07, RUN-08, RUN-26; D-17-19).
 //
-// W11 sibling B — same architectural shape as bin/lib/state.ts (W10) and
-// bin/lib/library.ts (W10), with two deliberate divergences:
+// Resolution precedence, per field:
+//   provider:   --runtime flag > .paper/config.toml [runtime] > global runtime.json
+//               > provider detected from env (only OPENAI_API_KEY set → openai)
+//               > default (anthropic)
+//   model:      --model flag > [runtime] model > global model > provider default
+//               (claude-opus-5 / gpt-6-astra; local providers have none)
+//   endpoint,
+//   api_key_env: the GLOBAL runtime.json only (S-18) > provider default
+//   effort, price overrides, refusal_fallbacks, per-slug overrides:
+//               [runtime] > global runtime.json > default
+// A layer's model / price / endpoint applies only when that layer names no
+// provider or the same provider that won, so `--runtime ollama` never sends a
+// Claude model id to Ollama.
 //
-//   1. Two-scope path resolution. Global config lives at
-//      `pensmithDataDir()/runtime.json` (W1 platform-local data dir per
-//      D-40 — NEVER inside .paper/, OneDrive non-negotiable). Paper config
-//      overlay lives at `<paperRoot>/runtime.json` (paper-scope override).
-//      `loadRuntimeConfig({scope:'auto', paperRoot?})` merges global ->
-//      paper-overlay with paper winning on top-level keys (providers map
-//      deep-merges by providerId).
+// The global runtime.json lives at pensmithDataDir()/runtime.json (never inside
+// .paper/, which may sit in a sync folder or a cloned repo). Its v1 → v2
+// migration is written back under the per-file lock. The paper-level
+// `<root>/runtime.json` overlay of v0.1 is retired: finding one prints a
+// one-time warning naming the config.toml section to use instead.
 //
-//   2. ENOENT translation -> defaults, NOT NotFoundError. Runtime config is
-//      OPTIONAL everywhere — first-run pensmith has no runtime.json and the
-//      schema defaults are sufficient to operate. This differs from
-//      state/library/checkpoint where the file is authoritative; for
-//      runtime config, "absent" == "use defaults", not "error".
-//
-// W2 (atomic-write) + W3 (lock) chokepoint composition is unchanged — the
-// write path validates via RuntimeConfigSchema.parse, takes withLock, and
-// writes via atomicWriteFile. The read path uses W7 loadAndMigrate; missing
-// files become schema defaults instead of throwing.
-//
-// Key Finding #5 / D-61 — OPENALEX_API_KEY slot semantics:
-//   getOpenAlexApiKey() reads process.env[config.openalexApiKeyEnv ??
-//   'OPENALEX_API_KEY']. When the env var is unset AND
-//   config.openalexApiKeyOptional === true (default per W7 schema), returns
-//   undefined — callers degrade gracefully. When openalexApiKeyOptional ===
-//   false, throws MissingApiKeyError. This means the env-var slot SHIPS NOW
-//   even though the OpenAlex client lands in a later phase, so post-Phase-1
-//   callsites have one canonical accessor and don't need a schema migration
-//   when they wire it to actual HTTP calls.
-//
-// Critical no-leak property (T-01-07):
-//   - Resolved api-key VALUES never reach disk. Only env-var NAMES are
-//     persisted (W7 schema enforces via z.string() on apiKeyEnv field, not
-//     a discriminated union with the actual key — there's no field where a
-//     key value could be stored).
-//   - Resolved api-key VALUES never reach the session log. Every log()
-//     event-kind call payload contains envName / providerId / present /
-//     optional / scope / schemaVersion only — NEVER the resolved string.
-//   - tests/runtime.test.ts has the load-bearing no-leak property test:
-//     after saving a runtime.json that points at process.env.SECRET_VALUE,
-//     reading the persisted file as a string asserts the env VALUE is
-//     absent and the env NAME is present.
-//
-// Foundation-slice contract:
-//   - The runtime config is read-only at start of pensmith — saves go
-//     through saveRuntimeConfig only. We acquire withLock on:
-//       (a) every saveRuntimeConfig (W10 pattern), AND
-//       (b) every readOne call when writeBack:true is in effect (BLOCKER-02
-//           fix). The loader's writeBack branch issues atomicWriteFile when
-//           a forward migration runs; without the lock, two concurrent
-//           loadRuntimeConfig callers each migrating a v(N-1) file to vN
-//           would race tmp+rename writes against each other AND against
-//           any concurrent saveRuntimeConfig.
-//     There is no "load INSIDE the lock for updateConfig" pattern here
-//     because Phase 1 ships no updateRuntimeConfig — saves are full
-//     replacements (config edits go through `pensmith config <key>=<value>`
-//     in Phase 7+, which is out-of-scope here).
-//
-//     Auto-mode (`scope:'auto'`) reads global first, then paper. Each is
-//     wrapped in its OWN withLock — the locks are sequential (not nested);
-//     the global lock is released before the paper lock is acquired.
-//
-// Forward-incompat contract (T-01-COMPAT-01 mitigation):
-//   - ForwardIncompatError from loadAndMigrate propagates UNCHANGED — runtime
-//     config is AUTHORITATIVE persistence (vs. checkpoint's append-only
-//     audit-log carve-out from D-39). A newer-on-disk runtime.json from a
-//     future pensmith version, opened by older code, MUST refuse-forward so
-//     we don't silently drop fields.
-//
-// Imports limited to: node:fs, node:path, and the W2/W3/W7/W9 chokepoint
-// modules. No third-party deps. No env var reads outside getProviderApiKey
-// and getOpenAlexApiKey (those are the explicit, tested points where env ->
-// runtime crosses the trust boundary).
+// No-leak (T-01-07): only env-var NAMES are persisted or logged. The key VALUE
+// is returned by getProviderApiKey() to the transport and nowhere else.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
-import { loadAndMigrate } from './migrations/loader.js';
+import { loadAndMigrate, SchemaValidationError, ForwardIncompatError } from './migrations/loader.js';
 import {
   Schema as RuntimeConfigSchema,
   CURRENT_RUNTIME_CONFIG_VERSION,
+  PROVIDER_ENUM_MESSAGE,
   type RuntimeConfig,
 } from './schemas/runtime-config.js';
-import { pensmithDataDir } from './paths.js';
+import { migrate as runtimeV1ToV2 } from './migrations/runtime-config/v1_to_v2.js';
+import { paperDir, pensmithDataDir, projectRoot } from './paths.js';
 import { openSessionLog, type SessionLogger } from './session-log.js';
+import { EXIT_ERROR, PensmithError } from './exit-codes.js';
+import {
+  DEFAULT_ENDPOINTS,
+  DEFAULT_KEY_ENV,
+  LOCAL_PROVIDERS,
+  PROVIDER_NAMES,
+  defaultModelFor,
+  isProviderName,
+  resolveModelAlias,
+  slugSpec,
+  type Effort,
+  type ProviderName,
+} from './llm-models.js';
+import { loadPaperConfig } from './config.js';
+import type { PriceOverride } from './pricing.js';
+
+export type { RuntimeConfig };
 
 // ---------------------------------------------------------------------------
-// Types + Errors (per <interfaces> in 01-13-PLAN.md).
+// Errors
 // ---------------------------------------------------------------------------
 
-export type LoadScope = 'global' | 'paper' | 'auto';
-
-export class MissingApiKeyError extends Error {
+/** No usable key for the resolved hosted provider (exit EXIT_ERROR, one line). */
+export class MissingApiKeyError extends PensmithError {
   code = 'MISSING_API_KEY' as const;
   constructor(message: string) {
-    super(message);
+    super(message, EXIT_ERROR);
     this.name = 'MissingApiKeyError';
   }
 }
 
-// Re-export the RuntimeConfig type so callers can import it from this module
-// (consistent with state.ts / library.ts / checkpoint.ts).
-export type { RuntimeConfig };
-
-// ---------------------------------------------------------------------------
-// Internals.
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the absolute path to the GLOBAL runtime.json under pensmithDataDir().
- * Per D-40 / D-43 the global path lives in the platform-local data dir
- * (LOCALAPPDATA on Windows, ~/Library/Application Support on macOS,
- * XDG_DATA_HOME on Linux) — NEVER inside .paper/ (OneDrive non-negotiable).
- */
-function globalConfigPath(): string {
-  return path.join(pensmithDataDir(), 'runtime.json');
+/** An invalid runtime configuration (unknown provider, bad runtime.json, missing local model). */
+export class RuntimeConfigError extends PensmithError {
+  constructor(message: string) {
+    super(message, EXIT_ERROR);
+    this.name = 'RuntimeConfigError';
+  }
 }
 
-/**
- * Resolve the absolute path to the PAPER-SCOPE runtime.json overlay at
- * `<paperRoot>/runtime.json`. Paper-scope overlay is fine inside .paper/
- * since it's user-owned config (NOT lock state, NOT cache, NOT secrets) —
- * the overlay file at most contains env-var NAMES + boolean toggles, never
- * api-key VALUES.
- */
-function paperConfigPath(paperRoot: string): string {
-  return path.join(path.resolve(paperRoot), 'runtime.json');
-}
+// ---------------------------------------------------------------------------
+// Session logger (event records only — never a key value)
+// ---------------------------------------------------------------------------
 
-/**
- * Module-level singleton SessionLogger child bound to `module: 'runtime'`.
- * Lazy-initialized so test files that mutate process.env (LOCALAPPDATA,
- * XDG_DATA_HOME, HOME) BEFORE dynamically importing this module observe the
- * mutated env. openSessionLog reads paths.ts at call-time, so this singleton
- * resolves the log destination at first use, not at import.
- *
- * IMPORTANT: every log call in this file emits ONLY safe fields (envName,
- * providerId, present, optional, scope, schemaVersion, event). NEVER the
- * resolved api-key VALUE. T-01-07 mitigation is partly load-bearing on this
- * invariant — see the no-leak test in tests/runtime.test.ts.
- */
 let _log: SessionLogger | null = null;
 function log(): SessionLogger {
-  if (!_log) {
-    _log = openSessionLog({ scope: 'auto' }).child({ module: 'runtime' });
-  }
+  if (!_log) _log = openSessionLog({ scope: 'auto' }).child({ module: 'runtime' });
   return _log;
 }
 
-/**
- * Construct a default RuntimeConfig. The W7 RuntimeConfigSchema's `providers`
- * map has a `.refine` requiring at least one provider — a runtime config with
- * zero providers is non-functional, so the schema rejects empty maps. This
- * means we can't simply call `RuntimeConfigSchema.parse({})` to fill defaults
- * — we have to seed at least one provider entry.
- *
- * The default seed is `anthropic` with apiKeyEnv='ANTHROPIC_API_KEY'. This
- * is the production-typical first provider; pensmith without an Anthropic
- * key is operable but limited. Callers that prefer OpenAI as primary can
- * overwrite by saveRuntimeConfig with their own provider map.
- *
- * The other defaulted fields (openalexApiKeyEnv='OPENALEX_API_KEY',
- * openalexApiKeyOptional=true, contactEmailEnv='PENSMITH_CONTACT_EMAIL')
- * come from the schema's .default() calls.
- */
-function defaults(): RuntimeConfig {
-  return RuntimeConfigSchema.parse({
-    $schemaVersion: CURRENT_RUNTIME_CONFIG_VERSION,
-    providers: {
-      anthropic: { name: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY' },
-    },
-  });
+// ---------------------------------------------------------------------------
+// Global runtime.json
+// ---------------------------------------------------------------------------
+
+export function globalRuntimeConfigPath(): string {
+  return path.join(pensmithDataDir(), 'runtime.json');
 }
 
-/**
- * Try to load a single runtime.json file via W7 loadAndMigrate. Returns
- * null on ENOENT (file absent), the parsed config on success. All other
- * errors (JSON parse, schema validation, ForwardIncompatError, permission)
- * bubble up unchanged.
- *
- * `writeBack: true` so a future v1->v2 migration persists the upgraded
- * shape on disk. Today the migration registry is empty (we're at v1) so
- * no actual write occurs.
- */
-async function readOne(file: string): Promise<RuntimeConfig | null> {
+function defaults(): RuntimeConfig {
+  return RuntimeConfigSchema.parse({ $schemaVersion: CURRENT_RUNTIME_CONFIG_VERSION });
+}
+
+function friendlyIssues(e: SchemaValidationError): string {
+  return e.zodIssue
+    .slice(0, 3)
+    .map((i) => {
+      const where = i.path.length ? i.path.join('.') : '(root)';
+      if (where === 'provider' && i.message === PROVIDER_ENUM_MESSAGE) {
+        const received = (i as { received?: unknown }).received;
+        return `unknown provider ${JSON.stringify(received)} (valid values: ${PROVIDER_NAMES.join(', ')})`;
+      }
+      return `${where}: ${i.message}`;
+    })
+    .join('; ');
+}
+
+async function readGlobal(file: string): Promise<RuntimeConfig | null> {
   try {
-    // BLOCKER-02 fix: wrap the loadAndMigrate call inside withLock. The
-    // loader's writeBack:true branch issues an atomicWriteFile when a
-    // forward migration runs — without the lock, two concurrent
-    // loadRuntimeConfig callers each migrating a v(N-1) file to vN would
-    // race tmp+rename writes against each other AND against concurrent
-    // saveRuntimeConfig. The race is dormant today (no v2 schema yet)
-    // but the lock must be in place so it cannot activate the day a
-    // real forward migration ships. The lock key is the file path — so
-    // global and paper-overlay reads use distinct locks (no deadlock
-    // when auto-mode reads both).
-    //
-    // T-01-07 no-leak property is unaffected: no log call is added here,
-    // and the only payload that crosses this function is the parsed
-    // RuntimeConfig (which holds env-var NAMES only — never resolved
-    // api-key VALUES). The withLock wrap operates strictly on the file
-    // path; it does not touch the loaded config or any env value.
     return await withLock(file, async () =>
       (await loadAndMigrate({
         file,
         schema: RuntimeConfigSchema,
         schemaName: 'runtime-config',
         currentVersion: CURRENT_RUNTIME_CONFIG_VERSION,
+        migrations: { 1: runtimeV1ToV2 },
         writeBack: true,
       })) as RuntimeConfig,
     );
   } catch (e) {
     const err = e as NodeJS.ErrnoException & { cause?: NodeJS.ErrnoException };
-    if (err?.code === 'ENOENT' || err?.cause?.code === 'ENOENT') {
-      return null;
-    }
+    if (err?.code === 'ENOENT' || err?.cause?.code === 'ENOENT') return null;
+    if (e instanceof SchemaValidationError) throw new RuntimeConfigError(`${file}: ${friendlyIssues(e)}`);
+    if (e instanceof ForwardIncompatError) throw new RuntimeConfigError(e.message.replace(/^pensmith: /, ''));
+    if (e instanceof SyntaxError) throw new RuntimeConfigError(`${file} is not valid JSON: ${e.message}`);
     throw e;
   }
 }
 
 /**
- * Merge `overlay` on top of `base`. Top-level keys are shallow-merged
- * (overlay wins). The `providers` map is deep-merged by providerId
- * (overlay's providerId entries win, but base's other providerId entries
- * survive).
- *
- * Returns the merged result re-validated through RuntimeConfigSchema.parse —
- * this guarantees defense-in-depth even if a hand-edited overlay is malformed
- * in a way the per-file load missed (e.g. overlay missing $schemaVersion gets
- * defaulted by readVersion -> 1, then revalidated here).
+ * Load the GLOBAL runtime config (missing file → schema defaults). Throws
+ * RuntimeConfigError (one line, no zod dump) on an invalid or newer file.
+ * `paperRoot` only drives the retired-overlay warning.
  */
-function mergeOverlay(
-  base: RuntimeConfig,
-  overlay: RuntimeConfig | null,
-): RuntimeConfig {
-  if (!overlay) return base;
-  const providers = { ...base.providers, ...overlay.providers };
-  return RuntimeConfigSchema.parse({
-    ...base,
-    ...overlay,
-    providers,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Public API (D-61 + D-65 + Key Finding #5 OpenAlex slot).
-// ---------------------------------------------------------------------------
-
-/**
- * Load runtime config according to `opts.scope`.
- *
- *   scope='global' (explicit)
- *     Read pensmithDataDir()/runtime.json. Missing file -> defaults().
- *
- *   scope='paper' (explicit)
- *     Read <paperRoot>/runtime.json. Missing file -> defaults().
- *     Throws if opts.paperRoot is not provided.
- *
- *   scope='auto' (default, no scope passed)
- *     Read global first; if opts.paperRoot is provided, also read paper and
- *     overlay it on top (paper wins on each top-level key; providers
- *     deep-merge by providerId). Missing files at either scope contribute
- *     defaults (no error).
- *
- * Per D-61, runtime config is OPTIONAL everywhere — first-run pensmith with
- * no runtime.json operates with schema defaults. This is why ENOENT is
- * translated to defaults instead of NotFoundError (cf. state.ts which throws
- * StateNotFoundError for the same condition).
- *
- * ForwardIncompatError propagates UNCHANGED (T-01-COMPAT-01 mitigation):
- * a newer-on-disk runtime.json from a future pensmith version, opened by
- * older code, MUST refuse-forward so we don't silently drop fields.
- *
- * Emits exactly one event-kind log record per call (event:'runtime.load',
- * scope, schemaVersion). NEVER logs api-key values.
- */
-export async function loadRuntimeConfig(
-  opts: { scope?: LoadScope; paperRoot?: string } = {},
-): Promise<RuntimeConfig> {
-  const scope = opts.scope ?? 'auto';
-  let result: RuntimeConfig;
-
-  if (scope === 'global') {
-    result = (await readOne(globalConfigPath())) ?? defaults();
-  } else if (scope === 'paper') {
-    if (!opts.paperRoot) {
-      throw new Error('loadRuntimeConfig: paperRoot is required when scope="paper"');
-    }
-    result = (await readOne(paperConfigPath(opts.paperRoot))) ?? defaults();
-  } else {
-    // auto: global first, then paper-overlay if paperRoot is provided.
-    const global_ = (await readOne(globalConfigPath())) ?? defaults();
-    if (opts.paperRoot) {
-      const paper = await readOne(paperConfigPath(opts.paperRoot));
-      result = mergeOverlay(global_, paper);
-    } else {
-      result = global_;
-    }
-  }
-
-  log().event({
-    event: 'runtime.load',
-    scope,
-    schemaVersion: result.$schemaVersion,
-  });
-
+export async function loadRuntimeConfig(opts: { paperRoot?: string } = {}): Promise<RuntimeConfig> {
+  const result = (await readGlobal(globalRuntimeConfigPath())) ?? defaults();
+  if (opts.paperRoot) warnRetiredPaperOverlay(opts.paperRoot);
+  log().event({ event: 'runtime.load', scope: 'global', schemaVersion: result.$schemaVersion });
   return result;
 }
 
-/**
- * Atomically write `config` to the global or paper-scope runtime.json.
- *
- * Refuses scope='auto' — the caller must explicitly pick a destination
- * because auto-merge has no inverse (we don't know which keys came from
- * global vs. paper). Throws if scope='paper' and opts.paperRoot is not
- * provided.
- *
- * RuntimeConfigSchema.parse runs BEFORE the lock — refuses to write
- * malformed config regardless of caller discipline (T-01-08 mitigation).
- * The schema's `providers` .refine guard ensures at least one provider is
- * present; bare `{...cfg, providers: {}}` will reject before disk is
- * touched.
- *
- * mkdir -p on the parent directory before atomicWriteFile so first-run
- * (no pensmithDataDir() yet) succeeds without requiring a separate init.
- *
- * Emits exactly one event-kind log record per call (event:'runtime.save',
- * scope, schemaVersion). NEVER logs api-key values.
- */
-export async function saveRuntimeConfig(
-  scope: 'global' | 'paper',
-  config: RuntimeConfig,
-  opts: { paperRoot?: string } = {},
-): Promise<void> {
-  let file: string;
-  if (scope === 'global') {
-    file = globalConfigPath();
-  } else {
-    if (!opts.paperRoot) {
-      throw new Error('saveRuntimeConfig: paperRoot is required when scope="paper"');
-    }
-    file = paperConfigPath(opts.paperRoot);
-  }
-
-  // Defense-in-depth: parse BEFORE the lock so caller-side garbage fails
-  // fast without contending the per-file critical section.
+/** Atomically write the global runtime.json (validated before the lock). */
+export async function saveRuntimeConfig(config: RuntimeConfig): Promise<void> {
+  const file = globalRuntimeConfigPath();
   const validated = RuntimeConfigSchema.parse(config);
-
   await withLock(file, async () => {
     await fs.promises.mkdir(path.dirname(file), { recursive: true });
     await atomicWriteFile(file, JSON.stringify(validated, null, 2) + '\n');
   });
+  log().event({ event: 'runtime.save', scope: 'global', schemaVersion: validated.$schemaVersion });
+}
 
-  log().event({
-    event: 'runtime.save',
-    scope,
-    schemaVersion: validated.$schemaVersion,
-  });
+const warnedOverlay = new Set<string>();
+
+function warnRetiredPaperOverlay(root: string): void {
+  for (const candidate of [path.join(root, 'runtime.json'), path.join(paperDir(root), 'runtime.json')]) {
+    if (warnedOverlay.has(candidate) || !fs.existsSync(candidate)) continue;
+    warnedOverlay.add(candidate);
+    process.stderr.write(
+      `pensmith: ${candidate} is no longer read (the paper-level runtime.json overlay is retired). ` +
+        `Move provider, model, effort and price overrides to .paper/config.toml [runtime] ` +
+        `(per-slug overrides under [runtime.slugs.<slug>]); endpoint and api_key_env belong in ` +
+        `${globalRuntimeConfigPath()}.\n`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// --runtime / --model flags (pre-parsed by the dispatcher's (b2) block)
+// ---------------------------------------------------------------------------
+
+export interface RuntimeOverride {
+  provider?: string;
+  model?: string;
+}
+
+let override: RuntimeOverride = {};
+
+export function setRuntimeOverride(o: RuntimeOverride): void {
+  const next: RuntimeOverride = {};
+  if (typeof o.provider === 'string' && o.provider.length > 0) next.provider = o.provider;
+  if (typeof o.model === 'string' && o.model.length > 0) next.model = o.model;
+  override = next;
+}
+
+export function getRuntimeOverride(): RuntimeOverride {
+  return { ...override };
+}
+
+/** The value of `--<name> <v>` or `--<name>=<v>` in argv (first occurrence), else undefined. */
+export function argvFlagValue(argv: readonly string[], name: string): string | undefined {
+  for (let i = 0; i < argv.length; i += 1) {
+    const tok = argv[i] ?? '';
+    if (tok === `--${name}`) {
+      const next = argv[i + 1];
+      return next !== undefined && !next.startsWith('--') ? next : undefined;
+    }
+    if (tok.startsWith(`--${name}=`)) return tok.slice(name.length + 3);
+  }
+  return undefined;
+}
+
+/** `--runtime <provider>` / `--model <id>` from argv (the dispatcher's (b2) pre-parse). */
+export function runtimeFlagsFromArgv(argv: readonly string[]): RuntimeOverride {
+  const out: RuntimeOverride = {};
+  const provider = argvFlagValue(argv, 'runtime');
+  const model = argvFlagValue(argv, 'model');
+  if (provider !== undefined) out.provider = provider;
+  if (model !== undefined) out.model = model;
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Resolution
+// ---------------------------------------------------------------------------
+
+export type RuntimeSource = 'flag' | 'config' | 'global' | 'env' | 'default';
+
+export interface SlugResolution {
+  slug: string;
+  model: string | null;
+  modelSource: RuntimeSource | 'slug-config' | 'slug-global' | 'tier-default';
+  effort: Effort;
+  effortSource: RuntimeSource | 'slug-config' | 'slug-global' | 'slug-default';
+}
+
+export interface ResolvedRuntime {
+  provider: ProviderName;
+  providerSource: RuntimeSource;
+  /** The generation model (null for a local provider with no configured model). */
+  model: string | null;
+  modelSource: RuntimeSource;
+  /** Paper-level generation effort override (null → per-slug defaults). */
+  effort: Effort | null;
+  effortSource: RuntimeSource;
+  endpoint: string | null;
+  endpointSource: RuntimeSource;
+  apiKeyEnv: string | null;
+  apiKeyEnvSource: RuntimeSource;
+  priceOverride: PriceOverride;
+  priceSource: RuntimeSource | null;
+  refusalFallbacks: 'off' | 'default';
+  refusalFallbacksSource: RuntimeSource;
+  slugOverrides: Readonly<Record<string, { model?: string; effort?: Effort; source: 'slug-config' | 'slug-global' }>>;
+  /** The loaded global runtime.json (OpenAlex / contact-email slots). */
+  global: RuntimeConfig;
+}
+
+function envPresent(env: NodeJS.ProcessEnv, name: string): boolean {
+  const v = env[name];
+  return typeof v === 'string' && v.length > 0;
 }
 
 /**
- * Resolve the api key for `providerId` by reading process.env at the env-var
- * NAME stored in the runtime config's providers map.
- *
- * The provider entry MUST exist in the loaded config — throws
- * MissingApiKeyError(`no provider config for "${providerId}"`) otherwise.
- * The env var MUST be set to a non-empty string — throws
- * MissingApiKeyError(`env var ${envName} is not set ...`) otherwise.
- *
- * Critical no-leak property (T-01-07): the resolved value is RETURNED to the
- * caller but NEVER logged. The session-log call carries envName + providerId
- * only. Callers that subsequently log the return value are responsible for
- * routing it through the W8 redactor (Authorization-header style ctx); that
- * is a downstream concern.
- *
- * Emits exactly one event-kind log record per call (event:'runtime.apiKey',
- * providerId, envName). NEVER logs the value.
+ * Resolve the effective runtime for `paperRoot` (default: the project root).
+ * Throws RuntimeConfigError for an unknown provider (listing the valid values),
+ * an invalid global runtime.json, or an invalid paper config.
+ */
+export async function resolveRuntime(
+  opts: { paperRoot?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<ResolvedRuntime> {
+  const root = opts.paperRoot ?? projectRoot();
+  const env = opts.env ?? process.env;
+  const global = await loadRuntimeConfig({ paperRoot: root });
+  const paper = (await loadPaperConfig(root)).runtime ?? {};
+
+  // provider
+  let provider: string;
+  let providerSource: RuntimeSource;
+  if (override.provider !== undefined) {
+    provider = override.provider;
+    providerSource = 'flag';
+  } else if (paper.provider !== undefined) {
+    provider = paper.provider;
+    providerSource = 'config';
+  } else if (global.provider !== undefined) {
+    provider = global.provider;
+    providerSource = 'global';
+  } else if (envPresent(env, 'OPENAI_API_KEY') && !envPresent(env, 'ANTHROPIC_API_KEY')) {
+    provider = 'openai';
+    providerSource = 'env';
+  } else {
+    provider = 'anthropic';
+    providerSource = 'default';
+  }
+  if (!isProviderName(provider)) {
+    const where = providerSource === 'flag' ? '--runtime' : providerSource === 'config' ? '.paper/config.toml [runtime] provider' : 'provider';
+    throw new RuntimeConfigError(
+      `unknown provider ${JSON.stringify(provider)} (${where}); valid values: ${PROVIDER_NAMES.join(', ')}`,
+    );
+  }
+  const p: ProviderName = provider;
+  const paperMatches = paper.provider === undefined || paper.provider === p;
+  const globalMatches = global.provider === undefined || global.provider === p;
+
+  // generation model
+  let model: string | null;
+  let modelSource: RuntimeSource;
+  if (override.model !== undefined) {
+    model = override.model;
+    modelSource = 'flag';
+  } else if (paperMatches && paper.model !== undefined) {
+    model = paper.model;
+    modelSource = 'config';
+  } else if (globalMatches && global.model !== undefined) {
+    model = global.model;
+    modelSource = 'global';
+  } else {
+    model = defaultModelFor(p, 'generation');
+    modelSource = 'default';
+  }
+  if (model !== null) model = resolveModelAlias(model);
+
+  // endpoint + key variable: global file only
+  const endpoint = globalMatches && global.endpoint !== undefined ? global.endpoint : DEFAULT_ENDPOINTS[p];
+  const endpointSource: RuntimeSource = globalMatches && global.endpoint !== undefined ? 'global' : 'default';
+  const apiKeyEnv = globalMatches && global.api_key_env !== undefined ? global.api_key_env : DEFAULT_KEY_ENV[p];
+  const apiKeyEnvSource: RuntimeSource = globalMatches && global.api_key_env !== undefined ? 'global' : 'default';
+
+  // price override
+  let priceOverride: PriceOverride = {};
+  let priceSource: RuntimeSource | null = null;
+  if (paperMatches && (paper.price_in_per_mtok !== undefined || paper.price_out_per_mtok !== undefined)) {
+    priceOverride = { inputPerMtok: paper.price_in_per_mtok, outputPerMtok: paper.price_out_per_mtok };
+    priceSource = 'config';
+  } else if (globalMatches && (global.price_in_per_mtok !== undefined || global.price_out_per_mtok !== undefined)) {
+    priceOverride = { inputPerMtok: global.price_in_per_mtok, outputPerMtok: global.price_out_per_mtok };
+    priceSource = 'global';
+  }
+
+  // refusal fallbacks
+  let refusalFallbacks: 'off' | 'default' = 'off';
+  let refusalFallbacksSource: RuntimeSource = 'default';
+  if (paper.refusal_fallbacks !== undefined) {
+    refusalFallbacks = paper.refusal_fallbacks;
+    refusalFallbacksSource = 'config';
+  } else if (global.refusal_fallbacks !== undefined) {
+    refusalFallbacks = global.refusal_fallbacks;
+    refusalFallbacksSource = 'global';
+  }
+
+  // per-slug overrides (paper wins per field)
+  const slugOverrides: Record<string, { model?: string; effort?: Effort; source: 'slug-config' | 'slug-global' }> = {};
+  for (const [slug, o] of Object.entries(global.slugs ?? {})) {
+    if (!globalMatches) break;
+    slugOverrides[slug] = { ...(o.model ? { model: resolveModelAlias(o.model) } : {}), ...(o.effort ? { effort: o.effort } : {}), source: 'slug-global' };
+  }
+  for (const [slug, o] of Object.entries(paper.slugs ?? {})) {
+    if (!paperMatches) break;
+    const prev = slugOverrides[slug];
+    slugOverrides[slug] = {
+      ...(prev ?? {}),
+      ...(o.model ? { model: resolveModelAlias(o.model) } : {}),
+      ...(o.effort ? { effort: o.effort } : {}),
+      source: 'slug-config',
+    };
+  }
+
+  return {
+    provider: p,
+    providerSource,
+    model,
+    modelSource,
+    effort: paper.effort ?? null,
+    effortSource: paper.effort !== undefined ? 'config' : 'default',
+    endpoint,
+    endpointSource,
+    apiKeyEnv,
+    apiKeyEnvSource,
+    priceOverride,
+    priceSource,
+    refusalFallbacks,
+    refusalFallbacksSource,
+    slugOverrides,
+    global,
+  };
+}
+
+/**
+ * The model and effort one prompt slug uses (RUN-26):
+ *   generation slugs: --model > [runtime.slugs.<slug>] > [runtime] model > global > default;
+ *   judgment slugs:   [runtime.slugs.<slug>] > the provider's small model
+ *                     (claude-haiku-4-5 / gpt-6-luna); local providers use the
+ *                     configured model for every slug.
+ *   effort: [runtime.slugs.<slug>] effort > [runtime] effort (generation only) > the slug default.
+ */
+export function resolveSlug(rt: ResolvedRuntime, slug: string): SlugResolution {
+  const spec = slugSpec(slug);
+  const o = rt.slugOverrides[slug];
+  let model: string | null;
+  let modelSource: SlugResolution['modelSource'];
+  if (spec.tier === 'generation' && rt.modelSource === 'flag') {
+    model = rt.model;
+    modelSource = 'flag';
+  } else if (o?.model) {
+    model = o.model;
+    modelSource = o.source;
+  } else if (spec.tier === 'generation' || LOCAL_PROVIDERS.has(rt.provider)) {
+    model = rt.model;
+    modelSource = rt.modelSource;
+  } else {
+    model = defaultModelFor(rt.provider, 'judgment');
+    modelSource = 'tier-default';
+  }
+  let effort: Effort = spec.effort;
+  let effortSource: SlugResolution['effortSource'] = 'slug-default';
+  if (o?.effort) {
+    effort = o.effort;
+    effortSource = o.source;
+  } else if (spec.tier === 'generation' && rt.effort) {
+    effort = rt.effort;
+    effortSource = rt.effortSource;
+  }
+  return { slug, model, modelSource, effort, effortSource };
+}
+
+// ---------------------------------------------------------------------------
+// Key resolution (the ONLY place a key VALUE is read)
+// ---------------------------------------------------------------------------
+
+/** The key variable a provider id reads under the resolved runtime. */
+export function apiKeyEnvFor(rt: ResolvedRuntime, providerId: string): string | null {
+  if (providerId === rt.provider) return rt.apiKeyEnv;
+  return isProviderName(providerId) ? DEFAULT_KEY_ENV[providerId] : null;
+}
+
+/**
+ * Resolve the API key VALUE for `providerId`. Local providers without a
+ * configured key variable return '' (no Authorization header). A hosted
+ * provider with no key throws MissingApiKeyError naming the variable and the
+ * `Set one of:` hint. The value is returned to the transport and never logged.
  */
 export async function getProviderApiKey(
   providerId: string,
-  opts: { scope?: LoadScope; paperRoot?: string } = {},
+  opts: { paperRoot?: string } = {},
 ): Promise<string> {
-  const cfg = await loadRuntimeConfig(opts);
-  const provider = cfg.providers?.[providerId];
-  if (!provider) {
-    throw new MissingApiKeyError(
-      `no provider config for "${providerId}"`,
-    );
+  const rt = await resolveRuntime(opts.paperRoot !== undefined ? { paperRoot: opts.paperRoot } : {});
+  if (!isProviderName(providerId)) {
+    throw new RuntimeConfigError(`unknown provider ${JSON.stringify(providerId)}; valid values: ${PROVIDER_NAMES.join(', ')}`);
   }
-  const envName = provider.apiKeyEnv;
+  const envName = apiKeyEnvFor(rt, providerId);
+  const local = LOCAL_PROVIDERS.has(providerId);
+  if (envName === null) {
+    if (local) return '';
+    throw new MissingApiKeyError(`no API key variable configured for provider "${providerId}"`);
+  }
   const value = process.env[envName];
   if (!value || value.length === 0) {
+    if (local) return '';
     throw new MissingApiKeyError(
-      `env var ${envName} is not set (required for provider "${providerId}")`,
+      `${envName} is not set (provider "${providerId}"). ` +
+        'Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY (or configure a local endpoint)',
     );
   }
-
-  // NEVER log the value — only the env-var name + providerId. T-01-07.
-  log().event({
-    event: 'runtime.apiKey',
-    providerId,
-    envName,
-  });
-
+  log().event({ event: 'runtime.apiKey', providerId, envName });
   return value;
 }
 
-/**
- * Resolve the OpenAlex api key per Key Finding #5 / D-61.
- *
- * Reads process.env[config.openalexApiKeyEnv ?? 'OPENALEX_API_KEY']. When the
- * env var is unset AND config.openalexApiKeyOptional === true (default per
- * W7 schema), returns undefined — callers degrade gracefully. When
- * openalexApiKeyOptional === false (caller has explicitly opted into hard-
- * required), throws MissingApiKeyError.
- *
- * The default optional=true semantics are deliberate:
- *   - OpenAlex's polite pool works with email-only authentication; no key
- *     is strictly required for Phase 1.
- *   - The slot SHIPS NOW so post-Phase-1 callsites have one canonical
- *     accessor and don't need a schema migration when wiring real HTTP.
- *   - Callers MUST handle undefined gracefully — see the carry-forward note
- *     in the SUMMARY.
- *
- * Critical no-leak property (T-01-07): if a value is found, it is RETURNED
- * to the caller but NEVER logged. The session-log call carries envName +
- * present:boolean + optional:boolean only. NEVER the resolved value.
- *
- * Emits exactly one event-kind log record per call (event:'runtime.openalex',
- * envName, optional, present). NEVER logs the value.
- */
-export async function getOpenAlexApiKey(
-  opts: { scope?: LoadScope; paperRoot?: string } = {},
-): Promise<string | undefined> {
-  const cfg = await loadRuntimeConfig(opts);
+/** Presence of a provider's key variable (boolean only; no value escapes). */
+export function isApiKeyPresent(envName: string | null, env: NodeJS.ProcessEnv = process.env): boolean {
+  return envName !== null && envPresent(env, envName);
+}
+
+// ---------------------------------------------------------------------------
+// OpenAlex / Semantic Scholar key slots (unchanged contracts)
+// ---------------------------------------------------------------------------
+
+export async function getOpenAlexApiKey(): Promise<string | undefined> {
+  const cfg = await loadRuntimeConfig();
   const envName = cfg.openalexApiKeyEnv ?? 'OPENALEX_API_KEY';
   const optional = cfg.openalexApiKeyOptional ?? true;
   const resolved = process.env[envName];
   const present = !!(resolved && resolved.length > 0);
-
-  // NEVER log the resolved string — only the env-var name + presence boolean.
-  // T-01-07. The pre-computed `present` boolean is what's logged; the resolved
-  // value lives only in the local variable until it's returned to the caller.
-  log().event({
-    event: 'runtime.openalex',
-    envName,
-    optional,
-    present,
-  });
-
+  log().event({ event: 'runtime.openalex', envName, optional, present });
   if (present) return resolved;
   if (optional) return undefined;
-  throw new MissingApiKeyError(
-    `env var ${envName} is not set (OpenAlex API key is required by current config)`,
-  );
+  throw new MissingApiKeyError(`env var ${envName} is not set (OpenAlex API key is required by current config)`);
 }
-
-// ---------------------------------------------------------------------------
-// Semantic Scholar API key — Phase 3 Plan 03-03 Task 3.3 (D-16, T-01-07).
-//
-// getS2ApiKey returns a PRESENCE-ONLY descriptor: { present, name }. The
-// resolved env value is NEVER returned, never logged, never persisted —
-// the no-leak invariant (T-01-07) is enforced by the shape of the return
-// type, not by caller discipline. Callers that need the actual key value
-// MUST read process.env.PENSMITH_S2_API_KEY themselves at the HTTP-call
-// boundary (analogous to getProviderApiKey but with a no-leak result type).
-//
-// On first call when the env var is unset, emits a single WARN log
-// breadcrumb so the operator sees the keyless-mode degradation once.
-// Subsequent calls are silent (the _s2WarnedOnce flag is module-scoped).
-// ---------------------------------------------------------------------------
 
 let _s2WarnedOnce = false;
 
-/**
- * Presence-only accessor for PENSMITH_S2_API_KEY (D-16).
- *
- * Returns `{ present: boolean, name: 'PENSMITH_S2_API_KEY' }`. The env
- * VALUE is never in the returned object — T-01-07 no-leak invariant
- * enforced by return type (the literal-typed `name` field is the only
- * string ever surfaced).
- *
- * On first call with the env var missing, emits ONE WARN log:
- * `'pensmith: PENSMITH_S2_API_KEY not set — Semantic Scholar adapter will
- *  use keyless mode (lower rate limit). Set PENSMITH_S2_API_KEY to enable.'`
- * Subsequent calls are silent (memoized via module-level _s2WarnedOnce).
- *
- * Synchronous because: (a) presence-check is process.env read, (b) the log
- * write is fire-and-forget via the session-log's emit(), (c) callers chain
- * it inside capabilities() which is sync.
- */
+/** Presence-only accessor for PENSMITH_S2_API_KEY (D-16): the value never leaves here. */
 export function getS2ApiKey(): { present: boolean; name: 'PENSMITH_S2_API_KEY' } {
   const raw = process.env['PENSMITH_S2_API_KEY'];
   const present = !!(raw && raw.length > 0);
   if (!present && !_s2WarnedOnce) {
     _s2WarnedOnce = true;
-    log().warn({
-      event: 'runtime.s2.keyless',
-      envName: 'PENSMITH_S2_API_KEY',
-      // present:false is implicit by virtue of being a 'keyless' breadcrumb;
-      // we do NOT log the raw value (which is undefined here anyway). The
-      // event-kind is 'warn' so doctor probes can surface it to the user.
-    });
+    log().warn({ event: 'runtime.s2.keyless', envName: 'PENSMITH_S2_API_KEY' });
   }
   return { present, name: 'PENSMITH_S2_API_KEY' };
 }
+
+/** The provider key variables worth reporting (names only) for capability facts and doctor. */
+export async function providerKeyVariables(): Promise<Array<{ name: string; api_key_env: string }>> {
+  const out: Array<{ name: string; api_key_env: string }> = [
+    { name: 'anthropic', api_key_env: 'ANTHROPIC_API_KEY' },
+    { name: 'openai', api_key_env: 'OPENAI_API_KEY' },
+  ];
+  let rt: ResolvedRuntime | null = null;
+  try {
+    rt = await resolveRuntime();
+  } catch {
+    rt = null;
+  }
+  if (rt && rt.apiKeyEnv && !out.some((e) => e.name === rt!.provider && e.api_key_env === rt!.apiKeyEnv)) {
+    const idx = out.findIndex((e) => e.name === rt!.provider);
+    if (idx >= 0) out[idx] = { name: rt.provider, api_key_env: rt.apiKeyEnv };
+    else out.push({ name: rt.provider, api_key_env: rt.apiKeyEnv });
+  }
+  return out;
+}
+
+/** The slug spec lookup is re-exported for callers that only import runtime.ts. */
+export { slugSpec };

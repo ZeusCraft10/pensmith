@@ -229,10 +229,10 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
   });
 
   const result = await complete({
+    slug: 'section-drafter',
+    section: n,
     system: interpolatedDrafterPrompt,
     messages: [{ role: 'user', content: `Write section ${n} (${slug}).` }],
-    scope: 'section',
-    scopeId: `write-${n}`,
   });
 
   const targetPath = sectionDraft(n, slug);

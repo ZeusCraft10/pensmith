@@ -18,12 +18,13 @@
 import { defineCommand } from 'citty';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { redactPii, diffPii } from '../lib/pii.js';
-import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
-import { getProviderApiKey } from '../lib/runtime.js';
+import { complete, assertLlmConfigured } from '../lib/anthropic.js';
+import { tryReadPaperConfigSync, updatePaperConfig, rawTable } from '../lib/config.js';
+import { parseIntakeMd } from '../lib/intake-parse.js';
+import type { IntakeClarification } from '../lib/llm-contracts.js';
 
 // EGRESS SEAM (H3 — test-observable model-bound payload). intake calls the
 // model-bound interpolate THROUGH this module-local indirection so the egress
@@ -59,28 +60,17 @@ import {
 
 /**
  * Resolve the paper's display name + class. `name` falls back to the project
- * folder basename; `class` reads config.toml `[project] class` when present,
- * defaulting to 'Unfiled'. Both reads are best-effort — never throw.
+ * folder basename; `class` reads `.paper/config.toml` `[project] class` when
+ * present (through bin/lib/config.ts, the one config reader), defaulting to
+ * 'Unfiled'. Best-effort — an absent or invalid config never throws here.
  */
 function resolvePaperMeta(cwd: string): { name: string; class: string } {
   const name = path.basename(cwd) || 'Untitled paper';
-  let klass = 'Unfiled';
-  try {
-    const cfgPath = path.join(cwd, 'config.toml');
-    if (existsSync(cfgPath)) {
-      const cfg = parseToml(readFileSync(cfgPath, 'utf8')) as {
-        project?: { class?: unknown; title?: unknown };
-      };
-      const c = cfg.project?.class;
-      if (typeof c === 'string' && c.trim()) klass = c.trim();
-      const t = cfg.project?.title;
-      if (typeof t === 'string' && t.trim()) {
-        return { name: t.trim(), class: klass };
-      }
-    }
-  } catch {
-    // best-effort: a malformed config.toml must not break intake.
-  }
+  const project = tryReadPaperConfigSync(cwd)?.project;
+  const c = project?.class;
+  const klass = typeof c === 'string' && c.trim() ? c.trim() : 'Unfiled';
+  const t = project?.title;
+  if (typeof t === 'string' && t.trim()) return { name: t.trim(), class: klass };
   return { name, class: klass };
 }
 
@@ -95,12 +85,12 @@ function coerceGoal(v: unknown): 'draft' | 'learning' | 'both' {
 
 /**
  * Persist `project.goal` (and `project.pii_redaction` when set via the CLI arg)
- * into config.toml. config.toml is the CANONICAL store (RESEARCH A2 + PRD §10);
- * we do NOT add a STATE.json field. The read+merge+write is best-effort: a
- * malformed config.toml must NOT break intake (mirrors resolvePaperMeta's
- * try/catch). On any persist failure we emit a VISIBLE stderr WARN AND keep the
- * selected goal in memory for THIS session (M1 — a silent persist failure must
- * not strand the learning goal). Written via atomicWriteFile (D-07 chokepoint).
+ * into `.paper/config.toml` through bin/lib/config.ts (CONF-01: the one writer;
+ * it stamps `schema_version = 1`). config.toml is the CANONICAL store (RESEARCH
+ * A2 + PRD §10); there is no STATE.json field. Best-effort: an invalid existing
+ * config.toml is NOT overwritten — we print a visible WARN and keep the selected
+ * goal in memory for THIS session (M1 — a silent persist failure must not strand
+ * the learning goal).
  */
 async function persistProjectConfig(
   cwd: string,
@@ -108,22 +98,13 @@ async function persistProjectConfig(
   piiRedactArg: boolean | undefined,
 ): Promise<void> {
   try {
-    const cfgPath = path.join(cwd, 'config.toml');
-    let cfg: { project?: Record<string, unknown> } = {};
-    if (existsSync(cfgPath)) {
-      try {
-        cfg = parseToml(readFileSync(cfgPath, 'utf8')) as typeof cfg;
-      } catch {
-        cfg = {}; // malformed config.toml → start from a clean object (best-effort).
-      }
-    }
-    const project = { ...(cfg.project ?? {}) };
-    project.goal = goal;
-    // Only persist pii_redaction when the user set it explicitly via the CLI arg
-    // (the arg WINS over config — see precedence comment at the call site).
-    if (piiRedactArg !== undefined) project.pii_redaction = piiRedactArg;
-    const next = { ...cfg, project };
-    await atomicWriteFile(cfgPath, stringifyToml(next));
+    await updatePaperConfig(cwd, (raw) => {
+      const project = rawTable(raw, 'project');
+      project['goal'] = goal;
+      // Only persist pii_redaction when the user set it explicitly via the CLI arg
+      // (the arg WINS over config — see precedence comment at the call site).
+      if (piiRedactArg !== undefined) project['pii_redaction'] = piiRedactArg;
+    });
   } catch (e) {
     process.stderr.write(
       `pensmith new: WARN — could not persist goal to config.toml (non-fatal; goal kept in-memory for this session): ${(e as Error).message}\n`,
@@ -143,18 +124,9 @@ function resolvePiiRedact(
 ): { on: boolean; argSet: boolean } {
   // CLI arg WINS (explicit user intent for this run).
   if (typeof argValue === 'boolean') return { on: argValue, argSet: true };
-  // Else fall back to config.toml [project] pii_redaction (best-effort).
-  try {
-    const cfgPath = path.join(cwd, 'config.toml');
-    if (existsSync(cfgPath)) {
-      const cfg = parseToml(readFileSync(cfgPath, 'utf8')) as {
-        project?: { pii_redaction?: unknown };
-      };
-      if (cfg.project?.pii_redaction === true) return { on: true, argSet: false };
-    }
-  } catch {
-    // best-effort — a malformed config.toml defaults PII OFF (opt-in).
-  }
+  // Else fall back to .paper/config.toml [project] pii_redaction (best-effort:
+  // an absent or invalid config defaults PII OFF — opt-in).
+  if (tryReadPaperConfigSync(cwd)?.project?.pii_redaction === true) return { on: true, argSet: false };
   return { on: false, argSet: false };
 }
 
@@ -267,6 +239,37 @@ async function runStyleProducerNonFatal(
       `pensmith new: WARN — style-match producer failed (non-fatal): ${(e as Error).message}\n`,
     );
   }
+}
+
+/**
+ * Render INTAKE.md from the validated intake-clarifier object (RUN-25). The
+ * `Topic:` / `Discipline:` lines are what bin/lib/intake-parse.ts reads for the
+ * research step; the assignment block carries `egressSeed` (the REDACTED text
+ * when PII opt-in is on — never the raw answers).
+ */
+export function renderIntakeMd(c: IntakeClarification, assignment: string, fallbackTopic: string): string {
+  const oneLine = (x: string): string => x.replace(/\s+/g, ' ').trim();
+  const topic = oneLine(c.topic) || oneLine(fallbackTopic) || 'the assigned topic';
+  const discipline = oneLine(c.discipline) || 'other';
+  const lines = [
+    '# Intake',
+    '',
+    `Topic: ${topic}`,
+    `Discipline: ${discipline}`,
+    '',
+    '## Assignment',
+    '',
+    assignment.trim() || '(no assignment text was provided)',
+    '',
+    '## Clarifying questions',
+    '',
+  ];
+  c.questions.forEach((q, i) => {
+    lines.push(`${i + 1}. ${oneLine(q.question)}`);
+    if (oneLine(q.suggested_answer)) lines.push(`   Suggested: ${oneLine(q.suggested_answer)}`);
+  });
+  lines.push('');
+  return lines.join('\n');
 }
 
 /**
@@ -443,41 +446,8 @@ export const intakeCommand = defineCommand({
       }
     };
 
-    // ── Phase 11: GEN-06 fail-loud probe (BEFORE any prompt/complete() work) ──
-    // getProviderApiKey() is used here as a PRESENCE PROBE only — the resolved
-    // key value is never bound to a variable used outside this block (T-01-07).
-    // complete() re-resolves the key internally when it makes the HTTP call.
-    // NOTE: complete() calls isNoLlmMode() BEFORE getProviderApiKey(), so when
-    // PENSMITH_NO_LLM=1 is set, the probe below throws MissingApiKeyError but
-    // complete() never reaches key resolution — the offline mock fires first.
-    // To preserve this ordering, we call getProviderApiKey ONLY when NOT in
-    // offline mode (isNoLlmMode is checked inside complete()). We let complete()
-    // handle the offline path transparently. We call the probe for fail-loud only.
-    {
-      // Only probe for key presence when we are NOT in offline mode.
-      // complete() handles PENSMITH_NO_LLM=1 internally (before key resolution).
-      const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
-      if (!noLlm) {
-        try {
-          // CR-01: resolve provider ID dynamically so OpenAI-only configs don't
-          // false-positive with "no config for 'anthropic'". resolveProviderId()
-          // is the single source of truth (shared with complete()).
-          const providerId = await resolveProviderId();
-          await getProviderApiKey(providerId);
-        } catch (e) {
-          if (e instanceof MissingApiKeyError) {
-            process.stderr.write(
-              'pensmith new: ERROR — no LLM key configured.\n' +
-              'Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n' +
-              'Run inside Claude Code (Tier 1) for key-free operation.\n',
-            );
-            process.exitCode = 1;
-            return { ok: false, mode: 'no-key-configured' };
-          }
-          throw e;
-        }
-      }
-    }
+    // ── GEN-06 / RUN-07 fail-loud probe (BEFORE any prompt/complete() work) ──
+    await assertLlmConfigured('new');
 
     // ── CRITICAL (H3 / Pitfall 3): the value interpolated into the model-bound ──
     // payload is `egressSeed` — the REDACTED text when PII opt-in is on (never
@@ -493,12 +463,17 @@ export const intakeCommand = defineCommand({
     const interpolatedPrompt = _interpolate(prompt, { assignment: egressSeed });
 
     // content is egressSeed (redacted when piiRedact=true) — never rawAnswers (Pitfall 3).
-    const result = await complete({
+    // intake-clarifier is a STRUCTURED slug (RUN-25): complete() returns the
+    // schema-validated {topic, discipline, questions} object, and INTAKE.md is
+    // rendered from it (never copied from model text).
+    const seed = parseIntakeMd(egressSeed);
+    const result = await complete<IntakeClarification>({
+      slug: 'intake-clarifier',
       system: interpolatedPrompt,
-      messages: [{ role: 'user', content: egressSeed }],
-      scope: 'task',
-      scopeId: 'intake',
+      messages: [{ role: 'user', content: egressSeed || '(no assignment text was provided)' }],
+      stubHint: { topic: seed.topic || 'the assigned topic', discipline: seed.discipline },
     });
+    const clarification = result.data as IntakeClarification;
 
     // GEN-04 — Bootstrap STATE.json BEFORE writing INTAKE.md and running
     // side effects, so resolvePaperId() returns a non-null paperId and the
@@ -516,9 +491,9 @@ export const intakeCommand = defineCommand({
       // else: STATE.json already present — paperId is unchanged (idempotent skip)
     }
 
-    // INTAKE.md carries the redacted text via the model result when PII opt-in
-    // is on (raw → .raw.local). The model output is the artifact; no placeholder.
-    await atomicWriteFile(targetPath, result.text);
+    // INTAKE.md is rendered from the validated object plus the (redacted, when
+    // PII opt-in is on) assignment text — raw answers only ever go to .raw.local.
+    await atomicWriteFile(targetPath, renderIntakeMd(clarification, egressSeed, seed.topic));
     process.stdout.write(`pensmith new: wrote INTAKE.md to ${targetPath}\n`);
     await runSideEffects();
     return { ok: true, path: targetPath, mode: 'real' };

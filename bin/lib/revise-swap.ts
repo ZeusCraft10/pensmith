@@ -74,10 +74,9 @@ export async function proposeSwap(vars: ReviseSwapVars): Promise<string> {
   //   {{available_sources}}, {{voice_hint}}
   const interpolated = interpolate(prompt, vars as unknown as Record<string, string>);
   const result = await complete({
+    slug: 'revise-swap',
     system: REVISE_SWAP_SYSTEM,
     messages: [{ role: 'user', content: interpolated }],
-    scope: 'task',
-    scopeId: `revise-${vars.flagged_citekey}`,
   });
   // Return the raw text — runRevise owns parse + membership guard.
   return result.text;

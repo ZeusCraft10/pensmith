@@ -10,7 +10,7 @@
 // (PROCESS-ENV-SENTINEL-DO-NOT-LEAK-...) to prove no leak path exists.
 // Symmetric to mcp/ T-01-07 / T-02-04-02 mitigation.
 
-import { loadRuntimeConfig } from './runtime.js';
+import { loadRuntimeConfig, providerKeyVariables } from './runtime.js';
 import {
   isPandocPresent,
   isZoteroMcpPresent,
@@ -67,13 +67,13 @@ function envPresent(name: string): boolean {
 export async function loadCapabilityFacts(): Promise<CapabilityFacts> {
   const cfg = await loadRuntimeConfig();
 
-  // cfg.providers is a Record<string, Provider> (z.record in runtime-config schema).
-  const providerEntries = Object.values(cfg.providers ?? {});
-
-  const providers: readonly ProviderCapability[] = providerEntries.map((p) => ({
+  // The hosted provider key variables (anthropic, openai) plus the configured
+  // provider's variable when it differs (runtime.ts providerKeyVariables returns
+  // NAMES only). Presence is computed HERE — the single composition site.
+  const providers: readonly ProviderCapability[] = (await providerKeyVariables()).map((p) => ({
     name: p.name,
-    api_key_env: p.apiKeyEnv,
-    present: envPresent(p.apiKeyEnv),
+    api_key_env: p.api_key_env,
+    present: envPresent(p.api_key_env),
   }));
 
   // CR-01: probe the ecosystem facts so the MCP tier reports real booleans.

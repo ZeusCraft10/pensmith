@@ -19,6 +19,7 @@ import { loadLibrary } from '../bin/lib/library.js';
 import { loadOutline } from '../bin/lib/outline.js';
 import { loadSection } from '../bin/lib/section.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
+import { buildStatusView } from '../bin/lib/status-view.js';
 
 // cross-AI cycle-2 HIGH #4 fix: registerPaperResources accepts an optional
 // `paperRoot` so the server boot site (mcp/server.ts main()) can thread the
@@ -35,8 +36,10 @@ export function registerPaperResources(server: McpServer, paperRoot: string): vo
     'paper://state',
     { title: 'Paper state', description: 'Section status, milestones, verification flags.', mimeType: 'application/json' },
     async (uri) => {
+      // RUN-19: the same status view `pensmith status` renders (tier parity).
       const state = await loadState(paperRoot);
-      return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(state, null, 2) }] };
+      const status = await buildStatusView(paperRoot, { tier: 'mcp' });
+      return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify({ ...state, status }, null, 2) }] };
     },
   );
 

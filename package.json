@@ -20,6 +20,7 @@
     "build": "tsc",
     "dev": "tsx",
     "pensmith": "tsx bin/pensmith.ts",
+    "mock-llm": "tsx scripts/mock-llm.mjs",
     "validate:manifests": "node scripts/validate-plugin-manifest.cjs",
     "test:tier-contract": "node --import tsx --test tests/tier-contract/preflight.test.ts tests/tier-contract.test.ts",
     "test:cassettes": "node --import tsx --test tests/tier-contract.test.ts",

@@ -1,30 +1,38 @@
-// bin/lib/budget.ts — budget assertion + cost ledger + concurrency primitive
-// per ARCH-09 / ARCH-10 / ARCH-11 (D-44, D-45, D-46, D-50).
+// bin/lib/budget.ts — session cost cap + cost ledger + concurrency primitive
+// (RUN-18 / D-17-26; ARCH-09 / ARCH-10; D-45, D-46, D-50).
 //
-// Pre-call gate (D-44):
-//   The CONTRACT is "assertBudget BEFORE LLM call". Caller pattern:
-//     await assertBudget({scope, scopeId, cap}, estimateUsd);
-//     const result = await llm.call(...);
-//     await appendCost({...result.usage, scope, scopeId});
-//   If estimateUsd + already-spent > cap → throws BudgetExceededError → caller
-//   never reaches the LLM call. NO post-call gate exists.
+// Session cost cap (PRD §14 "Hard cost cap", D-17-26):
+//   A session is one top-level process invocation (a bare-router chain
+//   included; the MCP server process is one session — session-log.ts
+//   currentSessionId()). The cap is `[budget] cost_cap_usd` (default $5.00),
+//   overridden by PENSMITH_COST_CAP_USD. Before every model call the transport
+//   calls assertSessionBudget(projected): spend-this-session + projected > cap
+//   runs the V2 `cost-cap` gate — a terminal user is asked ONCE per session; a
+//   run that cannot prompt (--yolo included; the gate is never yolo-skippable)
+//   sends nothing and fails with EXIT_COST_CAP. The projection is the input
+//   estimate plus min(recorded p90, max_tokens) output at the model price
+//   (estimator.ts projectCall). Crossing `[budget] warn_at_usd` prints one
+//   warning with the running total. This is the ONLY LLM cap: the per-scope
+//   $0.50 caps and the Pass 2 / Pass 4 section caps are gone.
 //
 // Ledger (D-45, D-46):
-//   .paper/COSTS.jsonl is append-only via O_APPEND. atomicAppendFile (W2)
-//   handles the file open/write/fsync/close. Concurrent appends from parallel
-//   sections are atomic for line size <= PIPE_BUF (4KB on POSIX, similar on
-//   NTFS). This is the SOLE write path — direct fs.writeFile is forbidden by
-//   the eslint chokepoint (D-07).
+//   .paper/COSTS.jsonl is append-only JSONL via O_APPEND (atomicAppendFile).
+//   Records gain optional session / slug / section / provider / model /
+//   served_model fields; readers treat missing fields as legacy, so there is
+//   no version envelope and no migration.
 //
-// Semaphore (D-50):
-//   Bounded-parallel primitive. No external dep. In-process only — does NOT
-//   coordinate across processes (use proper-lockfile / lock.ts for that).
-//   Used by Phase 2+ wave scheduler to bound parallel section drafting.
+// assertBudget(spec, estimate) — the legacy per-scope check — stays for the
+// non-LLM GPTZero advisory (honesty.ts); LLM calls never use it.
+//
+// Semaphore (D-50): bounded-parallel primitive, in-process only.
 
 import path from 'node:path';
 import * as fsp from 'node:fs/promises';
-import { paperDir } from './paths.js';
+import { paperDir, projectRoot } from './paths.js';
 import { atomicAppendFile } from './atomic-write.js';
+import { currentSessionId } from './session-log.js';
+import { declineGate, runGate } from './gates.js';
+import { tryReadPaperConfigSync } from './config.js';
 
 export interface BudgetSpec {
   scope: 'paper' | 'section' | 'task';
@@ -36,18 +44,24 @@ export interface CostRecord {
   ts: string;
   scope: BudgetSpec['scope'];
   scopeId: string;
-  provider: 'anthropic' | 'openai' | 'crossref' | 'openalex' | 'other';
+  provider: string;
   model?: string;
   inputTokens?: number;
   outputTokens?: number;
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
   costUsd: number;
+  /** D-17-26: the session (one top-level invocation) that spent this. */
+  session?: string;
+  slug?: string;
+  section?: number;
+  /** The model that actually served the response (differs after a refusal fallback). */
+  served_model?: string;
 }
 
 /**
- * Thrown by assertBudget when spent + estimatedAdd exceeds spec.cap.
- *
- * Exposes scope / cap / spent / estimatedAdd so callers can format
- * user-facing diagnostics (Phase 2+ TUI) without re-parsing the message.
+ * Thrown by the legacy per-scope assertBudget when spent + estimatedAdd
+ * exceeds spec.cap (the GPTZero advisory only).
  */
 export class BudgetExceededError extends Error {
   scope: BudgetSpec['scope'];
@@ -66,63 +80,55 @@ export class BudgetExceededError extends Error {
   }
 }
 
-function costsPath(): string {
-  return path.join(paperDir(), 'COSTS.jsonl');
+function costsPath(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'COSTS.jsonl');
+}
+
+async function readRecords(root?: string): Promise<CostRecord[]> {
+  let raw: string;
+  try {
+    raw = await fsp.readFile(costsPath(root), 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+  const out: CostRecord[] = [];
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      out.push(JSON.parse(line) as CostRecord);
+    } catch {
+      // Defensive: a hand-edited partial line is skipped (O_APPEND keeps real lines whole).
+    }
+  }
+  return out;
 }
 
 /**
- * Sum costUsd across COSTS.jsonl, optionally filtered by scope/scopeId.
- *
- * Returns 0 if the file does not exist (a fresh paper has no ledger yet —
- * not an error condition). Malformed lines are skipped defensively;
- * atomicAppendFile guarantees per-line atomicity so this should never
- * happen in practice, but tolerating it costs nothing and protects against
- * manual edits that leave a partial line.
+ * Sum costUsd across COSTS.jsonl, optionally filtered by scope / scopeId /
+ * session. A missing ledger is 0 (a fresh paper), never an error.
  */
 export async function totalCost(
-  filter: { scope?: BudgetSpec['scope']; scopeId?: string } = {},
+  filter: { scope?: BudgetSpec['scope']; scopeId?: string; session?: string; root?: string } = {},
 ): Promise<number> {
-  const file = costsPath();
-  let raw: string;
-  try {
-    raw = await fsp.readFile(file, 'utf8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 0;
-    throw err;
-  }
   let total = 0;
-  for (const line of raw.split('\n')) {
-    if (!line.trim()) continue;
-    let rec: CostRecord;
-    try {
-      rec = JSON.parse(line) as CostRecord;
-    } catch {
-      // Defensive: skip malformed line. Per D-46 (O_APPEND atomicity) this
-      // should be unreachable, but tolerate it for hand-edited ledgers.
-      continue;
-    }
+  for (const rec of await readRecords(filter.root)) {
     if (filter.scope && rec.scope !== filter.scope) continue;
     if (filter.scopeId && rec.scopeId !== filter.scopeId) continue;
+    if (filter.session && rec.session !== filter.session) continue;
     total += Number(rec.costUsd) || 0;
   }
   return total;
 }
 
+/** Spend recorded by THIS session (this process invocation). */
+export async function sessionSpend(root?: string): Promise<number> {
+  return totalCost({ session: currentSessionId(), ...(root !== undefined ? { root } : {}) });
+}
+
 /**
- * Pre-call budget gate (D-44). MUST be called BEFORE any paid API request.
- *
- *   await assertBudget({scope, scopeId, cap}, estimateUsd);
- *   const result = await llm.call(...);
- *   await appendCost({...result.usage, scope, scopeId});
- *
- * If totalCost(filter) + estimateUsd > spec.cap, throws BudgetExceededError.
- * The caller's API call is never made — this is the financial-safety
- * boundary.
- *
- * Race note (T-01-RACE-03): two concurrent assertBudget calls can both pass
- * the check before either's appendCost lands. v0.1 accepts this TOCTOU
- * window; per-section caps bound the worst-case overrun to one extra
- * estimate per parallel section.
+ * Legacy per-scope pre-call check (the GPTZero advisory). Throws
+ * BudgetExceededError when totalCost(scope) + estimate > spec.cap.
  */
 export async function assertBudget(spec: BudgetSpec, estimateUsd: number): Promise<void> {
   const spent = await totalCost({ scope: spec.scope, scopeId: spec.scopeId });
@@ -131,20 +137,96 @@ export async function assertBudget(spec: BudgetSpec, estimateUsd: number): Promi
   }
 }
 
+// ---------- Session cost cap (RUN-18) ----------
+
+export const DEFAULT_SESSION_CAP_USD = 5;
+
+export interface CostCapSettings {
+  capUsd: number;
+  capSource: 'default' | 'config' | 'env';
+  warnAtUsd: number | null;
+}
+
+/** `PENSMITH_COST_CAP_USD` (finite, > 0) > `[budget] cost_cap_usd` > $5.00; warn from `[budget] warn_at_usd`. */
+export function resolveCostCap(root: string = projectRoot(), env: NodeJS.ProcessEnv = process.env): CostCapSettings {
+  const cfg = tryReadPaperConfigSync(root);
+  const warnAtUsd = cfg?.budget?.warn_at_usd ?? null;
+  const raw = env['PENSMITH_COST_CAP_USD'];
+  const fromEnv = raw !== undefined && raw !== '' ? Number(raw) : NaN;
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return { capUsd: fromEnv, capSource: 'env', warnAtUsd };
+  const fromCfg = cfg?.budget?.cost_cap_usd;
+  if (typeof fromCfg === 'number' && fromCfg > 0) return { capUsd: fromCfg, capSource: 'config', warnAtUsd };
+  return { capUsd: DEFAULT_SESSION_CAP_USD, capSource: 'default', warnAtUsd };
+}
+
+let overCapApproved = false;
+let warnPrinted = false;
+
+/** Test-only: forget the once-per-session cap approval and warning. */
+export function _resetCostCapForTest(): void {
+  overCapApproved = false;
+  warnPrinted = false;
+}
+
+function usd(n: number): string {
+  return n >= 0.01 || n === 0 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`;
+}
+
 /**
- * Append a cost record to .paper/COSTS.jsonl via O_APPEND (D-45/D-46).
- *
- * Each record becomes one JSONL line. atomicAppendFile guarantees per-line
- * atomicity for size <= PIPE_BUF (4KB) — well above the ~200-byte typical
- * record size, so concurrent appends from parallel sections never tear.
- *
- * Throws on disk-write failure (D-45 chose hard-fail over silent loss to
- * prevent cost-leakage: if we can't record a cost, we shouldn't have
- * silently paid for it).
+ * The per-call session cap check (RUN-18). Called by the transport BEFORE any
+ * byte is sent. Over the cap: ask once per session in a terminal; otherwise
+ * GateRefusedError(EXIT_COST_CAP) — nothing is sent.
  */
-export async function appendCost(record: CostRecord): Promise<void> {
-  const line = JSON.stringify(record) + '\n';
-  await atomicAppendFile(costsPath(), line);
+export async function assertSessionBudget(args: {
+  projectedUsd: number;
+  slug: string;
+  model: string;
+  root?: string;
+}): Promise<void> {
+  const root = args.root ?? projectRoot();
+  const { capUsd } = resolveCostCap(root);
+  const spent = await sessionSpend(root);
+  if (spent + args.projectedUsd <= capUsd || overCapApproved) return;
+  const detail =
+    `${args.slug} on ${args.model}: projected ${usd(args.projectedUsd)} + ${usd(spent)} spent this session ` +
+    `> cap ${usd(capUsd)}; raise [budget] cost_cap_usd or PENSMITH_COST_CAP_USD`;
+  const outcome = await runGate('cost-cap', {
+    yolo: false,
+    detail,
+    question: {
+      id: 'cost-cap',
+      kind: 'confirm',
+      label:
+        `The next model call (${args.slug} on ${args.model}, ~${usd(args.projectedUsd)}) would exceed your ` +
+        `${usd(capUsd)} cost cap (${usd(spent)} spent this session). Continue?`,
+      default: false,
+    },
+  });
+  if (outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true) {
+    overCapApproved = true;
+    return;
+  }
+  declineGate('cost-cap', `cost cap: stopped before calling the model (${detail})`);
+}
+
+/**
+ * Append a cost record to .paper/COSTS.jsonl via O_APPEND (D-45/D-46), stamped
+ * with the session id. Crossing `[budget] warn_at_usd` prints one warning.
+ * Throws on a disk-write failure (D-45: never silently lose a paid cost).
+ */
+export async function appendCost(record: CostRecord, root: string = projectRoot()): Promise<void> {
+  const stamped: CostRecord = { ...record, session: record.session ?? currentSessionId() };
+  await atomicAppendFile(costsPath(root), JSON.stringify(stamped) + '\n');
+  if (warnPrinted) return;
+  const { warnAtUsd, capUsd } = resolveCostCap(root);
+  if (warnAtUsd === null) return;
+  const spent = await sessionSpend(root);
+  if (spent >= warnAtUsd) {
+    warnPrinted = true;
+    process.stderr.write(
+      `pensmith: cost warning — ${usd(spent)} spent this session (warn_at_usd ${usd(warnAtUsd)}, cap ${usd(capUsd)}).\n`,
+    );
+  }
 }
 
 // ---------- Semaphore (D-50) ----------

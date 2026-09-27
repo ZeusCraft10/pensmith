@@ -24,10 +24,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { atomicAppendFile, atomicWriteFile } from './atomic-write.js';
 import { redactKeys, deepRedactPii } from './pii.js';
-import { paperDir, pensmithDataDir } from './paths.js';
+import { paperDir, pensmithDataDir, projectRoot } from './paths.js';
 
 // ---------------------------------------------------------------------------
 // Public types (per D-49 / D-50 / D-51 / D-52).
@@ -66,6 +66,7 @@ export interface OpenSessionLogOptions {
   maxBytes?: number;                     // default 50 * 1024 * 1024 (D-51)
   maxBackups?: number;                   // default 3 (D-51)
   maxRecordBytes?: number;               // default 16 * 1024 (D-50)
+  runId?: string;                        // default: a fresh UUID per handle; the llm logger passes the session id
 }
 
 // ---------------------------------------------------------------------------
@@ -76,11 +77,13 @@ const MAX_LOG_BYTES = 50 * 1024 * 1024;   // D-51 — 50 MB rotation threshold
 const MAX_BACKUPS = 3;                    // D-51 — last 3 rotated files kept
 const MAX_RECORD_BYTES = 16 * 1024;       // D-50 — per-record size limit
 const HEAD_TAIL_BYTES = 4 * 1024;         // D-50 — head + tail slice when truncating
+const MAX_LLM_RECORD_BYTES = 256 * 1024;  // D-17-29 — kind:"llm" records spill above 256 KiB
+const PREVIEW_CHARS = 200;                // D-17-29 — preview length kept in a spilled/redacted record
 
 // ---------------------------------------------------------------------------
 // D-52 stderr-mirror toggle (module-scope).
-// Phase 7's CLI flag --show-prompts will call setMirrorPromptsToStderr(true).
-// Phase 1 only ships the setter.
+// The --show-prompts pre-parse calls setMirrorPromptsToStderr(true); http.ts
+// reads it through isMirrorPromptsEnabled() and mirrors each outbound payload.
 // ---------------------------------------------------------------------------
 
 let mirrorPromptsToStderr = false;
@@ -144,6 +147,75 @@ function resolveRoot(scope: NonNullable<OpenSessionLogOptions['scope']>, cwd: st
 }
 
 // ---------------------------------------------------------------------------
+// Session identity (RUN-18 / D-17-26, RUN-15 / D-17-29).
+//
+// A session is one top-level process invocation (a bare-router chain included;
+// the MCP server process is one session). The id is minted on first use and
+// shared by COSTS.jsonl records (budget.ts) and kind:"llm" record ids
+// (`<session_id>:<seq>`), so one invocation's spend and calls line up.
+// ---------------------------------------------------------------------------
+
+let sessionIdValue: string | null = null;
+let llmSeq = 0;
+let sessionArgv: readonly string[] | null = null;
+const argvLoggedTo = new Set<string>();
+
+export function currentSessionId(): string {
+  if (sessionIdValue === null) sessionIdValue = randomUUID();
+  return sessionIdValue;
+}
+
+/** The next kind:"llm" record sequence number of this session (1-based). */
+export function nextLlmSeq(): number {
+  llmSeq += 1;
+  return llmSeq;
+}
+
+/** Record the invocation argv (the dispatcher calls this once); logged once per session for replay (RUN-17). */
+export function setSessionArgv(argv: readonly string[]): void {
+  sessionArgv = Object.freeze([...argv]);
+}
+
+export function getSessionArgv(): readonly string[] | null {
+  return sessionArgv;
+}
+
+/** Test-only: start a fresh session (new id, seq 0, argv unlogged). */
+export function _resetSessionForTest(): void {
+  sessionIdValue = null;
+  llmSeq = 0;
+  sessionArgv = null;
+  argvLoggedTo.clear();
+  secrets.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Known secret values (defence in depth, RUN-15 / T-01-07).
+//
+// The transport registers every resolved provider key here. Every serialized
+// line and spill file is scrubbed of those exact values before it is written,
+// so a key can never reach SESSION.log even if a future payload carried one
+// (the key-name redaction in redactKeys is the first line of defence).
+// ---------------------------------------------------------------------------
+
+const secrets = new Set<string>();
+
+export function registerSecret(value: string): void {
+  if (typeof value === 'string' && value.length >= 8) secrets.add(value);
+}
+
+function scrubSecrets(line: string): string {
+  let out = line;
+  for (const s of secrets) {
+    const escaped = JSON.stringify(s).slice(1, -1);
+    if (out.includes(s)) out = out.split(s).join('[REDACTED]');
+    if (escaped !== s && out.includes(escaped)) out = out.split(escaped).join('[REDACTED]');
+  }
+  return out;
+}
+
+
+// ---------------------------------------------------------------------------
 // Record construction (D-49 — `{at, kind, run_id, ...payload}`).
 //
 // Order:
@@ -187,8 +259,20 @@ function buildRecord(
   // The spill payload in writeLineOrTruncate is built FROM the `record`
   // returned below, which already incorporates both stages — no raw payload
   // ever bypasses redaction (invariant T-01-LOG-03 preserved).
-  for (const k of Object.keys(safe)) {
-    safe[k] = deepRedactPii(safe[k]);
+  //
+  // kind:"llm" (RUN-15 / D-17-29) is the one exception to stage 2: request and
+  // response bodies are stored AS SENT, because replay (RUN-17) must reproduce
+  // the exact request hash and response, and the prompt is already
+  // intake-redacted when the user opted into PII redaction. Keys are still
+  // redacted (stage 1 above, plus the registered-secret scrub at write time).
+  // `[logging] session_bodies = "redacted"` (the payload's `session_bodies`)
+  // replaces every body with its sha256 and a short preview.
+  if (kind === 'llm') {
+    if (safe['session_bodies'] === 'redacted') redactLlmBodies(safe);
+  } else {
+    for (const k of Object.keys(safe)) {
+      safe[k] = deepRedactPii(safe[k]);
+    }
   }
 
   return {
@@ -197,6 +281,66 @@ function buildRecord(
     run_id,
     ...safe,
   };
+}
+
+function sha256Hex(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+function previewOf(text: string): string {
+  return text.length <= PREVIEW_CHARS ? text : text.slice(0, PREVIEW_CHARS);
+}
+
+/** Replace an llm record's bodies with hashes + previews (`session_bodies = "redacted"`). */
+function redactLlmBodies(rec: Record<string, unknown>): void {
+  if (rec['request'] !== undefined) {
+    const text = typeof rec['request'] === 'string' ? rec['request'] : JSON.stringify(rec['request']);
+    rec['request'] = { sha256: sha256Hex(text), chars: text.length, preview: previewOf(text) };
+  }
+  const resp = rec['response'];
+  if (resp && typeof resp === 'object') {
+    const r = resp as Record<string, unknown>;
+    const text = typeof r['text'] === 'string' ? r['text'] : '';
+    const out: Record<string, unknown> = { sha256: sha256Hex(text), chars: text.length, preview: previewOf(text) };
+    if (r['data'] !== undefined) out['data_sha256'] = sha256Hex(JSON.stringify(r['data']));
+    rec['response'] = out;
+  }
+}
+
+/**
+ * kind:"llm" spill (D-17-29): a record above 256 KiB is written whole to
+ * `sessions/<run_id>/<seq>.json` (seq = the record id's sequence number) and
+ * the log line keeps the sha256 of each body plus 200-character previews.
+ */
+async function llmLine(spillRoot: string, record: BaseRecord): Promise<string> {
+  const line = scrubSecrets(JSON.stringify(record)) + '\n';
+  if (Buffer.byteLength(line, 'utf8') <= MAX_LLM_RECORD_BYTES) return line;
+  const id = typeof record['id'] === 'string' ? record['id'] : `${record.run_id}:0`;
+  const seq = id.slice(id.lastIndexOf(':') + 1) || '0';
+  const spillFile = path.join(spillRoot, record.run_id, `${seq}.json`);
+  try {
+    await atomicWriteFile(spillFile, scrubSecrets(JSON.stringify(record, null, 2)) + '\n');
+  } catch {
+    /* spill is best-effort; the summary line is still written */
+  }
+  const summary: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(record)) {
+    if (k === 'request' || k === 'response') continue;
+    summary[k] = v;
+  }
+  const reqText = typeof record['request'] === 'string' ? record['request'] : JSON.stringify(record['request'] ?? null);
+  summary['request'] = { sha256: sha256Hex(reqText), chars: reqText.length, preview: previewOf(reqText) };
+  const resp = (record['response'] ?? {}) as Record<string, unknown>;
+  const respText = typeof resp['text'] === 'string' ? resp['text'] : '';
+  summary['response'] = {
+    sha256: sha256Hex(respText),
+    chars: respText.length,
+    preview: previewOf(respText),
+    ...(resp['data'] !== undefined ? { data_sha256: sha256Hex(JSON.stringify(resp['data'])) } : {}),
+  };
+  summary['truncated'] = true;
+  summary['spilled_to'] = `sessions/${record.run_id}/${seq}.json`;
+  return scrubSecrets(JSON.stringify(summary)) + '\n';
 }
 
 // ---------------------------------------------------------------------------
@@ -327,24 +471,13 @@ async function maybeRotate(filePath: string, maxBytes: number, maxBackups: numbe
 }
 
 // ---------------------------------------------------------------------------
-// Stderr mirror helper (D-52).
+// Stderr mirror (D-52 → D-17-12).
 //
-// Only kind === 'prompt' records mirror. Mirror is in addition to the
-// file write, not a replacement. Runs synchronously before the async
-// file write so the caller doesn't race the queue.
+// The prompt-kind stderr mirror that lived here is removed: `--show-prompts`
+// now mirrors every outbound payload exactly once, in bin/lib/http.ts, before
+// any byte is sent (it reads isMirrorPromptsEnabled()). Mirroring here as well
+// would print each LLM payload twice.
 // ---------------------------------------------------------------------------
-
-function mirrorIfPrompt(record: BaseRecord): void {
-  if (!mirrorPromptsToStderr) return;
-  if (record.kind !== 'prompt') return;
-  try {
-    process.stderr.write(
-      `[prompt ${record.at} ${record.run_id}] ${JSON.stringify(record, null, 2)}\n`,
-    );
-  } catch {
-    /* never throw from logger */
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Public API.
@@ -352,32 +485,37 @@ function mirrorIfPrompt(record: BaseRecord): void {
 
 export function openSessionLog(opts: OpenSessionLogOptions = {}): SessionLogger {
   const scope = opts.scope ?? 'auto';
-  const cwd = opts.cwd ?? process.cwd();
+  // The paper is resolved through projectRoot() (D-17-29), so SESSION.log lands
+  // in the active paper's .paper/ even when the cwd is elsewhere.
+  const cwd = opts.cwd ?? projectRoot();
   const maxBytes = opts.maxBytes ?? MAX_LOG_BYTES;
   const maxBackups = opts.maxBackups ?? MAX_BACKUPS;
   const maxRecordBytes = opts.maxRecordBytes ?? MAX_RECORD_BYTES;
   const { logFile, spillRoot } = resolveRoot(scope, cwd);
 
   // run_id: per-handle unique identifier. Per D-64 we have no `ulid` dep —
-  // crypto.randomUUID() (UUIDv4) per RESEARCH §V3 (line 972).
-  const run_id = randomUUID();
+  // crypto.randomUUID() (UUIDv4) per RESEARCH §V3 (line 972). The llm logger
+  // passes the session id so `<run_id>:<seq>` record ids span one invocation.
+  const run_id = opts.runId ?? randomUUID();
   // Per-handle monotonic counter for spill files. Shared with child() loggers.
   const seqRef: SeqRef = { value: 0 };
 
   function makeLogger(bindings: Record<string, unknown>): SessionLogger {
     function emit(kind: Kind, payload: Record<string, unknown>): void {
       const record = buildRecord(kind, payload, bindings, run_id);
-      // Mirror BEFORE async write so it's synchronous from caller's POV.
-      mirrorIfPrompt(record);
       enqueue(async () => {
         try {
-          const line = await writeLineOrTruncate(
-            spillRoot,
-            run_id,
-            seqRef,
-            record,
-            maxRecordBytes,
-          );
+          // kind:"llm" records use the 256 KiB spill with hashes + previews
+          // (D-17-29); every other kind keeps the D-50 16 KiB head/tail spill.
+          const line = kind === 'llm'
+            ? await llmLine(spillRoot, record)
+            : scrubSecrets(await writeLineOrTruncate(
+              spillRoot,
+              run_id,
+              seqRef,
+              record,
+              maxRecordBytes,
+            ));
           await atomicAppendFile(logFile, line);
           await maybeRotate(logFile, maxBytes, maxBackups);
         } catch {
@@ -409,4 +547,19 @@ export function openSessionLog(opts: OpenSessionLogOptions = {}): SessionLogger 
   }
 
   return makeLogger({});
+}
+
+/**
+ * Log the invocation argv once per session per log file (RUN-17 replay needs
+ * it). Called by the transport before its first kind:"llm" record.
+ */
+export function logSessionArgvOnce(logger: SessionLogger, logFileKey: string): void {
+  if (sessionArgv === null || argvLoggedTo.has(logFileKey)) return;
+  argvLoggedTo.add(logFileKey);
+  logger.event({ event: 'session.argv', session: currentSessionId(), argv: [...sessionArgv] });
+}
+
+/** The SESSION.log path the 'auto' scope resolves to for `root` (paper when .paper/ exists). */
+export function sessionLogPathFor(root: string = projectRoot()): string {
+  return resolveRoot('auto', root).logFile;
 }
