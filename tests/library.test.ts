@@ -1,20 +1,21 @@
-// tests/library.test.ts — round-trip + init-collision + not-found +
-// addEntry persistence + duplicate-id refusal + concurrent-add + findEntry
-// + forward-incompat coverage for bin/lib/library.ts (W11).
+// tests/library.test.ts — round-trip + init-collision + not-found + upsert
+// persistence + concurrent upserts + findEntry + forward-incompat coverage for
+// bin/lib/library.ts (W11; v2 / one writer since BRDTH-01 / D-17-43).
 //
 // Test isolation strategy (mirrors tests/state.test.ts and
-// tests/session-log.test.ts): each test calls mkPaperRoot() to create a
-// fresh tmpdir AND override process.env.LOCALAPPDATA / XDG_DATA_HOME / HOME
-// so the session-log singleton inside library.ts (lazy-init at first
-// .event() call) resolves into the per-test tmpdir.
+// tests/session-log.test.ts): each test calls mkPaperRoot() to create a fresh
+// tmpdir AND override process.env.LOCALAPPDATA / XDG_DATA_HOME / HOME so the
+// session-log singleton inside library.ts (lazy-init at first .event() call)
+// resolves into the per-test tmpdir.
 //
-// Concurrency property (Test 6): 10 simultaneous addEntry calls with
-// disjoint ids must all succeed and all 10 ids must appear in the final
-// loadLibrary snapshot. This is the regression gate for the T-01-01
-// "load + duplicate-check + write inside ONE withLock" invariant. If
-// the read were outside the lock, two callers could each observe the
-// same pre-write entries[] and the second writer would silently clobber
-// the first — giving a final count strictly less than 10.
+// Paper root (D-17-32): library functions take the PROJECT root and resolve
+// `.paper/LIBRARY.json` themselves; the `.paper` directory is accepted too.
+//
+// Concurrency property: 10 simultaneous upsertSources calls with disjoint
+// sources must all land in the final library. This is the regression gate for
+// the "load + merge + write inside ONE withLock" invariant (T-01-01): if the
+// read were outside the lock, two callers could each observe the same
+// pre-write entries[] and the second writer would silently clobber the first.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,15 +30,29 @@ function mkPaperRoot(): string {
   //   - LOCALAPPDATA on win32
   //   - HOME on darwin (-> HOME/Library/Application Support)
   //   - XDG_DATA_HOME (then HOME/.local/share) on POSIX
-  // Same env-override pattern as tests/session-log.test.ts (W9) and
-  // tests/state.test.ts (W10).
   process.env.LOCALAPPDATA = tmp;
   process.env.XDG_DATA_HOME = tmp;
   process.env.HOME = tmp;
   return tmp;
 }
 
-test('initLibrary then loadLibrary returns empty entries', async () => {
+function src(i: number, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    source: 'crossref',
+    id: `10.5555/lib.${i}`,
+    doi: `10.5555/lib.${i}`,
+    title: `Library Round Trip Work Number ${i}`,
+    authors: [`Author${String.fromCharCode(97 + i)}, Test`],
+    year: 2000 + i,
+    citekey: `author${String.fromCharCode(97 + i)}${2000 + i}`,
+    last_verified: '2026-01-01T00:00:00.000Z',
+    retracted: false,
+    raw: {},
+    ...extra,
+  };
+}
+
+test('initLibrary then loadLibrary returns an empty v2 library', async () => {
   const root = mkPaperRoot();
   const { initLibrary, loadLibrary } = await import('../bin/lib/library.js');
 
@@ -45,14 +60,13 @@ test('initLibrary then loadLibrary returns empty entries', async () => {
   const loaded = await loadLibrary(root);
 
   assert.deepEqual(loaded.entries, []);
-  assert.equal(typeof loaded.$schemaVersion, 'number');
+  assert.equal(loaded.$schemaVersion, 2);
+  assert.ok(fs.existsSync(path.join(root, '.paper', 'LIBRARY.json')), 'LIBRARY.json lives under .paper/');
 });
 
 test('initLibrary refuses to overwrite an existing LIBRARY.json', async () => {
   const root = mkPaperRoot();
-  const { initLibrary, LibraryAlreadyExistsError } = await import(
-    '../bin/lib/library.js'
-  );
+  const { initLibrary, LibraryAlreadyExistsError } = await import('../bin/lib/library.js');
 
   await initLibrary(root);
   await assert.rejects(
@@ -61,119 +75,72 @@ test('initLibrary refuses to overwrite an existing LIBRARY.json', async () => {
   );
 });
 
-test('loadLibrary throws LibraryNotFoundError when LIBRARY.json absent', async () => {
+test('loadLibrary throws LibraryNotFoundError when LIBRARY.json is absent; tryLoadLibrary returns null', async () => {
   const root = mkPaperRoot();
-  const { loadLibrary, LibraryNotFoundError } = await import(
-    '../bin/lib/library.js'
-  );
+  const { loadLibrary, tryLoadLibrary, LibraryNotFoundError } = await import('../bin/lib/library.js');
 
   await assert.rejects(
     () => loadLibrary(root),
     (e: unknown) => e instanceof LibraryNotFoundError,
   );
+  assert.equal(await tryLoadLibrary(root), null);
 });
 
-test('addEntry persists; subsequent loadLibrary sees it', async () => {
+test('upsertSources persists; loadLibrary (via the project root or the .paper dir) sees it', async () => {
   const root = mkPaperRoot();
-  const { initLibrary, addEntry, loadLibrary } = await import(
-    '../bin/lib/library.js'
-  );
+  const { upsertSources, loadLibrary } = await import('../bin/lib/library.js');
 
-  await initLibrary(root);
-  await addEntry(root, { id: 'cite-1', addedAt: '2099-01-01T00:00:00.000Z' });
+  const r = await upsertSources(root, [src(1)], { provenance: 'research' });
+  assert.deepEqual(r.outcomes, [{ index: 0, citekey: 'authorb2001', status: 'added' }]);
+
+  for (const via of [root, path.join(root, '.paper')]) {
+    const lib = await loadLibrary(via);
+    assert.equal(lib.entries.length, 1);
+    const e = lib.entries[0]!;
+    assert.equal(e.citekey, 'authorb2001');
+    assert.equal(e.doi, '10.5555/lib.1');
+    assert.deepEqual(e.provenance, ['research:crossref']);
+    assert.ok(!Number.isNaN(Date.parse(e.addedAt)));
+    assert.equal(e.last_verified, '2026-01-01T00:00:00.000Z');
+  }
+  // The two citation files are rendered from it.
+  assert.match(fs.readFileSync(path.join(root, '.paper', 'CITATIONS.bib'), 'utf8'), /@article\{authorb2001,/);
+  assert.match(fs.readFileSync(path.join(root, '.paper', 'CITATIONS.ris'), 'utf8'), /TY {2}- JOUR/);
+});
+
+test('10 concurrent upsertSources calls with disjoint sources all succeed and all are visible', async () => {
+  const root = mkPaperRoot();
+  const { upsertSources, loadLibrary } = await import('../bin/lib/library.js');
+
+  // Fire 10 simultaneously; if the load-merge-write triple were not under ONE
+  // lock, the final entries[] would be strictly shorter than 10.
+  await Promise.all(Array.from({ length: 10 }, (_, i) => upsertSources(root, [src(i)], { provenance: 'research' })));
 
   const lib = await loadLibrary(root);
-  assert.equal(lib.entries.length, 1);
-  assert.equal(lib.entries[0]?.id, 'cite-1');
-  assert.equal(lib.entries[0]?.addedAt, '2099-01-01T00:00:00.000Z');
+  assert.deepEqual(
+    lib.entries.map((e) => e.doi).sort(),
+    Array.from({ length: 10 }, (_, i) => `10.5555/lib.${i}`).sort(),
+  );
 });
 
-test('addEntry refuses duplicate id; library state unchanged after failed call', async () => {
+test('findEntry returns the matching entry / undefined for a miss', async () => {
   const root = mkPaperRoot();
-  const { initLibrary, addEntry, loadLibrary, DuplicateLibraryEntryError } =
-    await import('../bin/lib/library.js');
+  const { upsertSources, findEntry } = await import('../bin/lib/library.js');
 
-  await initLibrary(root);
-  await addEntry(root, { id: 'cite-A', addedAt: '2099-01-01T00:00:00.000Z' });
+  await upsertSources(root, [src(3)], { provenance: 'add' });
+  const hit = await findEntry(root, (e) => e.doi === '10.5555/lib.3');
+  const miss = await findEntry(root, (e) => e.citekey === 'nope');
 
-  await assert.rejects(
-    () =>
-      addEntry(root, { id: 'cite-A', addedAt: '2099-02-01T00:00:00.000Z' }),
-    (e: unknown) => e instanceof DuplicateLibraryEntryError,
-  );
-
-  // Original entry preserved; addedAt of the rejected duplicate did NOT
-  // bleed in. This guards the "no torn write on rejection" invariant.
-  const lib = await loadLibrary(root);
-  assert.equal(lib.entries.length, 1);
-  assert.equal(lib.entries[0]?.addedAt, '2099-01-01T00:00:00.000Z');
-});
-
-test('10 concurrent addEntry calls with disjoint ids all succeed and all visible', async () => {
-  const root = mkPaperRoot();
-  const { initLibrary, addEntry, loadLibrary } = await import(
-    '../bin/lib/library.js'
-  );
-
-  await initLibrary(root);
-
-  // Fire 10 simultaneously; if the load-check-write triple were not under
-  // ONE lock, the final entries[] would be strictly shorter than 10 and
-  // this assertion would fail.
-  await Promise.all(
-    Array.from({ length: 10 }, (_, i) =>
-      addEntry(root, { id: `e${i}`, addedAt: '2099-01-01T00:00:00.000Z' }),
-    ),
-  );
-
-  const lib = await loadLibrary(root);
-  const ids = lib.entries.map((e) => e.id).sort();
-  assert.deepEqual(ids, [
-    'e0',
-    'e1',
-    'e2',
-    'e3',
-    'e4',
-    'e5',
-    'e6',
-    'e7',
-    'e8',
-    'e9',
-  ]);
-});
-
-test('findEntry returns matching entry / undefined for miss', async () => {
-  const root = mkPaperRoot();
-  const { initLibrary, addEntry, findEntry } = await import(
-    '../bin/lib/library.js'
-  );
-
-  await initLibrary(root);
-  await addEntry(root, { id: 'cite-X', addedAt: '2099-01-01T00:00:00.000Z' });
-
-  const hit = await findEntry(root, (e) => e.id === 'cite-X');
-  const miss = await findEntry(root, (e) => e.id === 'nope');
-
-  assert.equal(hit?.id, 'cite-X');
+  assert.equal(hit?.citekey, 'authord2003');
   assert.equal(miss, undefined);
 });
 
 test('BLOCKER-01: concurrent initLibrary calls — exactly one succeeds, others get AlreadyExists (no clobber)', async () => {
   const root = mkPaperRoot();
-  const { initLibrary, LibraryAlreadyExistsError, loadLibrary } = await import(
-    '../bin/lib/library.js'
-  );
+  const { initLibrary, LibraryAlreadyExistsError, loadLibrary } = await import('../bin/lib/library.js');
 
-  // Fire 8 concurrent initLibrary calls. The lock-inside-init fix guarantees
-  // exactly one wins the race; the others all observe the seeded file
-  // inside the critical section and throw LibraryAlreadyExistsError. The
-  // on-disk library must be valid (parseable + empty entries[]) — never
-  // a partial/torn write.
   const N = 8;
-  const results = await Promise.allSettled(
-    Array.from({ length: N }, () => initLibrary(root)),
-  );
-
+  const results = await Promise.allSettled(Array.from({ length: N }, () => initLibrary(root)));
   const fulfilled = results.filter((r) => r.status === 'fulfilled');
   const rejected = results.filter((r) => r.status === 'rejected');
 
@@ -185,30 +152,33 @@ test('BLOCKER-01: concurrent initLibrary calls — exactly one succeeds, others 
       'every loser must throw LibraryAlreadyExistsError',
     );
   }
-
-  // The on-disk library must be the empty seed shape — confirms no clobber
-  // by a later contender after the winner committed.
   const final = await loadLibrary(root);
   assert.deepEqual(final.entries, [], 'on-disk entries must be the seeded empty array');
 });
 
-test('forward-incompat: $schemaVersion=999 throws ForwardIncompatError', async () => {
+test('forward-incompat: $schemaVersion=999 throws ForwardIncompatError (never downgraded)', async () => {
   const root = mkPaperRoot();
-  const file = path.join(root, 'LIBRARY.json');
-  // Hand-craft a newer-than-code library file. loadLibrary must surface
-  // the loader's ForwardIncompatError unchanged (T-01-COMPAT-01 mitigation).
-  fs.writeFileSync(
-    file,
-    JSON.stringify({ $schemaVersion: 999, entries: [] }),
-  );
+  const file = path.join(root, '.paper', 'LIBRARY.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ $schemaVersion: 999, entries: [] }));
 
-  const { loadLibrary } = await import('../bin/lib/library.js');
-  const { ForwardIncompatError } = await import(
-    '../bin/lib/migrations/loader.js'
-  );
+  const { loadLibrary, upsertSources } = await import('../bin/lib/library.js');
+  const { ForwardIncompatError } = await import('../bin/lib/migrations/loader.js');
 
-  await assert.rejects(
-    () => loadLibrary(root),
-    (e: unknown) => e instanceof ForwardIncompatError,
-  );
+  await assert.rejects(() => loadLibrary(root), (e: unknown) => e instanceof ForwardIncompatError);
+  await assert.rejects(() => upsertSources(root, [src(1)], { provenance: 'add' }), (e: unknown) => e instanceof ForwardIncompatError);
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).$schemaVersion, 999, 'the newer file is untouched');
+});
+
+test('the library refuses to persist a duplicate citekey (schema invariant)', async () => {
+  const { Schema } = await import('../bin/lib/schemas/library.js');
+  const e = {
+    citekey: 'dup2020',
+    title: 'x',
+    addedAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  };
+  const r = Schema.safeParse({ $schemaVersion: 2, entries: [e, { ...e, doi: '10.5555/other' }] });
+  assert.equal(r.success, false);
+  assert.match(JSON.stringify(r.error?.issues), /duplicate citekey/);
 });

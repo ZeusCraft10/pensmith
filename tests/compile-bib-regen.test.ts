@@ -1,20 +1,24 @@
-// tests/compile-bib-regen.test.ts — COMP-07 / D-19 CITATIONS.bib regeneration.
+// tests/compile-bib-regen.test.ts — BRDTH-01 / D-17-43 (supersedes COMP-07's
+// bib regeneration): compile NEVER rewrites .paper/CITATIONS.bib.
 //
-// RED-first: bin/lib/compile.ts does not exist yet.
-//
-// COMP-07 (compile output generation) anchored to the D-19 bibtex chokepoint:
-// after a successful compile, .paper/CITATIONS.bib is re-rendered from the UNION
-// of the compiled sections' citekeys via bin/lib/bibtex-write.ts (which rides the
-// citation-js D-19 chokepoint and resolves collisions with a base-26 suffix).
-// Bib regen is part of COMP-07 output generation — NOT canonical COMP-04/05.
-//
-// Fixture: a CITATIONS.bib seeded with THREE entries; the compiled sections cite
-// only TWO of them. After compile the bib must contain the two cited keys and
-// drop the uncited one (regenerated from the union of compiled citekeys).
+// History: COMP-07 made compile re-render .paper/CITATIONS.bib from the union of
+// the compiled citekeys, dropping every uncited entry. That pruned the research
+// library (a later redo of a section came back FABRICATED because its source was
+// gone), lost locator/multi-cite keys, and once wrote the file to 0 bytes
+// (EXP-01). BRDTH-01 made LIBRARY.json the source of truth with ONE writer
+// (bin/lib/library.ts), which renders CITATIONS.bib; citeproc renders only the
+// keys a draft cites, so compile has no reason to touch the file. This suite
+// used to assert the pruning; it now asserts the replacement contract:
+//   - after a successful compile, CITATIONS.bib is byte-identical (mtime too);
+//   - the uncited key and a DOI-less book (ISBN only) are still there;
+//   - the bib still parses through the D-19 citation-js chokepoint.
+// The old assertions ("an UNCITED key must be dropped", "regen must preserve
+// the year (#5)", "a DOI-less book survives regen (#17)") are superseded: with
+// no regeneration there is nothing to drop and nothing to lose.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
@@ -49,7 +53,7 @@ function seed(): string {
   writeFileSync(
     join(root, '.paper', 'OUTLINE.md'),
     [
-      '# Bib Regen Fixture',
+      '# Bib Fixture',
       '',
       '| # | slug | title | depends_on | word target | assigned_sources |',
       '| --- | --- | --- | --- | --- | --- |',
@@ -78,36 +82,30 @@ function seed(): string {
   return root;
 }
 
-test('COMP-07/D-19: compile regenerates CITATIONS.bib from the union of compiled citekeys', async () => {
+test('BRDTH-01: compile leaves CITATIONS.bib byte-identical — the uncited key stays in the library', async () => {
   const root = seed();
+  const bibPath = join(root, '.paper', 'CITATIONS.bib');
+  const before = readFileSync(bibPath);
+  const mtimeBefore = statSync(bibPath).mtimeMs;
   const result = await runCompile({ paperRoot: root, yolo: true });
   assert.equal(result.refused, false);
 
-  const bibText = readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8');
-  const entries = await parseBib(bibText);
-  const ids = new Set(entries.map((e) => String((e as { id?: string }).id ?? '')));
-
-  assert.ok(ids.has('smith2020'), 'a cited key must survive bib regen');
-  assert.ok(ids.has('jones2019'), 'a cited key must survive bib regen');
-  assert.ok(!ids.has('unused2018'), 'an UNCITED key must be dropped (regenerated from the compiled union)');
-
-  // Audit #5: the publication year must survive regen (was stripped from every
-  // entry). citation-js parses `year` into issued.date-parts[0][0].
-  const smith = entries.find((e) => String((e as { id?: string }).id ?? '') === 'smith2020') as
-    | { issued?: { 'date-parts'?: number[][] } }
-    | undefined;
-  assert.equal(smith?.issued?.['date-parts']?.[0]?.[0], 2020, 'regen must preserve the publication year (#5)');
-  // Belt-and-suspenders: the raw bib text carries the year too.
-  assert.match(bibText, /year\s*=\s*\{?2020\}?/i, 'regenerated bib text must contain the year');
+  const after = readFileSync(bibPath);
+  assert.ok(after.equals(before), 'compile must not rewrite .paper/CITATIONS.bib');
+  assert.equal(statSync(bibPath).mtimeMs, mtimeBefore, 'not even an identical rewrite (mtime unchanged)');
+  const ids = new Set((await parseBib(after.toString('utf8'))).map((e) => String((e as { id?: string }).id ?? '')));
+  assert.deepEqual([...ids].sort(), ['jones2019', 'smith2020', 'unused2018'], 'the uncited key is still in the library');
+  // The compiled draft is written as before.
+  assert.ok(existsSync(join(root, '.paper', 'DRAFT.md')));
 });
 
-test('audit #17: a DOI-less source (book, ISBN only) survives bib regen', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'pensmith-compile-bookregen-'));
+test('BRDTH-01 (was audit #17): a DOI-less source (book, ISBN only) is untouched by compile', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-compile-book-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
   writeFileSync(
     join(root, '.paper', 'OUTLINE.md'),
     [
-      '# Book Regen Fixture',
+      '# Book Fixture',
       '',
       '| # | slug | title | depends_on | word target | assigned_sources |',
       '| --- | --- | --- | --- | --- | --- |',
@@ -115,12 +113,8 @@ test('audit #17: a DOI-less source (book, ISBN only) survives bib regen', async 
       '',
     ].join('\n'),
   );
-  // A book entry: ISBN, no DOI. Before the fix, writeBibtex's persistent-id gate
-  // dropped it because regenerateBib never carried the ISBN.
-  writeFileSync(
-    join(root, '.paper', 'CITATIONS.bib'),
-    '@book{kuhn1962,\n  title = {The Structure of Scientific Revolutions},\n  author = {Kuhn, Thomas},\n  year = {1962},\n  isbn = {9780226458120}\n}\n',
-  );
+  const bib = '@book{kuhn1962,\n  title = {The Structure of Scientific Revolutions},\n  author = {Kuhn, Thomas},\n  year = {1962},\n  isbn = {9780226458120}\n}\n';
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bib);
   const dir = join(root, '.paper', 'sections', '01-intro');
   mkdirSync(dir, { recursive: true });
   const draft = '# Intro\n\nA paradigm shift [@kuhn1962].\n';
@@ -137,17 +131,13 @@ test('audit #17: a DOI-less source (book, ISBN only) survives bib regen', async 
 
   const result = await runCompile({ paperRoot: root, yolo: true });
   assert.equal(result.refused, false);
-  const bibText = readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8');
-  const ids = new Set((await parseBib(bibText)).map((e) => String((e as { id?: string }).id ?? '')));
-  assert.ok(ids.has('kuhn1962'), 'a DOI-less book (ISBN) must survive bib regen (#17)');
-  assert.match(bibText, /year\s*=\s*\{?1962\}?/i, 'the book year must survive too');
+  assert.equal(readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8'), bib, 'the book entry is untouched');
 });
 
-test('COMP-07/D-19: regenerated bib is non-empty and parseable (rides the citation-js chokepoint)', async () => {
+test('BRDTH-01: after compile the bibliography still parses through the D-19 citation-js chokepoint', async () => {
   const root = seed();
   await runCompile({ paperRoot: root, yolo: true });
   const bibText = readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8');
-  assert.ok(bibText.includes('@'), 'regenerated bib must contain BibTeX entries');
-  // Round-trips through the D-19 citation-js chokepoint without throwing.
+  assert.ok(bibText.includes('@'), 'the bib keeps its BibTeX entries');
   await assert.doesNotReject(async () => parseBib(bibText));
 });

@@ -353,43 +353,45 @@ test(
 );
 
 test(
-  'research-discovery: crossCheckRetractions runs BEFORE writeBibtex (D-15 LOCKED ordering)',
+  'research-discovery: crossCheckRetractions runs BEFORE the library write (D-15 LOCKED ordering)',
   { skip: !SEAM_WIRED },
   async () => {
-    // D-15 LOCKED: crossCheckRetractions MUST run before writeBibtex.
-    // This test asserts the ordering by verifying the research.ts chokepoint
-    // sequence is preserved after the swap-seam block is replaced.
+    // D-15 LOCKED: crossCheckRetractions MUST run before the library write, so the
+    // retracted flag reaches LIBRARY.json and the CITATIONS.bib rendered from it.
+    // BRDTH-01 / D-17-43 made bin/lib/library.ts upsertSources the ONE writer of
+    // LIBRARY.json + CITATIONS.bib + CITATIONS.ris (it renders the bib via
+    // writeBibtex internally), so research.ts calls upsertSources, not writeBibtex.
     //
-    // Strategy: check the source of research.ts to confirm the D-15 LOCKED comment
-    // and the crossCheckRetractions call still appear BEFORE writeBibtex. This is a
-    // source-level ordering assertion (the runtime is production code; the ordering
-    // is enforced by code structure, not by a spy here).
+    // Strategy: a source-level ordering assertion on research.ts (the runtime is
+    // production code; the ordering is enforced by code structure, not by a spy).
 
     const researchSrc = fs.readFileSync(researchSrcPath, 'utf8');
 
     const crossCheckIdx = researchSrc.indexOf('crossCheckRetractions(');
-    const writeBibtexIdx = researchSrc.indexOf('writeBibtex(');
+    const upsertIdx = researchSrc.indexOf('upsertSources(');
 
     assert.ok(
       crossCheckIdx !== -1,
       'research.ts must still call crossCheckRetractions (D-15 LOCKED)',
     );
     assert.ok(
-      writeBibtexIdx !== -1,
-      'research.ts must still call writeBibtex (D-19/D-20 LOCKED)',
+      upsertIdx !== -1,
+      'research.ts must write the library through upsertSources (BRDTH-01 — the one library writer)',
     );
     assert.ok(
-      crossCheckIdx < writeBibtexIdx,
-      `D-15 LOCKED ordering violated: crossCheckRetractions (char ${crossCheckIdx}) must appear BEFORE writeBibtex (char ${writeBibtexIdx}) in research.ts`,
+      crossCheckIdx < upsertIdx,
+      `D-15 LOCKED ordering violated: crossCheckRetractions (char ${crossCheckIdx}) must appear BEFORE upsertSources (char ${upsertIdx}) in research.ts`,
+    );
+    assert.ok(
+      !researchSrc.includes('writeBibtex(') && !researchSrc.includes('writeRis('),
+      'research.ts must not render CITATIONS.bib/.ris itself — library.ts does (library-writer chokepoint)',
     );
 
-    // Additionally check the orchestrator module exposes candidates to research.ts
-    // BEFORE the chokepoint sequence (i.e., the orchestrator returns candidates, it
-    // does NOT itself call writeBibtex — that chokepoint belongs to research.ts).
+    // The orchestrator returns candidates; it never writes the library.
     const orchSrc = fs.readFileSync(orchestratorSrcPath, 'utf8');
     assert.ok(
-      !orchSrc.includes('writeBibtex('),
-      'research-orchestrator must NOT call writeBibtex — that chokepoint belongs to research.ts (D-15)',
+      !orchSrc.includes('writeBibtex(') && !orchSrc.includes('upsertSources('),
+      'research-orchestrator must NOT write the library — research.ts owns the call (D-15)',
     );
   },
 );

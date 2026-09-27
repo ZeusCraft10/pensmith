@@ -87,10 +87,11 @@ repairs ONE verifier-flagged citation rather than authoring a fresh PLAN.md:
    citation clause (NO LLM prose rewrite). The patched DRAFT.md is written via
    `bin/lib/atomic-write.ts` and `verified_against_draft_hash` is reset to
    `null` (D-05), so the next `pensmith verify <N>` re-runs from scratch.
-6. **`--research <query>`** (PLAN-03 / D-09) — append findings to the
-   project-level `.paper/RESEARCH.md`, merge new entries into
-   `.paper/CITATIONS.bib` (with a non-standard `from_section: <N>` annotation),
-   and append a provenance row to `sections/<N>/RESEARCH-LOG.md` (query,
+6. **`--research <query>`** (PLAN-03 / D-09) — merge the findings into the
+   paper library through the one library writer (`upsertSources` in
+   `bin/lib/library.ts`, BRDTH-01: `.paper/LIBRARY.json`, deduped, provenance
+   tag `plan-research:§<N>`, with `.paper/CITATIONS.bib` / `.ris` re-rendered
+   from it), append them to the project-level `.paper/RESEARCH.md`, and append a provenance row to `sections/<N>/RESEARCH-LOG.md` (query,
    adapter, hit-count, citekeys-added, timestamp). This is the ONLY
    section-level file `--research` creates — NO other section's files are
    touched (section-as-phase isolation, TEST-09).

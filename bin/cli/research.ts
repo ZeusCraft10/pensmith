@@ -13,12 +13,13 @@
 //   6. Call runResearchOrchestrator (adapter fan-out + dedup + source-evaluator).
 //   7. Candidate approval gate (default-ON): multiselect prune; --yolo → keep all;
 //      zero-candidates → skip gate; non-TTY → ApprovalUnavailableError / exit-3.
-//   8. D-15 LOCKED: crossCheckRetractions BEFORE writeBibtex BEFORE writeRis BEFORE
-//      LIBRARY.json write.
+//   8. D-15 LOCKED: crossCheckRetractions BEFORE the library write — upsertSources
+//      (BRDTH-01, the one writer) merges into LIBRARY.json and renders
+//      CITATIONS.bib + CITATIONS.ris from it.
 //
 // D-12 LOCKED prompt slugs: 'topic-disambiguator' + 'source-evaluator'.
-// D-15 LOCKED ordering: crossCheckRetractions BEFORE writeBibtex.
-// D-19 LOCKED chokepoint: bib output goes through writeBibtex (citation-js).
+// D-15 LOCKED ordering: crossCheckRetractions BEFORE upsertSources.
+// D-19 LOCKED chokepoint: bib output is rendered by the library writer (citation-js).
 // D-20 LOCKED chokepoint: canonical .bib path is `.paper/CITATIONS.bib`.
 // T-11-10: malformed LLM JSON → WARN + fallback, never a crash.
 // T-11-12: key value never logged here — complete() owns the no-leak header path.
@@ -28,10 +29,8 @@ import path from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
 import { z } from 'zod';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { atomicWriteFile } from '../lib/atomic-write.js';
-import { writeBibtex } from '../lib/bibtex-write.js';
-import { writeRis } from '../lib/ris-write.js';
-import { paperDir } from '../lib/paths.js';
+import { upsertSources } from '../lib/library.js';
+import { paperDir, projectRoot } from '../lib/paths.js';
 import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js';
 import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
@@ -92,10 +91,6 @@ export const researchCommand = defineCommand({
     // Validate both D-12 LOCKED slugs at startup (hash-pin defense-in-depth).
     loadPrompt('topic-disambiguator');
     loadPrompt('source-evaluator');
-
-    const libraryPath = path.join(paperDir(), 'LIBRARY.json');
-    const bibPath = path.join(paperDir(), 'CITATIONS.bib');
-    const risPath = path.join(paperDir(), 'CITATIONS.ris');
 
     // GEN-06 fail-loud probe: assert a key is configured before doing any LLM work.
     // CRITICAL ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE
@@ -282,37 +277,35 @@ export const researchCommand = defineCommand({
       process.stderr.write(
         `pensmith research: WARN — 0 candidates remain after discovery ` +
         `(${candidates.length > 0 ? 'all pruned by approval gate' : 'no results from adapters'}); ` +
-        `writing empty LIBRARY.json.\n`,
+        `the library gains no new source.\n`,
       );
     }
 
-    // ── D-15 LOCKED ordering: crossCheckRetractions BEFORE writeBibtex ──
-    // Marks any retracted candidates so writeBibtex persists retracted=true.
+    // ── Step 7: D-15 LOCKED ordering — crossCheckRetractions BEFORE the library write ──
+    // Marks any retracted candidates so the library (and the CITATIONS.bib it
+    // renders) persists retracted=true.
     await crossCheckRetractions(finalCandidates);
 
-    // D-19 + D-20 LOCKED: writeBibtex is the SOLE citation-js writer.
-    await writeBibtex(finalCandidates, bibPath);
-    // CITE-05: emit CITATIONS.ris alongside CITATIONS.bib at the SAME call site.
-    await writeRis(finalCandidates, risPath);
-
-    // Write a real LIBRARY.json (no placeholder _note strings).
-    // Content: { $schemaVersion: 1, entries: SourceCandidate[] }
-    const libraryContent = JSON.stringify(
-      { $schemaVersion: 1, entries: finalCandidates },
-      null,
-      2,
-    );
-    await atomicWriteFile(libraryPath, libraryContent);
+    // BRDTH-01 / D-17-43: the ONE library writer. upsertSources dedups against
+    // the existing LIBRARY.json (DOI, then arXiv/PMID/ISBN, then the
+    // preprint ↔ version-of-record rule), merges, and renders CITATIONS.bib (D-19
+    // citation-js chokepoint, D-20 canonical path) and CITATIONS.ris (CITE-05)
+    // from the validated LIBRARY.json — so a re-run never duplicates a source and
+    // paper://library always parses.
+    const upsert = await upsertSources(projectRoot(), finalCandidates, { provenance: 'research' });
+    const added = upsert.outcomes.filter((o) => o.status === 'added').length;
+    const known = upsert.outcomes.length - added;
 
     process.stdout.write(
-      `pensmith research: wrote LIBRARY.json (${finalCandidates.length} candidate(s)) to ${libraryPath}` +
-      ` and .bib/.ris to ${bibPath} / ${risPath}\n`,
+      `pensmith research: wrote LIBRARY.json (${upsert.library.entries.length} source(s); ${added} new` +
+      `${known > 0 ? `, ${known} already in library` : ''}) to ${upsert.paths.library}` +
+      ` and .bib/.ris to ${upsert.paths.bib} / ${upsert.paths.ris}\n`,
     );
     return {
       ok: true,
-      library: libraryPath,
-      bib: bibPath,
-      ris: risPath,
+      library: upsert.paths.library,
+      bib: upsert.paths.bib,
+      ris: upsert.paths.ris,
     };
   },
 });

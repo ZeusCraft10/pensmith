@@ -9,8 +9,9 @@
 // `verified_against_draft_hash` (those are owned by the write/verify verbs).
 //
 // RED-by-skip via SOURCE-GREP (mirrors [07-01]): the add verb is a stub until
-// 08-06. READY = bin/cli/add.ts exists AND imports BOTH extractPdfText AND
-// writeBibtex (the two chokepoints it must route through). existsSync alone is
+// 08-06. READY = bin/cli/add.ts exists AND routes through BOTH extractPdfText AND
+// upsertSources (the two chokepoints it must route through; BRDTH-01 replaced
+// the direct writeBibtex call with the one library writer). existsSync alone is
 // insufficient. Until 08-06 wires it, every test SKIPS so `npm test` stays GREEN.
 //
 // Offline: PENSMITH_NETWORK_TESTS is NOT set, so isOfflineMode() is true and the
@@ -38,7 +39,8 @@ const CASSETTE_DOI = '10.1038/nphys1170';
 function addWired(): boolean {
   if (!fs.existsSync(ADD_SRC)) return false;
   const src = fs.readFileSync(ADD_SRC, 'utf8');
-  return /extractPdfText/.test(src) && /writeBibtex/.test(src);
+  // BRDTH-01: the library write goes through upsertSources (the one writer).
+  return /extractPdfText/.test(src) && /upsertSources/.test(src);
 }
 
 const READY = addWired();

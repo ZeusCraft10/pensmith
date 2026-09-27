@@ -22,7 +22,10 @@ degrade_if_missing:
 `pensmith compile` is the milestone-completion verb (intake → research → outline →
 for each section { plan → write → verify } → **compile** → done). It composes the
 Phase 1-3 chokepoints into one lock-guarded pipeline and produces
-`.paper/DRAFT.md` + `.paper/COMPILE-REPORT.md`, regenerating `.paper/CITATIONS.bib`.
+`.paper/DRAFT.md` + `.paper/COMPILE-REPORT.md`. It never rewrites
+`.paper/CITATIONS.bib`: that file is the full research library, rendered from
+`.paper/LIBRARY.json` by the one library writer (`bin/lib/library.ts`,
+BRDTH-01), and citeproc renders only the keys the draft cites.
 
 The implementation lives in `bin/lib/compile.ts` (`runCompile`); the verb is
 `bin/cli/compile.ts` — a thin delegate. Both Tier 1 (plugin) and Tier 2 (CLI)
@@ -41,7 +44,7 @@ smoothing operates only on placeholder-masked text — the model never sees raw
 - `.paper/COMPILE-REPORT.md` — schema v1 (D-14): Transitions Changed,
   Cross-Section Consistency Flags, Citation Density, Compile-Staleness Resolved,
   Advisory Findings (empty marker reserved for Phase 5).
-- `.paper/CITATIONS.bib` — regenerated from the union of compiled citekeys (D-19).
+- `.paper/CITATIONS.bib` is read (staleness re-verify), never written (BRDTH-01).
 
 ## Body
 
@@ -85,11 +88,11 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    cross-section consistency scan (COMP-04, flags only) and the citation-density
    computation vs. the discipline preset target (COMP-05, warn-only).
 
-8. **Regenerate `.paper/CITATIONS.bib`** (D-19) from the union of compiled
-   citekeys via the citation-js chokepoint, then `atomicWriteFile`
-   `.paper/DRAFT.md` and `.paper/COMPILE-REPORT.md` (schema v1, D-14). EVERY
-   write routes through the D-07 atomic-write chokepoint; section files are never
-   written (ARCH-20).
+8. **Emit the outputs**: `atomicWriteFile` `.paper/DRAFT.md` and
+   `.paper/COMPILE-REPORT.md` (schema v1, D-14). EVERY write routes through the
+   D-07 atomic-write chokepoint; section files are never written (ARCH-20), and
+   `.paper/CITATIONS.bib` is left exactly as the library writer rendered it
+   (BRDTH-01 — compile once pruned it to the cited keys and even emptied it).
 
 9. **Shell fallback** (TIER-06 equivalence path): `pensmith compile [--yolo]
    [--lintHeadings] [--discipline <preset>]`.

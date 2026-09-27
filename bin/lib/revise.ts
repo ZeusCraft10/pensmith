@@ -22,9 +22,11 @@
 //   6. --yolo auto-loop: re-run the SAME path up to 2 retries; on exhaustion
 //      write a RETRY_EXHAUSTED verdict to VERIFICATION.md (D-06).
 //
-// --research (D-09 / PLAN-03): append the query's findings to the project-level
-// .paper/RESEARCH.md, merge new entries into .paper/CITATIONS.bib (with a
-// non-standard `from_section: <N>` annotation), AND append a provenance row to
+// --research (D-09 / PLAN-03): merge the query's findings into the paper
+// library through the one library writer (bin/lib/library.ts upsertSources,
+// BRDTH-01 — LIBRARY.json + the CITATIONS.bib/.ris rendered from it, provenance
+// tag `plan-research:§<N>`), append them to the project-level .paper/RESEARCH.md,
+// AND append a provenance row to
 // sections/<N>/RESEARCH-LOG.md (query, adapter, hit-count, citekeys-added,
 // ISO timestamp). RESEARCH-LOG.md is the ONLY section-level file --research
 // creates — NO other section's files are touched (section-as-phase isolation).
@@ -37,8 +39,7 @@ import { atomicWriteFile } from './atomic-write.js';
 import { updateFrontmatter, parseFrontmatter } from './frontmatter.js';
 import { withLock } from './lock.js';
 import { replaceCitekeys } from './citation-token.js';
-import { parseBibtex } from './citations.js';
-import { writeBibtex } from './bibtex-write.js';
+import { upsertSources } from './library.js';
 import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 
@@ -316,9 +317,29 @@ async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<
   const query = opts.research ?? '';
   const root = opts.paperRoot;
   const now = new Date().toISOString();
-  const citekeysAdded = hits.map((h) => h.citekey);
 
-  // 1. Append to project-level .paper/RESEARCH.md (append, never overwrite).
+  // 1. Merge the hits into the paper library through the ONE library writer
+  //    (BRDTH-01 / D-17-43): LIBRARY.json gains them — deduped against what is
+  //    already there, tagged `plan-research:§<N>` — and CITATIONS.bib / .ris are
+  //    re-rendered from it. A work already in the library keeps its citekey, so
+  //    the records below use the REAL keys.
+  const upsert = await upsertSources(
+    root,
+    hits.map((h) => ({
+      citekey: h.citekey,
+      title: h.title,
+      authors: h.authors,
+      ...(h.year !== undefined ? { year: h.year } : {}),
+      ...(h.doi !== undefined ? { doi: h.doi } : {}),
+      ...(h.source !== undefined ? { source: h.source } : {}),
+      last_verified: now,
+    })),
+    { provenance: `plan-research:§${opts.n}` },
+  );
+  const keyOf = (i: number): string => upsert.outcomes[i]?.citekey ?? hits[i]!.citekey;
+  const citekeysAdded = upsert.outcomes.filter((o) => o.status === 'added').map((o) => o.citekey);
+
+  // 2. Append to project-level .paper/RESEARCH.md (append, never overwrite).
   const researchPath = `${paperDir(root)}/RESEARCH.md`;
   const prior = existsSync(researchPath) ? readFileSync(researchPath, 'utf8') : '';
   const block = [
@@ -327,62 +348,10 @@ async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<
     '',
     `Query: ${query}`,
     '',
-    ...hits.map((h) => `- [@${h.citekey}] ${h.title} (${(h.authors ?? []).join('; ')}${h.year ? `, ${h.year}` : ''})`),
+    ...hits.map((h, i) => `- [@${keyOf(i)}] ${h.title} (${(h.authors ?? []).join('; ')}${h.year ? `, ${h.year}` : ''})`),
     '',
   ].join('\n');
   await atomicWriteFile(researchPath, prior + block);
-
-  // 2. Merge new entries into .paper/CITATIONS.bib (from_section annotation).
-  const bibPath = `${paperDir(root)}/CITATIONS.bib`;
-  const existingBib = existsSync(bibPath) ? readFileSync(bibPath, 'utf8') : '';
-  const existingEntries = existingBib.trim().length > 0 ? await parseBibtex(existingBib) : [];
-  const existingKeys = new Set(existingEntries.map((e) => String((e as { id?: string }).id ?? '')));
-
-  const newCandidates: SourceCandidate[] = hits
-    .filter((h) => !existingKeys.has(h.citekey))
-    .map((h) => ({
-      source: h.source ?? 'openalex',
-      id: h.doi ?? h.citekey,
-      title: h.title,
-      authors: h.authors.length > 0 ? h.authors : ['Unknown'],
-      ...(h.year !== undefined ? { year: h.year } : {}),
-      ...(h.doi !== undefined ? { doi: h.doi } : {}),
-      retracted: false,
-      last_verified: now,
-      citekey: h.citekey,
-      raw: {},
-    } as SourceCandidate));
-
-  if (newCandidates.length > 0) {
-    // Re-render the union through the citation-js + atomic-write chokepoints.
-    // We hand writeBibtex the merged candidate set so collisions resolve and
-    // the file stays git-diff-stable. The from_section provenance is recorded
-    // as a non-standard trailing comment block (standard parsers ignore `%`).
-    const mergedExisting: SourceCandidate[] = existingEntries.map((e) => {
-      const x = e as { id?: string; title?: string | string[]; author?: Array<{ family?: string; given?: string }>; DOI?: string };
-      const title = Array.isArray(x.title) ? (x.title[0] ?? '') : (x.title ?? '');
-      const authors = (x.author ?? []).map((a) => {
-        const fam = String(a?.family ?? '').trim();
-        const giv = String(a?.given ?? '').trim();
-        return giv ? `${fam}, ${giv}` : fam;
-      }).filter(Boolean);
-      return {
-        source: 'crossref',
-        id: x.DOI ?? String(x.id ?? ''),
-        title: title || String(x.id ?? 'untitled'),
-        authors: authors.length > 0 ? authors : ['Unknown'],
-        ...(x.DOI !== undefined ? { doi: x.DOI } : {}),
-        retracted: false,
-        last_verified: now,
-        citekey: String(x.id ?? ''),
-        raw: {},
-      } as SourceCandidate;
-    });
-    await writeBibtex([...mergedExisting, ...newCandidates], bibPath);
-    const rendered = readFileSync(bibPath, 'utf8');
-    const provenance = newCandidates.map((c) => `% from_section: ${opts.n}  citekey: ${c.citekey}`).join('\n');
-    await atomicWriteFile(bibPath, `${rendered}${rendered.endsWith('\n') ? '' : '\n'}${provenance}\n`);
-  }
 
   // 3. Append a provenance row to sections/<N>/RESEARCH-LOG.md (the ONLY
   //    section-level file --research writes — D-09 / PLAN-03 isolation).

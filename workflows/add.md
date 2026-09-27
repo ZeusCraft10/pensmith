@@ -35,14 +35,20 @@ bodies).
 
 ## Outputs
 
-- `.paper/CITATIONS.bib` — the new candidate appended via `writeBibtex` (D-19
-  citation-js chokepoint, never a hand-rolled serializer), re-serializing the
-  whole file (existing entries preserved, citekey deduped).
+- `.paper/LIBRARY.json` — the source merged in through `upsertSources`
+  (`bin/lib/library.ts`, BRDTH-01 — the one library writer): deduped by
+  normalized DOI, then arXiv id / PMID / ISBN, then the preprint ↔
+  version-of-record rule; a work already in the library keeps its citekey.
+- `.paper/CITATIONS.bib` + `.paper/CITATIONS.ris` — re-rendered from LIBRARY.json
+  by the same writer (D-19 citation-js chokepoint, never a hand-rolled
+  serializer).
 - On remap: each targeted section `PLAN.md` gains the citekey in
   `assigned_sources[]` (via `updateFrontmatter` inside `withLock` +
   `atomicWriteFile`). `status` and `verified_against_draft_hash` are byte-
   untouched (Pitfall 3 / A6).
-- stdout — `added <citekey>` (and the remap count when sections were remapped).
+- stdout — `added <citekey>` (and the remap count when sections were remapped),
+  or `already in library as <citekey>` for a known work (nothing is duplicated;
+  the remap then runs only with `--remap`).
 
 ## Body
 
@@ -69,9 +75,12 @@ bodies).
    verifier re-checks at compile time and blocks on FABRICATED. A transport error
    never aborts the add.
 
-3. **Write `.paper/CITATIONS.bib`** (D-19): load existing candidates, dedup the
-   citekey, append the new one, and re-serialize the whole file via the
-   `writeBibtex` chokepoint.
+3. **Merge into the library** (BRDTH-01): `upsertSources(root, [candidate],
+   { provenance: 'add' })` updates `.paper/LIBRARY.json` under its lock and
+   re-renders `.paper/CITATIONS.bib` / `.paper/CITATIONS.ris` from it. A known
+   work (same DOI, arXiv id, PMID or ISBN, or the preprint of a work already
+   present) is merged, keeps its citekey, and prints `already in library as
+   <citekey>`; every later message and the remap use that real key.
 
 4. **Remap approval gate** (ERGO-06, approval-gates-default-on): remap when
    `--remap` is set OR (not `--yolo` AND the user confirms via the gate). When
