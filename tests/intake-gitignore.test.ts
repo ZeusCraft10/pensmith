@@ -22,6 +22,11 @@ function runNew(cwd: string): { status: number | null; stdout: string; stderr: s
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
   env['PENSMITH_NO_LLM'] = '1';
   env['PENSMITH_NETWORK_TESTS'] = '';
+  // RUN-09: `new` needs an assignment in a non-interactive run (EXIT_USAGE
+  // otherwise); the paper folder's assignment.txt is picked up automatically.
+  if (!existsSync(join(cwd, 'assignment.txt'))) {
+    writeFileSync(join(cwd, 'assignment.txt'), 'Write a 1500-word essay on tidal power.\n');
+  }
   const r = spawnSync(
     process.execPath,
     ['--import', TSX_LOADER, PENSMITH_TS, 'new', '--yolo'],

@@ -136,9 +136,10 @@ test(
     // Run intake with --from (no interactive questions), --yolo (no approval gate).
     await runIntake(root, { from: assignPath, yolo: true });
 
-    // STATE.json must exist at the paper root (stateFile(paperDir) = root/STATE.json
-    // per stateFile() contract in bin/lib/state.ts).
-    const statePath = path.join(root, 'STATE.json');
+    // RUN-13 (D-17-32): STATE.json lives at <project root>/.paper/STATE.json
+    // (stateFile() in bin/lib/state.ts → paperStateFile()); nothing at the root.
+    const statePath = path.join(root, '.paper', 'STATE.json');
+    assert.ok(!fs.existsSync(path.join(root, 'STATE.json')), 'no root-level STATE.json (RUN-13)');
     assert.ok(
       fs.existsSync(statePath),
       `intake must write STATE.json at ${statePath}`,
@@ -182,7 +183,7 @@ test(
     // First run: seeds STATE.json.
     await runIntake(root, { from: assignPath, yolo: true });
 
-    const statePath = path.join(root, 'STATE.json');
+    const statePath = path.join(root, '.paper', 'STATE.json');
     assert.ok(fs.existsSync(statePath), 'STATE.json must exist after first intake run');
 
     const stateAfterRun1 = JSON.parse(fs.readFileSync(statePath, 'utf8')) as {
@@ -258,7 +259,7 @@ test(
     );
 
     // The STATE.json must exist and have a valid paperId.
-    const statePath = path.join(root, 'STATE.json');
+    const statePath = path.join(root, '.paper', 'STATE.json');
     assert.ok(fs.existsSync(statePath), `STATE.json must exist at ${statePath}`);
     const state = JSON.parse(fs.readFileSync(statePath, 'utf8')) as { paperId?: string };
     assert.ok(

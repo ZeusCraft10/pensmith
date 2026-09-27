@@ -66,6 +66,9 @@ function mkProjectRoot(): string {
   process.env.HOME = tmp;
   // Tier-2 deterministic mode (no LLM) so intake runs offline.
   process.env.PENSMITH_NO_LLM = '1';
+  // RUN-09: `new` needs an assignment in a non-interactive run (EXIT_USAGE
+  // otherwise); the paper folder's assignment.txt is picked up automatically.
+  fs.writeFileSync(path.join(tmp, 'assignment.txt'), 'Write a 1500-word essay on tidal power.\n');
   return tmp;
 }
 

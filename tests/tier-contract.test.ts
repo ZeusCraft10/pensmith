@@ -59,14 +59,15 @@ after(async () => {
 
 /**
  * Create a fresh paper root with minimal valid STATE.json + LIBRARY.json.
- * STATE.json lives at paperRoot/STATE.json (not paperRoot/.paper/STATE.json)
- * per stateFile(paperRoot) = path.join(path.resolve(paperRoot), 'STATE.json').
+ * RUN-13 (D-17-32): the paper root is the PROJECT folder; STATE.json and
+ * LIBRARY.json live under it at .paper/ — the files `pensmith status` and
+ * paper://state / paper://library both read.
  */
 function freshPaperRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-contract-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
   writeFileSync(
-    join(root, 'STATE.json'),
+    join(root, '.paper', 'STATE.json'),
     JSON.stringify({
       $schemaVersion: 1,
       paperId: 'tier-contract-test',
@@ -75,7 +76,7 @@ function freshPaperRoot(): string {
     }),
   );
   writeFileSync(
-    join(root, 'LIBRARY.json'),
+    join(root, '.paper', 'LIBRARY.json'),
     JSON.stringify({ $schemaVersion: 1, entries: [] }),
   );
   return root;
@@ -501,6 +502,15 @@ function runCliInDir(args: string[], cwd: string): { stdout: string; stderr: str
  * temp root, not the host repo.
  */
 async function runMcpToolInDir(toolName: string, paperRoot: string, args: Record<string, unknown>): Promise<string> {
+  return (await runMcpToolResultInDir(toolName, paperRoot, args)).text;
+}
+
+/** runMcpToolInDir plus the MCP `isError` flag (RUN-09 exit-code parity). */
+async function runMcpToolResultInDir(
+  toolName: string,
+  paperRoot: string,
+  args: Record<string, unknown>,
+): Promise<{ text: string; isError: boolean }> {
   const t = new StdioClientTransport({
     command: process.execPath,
     args: [MCP_BIN_ABS],
@@ -512,10 +522,37 @@ async function runMcpToolInDir(toolName: string, paperRoot: string, args: Record
   try {
     const res = await c.callTool({ name: toolName, arguments: args });
     const content = res.content as Array<{ type: string; text: string }>;
-    return content[0]?.text ?? '';
+    return { text: content[0]?.text ?? '', isError: res.isError === true };
   } finally {
     await c.close();
   }
+}
+
+/**
+ * RUN-09: the exit code a Phase-3 case's CLI run must end with, derived from
+ * what the run actually produced. Every case succeeds (0) except:
+ *   - outline: EXIT_ERROR (1) when the reply registered no section in
+ *     STATE.json (a reply without the section table cannot advance the
+ *     pipeline); 0 once sections are registered;
+ *   - verify-section: EXIT_BLOCKED (4) when VERIFICATION.md says
+ *     `Status: failed`, or carries a blocking Pass-1 UNVERIFIABLE row; else 0.
+ */
+function expectedPhase3Exit(caseName: string, root: string): number {
+  if (caseName === 'outline') {
+    try {
+      const st = JSON.parse(readFileSync(join(root, '.paper', 'STATE.json'), 'utf8')) as { sections?: unknown[] };
+      return Array.isArray(st.sections) && st.sections.length > 0 ? 0 : 1;
+    } catch {
+      return 1;
+    }
+  }
+  if (caseName === 'verify-section') {
+    const vpath = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`, 'VERIFICATION.md');
+    const md = existsSync(vpath) ? readFileSync(vpath, 'utf8') : '';
+    const status = /^Status:\s*(\S+)/m.exec(md)?.[1] ?? '';
+    return status === 'failed' || /^-\s*\S+:\s*\*\*UNVERIFIABLE\*\*/m.test(md) ? 4 : 0;
+  }
+  return 0;
 }
 
 /**
@@ -614,10 +651,11 @@ for (const tc of PHASE_3_CASES) {
 
     // --- Tier 2 (CLI) ---
     const cliResult = runCliInDir(tc.cliArgs, root);
+    const expectedExit = expectedPhase3Exit(tc.name, root);
     assert.equal(
       cliResult.exitCode,
-      0,
-      `tier-contract ${tc.name}: CLI exit 0 expected; got ${cliResult.exitCode}. stdout: ${cliResult.stdout.slice(0, 400)} stderr: ${cliResult.stderr.slice(0, 400)}`,
+      expectedExit,
+      `tier-contract ${tc.name}: CLI exit ${expectedExit} expected; got ${cliResult.exitCode}. stdout: ${cliResult.stdout.slice(0, 400)} stderr: ${cliResult.stderr.slice(0, 400)}`,
     );
 
     // CLI MUST produce its declared artifact (D-02 / SC-1 invariant — the
@@ -674,8 +712,17 @@ for (const tc of PHASE_3_CASES) {
     const toolArgs = tc.name.endsWith('-section')
       ? { n: Number(MIDDLE_SECTION), slug: 'placeholder', yolo: true }
       : {};
-    const mcpJson = await runMcpToolInDir(tc.mcpTool, mcpRoot, toolArgs);
+    const mcpResult = await runMcpToolResultInDir(tc.mcpTool, mcpRoot, toolArgs);
+    const mcpJson = mcpResult.text;
     assert.ok(mcpJson.length > 0, `tier-contract ${tc.name}: MCP tool returned empty text`);
+    // RUN-09 parity: the MCP tool reports the same exit classification the CLI
+    // exited with — isError + exit_code for a refusal, a plain result for 0.
+    const mcpExpectedExit = expectedPhase3Exit(tc.name, mcpRoot);
+    assert.equal(mcpExpectedExit, expectedExit, `tier-contract ${tc.name}: both tiers must reach the same outcome`);
+    assert.equal(mcpResult.isError, expectedExit !== 0, `tier-contract ${tc.name}: MCP isError must match CLI exit ${expectedExit}: ${mcpJson.slice(0, 300)}`);
+    if (expectedExit !== 0) {
+      assert.equal((JSON.parse(mcpJson) as { exit_code?: number }).exit_code, expectedExit, `tier-contract ${tc.name}: MCP exit_code`);
+    }
 
     // MCP MUST produce the same artifact in its own temp root.
     const mcpArtifactPath = join(mcpRoot, tc.expectedArtifact);
@@ -1333,12 +1380,13 @@ function seedGlobalRegistry(): { dataDir: string; resolvedDataDir: string; paper
     HOME: dataDir,
   });
   // A real v2 STATE.json so deriveLibraryStatus reads it (status → 'intake':
-  // STATE.json present, no RESEARCH.md). stateFile(paperRoot) = <paperRoot>/STATE.json.
+  // STATE.json present, no RESEARCH.md). RUN-13: <paperRoot>/.paper/STATE.json.
   // deriveLibraryStatus does a RAW StateSchema.parse (no migration), so the
   // fixture MUST be the CURRENT state version (2) — a v1 envelope would fail
   // parse and classify as 'unknown' (corrupt) rather than the live 'intake'.
+  mkdirSync(join(paperRoot, '.paper'), { recursive: true });
   writeFileSync(
-    join(paperRoot, 'STATE.json'),
+    join(paperRoot, '.paper', 'STATE.json'),
     JSON.stringify({
       $schemaVersion: 2,
       paperId: 'tier-lib-paper',

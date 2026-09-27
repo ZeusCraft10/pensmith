@@ -29,6 +29,7 @@ function outlineOf(
 
 function planOf(slug: string, depends_on: string[], wave?: number): PlanFrontmatter {
   const base = {
+    schema_version: 1 as const,
     section: 1,
     slug,
     title: slug,
