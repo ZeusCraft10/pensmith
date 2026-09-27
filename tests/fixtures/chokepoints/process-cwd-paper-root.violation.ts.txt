@@ -1,0 +1,10 @@
+// Chokepoint fixture (process-cwd-paper-root, RUN-14): a verb that uses the
+// process working directory as its paper root. It ignores --paper,
+// PENSMITH_PAPER_ROOT and the `pensmith open` pointer the dispatcher resolved,
+// so it can write a different paper — the rule must flag it.
+import path from 'node:path';
+
+export function sneakyPaperRoot(): string {
+  const paperRoot = process.cwd();
+  return path.join(paperRoot, '.paper', 'OUTLINE.md');
+}

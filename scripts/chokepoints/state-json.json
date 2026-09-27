@@ -1,0 +1,13 @@
+{
+  "id": "state-json",
+  "requirement": "RUN-13",
+  "module": "bin/lib/state.ts",
+  "description": "STATE.json lives at <project root>/.paper/STATE.json and is resolved only by bin/lib/paths.ts (paperStateFile, plus legacyStateFile for the one-time pre-v1 move) and read or written only by bin/lib/state.ts (loadState / initState / saveState / updateState / readStateTextSync, which also run migrateLegacyLayout). No other shipped module builds a path from a bare 'STATE.json' segment: a second resolver is how the CLI once wrote the project root while the MCP server and hooks read .paper/. Everything else calls the state.ts API or paperStateFile(root).",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs", "scripts/**/*.mjs"],
+  "allow": ["bin/lib/state.ts", "bin/lib/paths.ts"],
+  "match": {
+    "kind": "file-regex",
+    "pattern": "['\"`]STATE\\.json['\"`]"
+  },
+  "fixture": "tests/fixtures/chokepoints/state-json.violation.ts.txt"
+}

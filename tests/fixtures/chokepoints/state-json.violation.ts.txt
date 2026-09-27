@@ -1,0 +1,10 @@
+// Chokepoint fixture (state-json, RUN-13): a second STATE.json resolver outside
+// bin/lib/state.ts and bin/lib/paths.ts. It builds the pre-v1 root-level path,
+// skips the legacy-layout move, the version envelope and the per-file lock —
+// the rule must flag it.
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+export function sneakyState(root: string): unknown {
+  return JSON.parse(readFileSync(path.join(root, 'STATE.json'), 'utf8'));
+}

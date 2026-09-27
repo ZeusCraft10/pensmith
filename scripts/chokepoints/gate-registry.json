@@ -1,0 +1,13 @@
+{
+  "id": "gate-registry",
+  "requirement": "RUN-28",
+  "module": "bin/lib/gates.ts",
+  "description": "Every approval decision goes through the one gate registry, bin/lib/gates.ts runGate / declineGate (PRD §7.20): it owns what --yolo may skip, what a run without a terminal does, and each gate's exit code. Only gates.ts and the content-question verbs (bin/cli/sketch.ts; intake from GRND-02, which adds itself here) may import ask() from bin/lib/prompts.ts, and only bin/lib/prompts.ts and bin/lib/prompts/ may load @clack/prompts. A verb that asks on its own would re-grow a private --yolo and no-terminal policy (the three ApprovalUnavailableError copies this row replaced).",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs"],
+  "allow": ["bin/lib/gates.ts", "bin/cli/sketch.ts", "bin/lib/prompts.ts", "bin/lib/prompts/**"],
+  "match": {
+    "kind": "file-regex",
+    "pattern": "import\\s*\\{[^}]*\\bask\\b[^}]*\\}\\s*from\\s*['\"][^'\"]*prompts(?:\\.js)?['\"]|import\\(\\s*['\"](?:@clack/prompts|[^'\"]*/prompts(?:\\.js)?)['\"]\\s*\\)|from\\s*['\"]@clack/prompts['\"]"
+  },
+  "fixture": "tests/fixtures/chokepoints/gate-registry.violation.ts.txt"
+}

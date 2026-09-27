@@ -1,0 +1,13 @@
+{
+  "id": "process-cwd-paper-root",
+  "requirement": "RUN-14",
+  "module": "bin/lib/paths.ts",
+  "description": "The paper root is resolved once per invocation — resolvePaperRoot (CLI: --paper, PENSMITH_PAPER_ROOT, the cwd's .paper/, a new paper, the `pensmith open` pointer) or servicePaperRoot (MCP server and hooks: PENSMITH_PAPER_ROOT, else the working directory) — and recorded with setActivePaperRoot; every later reader calls projectRoot(). Only bin/lib/paths.ts reads the process working directory (projectRoot's fallback, workingDirectory()). A verb, library module, MCP handler or hook that used the working directory as its paper root would ignore --paper, PENSMITH_PAPER_ROOT and the pointer, and write a different paper than the one the dispatcher resolved.",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs"],
+  "allow": ["bin/lib/paths.ts"],
+  "match": {
+    "kind": "file-regex",
+    "pattern": "process\\.cwd\\(\\)"
+  },
+  "fixture": "tests/fixtures/chokepoints/process-cwd-paper-root.violation.ts.txt"
+}
