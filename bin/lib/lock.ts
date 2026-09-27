@@ -55,7 +55,8 @@
 //   - withLock(resource, fn, opts?)   — acquire, run, release (try/finally)
 //   - tryAcquire(resource, opts?)     — returns release(); caller manages
 //   - release(resource)               — release a lock this process holds
-//   - forceRelease(resource)          — best-effort orphan cleanup (Stop hook)
+//   (There is deliberately no force-release: RUN-23 removed the Stop hook's
+//   forceRelease('.paper'); a dead holder is cleared as stale, never forced.)
 //   - isLocked(resource)              — non-destructive check
 //   - lockOwner(resource)             — the holder record, or null
 
@@ -439,29 +440,6 @@ export async function release(resource: string): Promise<void> {
   if (own) return own();
   const stub = await stubFor(resource);
   await lockfile.unlock(stub, { realpath: false, fs: ownerFs });
-}
-
-/**
- * Best-effort release of an ORPHANED lock for `resource` — including one held
- * by another (now-defunct) process. proper-lockfile.unlock() only succeeds for
- * a lock held in THIS process's in-memory registry; cross-process it throws
- * ENOTACQUIRED and leaves the on-disk `${stub}.lock` directory in place. This
- * clears it. Never rejects.
- */
-export async function forceRelease(resource: string): Promise<void> {
-  try {
-    await release(resource);
-    return;
-  } catch {
-    // Not held by this process (ENOTACQUIRED) or already gone — fall through
-    // to remove the on-disk lock directory directly.
-  }
-  try {
-    const stub = await stubFor(resource);
-    await fsp.rm(`${stub}.lock`, { recursive: true, force: true });
-  } catch {
-    /* nothing to remove / inaccessible — best-effort, never throw */
-  }
 }
 
 /**
