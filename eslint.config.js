@@ -510,6 +510,7 @@ export default [
       // by tests/chokepoints.test.ts (lintText under a virtual in-scope path).
       'tests/fixtures/chokepoints/**',
       'dist/**',
+      'coverage/**',
       'node_modules/**',
     ],
   },
