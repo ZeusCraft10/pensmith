@@ -1,0 +1,29 @@
+{
+  "id": "no-new-eslint-disable",
+  "requirement": "RUN-29",
+  "module": "eslint.config.js",
+  "description": "No new inline ESLint disable directive or inline rule configuration anywhere in bin/, mcp/, hooks/, tests/ or scripts/. A chokepoint that fires is fixed by restructuring the code (usually a bin/lib helper), never silenced; a test that must redirect data dirs through env vars gets a narrowly scoped exemption block in eslint.config.js. The baseline lists the directives that predate this rule (all of them no-explicit-any / no-unused-vars); a file may keep at most that many, and every other file none.",
+  "scope": [
+    "bin/**/*.{ts,mts,cts,js,mjs,cjs}",
+    "mcp/**/*.{ts,mts,cts,js,mjs,cjs}",
+    "hooks/**/*.{ts,mts,cts,js,mjs,cjs}",
+    "tests/**/*.{ts,mts,cts,js,mjs,cjs}",
+    "scripts/**/*.{ts,mts,cts,js,mjs,cjs}"
+  ],
+  "allow": ["tests/fixtures/**"],
+  "match": {
+    "kind": "file-regex",
+    "pattern": "(?://|/\\*)\\s*eslint-(?:disable|enable)(?:-next-line|-line)?\\b|/\\*\\s*eslint\\s+[@a-z][@\\w/-]*\\s*:"
+  },
+  "baseline": {
+    "bin/pensmith.ts": 1,
+    "bin/lib/http-mock.ts": 1,
+    "bin/lib/prompts/clack.ts": 1,
+    "bin/lib/sources/unpaywall.ts": 1,
+    "mcp/tools.ts": 1,
+    "tests/lint-thin-shim.test.ts": 2,
+    "tests/mcp-tool-handlers.test.ts": 1,
+    "tests/prompts-numbered.test.ts": 5
+  },
+  "fixture": "tests/fixtures/chokepoints/no-new-eslint-disable.violation.ts.txt"
+}

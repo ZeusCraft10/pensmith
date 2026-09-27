@@ -1,0 +1,13 @@
+// Chokepoint fixture (main-guard, RUN-10): an entry point with a hand-rolled
+// main guard. Under `npm i -g` / `npm link` argv[1] is the bin symlink while
+// import.meta.url is the real path, so this guard is false and the CLI exits 0
+// having done nothing — the rule must flag it (use isMainModule instead).
+import { pathToFileURL } from 'node:url';
+
+async function main(): Promise<void> {
+  process.stdout.write('hello\n');
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  void main();
+}

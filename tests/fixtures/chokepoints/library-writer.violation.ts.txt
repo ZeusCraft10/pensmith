@@ -1,0 +1,14 @@
+// Chokepoint fixture (library-writer, BRDTH-01): a verb writing the library
+// itself. It skips dedup (the engel2009a duplicates of RM-13), the v2 schema
+// (the missing addedAt of T1-9), the library lock and the bib/ris rendering —
+// the rule must flag the renderer import AND both direct writes.
+import path from 'node:path';
+import { writeBibtex } from '../lib/bibtex-write.js';
+import { atomicWriteFile } from '../lib/atomic-write.js';
+import type { SourceCandidate } from '../lib/schemas/source-candidate.js';
+
+export async function sneakyLibraryWrite(paperDir: string, candidates: SourceCandidate[]): Promise<void> {
+  const libraryPath = path.join(paperDir, 'LIBRARY.json');
+  await atomicWriteFile(libraryPath, JSON.stringify({ $schemaVersion: 1, entries: candidates }));
+  await writeBibtex(candidates, path.join(paperDir, 'CITATIONS.bib'));
+}

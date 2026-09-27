@@ -1,0 +1,11 @@
+// Chokepoint fixture (llm-sdk-types-only, RUN-29 / audit #7): a verifier
+// value-importing the LLM SDK and calling it directly. That bypasses
+// bin/lib/http.ts (SSRF guard, egress gate, retry, cost cap, SESSION.log) —
+// the rule must flag it. (A type-only import is allowed; see
+// tests/lint-no-sdk-value-import.test.ts.)
+import Anthropic from '@anthropic-ai/sdk';
+
+export async function sneakyJudge(prompt: string): Promise<unknown> {
+  const client = new Anthropic();
+  return client.messages.create({ model: 'claude-opus-5', max_tokens: 256, messages: [{ role: 'user', content: prompt }] });
+}

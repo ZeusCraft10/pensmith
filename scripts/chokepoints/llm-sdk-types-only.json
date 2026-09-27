@@ -1,0 +1,14 @@
+{
+  "id": "llm-sdk-types-only",
+  "requirement": "RUN-29",
+  "module": "bin/lib/anthropic.ts",
+  "description": "The Anthropic and OpenAI SDKs are imported for TYPES only (audit #7). A value import (`import Anthropic from '@anthropic-ai/sdk'`, `new OpenAI()`) would open a second network path that skips bin/lib/http.ts — no SSRF guard, no egress gate, no retry, no session cost cap, no SESSION.log record. Every completion goes through complete() in bin/lib/anthropic.ts, which sends its requests through http.ts; `import type … from '@anthropic-ai/sdk'` stays allowed.",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs", "scripts/**/*.mjs"],
+  "allow": [],
+  "match": {
+    "kind": "import",
+    "pattern": "^(?:@anthropic-ai/sdk|openai)(?:/.*)?$",
+    "typeImports": "allow"
+  },
+  "fixture": "tests/fixtures/chokepoints/llm-sdk-types-only.violation.ts.txt"
+}

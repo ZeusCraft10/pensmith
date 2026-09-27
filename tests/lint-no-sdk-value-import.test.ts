@@ -1,20 +1,23 @@
-// tests/lint-no-sdk-value-import.test.ts — audit #7 architectural guard.
+// tests/lint-no-sdk-value-import.test.ts — audit #7 architectural guard, now the
+// `llm-sdk-types-only` chokepoint row (RUN-29).
 //
 // The Pass-2 / Pass-4 verifiers used to `import Anthropic from '@anthropic-ai/sdk'`
 // and call `client.messages.create(...)` directly, bypassing the bin/lib/http.ts
 // (D-06) transport chokepoint — so those calls got no SSRF pre-flight guard, no
 // retry/backoff, no polite User-Agent, no central budget/cost handling. The
-// eslint no-restricted-imports rule bans undici/http/https but NOT the LLM SDK,
-// so the bypass was invisible to lint. This source-grep guard (the repo's
-// lint-*.test.ts idiom) asserts no file VALUE-imports the LLM SDK: every LLM
-// completion must flow through bin/lib/anthropic.ts::complete() → http.ts. A
-// TYPE-only import (`import type ... from '@anthropic-ai/sdk'`) is allowed.
+// guard is now a row of the data-driven `pensmith/chokepoint` ESLint rule
+// (scripts/chokepoints/llm-sdk-types-only.json), so `npm run lint` fails on a
+// value import anywhere in bin/, mcp/, hooks/ or scripts/. This suite keeps the
+// original source walk as a second, lint-independent check and pins the one
+// semantic the row must keep: a TYPE-only import stays allowed.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { ESLint } from 'eslint';
+import { REPO_ROOT, loadChokepointRows, matchersOf } from '../scripts/eslint-rules/chokepoint.mjs';
 
 const binDir = fileURLToPath(new URL('../bin', import.meta.url));
 
@@ -48,10 +51,15 @@ test('audit #7: no file value-imports the LLM SDK (all completions go through co
   );
 });
 
-test('audit #7: the type-only SDK import in anthropic.ts is still permitted', async () => {
-  const anthropicTs = await readFile(path.join(binDir, 'lib', 'anthropic.ts'), 'utf8');
-  assert.ok(
-    /import\s+type\s+Anthropic\s+from\s+['"]@anthropic-ai\/sdk['"]/.test(anthropicTs),
-    'anthropic.ts must keep its type-only SDK import (the guard must not ban type imports)',
-  );
+test('audit #7 / RUN-29: the llm-sdk-types-only row enforces it in ESLint, and a type-only import stays allowed', async () => {
+  const row = loadChokepointRows().find((r) => r.id === 'llm-sdk-types-only');
+  assert.ok(row, 'scripts/chokepoints/llm-sdk-types-only.json ships');
+  assert.ok(matchersOf(row).some((m) => m.kind === 'import' && m.typeImports === 'allow'));
+  const eslint = new ESLint({ cwd: REPO_ROOT });
+  const lint = async (code: string): Promise<number> => {
+    const [r] = await eslint.lintText(code, { filePath: path.join(REPO_ROOT, 'bin', 'lib', 'verify', 'sdk-probe.ts') });
+    return (r?.messages ?? []).filter((m) => m.ruleId === 'pensmith/chokepoint' && m.message.includes('"llm-sdk-types-only"')).length;
+  };
+  assert.equal(await lint(`import type Anthropic from '@anthropic-ai/sdk';\nexport type M = Anthropic.Message;\n`), 0);
+  assert.equal(await lint(`import Anthropic from '@anthropic-ai/sdk';\nexport const c = new Anthropic();\n`), 1);
 });

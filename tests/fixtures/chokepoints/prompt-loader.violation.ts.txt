@@ -1,0 +1,9 @@
+// Chokepoint fixture (prompt-loader, RUN-29 / D-12): a module reading a prompt
+// template directly. It skips the EXPECTED_PROMPT_HASHES pin, so an edited or
+// tampered prompt would reach the model — the rule must flag it.
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+export function sneakyPrompt(pkgRoot: string, slug: string): string {
+  return readFileSync(path.join(pkgRoot, 'templates', 'prompts', `${slug}.md`), 'utf8');
+}
