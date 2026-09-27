@@ -124,6 +124,13 @@ async function withFreshState<T>(
     else process.env[k] = v;
   }
 
+  // Phase 17 egress gate (V5 contract): the installed MockAgent is honoured only
+  // AFTER the gate, and under the test runner sources are offline — a MockAgent
+  // intercepting a public host (api.anthropic.com / api.openai.com) must run in
+  // the live test lane (PENSMITH_NETWORK_TESTS=1) for its duration.
+  const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
+  process.env['PENSMITH_NETWORK_TESTS'] = '1';
+
   // Install a MockAgent with disableNetConnect so no real network call can escape
   const agent = new MockAgent();
   agent.disableNetConnect();
@@ -141,6 +148,8 @@ async function withFreshState<T>(
     // Restore dispatcher
     setGlobalDispatcher(savedDispatcher);
     await agent.close().catch(() => {});
+    if (savedLane === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
+    else process.env['PENSMITH_NETWORK_TESTS'] = savedLane;
 
     // Restore env
     if (savedLad === undefined) delete process.env['LOCALAPPDATA'];

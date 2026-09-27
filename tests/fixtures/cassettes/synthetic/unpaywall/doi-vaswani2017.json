@@ -2,7 +2,7 @@
   {
     "scope": "https://api.unpaywall.org",
     "method": "GET",
-    "path": "/v2/10.48550/arxiv.1706.03762?email=akhilachanta8%40gmail.com",
+    "path": "/v2/10.48550/arxiv.1706.03762",
     "status": 200,
     "response": {
       "doi": "10.48550/arxiv.1706.03762",
@@ -10,8 +10,14 @@
       "year": 2017,
       "is_oa": true,
       "z_authors": [
-        { "family": "Vaswani", "given": "Ashish" },
-        { "family": "Shazeer", "given": "Noam" }
+        {
+          "family": "Vaswani",
+          "given": "Ashish"
+        },
+        {
+          "family": "Shazeer",
+          "given": "Noam"
+        }
       ],
       "best_oa_location": {
         "url": "https://arxiv.org/abs/1706.03762",
@@ -20,6 +26,8 @@
         "version": "submittedVersion"
       }
     },
-    "responseHeaders": { "content-type": "application/json" }
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
   }
 ]

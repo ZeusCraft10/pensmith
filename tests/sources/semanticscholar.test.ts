@@ -1,53 +1,59 @@
-// tests/sources/semanticscholar.test.ts — Wave 0 stub for RSCH-03/04 / T-3-13.
-// Per-adapter parse test against committed cassette.
-// D-16: PENSMITH_S2_API_KEY missing-key WARN-once behavior.
+// tests/sources/semanticscholar.test.ts — Semantic Scholar adapter (RSCH-03/04,
+// T-3-13, D-16).
 //
-// Production code required: bin/lib/sources/semanticscholar.ts + cassette
-// Until then: existence assertions fire RED; behavioral tests skip gracefully.
+// Keyless Semantic Scholar answered HTTP 429 when Phase 17 re-recorded the
+// cassettes, so this adapter is exercised against the hand-written SYNTHETIC
+// fixture (tests/fixtures/cassettes/synthetic/semanticscholar/), whose request
+// paths match the adapter's URLs exactly. Re-record with
+// `npm run cassettes:refresh -- --only semanticscholar` (a PENSMITH_S2_API_KEY
+// lifts the limit).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync } from 'node:fs';
+import * as s2 from '../../bin/lib/sources/semanticscholar.js';
+import { assertOfflineMiss } from './recorded.js';
 
-const ADAPTER = 'semanticscholar';
-const adapterPath = new URL(`../../bin/lib/sources/${ADAPTER}.ts`, import.meta.url);
-const cassetteDir = new URL(`../../tests/fixtures/cassettes/${ADAPTER}/`, import.meta.url);
-
-test(`${ADAPTER}: production adapter exists (RSCH-03/04, T-3-13)`, () => {
-  assert.ok(existsSync(adapterPath), `MISSING: bin/lib/sources/${ADAPTER}.ts — Plan 04 must create before this test passes`);
+test('semanticscholar.search() parses the fixture into SourceCandidate[] (RSCH-03)', async () => {
+  const results = await s2.search('attention mechanisms', { limit: 20 });
+  assert.ok(results.length > 0);
+  assert.equal(results[0]?.title, 'Attention Is All You Need');
+  assert.equal(results[0]?.doi, '10.48550/arXiv.1706.03762');
+  assert.equal(results[0]?.id, '0796f6cd597d2b07b571e4b4ebf3e8aef0f5e3af');
+  for (const r of results) {
+    assert.equal(r.source, 'semanticscholar');
+    assert.ok(r.authors.length > 0);
+  }
 });
 
-test(`${ADAPTER}: at least one cassette exists (T-3-13)`, () => {
-  const hasCassettes = existsSync(cassetteDir) && readdirSync(cassetteDir).some(f => f.endsWith('.json'));
-  assert.ok(hasCassettes, `MISSING: tests/fixtures/cassettes/${ADAPTER}/*.json — Plan 04 Task 4.1 must create`);
+test('semanticscholar.fetchById() hydrates exactly the requested paperId (RSCH-04)', async () => {
+  const r = await s2.fetchById('0796f6cd597d2b07b571e4b4ebf3e8aef0f5e3af');
+  assert.ok(r);
+  assert.equal(r.id, '0796f6cd597d2b07b571e4b4ebf3e8aef0f5e3af');
+  assert.equal(r.title, 'Attention Is All You Need');
 });
 
-const skip = !existsSync(adapterPath);
-
-test(`${ADAPTER}.search() parses cassette into SourceCandidate[] (RSCH-03)`, { skip }, async () => {
-  const adapter = await import(`../../bin/lib/sources/${ADAPTER}.js`);
-  const results = await adapter.search('attention mechanisms');
-  assert.ok(Array.isArray(results), 'search returns array');
-  assert.ok(results.length >= 0, 'search returns non-negative count');
-});
-
-test(`${ADAPTER}.fetchById() parses cassette into SourceCandidate | null (RSCH-04)`, { skip }, async () => {
-  const adapter = await import(`../../bin/lib/sources/${ADAPTER}.js`);
-  const result = await adapter.fetchById('0796f6cd597d2b07b571e4b4ebf3e8aef0f5e3af');
-  assert.ok(result === null || typeof result === 'object', 'fetchById returns object or null');
-});
-
-test(`missing PENSMITH_S2_API_KEY emits WARN-once and falls back to keyless mode (D-16)`, { skip }, async () => {
-  // Ensure PENSMITH_S2_API_KEY is not set for this test.
+test('missing PENSMITH_S2_API_KEY: WARN once on stderr, keyless request still served (D-16)', async () => {
   const original = process.env['PENSMITH_S2_API_KEY'];
   delete process.env['PENSMITH_S2_API_KEY'];
+  const chunks: string[] = [];
+  const orig = process.stderr.write.bind(process.stderr);
+  (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => {
+    chunks.push(String(s));
+    return true;
+  };
   try {
-    const adapter = await import(`../../bin/lib/sources/${ADAPTER}.js`);
-    // The adapter must NOT throw when the key is absent — it falls back to keyless mode (D-16).
-    // The WARN-once banner is emitted to stderr; we only check non-throw behavior here.
-    const results = await adapter.search('test query');
-    assert.ok(Array.isArray(results), 'adapter must work without PENSMITH_S2_API_KEY (D-16 keyless fallback)');
+    const results = await s2.search('test query', { limit: 20 });
+    assert.ok(Array.isArray(results), 'the adapter works without PENSMITH_S2_API_KEY (keyless fallback)');
+    await s2.search('test query', { limit: 20 });
   } finally {
+    (process.stderr as unknown as { write: typeof orig }).write = orig;
     if (original !== undefined) process.env['PENSMITH_S2_API_KEY'] = original;
   }
+  const warns = chunks.join('').match(/PENSMITH_S2_API_KEY not set/g) ?? [];
+  assert.ok(warns.length <= 1, 'the keyless WARN is printed at most once per process');
+});
+
+test('RUN-03: an unrecorded Semantic Scholar query or paperId is a typed offline miss', async () => {
+  await assertOfflineMiss(() => s2.search('medieval Icelandic sagas', { limit: 10 }), 'search miss');
+  await assertOfflineMiss(() => s2.fetchById('ffffffffffffffffffffffffffffffffffffffff'), 'fetchById miss');
 });

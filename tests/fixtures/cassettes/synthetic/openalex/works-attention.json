@@ -2,10 +2,12 @@
   {
     "scope": "https://api.openalex.org",
     "method": "GET",
-    "path": "/works?search=attention+mechanisms&per-page=20&mailto=akhilachanta8%40gmail.com",
+    "path": "/works?search=attention+mechanisms&per-page=20&select=id%2Cdoi%2Ctitle%2Cpublication_year%2Cauthorships",
     "status": 200,
     "response": {
-      "meta": { "count": 3 },
+      "meta": {
+        "count": 3
+      },
       "results": [
         {
           "id": "https://openalex.org/W2963403868",
@@ -13,8 +15,16 @@
           "title": "Attention Is All You Need",
           "publication_year": 2017,
           "authorships": [
-            { "author": { "display_name": "Ashish Vaswani" } },
-            { "author": { "display_name": "Noam Shazeer" } }
+            {
+              "author": {
+                "display_name": "Ashish Vaswani"
+              }
+            },
+            {
+              "author": {
+                "display_name": "Noam Shazeer"
+              }
+            }
           ]
         },
         {
@@ -23,8 +33,16 @@
           "title": "Non-local Neural Networks",
           "publication_year": 2018,
           "authorships": [
-            { "author": { "display_name": "Xiaolong Wang" } },
-            { "author": { "display_name": "Ross Girshick" } }
+            {
+              "author": {
+                "display_name": "Xiaolong Wang"
+              }
+            },
+            {
+              "author": {
+                "display_name": "Ross Girshick"
+              }
+            }
           ]
         },
         {
@@ -33,18 +51,28 @@
           "title": "A Survey on Attention Mechanisms",
           "publication_year": 2019,
           "authorships": [
-            { "author": { "display_name": "Sneha Chaudhari" } },
-            { "author": { "display_name": "Varun Mithal" } }
+            {
+              "author": {
+                "display_name": "Sneha Chaudhari"
+              }
+            },
+            {
+              "author": {
+                "display_name": "Varun Mithal"
+              }
+            }
           ]
         }
       ]
     },
-    "responseHeaders": { "content-type": "application/json" }
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
   },
   {
     "scope": "https://api.openalex.org",
     "method": "GET",
-    "path": "/works/W2741809807?mailto=akhilachanta8%40gmail.com",
+    "path": "/works/W2741809807?select=id%2Cdoi%2Ctitle%2Cpublication_year%2Cauthorships",
     "status": 200,
     "response": {
       "id": "https://openalex.org/W2741809807",
@@ -52,9 +80,15 @@
       "title": "Attention Is All You Need",
       "publication_year": 2017,
       "authorships": [
-        { "author": { "display_name": "Ashish Vaswani" } }
+        {
+          "author": {
+            "display_name": "Ashish Vaswani"
+          }
+        }
       ]
     },
-    "responseHeaders": { "content-type": "application/json" }
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
   }
 ]

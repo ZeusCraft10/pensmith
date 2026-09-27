@@ -55,6 +55,8 @@ export const RECORDED_DOI = '10.1038/nphys1170';
 export const RECORDED_CROSSREF_404_DOI = '10.48550/arXiv.1706.03762';
 /** An arXiv id recorded for fetchById. */
 export const RECORDED_ARXIV_ID = '1706.03762';
+/** The title add.ts extracts from tests/fixtures/pdf/byo-text.pdf. */
+export const BYO_PDF_TITLE = 'Attention Is All You Need';
 
 /**
  * The recorded query sets. Each cassette file is a list of calls; `limit` calls
@@ -65,6 +67,9 @@ export const RECORDED_ARXIV_ID = '1706.03762';
 const QUERY_SETS = {
   crossref: [
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3 }] },
+    // `add <tests/fixtures/pdf/byo-text.pdf>`: the PDF's title heuristic, limit 1,
+    // then the verifyDoi re-fetch of the hit.
+    { file: 'search-byo-pdf-title', calls: [{ fn: 'search', arg: BYO_PDF_TITLE, limit: 1, thenFetchFirst: true }] },
     { file: 'works-nphys1170', calls: [{ fn: 'fetchById', arg: RECORDED_DOI }] },
     { file: 'works-arxiv-doi-404', calls: [{ fn: 'fetchById', arg: RECORDED_CROSSREF_404_DOI }] },
   ],
@@ -140,7 +145,12 @@ async function runChild(adapter) {
       for (;;) {
         http.takeRecordedFixtures(); // drop anything stale
         const args = call.fn === 'search' ? [call.arg, { limit }] : [call.arg];
-        await mod[call.fn](...args);
+        const result = await mod[call.fn](...args);
+        // `thenFetchFirst`: also record the re-fetch of the first hit's DOI (the
+        // `add <pdf>` path: title search → verifyDoi on the hit).
+        if (call.thenFetchFirst && Array.isArray(result) && result[0]?.doi) {
+          await mod.fetchById(result[0].doi);
+        }
         const recorded = http.takeRecordedFixtures();
         if (recorded.length === 0) {
           throw new Error(

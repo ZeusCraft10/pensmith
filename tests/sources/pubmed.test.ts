@@ -1,37 +1,34 @@
-// tests/sources/pubmed.test.ts — Wave 0 stub for RSCH-03/04 / T-3-13.
-// Per-adapter parse test against committed cassette.
-//
-// Production code required: bin/lib/sources/pubmed.ts + cassette
-// Until then: existence assertions fire RED; behavioral tests skip gracefully.
+// tests/sources/pubmed.test.ts — PubMed E-utilities adapter against RECORDED
+// cassettes (two-step esearch → esummary; RSCH-03/04, T-3-13, CI-07).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync } from 'node:fs';
+import * as pubmed from '../../bin/lib/sources/pubmed.js';
+import { RECORDED_QUERY, recorded, assertOfflineMiss } from './recorded.js';
 
-const ADAPTER = 'pubmed';
-const adapterPath = new URL(`../../bin/lib/sources/${ADAPTER}.ts`, import.meta.url);
-const cassetteDir = new URL(`../../tests/fixtures/cassettes/${ADAPTER}/`, import.meta.url);
+interface Esearch { esearchresult: { idlist: string[] } }
+interface Esummary { result: Record<string, { uid?: string; title?: string; authors?: Array<{ name?: string }> }> }
 
-test(`${ADAPTER}: production adapter exists (RSCH-03/04, T-3-13)`, () => {
-  assert.ok(existsSync(adapterPath), `MISSING: bin/lib/sources/${ADAPTER}.ts — Plan 04 must create before this test passes`);
+test('pubmed.search() replays the recorded esearch + esummary pair (RSCH-03)', async () => {
+  const entries = recorded('pubmed', 'search-attention-neural-networks');
+  const esearch = entries.find((e) => e.path.includes('esearch.fcgi'));
+  const esummary = entries.find((e) => e.path.includes('esummary.fcgi'));
+  assert.ok(esearch && esummary, 'both steps are recorded');
+  const ids = (esearch.response as Esearch).esearchresult.idlist;
+  assert.ok(ids.length > 0);
+  const summary = (esummary.response as Esummary).result;
+  const expected = ids.filter((id) => summary[id]?.title && (summary[id]?.authors ?? []).length > 0);
+
+  const results = await pubmed.search(RECORDED_QUERY, { limit: 10 });
+  assert.deepEqual(results.map((r) => r.id), expected, 'one candidate per recorded PMID with a title and authors');
+  for (const r of results) {
+    assert.equal(r.source, 'pubmed');
+    assert.equal(r.title, String(summary[r.id]?.title).trim());
+    assert.ok(r.authors.length > 0);
+  }
 });
 
-test(`${ADAPTER}: at least one cassette exists (T-3-13)`, () => {
-  const hasCassettes = existsSync(cassetteDir) && readdirSync(cassetteDir).some(f => f.endsWith('.json'));
-  assert.ok(hasCassettes, `MISSING: tests/fixtures/cassettes/${ADAPTER}/*.json — Plan 04 Task 4.1 must create`);
-});
-
-const skip = !existsSync(adapterPath);
-
-test(`${ADAPTER}.search() parses cassette into SourceCandidate[] (RSCH-03)`, { skip }, async () => {
-  const adapter = await import(`../../bin/lib/sources/${ADAPTER}.js`);
-  const results = await adapter.search('attention mechanisms neural networks');
-  assert.ok(Array.isArray(results), 'search returns array');
-  assert.ok(results.length >= 0, 'search returns non-negative count');
-});
-
-test(`${ADAPTER}.fetchById() parses cassette into SourceCandidate | null (RSCH-04)`, { skip }, async () => {
-  const adapter = await import(`../../bin/lib/sources/${ADAPTER}.js`);
-  const result = await adapter.fetchById('12345678');
-  assert.ok(result === null || typeof result === 'object', 'fetchById returns object or null');
+test('RUN-03: an unrecorded PubMed query or PMID is a typed offline miss', async () => {
+  await assertOfflineMiss(() => pubmed.search('medieval Icelandic sagas', { limit: 10 }), 'search miss');
+  await assertOfflineMiss(() => pubmed.fetchById('12345678'), 'fetchById miss');
 });

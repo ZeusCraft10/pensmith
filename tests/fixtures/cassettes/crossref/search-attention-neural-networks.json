@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 2733886,
+        "total-results": 2733885,
         "items": [
           {
             "DOI": "10.1016/j.neunet.2026.109418",
@@ -630,7 +630,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-27T18:21:29.034Z",
+      "recordedAt": "2026-09-27T18:38:36.353Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

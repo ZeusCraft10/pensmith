@@ -1,0 +1,20 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/rw-unavailable",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message": {
+        "DOI": "10.0000/rw-unavailable",
+        "title": ["A Retraction-Status-Unavailable Fixture"],
+        "author": [{ "family": "Gap", "given": "Rita" }],
+        "issued": { "date-parts": [[2018]] },
+        "container-title": ["Test Journal"],
+        "type": "journal-article"
+      }
+    },
+    "responseHeaders": { "content-type": "application/json" }
+  }
+]

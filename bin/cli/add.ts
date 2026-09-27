@@ -299,6 +299,9 @@ export const addCommand = defineCommand({
     //     it is STILL added with a warning (the Pass-1 verifier blocks compile on
     //     FABRICATED at verify time — T-08-04-04: add cannot smuggle a verified
     //     source past the verifier). Never let a transport throw abort the add.
+    //     RUN-03/RUN-04: verification that is UNAVAILABLE because of the network
+    //     mode (no recorded fixture offline, or --dry-run) is not a transport
+    //     blip — nothing is added.
     if (candidate.doi) {
       try {
         const v = await verifyDoi(candidate.doi);
@@ -307,7 +310,16 @@ export const addCommand = defineCommand({
             `pensmith add: WARNING — DOI ${candidate.doi} did not verify (added as unverified; compile will re-check).\n`,
           );
         }
-      } catch {
+      } catch (err) {
+        if (isOfflineEgressError(err)) {
+          const label = offlineLabel(err);
+          process.stderr.write(
+            `pensmith add: DOI verification unavailable (${label}) — ${candidate.doi} NOT added` +
+            `${label === 'offline' ? '; re-run online to verify and add it' : ''}.\n`,
+          );
+          if (label === 'offline') process.exitCode = EXIT_ERROR;
+          return { ok: false, refused: label === 'offline', mode: label };
+        }
         // verification transport error — add proceeds, verifier re-checks later.
       }
     }
