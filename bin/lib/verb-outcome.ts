@@ -94,6 +94,15 @@ export function classifyFailure(e: unknown): ClassifiedFailure {
   return { code: EXIT_ERROR, message: oneLine(msg) || 'unexpected error', unexpected: true };
 }
 
+/**
+ * The one stderr line for a classified failure. Messages that already name
+ * their origin (`pensmith research: …`, `pensmith add: …`) are printed as they
+ * are; every other message gets the `pensmith: ` prefix — never both.
+ */
+export function failureLine(message: string): string {
+  return /^pensmith[\s:]/.test(message) ? message : `pensmith: ${message}`;
+}
+
 /** A verb or tool call's classified outcome (the MCP `isError` payload source). */
 export interface ClassifiedOutcome {
   /** The return value (null when it threw). */

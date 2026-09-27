@@ -62,7 +62,7 @@ import { migrateLegacyLayout } from './lib/state.js';
 import { acquireSessionLock, releaseSessionLock } from './lib/session-lock.js';
 import { runGate, declineGate, canPrompt } from './lib/gates.js';
 import { EXIT_CODES, EXIT_USAGE, EXIT_ERROR, EXIT_COST_CAP, PensmithError } from './lib/exit-codes.js';
-import { classifyFailure, finalExitCode, stripAnsi } from './lib/verb-outcome.js';
+import { classifyFailure, finalExitCode, failureLine, stripAnsi } from './lib/verb-outcome.js';
 import { setMirrorPromptsToStderr, setSessionArgv } from './lib/session-log.js';
 import { announceModes } from './lib/http-mock.js';
 import { projectEstimate, renderEstimate } from './lib/estimator.js';
@@ -829,7 +829,7 @@ export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<
   } catch (e) {
     const failure = classifyFailure(e);
     code = failure.code;
-    process.stderr.write(`pensmith: ${failure.message}\n`);
+    process.stderr.write(`${failureLine(failure.message)}\n`);
     if (failure.unexpected) {
       if (process.env['PENSMITH_DEBUG'] === '1' && e instanceof Error && e.stack) {
         process.stderr.write(`${e.stack}\n`);

@@ -22,7 +22,7 @@ import {
   EXIT_COST_CAP,
   PensmithError,
 } from '../bin/lib/exit-codes.js';
-import { exitCodeForResult, finalExitCode, classifyFailure } from '../bin/lib/verb-outcome.js';
+import { exitCodeForResult, finalExitCode, classifyFailure, failureLine } from '../bin/lib/verb-outcome.js';
 import { PromptAbortedError } from '../bin/lib/prompts.js';
 import {
   CLI_BIN,
@@ -262,4 +262,26 @@ test('RUN-12: an unexpected error prints one line plus the PENSMITH_DEBUG hint â
   const dbg = runCli(sb, root, ['write', '--yolo'], { env: { PENSMITH_DEBUG: '1' } });
   assert.equal(dbg.status, EXIT_ERROR);
   assert.match(dbg.stderr, STACK_LINE, 'PENSMITH_DEBUG=1 prints the stack');
+});
+
+test('RUN-12: a failure line carries exactly one pensmith prefix', () => {
+  assert.equal(failureLine('export cancelled by user'), 'pensmith: export cancelled by user');
+  assert.equal(
+    failureLine('pensmith research: no LLM key configured (ANTHROPIC_API_KEY is not set for provider anthropic).'),
+    'pensmith research: no LLM key configured (ANTHROPIC_API_KEY is not set for provider anthropic).',
+  );
+  assert.equal(failureLine('pensmith: already prefixed'), 'pensmith: already prefixed');
+  assert.equal(failureLine('pensmith.json is missing'), 'pensmith: pensmith.json is missing');
+});
+
+test('RUN-12: the built CLI never prints a doubled "pensmith: pensmith" prefix', () => {
+  const sb = sandbox('exit-prefix');
+  const cwd = sb.project('p');
+  writeState(cwd, [{ n: 1, slug: 'intro' }]);
+  const r = runCli(sb, cwd, ['plan', '1'], {
+    env: { ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined, PENSMITH_NO_LLM: undefined },
+  });
+  assert.equal(r.status, EXIT_ERROR, r.stderr);
+  assert.match(r.stderr, /^pensmith plan: no LLM key configured/m);
+  assert.doesNotMatch(r.stderr, /pensmith: pensmith/);
 });
