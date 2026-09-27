@@ -533,7 +533,7 @@ refusal_fallbacks = "off"            # off | default — opt-in Anthropic server
 # endpoint and api_key_env are NOT allowed here: a paper's files cannot choose
 # where prompts and keys are sent. They live only in the global runtime.json
 # (pensmithDataDir()/runtime.json); api_key_env must be ANTHROPIC_API_KEY,
-# OPENAI_API_KEY or end in _API_KEY and must not name a credential of another tool.
+# OPENAI_API_KEY or match ^[A-Z][A-Z0-9_]*_API_KEY$ (never e.g. GITHUB_TOKEN).
 
 [runtime.slugs.section-drafter]      # per-prompt-slug overrides (any slug in templates/prompts/)
 model = "claude-opus-5"

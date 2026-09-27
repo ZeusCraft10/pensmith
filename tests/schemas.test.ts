@@ -6,8 +6,11 @@
 //   - library  : valid empty, valid with entry, rejects empty-id entry
 //   - checkpoint: valid + rejects empty label
 //   - session-log: valid (kind=event/tool_call), rejects bad-kind, rejects missing run_id
-//   - runtime-config: valid record form + defaults + rejects empty record
-//   - runtime-config: providers overlay-merges by key (record-form proof)
+//   - runtime-config (v2, Phase 17 D-17-19): flat provider/model form + defaults;
+//     unknown provider, bad endpoint and bad api_key_env rejected; the legacy v1
+//     record form is read only by the v1→v2 migration. (Superseded: the v1
+//     per-paper providers overlay-merge — a paper can no longer choose the
+//     endpoint or key variable.)
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,17 +32,19 @@ import {
 } from '../bin/lib/schemas/session-log.js';
 import {
   Schema as RuntimeConfigSchema,
+  RuntimeConfigV1Schema,
   CURRENT_RUNTIME_CONFIG_VERSION,
 } from '../bin/lib/schemas/runtime-config.js';
+import { migrate as runtimeV1ToV2 } from '../bin/lib/migrations/runtime-config/v1_to_v2.js';
 
 const ISO = '2026-05-08T00:00:00.000Z';
 
-test('CURRENT_*_VERSION constants (state=2, others=1)', () => {
+test('CURRENT_*_VERSION constants (state=2, runtime-config=2, others=1)', () => {
   assert.equal(CURRENT_STATE_VERSION, 2);
   assert.equal(CURRENT_LIBRARY_VERSION, 1);
   assert.equal(CURRENT_CHECKPOINT_VERSION, 1);
   assert.equal(CURRENT_SESSION_LOG_VERSION, 1);
-  assert.equal(CURRENT_RUNTIME_CONFIG_VERSION, 1);
+  assert.equal(CURRENT_RUNTIME_CONFIG_VERSION, 2);
 });
 
 // ---- state ----
@@ -158,42 +163,45 @@ test('session-log: valid kind=event / kind=tool_call + rejects bad kind + reject
 
 // ---- runtime-config ----
 
-test('runtime-config: valid record form + defaults', () => {
+test('runtime-config v2: flat provider/model form + defaults', () => {
   const parsed = RuntimeConfigSchema.parse({
-    $schemaVersion: 1,
-    providers: {
-      anthropic: { name: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY' },
-    },
+    $schemaVersion: 2,
+    provider: 'anthropic',
+    model: 'claude-opus-5',
+    api_key_env: 'ANTHROPIC_API_KEY',
+    slugs: { 'claim-support': { model: 'claude-sonnet-5', effort: 'low' } },
   });
   // Defaults from Key Finding #5 / D-61
   assert.equal(parsed.openalexApiKeyEnv, 'OPENALEX_API_KEY');
   assert.equal(parsed.openalexApiKeyOptional, true);
   assert.equal(parsed.contactEmailEnv, 'PENSMITH_CONTACT_EMAIL');
-  // Provider keyed by id is accessible via record lookup (W11/W13 pattern)
-  assert.equal(parsed.providers['anthropic']?.apiKeyEnv, 'ANTHROPIC_API_KEY');
+  assert.equal(parsed.provider, 'anthropic');
+  assert.equal(parsed.slugs?.['claim-support']?.model, 'claude-sonnet-5');
+  // Every field but the version is optional (env detection fills the rest).
+  assert.ok(RuntimeConfigSchema.safeParse({ $schemaVersion: 2 }).success);
 });
 
-test('runtime-config: rejects empty providers record (.refine min-1 guard)', () => {
-  assert.ok(
-    !RuntimeConfigSchema.safeParse({ $schemaVersion: 1, providers: {} }).success,
-  );
+test('runtime-config v2: rejects an unknown provider, a bad endpoint and a non-key api_key_env', () => {
+  const bad = (o: Record<string, unknown>): string => {
+    const r = RuntimeConfigSchema.safeParse({ $schemaVersion: 2, ...o });
+    assert.ok(!r.success, JSON.stringify(o));
+    return r.error.issues.map((i) => i.message).join('; ');
+  };
+  assert.match(bad({ provider: 'bedrock' }), /unknown provider; valid values: anthropic, openai, ollama, vllm, openai-compatible/);
+  assert.match(bad({ endpoint: 'ftp://example.org' }), /http:\/\/ or https:\/\//);
+  assert.match(bad({ endpoint: 'https://user:pw@example.org' }), /must not embed credentials/);
+  assert.match(bad({ api_key_env: 'GITHUB_TOKEN' }), /api_key_env must be ANTHROPIC_API_KEY, OPENAI_API_KEY/);
+  assert.match(bad({ slugs: { 'section-drafter': { temperature: 0 } } }), /Unrecognized key/);
+  assert.ok(!RuntimeConfigSchema.safeParse({ $schemaVersion: 1, providers: {} }).success, 'v1 is not a v2 document');
 });
 
-test('runtime-config: providers overlay-merges by key (record form, not array)', () => {
-  // W11/W13 consumer pattern: base defaults, then per-paper overlay merges
-  // by provider id. This only works because providers is a record (object).
-  const base = RuntimeConfigSchema.parse({
+test('runtime-config v1 (legacy record form) is read by the v1→v2 migration only', () => {
+  const v1 = RuntimeConfigV1Schema.parse({
     $schemaVersion: 1,
-    providers: {
-      anthropic: { name: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY' },
-    },
+    providers: { openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY', defaultModel: 'gpt-6-astra' } },
   });
-  const overlay = RuntimeConfigSchema.parse({
-    $schemaVersion: 1,
-    providers: { openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY' } },
-  });
-  const merged = { ...base.providers, ...overlay.providers };
-  assert.ok(merged['anthropic'], 'base provider survives merge');
-  assert.ok(merged['openai'], 'overlay provider added by merge');
-  assert.equal(merged['openai']?.apiKeyEnv, 'OPENAI_API_KEY');
+  const v2 = RuntimeConfigSchema.parse(runtimeV1ToV2(v1));
+  assert.equal(v2.provider, 'openai');
+  assert.equal(v2.model, 'gpt-6-astra');
+  assert.equal(v2.api_key_env, undefined, 'the provider default key variable is implied, not copied');
 });

@@ -287,8 +287,10 @@ function sha256Hex(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
+/** A 200-char preview, scrubbed BEFORE truncation so a key cut at the boundary cannot leak partially. */
 function previewOf(text: string): string {
-  return text.length <= PREVIEW_CHARS ? text : text.slice(0, PREVIEW_CHARS);
+  const clean = scrubSecrets(text);
+  return clean.length <= PREVIEW_CHARS ? clean : clean.slice(0, PREVIEW_CHARS);
 }
 
 /** Replace an llm record's bodies with hashes + previews (`session_bodies = "redacted"`). */

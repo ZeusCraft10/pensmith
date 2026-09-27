@@ -21,7 +21,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openSessionLog, setMirrorPromptsToStderr } from '../bin/lib/session-log.js';
+import { openSessionLog, setMirrorPromptsToStderr, isMirrorPromptsEnabled } from '../bin/lib/session-log.js';
 
 // ---- HARD-03 skip gate: probe deepRedactPii export from pii.ts ----
 // Path resolution via fileURLToPath — Phase-11 spaced-path safe.
@@ -213,20 +213,24 @@ test('D-50 oversize: 100KB payload truncates to <=16KB line; full payload spills
   );
 });
 
-test('D-52 setMirrorPromptsToStderr(true): kind:prompt mirrors to stderr; other kinds do not', async () => {
+// Superseded (D-17-12): the D-52 `prompt`-kind stderr mirror moved to http.ts
+// (`[show-prompts] <METHOD> <url>` + the full LLM request body, before any byte
+// is sent), so a payload prints exactly once. session-log keeps only the flag
+// (isMirrorPromptsEnabled, V4) that http.ts reads, and never writes to stderr.
+test('D-17-12: setMirrorPromptsToStderr sets the flag http.ts reads; session-log itself never mirrors to stderr', async () => {
   const tmp = mkTmp();
   setEnvForTmp(tmp);
   const captured: string[] = [];
   const original = process.stderr.write.bind(process.stderr);
-  // Stub stderr.write — we use `as unknown as typeof process.stderr.write` to
-  // sidestep the overloaded signature; only `chunk` is exercised.
   const stub = ((chunk: unknown): boolean => {
     captured.push(String(chunk));
     return true;
   }) as unknown as typeof process.stderr.write;
   process.stderr.write = stub;
   try {
+    assert.equal(isMirrorPromptsEnabled(), false);
     setMirrorPromptsToStderr(true);
+    assert.equal(isMirrorPromptsEnabled(), true);
     const log = openSessionLog({ scope: 'global', cwd: tmp });
     log.prompt({ p: 'gen 1' });
     log.event({ note: 'should not mirror' });
@@ -235,9 +239,9 @@ test('D-52 setMirrorPromptsToStderr(true): kind:prompt mirrors to stderr; other 
     setMirrorPromptsToStderr(false);
     process.stderr.write = original;
   }
-  const all = captured.join('');
-  assert.ok(all.includes('[prompt'), 'expected stderr to receive prompt mirror header');
-  assert.ok(!all.includes('should not mirror'), 'event records must NOT mirror to stderr');
+  assert.equal(captured.join(''), '', 'no session-log record is mirrored to stderr');
+  const lines = readLines(await logFilePath());
+  assert.ok(lines.some((l) => l['kind'] === 'prompt' && l['p'] === 'gen 1'), 'the prompt is still logged');
 });
 
 test('child bindings carry into every line; child shares parent run_id; bindings themselves redacted', async () => {

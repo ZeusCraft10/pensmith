@@ -69,6 +69,7 @@ import {
 import {
   contractFor,
   correctiveInstruction,
+  type ParseOutcome,
   jsonSchemaForSlug,
   parseStructured,
 } from './llm-contracts.js';
@@ -896,7 +897,7 @@ async function runWithRetry(
   key: string | null,
   messages: ChatMessage[],
   attemptKind: 'initial' | 'corrective-retry',
-): Promise<{ result: AttemptResult; spentUsd: number; body: Record<string, unknown>; requestText: string; requestSha: string; replayOf?: string }> {
+): Promise<{ result: AttemptResult; parsed: ParseOutcome<unknown> | null; spentUsd: number; body: Record<string, unknown>; requestText: string; requestSha: string; replayOf?: string }> {
   const root = projectRoot();
   // Every billed attempt (a truncated first attempt included) counts toward the call's cost.
   let spentUsd = 0;
@@ -931,12 +932,18 @@ async function runWithRetry(
 
     if (replayOf === undefined) spentUsd += result.costUsd;
     const needsRetry = result.stopReason === 'max_tokens' && i + 1 < maxes.length;
+    // Structured slugs: parse a complete reply here so the record carries the
+    // parsed object (D-17-29) and complete() validates exactly what was logged.
+    const parsed = plan.structured && result.stopReason !== 'max_tokens' && result.stopReason !== 'refusal'
+      ? parseStructured(plan.spec.slug, result.text, { strictNulls: plan.native && plan.provider === 'openai' })
+      : null;
     await recordAttempt(plan, opts, {
       attempt: kind,
       requestText,
       requestSha,
       body,
       result,
+      ...(parsed?.ok ? { data: parsed.data } : {}),
       ...(replayOf !== undefined ? { replayOf } : {}),
     });
     if (result.stopReason === 'refusal') {
@@ -946,7 +953,7 @@ async function runWithRetry(
       if (needsRetry) continue;
       throw new ProviderTruncatedError(plan.provider, plan.model, plan.spec.slug, maxTokens);
     }
-    return { result, spentUsd, body, requestText, requestSha, ...(replayOf !== undefined ? { replayOf } : {}) };
+    return { result, parsed, spentUsd, body, requestText, requestSha, ...(replayOf !== undefined ? { replayOf } : {}) };
   }
   // Unreachable: the loop either returns or throws.
   throw new ProviderTruncatedError(plan.provider, plan.model, plan.spec.slug, maxes[maxes.length - 1] as number);
@@ -997,8 +1004,7 @@ export async function complete<T = unknown>(opts: CompleteOptions): Promise<Comp
   let data: unknown;
 
   if (plan.structured) {
-    const strictNulls = plan.native && plan.provider === 'openai';
-    let parsed = parseStructured(plan.spec.slug, first.result.text, { strictNulls });
+    let parsed = first.parsed ?? { ok: false as const, error: 'no reply to parse' };
     if (!parsed.ok) {
       // One corrective retry after a structural failure (RUN-25).
       const retryMessages: ChatMessage[] = [
@@ -1009,7 +1015,7 @@ export async function complete<T = unknown>(opts: CompleteOptions): Promise<Comp
       const second = await runWithRetry(plan, opts, key, retryMessages, 'corrective-retry');
       totalCost += second.spentUsd;
       final = second;
-      parsed = parseStructured(plan.spec.slug, second.result.text, { strictNulls });
+      parsed = second.parsed ?? { ok: false as const, error: 'no reply to parse' };
       if (!parsed.ok) throw new StructuredOutputError(plan.spec.slug, plan.model, parsed.error);
     }
     data = parsed.data;
