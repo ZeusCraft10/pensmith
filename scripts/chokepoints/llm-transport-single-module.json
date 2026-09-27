@@ -1,0 +1,13 @@
+{
+  "id": "llm-transport-single-module",
+  "requirement": "RUN-29",
+  "module": "bin/lib/anthropic.ts",
+  "description": "Every LLM provider transport (Anthropic Messages, OpenAI chat completions, Ollama / vLLM / OpenAI-compatible) lives in the one completion module, bin/lib/anthropic.ts: request bodies, provider headers, stop-reason handling, streaming, the session cost cap and the SESSION.log llm record. No other shipped module names a provider API path or provider header; call complete() / probeLlmEndpoint() instead. (Renaming the module renames this row, but it stays one module.)",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs", "scripts/**/*.mjs"],
+  "allow": ["bin/lib/anthropic.ts"],
+  "match": {
+    "kind": "string-literal",
+    "pattern": "^(?:/v1)?/(?:messages|chat/completions|completions|responses)(?:\\?.*)?$|^anthropic-(?:version|beta)$|^https://api\\.(?:anthropic|openai)\\.com(?:/v1)?/(?:messages|chat/completions|completions|responses)$"
+  },
+  "fixture": "tests/fixtures/chokepoints/llm-transport-single-module.violation.ts.txt"
+}

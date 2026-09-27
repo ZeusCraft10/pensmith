@@ -1,0 +1,13 @@
+{
+  "id": "config-toml",
+  "requirement": "CONF-01",
+  "module": "bin/lib/config.ts",
+  "description": "bin/lib/config.ts is the only reader and writer of .paper/config.toml (smol-toml + zod, schema_version, migrations, unknown-key warnings, the verify_quotes and paper-level endpoint/api_key_env refusals). Nothing else imports smol-toml or builds a path from the bare 'config.toml' segment; paths.ts and state.ts may name it for the legacy root-file move (RUN-13). Everything else calls readPaperConfigSync / tryReadPaperConfigSync / loadPaperConfig / updatePaperConfig / paperConfigPath.",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs", "scripts/**/*.mjs"],
+  "allow": ["bin/lib/config.ts", "bin/lib/paths.ts", "bin/lib/state.ts"],
+  "match": {
+    "kind": "file-regex",
+    "pattern": "['\"](?:smol-toml|config\\.toml)['\"]"
+  },
+  "fixture": "tests/fixtures/chokepoints/config-toml.violation.ts.txt"
+}

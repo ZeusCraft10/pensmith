@@ -6,11 +6,17 @@
 // branch; the Tier-2 (portable Node CLI) path calls complete() via the
 // Tier-2 LLM transport (GEN-02, Phase 11).
 //
-// Phase 11 wiring: complete() handles isNoLlmMode() short-circuit before
-// key resolution, so verbs do NOT check PENSMITH_NO_LLM themselves.
-//   - With PENSMITH_NO_LLM=1: complete() returns offline mock (no key needed).
-//   - With ANTHROPIC_API_KEY set: complete() makes real API call.
-//   - With no key: getProviderApiKey() throws MissingApiKeyError → fail-loud.
+// Phase 17 wiring (RUN-07, RUN-25, CONF-01):
+//   - assertLlmConfigured('new') runs before any model work: with no usable
+//     provider it throws the one-line MissingApiKeyError ("Set one of:
+//     ANTHROPIC_API_KEY, OPENAI_API_KEY (or configure a local endpoint)").
+//     PENSMITH_NO_LLM=1 (and offline replay) skip it; complete() then returns
+//     the contract stub.
+//   - intake-clarifier is a STRUCTURED slug: complete() returns
+//     {topic, discipline, questions[]} validated against llm-contracts.ts and
+//     INTAKE.md is rendered from that object (renderIntakeMd).
+//   - .paper/config.toml is read and written ONLY through bin/lib/config.ts
+//     (schema_version = 1).
 //
 // D-12 LOCKED prompt slug: `intake-clarifier` (registered in
 // bin/lib/prompt-loader.ts EXPECTED_PROMPT_HASHES).

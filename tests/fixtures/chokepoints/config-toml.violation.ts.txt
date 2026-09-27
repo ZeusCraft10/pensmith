@@ -1,0 +1,11 @@
+// Chokepoint fixture (config-toml, CONF-01): a second .paper/config.toml
+// reader outside bin/lib/config.ts. It skips schema_version, migrations, the
+// unknown-key warnings and the verify_quotes / endpoint refusals — the rule
+// must flag it.
+import { parse } from 'smol-toml';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+export function sneakyConfig(root: string): unknown {
+  return parse(readFileSync(path.join(root, '.paper', 'config.toml'), 'utf8'));
+}

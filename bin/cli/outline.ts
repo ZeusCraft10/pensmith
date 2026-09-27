@@ -5,11 +5,12 @@
 // (D-12 LOCKED slug). In Tier 2 (portable CLI) the verb calls complete()
 // via the Phase 11 transport (GEN-02).
 //
-// Phase 11 wiring: complete() handles isNoLlmMode() short-circuit before
-// key resolution, so verbs do NOT check PENSMITH_NO_LLM themselves.
-//   - With PENSMITH_NO_LLM=1: complete() returns offline mock (no key needed).
-//   - With ANTHROPIC_API_KEY set: complete() makes real API call.
-//   - With no key: getProviderApiKey() throws MissingApiKeyError → fail-loud.
+// Phase 17 wiring (RUN-07, RUN-25): assertLlmConfigured('outline') runs
+// before any model work (one-line MissingApiKeyError when no provider is
+// usable; skipped under PENSMITH_NO_LLM=1). outline-author is a STRUCTURED
+// slug: complete() returns the validated OutlineSchema object and OUTLINE.md
+// is rendered from it (outline-parse.ts renderOutlineMd) — model prose never
+// reaches the file.
 //
 // CLAUDE.md non-negotiable: outline approval is default-ON (only skips with
 // --yolo). The gate mirrors the revise.ts ApprovalUnavailableError pattern:

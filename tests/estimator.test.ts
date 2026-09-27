@@ -1,184 +1,133 @@
-// tests/estimator.test.ts — Phase 7 Wave 0 RED scaffold for ERGO-02 / ERGO-03.
+// tests/estimator.test.ts — ERGO-02 / ERGO-03, updated for Phase 17 (RUN-20,
+// RUN-26, D-17-26, D-17-27).
 //
-// RED-by-skip precedent (05-01 / 06-01): every behavioral assertion is
-// skip-guarded on existsSync('bin/lib/estimator.ts'). Until Plan 07-02 lands
-// the module the suite reports SKIPS with ZERO failures.
-//
-// Asserts the EXACT contract from 07-01-PLAN.md <interfaces>:
-//   export function projectEstimate(args: { paperRoot: string; sessionCapUsd?: number })
-//     : Promise<{ rows: EstimateRow[]; totalUsd: number; exceedsHalfCap: boolean }>
+// Contract (bin/lib/estimator.ts):
+//   projectEstimate({ paperRoot, sessionCapUsd?, from? })
+//     → { rows, totalUsd, capUsd, exceedsCap, nothingLeft, … }
 //   - totalUsd === sum of row.usd
-//   - exceedsHalfCap === (totalUsd > sessionCapUsd * 0.5)
-//   - C2-H1: paper-less dir → empty projection, never throws
-//   - C4-HIGH: present-but-corrupt / schema-invalid STATE.json → empty projection,
-//     never throws (same disposition as the fresh-dir case)
-//   - T-07-03: NO COSTS.jsonl is written during projection (projection never bills)
+//   - exceedsCap === (totalUsd > cap). Superseded: the v0.1 ERGO-03
+//     `exceedsHalfCap` (50% heuristic) refused the default §15 paper; the
+//     --yolo pre-flight now compares against the cap itself (D-17-27).
+//   - C2-H1 (updated by RUN-20): a paper-less dir never throws and projects the
+//     WHOLE pipeline from the assignment / length target (it used to be empty).
+//   - C4-HIGH: a present-but-corrupt or schema-invalid STATE.json never throws
+//     and is treated like "no sections registered yet" (same as a fresh dir).
+//   - T-07-03: projection never bills (no COSTS.jsonl) and never dials.
 
-import { test } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { withLlmSandbox, type LlmSandbox } from './helpers/llm-sandbox.js';
+import {
+  MIN_P90_SAMPLES,
+  p90,
+  parseLengthWords,
+  projectEstimate,
+  sectionCountForLength,
+  VERIFY_CALLS_PER_SECTION,
+} from '../bin/lib/estimator.js';
+import { initSection, initState } from '../bin/lib/state.js';
 
-// RED-by-skip guard — the module under test does not exist until Plan 07-02.
-const ESTIMATOR_SRC = fileURLToPath(new URL('../bin/lib/estimator.ts', import.meta.url));
-const built = existsSync(ESTIMATOR_SRC);
-const ESTIMATOR_MOD = new URL('../bin/lib/estimator.js', import.meta.url).href;
-
-interface EstimateRow { step: string; inputTokens: number; outputTokens: number; usd: number; }
-interface EstimateResult { rows: EstimateRow[]; totalUsd: number; exceedsHalfCap: boolean; }
-type ProjectEstimate = (args: { paperRoot: string; sessionCapUsd?: number }) => Promise<EstimateResult>;
-
-async function loadProject(): Promise<ProjectEstimate> {
-  const mod = (await import(ESTIMATOR_MOD)) as { projectEstimate: ProjectEstimate };
-  return mod.projectEstimate;
+async function twoSectionPaper(sb: LlmSandbox): Promise<void> {
+  await initState(sb.root);
+  fs.writeFileSync(path.join(sb.paper, 'INTAKE.md'), 'Topic: t\n');
+  fs.writeFileSync(path.join(sb.paper, 'LIBRARY.json'), '{"$schemaVersion":1,"entries":[]}');
+  await initSection(sb.root, 1, 'intro');
+  await initSection(sb.root, 2, 'methods');
 }
 
-function freshRoot(): string {
-  return mkdtempSync(join(tmpdir(), 'pensmith-estimator-'));
-}
+test('ERGO-02: projectEstimate returns rows + totalUsd === sum(row.usd) + the cap verdict', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    await twoSectionPaper(sb);
+    const res = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100 });
+    assert.ok(Array.isArray(res.rows) && res.rows.length > 0);
+    const sum = res.rows.reduce((acc, r) => acc + r.usd, 0);
+    assert.ok(Math.abs(res.totalUsd - sum) < 1e-9, `totalUsd ${res.totalUsd} === sum ${sum}`);
+    for (const r of res.rows) {
+      for (const k of ['step', 'inputTokens', 'outputTokens', 'usd']) assert.ok(k in r, `row carries "${k}"`);
+    }
+    assert.deepEqual(res.rows.map((r) => r.step), ['plan §1', 'write §1', 'verify §1', 'plan §2', 'write §2', 'verify §2', 'compile', 'done']);
+    const verify = res.rows.find((r) => r.step === 'verify §1')!;
+    assert.deepEqual(verify.calls.map((c) => [c.slug, c.calls]), Object.entries(VERIFY_CALLS_PER_SECTION));
+    assert.equal(res.capUsd, 100);
+    assert.equal(res.sectionSource, 'state');
+  });
+});
 
-function writeState(root: string, sections: Array<{ n: number; slug: string }>): void {
-  writeFileSync(
-    join(root, 'STATE.json'),
-    JSON.stringify({
-      $schemaVersion: 2,
-      paperId: 'estimator-test',
-      createdAt: new Date().toISOString(),
-      sections,
-    }),
-  );
-}
+test('ERGO-03 (D-17-27): exceedsCap compares with the cap itself, not 50% of it', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    await twoSectionPaper(sb);
+    const probe = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 1_000 });
+    const total = probe.totalUsd;
+    assert.ok(total > 0);
+    // Between 50% and 100% of the cap: the old heuristic refused; now it does not.
+    const between = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: total * 1.5 });
+    assert.equal(between.exceedsCap, false, 'a projection at 67% of the cap is not refused');
+    const over = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: total * 0.9 });
+    assert.equal(over.exceedsCap, true, 'a projection above the cap is');
+    const exact = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: total });
+    assert.equal(exact.exceedsCap, false, 'exactly at the cap fits');
+  });
+});
 
-// --- RED-by-skip presence guard ---
-test('ERGO-02: estimator module presence is consistent with Wave-0 RED state', () => {
-  if (built) {
-    assert.ok(built, 'bin/lib/estimator.ts present — behavioral tests active');
-  } else {
-    assert.ok(!built, 'Wave-0: bin/lib/estimator.ts absent (RED-by-skip)');
+test('ERGO-03: the cap defaults to [budget] cost_cap_usd / $5 when not passed', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    await twoSectionPaper(sb);
+    assert.equal((await projectEstimate({ paperRoot: sb.root })).capUsd, 5);
+    sb.writePaperConfig('schema_version = 1\n[budget]\ncost_cap_usd = 9\n');
+    assert.equal((await projectEstimate({ paperRoot: sb.root })).capUsd, 9);
+  });
+});
+
+test('T-07-03 / ERGO-02: projection never bills (no COSTS.jsonl) and never dials the model', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: 'sk-test-estimator-0001' } }, async (sb) => {
+    await twoSectionPaper(sb);
+    await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100 });
+    assert.equal(fs.existsSync(path.join(sb.paper, 'COSTS.jsonl')), false);
+    assert.equal(sb.mock!.requests.length, 0);
+  });
+});
+
+test('ERGO-02 / C2-H1 (RUN-20): a paper-less dir never throws and projects the whole pipeline', async () => {
+  await withLlmSandbox({ paper: false }, async (sb) => {
+    fs.writeFileSync(path.join(sb.root, 'assignment.md'), 'A 2,500 words essay on tides.\n');
+    const res = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100 });
+    assert.equal(res.sectionSource, 'derived');
+    assert.equal(res.lengthWords, 2500);
+    assert.equal(res.sectionCount, 5);
+    const steps = res.rows.map((r) => r.step);
+    for (const s of ['new', 'research', 'outline', 'plan §5', 'write §5', 'verify §5', 'compile', 'done']) assert.ok(steps.includes(s), s);
+    assert.ok(res.totalUsd > 0);
+    assert.equal(fs.existsSync(sb.paper), false, 'nothing written');
+  });
+});
+
+test('ERGO-02 / C4-HIGH: invalid-JSON and schema-invalid STATE.json never throw (treated as no sections)', async () => {
+  for (const body of ['{ not json', JSON.stringify({ $schemaVersion: 2, paperId: 'p', createdAt: new Date().toISOString(), sections: [{ n: 1 }] })]) {
+    await withLlmSandbox({}, async (sb) => {
+      fs.writeFileSync(path.join(sb.root, 'STATE.json'), body);
+      let res: Awaited<ReturnType<typeof projectEstimate>> | undefined;
+      await assert.doesNotReject(async () => { res = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100 }); });
+      assert.equal(res!.sectionSource, 'derived');
+      assert.ok(res!.rows.some((r) => r.step === 'outline'), 'projects from the outline on');
+      assert.equal(res!.exceedsCap, false);
+    });
   }
 });
 
-// === Shape + totalUsd arithmetic ===
-test('ERGO-02: projectEstimate returns { rows, totalUsd, exceedsHalfCap } with totalUsd === sum(row.usd)',
-  { skip: !built }, async () => {
-    const projectEstimate = await loadProject();
-    const root = freshRoot();
-    writeState(root, [{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }]);
-    const res = await projectEstimate({ paperRoot: root, sessionCapUsd: 100 });
-    assert.ok(Array.isArray(res.rows), 'ERGO-02: rows must be an array');
-    assert.equal(typeof res.totalUsd, 'number', 'ERGO-02: totalUsd must be a number');
-    assert.equal(typeof res.exceedsHalfCap, 'boolean', 'ERGO-02: exceedsHalfCap must be a boolean');
-    const sum = res.rows.reduce((acc, r) => acc + r.usd, 0);
-    assert.ok(Math.abs(res.totalUsd - sum) < 1e-9,
-      `ERGO-02: totalUsd (${res.totalUsd}) must equal the sum of row.usd (${sum})`);
-    for (const r of res.rows) {
-      for (const k of ['step', 'inputTokens', 'outputTokens', 'usd']) {
-        assert.ok(k in r, `ERGO-02: each EstimateRow must carry "${k}" (got ${Object.keys(r).join(', ')})`);
-      }
-    }
-  });
-
-// === ERGO-03: exceedsHalfCap predicate arithmetic — over the 50% cap ===
-test('ERGO-03: exceedsHalfCap === true when totalUsd > sessionCapUsd * 0.5',
-  { skip: !built }, async () => {
-    const projectEstimate = await loadProject();
-    const root = freshRoot();
-    // Many sections drive the projection up; a tiny cap forces over-50%.
-    writeState(root, Array.from({ length: 20 }, (_, i) => ({ n: i + 1, slug: `s${i + 1}` })));
-    const res = await projectEstimate({ paperRoot: root, sessionCapUsd: 0.0001 });
-    assert.equal(res.exceedsHalfCap, res.totalUsd > 0.0001 * 0.5,
-      'ERGO-03: exceedsHalfCap must equal (totalUsd > sessionCapUsd * 0.5)');
-    assert.equal(res.exceedsHalfCap, true,
-      'ERGO-03: a tiny cap against a real projection must trip exceedsHalfCap');
-  });
-
-// === ERGO-03: exceedsHalfCap predicate arithmetic — under the 50% cap ===
-test('ERGO-03: exceedsHalfCap === false when totalUsd <= sessionCapUsd * 0.5',
-  { skip: !built }, async () => {
-    const projectEstimate = await loadProject();
-    const root = freshRoot();
-    writeState(root, [{ n: 1, slug: 'intro' }]);
-    const res = await projectEstimate({ paperRoot: root, sessionCapUsd: 1_000_000 });
-    assert.equal(res.exceedsHalfCap, res.totalUsd > 1_000_000 * 0.5,
-      'ERGO-03: exceedsHalfCap must equal (totalUsd > sessionCapUsd * 0.5)');
-    assert.equal(res.exceedsHalfCap, false,
-      'ERGO-03: a huge cap must NOT trip exceedsHalfCap (no false refusal)');
-  });
-
-// === T-07-03: projection must not bill — no COSTS.jsonl written ===
-test('T-07-03 / ERGO-02: projectEstimate does NOT write .paper/COSTS.jsonl (no real LLM/network)',
-  { skip: !built }, async () => {
-    const projectEstimate = await loadProject();
-    const root = freshRoot();
-    writeState(root, [{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }]);
-    process.env['PENSMITH_DRY_RUN'] = '1';
-    try {
-      await projectEstimate({ paperRoot: root, sessionCapUsd: 100 });
-    } finally {
-      delete process.env['PENSMITH_DRY_RUN'];
-    }
-    assert.ok(
-      !existsSync(join(root, '.paper', 'COSTS.jsonl')),
-      'T-07-03: projection is a pure cost forecast — it must NEVER append to COSTS.jsonl',
-    );
-  });
-
-// === C2-H1: paper-less dir → empty projection, never throws ===
-test('ERGO-02 / C2-H1: projectEstimate on a paper-less dir → empty projection, no throw',
-  { skip: !built }, async () => {
-    const projectEstimate = await loadProject();
-    const root = freshRoot(); // no STATE.json
-    let res: EstimateResult | undefined;
-    await assert.doesNotReject(
-      async () => { res = await projectEstimate({ paperRoot: root, sessionCapUsd: 100 }); },
-      'C2-H1: a paper-less dir must NOT crash projectEstimate (StateNotFoundError caught)',
-    );
-    assert.notEqual(res, undefined, 'C2-H1: result must be defined');
-    assert.deepEqual(res!.rows, [], 'C2-H1: paper-less dir yields an empty rows projection');
-    assert.equal(res!.totalUsd, 0, 'C2-H1: paper-less dir yields totalUsd 0');
-    assert.equal(res!.exceedsHalfCap, false, 'C2-H1: paper-less dir is under-cap (no refusal)');
-  });
-
-// === C4-HIGH: invalid-JSON STATE.json → empty projection, never throws ===
-test('ERGO-02 / C4-HIGH: invalid-JSON STATE.json → empty projection, no throw (same as fresh dir)',
-  { skip: !built }, async () => {
-    const projectEstimate = await loadProject();
-    const root = freshRoot();
-    writeFileSync(join(root, 'STATE.json'), '{ not json');
-    let res: EstimateResult | undefined;
-    await assert.doesNotReject(
-      async () => { res = await projectEstimate({ paperRoot: root, sessionCapUsd: 100 }); },
-      'C4-HIGH: a present-but-corrupt STATE.json must behave like a missing one (no throw)',
-    );
-    assert.notEqual(res, undefined, 'C4-HIGH: result must be defined');
-    assert.deepEqual(res!.rows, [], 'C4-HIGH: corrupt STATE.json yields an empty rows projection');
-    assert.equal(res!.totalUsd, 0, 'C4-HIGH: corrupt STATE.json yields totalUsd 0');
-    assert.equal(res!.exceedsHalfCap, false,
-      'C4-HIGH: corrupt STATE.json is under-cap so --yolo/--estimate does not crash');
-  });
-
-// === C4-HIGH: schema-invalid STATE.json → empty projection, never throws ===
-test('ERGO-02 / C4-HIGH: schema-invalid STATE.json (section missing slug) → empty projection, no throw',
-  { skip: !built }, async () => {
-    const projectEstimate = await loadProject();
-    const root = freshRoot();
-    writeFileSync(
-      join(root, 'STATE.json'),
-      JSON.stringify({
-        $schemaVersion: 2,
-        paperId: 'p',
-        createdAt: new Date().toISOString(),
-        sections: [{ n: 1 }],
-      }),
-    );
-    let res: EstimateResult | undefined;
-    await assert.doesNotReject(
-      async () => { res = await projectEstimate({ paperRoot: root, sessionCapUsd: 100 }); },
-      'C4-HIGH: a schema-invalid STATE.json must NOT crash projectEstimate (no throw)',
-    );
-    assert.notEqual(res, undefined, 'C4-HIGH: result must be defined');
-    assert.deepEqual(res!.rows, [], 'C4-HIGH: schema-invalid STATE.json yields an empty rows projection');
-    assert.equal(res!.exceedsHalfCap, false, 'C4-HIGH: schema-invalid STATE.json is under-cap');
-  });
+test('RUN-26: p90 is nearest-rank over recorded samples; length parsing and section count clamps', () => {
+  assert.equal(MIN_P90_SAMPLES, 5);
+  assert.equal(p90([]), null);
+  assert.equal(p90([10]), 10);
+  assert.equal(p90([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), 9);
+  assert.equal(p90([5, 1, 4, 2, 3]), 5);
+  assert.equal(parseLengthWords('Write a 1500-word literature review'), 1500);
+  assert.equal(parseLengthWords('about 2,500 words'), 2500);
+  assert.equal(parseLengthWords('8 pages double spaced'), 2200);
+  assert.equal(parseLengthWords('no length here'), null);
+  assert.equal(sectionCountForLength(500), 3);
+  assert.equal(sectionCountForLength(1500), 3);
+  assert.equal(sectionCountForLength(3000), 6);
+  assert.equal(sectionCountForLength(20_000), 8);
+});

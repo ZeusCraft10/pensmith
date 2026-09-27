@@ -1,12 +1,14 @@
 // bin/cli/plan.ts — `pensmith plan <n>` verb entrypoint (PLAN-01).
 //
-// Phase 11 (GEN-02 / GEN-06): Wired to the Tier-2 LLM transport.
-//   - The local deterministic-remove proposeSwap stub is REMOVED.
-//   - The placeholder PLAN.md constant is REMOVED.
-//   - A fail-loud probe fires at the top of run(): MissingApiKeyError →
-//     stderr banner + exitCode=1 + ok:false. Never ok:true on missing key.
-//   - The normal plan path calls complete() with the 'section-planner' prompt
-//     (D-12 LOCKED slug) and writes the model output as a real PLAN.md.
+// Phase 11 (GEN-02 / GEN-06) + Phase 17 (RUN-07, RUN-25):
+//   - assertLlmConfigured('plan') runs at the top of run(): with no usable
+//     provider it throws the one-line MissingApiKeyError. Never ok:true on a
+//     missing key; PENSMITH_NO_LLM=1 skips it.
+//   - The normal plan path calls complete() with the STRUCTURED
+//     'section-planner' slug (D-12 LOCKED) and renders PLAN.md from the
+//     validated {frontmatter, body} object (renderPlanMd): section identity
+//     and depends_on come from OUTLINE.md, assigned_sources is limited to
+//     citekeys in the library (PRD §7.6).
 //   - The --revise path imports the shared proposeSwap from bin/lib/revise-swap.ts
 //     (ONE implementation; no duplication with revise.ts — GEN-02).
 //

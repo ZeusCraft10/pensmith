@@ -65,7 +65,10 @@ function envPresent(name: string): boolean {
  * No resolved api-key values ever appear in the return shape.
  */
 export async function loadCapabilityFacts(): Promise<CapabilityFacts> {
-  const cfg = await loadRuntimeConfig();
+  // An invalid global runtime.json (e.g. an unknown provider) must not take
+  // paper://capabilities or doctor down: the facts fall back to the defaults
+  // and the runtime-config-presence probe reports the error (FAIL, RUN-08).
+  const cfg = await loadRuntimeConfig().catch(() => null);
 
   // The hosted provider key variables (anthropic, openai) plus the configured
   // provider's variable when it differs (runtime.ts providerKeyVariables returns
@@ -92,7 +95,7 @@ export async function loadCapabilityFacts(): Promise<CapabilityFacts> {
 
   return {
     mcp_self: true,
-    contact_email_set: envPresent(cfg.contactEmailEnv ?? 'PENSMITH_CONTACT_EMAIL'),
+    contact_email_set: envPresent(cfg?.contactEmailEnv ?? 'PENSMITH_CONTACT_EMAIL'),
     providers,
     pandoc: safeBool(isPandocPresent),
     zotero_mcp: safeBool(isZoteroMcpPresent),
