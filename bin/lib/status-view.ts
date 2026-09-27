@@ -22,7 +22,7 @@ import { parseIntakeMd } from './intake-parse.js';
 import { parseOutline } from './outline-parse.js';
 import { resolveCostCap, sessionSpend, totalCost } from './budget.js';
 import { isApiKeyPresent, resolveRuntime, resolveSlug } from './runtime.js';
-import { SLUG_NAMES, slugSpec } from './llm-models.js';
+import { SLUG_NAMES, slugSpec, LOCAL_PROVIDERS, effectiveEffort, modelCapabilities } from './llm-models.js';
 
 export type GlyphSet = 'unicode' | 'ascii';
 export type SectionPhase = 'verified' | 'in-progress' | 'pending' | 'attention';
@@ -258,9 +258,15 @@ export async function renderConfigView(root: string, env: NodeJS.ProcessEnv = pr
   for (const slug of SLUG_NAMES) {
     const spec = slugSpec(slug);
     const sr = resolveSlug(rt, slug);
+    // Show the effort that is actually SENT (anthropic.ts: a local provider or a
+    // model without effort levels, e.g. claude-haiku-4-5, sends none; an
+    // unsupported level falls back to the nearest lower one).
+    const sent = sr.model === null || LOCAL_PROVIDERS.has(rt.provider)
+      ? null
+      : effectiveEffort(modelCapabilities(rt.provider, sr.model), sr.effort);
     lines.push(
-      `    ${slug.padEnd(w)} ${spec.tier.padEnd(10)} ${(sr.model ?? '(unset)').padEnd(18)} effort ${sr.effort.padEnd(6)} ` +
-        `(model: ${slugSourceLabel(sr.modelSource)}; effort: ${slugSourceLabel(sr.effortSource)})`,
+      `    ${slug.padEnd(w)} ${spec.tier.padEnd(10)} ${(sr.model ?? '(unset)').padEnd(18)} effort ${(sent ?? 'n/a').padEnd(6)} ` +
+        `(model: ${slugSourceLabel(sr.modelSource)}; effort: ${sent === null ? 'not sent for this model' : slugSourceLabel(sr.effortSource)})`,
     );
   }
   return lines.join('\n');

@@ -168,5 +168,7 @@ test('CONF-01 / RUN-26: `pensmith status --config` prints values, runtime and pe
     assert.match(out, /section-drafter\s+generation\s+claude-sonnet-5\s+effort high\s+\(model: flag; effort: default\)/);
     assert.match(out, /claim-support\s+judgment\s+claude-sonnet-5\s+.*\(model: config/);
     assert.match(out, /orphan-label\s+judgment\s+claude-haiku-4-5\s+.*\(model: default/);
+    // The effort shown is the one SENT: claude-haiku-4-5 takes no effort parameter.
+    assert.match(out, /orphan-label\s+judgment\s+claude-haiku-4-5\s+effort n\/a\s+\(model: default; effort: not sent for this model\)/);
   });
 });
