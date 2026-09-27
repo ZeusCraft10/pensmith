@@ -24,6 +24,8 @@ export interface DialRecorder {
 export interface DialRecorderOptions {
   /** Default true: every recorded dial then fails with ECONNREFUSED. */
   refuseConnects?: boolean;
+  /** Default false: a dial to a loopback IP literal (127.0.0.0/8, ::1) is recorded but allowed. */
+  allowLoopback?: boolean;
   onEvent?: (e: DialEvent) => void;
 }
 

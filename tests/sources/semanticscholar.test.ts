@@ -57,3 +57,39 @@ test('RUN-03: an unrecorded Semantic Scholar query or paperId is a typed offline
   await assertOfflineMiss(() => s2.search('medieval Icelandic sagas', { limit: 10 }), 'search miss');
   await assertOfflineMiss(() => s2.fetchById('ffffffffffffffffffffffffffffffffffffffff'), 'fetchById miss');
 });
+
+test('live Semantic Scholar shape: a null abstract or missing DOI keeps the candidate (MockAgent lane)', async () => {
+  // The live API answers `"abstract": null` for many papers and omits DOI from
+  // externalIds; neither may drop an otherwise valid candidate.
+  const { installMockAgent } = await import('../helpers/local-servers/mock-agent.js');
+  const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
+  process.env['PENSMITH_NETWORK_TESTS'] = '1';
+  const { agent, restore } = installMockAgent();
+  const query = `null abstract ${process.pid}-${Date.now()}`;
+  try {
+    agent
+      .get('https://api.semanticscholar.org')
+      .intercept({ path: (p: string) => p.startsWith('/graph/v1/paper/search?') && p.includes('query=null+abstract'), method: 'GET' })
+      .reply(200, {
+        data: [
+          {
+            paperId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            externalIds: { CorpusId: 1 },
+            title: 'Old Norse-Icelandic Sagas',
+            year: 2014,
+            authors: [{ name: 'Russell Poole' }],
+            abstract: null,
+          },
+        ],
+      }, { headers: { 'content-type': 'application/json' } });
+    const results = await s2.search(query, { limit: 1 });
+    assert.equal(results.length, 1, 'the candidate survives');
+    assert.equal(results[0]?.abstract, undefined);
+    assert.equal(results[0]?.doi, undefined);
+    assert.equal(results[0]?.title, 'Old Norse-Icelandic Sagas');
+  } finally {
+    await restore();
+    if (savedLane === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
+    else process.env['PENSMITH_NETWORK_TESTS'] = savedLane;
+  }
+});

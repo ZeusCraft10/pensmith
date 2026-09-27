@@ -41,7 +41,8 @@ interface S2Paper {
   title?: string;
   year?: number;
   authors?: S2Author[];
-  abstract?: string;
+  /** The live API returns `null` for papers without an abstract. */
+  abstract?: string | null;
 }
 
 let warnedOnceKeyless = false;
@@ -90,7 +91,7 @@ function toCandidate(item: S2Paper): SourceCandidate | null {
       ? item.year
       : undefined;
 
-  const doi = item.externalIds?.DOI;
+  const doi = typeof item.externalIds?.DOI === 'string' ? item.externalIds.DOI : undefined;
   const base: Partial<SourceCandidate> = { authors, year };
   const citekey = generateCitekey(base);
 
@@ -101,7 +102,9 @@ function toCandidate(item: S2Paper): SourceCandidate | null {
     title,
     authors,
     year,
-    abstract: item.abstract,
+    // A null abstract (common in live S2 responses) is "no abstract", never a
+    // reason to drop an otherwise valid candidate.
+    abstract: typeof item.abstract === 'string' ? item.abstract : undefined,
     retracted: false,
     last_verified: new Date().toISOString(),
     citekey,

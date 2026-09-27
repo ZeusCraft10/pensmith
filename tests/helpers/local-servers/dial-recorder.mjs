@@ -11,6 +11,9 @@
 //      answers a TEST-NET-1 placeholder (192.0.2.1 — never a real query) and
 //      every connect is REFUSED, so a live run shows exactly which hosts it
 //      tried to reach (the TLS SNI host) without any byte leaving the machine.
+//      With PENSMITH_DIAL_ALLOW_LOOPBACK=1, a dial to a loopback IP literal
+//      (127.0.0.0/8, ::1) is still recorded but allowed through — so a run can
+//      talk to a local mock LLM while every public dial stays refused.
 //
 //   2. In-process: installDialRecorder() → { events, restore() }.
 //
@@ -27,6 +30,13 @@ const dns = require('node:dns');
 const fs = require('node:fs');
 
 const PLACEHOLDER_ADDRESS = '192.0.2.1';
+
+/** A loopback IP literal (never a hostname: DNS answers stay placeholders). */
+function isLoopbackLiteral(host) {
+  if (typeof host !== 'string') return false;
+  const h = host.replace(/^\[|\]$/g, '');
+  return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h) || h === '::1';
+}
 const CASSETTE_SEGMENT = /tests[\\/]+fixtures[\\/]+cassettes/;
 
 function refusal(host, port) {
@@ -68,11 +78,15 @@ function connectArgs(args) {
 
 /**
  * Install the spies. `onEvent` receives every event; `refuseConnects` (default
- * true) makes every TCP/TLS dial fail with ECONNREFUSED after it is recorded.
+ * true) makes every TCP/TLS dial fail with ECONNREFUSED after it is recorded;
+ * `allowLoopback` (default false) lets a dial to a loopback IP literal through
+ * (still recorded) so a local mock LLM stays reachable.
  * Returns the recorded events and a restore() that puts the builtins back.
  */
 export function installDialRecorder(opts = {}) {
-  const refuseConnects = opts.refuseConnects !== false;
+  const refuseAll = opts.refuseConnects !== false;
+  const allowLoopback = opts.allowLoopback === true;
+  const refuse = (host) => refuseAll && !(allowLoopback && isLoopbackLiteral(host));
   const events = [];
   const emit = (e) => {
     events.push(e);
@@ -95,14 +109,14 @@ export function installDialRecorder(opts = {}) {
     if (a.path !== undefined && a.host === undefined) return orig.netConnect.apply(this, args); // IPC pipe
     const pinned = pinnedAddresses(args[0], a.host);
     emit({ kind: 'connect', tls: false, host: a.host, port: a.port, ...(pinned ? { addresses: pinned } : {}) });
-    if (refuseConnects) throw refusal(a.host, a.port);
+    if (refuse(a.host)) throw refusal(a.host, a.port);
     return orig.netConnect.apply(this, args);
   };
   const netCreateSpy = function patchedCreateConnection(...args) {
     const a = connectArgs(args);
     if (a.path !== undefined && a.host === undefined) return orig.netCreateConnection.apply(this, args);
     emit({ kind: 'connect', tls: false, host: a.host, port: a.port });
-    if (refuseConnects) throw refusal(a.host, a.port);
+    if (refuse(a.host)) throw refusal(a.host, a.port);
     return orig.netCreateConnection.apply(this, args);
   };
   const tlsSpy = function patchedTlsConnect(...args) {
@@ -112,7 +126,7 @@ export function installDialRecorder(opts = {}) {
       kind: 'connect', tls: true, host: a.host, port: a.port, servername: a.servername ?? a.host,
       ...(pinned ? { addresses: pinned } : {}),
     });
-    if (refuseConnects) throw refusal(a.servername ?? a.host, a.port);
+    if (refuse(a.host)) throw refusal(a.servername ?? a.host, a.port);
     return orig.tlsConnect.apply(this, args);
   };
   const lookupSpy = function patchedLookup(host, options, cb) {
@@ -180,6 +194,7 @@ const LOG = process.env.PENSMITH_DIAL_LOG;
 if (typeof LOG === 'string' && LOG.length > 0) {
   const append = orig_appendFileSync();
   installDialRecorder({
+    allowLoopback: process.env.PENSMITH_DIAL_ALLOW_LOOPBACK === '1',
     onEvent: (e) => {
       try {
         append(LOG, JSON.stringify(e) + '\n');
