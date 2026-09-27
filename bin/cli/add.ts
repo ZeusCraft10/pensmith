@@ -202,7 +202,8 @@ export const addCommand = defineCommand({
       } catch (err) {
         // RUN-03 / RUN-04: offline (no recorded fixture for this exact DOI) or
         // --dry-run — nothing is verified and nothing is added. Offline is a
-        // refusal (exit 1); --dry-run is a preview that simply reports it.
+        // refusal (exit 1); --dry-run is a preview that simply reports it
+        // (ok, exit 0 — RUN-09 maps only a failed run to a non-zero code).
         if (!isOfflineEgressError(err)) throw err;
         const label = offlineLabel(err);
         process.stderr.write(
@@ -210,7 +211,7 @@ export const addCommand = defineCommand({
           `${label === 'offline' ? '; re-run online to verify and add it' : ''}.\n`,
         );
         if (label === 'offline') process.exitCode = EXIT_ERROR;
-        return { ok: false, refused: label === 'offline', mode: label };
+        return { ok: label === 'dry-run', added: false, refused: label === 'offline', mode: label };
       }
     } else if (isHttpUrl(source)) {
       // URL path — checked BEFORE the local-PDF branch (audit #12: a URL ending
@@ -269,7 +270,7 @@ export const addCommand = defineCommand({
             `"${source}" needs the network. Source NOT added.\n`,
           );
           if (offlineLabel(e) === 'offline') process.exitCode = EXIT_ERROR;
-          return { ok: false, refused: offlineLabel(e) === 'offline', mode: offlineLabel(e) };
+          return { ok: offlineLabel(e) === 'dry-run', added: false, refused: offlineLabel(e) === 'offline', mode: offlineLabel(e) };
         }
         process.stderr.write(
           `pensmith add: could not read local PDF "${source}": ${(e as Error).message}\n`,
@@ -309,7 +310,7 @@ export const addCommand = defineCommand({
             `${label === 'offline' ? '; re-run online to verify and add it' : ''}.\n`,
           );
           if (label === 'offline') process.exitCode = EXIT_ERROR;
-          return { ok: false, refused: label === 'offline', mode: label };
+          return { ok: label === 'dry-run', added: false, refused: label === 'offline', mode: label };
         }
         // verification transport error — add proceeds, verifier re-checks later.
       }

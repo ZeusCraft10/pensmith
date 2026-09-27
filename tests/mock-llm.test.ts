@@ -149,15 +149,24 @@ test('RUN-21: failure injection maps to the RUN-12 / RUN-24 outcomes', async () 
 
 test('RUN-21: close() stops listening and leaves no open socket', async () => {
   await withLlmSandbox({ mock: false, env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
-    const mock = await startMockLlm();
+    // The http.ts egress gate dials through a per-request pinned Agent that it
+    // destroys after the response (SEC-01), so a finished call leaves no pooled
+    // connection behind. To prove close() tears down a LIVE socket, hold one
+    // open: the mock delays its reply, and close() runs while the request is
+    // still in flight.
+    const mock = await startMockLlm({ delayMs: 5_000 });
     sb.writeGlobalRuntime({ $schemaVersion: 2, provider: 'anthropic', endpoint: mock.url });
-    // A real call leaves a keep-alive connection in the transport's pool.
-    await complete({ slug: 'section-drafter', system: 's', messages: [{ role: 'user', content: 'go' }] });
-    assert.ok(mock.openSockets >= 1, 'the keep-alive socket is tracked');
+    const inFlight = complete({ slug: 'section-drafter', system: 's', messages: [{ role: 'user', content: 'go' }] })
+      .then(() => 'resolved' as const, () => 'rejected' as const);
+    const deadline = Date.now() + 5_000;
+    while (mock.openSockets < 1 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+    assert.ok(mock.openSockets >= 1, 'the in-flight request socket is tracked');
     const port = Number(new URL(mock.url).port);
     await mock.close();
     assert.equal(mock.listening, false);
     assert.equal(mock.openSockets, 0, 'close() destroyed every socket');
+    // The torn-down request fails on the client side instead of hanging.
+    assert.equal(await inFlight, 'rejected');
     // The port is free again: a new server can bind it.
     const again = await startMockLlm({ port });
     assert.equal(again.url, `http://127.0.0.1:${port}`);

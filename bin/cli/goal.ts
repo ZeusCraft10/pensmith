@@ -83,7 +83,7 @@ export function parseResearchClaims(researchMd: string): Map<string, string> {
 }
 
 /**
- * Build the research.done payload from LIBRARY.json (SourceCandidate[]) +
+ * Build the research.done payload from LIBRARY.json (v2 entries, or a legacy array) +
  * RESEARCH.md (per-source `supports:` claim lines). The shape matches the
  * TutorialSubscriber's research.done reader: `{ sources: [{citekey,title,year}],
  * claims: [{citekey,claim}] }`. Best-effort — a missing/malformed file yields an
@@ -99,9 +99,17 @@ export function buildResearchDonePayload(
   try {
     const libPath = path.join(pDir, 'LIBRARY.json');
     if (existsSync(libPath)) {
-      const raw = JSON.parse(readFileSync(libPath, 'utf8'));
-      if (Array.isArray(raw)) {
-        sources = raw
+      // LIBRARY.json v2 (BRDTH-01) is `{$schemaVersion, entries: [...]}`; a
+      // pre-v2 file is a bare array. Read-only here — bin/lib/library.ts is
+      // the one writer, and it migrates the file on its next load.
+      const raw = JSON.parse(readFileSync(libPath, 'utf8')) as unknown;
+      const list: unknown[] | null = Array.isArray(raw)
+        ? raw
+        : raw !== null && typeof raw === 'object' && Array.isArray((raw as { entries?: unknown }).entries)
+          ? (raw as { entries: unknown[] }).entries
+          : null;
+      if (list !== null) {
+        sources = list
           .map((s): ResearchDoneSource | null => {
             const rec = s as Record<string, unknown>;
             const citekey = typeof rec.citekey === 'string' ? rec.citekey : '';

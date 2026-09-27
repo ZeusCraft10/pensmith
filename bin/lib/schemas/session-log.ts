@@ -1,8 +1,10 @@
 // bin/lib/schemas/session-log.ts — JSONL entry schema (D-49).
 //
 // Wire shape (D-49): each line is `{at, kind, run_id, ...payload}`. The
-// `kind` field is one of 8 enum values (prompt, response, tool_call,
-// tool_result, cost, event, warn, error). The remaining payload is
+// `kind` field is one of 10 enum values (prompt, response, tool_call,
+// tool_result, cost, event, warn, error, and — since wire version 2 — the
+// Phase 17 `llm` and `http` records of RUN-15 / D-17-13 / D-17-29). The
+// remaining payload is
 // kind-specific and validated downstream (the schema here uses
 // `.passthrough()` so unknown payload keys are preserved by safeParse).
 //
@@ -21,7 +23,7 @@
 
 import { z } from 'zod';
 
-export const CURRENT_SESSION_LOG_VERSION = 1;
+export const CURRENT_SESSION_LOG_VERSION = 2;
 
 export const KindSchema = z.enum([
   'prompt',
@@ -32,6 +34,8 @@ export const KindSchema = z.enum([
   'event',
   'warn',
   'error',
+  'llm',
+  'http',
 ]);
 
 export const Schema = z

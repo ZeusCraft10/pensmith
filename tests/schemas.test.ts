@@ -39,11 +39,11 @@ import { migrate as runtimeV1ToV2 } from '../bin/lib/migrations/runtime-config/v
 
 const ISO = '2026-05-08T00:00:00.000Z';
 
-test('CURRENT_*_VERSION constants (state=2, runtime-config=2, others=1)', () => {
+test('CURRENT_*_VERSION constants (state=2, library=2, session-log=2, runtime-config=2, others=1)', () => {
   assert.equal(CURRENT_STATE_VERSION, 2);
   assert.equal(CURRENT_LIBRARY_VERSION, 2); // BRDTH-01: LIBRARY.json v2 (one writer)
   assert.equal(CURRENT_CHECKPOINT_VERSION, 1);
-  assert.equal(CURRENT_SESSION_LOG_VERSION, 1);
+  assert.equal(CURRENT_SESSION_LOG_VERSION, 2); // Phase 17: the llm + http record kinds
   assert.equal(CURRENT_RUNTIME_CONFIG_VERSION, 2);
 });
 
@@ -157,8 +157,16 @@ test('session-log: valid kind=event / kind=tool_call + rejects bad kind + reject
   assert.ok(
     !SessionLogSchema.safeParse({ at: ISO, kind: 'bogus', run_id: 'r1' })
       .success,
-    'kind not in 8-value enum must be rejected',
+    'kind not in the 10-value enum must be rejected',
   );
+  // Phase 17 (RUN-15, V4): the kind:"llm" and kind:"http" records the session
+  // logger writes validate against the wire schema replay tools use.
+  for (const kind of ['llm', 'http'] as const) {
+    assert.ok(
+      SessionLogSchema.safeParse({ at: ISO, kind, run_id: 'r1', slug: 'outline-author' }).success,
+      `kind=${kind} must be a valid session-log record kind`,
+    );
+  }
   assert.ok(
     !SessionLogSchema.safeParse({ at: ISO, kind: 'event' }).success,
     'missing run_id must be rejected (D-49)',

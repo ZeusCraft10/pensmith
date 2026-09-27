@@ -158,11 +158,14 @@ test('RUN-18: --yolo never skips the cap — spawned CLI runs refuse before any 
     // --yolo: the D-17-27 pre-flight refuses with EXIT_COST_CAP before dispatch.
     const yolo = await sb.runTsx(null, ['outline', '--force', '--yolo'], { env });
     assert.equal(yolo.status, EXIT_COST_CAP, yolo.stderr);
-    assert.match(yolo.stderr, /^pensmith: REFUSED — --yolo projects \$\d+\.\d\d for the remaining steps, over the \$0\.0001 session cost cap/);
+    // One refusal line (the RUN-02 test-runner OFFLINE banner may precede it).
+    assert.match(yolo.stderr, /^pensmith: REFUSED — --yolo projects \$\d+\.\d\d for the remaining steps, over the \$0\.0001 session cost cap/m);
+    assert.equal(yolo.stderr.split('\n').filter((l) => l.startsWith('pensmith: REFUSED')).length, 1, yolo.stderr);
 
     // Without --yolo and without a terminal: the per-call cap gate refuses.
     const plain = await sb.runTsx(null, ['outline', '--force'], { env });
-    assert.notEqual(plain.status, 0);
+    // The dispatcher prints the GateRefusedError as one line and exits with its code.
+    assert.equal(plain.status, EXIT_COST_CAP, plain.stderr);
     assert.match(plain.stderr, /This call would exceed your cost cap\. Continue\? \(outline-author on claude-opus-5: projected \$0\.\d+ \+ \$0\.00 spent this session > cap \$0\.0001/);
     assert.match(plain.stderr, /--yolo does not skip this gate/);
 
