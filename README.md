@@ -37,7 +37,7 @@ The thing that makes Pensmith different from "ask an AI to write my paper": **a 
 - 🔎 **Real research, real sources.** Discovery fans out across OpenAlex, Crossref, arXiv, PubMed, and Unpaywall, then deduplicates and ranks candidates into a sourced research map. Section writers only ever see their own mapped sources.
 - 🎯 **One command.** `/pensmith` reads your paper's state and dispatches the next step. Everything else is a power-user fallback.
 - 🪪 **Honest by design.** No metadata or fingerprint is stamped into exported documents. The AI-likelihood transparency check reports a score for your own awareness — it never promises your writing will get past a detector. [Style Match](#style-match) is opt-in and openly dual-use.
-- 🔒 **Safe by default.** Every outbound request — sources, verification, detectors and your model provider — leaves through one audited HTTP gate that validates and pins the destination address, caps response size, and logs what was sent; PII is redacted before any model call. Pensmith is **live by default** (it verifies against the real registrars); offline replay and `--dry-run` are explicit and always announced. API keys are never logged.
+- 🔒 **Safe by default.** Every outbound request — sources, verification, detectors and your model provider — leaves through one audited HTTP gate that validates and pins the destination address, caps response size, and logs what was sent; optional PII redaction (`pensmith new --pii-redact`, or `[project] pii_redaction = true`) scrubs your assignment text before any model call. Pensmith is **live by default** (it verifies against the real registrars); offline replay and `--dry-run` are explicit and always announced. API keys are never logged.
 - 📄 **Compile & export.** Verified sections assemble into a single document and export to **DOCX / PDF / LaTeX / Markdown**, with citation rendering in 8 styles.
 
 ## How it works
@@ -196,7 +196,7 @@ Every model call is recorded in `.paper/SESSION.log` (JSONL): the step, provider
 
 ### Flags
 
-`--dry-run`, `--estimate`, `--yolo` (skip the outline-approval and export-confirmation gates — never the cost cap, the estimate confirmation or detector consent), `--show-prompts`, `--runtime <provider>`, `--model <id>`, `--paper <name|path>`. `pensmith --help` lists them with the exit codes.
+`--dry-run`, `--estimate`, `--yolo` (skip the gates `--yolo` may skip: outline approval, export confirmation, research scope and pruning, the `add` remap and the revise swap — never the cost cap, the estimate confirmation, detector consent or the active-paper choice), `--show-prompts`, `--runtime <provider>`, `--model <id>`, `--paper <name|path>`. `pensmith --help` lists them with the exit codes.
 
 ### Exit codes
 
@@ -252,7 +252,7 @@ A drift gate (`tests/tier-contract.test.ts`) keeps the two tiers behaving identi
 
 ## Privacy & security
 
-- **PII is redacted before any model call** (recursively, across structured payloads).
+- **PII redaction is opt-in**: with `pensmith new --pii-redact` (or `[project] pii_redaction = true` in `.paper/config.toml`) the assignment text is redacted, recursively across structured payloads, before any model call. It is off by default.
 - **All outbound network goes through one audited gate** (`bin/lib/http.ts`): every destination is DNS-resolved and validated, the connection is pinned to the validated address, private / loopback / link-local ranges are refused (only the local model endpoint you configure is allowed), responses are size-capped, and each request is logged without secrets.
 - **Zero export trace** — no metadata stamp, footer, or fingerprint is written into your exported documents. The disclaimer below is the sole disclosure mechanism.
 - **Secrets are never logged** — only their presence, never their value.
