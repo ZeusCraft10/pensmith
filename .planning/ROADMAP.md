@@ -5,7 +5,7 @@
 - ✅ **v0.1.0 Foundation** — Phases 0–10 (shipped 2026-06-22) — full two-tier architecture, Foundation NFRs, the deterministic verifier gate, compile/export pipeline, single-command UX, and the citation/style libraries. Archive: [milestones/v0.1.0-ROADMAP.md](milestones/v0.1.0-ROADMAP.md).
 - ✅ **v0.2.0 End-to-End** — Phases 11–16 (shipped 2026-06-24) — connected the generative seams: Tier-2 LLM transport, live research discovery, citation rendering at export, fail-closed verifier gate, foundation/security hardening, CI/DX + docs parity. 25/25 requirements; 3-OS CI green. Archive: [milestones/v0.2.0-ROADMAP.md](milestones/v0.2.0-ROADMAP.md).
 - **v0.3.0 Truly End-to-End** — Phases 17–19 (never started, not shipped) — absorbed into v1.0.0 on 2026-09-27. Its requirements keep their IDs: FEED-01..05 → Phase 18, SEC-01 → Phase 17, SEC-02 → Phase 19, HARDEN-01/02/04 → Phase 26, HARDEN-03 → Phase 20; its deferred BRDTH-01..06 backlog → Phases 17 (BRDTH-01) and 25.
-- 🚧 **v1.0.0 Open Source Release** — Phases 17–27 (in progress) — finish the product and make it ready for open source: every category of the 2026-09-25 completeness assessment reaches 100%. 180 requirements covering all 200 gap-register items. Requirements: [REQUIREMENTS.md](REQUIREMENTS.md). Gap register: [research/V1-GAP-REGISTER.md](research/V1-GAP-REGISTER.md).
+- 🚧 **v1.0.0 Open Source Release** — Phases 17–27 (in progress) — finish the product and make it ready for open source: every category of the 2026-09-25 completeness assessment reaches 100%. 184 requirements covering all 333 gap-register items (200 from the audit, 133 from the SWEEP-01 stub sweep). Requirements: [REQUIREMENTS.md](REQUIREMENTS.md). Gap register: [research/V1-GAP-REGISTER.md](research/V1-GAP-REGISTER.md).
 
 ## Phases
 
@@ -48,14 +48,14 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
 
 - [ ] **Phase 17: Tier-2 Runtime Foundations (RUNTIME)** - Live network by default with orthogonal offline, no-LLM and dry-run modes; current models parsed correctly with native structured output and per-slug defaults that fit the cost cap; safe OpenAI-compatible/Ollama runtimes; working installed binary; exit codes; one paper root and resolver; session log; one gate registry; the chokepoint table; the versioned config and frontmatter loaders; the single library writer; IP pinning and response-size cap; the synthetic dry-run provider; the mock LLM; Node 22/24, the cassette recorder and data-dir isolation in CI; and the finished stub sweep
 - [ ] **Phase 18: Grounded Generation (GROUND)** - Intake collects the assignment and answers, outline/plan/write run on validated contracts fed by the real topic, voice and each section's own sources (FEED-01..05), counterargument enforcement, a recorded e2e corpus, and a full-workflow `--dry-run` that never touches the real paper
-- [ ] **Phase 19: Sources and Library (SOURCES)** - Live-hardened adapters (arXiv https, Unpaywall, retractions, Crossref, OpenAlex/S2 keys), per-adapter failure reporting, evaluator tiers and policy, books/ISBN, round-trippable BibTeX, correct `add`, hashed BYO PDF ingest in a worker thread (SEC-02), Zotero, the drafter quote policy and `plan N --research`
+- [ ] **Phase 19: Sources and Library (SOURCES)** - Live-hardened adapters (arXiv https, Unpaywall, retractions, Crossref, OpenAlex/S2 keys), per-adapter failure reporting, evaluator tiers and policy, books/ISBN, round-trippable BibTeX, correct `add`, hashed BYO PDF ingest in a worker thread (SEC-02), Zotero, the drafter quote policy and `plan N --research`, and polite rate-limit handling with a per-host circuit breaker (SRC-17)
 - [ ] **Phase 20: Verifier Completeness (VERIFY)** - One citation grammar that fails closed on every unsupported form (footnotes, reference lists, raw TeX/HTML included), Pass 1 across Crossref/DataCite/arXiv/PubMed/ISBN with correct name matching, real Pass 3 with a cached source store, per-quote acceptance, Pass 2 on abstracts, Pass 4 orphans, gate recomputation in compile and done that trusts no local file, freshness through the library writer, HARDEN-03
 - [ ] **Phase 21: Compile, Done and Export (EXPORT)** - Unpruned bibliography, correct styles and headings, zero-trace output (paths, producer fields, image metadata), docx/pdf without pandoc, smoother, capped contradiction check, density map, a humanizer that runs, honest before/after scores with explicit detector consent, real plagiarism check, done flags and aliases, outline-only mode with an annotated bibliography
 - [ ] **Phase 22: Revision Loop and Inline Corrections (REVISE)** - No verify loops, `--auto-revise` as an explicit opt-in, staleness propagation to compile/export, real `plan --revise`, length/add/drop/swap corrections, `list --class`/archive, learning-mode TUTORIAL.md, real sketch synthesis
 - [ ] **Phase 23: Tier-1 Claude Code Plugin (PLUGIN)** - One canonical `plugin/` directory with committed bundles and no build step, spec-valid manifest/skills/hooks validated and installed in CI (CI-05), key-free generation through the user's Claude session with context/submit tools for every generative role, thin agents, real state tools, owner-aware locks and hooks, a doctor tool, and real headless sessions as the exit gate
 - [ ] **Phase 24: Security Review (SEC)** - Full security review of everything Phases 17–23 added, with every medium-or-higher finding fixed or accepted with a reason
-- [ ] **Phase 25: Configuration and PRD Breadth (CONFIG)** - Every config.toml key has an observable effect, presets used by every stage, CAPABILITIES.json (booleans-only resource), PRD §13 reconciled, full doctor, figures/tables, mid-section resume, unverifiable-quote bucket, generated reference card, Phase-1 FLAG paydown (BRDTH-02..06)
-- [ ] **Phase 26: CI and Test Hardening (HARDEN)** - Strict required e2e chain over the mock LLM (HARDEN-01), gate-bypass matrix including forged local files, a secrets-gated live lane in both tiers plus a mandatory Ollama job (HARDEN-02), real pandoc/PyMuPDF/Zotero in CI (HARDEN-04), a real-model output replay corpus, the cassette-refresh workflow and drift job, coverage of spawned processes, integration inventory
+- [ ] **Phase 25: Configuration and PRD Breadth (CONFIG)** - Every config.toml key has an observable effect, presets used by every stage, CAPABILITIES.json (booleans-only resource), PRD §13 reconciled, full doctor, figures/tables, mid-section resume, unverifiable-quote bucket, generated reference card, Phase-1 FLAG paydown (BRDTH-02..06), and newer-version state refused by every verb (CONF-08)
+- [ ] **Phase 26: CI and Test Hardening (HARDEN)** - Strict required e2e chain over the mock LLM (HARDEN-01), gate-bypass matrix including forged local files, a secrets-gated live lane in both tiers plus a mandatory Ollama job (HARDEN-02), real pandoc/PyMuPDF/Zotero in CI (HARDEN-04), a real-model output replay corpus, the cassette-refresh workflow and drift job, coverage of spawned processes, integration inventory, the shipped chokepoint lint holes closed, and `npm run check` identical to the required CI job (CI-14, CI-15)
 - [ ] **Phase 27: Open-Source Release (RELEASE)** - Version 1.0.0, CHANGELOG, maintainer-triggered release workflow, correct npm package, a pinned marketplace listing, truthful README and docs/, community files, third-party notices and a full privacy table, a release-surface security review (SEC-05), no stale markers, final completeness re-audit
 
 ## Phase Details
@@ -94,7 +94,7 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
 ### Phase 19: Sources and Library (SOURCES)
 **Goal**: Every source adapter works against today's live APIs and reports failures to the user, every ingest goes through the Phase 17 library writer, books, hashed BYO PDFs and Zotero items are first-class sources, and the drafter and `plan --research` can use this phase's full-text flags and evaluator.
 **Depends on**: Phase 17 (live network default, the pinned and size-capped http.ts transport, the library writer, the cassette recorder, exit codes) and Phase 18 (the structured intake topic research is seeded from, the source-context builder, the planner)
-**Requirements**: SRC-01, SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, SRC-07, SRC-08, SRC-09, SRC-10, SRC-11, SRC-12, SRC-13, SRC-14, SRC-15, SRC-16, GRND-14, GRND-17, SEC-02 (19)
+**Requirements**: SRC-01, SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, SRC-07, SRC-08, SRC-09, SRC-10, SRC-11, SRC-12, SRC-13, SRC-14, SRC-15, SRC-16, SRC-17, GRND-14, GRND-17, SEC-02 (20)
 **Success Criteria** (what must be TRUE):
   1. In the live lane, arXiv, Unpaywall, Crossref (including consortium works), OpenAlex (keyed) and Semantic Scholar return real results, and `http.ts` follows redirects with a fresh SSRF check and IP pin on every hop
   2. Research prints per-adapter counts or failure reasons, disambiguates ambiguous topics, runs 5–10 focused queries in the preset's source order, applies the `[sources]` policy, tiers every source and writes RESEARCH.md; zero relevant sources exits non-zero
@@ -103,6 +103,7 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
   5. `add` accepts DOIs, arXiv IDs, ISBNs, PDFs and URLs and either identifies the correct work or refuses; it updates LIBRARY.json and RESEARCH.md and remaps only relevant sections
   6. `new --pdfs <dir>` ingests BYO PDFs tagged bring-your-own, kept with their hashes and extracted in a worker thread that is hard-aborted on timeout; editing local text never changes a verdict; only titles or identifiers leave the machine
   7. A History paper can cite a book with an ISBN, Zotero items flow into the library in both tiers with an authenticated doctor check, the drafter quotes directly only from sources with real full text, and `plan N --research` adds real hits to that section only
+  8. `http.ts` sends each service's polite contact form (Crossref `mailto:` User-Agent), honours `X-Rate-Limit` headers, stops retrying a host whose `Retry-After` exceeds the cap, trips a per-host circuit breaker on 429/5xx storms, and never caches an error body as a success (SRC-17)
 **Plans**: TBD
 
 ### Phase 20: Verifier Completeness (VERIFY)
@@ -174,7 +175,7 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
 ### Phase 25: Configuration and PRD Breadth (CONFIG)
 **Goal**: Every documented config key has an observable effect, the discipline presets drive every stage, and the remaining PRD breadth lands: figures and tables, mid-section resume, the unverifiable-quote bucket, the reference card, CAPABILITIES.json, a complete doctor and the deferred Phase-1 FLAGs.
 **Depends on**: Phases 18–21 (the stages that consume config keys and presets) and Phase 23 (the Tier-1 hooks that mid-section resume relies on); the config and frontmatter loaders landed in Phase 17
-**Requirements**: CONF-02, CONF-03, CONF-05, CONF-06, CONF-07, BRDTH-02, BRDTH-03, BRDTH-04, BRDTH-05, BRDTH-06 (10)
+**Requirements**: CONF-02, CONF-03, CONF-05, CONF-06, CONF-07, CONF-08, BRDTH-02, BRDTH-03, BRDTH-04, BRDTH-05, BRDTH-06 (11)
 **Success Criteria** (what must be TRUE):
   1. Every PRD §10 key has an observable effect in a table-driven test, and the README configuration section lists every key
   2. Each discipline preset's style, source order, sectioning, counterargument default and density band reach their stages, and no hard-coded discipline literal remains
@@ -183,12 +184,13 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
   5. Tables, captions and user-supplied figures appear numbered in every export format with image metadata stripped, and a missing figure file makes compile refuse
   6. Killing `pensmith write` at any of 10 random points and running `resume` completes the section without redoing finished work
   7. done shows the unverifiable-quote bucket, the reference card and README command table (gate table and global flags included) are generated and drift-checked, and the 13 Phase-1 FLAG/NIT items are fixed or accepted with reasons
+  8. Every verb, the router, the MCP resources and the hooks refuse a state file with a newer schema version, name it, and leave it untouched (CONF-08)
 **Plans**: TBD
 
 ### Phase 26: CI and Test Hardening (HARDEN)
 **Goal**: The whole chain, the gate, pandoc, real model output and the live services are exercised in CI, so none of the v1.0.0 behaviour can regress silently. Absorbs v0.3.0 HARDEN-01/02/04. Runs that need maintainer-held secrets are prepared here and their first green run is a maintainer-triggered checklist item (D-V1-07).
 **Depends on**: Phases 17–25 (it gates the finished behaviour)
-**Requirements**: HARDEN-01, HARDEN-02, HARDEN-04, CI-04, CI-08, CI-10, CI-11, CI-12, CI-13 (9)
+**Requirements**: HARDEN-01, HARDEN-02, HARDEN-04, CI-04, CI-08, CI-10, CI-11, CI-12, CI-13, CI-14, CI-15 (11)
 **Success Criteria** (what must be TRUE):
   1. A required e2e-chain job on ubuntu, macOS and Windows takes a folder containing only assignment.txt to an exported, zero-trace paper through bare `pensmith`, with per-stage assertions over the recorded corpus, and also runs against the installed binary, an OpenAI-compatible endpoint, `--dry-run` and a data dir with a stale `open` pointer
   2. A gate-bypass matrix covering every known bypass, including forged BYO text, forged quote acceptances, forged alternate DOIs, footnotes, reference lists and raw TeX/HTML, exits 4 with no export on every OS
@@ -196,6 +198,7 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
   4. Every structured parser runs in required CI over real responses from each supported model plus adversarial variants
   5. CI exports through real pandoc and tectonic, extracts with PyMuPDF and runs the Zotero stub; the cassette-refresh workflow and a scheduled drift job run for real; source tests assert real values
   6. Coverage includes spawned CLI, MCP and hook processes with per-file floors on the blocking passes, and every major user path, interactive prompts included, is in the integration inventory
+  7. The shipped chokepoint lint rules catch every forbidden pattern in every directory scope (named `homedir` imports, HTTP imports in `mcp/`, the DOI regex in doctor probes), and `npm run check` runs exactly the steps of the required CI job (CI-14, CI-15)
 **Plans**: TBD
 
 ### Phase 27: Open-Source Release (RELEASE)
@@ -237,4 +240,4 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
 ---
 *Roadmap initialized: 2026-05-06 from PRD.md*
 *v0.1.0 archived 2026-06-22 · v0.2.0 archived 2026-06-24*
-*v0.3.0 phases 17–19 added: 2026-07-06 · absorbed into v1.0.0 (phases 17–27): 2026-09-27 · refined after critique (180 requirements): 2026-09-27*
+*v0.3.0 phases 17–19 added: 2026-07-06 · absorbed into v1.0.0 (phases 17–27): 2026-09-27 · refined after critique (180 requirements): 2026-09-27 · SWEEP-01 stub sweep mapped (184 requirements, 333 gap items): 2026-09-27*
