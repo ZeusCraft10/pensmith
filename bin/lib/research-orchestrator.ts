@@ -30,7 +30,7 @@
 //     offline), the scope, the queries, per-adapter counts and failures, and the
 //     candidates discovered. The generated log is the top block of the file and
 //     ends at RESEARCH_LOG_END; anything below that line (e.g. findings appended
-//     by `revise --research`, or curated learning-mode notes) is kept verbatim
+//     by `revise --research`, or other curated notes) is kept verbatim
 //     when a later run rewrites the log — a re-run never destroys notes.
 //
 // Threat mitigations:
@@ -307,7 +307,7 @@ function cell(s: string): string {
 /**
  * The line that ends the generated research log in .paper/RESEARCH.md. Every
  * `pensmith research` run rewrites the text above it; the text below it is
- * never touched (D-17-10 + `revise --research` appends, learning-mode notes).
+ * never touched (D-17-10; `revise --research` appends, curated notes).
  */
 export const RESEARCH_LOG_END =
   '<!-- end of the research log: `pensmith research` rewrites everything above this line; notes below it are kept -->';
@@ -331,7 +331,7 @@ export function mergeResearchLog(log: string, existing: string | null): string {
 /**
  * Render .paper/RESEARCH.md (D-10): the offline marker first (when offline),
  * then the scope, the queries, per-adapter counts and failures, and the
- * candidates. List items only — no `### ` blocks, so the learning-mode claims
+ * candidates. List items only — no `### ` blocks, so the curated-claims
  * parser never mistakes a candidate for a curated `supports:` entry.
  */
 export function renderResearchLog(input: {

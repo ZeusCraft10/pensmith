@@ -64,7 +64,7 @@
 //   3. Pin: a per-request dispatcher whose connect lookup answers ONLY with the
 //      validated addresses (no second DNS resolution — closes WR-03 / DNS
 //      rebinding), keeping the hostname for TLS SNI and the Host header.
-//      maxRedirections stays 0 (SRC-01 adds a re-pinning redirect loop later).
+//      Redirects are never followed: undici's redirect count is 0 (SRC-01 adds a re-pinning redirect loop later).
 //   4. --show-prompts mirror (D-17-12), before any byte is sent.
 //   5. The body streams under maxBytes; ResponseTooLargeError aborts before
 //      full buffering (JSON 8 MiB, PDFs MAX_PDF_BYTES, LLM 16 MiB).
