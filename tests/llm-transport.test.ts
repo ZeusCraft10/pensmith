@@ -54,7 +54,9 @@ function captureStdio(): { restore(): { stdout: string; stderr: string } } {
   let stderr = '';
   const o = process.stdout.write.bind(process.stdout);
   const e = process.stderr.write.bind(process.stderr);
-  (process.stdout as unknown as { write: (c: string | Uint8Array) => boolean }).write = (c) => { stdout += String(c); return true; };
+  // stdout is teed, never swallowed: the node:test reporter writes its TAP
+  // lines there, and a swallowed line silently drops a test from the count.
+  (process.stdout as unknown as { write: (c: string | Uint8Array) => boolean }).write = (c) => { stdout += String(c); return o(c); };
   (process.stderr as unknown as { write: (c: string | Uint8Array) => boolean }).write = (c) => { stderr += String(c); return true; };
   return {
     restore() {

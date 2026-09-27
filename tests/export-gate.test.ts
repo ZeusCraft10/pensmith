@@ -237,9 +237,11 @@ test('export-gate HIGH-3: NON-yolo on-disk gate integration — gate fires from 
     // Capture stdout so we can assert the per-issue summary precedes the approver.
     const stdoutLines: string[] = [];
     const origWrite = process.stdout.write.bind(process.stdout);
+    // Tee, never swallow: the node:test reporter writes its TAP lines to this
+    // same stdout, and a swallowed line silently drops a test from the count.
     (process.stdout as unknown as { write: (s: string) => boolean }).write = (s: string) => {
       stdoutLines.push(s);
-      return true;
+      return origWrite(s);
     };
     let approverCalled = 0;
     let summaryAtCallTime = '';

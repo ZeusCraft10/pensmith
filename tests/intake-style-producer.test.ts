@@ -76,9 +76,11 @@ function mkProjectRoot(): string {
 async function captureStdout(fn: () => Promise<void>): Promise<string> {
   const chunks: string[] = [];
   const orig = process.stdout.write.bind(process.stdout);
+  // Tee, never swallow: the node:test reporter writes its TAP lines to this
+  // same stdout, and a swallowed line silently drops a test from the count.
   const patched = ((chunk: string | Uint8Array): boolean => {
     chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'));
-    return true;
+    return orig(chunk);
   }) as typeof process.stdout.write;
   process.stdout.write = patched;
   try {
