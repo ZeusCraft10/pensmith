@@ -216,13 +216,13 @@ export const command = defineCommand({
   // The global flags are declared so `--help` documents them; the LOAD-BEARING
   // application is the argv pre-parse below (NOT a root run() — H2).
   args: {
-    paper: { type: 'string', description: 'Work on this paper: a name from `pensmith list`, or a folder containing .paper/ (RUN-14).', valueHint: 'name|path' },
+    paper: { type: 'string', description: 'Work on this paper: a name from `pensmith list`, or a folder containing .paper/.', valueHint: 'name|path' },
     'dry-run': { type: 'boolean', description: 'Preview run: makes no network or model call (sources and model replies are labelled stand-ins).', default: false },
     estimate: { type: 'boolean', description: 'Project the remaining token + USD cost, then offer to proceed.', default: false },
     yolo: { type: 'boolean', description: 'Skip the approval gates --yolo may skip (outline approval, export confirmation, research scope/prune, add remap, revise swap). Never skips the cost cap, detector consent or the active-paper choice.', default: false },
     'show-prompts': { type: 'boolean', description: 'Mirror every outbound request (and full LLM prompts) to stderr before it is sent.', default: false },
-    runtime: { type: 'string', description: 'LLM provider for this run: anthropic | openai | ollama | vllm | openai-compatible (overrides config; RUN-08).' },
-    model: { type: 'string', description: 'Generation model for this run (outline, plan, write); judgment slugs keep their own model (RUN-26).' },
+    runtime: { type: 'string', description: 'LLM provider for this run: anthropic | openai | ollama | vllm | openai-compatible (overrides the config).', valueHint: 'provider' },
+    model: { type: 'string', description: 'Generation model for this run (outline, plan, write); judgment steps keep their own model.', valueHint: 'id' },
   },
   // NO run() — bare routing happens in the pre-dispatch wrapper below (H2).
   subCommands: buildSubCommands(),
