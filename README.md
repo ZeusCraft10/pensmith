@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/ZeusCraft10/pensmith/actions/workflows/ci.yml"><img src="https://github.com/ZeusCraft10/pensmith/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPLv3-blue.svg" alt="License: AGPL-3.0-or-later"></a>
-  <img src="https://img.shields.io/badge/node-%3E%3D20.10-brightgreen.svg" alt="Node >=20.10">
+  <img src="https://img.shields.io/badge/node-%3E%3D22.12-brightgreen.svg" alt="Node >=22.12">
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6.svg?logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/status-alpha%20(v0.1.0--dev)-orange.svg" alt="Status: alpha">
 </p>
@@ -37,7 +37,7 @@ The thing that makes Pensmith different from "ask an AI to write my paper": **a 
 - 🔎 **Real research, real sources.** Discovery fans out across OpenAlex, Crossref, arXiv, PubMed, and Unpaywall, then deduplicates and ranks candidates into a sourced research map. Section writers only ever see their own mapped sources.
 - 🎯 **One command.** `/pensmith` reads your paper's state and dispatches the next step. Everything else is a power-user fallback.
 - 🪪 **Honest by design.** No metadata or fingerprint is stamped into exported documents. The AI-likelihood transparency check reports a score for your own awareness — it never promises your writing will get past a detector. [Style Match](#style-match) is opt-in and openly dual-use.
-- 🔒 **Safe by default.** Outbound requests run through a single audited HTTP chokepoint with SSRF protection; PII is redacted before any model call; network access is **off by default** (tests run against committed cassettes). API keys are never logged.
+- 🔒 **Safe by default.** Every outbound request — sources, verification, detectors and your model provider — leaves through one audited HTTP gate that validates and pins the destination address, caps response size, and logs what was sent; PII is redacted before any model call. Pensmith is **live by default** (it verifies against the real registrars); offline replay and `--dry-run` are explicit and always announced. API keys are never logged.
 - 📄 **Compile & export.** Verified sections assemble into a single document and export to **DOCX / PDF / LaTeX / Markdown**, with citation rendering in 8 styles.
 
 ## How it works
@@ -82,7 +82,7 @@ npm install
 npm run build
 ```
 
-Requires **Node.js ≥ 20.10.0**.
+Requires **Node.js ≥ 22.12.0** (the Node 22 and 24 LTS lines are tested on Linux, macOS and Windows).
 
 **Tier 1 — Claude Code plugin (recommended)**
 
@@ -99,10 +99,11 @@ From a Claude Code session, register your local checkout as a plugin marketplace
 
 ```bash
 npm link            # exposes `pensmith` on your PATH (from the clone)
-pensmith doctor     # 11-probe self-check
+pensmith --version
+pensmith doctor     # environment self-check: Node, pandoc, MCP build, provider and keys, network mode
 ```
 
-The CLI needs a model provider key (see [Configuration](#configuration)); the Tier 1 plugin does not.
+The CLI needs a model provider — an API key, or a local OpenAI-compatible server such as Ollama or vLLM (see [Configuration](#configuration)).
 
 ## Quick start
 
@@ -142,38 +143,91 @@ In normal use, bare `/pensmith` handles dispatch. The 16 verbs below let power u
 
 | Verb | What it does |
 |------|-------------|
-| `doctor` | Ecosystem self-check: 11 probes across runtime, MCP wiring, and ecosystem presence. Exits 1 on FAIL. |
-| `new` / `intake` | Start a new paper — capture the assignment, run the clarifying battery, detect discipline, persist `INTAKE.md`. |
-| `next` | Advance to the next workflow step based on current paper state (the bare `/pensmith` flow). |
-| `status` | Report current paper state: per-section progress table + resolved next action. |
-| `research` | Generate a sourced research map — fetch and rank candidates from OpenAlex, Crossref, arXiv, PubMed, Unpaywall. |
-| `outline` | Draft and approve a section outline from the research map. Approval gate (skippable with `--yolo`). |
-| `plan` | Generate a section-level plan for one section (`--section <n>`). |
-| `write` | Draft one section using only its mapped sources (`--section <n>`). |
-| `verify` | Run the three-pass citation verifier on one section: DOI re-fetch, author/title fuzzy match, quote exact-match. |
-| `compile` | Assemble all verified sections into a single document and export (DOCX / PDF / LaTeX / Markdown). |
-| `done` | Mark the paper complete after compile. |
-| `resume` | Resume an interrupted workflow: summarize the last handoff, compute the next work verb, dispatch it. |
-| `list` | List all papers managed by Pensmith in the current workspace. |
-| `open` | Open an existing paper by slug or number. |
-| `sketch` | Quick-draft mode: a lightly sourced outline without the full research phase (for early ideation). |
-| `add` | Add a section to an existing outline after initial approval. |
+| `doctor` | Environment self-check (Node version, MCP build, pandoc, humanizer skill, provider and key presence, network mode, …). Exits 1 on FAIL. |
+| `new` | Start a new paper — capture the assignment (`--from <file>`), run the clarifying questions, detect the discipline, write `.paper/INTAKE.md`. |
+| `next` | Run the next workflow step for the current paper (what bare `/pensmith` does). |
+| `status` | The paper's position, per-section progress, cost so far and the next action. `--config` prints every effective setting and where it came from. |
+| `research` | Discover sources across OpenAlex, Crossref, arXiv, PubMed, Semantic Scholar and Unpaywall, cross-check retractions, and merge the kept sources into `.paper/LIBRARY.json` (which renders `CITATIONS.bib` / `CITATIONS.ris`). |
+| `outline` | Propose the section outline from the research. Approval gate (skippable with `--yolo`). |
+| `plan` | Write one section's `PLAN.md` (`plan <n>`); `--revise` repairs a verifier-flagged citation. |
+| `write` | Draft one section from only its mapped sources (`write <n>`), or every section in dependency waves (`write`). |
+| `verify` | Run the blocking verifier on one section: DOI/arXiv/PMID re-fetch with author/title match, and quote exact-match. |
+| `compile` | Assemble all verified sections into `.paper/DRAFT.md` + `COMPILE-REPORT.md` (refuses on any blocking verdict). |
+| `done` | Finalize: re-check the gate, optional humanize, plagiarism and AI-likelihood transparency checks, then export (DOCX / PDF / LaTeX / Markdown) with no metadata trace. Export confirmation gate (skippable with `--yolo`). |
+| `resume` | Summarize the last handoff and continue with the next step; `--replay <id>` re-runs a logged step. |
+| `list` | List every paper Pensmith knows about, grouped by class, with its live status. |
+| `open` | Make a paper the active one by name (as shown by `list`). |
+| `sketch` | Thinking-partner thesis discovery before intake — asks a few questions; nothing is created until you confirm. |
+| `add` | Add one source mid-paper (DOI, local PDF or URL): verify it, merge it into the library (a known work is reported as `already in library as <key>`), and optionally map it onto sections. |
 
 ## Configuration
 
-**Flags** (work on any verb where they apply): `--dry-run` (plan the actions, change nothing), `--estimate` (show projected token/cost before running), `--show-prompts` (print the prompts a step would send), `--yolo` (skip the outline-approval and export-confirmation gates — refuses if it would exceed the session cost cap), `--section <n>` (target one section).
+### Network modes
 
-**Environment variables:**
+Pensmith is **live by default**: research, `add`, the Pass 1 / Pass 3 re-fetch, retraction and freshness checks, the plagiarism check and the GPTZero check talk to the real services, with no environment variable needed. Two explicit modes change that, and both are always announced on stderr before anything else runs:
+
+| Mode | How | What happens |
+|------|-----|--------------|
+| **Offline** | `PENSMITH_OFFLINE=1` | Sources, verification, detector and plagiarism requests replay **exactly recorded** fixtures from a source checkout, or fail closed as "unavailable (offline)". A citation that cannot be re-checked is `UNVERIFIABLE` and **blocks** compile and done until you re-run online. The banner reads `OFFLINE MODE (reason: PENSMITH_OFFLINE=1): …`, and RESEARCH.md, VERIFICATION.md and COMPILE-REPORT.md carry an offline marker line (never an export). The installed npm package ships no fixtures, so there it refuses instead. Only a model endpoint you configured on this machine (loopback) is still reachable. |
+| **Dry run** | `--dry-run` | Nothing leaves the machine — zero sockets. Sources come from a clearly labelled synthetic provider (`10.0000/pensmith-dryrun.*`), and every model call returns a deterministic stub. Synthetic identifiers are refused everywhere outside `--dry-run`. |
+
+`PENSMITH_NO_LLM=1` is independent of the network mode: it replaces every LLM call with a deterministic stub (testing and dry-run) and prints `LLM STUBBED …`. `pensmith doctor` shows `network: live` or `network: OFFLINE (<reason>)`. The test suite (`npm test`) always runs sources offline unless a maintainer sets `PENSMITH_NETWORK_TESTS=1`.
+
+### Model runtimes
+
+With `ANTHROPIC_API_KEY` set, Pensmith uses Anthropic with `claude-opus-5` for generation (outline, planning, drafting, smoothing) and `claude-haiku-4-5` for the high-volume judgment steps (source evaluation, query generation, the advisory verifier passes). With only `OPENAI_API_KEY` set, it selects OpenAI and its default generation and judgment models automatically. `pensmith status --config` shows the model each step will use and where that choice came from.
+
+- `--runtime <provider>` picks `anthropic`, `openai`, `ollama`, `vllm` or `openai-compatible`; `--model <id>` overrides the generation model (judgment steps keep theirs). Unknown providers are rejected with the list of valid ones.
+- **Local models.** `ollama` (default endpoint `http://127.0.0.1:11434/v1`), `vllm` (`http://127.0.0.1:8000/v1`) and any `openai-compatible` server are called through the chat-completions API; no key is needed, and there is no default model — set `[runtime] model` or pass `--model`.
+- **Where each setting lives.** The endpoint and the key variable (`endpoint`, `api_key_env`) are set **only** in the global `runtime.json` in your Pensmith data directory (`%LOCALAPPDATA%\pensmith\` on Windows, `~/Library/Application Support/pensmith/` on macOS, `$XDG_DATA_HOME/pensmith/` or `~/.local/share/pensmith/` elsewhere), for example `{"$schemaVersion": 2, "provider": "openai-compatible", "endpoint": "http://127.0.0.1:1234/v1", "model": "qwen2.5"}`. A paper's `.paper/config.toml` may choose `provider`, `model`, `effort`, `price_in_per_mtok` / `price_out_per_mtok` and per-step `[runtime.slugs.<step>]` models, but never an endpoint or key — a paper folder you synced or cloned cannot redirect your prompts or keys. `api_key_env` must name a provider key or a `*_API_KEY` variable; a plain-`http://` endpoint must be on this machine, and link-local / cloud-metadata addresses are always refused.
+- **Precedence:** `--runtime` / `--model` → `.paper/config.toml` `[runtime]` → global `runtime.json` → the key found in your environment → the default.
+
+### Cost cap and estimates
+
+Each run of `pensmith` (one invocation, including the steps a bare `pensmith` chains) has a **cost cap**: `[budget] cost_cap_usd` in `.paper/config.toml`, default **$5.00**, or `PENSMITH_COST_CAP_USD`. Before every model call Pensmith projects the call's cost; if it would cross the cap, you are asked in a terminal, and a non-interactive run — `--yolo` included — sends nothing and exits with code 5. `[budget] warn_at_usd` prints one warning when the running total passes it. `--estimate` projects the remaining pipeline step by step (model, price, total) without any network or model call, then asks `Proceed? [y/N]` in a terminal.
+
+### Which paper
+
+Pensmith works on the `.paper/` folder in the current directory. `--paper <name|path>` (or `PENSMITH_PAPER_ROOT`) picks another; `pensmith open <name>` sets an active paper that read-only commands (`status`, `list`, `doctor`, `--estimate`) follow with a banner. A command that would change a paper asks before following that pointer — and outside a terminal, or with `--yolo`, it refuses (exit 2) and names `--paper <name>` or `pensmith new` instead.
+
+### What was sent: SESSION.log and --show-prompts
+
+Every model call is recorded in `.paper/SESSION.log` (JSONL): the step, provider, model, the prompt as sent, the response, tokens and cost (matching the cost ledger); every source request is recorded with its URL (secrets removed), status and cache use. API keys never appear. `[logging] session_bodies = "redacted"` keeps only hashes, counts, cost and short previews. `pensmith resume --replay <id>` re-runs a logged step (offline, from the logged response). `--show-prompts` prints each outgoing request to stderr **before** it is sent: the full model request, every source URL, the GPTZero payload preview and the DuckDuckGo queries — with keys, cookies and authorization headers removed.
+
+### Flags
+
+`--dry-run`, `--estimate`, `--yolo` (skip the outline-approval and export-confirmation gates — never the cost cap, the estimate confirmation or detector consent), `--show-prompts`, `--runtime <provider>`, `--model <id>`, `--paper <name|path>`. `pensmith --help` lists them with the exit codes.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Error — provider failure or refusal, invalid configuration, internal error |
+| `2` | Usage — unknown command or flag, invalid arguments, missing required input |
+| `3` | Approval — a gate needs an answer and there is no terminal and no `--yolo`, or you declined |
+| `4` | Blocked — the verifier or a gate refused (verify failed, compile REFUSED, done BLOCKED, stale output) |
+| `5` | Cost cap — the next model call would exceed the session cost cap |
+
+Expected failures print one line (`pensmith: …`); `PENSMITH_DEBUG=1` adds a stack trace for unexpected errors.
+
+### Environment variables
 
 | Variable | Purpose |
 |----------|---------|
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Provider key for the **Tier 2 CLI**. (Tier 1 plugin uses your Claude session — no key needed.) |
-| `PENSMITH_CONTACT_EMAIL` | Polite-pool contact sent to OpenAlex / Unpaywall so your queries are well-behaved. |
-| `PENSMITH_COST_CAP_USD` | Hard ceiling on model spend; runs refuse rather than exceed it. |
-| `GPTZERO_API_KEY` | *Optional.* Enables the AI-likelihood transparency check (consent-gated). |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Provider key for the **Tier 2 CLI**. With only `OPENAI_API_KEY` set, OpenAI is selected automatically. Local runtimes need neither. |
+| `PENSMITH_OFFLINE=1` | Sources offline: exact recorded fixtures or fail closed (see [Network modes](#network-modes)). |
+| `PENSMITH_NO_LLM=1` | Replaces every LLM call with a deterministic stub (testing and dry-run). |
+| `PENSMITH_COST_CAP_USD` | Per-session cost cap in USD (overrides `[budget] cost_cap_usd`, default 5.00). |
+| `PENSMITH_CONTACT_EMAIL` | Polite-pool contact sent to Crossref / OpenAlex / Unpaywall so your queries are well-behaved. |
+| `OPENALEX_API_KEY` | *Optional.* OpenAlex API key (higher rate limits). |
+| `PENSMITH_S2_API_KEY` | *Optional.* Semantic Scholar API key. |
+| `GPTZERO_API_KEY` | *Optional.* Enables the AI-likelihood transparency check; it still asks for your consent before sending text (`--yolo` never grants it). |
 | `ZOTERO_API_KEY` | *Optional.* Enables the Zotero library adapter. |
-| `PENSMITH_NETWORK_TESTS=1` | Opt into **live** network calls. Pensmith is offline-by-default and replays committed cassettes otherwise. |
-| `PENSMITH_NO_LLM=1` | Run the deterministic stages only (skips the advisory LLM passes). |
+| `PENSMITH_PAPER_ROOT` | The project folder (the one containing `.paper/`) for the CLI, the MCP server and the hooks. |
+| `PENSMITH_PROMPT_MODE=numbered` | Answer prompts from piped stdin, one line per question (scripts and CI). |
+| `PENSMITH_DEBUG=1` | Print a stack trace for unexpected errors. |
+| `PENSMITH_NETWORK_TESTS=1` | *Maintainers.* Lets the test suite reach the live services (the live test lane). |
 
 ## Style Match
 
@@ -199,7 +253,7 @@ A drift gate (`tests/tier-contract.test.ts`) keeps the two tiers behaving identi
 ## Privacy & security
 
 - **PII is redacted before any model call** (recursively, across structured payloads).
-- **All outbound network goes through one audited chokepoint** with SSRF protection; private/loopback/link-local ranges are blocked.
+- **All outbound network goes through one audited gate** (`bin/lib/http.ts`): every destination is DNS-resolved and validated, the connection is pinned to the validated address, private / loopback / link-local ranges are refused (only the local model endpoint you configure is allowed), responses are size-capped, and each request is logged without secrets.
 - **Zero export trace** — no metadata stamp, footer, or fingerprint is written into your exported documents. The disclaimer below is the sole disclosure mechanism.
 - **Secrets are never logged** — only their presence, never their value.
 
@@ -207,7 +261,7 @@ See [`PRIVACY.md`](PRIVACY.md) and the project's security notes for the full thr
 
 ## Project status
 
-Pensmith is **alpha** (`v0.1.0-dev`). The two-tier architecture, the verifier gate, the research pipeline, compile/export, and the single-command UX are implemented and covered by a 3-OS CI matrix (Ubuntu / macOS / Windows). Published distribution (npm + plugin marketplace) and a fully source-fed planner/writer are on the roadmap.
+Pensmith is **alpha** (`v0.1.0-dev`), working toward the v1.0.0 open-source release. The two-tier architecture, the verifier gate, the research pipeline, compile/export, and the single-command UX are implemented and covered by a CI matrix of Node 22 and 24 on Ubuntu, macOS and Windows. The Tier 2 CLI is the complete path today; key-free generation through your Claude session for every Tier 1 stage, published distribution (npm + plugin marketplace) and a fully source-fed planner/writer are on the roadmap.
 
 ## Contributing
 
