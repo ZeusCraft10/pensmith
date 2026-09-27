@@ -51,6 +51,7 @@ import { makeStub } from './cli/stubs.js';
 import { VERSION } from './lib/version.generated.js';
 import { UX02_VERBS, type Ux02Verb } from './lib/verbs.js';
 import { setMirrorPromptsToStderr } from './lib/session-log.js';
+import { announceModes } from './lib/http-mock.js';
 import { projectEstimate } from './lib/estimator.js';
 import { resolveNextAction } from './lib/router.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
@@ -287,15 +288,22 @@ function isSectionVerbWithoutNumber(argv: string[], verb: Ux02Verb): boolean {
  * exactly once (explicit verb → runMain; bare → resolveNextAction + dispatchVerb).
  */
 export async function dispatch(argv: string[] = process.argv.slice(2)): Promise<void> {
-  // (a) --show-prompts → mirror prompts to stderr (BEFORE any LLM call).
+  // (a) --show-prompts → the http.ts egress gate mirrors every outbound request
+  //     (URL, LLM body, POST previews; never headers) to stderr BEFORE it is sent
+  //     (RUN-16, D-17-12).
   if (hasFlag(argv, 'show-prompts')) setMirrorPromptsToStderr(true);
 
-  // (b) --dry-run → gate BOTH egress channels via env the existing code honors.
+  // (b) --dry-run → both channels off (D-17-04). PENSMITH_DRY_RUN=1 makes the
+  //     http.ts gate refuse every request (zero sockets) and routes research to
+  //     the labelled synthetic provider (RUN-27); PENSMITH_NO_LLM=1 stubs every
+  //     model call. Both are env vars so child processes inherit the mode.
   if (hasFlag(argv, 'dry-run')) {
-    process.env['PENSMITH_NETWORK_TESTS'] = ''; // source adapters → cassettes (isOfflineMode()===true)
-    process.env['PENSMITH_NO_LLM'] = '1'; // LLM call sites (pass2/pass4) → offline placeholder, ZERO egress
-    process.env['PENSMITH_DRY_RUN'] = '1'; // advisory marker only — NOT itself a gate
+    process.env['PENSMITH_DRY_RUN'] = '1';
+    process.env['PENSMITH_NO_LLM'] = '1';
   }
+  // RUN-02 banners (once, stderr, before other output) + the D-17-15
+  // installed-package refusal (throws OfflineFixturesNotShippedError, EXIT_ERROR).
+  announceModes({ verb: firstVerb(argv), argv });
 
   // (c) H1 / C2-H1 YOLO CAP PRE-FLIGHT — runs WHENEVER --yolo is present for a
   //     COST-INCURRING execution (write/plan/verify/research/compile/done/revise,

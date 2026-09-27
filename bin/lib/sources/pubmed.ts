@@ -13,9 +13,11 @@
 //
 // RESEARCH pitfall: pubdate is a loose string like "2019 Jul" or "2020 May 12".
 // Year extraction = first 4-digit token only.
+//
+// Offline replay is the exact-match fixture store inside bin/lib/http.ts; the
+// typed OfflineEgressError is rethrown so callers report "unavailable (offline)".
 
-import { fetch as httpFetch } from '../http.js';
-import { isOfflineMode, loadCassetteFile } from '../http-mock.js';
+import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -110,93 +112,39 @@ export async function search(
   opts: { limit?: number } = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
-  if (isOfflineMode()) {
-    // Step 1: cassette for esearch.
-    const esearchCassette = loadCassetteFile('pubmed', 'esearch-attention');
-    if (!esearchCassette) return [];
-    const esearchEntry = esearchCassette.find(
-      (c) => c.method === 'GET' && c.path.includes('esearch.fcgi'),
-    );
-    if (!esearchEntry) return [];
-    const idlist = (esearchEntry.response as EsearchResponse)?.esearchresult?.idlist ?? [];
-    if (idlist.length === 0) return [];
-
-    // Step 2: cassette for esummary.
-    const esummaryCassette = loadCassetteFile('pubmed', 'esummary-attention');
-    if (!esummaryCassette) return [];
-    // Match the cassette entry whose id-list contains our first PMID.
-    const wantedId = idlist[0];
-    const esummaryEntry = esummaryCassette.find(
-      (c) =>
-        c.method === 'GET' &&
-        c.path.includes('esummary.fcgi') &&
-        typeof wantedId === 'string' &&
-        c.path.includes(`id=${wantedId}`),
-    ) ?? esummaryCassette.find(
-      (c) => c.method === 'GET' && c.path.includes('esummary.fcgi'),
-    );
-    if (!esummaryEntry) return [];
-    const records = recordsFromEsummary(esummaryEntry.response as EsummaryResponse, idlist);
-    return records.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
-  }
-
-  // Online path: two-step request via the chokepoint.
+  // Two-step request via the chokepoint.
   const esearchUrl = `${BASE}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmode=json&retmax=${limit}`;
   try {
-    const res1 = await httpFetch(esearchUrl, { source: 'pubmed' });
+    const res1 = await httpFetch(esearchUrl, { source: 'pubmed', maxBytes: MAX_JSON_RESPONSE_BYTES });
     if (res1.status !== 200) return [];
-    const body1 = typeof res1.body === 'string' ? (JSON.parse(res1.body) as unknown) : res1.body;
+    const body1 = JSON.parse(res1.body) as unknown;
     const idlist = ((body1 as EsearchResponse)?.esearchresult?.idlist) ?? [];
     if (idlist.length === 0) return [];
 
     const idCsv = idlist.join(',');
     const esummaryUrl = `${BASE}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(idCsv)}&retmode=json`;
-    const res2 = await httpFetch(esummaryUrl, { source: 'pubmed' });
+    const res2 = await httpFetch(esummaryUrl, { source: 'pubmed', maxBytes: MAX_JSON_RESPONSE_BYTES });
     if (res2.status !== 200) return [];
-    const body2 = typeof res2.body === 'string' ? (JSON.parse(res2.body) as unknown) : res2.body;
+    const body2 = JSON.parse(res2.body) as unknown;
     const records = recordsFromEsummary(body2 as EsummaryResponse, idlist);
     return records.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
-  } catch {
+  } catch (err) {
+    if (isOfflineEgressError(err)) throw err;
     return [];
   }
 }
 
 export async function fetchById(pmid: string): Promise<SourceCandidate | null> {
-  if (isOfflineMode()) {
-    const cassette = loadCassetteFile('pubmed', 'esummary-attention');
-    if (!cassette) return null;
-    // Direct cassette match: an esummary entry whose path contains id=<pmid>.
-    const direct = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes(`id=${pmid}`),
-    );
-    if (direct) {
-      const records = recordsFromEsummary(direct.response as EsummaryResponse, [pmid]);
-      const first = records[0];
-      return first ? toCandidate(first) : null;
-    }
-    // Fallback: first record from the first esummary cassette entry.
-    const fallback = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('esummary.fcgi'),
-    );
-    if (!fallback) return null;
-    const body = fallback.response as EsummaryResponse;
-    const uids = body.result?.uids ?? [];
-    const first = uids[0];
-    if (!first) return null;
-    const records = recordsFromEsummary(body, [first]);
-    const rec = records[0];
-    return rec ? toCandidate(rec) : null;
-  }
-
   const url = `${BASE}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(pmid)}&retmode=json`;
   try {
-    const res = await httpFetch(url, { source: 'pubmed' });
+    const res = await httpFetch(url, { source: 'pubmed', maxBytes: MAX_JSON_RESPONSE_BYTES });
     if (res.status !== 200) return null;
-    const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
+    const body = JSON.parse(res.body) as unknown;
     const records = recordsFromEsummary(body as EsummaryResponse, [pmid]);
     const first = records[0];
     return first ? toCandidate(first) : null;
-  } catch {
+  } catch (err) {
+    if (isOfflineEgressError(err)) throw err;
     return null;
   }
 }

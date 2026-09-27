@@ -176,25 +176,23 @@ export default [
     rules: { 'no-restricted-syntax': 'off' },
   },
 
-  // === HTTP/path chokepoint EXEMPTIONS for HTTP test files (Wave 5) ===
-  // tests/http.test.ts and tests/http-cache.test.ts MUST import undici
-  // (MockAgent / setGlobalDispatcher) to install cassette interceptors —
-  // there is no other way to test bin/lib/http.ts without live network.
-  // They MUST also override process.env.LOCALAPPDATA / XDG_DATA_HOME / HOME
-  // to redirect pensmithHttpCacheDir() into a per-test tmpdir for isolation.
-  // Both exemptions are scoped to these test files only.
+  // === Path chokepoint EXEMPTION for the http.ts transport test files ===
+  // These suites override process.env.LOCALAPPDATA / XDG_DATA_HOME / HOME to
+  // redirect pensmithHttpCacheDir() / pensmithDataDir() into a per-test tmpdir.
+  // Phase 17 (V5/V6, RUN-29): they no longer import undici — MockAgent and the
+  // local test servers come from tests/helpers/local-servers/ (the only
+  // undici / node:http / node:https exemption under tests/), so only the D-41
+  // path rule is relaxed here. Scoped to these test files only.
   {
     files: [
       'tests/http.test.ts',
       'tests/http-cache.test.ts',
       'tests/http-cache-no-header-leak.test.ts',
       'tests/retry.test.ts',
-      // audit #29: must import undici MockAgent to reply with binary bytes and
-      // assert http.ts exposes byte-faithful bodyBytes (no other way to test it).
-      'tests/http-binary-body.test.ts',
+      'tests/egress-gate.test.ts',
+      'tests/http-session-records.test.ts',
     ],
     rules: {
-      'no-restricted-imports': 'off',
       'no-restricted-syntax': 'off',
     },
   },

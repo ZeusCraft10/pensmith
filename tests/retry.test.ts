@@ -15,12 +15,23 @@ import * as fsp from 'node:fs/promises';
 import * as fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {
-  MockAgent,
-  setGlobalDispatcher,
-  getGlobalDispatcher,
-  type Dispatcher,
-} from 'undici';
+import { MockAgent, installMockAgent, type InstalledMockAgent } from './helpers/local-servers/mock-agent.js';
+
+// Phase 17 (V5 + RUN-04): MockAgent comes from the local-servers seam, and a
+// test that intercepts a public host runs in the live test lane
+// (PENSMITH_NETWORK_TESTS=1 for its duration) — otherwise the egress gate
+// answers from the exact-match fixture store before any dispatcher is used.
+let installedAgents: InstalledMockAgent[] = [];
+function installAgent(): MockAgent {
+  const m = installMockAgent();
+  installedAgents.push(m);
+  return m.agent;
+}
+async function restoreAgents(): Promise<void> {
+  for (const m of installedAgents.reverse()) await m.restore().catch(() => undefined);
+  installedAgents = [];
+}
+
 import { retry, fullJitterDelayMs, parseRetryAfter } from '../bin/lib/retry.js';
 import {
   fetch,
@@ -52,9 +63,7 @@ function loadCassette(name: string): Cassette {
 }
 
 function applyCassette(cassette: Cassette): MockAgent {
-  const agent = new MockAgent();
-  agent.disableNetConnect();
-  setGlobalDispatcher(agent);
+  const agent = installAgent();
   const u = new URL(cassette.request.url);
   const pool = agent.get(u.origin);
   for (const r of cassette.responses) {
@@ -71,7 +80,8 @@ async function withFreshState<T>(fn: () => Promise<T>): Promise<T> {
   const savedXdg = process.env.XDG_DATA_HOME;
   const savedHome = process.env.HOME;
   const savedEmail = process.env.PENSMITH_CONTACT_EMAIL;
-  const savedDispatcher: Dispatcher = getGlobalDispatcher();
+  const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
+  process.env['PENSMITH_NETWORK_TESTS'] = '1';
   process.env.LOCALAPPDATA = tmpRoot;
   process.env.XDG_DATA_HOME = tmpRoot;
   process.env.HOME = tmpRoot;
@@ -89,7 +99,9 @@ async function withFreshState<T>(fn: () => Promise<T>): Promise<T> {
     else process.env.HOME = savedHome;
     if (savedEmail === undefined) delete process.env.PENSMITH_CONTACT_EMAIL;
     else process.env.PENSMITH_CONTACT_EMAIL = savedEmail;
-    setGlobalDispatcher(savedDispatcher);
+    await restoreAgents();
+    if (savedLane === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
+    else process.env['PENSMITH_NETWORK_TESTS'] = savedLane;
     await fsp.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
   }
 }
@@ -279,7 +291,7 @@ test('retry-cassette: 429 then 200 — retry succeeds on second attempt', async 
         'both interceptors must have fired (429 then 200)',
       );
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -294,7 +306,7 @@ test('retry-cassette: 500 then 200 — retry succeeds on second attempt', async 
       assert.equal(r.cached, false);
       assert.deepEqual(agent.pendingInterceptors(), []);
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -302,9 +314,7 @@ test('retry-cassette: 500 then 200 — retry succeeds on second attempt', async 
 test('retry-cassette: noRetry:true skips retry on 500 (returns the 500 directly)', async () => {
   await withFreshState(async () => {
     const cassette = loadCassette('crossref-doi-500-retry');
-    const agent = new MockAgent();
-    agent.disableNetConnect();
-    setGlobalDispatcher(agent);
+    const agent = installAgent();
     const u = new URL(cassette.request.url);
     const pool = agent.get(u.origin);
     // Register only the FIRST response (the 500).
@@ -320,7 +330,7 @@ test('retry-cassette: noRetry:true skips retry on 500 (returns the 500 directly)
       assert.equal(r.status, 500, 'noRetry must surface the 500 directly');
       assert.deepEqual(agent.pendingInterceptors(), [], 'exactly 1 interceptor consumed');
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -338,7 +348,7 @@ test('retry-cassette: 4xx (404) is NOT retried', async () => {
         '404 should be a single dispatch, not retried',
       );
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -348,9 +358,7 @@ test('retry-cassette: permanent 500 — maxAttempts exhausted -> throws', async 
     // Build a cassette that ALWAYS returns 500 — register 5 interceptors
     // (the maxAttempts default) and assert all are consumed.
     const url = 'https://api.crossref.org/works/10.1038/permerr';
-    const agent = new MockAgent();
-    agent.disableNetConnect();
-    setGlobalDispatcher(agent);
+    const agent = installAgent();
     const u = new URL(url);
     const pool = agent.get(u.origin);
     for (let i = 0; i < 5; i++) {
@@ -369,7 +377,7 @@ test('retry-cassette: permanent 500 — maxAttempts exhausted -> throws', async 
         'all 5 interceptors must have fired before the throw',
       );
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });

@@ -1,0 +1,1353 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=attention+mechanisms+in+neural+networks&retmode=json&retmax=10",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esearch",
+        "version": "0.3"
+      },
+      "esearchresult": {
+        "count": "9125",
+        "retmax": "10",
+        "retstart": "0",
+        "idlist": [
+          "42801104",
+          "42800368",
+          "42800132",
+          "42795149",
+          "42794920",
+          "42793749",
+          "42792979",
+          "42791834",
+          "42789547",
+          "42786768"
+        ],
+        "translationset": [
+          {
+            "from": "attention",
+            "to": "\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention's\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]"
+          },
+          {
+            "from": "mechanisms",
+            "to": "\"mechanism\"[All Fields] OR \"mechanisms\"[All Fields]"
+          },
+          {
+            "from": "neural networks",
+            "to": "\"neural networks, computer\"[MeSH Terms] OR (\"neural\"[All Fields] AND \"networks\"[All Fields] AND \"computer\"[All Fields]) OR \"computer neural networks\"[All Fields] OR (\"neural\"[All Fields] AND \"networks\"[All Fields]) OR \"neural networks\"[All Fields]"
+          }
+        ],
+        "querytranslation": "(\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention s\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]) AND (\"mechanism\"[All Fields] OR \"mechanisms\"[All Fields]) AND (\"neural networks, computer\"[MeSH Terms] OR (\"neural\"[All Fields] AND \"networks\"[All Fields] AND \"computer\"[All Fields]) OR \"computer neural networks\"[All Fields] OR (\"neural\"[All Fields] AND \"networks\"[All Fields]) OR \"neural networks\"[All Fields])",
+        "warninglist": {
+          "phrasesignored": [
+            "in"
+          ],
+          "quotedphrasesnotfound": [],
+          "outputmessages": []
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-27T18:21:39.745Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  },
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42801104%2C42800368%2C42800132%2C42795149%2C42794920%2C42793749%2C42792979%2C42791834%2C42789547%2C42786768&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "42786768": {
+          "uid": "42786768",
+          "pubdate": "2026 Sep 25",
+          "epubdate": "2026 Sep 25",
+          "source": "Biomed Phys Eng Express",
+          "authors": [
+            {
+              "name": "Chen X",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Pang Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Lian J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yap PT",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Yap PT",
+          "title": "Unsupervised pelvic CBCT-to-CT translation via cross-slice attention for 3D context modeling.",
+          "sorttitle": "unsupervised pelvic cbct to ct translation via cross slice attention for 3d context modeling",
+          "volume": "12",
+          "issue": "5",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101675002",
+          "issn": "",
+          "essn": "2057-1976",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42786768"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1088/2057-1976/aea90f"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/04/03 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/17 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/25 05:32"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/25 05:31"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/25 02:23"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Biomedical physics & engineering express",
+          "elocationid": "doi: 10.1088/2057-1976/aea90f",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/25 00:00",
+          "sortfirstauthor": "Chen X",
+          "vernaculartitle": ""
+        },
+        "42789547": {
+          "uid": "42789547",
+          "pubdate": "2026",
+          "epubdate": "2026 Sep 25",
+          "source": "PLoS One",
+          "authors": [
+            {
+              "name": "Gao T",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Sun L",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Sun L",
+          "title": "Graph attention spatio-temporal graph neural network based human-light interaction modeling for indoor lighting environments.",
+          "sorttitle": "graph attention spatio temporal graph neural network based human light interaction modeling for indoor lighting environments",
+          "volume": "21",
+          "issue": "9",
+          "pages": "e0358774",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101285081",
+          "issn": "",
+          "essn": "1932-6203",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "258",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42789547"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1371/journal.pone.0358774"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "PONE-D-26-05873"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/02/03 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/04 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/25 17:34"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/25 17:33"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/25 13:45"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "PloS one",
+          "elocationid": "doi: 10.1371/journal.pone.0358774",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/25 00:00",
+          "sortfirstauthor": "Gao T",
+          "vernaculartitle": ""
+        },
+        "42791834": {
+          "uid": "42791834",
+          "pubdate": "2026 Aug 23",
+          "epubdate": "2026 Aug 23",
+          "source": "Bioengineering (Basel)",
+          "authors": [
+            {
+              "name": "Talaat FM",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Elnakib A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Hekal AA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Alnaggar M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Abdellatif AG",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Shawky MA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Safwat S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Shaban WM",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Shehata M",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Shehata M",
+          "title": "End-to-End Intelligent Drug Discovery via a Scalable and Explainable Graph-Transformer Framework.",
+          "sorttitle": "end to end intelligent drug discovery via a scalable and explainable graph transformer framework",
+          "volume": "13",
+          "issue": "9",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101676056",
+          "issn": "2306-5354",
+          "essn": "",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42791834"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/bioengineering13090961"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "bioengineering13090961"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/07/02 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/08/18 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/08/19 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 01:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Bioengineering (Basel, Switzerland)",
+          "elocationid": "pii: 961. doi: 10.3390/bioengineering13090961",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/08/23 00:00",
+          "sortfirstauthor": "Talaat FM",
+          "vernaculartitle": ""
+        },
+        "42792979": {
+          "uid": "42792979",
+          "pubdate": "2026 Sep 9",
+          "epubdate": "2026 Sep 9",
+          "source": "Genes (Basel)",
+          "authors": [
+            {
+              "name": "Liu W",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Liu X",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhou S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Li K",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Wang X",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Chen K",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Guo L",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhang R",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Su Q",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Su Q",
+          "title": "TMO-Net+: An Enhanced Tumor Multi-Omics Pre-Trained Network for Multi-Task Learning in Oncology.",
+          "sorttitle": "tmo net an enhanced tumor multi omics pre trained network for multi task learning in oncology",
+          "volume": "17",
+          "issue": "9",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101551097",
+          "issn": "",
+          "essn": "2073-4425",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42792979"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/genes17091085"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "genes17091085"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/07/23 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/08/27 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/05 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 01:02"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Genes",
+          "elocationid": "pii: 1085. doi: 10.3390/genes17091085",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/09 00:00",
+          "sortfirstauthor": "Liu W",
+          "vernaculartitle": ""
+        },
+        "42793749": {
+          "uid": "42793749",
+          "pubdate": "2026 Sep 14",
+          "epubdate": "2026 Sep 14",
+          "source": "Diagnostics (Basel)",
+          "authors": [
+            {
+              "name": "Karabulut E",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Karaduman M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yildirim M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Akbulut S",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Akbulut S",
+          "title": "An Attention-Residual Hybrid CNN for CT-Based Multiclass Classification of Alcohol-Related Liver Disease: Differential Diagnosis Against HBV-Related Cirrhosis.",
+          "sorttitle": "attention residual hybrid cnn for ct based multiclass classification of alcohol related liver disease differential diagnosis against hbv related cirrhosis",
+          "volume": "16",
+          "issue": "18",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101658402",
+          "issn": "2075-4418",
+          "essn": "",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42793749"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/diagnostics16182964"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "diagnostics16182964"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/06/15 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/09/05 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/07 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 01:05"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Diagnostics (Basel, Switzerland)",
+          "elocationid": "pii: 2964. doi: 10.3390/diagnostics16182964",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/14 00:00",
+          "sortfirstauthor": "Karabulut E",
+          "vernaculartitle": ""
+        },
+        "42794920": {
+          "uid": "42794920",
+          "pubdate": "2026 Sep 13",
+          "epubdate": "2026 Sep 13",
+          "source": "Cancers (Basel)",
+          "authors": [
+            {
+              "name": "Chakrabarti T",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Mansour AG",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Wu X",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Arias-Romero J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Mambetsariev I",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Chang N",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Delos Santos S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Mirzapoiazova T",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Fricke J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Kim J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Afkhami M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Lall C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Khan AM",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Reyes A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Lee M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Bruno DS",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ladbury C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Amini A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Salgia R",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Salgia R",
+          "title": "Multimodal Artificial Intelligence in Lung Cancer: From Data Integration to Precision Oncology.",
+          "sorttitle": "multimodal artificial intelligence in lung cancer from data integration to precision oncology",
+          "volume": "18",
+          "issue": "18",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101526829",
+          "issn": "2072-6694",
+          "essn": "",
+          "pubtype": [
+            "Journal Article",
+            "Review"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42794920"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/cancers18182953"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "cancers18182953"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/07/22 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/09/04 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/09 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 01:09"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Cancers",
+          "elocationid": "pii: 2953. doi: 10.3390/cancers18182953",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/13 00:00",
+          "sortfirstauthor": "Chakrabarti T",
+          "vernaculartitle": ""
+        },
+        "42795149": {
+          "uid": "42795149",
+          "pubdate": "2026 Sep 16",
+          "epubdate": "2026 Sep 16",
+          "source": "Materials (Basel)",
+          "authors": [
+            {
+              "name": "Deng B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Li Z",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Lai Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Feng Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Sun B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhang R",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Bai Y",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Bai Y",
+          "title": "Research on the Performance Prediction of Fly Ash Slurry by Neural Network Based on Information Bottleneck Theory and Attention Mechanism.",
+          "sorttitle": "research on the performance prediction of fly ash slurry by neural network based on information bottleneck theory and attention mechanism",
+          "volume": "19",
+          "issue": "18",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101555929",
+          "issn": "1996-1944",
+          "essn": "",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42795149"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/ma19183929"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "ma19183929"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/08/08 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/09/07 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/08 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 01:09"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Materials (Basel, Switzerland)",
+          "elocationid": "pii: 3929. doi: 10.3390/ma19183929",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/16 00:00",
+          "sortfirstauthor": "Deng B",
+          "vernaculartitle": ""
+        },
+        "42800132": {
+          "uid": "42800132",
+          "pubdate": "2026 Sep 24",
+          "epubdate": "2026 Sep 24",
+          "source": "Spectrochim Acta A Mol Biomol Spectrosc",
+          "authors": [
+            {
+              "name": "Naqvi I",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Singh R",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Jain P",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Mehdi Y",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Mehdi Y",
+          "title": "Understanding calibration robustness under extreme spectral multicollinearity: A systematic evaluation of high-dimensional NIR spectroscopy.",
+          "sorttitle": "understanding calibration robustness under extreme spectral multicollinearity a systematic evaluation of high dimensional nir spectroscopy",
+          "volume": "366",
+          "issue": "",
+          "pages": "128854",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "9602533",
+          "issn": "1386-1425",
+          "essn": "1873-3557",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - as supplied by publisher",
+          "pubstatus": "10",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42800132"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1016/j.saa.2026.128854"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "S1386-1425(26)01425-3"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/07/10 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/09/20 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/23 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/27 02:29"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/27 02:29"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 18:03"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Spectrochimica acta. Part A, Molecular and biomolecular spectroscopy",
+          "elocationid": "doi: 10.1016/j.saa.2026.128854",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/24 00:00",
+          "sortfirstauthor": "Naqvi I",
+          "vernaculartitle": ""
+        },
+        "42800368": {
+          "uid": "42800368",
+          "pubdate": "2026 Sep 23",
+          "epubdate": "2026 Sep 23",
+          "source": "Neural Netw",
+          "authors": [
+            {
+              "name": "Wang Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhou Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhang Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Mei Y",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Mei Y",
+          "title": "Foreground guided dual branch learning for sparse 4D radar 3D object detection.",
+          "sorttitle": "foreground guided dual branch learning for sparse 4d radar 3d object detection",
+          "volume": "206",
+          "issue": "Pt A",
+          "pages": "109687",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "8805018",
+          "issn": "0893-6080",
+          "essn": "1879-2782",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - as supplied by publisher",
+          "pubstatus": "10",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42800368"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1016/j.neunet.2026.109687"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "S0893-6080(26)01142-1"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/05/25 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/07/25 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/21 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/27 02:29"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/27 02:29"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 18:10"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Neural networks : the official journal of the International Neural Network Society",
+          "elocationid": "doi: 10.1016/j.neunet.2026.109687",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/23 00:00",
+          "sortfirstauthor": "Wang Y",
+          "vernaculartitle": ""
+        },
+        "42801104": {
+          "uid": "42801104",
+          "pubdate": "2026",
+          "epubdate": "2026 Sep 4",
+          "source": "Sleep Adv",
+          "authors": [
+            {
+              "name": "Zikopoulos B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Matuk N",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Romanova I",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yazdanbakhsh A",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Yazdanbakhsh A",
+          "title": "Biophysical modeling of thalamocortical circuit dynamics: species-specific insights into neural synchrony, sleep spindles, and circuit mechanisms.",
+          "sorttitle": "biophysical modeling of thalamocortical circuit dynamics species specific insights into neural synchrony sleep spindles and circuit mechanisms",
+          "volume": "7",
+          "issue": "3",
+          "pages": "zpag100",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101774029",
+          "issn": "",
+          "essn": "2632-5012",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "258",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42801104"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13615542"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13615542;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1093/sleepadvances/zpag100"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "zpag100"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/07/10 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/08/28 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/27 05:45"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/27 05:44"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/27 04:00"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/09/04 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 89,
+          "fulljournalname": "Sleep advances : a journal of the Sleep Research Society",
+          "elocationid": "doi: 10.1093/sleepadvances/zpag100",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/04 00:00",
+          "sortfirstauthor": "Zikopoulos B",
+          "vernaculartitle": ""
+        },
+        "uids": [
+          "42801104",
+          "42800368",
+          "42800132",
+          "42795149",
+          "42794920",
+          "42793749",
+          "42792979",
+          "42791834",
+          "42789547",
+          "42786768"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-27T18:21:39.745Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

@@ -5,14 +5,15 @@
 //   fetchById:  GET https://api.openalex.org/works/<id>
 //
 // Polite-pool mailto query param (NOT a header — different from Crossref).
-// RESEARCH pitfall #2: the polite-pool slot SUNSETS Feb 2026. Today is
-// 2026-05-17, so the slot is still in effect; keep the &mailto param but
-// document the upcoming change.
-// TODO(post-2026-02): switch to a key-based pool once OpenAlex publishes
-// the replacement auth mechanism.
+// RESEARCH pitfall #2: OpenAlex's keyless budget is now shared per IP; a keyed
+// pool is the adapter's future (tracked outside Phase 17). The mailto param is
+// scrubbed from recorded fixtures and never decides a fixture match (D-17-06).
+//
+// `select=` keeps responses to the fields toCandidate reads. Offline replay is
+// the exact-match fixture store inside bin/lib/http.ts; the typed
+// OfflineEgressError is rethrown so callers can report "unavailable (offline)".
 
-import { fetch as httpFetch } from '../http.js';
-import { isOfflineMode, loadCassetteFile } from '../http-mock.js';
+import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -81,68 +82,36 @@ function toCandidate(item: OpenAlexWork): SourceCandidate | null {
   };
 }
 
+/** The OpenAlex fields toCandidate reads. */
+const SELECT = 'id,doi,title,publication_year,authorships';
+
 export async function search(
   query: string,
   opts: { limit?: number } = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
-  if (isOfflineMode()) {
-    const cassette = loadCassetteFile('openalex', 'works-attention');
-    if (!cassette) return [];
-    const searchEntry = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('/works?search='),
-    );
-    if (!searchEntry) return [];
-    const body = searchEntry.response as { results?: OpenAlexWork[] };
-    const results = body?.results ?? [];
-    return results.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
-  }
-
-  const url = `${BASE}/works?search=${encodeURIComponent(query)}&per-page=${limit}${mailtoParam('&')}`;
+  const url = `${BASE}/works?search=${encodeURIComponent(query)}&per-page=${limit}&select=${encodeURIComponent(SELECT)}${mailtoParam('&')}`;
   try {
-    const res = await httpFetch(url, { source: 'openalex' });
+    const res = await httpFetch(url, { source: 'openalex', maxBytes: MAX_JSON_RESPONSE_BYTES });
     if (res.status !== 200) return [];
-    const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
+    const body = JSON.parse(res.body) as unknown;
     const results = ((body as { results?: OpenAlexWork[] })?.results) ?? [];
     return results.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
-  } catch {
+  } catch (err) {
+    if (isOfflineEgressError(err)) throw err;
     return [];
   }
 }
 
 export async function fetchById(id: string): Promise<SourceCandidate | null> {
-  if (isOfflineMode()) {
-    const cassette = loadCassetteFile('openalex', 'works-attention');
-    if (!cassette) return null;
-    // Direct cassette match by /works/<id>.
-    const direct = cassette.find(
-      (c) =>
-        c.method === 'GET' &&
-        (c.path === `/works/${id}` || c.path.startsWith(`/works/${id}?`)),
-    );
-    if (direct) {
-      return toCandidate(direct.response as OpenAlexWork);
-    }
-    // Fallback: first result from the search cassette so test ids like
-    // 'W2741809807' still get a SourceCandidate-shaped return.
-    const search = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('/works?search='),
-    );
-    if (!search) return null;
-    const results = (search.response as { results?: OpenAlexWork[] })?.results ?? [];
-    const first = results[0];
-    return first ? toCandidate(first) : null;
-  }
-
-  // CR-03 fix: if no contact email, omit the query string entirely (?mailto= is the only param here).
-  const mp = mailtoParam('?');
-  const url = `${BASE}/works/${encodeURIComponent(id)}${mp}`;
+  const url = `${BASE}/works/${encodeURIComponent(id)}?select=${encodeURIComponent(SELECT)}${mailtoParam('&')}`;
   try {
-    const res = await httpFetch(url, { source: 'openalex' });
+    const res = await httpFetch(url, { source: 'openalex', maxBytes: MAX_JSON_RESPONSE_BYTES });
     if (res.status !== 200) return null;
-    const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
+    const body = JSON.parse(res.body) as unknown;
     return toCandidate(body as OpenAlexWork);
-  } catch {
+  } catch (err) {
+    if (isOfflineEgressError(err)) throw err;
     return null;
   }
 }

@@ -14,9 +14,12 @@
 //   - The lockdown test never registers an interceptor; it asserts
 //     disableNetConnect() blocks the request with an undici error.
 //
-// undici@7 note: MockAgent + setGlobalDispatcher replaces the global
-// dispatcher used by request(). After the test we restore the original
-// dispatcher to keep parallel test files isolated.
+// Phase 17: the MockAgent is installed through the V5 local-servers seam
+// (tests/helpers/local-servers/mock-agent.ts — the only undici import allowed
+// under tests/), which http.ts honours only under a test context and only AFTER
+// its egress gate. Intercepting a public host therefore runs in the live test
+// lane (PENSMITH_NETWORK_TESTS=1, set by withFreshState); the seam restores the
+// original dispatcher afterwards.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,12 +27,23 @@ import * as fsp from 'node:fs/promises';
 import * as fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {
-  MockAgent,
-  setGlobalDispatcher,
-  getGlobalDispatcher,
-  type Dispatcher,
-} from 'undici';
+import { MockAgent, installMockAgent, type InstalledMockAgent } from './helpers/local-servers/mock-agent.js';
+
+// Phase 17 (V5 + RUN-04): MockAgent comes from the local-servers seam, and a
+// test that intercepts a public host runs in the live test lane
+// (PENSMITH_NETWORK_TESTS=1 for its duration) — otherwise the egress gate
+// answers from the exact-match fixture store before any dispatcher is used.
+let installedAgents: InstalledMockAgent[] = [];
+function installAgent(): MockAgent {
+  const m = installMockAgent();
+  installedAgents.push(m);
+  return m.agent;
+}
+async function restoreAgents(): Promise<void> {
+  for (const m of installedAgents.reverse()) await m.restore().catch(() => undefined);
+  installedAgents = [];
+}
+
 import {
   fetch,
   clearCache,
@@ -64,9 +78,7 @@ function loadCassette(name: string): Cassette {
 }
 
 function applyCassette(cassette: Cassette): MockAgent {
-  const agent = new MockAgent();
-  agent.disableNetConnect();
-  setGlobalDispatcher(agent);
+  const agent = installAgent();
   const u = new URL(cassette.request.url);
   const pool = agent.get(u.origin);
   for (const r of cassette.responses) {
@@ -95,7 +107,8 @@ async function withFreshState<T>(
   const savedXdg = process.env.XDG_DATA_HOME;
   const savedHome = process.env.HOME;
   const savedEmail = process.env.PENSMITH_CONTACT_EMAIL;
-  const savedDispatcher: Dispatcher = getGlobalDispatcher();
+  const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
+  process.env['PENSMITH_NETWORK_TESTS'] = '1';
   // Point all three so every platform branch lands inside tmpRoot.
   process.env.LOCALAPPDATA = tmpRoot;
   process.env.XDG_DATA_HOME = tmpRoot;
@@ -117,7 +130,9 @@ async function withFreshState<T>(
     else process.env.HOME = savedHome;
     if (savedEmail === undefined) delete process.env.PENSMITH_CONTACT_EMAIL;
     else process.env.PENSMITH_CONTACT_EMAIL = savedEmail;
-    setGlobalDispatcher(savedDispatcher);
+    await restoreAgents();
+    if (savedLane === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
+    else process.env['PENSMITH_NETWORK_TESTS'] = savedLane;
     await fsp.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
   }
 }
@@ -148,7 +163,7 @@ test('http: 200 cassette returns parsed body', async () => {
   await withFreshState(
     async () => {
       const cassette = loadCassette('crossref-doi-200');
-      const agent = applyCassette(cassette);
+      applyCassette(cassette);
       try {
         const r = await fetch(cassette.request.url, { source: 'crossref' });
         assert.equal(r.status, 200);
@@ -156,7 +171,7 @@ test('http: 200 cassette returns parsed body', async () => {
         const body = JSON.parse(r.body) as { message: { DOI: string } };
         assert.equal(body.message.DOI, '10.1038/test');
       } finally {
-        await agent.close();
+        await restoreAgents();
       }
     },
     { PENSMITH_CONTACT_EMAIL: 'test@example.org' },
@@ -167,13 +182,13 @@ test('http: 404 cassette returns status 404 without throwing', async () => {
   await withFreshState(
     async () => {
       const cassette = loadCassette('crossref-doi-404');
-      const agent = applyCassette(cassette);
+      applyCassette(cassette);
       try {
         const r = await fetch(cassette.request.url, { source: 'crossref' });
         assert.equal(r.status, 404);
         assert.equal(r.cached, false);
       } finally {
-        await agent.close();
+        await restoreAgents();
       }
     },
     { PENSMITH_CONTACT_EMAIL: 'test@example.org' },
@@ -184,9 +199,7 @@ test('http: User-Agent contains pensmith/{version} and the email', async () => {
   await withFreshState(
     async () => {
       const cassette = loadCassette('crossref-doi-200');
-      const agent = new MockAgent();
-      agent.disableNetConnect();
-      setGlobalDispatcher(agent);
+      const agent = installAgent();
       const u = new URL(cassette.request.url);
       const pool = agent.get(u.origin);
       // Capture the inbound User-Agent via the reply callback form.
@@ -208,7 +221,7 @@ test('http: User-Agent contains pensmith/{version} and the email', async () => {
         assert.match(observedUA, /^pensmith\//, `UA should start with pensmith/, got "${observedUA}"`);
         assert.match(observedUA, /\(test@example\.org\)/, 'UA should contain the email');
       } finally {
-        await agent.close();
+        await restoreAgents();
       }
     },
     { PENSMITH_CONTACT_EMAIL: 'test@example.org' },
@@ -219,9 +232,7 @@ test('http: WARN-once banner emitted exactly once across multiple fetches when P
   await withFreshState(
     async () => {
       const cassette = loadCassette('crossref-doi-200');
-      const agent = new MockAgent();
-      agent.disableNetConnect();
-      setGlobalDispatcher(agent);
+      const agent = installAgent();
       const u = new URL(cassette.request.url);
       const pool = agent.get(u.origin);
       const r0 = cassette.responses[0]!;
@@ -253,7 +264,7 @@ test('http: WARN-once banner emitted exactly once across multiple fetches when P
         // Locked banner must contain the no-contact User-Agent phrasing.
         assert.match(stderr, /no-contact User-Agent/, 'Locked banner phrasing missing');
       } finally {
-        await agent.close();
+        await restoreAgents();
       }
     },
     { PENSMITH_CONTACT_EMAIL: undefined },
@@ -264,7 +275,7 @@ test('http: WARN does NOT fire when PENSMITH_CONTACT_EMAIL is set', async () => 
   await withFreshState(
     async () => {
       const cassette = loadCassette('crossref-doi-200');
-      const agent = applyCassette(cassette);
+      applyCassette(cassette);
       const stderr = await captureStderr(async () => {
         await fetch(cassette.request.url, { source: 'crossref' });
       });
@@ -274,7 +285,7 @@ test('http: WARN does NOT fire when PENSMITH_CONTACT_EMAIL is set', async () => 
           `expected no WARN, got: ${JSON.stringify(stderr)}`,
         );
       } finally {
-        await agent.close();
+        await restoreAgents();
       }
     },
     { PENSMITH_CONTACT_EMAIL: 'set@example.org' },
@@ -285,9 +296,7 @@ test('http: lockdown mode — request to non-mocked URL throws (no live network)
   await withFreshState(
     async () => {
       // Install a MockAgent with NO interceptors, disableNetConnect.
-      const agent = new MockAgent();
-      agent.disableNetConnect();
-      setGlobalDispatcher(agent);
+      installAgent();
       try {
         await assert.rejects(
           () =>
@@ -297,7 +306,7 @@ test('http: lockdown mode — request to non-mocked URL throws (no live network)
             }),
         );
       } finally {
-        await agent.close();
+        await restoreAgents();
       }
     },
     { PENSMITH_CONTACT_EMAIL: 'test@example.org' },
@@ -311,9 +320,7 @@ test('http: 429 with retry-after:1 — next attempt waits at least ~900ms', asyn
   await withFreshState(
     async () => {
       const url = 'https://api.crossref.org/works/10.1038/retry-after-test';
-      const agent = new MockAgent();
-      agent.disableNetConnect();
-      setGlobalDispatcher(agent);
+      const agent = installAgent();
       const u = new URL(url);
       const pool = agent.get(u.origin);
       // First response: 429 with retry-after header
@@ -335,7 +342,7 @@ test('http: 429 with retry-after:1 — next attempt waits at least ~900ms', asyn
         );
         assert.deepEqual(agent.pendingInterceptors(), [], 'both interceptors must have fired');
       } finally {
-        await agent.close();
+        await restoreAgents();
       }
     },
     { PENSMITH_CONTACT_EMAIL: 'test@example.org' },
@@ -347,9 +354,7 @@ test('http: 429 with NO retry-after header — normal jitter behavior (regressio
   await withFreshState(
     async () => {
       const url = 'https://api.crossref.org/works/10.1038/no-retry-after';
-      const agent = new MockAgent();
-      agent.disableNetConnect();
-      setGlobalDispatcher(agent);
+      const agent = installAgent();
       const u = new URL(url);
       const pool = agent.get(u.origin);
       // First response: 429 without retry-after header
@@ -365,7 +370,7 @@ test('http: 429 with NO retry-after header — normal jitter behavior (regressio
         assert.equal(r.status, 200, '429-then-200 without retry-after should still resolve to 200');
         assert.deepEqual(agent.pendingInterceptors(), []);
       } finally {
-        await agent.close();
+        await restoreAgents();
       }
     },
     { PENSMITH_CONTACT_EMAIL: 'test@example.org' },
@@ -377,9 +382,7 @@ test('http: 503 with retry-after:0 — next attempt fires without extra wait', a
   await withFreshState(
     async () => {
       const url = 'https://api.crossref.org/works/10.1038/503-retry-after-zero';
-      const agent = new MockAgent();
-      agent.disableNetConnect();
-      setGlobalDispatcher(agent);
+      const agent = installAgent();
       const u = new URL(url);
       const pool = agent.get(u.origin);
       // First response: 503 with retry-after: 0
@@ -395,7 +398,7 @@ test('http: 503 with retry-after:0 — next attempt fires without extra wait', a
         assert.equal(r.status, 200, '503-then-200 with retry-after:0 should resolve to 200');
         assert.deepEqual(agent.pendingInterceptors(), []);
       } finally {
-        await agent.close();
+        await restoreAgents();
       }
     },
     { PENSMITH_CONTACT_EMAIL: 'test@example.org' },
@@ -406,7 +409,7 @@ test('http: clearCache removes all entries', async () => {
   await withFreshState(
     async () => {
       const cassette = loadCassette('crossref-doi-200');
-      const agent = applyCassette(cassette);
+      applyCassette(cassette);
       try {
         await fetch(cassette.request.url, { source: 'crossref' });
         // Cache file should exist after the GET.
@@ -418,7 +421,7 @@ test('http: clearCache removes all entries', async () => {
         const after = await fsp.readdir(dir).catch(() => [] as string[]);
         assert.equal(after.length, 0, `clearCache should empty the dir, got ${after.length}`);
       } finally {
-        await agent.close();
+        await restoreAgents();
       }
     },
     { PENSMITH_CONTACT_EMAIL: 'test@example.org' },

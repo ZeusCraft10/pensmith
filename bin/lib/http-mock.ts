@@ -1,74 +1,67 @@
-// bin/lib/http-mock.ts — PR-time offline cassette loader + cron recorder (D-23, RSCH-11).
+// bin/lib/http-mock.ts — the network-mode seam and the exact-match fixture store
+// (RUN-01..RUN-05, D-17-04, D-17-06, D-17-08, D-17-14, D-17-15).
 //
 // =====================================================================
-//   Two-tier API surface (executor deviation note — see below)
+//   Three orthogonal modes (S-15, D-17-04)
 // =====================================================================
-// The originally-specified API in Plan 04 wires `nock` interceptors so that
-// subsequent `http.get(url)` calls return the cassette body. In practice
-// `pensmith`'s HTTP chokepoint (bin/lib/http.ts) routes through `undici`,
-// and nock@14 hooks node:http/https only — it does NOT intercept undici
-// requests. Rather than burn an entire wave on a port to undici MockAgent
-// (which would need its own per-file eslint exemption since undici imports
-// are forbidden outside bin/lib/http.ts), this module ships TWO surfaces:
+// This module is the ONE place that decides the network mode. bin/lib/http.ts
+// asks networkMode() at the top of every request (the egress gate, D-17-05) and
+// never reads a mode environment variable itself.
 //
-//   1. loadCassettes(adapter)/clearCassettes() — nock-based, preserved
-//      for forward compatibility AND for the cron-refresh recorder which
-//      uses nock.recorder.rec() to capture live traffic from the same
-//      adapter code via a dedicated tsx entry-point (Plan 09).
-//   2. loadCassetteFile(adapter, basename) — synchronous reader that
-//      returns the parsed cassette JSON. Each adapter checks
-//      isOfflineMode() at the top of search/fetchById and short-circuits
-//      through loadCassetteFile, bypassing http.ts entirely in offline
-//      mode. This is the path the PR-time test suite actually uses.
+//   dryRun         PENSMITH_DRY_RUN=1 (set by the --dry-run pre-parse, which
+//                  is also the channel into child processes).
+//   sourcesOffline PENSMITH_OFFLINE=1, OR dry-run, OR a test context
+//                  (NODE_TEST_CONTEXT set by `node --test`, or PENSMITH_TEST=1
+//                  set by scripts/run-tests.mjs) WITHOUT PENSMITH_NETWORK_TESTS=1.
+//   llmStubbed     PENSMITH_NO_LLM=1 OR dry-run.
 //
-// The two-surface design keeps the plan's API contract intact while
-// making the offline tests actually function against undici-backed
-// adapters. Documented as Rule 3 (auto-fix blocking issue) in
-// .planning/phases/03-vertical-slice-one-section/03-04-SUMMARY.md.
+// A real user with no variables set is LIVE (D-V1-01). PENSMITH_NETWORK_TESTS=1
+// turns sources live ONLY inside a test context (the test-lane seam); this file
+// is the only bin/, mcp/ or hooks/ code that reads it (chokepoint row
+// network-tests-seam).
 //
 // =====================================================================
-//   Cassette schema (mirror nockBack output shape — recorder compat)
+//   Exact-match fixture store (D-17-06)
 // =====================================================================
-// Each cassette JSON is an array of:
+// Sources-offline replay answers a request ONLY from a recorded fixture whose
+// canonical key (method, origin, pathname, sorted query without the contact /
+// secret params, sha256 of a POST body) equals the request's. There is no
+// "first search item" or "first cassette entry" fallback anywhere: a miss is
+// null here, and bin/lib/http.ts turns it into a typed OfflineEgressError.
+//
+// Fixtures live in tests/fixtures/cassettes/<adapter>/*.json (real recordings
+// made by scripts/refresh-cassettes.mjs) and tests/fixtures/cassettes/
+// synthetic/<adapter>/*.json (hand-written negative-test fixtures). This is the
+// ONLY runtime module that resolves a tests/ path (chokepoint row
+// tests-path-at-runtime); an installed package does not ship tests/, so
+// fixturesAvailable is false there and offline replay is refused up front
+// (announceModes, D-17-15).
+//
+// =====================================================================
+//   Cassette schema
+// =====================================================================
 //   {
 //     scope: 'https://api.crossref.org',
 //     method: 'GET',
-//     path: '/works?query=...',
+//     path: '/works?query=...',          (scrubbed params removed by the recorder)
 //     status: 200,
-//     response: <body — object for JSON APIs, string for XML APIs>,
-//     responseHeaders?: { 'content-type': 'application/json' }
+//     response: <object for JSON bodies, string otherwise>,
+//     responseHeaders?: { 'content-type': 'application/json' },
+//     bodySha256?: '<hex>',              (POST fixtures only)
+//     provenance?: { recordedAt, recorder, adapter }   (recorded fixtures)
 //   }
-//
-// =====================================================================
-//   Sensitive-header scrubbing (T-3-02 / T-01-07 / CYCLE-3 LOW)
-// =====================================================================
-// recordCassettes() opens nock.recorder.rec() with
-// enable_reqheaders_recording: false — request headers (which would
-// carry Authorization / x-api-key) never reach the recorder buffer.
-// finalizeRecording() additionally scrubs RESPONSE headers via the
-// SENSITIVE_HEADERS deny-list before writing each cassette. The
-// tests/cassette-no-leak.test.ts sentinel scans both `responseHeaders`
-// AND any stray `reqheaders`/`requestHeaders` keys in committed JSON.
 
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-} from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { statSync } from 'node:fs';
+import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 
 // ---------------------------------------------------------------------
-//   Cassette root resolution (mirrors http.ts findPkgRoot pattern)
+//   Package-root resolution (mirrors http.ts findPkgRoot pattern)
 // ---------------------------------------------------------------------
 // This file ships at two depths: bin/lib/http-mock.ts under tsx, and
-// dist/bin/lib/http-mock.js after build. Fixed-depth `..` × N would
-// land in the wrong dir post-build (same defect class as IN-03). Walk
-// up from HERE until we find package.json, then resolve cassette dir
-// relative to that.
+// dist/bin/lib/http-mock.js after build. Walk up to package.json.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -89,6 +82,7 @@ function findPkgRoot(start: string): string {
 
 const PKG_ROOT = findPkgRoot(__dirname);
 const CASSETTES_ROOT = join(PKG_ROOT, 'tests', 'fixtures', 'cassettes');
+const SYNTHETIC_DIR = 'synthetic';
 
 // ---------------------------------------------------------------------
 //   Public types
@@ -96,11 +90,15 @@ const CASSETTES_ROOT = join(PKG_ROOT, 'tests', 'fixtures', 'cassettes');
 
 export interface Cassette {
   scope: string;
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'HEAD';
   path: string;
   status: number;
   response: unknown;
   responseHeaders?: Record<string, string>;
+  /** sha256 (hex) of the POST body this fixture answers (D-17-06). */
+  bodySha256?: string;
+  /** Written by scripts/refresh-cassettes.mjs for every real recording (CI-07). */
+  provenance?: { recordedAt: string; recorder: string; adapter: string };
   /** CYCLE-3 substantive LOW REVIEWS CONVERGENCE — request-header bucket. */
   requestHeaders?: Record<string, string>;
   /** Alternate spelling some recorders use. */
@@ -110,11 +108,9 @@ export interface Cassette {
 /**
  * Sensitive-header deny-list (T-3-02 / T-01-07).
  *
- * Used by finalizeRecording() to scrub response headers and by
- * tests/cassette-no-leak.test.ts to assert no committed cassette
- * carries any of these keys (case-insensitive). EXPORTED so the
- * sentinel test imports the exact same set the writer applies —
- * single source of truth.
+ * The recorder (bin/lib/http.ts record hook + scripts/refresh-cassettes.mjs)
+ * never persists these, and tests/cassette-no-leak.test.ts asserts no committed
+ * cassette carries any of them. EXPORTED so both sides use the same set.
  */
 export const SENSITIVE_HEADERS: ReadonlySet<string> = new Set([
   'authorization',
@@ -126,35 +122,242 @@ export const SENSITIVE_HEADERS: ReadonlySet<string> = new Set([
   'proxy-authorization',
 ]);
 
+/**
+ * Query parameters removed from a fixture key and from recorded cassette paths
+ * (D-17-06): contact and secret parameters must never decide a match, and must
+ * never be committed.
+ */
+export const SCRUBBED_QUERY_PARAMS: ReadonlySet<string> = new Set([
+  'mailto',
+  'email',
+  'api_key',
+  'key',
+  'tool',
+  '_',
+]);
+
 // ---------------------------------------------------------------------
-//   Offline-mode predicate
+//   Network mode (D-17-04)
 // ---------------------------------------------------------------------
 
+export type OfflineReason = '--dry-run' | 'PENSMITH_OFFLINE=1' | 'test runner';
+
+export interface NetworkMode {
+  /** Source, registrar, detector and plagiarism requests are answered from fixtures (or refused). */
+  readonly sourcesOffline: boolean;
+  /** Every model call returns a deterministic stub; no provider is contacted. */
+  readonly llmStubbed: boolean;
+  /** --dry-run: zero sockets; sources come from the synthetic dry-run provider. */
+  readonly dryRun: boolean;
+  /** Why sources are offline, or null when live. */
+  readonly reason: OfflineReason | null;
+  /** tests/fixtures/cassettes exists (a source checkout, not an installed package). */
+  readonly fixturesAvailable: boolean;
+}
+
+/** True under `node --test` (NODE_TEST_CONTEXT) or scripts/run-tests.mjs (PENSMITH_TEST=1). */
+export function isTestContext(): boolean {
+  const ctx = process.env['NODE_TEST_CONTEXT'];
+  return (typeof ctx === 'string' && ctx.length > 0) || process.env['PENSMITH_TEST'] === '1';
+}
+
+/** Compute the effective network mode for this process right now. */
+export function networkMode(): NetworkMode {
+  const dryRun = process.env['PENSMITH_DRY_RUN'] === '1';
+  const offlineEnv = process.env['PENSMITH_OFFLINE'] === '1';
+  const test = isTestContext();
+  // The ONE read of PENSMITH_NETWORK_TESTS in bin/ (chokepoint network-tests-seam):
+  // it turns sources live only inside a test context. Outside a test context it
+  // means nothing — a real user is live by default anyway.
+  const testLaneLive = test && process.env['PENSMITH_NETWORK_TESTS'] === '1';
+
+  let reason: OfflineReason | null = null;
+  if (dryRun) reason = '--dry-run';
+  else if (offlineEnv) reason = 'PENSMITH_OFFLINE=1';
+  else if (test && !testLaneLive) reason = 'test runner';
+
+  return {
+    sourcesOffline: reason !== null,
+    llmStubbed: dryRun || process.env['PENSMITH_NO_LLM'] === '1',
+    dryRun,
+    reason,
+    fixturesAvailable: existsSync(CASSETTES_ROOT),
+  };
+}
+
 /**
- * Offline mode is the DEFAULT (PR-time CI never sets PENSMITH_NETWORK_TESTS).
- * The weekly cron-refresh job sets PENSMITH_NETWORK_TESTS=1 to opt into
- * live HTTP and re-record cassettes.
+ * Sources-offline predicate (kept for existing callers; D-17-04). True under
+ * PENSMITH_OFFLINE=1, --dry-run, or the test runner without
+ * PENSMITH_NETWORK_TESTS=1. False for a real user with no variables set.
  */
 export function isOfflineMode(): boolean {
-  return process.env['PENSMITH_NETWORK_TESTS'] !== '1';
+  return networkMode().sourcesOffline;
+}
+
+/**
+ * The cassette recorder hook (D-17-14) is active only when LIVE, outside a test
+ * context, and with PENSMITH_RECORD_CASSETTES=1 (scripts/refresh-cassettes.mjs).
+ */
+export function isRecordingEnabled(): boolean {
+  if (process.env['PENSMITH_RECORD_CASSETTES'] !== '1') return false;
+  if (isTestContext()) return false;
+  return !networkMode().sourcesOffline;
+}
+
+// ---------------------------------------------------------------------
+//   Disclosure strings (D-17-08 — fixed copy)
+// ---------------------------------------------------------------------
+
+/** The stderr banner for an offline run, or null when live. */
+export function offlineBanner(mode: NetworkMode = networkMode()): string | null {
+  if (!mode.sourcesOffline || mode.reason === null) return null;
+  if (mode.dryRun) {
+    return 'OFFLINE MODE (reason: --dry-run): sources are labelled synthetic dry-run sources; no network or model call is made';
+  }
+  return `OFFLINE MODE (reason: ${mode.reason}): sources, verification, detector and plagiarism results are recorded fixtures, not live`;
+}
+
+/** The reason label of a stubbed-LLM run (--dry-run sets PENSMITH_NO_LLM=1 too). */
+export const LLM_STUBBED_REASON = 'PENSMITH_NO_LLM=1';
+
+/** The stderr banner for a stubbed-LLM run, or null. Independent of the network mode. */
+export function llmStubbedBanner(mode: NetworkMode = networkMode()): string | null {
+  if (!mode.llmStubbed) return null;
+  return `LLM STUBBED (${LLM_STUBBED_REASON}): every model call returns a deterministic stub; no provider is contacted`;
+}
+
+/**
+ * The marker line written as the FIRST line of every artifact produced offline
+ * (.paper/RESEARCH.md, each section VERIFICATION.md, COMPILE-REPORT.md body,
+ * .paper/VERIFICATION.md). null when live. Exports never carry it: exporters
+ * read DRAFT.md / FINAL.md, which never do (zero trace).
+ */
+export function offlineMarkerLine(mode: NetworkMode = networkMode()): string | null {
+  if (!mode.sourcesOffline || mode.reason === null) return null;
+  if (mode.dryRun) {
+    return '> OFFLINE MODE (--dry-run) — synthetic dry-run sources, not live results.';
+  }
+  return `> OFFLINE MODE (${mode.reason}) — recorded fixtures, not live results.`;
+}
+
+/** The exact prefix every offline marker line starts with (for readers and tests). */
+export const OFFLINE_MARKER_PREFIX = '> OFFLINE MODE (';
+
+/** Verbs that never need fixtures: exempt from the installed-package refusal (D-17-15). */
+export const OFFLINE_READ_ONLY_VERBS: ReadonlySet<string> = new Set(['status', 'list', 'doctor', 'open']);
+
+export const OFFLINE_FIXTURES_NOT_SHIPPED =
+  'offline fixtures are not shipped in the installed package; offline replay needs a source checkout';
+
+/**
+ * The installed-package refusal (RUN-05, D-17-15): sources-offline replay
+ * without --dry-run needs the recorded fixtures, which only a source checkout
+ * has. Thrown before any work so a user never gets 0-result research or
+ * all-FABRICATED verdicts from a missing fixture tree.
+ */
+export class OfflineFixturesNotShippedError extends PensmithError {
+  constructor() {
+    super(OFFLINE_FIXTURES_NOT_SHIPPED, EXIT_ERROR);
+    this.name = 'OfflineFixturesNotShippedError';
+  }
+}
+
+let announced = false;
+
+export interface AnnounceOptions {
+  /** The explicit verb (bin/pensmith.ts firstVerb), or null for a bare/routed run. */
+  readonly verb: string | null;
+  /** The raw argv, when available: --version / --help / --estimate are exempt. */
+  readonly argv?: readonly string[];
+}
+
+/**
+ * Print the RUN-02 banners once per process (stderr, before any other output),
+ * then apply the installed-package refusal (D-17-15). Read-only verbs, the
+ * citty meta flags and the --estimate preview are exempt from the refusal.
+ */
+export function announceModes(opts: AnnounceOptions): void {
+  const argv = opts.argv ?? [];
+  const meta = argv.includes('--version') || argv.includes('--help') || argv.includes('-h');
+  const mode = networkMode();
+  if (!announced && !meta) {
+    announced = true;
+    const lines = [offlineBanner(mode), llmStubbedBanner(mode)].filter(
+      (l): l is string => l !== null,
+    );
+    if (lines.length > 0) process.stderr.write(lines.join('\n') + '\n');
+  }
+  if (meta || argv.includes('--estimate')) return;
+  if (opts.verb !== null && OFFLINE_READ_ONLY_VERBS.has(opts.verb)) return;
+  if (mode.sourcesOffline && !mode.dryRun && !mode.fixturesAvailable) {
+    throw new OfflineFixturesNotShippedError();
+  }
+}
+
+/** Test-only: let a second announceModes() call print again. */
+export function _resetAnnouncedForTest(): void {
+  announced = false;
+}
+
+// ---------------------------------------------------------------------
+//   Canonical fixture key (D-17-06)
+// ---------------------------------------------------------------------
+
+function sha256Hex(body: string | Buffer): string {
+  return createHash('sha256').update(body).digest('hex');
+}
+
+function decodePath(p: string): string {
+  try {
+    return decodeURIComponent(p);
+  } catch {
+    return p;
+  }
+}
+
+/**
+ * The canonical key a request and a fixture must share exactly: METHOD,
+ * origin, percent-decoded pathname, and the query sorted by key then value
+ * with SCRUBBED_QUERY_PARAMS removed; a request body (POST) adds its sha256.
+ */
+export function canonicalFixtureKey(method: string, url: string, body?: string | Buffer): string {
+  const u = new URL(url);
+  const params = [...u.searchParams.entries()]
+    .filter(([k]) => !SCRUBBED_QUERY_PARAMS.has(k.toLowerCase()))
+    .sort(([ak, av], [bk, bv]) => (ak < bk ? -1 : ak > bk ? 1 : av < bv ? -1 : av > bv ? 1 : 0));
+  const query = params.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+  let key = `${method.toUpperCase()} ${u.origin}${decodePath(u.pathname)}${query ? `?${query}` : ''}`;
+  if (body !== undefined && method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD') {
+    key += ` sha256:${sha256Hex(body)}`;
+  }
+  return key;
+}
+
+/** The path+query a recorded cassette stores (scrubbed params removed, order kept). */
+export function scrubbedPathAndQuery(url: string): string {
+  const u = new URL(url);
+  const kept = [...u.searchParams.entries()].filter(([k]) => !SCRUBBED_QUERY_PARAMS.has(k.toLowerCase()));
+  const sp = new URLSearchParams(kept);
+  const q = sp.toString();
+  return `${u.pathname}${q ? `?${q}` : ''}`;
+}
+
+/** The canonical key of a committed cassette entry. */
+export function cassetteKey(c: Cassette): string {
+  const url = `${c.scope}${c.path}`;
+  const method = String(c.method).toUpperCase();
+  let key = canonicalFixtureKey(method, url);
+  if (method !== 'GET' && method !== 'HEAD' && typeof c.bodySha256 === 'string') {
+    key += ` sha256:${c.bodySha256.toLowerCase()}`;
+  }
+  return key;
 }
 
 // ---------------------------------------------------------------------
 //   Cassette readers
 // ---------------------------------------------------------------------
 
-/**
- * Synchronously read + parse a single cassette JSON file. Used by
- * adapters in offline mode to short-circuit the HTTP path entirely
- * (nock@14 does NOT intercept undici requests — see file header).
- *
- * Returns the parsed cassette array, or null if the file does not
- * exist. Throws on JSON-parse errors so corrupt cassettes surface
- * loudly in CI rather than silently degrading to "no data".
- */
-export function loadCassetteFile(adapter: string, basename: string): Cassette[] | null {
-  const file = join(CASSETTES_ROOT, adapter, `${basename}.json`);
-  if (!existsSync(file)) return null;
+function parseCassetteFile(file: string): Cassette[] {
   const raw = readFileSync(file, 'utf8');
   const parsed = JSON.parse(raw) as Cassette[];
   if (!Array.isArray(parsed)) {
@@ -163,186 +366,123 @@ export function loadCassetteFile(adapter: string, basename: string): Cassette[] 
   return parsed;
 }
 
+/** The directories searched for an adapter: <adapter>/ then synthetic/<adapter>/. */
+function adapterDirs(adapter: string): string[] {
+  return [join(CASSETTES_ROOT, adapter), join(CASSETTES_ROOT, SYNTHETIC_DIR, adapter)];
+}
+
 /**
- * Merge EVERY committed cassette JSON in tests/fixtures/cassettes/<adapter>/
- * into one flat entry array. Used by the offline adapters when a request must
- * resolve against a DOI/query that may live in ANY committed cassette — not
- * just one hard-coded basename (ERGO-06 `add <doi>`: the committed add-doi.json
- * carries 10.1038/nphys1170, distinct from works-attention.json). Returns null
- * when the adapter dir does not exist; throws (loudly) on a corrupt cassette so
- * CI never silently degrades to "no data". Order follows readdirSync (locale-
- * sorted on most platforms) — adapters that need a deterministic first-match
- * should path-match a specific entry rather than rely on dir order.
+ * Synchronously read + parse a single cassette JSON file from
+ * tests/fixtures/cassettes/<adapter>/ or tests/fixtures/cassettes/synthetic/
+ * <adapter>/. Used by tests that need a fixture body (parser tests, the LLM
+ * fixture tests). Returns null when the file does not exist; throws on a
+ * corrupt cassette so CI never silently degrades to "no data".
+ */
+export function loadCassetteFile(adapter: string, basename: string): Cassette[] | null {
+  for (const dir of adapterDirs(adapter)) {
+    const file = join(dir, `${basename}.json`);
+    if (existsSync(file)) return parseCassetteFile(file);
+  }
+  return null;
+}
+
+/**
+ * Merge every committed cassette for an adapter (recorded and synthetic) into
+ * one flat entry array. Returns null when neither directory exists.
  */
 export function loadCassetteDir(adapter: string): Cassette[] | null {
-  const dir = join(CASSETTES_ROOT, adapter);
-  if (!existsSync(dir)) return null;
-  const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+  const dirs = adapterDirs(adapter).filter((d) => existsSync(d));
+  if (dirs.length === 0) return null;
   const out: Cassette[] = [];
-  for (const f of files) {
-    const raw = readFileSync(join(dir, f), 'utf8');
-    const parsed = JSON.parse(raw) as Cassette[];
-    if (!Array.isArray(parsed)) {
-      throw new Error(`Cassette ${join(dir, f)} is not a JSON array (got ${typeof parsed})`);
-    }
-    out.push(...parsed);
+  for (const dir of dirs) {
+    const files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
+    for (const f of files) out.push(...parseCassetteFile(join(dir, f)));
   }
   return out;
 }
 
-/**
- * Register nock interceptors for every cassette in
- * tests/fixtures/cassettes/<adapter>/. Used by the cron-refresh tooling
- * (Plan 09) to ensure existing cassettes still apply during re-record
- * runs; also preserved as the documented API even though nock@14 does
- * not intercept undici (the runtime path used by bin/lib/http.ts).
- *
- * In offline mode this also calls nock.disableNetConnect() — request
- * lockdown defense-in-depth at the node:http layer (catches any future
- * dep that bypasses our undici chokepoint).
- */
-export async function loadCassettes(adapter: string): Promise<void> {
-  if (!isOfflineMode()) return;
-  const { default: nock } = await import('nock');
-  const dir = join(CASSETTES_ROOT, adapter);
-  if (!existsSync(dir)) {
-    throw new Error(
-      `No cassette directory for adapter "${adapter}" at ${dir} (D-23)`,
-    );
-  }
-  const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
-  for (const f of files) {
-    const cassettes = JSON.parse(readFileSync(join(dir, f), 'utf8')) as Cassette[];
-    for (const c of cassettes) {
-      nock(c.scope)
-        .intercept(c.path, c.method)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .reply(c.status, c.response as any, c.responseHeaders ?? {});
+/** Every cassette file under tests/fixtures/cassettes (recorded + synthetic). */
+export function listCassetteFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
     }
-  }
-  nock.disableNetConnect();
-}
-
-/**
- * Tear down every nock interceptor and re-enable network connect. Called
- * between tests (or after a recorder run) to leave the global state clean.
- */
-export async function clearCassettes(): Promise<void> {
-  // WR-01 (16 review): guard BEFORE the lazy nock import — symmetric with
-  // loadCassettes(). nock is a devDependency now (DOCS-03); in a prod install
-  // (--omit=dev) it is absent. In non-offline mode no nock was ever installed,
-  // so there is nothing to clear — return before `await import('nock')` so a
-  // stray production caller never hits ERR_MODULE_NOT_FOUND.
-  if (!isOfflineMode()) return;
-  const { default: nock } = await import('nock');
-  nock.cleanAll();
-  nock.enableNetConnect();
+    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.isFile() && e.name.endsWith('.json')) out.push(full);
+    }
+  };
+  walk(CASSETTES_ROOT);
+  return out;
 }
 
 // ---------------------------------------------------------------------
-//   Recorder (cron-refresh — Plan 09)
+//   The exact-match fixture store (D-17-06)
 // ---------------------------------------------------------------------
 
-/**
- * Open the nock.recorder for the given adapter. The caller MUST wrap
- * adapter invocations in try/finally so the recorder is always cleared
- * even if the adapter throws — leaving nock.recorder in 'recording'
- * state across tests poisons all subsequent invocations and may leak
- * sensitive headers from later runs into earlier cassettes.
- *
- * Canonical caller pattern (Plan 09 bin/cli/refresh-cassettes.ts):
- *
- *   await recordCassettes('crossref');
- *   try {
- *     await crossref.search('attention mechanisms');
- *     await crossref.fetchById('10.0000/aaa');
- *   } finally {
- *     finalizeRecording('crossref');
- *   }
- */
-export async function recordCassettes(adapter: string): Promise<void> {
-  if (
-    process.env['PENSMITH_NETWORK_TESTS'] !== '1' ||
-    process.env['PENSMITH_RECORD_CASSETTES'] !== '1'
-  ) {
-    throw new Error(
-      `recordCassettes(${adapter}) requires PENSMITH_NETWORK_TESTS=1 AND PENSMITH_RECORD_CASSETTES=1 (D-23, D-24)`,
-    );
+export interface FixtureResponse {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+  /** Which committed file answered (for diagnostics and the http session record). */
+  file: string;
+}
+
+interface IndexedFixture {
+  entry: Cassette;
+  file: string;
+}
+
+let fixtureIndex: Map<string, IndexedFixture> | null = null;
+
+function buildIndex(): Map<string, IndexedFixture> {
+  const index = new Map<string, IndexedFixture>();
+  for (const file of listCassetteFiles()) {
+    for (const entry of parseCassetteFile(file)) {
+      if (typeof entry?.scope !== 'string' || typeof entry?.path !== 'string') continue;
+      const method = String(entry.method).toUpperCase();
+      // A POST fixture without a body hash can never match exactly (D-17-06):
+      // it answers nothing (the hand-written LLM fixtures are read by their
+      // tests through loadCassetteFile, never through replay).
+      if (method !== 'GET' && method !== 'HEAD' && typeof entry.bodySha256 !== 'string') continue;
+      let key: string;
+      try {
+        key = cassetteKey(entry);
+      } catch {
+        continue;
+      }
+      // First file (sorted walk) wins; tests/cassette-provenance.test.ts asserts
+      // there are no duplicate keys, so the order never decides a match.
+      if (!index.has(key)) index.set(key, { entry, file });
+    }
   }
-  // mkdir is done at finalizeRecording time; opening the recorder is
-  // synchronous, but the public surface is async so callers don't have
-  // to special-case open/teardown — see lifecycle docblock above.
-  const { default: nock } = await import('nock');
-  nock.recorder.rec({
-    output_objects: true,
-    dont_print: true,
-    // CYCLE-3 substantive LOW: request-header capture disabled by nock;
-    // nothing reaches the scrubber for requests. This is the FIRST
-    // defense; tests/cassette-no-leak.test.ts is the SECOND defense.
-    enable_reqheaders_recording: false,
-  });
+  return index;
 }
 
 /**
- * Drain the nock recorder buffer, scrub SENSITIVE_HEADERS from each
- * response (and any stray reqheaders), and write one JSON file per
- * unique (method, scope, path) tuple to tests/fixtures/cassettes/
- * <adapter>/<sanitized-path>.json.
- *
- * CRITICAL — nock.recorder.clear() runs in the finally block regardless
- * of write success. Leaving the recorder in 'recording' state across
- * runs poisons subsequent invocations.
+ * Answer a request from the exact-match store, or null on a miss. Never
+ * falls back to another record (D-17-06). Only bin/lib/http.ts calls this, and
+ * only in sources-offline mode.
  */
-export async function finalizeRecording(adapter: string): Promise<void> {
-  // nock.recorder.play() returns Array<string | Definition>; with
-  // output_objects:true (passed in recordCassettes) every element is a
-  // Definition. We cast through unknown so TS accepts the recorder's
-  // structural shape (the runtime keys we read are guarded below).
-  const { default: nock } = await import('nock');
-  const recorded = nock.recorder.play() as unknown as Array<{
-    scope: string;
-    method: string;
-    path: string;
-    status: number;
-    response: unknown;
-    rawHeaders?: string[];
-    reqheaders?: Record<string, string>;
-  }>;
-  try {
-    const outDir = join(CASSETTES_ROOT, adapter);
-    mkdirSync(outDir, { recursive: true });
-    for (const rec of recorded) {
-      // Scrub sensitive RESPONSE headers (rawHeaders is interleaved k,v,k,v,...).
-      const cleanedHeaders: Record<string, string> = {};
-      const raw = rec.rawHeaders ?? [];
-      for (let i = 0; i + 1 < raw.length; i += 2) {
-        const rawK = raw[i];
-        const rawV = raw[i + 1];
-        if (rawK === undefined || rawV === undefined) continue;
-        const k = rawK.toLowerCase();
-        if (!SENSITIVE_HEADERS.has(k)) cleanedHeaders[k] = rawV;
-      }
-      // CYCLE-3 substantive LOW REVIEWS CONVERGENCE — defense-in-depth: also
-      // scrub any stray REQUEST headers in case enable_reqheaders_recording
-      // is flipped to true upstream. Empty {} on disk documents the policy.
-      const cleanedReqHeaders: Record<string, string> = {};
-      for (const [k, v] of Object.entries(rec.reqheaders ?? {})) {
-        if (!SENSITIVE_HEADERS.has(k.toLowerCase())) cleanedReqHeaders[k] = v;
-      }
-      const sanitizedPath = rec.path.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
-      const outPath = join(outDir, `${sanitizedPath}.json`);
-      const cassette: Cassette = {
-        scope: rec.scope,
-        method: rec.method.toUpperCase() as 'GET' | 'POST',
-        path: rec.path,
-        status: rec.status,
-        response: rec.response,
-        responseHeaders: cleanedHeaders,
-        requestHeaders: cleanedReqHeaders,
-      };
-      writeFileSync(outPath, JSON.stringify([cassette], null, 2));
-    }
-  } finally {
-    nock.recorder.clear();
+export function lookupFixture(method: string, url: string, body?: string | Buffer): FixtureResponse | null {
+  if (fixtureIndex === null) fixtureIndex = buildIndex();
+  const hit = fixtureIndex.get(canonicalFixtureKey(method, url, body));
+  if (!hit) return null;
+  const r = hit.entry.response;
+  const bodyText = typeof r === 'string' ? r : r === undefined || r === null ? '' : JSON.stringify(r);
+  const headers: Record<string, string> = {};
+  for (const [k, v] of Object.entries(hit.entry.responseHeaders ?? {})) {
+    headers[k.toLowerCase()] = String(v);
   }
+  return { status: hit.entry.status, headers, body: bodyText, file: hit.file };
+}
+
+/** Test-only: drop the in-memory fixture index (after a test writes a fixture). */
+export function _resetFixtureIndexForTest(): void {
+  fixtureIndex = null;
 }

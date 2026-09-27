@@ -235,7 +235,53 @@ export function isPmcid(s: string): boolean {
 // and bin/lib/http.ts. mcp/tools.ts paper_doi_verify delegates here.
 // ---------------------------------------------------------------------------
 
-import { fetch as httpFetch } from './http.js';
+import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES } from './http.js';
+
+// ---------------------------------------------------------------------------
+// Reserved dry-run identifier namespace (RUN-27, D-17-11).
+//
+// The synthetic dry-run provider (bin/lib/sources/dry-run.ts) mints ids that no
+// real work can carry:
+//   - DOIs      10.0000/pensmith-dryrun.<8 hex>   (10.0000 is never assigned)
+//   - arXiv-ish pensmith-dryrun.<8 hex>          (not an arXiv id shape)
+//   - ISBN-ish  978-0-00-<6 digits>-<check>       with a DELIBERATELY INVALID
+//               ISBN-13 check digit, so no real book (978-0-00 is a live
+//               publisher prefix) can ever collide with the reserved range.
+// Outside --dry-run, research filters these, `add` refuses them and Pass 1 /
+// Pass 3 treat them as FABRICATED ("reserved dry-run identifier").
+// ---------------------------------------------------------------------------
+
+export const DRY_RUN_DOI_PREFIX = '10.0000/pensmith-dryrun.';
+const DRY_RUN_DOI_RE = /^10\.0000\/pensmith-dryrun\.[0-9a-f]{8}$/;
+const DRY_RUN_ARXIV_RE = /^(?:arxiv:)?pensmith-dryrun\.[0-9a-f]{8}$/i;
+const DRY_RUN_ISBN_PREFIX = '978000';
+
+/** The ISBN-13 check digit for the first 12 digits. */
+export function isbn13CheckDigit(first12: string): number {
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(first12[i]) * (i % 2 === 0 ? 1 : 3);
+  return (10 - (sum % 10)) % 10;
+}
+
+/**
+ * True for an identifier in the reserved dry-run namespace (RUN-27): a
+ * `10.0000/pensmith-dryrun.<8 hex>` DOI (any accepted DOI spelling), a
+ * `pensmith-dryrun.<8 hex>` arXiv-style id, or a `978-0-00-…` ISBN-style id
+ * whose check digit is deliberately wrong.
+ */
+export function isReservedDryRunId(id: string | null | undefined): boolean {
+  if (typeof id !== 'string') return false;
+  const s = id.trim();
+  if (!s) return false;
+  const doi = normalizeDoi(s);
+  if (doi !== null && (DRY_RUN_DOI_RE.test(doi) || doi.startsWith(DRY_RUN_DOI_PREFIX))) return true;
+  if (DRY_RUN_ARXIV_RE.test(s)) return true;
+  const digits = s.replace(/^isbn[:\s]*/i, '').replace(/[-\s]/g, '');
+  if (/^\d{13}$/.test(digits) && digits.startsWith(DRY_RUN_ISBN_PREFIX)) {
+    return isbn13CheckDigit(digits.slice(0, 12)) !== Number(digits[12]);
+  }
+  return false;
+}
 
 export interface DoiVerifyResult {
   readonly valid: boolean;
@@ -247,7 +293,9 @@ export interface DoiVerifyResult {
  * Normalize `doi`, then re-fetch it from Crossref to verify it resolves to a
  * real work. Returns `{ valid: true, canonical, metadata }` on success or
  * `{ valid: false, canonical }` when the DOI is malformed or Crossref returns
- * a non-200 response. Network errors propagate to the caller.
+ * a non-200 response. Network errors propagate to the caller — including
+ * the typed OfflineEgressError (offline fixture miss or --dry-run), which the
+ * caller maps to "DOI verification unavailable (offline | dry-run)" (RUN-04).
  */
 export async function verifyDoi(doi: string): Promise<DoiVerifyResult> {
   const canonical = normalizeDoi(doi);
@@ -255,7 +303,7 @@ export async function verifyDoi(doi: string): Promise<DoiVerifyResult> {
     return { valid: false, canonical: null };
   }
   const url = `https://api.crossref.org/works/${encodeURIComponent(canonical)}`;
-  const res = await httpFetch(url, { source: 'crossref' });
+  const res = await httpFetch(url, { source: 'crossref', maxBytes: MAX_JSON_RESPONSE_BYTES });
   if (res.status !== 200) {
     return { valid: false, canonical };
   }

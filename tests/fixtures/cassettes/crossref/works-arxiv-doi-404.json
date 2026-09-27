@@ -1,0 +1,17 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.48550%2FarXiv.1706.03762",
+    "status": 404,
+    "response": "Resource not found.",
+    "responseHeaders": {
+      "content-type": "text/plain"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-27T18:21:29.034Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

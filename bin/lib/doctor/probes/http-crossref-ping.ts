@@ -1,30 +1,61 @@
 // bin/lib/doctor/probes/http-crossref-ping.ts
 //
-// D-03(d): Crossref HTTP ping cassette wiring smoke probe.
+// D-03(d): the offline-replay wiring probe.
 //
-// bin/lib/http-mock.ts shipped in Phase 3 as the production-tree cassette
-// chokepoint. This probe exercises the cassette path to confirm the offline
-// HTTP mechanism is reachable. In CI (OFFLINE mode) the probe verifies that
-// the cassette directory exists and contains valid cassette JSON; outside the
-// repo (no cassettes shipped) the probe returns SKIP as the honest answer.
+// Offline replay (PENSMITH_OFFLINE=1 and the test runner) answers a request
+// ONLY from the exact-match fixture store in bin/lib/http-mock.ts (D-17-06).
+// This probe checks that the store is usable: in a source checkout every
+// committed fixture must parse and the Crossref fixtures must be present
+// (PASS, with the count); outside a checkout — an installed package, which does
+// not ship tests/ — the honest answer is SKIP (offline replay is refused there
+// before any work, D-17-15). A corrupt cassette is FAIL.
 //
-// The probe interface (id + run signature) is stable — 02-07 Case A
-// extracts `probes['http-crossref-ping']?.severity` and treats SKIP as
-// a non-failure (parity is asserted on existence + canonical id, not on
-// the severity value itself).
+// The probe interface (id + run signature) is stable — the tier contract
+// extracts `probes['http-crossref-ping']?.severity` and treats SKIP as a
+// non-failure (parity is asserted on existence + canonical id).
 //
-// D-19 read-only: no filesystem I/O beyond cassette-directory existence check.
+// D-19 read-only: it only READS the committed fixtures; it never dials.
 
 import type { Probe, ProbeResult } from '../probes.js';
+import { networkMode, listCassetteFiles, loadCassetteDir } from '../../http-mock.js';
 
 export const httpCrossrefPingProbe: Probe = {
   id: 'http-crossref-ping',
   async run(): Promise<ProbeResult> {
+    if (!networkMode().fixturesAvailable) {
+      return {
+        id: 'http-crossref-ping',
+        severity: 'SKIP',
+        summary:
+          'Offline-replay wiring probe — SKIP: recorded fixtures are not shipped in the installed package (offline replay needs a source checkout; live mode is unaffected).',
+      };
+    }
+    let files = 0;
+    let crossref = 0;
+    try {
+      files = listCassetteFiles().length;
+      crossref = (loadCassetteDir('crossref') ?? []).length;
+    } catch (e) {
+      return {
+        id: 'http-crossref-ping',
+        severity: 'FAIL',
+        summary: 'Offline-replay wiring probe — a committed fixture does not parse.',
+        detail: (e as Error).message,
+        fix: 'Re-record the adapter with `npm run cassettes:refresh -- --only <adapter>` (CONTRIBUTING.md).',
+      };
+    }
+    if (crossref === 0) {
+      return {
+        id: 'http-crossref-ping',
+        severity: 'FAIL',
+        summary: 'Offline-replay wiring probe — no recorded Crossref fixture found.',
+        fix: 'Re-record with `npm run cassettes:refresh -- --only crossref` (needs network + PENSMITH_CONTACT_EMAIL).',
+      };
+    }
     return {
       id: 'http-crossref-ping',
-      severity: 'SKIP',
-      summary: 'D-03(d) Crossref-adapter cassette-wiring probe — exercises the recorded fixture cassette to confirm the offline HTTP path is reachable. PR-time CI runs OFFLINE; this probe is the canary for cassette parse / schema drift. PASS in CI; SKIP outside the repo where cassettes are not shipped.',
-      fix: 'If FAIL: check that tests/fixtures/cassettes/crossref/ exists and contains valid JSON cassette files. bin/lib/http-mock.ts shipped in Phase 3 — the probe is now active.',
+      severity: 'PASS',
+      summary: `Offline-replay wiring probe — ${files} fixture file(s) load (${crossref} Crossref entr${crossref === 1 ? 'y' : 'ies'}); offline replay is exact-match only.`,
     };
   },
 };

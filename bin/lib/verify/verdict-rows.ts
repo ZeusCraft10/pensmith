@@ -10,8 +10,18 @@
 // change will break the round-trip test (tests/verdict-rows.test.ts) rather
 // than silently nulling the blocking set.
 
-/** Verdicts that block compile (mirrors REFUSING_VERDICTS in compile.ts:62). */
-const BLOCKING_VERDICTS = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND']);
+/**
+ * Verdicts that block compile and done. UNVERIFIABLE (D-17-07) is a Pass-1 row
+ * recorded when the re-fetch was unavailable because of the network mode
+ * (offline fixture miss or --dry-run); it blocks with a "re-run online" message.
+ */
+export const BLOCKING_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'UNVERIFIABLE']);
+
+/** One blocking verdict row parsed from a VERIFICATION.md body. */
+export interface BlockingVerdictRow {
+  citekey: string;
+  verdict: string;
+}
 
 /**
  * Render a Pass-1 verdict row (writer side — verify.ts).
@@ -58,10 +68,19 @@ export function renderPass3VerdictRow(
  * the Source Freshness table (RSCH-10) does NOT pollute the blocking set (Pitfall 2).
  *
  * Returns only citekeys whose verdict is in BLOCKING_VERDICTS (FABRICATED / MIS-CITED /
- * NOT_FOUND). Safe to call on any string, including ''.
+ * NOT_FOUND / UNVERIFIABLE). Safe to call on any string, including ''.
  */
 export function parseVerdictRows(verificationMd: string): string[] {
-  const out: string[] = [];
+  return parseBlockingVerdictRows(verificationMd).map((r) => r.citekey);
+}
+
+/**
+ * Like parseVerdictRows, but keeps each row's verdict so a caller can word the
+ * refusal: UNVERIFIABLE rows say "re-run online" (D-17-07), the others name the
+ * failing verdict. Same parser, same blocking set — never a second grammar.
+ */
+export function parseBlockingVerdictRows(verificationMd: string): BlockingVerdictRow[] {
+  const out: BlockingVerdictRow[] = [];
   for (const line of verificationMd.split(/\r?\n/)) {
     // `- <citekey>: **VERDICT**` OR `- <citekey> ("quote…"): **VERDICT**`
     //
@@ -80,7 +99,14 @@ export function parseVerdictRows(verificationMd: string): string[] {
     const citekey = m[1];
     const verdict = m[2];
     if (citekey === undefined || verdict === undefined) continue;
-    if (BLOCKING_VERDICTS.has(verdict)) out.push(citekey);
+    if (BLOCKING_VERDICTS.has(verdict)) out.push({ citekey, verdict });
   }
   return out;
+}
+
+/** The refusal wording for one blocking row (compile refuse-gate, done re-check). */
+export function blockingRowReason(row: BlockingVerdictRow): string {
+  return row.verdict === 'UNVERIFIABLE'
+    ? `citation [@${row.citekey}] is UNVERIFIABLE (checked offline or under --dry-run) — re-run online`
+    : `citation [@${row.citekey}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND)`;
 }

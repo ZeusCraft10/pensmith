@@ -14,8 +14,18 @@
 // Verdict enum:
 //   - OK             — match ratio >= QUOTE_LEV_THRESHOLD
 //   - NOT_FOUND      — match ratio < QUOTE_LEV_THRESHOLD
-//   - PDF_UNAVAILABLE — no DOI or no Unpaywall OA URL
+//   - PDF_UNAVAILABLE — no DOI or no Unpaywall OA URL, or the text is unavailable
+//                       because the run is offline / --dry-run (RUN-04: no
+//                       request is made; "text unavailable (offline)")
 //   - TEXT_UNAVAILABLE — PDF parsed but appears image-only (<50 non-WS chars)
+//
+// Reserved dry-run identifiers (RUN-27): accepted only under --dry-run (the
+// synthetic source has no text → PDF_UNAVAILABLE "text unavailable (dry-run)");
+// outside --dry-run a quote attributed to one is NOT_FOUND ("reserved dry-run
+// identifier") without any request.
+//
+// The OA PDF is fetched byte-faithfully (bodyBytes, audit #29) under the
+// MAX_PDF_BYTES response cap (SEC-03).
 //
 // CYCLE-2 H-4 signature lock:
 //   `runPass3(draftMd, bibByCitekey)` is the canonical entrypoint.
@@ -24,9 +34,11 @@
 
 import { levenshteinSubstring, QUOTE_LEV_THRESHOLD } from '../fuzzy.js';
 import { nfkcNormalize } from '../normalize.js';
-import { extractPdfText } from '../pdf-text.js';
+import { extractPdfText, MAX_PDF_BYTES } from '../pdf-text.js';
 import { sources } from '../sources/index.js';
-import { fetch as httpFetch } from '../http.js';
+import { fetch as httpFetch, isOfflineEgressError, offlineLabel } from '../http.js';
+import { networkMode } from '../http-mock.js';
+import { isReservedDryRunId } from '../doi.js';
 import { extractQuotes } from '../quote-extractor.js';
 
 export type Pass3Verdict = 'OK' | 'NOT_FOUND' | 'PDF_UNAVAILABLE' | 'TEXT_UNAVAILABLE';
@@ -48,8 +60,8 @@ interface BibLike {
  * Run Pass-3 against every quote in `draftMd`, looking up source PDFs via
  * the bib map.
  *
- * Pure deterministic except for the HTTP fetches (cassette-served in offline
- * test mode via http-mock.ts).
+ * Pure deterministic except for the HTTP fetches, which are made only when the
+ * run is live: offline and --dry-run report the text as unavailable instead.
  */
 export async function runPass3(
   draftMd: string,
@@ -57,6 +69,7 @@ export async function runPass3(
 ): Promise<Pass3Result[]> {
   const quotes = extractQuotes(draftMd);
   const results: Pass3Result[] = [];
+  const mode = networkMode();
 
   for (const q of quotes) {
     const snippet = q.text.slice(0, 40);
@@ -71,7 +84,45 @@ export async function runPass3(
       continue;
     }
 
-    const oaCandidate = await sources.unpaywall.fetchById(claimed.DOI);
+    if (isReservedDryRunId(claimed.DOI)) {
+      results.push(
+        mode.dryRun
+          ? {
+              citekey: q.citekey, quoteSnippet: snippet,
+              verdict: 'PDF_UNAVAILABLE', levRatio: 0,
+              reason: 'text unavailable (dry-run): a synthetic dry-run source has no text',
+            }
+          : {
+              citekey: q.citekey, quoteSnippet: snippet,
+              verdict: 'NOT_FOUND', levRatio: 0,
+              reason: `reserved dry-run identifier ${claimed.DOI} — a synthetic source cannot be quoted`,
+            },
+      );
+      continue;
+    }
+
+    if (mode.sourcesOffline) {
+      // RUN-04: no Unpaywall lookup and no OA-PDF fetch offline or under --dry-run.
+      results.push({
+        citekey: q.citekey, quoteSnippet: snippet,
+        verdict: 'PDF_UNAVAILABLE', levRatio: 0,
+        reason: `text unavailable (${mode.dryRun ? 'dry-run' : 'offline'}) — re-run online to check the quote`,
+      });
+      continue;
+    }
+
+    let oaCandidate: Awaited<ReturnType<typeof sources.unpaywall.fetchById>>;
+    try {
+      oaCandidate = await sources.unpaywall.fetchById(claimed.DOI);
+    } catch (err) {
+      if (!isOfflineEgressError(err)) throw err;
+      results.push({
+        citekey: q.citekey, quoteSnippet: snippet,
+        verdict: 'PDF_UNAVAILABLE', levRatio: 0,
+        reason: `text unavailable (${offlineLabel(err)}) — re-run online to check the quote`,
+      });
+      continue;
+    }
     const oaUrl = oaCandidate?.oa_pdf_url;
     if (!oaUrl) {
       results.push({
@@ -83,9 +134,17 @@ export async function runPass3(
     }
 
     try {
-      const resp = await httpFetch(oaUrl, { source: 'unpaywall' });
-      const body = resp.body;
-      const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
+      // noCache: a live fetch always carries byte-faithful bodyBytes (audit #29).
+      const resp = await httpFetch(oaUrl, { source: 'unpaywall', noCache: true, maxBytes: MAX_PDF_BYTES });
+      if (resp.status !== 200) {
+        results.push({
+          citekey: q.citekey, quoteSnippet: snippet,
+          verdict: 'PDF_UNAVAILABLE', levRatio: 0,
+          reason: `OA PDF fetch returned HTTP ${resp.status}`,
+        });
+        continue;
+      }
+      const buf = resp.bodyBytes ?? Buffer.from(resp.body, 'utf8');
       const text = await extractPdfText(buf);
       if (text.replace(/\s/g, '').length < 50) {
         results.push({

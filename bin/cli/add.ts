@@ -29,11 +29,11 @@
 import { defineCommand } from 'citty';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { extractPdfText } from '../lib/pdf-text.js';
+import { extractPdfText, MAX_PDF_BYTES } from '../lib/pdf-text.js';
 import { search as crossrefSearch, fetchById as crossrefFetchById } from '../lib/sources/crossref.js';
 import { writeBibtex } from '../lib/bibtex-write.js';
 import { parseBibtex } from '../lib/citations.js';
-import { normalizeDoi, isDoi, verifyDoi } from '../lib/doi.js';
+import { normalizeDoi, isDoi, verifyDoi, isReservedDryRunId } from '../lib/doi.js';
 import { updateFrontmatter } from '../lib/frontmatter.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
@@ -41,8 +41,9 @@ import { ask } from '../lib/prompts.js';
 import { paperDir, sectionPlan } from '../lib/paths.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { loadState } from '../lib/state.js';
-import { fetch as httpFetch } from '../lib/http.js';
-import { isOfflineMode } from '../lib/http-mock.js';
+import { fetch as httpFetch, isOfflineEgressError, offlineLabel } from '../lib/http.js';
+import { isOfflineMode, networkMode } from '../lib/http-mock.js';
+import { EXIT_ERROR } from '../lib/exit-codes.js';
 
 /** True for an http(s) URL — used to route URL ingestion away from the local-PDF
  *  branch (audit #12: a URL ending in .pdf must NOT be read as a local file). */
@@ -195,7 +196,31 @@ export const addCommand = defineCommand({
 
     if (isDoi(source)) {
       const norm = normalizeDoi(source);
-      candidate = norm ? await crossrefFetchById(norm) : null;
+      // RUN-27: a reserved dry-run identifier is never a real source — refused
+      // outside --dry-run before any request is made.
+      if (norm !== null && isReservedDryRunId(norm) && !networkMode().dryRun) {
+        process.stderr.write(
+          `pensmith add: ${norm} is a reserved dry-run identifier (synthetic --dry-run sources are ` +
+          `never real citations). Source NOT added.\n`,
+        );
+        process.exitCode = EXIT_ERROR;
+        return { ok: false, refused: true };
+      }
+      try {
+        candidate = norm ? await crossrefFetchById(norm) : null;
+      } catch (err) {
+        // RUN-03 / RUN-04: offline (no recorded fixture for this exact DOI) or
+        // --dry-run — nothing is verified and nothing is added. Offline is a
+        // refusal (exit 1); --dry-run is a preview that simply reports it.
+        if (!isOfflineEgressError(err)) throw err;
+        const label = offlineLabel(err);
+        process.stderr.write(
+          `pensmith add: DOI verification unavailable (${label}) — ${norm ?? source} NOT added` +
+          `${label === 'offline' ? '; re-run online to verify and add it' : ''}.\n`,
+        );
+        if (label === 'offline') process.exitCode = EXIT_ERROR;
+        return { ok: false, refused: label === 'offline', mode: label };
+      }
     } else if (isHttpUrl(source)) {
       // URL path — checked BEFORE the local-PDF branch (audit #12: a URL ending
       // in .pdf used to fall into the local branch and crash fs.readFile with an
@@ -215,7 +240,7 @@ export const addCommand = defineCommand({
           // noCache:true guarantees a live fetch so res.bodyBytes is populated
           // (audit #29) — a PDF must be read byte-faithfully, never via the
           // UTF-8-decoded body string.
-          const res = await httpFetch(source, { source: 'generic', noCache: true });
+          const res = await httpFetch(source, { source: 'generic', noCache: true, maxBytes: MAX_PDF_BYTES });
           const ct = (res.headers['content-type'] ?? '').toLowerCase();
           if (ct.includes('application/pdf') || source.toLowerCase().endsWith('.pdf')) {
             const buf = res.bodyBytes ?? Buffer.from(res.body, 'binary');
@@ -246,6 +271,15 @@ export const addCommand = defineCommand({
           candidate = hits[0] ?? null;
         }
       } catch (e) {
+        if (isOfflineEgressError(e)) {
+          // The PDF was read, but its title lookup needs the network (RUN-04).
+          process.stderr.write(
+            `pensmith add: DOI verification unavailable (${offlineLabel(e)}) — the title lookup for ` +
+            `"${source}" needs the network. Source NOT added.\n`,
+          );
+          if (offlineLabel(e) === 'offline') process.exitCode = EXIT_ERROR;
+          return { ok: false, refused: offlineLabel(e) === 'offline', mode: offlineLabel(e) };
+        }
         process.stderr.write(
           `pensmith add: could not read local PDF "${source}": ${(e as Error).message}\n`,
         );

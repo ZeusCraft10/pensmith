@@ -21,6 +21,18 @@
 //   `runPass1(draftMd: string, citationsBibPath: string)` is the canonical
 //   draft-+-bib entrypoint. `runPass1Unit(input)` is the fixture-shape
 //   helper used by tests/known-bad-citations.test.ts in Plan 03-09.
+//
+// UNVERIFIABLE (D-17-07, RUN-03, RUN-04): when the Crossref re-fetch or the
+// live Retraction Watch re-query is unavailable BECAUSE OF THE NETWORK MODE
+// (a sources-offline fixture miss, or --dry-run), the verdict is UNVERIFIABLE
+// with the reason "offline: no recorded fixture — re-run online" (or the
+// dry-run equivalent). It is BLOCKING — compile and done refuse it with a
+// "re-run online" message — and it is never OK, MIS-CITED or FABRICATED.
+//
+// Reserved dry-run identifiers (RUN-27, D-17-11): under --dry-run a reserved
+// `10.0000/pensmith-dryrun.*` DOI is re-fetched from the synthetic provider and
+// runs the same title/author AND-gate; outside --dry-run it is FABRICATED
+// ("reserved dry-run identifier") without any request.
 
 import { jaroWinkler, TITLE_JW_THRESHOLD, AUTHOR_JW_THRESHOLD } from '../fuzzy.js';
 import { firstAuthorSurname } from '../author-normalize.js';
@@ -29,12 +41,26 @@ import { parseBibtex } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
+import { fetchById as dryRunFetchById } from '../sources/dry-run.js';
 import { extractCitedKeysForVerification } from '../citation-token.js';
+import { isReservedDryRunId } from '../doi.js';
+import { isOfflineEgressError, type OfflineEgressError } from '../http.js';
+import { networkMode } from '../http-mock.js';
 
 export type { FreshnessResult } from './freshness.js';
 export { renderFreshnessTable } from './freshness.js';
 
-export type Pass1Verdict = 'OK' | 'MIS-CITED' | 'FABRICATED';
+export type Pass1Verdict = 'OK' | 'MIS-CITED' | 'FABRICATED' | 'UNVERIFIABLE';
+
+/** The fixed UNVERIFIABLE reasons (D-17-07). */
+export const UNVERIFIABLE_OFFLINE_REASON = 'offline: no recorded fixture — re-run online';
+export const UNVERIFIABLE_DRY_RUN_REASON = 'dry-run: no live re-fetch under --dry-run — re-run online';
+export const RESERVED_DRY_RUN_REASON = 'reserved dry-run identifier (a synthetic --dry-run source is never a real citation)';
+
+function unverifiable(ck: string, err: OfflineEgressError, what: string): Pass1Result {
+  const reason = err.mode === 'dry-run' ? UNVERIFIABLE_DRY_RUN_REASON : UNVERIFIABLE_OFFLINE_REASON;
+  return { citekey: ck, verdict: 'UNVERIFIABLE', titleJW: 0, authorJW: 0, reason: `${reason} (${what})` };
+}
 
 export interface Pass1Result {
   citekey: string;
@@ -140,7 +166,29 @@ async function verdictForCitekey(
     };
   }
 
-  const actual = await sources.crossref.fetchById(claimed.DOI);
+  // RUN-27: a reserved dry-run DOI is accepted ONLY under --dry-run, where the
+  // synthetic provider stands in for the registrar (zero sockets).
+  if (isReservedDryRunId(claimed.DOI)) {
+    if (!networkMode().dryRun) {
+      return { citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0, reason: RESERVED_DRY_RUN_REASON };
+    }
+    const synthetic = await dryRunFetchById(claimed.DOI);
+    if (!synthetic) {
+      return {
+        citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
+        reason: `dry-run: reserved DOI ${claimed.DOI} is not a source the synthetic provider minted`,
+      };
+    }
+    return andGate(ck, synthetic, claimedTitle, claimedAuthorsD14, 'dry-run synthetic source; ');
+  }
+
+  let actual: Awaited<ReturnType<typeof sources.crossref.fetchById>>;
+  try {
+    actual = await sources.crossref.fetchById(claimed.DOI);
+  } catch (err) {
+    if (isOfflineEgressError(err)) return unverifiable(ck, err, `Crossref re-fetch of ${claimed.DOI}`);
+    throw err;
+  }
   if (!actual) {
     return {
       citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
@@ -165,8 +213,19 @@ async function verdictForCitekey(
     [claimed.DOI, actual.doi].filter((d): d is string => typeof d === 'string' && d.length > 0),
   )];
   let liveRetraction: Awaited<ReturnType<typeof retractionWatchFetchById>> = null;
+  let retractionUnavailable: { err: OfflineEgressError; doi: string } | null = null;
   for (const d of retractionDois) {
-    const hit = await retractionWatchFetchById(d);
+    let hit: Awaited<ReturnType<typeof retractionWatchFetchById>>;
+    try {
+      hit = await retractionWatchFetchById(d);
+    } catch (err) {
+      // An unavailable re-query is never "not retracted" (RUN-03): remember it,
+      // keep checking the other DOI (a confirmed hit there still blocks), and
+      // report UNVERIFIABLE below if nothing confirmed a retraction.
+      if (!isOfflineEgressError(err)) throw err;
+      retractionUnavailable ??= { err, doi: d };
+      continue;
+    }
     if (hit !== null) {
       liveRetraction = hit;
       break;
@@ -180,6 +239,9 @@ async function verdictForCitekey(
       citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
       reason: `cited work appears in Retraction Watch (live re-query at verify time)${why}`,
     };
+  }
+  if (retractionUnavailable !== null) {
+    return unverifiable(ck, retractionUnavailable.err, `Retraction Watch re-query of ${retractionUnavailable.doi}`);
   }
 
   const titleJW = jaroWinkler(actual.title, claimedTitle);
@@ -214,6 +276,31 @@ async function verdictForCitekey(
   return {
     citekey: ck, verdict: 'MIS-CITED', titleJW, authorJW,
     reason: `JW below threshold (title=${titleJW.toFixed(2)}/${TITLE_JW_THRESHOLD}, author=${authorJW.toFixed(2)}/${AUTHOR_JW_THRESHOLD})`,
+  };
+}
+
+/**
+ * The D-11 AND-gate against a re-fetched record with the same claimed DOI
+ * (the dry-run synthetic path; the Crossref path inlines the same thresholds).
+ */
+function andGate(
+  ck: string,
+  actual: { title: string; authors?: string[] },
+  claimedTitle: string,
+  claimedAuthorsD14: string[],
+  prefix: string,
+): Pass1Result {
+  const titleJW = jaroWinkler(actual.title, claimedTitle);
+  const authorJW = jaroWinkler(
+    firstAuthorSurname(actual.authors?.[0] ?? ''),
+    firstAuthorSurname(claimedAuthorsD14[0] ?? ''),
+  );
+  if (titleJW >= TITLE_JW_THRESHOLD && authorJW >= AUTHOR_JW_THRESHOLD) {
+    return { citekey: ck, verdict: 'OK', titleJW, authorJW, reason: `${prefix}D-11 AND-gate passed` };
+  }
+  return {
+    citekey: ck, verdict: 'MIS-CITED', titleJW, authorJW,
+    reason: `${prefix}JW below threshold (title=${titleJW.toFixed(2)}/${TITLE_JW_THRESHOLD}, author=${authorJW.toFixed(2)}/${AUTHOR_JW_THRESHOLD})`,
   };
 }
 
@@ -300,6 +387,9 @@ export function runPass1Unit(input: {
 }): { verdict: Pass1Verdict; titleJW: number; authorJW: number; reason: string } {
   if (!input.claimed.doi) {
     return { verdict: 'FABRICATED', titleJW: 0, authorJW: 0, reason: 'no DOI in claimed citation' };
+  }
+  if (isReservedDryRunId(input.claimed.doi) && !networkMode().dryRun) {
+    return { verdict: 'FABRICATED', titleJW: 0, authorJW: 0, reason: RESERVED_DRY_RUN_REASON };
   }
   if (input.claimed.retracted) {
     return { verdict: 'MIS-CITED', titleJW: 0, authorJW: 0, reason: 'cited a retracted work' };

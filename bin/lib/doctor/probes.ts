@@ -6,6 +6,8 @@
 //       DOCT-06 tier-equivalence lands in 02-07.
 //       Phase 3 Plan 03-09 Task 9.1 adds the real DOCT-05 probe
 //       (intake-outline-verify-wiring) bringing the active probe count to 11.
+//       Phase 17 (RUN-02, D-17-08) adds network-mode (the effective network mode
+//       and why) directly after contact-email-presence: 12 probes.
 // D-19: probes are READ-ONLY. No fs.writeFile, no atomicWriteFile, no withLock calls.
 //       Tests assert no .paper/ files appear after runDoctor() runs against a clean tmp dir.
 // D-20: returns Record<string, ProbeResult> keyed by probe.id (NOT an array).
@@ -31,6 +33,7 @@ import { zoteroMcpPresenceProbe } from './probes/zotero-mcp-presence.js';
 import { pandocPresenceProbe } from './probes/pandoc-presence.js';
 import { humanizerSkillPresenceProbe } from './probes/humanizer-skill-presence.js';
 import { contactEmailPresenceProbe } from './probes/contact-email-presence.js';
+import { networkModeProbe } from './probes/network-mode.js';
 import { syncFolderDetectionProbe } from './probes/sync-folder-detection.js';
 import { runtimeConfigPresenceProbe } from './probes/runtime-config-presence.js';
 import { buildArtifactResolvesProbe } from './probes/build-artifact-resolves.js';
@@ -45,6 +48,7 @@ export function defaultProbes(): Probe[] {
     pandocPresenceProbe,
     humanizerSkillPresenceProbe,
     contactEmailPresenceProbe,
+    networkModeProbe,
     syncFolderDetectionProbe,
     runtimeConfigPresenceProbe,
     buildArtifactResolvesProbe,

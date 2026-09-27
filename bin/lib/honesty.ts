@@ -8,6 +8,8 @@
 //
 // The module mirrors bin/lib/plagiarism.ts + bin/lib/verify/pass2.ts:
 //   - key-absence / offline guard → clean null skip, NEVER a crash (advisory);
+//     offline prints "score unavailable (offline)" and never replays a score;
+//   - the V2 detector-consent gate before any text leaves (--yolo never skips);
 //   - http.ts as the SOLE network chokepoint (source 'generic', noCache true);
 //   - assertBudget BEFORE the live scored API call (ARCH-10 financial boundary);
 //   - defensive response parse (unexpected shape / non-200 / parse error → null,
@@ -20,9 +22,9 @@ import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetch as httpFetch } from './http.js';
-import { isOfflineMode, loadCassetteFile } from './http-mock.js';
+import { networkMode } from './http-mock.js';
 import { assertBudget, appendCost } from './budget.js';
-import { ask } from './prompts.js';
+import { runGate } from './gates.js';
 
 // ============================================================
 //   Public types
@@ -184,8 +186,6 @@ function loadDisclosureNote(): string {
 // ============================================================
 
 const GPTZERO_URL = 'https://api.gptzero.me/v2/predict/text';
-const GPTZERO_SCOPE = 'https://api.gptzero.me';
-const GPTZERO_PATH = '/v2/predict/text';
 
 // Paper-level honesty budget gate (ARCH-10). GPTZero is not a token-metered LLM;
 // the score runs at most twice per paper (before/after humanize). We model a
@@ -224,40 +224,39 @@ function parseGptzeroResponse(raw: unknown): HonestyScore | null {
   }
 }
 
-/** Read the matching GPTZero cassette response object (offline branch). */
-function offlineGptzeroResponse(): unknown {
-  const cassettes = loadCassetteFile('gptzero', 'predict-text');
-  if (!cassettes || cassettes.length === 0) return null;
-  const match =
-    cassettes.find(
-      (c) => c.scope === GPTZERO_SCOPE && c.path === GPTZERO_PATH && c.method === 'POST',
-    ) ?? cassettes[0];
-  return match?.response ?? null;
-}
-
 /** Options for scoreWithGptzero (HARD-05 consent seam). */
 export interface GptzeroScoringOptions {
-  /** When true, skip the consent gate (approval-gates design: --yolo skips). */
+  /**
+   * --yolo for this invocation. The detector-consent gate is NEVER skipped by
+   * --yolo (D-17-16, RUN-28): the flag is forwarded only so the gate registry
+   * sees the real invocation.
+   */
   yolo?: boolean;
   /**
-   * Injected consent decision (for tests). When provided, the ask() gate is
-   * bypassed and this value is used directly. undefined → run the gate normally.
+   * Injected consent decision (for tests). When provided, the gate is bypassed
+   * and this value is used directly. undefined → run the gate normally.
    */
   consentGranted?: boolean;
+}
+
+/** One stdout line naming why no GPTZero score was produced. */
+function unavailable(why: string): null {
+  process.stdout.write(`pensmith: GPTZero honesty score unavailable (${why}) — no text was sent.\n`);
+  return null;
 }
 
 /**
  * Score `text` against GPTZero. Behavior:
  *   - GPTZERO_API_KEY absent → null (skip-clean banner; key never logged).
- *   - Disclosure (HARD-05) — always shown before any POST attempt.
- *   - Consent gate (HARD-05) — ask() before POST; declined → null, no POST.
- *     --yolo (opts.yolo) skips the gate (disclosure still shown).
- *     non-TTY and not-yolo → SILENT decline (null) — honesty is advisory,
- *     NEVER exit-3/block (Pitfall 6 / RESEARCH A4).
- *     opts.consentGranted bypasses ask() for test injection.
+ *   - offline (PENSMITH_OFFLINE=1, --dry-run, the test runner) → "score
+ *     unavailable (offline | dry-run)": no request, and never a replayed canned
+ *     score (RUN-03).
+ *   - Disclosure (HARD-05) — always shown before the consent question.
+ *   - Consent — the V2 `detector-consent` gate (D-17-16): asked in a terminal
+ *     (or with PENSMITH_PROMPT_MODE=numbered); --yolo NEVER skips it; a run that
+ *     cannot prompt gives "score unavailable (no consent)"; "no" → declined.
+ *     opts.consentGranted bypasses the gate for test injection.
  *   - Size cap (HARD-05) — input truncated to GPTZERO_MAX_BYTES with a note.
- *   - offline (PENSMITH_NETWORK_TESTS !== '1') → read the gptzero cassette and
- *     parse it defensively; no network call is made.
  *   - live → assertBudget BEFORE the call (paper-scoped cap), then httpFetch
  *     POST with the x-api-key header through the http.ts chokepoint; status
  *     !== 200 → null; parse defensively; appendCost AFTER a successful call.
@@ -276,45 +275,35 @@ async function scoreWithGptzero(
   }
 
   // HARD-05 Step 2a: Explicit test-injection decline. When consentGranted is
-  // explicitly false (injected by tests), return null immediately — no offline
-  // branch, no POST, no disclosure printed (decline takes priority over display).
+  // explicitly false (injected by tests), return null immediately — no POST,
+  // no disclosure printed (decline takes priority over display).
   if (opts?.consentGranted === false) {
     return null;
   }
 
-  // Offline branch MUST NOT touch the network (no disclosure/consent needed —
-  // cassette replay involves zero data egress to any external service).
-  if (isOfflineMode()) {
-    return parseGptzeroResponse(offlineGptzeroResponse());
+  // RUN-03: offline never sends and never replays a canned score.
+  const mode = networkMode();
+  if (mode.sourcesOffline) {
+    return unavailable(mode.dryRun ? 'dry-run' : 'offline');
   }
 
-  // Live branch only beyond this point (PENSMITH_NETWORK_TESTS=1).
-
-  // HARD-05 Step 1: Disclosure — always shown before a live POST attempt,
+  // HARD-05 Step 1: Disclosure — always shown before the consent question,
   // even if the user later declines. Copy is read VERBATIM from the locked
   // references/honesty-framing.md (never inlined — loadDisclosureNote).
   process.stdout.write(`pensmith: ${loadDisclosureNote()}\n`);
 
-  // HARD-05 Step 2: Consent gate — before any live POST.
-  const isYolo = opts?.yolo === true;
-  if (!isYolo) {
+  // HARD-05 Step 2 / D-17-16: the detector-consent gate (V2) before any POST.
+  if (opts?.consentGranted !== true) {
     let consented: boolean;
-    if (opts?.consentGranted === true) {
-      // Explicit test injection of consent=true: bypass ask().
-      consented = true;
-    } else if (!process.stdout.isTTY) {
-      // Non-TTY (CI/piped): silently decline — honesty is advisory and must
-      // NEVER break automated export (Pitfall 6 / RESEARCH A4 / open-Q2).
-      return null;
-    } else {
-      // TTY: show the interactive consent gate (approval-gates default-on).
-      const answer = await ask({
-        id: 'honesty-gptzero-consent',
-        kind: 'confirm',
-        label: 'Send paper text to GPTZero for honesty scoring?',
-        default: true,
-      });
-      consented = answer.kind === 'confirm' ? answer.value : false;
+    try {
+      const outcome = await runGate('detector-consent', { yolo: opts?.yolo === true });
+      if (outcome.kind === 'skipped') return unavailable('no consent');
+      consented =
+        outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
+    } catch {
+      // A gate refusal or an aborted prompt is "no consent" — the honesty
+      // score is advisory and never breaks export.
+      return unavailable('no consent');
     }
     if (!consented) {
       process.stdout.write('pensmith: GPTZero honesty scoring declined — skipped.\n');
@@ -331,7 +320,6 @@ async function scoreWithGptzero(
     );
   }
 
-  // Live branch — only reached with PENSMITH_NETWORK_TESTS=1 (never in CI).
   try {
     // ARCH-10 pre-call gate: assertBudget BEFORE the scored API call. A
     // BudgetExceededError here aborts the call (financial-safety boundary) and
@@ -344,15 +332,11 @@ async function scoreWithGptzero(
     const resp = await httpFetch(GPTZERO_URL, {
       method: 'POST',
       source: 'generic',
-      // IN-02: GPTZERO_URL is a hardcoded constant — not user-supplied — so the
-      // SSRF DNS pre-flight is unnecessary and adds latency + a false-block risk
-      // if api.gptzero.me ever resolves through a CDN with a CGNAT address.
-      // untrusted:false overrides the source==='generic' default in http.ts.
-      untrusted: false,
       noCache: true,
       headers: {
         // The resolved key reaches ONLY this header. http.ts's cache-header
-        // allowlist drops x-api-key from any persisted envelope (T-06-03-01).
+        // allowlist drops x-api-key from any persisted envelope (T-06-03-01),
+        // and --show-prompts never prints headers (D-17-12).
         'x-api-key': apiKey,
         'content-type': 'application/json',
       },
@@ -445,8 +429,9 @@ export async function scoreHonesty(
  * Score `text` with explicit HARD-05 consent/yolo options (test seam + caller
  * override). Delegates to scoreWithGptzero directly (GPTZero is the only
  * backend with a consent gate; other backends are advisory stubs with no egress).
- * opts.consentGranted bypasses ask() for test injection; opts.yolo skips the
- * consent gate entirely (disclosure still shown). Non-TTY + not-yolo → null.
+ * opts.consentGranted bypasses the gate for test injection. --yolo never skips
+ * the detector-consent gate (D-17-16); a run that cannot prompt → null with
+ * "score unavailable (no consent)".
  */
 export async function scoreHonestyWithOptions(
   text: string,
