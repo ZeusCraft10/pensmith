@@ -20,6 +20,7 @@ import { loadOutline } from '../bin/lib/outline.js';
 import { loadSection } from '../bin/lib/section.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
 import { paperDir } from '../bin/lib/paths.js';
+import { buildStatusView } from '../bin/lib/status-view.js';
 
 // RUN-13 (D-17-32): `paperRoot` is the PROJECT root (the folder containing
 // `.paper/`) — the same root the CLI verbs, loadState, loadOutline and
@@ -40,8 +41,10 @@ export function registerPaperResources(server: McpServer, paperRoot: string): vo
     'paper://state',
     { title: 'Paper state', description: 'Section status, milestones, verification flags.', mimeType: 'application/json' },
     async (uri) => {
+      // RUN-19: the same status view `pensmith status` renders (tier parity).
       const state = await loadState(paperRoot);
-      return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(state, null, 2) }] };
+      const status = await buildStatusView(paperRoot, { tier: 'mcp' });
+      return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify({ ...state, status }, null, 2) }] };
     },
   );
 

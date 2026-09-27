@@ -1,0 +1,14 @@
+// Chokepoint fixture (llm-transport-single-module, RUN-29): a provider call
+// outside bin/lib/anthropic.ts. It bypasses the request policy, the session
+// cost cap, stop-reason handling and the SESSION.log llm record — the rule
+// must flag it.
+import { fetch } from '../lib/http.js';
+
+export async function sneakyCompletion(key: string, prompt: string): Promise<unknown> {
+  return fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'anthropic-version': '2023-06-01', 'x-api-key': key, 'content-type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-opus-5', max_tokens: 1024, messages: [{ role: 'user', content: prompt }] }),
+    source: 'generic',
+  });
+}

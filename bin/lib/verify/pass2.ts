@@ -17,16 +17,19 @@
 // a confident SUPPORTED on thin evidence.
 //
 // Offline guard (Pattern 4 — analog: bin/cli/revise.ts): under PENSMITH_NO_LLM=1
-// (or when ANTHROPIC_API_KEY is absent) Pass 2 returns a conservative UNCLEAR
-// placeholder for every citation and issues NO network call. This is the CI path.
+// Pass 2 returns a conservative UNCLEAR placeholder for every citation and
+// issues NO network call. This is the CI path.
 //
-// Budget gate (ARCH-09/10 — analog: bin/lib/budget.ts): the live branch calls
-// assertBudget BEFORE every model call and appendCost AFTER it, scoped to a
-// per-section cap (PASS2_SECTION_CAP). The api key is resolved ONLY through the
-// no-leak runtime chokepoint (getProviderApiKey); the value never reaches a log
-// or the cost ledger (T-05-02-02).
+// Cost: every live claim-support call goes through complete(), which checks the
+// SESSION cost cap before sending (RUN-18) and records the actual cost after.
+// There is no per-section Pass-2 cap any more — the session cap is the only cap
+// (D-17-26). claim-support is a judgment slug (claude-haiku-4-5 by default,
+// RUN-26) with a structured contract (RUN-25): complete() returns the validated
+// {verdict, rationale, evidence} object. The api key is resolved ONLY inside the
+// transport; the value never reaches a log or the cost ledger (T-05-02-02).
 
-import { complete } from '../anthropic.js';
+import { complete, isFatalLlmError } from '../anthropic.js';
+import type { ClaimSupport } from '../llm-contracts.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
 
 // WR-04 (HARD-04c fence-marker breakout mitigation).
@@ -109,7 +112,7 @@ function pass2Placeholder(claimSentence: string, citekey: string): Pass2Result {
     citekey,
     claimSentence,
     verdict: 'UNCLEAR',
-    rationale: 'Tier-2 placeholder: no LLM transport wired.',
+    rationale: 'LLM stubbed (PENSMITH_NO_LLM): no claim-support judgment was made.',
     evidence: '',
   };
 }
@@ -131,18 +134,6 @@ function collectClaimPairs(draftMd: string): ClaimPair[] {
     return { citekey, claimSentence: sentences[0] ?? '' };
   });
 }
-
-// Per-section Pass 2 cap (ARCH-10 per-step cap). A config knob (05-RESEARCH Open
-// Question 1) — no CONTEXT.md locks it, so default at Claude's discretion to
-// $0.50/section, which leaves ample headroom under the $5 session cap even for
-// many-citation sections using claude-haiku-4 (~$0.007/call).
-const PASS2_SECTION_CAP_DEFAULT = 0.5;
-
-// Output-token cap for the claim-support call (also the budget pre-estimate
-// ceiling inside complete()). claude-haiku-4 at this size ≈ $0.0024 — well under
-// the per-section cap. complete() estimates input tokens from content length and
-// records ACTUAL cost post-call, so no fixed input estimate is needed here.
-const EST_OUTPUT_TOKENS = 300;
 
 /** Normalize a CSL-style title (string | string[]) to a single string. */
 function normalizeTitle(title: Pass2BibEntry['title']): string {
@@ -170,39 +161,20 @@ function clampText(text: string, max: number): string {
 }
 
 /**
- * Parse the model's JSON response into a validated Pass2Result. Defensive:
- *   - verdict must be one of the four enum values, else UNCLEAR (UNCLEAR-bias)
+ * Turn the validated claim-support object into a Pass2Result. The schema
+ * already pins the verdict enum; this step keeps the table-cell and
+ * anti-fabrication guarantees:
  *   - rationale clamped to <=200 chars, newline/pipe-stripped
- *   - evidence must be a verbatim substring of the abstract, else '' (anti-fab)
+ *   - evidence must be a verbatim substring of the abstract, else '' (T-05-02-01)
  */
-function parsePass2Response(
-  raw: string,
+function toPass2Result(
+  data: ClaimSupport,
   citekey: string,
   claimSentence: string,
   abstract: string,
 ): Pass2Result {
-  let verdict: Pass2Verdict = 'UNCLEAR';
-  let rationale = '';
-  let evidence = '';
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const v = parsed['verdict'];
-    if (v === 'SUPPORTED' || v === 'PARTIAL' || v === 'UNSUPPORTED' || v === 'UNCLEAR') {
-      verdict = v;
-    }
-    if (typeof parsed['rationale'] === 'string') {
-      rationale = clampText(parsed['rationale'], 200);
-    }
-    if (typeof parsed['evidence'] === 'string' && parsed['evidence'].length > 0) {
-      // Anti-fabrication (T-05-02-01): evidence MUST be a substring of the abstract.
-      evidence = abstract.includes(parsed['evidence']) ? parsed['evidence'] : '';
-    }
-  } catch {
-    // Unparseable response → conservative UNCLEAR (UNCLEAR-bias).
-    verdict = 'UNCLEAR';
-    rationale = 'LLM response was not valid JSON; defaulting to UNCLEAR.';
-  }
-  return { citekey, claimSentence, verdict, rationale, evidence };
+  const evidence = data.evidence.length > 0 && abstract.includes(data.evidence) ? data.evidence : '';
+  return { citekey, claimSentence, verdict: data.verdict, rationale: clampText(data.rationale, 200), evidence };
 }
 
 /**
@@ -215,7 +187,7 @@ function parsePass2Response(
 export async function runPass2(
   draftMd: string,
   bibByCitekey: Map<string, Pass2BibEntry>,
-  opts: { n: number; scopeCapUsd?: number },
+  opts: { n: number },
 ): Promise<Pass2Result[]> {
   // Provider-agnostic offline gate: only PENSMITH_NO_LLM short-circuits to the
   // placeholder. complete() owns provider + key resolution; if no provider key
@@ -231,8 +203,6 @@ export async function runPass2(
 
   // ---- Live claim-support branch (only reached with a real key + LLM enabled).
   // Never reached in CI: the noLlm short-circuit above is the test path.
-  const cap = opts.scopeCapUsd ?? PASS2_SECTION_CAP_DEFAULT;
-  const scopeId = `${opts.n}-pass2`;
   const promptTemplate = loadPrompt('claim-support');
 
   const results: Pass2Result[] = [];
@@ -253,24 +223,22 @@ export async function runPass2(
         source_authors: stripFenceMarkers(normalizeAuthors(bibEntry?.author)),
       });
 
-      // Route through the http.ts (D-06) transport chokepoint. complete()
-      // applies the SSRF pre-flight guard, full-jitter retry/backoff, the polite
-      // User-Agent, the pre-call assertBudget gate (scope/scopeId/cap forwarded),
-      // and post-call appendCost with ACTUAL usage — none of which the raw SDK
-      // client received (audit #7). The prompt is the user message (no system).
-      // A BudgetExceededError or transport error is caught below → UNCLEAR.
-      const res = await complete({
+      // Route through the transport chokepoint (complete() → http.ts, D-06):
+      // the session cost-cap check before sending, retry/backoff, and the
+      // actual-usage cost record after. The prompt is the user message (no system).
+      const res = await complete<ClaimSupport>({
+        slug: 'claim-support',
+        section: opts.n,
         system: '',
         messages: [{ role: 'user', content: prompt }],
-        scope: 'section',
-        scopeId,
-        scopeCapUsd: cap,
-        maxTokens: EST_OUTPUT_TOKENS,
       });
-      results.push(parsePass2Response(res.text, pair.citekey, pair.claimSentence, abstract));
+      results.push(toPass2Result(res.data as ClaimSupport, pair.citekey, pair.claimSentence, abstract));
     } catch (err) {
-      // Any failure (budget, transport, parse) surfaces as a conservative
-      // UNCLEAR — never thrown out of runPass2 (advisory must not crash verify).
+      // The session cost cap, a missing key and invalid configuration are never
+      // advisory — they stop verify (RUN-18). Any other failure (provider error,
+      // refusal, truncation, a reply that never matched the schema) surfaces as
+      // a conservative UNCLEAR — advisory must not crash verify.
+      if (isFatalLlmError(err)) throw err;
       results.push({
         citekey: pair.citekey,
         claimSentence: pair.claimSentence,

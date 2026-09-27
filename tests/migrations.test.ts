@@ -365,3 +365,79 @@ test('schema validation failure throws SchemaValidationError with rich issues', 
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 17 (llm stream) — config migrations. Appended at the END of the file so
+// concurrent streams' additions merge cleanly; modules are imported dynamically
+// inside each test for the same reason.
+//   9. .paper/config.toml v0 → v1 (CONF-01, D-17-31): pure, adds schema_version,
+//      drops the retired verify_quotes = true and the v0 template's no-op
+//      [runtime] endpoint / api_key_env, KEEPS every other value (so a
+//      verify_quotes = false or a real endpoint is refused by validation).
+//  10. global runtime.json v1 → v2 (D-17-19) through loadAndMigrate with
+//      write-back: the first provider entry becomes provider/model; a
+//      default key variable is implied, a custom one kept.
+// ---------------------------------------------------------------------------
+
+test('config.toml v0 → v1: pure; adds schema_version; drops only the retired no-op values', async () => {
+  const { migrate } = await import('../bin/lib/migrations/config/v0_to_v1.js');
+  const input = {
+    project: { title: 'T', goal: 'both' },
+    verification: { verify_quotes: true, plagiarism_check: false },
+    runtime: { provider: 'openai', endpoint: '', api_key_env: 'OPENAI_API_KEY', model: 'gpt-6-astra' },
+  };
+  const frozen = JSON.stringify(input);
+  const out = migrate(input);
+  assert.equal(JSON.stringify(input), frozen, 'the input is not mutated');
+  assert.deepEqual(out, {
+    schema_version: 1,
+    project: { title: 'T', goal: 'both' },
+    verification: { plagiarism_check: false },
+    runtime: { provider: 'openai', model: 'gpt-6-astra' },
+  });
+  // Values that must be REFUSED later are kept, never silently dropped.
+  assert.deepEqual(migrate({ verification: { verify_quotes: false } }), { schema_version: 1, verification: { verify_quotes: false } });
+  assert.deepEqual(
+    migrate({ runtime: { endpoint: 'http://169.254.169.254/latest', api_key_env: 'GITHUB_TOKEN' } }),
+    { schema_version: 1, runtime: { endpoint: 'http://169.254.169.254/latest', api_key_env: 'GITHUB_TOKEN' } },
+  );
+  assert.deepEqual(
+    migrate({ runtime: { api_key_env: 'ANTHROPIC_API_KEY', provider: 'openai' } }),
+    { schema_version: 1, runtime: { api_key_env: 'ANTHROPIC_API_KEY', provider: 'openai' } },
+    "only the provider's OWN default key variable is a no-op",
+  );
+});
+
+test('runtime.json v1 → v2 via loadAndMigrate: first provider entry wins; written back as v2', async () => {
+  const { Schema: RuntimeSchema, CURRENT_RUNTIME_CONFIG_VERSION } = await import('../bin/lib/schemas/runtime-config.js');
+  const { migrate: runtimeV1ToV2 } = await import('../bin/lib/migrations/runtime-config/v1_to_v2.js');
+  const migrations = { 1: runtimeV1ToV2 };
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'pensmith-migr-runtime-'));
+  try {
+    const file = path.join(dir, 'runtime.json');
+    await atomicWriteFile(file, JSON.stringify({
+      $schemaVersion: 1,
+      providers: {
+        anthropic: { name: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY', defaultModel: 'claude-opus-4-8' },
+        openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY' },
+      },
+      contactEmailEnv: 'MY_EMAIL',
+    }));
+    const cfg = await loadAndMigrate({ file, schema: RuntimeSchema, schemaName: 'runtime-config', currentVersion: CURRENT_RUNTIME_CONFIG_VERSION, migrations, writeBack: true });
+    assert.equal(cfg.provider, 'anthropic');
+    assert.equal(cfg.model, 'claude-opus-4-8');
+    assert.equal(cfg.api_key_env, undefined);
+    assert.equal(cfg.contactEmailEnv, 'MY_EMAIL');
+    const onDisk = JSON.parse(await fsp.readFile(file, 'utf8')) as Record<string, unknown>;
+    assert.equal(onDisk['$schemaVersion'], 2);
+    assert.equal(onDisk['providers'], undefined, 'the v1 providers map is gone');
+
+    // A custom key variable survives the migration (validated by the v2 rule).
+    await atomicWriteFile(file, JSON.stringify({ $schemaVersion: 1, providers: { x: { name: 'openai-compatible', apiKeyEnv: 'TOGETHER_API_KEY', defaultModel: 'llama' } } }));
+    const custom = await loadAndMigrate({ file, schema: RuntimeSchema, schemaName: 'runtime-config', currentVersion: CURRENT_RUNTIME_CONFIG_VERSION, migrations, writeBack: false });
+    assert.equal(custom.provider, 'openai-compatible');
+    assert.equal(custom.api_key_env, 'TOGETHER_API_KEY');
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});

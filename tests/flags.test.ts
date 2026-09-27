@@ -30,6 +30,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { syntheticSource } from '../bin/lib/sources/dry-run.js';
 import { readDialLog, type DialEvent } from './helpers/local-servers/dial-recorder.mjs';
+import { withLlmSandbox } from './helpers/llm-sandbox.js';
+import { projectEstimate } from '../bin/lib/estimator.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const DIAL_RECORDER = new URL('./helpers/local-servers/dial-recorder.mjs', import.meta.url).href;
@@ -158,7 +160,7 @@ function writeCorruptSectionPlan(root: string, n: number, slug: string): void {
   writeFileSync(join(dir, 'PLAN.md'), `---\nstatus: *missing_anchor\n---\nbody text\n`);
 }
 
-// A large section count to drive the projected cost over the 50% cap.
+// A large section count to drive the projected cost over the cap.
 function manySections(count: number): Array<{ n: number; slug: string }> {
   return Array.from({ length: count }, (_, i) => ({ n: i + 1, slug: `s${i + 1}` }));
 }
@@ -225,8 +227,11 @@ test('ERGO-01/04: --dry-run / --show-prompts parse on explicit verbs (no "unknow
 // re-scoped the refusal to gate-skipping verbs only, so `write --yolo` /
 // `plan --yolo` over-cap were NOT refused. The cap pre-flight must run for ANY
 // --yolo verb.
-// NOTE: the >50%-cap env knob (PENSMITH_COST_CAP_USD) is introduced by 07-02's
+// NOTE: the cap env knob (PENSMITH_COST_CAP_USD) is introduced by 07-02's
 // pre-flight; a large section count drives the projection over a small cap.
+// Phase 17 (D-17-27): the pre-flight compares the projection with the session
+// cap itself, not 50% of it — the ARCH-11 heuristic refused the default §15
+// paper. See the "between 50% and 100%" case below.
 // ===========================================================================
 test('H1 / C2-H1: `write --yolo` (NON-GATE) over-cap WITHOUT --estimate exits non-zero (cap refusal)',
   { skip: !flagsWired }, () => {
@@ -236,9 +241,9 @@ test('H1 / C2-H1: `write --yolo` (NON-GATE) over-cap WITHOUT --estimate exits no
     writePaperFile(root, 'OUTLINE.md');
     const res = runCli(['write', '--yolo'], root, { PENSMITH_COST_CAP_USD: '0.0001' });
     assert.notEqual(res.status, 0,
-      'H1/C2-H1: a NON-GATE verb under --yolo over the 50% cap must EXIT NON-ZERO (cap cannot be skipped)');
+      'H1/C2-H1: a NON-GATE verb under --yolo over the cap must EXIT NON-ZERO (cap cannot be skipped)');
     assert.match(res.stderr + res.stdout, /cap|50%|exceed/i,
-      'H1/C2-H1: the refusal must name the >50%-cap reason');
+      'H1/C2-H1: the refusal must name the cap reason');
   });
 
 test('H1 / C2-H1: `plan --yolo` (NON-GATE) over-cap WITHOUT --estimate exits non-zero (cap refusal)',
@@ -264,7 +269,24 @@ test('H1: `compile --yolo` and bare `--yolo` over-cap exit non-zero (gate-skippi
     assert.notEqual(b.status, 0, 'H1: bare `--yolo` over-cap must exit non-zero');
   });
 
-test('H1: a --yolo verb UNDER the 50% cap exits 0 (no false refusal)',
+test('H1 (D-17-27): a --yolo projection between 50% and 100% of the cap is NOT refused; above the cap it is (exit 5)',
+  { skip: !flagsWired }, async () => {
+    await withLlmSandbox({}, async (sb) => {
+      writeState(sb.root, manySections(4));
+      writePaperFile(sb.root, 'RESEARCH.md');
+      writePaperFile(sb.root, 'OUTLINE.md');
+      const est = await projectEstimate({ paperRoot: sb.root });
+      assert.ok(est.totalUsd > 0);
+      const between = sb.runCli(['compile', '--yolo'], { env: { PENSMITH_COST_CAP_USD: String(est.totalUsd / 0.67) } });
+      assert.ok(!/REFUSED — --yolo projects/.test(between.stderr),
+        `H1: a projection at 67% of the cap must NOT be refused by the pre-flight; stderr=${between.stderr}`);
+      const over = sb.runCli(['compile', '--yolo'], { env: { PENSMITH_COST_CAP_USD: String(est.totalUsd / 1.1) } });
+      assert.equal(over.status, 5, `H1: above the cap → EXIT_COST_CAP; stderr=${over.stderr}`);
+      assert.match(over.stderr, /REFUSED — --yolo projects \$\d+\.\d\d for the remaining steps, over the \$\d+\.\d\d session cost cap/);
+    });
+  });
+
+test('H1: a --yolo verb UNDER the cap exits 0 (no false refusal)',
   { skip: !flagsWired }, () => {
     const root = freshRoot();
     writeState(root, [{ n: 1, slug: 'intro' }]);

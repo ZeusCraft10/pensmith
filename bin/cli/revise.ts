@@ -16,21 +16,18 @@
 // Phase 11 (GEN-02 / GEN-06): the local deterministic-remove proposeSwap stub is REMOVED.
 // The shared real proposeSwap from bin/lib/revise-swap.ts calls complete() with
 // the hash-pinned 'revise-swap' prompt. A fail-loud probe fires BEFORE runRevise:
-// if no API key is configured (and PENSMITH_NO_LLM=1 is not set), the verb
-// prints a banner to stderr + sets exitCode=1 + returns ok:false without calling
-// runRevise. The membership guard in runRevise (T-04-14 / T-11-09) is untouched.
-//
-// Key ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE
-// getProviderApiKey — so PENSMITH_NO_LLM=1 bypasses MissingApiKeyError.
-// The fail-loud probe here uses the same try/catch idiom as the other wired verbs
-// (intake.ts, outline.ts, write.ts — Phase 11 plan 11-03).
+// assertLlmConfigured('revise') (RUN-07) throws a one-line MissingApiKeyError
+// ('Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY (or configure a local
+// endpoint)') that the dispatcher prints before exiting non-zero; runRevise is
+// never called. Under PENSMITH_NO_LLM=1 the probe is a no-op and complete()
+// returns the deterministic stub. The membership guard in runRevise
+// (T-04-14 / T-11-09) is untouched.
 
 import { defineCommand } from 'citty';
 import { runRevise } from '../lib/revise.js';
 import { projectRoot } from '../lib/paths.js';
 import { proposeSwap } from '../lib/revise-swap.js';
-import { MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
-import { getProviderApiKey } from '../lib/runtime.js';
+import { assertLlmConfigured } from '../lib/anthropic.js';
 
 const DEFAULT_SLUG = 'placeholder';
 
@@ -73,33 +70,8 @@ export const reviseCommand = defineCommand({
     const slug = args.slug && typeof args.slug === 'string' ? args.slug : DEFAULT_SLUG;
     const research = typeof args.research === 'string' && args.research.length > 0 ? args.research : undefined;
 
-    // GEN-06 fail-loud probe: assert a key is configured BEFORE calling runRevise.
-    // CRITICAL ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE
-    // getProviderApiKey. When PENSMITH_NO_LLM=1 is set, complete() short-circuits to
-    // the offline mock — MissingApiKeyError is never thrown. The probe here is ONLY
-    // for the non-offline case: if no key and no offline mode, we fail loud.
-    // NEVER log the resolved key value — T-11-12 / T-01-07.
-    const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
-    if (!noLlm) {
-      try {
-        // CR-01: resolve provider ID dynamically so OpenAI-only configs don't
-        // false-positive with "no config for 'anthropic'". resolveProviderId()
-        // is the single source of truth (shared with complete()).
-        const providerId = await resolveProviderId();
-        await getProviderApiKey(providerId);
-      } catch (e) {
-        if (e instanceof MissingApiKeyError) {
-          process.stderr.write(
-            `pensmith revise: ERROR — no LLM key configured.\n` +
-            `Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n` +
-            `Run inside Claude Code (Tier 1) for key-free operation.\n`,
-          );
-          process.exitCode = 1;
-          return { ok: false, mode: 'no-key-configured' };
-        }
-        throw e;
-      }
-    }
+    // GEN-06 / RUN-07 fail-loud probe: assert an LLM is configured BEFORE calling runRevise.
+    await assertLlmConfigured('revise');
 
     const result = await runRevise({
       paperRoot: projectRoot(),

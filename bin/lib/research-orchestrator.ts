@@ -41,7 +41,6 @@
 //   T-12-05: no new fetch surface — all network via existing adapter modules.
 //   T-12-06: complete() owns no-leak header path.
 
-import { z } from 'zod';
 import path from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { sources } from './sources/index.js';
@@ -54,7 +53,8 @@ import { atomicWriteFile } from './atomic-write.js';
 import { paperDir } from './paths.js';
 import { jaroWinkler, TITLE_JW_THRESHOLD } from './fuzzy.js';
 import { assignUniqueCitekeys } from './bibtex-write.js';
-import { complete } from './anthropic.js';
+import { complete, isFatalLlmError } from './anthropic.js';
+import type { SourceEvaluation } from './llm-contracts.js';
 import { loadPrompt, interpolate } from './prompt-loader.js';
 import { escapeTemplateTokens } from './intake-parse.js';
 
@@ -74,18 +74,6 @@ export interface SearchableAdapter {
 
 /** Registry type accepted by runResearchOrchestrator for DI. */
 export type AdapterRegistry = Record<string, SearchableAdapter | { fetchById?: unknown }>;
-
-// ---------------------------------------------------------------------------
-// Source-evaluator response schema (Zod — T-12-01 trust boundary).
-// ---------------------------------------------------------------------------
-
-const EvalVerdictSchema = z.object({
-  citekey: z.string().min(1),
-  keep: z.boolean(),
-  reason: z.string().optional(),
-});
-
-const EvalResponseSchema = z.array(EvalVerdictSchema);
 
 // ---------------------------------------------------------------------------
 // Dedup helpers
@@ -162,9 +150,13 @@ function dedupCandidates(raw: SourceCandidate[]): SourceCandidate[] {
 /**
  * Run the source-evaluator LLM step to tier the deduplicated candidates.
  *
- * On any parse failure (PENSMITH_NO_LLM=1 mock returns non-JSON, or hostile
- * LLM output): emits a WARN and returns ALL deduped candidates (defensive
- * fallback — T-11-10).
+ * source-evaluator is a STRUCTURED slug (RUN-25): complete() returns
+ * {verdicts:[{citekey, keep, reason?}]} validated against the llm-contracts.ts
+ * schema (the old bare-array reply is accepted by the tolerant parser). Under
+ * PENSMITH_NO_LLM the stub keeps every candidate. An advisory failure (provider
+ * error, refusal, truncation, a reply that never matched the schema) keeps ALL
+ * deduped candidates with a WARN (T-11-10); the session cost cap, a missing key
+ * and invalid configuration propagate (isFatalLlmError).
  */
 async function evaluateCandidates(
   candidates: SourceCandidate[],
@@ -172,7 +164,7 @@ async function evaluateCandidates(
 ): Promise<SourceCandidate[]> {
   if (candidates.length === 0) return [];
 
-  let evalResponseText: string;
+  let verdicts: SourceEvaluation['verdicts'];
   try {
     const evaluatorPrompt = loadPrompt('source-evaluator');
     const interpolatedEvaluator = interpolate(evaluatorPrompt, {
@@ -187,7 +179,6 @@ async function evaluateCandidates(
           year: c.year,
           doi: c.doi,
           // WR-03: cap abstracts at 500 chars to prevent arbitrarily large prompts.
-          // 20-50 candidates × 3000-5000 char abstracts → 60K-150K chars without cap.
           abstract: c.abstract ? c.abstract.slice(0, 500) : undefined,
           retracted: c.retracted,
           citekey: c.citekey,
@@ -202,49 +193,25 @@ async function evaluateCandidates(
       discipline: escapeTemplateTokens(opts.discipline),
     });
 
-    const result = await complete({
+    const result = await complete<SourceEvaluation>({
+      slug: 'source-evaluator',
       system:
-        'You are an academic research assistant. Evaluate the candidate sources and ' +
-        'return a JSON array of verdict objects in the exact format specified. ' +
-        'No prose outside the JSON array.',
+        'You are an academic research assistant. Evaluate every candidate source and ' +
+        'return one verdict per candidate in the exact format specified.',
       messages: [{ role: 'user', content: interpolatedEvaluator }],
-      scope: 'task',
-      scopeId: 'research-evaluator',
+      stubHint: { citekeys: candidates.map((c) => c.citekey) },
     });
-    evalResponseText = result.text;
+    verdicts = (result.data as SourceEvaluation).verdicts;
   } catch (err) {
+    if (isFatalLlmError(err)) throw err;
     process.stderr.write(
-      `pensmith research: WARN — source-evaluator LLM call failed (${String(err)}); ` +
+      `pensmith research: WARN — source-evaluator step failed (${(err as Error).message}); ` +
       `keeping all ${candidates.length} deduped candidates (T-11-10 defensive fallback).\n`,
     );
     return candidates;
   }
 
-  // Defensive JSON parse (T-12-01 trust boundary).
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(evalResponseText);
-  } catch {
-    process.stderr.write(
-      `pensmith research: WARN — source-evaluator response is not valid JSON ` +
-      `(expected under PENSMITH_NO_LLM=1); keeping all ${candidates.length} candidates ` +
-      `(T-11-10 defensive fallback).\n`,
-    );
-    return candidates;
-  }
-
-  const verdictResult = EvalResponseSchema.safeParse(parsed);
-  if (!verdictResult.success) {
-    process.stderr.write(
-      `pensmith research: WARN — source-evaluator response failed schema validation; ` +
-      `keeping all ${candidates.length} candidates (T-11-10 defensive fallback).\n`,
-    );
-    return candidates;
-  }
-
-  const keepSet = new Set(
-    verdictResult.data.filter((v) => v.keep).map((v) => v.citekey),
-  );
+  const keepSet = new Set(verdicts.filter((v) => v.keep).map((v) => v.citekey));
 
   // If the evaluator said keep nothing (edge case: hostile or confused response),
   // fall back to keeping all candidates.

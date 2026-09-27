@@ -190,3 +190,87 @@ export function parseOutline(raw: string): ParsedOutline {
 
   return { paper_title: paperTitle, sections };
 }
+
+// =========================================================================
+// Renderer (RUN-25 / D-17-23): the canonical OUTLINE.md is rendered from the
+// validated outline-author object — never copied from model text — and is
+// exactly the table parseOutline() reads back.
+// =========================================================================
+
+/**
+ * The `assigned_sources` column per section number (the table's 6th column,
+ * which parseOutline's wave-graph view does not carry). Used by `plan` to hand
+ * the section planner the outline's source assignment. Pure; never throws —
+ * an unparseable outline yields an empty map.
+ */
+export function parseOutlineAssignedSources(raw: string): Map<number, string[]> {
+  const out = new Map<number, string[]>();
+  let parsed: ParsedOutline;
+  try {
+    parsed = parseOutline(raw);
+  } catch {
+    return out;
+  }
+  const bySlug = new Map(parsed.sections.map((s) => [s.slug, s.n]));
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('|')) continue;
+    const cells = splitRow(trimmed);
+    if (cells.length !== EXPECTED_HEADER.length || isDelimiterRow(cells)) continue;
+    const n = bySlug.get(cells[1] ?? '');
+    if (n === undefined || String(n) !== cells[0]) continue;
+    out.set(n, (cells[5] ?? '').split(',').map((c) => c.trim()).filter((c) => c.length > 0));
+  }
+  return out;
+}
+
+/** The subset of the llm-contracts.ts OutlineSchema the renderer needs. */
+export interface OutlineRenderInput {
+  thesis: string;
+  sections: ReadonlyArray<{
+    n: number;
+    slug: string;
+    title: string;
+    purpose: string;
+    depends_on: readonly string[];
+    estimated_word_count: number;
+    assigned_sources: readonly string[];
+    role: string;
+    voice?: string | undefined;
+  }>;
+}
+
+/** One table cell: single line, no pipe (parseOutline splits on '|'). */
+function cell(text: string): string {
+  return text.replace(/\s+/g, ' ').replace(/\|/g, '/').trim();
+}
+
+/**
+ * Render the canonical OUTLINE.md: an H1 title, the thesis, the locked section
+ * table, then one detail line per section (role, purpose, voice). The detail
+ * lines never start with '|', so parseOutline ignores them.
+ */
+export function renderOutlineMd(outline: OutlineRenderInput, paperTitle: string): string {
+  const lines: string[] = [`# ${cell(paperTitle) || 'Outline'}`, ''];
+  if (outline.thesis.trim()) lines.push(`Thesis: ${cell(outline.thesis)}`, '');
+  lines.push(`| ${EXPECTED_HEADER.join(' | ')} |`);
+  lines.push(`| ${EXPECTED_HEADER.map(() => '---').join(' | ')} |`);
+  const ordered = [...outline.sections].sort((a, b) => a.n - b.n);
+  for (const s of ordered) {
+    lines.push(
+      `| ${s.n} | ${s.slug} | ${cell(s.title)} | ${s.depends_on.join(', ')} | ${s.estimated_word_count} | ${s.assigned_sources.map(cell).join(', ')} |`,
+    );
+  }
+  lines.push('', '## Sections', '');
+  for (const s of ordered) {
+    const bits = [`role: ${cell(s.role)}`];
+    if (s.purpose.trim()) bits.push(`purpose: ${cell(s.purpose)}`);
+    if (s.voice && s.voice.trim()) bits.push(`voice: ${cell(s.voice)}`);
+    lines.push(`- §${s.n} ${cell(s.title)} — ${bits.join('; ')}`);
+  }
+  lines.push('');
+  const md = lines.join('\n');
+  // Self-check: the rendered file must round-trip through the parser.
+  parseOutline(md);
+  return md;
+}

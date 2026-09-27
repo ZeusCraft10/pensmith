@@ -5,11 +5,12 @@
 // (D-12 LOCKED slug). In Tier 2 (portable CLI) the verb calls complete()
 // via the Phase 11 transport (GEN-02).
 //
-// Phase 11 wiring: complete() handles isNoLlmMode() short-circuit before
-// key resolution, so verbs do NOT check PENSMITH_NO_LLM themselves.
-//   - With PENSMITH_NO_LLM=1: complete() returns offline mock (no key needed).
-//   - With ANTHROPIC_API_KEY set: complete() makes real API call.
-//   - With no key: getProviderApiKey() throws MissingApiKeyError → fail-loud.
+// Phase 17 wiring (RUN-07, RUN-25): assertLlmConfigured('outline') runs
+// before any model work (one-line MissingApiKeyError when no provider is
+// usable; skipped under PENSMITH_NO_LLM=1). outline-author is a STRUCTURED
+// slug: complete() returns the validated OutlineSchema object and OUTLINE.md
+// is rendered from it (outline-parse.ts renderOutlineMd) — model prose never
+// reaches the file.
 //
 // CLAUDE.md non-negotiable: outline approval is default-ON (only skips with
 // --yolo). It is the `outline-approval` gate of the one registry
@@ -24,9 +25,12 @@ import { paperDir, projectRoot } from '../lib/paths.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
 import { EXIT_ERROR } from '../lib/exit-codes.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
-import { getProviderApiKey } from '../lib/runtime.js';
-import { parseOutline } from '../lib/outline-parse.js';
+import { complete, assertLlmConfigured } from '../lib/anthropic.js';
+import { parseOutline, renderOutlineMd } from '../lib/outline-parse.js';
+import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
+import { tryReadPaperConfigSync } from '../lib/config.js';
+import { parseLengthWords } from '../lib/estimator.js';
+import type { OutlineContract } from '../lib/llm-contracts.js';
 import {
   initSection,
   initState,
@@ -35,9 +39,52 @@ import {
   StateNotFoundError,
 } from '../lib/state.js';
 
-// Phase 11 — the outline placeholder constant has been removed. outline now calls
-// complete() for real generation (GEN-02). With no key configured: fail-loud
-// (GEN-06). With PENSMITH_NO_LLM=1: complete() returns offline mock transparently.
+// outline-author is a STRUCTURED slug (RUN-25): complete() returns the
+// schema-validated OutlineSchema object (GRND-07 fields), and OUTLINE.md is
+// rendered from it by outline-parse.ts renderOutlineMd — the canonical table
+// parseOutline reads back. With no key configured: fail-loud (GEN-06 / RUN-07).
+// With PENSMITH_NO_LLM=1: complete() returns a deterministic 3-section stub.
+
+/** One library candidate as the outline prompt sees it (T-12-02: JSON-encoded). */
+interface OutlineCandidate {
+  citekey: string;
+  title?: string;
+  authors?: string[];
+  year?: number;
+  doi?: string;
+}
+
+/**
+ * Read the research library (LIBRARY.json: `{entries: [...]}` or a bare array)
+ * as the outline prompt's candidate list. Best-effort: absent or malformed → [].
+ */
+function readLibraryCandidates(paperRoot: string): OutlineCandidate[] {
+  const libPath = path.join(paperDir(paperRoot), 'LIBRARY.json');
+  if (!existsSync(libPath)) return [];
+  try {
+    const raw = JSON.parse(readFileSync(libPath, 'utf8')) as unknown;
+    const list = Array.isArray(raw)
+      ? raw
+      : raw && typeof raw === 'object' && Array.isArray((raw as { entries?: unknown }).entries)
+        ? (raw as { entries: unknown[] }).entries
+        : [];
+    const out: OutlineCandidate[] = [];
+    for (const e of list) {
+      if (!e || typeof e !== 'object') continue;
+      const r = e as Record<string, unknown>;
+      if (typeof r['citekey'] !== 'string' || !r['citekey']) continue;
+      const c: OutlineCandidate = { citekey: r['citekey'] as string };
+      if (typeof r['title'] === 'string') c.title = r['title'];
+      if (Array.isArray(r['authors'])) c.authors = (r['authors'] as unknown[]).filter((a): a is string => typeof a === 'string').slice(0, 3);
+      if (typeof r['year'] === 'number') c.year = r['year'];
+      if (typeof r['doi'] === 'string') c.doi = r['doi'];
+      out.push(c);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Run the outline approval gate — `outline-approval` in the gate registry
@@ -156,69 +203,56 @@ export const outlineCommand = defineCommand({
       }
     }
 
-    // ── Phase 11: GEN-06 fail-loud probe (BEFORE any prompt/complete() work) ──
-    // Only probe for key presence when NOT in offline mode.
-    // complete() handles PENSMITH_NO_LLM=1 internally (before key resolution).
-    const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
-    if (!noLlm) {
-      try {
-        // CR-01: resolve provider ID dynamically so OpenAI-only configs don't
-        // false-positive with "no config for 'anthropic'". resolveProviderId()
-        // is the single source of truth (shared with complete()).
-        const providerId = await resolveProviderId();
-        await getProviderApiKey(providerId);
-      } catch (e) {
-        if (e instanceof MissingApiKeyError) {
-          process.stderr.write(
-            'pensmith outline: ERROR — no LLM key configured.\n' +
-            'Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n' +
-            'Run inside Claude Code (Tier 1) for key-free operation.\n',
-          );
-          process.exitCode = 1;
-          return { ok: false, mode: 'no-key-configured' };
-        }
-        throw e;
-      }
-    }
+    // ── GEN-06 / RUN-07 fail-loud probe (BEFORE any prompt/complete() work) ──
+    await assertLlmConfigured('outline');
 
     // ── Load and interpolate the outline-author prompt (D-12 LOCKED) ──
     // The outline-author template requires: {{topic}}, {{length}},
-    // {{candidateSources}}, {{discipline}}. In Tier 2, we derive these
-    // best-effort from the existing INTAKE.md (written by intake verb).
-    // This gives the model context to work with; the workflow body populates
-    // them from research output in Tier 1.
+    // {{candidateSources}}, {{discipline}}. In Tier 2 they come from INTAKE.md
+    // (topic, discipline), [project] length_target_words or the assignment's
+    // stated length, and the research library (the citekeys the outline may
+    // assign). User-derived strings are escaped against template injection.
     const intakePath = path.join(paperDir(), 'INTAKE.md');
     const intakeContent = existsSync(intakePath)
       ? readFileSync(intakePath, 'utf8').trim()
       : '(no intake content available — run `pensmith new` first)';
+    const intake = parseIntakeMd(intakeContent);
+    const config = tryReadPaperConfigSync(paperRoot);
+    const lengthWords = config?.project?.length_target_words ?? parseLengthWords(intakeContent) ?? 1500;
+    const candidates = readLibraryCandidates(paperRoot);
+    const topic = intake.topic || 'the assigned topic';
 
     const prompt = loadPrompt('outline-author');
     const interpolatedPrompt = interpolate(prompt, {
-      topic: intakeContent,
-      length: '2000',           // default word-count target; intake captures the real value
-      candidateSources: '[]',   // populated by research in full workflow
-      discipline: 'general',    // populated from intake answers in full workflow
+      topic: escapeTemplateTokens(topic),
+      length: String(lengthWords),
+      candidateSources: JSON.stringify(candidates, null, 2),
+      discipline: escapeTemplateTokens(intake.discipline),
     });
 
-    // ── Call the transport (GEN-02) ──
-    const result = await complete({
+    // ── Call the transport (GEN-02) — structured outline-author (RUN-25) ──
+    const result = await complete<OutlineContract>({
+      slug: 'outline-author',
       system: interpolatedPrompt,
       messages: [{ role: 'user', content: intakeContent }],
-      scope: 'task',
-      scopeId: 'outline',
+      stubHint: { topic, length: lengthWords, sources: candidates.map((c) => c.citekey) },
     });
+    const outlineMd = renderOutlineMd(
+      result.data as OutlineContract,
+      config?.project?.title?.trim() || topic,
+    );
 
     // ── Approval gate (CLAUDE.md non-negotiable: default-ON, skip with --yolo) ──
     // A refusal or a decline throws a GateRefusedError (EXIT_APPROVAL); the
     // dispatcher prints it as one line (RUN-12).
-    await runApprovalGate(result.text, args.yolo === true);
+    await runApprovalGate(outlineMd, args.yolo === true);
 
-    await atomicWriteFile(outlinePath, result.text);
+    await atomicWriteFile(outlinePath, outlineMd);
     process.stdout.write(`pensmith outline: wrote OUTLINE.md to ${outlinePath}\n`);
 
     // Audit #1: register the outline's sections into STATE.json so the router can
     // advance to the per-section plan/write/verify pipeline (best-effort).
-    const sectionCount = await registerOutlineSections(paperRoot, result.text);
+    const sectionCount = await registerOutlineSections(paperRoot, outlineMd);
     if (sectionCount > 0) {
       process.stdout.write(
         `pensmith outline: registered ${sectionCount} section(s) in STATE.json.\n`,

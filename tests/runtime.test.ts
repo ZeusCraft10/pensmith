@@ -1,233 +1,281 @@
-// tests/runtime.test.ts — defaults / api-key resolution / round-trip /
-// no-key-on-disk / paper-overlay coverage for bin/lib/runtime.ts (W11 sibling B).
+// tests/runtime.test.ts — bin/lib/runtime.ts: the global runtime.json (v2 +
+// the v1 → v2 migration), resolution precedence (RUN-07, D-17-19), per-slug
+// models (RUN-26), key resolution and the no-key-on-disk property (T-01-07).
 //
-// Test isolation strategy (mirrors tests/state.test.ts and tests/library.test.ts):
-//   Each test calls mkPaperRoot() to create a fresh tmpdir AND override
-//   process.env.LOCALAPPDATA / XDG_DATA_HOME / HOME so:
-//     1. The session-log singleton inside runtime.ts (lazy-init at first
-//        .event() call) resolves into the per-test tmpdir.
-//     2. pensmithDataDir() — used by globalConfigPath() inside runtime.ts —
-//        resolves into the per-test tmpdir, so tests don't clobber the
-//        user's real ~/Library/Application Support/pensmith/runtime.json
-//        (or worse, fail with EACCES on a sealed sysdir).
-//   Each test also dynamically imports runtime.ts AFTER the env override so
-//   its first-call logger init picks up the redirected paths.
+// Superseded behaviour (Phase 17): runtime.json v1 keyed a `providers` map and
+// a paper-level `<root>/runtime.json` overlaid it. v2 is one flat provider;
+// the paper overlay is retired (a one-time warning names .paper/config.toml
+// [runtime]); endpoint and api_key_env come only from the global file.
 //
-// Critical no-leak property test (T-01-07):
-//   Test 8 ('CRITICAL: persisted runtime.json never contains the resolved
-//   api-key VALUE') is the load-bearing assertion for T-01-07 (secret-on-disk).
-//   It writes a runtime.json that points at process.env.SECRET_VALUE_DO_NOT_LEAK
-//   (set to a sentinel string), then reads the persisted file as a string and
-//   asserts the env VALUE is absent and the env NAME is present. This proves
-//   the schema persists env NAMES only, never resolved values.
-//
-// Schema reconciliation (Deviation 1 in 01-13-SUMMARY.md):
-//   The plan's test fixtures used `{ apiKeyEnv: 'MY_ANTHROPIC' }` for
-//   provider entries. The W7 ProviderSchema requires `name: z.enum(['anthropic',
-//   'openai'])` ALSO. Test fixtures here include the `name` field to honor
-//   the locked W7 schema (same Plan-vs-Schema reconciliation pattern as 01-12).
+// Isolation: every test runs in tests/helpers/llm-sandbox.ts (temp paper root
+// as cwd, temp data dir via XDG_DATA_HOME / LOCALAPPDATA / HOME).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
+import { withLlmSandbox } from './helpers/llm-sandbox.js';
+import {
+  MissingApiKeyError,
+  RuntimeConfigError,
+  getOpenAlexApiKey,
+  getProviderApiKey,
+  loadRuntimeConfig,
+  resolveRuntime,
+  resolveSlug,
+  runtimeFlagsFromArgv,
+  saveRuntimeConfig,
+  setRuntimeOverride,
+} from '../bin/lib/runtime.js';
+import { CURRENT_RUNTIME_CONFIG_VERSION, isAllowedApiKeyEnv } from '../bin/lib/schemas/runtime-config.js';
+import { PensmithError } from '../bin/lib/exit-codes.js';
 
-function mkPaperRoot(): string {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-runtime-'));
-  // Force pensmithDataDir() (used by globalConfigPath() AND by openSessionLog
-  // scope:'auto' fallback inside runtime.ts) to resolve into tmp regardless
-  // of platform. paths.ts inspects:
-  //   - LOCALAPPDATA on win32
-  //   - HOME on darwin (-> HOME/Library/Application Support)
-  //   - XDG_DATA_HOME (then HOME/.local/share) on POSIX
-  // Same env-override pattern as tests/state.test.ts (W10), tests/library.test.ts
-  // (W10), tests/checkpoint.test.ts (W10), and tests/session-log.test.ts (W9).
-  process.env.LOCALAPPDATA = tmp;
-  process.env.XDG_DATA_HOME = tmp;
-  process.env.HOME = tmp;
-  return tmp;
+function captureStderr<T>(fn: () => Promise<T>): Promise<{ value: T; stderr: string }> {
+  const orig = process.stderr.write.bind(process.stderr);
+  let stderr = '';
+  process.stderr.write = ((chunk: unknown) => {
+    stderr += String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  return fn().then(
+    (value) => { process.stderr.write = orig; return { value, stderr }; },
+    (e: unknown) => { process.stderr.write = orig; throw e; },
+  );
 }
 
-test('loadRuntimeConfig with no file returns schema defaults including OpenAlex slot', async () => {
-  mkPaperRoot();
-  const { loadRuntimeConfig } = await import('../bin/lib/runtime.js');
-  const cfg = await loadRuntimeConfig();
-  assert.equal(cfg.openalexApiKeyEnv, 'OPENALEX_API_KEY');
-  assert.equal(cfg.openalexApiKeyOptional, true);
-  assert.equal(cfg.contactEmailEnv, 'PENSMITH_CONTACT_EMAIL');
-  // Defaults seed at least one provider per W7 schema's .refine guard.
-  assert.ok(
-    Object.keys(cfg.providers).length >= 1,
-    'defaults must include at least one provider',
-  );
-});
-
-test('getOpenAlexApiKey returns undefined when env unset and optional=true (default)', async () => {
-  mkPaperRoot();
-  delete process.env.OPENALEX_API_KEY;
-  const { getOpenAlexApiKey } = await import('../bin/lib/runtime.js');
-  const got = await getOpenAlexApiKey();
-  assert.equal(got, undefined);
-});
-
-test('getOpenAlexApiKey returns the env value when set', async () => {
-  mkPaperRoot();
-  process.env.OPENALEX_API_KEY = 'oa-key-value-xyz';
-  try {
-    const { getOpenAlexApiKey } = await import('../bin/lib/runtime.js');
-    const got = await getOpenAlexApiKey();
-    assert.equal(got, 'oa-key-value-xyz');
-  } finally {
-    delete process.env.OPENALEX_API_KEY;
-  }
-});
-
-test('getOpenAlexApiKey throws MissingApiKeyError when env unset and config sets optional=false', async () => {
-  mkPaperRoot();
-  delete process.env.OPENALEX_API_KEY;
-  const { saveRuntimeConfig, getOpenAlexApiKey, MissingApiKeyError, loadRuntimeConfig } =
-    await import('../bin/lib/runtime.js');
-  const cfg = await loadRuntimeConfig();
-  await saveRuntimeConfig('global', { ...cfg, openalexApiKeyOptional: false });
-  await assert.rejects(
-    () => getOpenAlexApiKey(),
-    (e: unknown) => e instanceof MissingApiKeyError,
-  );
-});
-
-test('getProviderApiKey resolves from process.env via configured slot name', async () => {
-  mkPaperRoot();
-  process.env.MY_ANTHROPIC = 'ak-xxx';
-  try {
-    const { saveRuntimeConfig, getProviderApiKey, loadRuntimeConfig } =
-      await import('../bin/lib/runtime.js');
+test('loadRuntimeConfig with no file returns v2 defaults including the OpenAlex slot', async () => {
+  await withLlmSandbox({}, async () => {
     const cfg = await loadRuntimeConfig();
-    await saveRuntimeConfig('global', {
-      ...cfg,
-      providers: {
-        ...cfg.providers,
-        anthropic: { name: 'anthropic', apiKeyEnv: 'MY_ANTHROPIC' },
-      },
-    });
-    const got = await getProviderApiKey('anthropic');
-    assert.equal(got, 'ak-xxx');
-  } finally {
-    delete process.env.MY_ANTHROPIC;
-  }
-});
-
-test('getProviderApiKey throws MissingApiKeyError when env-var unset', async () => {
-  mkPaperRoot();
-  delete process.env.MY_PROVIDER_X;
-  const { saveRuntimeConfig, getProviderApiKey, MissingApiKeyError, loadRuntimeConfig } =
-    await import('../bin/lib/runtime.js');
-  const cfg = await loadRuntimeConfig();
-  // providerX uses the openai enum slot since W7 limits name to anthropic|openai;
-  // the apiKeyEnv slot is independent of the discriminator and is what gets read.
-  await saveRuntimeConfig('global', {
-    ...cfg,
-    providers: {
-      ...cfg.providers,
-      providerX: { name: 'openai', apiKeyEnv: 'MY_PROVIDER_X' },
-    },
+    assert.equal(cfg.$schemaVersion, CURRENT_RUNTIME_CONFIG_VERSION);
+    assert.equal(CURRENT_RUNTIME_CONFIG_VERSION, 2);
+    assert.equal(cfg.provider, undefined);
+    assert.equal(cfg.openalexApiKeyEnv, 'OPENALEX_API_KEY');
+    assert.equal(cfg.openalexApiKeyOptional, true);
+    assert.equal(cfg.contactEmailEnv, 'PENSMITH_CONTACT_EMAIL');
   });
-  await assert.rejects(
-    () => getProviderApiKey('providerX'),
-    (e: unknown) => e instanceof MissingApiKeyError,
-  );
 });
 
-test('saveRuntimeConfig + loadRuntimeConfig round-trips schema-validated', async () => {
-  mkPaperRoot();
-  const { saveRuntimeConfig, loadRuntimeConfig } = await import('../bin/lib/runtime.js');
-  const cfg = await loadRuntimeConfig();
-  const next = { ...cfg, openalexApiKeyEnv: 'CUSTOM_OA_ENV' };
-  await saveRuntimeConfig('global', next);
-  const back = await loadRuntimeConfig();
-  assert.equal(back.openalexApiKeyEnv, 'CUSTOM_OA_ENV');
-  // Other defaults should survive the round-trip unchanged.
-  assert.equal(back.openalexApiKeyOptional, true);
-  assert.equal(back.contactEmailEnv, 'PENSMITH_CONTACT_EMAIL');
-});
-
-test('CRITICAL: persisted runtime.json never contains the resolved api-key VALUE (T-01-07)', async () => {
-  mkPaperRoot();
-  process.env.SECRET_VALUE_DO_NOT_LEAK = 'sk-very-secret-1234567890';
-  try {
-    const { saveRuntimeConfig, loadRuntimeConfig } = await import('../bin/lib/runtime.js');
-    const cfg = await loadRuntimeConfig();
-    await saveRuntimeConfig('global', {
-      ...cfg,
+test('D-17-19: a v1 runtime.json migrates to v2 (first provider entry) and is written back', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    const file = path.join(sb.pensmithData, 'runtime.json');
+    fs.writeFileSync(file, JSON.stringify({
+      $schemaVersion: 1,
       providers: {
-        ...cfg.providers,
-        leaktest: { name: 'openai', apiKeyEnv: 'SECRET_VALUE_DO_NOT_LEAK' },
+        openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY', defaultModel: 'gpt-5' },
+        anthropic: { name: 'anthropic', apiKeyEnv: 'ANTHROPIC_API_KEY' },
       },
+      contactEmailEnv: 'MY_CONTACT',
+    }));
+    const cfg = await loadRuntimeConfig();
+    assert.equal(cfg.provider, 'openai');
+    assert.equal(cfg.model, 'gpt-5');
+    assert.equal(cfg.api_key_env, undefined, 'the provider default variable is not repeated');
+    assert.equal(cfg.contactEmailEnv, 'MY_CONTACT');
+    const onDisk = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+    assert.equal(onDisk['$schemaVersion'], 2, 'the migrated file is written back');
+    assert.equal(onDisk['providers'], undefined);
+  });
+});
+
+test('RUN-07: a v1 file naming a non-conforming key variable fails with the rule, not silently', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    fs.writeFileSync(path.join(sb.pensmithData, 'runtime.json'), JSON.stringify({
+      $schemaVersion: 1,
+      providers: { anthropic: { name: 'anthropic', apiKeyEnv: 'GITHUB_TOKEN' } },
+    }));
+    await assert.rejects(loadRuntimeConfig(), (e: unknown) =>
+      e instanceof RuntimeConfigError && /api_key_env must be ANTHROPIC_API_KEY, OPENAI_API_KEY or a name matching/.test(e.message));
+  });
+});
+
+test('RUN-07: api_key_env accepts only the provider variables or *_API_KEY names', () => {
+  for (const ok of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GROQ_API_KEY', 'MY_LOCAL_LLM_API_KEY']) assert.ok(isAllowedApiKeyEnv(ok), ok);
+  for (const bad of ['GITHUB_TOKEN', 'HOME', 'AWS_SECRET_ACCESS_KEY', 'api_key', '_API_KEY', 'X_API_KEY_2']) assert.equal(isAllowedApiKeyEnv(bad), false, bad);
+});
+
+test('RUN-08: an unknown provider is one friendly line listing the valid values (no zod dump)', async () => {
+  await withLlmSandbox({ runtime: { provider: 'bogus' } }, async () => {
+    await assert.rejects(resolveRuntime(), (e: unknown) => {
+      assert.ok(e instanceof RuntimeConfigError);
+      assert.match(e.message, /unknown provider "bogus"/);
+      assert.match(e.message, /anthropic, openai, ollama, vllm, openai-compatible/);
+      assert.ok(!e.message.includes('\n'), 'one line');
+      assert.ok(!/invalid_enum_value|ZodError|"code"/.test(e.message), 'no zod dump');
+      assert.equal(e.exitCode, 1);
+      return true;
     });
-    const { pensmithDataDir } = await import('../bin/lib/paths.js');
-    const file = path.join(pensmithDataDir(), 'runtime.json');
-    const onDisk = fs.readFileSync(file, 'utf8');
-    assert.ok(
-      !onDisk.includes('sk-very-secret-1234567890'),
-      'api-key VALUE must never reach disk (T-01-07 load-bearing property)',
-    );
-    assert.ok(
-      onDisk.includes('SECRET_VALUE_DO_NOT_LEAK'),
-      'env-var NAME may appear (and must, for resolution)',
-    );
-  } finally {
-    delete process.env.SECRET_VALUE_DO_NOT_LEAK;
-  }
+  });
+  await withLlmSandbox({}, async () => {
+    setRuntimeOverride({ provider: 'bogus' });
+    await assert.rejects(resolveRuntime(), /unknown provider "bogus" \(--runtime\); valid values: anthropic/);
+  });
 });
 
-test('paper scope overlays global (paper wins on top-level keys)', async () => {
-  mkPaperRoot();
-  const paperRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-paper-'));
-  const { saveRuntimeConfig, loadRuntimeConfig } = await import('../bin/lib/runtime.js');
-  const cfg = await loadRuntimeConfig();
-  await saveRuntimeConfig('global', { ...cfg, openalexApiKeyEnv: 'GLOBAL_OA' });
-  await saveRuntimeConfig('paper', { ...cfg, openalexApiKeyEnv: 'PAPER_OA' }, { paperRoot });
-  const merged = await loadRuntimeConfig({ scope: 'auto', paperRoot });
-  assert.equal(
-    merged.openalexApiKeyEnv,
-    'PAPER_OA',
-    'paper-scope override must win over global-scope value',
-  );
+test('RUN-07: precedence — flag > paper config > global > env detection > default', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    // default
+    let rt = await resolveRuntime();
+    assert.equal(rt.provider, 'anthropic');
+    assert.equal(rt.providerSource, 'default');
+    assert.equal(rt.model, 'claude-opus-5');
+    assert.equal(rt.endpoint, 'https://api.anthropic.com');
+    assert.equal(rt.apiKeyEnv, 'ANTHROPIC_API_KEY');
+
+    // env detection: only OPENAI_API_KEY → openai + its default model
+    process.env['OPENAI_API_KEY'] = 'sk-o';
+    rt = await resolveRuntime();
+    assert.equal(rt.provider, 'openai');
+    assert.equal(rt.providerSource, 'env');
+    assert.equal(rt.model, 'gpt-6-astra');
+    assert.equal(rt.endpoint, 'https://api.openai.com/v1');
+    process.env['ANTHROPIC_API_KEY'] = 'sk-a';
+    assert.equal((await resolveRuntime()).provider, 'anthropic', 'both keys set → anthropic');
+
+    // global beats env
+    sb.writeGlobalRuntime({ $schemaVersion: 2, provider: 'openai', model: 'gpt-5' });
+    rt = await resolveRuntime();
+    assert.equal(rt.provider, 'openai');
+    assert.equal(rt.providerSource, 'global');
+    assert.equal(rt.model, 'gpt-5');
+
+    // paper config beats global; the global model (another provider's) does not leak
+    sb.writePaperConfig('schema_version = 1\n[runtime]\nprovider = "anthropic"\nmodel = "claude-sonnet-5"\n');
+    rt = await resolveRuntime();
+    assert.equal(rt.provider, 'anthropic');
+    assert.equal(rt.providerSource, 'config');
+    assert.equal(rt.model, 'claude-sonnet-5');
+    assert.equal(rt.modelSource, 'config');
+
+    // flags beat everything
+    setRuntimeOverride(runtimeFlagsFromArgv(['write', '1', '--runtime', 'ollama', '--model=qwen2.5']));
+    rt = await resolveRuntime();
+    assert.equal(rt.provider, 'ollama');
+    assert.equal(rt.providerSource, 'flag');
+    assert.equal(rt.model, 'qwen2.5');
+    assert.equal(rt.endpoint, 'http://127.0.0.1:11434/v1');
+    assert.equal(rt.apiKeyEnv, null, 'local providers need no key variable');
+  });
 });
 
-test('saveRuntimeConfig scope=paper without paperRoot throws', async () => {
-  mkPaperRoot();
-  const { saveRuntimeConfig, loadRuntimeConfig } = await import('../bin/lib/runtime.js');
-  const cfg = await loadRuntimeConfig();
-  await assert.rejects(() => saveRuntimeConfig('paper', cfg));
+test('RUN-08: a local provider has no default model; openai-compatible needs a global endpoint', async () => {
+  await withLlmSandbox({ runtime: { provider: 'vllm' } }, async () => {
+    const rt = await resolveRuntime();
+    assert.equal(rt.model, null);
+    assert.equal(rt.endpoint, 'http://127.0.0.1:8000/v1');
+  });
+  await withLlmSandbox({ runtime: { provider: 'openai-compatible', model: 'm', endpoint: 'http://localhost:8000/v1', api_key_env: 'LLM_TEST_API_KEY' } }, async () => {
+    const rt = await resolveRuntime();
+    assert.equal(rt.endpoint, 'http://localhost:8000/v1');
+    assert.equal(rt.endpointSource, 'global');
+    assert.equal(rt.apiKeyEnv, 'LLM_TEST_API_KEY');
+    assert.equal(await getProviderApiKey('openai-compatible'), '', 'the key is optional for local providers');
+    process.env['LLM_TEST_API_KEY'] = 'sk-local-1234567';
+    assert.equal(await getProviderApiKey('openai-compatible'), 'sk-local-1234567');
+  });
 });
 
-// === Phase 3 Plan 00 Task 0.3 extension: PENSMITH_S2_API_KEY no-leak (D-16, T-01-07) ===
-// The PENSMITH_S2_API_KEY value must NEVER reach disk or session log.
-// Only the env-var NAME is persisted; the resolved value stays in memory only.
-// This extends the T-01-07 no-leak property from Phase 1 to the new S2 slot.
-//
-// Skip guard: if capabilities() is not yet exported from runtime.ts (it lands in Phase 3
-// Wave 2 when the doctor probe waking happens), this test skips gracefully.
-test('runtime: PENSMITH_S2_API_KEY value never persisted to capabilities/state/handoff (T-01-07, D-16)',
-  async () => {
-    mkPaperRoot();
+test('RUN-07: the retired paper runtime.json overlay is ignored with a one-time warning', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    fs.writeFileSync(path.join(sb.root, 'runtime.json'), JSON.stringify({ $schemaVersion: 1, providers: { openai: { name: 'openai', apiKeyEnv: 'OPENAI_API_KEY' } } }));
+    const first = await captureStderr(() => resolveRuntime());
+    assert.equal(first.value.provider, 'anthropic', 'the overlay is not read');
+    assert.match(first.stderr, /is no longer read .*\.paper\/config\.toml \[runtime\]/);
+    const second = await captureStderr(() => resolveRuntime());
+    assert.equal(second.stderr.includes('no longer read'), false, 'warned once');
+  });
+});
+
+test('RUN-26: per-slug models — generation on the configured model, judgment on the small model', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    let rt = await resolveRuntime();
+    assert.equal(resolveSlug(rt, 'outline-author').model, 'claude-opus-5');
+    assert.equal(resolveSlug(rt, 'section-drafter').effort, 'high');
+    assert.equal(resolveSlug(rt, 'claim-support').model, 'claude-haiku-4-5');
+    assert.equal(resolveSlug(rt, 'source-evaluator').model, 'claude-haiku-4-5');
+
+    sb.writePaperConfig('schema_version = 1\n[runtime]\neffort = "low"\n[runtime.slugs.claim-support]\nmodel = "claude-sonnet-5"\n');
+    rt = await resolveRuntime();
+    assert.equal(resolveSlug(rt, 'claim-support').model, 'claude-sonnet-5', 'only Pass 2 changes');
+    assert.equal(resolveSlug(rt, 'claim-support').modelSource, 'slug-config');
+    assert.equal(resolveSlug(rt, 'orphan-label').model, 'claude-haiku-4-5');
+    assert.equal(resolveSlug(rt, 'outline-author').effort, 'low', '[runtime] effort applies to generation slugs');
+    assert.equal(resolveSlug(rt, 'orphan-label').effort, 'low', 'judgment keeps its own default (low)');
+
+    setRuntimeOverride({ model: 'claude-sonnet-5' });
+    rt = await resolveRuntime();
+    assert.equal(resolveSlug(rt, 'section-planner').model, 'claude-sonnet-5', '--model changes generation slugs');
+    assert.equal(resolveSlug(rt, 'topic-disambiguator').model, 'claude-haiku-4-5', '--model never changes judgment slugs');
+
+    setRuntimeOverride({ provider: 'ollama', model: 'llama3.3' });
+    rt = await resolveRuntime();
+    assert.equal(resolveSlug(rt, 'orphan-label').model, 'llama3.3', 'local providers use the configured model for every slug');
+  });
+});
+
+test('getProviderApiKey resolves the configured variable; a missing hosted key is a one-line PensmithError', async () => {
+  await withLlmSandbox({ runtime: { provider: 'anthropic', api_key_env: 'LLM_TEST_API_KEY' } }, async () => {
+    await assert.rejects(getProviderApiKey('anthropic'), (e: unknown) =>
+      e instanceof MissingApiKeyError && e instanceof PensmithError && e.exitCode === 1
+      && /LLM_TEST_API_KEY is not set/.test(e.message)
+      && /Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY \(or configure a local endpoint\)/.test(e.message));
+    process.env['LLM_TEST_API_KEY'] = 'sk-test-resolved-1';
+    assert.equal(await getProviderApiKey('anthropic'), 'sk-test-resolved-1');
+  });
+});
+
+test('CRITICAL: persisted runtime.json never contains a resolved key VALUE (T-01-07)', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    const sentinel = 'SECRET-VALUE-DO-NOT-LEAK-7d1f';
+    process.env['LLM_TEST_API_KEY'] = sentinel;
+    await saveRuntimeConfig({
+      $schemaVersion: 2,
+      provider: 'anthropic',
+      api_key_env: 'LLM_TEST_API_KEY',
+      openalexApiKeyEnv: 'OPENALEX_API_KEY',
+      openalexApiKeyOptional: true,
+      contactEmailEnv: 'PENSMITH_CONTACT_EMAIL',
+    });
+    assert.equal(await getProviderApiKey('anthropic'), sentinel);
+    const raw = fs.readFileSync(path.join(sb.pensmithData, 'runtime.json'), 'utf8');
+    assert.ok(raw.includes('LLM_TEST_API_KEY'), 'the variable NAME is persisted');
+    assert.equal(raw.includes(sentinel), false, 'the VALUE never reaches disk');
+    for (const f of fs.readdirSync(sb.pensmithData)) {
+      const p = path.join(sb.pensmithData, f);
+      if (fs.statSync(p).isFile()) assert.equal(fs.readFileSync(p, 'utf8').includes(sentinel), false, `${f} must not hold the key`);
+    }
+  });
+});
+
+test('saveRuntimeConfig refuses an invalid config before touching disk', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    await assert.rejects(saveRuntimeConfig({ $schemaVersion: 2, api_key_env: 'GITHUB_TOKEN' } as never));
+    assert.equal(fs.existsSync(path.join(sb.pensmithData, 'runtime.json')), false);
+  });
+});
+
+test('getOpenAlexApiKey: undefined when unset + optional, the value when set, MissingApiKeyError when required', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    delete process.env['OPENALEX_API_KEY'];
+    assert.equal(await getOpenAlexApiKey(), undefined);
+    process.env['OPENALEX_API_KEY'] = 'oa-key-1';
+    try {
+      assert.equal(await getOpenAlexApiKey(), 'oa-key-1');
+    } finally {
+      delete process.env['OPENALEX_API_KEY'];
+    }
+    sb.writeGlobalRuntime({ $schemaVersion: 2, openalexApiKeyOptional: false });
+    await assert.rejects(getOpenAlexApiKey(), MissingApiKeyError);
+  });
+});
+
+test('runtime: PENSMITH_S2_API_KEY value never persisted into the runtime config (T-01-07, D-16)', async () => {
+  await withLlmSandbox({}, async () => {
     process.env['PENSMITH_S2_API_KEY'] = 'sk-test-secret-do-not-leak';
     try {
-      const runtimeMod = await import('../bin/lib/runtime.js') as Record<string, unknown>;
-      if (typeof runtimeMod['loadRuntimeConfig'] !== 'function') return; // skip if not ready
-
-      const { loadRuntimeConfig } = runtimeMod as { loadRuntimeConfig: () => Promise<Record<string, unknown>> };
       const cfg = await loadRuntimeConfig();
-      const serialized = JSON.stringify(cfg);
-
-      // The resolved value must NOT appear in the serialized config.
-      assert.ok(
-        !serialized.includes('sk-test-secret-do-not-leak'),
-        'PENSMITH_S2_API_KEY value LEAKED into runtime config serialization (T-01-07, D-16)',
-      );
+      assert.equal(JSON.stringify(cfg).includes('sk-test-secret-do-not-leak'), false);
     } finally {
       delete process.env['PENSMITH_S2_API_KEY'];
     }
-  },
-);
+  });
+});

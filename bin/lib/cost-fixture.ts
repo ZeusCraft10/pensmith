@@ -3,11 +3,12 @@
 //
 // Why a fixture (not live pricing):
 //   Budget tests must NOT drift when real provider pricing changes. The
-//   numbers below are rounded approximations of late-2025 Anthropic /
-//   OpenAI pricing — close enough to be intuitive, but pinned in code so
-//   tests are deterministic. The runtime layer (Phase 2+ W11) reads real
-//   prices from a config file at process start; this fixture is only
-//   imported by tests/cost-fixture.test.ts and tests/budget.test.ts.
+//   numbers below are the published prices of the current default models as
+//   of 2026-09 (Phase 17 re-keyed the table: the v0.1 claude-{opus,sonnet,
+//   haiku}-4 ids were never valid model ids), pinned in code so tests are
+//   deterministic. The runtime price table is bin/lib/pricing.ts; this
+//   fixture is only imported by tests/cost-fixture.test.ts and
+//   tests/budget.test.ts.
 //
 // Unknown provider/model returns 0 (per PLAN line 355 — pick "returns 0").
 // This is the deliberate choice: tests for unknown models should not crash;
@@ -17,11 +18,11 @@
 // LLM call lands here.
 
 export const FIXTURE_PRICES = {
-  'anthropic:claude-opus-4':   { inputUsdPerMtok: 15.00, outputUsdPerMtok: 75.00 },
-  'anthropic:claude-sonnet-4': { inputUsdPerMtok:  3.00, outputUsdPerMtok: 15.00 },
-  'anthropic:claude-haiku-4':  { inputUsdPerMtok:  1.00, outputUsdPerMtok:  5.00 },
-  'openai:gpt-4-turbo':        { inputUsdPerMtok: 10.00, outputUsdPerMtok: 30.00 },
-  'openai:gpt-4o-mini':        { inputUsdPerMtok:  0.15, outputUsdPerMtok:  0.60 },
+  'anthropic:claude-opus-5':     { inputUsdPerMtok:  5.00, outputUsdPerMtok: 25.00 },
+  'anthropic:claude-sonnet-5':   { inputUsdPerMtok:  2.00, outputUsdPerMtok: 10.00 },
+  'anthropic:claude-haiku-4-5':  { inputUsdPerMtok:  1.00, outputUsdPerMtok:  5.00 },
+  'openai:gpt-6-astra':          { inputUsdPerMtok: 10.00, outputUsdPerMtok: 50.00 },
+  'openai:gpt-6-luna':           { inputUsdPerMtok:  0.10, outputUsdPerMtok:  0.50 },
 } as const;
 
 export type FixtureModelKey = keyof typeof FIXTURE_PRICES;

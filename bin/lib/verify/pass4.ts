@@ -49,12 +49,15 @@
 //   For AMBIGUOUS sentences ONLY, the hash-pinned `orphan-label` prompt is asked
 //   for a {claim, definition, UNCLEAR} label. This is purely advisory metadata
 //   for the per-claim `label` field; it NEVER changes orphanCount (R8 invariant)
-//   and NEVER reclassifies a HIGH claim. It is gated behind assertBudget
-//   (ARCH-09/10 per-section cap) and the PENSMITH_NO_LLM guard — under
-//   PENSMITH_NO_LLM=1 (or no ANTHROPIC_API_KEY) Step 3 is skipped entirely, every
-//   AMBIGUOUS claim is labeled 'UNCLEAR', and ZERO network calls are made (CI path).
+//   and NEVER reclassifies a HIGH claim. Each call goes through complete(), which
+//   checks the SESSION cost cap before sending (RUN-18; there is no per-section
+//   Pass-4 cap any more) — under PENSMITH_NO_LLM=1 Step 3 is skipped entirely,
+//   every AMBIGUOUS claim is labeled 'UNCLEAR', and ZERO network calls are made
+//   (CI path). orphan-label is a judgment slug with a structured contract
+//   (RUN-25, RUN-26): complete() returns the validated {label} object.
 
-import { complete } from '../anthropic.js';
+import { complete, isFatalLlmError } from '../anthropic.js';
+import type { OrphanLabel as OrphanLabelData } from '../llm-contracts.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
 
 // WR-04 (HARD-04c fence-marker breakout mitigation).
@@ -105,18 +108,7 @@ const SENTENCE_BOUNDARY_RE = /(?<=[.!?])\s+/;
 /** R2 — canonical [@citekey] token regex (verbatim from pass1.ts / quote-extractor.ts). */
 const CITEKEY_RE = /\[@([a-z][a-z0-9_-]*)\]/g;
 
-// ---- Step-3 LLM constants (advisory edge-case labeling — AMBIGUOUS only) ----
-
-// Per-section Pass 4 cap (ARCH-10 per-step cap). A config knob (05-RESEARCH Open
-// Question 1) — no CONTEXT.md locks it, so default at Claude's discretion to
-// $0.50/section, matching the Pass-2 sibling and leaving ample headroom under the
-// $5 session cap even for paragraph-dense papers on claude-haiku-4.
-const PASS4_SECTION_CAP_DEFAULT = 0.5;
-
-// Output-token cap for the orphan-label call (also the budget pre-estimate
-// ceiling inside complete()). complete() estimates input tokens from content
-// length and records ACTUAL cost post-call, so no fixed input estimate is needed.
-const EST_OUTPUT_TOKENS = 60;
+// ---- Step-3 LLM labeling (advisory edge-case labeling — AMBIGUOUS only) ----
 
 /** Step-3 advisory label vocabulary (parsed from the orphan-label response). */
 type OrphanLabel = 'claim' | 'definition' | 'UNCLEAR';
@@ -355,23 +347,6 @@ function orphanLabelPlaceholder(): OrphanLabel {
   return 'UNCLEAR';
 }
 
-/**
- * Parse the orphan-label model response into the {claim, definition, UNCLEAR}
- * enum. Defensive: anything that is not a valid enum value -> 'UNCLEAR'
- * (UNCLEAR-bias). Never throws.
- */
-function parseOrphanLabel(raw: string): OrphanLabel {
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const label = parsed['label'];
-    if (label === 'claim' || label === 'definition' || label === 'UNCLEAR') {
-      return label;
-    }
-  } catch {
-    // Unparseable -> conservative UNCLEAR below.
-  }
-  return 'UNCLEAR';
-}
 
 /**
  * Pass 4 advisory orphan audit. Splits `draftMd` into paragraphs on /\n{2,}/,
@@ -390,7 +365,7 @@ function parseOrphanLabel(raw: string): OrphanLabel {
  */
 export async function runPass4(
   draftMd: string,
-  opts: { n: number; scopeCapUsd?: number },
+  opts: { n: number },
 ): Promise<Pass4Result[]> {
   // Presence check ONLY — never reads the key VALUE (the resolved key, when the
   // live branch is reached, comes from getProviderApiKey('anthropic')).
@@ -424,8 +399,6 @@ export async function runPass4(
 
   // Live branch (only reached with a real key + LLM enabled + >=1 AMBIGUOUS).
   // Never reached in CI: the noLlm short-circuit above is the test path.
-  const cap = opts.scopeCapUsd ?? PASS4_SECTION_CAP_DEFAULT;
-  const scopeId = `${opts.n}-pass4`;
   const promptTemplate = loadPrompt('orphan-label');
 
   for (const audit of audits) {
@@ -442,24 +415,21 @@ export async function runPass4(
           paragraph_context: stripFenceMarkers(paraText.slice(0, 500)),
         });
 
-        // Route through the http.ts (D-06) transport chokepoint. complete()
-        // applies the SSRF pre-flight guard, full-jitter retry/backoff, the
-        // polite User-Agent, the pre-call assertBudget gate (scope/scopeId/cap
-        // forwarded), and post-call appendCost with ACTUAL usage — none of which
-        // the raw SDK client received (audit #7). Errors are caught below →
-        // UNCLEAR (advisory must not crash verify).
-        const res = await complete({
+        // Route through the transport chokepoint (complete() → http.ts, D-06):
+        // the session cost-cap check before sending, retry/backoff, and the
+        // actual-usage cost record after.
+        const res = await complete<OrphanLabelData>({
+          slug: 'orphan-label',
+          section: opts.n,
           system: '',
           messages: [{ role: 'user', content: prompt }],
-          scope: 'section',
-          scopeId,
-          scopeCapUsd: cap,
-          maxTokens: EST_OUTPUT_TOKENS,
         });
-        label = parseOrphanLabel(res.text);
-      } catch {
-        // Any failure (budget, transport, parse) -> conservative UNCLEAR. Never
-        // thrown out of runPass4 (advisory must not crash verify).
+        label = (res.data as OrphanLabelData).label;
+      } catch (err) {
+        // The session cost cap, a missing key and invalid configuration stop
+        // verify (RUN-18). Any other failure -> conservative UNCLEAR (advisory
+        // must not crash verify).
+        if (isFatalLlmError(err)) throw err;
         label = 'UNCLEAR';
       }
 

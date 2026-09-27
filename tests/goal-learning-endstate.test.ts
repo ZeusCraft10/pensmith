@@ -98,8 +98,10 @@ test('readGoalFromConfig + stopAfterResearchFor: learning ⇒ stop, draft/both �
   assert.equal(stopAfterResearchFor('both'), false);
   assert.equal(stopAfterResearchFor('learning'), true);
 
-  // config.toml [project] goal = 'learning' → learning → stop.
-  fs.writeFileSync(path.join(root, 'config.toml'), '[project]\ngoal = "learning"\n');
+  // .paper/config.toml [project] goal = 'learning' → learning → stop. (CONF-01:
+  // the config lives in .paper/ and is read through bin/lib/config.ts.)
+  fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.paper', 'config.toml'), 'schema_version = 1\n[project]\ngoal = "learning"\n');
   assert.equal(readGoalFromConfig(root), 'learning');
   assert.equal(stopAfterResearchFor(readGoalFromConfig(root)), true);
 });

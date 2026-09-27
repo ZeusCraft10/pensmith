@@ -16,11 +16,11 @@
 // caller-injected fields from widening the drafter's context. Both the
 // single-section path AND the per-node wave writer route through it.
 //
-// Phase 11 wiring: complete() handles isNoLlmMode() short-circuit before
-// key resolution. MissingApiKeyError propagates from writeOneSection so the
-// wave orchestrator surfaces it per-section (existing error-propagation contract
-// preserved). The verb-level run() translates it to a fail-loud banner + non-zero
-// exit for the single-section path.
+// Phase 17 wiring (RUN-07): run() calls assertLlmConfigured('write') before
+// any section is touched, in both modes — a missing key is one line through
+// the dispatcher ('Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY (or configure
+// a local endpoint)'). Under PENSMITH_NO_LLM=1 the probe is a no-op and
+// complete() returns the deterministic stub.
 
 import { defineCommand } from 'citty';
 import { existsSync, readFileSync } from 'node:fs';
@@ -39,15 +39,14 @@ import { TutorialSubscriber } from '../lib/tutorial.js';
 import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
 import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
-import { getProviderApiKey } from '../lib/runtime.js';
+import { complete, assertLlmConfigured } from '../lib/anthropic.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { EXIT_ERROR } from '../lib/exit-codes.js';
 
 // Phase 11 — the section-draft placeholder constant has been removed. write now
-// calls complete() for real generation (GEN-02). With no key configured:
-// MissingApiKeyError propagates from complete() → fail-loud banner (GEN-06).
-// With PENSMITH_NO_LLM=1: complete() returns offline mock transparently.
+// calls complete() for real generation (GEN-02). With no key configured, run()
+// refuses up front (assertLlmConfigured, GEN-06 / RUN-07). With
+// PENSMITH_NO_LLM=1: complete() returns the deterministic stub.
 
 const DEFAULT_MAX_PARALLEL = 5;
 
@@ -210,11 +209,10 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
   });
 
   // ── Phase 11: call complete() AFTER assertDrafterInput (WRTE-04 preserved) ──
-  // MissingApiKeyError propagates upward — the wave orchestrator surfaces it
-  // per-section (runAllSections existing error-propagation contract; see the
-  // writeOneSection caller in run() which translates it to a fail-loud banner
-  // for the single-section path). Wave mode: each section's error is isolated.
-  // PENSMITH_NO_LLM=1: complete() short-circuits before key resolution (offline mock).
+  // run() already asserted an LLM is configured (RUN-07); any provider error
+  // propagates upward — the wave orchestrator isolates it per section, and the
+  // single-section path reports it as one line through the dispatcher.
+  // PENSMITH_NO_LLM=1: complete() short-circuits to the deterministic stub.
   const drafterPrompt = loadPrompt('section-drafter');
   const interpolatedDrafterPrompt = interpolate(drafterPrompt, {
     section: JSON.stringify({ number: n, slug, title: slug, depends_on: [], estimated_word_count: 300 }),
@@ -231,10 +229,10 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
   });
 
   const result = await complete({
+    slug: 'section-drafter',
+    section: n,
     system: interpolatedDrafterPrompt,
     messages: [{ role: 'user', content: `Write section ${n} (${slug}).` }],
-    scope: 'section',
-    scopeId: `write-${n}`,
   });
 
   const targetPath = sectionDraft(n, slug, paperRoot);
@@ -289,28 +287,10 @@ export const writeCommand = defineCommand({
     // the WRTE-04 chokepoint per section — no bypass). Progress streams as
     // structured JSON lines to stdout (04-RESEARCH §L); WARN goes to stderr.
     if (args.n === undefined || args.n === null || args.n === '') {
-      // CR-02: GEN-06 fail-loud probe for wave mode.
-      // Single-section path catches MissingApiKeyError from writeOneSection,
-      // but wave mode routes it per-section via runAllSections — by then
-      // disabling the whole wave is not possible. Probe here, before dispatch.
-      const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
-      if (!noLlm) {
-        try {
-          const providerId = await resolveProviderId();
-          await getProviderApiKey(providerId);
-        } catch (e) {
-          if (e instanceof MissingApiKeyError) {
-            process.stderr.write(
-              'pensmith write: ERROR — no LLM key configured.\n' +
-              'Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n' +
-              'Run inside Claude Code (Tier 1) for key-free operation.\n',
-            );
-            process.exitCode = 1;
-            return { ok: false, mode: 'no-key-configured' };
-          }
-          throw e;
-        }
-      }
+      // CR-02 / RUN-07: GEN-06 fail-loud probe for wave mode, before any
+      // section is dispatched (a per-section failure could not stop the wave).
+      // One line through dispatch(): 'Set one of: ANTHROPIC_API_KEY, …'.
+      await assertLlmConfigured('write');
 
       const rawMax = typeof args['max-parallel'] === 'string' ? Number(args['max-parallel']) : DEFAULT_MAX_PARALLEL;
       const maxParallel = Number.isInteger(rawMax) && rawMax >= 1 ? rawMax : DEFAULT_MAX_PARALLEL;
@@ -394,6 +374,9 @@ export const writeCommand = defineCommand({
     if (!Number.isInteger(n) || n < 1) {
       throw new Error(`pensmith write: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
     }
+    // GEN-06 / RUN-07 fail-loud probe: an LLM must be configured before the
+    // section is touched (writeOneSection marks it 'writing' first).
+    await assertLlmConfigured('write');
     // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
     // wins; 'placeholder' only if no outline row exists).
     const paperRoot = projectRoot();
@@ -404,21 +387,7 @@ export const writeCommand = defineCommand({
     // byte-unchanged for every goal (the writer never sees the subscriber).
     const subscriber = makeSubscriberNonFatal(paperRoot);
 
-    let targetPath: string;
-    try {
-      targetPath = await writeOneSection(n, slug);
-    } catch (e) {
-      if (e instanceof MissingApiKeyError) {
-        process.stderr.write(
-          'pensmith write: ERROR — no LLM key configured.\n' +
-          'Set ANTHROPIC_API_KEY to enable real generation.\n' +
-          'Run inside Claude Code (Tier 1) for key-free operation.\n',
-        );
-        process.exitCode = 1;
-        return { ok: false, mode: 'no-key-configured' };
-      }
-      throw e;
-    }
+    const targetPath = await writeOneSection(n, slug);
 
     if (subscriber) {
       subscriber.emit({

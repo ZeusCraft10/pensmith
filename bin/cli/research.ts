@@ -28,14 +28,13 @@
 import { defineCommand } from 'citty';
 import path from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
-import { z } from 'zod';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { upsertSources } from '../lib/library.js';
 import { paperDir, projectRoot } from '../lib/paths.js';
 import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js';
 import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
-import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
-import { getProviderApiKey } from '../lib/runtime.js';
+import { complete, assertLlmConfigured, StructuredOutputError } from '../lib/anthropic.js';
+import type { TopicDisambiguation } from '../lib/llm-contracts.js';
 import { runGate } from '../lib/gates.js';
 import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
 import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
@@ -46,17 +45,6 @@ import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
 // The actual pin calls happen inside run() to catch drift before any network.
 // ---------------------------------------------------------------------------
 void loadPrompt; // reference kept to prevent unused-import elision
-
-// ---------------------------------------------------------------------------
-// Topic-disambiguator response schema (T-12-01 trust boundary).
-// ---------------------------------------------------------------------------
-const ScopeSchema = z.object({
-  label: z.string().min(1),
-  queries: z.array(z.string().min(1)).min(1),
-});
-const DisambiguatorResponseSchema = z.object({
-  scopes: z.array(ScopeSchema).min(1),
-});
 
 export const researchCommand = defineCommand({
   meta: {
@@ -81,33 +69,8 @@ export const researchCommand = defineCommand({
     loadPrompt('topic-disambiguator');
     loadPrompt('source-evaluator');
 
-    // GEN-06 fail-loud probe: assert a key is configured before doing any LLM work.
-    // CRITICAL ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE
-    // getProviderApiKey. When PENSMITH_NO_LLM=1 is set, complete() short-circuits to
-    // the offline mock — MissingApiKeyError is never thrown. The probe here is ONLY
-    // for the non-offline case: if no key and no offline mode, we fail loud.
-    // NEVER log the resolved key value — T-11-12 / T-01-07.
-    const noLlm = process.env['PENSMITH_NO_LLM'] === '1';
-    if (!noLlm) {
-      try {
-        // CR-01: resolve provider ID dynamically so OpenAI-only configs don't
-        // false-positive with "no config for 'anthropic'". resolveProviderId()
-        // is the single source of truth (shared with complete()).
-        const providerId = await resolveProviderId();
-        await getProviderApiKey(providerId);
-      } catch (e) {
-        if (e instanceof MissingApiKeyError) {
-          process.stderr.write(
-            `pensmith research: ERROR — no LLM key configured.\n` +
-            `Set ANTHROPIC_API_KEY (or configure a provider in runtime.json) to enable real generation.\n` +
-            `Run inside Claude Code (Tier 1) for key-free operation.\n`,
-          );
-          process.exitCode = 1;
-          return { ok: false, mode: 'no-key-configured' };
-        }
-        throw e;
-      }
-    }
+    // GEN-06 / RUN-07 fail-loud probe: assert an LLM is configured before any LLM work.
+    await assertLlmConfigured('research');
 
     // ── Step 1: Read INTAKE.md and parse → topic/discipline/assignment ──
     // D-07: read via readFileSync; WARN + empty string if absent.
@@ -139,36 +102,28 @@ export const researchCommand = defineCommand({
       discipline: escapeTemplateTokens(discipline),
       assignment: escapeTemplateTokens(assignment || '(no assignment text — run pensmith intake first)'),
     });
-    const llmResult = await complete({
-      system:
-        'You are an academic research assistant. Your task is to disambiguate a ' +
-        'research topic and propose search scopes. Return a JSON object in the ' +
-        'exact format specified in the prompt. No prose outside the JSON object.',
-      messages: [{ role: 'user', content: interpolatedPrompt }],
-      scope: 'task',
-      scopeId: 'research',
-    });
-
-    // ── Step 3: Defensively parse topic-disambiguator response (T-12-01) ──
-    // On any parse failure: WARN + fall back to a single auto scope.
+    // topic-disambiguator is a STRUCTURED slug (RUN-25, T-12-01 trust boundary):
+    // complete() returns {scopes:[{label, queries}]} validated against the
+    // llm-contracts.ts schema (native structured output where the model has it,
+    // else the tolerant parser plus one corrective retry).
     let scopes: Array<{ label: string; queries: string[] }>;
     try {
-      const rawParsed: unknown = JSON.parse(llmResult.text);
-      const zodResult = DisambiguatorResponseSchema.safeParse(rawParsed);
-      if (zodResult.success) {
-        scopes = zodResult.data.scopes;
-      } else {
-        process.stderr.write(
-          `pensmith research: WARN — topic-disambiguator response failed schema validation ` +
-          `(${zodResult.error.message.slice(0, 120)}); ` +
-          `falling back to single-scope with topic as query.\n`,
-        );
-        scopes = [{ label: 'auto', queries: [topic || 'research'] }];
-      }
-    } catch {
+      const llmResult = await complete<TopicDisambiguation>({
+        slug: 'topic-disambiguator',
+        system:
+          'You are an academic research assistant. Your task is to disambiguate a ' +
+          'research topic and propose search scopes, in the exact format specified in the prompt.',
+        messages: [{ role: 'user', content: interpolatedPrompt }],
+        stubHint: topic || 'research topic',
+      });
+      scopes = (llmResult.data as TopicDisambiguation).scopes;
+    } catch (e) {
+      // ── Step 3: a reply that never matched the schema (after the corrective
+      // retry) degrades to one scope built from the topic (T-11-10); provider,
+      // cost-cap and configuration errors still propagate.
+      if (!(e instanceof StructuredOutputError)) throw e;
       process.stderr.write(
-        `pensmith research: WARN — topic-disambiguator response is not valid JSON; ` +
-        `falling back to single-scope with topic as query.\n`,
+        `pensmith research: WARN — ${e.message}; falling back to a single scope with the topic as the query.\n`,
       );
       scopes = [{ label: 'auto', queries: [topic || 'research'] }];
     }

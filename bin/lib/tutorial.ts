@@ -37,7 +37,33 @@
 
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
+import { z } from 'zod';
 import { atomicWriteFile } from './atomic-write.js';
+
+// ---------------------------------------------------------------------------
+// config.toml [project] fragment (CONF-01, D-17-31).
+//
+// The educator-mode keys of `.paper/config.toml` [project] are declared HERE,
+// the one goal-aware module, as an opaque zod fragment. bin/lib/config.ts
+// spreads it into the [project] schema without naming its fields, so the
+// zero-branch invariant (tests/lint-tutorial-no-branch.test.ts) holds and its
+// allowlist is not widened.
+// ---------------------------------------------------------------------------
+
+/** The educator-mode workflow goal enum (draft is the default; PRD §7.13). */
+export const GOAL_VALUES = ['draft', 'learning', 'both'] as const;
+
+/** Zod shape merged into the config.toml [project] schema. */
+export const PROJECT_CONFIG_FRAGMENT = Object.freeze({
+  goal: z.enum(GOAL_VALUES, {
+    errorMap: () => ({ message: `goal must be one of: ${GOAL_VALUES.join(', ')}` }),
+  }).optional(),
+});
+
+/** Defaults for the fragment's keys (shown by `pensmith status --config`). */
+export const PROJECT_CONFIG_FRAGMENT_DEFAULTS: Readonly<Record<string, unknown>> = Object.freeze({
+  goal: 'draft',
+});
 
 /**
  * The educator-mode goal. Only `learning` and `both` activate a subscriber;

@@ -9,7 +9,10 @@
 // Covers:
 //   - VRFY-03: Pass 2 produces UNCLEAR-biased verdicts on adversarial fixtures
 //   - VRFY-03: verdict enum + result-object shape
-//   - ARCH-10: assertBudget appears before the LLM call site (source-level proxy)
+//   - ARCH-10 (superseded by RUN-18 / D-17-26): the per-section Pass 2 cap is
+//     gone; Pass 2 reaches the model only through complete(), whose transport
+//     checks the SESSION cap before any byte is sent (source-level proxy; the
+//     behaviour is covered by tests/cost-cap.test.ts)
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -112,17 +115,15 @@ test('known-bad-pass2: runPass2 returns UNCLEAR for all adversarial fixtures und
   },
 );
 
-test('known-bad-pass2: assertBudget appears before the LLM call site in pass2.ts (ARCH-10)',
+test('known-bad-pass2: Pass 2 calls the model only via complete(), which checks the session cap before sending (ARCH-10 → RUN-18)',
   { skip: !existsSync(pass2SrcPath) },
   () => {
-    // Source-level proxy for the budget-before-call invariant: the pass2.ts
-    // source MUST reference assertBudget (the pre-call gate). A stronger
-    // ordering check (assertBudget index < LLM-call index) is asserted once the
-    // module lands; here the existence of the token is the Wave-0 RED contract.
     const src = readFileSync(pass2SrcPath, 'utf-8');
-    assert.ok(
-      src.indexOf('assertBudget') >= 0,
-      'pass2.ts must call assertBudget BEFORE any LLM call (ARCH-10 per-step cap)',
-    );
+    assert.ok(/\bcomplete(<[^>]*>)?\(\{/.test(src), 'pass2.ts calls complete()');
+    assert.ok(!/from '\.\.\/http\.js'|from 'undici'/.test(src), 'pass2.ts never talks to the network directly');
+    const transport = readFileSync(fileURLToPath(new URL('../bin/lib/anthropic.ts', import.meta.url)), 'utf-8');
+    const gate = transport.indexOf('await assertSessionBudget(');
+    const send = transport.indexOf('await sendAttempt(');
+    assert.ok(gate >= 0 && send > gate, 'the session cap is checked BEFORE the attempt is sent');
   },
 );

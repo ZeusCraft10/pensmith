@@ -61,11 +61,13 @@ import {
 import { migrateLegacyLayout } from './lib/state.js';
 import { acquireSessionLock, releaseSessionLock } from './lib/session-lock.js';
 import { runGate, declineGate, canPrompt } from './lib/gates.js';
-import { EXIT_CODES, EXIT_USAGE, EXIT_ERROR, PensmithError } from './lib/exit-codes.js';
+import { EXIT_CODES, EXIT_USAGE, EXIT_ERROR, EXIT_COST_CAP, PensmithError } from './lib/exit-codes.js';
 import { classifyFailure, finalExitCode, stripAnsi } from './lib/verb-outcome.js';
-import { setMirrorPromptsToStderr } from './lib/session-log.js';
+import { setMirrorPromptsToStderr, setSessionArgv } from './lib/session-log.js';
 import { announceModes } from './lib/http-mock.js';
-import { projectEstimate } from './lib/estimator.js';
+import { projectEstimate, renderEstimate } from './lib/estimator.js';
+import { formatUsd } from './lib/budget.js';
+import { argvFlagValue, runtimeFlagsFromArgv, setRuntimeOverride } from './lib/runtime.js';
 import { resolveNextAction } from './lib/router.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 
@@ -219,6 +221,8 @@ export const command = defineCommand({
     estimate: { type: 'boolean', description: 'Project the remaining token + USD cost, then offer to proceed.', default: false },
     yolo: { type: 'boolean', description: 'Skip the approval gates --yolo may skip (outline approval, export confirmation, research scope/prune, add remap, revise swap). Never skips the cost cap, detector consent or the active-paper choice.', default: false },
     'show-prompts': { type: 'boolean', description: 'Mirror every outbound request (and full LLM prompts) to stderr before it is sent.', default: false },
+    runtime: { type: 'string', description: 'LLM provider for this run: anthropic | openai | ollama | vllm | openai-compatible (overrides config; RUN-08).' },
+    model: { type: 'string', description: 'Generation model for this run (outline, plan, write); judgment slugs keep their own model (RUN-26).' },
   },
   // NO run() — bare routing happens in the pre-dispatch wrapper below (H2).
   subCommands: buildSubCommands(),
@@ -256,13 +260,6 @@ export function shouldRunYoloCapPreflight(argv: string[]): boolean {
   const v = firstVerb(argv);
   if (v !== null && READ_ONLY_VERBS.has(v)) return false;
   return true;
-}
-
-/** The configured session cap (C2-M3): PENSMITH_COST_CAP_USD if finite >0, else $5. */
-function configuredCapUsd(): number {
-  const raw = process.env['PENSMITH_COST_CAP_USD'];
-  const n = raw ? Number(raw) : NaN;
-  return Number.isFinite(n) && n > 0 ? n : 5.0;
 }
 
 /**
@@ -603,37 +600,68 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   // installed-package refusal (throws OfflineFixturesNotShippedError, EXIT_ERROR).
   announceModes({ verb: firstVerb(argv), argv });
 
-  // (c) H1 / C2-H1 YOLO CAP PRE-FLIGHT — runs WHENEVER --yolo is present for a
+  // (b2) --runtime / --model (RUN-08, D-17-19): pre-parse into the runtime
+  //      override so every model call in this invocation resolves them first,
+  //      and record the invocation argv once for SESSION.log replay (RUN-17).
+  setSessionArgv(argv);
+  setRuntimeOverride(runtimeFlagsFromArgv(argv));
+
+  // (c) --yolo COST PRE-FLIGHT (D-17-27) — runs whenever --yolo is present for a
   //     COST-INCURRING execution (write/plan/verify/research/compile/done/revise,
-  //     next/resume, and bare invocation). projectEstimate is guarded against ALL
-  //     load errors, so a paper-less dir / corrupt STATE.json sees an empty
-  //     estimate.
+  //     next/resume, and bare invocation). It refuses (EXIT_COST_CAP) only when
+  //     the projected remaining cost exceeds the session cost cap — not 50% of
+  //     it (the ARCH-11 heuristic would refuse the default §15 paper). The
+  //     per-call cap in complete(), which --yolo cannot skip, is the hard
+  //     enforcement (RUN-18). projectEstimate never throws for on-disk paper
+  //     state (a paper-less dir or a corrupt STATE.json projects the whole
+  //     pipeline); an invalid runtime config is a one-line error.
   //
-  //     Audit #24: a read-only verb (status/list/doctor/open) and the --estimate
-  //     preview incur NO model/network cost, so the cap must NOT hard-refuse them
-  //     — `pensmith status --yolo` or `pensmith --estimate --yolo` should still
-  //     work over an over-cap project. --version/--help are citty meta and bypass
-  //     too. Bare/cost verbs still get the refusal.
+  //     Audit #24: read-only verbs (status/list/doctor/open), the --estimate
+  //     preview and --version/--help incur no model cost and bypass it.
   if (shouldRunYoloCapPreflight(argv)) {
-    const est = await projectEstimate({ paperRoot: projectRoot(), sessionCapUsd: configuredCapUsd() });
-    if (est.exceedsHalfCap) {
-      process.stderr.write(
-        'pensmith: REFUSED — --yolo estimate exceeds 50% of the session cap (ARCH-11).\n',
+    let est: Awaited<ReturnType<typeof projectEstimate>>;
+    try {
+      const from = argvFlagValue(argv, 'from');
+      est = await projectEstimate({ paperRoot: projectRoot(), ...(from !== undefined ? { from } : {}) });
+    } catch (e) {
+      // An invalid runtime config (or any projection failure) is one line
+      // through dispatch() — which also releases the session lock.
+      if (e instanceof PensmithError) throw e;
+      throw new PensmithError((e as Error).message, EXIT_ERROR);
+    }
+    if (est.exceedsCap) {
+      // HARD refusal before any model call: one line and EXIT_COST_CAP through
+      // dispatch(), which also releases the session lock.
+      throw new PensmithError(
+        `REFUSED — --yolo projects ${formatUsd(est.totalUsd)} for the remaining steps, over the ` +
+          `${formatUsd(est.capUsd)} session cost cap (RUN-18). Raise [budget] cost_cap_usd or ` +
+          `PENSMITH_COST_CAP_USD, or run without --yolo to be asked before the cap is crossed.`,
+        EXIT_COST_CAP,
       );
-      process.exit(1); // HARD refusal — not advisory, not nested in --estimate
     }
   }
 
-  // (d) --estimate → print the projection table and exit 0 WITHOUT a verb.
+  // (d) --estimate (RUN-20) → print the projection (no network, no LLM call),
+  //     then the V2 estimate-proceed gate: a terminal user may continue into
+  //     the normal routing (with --estimate stripped); "no" or a run that
+  //     cannot prompt exits 0 after printing.
   if (hasFlag(argv, 'estimate')) {
-    const est = await projectEstimate({ paperRoot: projectRoot(), sessionCapUsd: configuredCapUsd() });
-    const out: string[] = ['pensmith estimate (token + USD projection, estimated ±50%):'];
-    for (const r of est.rows) {
-      out.push(`  ${r.step}: in=${r.inputTokens} out=${r.outputTokens} → $${r.usd.toFixed(4)}`);
+    let est: Awaited<ReturnType<typeof projectEstimate>>;
+    try {
+      const from = argvFlagValue(argv, 'from');
+      est = await projectEstimate({ paperRoot: projectRoot(), ...(from !== undefined ? { from } : {}) });
+    } catch (e) {
+      // An invalid runtime config (or any projection failure) is one line
+      // through dispatch() — which also releases the session lock.
+      if (e instanceof PensmithError) throw e;
+      throw new PensmithError((e as Error).message, EXIT_ERROR);
     }
-    out.push(`  TOTAL: $${est.totalUsd.toFixed(4)}`);
-    process.stdout.write(out.join('\n') + '\n');
-    return;
+    process.stdout.write(renderEstimate(est) + '\n');
+    if (est.nothingLeft) return;
+    const outcome = await runGate('estimate-proceed', { yolo: false });
+    const proceed = outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
+    if (!proceed) return;
+    argv = argv.filter((a) => a !== '--estimate');
   }
 
   // (e) Dispatch exactly once.
