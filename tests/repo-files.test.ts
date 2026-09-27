@@ -48,7 +48,8 @@ test('package.json contract', () => {
   assert.equal(pkg['type'], 'module');
   assert.equal(pkg['license'], 'AGPL-3.0-or-later');
   const engines = pkg['engines'] as Record<string, string> | undefined;
-  assert.equal(engines?.['node'], '>=20.10.0');
+  // CI-06 / D-17-39: the supported Node LTS floor (22 and 24 are tested).
+  assert.equal(engines?.['node'], '>=22.12.0');
   assert.equal(pkg['packageManager'], 'npm@10.9.0');
   const scripts = pkg['scripts'] as Record<string, string> | undefined;
   for (const s of ['lint', 'typecheck', 'test', 'build', 'dev', 'validate:manifests', 'check']) {

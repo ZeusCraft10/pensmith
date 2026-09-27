@@ -6,7 +6,8 @@
 //   2. withLock releases on inner throw (try/finally)
 //   3. tryAcquire / release / isLocked roundtrip
 //   4. same-process serialization (two parallel withLock calls)
-//   5. cross-process spawn conflict (TEST-07 — the high-value case)
+//   5. cross-process spawn conflict (TEST-07 — the high-value case; the child
+//      runs the real lock.ts, tests/lock-conflict.cjs)
 //   6. lock files live in pensmithLockDir(), NOT inside .paper/ (D-40)
 //   7. [HARD-01 SCAFFOLD] lock canonicalize: two path conventions for one
 //      file → identical stub (skip-guarded on stubFor export)
@@ -133,7 +134,12 @@ test('cross-process: child holds, parent waits (TEST-07)', async () => {
   const r = 'test:xp:' + Date.now() + ':' + Math.random();
   const helper = path.resolve('tests/lock-conflict.cjs');
   const HOLD_MS = 1500;
-  const child = spawn(process.execPath, [helper], {
+  // Resolve the data dir BEFORE spawning so a single-file run's per-process
+  // test data dir (bin/lib/paths.ts, CI-09) is exported to the child's env and
+  // both processes share one lock directory.
+  void pensmithLockDir();
+  // The child runs the REAL bin/lib/lock.ts through the tsx loader (RUN-22).
+  const child = spawn(process.execPath, ['--import', 'tsx', helper], {
     env: { ...process.env, RESOURCE: r, HOLD_MS: String(HOLD_MS) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

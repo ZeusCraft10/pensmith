@@ -21,6 +21,7 @@
 //   one of these sync roots.
 
 import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -83,25 +84,97 @@ export function localDataDir(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
 ): string {
+  // ---- The platform data dir (what a real user gets) ----------------------
+  // win32: LOCALAPPDATA (never APPDATA — Pitfall 4). darwin: ~/Library/
+  // Application Support. POSIX-like (linux, freebsd, openbsd, aix, sunos, …):
+  // XDG_DATA_HOME if set, else ~/.local/share per the XDG Base Directory Spec.
+  let platformDir: string | undefined;
   if (platform === 'win32') {
-    const localAppData = env.LOCALAPPDATA;
-    if (!localAppData) {
-      throw new Error(
-        'LOCALAPPDATA is unset on Windows; set it explicitly or run from a logged-in user account',
+    platformDir = env.LOCALAPPDATA || undefined;
+  } else if (platform === 'darwin') {
+    platformDir = path.join(env.HOME ?? os.homedir(), 'Library', 'Application Support');
+  } else {
+    platformDir = env.XDG_DATA_HOME || path.join(env.HOME ?? os.homedir(), '.local', 'share');
+  }
+
+  // ---- CI-09 / D-17-40: tests never reach the real data dir ---------------
+  // Under a test context (node:test sets NODE_TEST_CONTEXT in every test-file
+  // process; scripts/run-tests.mjs sets PENSMITH_TEST=1) the platform dir is
+  // honoured ONLY when it resolves inside os.tmpdir() — i.e. a test (or the
+  // runner) redirected it to a temp dir. Anything else, including the real
+  // data dir derived from HOME on macOS, is replaced by PENSMITH_TEST_DATA_DIR
+  // (the runner's per-run dir), and failing that by a per-process temp dir
+  // (a single test file run directly with `node --test`). The test context is
+  // read from `env` itself, so callers that inject an env (tests/paths.test.ts)
+  // see the plain platform logic.
+  const testContext = Boolean(env.NODE_TEST_CONTEXT) || env.PENSMITH_TEST === '1';
+  if (testContext) {
+    const tmpRoots = (() => {
+      const roots = new Set<string>();
+      const t = path.resolve(os.tmpdir());
+      roots.add(t);
+      for (const real of [fs.realpathSync, fs.realpathSync.native]) {
+        try {
+          roots.add(real(t));
+        } catch {
+          /* tmpdir missing — keep the resolved form */
+        }
+      }
+      return [...roots];
+    })();
+    const fold = (p: string): string => (platform === 'win32' ? p.toLowerCase() : p);
+    const insideTmp = (candidate: string): boolean => {
+      const forms = new Set<string>([path.resolve(candidate)]);
+      // Resolve the nearest existing ancestor too (macOS /var → /private/var,
+      // Windows 8.3 short names such as RUNNER~1), so a temp dir given in
+      // either spelling is recognised.
+      let probe = path.resolve(candidate);
+      let rest = '';
+      for (;;) {
+        try {
+          forms.add(path.join(fs.realpathSync.native(probe), rest));
+          break;
+        } catch {
+          const parent = path.dirname(probe);
+          if (parent === probe) break;
+          rest = path.join(path.basename(probe), rest);
+          probe = parent;
+        }
+      }
+      return [...forms].some((f) =>
+        tmpRoots.some((root) => {
+          const rel = path.relative(fold(root), fold(f));
+          return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+        }),
       );
+    };
+    if (platformDir && insideTmp(platformDir)) return platformDir;
+    const runDir = env.PENSMITH_TEST_DATA_DIR;
+    if (runDir) return runDir;
+    const g = globalThis as { __pensmithTestDataDir?: string };
+    if (!g.__pensmithTestDataDir) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-test-data-'));
+      g.__pensmithTestDataDir = dir;
+      // Spawned CLI children inherit the same private dir; the creating
+      // process removes it when it exits.
+      if (env === process.env) process.env.PENSMITH_TEST_DATA_DIR = dir;
+      process.once('exit', () => {
+        try {
+          fs.rmSync(dir, { recursive: true, force: true });
+        } catch {
+          /* best-effort temp cleanup */
+        }
+      });
     }
-    return localAppData;
+    return g.__pensmithTestDataDir;
   }
-  if (platform === 'darwin') {
-    const home = env.HOME ?? os.homedir();
-    return path.join(home, 'Library', 'Application Support');
+
+  if (!platformDir) {
+    throw new Error(
+      'LOCALAPPDATA is unset on Windows; set it explicitly or run from a logged-in user account',
+    );
   }
-  // POSIX-like (linux, freebsd, openbsd, aix, sunos, etc.):
-  // XDG_DATA_HOME if set, else ~/.local/share per XDG Base Directory Spec.
-  const xdg = env.XDG_DATA_HOME;
-  if (xdg) return xdg;
-  const home = env.HOME ?? os.homedir();
-  return path.join(home, '.local', 'share');
+  return platformDir;
 }
 
 /**

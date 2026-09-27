@@ -2,23 +2,50 @@
 // scripts/run-tests.mjs
 // Portable cross-platform test runner for pensmith.
 //
+// Usage:
+//   node scripts/run-tests.mjs                      # every tests/**/*.test.ts
+//   node scripts/run-tests.mjs tests/tier-contract/ tests/tier-contract.test.ts
+//   node scripts/run-tests.mjs --test-name-pattern=idempot tests/doi.test.ts
+// Positional arguments are test files or directories (searched recursively for
+// *.test.ts); arguments starting with `--` are passed to `node --test`.
+//
 // Why this file exists (do not replace with a shell glob):
 //   - D-10 mandates a windows-x64 CI matrix entry. cmd.exe does NOT expand
 //     `tests/**/*.test.ts` — the literal string is passed to Node, which
 //     interprets it as a single non-existent file and silently runs zero
 //     tests (vacuous pass). This is a Pitfall 8 cross-platform landmine.
-//   - Node 20.10 (D-10) lacks native `--test` glob support; that lands in
-//     Node 21+. We cannot wait for it.
-//   - This script enumerates `tests/**/*.test.ts` programmatically via
-//     fs.readdir({recursive:true}), passes the matched files explicitly to
+//   - `node --test` glob support differs across the supported Node lines
+//     (22 and 24, engines.node >=22.12.0 — CI-06 / D-17-39), and a glob that
+//     matches nothing is still a vacuous pass. This script enumerates the test
+//     files itself via a recursive readdir, passes them explicitly to
 //     `node --import tsx --test`, and exits 1 if zero matches are found
-//     (mitigates vacuous-pass failure mode).
+//     (vacuous-pass mitigation, 00-CONTEXT D-10 + RESEARCH Pitfall 8).
+//
+// Test isolation (CI-09 / D-17-40) — every run gets a fresh, private data dir:
+//   - A per-run temp dir is created under os.tmpdir(). XDG_DATA_HOME,
+//     LOCALAPPDATA and PENSMITH_TEST_DATA_DIR all point at it, so
+//     pensmithDataDir() (locks, the HTTP cache, the global paper registry,
+//     runtime.json, COSTS, session logs) resolves inside it on every OS.
+//     macOS derives its data dir from HOME, which is never redirected here
+//     (npm, git and the humanizer probe need the real HOME); bin/lib/paths.ts
+//     instead refuses, under a test context, any platform data dir that is not
+//     inside os.tmpdir() and falls back to PENSMITH_TEST_DATA_DIR. The real
+//     data dir is therefore unreachable from tests, including spawned CLI
+//     children, which inherit these variables.
+//   - PENSMITH_TEST=1 marks the test context (alongside NODE_TEST_CONTEXT,
+//     which node:test sets in each test-file process). Under a test context
+//     sources are OFFLINE (exact recorded fixtures) unless
+//     PENSMITH_NETWORK_TESTS=1 (the maintainer's live lane) — D-V1-01.
+//   - The per-run dir is deleted when the run ends. Set
+//     PENSMITH_KEEP_TEST_DATA=1 to keep it for debugging (its path is printed).
 //
 // CI assertion: the workflow greps the stdout of `npm test` for the
 // "discovered N test files" line and asserts N >= 1.
 
-import { readdir } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,11 +53,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const testsDir = path.join(repoRoot, 'tests');
 
-// Manual recursive walker — does NOT rely on Dirent.parentPath (Node 20.12+)
-// or Dirent.path (Node 20.5+ for recursive readdir). We use a depth-first
-// traversal where the parent path is tracked explicitly. This works on any
-// supported Node version (engines.node = ">=20.10.0"). See
-// 00-CONTEXT.md D-10 + RESEARCH.md Pitfall 8: vacuous-pass mitigation.
+// Depth-first walker with the parent path tracked explicitly (does not rely on
+// Dirent.parentPath / Dirent.path, whose availability differs across Node
+// releases). Sorted so the file list — and the output order — is stable.
 async function discoverTestFiles(dir) {
   const matches = [];
   let entries;
@@ -40,6 +65,7 @@ async function discoverTestFiles(dir) {
     if (err && err.code === 'ENOENT') return matches;
     throw err;
   }
+  entries.sort((a, b) => a.name.localeCompare(b.name));
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -52,17 +78,66 @@ async function discoverTestFiles(dir) {
   return matches;
 }
 
-const files = await discoverTestFiles(testsDir);
+/** Resolve positional args (files or directories) to test files. */
+async function resolveTargets(targets) {
+  const out = [];
+  for (const t of targets) {
+    const abs = path.resolve(repoRoot, t);
+    let st;
+    try {
+      st = await stat(abs);
+    } catch {
+      console.error(`FATAL: test path not found: ${t}`);
+      process.exit(1);
+    }
+    if (st.isDirectory()) out.push(...(await discoverTestFiles(abs)));
+    else out.push(abs);
+  }
+  return [...new Set(out)];
+}
+
+const argv = process.argv.slice(2);
+const nodeTestFlags = argv.filter((a) => a.startsWith('--'));
+const targets = argv.filter((a) => !a.startsWith('--'));
+
+const files = targets.length > 0 ? await resolveTargets(targets) : await discoverTestFiles(testsDir);
 console.log(`discovered ${files.length} test files`);
 if (files.length === 0) {
   console.error('FATAL: zero *.test.ts files found under tests/. Failing to avoid vacuous CI pass.');
   process.exit(1);
 }
 
+// CI-09: the per-run data dir. mkdtemp under os.tmpdir() — the one location
+// bin/lib/paths.ts honours for a platform data-dir variable under a test context.
+const runDataDir = mkdtempSync(path.join(os.tmpdir(), 'pensmith-test-run-'));
+const keep = process.env.PENSMITH_KEEP_TEST_DATA === '1';
+if (keep) console.log(`per-run test data dir (kept): ${runDataDir}`);
+
+const env = {
+  ...process.env,
+  PENSMITH_TEST: '1',
+  PENSMITH_TEST_DATA_DIR: runDataDir,
+  XDG_DATA_HOME: runDataDir,
+  LOCALAPPDATA: runDataDir,
+};
+
+function cleanup() {
+  if (keep) return;
+  try {
+    rmSync(runDataDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  } catch {
+    /* best-effort: a Windows handle may still be closing */
+  }
+}
+
 // Spawn `node --import tsx --test <files>` and inherit stdio.
-const args = ['--import', 'tsx', '--test', ...files];
-const child = spawn(process.execPath, args, { stdio: 'inherit', cwd: repoRoot });
+const args = ['--import', 'tsx', '--test', ...nodeTestFlags, ...files];
+const child = spawn(process.execPath, args, { stdio: 'inherit', cwd: repoRoot, env });
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => child.kill(sig));
+}
 child.on('exit', (code, signal) => {
+  cleanup();
   if (signal) { console.error(`test runner killed by signal ${signal}`); process.exit(1); }
   process.exit(code ?? 1);
 });
