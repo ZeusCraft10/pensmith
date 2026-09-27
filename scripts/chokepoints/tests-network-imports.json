@@ -1,0 +1,13 @@
+{
+  "id": "tests-network-imports",
+  "requirement": "RUN-29",
+  "module": "tests/helpers/local-servers/",
+  "description": "Under tests/, only the local-servers directory module (tests/helpers/local-servers/: the V5 MockAgent entry point, the transport servers, the mock LLM and the dial recorder) may import node:http, node:https, node:http2, node:net, node:tls or undici (D-17-03). Every other test reaches the network only through bin/lib/http.ts and those helpers, so the one egress gate stays in force under test.",
+  "scope": ["tests/**/*.ts", "tests/**/*.mts", "tests/**/*.mjs"],
+  "allow": ["tests/helpers/local-servers/**", "tests/fixtures/**"],
+  "match": {
+    "kind": "import",
+    "pattern": "^(?:node:)?(?:http|https|http2|net|tls)$|^undici$"
+  },
+  "fixture": "tests/fixtures/chokepoints/tests-network-imports.violation.ts.txt"
+}

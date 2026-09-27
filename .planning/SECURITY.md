@@ -47,7 +47,7 @@ This is a planning artifact — it lives in `.planning/` and is NOT a public-fac
 | 24 | Honesty framing drift — "evade detection" wording sneaks into honesty report | `references/honesty-framing.md` → SHA-256 hash-pin (WN-3) | `tests/repo-files.test.ts` ("references/honesty-framing.md hash-pin") | **PROVEN** |
 | 25 | Unbounded upstream response — a hostile or broken endpoint streams an endless body (memory exhaustion; the old `MAX_PDF_BYTES` check ran only after full buffering) | `bin/lib/http.ts` → the body is streamed under a per-call `maxBytes` (JSON/text 8 MiB, PDFs `MAX_PDF_BYTES`, LLM 16 MiB); a larger `content-length` is refused up front; `ResponseTooLargeError` aborts before full buffering | `tests/response-size-cap.test.ts` (a 60 MB stream is aborted at the cap with bounded memory growth; a declared oversize length is refused before reading) | **PROVEN** (SEC-03, Phase 17) |
 | 26 | LLM-endpoint SSRF — a configured model endpoint used to reach metadata / internal services | `bin/lib/http.ts` → `checkLlmEndpoint()` for `opts.llm` requests only: exact configured origin; `http://` only when every resolved address is loopback; 169.254.0.0/16, fe80::/10, fd00:ec2::254 never; other private ranges only over https; pinned like every request. Source requests to loopback/private are always refused | `tests/egress-gate.test.ts` (D-17-09 rows) | **PROVEN** (RUN-08 transport half, Phase 17). Config-time validation of `endpoint` / `api_key_env` belongs to the runtime loader (llm stream). |
-| 27 | Silent egress in offline / dry-run modes — an adapter, `verifyDoi`, the Pass-3 OA-PDF fetch or the LLM leaking a request when the user asked for no network | `bin/lib/http.ts` → one gate: `--dry-run` refuses every request; `PENSMITH_NO_LLM` refuses `opts.llm`; sources-offline answers only exact recorded fixtures (else `OfflineEgressError`), and dials only a configured loopback LLM endpoint | `tests/egress-gate.test.ts`, `tests/flags.test.ts` H3 (socket-level dial recorder over research / add / verify / compile / done under `--dry-run` and `PENSMITH_OFFLINE=1`: 0 dials), `tests/net-mode.test.ts` (no env bypass in http.ts) | **PROVEN** (RUN-04, Phase 17) |
+| 27 | Silent egress in offline / dry-run modes — an adapter, `verifyDoi`, the Pass-3 OA-PDF fetch or the LLM leaking a request when the user asked for no network | `bin/lib/http.ts` → one gate: `--dry-run` refuses every request; `PENSMITH_NO_LLM` refuses `opts.llm`; sources-offline answers only exact recorded fixtures (else `OfflineEgressError`), and dials only a configured loopback LLM endpoint | `tests/egress-gate.test.ts`, `tests/flags.test.ts` H3 (socket-level dial recorder over research / add / verify / compile / done under `--dry-run` and `PENSMITH_OFFLINE=1`: 0 dials), `tests/net-mode.test.ts` (no env bypass in http.ts), `tests/offline-fail-closed.test.ts` (a fixture miss is never another record), `tests/dry-run-sources.test.ts` (dry-run research: 0 dials, 0 cassette reads) | **PROVEN** (RUN-04, Phase 17) |
 
 ---
 
@@ -95,8 +95,8 @@ These were identified before Phase 15 and are included for completeness:
 
 ## Counts
 
-- **Total threats enumerated:** 28 rows (+ 2 manual-only; rows 2a and updated 9 added Phase 15 fix; rows 25–27 added Phase 17)
-- **PROVEN (CI-verified):** 27
+- **Total threats enumerated:** 28 table rows (1–27 plus 2a) + 2 manual-only (M-1, M-2); rows 2a and updated 9 added Phase 15 fix; rows 25–27 added Phase 17 (counts recounted from the table in Phase 17)
+- **PROVEN (CI-verified):** 25
 - **PROVEN-in-CI / UNPROVEN-live:** 1 (row 2 — live DNS SSRF)
 - **PROVEN-with-residual (documented gap, deferred fix):** 1 (row 9 — post-timeout PDF CPU)
 - **UNPROVEN-in-CI (manual-only):** 2 (rows 13, M-2 — live GPTZero)

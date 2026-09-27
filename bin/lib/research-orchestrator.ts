@@ -28,7 +28,10 @@
 //   - outside --dry-run, reserved dry-run identifiers are filtered out.
 //   - Every research run writes .paper/RESEARCH.md: the offline marker (when
 //     offline), the scope, the queries, per-adapter counts and failures, and the
-//     candidates discovered.
+//     candidates discovered. The generated log is the top block of the file and
+//     ends at RESEARCH_LOG_END; anything below that line (e.g. findings appended
+//     by `revise --research`, or curated learning-mode notes) is kept verbatim
+//     when a later run rewrites the log — a re-run never destroys notes.
 //
 // Threat mitigations:
 //   T-12-01: defensive Zod safeParse on all LLM JSON outputs.
@@ -40,6 +43,7 @@
 
 import { z } from 'zod';
 import path from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 import { sources } from './sources/index.js';
 import * as dryRunProvider from './sources/dry-run.js';
 import { SourceCandidateSchema, type SourceCandidate } from './schemas/source-candidate.js';
@@ -298,6 +302,30 @@ interface AdapterLogRow {
 
 function cell(s: string): string {
   return s.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+}
+
+/**
+ * The line that ends the generated research log in .paper/RESEARCH.md. Every
+ * `pensmith research` run rewrites the text above it; the text below it is
+ * never touched (D-17-10 + `revise --research` appends, learning-mode notes).
+ */
+export const RESEARCH_LOG_END =
+  '<!-- end of the research log: `pensmith research` rewrites everything above this line; notes below it are kept -->';
+
+/**
+ * The new RESEARCH.md: the freshly rendered log, the end line, then whatever an
+ * existing file kept below its end line — or, for a file without one (notes
+ * written before any research log existed), the whole existing file.
+ */
+export function mergeResearchLog(log: string, existing: string | null): string {
+  let kept = '';
+  if (existing !== null) {
+    const at = existing.indexOf(RESEARCH_LOG_END);
+    kept = at >= 0 ? existing.slice(at + RESEARCH_LOG_END.length) : existing;
+    kept = kept.replace(/^(?:\r?\n)+/, '');
+  }
+  const head = `${log.replace(/\s+$/, '')}\n\n${RESEARCH_LOG_END}\n`;
+  return kept.trim().length > 0 ? `${head}\n${kept}` : head;
 }
 
 /**
@@ -575,9 +603,10 @@ export async function runResearchOrchestrator(
 
   const writeLog = async (candidates: SourceCandidate[]): Promise<void> => {
     if (researchMdPath === null) return;
+    const existing = existsSync(researchMdPath) ? readFileSync(researchMdPath, 'utf8') : null;
     await atomicWriteFile(
       researchMdPath,
-      renderResearchLog({ scope: scopeLabel, topic, discipline, queries, log, candidates }),
+      mergeResearchLog(renderResearchLog({ scope: scopeLabel, topic, discipline, queries, log, candidates }), existing),
     );
   };
 

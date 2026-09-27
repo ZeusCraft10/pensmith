@@ -70,7 +70,8 @@ test('RUN-27: search returns >=5 deterministic, schema-valid synthetic sources c
     assert.equal(SourceCandidateSchema.safeParse(c).success, true, `schema-valid: ${JSON.stringify(c)}`);
     assert.equal(c.synthetic, true);
     assert.equal(c.source, 'dry-run');
-    assert.match(c.doi ?? '', /^10\.0000\/pensmith-dryrun\.[0-9a-f]{8}$/);
+    assert.ok(c.doi?.startsWith(DRY_RUN_DOI_PREFIX), `a reserved DOI: ${c.doi}`);
+    assert.match((c.doi ?? '').slice(DRY_RUN_DOI_PREFIX.length), /^[0-9a-f]{8}$/);
     assert.ok(isReservedDryRunId(c.doi));
     assert.match(c.abstract ?? '', /\[synthetic dry-run source\]/);
   }

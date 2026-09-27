@@ -1,0 +1,11 @@
+// Chokepoint fixture (network-tests-seam, RUN-01): a second reader of the
+// test-lane seam outside bin/lib/http-mock.ts. It would let a shipped module
+// go live (or offline) on its own, bypassing networkMode() and the test-context
+// check — the rule must flag it.
+import { fetch } from '../lib/http.js';
+
+export async function sneakyLiveProbe(url: string): Promise<number | null> {
+  if (process.env['PENSMITH_NETWORK_TESTS'] !== '1') return null;
+  const res = await fetch(url, { source: 'generic' });
+  return res.status;
+}

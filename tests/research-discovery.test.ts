@@ -196,7 +196,7 @@ test(
     const orig = process.stderr.write.bind(process.stderr);
     (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => {
       stderr.push(String(s));
-      return true;
+      return orig(s);
     };
     let candidates: unknown[] = [];
     try {
@@ -215,6 +215,38 @@ test(
     assert.match(researchMd, /^> OFFLINE MODE \(test runner\)/);
     assert.match(researchMd, /## Candidates \(0\)/);
     assert.match(researchMd, /_offline: no recorded results for these queries — re-run online\._/);
+  },
+);
+
+test(
+  'D-17-10: a research re-run rewrites only the generated log — notes below the end line (revise --research) are kept',
+  { skip: !SEAM_WIRED },
+  async () => {
+    const root = mkPaperRoot();
+    const mod = await import(orchestratorModUrl.href) as {
+      runResearchOrchestrator: (opts: { assignment: string; topic: string; discipline: string; paperRoot?: string }) => Promise<unknown[]>;
+      RESEARCH_LOG_END: string;
+    };
+    const rPath = path.join(root, '.paper', 'RESEARCH.md');
+    // A pre-existing notes file (no research log yet) is kept below the new log.
+    const notes = '### vaswani2017\nsupports: attention alone suffices for translation\n';
+    fs.writeFileSync(rPath, notes);
+    const run = (topic: string): Promise<unknown[]> =>
+      mod.runResearchOrchestrator({ assignment: topic, topic, discipline: 'history', paperRoot: root });
+    await run('medieval Icelandic sagas');
+    const first = fs.readFileSync(rPath, 'utf8');
+    assert.match(first, /^> OFFLINE MODE \(test runner\)/, 'the marker stays the first line');
+    assert.ok(first.includes(mod.RESEARCH_LOG_END));
+    assert.ok(first.endsWith(notes), 'the existing notes are kept verbatim below the log');
+    // Notes appended below the end line survive a second run; the log is replaced.
+    fs.appendFileSync(rPath, '\n### appended2020\nsupports: an appended finding\n');
+    await run('norse skaldic poetry');
+    const second = fs.readFileSync(rPath, 'utf8');
+    assert.equal(second.split(mod.RESEARCH_LOG_END).length, 2, 'exactly one end line');
+    const [log, kept] = second.split(mod.RESEARCH_LOG_END) as [string, string];
+    assert.match(log, /1\. norse skaldic poetry/);
+    assert.ok(!log.includes('medieval Icelandic sagas'), 'the previous log is replaced, not stacked');
+    assert.ok(kept.includes(notes) && kept.includes('### appended2020'), 'every note below the end line is kept');
   },
 );
 

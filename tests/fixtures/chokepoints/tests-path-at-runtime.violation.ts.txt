@@ -1,0 +1,10 @@
+// Chokepoint fixture (tests-path-at-runtime, RUN-05): shipped code resolving a
+// tests/ path at runtime outside bin/lib/http-mock.ts. The installed package
+// has no tests/ directory, so this ENOENTs for every user — the rule must flag it.
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+export function sneakyFixture(pkgRoot: string): unknown {
+  const file = path.join(pkgRoot, 'tests', 'fixtures', 'cassettes', 'crossref', 'works-nphys1170.json');
+  return JSON.parse(readFileSync(file, 'utf8'));
+}
