@@ -221,10 +221,15 @@ test('C2-H1: `pensmith --yolo` and `write --yolo` in a paper-less dir do NOT cra
     // PENSMITH_NO_LLM=1 (offline mode). Set it so the bare dispatch (intake) and
     // write don't fail-loud on missing key. This tests StateNotFoundError handling,
     // not LLM key behavior — see 11-PATTERNS.md §Fail-Loud Pitfall 6.
+    // RUN-09 / RUN-12: bare `--yolo` routes a paper-less dir to `new`, which has
+    // no assignment to start from in a non-interactive run — EXIT_USAGE (2), one
+    // line naming what to pass. It still never crashes with StateNotFoundError.
     const a = runCli(['--yolo'], root, { PENSMITH_NO_LLM: '1' });
-    assert.equal(a.status, 0,
-      `C2-H1: bare \`--yolo\` in a fresh dir must exit 0 (empty projection, under-cap); stderr=${a.stderr}`);
+    assert.equal(a.status, 2,
+      `C2-H1: bare \`--yolo\` in a fresh dir without an assignment must exit 2 (EXIT_USAGE); stderr=${a.stderr}`);
+    assert.match(a.stderr, /^pensmith: no assignment: pass --from <file>/m, 'C2-H1: one actionable line');
     assert.ok(!/StateNotFoundError/.test(a.stderr), 'C2-H1: must not surface StateNotFoundError');
+    assert.ok(!/^\s+at .*\.[jt]s:\d+/m.test(a.stderr), 'C2-H1: no stack trace (RUN-12)');
     const b = runCli(['write', '--yolo'], root, { PENSMITH_NO_LLM: '1' });
     assert.ok(!/StateNotFoundError/.test(b.stderr),
       'C2-H1: `write --yolo` in a fresh dir must not crash with StateNotFoundError');
@@ -235,10 +240,16 @@ test('C4-HIGH: bare `pensmith --yolo` against a corrupt STATE.json does NOT cras
     const root = freshRoot();
     writeFileSync(join(root, 'STATE.json'), '{ this is not json ');
     const res = runCli(['--yolo'], root);
-    assert.equal(res.status, 0,
-      `C4-HIGH: a corrupt STATE.json yields the empty projection (under-cap), so --yolo must exit 0; stderr=${res.stderr}`);
+    // RUN-09: the router routes a corrupt STATE.json to `status` (attention),
+    // which reports it and exits EXIT_ERROR (1) — a defined status with a
+    // one-line diagnostic, never an uncaught crash (the pre-v1 root-level file
+    // is first moved into .paper/ by the legacy-layout migration, RUN-13).
+    assert.equal(res.status, 1,
+      `C4-HIGH: a corrupt STATE.json must exit 1 (EXIT_ERROR) with a diagnostic; stderr=${res.stderr} stdout=${res.stdout}`);
+    assert.match(res.stdout + res.stderr, /unreadable\/corrupt/, 'C4-HIGH: the corrupt STATE.json is reported');
     assert.ok(!/SyntaxError|SchemaValidationError/.test(res.stderr),
       'C4-HIGH: the parse error must NOT escape to an uncaught crash');
+    assert.ok(!/^\s+at .*\.[jt]s:\d+/m.test(res.stderr), 'C4-HIGH: no stack trace (RUN-12)');
   });
 
 // ===========================================================================

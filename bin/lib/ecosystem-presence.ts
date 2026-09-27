@@ -24,7 +24,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { isInsideSyncFolder, paperDir } from './paths.js';
+import { isInsideSyncFolder, paperDir, activePaperRoot, servicePaperRoot } from './paths.js';
 
 /**
  * Probe whether `pandoc` is on PATH and answers `--version`.
@@ -92,14 +92,15 @@ export function isHumanizerSkillPresent(): boolean {
  * paper-dir path that matched (or null) for capabilities.ts
  * (`sync_folder_match`, per WR-02 — string|null, not boolean).
  *
- * Env-var resolution: PENSMITH_PAPER_ROOT → paperDir(). This is the canonical
+ * Root resolution: the active root, else PENSMITH_PAPER_ROOT → cwd. This is the canonical
  * env var name used everywhere else in the codebase (mcp/server.ts boot,
  * tests/tier-contract.test.ts Case C); WR-05 dropped the transitional
  * PENSMITH_PAPER_DIR legacy fallback.
  */
 export function detectSyncFolder(): { detected: boolean; match: string | null; dir: string } {
-  const envRoot = process.env.PENSMITH_PAPER_ROOT;
-  const dir = envRoot && envRoot.length > 0 ? envRoot : paperDir();
+  // RUN-13: the paper's `.paper/` under the resolved project root — the CLI's or
+  // MCP server's active root, else PENSMITH_PAPER_ROOT / the working directory.
+  const dir = paperDir(activePaperRoot() ?? servicePaperRoot());
   const detected = isInsideSyncFolder(dir);
   return { detected, match: detected ? dir : null, dir };
 }

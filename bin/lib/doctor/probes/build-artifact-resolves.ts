@@ -14,7 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-// CR-02 fix: resolve build artifacts relative to THIS file, not process.cwd().
+// CR-02 fix: resolve build artifacts relative to THIS file, not the process working directory.
 // The PRD §3 / §19 Tier-2 contract guarantees `pensmith doctor` runs from
 // inside a user's paper directory — not from the pensmith repo root. Using
 // cwd-relative literals silently failed every Tier-2 user's first

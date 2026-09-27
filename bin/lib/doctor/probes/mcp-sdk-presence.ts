@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 // CR-02 fix: resolve dist/mcp/server.js relative to THIS file, not
-// process.cwd(). Tier-2 (`pensmith doctor` from a user's paper directory)
+// the process working directory. Tier-2 (`pensmith doctor` from a user's paper directory)
 // must find the build artifact at the installed package root regardless of
 // invocation cwd. See sibling probe build-artifact-resolves.ts for the
 // full rationale.

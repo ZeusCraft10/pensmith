@@ -29,6 +29,43 @@ import {
 } from '../bin/lib/schemas/state.js';
 import v1_to_v2 from '../bin/lib/migrations/state/v1_to_v2.js';
 import { atomicWriteFile } from '../bin/lib/atomic-write.js';
+import { migrateFrontmatterText, FrontmatterVersionError } from '../bin/lib/frontmatter.js';
+import { migrate as planV0ToV1 } from '../bin/lib/migrations/plan/v0_to_v1.js';
+
+// ---------------------------------------------------------------------------
+// Frontmatter migrations (CONF-04, D-17-38) — bin/lib/migrations/<kind>/.
+// Section PLAN.md is v1 (v0_to_v1 inserts `schema_version: 1`); INTAKE.md,
+// DRAFT.md and VERIFICATION.md have no frontmatter yet (v0) and refuse a file
+// from a newer build. tests/frontmatter-versioning.test.ts covers the loader's
+// write-back and the CLI paths.
+// ---------------------------------------------------------------------------
+
+const SECTION_PLAN_V0 = '---\nsection: 1\nslug: intro\ntitle: Intro\nstatus: written\n---\n\n## Brief\n';
+
+test('frontmatter: section PLAN.md v0 → v1 adds schema_version and nothing else', () => {
+  assert.equal(planV0ToV1(SECTION_PLAN_V0), SECTION_PLAN_V0.replace('---\n', '---\nschema_version: 1\n'));
+  const doc = migrateFrontmatterText('plan', SECTION_PLAN_V0);
+  assert.deepEqual(
+    { disk: doc.diskVersion, now: doc.version, migrated: doc.migrated, status: doc.frontmatter['status'] },
+    { disk: 0, now: 1, migrated: true, status: 'written' },
+  );
+  assert.equal(migrateFrontmatterText('plan', doc.text).migrated, false, 'a v1 file is left as is');
+});
+
+test('frontmatter: section PLAN.md newer than the build is refused (never downgraded)', () => {
+  assert.throws(
+    () => migrateFrontmatterText('plan', SECTION_PLAN_V0.replace('---\n', '---\nschema_version: 5\n'), 'PLAN.md'),
+    (e: unknown) => e instanceof FrontmatterVersionError && /upgrade pensmith/.test(e.message),
+  );
+});
+
+test('frontmatter: INTAKE.md (and DRAFT.md / VERIFICATION.md) are v0 until a requirement adds a field', () => {
+  for (const kind of ['intake', 'draft', 'verification'] as const) {
+    const plain = migrateFrontmatterText(kind, '# Heading\n\nText.\n');
+    assert.deepEqual({ v: plain.version, migrated: plain.migrated }, { v: 0, migrated: false }, kind);
+    assert.throws(() => migrateFrontmatterText(kind, '---\nschema_version: 1\n---\n# H\n'), FrontmatterVersionError, kind);
+  }
+});
 
 // Test-fixture seed: writes JSON content to a tmpdir path through the W2
 // chokepoint. We cannot use fsp.writeFile directly here because the D-07

@@ -27,6 +27,7 @@ import { defineCommand } from 'citty';
 import { ask } from '../lib/prompts.js';
 import { dispatchVerb, type GlobalFlags } from '../pensmith.js';
 import type { Ux02Verb } from '../lib/verbs.js';
+import { EXIT_APPROVAL } from '../lib/exit-codes.js';
 
 /** Dispatcher seam — matches the dispatchVerb signature the tests spy on. */
 type Dispatcher = (
@@ -89,7 +90,8 @@ export const sketchCommand = defineCommand({
 
     if (!proceed) {
       process.stdout.write('pensmith sketch: cancelled — re-run to try again.\n');
-      return { ok: false };
+      // RUN-09: a declined confirmation is EXIT_APPROVAL (nothing was created).
+      return { ok: false, exitCode: EXIT_APPROVAL };
     }
 
     // (3) ONLY after confirm: dispatch the existing `new` verb with the thesis
@@ -104,12 +106,14 @@ export const sketchCommand = defineCommand({
               globalFlags?: GlobalFlags;
             });
 
-    await dispatch('new', {
+    const created = await dispatch('new', {
       args: { thesis: synthesized },
       globalFlags: { yolo: args.yolo === true, dryRun: args['dry-run'] === true },
     });
 
-    return { ok: true, thesis: synthesized };
+    // The dispatched `new` decides the exit code (RUN-09 propagation).
+    const failed = created !== null && typeof created === 'object' && (created as { ok?: unknown }).ok === false;
+    return failed ? { ...(created as object), thesis: synthesized } : { ok: true, thesis: synthesized };
   },
 });
 

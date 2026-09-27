@@ -1,6 +1,7 @@
 // tests/hooks/stop.test.ts — Phase 7 Wave 0 RED scaffold for HOOK-04 / M1.
 //
-// The Stop hook releases the .paper lock and flushes the session log. Phase 2
+// The Stop hook applies the session-lock release policy (RUN-23) and flushes
+// the session log. Phase 2
 // ships a bare `process.exit(0)` stub; Plan 07-03 upgrades it. RED-by-skip: the
 // release + flush-survives-rejection assertions skip while stop.ts is still the
 // stub (detected by reading the source). The exit-0 + empty-stdout invariant is
@@ -17,6 +18,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, realpa
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const HOOK = fileURLToPath(new URL('../../hooks/stop.ts', import.meta.url));
 // Resolve tsx's loader to an ABSOLUTE file URL so the hook subprocess can load
@@ -77,26 +79,75 @@ test('HOOK-04: stop release + flush wiring is consistent with Wave-0 RED state',
   }
 });
 
-// === release: after Stop, the .paper lock is no longer held ===
-test('HOOK-04: stop releases the .paper lock (isLocked === false afterward)',
-  { skip: !stopWired }, async () => {
-    const cwd = freshCwd();
-    // Pre-acquire the .paper resource lock, then run Stop and assert release.
-    const lockMod = (await import('../../bin/lib/lock.js')) as {
-      tryAcquire: (resource: string) => Promise<() => Promise<void>>;
-      isLocked: (resource: string) => Promise<boolean>;
+// === RUN-23 (D-17-37): the Stop hook's session-lock policy ===
+// It releases the paper's session lock ONLY when an MCP server of THIS Claude
+// session owns it (kind 'mcp' + claudeSessionId === stdin session_id). A CLI
+// session's lock, or another Claude session's, is never removed. (Supersedes
+// the unconditional release of a `.paper` resource lock, which could delete a
+// live CLI session's lock.)
+function runHookWithInput(cwd: string, dataDir: string, input: string): RunResult {
+  try {
+    const stdout = execFileSync(process.execPath, ['--import', TSX_LOADER, HOOK], {
+      cwd,
+      input,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, XDG_DATA_HOME: dataDir, LOCALAPPDATA: dataDir, HOME: dataDir, PENSMITH_PAPER_ROOT: '' },
+    });
+    return { status: 0, stdout, stderr: '' };
+  } catch (e) {
+    const err = e as { status?: number | null; stdout?: Buffer | string; stderr?: Buffer | string };
+    return {
+      status: err.status ?? 1,
+      stdout: err.stdout ? err.stdout.toString() : '',
+      stderr: err.stderr ? err.stderr.toString() : '',
     };
-    const resource = join(cwd, '.paper');
-    const release = await lockMod.tryAcquire(resource);
-    try {
-      runHook(cwd);
-      const held = await lockMod.isLocked(resource);
-      assert.equal(held, false, 'HOOK-04: Stop must release the .paper lock');
-    } finally {
-      // Best-effort cleanup if Stop did not release (test already failed).
-      await release().catch(() => undefined);
-    }
-  });
+  }
+}
+
+function seedSessionLock(dataDir: string, root: string, owner: Record<string, unknown>): string {
+  // Mirror bin/lib/session-lock.ts sessionLockFile(): <data>/pensmith/locks/session-<projectHash>.json.
+  const real = realpathSync.native(root);
+  const canonical = process.platform === 'win32' ? real.toLowerCase() : real;
+  const hash = createHash('sha256').update(canonical).digest('hex').slice(0, 12);
+  const dir = join(dataDir, 'pensmith', 'locks');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `session-${hash}.json`);
+  writeFileSync(file, JSON.stringify({
+    hostname: 'test-host', pid: 999999, sessionId: 's-1', verb: 'write', startedAt: new Date().toISOString(),
+    root, ...owner,
+  }));
+  return file;
+}
+
+test('RUN-23: Stop releases an MCP session lock owned by ITS Claude session', () => {
+  const cwd = freshCwd();
+  const dataDir = freshCwd();
+  const file = seedSessionLock(dataDir, cwd, { kind: 'mcp', claudeSessionId: 'claude-abc' });
+  const res = runHookWithInput(cwd, dataDir, JSON.stringify({ session_id: 'claude-abc', hook_event_name: 'Stop' }));
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(res.stdout, '', 'Stop stdout MUST stay empty');
+  assert.equal(existsSync(file), false, 'the matching mcp-owned session lock is released');
+});
+
+test("RUN-23: Stop never removes a CLI session lock or another Claude session's lock", () => {
+  const cwd = freshCwd();
+  const dataDir = freshCwd();
+  const cliLock = seedSessionLock(dataDir, cwd, { kind: 'cli', claudeSessionId: null });
+  const res = runHookWithInput(cwd, dataDir, JSON.stringify({ session_id: 'claude-abc' }));
+  assert.equal(res.status, 0, res.stderr);
+  assert.equal(existsSync(cliLock), true, 'a CLI session lock is never removed by Stop');
+
+  const cwd2 = freshCwd();
+  const otherLock = seedSessionLock(dataDir, cwd2, { kind: 'mcp', claudeSessionId: 'claude-OTHER' });
+  const res2 = runHookWithInput(cwd2, dataDir, JSON.stringify({ session_id: 'claude-abc' }));
+  assert.equal(res2.status, 0, res2.stderr);
+  assert.equal(existsSync(otherLock), true, "another Claude session's MCP lock is never removed");
+
+  const res3 = runHookWithInput(cwd2, dataDir, '');
+  assert.equal(res3.status, 0, 'no stdin input: exit 0, nothing released');
+  assert.equal(existsSync(otherLock), true);
+});
 
 // === M1 / C2-M2: flush survives a release rejection (Promise.allSettled) ===
 test('HOOK-04 / M1: session log is flushed EVEN when release rejects (no held lock → Promise.allSettled)',

@@ -8,11 +8,12 @@
 //   2. GEN-06 fail-loud probe: assert LLM key configured (non-offline only).
 //   3. Read INTAKE.md → parseIntakeMd → topic/discipline/assignment.
 //   4. Call topic-disambiguator complete() → defensively parse scopes.
-//   5. Scope approval gate (default-ON): select one scope; --yolo → scope[0];
-//      non-TTY → ApprovalUnavailableError / exit-3.
+//   5. Scope approval gate (default-ON, `research-scope`): select one scope;
+//      --yolo → scope[0]; no terminal → GateRefusedError / EXIT_APPROVAL.
 //   6. Call runResearchOrchestrator (adapter fan-out + dedup + source-evaluator).
-//   7. Candidate approval gate (default-ON): multiselect prune; --yolo → keep all;
-//      zero-candidates → skip gate; non-TTY → ApprovalUnavailableError / exit-3.
+//   7. Candidate approval gate (default-ON, `research-prune`): multiselect prune;
+//      --yolo → keep all; zero-candidates → skip gate; no terminal →
+//      GateRefusedError / EXIT_APPROVAL.
 //   8. D-15 LOCKED: crossCheckRetractions BEFORE the library write — upsertSources
 //      (BRDTH-01, the one writer) merges into LIBRARY.json and renders
 //      CITATIONS.bib + CITATIONS.ris from it.
@@ -35,7 +36,7 @@ import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js'
 import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
-import { ask } from '../lib/prompts.js';
+import { runGate } from '../lib/gates.js';
 import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
 import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
 
@@ -45,18 +46,6 @@ import { runResearchOrchestrator } from '../lib/research-orchestrator.js';
 // The actual pin calls happen inside run() to catch drift before any network.
 // ---------------------------------------------------------------------------
 void loadPrompt; // reference kept to prevent unused-import elision
-
-// ---------------------------------------------------------------------------
-// ApprovalUnavailableError — mirrors outline.ts exactly (CLAUDE.md non-negotiable:
-// approval gates default-on; non-TTY without --yolo → exit 3).
-// ---------------------------------------------------------------------------
-class ApprovalUnavailableError extends Error {
-  exitCode = 3 as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'ApprovalUnavailableError';
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Topic-disambiguator response schema (T-12-01 trust boundary).
@@ -184,40 +173,35 @@ export const researchCommand = defineCommand({
       scopes = [{ label: 'auto', queries: [topic || 'research'] }];
     }
 
-    // ── Step 4: Scope approval gate (default-ON) ──
-    // When scopes.length > 1 and not --yolo: ask() a kind:'select' over scope labels.
-    // --yolo: auto-select scopes[0].
-    // non-TTY: ApprovalUnavailableError → exit-3 (outline precedent).
+    // ── Step 4: Scope approval gate (default-ON) — `research-scope` (RUN-28) ──
+    // When scopes.length > 1: a select over the scope labels.
+    // --yolo: the registry's choice (the first proposed scope).
+    // No terminal and no --yolo: GateRefusedError → EXIT_APPROVAL, nothing written.
     let chosenScope = scopes[0]!;
-    if (scopes.length > 1 && !yolo) {
-      if (!process.stdout.isTTY || !process.stdin.isTTY) {
-        const err = new ApprovalUnavailableError(
-          'research: scope selection requires an interactive terminal. ' +
-          'Use --yolo to auto-select the first scope (CLAUDE.md non-negotiable: approval-gates default-on).',
-        );
-        process.stderr.write(`pensmith ${err.message}\n`);
-        process.exitCode = err.exitCode;
-        return { ok: false, mode: 'approval-unavailable' };
-      }
-
-      const answer = await ask({
-        id: 'scope',
-        kind: 'select',
-        label: 'Which research scope should I use?',
-        options: scopes.map((s) => ({
-          value: s.label,
-          label: s.label,
-          hint: s.queries.slice(0, 2).join(', '),
-        })),
-        default: scopes[0]!.label,
+    if (scopes.length > 1) {
+      const outcome = await runGate('research-scope', {
+        yolo,
+        detail: `${scopes.length} scopes proposed; nothing was searched or written`,
+        question: {
+          id: 'research-scope',
+          kind: 'select',
+          label: 'Which research scope should I use?',
+          options: scopes.map((s) => ({
+            value: s.label,
+            label: s.label,
+            hint: s.queries.slice(0, 2).join(', '),
+          })),
+          default: scopes[0]!.label,
+        },
       });
-
-      const answerValue = (answer as { value: string }).value;
+      const answerValue = outcome.kind === 'answered' && outcome.answer.kind === 'select'
+        ? outcome.answer.value
+        : scopes[0]!.label;
       const selected = scopes.find((s) => s.label === answerValue);
       if (selected) {
         chosenScope = selected;
       } else {
-        // WR-01: the ask() return value did not match any scope label.
+        // WR-01: the gate answer did not match any scope label.
         // Emit a WARN rather than silently falling through to the pre-gate default.
         process.stderr.write(
           `pensmith research: WARN — scope selection returned unrecognised value ` +
@@ -238,39 +222,31 @@ export const researchCommand = defineCommand({
       },
     );
 
-    // ── Step 6: Candidate approval gate (default-ON) ──
+    // ── Step 6: Candidate approval gate (default-ON) — `research-prune` (RUN-28) ──
     // Zero-candidate path: skip the gate (nothing to prune).
-    // non-TTY and not --yolo: ApprovalUnavailableError → exit-3.
+    // --yolo: the registry's choice (keep every candidate).
+    // No terminal and no --yolo: GateRefusedError → EXIT_APPROVAL, nothing written.
     let finalCandidates: SourceCandidate[] = candidates;
-    if (candidates.length > 0 && !yolo) {
-      if (!process.stdout.isTTY || !process.stdin.isTTY) {
-        const err = new ApprovalUnavailableError(
-          'research: candidate approval requires an interactive terminal. ' +
-          'Use --yolo to auto-accept all candidates (CLAUDE.md non-negotiable: approval-gates default-on).',
-        );
-        process.stderr.write(`pensmith ${err.message}\n`);
-        process.exitCode = err.exitCode;
-        return { ok: false, mode: 'approval-unavailable' };
-      }
-
-      const pruneAnswer = await ask({
-        id: 'candidates',
-        kind: 'multiselect',
-        label: `Select candidates to keep (${candidates.length} found):`,
-        options: candidates.map((c) => ({
-          value: c.citekey,
-          label: `[${c.source}] ${c.title.slice(0, 60)}${c.title.length > 60 ? '…' : ''} (${c.year ?? '?'})`,
-          hint: c.authors.slice(0, 2).join(', '),
-        })),
-        default: candidates.map((c) => c.citekey),
+    if (candidates.length > 0) {
+      const outcome = await runGate('research-prune', {
+        yolo,
+        detail: `${candidates.length} candidates found; no library was written`,
+        question: {
+          id: 'research-prune',
+          kind: 'multiselect',
+          label: `Select candidates to keep (${candidates.length} found):`,
+          options: candidates.map((c) => ({
+            value: c.citekey,
+            label: `[${c.source}] ${c.title.slice(0, 60)}${c.title.length > 60 ? '…' : ''} (${c.year ?? '?'})`,
+            hint: c.authors.slice(0, 2).join(', '),
+          })),
+          default: candidates.map((c) => c.citekey),
+        },
       });
-
-      const keepKeys = new Set(
-        Array.isArray((pruneAnswer as { value: unknown }).value)
-          ? (pruneAnswer as { value: string[] }).value
-          : candidates.map((c) => c.citekey),
-      );
-      finalCandidates = candidates.filter((c) => keepKeys.has(c.citekey));
+      if (outcome.kind === 'answered' && outcome.answer.kind === 'multiselect') {
+        const keepKeys = new Set(outcome.answer.value);
+        finalCandidates = candidates.filter((c) => keepKeys.has(c.citekey));
+      }
     }
 
     if (finalCandidates.length === 0) {

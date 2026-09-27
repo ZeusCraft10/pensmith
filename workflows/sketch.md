@@ -39,8 +39,11 @@ verbs bijective with the 16 workflow bodies).
 - stdout — the synthesized candidate thesis, then either a cancellation line (on
   decline) or the downstream `new` verb's intake artifacts (on confirm).
 - On confirm ONLY: the `new` verb creates `.paper/STATE.json` + `.paper/INTAKE.md`
-  (seeded with the thesis). sketch itself writes NOTHING (the no-advance
-  invariant).
+  in the current folder (a new paper — sketch never follows the `pensmith open`
+  pointer; RUN-14), seeded with the thesis. sketch itself writes NOTHING (the
+  no-advance invariant).
+- Exit code: 0 after a confirmed hand-off (or `new`'s own code); 3 (EXIT_APPROVAL)
+  on a decline or when the answers run out (RUN-09).
 
 ## Body
 
@@ -52,7 +55,9 @@ verbs bijective with the 16 workflow bodies).
 1. **Socratic loop** (ERGO-05): ask 4-5 thinking-partner questions to surface a
    thesis — e.g. what motivates the paper, what conventional view the author
    disagrees with, the target audience, and the candidate thesis claim. Tier 1
-   asks via `AskUserQuestion`; Tier 2 via `@clack/prompts` over stdin. Synthesize
+   asks via `AskUserQuestion`; Tier 2 via `@clack/prompts` in a terminal, else the
+   numbered prompts over stdin — one line per question, so the answers can be
+   piped (`printf '…\n…\n' | pensmith sketch`, RUN-12). Synthesize
    the answers into a single candidate thesis sentence and print it. (A
    pre-supplied `--thesis` skips the loop — the one-shot / test-seam path.)
    CRITICAL: nothing in this step creates `.paper/` / STATE.json / LIBRARY.json.
@@ -60,8 +65,10 @@ verbs bijective with the 16 workflow bodies).
 2. **Confirm gate** (approval-gates-default-on): present the candidate thesis and
    ask `Proceed to intake with this thesis?` (default no). `--yolo` skips the
    prompt; a pre-supplied `--confirm` (test seam) wins over both. On DECLINE:
-   print `cancelled — re-run to try again.` and return `{ ok: false }` WITHOUT
-   creating ANY state (the no-advance invariant — Pitfall 6).
+   print `cancelled — re-run to try again.` and return `{ ok: false }` (exit 3)
+   WITHOUT creating ANY state (the no-advance invariant — Pitfall 6). sketch is a
+   content-question verb, so it asks directly (`ask()` — the gate-registry
+   chokepoint allows it) rather than through a registry gate.
 
 3. **Dispatch `new` with the thesis seed** (Open-Q2): ONLY after confirm,
    dispatch the existing `new` verb via `dispatchVerb('new', { args: { thesis },

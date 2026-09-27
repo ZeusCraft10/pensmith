@@ -1,0 +1,11 @@
+// Chokepoint fixture (gate-registry, RUN-28): a verb that asks its own approval
+// question instead of going through bin/lib/gates.ts runGate. It invents a
+// private --yolo rule and exits 0 when there is no terminal — the rule must
+// flag it.
+import { ask } from '../lib/prompts.js';
+
+export async function sneakyApproval(yolo: boolean): Promise<boolean> {
+  if (yolo) return true;
+  const answer = await ask({ id: 'sneaky', kind: 'confirm', label: 'Export now?', default: true });
+  return answer.kind === 'confirm' && answer.value;
+}

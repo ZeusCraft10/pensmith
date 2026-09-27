@@ -9,6 +9,8 @@
 //      MEDIUM fix — the naïve Object.entries→doc.set pattern was broken).
 //   4. updateFrontmatter preserves a comment across deletion of a sibling.
 //   5. parseFrontmatter + serializeFrontmatter preserves key order.
+//   6. CONF-04: `schema_version` survives every round-trip (parse, serialize,
+//      update of another key, and the v0 → v1 migration followed by an update).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,6 +18,7 @@ import {
   parseFrontmatter,
   serializeFrontmatter,
   updateFrontmatter,
+  migrateFrontmatterText,
 } from '../bin/lib/frontmatter.js';
 
 test('parseFrontmatter handles missing frontmatter', () => {
@@ -57,4 +60,21 @@ test('parseFrontmatter + serializeFrontmatter preserves key order', () => {
   const { frontmatter } = parseFrontmatter(input);
   const ser = serializeFrontmatter(frontmatter);
   assert.match(ser, /---\nz: 1\na: 2\nm: 3\n---/);
+});
+
+test('CONF-04: schema_version survives parse, serialize, and updates of other keys', () => {
+  const input = '---\nschema_version: 1\nsection: 2\nstatus: planned\n---\nbody';
+  const { frontmatter } = parseFrontmatter(input);
+  assert.equal(frontmatter['schema_version'], 1);
+  assert.match(serializeFrontmatter(frontmatter), /^---\nschema_version: 1\nsection: 2\nstatus: planned\n---\n$/);
+  const out = updateFrontmatter(input, (fm) => {
+    fm.status = 'written';
+  });
+  assert.match(out, /^---\nschema_version: 1\nsection: 2\nstatus: written\n---\nbody$/);
+  // A v0 file migrated, then updated, keeps the stamp first and the comment.
+  const migrated = migrateFrontmatterText('plan', '---\n# note\nsection: 1\n---\nbody').text;
+  const updated = updateFrontmatter(migrated, (fm) => {
+    fm.status = 'writing';
+  });
+  assert.match(updated, /^---\nschema_version: 1\n# note\nsection: 1\nstatus: writing\n---\nbody$/);
 });

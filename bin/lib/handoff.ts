@@ -23,6 +23,7 @@ import {
   type Handoff,
 } from './schemas/handoff.js';
 import { atomicWriteFile } from './atomic-write.js';
+import { paperDir as paperDirOf } from './paths.js';
 
 // Re-export the schema so tests + consumers can import a single module.
 export { HandoffSchema, HANDOFF_MAX_BYTES };
@@ -55,7 +56,7 @@ export function assembleHandoff(input: AssembleInput): Handoff {
 
 export async function writeHandoff(
   handoff: Handoff,
-  paperDir = '.paper',
+  paperDir: string = paperDirOf(),
 ): Promise<void> {
   HandoffSchema.parse(handoff);
   const content = JSON.stringify(handoff, null, 2);

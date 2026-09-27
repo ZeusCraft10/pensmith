@@ -27,7 +27,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { readGoalFromConfig } from './goal.js';
-import { sectionDraft, sectionPlan, paperDir } from '../lib/paths.js';
+import { sectionDraft, sectionPlan, paperDir, projectRoot } from '../lib/paths.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { assertDrafterInput } from '../lib/drafter-input.js';
 import { runAllSections } from '../lib/write-orchestrator.js';
@@ -36,12 +36,13 @@ import type { SectionNode } from '../lib/schemas/wave-graph.js';
 import { styleMatchToVoiceHint } from '../lib/style-match.js';
 import { StyleProfileSchema, type StyleProfile } from '../lib/schemas/style.js';
 import { TutorialSubscriber } from '../lib/tutorial.js';
-import { parseFrontmatter } from '../lib/frontmatter.js';
+import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
 import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
+import { EXIT_ERROR } from '../lib/exit-codes.js';
 
 // Phase 11 — the section-draft placeholder constant has been removed. write now
 // calls complete() for real generation (GEN-02). With no key configured:
@@ -158,7 +159,8 @@ function makeSubscriberNonFatal(paperRoot: string): TutorialSubscriber | undefin
 function readAssignedSources(planPath: string): string[] {
   try {
     if (!existsSync(planPath)) return [];
-    const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
+    // CONF-04: the versioned reader (writeSection has already stamped the file).
+    const { frontmatter } = loadFrontmatterDocSync('plan', planPath);
     return PlanFrontmatterSchema.parse(frontmatter).assigned_sources;
   } catch {
     return [];
@@ -173,7 +175,7 @@ function readAssignedSources(planPath: string): string[] {
  * never bypass it.
  */
 async function writeOneSection(n: number, slug: string): Promise<string> {
-  const paperRoot = process.cwd();
+  const paperRoot = projectRoot();
 
   // STYL-03 — resolve the effective voiceHint by strict priority BEFORE the
   // chokepoint: PLAN.md voice direction > style-match render > default. Read the
@@ -235,7 +237,7 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
     scopeId: `write-${n}`,
   });
 
-  const targetPath = sectionDraft(n, slug);
+  const targetPath = sectionDraft(n, slug, paperRoot);
   await atomicWriteFile(targetPath, result.text);
 
   // Audit #9: mark the section 'written' so the router (router.ts:202) advances
@@ -313,7 +315,7 @@ export const writeCommand = defineCommand({
       const rawMax = typeof args['max-parallel'] === 'string' ? Number(args['max-parallel']) : DEFAULT_MAX_PARALLEL;
       const maxParallel = Number.isInteger(rawMax) && rawMax >= 1 ? rawMax : DEFAULT_MAX_PARALLEL;
 
-      const paperRoot = process.cwd();
+      const paperRoot = projectRoot();
 
       // Audit M2: a missing or section-less OUTLINE.md must yield a friendly
       // diagnostic, not a raw parseOutline stack trace from the wave orchestrator
@@ -382,10 +384,9 @@ export const writeCommand = defineCommand({
       }
 
       const anyFailed = results.some((w) => w.sections.some((s) => s.status === 'failed'));
-      // CR-02: set exitCode when any section failed so the process exits non-zero.
-      // citty does not map verb return values to exit codes; we must set it here.
-      if (anyFailed) process.exitCode = 1;
-      return { ok: !anyFailed, mode: 'wave', waves: results };
+      // CR-02 / RUN-09: a wave with a failed section exits EXIT_ERROR (the
+      // dispatcher maps the result; MCP callers get isError the same way).
+      return { ok: !anyFailed, mode: 'wave', waves: results, ...(anyFailed ? { exitCode: EXIT_ERROR } : {}) };
     }
 
     // ---- Single-section mode: positional <n> present (UNCHANGED) ----
@@ -395,7 +396,7 @@ export const writeCommand = defineCommand({
     }
     // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
     // wins; 'placeholder' only if no outline row exists).
-    const paperRoot = process.cwd();
+    const paperRoot = projectRoot();
     const slug = resolveSectionSlug(paperRoot, n, args.slug);
     // Construct the goal-aware subscriber for a single-section re-do too, so a
     // re-write in learning/both mode still re-annotates TUTORIAL.md. goal=draft

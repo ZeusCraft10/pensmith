@@ -29,16 +29,17 @@
 // the section walk uses it AND bin/cli/status.ts imports + reuses it, so NO
 // component does a raw unguarded parseFrontmatter(readFileSync(planPath)).
 //
-// Imports: loadState/StateNotFoundError (state.ts), existsSync/readFileSync
-// (node:fs), join (node:path), paperDir/sectionPlan (paths.ts), parseFrontmatter
-// (frontmatter.ts), and the Handoff type (schemas/handoff.ts — type-only; the
-// router does NOT read HANDOFF.json per H4).
+// Imports: loadState/StateNotFoundError (state.ts), existsSync (node:fs), join
+// (node:path), paperDir/sectionPlan (paths.ts), loadFrontmatterDocSync
+// (frontmatter.ts — the CONF-04 versioned reader, used without write-back), and
+// the Handoff type (schemas/handoff.ts — type-only; the router does NOT read
+// HANDOFF.json per H4).
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadState, StateNotFoundError } from './state.js';
 import { paperDir, sectionPlan } from './paths.js';
-import { parseFrontmatter } from './frontmatter.js';
+import { loadFrontmatterDocSync } from './frontmatter.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
@@ -95,7 +96,9 @@ export function readSectionState(planPath: string): SectionStateRead {
     return { status: 'planned', corrupt: false, absent: true };
   }
   try {
-    const { frontmatter } = parseFrontmatter(readFileSync(planPath, 'utf8'));
+    // CONF-04: the versioned loader, WITHOUT write-back (the router stays pure).
+    // A PLAN.md newer than this build throws "upgrade pensmith" → corrupt below.
+    const { frontmatter } = loadFrontmatterDocSync('plan', planPath);
     const status = (frontmatter as { status?: unknown }).status;
     return {
       status: typeof status === 'string' ? status : 'planned',

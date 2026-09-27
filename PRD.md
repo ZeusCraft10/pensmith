@@ -171,7 +171,12 @@ Pensmith maintains a global library of all your papers across folders, with opti
 - `~/.pensmith/library/index.json` (or platform equivalent — see §13) maps name → folder path → status → class
 - `/pensmith list` shows all papers, grouped by class, with status
 - `/pensmith list --class "PHIL 101"` filters by class
-- `/pensmith open <name>` switches active context (changes cwd or sets pointer)
+- `/pensmith open <name>` sets the active-paper pointer (`active.json` in the data dir; it never changes the cwd). The pointer never hijacks a fresh folder — a paper is resolved in this order (S-21, RUN-14):
+  1. `--paper <name|path>` (a name from `list`, or a folder containing `.paper/`), or `PENSMITH_PAPER_ROOT`;
+  2. the current folder, when it contains `.paper/`;
+  3. a new paper in the current folder for `new` and `sketch`, or for a bare `/pensmith` that finds `assignment.{txt,md,pdf}` there;
+  4. the pointer. Read-only verbs (`status`, `list`, `doctor`, `--estimate`) use it and print `(active paper "<name>" at <path>)`. Mutating verbs and a bare `/pensmith`, `next` or `resume` ask in a terminal (continue the active paper, or start a new one here); without a terminal they refuse with exit 2, naming `--paper <name>` and `pensmith new`. `--yolo` never follows the pointer.
+  A pointer to a folder that no longer holds a paper is cleared with a warning. The MCP server and the hooks never follow the pointer: they use `PENSMITH_PAPER_ROOT`, else their working directory.
 - `/pensmith new` prompts for class assignment at intake (optional; "Unfiled" if skipped)
 - Class names are free-form strings (`PHIL 101`, `ENGL-250`, `Senior Thesis`, etc.)
 - Per-paper folders still hold `.paper/` state; library is just an index over them
@@ -402,6 +407,28 @@ For power users / batch processing / CI testing:
 - `/pensmith done --yolo` skips outline approval gate and export confirmation gate.
 - Default-off. README documents this as deliberately gated behavior.
 
+**Approval gates (amended by RUN-28, S-16).** Every interactive decision point is one gate in `bin/lib/gates.ts` (`GATES`), and both tiers ask the same questions. `--yolo` may skip only the gates marked "skip"; it never authorizes spend, third-party data egress, a verification decision, or following the active-paper pointer. "Without a terminal" is a run that cannot prompt (stdin is not a terminal and `PENSMITH_PROMPT_MODE=numbered` answers are not scripted): the gate refuses with its exit code, or skips its step. Exit codes are the RUN-09 table (`pensmith --help`). Rows marked *(planned)* land with the named requirement, which adds the gate to `GATES` in the same change; `tests/gates-registry.test.ts` checks this table against `GATES`.
+
+| Gate | Asks | `--yolo` | Without a terminal | Explicit "no" | Owner |
+|---|---|---|---|---|---|
+| `outline-approval` | Approve this outline and register its sections? | skip: approve the outline | refuse: 3 | 3 | PRD §7.20 |
+| `export-confirm` | Export the paper now? | skip: export | refuse: 3 | 3 | PRD §7.20 |
+| `research-scope` | Which research scope should I use? | skip: use the first proposed scope | refuse: 3 | 3 | SRC-08 |
+| `research-prune` | Select the candidate sources to keep | skip: keep every candidate | refuse: 3 | 3 | SRC-09 |
+| `add-remap` | Map this source to a section now? | skip: skip the remap | skip: 0 | 0 | SRC-14 |
+| `revise-swap` | Apply this citation swap to the section? | skip: apply the proposed swap | refuse: 3 | 3 | PRD §7.5 |
+| `cost-cap` | This call would exceed your cost cap. Continue? | never | refuse: 5 | 5 | RUN-18 |
+| `estimate-proceed` | Proceed? | never | skip: 0 | 0 | RUN-20 |
+| `detector-consent` | Send the full paper text to GPTZero for an AI-detection score? | never | skip: 0 | 0 | EXP-17 |
+| `paper-pointer` | Continue the active paper, or start a new paper here? | never | refuse: 2 | 2 | RUN-14 |
+| `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 (planned) |
+| `plan-research` | Run this section-scoped research? | skip: run it | refuse: 3 | 3 | GRND-17 (planned) |
+| `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |
+| `quote-accept` | Accept this quote match? | never | refuse: 3 | 3 | VRFY-20 (planned) |
+| `reoutline` | Re-outline a paper that already has drafts? | skip only with `--force`: re-outline | refuse: 3 | 3 | GRND-09 (planned) |
+
+Automatic revision of a failed section is not a gate `--yolo` can open: it is its own opt-in, `--auto-revise` or `[project] auto_revise = true` (REV-01). Detector consent persisted in `config.toml` (EXP-17) is the only way that gate is answered without asking.
+
 ### 7.21 Health check (`/pensmith doctor`)
 
 Run before the user's first paper or any time something feels off:
@@ -582,10 +609,11 @@ pensmith/
 │   ├── pensmith-cli.js          # Tier 2 CLI
 │   ├── pensmith-tools.js        # state queries + verify-doi subcommand
 │   └── lib/
-│       ├── state.js             # .paper/STATE.md atomic read/write (write-then-rename)
+│       ├── state.js             # .paper/STATE.json atomic read/write (write-then-rename) + the one-time pre-v1 layout move
 │       ├── library.js           # ~/.pensmith/library/ (or platform path) index, class grouping
 │       ├── checkpoint.js        # HANDOFF.json
-│       ├── lock.js              # concurrent-run lock file (PID + timestamp)
+│       ├── lock.js              # per-file locks (proper-lockfile)
+│       ├── session-lock.js      # per-paper session lock (host, PID, session id, start time; RUN-23)
 │       ├── paths.js             # cross-platform path resolution (XDG / AppData / ~)
 │       ├── http.js              # cached HTTP client with backoff, polite UA, DOI normalization
 │       ├── doi.js               # DOI / arXiv ID / PMID normalization
@@ -659,7 +687,7 @@ pensmith/
     └── sources.test.js          # cassette-based; gated on PENSMITH_NETWORK_TESTS for live
 ```
 
-The `.paper/` directory layout per project:
+The `.paper/` directory layout per project. The project folder that contains `.paper/` is the paper root everywhere — the CLI, the MCP server (`PENSMITH_PAPER_ROOT`) and the hooks. All paper state, `STATE.json` and `config.toml` included, lives under `.paper/`; a pre-v1 paper with a root-level `STATE.json`/`config.toml` is moved into `.paper/` on first use, once, under the file lock (RUN-13):
 
 ```
 .paper/
@@ -668,7 +696,7 @@ The `.paper/` directory layout per project:
 ├── RESEARCH.md
 ├── CITATIONS.bib
 ├── OUTLINE.md
-├── STATE.md
+├── STATE.json               # paper state (the only STATE file; RUN-13)
 ├── HANDOFF.json
 ├── CAPABILITIES.json
 ├── SESSION.log              # jsonl, append-only
@@ -704,8 +732,8 @@ These are the operational guarantees. Each maps to a specific common pitfall.
 - **DOI / arXiv ID / PMID normalization.** All identifier reads and writes go through `bin/lib/doi.js`. `10.1145/foo`, `https://doi.org/10.1145/foo`, `doi:10.1145/foo` all normalize to the same canonical form.
 - **Author/title verification is part of Pass 1.** DOI existence is necessary but not sufficient; cited authors/year/title must fuzzy-match the canonical metadata or the citation is `MIS-CITED`.
 - **Atomic state writes.** Every state file uses write-then-rename (`STATE.md.tmp` → fsync → rename → `STATE.md`). State transitions are single rename operations.
-- **Concurrent-run lock.** `bin/lib/lock.js` writes a lock file (PID + start timestamp) at session start; new sessions detect the lock and either resume or refuse with a clear message. Stale locks (older than longest-step timeout) auto-clear.
-- **Schema versioning from day one.** Every state file (`STATE.md`, `config.toml`, `HANDOFF.json`, `sections/<N>/*.md`) has a `schema_version` field. Migrations live in `bin/lib/migrations/<from>-to-<to>.js`. Empty in v0.1.0; populated as schemas evolve.
+- **Concurrent-run lock.** `bin/lib/session-lock.ts` takes a per-paper session lock (owner record: host, PID, session id, start time) for every mutating verb and every mutating MCP tool call; a second session refuses with the holder's PID and `run pensmith resume once it ends`. Stale locks (dead PID on this host, or older than the longest-step timeout, 6 h) auto-clear with a notice (RUN-23).
+- **Schema versioning from day one.** Every persisted file carries a version: JSON state (`STATE.json`, `LIBRARY.json`, `runtime.json`, …) a `$schemaVersion` envelope, and `config.toml` plus the markdown frontmatter of section `PLAN.md` (and, when they gain frontmatter, `INTAKE.md`, `DRAFT.md`, `VERIFICATION.md`) a `schema_version` key. Reads go through a migration loader — `loadAndMigrate` for JSON, `loadFrontmatterDoc(kind, file, {writeBack})` for frontmatter — with migrations in `bin/lib/migrations/<kind>/vN_to_vN+1.ts`. A file newer than the build is refused with an "upgrade pensmith" message, never downgraded. A requirement that adds a field ships its migration and version bump in the same change (S-20, CONF-04).
 - **Cross-platform paths.** `bin/lib/paths.js` resolves the data directory: `%APPDATA%\Pensmith\` on Windows, `~/Library/Application Support/Pensmith/` on macOS, `$XDG_DATA_HOME/pensmith` (default `~/.local/share/pensmith`) on Linux.
 - **Hard cost cap.** `cost_cap_usd` (default $5/session) aborts any step that would exceed it. Cost meter visible in `/pensmith status`.
 - **HTTP caching + backoff.** All source-API calls go through `bin/lib/http.js`: response cache (TTL per source — 24h for DOI, 1h for search), exponential backoff with jitter, retry on transient errors, polite User-Agent.

@@ -17,6 +17,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { HandoffSchema, type Handoff } from '../bin/lib/schemas/handoff.js';
+import { paperDir, servicePaperRoot } from '../bin/lib/paths.js';
 
 function readHandoff(paperDir: string): Handoff | null {
   const path = join(paperDir, 'HANDOFF.json');
@@ -46,7 +47,9 @@ function buildResumeMessage(handoff: Handoff): string {
 
 function main(): void {
   try {
-    const handoff = readHandoff('.paper');
+    // RUN-13 / D-17-33: the paper resolves like the MCP server's —
+    // PENSMITH_PAPER_ROOT, else the working directory (never the open pointer).
+    const handoff = readHandoff(paperDir(servicePaperRoot()));
     // Nothing to resume: no handoff, or the paper is already done.
     if (!handoff || handoff.phase === 'done') return;
     const message = buildResumeMessage(handoff);

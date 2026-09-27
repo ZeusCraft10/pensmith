@@ -15,10 +15,26 @@
 //         "Object.entries(json) → doc.set" pattern silently keeps deleted keys
 //         because they never appear in the JSON projection)
 //
-// Pure function: NO filesystem I/O. Callers persist the returned string via
-// bin/lib/atomic-write.ts atomicWriteFile (D-07 LOCKED chokepoint).
+// The three helpers above are pure (NO filesystem I/O); callers persist the
+// returned string via bin/lib/atomic-write.ts atomicWriteFile (D-07 LOCKED
+// chokepoint).
+//
+// CONF-04 (D-17-38) adds the versioned READ path for markdown documents with
+// frontmatter — loadFrontmatterDoc / loadFrontmatterDocSync /
+// migrateFrontmatterText — the markdown sibling of migrations/loader.ts
+// loadAndMigrate: read `schema_version` (absent = v0), refuse a newer file with
+// "upgrade pensmith", run the text migrations under
+// bin/lib/migrations/<kind>/vN_to_vN+1.ts, and (optionally) write the migrated
+// text back under the file's lock. Every PLAN.md reader goes through it; the
+// router reads without write-back so it stays pure.
 
+import * as fs from 'node:fs';
 import { parseDocument, type Document } from 'yaml';
+import { atomicWriteFile } from './atomic-write.js';
+import { withLock } from './lock.js';
+import { PensmithError, EXIT_ERROR } from './exit-codes.js';
+import { CURRENT_PLAN_FRONTMATTER_VERSION } from './schemas/plan-frontmatter.js';
+import { migrate as planV0ToV1 } from './migrations/plan/v0_to_v1.js';
 
 // Frontmatter delimiter regex — accepts \n or \r\n line endings.
 // Group 1: the YAML body between the --- fences. Group 2: the markdown body
@@ -104,4 +120,134 @@ export function updateFrontmatter(
   mutator(proxy);
 
   return `---\n${doc.toString()}---\n${body}`;
+}
+
+// ---------------------------------------------------------------------------
+// Versioned frontmatter documents (CONF-04, D-17-38).
+// ---------------------------------------------------------------------------
+
+/**
+ * The markdown documents whose frontmatter is versioned. Only PLAN.md carries
+ * frontmatter today (v1). INTAKE.md frontmatter arrives with GRND-03, and
+ * DRAFT.md / VERIFICATION.md gain it only when a later requirement adds a
+ * field — each through this registry, with its migration under
+ * bin/lib/migrations/<kind>/ and a version bump in the same change (S-20).
+ */
+export type FrontmatterKind = 'plan' | 'intake' | 'draft' | 'verification';
+
+type TextMigration = (text: string) => string;
+
+interface FrontmatterKindDef {
+  /** The version this build writes and reads. 0 = no frontmatter yet. */
+  readonly current: number;
+  /** migrations[N] migrates vN → vN+1. */
+  readonly migrations: Readonly<Record<number, TextMigration>>;
+}
+
+export const FRONTMATTER_KINDS: Readonly<Record<FrontmatterKind, FrontmatterKindDef>> = Object.freeze({
+  plan: { current: CURRENT_PLAN_FRONTMATTER_VERSION, migrations: { 0: planV0ToV1 } },
+  intake: { current: 0, migrations: {} },
+  draft: { current: 0, migrations: {} },
+  verification: { current: 0, migrations: {} },
+});
+
+/** A frontmatter document that cannot be read by this build (EXIT_ERROR). */
+export class FrontmatterVersionError extends PensmithError {
+  readonly kind: FrontmatterKind;
+  readonly diskVersion: number | null;
+  constructor(kind: FrontmatterKind, file: string, message: string, diskVersion: number | null) {
+    super(`${file}: ${message}`, EXIT_ERROR);
+    this.name = 'FrontmatterVersionError';
+    this.kind = kind;
+    this.diskVersion = diskVersion;
+  }
+}
+
+export interface FrontmatterDoc {
+  readonly kind: FrontmatterKind;
+  /** The frontmatter after migration (what readers should use). */
+  readonly frontmatter: Record<string, unknown>;
+  readonly body: string;
+  /** The full document text after migration. */
+  readonly text: string;
+  /** The version found on disk (absent `schema_version` = 0). */
+  readonly diskVersion: number;
+  /** The version after migration (FRONTMATTER_KINDS[kind].current). */
+  readonly version: number;
+  /** True when a migration ran (the text differs from the input). */
+  readonly migrated: boolean;
+}
+
+function readFrontmatterVersion(kind: FrontmatterKind, fm: Record<string, unknown>, file: string): number {
+  const v = fm['schema_version'];
+  if (v === undefined || v === null) return 0;
+  if (typeof v === 'number' && Number.isInteger(v) && v >= 0) return v;
+  throw new FrontmatterVersionError(
+    kind,
+    file,
+    `${kind} frontmatter schema_version must be a non-negative integer (got ${JSON.stringify(v)})`,
+    null,
+  );
+}
+
+/**
+ * Pure: parse `text` as a `kind` document, refuse a newer version, and run the
+ * pending text migrations. `file` only labels error messages.
+ */
+export function migrateFrontmatterText(
+  kind: FrontmatterKind,
+  text: string,
+  file = `${kind} document`,
+): FrontmatterDoc {
+  const def = FRONTMATTER_KINDS[kind];
+  const diskVersion = readFrontmatterVersion(kind, parseFrontmatter(text).frontmatter, file);
+  if (diskVersion > def.current) {
+    throw new FrontmatterVersionError(
+      kind,
+      file,
+      `${kind} frontmatter schema_version ${diskVersion} is newer than this pensmith supports ` +
+        `(${def.current}) — upgrade pensmith`,
+      diskVersion,
+    );
+  }
+  let out = text;
+  for (let v = diskVersion; v < def.current; v += 1) {
+    const step = def.migrations[v];
+    if (!step) {
+      throw new FrontmatterVersionError(kind, file, `missing ${kind} frontmatter migration v${v} → v${v + 1}`, diskVersion);
+    }
+    out = step(out);
+  }
+  const { frontmatter, body } = parseFrontmatter(out);
+  return { kind, frontmatter, body, text: out, diskVersion, version: def.current, migrated: out !== text };
+}
+
+export interface LoadFrontmatterOptions {
+  /** Persist a migrated document (atomic write under the file's lock). Default false. */
+  readonly writeBack?: boolean;
+}
+
+/**
+ * Read `file` as a versioned `kind` document (see migrateFrontmatterText). With
+ * `writeBack: true` a migrated document is written back — under withLock(file),
+ * re-read inside the lock so a concurrent writer is never clobbered. ENOENT and
+ * other I/O errors propagate unchanged.
+ */
+export async function loadFrontmatterDoc(
+  kind: FrontmatterKind,
+  file: string,
+  opts: LoadFrontmatterOptions = {},
+): Promise<FrontmatterDoc> {
+  const doc = migrateFrontmatterText(kind, await fs.promises.readFile(file, 'utf8'), file);
+  if (!doc.migrated || opts.writeBack !== true) return doc;
+  return withLock(file, async () => {
+    const fresh = migrateFrontmatterText(kind, await fs.promises.readFile(file, 'utf8'), file);
+    if (fresh.migrated) await atomicWriteFile(file, fresh.text);
+    return fresh;
+  });
+}
+
+/** Synchronous, never-writing read (the pure router uses it). */
+export function loadFrontmatterDocSync(kind: FrontmatterKind, file: string): FrontmatterDoc {
+  return migrateFrontmatterText(kind, fs.readFileSync(file, 'utf8'), file);
 }

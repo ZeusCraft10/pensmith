@@ -44,7 +44,8 @@ export function __setInterpolateForTest(
     _interpolate = prev;
   };
 }
-import { paperDir } from '../lib/paths.js';
+import { paperDir, projectRoot } from '../lib/paths.js';
+import { resolveAssignmentFile, readAssignmentText, missingAssignmentError } from '../lib/assignment.js';
 import { initState, loadState, StateAlreadyExistsError } from '../lib/state.js';
 import { registerPaperInGlobalLibrary } from '../lib/global-library.js';
 import {
@@ -351,7 +352,15 @@ export const intakeCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const cwd = process.cwd();
+    const cwd = projectRoot();
+
+    // RUN-09 / RUN-12 / RUN-14: the assignment — `--from <file>`, else an
+    // assignment.{txt,md,pdf} in the paper folder. A missing --from file, or no
+    // assignment at all in a run without a terminal, is EXIT_USAGE — decided
+    // here, before anything is printed or written.
+    const assignmentFile = resolveAssignmentFile(args.from, cwd);
+    const hasThesisSeed = typeof args.thesis === 'string' && args.thesis.trim().length > 0;
+    if (assignmentFile === null && !hasThesisSeed && !process.stdin.isTTY) throw missingAssignmentError(cwd);
 
     // DOCS-01: PRD §3 disclaimer — print at intake start so CLI-only users see it.
     // Static copy — sourced verbatim from PRD §3 (non-negotiable per CLAUDE.md).
@@ -413,7 +422,7 @@ export const intakeCommand = defineCommand({
     // (the value interpolated into the model payload) is the REDACTED text — the
     // raw answers never cross the LLM boundary (H3). When opt-in is OFF, raw
     // answers go to INTAKE.md and egressSeed = rawAnswers (today's behavior).
-    const fromText = args.from && existsSync(args.from) ? readFileSync(args.from, 'utf8') : '';
+    const fromText = assignmentFile !== null ? await readAssignmentText(assignmentFile) : '';
     const rawAnswers = [fromText, thesisSeed].filter((s) => s.length > 0).join('\n\n');
 
     let egressSeed = rawAnswers;

@@ -19,7 +19,12 @@ import { loadLibrary } from '../bin/lib/library.js';
 import { loadOutline } from '../bin/lib/outline.js';
 import { loadSection } from '../bin/lib/section.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
+import { paperDir } from '../bin/lib/paths.js';
 
+// RUN-13 (D-17-32): `paperRoot` is the PROJECT root (the folder containing
+// `.paper/`) — the same root the CLI verbs, loadState, loadOutline and
+// loadSection take; each loader resolves `.paper/` itself.
+//
 // cross-AI cycle-2 HIGH #4 fix: registerPaperResources accepts an optional
 // `paperRoot` so the server boot site (mcp/server.ts main()) can thread the
 // root selected via PENSMITH_PAPER_ROOT (env) or the CWD default. Every
@@ -66,13 +71,13 @@ export function registerPaperResources(server: McpServer, paperRoot: string): vo
     },
   );
 
-  // 4. paper://library — citation library
+  // 4. paper://library — citation library (`.paper/LIBRARY.json` of the project root)
   server.registerResource(
     'library',
     'paper://library',
     { title: 'Citation library', description: 'All cited works with DOI verification status.', mimeType: 'application/json' },
     async (uri) => {
-      const library = await loadLibrary(paperRoot);
+      const library = await loadLibrary(paperDir(paperRoot));
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(library, null, 2) }] };
     },
   );

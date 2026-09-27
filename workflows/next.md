@@ -7,14 +7,20 @@ required:
   - MCP state.read
 
 degrade_if_missing:
-  - if no MCP tools: direct readFileSync('.paper/STATE.json') + direct per-section PLAN.md reads
+  - if no MCP tools: direct readFileSync('<project root>/.paper/STATE.json') + direct per-section PLAN.md reads
 </capability_check>
 
 ## Overview
 
 `pensmith next` is the bare `/pensmith` invocation: the state-aware next-step resolver.
-It calls `resolveNextAction()` (`bin/lib/router.ts`) — a pure function over STATE.json
-+ per-section PLAN.md frontmatter. The resolver IGNORES HANDOFF.json (H4) and NEVER
+It works on the paper at the project root that contains `.paper/` — `--paper`,
+`PENSMITH_PAPER_ROOT`, or the current folder. In a folder without a paper, while
+`pensmith open` points at another one, it asks in a terminal whether to continue that
+paper or start a new one here; without a terminal (or with `--yolo`) it refuses with
+exit 2, naming `--paper <name>` and `pensmith new` (RUN-14). It holds the paper's
+session lock while it runs (RUN-23).
+It calls `resolveNextAction()` (`bin/lib/router.ts`) — a pure function over `.paper/STATE.json`
++ per-section PLAN.md frontmatter (read through the versioned loader without write-back). The resolver IGNORES HANDOFF.json (H4) and NEVER
 returns `{ verb:'resume' }`. It dispatches the resolved verb via `dispatchVerb()`.
 
 State machine: `new → research → outline → (plan → write → verify per section) → compile → done`.
@@ -24,6 +30,7 @@ states (`{ verb:'status', reason:'done' }` or `{ verb:'status', reason:'attentio
 ## Outputs
 
 - Delegates entirely to the dispatched verb. No direct file writes.
+- Exit code: the dispatched verb's (RUN-09) — e.g. 4 when the verify it ran failed.
 
 ## Body
 

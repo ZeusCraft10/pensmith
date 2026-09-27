@@ -32,13 +32,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { extractPdfText } from '../lib/pdf-text.js';
 import { search as crossrefSearch, fetchById as crossrefFetchById } from '../lib/sources/crossref.js';
-import { upsertSources } from '../lib/library.js';
+import { upsertSources, tryLoadLibrary } from '../lib/library.js';
 import { normalizeDoi, isDoi, verifyDoi } from '../lib/doi.js';
 import { updateFrontmatter } from '../lib/frontmatter.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
-import { ask } from '../lib/prompts.js';
-import { sectionPlan } from '../lib/paths.js';
+import { runGate } from '../lib/gates.js';
+import { migrateFrontmatterText } from '../lib/frontmatter.js';
+import { sectionPlan, projectRoot } from '../lib/paths.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { loadState } from '../lib/state.js';
 import { fetch as httpFetch } from '../lib/http.js';
@@ -50,6 +51,7 @@ function isHttpUrl(s: string): boolean {
   return /^https?:\/\//i.test(s.trim());
 }
 import type { SourceCandidate } from '../lib/schemas/source-candidate.js';
+import { EXIT_USAGE } from '../lib/exit-codes.js';
 
 /**
  * Heuristic title extractor for a BYO PDF: the first non-empty line with a
@@ -101,7 +103,8 @@ async function remapSections(
     const planPath = sectionPlan(n, slug, paperRoot);
     if (!fs.existsSync(planPath)) continue;
     await withLock(planPath, async () => {
-      const text = await fs.promises.readFile(planPath, 'utf8');
+      // CONF-04: migrate a v0 PLAN.md (stamp schema_version) before mutating it.
+      const text = migrateFrontmatterText('plan', await fs.promises.readFile(planPath, 'utf8'), planPath).text;
       const updated = updateFrontmatter(text, (fm) => {
         const existing = Array.isArray(fm.assigned_sources)
           ? (fm.assigned_sources as unknown[])
@@ -117,6 +120,41 @@ async function remapSections(
   return updatedCount;
 }
 
+/**
+ * Remap `citekey` onto one section (--section/--slug) or every section.
+ * Audit #25: when --section is given, remap ONLY that section, resolving its
+ * slug from --slug, else from OUTLINE.md. A --section we cannot resolve to a
+ * real slug must NOT fall through to "remap every section" — it is a usage
+ * error instead. Omitting --section remaps all sections, by design.
+ */
+async function remapCommand(
+  paperRoot: string,
+  citekey: string,
+  secRaw: unknown,
+  slugRaw: unknown,
+): Promise<{ ok: boolean; citekey: string; remapped: number; exitCode?: typeof EXIT_USAGE }> {
+  let only: { n: number; slug: string } | undefined;
+  if (secRaw !== undefined) {
+    const n = Number(secRaw);
+    const explicit = typeof slugRaw === 'string' && slugRaw.length > 0 ? slugRaw : undefined;
+    const slug = Number.isInteger(n) && n >= 1 ? resolveSectionSlug(paperRoot, n, explicit) : 'placeholder';
+    if (!Number.isInteger(n) || n < 1 || (slug === 'placeholder' && explicit === undefined)) {
+      process.stdout.write(
+        `pensmith add: ${citekey} is in CITATIONS.bib; --section ${String(secRaw)} could not be ` +
+        `resolved to a section slug (pass --slug, or run \`pensmith outline\` first) — ` +
+        `no sections remapped.\n`,
+      );
+      return { ok: false, citekey, remapped: 0, exitCode: EXIT_USAGE };
+    }
+    only = { n, slug };
+  }
+  const count = await remapSections(paperRoot, citekey, only);
+  process.stdout.write(
+    `pensmith add: added ${citekey}; remapped ${count} section(s) (assigned_sources only).\n`,
+  );
+  return { ok: true, citekey, remapped: count };
+}
+
 export const addCommand = defineCommand({
   meta: {
     name: 'add',
@@ -126,12 +164,22 @@ export const addCommand = defineCommand({
     source: { type: 'positional', description: 'DOI, local PDF path, or URL.', required: true },
     section: { type: 'string', description: 'Section number to remap onto (optional).' },
     slug: { type: 'string', description: 'Section slug paired with --section (optional).' },
-    remap: { type: 'boolean', description: 'Remap the new source onto sections (skips the prompt).', default: false },
-    yolo: { type: 'boolean', description: 'Skip the remap approval gate.', default: false },
+    remap: { type: 'boolean', description: 'Remap onto sections without asking; `add --remap <citekey> --section N` remaps a source already in the bib.', default: false },
+    yolo: { type: 'boolean', description: 'Skip the remap question (the source is added, no section is remapped).', default: false },
   },
   async run({ args }) {
-    const paperRoot = process.cwd();
+    const paperRoot = projectRoot();
     const source = String(args.source);
+
+    // (0) `pensmith add --remap <citekey> [--section N]` — remap a source that is
+    //     already in the library (the command a non-interactive add prints,
+    //     RUN-12). Nothing is fetched or re-added.
+    if (args.remap === true) {
+      const library = await tryLoadLibrary(paperRoot);
+      if (library?.entries.some((e) => e.citekey === source)) {
+        return remapCommand(paperRoot, source, args.section, args.slug);
+      }
+    }
 
     // (1) Detect type + hydrate into a SourceCandidate.
     let candidate: SourceCandidate | null = null;
@@ -235,57 +283,39 @@ export const addCommand = defineCommand({
       if (args.remap !== true) return { ok: true, citekey: outcome.citekey, alreadyInLibrary: true };
     }
 
-    // (5) Remap gate. Remap when --remap is set OR (not --yolo AND the user
-    //     confirms). When --section/--slug are supplied, remap that one section;
-    //     otherwise remap every section in STATE.json.
+    // (5) Remap gate — `add-remap` in the gate registry (RUN-28, SRC-14).
+    //     --remap remaps without asking; --yolo skips the remap; a run that
+    //     cannot prompt skips it and prints the command to remap later (RUN-12)
+    //     — the source is already in CITATIONS.bib, so the bib and library stay
+    //     consistent either way. When --section/--slug are supplied, remap that
+    //     one section; otherwise remap every section in STATE.json.
     let doRemap = args.remap === true;
-    if (!doRemap && args.yolo !== true) {
-      const answer = await ask({
-        id: 'add-remap',
-        kind: 'confirm',
-        label: 'Source added. Remap sections to reference it?',
-        default: false,
+    if (!doRemap) {
+      const outcome = await runGate('add-remap', {
+        yolo: args.yolo === true,
+        question: {
+          id: 'add-remap',
+          kind: 'confirm',
+          label: 'Source added. Remap sections to reference it?',
+          default: false,
+        },
       });
-      doRemap = answer.kind === 'confirm' ? answer.value : false;
-    }
-
-    if (doRemap) {
-      let only: { n: number; slug: string } | undefined;
-      let skipRemap = false;
-      const secRaw = args.section;
-      const slugRaw = args.slug;
-      // Audit #25: when --section is given, remap ONLY that section. Resolve its
-      // slug from --slug, else from OUTLINE.md. A --section we cannot resolve to a
-      // real slug must NOT fall through to "remap every section" (the old bug) —
-      // skip the remap with a clear message instead. Omitting --section entirely
-      // (only === undefined) still remaps all sections, by design.
-      if (secRaw !== undefined) {
-        const n = Number(secRaw);
-        const explicit = typeof slugRaw === 'string' && slugRaw.length > 0 ? slugRaw : undefined;
-        const slug =
-          Number.isInteger(n) && n >= 1 ? resolveSectionSlug(paperRoot, n, explicit) : 'placeholder';
-        if (!Number.isInteger(n) || n < 1 || (slug === 'placeholder' && explicit === undefined)) {
-          process.stdout.write(
-            `pensmith add: added ${candidate.citekey}; --section ${String(secRaw)} could not be ` +
-            `resolved to a section slug (pass --slug, or run \`pensmith outline\` first) — ` +
-            `no sections remapped.\n`,
-          );
-          skipRemap = true;
-        } else {
-          only = { n, slug };
-        }
-      }
-      if (!skipRemap) {
-        const count = await remapSections(paperRoot, candidate.citekey, only);
+      if (outcome.kind === 'skipped') {
         process.stdout.write(
-          `pensmith add: added ${candidate.citekey}; remapped ${count} section(s) (assigned_sources only).\n`,
+          `pensmith add: added ${candidate.citekey}; remap skipped (non-interactive); run ` +
+            `pensmith add --remap ${candidate.citekey} --section N\n`,
         );
+        return { ok: true, citekey: candidate.citekey, remapped: 0 };
       }
-    } else {
-      process.stdout.write(`pensmith add: added ${candidate.citekey}.\n`);
+      doRemap = outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
     }
 
-    return { ok: true, citekey: candidate.citekey };
+    if (!doRemap) {
+      process.stdout.write(`pensmith add: added ${candidate.citekey}.\n`);
+      return { ok: true, citekey: candidate.citekey, remapped: 0 };
+    }
+    const remap = await remapCommand(paperRoot, candidate.citekey, args.section, args.slug);
+    return { ...remap, citekey: candidate.citekey };
   },
 });
 

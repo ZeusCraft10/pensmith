@@ -17,7 +17,7 @@
 
 import { defineCommand } from 'citty';
 import { atomicWriteFile } from '../lib/atomic-write.js';
-import { sectionPlan } from '../lib/paths.js';
+import { sectionPlan, projectRoot } from '../lib/paths.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { runRevise } from '../lib/revise.js';
 import { proposeSwap } from '../lib/revise-swap.js';
@@ -64,7 +64,7 @@ export const planCommand = defineCommand({
     }
     // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
     // wins; 'placeholder' only if no outline row exists).
-    const slug = resolveSectionSlug(process.cwd(), n, args.slug);
+    const slug = resolveSectionSlug(projectRoot(), n, args.slug);
 
     // GEN-06 fail-loud probe: assert a key is configured before doing any LLM work.
     // CRITICAL ordering (Pitfall 6): isNoLlmMode() inside complete() fires BEFORE
@@ -101,7 +101,7 @@ export const planCommand = defineCommand({
     const research = typeof args.research === 'string' && args.research.length > 0 ? args.research : undefined;
     if (args.revise === true || research) {
       const result = await runRevise({
-        paperRoot: process.cwd(),
+        paperRoot: projectRoot(),
         n,
         slug,
         yolo: args.yolo === true,

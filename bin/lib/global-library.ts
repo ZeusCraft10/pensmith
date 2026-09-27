@@ -44,7 +44,7 @@ import { join } from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { loadAndMigrate } from './migrations/loader.js';
-import { loadState, StateNotFoundError } from './state.js';
+import { loadState, StateNotFoundError, readStateTextSync } from './state.js';
 import { Schema as StateSchema, type State } from './schemas/state.js';
 import { readSectionState } from './router.js';
 import { paperDir, sectionPlan, pensmithGlobalLibraryIndexPath } from './paths.js';
@@ -454,10 +454,11 @@ function loadStateSync(folderPath: string): SyncStateRead {
   void loadState;
   void StateNotFoundError;
 
-  const file = join(path.resolve(folderPath), 'STATE.json');
+  // RUN-13: the paper's `.paper/STATE.json`, else a pre-v1 root-level one
+  // (read-only here — `list` never moves another paper's files).
   let raw: string;
   try {
-    raw = fs.readFileSync(file, 'utf8');
+    raw = readStateTextSync(folderPath);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException | null)?.code;
     if (code === 'ENOENT') return { absent: true, corrupt: false };

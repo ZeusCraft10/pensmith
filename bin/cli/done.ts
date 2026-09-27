@@ -30,11 +30,12 @@ import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
 import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
 import { exportDraft, runHumanizer, type ExportFormat } from '../lib/exporter.js';
-import { paperDir } from '../lib/paths.js';
+import { paperDir, projectRoot } from '../lib/paths.js';
 import { parseIntakeMd } from '../lib/intake-parse.js';
 import { resolveStyleName, parseBibtex } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
-import { ask } from '../lib/prompts.js';
+import { runGate, declineGate, canPrompt } from '../lib/gates.js';
+import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
 import { extractCitekeys } from '../lib/citation-token.js';
 import { parseVerdictRows } from '../lib/verify/verdict-rows.js';
 
@@ -579,7 +580,7 @@ export const doneCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const paperRoot = process.cwd();
+    const paperRoot = projectRoot();
     const draftPath = join(paperDir(paperRoot), 'DRAFT.md');
 
     let draftMd: string;
@@ -589,7 +590,7 @@ export const doneCommand = defineCommand({
       process.stdout.write(
         `pensmith done: no compiled draft at ${draftPath} — run 'pensmith compile' first.\n`,
       );
-      return { ok: false };
+      return { ok: false, exitCode: EXIT_ERROR };
     }
 
     // UNCONDITIONAL export blocking gate (audit #3/#14) — re-assert the Core
@@ -606,7 +607,14 @@ export const doneCommand = defineCommand({
       process.stdout.write(
         "Fix the cited section(s) — re-run 'pensmith verify <N>' then 'pensmith compile' — and try again.\n",
       );
-      return { ok: false, blocked: true };
+      return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
+    }
+
+    // RUN-09 / RUN-28: the export confirmation needs an answer. Without a
+    // terminal (and without --yolo) refuse NOW — EXIT_APPROVAL, before the
+    // plagiarism / detector / humanizer work — instead of after it.
+    if (args.yolo !== true && !canPrompt()) {
+      await runGate('export-confirm', { yolo: false, detail: 'nothing was exported' });
     }
 
     // 1. DONE-01 whole-paper Pass 4 (orphan audit). 2. DONE-02 plagiarism.
@@ -649,7 +657,7 @@ export const doneCommand = defineCommand({
         process.stdout.write(
           `pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification: ${gate4.reason}\n`,
         );
-        return { ok: false };
+        return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
       }
     }
 
@@ -661,20 +669,20 @@ export const doneCommand = defineCommand({
       pass4Results,
       plagiarismResults,
       yolo: args.yolo === true,
+      // The `export-confirm` gate of the registry (RUN-28). --yolo is handled by
+      // runDoneGate; a run that cannot prompt refuses (EXIT_APPROVAL).
       approve: async () => {
-        const answer = await ask({
-          id: 'export-confirm',
-          kind: 'confirm',
-          label: 'Export the paper?',
-          default: true,
+        const outcome = await runGate('export-confirm', {
+          yolo: false,
+          question: { id: 'export-confirm', kind: 'confirm', label: 'Export the paper?', default: true },
         });
-        return answer.kind === 'confirm' ? answer.value : false;
+        return outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
       },
     });
 
     if (gateResult.exported === false && gateResult.gateSkipped !== true) {
-      process.stdout.write('pensmith done: export cancelled by user.\n');
-      return { ok: false };
+      // An explicit "no" is the gate's decline: EXIT_APPROVAL, nothing exported.
+      declineGate('export-confirm', 'export cancelled by user');
     }
 
     // 7. DONE-06/07/08 exportDraft into the exporter's DISTINCT export dir. Leave

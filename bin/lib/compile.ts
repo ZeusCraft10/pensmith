@@ -41,7 +41,7 @@ import { join } from 'node:path';
 import { paperDir } from './paths.js';
 import { loadOutline } from './outline.js';
 import { parseOutline, type ParsedOutlineSection } from './outline-parse.js';
-import { parseFrontmatter } from './frontmatter.js';
+import { loadFrontmatterDoc } from './frontmatter.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { computeDraftHash } from './draft-hash.js';
@@ -206,8 +206,10 @@ async function loadSection(
   if (!existsSync(draftPath) || !existsSync(planPath)) return null;
 
   const draftBytes = readFileSync(draftPath);
-  const planMd = readFileSync(planPath, 'utf8');
-  const { frontmatter } = parseFrontmatter(planMd);
+  // CONF-04: the versioned PLAN.md reader (a v0 file is migrated in memory; a
+  // newer one is refused with "upgrade pensmith"). compile never writes a
+  // section's PLAN.md — the verbs that own it persist the migration.
+  const { frontmatter } = await loadFrontmatterDoc('plan', planPath);
   const assignedSources = Array.isArray(frontmatter['assigned_sources'])
     ? (frontmatter['assigned_sources'] as unknown[]).map(String)
     : [];
@@ -237,7 +239,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     // refuseReasons), not a raw parseOutline stack trace. loadOutline returns ''
     // for an absent file and parseOutline throws "no section table" on '' or a
     // placeholder, so both degenerate cases land here gracefully.
-    const raw = await loadOutline(paperDir(opts.paperRoot));
+    const raw = await loadOutline(opts.paperRoot);
     let outline: ReturnType<typeof parseOutline>;
     try {
       outline = parseOutline(raw);

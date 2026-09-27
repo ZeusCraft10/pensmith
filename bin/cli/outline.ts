@@ -12,14 +12,17 @@
 //   - With no key: getProviderApiKey() throws MissingApiKeyError → fail-loud.
 //
 // CLAUDE.md non-negotiable: outline approval is default-ON (only skips with
-// --yolo). The gate mirrors the revise.ts ApprovalUnavailableError pattern:
-// TTY → @clack/prompts confirm; non-TTY without --yolo → exit code 3.
+// --yolo). It is the `outline-approval` gate of the one registry
+// (bin/lib/gates.ts, RUN-28): a terminal asks; no terminal and no --yolo exits
+// EXIT_APPROVAL (3); an explicit "no" exits 3 with nothing written.
 
 import { defineCommand } from 'citty';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { atomicWriteFile } from '../lib/atomic-write.js';
-import { paperDir } from '../lib/paths.js';
+import { paperDir, projectRoot } from '../lib/paths.js';
+import { runGate, declineGate, canPrompt } from '../lib/gates.js';
+import { EXIT_ERROR } from '../lib/exit-codes.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { complete, MissingApiKeyError, resolveProviderId } from '../lib/anthropic.js';
 import { getProviderApiKey } from '../lib/runtime.js';
@@ -37,41 +40,28 @@ import {
 // (GEN-06). With PENSMITH_NO_LLM=1: complete() returns offline mock transparently.
 
 /**
- * ApprovalUnavailableError — thrown by the approval gate when the terminal is
- * not interactive and --yolo was not passed. Mirrors revise.ts shape exactly.
- * Exit code 3 (per CLAUDE.md non-negotiable: approval-gates default-on).
- */
-class ApprovalUnavailableError extends Error {
-  exitCode = 3 as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'ApprovalUnavailableError';
-  }
-}
-
-/**
- * Run the outline approval gate.
+ * Run the outline approval gate — `outline-approval` in the gate registry
+ * (RUN-28, bin/lib/gates.ts; CLAUDE.md non-negotiable: default-ON).
  *
- * - When args.yolo is true: auto-approve immediately (no prompt).
- * - When TTY: show @clack/prompts confirm dialog.
- * - When non-TTY and !yolo: throw ApprovalUnavailableError (exit 3).
+ * - --yolo: approve (the registry's yolo choice) without asking.
+ * - A run that can prompt: show a preview on stderr, then ask.
+ * - A run that cannot prompt and no --yolo: GateRefusedError, EXIT_APPROVAL.
+ * - An explicit "no": the registry's decline — EXIT_APPROVAL, nothing written.
  */
 async function runApprovalGate(outlineText: string, yolo: boolean): Promise<boolean> {
-  if (yolo) return true;
-
-  if (!process.stdout.isTTY || !process.stdin.isTTY) {
-    throw new ApprovalUnavailableError(
-      'outline: approval gate requires an interactive terminal. ' +
-      'Use --yolo to auto-accept (CLAUDE.md non-negotiable: approval-gates default-on).',
-    );
+  if (!yolo && canPrompt()) {
+    // Show a preview of the proposed outline (first 500 chars).
+    const preview = outlineText.slice(0, 500) + (outlineText.length > 500 ? '\n…(truncated)' : '');
+    process.stderr.write(`Proposed outline:\n${preview}\n`);
   }
-
-  const clack = await import('@clack/prompts');
-  // Show a preview of the proposed outline (first 500 chars).
-  const preview = outlineText.slice(0, 500) + (outlineText.length > 500 ? '\n…(truncated)' : '');
-  clack.note(preview, 'Proposed outline');
-  const ok = await clack.confirm({ message: 'Accept this outline and write OUTLINE.md?' });
-  return ok === true && !clack.isCancel(ok);
+  const outcome = await runGate('outline-approval', {
+    yolo,
+    detail: 'no OUTLINE.md was written',
+    question: { id: 'outline-approval', kind: 'confirm', label: 'Accept this outline and write OUTLINE.md?', default: false },
+  });
+  if (outcome.kind === 'yolo') return true;
+  if (outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true) return true;
+  return declineGate('outline-approval', 'outline rejected — no OUTLINE.md written');
 }
 
 /**
@@ -140,7 +130,7 @@ export const outlineCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const paperRoot = process.cwd();
+    const paperRoot = projectRoot();
     const outlinePath = path.join(paperDir(), 'OUTLINE.md');
 
     // Audit #4: NEVER clobber a valid, parseable OUTLINE.md. bare /pensmith,
@@ -219,22 +209,9 @@ export const outlineCommand = defineCommand({
     });
 
     // ── Approval gate (CLAUDE.md non-negotiable: default-ON, skip with --yolo) ──
-    let approved: boolean;
-    try {
-      approved = await runApprovalGate(result.text, args.yolo === true);
-    } catch (e) {
-      if (e instanceof ApprovalUnavailableError) {
-        process.stderr.write(`pensmith outline: ${e.message}\n`);
-        process.exitCode = e.exitCode;
-        return { ok: false, mode: 'approval-unavailable' };
-      }
-      throw e;
-    }
-
-    if (!approved) {
-      process.stdout.write('pensmith outline: outline rejected — no OUTLINE.md written.\n');
-      return { ok: false, mode: 'rejected' };
-    }
+    // A refusal or a decline throws a GateRefusedError (EXIT_APPROVAL); the
+    // dispatcher prints it as one line (RUN-12).
+    await runApprovalGate(result.text, args.yolo === true);
 
     await atomicWriteFile(outlinePath, result.text);
     process.stdout.write(`pensmith outline: wrote OUTLINE.md to ${outlinePath}\n`);
@@ -247,6 +224,9 @@ export const outlineCommand = defineCommand({
         `pensmith outline: registered ${sectionCount} section(s) in STATE.json.\n`,
       );
     }
+    // RUN-09: an outline that registered no section cannot advance the
+    // pipeline — EXIT_ERROR (the WARN above says why).
+    if (sectionCount === 0) return { ok: false, path: outlinePath, mode: 'real', sections: 0, exitCode: EXIT_ERROR };
     return { ok: true, path: outlinePath, mode: 'real', sections: sectionCount };
   },
 });
