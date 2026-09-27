@@ -23,7 +23,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCassetteFile } from '../bin/lib/http-mock.js';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
@@ -103,9 +105,11 @@ test('honesty: absent GPTZERO_API_KEY → scoreHonesty returns null (skip-clean)
 async function captureStdout<T>(fn: () => Promise<T>): Promise<{ value: T; out: string }> {
   const chunks: string[] = [];
   const orig = process.stdout.write.bind(process.stdout);
+  // Tee, never swallow: the node:test child reports results on stdout, and a
+  // swallowed report line makes earlier tests silently vanish from the run.
   (process.stdout as unknown as { write: (s: string) => boolean }).write = (s: string) => {
     chunks.push(String(s));
-    return true;
+    return orig(s);
   };
   try {
     const value = await fn();
@@ -122,6 +126,10 @@ async function withGptzeroMock<T>(
 ): Promise<T> {
   const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
   process.env['PENSMITH_NETWORK_TESTS'] = '1';
+  // A live score appends to <cwd>/.paper/COSTS.jsonl (ARCH-10) — run from a
+  // temp project, never from the repo checkout.
+  const savedCwd = process.cwd();
+  process.chdir(mkdtempSync(join(tmpdir(), 'pensmith-honesty-')));
   const { agent, restore } = installMockAgent();
   const captured: Array<{ body: string; apiKey: string | undefined }> = [];
   if (opts.intercept) {
@@ -140,6 +148,7 @@ async function withGptzeroMock<T>(
     return await fn(captured);
   } finally {
     await restore();
+    process.chdir(savedCwd);
     if (savedLane === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
     else process.env['PENSMITH_NETWORK_TESTS'] = savedLane;
   }

@@ -20,7 +20,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, copyFileSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -304,5 +305,59 @@ test('zero-trace Test G: exportDraft excludes a sibling TUTORIAL.md from the exp
     assert.ok(!exported.includes(sentinel), `export leaked TUTORIAL.md content; exported:\n${exported}`);
     // The exporter's own emitted bytes (verbatim DRAFT copy) carry no pensmith trace.
     assert.ok(!exported.toLowerCase().includes('pensmith'), "exporter-emitted bytes must not contain 'pensmith'");
+  },
+);
+
+// =====================================================================
+//   Test H — an OFFLINE run's export carries no offline marker (RUN-02)
+// =====================================================================
+// Offline (PENSMITH_OFFLINE=1) every working artifact carries the offline
+// marker line (section VERIFICATION.md, COMPILE-REPORT.md, .paper/VERIFICATION.md)
+// — and the exported document never does (zero trace). Runs the real CLI chain
+// verify → compile → done against the recorded Crossref work 10.1038/nphys1170.
+test('zero-trace Test H (RUN-02): an offline verify → compile → done run marks its artifacts but NOT the export',
+  { skip: !existsSync(exporterSrcPath) },
+  () => {
+    const root = mkdtempSync(join(tmpdir(), 'pensmith-ztoffline-'));
+    const data = mkdtempSync(join(tmpdir(), 'pensmith-ztoffline-data-'));
+    const paper = join(root, '.paper');
+    const sec = join(paper, 'sections', '01-intro');
+    mkdirSync(sec, { recursive: true });
+    writeFileSync(join(root, 'STATE.json'), JSON.stringify({ $schemaVersion: 2, paperId: 'zt-offline', createdAt: new Date().toISOString(), sections: [{ n: 1, slug: 'intro' }] }));
+    writeFileSync(join(paper, 'OUTLINE.md'), ['# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', '| 1 | intro | Introduction | | 300 | aspelmeyer2009 |', ''].join('\n'));
+    writeFileSync(join(paper, 'CITATIONS.bib'), '@article{aspelmeyer2009,\n  title = {Measured measurement},\n  author = {Aspelmeyer, Markus},\n  doi = {10.1038/nphys1170},\n  year = {2009}\n}\n');
+    writeFileSync(join(sec, 'PLAN.md'), ['---', 'section: 1', 'slug: intro', 'title: Introduction', 'depends_on: []', 'assigned_sources: [aspelmeyer2009]', 'status: written', '---', ''].join('\n'));
+    writeFileSync(join(sec, 'DRAFT.md'), '# Introduction\n\nMeasurement shapes what an observer records [@aspelmeyer2009].\n');
+
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
+    Object.assign(env, { XDG_DATA_HOME: data, LOCALAPPDATA: data, HOME: data, USERPROFILE: data, PENSMITH_OFFLINE: '1', PENSMITH_NO_LLM: '1' });
+    const cli = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
+    const run = (args: string[]): { status: number | null; out: string } => {
+      const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), cli, ...args], {
+        cwd: root, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000,
+      });
+      return { status: r.status, out: `${r.stdout}\n${r.stderr}` };
+    };
+    const marker = /OFFLINE MODE|recorded fixtures, not live/;
+
+    assert.equal(run(['verify', '1', '--slug', 'intro', '--yolo']).status, 0);
+    assert.match(readFileSync(join(sec, 'VERIFICATION.md'), 'utf8'), /^> OFFLINE MODE \(PENSMITH_OFFLINE=1\)/m);
+    const compile = run(['compile', '--yolo']);
+    assert.equal(compile.status, 0, compile.out);
+    assert.match(readFileSync(join(paper, 'COMPILE-REPORT.md'), 'utf8'), /^> OFFLINE MODE \(PENSMITH_OFFLINE=1\)/m);
+    assert.ok(!marker.test(readFileSync(join(paper, 'DRAFT.md'), 'utf8')), 'the compiled DRAFT.md (the export source) is unmarked');
+    const done = run(['done', '--yolo', '--format', 'md']);
+    assert.equal(done.status, 0, done.out);
+    assert.match(readFileSync(join(paper, 'VERIFICATION.md'), 'utf8'), /^> OFFLINE MODE \(PENSMITH_OFFLINE=1\)/m);
+
+    const exportDir = join(paper, 'export');
+    const exported = readdirSync(exportDir).filter((f) => /\.(md|tex|docx|pdf)$/.test(f));
+    assert.ok(exported.length > 0, 'done exported a document');
+    for (const f of exported) {
+      const text = readFileSync(join(exportDir, f), 'utf8');
+      assert.ok(!marker.test(text), `${f} must not carry the offline marker (zero trace)`);
+      assert.ok(!text.toLowerCase().includes('pensmith'), `${f} must not carry a pensmith trace`);
+    }
   },
 );

@@ -72,9 +72,11 @@ interface PlagMod {
 async function captureStdout<T>(fn: () => Promise<T>): Promise<{ value: T; out: string }> {
   const chunks: string[] = [];
   const orig = process.stdout.write.bind(process.stdout);
+  // Tee, never swallow: the node:test child reports results on stdout, and a
+  // swallowed report line makes earlier tests silently vanish from the run.
   (process.stdout as unknown as { write: (s: string) => boolean }).write = (s: string) => {
     chunks.push(String(s));
-    return true;
+    return orig(s);
   };
   try {
     return { value: await fn(), out: chunks.join('') };

@@ -13,18 +13,26 @@
 // 07-02 wires the flags these cases SKIP; afterwards they un-skip and must PASS
 // — and would FAIL against the ORIGINAL broken design (see per-case notes).
 //
-// One un-skipped case asserts isOfflineMode()===true (the offline-by-default
-// adapter gate that --dry-run relies on for SOURCE adapters).
+// Phase 17 (RUN-01): sources are LIVE by default. The test runner is one of
+// the three offline reasons (with PENSMITH_OFFLINE=1 and --dry-run), so ERGO-01
+// asserts the test-runner half of the RUN-01 truth table (the full table lives
+// in tests/net-mode.test.ts). H2 asserts the --show-prompts mirror CONTENT, and
+// H3 proves zero egress at the SOCKET level: the CLI runs with the
+// dial-recorder preload (tests/helpers/local-servers/dial-recorder.mjs), which
+// records every dns.lookup / net.connect / tls.connect and refuses the dial.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { syntheticSource } from '../bin/lib/sources/dry-run.js';
+import { readDialLog, type DialEvent } from './helpers/local-servers/dial-recorder.mjs';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
+const DIAL_RECORDER = new URL('./helpers/local-servers/dial-recorder.mjs', import.meta.url).href;
 
 // Resolve tsx's loader to an ABSOLUTE file URL so the CLI subprocess can load it
 // regardless of cwd — a bare `--import tsx` resolves relative to the child's
@@ -62,6 +70,47 @@ function runCli(args: string[], cwd: string, extraEnv: Record<string, string | u
       stderr: err.stderr ? err.stderr.toString() : '',
     };
   }
+}
+
+interface SpawnResult extends RunResult { dials: DialEvent[]; }
+
+/**
+ * Spawn the CLI with the dial-recorder preload, which logs every dns.lookup /
+ * net.connect / tls.connect (refusing the dial) and every cassette read to a
+ * file. The child gets an isolated data dir and home, no provider/detector keys
+ * unless `extraEnv` sets them, and — unless `keepTestContext` — no test-runner
+ * context and no PENSMITH_* variable, so it runs exactly like a user's CLI and
+ * the only offline reason is the one the case sets.
+ */
+function spawnCli(
+  args: string[],
+  cwd: string,
+  extraEnv: Record<string, string>,
+  opts: { keepTestContext?: boolean } = {},
+): SpawnResult {
+  const scratch = mkdtempSync(join(tmpdir(), 'pensmith-flags-env-'));
+  const dialLog = join(scratch, 'dials.jsonl');
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v === undefined) continue;
+    if (/^(ANTHROPIC|OPENAI|GPTZERO)_/.test(k)) continue;
+    if (!opts.keepTestContext && (k === 'NODE_TEST_CONTEXT' || k.startsWith('PENSMITH_'))) continue;
+    env[k] = v;
+  }
+  Object.assign(env, {
+    XDG_DATA_HOME: join(scratch, 'data'),
+    LOCALAPPDATA: join(scratch, 'data'),
+    HOME: join(scratch, 'home'),
+    USERPROFILE: join(scratch, 'home'),
+    PENSMITH_DIAL_LOG: dialLog,
+    ...extraEnv,
+  });
+  const r = spawnSync(
+    process.execPath,
+    ['--import', DIAL_RECORDER, '--import', TSX_LOADER, PENSMITH_TS, ...args],
+    { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 120_000 },
+  );
+  return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '', dials: readDialLog(dialLog) };
 }
 
 // === Fixture builders ===
@@ -115,17 +164,34 @@ function manySections(count: number): Array<{ n: number; slug: string }> {
 }
 
 // ===========================================================================
-// Un-skipped: isOfflineMode() is the adapter offline gate --dry-run rides for
-// SOURCE adapters. PR-time CI never sets PENSMITH_NETWORK_TESTS, so it is true.
+// ERGO-01 / RUN-01: under the test runner, sources are offline (reason "test
+// runner") unless the live test lane (PENSMITH_NETWORK_TESTS=1) is on. A normal
+// CLI run with no env is LIVE (tests/live-default.test.ts proves that at the
+// socket level); --dry-run and PENSMITH_OFFLINE=1 are the other two reasons.
 // ===========================================================================
-test('ERGO-01: isOfflineMode() is true when PENSMITH_NETWORK_TESTS !== "1"', async () => {
-  const prev = process.env['PENSMITH_NETWORK_TESTS'];
-  delete process.env['PENSMITH_NETWORK_TESTS'];
+test('ERGO-01 / RUN-01: the test runner forces sources offline unless the live test lane is on', async () => {
+  const mod = (await import('../bin/lib/http-mock.js')) as typeof import('../bin/lib/http-mock.js');
+  const keys = ['PENSMITH_NETWORK_TESTS', 'PENSMITH_OFFLINE', 'PENSMITH_DRY_RUN', 'PENSMITH_NO_LLM'] as const;
+  const saved = new Map(keys.map((k) => [k, process.env[k]]));
   try {
-    const mod = (await import('../bin/lib/http-mock.js')) as { isOfflineMode: () => boolean };
-    assert.equal(mod.isOfflineMode(), true, 'ERGO-01: offline-by-default adapter gate');
+    for (const k of keys) delete process.env[k];
+    assert.equal(mod.isTestContext(), true, 'node --test children run in a test context');
+    assert.equal(mod.isOfflineMode(), true, 'ERGO-01: sources are offline under the test runner');
+    assert.equal(mod.networkMode().reason, 'test runner');
+    assert.equal(mod.networkMode().llmStubbed, false, 'the network mode never stubs the LLM by itself (S-15)');
+
+    process.env['PENSMITH_NETWORK_TESTS'] = '1';
+    assert.equal(mod.isOfflineMode(), false, 'the live test lane turns sources live');
+    assert.equal(mod.networkMode().reason, null);
+
+    process.env['PENSMITH_DRY_RUN'] = '1';
+    assert.equal(mod.isOfflineMode(), true, '--dry-run is offline even in the live test lane');
+    assert.equal(mod.networkMode().reason, '--dry-run');
   } finally {
-    if (prev !== undefined) process.env['PENSMITH_NETWORK_TESTS'] = prev;
+    for (const [k, v] of saved) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
   }
 });
 
@@ -302,6 +368,43 @@ test('H2: --show-prompts takes effect for an EXPLICIT verb (pre-dispatch seam, m
       `H2: \`write --show-prompts\` must parse and engage the mirror; stderr=${res.stderr}`);
   });
 
+// RUN-16: the mirror is in the http.ts egress gate, so an explicit `research
+// --show-prompts` prints every source-API URL (METHOD + URL, secret params
+// redacted, never a header) before the request. Under the test runner the
+// sources are answered from recorded fixtures, which are mirrored the same way.
+test('H2 / RUN-16: `research --show-prompts --yolo` mirrors every source URL to stderr and never a key',
+  { skip: !flagsWired }, () => {
+    const root = freshRoot();
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    writeFileSync(
+      join(root, '.paper', 'INTAKE.md'),
+      '---\ntopic: attention mechanisms in neural networks\ndiscipline: computer science\n---\n# Intake\n\nA short survey.\n',
+    );
+    const SENTINEL = 'sk-sentinel-flags-h2-0123456789';
+    const res = spawnCli(['research', '--show-prompts', '--yolo'], root, {
+      PENSMITH_NO_LLM: '1',
+      PENSMITH_S2_API_KEY: SENTINEL,
+      ANTHROPIC_API_KEY: SENTINEL,
+    }, { keepTestContext: true });
+    const mirrored = res.stderr.split(/\r?\n/).filter((l) => l.startsWith('[show-prompts] '));
+    const urls = mirrored.filter((l) => /^\[show-prompts\] (GET|POST|HEAD) https:\/\//.test(l));
+    assert.ok(
+      urls.some((l) => l.startsWith('[show-prompts] GET https://api.crossref.org/works?') && /query=attention/.test(l)),
+      `H2: the Crossref search URL is mirrored; mirror lines:\n${mirrored.join('\n')}\nstderr=${res.stderr.slice(0, 1500)}`,
+    );
+    // Every adapter with a recorded fixture for this query is mirrored (a fixture
+    // miss is refused before anything could be sent, so it is not mirrored).
+    for (const prefix of [
+      'https://export.arxiv.org/api/query?search_query=attention',
+      'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?',
+      'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?',
+    ]) {
+      assert.ok(urls.some((l) => l.startsWith(`[show-prompts] GET ${prefix}`)), `H2: ${prefix} is mirrored`);
+    }
+    assert.ok(!res.stderr.includes(SENTINEL) && !res.stdout.includes(SENTINEL), 'H2: the sentinel key never appears');
+    assert.ok(!/x-api-key|authorization/i.test(mirrored.join('\n')), 'H2: headers are never mirrored');
+  });
+
 // ===========================================================================
 // C3-HIGH-2 — global flags (esp. --yolo) propagate through the BARE and RESUME
 // manual-dispatch paths so the dispatched GATE verb receives yolo:true / skips
@@ -351,44 +454,173 @@ test('C3-HIGH-2 (b) RESUME path: `pensmith resume --yolo` → dispatched work ve
   });
 
 // ===========================================================================
-// H3 / C2-H3 — --dry-run gates the LLM call sites on a path that WOULD egress.
-// `verify <N> --dry-run` with a FAKE ANTHROPIC_API_KEY present is the path that
-// WOULD call messages.create() in pass2/pass4 absent the guard. The previous
-// test drove write/research (Tier-2 placeholders, zero LLM calls in any mode)
-// so it gated NOTHING (vacuous). Assert: ZERO COSTS.jsonl append (the pass2/4
-// placeholder path skips appendCost under PENSMITH_NO_LLM, which --dry-run sets).
+// H3 / C2-H3 / RUN-04 — zero egress at the SOCKET level. The CLI runs with the
+// dial-recorder preload, so any dns.lookup / net.connect / tls.connect — from
+// http.ts, undici, a stray SDK or anything else in the process — is recorded
+// (and refused). The chain covers every verb that used to leak: research,
+// add (doi.ts verifyDoi), verify (Pass-1 re-fetch, retraction re-query, Pass-3
+// OA-PDF lookup, freshness HEAD, Pass-2/4 LLM), compile, and done (plagiarism
+// queries, GPTZero with a key present). A fake provider key and a fake GPTZero
+// key are present, so every LLM / detector path WOULD egress absent the gate.
+// Run under --dry-run and under PENSMITH_OFFLINE=1 (+ PENSMITH_NO_LLM=1), with
+// no test-runner context: 0 dials, 0 DNS lookups, and no COSTS.jsonl.
 // ===========================================================================
-test('H3 / C2-H3: `verify <N> --dry-run` with a fake key makes ZERO network calls + appends NO COSTS.jsonl (non-vacuous)',
+
+const QUOTE = 'The act of measurement in quantum physics shapes the outcome that every careful observer records in the laboratory.';
+
+interface ChainFixture {
+  researchRoot: string;
+  paperRoot: string;
+}
+
+/**
+ * Two roots: one with only INTAKE.md for `research` (it rewrites the library
+ * and CITATIONS.bib), and one seeded paper whose single section cites `citekey`
+ * (inline and under a block quote Pass 3 extracts) for add → verify → compile
+ * → done.
+ */
+function seedChain(entry: { citekey: string; doi: string; title: string; author: string; year: number }): ChainFixture {
+  const researchRoot = freshRoot();
+  mkdirSync(join(researchRoot, '.paper'), { recursive: true });
+  writeFileSync(
+    join(researchRoot, '.paper', 'INTAKE.md'),
+    '---\ntopic: attention mechanisms in neural networks\ndiscipline: computer science\n---\n# Intake\n\nA short survey.\n',
+  );
+
+  const paperRoot = freshRoot();
+  writeState(paperRoot, [{ n: 1, slug: 'intro' }]);
+  const pDir = join(paperRoot, '.paper');
+  mkdirSync(join(pDir, 'sections', '01-intro'), { recursive: true });
+  writeFileSync(
+    join(pDir, 'INTAKE.md'),
+    '---\ntopic: quantum measurement\ndiscipline: physics\n---\n# Intake\n\nA short essay.\n',
+  );
+  writeFileSync(
+    join(pDir, 'OUTLINE.md'),
+    [
+      '# Outline',
+      '',
+      '| # | slug | title | depends_on | word target | assigned_sources |',
+      '| --- | --- | --- | --- | --- | --- |',
+      `| 1 | intro | Introduction | | 300 | ${entry.citekey} |`,
+      '',
+    ].join('\n'),
+  );
+  writeFileSync(
+    join(pDir, 'CITATIONS.bib'),
+    `@article{${entry.citekey},\n  title = {${entry.title}},\n  author = {${entry.author}},\n  doi = {${entry.doi}},\n  year = {${entry.year}}\n}\n`,
+  );
+  writeFileSync(
+    join(pDir, 'sections', '01-intro', 'PLAN.md'),
+    ['---', 'section: 1', 'slug: intro', 'title: Introduction', 'depends_on: []', `assigned_sources: [${entry.citekey}]`, 'status: written', '---', '', '# Introduction', ''].join('\n'),
+  );
+  writeFileSync(
+    join(pDir, 'sections', '01-intro', 'DRAFT.md'),
+    [
+      '# Introduction',
+      '',
+      `Measurement remains a central question in the physics literature [@${entry.citekey}].`,
+      '',
+      `> ${QUOTE}`,
+      '',
+      `[@${entry.citekey}]`,
+      '',
+    ].join('\n'),
+  );
+  return { researchRoot, paperRoot };
+}
+
+interface VerbRun { verb: string; res: SpawnResult; }
+
+function runChain(fx: ChainFixture, modeArgs: string[], modeEnv: Record<string, string>, addDoi: string): VerbRun[] {
+  const keys = { ANTHROPIC_API_KEY: 'sk-fake-flags-h3', GPTZERO_API_KEY: 'gz-fake-flags-h3' };
+  const env = { ...keys, ...modeEnv };
+  const out: VerbRun[] = [];
+  const run = (verb: string, args: string[], cwd: string): void => {
+    out.push({ verb, res: spawnCli([...modeArgs, ...args], cwd, env) });
+  };
+  run('research', ['research', '--yolo'], fx.researchRoot);
+  run('add', ['add', addDoi, '--yolo'], fx.paperRoot);
+  run('verify', ['verify', '1', '--slug', 'intro', '--yolo'], fx.paperRoot);
+  run('compile', ['compile', '--yolo'], fx.paperRoot);
+  run('done', ['done', '--yolo', '--format', 'md'], fx.paperRoot);
+  return out;
+}
+
+function assertZeroEgress(runs: VerbRun[], label: string): void {
+  for (const { verb, res } of runs) {
+    const where = `${label} ${verb} (exit ${res.status}); stderr=${res.stderr.slice(0, 1200)}`;
+    assert.ok(!/ERR_MODULE_NOT_FOUND|Cannot find module/.test(res.stderr), `the preload + CLI must load: ${where}`);
+    const dials = res.dials.filter((e) => e.kind === 'connect');
+    const lookups = res.dials.filter((e) => e.kind === 'dns');
+    assert.deepEqual(dials, [], `H3: ${label} ${verb} must open ZERO sockets: ${where}`);
+    assert.deepEqual(lookups, [], `H3: ${label} ${verb} must make ZERO DNS lookups: ${where}`);
+    assert.ok(!/ECONNREFUSED|ENOTFOUND|fetch failed|dial-recorder/.test(res.stderr), `H3: no refused dial surfaced: ${where}`);
+  }
+}
+
+test('H3 / RUN-04: --dry-run research, add, verify (incl. Pass 3), compile and done open ZERO sockets (dial recorder)',
   { skip: !flagsWired }, () => {
-    const root = freshRoot();
-    writeState(root, [{ n: 1, slug: 'intro' }]);
-    // A verifiable section: a DRAFT.md with a [@citekey] + a matching bib entry,
-    // so runPass2/runPass4 WOULD call messages.create() absent the dry-run guard.
-    const secDir = join(root, '.paper', 'sections', '01-intro');
-    mkdirSync(secDir, { recursive: true });
-    writeFileSync(
-      join(secDir, 'DRAFT.md'),
-      'Transformers improved translation quality substantially in 2017. [@vaswani2017]\n',
-    );
-    const pDir = join(root, '.paper');
-    mkdirSync(pDir, { recursive: true });
-    writeFileSync(
-      join(pDir, 'CITATIONS.bib'),
-      '@article{vaswani2017,\n  title = {Attention Is All You Need},\n  author = {Vaswani, Ashish},\n  doi = {10.5555/3295222.3295349},\n  year = {2017}\n}\n',
-    );
-    const res = runCli(['verify', '1', '--slug', 'intro', '--dry-run'], root, {
-      // A FAKE key present — this is the path that WOULD egress absent the guard.
-      ANTHROPIC_API_KEY: 'sk-fake-test-key',
-      // Force adapters offline (defense-in-depth): never set network tests.
-      PENSMITH_NETWORK_TESTS: undefined,
+    // An article-kind synthetic source (kindOf('00…') === 'article'): its
+    // reserved DOI, title and author pass the Pass-1 AND-gate under --dry-run.
+    const synthetic = syntheticSource('00c0ffee');
+    const fx = seedChain({
+      citekey: 'dryrunsrc2020',
+      doi: synthetic.doi ?? '',
+      title: synthetic.title,
+      author: synthetic.authors[0] ?? '',
+      year: synthetic.year ?? 2020,
     });
-    // Non-vacuous: the verify LLM-calling path ran with a key present, yet
-    // --dry-run (which sets PENSMITH_NO_LLM) must keep pass2/pass4 on the
-    // offline UNCLEAR placeholder so NO cost record is appended.
-    assert.ok(
-      !existsSync(join(root, '.paper', 'COSTS.jsonl')),
-      'H3/C2-H3: `verify --dry-run` with a key present must NOT append COSTS.jsonl (LLM gated)',
-    );
-    assert.ok(!/network|ECONNREFUSED|ENOTFOUND|fetch failed/i.test(res.stderr),
-      `H3/C2-H3: zero network egress on the verify dry-run path; stderr=${res.stderr}`);
+    const runs = runChain(fx, ['--dry-run'], {}, '10.1038/nphys1170');
+    assertZeroEgress(runs, '--dry-run');
+
+    const byVerb = new Map(runs.map((r) => [r.verb, r.res]));
+    // The runs are real, not vacuous refusals.
+    for (const { verb, res } of runs) {
+      assert.match(res.stderr, /OFFLINE MODE \(reason: --dry-run\)/, `--dry-run ${verb} discloses the mode`);
+      assert.ok(!res.dials.some((e) => e.kind === 'read'), `--dry-run ${verb} never reads a cassette (RUN-27)`);
+    }
+    assert.equal(byVerb.get('research')?.status, 0, `research: ${byVerb.get('research')?.stderr}`);
+    const library = readFileSync(join(fx.researchRoot, '.paper', 'LIBRARY.json'), 'utf8');
+    assert.ok(/10\.0000\/pensmith-dryrun\./.test(library), 'dry-run research writes synthetic sources');
+    assert.match(byVerb.get('add')?.stderr ?? '', /unavailable \(dry-run\)/, 'add reports unavailable (dry-run)');
+    const verification = readFileSync(join(fx.paperRoot, '.paper', 'sections', '01-intro', 'VERIFICATION.md'), 'utf8');
+    assert.match(verification, /text unavailable \(dry-run\)/, 'Pass 3 ran on the quote without a request');
+    assert.match(verification, /- dryrunsrc2020: \*\*OK\*\* .*dry-run synthetic source/, 'Pass 1 accepted the synthetic source under --dry-run');
+    assert.equal(byVerb.get('compile')?.status, 0, `compile: ${byVerb.get('compile')?.stderr}`);
+    assert.equal(byVerb.get('done')?.status, 0, `done: ${byVerb.get('done')?.stderr}`);
+    assert.ok(!existsSync(join(fx.paperRoot, '.paper', 'COSTS.jsonl')), 'no LLM cost was recorded');
+  });
+
+test('H3 / RUN-04: PENSMITH_OFFLINE=1 research, add, verify (incl. Pass 3), compile and done open ZERO sockets (dial recorder)',
+  { skip: !flagsWired }, () => {
+    // The recorded Crossref work (tests/fixtures/cassettes/crossref/works-nphys1170.json).
+    const fx = seedChain({
+      citekey: 'aspelmeyer2009',
+      doi: '10.1038/nphys1170',
+      title: 'Measured measurement',
+      author: 'Aspelmeyer, Markus',
+      year: 2009,
+    });
+    // add: an unrecorded DOI (RUN-03 acceptance) — refused, nothing added.
+    const runs = runChain(fx, [], { PENSMITH_OFFLINE: '1', PENSMITH_NO_LLM: '1' }, '10.1093/nar/gkab1112');
+    assertZeroEgress(runs, 'PENSMITH_OFFLINE=1');
+
+    const byVerb = new Map(runs.map((r) => [r.verb, r.res]));
+    for (const { verb, res } of runs) {
+      assert.match(res.stderr, /OFFLINE MODE \(reason: PENSMITH_OFFLINE=1\)/, `offline ${verb} discloses the mode`);
+    }
+    assert.ok(byVerb.get('research')?.dials.some((e) => e.kind === 'read'), 'offline research replays recorded fixtures');
+    assert.notEqual(byVerb.get('add')?.status, 0, 'offline add refuses with a non-zero exit');
+    assert.match(byVerb.get('add')?.stderr ?? '', /DOI verification unavailable \(offline\)/);
+    const verification = readFileSync(join(fx.paperRoot, '.paper', 'sections', '01-intro', 'VERIFICATION.md'), 'utf8');
+    assert.match(verification, /- aspelmeyer2009: \*\*OK\*\* .*D-11 AND-gate passed/, 'Pass 1 re-fetched the recorded Crossref work');
+    assert.ok(!readFileSync(join(fx.paperRoot, '.paper', 'CITATIONS.bib'), 'utf8').includes('gkab1112'), 'the refused DOI was not added');
+    assert.match(verification, /text unavailable \(offline\)/, 'Pass 3 ran on the quote without a request');
+    assert.equal(byVerb.get('compile')?.status, 0, `compile: ${byVerb.get('compile')?.stderr}`);
+    const done = byVerb.get('done');
+    assert.equal(done?.status, 0, `done: ${done?.stderr}`);
+    assert.match(`${done?.stdout ?? ''}${done?.stderr ?? ''}`, /score unavailable \(offline\)/, 'GPTZero (key present) sends nothing offline');
+    assert.match(`${done?.stdout ?? ''}${done?.stderr ?? ''}`, /plagiarism check skipped \(offline\)/, 'no DDG query offline');
+    assert.ok(!existsSync(join(fx.paperRoot, '.paper', 'COSTS.jsonl')), 'no LLM cost was recorded');
   });
