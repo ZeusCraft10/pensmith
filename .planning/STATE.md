@@ -1,12 +1,12 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3.0
-milestone_name: Truly End-to-End
+milestone: v1.0.0
+milestone_name: Open Source Release
 status: roadmapped
-last_updated: "2026-07-06T00:00:00.000Z"
-last_activity: 2026-07-06
+last_updated: "2026-09-27T00:00:00.000Z"
+last_activity: 2026-09-27
 progress:
-  total_phases: 3
+  total_phases: 11
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,17 +17,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-24 after v0.2.0 End-to-End milestone)
+See: .planning/PROJECT.md (updated 2026-09-27 for the v1.0.0 Open Source Release milestone)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** v0.3.0 roadmapped (Phases 17–19). Phase 17 FEED wires discovered LIBRARY.json sources into the plan/outline/write prompts (the v0.2.0 carried-forward tech-debt headline) + injection fencing. Phase 18 SEC closes the two documented security residuals (DNS-rebind pinning, PDF worker-abort), independent of FEED. Phase 19 HARDEN promotes the audit-hardening work into standing CI invariants (strict e2e gate, live-provider lane, citation-integrity test), sequenced after FEED. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
+**Current focus:** v1.0.0 Open Source Release roadmapped (Phases 17–27, 168 requirements covering all 200 items of the 2026-09-25 gap register). Goal: every completeness category at 100% and the product ready for open source. v0.3.0 Truly End-to-End never started and is absorbed (FEED → Phase 18, SEC → Phase 24, HARDEN → Phase 26, HARDEN-03 → Phase 20). Phase 17 RUNTIME comes first: live network by default (D-V1-01), valid models and runtimes (D-V1-02), documented exit codes, one paper root, session log, cost cap, and the deterministic mock LLM every later phase tests against. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
 
 ## Current Position
 
-Phase: 17 — Source→Drafting Feed (FEED) (not started; next up per roadmap)
+Phase: 17 — Tier-2 Runtime Foundations (RUNTIME) (not started; next up per roadmap)
 Plan: —
 Status: Roadmap created, ready for `/gsd:plan-phase 17`
-Last activity: 2026-07-06 — ROADMAP.md written (Phases 17–19), 11/11 requirements mapped, REQUIREMENTS.md traceability filled
+Last activity: 2026-09-27 — v1.0.0 milestone defined: REQUIREMENTS.md (168 requirements, 200/200 gap-register items mapped, 0 descoped), ROADMAP.md (Phases 17–27); v0.3.0 absorbed
 
 ## Performance Metrics
 
@@ -271,6 +271,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [v0.3.0 roadmap] Phase order is FEED (17) → SEC (18) → HARDEN (19), not numeric-implies-dependency: SEC is fully independent and could run in parallel with FEED; HARDEN is sequenced last because its FEED-specific e2e assertions (assigned_sources population, citekey containment) are meaningless against placeholder data
 - [v0.3.0 roadmap] AUDIT-FINDINGS.md's 37 findings are already fixed and merged (PRs #3-#19) — HARDEN's strict e2e gate and citation-integrity test are hardening ON TOP of shipped fixes, not blocked behind a router/regex-fix phase; no phase inserted for "fix the router bugs first"
 - [v0.3.0 roadmap] OUTLINE.md's `assigned_sources` column stays advisory; `plan.ts` is the single authoritative writer of PLAN.md's real `assigned_sources`, reading LIBRARY.json directly — avoids a two-writer inconsistency (research ARCHITECTURE.md Pattern 3, carried into Phase 17 scope)
+- [v1.0.0 roadmap] v0.3.0 Truly End-to-End (never started) is absorbed into v1.0.0 Open Source Release; FEED-01..05, SEC-01/02 and HARDEN-01..04 keep their IDs (FEED → Phase 18, SEC → Phase 24, HARDEN-01/02/04 → Phase 26, HARDEN-03 → Phase 20) and the BRDTH-01..06 backlog is in scope (Phases 19, 25). Phase numbers 17–19 are reused
+- [v1.0.0 roadmap] Locked decisions D-V1-01..08 recorded in REQUIREMENTS.md. D-V1-01 reverses the v0.3.0 research advice to keep cassette replay as the default: normal runs are live, offline replay only under PENSMITH_OFFLINE=1 / --dry-run / the test runner, always disclosed
+- [v1.0.0 roadmap] Supersedes the v0.3.0 note above: the outline allocation seeds each stub PLAN.md `assigned_sources`, and PLAN.md is the authoritative section→source map, backstopped at write time (FEED-04) and at verify time (VRFY-17, blocking UNASSIGNED)
+- [v1.0.0 roadmap] Synthesis decisions S-01..S-14 (REQUIREMENTS.md) settle the slice drafts' conflicts: exit codes 0/1/2/3 approval (kept)/4 blocked/5 cost cap; RETRACTED blocks; UNVERIFIABLE never FABRICATED but blocks; uncheckable quotes need explicit per-quote acceptance (--yolo does not accept); http.ts follows redirects in its own pinned loop while undici maxRedirections stays 0; new prompt slugs only claim-consistency and the sketch synthesizer (D-12 amendments); export/humanize/score/plagiarism are aliases, 16 verbs stay locked
+- [v1.0.0 roadmap] Sequencing: 17 → 18 → 20 → 21 → 22 → 23 → 25 → 26 → 27; Phase 19 needs 17 and can overlap 18; Phase 24 needs 17 + 19 and can run alongside 20–23. The mock LLM (RUN-21) and per-slug contract stubs (GRND-19) land in 17–18 because every later acceptance test uses them
 
 ### Pending Todos
 
@@ -279,27 +284,29 @@ None yet.
 ### Blockers/Concerns
 
 - Style-match (Phase 8) is novel-territory dual-use with no industry precedent; flagged for milestone-close review of guardrails before shipping.
+- v1.0.0 is large: 168 requirements over 11 phases; the 2026-09-25 audit sized the remaining work at about 55–75 plans. Phases 17–18 gate everything else (mock LLM, contracts), so keep them tight.
 - PRD §17 open questions (verifier prompt wording, section-dependency syntax, wave-scheduling algorithm, MCP SDK choice, PDF parsing library, style-match implementation, library index format, section renumbering policy) deferred to per-phase discuss-phase as planned.
 
 ## Deferred Items
 
-Items acknowledged and carried forward at the v0.2.0 milestone close (2026-06-24):
+Items acknowledged and carried forward at the v0.2.0 milestone close (2026-06-24), now mapped into v1.0.0:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| tech-debt (v0.3.0 headline) | Wire discovered LIBRARY.json sources into the plan/outline/write prompts (research discovers sources but the section planner/writer get placeholder context) | now Phase 17 (FEED) in v0.3.0 roadmap | v0.2.0 close |
-| manual-verify | Live LLM-key generation (GEN-02) + live adapter network round-trip (GEN-03) — Phase 12 | deferred (manual-only; offline cassette/PENSMITH_NO_LLM verified) | v0.2.0 close |
-| manual-verify | Live Retraction Watch re-query (GATE-03) — Phase 14 | deferred (manual-only; cassette verified) | v0.2.0 close |
-| manual-verify | Live-DNS SSRF block (HARD-02) + live GPTZero consent/cap (HARD-05) — Phase 15 | deferred (manual-only; injected-resolver/offline verified) | v0.2.0 close |
-| security-residual | DNS-rebind socket-pinning (WR-03) + worker-thread PDF abort (WR-05) — SECURITY.md | now Phase 18 (SEC) in v0.3.0 roadmap | v0.2.0 close |
+| tech-debt (v0.3.0 headline) | Wire discovered LIBRARY.json sources into the plan/outline/write prompts (research discovers sources but the section planner/writer get placeholder context) | now Phase 18 (FEED-01..05) in v1.0.0 | v0.2.0 close |
+| manual-verify | Live LLM-key generation (GEN-02) + live adapter network round-trip (GEN-03) — Phase 12 | now HARDEN-02 live lane (Phase 26) in v1.0.0 | v0.2.0 close |
+| manual-verify | Live Retraction Watch re-query (GATE-03) — Phase 14 | now SRC-04 + HARDEN-02 (Phases 19, 26) in v1.0.0 | v0.2.0 close |
+| manual-verify | Live-DNS SSRF block (HARD-02) + live GPTZero consent/cap (HARD-05) — Phase 15 | now HARDEN-02 live lane (Phase 26) in v1.0.0 | v0.2.0 close |
+| security-residual | DNS-rebind socket-pinning (WR-03) + worker-thread PDF abort (WR-05) — SECURITY.md | now Phase 24 (SEC-01/02) in v1.0.0 | v0.2.0 close |
 
 ## Session Continuity
 
-Last session: 2026-07-06T00:00:00.000Z
-Stopped at: ROADMAP.md written for v0.3.0 (Phases 17-19); REQUIREMENTS.md traceability filled (11/11 mapped); ready for /gsd:plan-phase 17
+Last session: 2026-09-27T00:00:00.000Z
+Stopped at: v1.0.0 Open Source Release defined — REQUIREMENTS.md (168 requirements, 200/200 gap items mapped), ROADMAP.md (Phases 17–27); ready for /gsd:plan-phase 17
 Resume file: None
 
 ## Operator Next Steps
 
-- Review .planning/ROADMAP.md Phase 17-19 detail and .planning/REQUIREMENTS.md traceability
-- Run /gsd:plan-phase 17 to begin planning Phase 17 (Source→Drafting Feed / FEED)
+- Review .planning/REQUIREMENTS.md: locked decisions D-V1-01..08, synthesis decisions S-01..S-14, the PRD amendments table, and Appendix A/B (gap coverage, partial descopes)
+- Review .planning/ROADMAP.md Phase 17–27 detail and dependencies
+- Run /gsd:plan-phase 17 to begin planning Phase 17 (Tier-2 Runtime Foundations / RUNTIME)

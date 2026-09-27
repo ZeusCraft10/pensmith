@@ -110,17 +110,15 @@ The generative seams the Foundation milestone scaffolded are now connected: the 
 
 **Tech stack:** Node ≥20.10, TypeScript (NodeNext, strict), undici, proper-lockfile, citation-js, pdf-parse/pdf-lib, jszip, Pandoc (optional shellout), MCP SDK, c8 coverage. Live LLM via `bin/lib/anthropic.ts` (Anthropic/OpenAI-compatible, through `http.ts`). Knowledge graph: gitignored, rebuild via `/gsd:graphify build`.
 
-## Current Milestone: v0.3.0 Truly End-to-End
+## Current Milestone: v1.0.0 Open Source Release
 
-**Goal:** Close the v0.2.0 carried-forward gap so discovered research actually informs drafting — the section planner/drafter consume the sources `research` found (grounded, section-scoped, injection-fenced) — and turn the two systemic themes the 37-finding audit just fixed into standing CI invariants so they can't silently return.
+**Goal:** Finish the product and make it ready for open source: every category of the 2026-09-25 completeness assessment (engineering quality; PRD features; the project roadmap; the PRD non-negotiables; Tier-2 CLI end to end with an API key; Tier-1 plugin inside Claude Code; release and distribution readiness) reaches 100%. The audit put pensmith at about 35% finished (`.planning/research/V1-GAP-REGISTER.md`, 200 open items).
 
-**Target features:**
-- **FEED — source→drafting feed (headline):** wire `LIBRARY.json` sources into the plan/outline/write prompts through a new pure section-scoped source-context builder (`bin/lib/source-context.ts`); the drafter cites `[@citekey]` only from its section's mapped sources; injection-fence the untrusted source abstracts in the planner/drafter prompts (currently only Pass 2/4 are fenced).
-- **HARDEN — integration & verifier invariants:** promote `scripts/e2e-smoke.mjs` to a strict required CI gate with STATE/PLAN transition asserts; add a secrets-gated live-provider CI lane; add a citation-integrity fabricated-key differential test. (Hardening on top of the already-merged audit fixes, not blocked on them.)
-- **SEC — documented residuals:** DNS-rebind socket-pinning via the undici `connect` callback (WR-03); worker-thread PDF-parse abort on timeout (WR-05).
-- **Deferred to Future:** v2 breadth — reference dedup, figure/table/caption handling, partial-draft resume, unverifiable-quote advisory bucket, verb reference card, Phase-1 FLAG paydown.
+**Absorbs v0.3.0 Truly End-to-End**, which was never started: FEED-01..05 → Phase 18, SEC-01/02 → Phase 24, HARDEN-01/02/04 → Phase 26, HARDEN-03 → Phase 20, and the deferred BRDTH-01..06 breadth backlog → Phases 19 and 25.
 
-Requirements: `.planning/REQUIREMENTS.md` (FEED-01..05, HARDEN-01..04, SEC-01/02 — 11 total). Research: `.planning/research/SUMMARY.md` (zero new dependencies; FEED is pure wiring of three placeholder call sites).
+**Phases 17–27:** runtime foundations (live network by default, valid models, OpenAI-compatible/Ollama runtimes, exit codes, one paper root) → grounded generation → sources and library → verifier completeness → compile/done/export → revision loop → Tier-1 plugin (key-free, installable with no build step) → security → config and PRD breadth → CI hardening → release readiness (version 1.0.0; publishing stays with the maintainer).
+
+Requirements: `.planning/REQUIREMENTS.md` (168 requirements, locked decisions D-V1-01..08, 200/200 gap items mapped). Roadmap: `.planning/ROADMAP.md`.
 
 ## Context
 
@@ -176,4 +174,4 @@ This document evolves at phase transitions and milestone boundaries.
 **After each milestone** (via `/gsd:complete-milestone`): full review of all sections; Core Value check; audit Out of Scope; update Context + Current State.
 
 ---
-*Last updated: 2026-07-06 — v0.3.0 Truly End-to-End milestone started (initialized 2026-05-06 from PRD.md)*
+*Last updated: 2026-09-27 — v1.0.0 Open Source Release milestone started; v0.3.0 absorbed (initialized 2026-05-06 from PRD.md)*
