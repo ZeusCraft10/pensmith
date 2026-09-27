@@ -1,12 +1,12 @@
 // tests/sources/semanticscholar.test.ts — Semantic Scholar adapter (RSCH-03/04,
 // T-3-13, D-16).
 //
-// Keyless Semantic Scholar answered HTTP 429 when Phase 17 re-recorded the
-// cassettes, so this adapter is exercised against the hand-written SYNTHETIC
-// fixture (tests/fixtures/cassettes/synthetic/semanticscholar/), whose request
-// paths match the adapter's URLs exactly. Re-record with
-// `npm run cassettes:refresh -- --only semanticscholar` (a PENSMITH_S2_API_KEY
-// lifts the limit).
+// The search path replays a REAL recording
+// (tests/fixtures/cassettes/semanticscholar/search-attention-neural-networks.json,
+// `npm run cassettes:refresh -- --only semanticscholar`; a PENSMITH_S2_API_KEY
+// lifts the keyless rate limit). fetchById and the parser edge cases still use
+// the hand-written SYNTHETIC fixture (tests/fixtures/cassettes/synthetic/
+// semanticscholar/), whose request paths match the adapter's URLs exactly.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,6 +22,18 @@ test('semanticscholar.search() parses the fixture into SourceCandidate[] (RSCH-0
   for (const r of results) {
     assert.equal(r.source, 'semanticscholar');
     assert.ok(r.authors.length > 0);
+  }
+});
+
+test('semanticscholar.search() parses the REAL recorded response (null abstracts included)', async () => {
+  const results = await s2.search('attention mechanisms in neural networks', { limit: 10 });
+  assert.equal(results.length, 10, 'every recorded paper parses — none is dropped for a null abstract');
+  assert.equal(results[0]?.title, 'Attention mechanisms in neural networks');
+  assert.ok(results.some((r) => r.abstract === undefined), 'the recording holds papers without an abstract');
+  for (const r of results) {
+    assert.equal(r.source, 'semanticscholar');
+    assert.ok(r.authors.length > 0);
+    assert.ok(!r.doi?.startsWith('10.0000/'), 'real records only');
   }
 });
 

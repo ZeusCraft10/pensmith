@@ -1,0 +1,418 @@
+[
+  {
+    "scope": "https://api.semanticscholar.org",
+    "method": "GET",
+    "path": "/graph/v1/paper/search?query=attention+mechanisms+in+neural+networks&limit=10&fields=title%2Cauthors%2Cyear%2CexternalIds%2Cabstract",
+    "status": 200,
+    "response": {
+      "total": 42238,
+      "offset": 0,
+      "next": 10,
+      "data": [
+        {
+          "paperId": "f0c8deff34a58a2b996b1c636b7b1cda18f4611b",
+          "externalIds": {
+            "ArXiv": "2601.03329",
+            "DBLP": "journals/corr/abs-2601-03329",
+            "DOI": "10.48550/arXiv.2601.03329",
+            "CorpusId": 284532748
+          },
+          "title": "Attention mechanisms in neural networks",
+          "year": 2026,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2601.03329, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "2403071035",
+              "name": "Hasi Hays"
+            }
+          ],
+          "abstract": "Attention mechanisms represent a fundamental paradigm shift in neural network architectures, enabling models to selectively focus on relevant portions of input sequences through learned weighting functions. This monograph provides a comprehensive and rigorous mathematical treatment of attention mechanisms, encompassing their theoretical foundations, computational properties, and practical implementations in contemporary deep learning systems. Applications in natural language processing, computer vision, and multimodal learning demonstrate the versatility of attention mechanisms. We examine language modeling with autoregressive transformers, bidirectional encoders for representation learning, sequence-to-sequence translation, Vision Transformers for image classification, and cross-modal attention for vision-language tasks. Empirical analysis reveals training characteristics, scaling laws that relate performance to model size and computation, attention pattern visualizations, and performance benchmarks across standard datasets. We discuss the interpretability of learned attention patterns and their relationship to linguistic and visual structures. The monograph concludes with a critical examination of current limitations, including computational scalability, data efficiency, systematic generalization, and interpretability challenges."
+        },
+        {
+          "paperId": "d3c6c635b9cfd8890c7244d3db4be53d45944963",
+          "externalIds": {
+            "MAG": "3040760313",
+            "DBLP": "journals/corr/abs-2002-10941",
+            "ArXiv": "2002.10941",
+            "DOI": "10.1109/HPCA47549.2020.00035",
+            "CorpusId": 211296403
+          },
+          "title": "A^3: Accelerating Attention Mechanisms in Neural Networks with Approximation",
+          "year": 2020,
+          "openAccessPdf": {
+            "url": "https://arxiv.org/pdf/2002.10941",
+            "status": "GREEN",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2002.10941, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "38568116",
+              "name": "Tae Jun Ham"
+            },
+            {
+              "authorId": "2111891693",
+              "name": "Sungjun Jung"
+            },
+            {
+              "authorId": "2109604031",
+              "name": "Seonghak Kim"
+            },
+            {
+              "authorId": "3072985",
+              "name": "Young H. Oh"
+            },
+            {
+              "authorId": "1504704369",
+              "name": "Yeonhong Park"
+            },
+            {
+              "authorId": "2115415721",
+              "name": "Yoonho Song"
+            },
+            {
+              "authorId": "2118946848",
+              "name": "Jung-Hun Park"
+            },
+            {
+              "authorId": "2144574279",
+              "name": "Sanghee Lee"
+            },
+            {
+              "authorId": "2111949417",
+              "name": "Kyoung Park"
+            },
+            {
+              "authorId": "2155775897",
+              "name": "Jae W. Lee"
+            },
+            {
+              "authorId": "2850552",
+              "name": "D. Jeong"
+            }
+          ],
+          "abstract": "With the increasing computational demands of the neural networks, many hardware accelerators for the neural networks have been proposed. Such existing neural network accelerators often focus on popular neural network types such as convolutional neural networks (CNNs) and recurrent neural networks (RNNs); however, not much attention has been paid to attention mechanisms, an emerging neural network primitive that enables neural networks to retrieve most relevant information from a knowledge-base, external memory, or past states. The attention mechanism is widely adopted by many state-of-the-art neural networks for computer vision, natural language processing, and machine translation, and accounts for a large portion of total execution time. We observe today's practice of implementing this mechanism using matrix-vector multiplication is suboptimal as the attention mechanism is semantically a content-based search where a large portion of computations ends up not being used. Based on this observation, we design and architect A3, which accelerates attention mechanisms in neural networks with algorithmic approximation and hardware specialization. Our proposed accelerator achieves multiple orders of magnitude improvement in energy efficiency (performance/watt) as well as substantial speedup over the state-of-the-art conventional hardware."
+        },
+        {
+          "paperId": "6824ae8511c3b4b47b85bed93e121743906445e9",
+          "externalIds": {
+            "DBLP": "conf/aicas/ChenSLG22",
+            "DOI": "10.1109/AICAS54282.2022.9869924",
+            "CorpusId": 252096827
+          },
+          "title": "Enabling Energy-Efficient Inference for Self-Attention Mechanisms in Neural Networks",
+          "year": 2022,
+          "openAccessPdf": {
+            "url": "https://www.zora.uzh.ch/id/eprint/231282/1/2022_IEDM_Special_Session.pdf",
+            "status": "GREEN",
+            "license": "other-oa",
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/AICAS54282.2022.9869924?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/AICAS54282.2022.9869924, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "50282924",
+              "name": "Qinyu Chen"
+            },
+            {
+              "authorId": "2115921471",
+              "name": "Congyi Sun"
+            },
+            {
+              "authorId": "1713782",
+              "name": "Zhonghai Lu"
+            },
+            {
+              "authorId": "2114087379",
+              "name": "Chang Gao"
+            }
+          ],
+          "abstract": "The study of specialized accelerators tailored for neural networks is becoming a promising topic in recent years. Such existing neural network accelerators are usually designed for convolutional neural networks (CNNs) or recurrent neural networks have been (RNNs), however, less attention has been paid to the attention mechanisms, which is an emerging neural network primitive with the ability to identify the relations within input entities. The self-attention-oriented models such as Transformer have achieved great performance on natural language processing, computer vision and machine translation. However, the self-attention mechanism has intrinsically expensive computational workloads, which increase quadratically with the number of input entities. Therefore, in this work, we propose an software-hardware co-design solution for energy-efficient self-attention inference. A prediction-based approximate self-attention mechanism is introduced to substantially reduce the runtime as well as power consumption, and then a specialized hardware architecture is designed to further increase the speedup. The design is implemented on a Xilinx XC7Z035 FPGA, and the results show that the energy efficiency is improved by 5.7x with less than 1% accuracy loss."
+        },
+        {
+          "paperId": "09b5fd6defe4fca517205e52182c993c38760439",
+          "externalIds": {
+            "DBLP": "journals/pr/ObesoBGR22",
+            "DOI": "10.1016/j.patcog.2021.108411",
+            "CorpusId": 243472146
+          },
+          "title": "Visual vs internal attention mechanisms in deep neural networks for image classification and object detection",
+          "year": 2021,
+          "openAccessPdf": {
+            "url": "https://doi.org/10.1016/j.patcog.2021.108411",
+            "status": "BRONZE",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1016/j.patcog.2021.108411?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1016/j.patcog.2021.108411, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "49048391",
+              "name": "A. M. Obeso"
+            },
+            {
+              "authorId": "1381345946",
+              "name": "J. Benois-Pineau"
+            },
+            {
+              "authorId": "1399106107",
+              "name": "M. García-Vázquez"
+            },
+            {
+              "authorId": "1381345944",
+              "name": "A. Ramírez-Acosta"
+            }
+          ],
+          "abstract": null
+        },
+        {
+          "paperId": "7c9438229e88c0534c2b0690b7f8860222e4d5b3",
+          "externalIds": {
+            "DBLP": "journals/tamd/JiangXTZZ22",
+            "DOI": "10.1109/TCDS.2021.3123979",
+            "CorpusId": 240247694
+          },
+          "title": "Convolutional-Recurrent Neural Networks With Multiple Attention Mechanisms for Speech Emotion Recognition",
+          "year": 2022,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/TCDS.2021.3123979?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/TCDS.2021.3123979, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "151169524",
+              "name": "Peng-Xu Jiang"
+            },
+            {
+              "authorId": "145281895",
+              "name": "Xinzhou Xu"
+            },
+            {
+              "authorId": "2510930",
+              "name": "Huawei Tao"
+            },
+            {
+              "authorId": "97775307",
+              "name": "Li Zhao"
+            },
+            {
+              "authorId": "1753723",
+              "name": "Cairong Zou"
+            }
+          ],
+          "abstract": "Speech emotion recognition (SER) aims to endow machines with the intelligence in perceiving latent affective components from speech. However, the existing works on deep-learning-based SER make it difficult to jointly consider time–frequency and sequential information in speech due to their structures, which may lead to deficiencies in exploring reasonable local emotional representations. In this regard, we propose a convolutional-recurrent neural network with multiple attention mechanisms (CRNN-MAs) for SER in this article, including the paralleled convolutional neural network (CNN) and long short-term memory (LSTM) modules, using extracted Mel-spectrums and frame-level features, respectively, in order to acquire time–frequency and sequential information simultaneously. Furthermore, we set three strategies for the proposed CRNN-MA: 1) a multiple self-attention layer in the CNN module on frame-level weights; 2) a multidimensional attention layer as the input features of the LSTM; and 3) a fusion layer summarizing the features of the two modules. Experimental results on three conventional SER corpora demonstrate the effectiveness of the proposed approach through using the convolutional-recurrent and multiple-attention modules, compared with other related models and existing state-of-the-art approaches."
+        },
+        {
+          "paperId": "92f4ebc58e553ebaf7e31367dd2768a9f5653a38",
+          "externalIds": {
+            "DBLP": "journals/jrtip/XuWZ25",
+            "DOI": "10.1007/s11554-025-01719-6",
+            "CorpusId": 279932514
+          },
+          "title": "ELA: efficient location attention for deep convolution neural networks",
+          "year": 2025,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1007/s11554-025-01719-6?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1007/s11554-025-01719-6, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "2289901228",
+              "name": "Wei Xu"
+            },
+            {
+              "authorId": "2075390039",
+              "name": "Yi Wan"
+            },
+            {
+              "authorId": "2370553023",
+              "name": "Weina Zhao"
+            }
+          ],
+          "abstract": null
+        },
+        {
+          "paperId": "b2960fbcc2cf0f1121cf5524b11c3438fbea72c0",
+          "externalIds": {
+            "PubMedCentral": "6509943",
+            "MAG": "2942942195",
+            "DOI": "10.3389/fgene.2019.00416",
+            "CorpusId": 142981474,
+            "PubMed": "31130990"
+          },
+          "title": "Dual Convolutional Neural Networks With Attention Mechanisms Based Method for Predicting Disease-Related lncRNA Genes",
+          "year": 2019,
+          "openAccessPdf": {
+            "url": "https://www.frontiersin.org/articles/10.3389/fgene.2019.00416/pdf",
+            "status": "GOLD",
+            "license": "CCBY",
+            "disclaimer": "Notice: Paper or abstract available at https://pmc.ncbi.nlm.nih.gov/articles/PMC6509943, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "1747022",
+              "name": "P. Xuan"
+            },
+            {
+              "authorId": "83489082",
+              "name": "Yangkun Cao"
+            },
+            {
+              "authorId": "31667755",
+              "name": "Tiangang Zhang"
+            },
+            {
+              "authorId": "38928503",
+              "name": "R. Kong"
+            },
+            {
+              "authorId": "47294676",
+              "name": "Zhao-Gong Zhang"
+            }
+          ],
+          "abstract": "A lot of studies indicated that aberrant expression of long non-coding RNA genes (lncRNAs) is closely related to human diseases. Identifying disease-related lncRNAs (disease lncRNAs) is critical for understanding the pathogenesis and etiology of diseases. Most of the previous methods focus on prioritizing the potential disease lncRNAs based on shallow learning methods. The methods fail to extract the deep and complex feature representations of lncRNA-disease associations. Furthermore, nearly all the methods ignore the discriminative contributions of the similarity, association, and interaction relationships among lncRNAs, disease, and miRNAs for the association prediction. A dual convolutional neural networks with attention mechanisms based method is presented for predicting the candidate disease lncRNAs, and it is referred to as CNNLDA. CNNLDA deeply integrates the multiple source data like the lncRNA similarities, the disease similarities, the lncRNA-disease associations, the lncRNA-miRNA interactions, and the miRNA-disease associations. The diverse biological premises about lncRNAs, miRNAs, and diseases are combined to construct the feature matrix from the biological perspectives. A novel framework based on the dual convolutional neural networks is developed to learn the global and attention representations of the lncRNA-disease associations. The left part of the framework exploits the various information contained by the feature matrix to learn the global representation of lncRNA-disease associations. The different connection relationships among the lncRNA, miRNA, and disease nodes and the different features of these nodes have the discriminative contributions for the association prediction. Hence we present the attention mechanisms from the relationship level and the feature level respectively, and the right part of the framework learns the attention representation of associations. The experimental results based on the cross validation indicate that CNNLDA yields superior performance than several state-of-the-art methods. Case studies on stomach cancer, lung cancer, and colon cancer further demonstrate CNNLDA's ability to discover the potential disease lncRNAs."
+        },
+        {
+          "paperId": "18d41e3bd94cf38736e37580912c3b4ba56f08d5",
+          "externalIds": {
+            "MAG": "2987761193",
+            "DBLP": "conf/iccv/ZhuCZLD19",
+            "ArXiv": "1904.05873",
+            "DOI": "10.1109/ICCV.2019.00679",
+            "CorpusId": 118673006
+          },
+          "title": "An Empirical Study of Spatial Attention Mechanisms in Deep Networks",
+          "year": 2019,
+          "openAccessPdf": {
+            "url": "https://arxiv.org/pdf/1904.05873",
+            "status": "GREEN",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/1904.05873, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "2578924",
+              "name": "Xizhou Zhu"
+            },
+            {
+              "authorId": "48573140",
+              "name": "Dazhi Cheng"
+            },
+            {
+              "authorId": "2148904543",
+              "name": "Zheng Zhang"
+            },
+            {
+              "authorId": "145676588",
+              "name": "Stephen Lin"
+            },
+            {
+              "authorId": "3304536",
+              "name": "Ji-Feng Dai"
+            }
+          ],
+          "abstract": "Attention mechanisms have become a popular component in deep neural networks, yet there has been little examination of how different influencing factors and methods for computing attention from these factors affect performance. Toward a better general understanding of attention mechanisms, we present an empirical study that ablates various spatial attention elements within a generalized attention formulation, encompassing the dominant Transformer attention as well as the prevalent deformable convolution and dynamic convolution modules. Conducted on a variety of applications, the study yields significant findings about spatial attention in deep networks, some of which run counter to conventional understanding. For example, we find that the query and key content comparison in Transformer attention is negligible for self-attention, but vital for encoder-decoder attention. A proper combination of deformable convolution with key content only saliency achieves the best accuracy-efficiency tradeoff in self-attention. Our results suggest that there exists much room for improvement in the design of attention mechanisms."
+        },
+        {
+          "paperId": "490f4b42d3058a2403e17a78554dfcea02c0eb4a",
+          "externalIds": {
+            "DBLP": "journals/pr/ZhangLSYYLS26",
+            "ArXiv": "2304.03198",
+            "DOI": "10.1016/j.patcog.2026.113208",
+            "CorpusId": 257985104
+          },
+          "title": "RFAConv: Receptive-field attention convolution for improving convolutional neural networks",
+          "year": 2023,
+          "openAccessPdf": {
+            "url": "https://arxiv.org/pdf/2304.03198",
+            "status": "GREEN",
+            "license": "public-domain",
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2304.03198, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "145863017",
+              "name": "X. Zhang"
+            },
+            {
+              "authorId": "2214978462",
+              "name": "Chen Liu"
+            },
+            {
+              "authorId": "73318423",
+              "name": "Tingting Song"
+            },
+            {
+              "authorId": "2193742632",
+              "name": "Degang Yang"
+            },
+            {
+              "authorId": "144254431",
+              "name": "Yichen Ye"
+            },
+            {
+              "authorId": "2213670153",
+              "name": "Ke Li"
+            },
+            {
+              "authorId": "2115712516",
+              "name": "Ying Song"
+            }
+          ],
+          "abstract": "In the realm of deep learning, spatial attention mechanisms have emerged as a vital method for enhancing the performance of convolutional neural networks. However, these mechanisms possess inherent limitations that cannot be overlooked. This work delves into the mechanism of spatial attention and reveals a new insight. It is that the mechanism essentially addresses the issue of convolutional parameter sharing. By addressing this issue, the convolutional kernel can efficiently extract features by employing varying weights at distinct locations. However, current spatial attention mechanisms focus on shallow attention to spatial features, which is insufficient to address the fundamental challenge of parameter sharing in convolutions involving larger kernels. In response to this challenge, we introduce a novel attention mechanism known as Receptive-Field Attention (RFA). Compared to existing spatial attention methods, RFA not only concentrates on the receptive-field spatial features but also offers effective attention weights for large convolutional kernels. Building upon the RFA concept, a Receptive-Field Attention Convolution (RFAConv) is proposed to supplant the conventional standard convolution. Notably, it offers nearly negligible increment of computational overhead and parameters, while significantly improving network performance. Furthermore, this work reveals that current spatial attention mechanisms require enhanced prioritization of receptive-field spatial features to optimize network performance. To validate the advantages of the proposed methods, we conduct many experiments across several authoritative datasets, including ImageNet, COCO, VOC, and Roboflow..."
+        },
+        {
+          "paperId": "480921c9fdd9dad3f87b8f3935b1fc6ffb67f7ab",
+          "externalIds": {
+            "DBLP": "journals/ijns/JiangNXM24",
+            "DOI": "10.1142/s0129065724500631",
+            "CorpusId": 271850156,
+            "PubMed": "39212940"
+          },
+          "title": "A Generalized Attention Mechanism to Enhance the Accuracy Performance of Neural Networks",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "",
+            "status": "CLOSED",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1142/s0129065724500631?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1142/s0129065724500631, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "authors": [
+            {
+              "authorId": "2149498281",
+              "name": "Pengcheng Jiang"
+            },
+            {
+              "authorId": "2249151256",
+              "name": "Ferrante Neri"
+            },
+            {
+              "authorId": "2149677172",
+              "name": "Yu Xue"
+            },
+            {
+              "authorId": "1696937",
+              "name": "U. Maulik"
+            }
+          ],
+          "abstract": "In many modern machine learning (ML) models, attention mechanisms (AMs) play a crucial role in processing data and identifying significant parts of the inputs, whether these are text or images. This selective focus enables subsequent stages of the model to achieve improved classification performance. Traditionally, AMs are applied as a preprocessing substructure before a neural network, such as in encoder/decoder architectures. In this paper, we extend the application of AMs to intermediate stages of data propagation within ML models. Specifically, we propose a generalized attention mechanism (GAM), which can be integrated before each layer of a neural network for classification tasks. The proposed GAM allows for at each layer/step of the ML architecture identification of the most relevant sections of the intermediate results. Our experimental results demonstrate that incorporating the proposed GAM into various ML models consistently enhances the accuracy of these models. This improvement is achieved with only a marginal increase in the number of parameters, which does not significantly affect the training time."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-27T21:44:45.809Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "semanticscholar"
+    }
+  }
+]
