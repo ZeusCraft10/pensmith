@@ -4,7 +4,7 @@
 // End-to-end smoke harness for the Tier-2 (portable Node CLI) pipeline.
 //
 // WHY THIS EXISTS
-//   The unit/contract suite (`npm test`, 971 tests) exercises each verb in
+//   The unit/contract suite (`npm test`) exercises each verb in
 //   ISOLATION — every plan/write/verify/compile/done case pre-seeds its own
 //   fixture. Nothing drives the *bare* `pensmith` router across the real
 //   new -> research -> outline -> ... chain to confirm that running one verb
@@ -14,8 +14,10 @@
 // WHAT IT DOES
 //   1. Builds an ISOLATED workspace AND an isolated data dir (LOCALAPPDATA /
 //      XDG_DATA_HOME) so the run never touches the user's real paper registry.
-//   2. Runs the pipeline fully OFFLINE (PENSMITH_NO_LLM=1 + cassettes; zero
-//      network, zero API key, zero cost).
+//   2. Runs the pipeline as a --dry-run preview (D-17-04: the http.ts gate
+//      refuses every request, research uses the labelled synthetic dry-run
+//      provider, PENSMITH_NO_LLM stubs every model call — zero network, zero
+//      API key, zero cost).
 //   3. Asserts a battery of named checks and prints a PASS/FAIL/FINDING table.
 //
 // USAGE
@@ -68,16 +70,17 @@ writeFileSync(ASSIGNMENT, [
   '',
 ].join('\n'));
 
-// Child env: fully offline + isolated data dir.
+// Child env: --dry-run mode + isolated data dir. Every verb below also passes
+// --dry-run, which sets these two itself; setting them here covers `status`.
 const childEnv = {
   ...process.env,
-  PENSMITH_NO_LLM: '1',           // LLM calls -> offline placeholder (zero egress)
-  PENSMITH_NETWORK_TESTS: '',     // source adapters -> cassettes (offline)
-  PENSMITH_DRY_RUN: '1',          // advisory marker
+  PENSMITH_NO_LLM: '1',           // every model call -> deterministic stub (zero egress)
+  PENSMITH_DRY_RUN: '1',          // http.ts gate refuses every request; synthetic sources
   LOCALAPPDATA: DATA,             // Windows data root -> isolated temp
   XDG_DATA_HOME: DATA,            // POSIX data root  -> isolated temp
   PENSMITH_CONTACT_EMAIL: 'e2e-smoke@example.invalid',
 };
+delete childEnv.PENSMITH_NETWORK_TESTS; // the live test lane never applies here
 
 /** Run a pensmith verb offline in the isolated workspace. */
 function pen(args, { cwd = WORK } = {}) {
@@ -107,7 +110,7 @@ const ppaper = (f) => path.join(WORK, '.paper', f);
 console.log(`workspace : ${WORK}`);
 console.log(`data dir  : ${DATA}`);
 console.log(`repo      : ${REPO}`);
-console.log('running offline pipeline (PENSMITH_NO_LLM=1)…\n');
+console.log('running the --dry-run pipeline (PENSMITH_NO_LLM=1, synthetic sources)…\n');
 
 // ── 0. doctor ──
 {
@@ -130,8 +133,11 @@ console.log('running offline pipeline (PENSMITH_NO_LLM=1)…\n');
   const bib = existsSync(ppaper('CITATIONS.bib'));
   if (r.code === 0 && lib && bib) pass('research', 'LIBRARY.json + CITATIONS.bib written, exit 0');
   else fail('research', `exit=${r.code}; LIBRARY.json=${lib} CITATIONS.bib=${bib}\n${r.out}`);
-  // The research verb does NOT write RESEARCH.md — record the artifact reality.
-  info('research-artifact', `RESEARCH.md present after research? ${existsSync(ppaper('RESEARCH.md'))} (expected: false — research writes LIBRARY.json)`);
+  // D-17-10: research also writes the RESEARCH.md log (the router's
+  // research-done sentinel), marked as a dry-run preview.
+  const researchMd = existsSync(ppaper('RESEARCH.md'));
+  if (researchMd) pass('research-artifact', 'RESEARCH.md written alongside LIBRARY.json');
+  else fail('research-artifact', 'research did not write RESEARCH.md (D-17-10)');
 }
 
 // ── 3. outline -> OUTLINE.md ──
@@ -167,26 +173,22 @@ console.log('running offline pipeline (PENSMITH_NO_LLM=1)…\n');
   }
 }
 
-// ── 5. BUG-2: graceful failure when OUTLINE.md has no section table ──
-// The offline outline is a placeholder (no table). write/compile must degrade
-// to a friendly diagnostic, not dump a raw Node stack trace.
+// ── 5. write (wave mode) + compile after the stub outline ──
+// Under PENSMITH_NO_LLM the structured outline stub registers real sections
+// (RUN-25), so `write` drafts every section wave-by-wave and `compile` then
+// runs its refuse-gate over unverified sections. Neither may ever print a raw
+// Node stack trace (RUN-12): every failure is one line with a documented code.
 function looksLikeRawStack(s) {
   return /\n\s+at\s+\w/.test(s) || /ERR_[A-Z_]+/.test(s) || /\.ts:\d+:\d+\)/.test(s);
 }
 for (const verb of ['write', 'compile']) {
   const r = pen([verb, '--dry-run', '--yolo']);
-  if (r.code === 0) {
-    info(`${verb}-no-sections`, `exit 0 (handled)`);
-  } else if (looksLikeRawStack(r.out)) {
-    finding(
-      `${verb}-no-sections`,
-      `\`pensmith ${verb}\` on a section-less OUTLINE.md throws a RAW stack trace ` +
-      `(unhandled parseOutline error) instead of a friendly message. Contrast: \`done\` ` +
-      `degrades gracefully ("run 'pensmith compile' first"). Reachable via --dry-run, ` +
-      `hand-edited outlines, or a malformed LLM outline.`,
-    );
+  if (looksLikeRawStack(r.out)) {
+    fail(`${verb}-after-outline`, `\`pensmith ${verb}\` printed a raw stack trace (RUN-12):\n${r.out}`);
+  } else if (r.code === 0) {
+    pass(`${verb}-after-outline`, 'exit 0');
   } else {
-    pass(`${verb}-no-sections`, `exit ${r.code} with a friendly (non-stack) diagnostic`);
+    pass(`${verb}-after-outline`, `exit ${r.code} with a one-line diagnostic (no stack)`);
   }
 }
 
@@ -213,7 +215,7 @@ for (const verb of ['write', 'compile']) {
     } catch { /* ignore */ }
     if (n >= 0 && n <= 2) pass('registry-isolation', `isolated registry holds ${n} paper(s); real registry untouched`);
     else info('registry-isolation', `isolated registry holds ${n} entries (${dead} dead)`);
-    info('registry-gc', 'NOTE: the production registry has no GC for dead (deleted-folder) entries — see findings.');
+    info('registry-gc', 'registering a paper prunes dead-folder entries (audit M3, tests/registry-gc.test.ts).');
   } else {
     info('registry-isolation', 'no isolated registry written (intake may have WARN-skipped registration)');
   }
