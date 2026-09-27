@@ -63,6 +63,14 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
 > `zeroTracePdf` for pdf). The export-confirmation gate ALWAYS prompts (generic
 > confirm even on a clean paper); only `--yolo` skips it.
 
+0. **Export blocking gate** (audit #3/#14, unconditional — `--yolo` never
+   skips it): re-check every section `VERIFICATION.md` the way compile's
+   refuse-gate does. A missing or Status-less file, `Status: failed`, a blocking
+   verdict (FABRICATED / MIS-CITED / NOT_FOUND, or UNVERIFIABLE — "re-run
+   online"), or, outside `--dry-run`, a verification written under `--dry-run`
+   (synthetic sources, RUN-27) refuses the export with EXIT_BLOCKED (4) and
+   writes nothing.
+
 1. **Whole-paper Pass 4** (DONE-01): run `runPass4` over `.paper/DRAFT.md`. The
    per-paragraph orphan counts (HIGH-confidence, R8) feed the DONE-09 gate. A
    missing draft → error out and stop (run `pensmith compile` first).

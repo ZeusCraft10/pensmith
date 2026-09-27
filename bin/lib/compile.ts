@@ -55,7 +55,8 @@ import {
   type CitationDensityEntry,
   type StalenessEntry,
 } from './compile-report.js';
-import { parseBlockingVerdictRows, blockingRowReason } from './verify/verdict-rows.js';
+import { parseBlockingVerdictRows, blockingRowReason, dryRunVerificationReason } from './verify/verdict-rows.js';
+import { networkMode } from './http-mock.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
@@ -292,6 +293,14 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
           `section ${os.n} (${os.slug}): no verifiable VERIFICATION.md (section never verified or verifier output unreadable)`,
         );
         continue; // skip the failing-citekey parse AND staleness check; section is already refused
+      }
+
+      // RUN-27: a section verified under --dry-run (synthetic sources) is not
+      // verified for a real compile — refuse it until it is re-verified.
+      const dryRunReason = dryRunVerificationReason(verificationMd, networkMode().dryRun);
+      if (dryRunReason !== null) {
+        refuseReasons.push(`section ${os.n} (${os.slug}): ${dryRunReason}`);
+        continue;
       }
 
       // Refuse-gate (COMP-01 / GATE-02): any failing verdict blocks. An

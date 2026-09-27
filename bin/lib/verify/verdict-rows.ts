@@ -110,3 +110,24 @@ export function blockingRowReason(row: BlockingVerdictRow): string {
     ? `citation [@${row.citekey}] is UNVERIFIABLE (checked offline or under --dry-run) — re-run online`
     : `citation [@${row.citekey}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND)`;
 }
+
+/**
+ * The first line of every VERIFICATION.md written under --dry-run (http-mock.ts
+ * offlineMarkerLine; tests/empty-bib.test.ts pins that the two agree).
+ */
+export const DRY_RUN_VERIFICATION_MARKER = '> OFFLINE MODE (--dry-run)';
+
+/**
+ * RUN-27 / D-17-11: a VERIFICATION.md written under --dry-run verified the
+ * labelled SYNTHETIC sources (reserved `10.0000/pensmith-dryrun.*` ids pass
+ * Pass 1 only under --dry-run). Outside --dry-run it proves nothing about the
+ * paper, so compile and done refuse it until the section is re-verified for
+ * real. Under --dry-run (a preview) it is accepted. Null when not refused.
+ */
+export function dryRunVerificationReason(verificationMd: string, dryRunNow: boolean): string | null {
+  if (dryRunNow) return null;
+  const first = verificationMd.split(/\r?\n/).find((l) => l.trim().length > 0) ?? '';
+  return first.startsWith(DRY_RUN_VERIFICATION_MARKER)
+    ? 'verified under --dry-run against synthetic sources — re-run `pensmith verify` without --dry-run'
+    : null;
+}

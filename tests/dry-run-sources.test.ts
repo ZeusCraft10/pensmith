@@ -237,3 +237,63 @@ test('RUN-27: `add <reserved DOI>` is refused outside --dry-run (non-zero) and r
   const bibPath = join(root, '.paper', 'CITATIONS.bib');
   assert.ok(!existsSync(bibPath) || !readFileSync(bibPath, 'utf8').includes('pensmith-dryrun'), 'nothing is added in either mode');
 });
+
+// ---------------------------------------------------------------------------
+// A paper verified UNDER --dry-run never compiles or exports outside it
+// ---------------------------------------------------------------------------
+
+const { runCompile } = await import('../bin/lib/compile.js');
+const { runExportBlockingGate } = await import('../bin/cli/done.js');
+const { computeDraftHash } = await import('../bin/lib/draft-hash.js');
+const { offlineMarkerLine } = await import('../bin/lib/http-mock.js');
+const { renderPass1VerdictRow, dryRunVerificationReason, DRY_RUN_VERIFICATION_MARKER } = await import('../bin/lib/verify/verdict-rows.js');
+
+/** One section whose VERIFICATION.md is what `verify --dry-run` writes for a reserved DOI. */
+function seedDryRunVerifiedPaper(): string {
+  const s = dryRun.syntheticSource('00c0ffee');
+  const root = tmp('pensmith-dryrun-verified-');
+  const secDir = join(root, '.paper', 'sections', '01-intro');
+  mkdirSync(secDir, { recursive: true });
+  const bibPath = bib({ key: 'syn', doi: s.doi ?? '', title: s.title, author: s.authors[0] ?? '', year: s.year ?? 2020 });
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), readFileSync(bibPath, 'utf8'));
+  writeFileSync(
+    join(root, '.paper', 'OUTLINE.md'),
+    ['# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', '| 1 | intro | Introduction | | 300 | syn |', ''].join('\n'),
+  );
+  const draft = '# Introduction\n\nA claim about the synthetic corpus [@syn].\n';
+  writeFileSync(join(secDir, 'DRAFT.md'), draft);
+  const hash = computeDraftHash(Buffer.from(draft, 'utf8'), ['syn']);
+  writeFileSync(
+    join(secDir, 'PLAN.md'),
+    ['---', 'schema_version: 1', 'section: 1', 'slug: intro', 'title: Introduction', 'depends_on: []', 'assigned_sources: [syn]', `verified_against_draft_hash: '${hash}'`, 'status: verified', '---', '', '## Brief', ''].join('\n'),
+  );
+  const marker = offlineMarkerLine({ ...networkMode(), sourcesOffline: true, dryRun: true, reason: '--dry-run' });
+  writeFileSync(
+    join(secDir, 'VERIFICATION.md'),
+    [marker ?? '', '', '# VERIFICATION (Section 1, intro)', '', 'Status: verified', '', '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)', '', renderPass1VerdictRow('syn', 'OK', 1, 1, 'dry-run synthetic source; D-11 AND-gate passed'), ''].join('\n'),
+  );
+  writeFileSync(join(root, '.paper', 'DRAFT.md'), draft);
+  return root;
+}
+
+test('RUN-27: the dry-run VERIFICATION.md marker is the one offlineMarkerLine writes under --dry-run', () => {
+  const marker = offlineMarkerLine({ ...networkMode(), sourcesOffline: true, dryRun: true, reason: '--dry-run' });
+  assert.ok(marker?.startsWith(DRY_RUN_VERIFICATION_MARKER), String(marker));
+  assert.equal(dryRunVerificationReason(`${marker}\n\n# VERIFICATION\n\nStatus: verified\n`, true), null, 'accepted under --dry-run');
+  assert.match(dryRunVerificationReason(`${marker}\n\n# VERIFICATION\n\nStatus: verified\n`, false) ?? '', /verified under --dry-run/);
+  const offline = offlineMarkerLine({ ...networkMode(), sourcesOffline: true, dryRun: false, reason: 'PENSMITH_OFFLINE=1' });
+  assert.equal(dryRunVerificationReason(`${offline}\n\nStatus: verified\n`, false), null, 'an offline (recorded-fixture) verification is not a dry-run one');
+});
+
+test('RUN-27: a section verified under --dry-run never compiles or exports outside --dry-run', async () => {
+  const root = seedDryRunVerifiedPaper();
+  const real = await runCompile({ paperRoot: root, yolo: true, onWarn: () => {} });
+  assert.equal(real.refused, true, 'compile outside --dry-run refuses the dry-run verification');
+  assert.ok((real.refuseReasons ?? []).some((r) => /verified under --dry-run against synthetic sources/.test(r)), JSON.stringify(real.refuseReasons));
+  const block = runExportBlockingGate(root);
+  assert.equal(block.blocked, true);
+  assert.ok(block.reasons.some((r) => /verified under --dry-run/.test(r)), JSON.stringify(block.reasons));
+
+  const preview = await underDryRun(() => runCompile({ paperRoot: root, yolo: true, onWarn: () => {} }));
+  assert.equal(preview.refused, false, `the --dry-run preview compiles: ${JSON.stringify(preview.refuseReasons)}`);
+});

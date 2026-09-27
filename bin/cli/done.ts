@@ -37,8 +37,8 @@ import { atomicWriteFile } from '../lib/atomic-write.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
 import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
 import { extractCitekeys } from '../lib/citation-token.js';
-import { parseBlockingVerdictRows, blockingRowReason } from '../lib/verify/verdict-rows.js';
-import { offlineMarkerLine } from '../lib/http-mock.js';
+import { parseBlockingVerdictRows, blockingRowReason, dryRunVerificationReason } from '../lib/verify/verdict-rows.js';
+import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -268,6 +268,10 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
     if (statusMatch[1]?.toLowerCase() === 'failed') {
       reasons.push(`section ${name}: VERIFICATION.md Status is 'failed'`);
     }
+    // RUN-27: a VERIFICATION.md written under --dry-run verified synthetic
+    // sources — outside --dry-run it never lets a paper export.
+    const dryRunReason = dryRunVerificationReason(md, networkMode().dryRun);
+    if (dryRunReason !== null) reasons.push(`section ${name}: ${dryRunReason}`);
     // Blocking verdicts — same parser + blocking set compile uses. UNVERIFIABLE
     // rows (checked offline / under --dry-run, D-17-07) block with "re-run online".
     for (const row of parseBlockingVerdictRows(md)) {
