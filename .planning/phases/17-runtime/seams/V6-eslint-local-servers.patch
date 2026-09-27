@@ -1,0 +1,20 @@
+diff --git a/eslint.config.js b/eslint.config.js
+index a637304..3c9ff0d 100644
+--- a/eslint.config.js
++++ b/eslint.config.js
+@@ -474,6 +474,15 @@ export default [
+     },
+   },
+ 
++  // === Local test servers + MockAgent seam (RUN-29; Phase 17 verbatim V6) ===
++  // The ONLY place under tests/ allowed to import undici / node:http / node:https:
++  // the RUN-21 mock LLM, the SEC-01 SNI/TLS server, the SEC-03 streaming server and
++  // the MockAgent helper. Every other test imports these helpers instead.
++  {
++    files: ['tests/helpers/local-servers/**/*.ts'],
++    rules: { 'no-restricted-imports': 'off' },
++  },
++
+   // === Red-team fixture exemption (D-08 + D-09 + D-10) ===
+   // Each fixture INTENTIONALLY violates a chokepoint. Fixtures are executed
+   // by their corresponding lint-*.test.ts files which run ESLint
