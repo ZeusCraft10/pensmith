@@ -27,7 +27,7 @@ import { runPass1, runFreshnessForDraft, renderFreshnessTable } from '../lib/ver
 import { runPass3 } from '../lib/verify/pass3.js';
 import { runPass2, renderPass2Section } from '../lib/verify/pass2.js';
 import { runPass4, renderPass4Section } from '../lib/verify/pass4.js';
-import { parseBibtex } from '../lib/citations.js';
+import { parseBibFile } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, sectionPlan, paperDir, projectRoot } from '../lib/paths.js';
 import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
@@ -71,6 +71,12 @@ export const verifyCommand = defineCommand({
     if (!Number.isInteger(n) || n < 1) {
       throw new Error(`pensmith verify: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
     }
+    // RUN-02: every VERIFICATION.md written in an offline / --dry-run session
+    // opens with the disclosure marker — the short-circuit bodies below too.
+    const markerPrefix = (): string => {
+      const m = offlineMarkerLine();
+      return m !== null ? `${m}\n\n` : '';
+    };
     // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
     // wins; 'placeholder' only if no outline row exists).
     const slug = resolveSectionSlug(projectRoot(), n, args.slug);
@@ -79,40 +85,40 @@ export const verifyCommand = defineCommand({
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');
 
     if (!existsSync(draftPath)) {
-      const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: DRAFT.md missing at ${draftPath}\n`;
+      const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: DRAFT.md missing at ${draftPath}\n`;
       await atomicWriteFile(verifPath, body);
       process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
     if (!existsSync(bibPath)) {
-      const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: .paper/CITATIONS.bib missing — run \`pensmith research\` first.\n`;
+      const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: .paper/CITATIONS.bib missing — run \`pensmith research\` first.\n`;
       await atomicWriteFile(verifPath, body);
       process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
 
-    // Empty / no-entry CITATIONS.bib is a valid Tier-2 placeholder state
-    // (research wrote an empty bib because no citations have been authored
-    // yet). parseBib throws on empty input per T-3-04 strict-parse mitigation,
-    // so we short-circuit here to "unverifiable: no citations to verify"
-    // rather than letting verify crash mid-pipeline. The DRAFT.md is read
-    // BEFORE the short-circuit so a draft with [@citekey] tokens against an
-    // empty bib still falls through to runPass1 (which will flag each as
-    // FABRICATED) — only the bib-empty + draft-citation-free intersection
-    // gets the short-circuit.
+    // Empty / no-entry CITATIONS.bib is a valid state (the library writer
+    // renders an empty library as an empty bib, BRDTH-01). With no draft
+    // citations there is nothing to verify, so we short-circuit here to
+    // "unverifiable: no citations to verify". parseBibFile reads an empty bib
+    // as zero entries (strict parseBib still throws on malformed text, T-3-04).
+    // The DRAFT.md is read BEFORE the short-circuit so a draft with [@citekey]
+    // tokens against an empty bib still falls through to runPass1 (which flags
+    // each as FABRICATED) — only the bib-empty + draft-citation-free
+    // intersection gets the short-circuit.
     const draftMd = readFileSync(draftPath, 'utf8');
     const bibText = readFileSync(bibPath, 'utf8');
     const draftHasCitekeys = /\[@[a-z][a-z0-9_-]*\]/i.test(draftMd);
     const bibIsEmpty = bibText.trim().length === 0;
     if (bibIsEmpty && !draftHasCitekeys) {
-      const body = `# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: CITATIONS.bib is empty and DRAFT.md has no [@citekey] references — nothing to verify (Tier-2 placeholder state).\n`;
+      const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: CITATIONS.bib is empty and DRAFT.md has no [@citekey] references — nothing to verify.\n`;
       await atomicWriteFile(verifPath, body);
       process.stdout.write(`pensmith verify: empty bib + no draft citekeys — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
 
     const pass1 = await runPass1(draftMd, bibPath);
-    const bibEntries = await parseBibtex(readFileSync(bibPath, 'utf8'));
+    const bibEntries = await parseBibFile(readFileSync(bibPath, 'utf8'));
     // Widened value type (additive): carries title/author/abstract so Pass 2
     // (claim support) has source metadata. runPass3 reads only DOI, so the
     // widening is backward-compatible with the runPass3 call below.

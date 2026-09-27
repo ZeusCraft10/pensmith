@@ -228,6 +228,19 @@ export async function parseBib(bibtex: string): Promise<Array<Record<string, unk
  */
 export const parseBibtex = parseBib;
 
+/**
+ * Parse the CONTENTS OF A CITATIONS.bib FILE. A whitespace-only file is a
+ * valid document with zero entries — bin/lib/library.ts renders an empty
+ * library that way (BRDTH-01) — so it yields []. Anything else goes through
+ * the strict parseBib (T-3-04): malformed text still throws. This never lets
+ * a citation look "absent": a draft that cites a key an empty bib lacks is
+ * FABRICATED in Pass 1, exactly as a key missing from a non-empty bib is.
+ */
+export async function parseBibFile(text: string): Promise<Array<Record<string, unknown>>> {
+  if (typeof text === 'string' && text.trim().length === 0) return [];
+  return parseBib(text);
+}
+
 // =====================================================================
 //   Public: renderStyle (CITE-02 / CITE-03 — generic N-style renderer)
 // =====================================================================

@@ -224,11 +224,14 @@ const UNVERIFIABLE_VERIFICATION = [
   '',
 ].join('\n');
 
+// The short-circuit body verify writes offline (RUN-02: it carries the marker too).
 const ZERO_ROW_UNVERIFIABLE = [
+  '> OFFLINE MODE (test runner) — recorded fixtures, not live results.',
+  '',
   '# VERIFICATION (Section 1, intro)',
   '',
   'Status: unverifiable',
-  'Reason: CITATIONS.bib is empty and DRAFT.md has no [@citekey] references — nothing to verify (Tier-2 placeholder state).',
+  'Reason: CITATIONS.bib is empty and DRAFT.md has no [@citekey] references — nothing to verify.',
   '',
 ].join('\n');
 
