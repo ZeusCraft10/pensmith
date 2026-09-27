@@ -331,6 +331,15 @@ export interface FetchOptions {
    *            NEVER set to false for user-supplied URLs.
    */
   untrusted?: boolean;
+  /**
+   * Phase 17 seam (verbatim V3): marks a call to the configured LLM endpoint.
+   * Only the completion module (bin/lib/anthropic.ts) sets it. `endpoint` is the
+   * configured base URL (e.g. https://api.anthropic.com or http://127.0.0.1:11434/v1);
+   * http.ts allows exactly its origin for this request (RUN-04, RUN-08, SEC-01).
+   */
+  llm?: { endpoint: string };
+  /** Phase 17 seam (verbatim V3): abort once the response body exceeds this many bytes (SEC-03). */
+  maxBytes?: number;
 }
 
 // ============================================================
