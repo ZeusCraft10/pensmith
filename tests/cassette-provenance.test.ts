@@ -1,0 +1,107 @@
+// tests/cassette-provenance.test.ts — CI-07 / D-17-14: cassettes are real
+// recordings from a working recorder, and synthetic fixtures are confined.
+//
+//   - Every cassette OUTSIDE tests/fixtures/cassettes/synthetic/ is a real
+//     recording: every entry carries the provenance scripts/refresh-cassettes.mjs
+//     writes ({ recordedAt, recorder, adapter }), with adapter = its directory.
+//   - Synthetic identifiers (10.0000/…, 10.1234/example) appear only under
+//     synthetic/ (the packaged RUN-27 dry-run corpus is not a cassette).
+//   - The exact-match store is unambiguous: no two committed entries share a
+//     canonical key, and every recorded entry replays through lookupFixture.
+//   - Recordings are https-only (arXiv included) and never commit a contact
+//     email or key in a path.
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  listCassetteFiles,
+  cassetteKey,
+  lookupFixture,
+  SCRUBBED_QUERY_PARAMS,
+  type Cassette,
+} from '../bin/lib/http-mock.js';
+
+const ROOT = fileURLToPath(new URL('./fixtures/cassettes/', import.meta.url));
+const RECORDER = 'scripts/refresh-cassettes.mjs';
+
+function rel(file: string): string {
+  return relative(ROOT, file).split(sep).join('/');
+}
+
+const files = listCassetteFiles();
+const recorded = files.filter((f) => !rel(f).startsWith('synthetic/'));
+
+test('CI-07: the store has real recordings (recorded cassettes exist outside synthetic/)', () => {
+  assert.ok(files.length > 0, 'cassettes exist');
+  assert.ok(recorded.length >= 7, `real recordings for the source adapters, got ${recorded.map(rel).join(', ')}`);
+  for (const adapter of ['crossref', 'arxiv', 'pubmed', 'unpaywall', 'retraction-watch']) {
+    assert.ok(recorded.some((f) => rel(f).startsWith(`${adapter}/`)), `a recorded ${adapter} cassette`);
+  }
+});
+
+test('CI-07: every entry outside synthetic/ carries recorder provenance for its own adapter', () => {
+  for (const file of recorded) {
+    const adapter = rel(file).split('/')[0];
+    const entries = JSON.parse(readFileSync(file, 'utf8')) as Cassette[];
+    assert.ok(Array.isArray(entries) && entries.length > 0, `${rel(file)} is a non-empty Cassette[]`);
+    for (const e of entries) {
+      const p = e.provenance;
+      assert.ok(p, `${rel(file)}: every recorded entry has provenance`);
+      assert.equal(p.recorder, RECORDER, `${rel(file)}: recorded by ${RECORDER}`);
+      assert.equal(p.adapter, adapter, `${rel(file)}: provenance.adapter matches the directory`);
+      assert.ok(!Number.isNaN(Date.parse(p.recordedAt)) && /^\d{4}-\d{2}-\d{2}T/.test(p.recordedAt), `${rel(file)}: ISO recordedAt`);
+    }
+  }
+});
+
+test('CI-07: synthetic identifiers (10.0000/…, 10.1234/example) appear only under synthetic/', () => {
+  for (const file of recorded) {
+    const text = readFileSync(file, 'utf8');
+    assert.ok(!/10\.0000[/%]/.test(text), `${rel(file)} must not carry a 10.0000/ identifier`);
+    assert.ok(!/10\.1234[/%]2?F?example/i.test(text), `${rel(file)} must not carry a 10.1234/example identifier`);
+  }
+});
+
+test('CI-07: recordings are https-only and commit no contact email or key in a path', () => {
+  for (const file of recorded) {
+    for (const e of JSON.parse(readFileSync(file, 'utf8')) as Cassette[]) {
+      assert.match(e.scope, /^https:\/\//, `${rel(file)}: ${e.scope} is https (arXiv over http is gone)`);
+      const q = new URL(`${e.scope}${e.path}`).searchParams;
+      for (const k of q.keys()) {
+        assert.ok(!SCRUBBED_QUERY_PARAMS.has(k.toLowerCase()), `${rel(file)}: scrubbed param "${k}" must not be committed`);
+      }
+    }
+  }
+});
+
+test('D-17-06: no two committed entries share a canonical key (the exact-match store is unambiguous)', () => {
+  const seen = new Map<string, string>();
+  for (const file of files) {
+    for (const e of JSON.parse(readFileSync(file, 'utf8')) as Cassette[]) {
+      if (typeof e?.scope !== 'string' || typeof e?.path !== 'string') continue;
+      const method = String(e.method).toUpperCase();
+      if (method !== 'GET' && method !== 'HEAD' && typeof e.bodySha256 !== 'string') continue; // never replayed
+      const key = cassetteKey(e);
+      const prior = seen.get(key);
+      assert.equal(prior, undefined, `duplicate fixture key ${key} in ${rel(file)} and ${prior}`);
+      seen.set(key, rel(file));
+    }
+  }
+  assert.ok(seen.size > 0);
+});
+
+test('D-17-06: every recorded entry replays through lookupFixture with its own status and body', () => {
+  for (const file of recorded) {
+    for (const e of JSON.parse(readFileSync(file, 'utf8')) as Cassette[]) {
+      const hit = lookupFixture(e.method, `${e.scope}${e.path}`);
+      assert.ok(hit, `${rel(file)}: ${e.method} ${e.scope}${e.path} replays`);
+      assert.equal(hit.status, e.status);
+      assert.equal(rel(hit.file), rel(file), 'answered by its own file');
+      const expected = typeof e.response === 'string' ? e.response : JSON.stringify(e.response);
+      assert.equal(hit.body, expected);
+    }
+  }
+});

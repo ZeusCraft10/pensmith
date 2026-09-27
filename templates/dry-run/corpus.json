@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "notice": "Synthetic dry-run corpus (RUN-27, D-17-11). Every source minted from it carries a reserved dry-run identifier (10.0000/pensmith-dryrun.<8 hex>, pensmith-dryrun.<8 hex>, or a 978-0-00 ISBN-style id with a deliberately invalid check digit) and synthetic: true. None of them refers to a real work. This is not a test cassette.",
+  "abstract_marker": "[synthetic dry-run source]",
+  "per_query": 6,
+  "year_min": 2004,
+  "year_max": 2024,
+  "title_templates": [
+    "{adj} {noun} in {field}: Evidence from a Synthetic Corpus",
+    "Revisiting {noun} for {field}",
+    "A {adj} Framework for {noun}",
+    "{noun} and Its Limits in {field}",
+    "Toward {adj} {noun}: Methods and Measures",
+    "Comparative Perspectives on {noun} in {field}",
+    "{adj} Approaches to {noun}",
+    "Measuring {noun} Across {field}"
+  ],
+  "book_templates": [
+    "{noun}: A Handbook for {field}",
+    "Foundations of {noun} in {field}",
+    "The {adj} Study of {noun}"
+  ],
+  "adjectives": [
+    "Scalable", "Robust", "Comparative", "Longitudinal", "Interpretive", "Structural",
+    "Adaptive", "Empirical", "Historical", "Integrative", "Quantitative", "Qualitative",
+    "Critical", "Contextual", "Systematic", "Emergent"
+  ],
+  "nouns": [
+    "Attention Allocation", "Knowledge Transfer", "Narrative Structure", "Model Calibration",
+    "Source Criticism", "Network Formation", "Feedback Loops", "Measurement Error",
+    "Institutional Change", "Signal Detection", "Representation Learning", "Evidence Synthesis",
+    "Collective Memory", "Resource Allocation", "Causal Inference", "Textual Transmission"
+  ],
+  "fields": [
+    "Education", "Computational Linguistics", "Medieval Studies", "Public Health",
+    "Economics", "Cognitive Science", "Environmental Policy", "Information Retrieval",
+    "Comparative Literature", "Political Science", "Materials Science", "Sociology"
+  ],
+  "surnames": [
+    "Aldersen", "Brightwell", "Castellan", "Drummond", "Esterhazy", "Fairweather",
+    "Galloway", "Hartigan", "Ingersoll", "Jessop", "Kavanagh", "Lindqvist",
+    "Montrose", "Northcote", "Okonkwo", "Pemberton", "Quintero", "Rasmussen",
+    "Sorensen", "Thackeray", "Underhill", "Vasquez", "Whitlock", "Yarrow"
+  ],
+  "given_names": [
+    "Ada", "Bram", "Clara", "Dmitri", "Elif", "Farah", "Gideon", "Hana",
+    "Ivo", "Jun", "Kiri", "Lena", "Mateo", "Nia", "Oren", "Priya"
+  ],
+  "venues": [
+    "Journal of Synthetic Studies", "Quarterly Review of Rehearsal Research", "Annals of Placeholder Research",
+    "Proceedings of the Rehearsal Conference", "Transactions on Simulated Scholarship"
+  ],
+  "publishers": ["Placeholder Press", "Rehearsal University Press"]
+}

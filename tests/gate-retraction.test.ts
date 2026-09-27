@@ -184,6 +184,36 @@ test('GATE-03: no-cassette DOI (transport/no-hit → fetchById null) → NOT a f
     false,
     'A no-cassette DOI (fetchById null) must NOT produce a GATE-03 false MIS-CITED reason (transport-error-silent)',
   );
+  // Phase 17 (RUN-03, D-17-07): offline, a DOI with no recorded fixture can be
+  // neither re-fetched nor cleared, so it is UNVERIFIABLE (blocking, "re-run
+  // online") — not FABRICATED, not OK. (It used to be FABRICATED via a
+  // Crossref first-search-item fallback, which no longer exists.)
+  assert.equal(r.verdict, 'UNVERIFIABLE');
+  assert.match(r.reason, /^offline: no recorded fixture — re-run online/);
+});
+
+// ---------------------------------------------------------------------------
+// Test 2b: a retraction re-query that is UNAVAILABLE offline is never "clean"
+// ---------------------------------------------------------------------------
+test('RUN-03: a Crossref hit whose Retraction Watch re-query has no fixture is UNVERIFIABLE, never OK', async () => {
+  const { runPass1 } = await import(pass1JsUrl.href) as {
+    runPass1: (draftMd: string, bibPath: string) => Promise<Array<{ citekey: string; verdict: string; reason: string }>>;
+  };
+  // synthetic/crossref/rw-unavailable.json answers Crossref for this DOI with a
+  // record that matches the bib exactly; there is deliberately NO Retraction
+  // Watch fixture for it. The title/author gate would pass — but the retraction
+  // status is unknown offline, so the verdict must not be OK.
+  const { draftMd, bibPath } = makeBibFixture({
+    citekey: 'rwgap2018',
+    title: 'A Retraction-Status-Unavailable Fixture',
+    author: 'Gap, Rita',
+    doi: '10.0000/rw-unavailable',
+  });
+  const results = await runPass1(draftMd, bibPath);
+  const r = results.find((x) => x.citekey === 'rwgap2018');
+  assert.ok(r);
+  assert.equal(r.verdict, 'UNVERIFIABLE');
+  assert.match(r.reason, /^offline: no recorded fixture — re-run online \(Retraction Watch re-query of 10\.0000\/rw-unavailable\)$/);
 });
 
 // ---------------------------------------------------------------------------

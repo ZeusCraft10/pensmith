@@ -3,6 +3,7 @@
 **Phase:** 15-foundation-security-hardening  
 **Authored:** 2026-06-24  
 **Wave:** 4 (Plans 15-02 through 15-07 have landed; this audit is authoritative as of Wave 4 completion)  
+**Phase 17 update (2026-09-27, egress stream — SEC-01, SEC-03, RUN-04, RUN-08):** row 2a is now PROVEN (per-request IP pinning); rows 25–27 are new (response size cap, LLM-endpoint allowlist, the one egress gate). Row 11 now runs through the V2 `detector-consent` gate.
 **Status legend:** PROVEN — enforcing test is currently green; UNPROVEN-in-CI — behavior is correct but cannot be validated in CI without live network access (manual-only verification instructions provided); UNPROVEN — no enforcing test yet (follow-up required).
 
 ---
@@ -21,7 +22,7 @@ This is a planning artifact — it lives in `.planning/` and is NOT a public-fac
 |---|--------|------------|----------------|--------|
 | 1 | SSRF — private-IP / loopback reach via user-supplied URL | `bin/lib/http.ts` → `checkSsrf()` | `tests/ssrf-guard.test.ts` | **PROVEN** |
 | 2 | SSRF — live DNS resolution to RFC1918/loopback/link-local/CGNAT/multicast/unspecified; IPv4-mapped hex-colon form | `bin/lib/http.ts` → `checkSsrf()` DNS pre-flight | `tests/ssrf-guard.test.ts` (injected resolver; WR-01/WR-02 coverage added Phase 15 fix) | **PROVEN-in-CI** / UNPROVEN-live (see §Manual) |
-| 2a | SSRF — DNS TOCTOU rebinding window: `checkSsrf()` pre-flight (call A) resolves to a public IP; undici performs its own independent resolution (call B) and may get a private IP | `bin/lib/http.ts` → `checkSsrf()` + undici `request()` | None (structural gap — no injected-resolver test covers the two-resolution split) | **PROVEN-with-residual**: the guard eliminates the easy SSRF vectors. The DNS TOCTOU window (TTL=0 rebinding) is NOT closed: there is a race between call A (validated) and call B (undici, unvalidated). Risk is LOW for a local CLI — the attacker must control DNS AND gain from internal network access during the race window. Preferred fix: pass the pre-resolved IP to undici via a custom `connect` callback (socket pinning). Deferred: requires undici `connect` API changes and risks destabilizing the network path. Follow-up tracked. |
+| 2a | SSRF — DNS TOCTOU rebinding window: the pre-flight resolves to a public IP, then the socket resolves again and gets a private IP | `bin/lib/http.ts` → `checkSsrf()` / `checkLlmEndpoint()` return the validated addresses; a per-request undici `Agent` whose connect `lookup` answers ONLY with them (hostname kept for TLS SNI + Host); `maxRedirections: 0` | `tests/ssrf-pinning.test.ts` (a resolver that flips public → 127.0.0.1 is consulted once and the dial goes to the validated IP; SNI server reached with the hostname as SNI/Host; cert verification on; a 302 is returned, never followed; `maxRedirections: 0` asserted) | **PROVEN** (SEC-01, Phase 17). Redirect following arrives with SRC-01 (Phase 19) as an http.ts loop that re-pins every hop. |
 | 3 | API key / secret leaks to SESSION.log | `bin/lib/pii.ts` → `redactKeys()` + `deepRedactPii()` | `tests/pii.test.ts` + `tests/session-log.test.ts` | **PROVEN** |
 | 4 | PII (email, phone, SSN, credit card) leaks to SESSION.log via nested object | `bin/lib/pii.ts` → `deepRedactPii()` + `bin/lib/session-log.ts` → `buildRecord()` | `tests/session-log.test.ts` (HARD-03 rows) | **PROVEN** |
 | 5 | Lock-race / clobber — two callers target same file via different path conventions, get different stubs, never contend | `bin/lib/lock.ts` → `stubFor()` canonicalization (resolve + realpathSync) | `tests/lock.test.ts` (HARD-01 row: "two path conventions for one file → identical stub") | **PROVEN** |
@@ -30,7 +31,7 @@ This is a planning artifact — it lives in `.planning/` and is NOT a public-fac
 | 8 | PDF supply-chain — pdf-parse version drift (malicious or breaking update) | `package.json` exact pin `pdf-parse@1.1.1` + dual-surface pin guard | `tests/repo-files.test.ts` ("pdf-parse stays pinned exact at 1.1.1") | **PROVEN** |
 | 9 | PDF OOM / hang — unbounded input causes memory exhaustion or infinite parse loop | `bin/lib/pdf-text.ts` → `MAX_PDF_BYTES` cap + `PDF_TIMEOUT_MS` Promise.race | `tests/pdf-text-bounds.test.ts` | **PROVEN-with-residual**: byte cap (50 MB) bounds memory. The `Promise.race` timeout correctly unblocks the caller, but `Promise.race` does NOT cancel the losing promise — pdf-parse continues executing in the background consuming CPU until complete. For pathological PDFs this may be seconds to minutes of background CPU. Risk LOW for a local CLI (the 50 MB cap bounds OOM; the post-timeout compute is bounded by the file size). Follow-up: migrate parse to `worker_threads` and call `worker.terminate()` on timeout to cleanly reclaim both memory and CPU. Deferred: larger change, risks destabilizing the PDF path. |
 | 10 | GPTZero API-key never logged | `bin/lib/honesty.ts` → presence-only check; value reaches only the `x-api-key` header | `tests/honesty.test.ts` (key-never-logged assertion) | **PROVEN** |
-| 11 | GPTZero full-body egress without consent — raw essay text sent to third-party service | `bin/lib/honesty.ts` → consent gate (ask() before POST, default-off in non-TTY) | `tests/honesty.test.ts` (HARD-05: "consent declined → scoreHonesty returns null without POST") | **PROVEN** |
+| 11 | GPTZero full-body egress without consent — raw essay text sent to third-party service | `bin/lib/honesty.ts` → the V2 `detector-consent` gate (asks in a terminal; `--yolo` NEVER skips it; a run that cannot prompt gives "score unavailable (no consent)"); offline never sends | `tests/honesty.test.ts` (consent declined / no terminal / `--yolo` → no POST; offline → "score unavailable (offline)") | **PROVEN** |
 | 12 | GPTZero over-sized POST — excessive bandwidth / API cost on large papers | `bin/lib/honesty.ts` → `GPTZERO_MAX_BYTES` truncation before POST | `tests/honesty.test.ts` (HARD-05: "over-cap input → POST body truncated") | **PROVEN** |
 | 13 | GPTZero live-egress consent with real API key | `bin/lib/honesty.ts` → same consent gate | manual only (see §Manual) | **UNPROVEN-in-CI** |
 | 14 | Zero-trace in exported .docx — pensmith metadata stamp in Word XML | `bin/lib/exporter.ts` → `zeroTracePatch()` + deterministic ZIP generator | `tests/zero-trace-export.test.ts` (Tests A–B) + `tests/repo-files.test.ts` (fixture hash-pins) | **PROVEN** |
@@ -44,6 +45,9 @@ This is a planning artifact — it lives in `.planning/` and is NOT a public-fac
 | 22 | Concurrency over-parallelization — Semaphore slot leak on bare-caller exception | `bin/lib/budget.ts` → `Semaphore.withLock()` try/finally; bare-caller doc warning | `tests/budget.test.ts` (HARD-06: withLock-releases-permit-on-throw; FIFO regression) | **PROVEN** |
 | 23 | HTTP cache header leak — cached responses include auth/session headers from original request | `bin/lib/http.ts` → cache layer | `tests/http-cache-no-header-leak.test.ts` | **PROVEN** |
 | 24 | Honesty framing drift — "evade detection" wording sneaks into honesty report | `references/honesty-framing.md` → SHA-256 hash-pin (WN-3) | `tests/repo-files.test.ts` ("references/honesty-framing.md hash-pin") | **PROVEN** |
+| 25 | Unbounded upstream response — a hostile or broken endpoint streams an endless body (memory exhaustion; the old `MAX_PDF_BYTES` check ran only after full buffering) | `bin/lib/http.ts` → the body is streamed under a per-call `maxBytes` (JSON/text 8 MiB, PDFs `MAX_PDF_BYTES`, LLM 16 MiB); a larger `content-length` is refused up front; `ResponseTooLargeError` aborts before full buffering | `tests/response-size-cap.test.ts` (a 60 MB stream is aborted at the cap with bounded memory growth; a declared oversize length is refused before reading) | **PROVEN** (SEC-03, Phase 17) |
+| 26 | LLM-endpoint SSRF — a configured model endpoint used to reach metadata / internal services | `bin/lib/http.ts` → `checkLlmEndpoint()` for `opts.llm` requests only: exact configured origin; `http://` only when every resolved address is loopback; 169.254.0.0/16, fe80::/10, fd00:ec2::254 never; other private ranges only over https; pinned like every request. Source requests to loopback/private are always refused | `tests/egress-gate.test.ts` (D-17-09 rows) | **PROVEN** (RUN-08 transport half, Phase 17). Config-time validation of `endpoint` / `api_key_env` belongs to the runtime loader (llm stream). |
+| 27 | Silent egress in offline / dry-run modes — an adapter, `verifyDoi`, the Pass-3 OA-PDF fetch or the LLM leaking a request when the user asked for no network | `bin/lib/http.ts` → one gate: `--dry-run` refuses every request; `PENSMITH_NO_LLM` refuses `opts.llm`; sources-offline answers only exact recorded fixtures (else `OfflineEgressError`), and dials only a configured loopback LLM endpoint | `tests/egress-gate.test.ts`, `tests/flags.test.ts` H3 (socket-level dial recorder over research / add / verify / compile / done under `--dry-run` and `PENSMITH_OFFLINE=1`: 0 dials), `tests/net-mode.test.ts` (no env bypass in http.ts), `tests/offline-fail-closed.test.ts` (a fixture miss is never another record), `tests/dry-run-sources.test.ts` (dry-run research: 0 dials, 0 cassette reads) | **PROVEN** (RUN-04, Phase 17) |
 
 ---
 
@@ -53,7 +57,7 @@ The following threats are architecturally mitigated but cannot be exercised in C
 
 | # | Behavior | Requirement | Why Manual | Test Instructions |
 |---|----------|-------------|------------|-------------------|
-| M-1 | A real `add <url>` to a host that resolves to 127.x/10.x/169.254.x is blocked via live DNS | HARD-02 | CI uses an injected resolver; real DNS unavailable | `PENSMITH_NETWORK_TESTS=1 pensmith add http://<host-resolving-to-private-IP>` — expect rejection with SSRF error |
+| M-1 | A real `add <url>` to a host that resolves to 127.x/10.x/169.254.x is blocked via live DNS | HARD-02 | CI uses an injected resolver; real DNS unavailable | `pensmith add http://<host-resolving-to-private-IP>` (live is the default since Phase 17) — expect rejection with an `SSRF guard:` error |
 | M-2 | GPTZero consent + size cap with a real API key on a large paper | HARD-05 | Live API + real GPTZERO_API_KEY required | Run `pensmith done` on a paper > GPTZERO_MAX_BYTES with a valid key; confirm: (a) consent prompt shown, (b) POST body truncated to cap, (c) key not printed anywhere in output |
 
 ---
@@ -64,6 +68,7 @@ The following threats are architecturally mitigated but cannot be exercised in C
 |------|-----------|------------------------|
 | 15-02 (lock.ts) | T-15-01 (BLOCKER-01/02, D-26/D-40) | Rows 5, 6 |
 | 15-03 (http.ts) | T-15-02 (ARCH-12/13, D-06 SSRF), T-15-06a (TokenBucket FIFO) | Rows 1, 2, 2a, 21, 23 |
+| Phase 17 (egress: http.ts gate) | SEC-01, SEC-03, RUN-04, RUN-08 (D-17-05, D-17-09) | Rows 2a, 25, 26, 27 |
 | 15-04 (pii.ts + session-log.ts) | T-15-03 (T-01-06/07/08 PII/key leak) | Rows 3, 4 |
 | 15-05 (pdf-text.ts) | T-15-04b (OOM/hang), T-15-04b-SC (supply-chain pin) | Rows 8, 9 |
 | 15-06 (pass2/pass4 fencing) | T-15-04c (prompt injection) | Row 7 |
@@ -90,13 +95,13 @@ These were identified before Phase 15 and are included for completeness:
 
 ## Counts
 
-- **Total threats enumerated:** 26 rows (+ 2 manual-only; rows 2a and updated 9 added Phase 15 fix)
-- **PROVEN (CI-verified):** 23
+- **Total threats enumerated:** 28 table rows (1–27 plus 2a) + 2 manual-only (M-1, M-2); rows 2a and updated 9 added Phase 15 fix; rows 25–27 added Phase 17 (counts recounted from the table in Phase 17)
+- **PROVEN (CI-verified):** 25
 - **PROVEN-in-CI / UNPROVEN-live:** 1 (row 2 — live DNS SSRF)
-- **PROVEN-with-residual (documented gap, deferred fix):** 2 (row 2a — DNS TOCTOU; row 9 — post-timeout PDF CPU)
+- **PROVEN-with-residual (documented gap, deferred fix):** 1 (row 9 — post-timeout PDF CPU)
 - **UNPROVEN-in-CI (manual-only):** 2 (rows 13, M-2 — live GPTZero)
 - **UNPROVEN (no test, follow-up required):** 0
 
-Rows 2a and 9 are HONEST about residual gaps (WR-03 DNS TOCTOU and WR-05 post-timeout PDF CPU). Both have deferred fixes documented. The risk is LOW for the current CLI threat model.
+Row 9 is HONEST about its residual gap (WR-05 post-timeout PDF CPU); its deferred fix is documented. Row 2a's WR-03 DNS TOCTOU gap was closed in Phase 17 (SEC-01).
 
 All enforcing tests confirmed green at time of authoring (Wave 4, 2026-06-24). Phase 15 fix audit: 2026-06-24.

@@ -13,11 +13,17 @@
 // issued.date-parts) and lets the rest slide.
 //
 // Error handling per plan: HTTP non-2xx -> [] for search, null for fetchById.
-// Adapter never throws on transport errors; the research workflow degrades
-// gracefully when a single adapter fails.
+// Transport errors degrade the same way, EXCEPT the typed OfflineEgressError
+// (sources-offline fixture miss or --dry-run), which is rethrown so callers can
+// say "unavailable (offline | dry-run)" instead of "not found" (RUN-03/RUN-04).
+// There is no adapter-level offline branch: offline replay is the exact-match
+// fixture store inside bin/lib/http.ts (D-06, D-17-06), never a first-item
+// fallback.
+//
+// `select=` keeps search responses small (the fields toCandidate reads), which
+// also keeps recorded fixtures under the 51200-byte cap.
 
-import { fetch as httpFetch } from '../http.js';
-import { isOfflineMode, loadCassetteDir, type Cassette } from '../http-mock.js';
+import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -81,79 +87,37 @@ function toCandidate(item: CrossrefItem): SourceCandidate | null {
   };
 }
 
+/** The Crossref fields toCandidate reads (search responses only; /works/{doi} has no select). */
+const SEARCH_SELECT = 'DOI,title,author,issued,abstract,container-title,type';
+
 export async function search(
   query: string,
   opts: { limit?: number } = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
-
-  // Offline path: serve from cassette (PR-time CI default — see http-mock.ts header).
-  // Scan EVERY committed crossref cassette (not just works-attention) so a query
-  // hydrated by add.ts (ERGO-06 PDF path) resolves against whichever cassette
-  // carries it (e.g. add-doi.json).
-  if (isOfflineMode()) {
-    const cassette = loadCassetteDir('crossref');
-    if (!cassette) return [];
-    const searchEntry = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('/works?query='),
-    );
-    if (!searchEntry) return [];
-    const body = searchEntry.response as { message?: { items?: CrossrefItem[] } };
-    const items = body?.message?.items ?? [];
-    return items.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
-  }
-
-  // Online path: real HTTP via the chokepoint.
-  const url = `${BASE}/works?query=${encodeURIComponent(query)}&rows=${limit}`;
+  const url = `${BASE}/works?query=${encodeURIComponent(query)}&rows=${limit}&select=${encodeURIComponent(SEARCH_SELECT)}`;
   try {
-    const res = await httpFetch(url, {
-      source: 'crossref',
-    });
+    const res = await httpFetch(url, { source: 'crossref', maxBytes: MAX_JSON_RESPONSE_BYTES });
     if (res.status !== 200) return [];
-    const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
+    const body = JSON.parse(res.body) as unknown;
     const items = ((body as { message?: { items?: CrossrefItem[] } })?.message?.items) ?? [];
     return items.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
-  } catch {
+  } catch (err) {
+    if (isOfflineEgressError(err)) throw err;
     return [];
   }
 }
 
 export async function fetchById(doi: string): Promise<SourceCandidate | null> {
-  if (isOfflineMode()) {
-    // Scan EVERY committed crossref cassette so a DOI carried by a non-default
-    // cassette (e.g. add-doi.json → 10.1038/nphys1170 for ERGO-06 `add <doi>`)
-    // resolves by direct path-match without a per-DOI basename lookup.
-    const cassette: Cassette[] | null = loadCassetteDir('crossref');
-    if (!cassette) return null;
-    // First try a direct path-match cassette for this DOI.
-    const direct = cassette.find(
-      (c) => c.method === 'GET' && c.path === `/works/${doi}`,
-    );
-    if (direct) {
-      const body = direct.response as { message?: CrossrefItem };
-      return body?.message ? toCandidate(body.message) : null;
-    }
-    // Fallback: pull the first item from the search cassette so test-only
-    // DOIs like '10.0000/test' get an object response (per test shape).
-    const search = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('/works?query='),
-    );
-    if (!search) return null;
-    const items = (search.response as { message?: { items?: CrossrefItem[] } })?.message?.items ?? [];
-    const first = items[0];
-    return first ? toCandidate(first) : null;
-  }
-
   const url = `${BASE}/works/${encodeURIComponent(doi)}`;
   try {
-    const res = await httpFetch(url, {
-      source: 'crossref',
-    });
+    const res = await httpFetch(url, { source: 'crossref', maxBytes: MAX_JSON_RESPONSE_BYTES });
     if (res.status !== 200) return null;
-    const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
+    const body = JSON.parse(res.body) as unknown;
     const msg = (body as { message?: CrossrefItem })?.message;
     return msg ? toCandidate(msg) : null;
-  } catch {
+  } catch (err) {
+    if (isOfflineEgressError(err)) throw err;
     return null;
   }
 }

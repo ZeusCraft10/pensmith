@@ -14,9 +14,10 @@
 // the direct writeBibtex call with the one library writer). existsSync alone is
 // insufficient. Until 08-06 wires it, every test SKIPS so `npm test` stays GREEN.
 //
-// Offline: PENSMITH_NETWORK_TESTS is NOT set, so isOfflineMode() is true and the
-// crossref adapter serves the committed tests/fixtures/cassettes/crossref/
-// add-doi.json cassette. The DOI under test is 10.1038/nphys1170.
+// Offline: the test runner is sources-offline (RUN-01), so the crossref adapter
+// replays the EXACT recorded fixture tests/fixtures/cassettes/crossref/
+// works-nphys1170.json. The DOI under test is 10.1038/nphys1170; the BYO PDF's
+// title search is recorded in search-byo-pdf-title.json.
 //
 // TYPECHECK NOTE: the not-yet-built verb is imported via a runtime URL.href
 // specifier so `tsc --noEmit` stays clean while the module is absent.
@@ -32,7 +33,7 @@ const ADD_SRC = fileURLToPath(new URL('../bin/cli/add.ts', import.meta.url));
 const ADD_MOD = new URL('../bin/cli/add.js', import.meta.url);
 const BYO_PDF = fileURLToPath(new URL('../tests/fixtures/pdf/byo-text.pdf', import.meta.url));
 
-// The DOI carried by the committed add-doi.json cassette.
+// The DOI with a recorded Crossref answer (works-nphys1170.json).
 const CASSETTE_DOI = '10.1038/nphys1170';
 
 // SOURCE-GREP skip-predicate: add.ts must route through the two chokepoints.
@@ -105,8 +106,15 @@ test('ERGO-06: `add <doi>` hydrates from the offline crossref cassette and appen
   const bibPath = path.join(root, '.paper', 'CITATIONS.bib');
   assert.ok(fs.existsSync(bibPath), 'add <doi> must append to .paper/CITATIONS.bib');
   const bib = fs.readFileSync(bibPath, 'utf8');
-  // The cassette title is "Quantum coherence in photosynthetic complexes" (2009).
-  assert.match(bib, /Quantum coherence|photosynthetic|2009/i, 'hydrated entry must reflect the cassette payload');
+  // The RECORDED Crossref answer for 10.1038/nphys1170 (CI-07) is the real work:
+  // "Measured measurement" (Aspelmeyer, Nature Physics 2009). The old hand-written
+  // cassette claimed a different paper for this DOI.
+  const { loadCassetteFile } = await import('../bin/lib/http-mock.js');
+  const recorded = loadCassetteFile('crossref', 'works-nphys1170');
+  const msg = (recorded?.[0]?.response as { message: { title: string[]; author: Array<{ family: string }> } }).message;
+  assert.ok(bib.includes(msg.title[0]!), 'hydrated entry must carry the recorded title');
+  assert.ok(bib.includes(msg.author[0]!.family), 'hydrated entry must carry the recorded first author');
+  assert.match(bib, /2009/);
 });
 
 test('RSCH-05: `add <pdf>` reads the committed text-bearing PDF and extracts text via the existing chokepoint', { skip: !READY }, async () => {

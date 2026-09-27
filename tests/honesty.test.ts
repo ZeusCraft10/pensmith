@@ -6,7 +6,11 @@
 // lands honesty.ts and these turn GREEN.
 //
 // Covers:
-//   - DONE-04: GPTZero score via offline cassette; absent GPTZERO_API_KEY → null.
+//   - DONE-04: GPTZero score in the live test lane (V5 MockAgent answering from
+//     the synthetic fixture); absent GPTZERO_API_KEY → null. Phase 17 (RUN-03):
+//     offline never replays a canned score — "score unavailable (offline)".
+//   - D-17-16: the V2 detector-consent gate; --yolo never skips it; a run that
+//     cannot prompt gives "score unavailable (no consent)".
 //   - DONE-04: the rendered honest-framing NOTE is read VERBATIM from the locked
 //     references/honesty-framing.md (proving the copy is rendered from the locked
 //     file, not inlined). This is the core-non-negotiable guard.
@@ -19,9 +23,12 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCassetteFile } from '../bin/lib/http-mock.js';
+import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 
 // ---- HARD-05 skip gate: probe GPTZERO_MAX_BYTES export ----
 // Wave-2 (15-05) adds GPTZERO_MAX_BYTES and the disclosure/consent seam exports.
@@ -94,23 +101,130 @@ test('honesty: absent GPTZERO_API_KEY → scoreHonesty returns null (skip-clean)
   },
 );
 
-test('honesty: scoreHonesty (offline cassette + key) → { aiProbability:0.82, classification:AI_ONLY, backend:gptzero } (DONE-04)',
+/** Capture process.stdout writes during `fn`. */
+async function captureStdout<T>(fn: () => Promise<T>): Promise<{ value: T; out: string }> {
+  const chunks: string[] = [];
+  const orig = process.stdout.write.bind(process.stdout);
+  // Tee, never swallow: the node:test child reports results on stdout, and a
+  // swallowed report line makes earlier tests silently vanish from the run.
+  (process.stdout as unknown as { write: (s: string) => boolean }).write = (s: string) => {
+    chunks.push(String(s));
+    return orig(s);
+  };
+  try {
+    const value = await fn();
+    return { value, out: chunks.join('') };
+  } finally {
+    (process.stdout as unknown as { write: typeof orig }).write = orig;
+  }
+}
+
+/** The live test lane with the V5 MockAgent answering GPTZero from the synthetic fixture. */
+async function withGptzeroMock<T>(
+  fn: (captured: Array<{ body: string; apiKey: string | undefined }>) => Promise<T>,
+  opts: { intercept: boolean } = { intercept: true },
+): Promise<T> {
+  const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
+  process.env['PENSMITH_NETWORK_TESTS'] = '1';
+  // A live score appends to <cwd>/.paper/COSTS.jsonl (ARCH-10) — run from a
+  // temp project, never from the repo checkout.
+  const savedCwd = process.cwd();
+  process.chdir(mkdtempSync(join(tmpdir(), 'pensmith-honesty-')));
+  const { agent, restore } = installMockAgent();
+  const captured: Array<{ body: string; apiKey: string | undefined }> = [];
+  if (opts.intercept) {
+    const cs = loadCassetteFile('gptzero', 'predict-text');
+    agent
+      .get('https://api.gptzero.me')
+      .intercept({ path: '/v2/predict/text', method: 'POST' })
+      .reply((req) => {
+        const headers = (req.headers ?? {}) as Record<string, string>;
+        captured.push({ body: String(req.body ?? ''), apiKey: headers['x-api-key'] });
+        return { statusCode: 200, data: JSON.stringify(cs?.[0]?.response), responseOptions: { headers: { 'content-type': 'application/json' } } };
+      })
+      .persist();
+  }
+  try {
+    return await fn(captured);
+  } finally {
+    await restore();
+    process.chdir(savedCwd);
+    if (savedLane === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
+    else process.env['PENSMITH_NETWORK_TESTS'] = savedLane;
+  }
+}
+
+test('RUN-03: offline, scoreHonesty prints "score unavailable (offline)" and sends nothing — never a canned score',
   { skip: !existsSync(honestySrcPath) },
   async () => {
     const mod = await import(honestyModUrl.href) as {
-      scoreHonesty: (t: string) => Promise<{ aiProbability: number; classification: string; backend: string } | null>;
+      scoreHonesty: (t: string) => Promise<unknown>;
     };
     const saved = process.env['GPTZERO_API_KEY'];
     process.env['GPTZERO_API_KEY'] = 'test-key-offline';
     try {
-      const result = await mod.scoreHonesty('some text');
-      assert.ok(result, 'offline cassette must yield a score');
-      assert.equal(result!.aiProbability, 0.82);
-      assert.equal(result!.classification, 'AI_ONLY');
-      assert.equal(result!.backend, 'gptzero');
+      const { value, out } = await captureStdout(() => mod.scoreHonesty('some text'));
+      assert.equal(value, null, 'offline never yields a score (no replayed canned 82%)');
+      assert.match(out, /GPTZero honesty score unavailable \(offline\) — no text was sent\./);
+      assert.ok(!out.includes('test-key-offline'), 'the key value is never printed');
     } finally {
       if (saved === undefined) delete process.env['GPTZERO_API_KEY'];
       else process.env['GPTZERO_API_KEY'] = saved;
+    }
+  },
+);
+
+test('honesty (live lane): consent granted → { aiProbability:0.82, classification:AI_ONLY, backend:gptzero } (DONE-04)',
+  { skip: !existsSync(honestySrcPath) },
+  async () => {
+    const mod = await import(honestyModUrl.href) as {
+      scoreHonestyWithOptions: (t: string, o?: { consentGranted?: boolean; yolo?: boolean }) =>
+        Promise<{ aiProbability: number; classification: string; backend: string } | null>;
+    };
+    const saved = process.env['GPTZERO_API_KEY'];
+    process.env['GPTZERO_API_KEY'] = 'test-key-live-lane';
+    try {
+      await withGptzeroMock(async (captured) => {
+        const { value } = await captureStdout(() => mod.scoreHonestyWithOptions('paper text', { consentGranted: true }));
+        assert.ok(value, 'a consented live call yields a score');
+        assert.equal(value!.aiProbability, 0.82);
+        assert.equal(value!.classification, 'AI_ONLY');
+        assert.equal(value!.backend, 'gptzero');
+        assert.equal(captured.length, 1);
+        assert.deepEqual(JSON.parse(captured[0]!.body), { document: 'paper text' });
+        assert.equal(captured[0]!.apiKey, 'test-key-live-lane', 'the key reaches only the x-api-key header');
+      });
+    } finally {
+      if (saved === undefined) delete process.env['GPTZERO_API_KEY'];
+      else process.env['GPTZERO_API_KEY'] = saved;
+    }
+  },
+);
+
+test('D-17-16: a run that cannot prompt gives "score unavailable (no consent)" — and --yolo never skips the gate',
+  { skip: !existsSync(honestySrcPath) },
+  async () => {
+    const mod = await import(honestyModUrl.href) as {
+      scoreHonestyWithOptions: (t: string, o?: { consentGranted?: boolean; yolo?: boolean }) => Promise<unknown>;
+    };
+    const saved = process.env['GPTZERO_API_KEY'];
+    const savedMode = process.env['PENSMITH_PROMPT_MODE'];
+    process.env['GPTZERO_API_KEY'] = 'test-key-no-consent';
+    delete process.env['PENSMITH_PROMPT_MODE'];
+    try {
+      await withGptzeroMock(async (captured) => {
+        for (const yolo of [false, true]) {
+          const { value, out } = await captureStdout(() => mod.scoreHonestyWithOptions('paper text', { yolo }));
+          assert.equal(value, null, `yolo=${yolo}: no terminal → no score`);
+          assert.match(out, /GPTZero honesty score unavailable \(no consent\) — no text was sent\./);
+          assert.match(out, /Disclosure: /, 'the transmission disclosure is shown before the consent question');
+        }
+        assert.equal(captured.length, 0, 'nothing was POSTed without consent');
+      });
+    } finally {
+      if (saved === undefined) delete process.env['GPTZERO_API_KEY'];
+      else process.env['GPTZERO_API_KEY'] = saved;
+      if (savedMode !== undefined) process.env['PENSMITH_PROMPT_MODE'] = savedMode;
     }
   },
 );

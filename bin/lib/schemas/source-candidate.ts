@@ -37,6 +37,11 @@ const BaseFields = {
   last_verified: z.string().datetime(),
   citekey: z.string().regex(/^[a-z][a-z0-9_-]*$/),
   raw: z.unknown(),
+  // RUN-27 (D-17-11): the synthetic dry-run provider flags every source it
+  // mints (reserved-namespace ids) and may carry arXiv-style / ISBN-style ids.
+  synthetic: z.boolean().optional(),
+  arxiv: z.string().optional(),
+  isbn: z.string().optional(),
 };
 
 export const SourceCandidateSchema = z.discriminatedUnion('source', [
@@ -52,5 +57,8 @@ export const SourceCandidateSchema = z.discriminatedUnion('source', [
   // variant so they validate against the locked D-14 schema and flow through the
   // SAME scoring + RSCH-11 retraction cross-check as every other adapter.
   z.object({ ...BaseFields, source: z.literal('zotero-mcp') }),
+  // RUN-27: the labelled synthetic dry-run provider (bin/lib/sources/dry-run.ts).
+  // Only ever produced under --dry-run; outside it research filters reserved ids.
+  z.object({ ...BaseFields, source: z.literal('dry-run') }),
 ]);
 export type SourceCandidate = z.infer<typeof SourceCandidateSchema>;

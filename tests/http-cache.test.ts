@@ -15,12 +15,23 @@ import * as fsp from 'node:fs/promises';
 import * as fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {
-  MockAgent,
-  setGlobalDispatcher,
-  getGlobalDispatcher,
-  type Dispatcher,
-} from 'undici';
+import { MockAgent, installMockAgent, type InstalledMockAgent } from './helpers/local-servers/mock-agent.js';
+
+// Phase 17 (V5 + RUN-04): MockAgent comes from the local-servers seam, and a
+// test that intercepts a public host runs in the live test lane
+// (PENSMITH_NETWORK_TESTS=1 for its duration) — otherwise the egress gate
+// answers from the exact-match fixture store before any dispatcher is used.
+let installedAgents: InstalledMockAgent[] = [];
+function installAgent(): MockAgent {
+  const m = installMockAgent();
+  installedAgents.push(m);
+  return m.agent;
+}
+async function restoreAgents(): Promise<void> {
+  for (const m of installedAgents.reverse()) await m.restore().catch(() => undefined);
+  installedAgents = [];
+}
+
 import {
   fetch,
   _resetWarnedForTest,
@@ -56,7 +67,8 @@ async function withFreshState<T>(fn: () => Promise<T>): Promise<T> {
   const savedXdg = process.env.XDG_DATA_HOME;
   const savedHome = process.env.HOME;
   const savedEmail = process.env.PENSMITH_CONTACT_EMAIL;
-  const savedDispatcher: Dispatcher = getGlobalDispatcher();
+  const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
+  process.env['PENSMITH_NETWORK_TESTS'] = '1';
   process.env.LOCALAPPDATA = tmpRoot;
   process.env.XDG_DATA_HOME = tmpRoot;
   process.env.HOME = tmpRoot;
@@ -74,7 +86,9 @@ async function withFreshState<T>(fn: () => Promise<T>): Promise<T> {
     else process.env.HOME = savedHome;
     if (savedEmail === undefined) delete process.env.PENSMITH_CONTACT_EMAIL;
     else process.env.PENSMITH_CONTACT_EMAIL = savedEmail;
-    setGlobalDispatcher(savedDispatcher);
+    await restoreAgents();
+    if (savedLane === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
+    else process.env['PENSMITH_NETWORK_TESTS'] = savedLane;
     await fsp.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
   }
 }
@@ -86,9 +100,7 @@ async function withFreshState<T>(fn: () => Promise<T>): Promise<T> {
 test('http-cache: second GET returns cached:true and does not consume a second interceptor', async () => {
   await withFreshState(async () => {
     const cassette = loadCassette('crossref-doi-200');
-    const agent = new MockAgent();
-    agent.disableNetConnect();
-    setGlobalDispatcher(agent);
+    const agent = installAgent();
     const u = new URL(cassette.request.url);
     const pool = agent.get(u.origin);
     const r0 = cassette.responses[0]!;
@@ -107,7 +119,7 @@ test('http-cache: second GET returns cached:true and does not consume a second i
       // No remaining interceptors prove we hit network exactly once.
       assert.deepEqual(agent.pendingInterceptors(), [], 'no leftover interceptors');
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -115,9 +127,7 @@ test('http-cache: second GET returns cached:true and does not consume a second i
 test('http-cache: TTL expiry triggers re-fetch', async () => {
   await withFreshState(async () => {
     const cassette = loadCassette('crossref-doi-200');
-    const agent = new MockAgent();
-    agent.disableNetConnect();
-    setGlobalDispatcher(agent);
+    const agent = installAgent();
     const u = new URL(cassette.request.url);
     const pool = agent.get(u.origin);
     const r0 = cassette.responses[0]!;
@@ -146,7 +156,7 @@ test('http-cache: TTL expiry triggers re-fetch', async () => {
       assert.equal(second.cached, false, 'TTL-expired entry must be ignored');
       assert.deepEqual(agent.pendingInterceptors(), [], 'both interceptors must have fired');
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -154,9 +164,7 @@ test('http-cache: TTL expiry triggers re-fetch', async () => {
 test('http-cache: noCache:true bypasses cache for both read and write', async () => {
   await withFreshState(async () => {
     const cassette = loadCassette('crossref-doi-200');
-    const agent = new MockAgent();
-    agent.disableNetConnect();
-    setGlobalDispatcher(agent);
+    const agent = installAgent();
     const u = new URL(cassette.request.url);
     const pool = agent.get(u.origin);
     const r0 = cassette.responses[0]!;
@@ -175,7 +183,7 @@ test('http-cache: noCache:true bypasses cache for both read and write', async ()
       const files = await fsp.readdir(dir).catch(() => [] as string[]);
       assert.equal(files.length, 0, `noCache must skip write; got ${files.join(', ')}`);
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -183,9 +191,7 @@ test('http-cache: noCache:true bypasses cache for both read and write', async ()
 test('http-cache: cache writes leave no .tmp file behind (atomicWriteFile)', async () => {
   await withFreshState(async () => {
     const cassette = loadCassette('crossref-doi-200');
-    const agent = new MockAgent();
-    agent.disableNetConnect();
-    setGlobalDispatcher(agent);
+    const agent = installAgent();
     const u = new URL(cassette.request.url);
     const pool = agent.get(u.origin);
     const r0 = cassette.responses[0]!;
@@ -199,7 +205,7 @@ test('http-cache: cache writes leave no .tmp file behind (atomicWriteFile)', asy
       const tmpLeaks = files.filter((f) => f.endsWith('.tmp'));
       assert.deepEqual(tmpLeaks, [], `unexpected .tmp leak: ${files.join(', ')}`);
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -207,9 +213,7 @@ test('http-cache: cache writes leave no .tmp file behind (atomicWriteFile)', asy
 test('http-cache: 404 GET is also cached (verifier short-circuit)', async () => {
   await withFreshState(async () => {
     const cassette = loadCassette('crossref-doi-404');
-    const agent = new MockAgent();
-    agent.disableNetConnect();
-    setGlobalDispatcher(agent);
+    const agent = installAgent();
     const u = new URL(cassette.request.url);
     const pool = agent.get(u.origin);
     const r0 = cassette.responses[0]!;
@@ -225,7 +229,7 @@ test('http-cache: 404 GET is also cached (verifier short-circuit)', async () => 
       assert.equal(second.cached, true);
       assert.deepEqual(agent.pendingInterceptors(), []);
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -240,9 +244,7 @@ test('WR-07: 404 cache TTL is 1 hour, NOT the 7-day positive-TTL of crossref', a
   // savedAt = 2h ago and asserts the next fetch ignores it (re-dispatches).
   await withFreshState(async () => {
     const cassette = loadCassette('crossref-doi-404');
-    const agent = new MockAgent();
-    agent.disableNetConnect();
-    setGlobalDispatcher(agent);
+    const agent = installAgent();
     const u = new URL(cassette.request.url);
     const pool = agent.get(u.origin);
     const r0 = cassette.responses[0]!;
@@ -285,7 +287,7 @@ test('WR-07: 404 cache TTL is 1 hour, NOT the 7-day positive-TTL of crossref', a
         'both interceptors must fire — bug regressed if the second one is still pending',
       );
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -297,9 +299,7 @@ test('WR-07: 200 cache TTL is the per-source 7-day default (sibling assertion)',
   // asymmetry between 200 and 404 TTLs introduced by WR-07.
   await withFreshState(async () => {
     const cassette = loadCassette('crossref-doi-200');
-    const agent = new MockAgent();
-    agent.disableNetConnect();
-    setGlobalDispatcher(agent);
+    const agent = installAgent();
     const u = new URL(cassette.request.url);
     const pool = agent.get(u.origin);
     const r0 = cassette.responses[0]!;
@@ -329,7 +329,7 @@ test('WR-07: 200 cache TTL is the per-source 7-day default (sibling assertion)',
         'WR-07 sibling: 2h-old cached 200 must still be a cache hit (7d TTL preserved for positives)',
       );
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -343,9 +343,7 @@ test('FLAG-01: malformed cache envelope reads as a miss (no crash, no torn respo
     // wrong shape. After FLAG-01 the http module must treat this as a
     // cache MISS (return cached:false), NOT crash on undefined fields.
     const cassette = loadCassette('crossref-doi-200');
-    const agent = new MockAgent();
-    agent.disableNetConnect();
-    setGlobalDispatcher(agent);
+    const agent = installAgent();
     const u = new URL(cassette.request.url);
     const pool = agent.get(u.origin);
     const r0 = cassette.responses[0]!;
@@ -403,7 +401,7 @@ test('FLAG-01: malformed cache envelope reads as a miss (no crash, no torn respo
       );
       assert.deepEqual(agent.pendingInterceptors(), [], 'both interceptors must have fired');
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -411,7 +409,7 @@ test('FLAG-01: malformed cache envelope reads as a miss (no crash, no torn respo
 test('http-cache: clearCache removes every entry', async () => {
   await withFreshState(async () => {
     const cassette = loadCassette('crossref-doi-200');
-    const agent = applyCassetteWithReplies(cassette);
+    applyCassetteWithReplies(cassette);
     try {
       await fetch(cassette.request.url, { source: 'crossref' });
       const dir = pensmithHttpCacheDir();
@@ -422,7 +420,7 @@ test('http-cache: clearCache removes every entry', async () => {
       const after = await fsp.readdir(dir).catch(() => [] as string[]);
       assert.equal(after.length, 0, 'clearCache must empty the dir');
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });
@@ -431,9 +429,7 @@ test('http-cache: clearCache removes every entry', async () => {
 // Helper used by the last test
 // ------------------------------------------------------------------
 function applyCassetteWithReplies(cassette: Cassette): MockAgent {
-  const agent = new MockAgent();
-  agent.disableNetConnect();
-  setGlobalDispatcher(agent);
+  const agent = installAgent();
   const u = new URL(cassette.request.url);
   const pool = agent.get(u.origin);
   for (const r of cassette.responses) {

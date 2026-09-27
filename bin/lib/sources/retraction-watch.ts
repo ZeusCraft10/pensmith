@@ -15,9 +15,14 @@
 //
 // Endpoint:
 //   fetchById:  GET https://api.labs.crossref.org/data/retractions?filter=record:<doi>
+//
+// Offline replay is the exact-match fixture store inside bin/lib/http.ts (a
+// fixture for exactly this DOI or nothing — never another record). The typed
+// OfflineEgressError is rethrown: an offline miss is "retraction status
+// unavailable", never "not retracted" (RUN-03). SRC-04 (Phase 19) replaces this
+// endpoint, whose live answer is a 200 wrapping an inner error.
 
-import { fetch as httpFetch } from '../http.js';
-import { isOfflineMode, loadCassetteDir } from '../http-mock.js';
+import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -91,37 +96,16 @@ function toCandidate(item: RWItem): SourceCandidate | null {
  * list, or null when it isn't.
  */
 export async function fetchById(doi: string): Promise<SourceCandidate | null> {
-  if (isOfflineMode()) {
-    // Scan ALL committed retraction-watch cassettes for a direct DOI match.
-    // Using loadCassetteDir (not a single fetchById-fake file) ensures new per-DOI
-    // cassettes (e.g. gate03-blocking-doi.json) are found without changing this code.
-    // Only a DIRECT path match (filter=record:<doi>) returns a hit; there is NO
-    // fallback to the first-any-retractions entry — that fallback caused false positives
-    // for DOIs not present in any cassette (GATE-03 blocking test deviation fix).
-    const cassettes = loadCassetteDir('retraction-watch');
-    // Treat an empty cassette array the same as a missing directory (null).
-    // loadCassetteDir returns [] when the directory exists but has no .json files;
-    // allowing [] through causes every DOI to look un-retracted (silent GATE-03
-    // bypass) in an environment where the cassette dir was created but files deleted.
-    if (!cassettes || cassettes.length === 0) return null;
-    const direct = cassettes.find(
-      (c) => c.method === 'GET' && c.path.includes(`filter=record:${doi}`),
-    );
-    if (!direct) return null;
-    const body = direct.response as RWResponse;
-    const first = body.items?.[0];
-    return first ? toCandidate(first) : null;
-  }
-
   const url = `${BASE}/data/retractions?filter=record:${encodeURIComponent(doi)}`;
   try {
-    const res = await httpFetch(url, { source: 'retraction-watch' });
+    const res = await httpFetch(url, { source: 'retraction-watch', maxBytes: MAX_JSON_RESPONSE_BYTES });
     if (res.status !== 200) return null;
-    const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
+    const body = JSON.parse(res.body) as unknown;
     const items = (body as RWResponse)?.items ?? [];
     const first = items[0];
     return first ? toCandidate(first) : null;
-  } catch {
+  } catch (err) {
+    if (isOfflineEgressError(err)) throw err;
     return null;
   }
 }

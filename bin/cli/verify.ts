@@ -35,6 +35,8 @@ import { loadFrontmatterDoc } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
+import { offlineMarkerLine } from '../lib/http-mock.js';
+import { EXIT_BLOCKED } from '../lib/exit-codes.js';
 
 // Force-bind the deterministic primitives so the acceptance grep
 // (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
@@ -131,13 +133,19 @@ export const verifyCommand = defineCommand({
     const freshness = await runFreshnessForDraft(draftMd, bibPath);
 
     // Aggregate: any FABRICATED → status: failed; any MIS-CITED → status: failed;
-    // any PDF_UNAVAILABLE/TEXT_UNAVAILABLE → status: unverifiable; else verified.
-    const hasFail = pass1.some((r) => r.verdict !== 'OK')
+    // any Pass-1 UNVERIFIABLE (the re-fetch was unavailable offline / under
+    // --dry-run, D-17-07) → status: unverifiable AND blocked (exit 4; compile and
+    // done refuse the row with "re-run online"); any PDF_UNAVAILABLE /
+    // TEXT_UNAVAILABLE → status: unverifiable (advisory); else verified.
+    const hasFail = pass1.some((r) => r.verdict === 'FABRICATED' || r.verdict === 'MIS-CITED')
       || pass3.some((r) => r.verdict === 'NOT_FOUND');
-    const hasUnverifiable = pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
+    const blockingUnverifiable = pass1.some((r) => r.verdict === 'UNVERIFIABLE');
+    const hasUnverifiable = blockingUnverifiable
+      || pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
     const status: 'verified' | 'failed' | 'unverifiable' = hasFail
       ? 'failed'
       : (hasUnverifiable ? 'unverifiable' : 'verified');
+    if (blockingUnverifiable && !hasFail) process.exitCode = EXIT_BLOCKED;
 
     // Pass-2 (claim support) + Pass-4 (orphan-claim audit), advisory. Both run
     // AFTER hasFail / hasUnverifiable / status are frozen above and NEVER feed
@@ -150,7 +158,9 @@ export const verifyCommand = defineCommand({
     const pass2 = await runPass2(draftMd, bibByCitekey, { n });
     const pass4 = await runPass4(draftMd, { n });
 
+    const offlineMarker = offlineMarkerLine();
     const lines = [
+      ...(offlineMarker !== null ? [offlineMarker, ''] : []),
       `# VERIFICATION (Section ${n}, ${slug})`,
       '',
       `Status: ${status}`,
@@ -206,8 +216,9 @@ export const verifyCommand = defineCommand({
     }
 
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
-    // RUN-09: a failed section is a verifier refusal — `blocked` maps to EXIT_BLOCKED.
-    return { ok: status !== 'failed', status, blocked: hasFail, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
+    // RUN-09: a failed or blocking-UNVERIFIABLE section is a verifier refusal —
+    // `blocked` maps to EXIT_BLOCKED.
+    return { ok: status !== 'failed' && !blockingUnverifiable, status, blocked: hasFail || blockingUnverifiable, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
   },
 });
 

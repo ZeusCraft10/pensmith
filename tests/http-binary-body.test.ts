@@ -3,18 +3,22 @@
 // http.ts decoded every response body with body.text() (UTF-8), so URL-fetched
 // PDF bytes were corrupted before extraction — `add <url>.pdf` could never work
 // even after the routing fix (#12). http.ts now exposes byte-faithful bodyBytes
-// alongside the (lossy-for-binary) text body.
+// alongside the (lossy-for-binary) text body — read ONCE from the capped body
+// stream (SEC-03).
+//
+// Phase 17: MockAgent comes from the V5 local-servers seam, and the test runs in
+// the live test lane (PENSMITH_NETWORK_TESTS=1): offline, the egress gate would
+// answer from the exact-match fixture store before any dispatcher is used.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MockAgent, setGlobalDispatcher, getGlobalDispatcher, type Dispatcher } from 'undici';
+import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 import { fetch, _resetBucketsForTest } from '../bin/lib/http.js';
 
 test('audit #29: bodyBytes is byte-faithful for binary content the UTF-8 body corrupts', async () => {
-  const prev: Dispatcher = getGlobalDispatcher();
-  const agent = new MockAgent();
-  agent.disableNetConnect();
-  setGlobalDispatcher(agent);
+  const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
+  process.env['PENSMITH_NETWORK_TESTS'] = '1';
+  const { agent, restore } = installMockAgent();
   try {
     // Bytes that are NOT valid UTF-8: %PDF-1.5 magic then a lone 0xFF / 0x80 etc.
     const bytes = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x35, 0x0a, 0xff, 0x00, 0x80, 0xfe, 0x89]);
@@ -26,7 +30,6 @@ test('audit #29: bodyBytes is byte-faithful for binary content the UTF-8 body co
       .reply(200, bytes, { headers: { 'content-type': 'application/pdf' } });
 
     _resetBucketsForTest();
-    // source:'crossref' is a trusted host → bypasses the SSRF pre-flight (no DNS).
     const res = await fetch(url, { source: 'crossref', noCache: true });
 
     assert.ok(res.bodyBytes, 'a live fetch must populate bodyBytes');
@@ -37,6 +40,8 @@ test('audit #29: bodyBytes is byte-faithful for binary content the UTF-8 body co
     assert.notDeepEqual([...Buffer.from(res.body, 'utf8')], [...bytes],
       'the UTF-8 text body is lossy for these bytes (why bodyBytes is required)');
   } finally {
-    setGlobalDispatcher(prev);
+    await restore();
+    if (savedLane === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
+    else process.env['PENSMITH_NETWORK_TESTS'] = savedLane;
   }
 });

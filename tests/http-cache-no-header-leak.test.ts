@@ -16,12 +16,23 @@ import assert from 'node:assert/strict';
 import * as fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import {
-  MockAgent,
-  setGlobalDispatcher,
-  getGlobalDispatcher,
-  type Dispatcher,
-} from 'undici';
+import { MockAgent, installMockAgent, type InstalledMockAgent } from './helpers/local-servers/mock-agent.js';
+
+// Phase 17 (V5 + RUN-04): MockAgent comes from the local-servers seam, and a
+// test that intercepts a public host runs in the live test lane
+// (PENSMITH_NETWORK_TESTS=1 for its duration) — otherwise the egress gate
+// answers from the exact-match fixture store before any dispatcher is used.
+let installedAgents: InstalledMockAgent[] = [];
+function installAgent(): MockAgent {
+  const m = installMockAgent();
+  installedAgents.push(m);
+  return m.agent;
+}
+async function restoreAgents(): Promise<void> {
+  for (const m of installedAgents.reverse()) await m.restore().catch(() => undefined);
+  installedAgents = [];
+}
+
 import { fetch, _resetWarnedForTest, _resetBucketsForTest } from '../bin/lib/http.js';
 import { pensmithHttpCacheDir } from '../bin/lib/paths.js';
 
@@ -38,7 +49,8 @@ async function withFreshState<T>(fn: () => Promise<T>): Promise<T> {
   const savedXdg = process.env.XDG_DATA_HOME;
   const savedHome = process.env.HOME;
   const savedEmail = process.env.PENSMITH_CONTACT_EMAIL;
-  const savedDispatcher: Dispatcher = getGlobalDispatcher();
+  const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
+  process.env['PENSMITH_NETWORK_TESTS'] = '1';
   process.env.LOCALAPPDATA = tmpRoot;
   process.env.XDG_DATA_HOME = tmpRoot;
   process.env.HOME = tmpRoot;
@@ -56,7 +68,9 @@ async function withFreshState<T>(fn: () => Promise<T>): Promise<T> {
     else process.env.HOME = savedHome;
     if (savedEmail === undefined) delete process.env.PENSMITH_CONTACT_EMAIL;
     else process.env.PENSMITH_CONTACT_EMAIL = savedEmail;
-    setGlobalDispatcher(savedDispatcher);
+    await restoreAgents();
+    if (savedLane === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
+    else process.env['PENSMITH_NETWORK_TESTS'] = savedLane;
     await fsp.rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
   }
 }
@@ -87,9 +101,7 @@ async function walkAndReadAll(dir: string): Promise<Array<{ path: string; text: 
 test('CR-03 / FLAG-06: Set-Cookie / Authorization / x-amz-* never reach the cache file', async () => {
   await withFreshState(async () => {
     const url = 'https://api.crossref.org/works/10.1038/header-leak-test';
-    const agent = new MockAgent();
-    agent.disableNetConnect();
-    setGlobalDispatcher(agent);
+    const agent = installAgent();
     const u = new URL(url);
     const pool = agent.get(u.origin);
     // Plant the sentinel-bearing headers alongside benign cache-relevant
@@ -140,7 +152,7 @@ test('CR-03 / FLAG-06: Set-Cookie / Authorization / x-amz-* never reach the cach
         'etag must be preserved by the allowlist',
       );
     } finally {
-      await agent.close();
+      await restoreAgents();
     }
   });
 });

@@ -1,0 +1,13 @@
+{
+  "id": "network-tests-seam",
+  "requirement": "RUN-01",
+  "module": "bin/lib/http-mock.ts",
+  "description": "PENSMITH_NETWORK_TESTS is the one test-lane live seam: only bin/lib/http-mock.ts networkMode() reads it, and only inside a test context (NODE_TEST_CONTEXT / PENSMITH_TEST=1), where it turns sources live for that test. No other bin/, mcp/ or hooks/ code may name it; everything else asks networkMode() / isOfflineMode(). A real user is live by default and needs no env.",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs"],
+  "allow": ["bin/lib/http-mock.ts"],
+  "match": {
+    "kind": "file-regex",
+    "pattern": "PENSMITH_NETWORK_TESTS"
+  },
+  "fixture": "tests/fixtures/chokepoints/network-tests-seam.violation.ts.txt"
+}

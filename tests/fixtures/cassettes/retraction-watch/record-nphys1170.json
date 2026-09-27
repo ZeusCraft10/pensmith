@@ -1,0 +1,27 @@
+[
+  {
+    "scope": "https://api.labs.crossref.org",
+    "method": "GET",
+    "path": "/data/retractions?filter=record%3A10.1038%2Fnphys1170",
+    "status": 200,
+    "response": {
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "statusCode": "403",
+      "body": {
+        "status": "403",
+        "message-type": "not-polite",
+        "message": "The given request did not specify a polite email address. Please see: https://api.crossref.org/swagger-ui/index.html#/docs"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-27T18:21:41.283Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "retraction-watch"
+    }
+  }
+]

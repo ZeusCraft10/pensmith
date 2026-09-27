@@ -14,9 +14,11 @@
 //
 // Fields requested are intentionally narrow: title, authors, year, externalIds,
 // abstract. This keeps response size predictable for the cassette budget.
+//
+// Offline replay is the exact-match fixture store inside bin/lib/http.ts; the
+// typed OfflineEgressError is rethrown so callers report "unavailable (offline)".
 
-import { fetch as httpFetch } from '../http.js';
-import { isOfflineMode, loadCassetteFile } from '../http-mock.js';
+import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import { getS2ApiKey } from '../runtime.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
@@ -112,81 +114,38 @@ export async function search(
   opts: { limit?: number } = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
-  if (isOfflineMode()) {
-    const cassette = loadCassetteFile('semanticscholar', 'search-attention');
-    if (!cassette) return [];
-    // Prefer a cassette path whose `query=` matches the requested query (after
-    // URL-encoding the spaces with `+`). Falls back to the first search entry.
-    const encoded = query.replace(/\s+/g, '+');
-    const exact = cassette.find(
-      (c) =>
-        c.method === 'GET' &&
-        c.path.includes('/paper/search?') &&
-        c.path.includes(`query=${encoded}`),
-    );
-    const searchEntry = exact ?? cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('/paper/search?'),
-    );
-    if (!searchEntry) return [];
-    const body = searchEntry.response as { data?: S2Paper[] };
-    const data = body?.data ?? [];
-    // D-16 keyless mode check: still warn-once if the env var is missing,
-    // matching the online code path. Tests cover this via the missing-key
-    // assertion.
-    if (!process.env['PENSMITH_S2_API_KEY']) warnKeylessOnce();
-    return data.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
-  }
-
   const url = `${BASE}/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&fields=${encodeURIComponent(FIELDS)}`;
   const headers = buildHeaders();
   try {
     const res = await httpFetch(url, {
       source: 'semanticscholar',
+      maxBytes: MAX_JSON_RESPONSE_BYTES,
       ...(headers ? { headers } : {}),
     });
     if (res.status !== 200) return [];
-    const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
+    const body = JSON.parse(res.body) as unknown;
     const data = ((body as { data?: S2Paper[] })?.data) ?? [];
     return data.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
-  } catch {
+  } catch (err) {
+    if (isOfflineEgressError(err)) throw err;
     return [];
   }
 }
 
 export async function fetchById(paperId: string): Promise<SourceCandidate | null> {
-  if (isOfflineMode()) {
-    const cassette = loadCassetteFile('semanticscholar', 'search-attention');
-    if (!cassette) return null;
-    const direct = cassette.find(
-      (c) =>
-        c.method === 'GET' &&
-        c.path.includes(`/paper/${paperId}`) &&
-        !c.path.includes('/paper/search'),
-    );
-    if (direct) {
-      return toCandidate(direct.response as S2Paper);
-    }
-    // Fallback: first search-cassette result.
-    const search = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('/paper/search?'),
-    );
-    if (!search) return null;
-    const data = (search.response as { data?: S2Paper[] })?.data ?? [];
-    const first = data[0];
-    return first ? toCandidate(first) : null;
-  }
-
   const url = `${BASE}/graph/v1/paper/${encodeURIComponent(paperId)}?fields=${encodeURIComponent(FIELDS)}`;
   const headers = buildHeaders();
   try {
     const res = await httpFetch(url, {
       source: 'semanticscholar',
+      maxBytes: MAX_JSON_RESPONSE_BYTES,
       ...(headers ? { headers } : {}),
     });
     if (res.status !== 200) return null;
-    const body = typeof res.body === 'string' ? (JSON.parse(res.body) as unknown) : res.body;
+    const body = JSON.parse(res.body) as unknown;
     return toCandidate(body as S2Paper);
-  } catch {
+  } catch (err) {
+    if (isOfflineEgressError(err)) throw err;
     return null;
   }
 }

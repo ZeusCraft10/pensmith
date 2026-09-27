@@ -23,8 +23,11 @@ degrade_if_missing:
 `pensmith research` is the second verb in the workflow (intake → **research** →
 outline → ...). It consumes `.paper/INTAKE.md`, produces `.paper/LIBRARY.json`
 and `.paper/CITATIONS.bib`, and is the only verb in Phase 3 that talks to
-external HTTP APIs (through `bin/lib/http.ts`, with cassette-mocked
-deterministic replay in CI per `bin/lib/http-mock.ts`).
+external HTTP APIs (through `bin/lib/http.ts`). Sources are live by default;
+recorded fixtures are replayed (exact match, fail closed) only under the test
+runner or `PENSMITH_OFFLINE=1`, and `--dry-run` uses labelled synthetic sources
+(`bin/lib/http-mock.ts` decides the mode). The run also writes
+`.paper/RESEARCH.md`, the research log, marked when it ran offline.
 
 The implementation lives in `bin/cli/research.ts` (created by Plan 07). The
 workflow body below is the prompt that drives the verb under both Tier 1

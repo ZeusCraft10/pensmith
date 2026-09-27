@@ -1,0 +1,14 @@
+// Chokepoint fixture (tests-network-imports, RUN-29): a test importing undici
+// and node:http directly instead of going through tests/helpers/local-servers/.
+// It sidesteps the V5 MockAgent entry point and the local-server helpers, so
+// the test no longer exercises the http.ts egress gate — the rule must flag it.
+import { test } from 'node:test';
+import { MockAgent, setGlobalDispatcher } from 'undici';
+import { createServer } from 'node:http';
+
+test('sneaky direct network test', async () => {
+  const agent = new MockAgent();
+  setGlobalDispatcher(agent);
+  const server = createServer((_req, res) => res.end('ok'));
+  server.close();
+});

@@ -1,44 +1,40 @@
-// tests/sources/unpaywall.test.ts — Wave 0 stub for RSCH-03/04 / T-3-13.
-// Per-adapter parse test against committed cassette.
+// tests/sources/unpaywall.test.ts — Unpaywall adapter (RSCH-04, T-3-13, CI-07).
 //
-// Production code required: bin/lib/sources/unpaywall.ts + cassette
-// Until then: existence assertions fire RED; behavioral tests skip gracefully.
+// The recorded cassette is TODAY's live shape: `z_authors` carries only
+// `raw_author_name`, which the current parser cannot read, so a real lookup
+// hydrates nothing (the known SRC-03 gap, Phase 19 — the fixture is recorded
+// faithfully, never edited to look parseable). The OA-PDF extraction path is
+// covered by the hand-written SYNTHETIC pre-2025-shape fixture.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync } from 'node:fs';
+import * as unpaywall from '../../bin/lib/sources/unpaywall.js';
+import { RECORDED_DOI, recorded, assertOfflineMiss } from './recorded.js';
 
-const ADAPTER = 'unpaywall';
-const adapterPath = new URL(`../../bin/lib/sources/${ADAPTER}.ts`, import.meta.url);
-const cassetteDir = new URL(`../../tests/fixtures/cassettes/${ADAPTER}/`, import.meta.url);
-
-test(`${ADAPTER}: production adapter exists (RSCH-03/04, T-3-13)`, () => {
-  assert.ok(existsSync(adapterPath), `MISSING: bin/lib/sources/${ADAPTER}.ts — Plan 04 must create before this test passes`);
+test('unpaywall: the recorded cassette is the current live shape (raw_author_name only)', () => {
+  const [entry] = recorded('unpaywall', 'doi-nphys1170');
+  const body = entry!.response as { doi: string; z_authors?: Array<Record<string, unknown>> };
+  assert.equal(body.doi, RECORDED_DOI);
+  assert.ok((body.z_authors ?? []).length > 0);
+  assert.ok((body.z_authors ?? []).every((a) => typeof a['raw_author_name'] === 'string'));
+  assert.ok(!entry!.path.includes('email='), 'the contact email param is scrubbed from the recording');
 });
 
-test(`${ADAPTER}: at least one cassette exists (T-3-13)`, () => {
-  const hasCassettes = existsSync(cassetteDir) && readdirSync(cassetteDir).some(f => f.endsWith('.json'));
-  assert.ok(hasCassettes, `MISSING: tests/fixtures/cassettes/${ADAPTER}/*.json — Plan 04 Task 4.1 must create`);
+test('unpaywall.fetchById() replays the recorded answer for exactly that DOI (current shape → no candidate until SRC-03)', async () => {
+  assert.equal(await unpaywall.fetchById(RECORDED_DOI), null);
 });
 
-const skip = !existsSync(adapterPath);
-
-test(`${ADAPTER}.search() parses cassette into SourceCandidate[] (RSCH-03)`, { skip }, async () => {
-  const adapter = await import(`../../bin/lib/sources/${ADAPTER}.js`);
-  const results = await adapter.search('attention mechanisms');
-  assert.ok(Array.isArray(results), 'search returns array');
-  assert.ok(results.length >= 0, 'search returns non-negative count');
+test('unpaywall.fetchById() extracts oa_pdf_url from the synthetic pre-2025 shape (RSCH-04)', async () => {
+  const r = await unpaywall.fetchById('10.48550/arxiv.1706.03762');
+  assert.ok(r);
+  assert.equal(r.source, 'unpaywall');
+  assert.equal(r.oa_pdf_url, 'https://arxiv.org/pdf/1706.03762.pdf');
 });
 
-test(`${ADAPTER}.fetchById() parses cassette into SourceCandidate | null with oa_pdf_url (RSCH-04)`, { skip }, async () => {
-  const adapter = await import(`../../bin/lib/sources/${ADAPTER}.js`);
-  const result = await adapter.fetchById('10.48550/arxiv.1706.03762');
-  assert.ok(result === null || typeof result === 'object', 'fetchById returns object or null');
-  if (result !== null) {
-    // Unpaywall should populate oa_pdf_url when OA full-text is available.
-    assert.ok(
-      'oa_pdf_url' in (result as object),
-      'Unpaywall SourceCandidate must have oa_pdf_url field (D-14)',
-    );
-  }
+test('unpaywall.search() is inert (DOI-lookup service)', async () => {
+  assert.deepEqual(await unpaywall.search('attention mechanisms'), []);
+});
+
+test('RUN-03: an unrecorded DOI is a typed offline miss — never the first cassette entry', async () => {
+  await assertOfflineMiss(() => unpaywall.fetchById('10.1093/nar/gkab1112'), 'fetchById miss');
 });

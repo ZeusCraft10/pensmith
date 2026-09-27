@@ -41,7 +41,9 @@ export type Kind =
   | 'cost'
   | 'event'
   | 'warn'
-  | 'error';
+  | 'error'
+  | 'llm'
+  | 'http';
 
 export interface SessionLogger {
   prompt(payload: Record<string, unknown>): void;
@@ -52,6 +54,8 @@ export interface SessionLogger {
   event(payload: Record<string, unknown>): void;
   warn(payload: Record<string, unknown>): void;
   error(payload: Record<string, unknown>): void;
+  llm(payload: Record<string, unknown>): void;         // RUN-15 kind:"llm" record (V4)
+  http(payload: Record<string, unknown>): void;        // RUN-15 kind:"http" record (V4)
   child(bindings: Record<string, unknown>): SessionLogger;
   close(): Promise<void>;
 }
@@ -83,6 +87,11 @@ let mirrorPromptsToStderr = false;
 
 export function setMirrorPromptsToStderr(enabled: boolean): void {
   mirrorPromptsToStderr = !!enabled;
+}
+
+/** Phase 17 seam (verbatim V4): read by bin/lib/http.ts to mirror outbound payloads (RUN-16). */
+export function isMirrorPromptsEnabled(): boolean {
+  return mirrorPromptsToStderr;
 }
 
 // ---------------------------------------------------------------------------
@@ -386,6 +395,8 @@ export function openSessionLog(opts: OpenSessionLogOptions = {}): SessionLogger 
       event: (p) => emit('event', p),
       warn: (p) => emit('warn', p),
       error: (p) => emit('error', p),
+      llm: (p) => emit('llm', p),
+      http: (p) => emit('http', p),
       child: (b) =>
         makeLogger({
           ...bindings,

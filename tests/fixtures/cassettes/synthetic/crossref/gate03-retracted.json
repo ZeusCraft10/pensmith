@@ -1,0 +1,37 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.0000/gate03-retracted",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message": {
+        "DOI": "10.0000/gate03-retracted",
+        "title": [
+          "A Gate-03 Live-Retraction Fixture"
+        ],
+        "author": [
+          {
+            "family": "Retracted",
+            "given": "Alice"
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2018
+            ]
+          ]
+        },
+        "container-title": [
+          "Test Journal"
+        ],
+        "type": "journal-article"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

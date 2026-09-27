@@ -1,8 +1,8 @@
 // bin/lib/sources/arxiv.ts — arXiv adapter (RSCH-03, RSCH-04, T-3-13).
 //
-// Endpoints:
-//   search:     GET http://export.arxiv.org/api/query?search_query=<encoded>&max_results=20
-//   fetchById:  GET http://export.arxiv.org/api/query?id_list=<arxiv-id>
+// Endpoints (https — the http:// host answers 301, CI-07):
+//   search:     GET https://export.arxiv.org/api/query?search_query=<encoded>&max_results=20
+//   fetchById:  GET https://export.arxiv.org/api/query?id_list=<arxiv-id>
 //
 // Atom-XML response. We parse with a tiny regex-based extractor instead of
 // pulling in fast-xml-parser / xml2js — keeps zero extra deps and the shape
@@ -11,13 +11,18 @@
 // RESEARCH note: arXiv has no polite-pool, no auth — the only courtesy is
 // the documented 3-second rate limit which our chokepoint (bin/lib/http.ts)
 // already enforces per-source.
+//
+// Offline replay is the exact-match fixture store inside bin/lib/http.ts; the
+// typed OfflineEgressError is rethrown so callers report "unavailable (offline)".
 
-import { fetch as httpFetch } from '../http.js';
-import { isOfflineMode, loadCassetteFile } from '../http-mock.js';
+import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
-const BASE = 'http://export.arxiv.org';
+const BASE = 'https://export.arxiv.org';
+
+/** arXiv serves Atom XML; http.ts defaults to Accept: application/json. */
+const ATOM_HEADERS = { accept: 'application/atom+xml' } as const;
 
 interface ArxivEntry {
   id: string;
@@ -116,21 +121,10 @@ function toCandidate(entry: ArxivEntry): SourceCandidate | null {
   };
 }
 
-// CR-05 fix: hard per-adapter size cap. The `extractAll` regex is lazy
-// (linear on well-formed input) but a malformed feed without a closing
-// </entry> can devolve into O(n²) backtracking on huge bodies. Cap at
-// 10 MB — real arXiv ATOM responses for a 50-result query are < 200 KB.
-// TODO: add an upstream MAX_RESPONSE_BYTES cap inside bin/lib/http.ts.callOnce
-// (deferred — out of scope for this fix pass; see REVIEW.md CR-05).
-const ARXIV_MAX_BODY_BYTES = 10_000_000;
-
+// CR-05: the lazy `extractAll` regex is linear on well-formed input; a huge
+// malformed feed is bounded upstream — bin/lib/http.ts streams every body under
+// maxBytes and aborts with ResponseTooLargeError before full buffering (SEC-03).
 function parseFeed(xml: string): SourceCandidate[] {
-  if (xml.length > ARXIV_MAX_BODY_BYTES) {
-    process.stderr.write(
-      `[arxiv] feed body exceeds ${ARXIV_MAX_BODY_BYTES} bytes (got ${xml.length}); bailing (CR-05)\n`,
-    );
-    return [];
-  }
   const entries = extractAll(xml, 'entry');
   return entries
     .map(parseEntry)
@@ -144,59 +138,26 @@ export async function search(
   opts: { limit?: number } = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
-  if (isOfflineMode()) {
-    const cassette = loadCassetteFile('arxiv', 'query-attention');
-    if (!cassette) return [];
-    const searchEntry = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('search_query='),
-    );
-    if (!searchEntry) return [];
-    const body = String(searchEntry.response ?? '');
-    return parseFeed(body);
-  }
-
   const url = `${BASE}/api/query?search_query=${encodeURIComponent(query)}&max_results=${limit}`;
   try {
-    const res = await httpFetch(url, { source: 'arxiv' });
+    const res = await httpFetch(url, { source: 'arxiv', headers: ATOM_HEADERS, maxBytes: MAX_JSON_RESPONSE_BYTES });
     if (res.status !== 200) return [];
-    const body = typeof res.body === 'string' ? res.body : String(res.body ?? '');
-    return parseFeed(body);
-  } catch {
+    return parseFeed(res.body);
+  } catch (err) {
+    if (isOfflineEgressError(err)) throw err;
     return [];
   }
 }
 
 export async function fetchById(id: string): Promise<SourceCandidate | null> {
-  if (isOfflineMode()) {
-    const cassette = loadCassetteFile('arxiv', 'query-attention');
-    if (!cassette) return null;
-    // Direct match on id_list=<id>
-    const direct = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes(`id_list=${id}`),
-    );
-    if (direct) {
-      const body = String(direct.response ?? '');
-      const results = parseFeed(body);
-      return results[0] ?? null;
-    }
-    // Fallback: first entry from the search cassette.
-    const searchEntry = cassette.find(
-      (c) => c.method === 'GET' && c.path.includes('search_query='),
-    );
-    if (!searchEntry) return null;
-    const body = String(searchEntry.response ?? '');
-    const results = parseFeed(body);
-    return results[0] ?? null;
-  }
-
   const url = `${BASE}/api/query?id_list=${encodeURIComponent(id)}`;
   try {
-    const res = await httpFetch(url, { source: 'arxiv' });
+    const res = await httpFetch(url, { source: 'arxiv', headers: ATOM_HEADERS, maxBytes: MAX_JSON_RESPONSE_BYTES });
     if (res.status !== 200) return null;
-    const body = typeof res.body === 'string' ? res.body : String(res.body ?? '');
-    const results = parseFeed(body);
+    const results = parseFeed(res.body);
     return results[0] ?? null;
-  } catch {
+  } catch (err) {
+    if (isOfflineEgressError(err)) throw err;
     return null;
   }
 }

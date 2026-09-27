@@ -55,7 +55,7 @@ import {
   type CitationDensityEntry,
   type StalenessEntry,
 } from './compile-report.js';
-import { parseVerdictRows } from './verify/verdict-rows.js';
+import { parseBlockingVerdictRows, blockingRowReason } from './verify/verdict-rows.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
@@ -294,9 +294,11 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         continue; // skip the failing-citekey parse AND staleness check; section is already refused
       }
 
-      // Refuse-gate (COMP-01 / GATE-02): any failing verdict blocks.
-      for (const ck of parseVerdictRows(verificationMd)) {
-        refuseReasons.push(`section ${os.n} (${os.slug}): citation [@${ck}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND)`);
+      // Refuse-gate (COMP-01 / GATE-02): any failing verdict blocks. An
+      // UNVERIFIABLE row (verified offline / under --dry-run, D-17-07) blocks too,
+      // with a "re-run online" message.
+      for (const row of parseBlockingVerdictRows(verificationMd)) {
+        refuseReasons.push(`section ${os.n} (${os.slug}): ${blockingRowReason(row)}`);
       }
 
       // Staleness (COMP-01 / D-08): recompute the per-section hash.

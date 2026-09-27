@@ -22,8 +22,10 @@
 // ("OneDrive - Roanoke College") which cause %20-encoded readFileSync paths to
 // throw, silently skipping tests locally while running untested on CI.
 //
-// Offline mode (T-12-W0-02): PENSMITH_NO_LLM=1 set at module top; PENSMITH_NETWORK_TESTS
-// NOT set → isOfflineMode() returns true → adapter cassettes fire; zero live calls.
+// Offline mode (T-12-W0-02): PENSMITH_NO_LLM=1 set at module top; the test runner
+// is sources-offline (RUN-01) → adapters replay EXACT recorded fixtures (D-17-06):
+// the topic 'attention mechanisms in neural networks' is the query
+// scripts/refresh-cassettes.mjs records; any other query is an offline miss.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -168,6 +170,83 @@ test(
       assert.ok(typeof c.source === 'string', `candidate source must be a string: ${JSON.stringify(c)}`);
       assert.ok(typeof c.citekey === 'string' && /^[a-z][a-z0-9_-]*$/.test(c.citekey), `candidate citekey must match [a-z][a-z0-9_-]*: ${JSON.stringify(c)}`);
     }
+
+    // D-17-10: the research log lands in .paper/RESEARCH.md, marker first.
+    const researchMd = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
+    const lines = researchMd.split(/\r?\n/);
+    assert.equal(lines[0], '> OFFLINE MODE (test runner) — recorded fixtures, not live results.');
+    assert.ok(lines.includes('Scope: auto'));
+    assert.ok(lines.includes('1. attention mechanisms in neural networks'), 'the query is listed');
+    assert.match(researchMd, /\| attention mechanisms in neural networks \| crossref \| [1-9]\d* \| ok \|/, 'per-adapter count');
+    assert.match(researchMd, /\| attention mechanisms in neural networks \| (openalex|semanticscholar) \| 0 \| offline: no recorded fixture \|/, 'an offline miss is reported per adapter');
+    assert.match(researchMd, new RegExp(`## Candidates \\(${candidates.length}\\)`));
+    for (const c of candidates) assert.ok(researchMd.includes(`[@${c.citekey}]`), `candidate ${c.citekey} is listed`);
+  },
+);
+
+test(
+  'RUN-03 / D-17-10: an unrecorded query offline prints "offline: no recorded results for this query" and yields 0 candidates',
+  { skip: !SEAM_WIRED },
+  async () => {
+    const root = mkPaperRoot();
+    const mod = await import(orchestratorModUrl.href) as {
+      runResearchOrchestrator?: (opts: { assignment: string; topic: string; discipline: string; paperRoot?: string }) => Promise<unknown[]>;
+    };
+    const stderr: string[] = [];
+    const orig = process.stderr.write.bind(process.stderr);
+    (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => {
+      stderr.push(String(s));
+      return orig(s);
+    };
+    let candidates: unknown[] = [];
+    try {
+      candidates = await mod.runResearchOrchestrator!({
+        assignment: 'Write a 1500-word essay on medieval Icelandic sagas.',
+        topic: 'medieval Icelandic sagas',
+        discipline: 'history',
+        paperRoot: root,
+      });
+    } finally {
+      (process.stderr as unknown as { write: typeof orig }).write = orig;
+    }
+    assert.equal(candidates.length, 0, 'no fixture is ever substituted for another query');
+    assert.match(stderr.join(''), /offline: no recorded results for this query \("medieval Icelandic sagas"\)/);
+    const researchMd = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
+    assert.match(researchMd, /^> OFFLINE MODE \(test runner\)/);
+    assert.match(researchMd, /## Candidates \(0\)/);
+    assert.match(researchMd, /_offline: no recorded results for these queries — re-run online\._/);
+  },
+);
+
+test(
+  'D-17-10: a research re-run rewrites only the generated log — notes below the end line (revise --research) are kept',
+  { skip: !SEAM_WIRED },
+  async () => {
+    const root = mkPaperRoot();
+    const mod = await import(orchestratorModUrl.href) as {
+      runResearchOrchestrator: (opts: { assignment: string; topic: string; discipline: string; paperRoot?: string }) => Promise<unknown[]>;
+      RESEARCH_LOG_END: string;
+    };
+    const rPath = path.join(root, '.paper', 'RESEARCH.md');
+    // A pre-existing notes file (no research log yet) is kept below the new log.
+    const notes = '### vaswani2017\nsupports: attention alone suffices for translation\n';
+    fs.writeFileSync(rPath, notes);
+    const run = (topic: string): Promise<unknown[]> =>
+      mod.runResearchOrchestrator({ assignment: topic, topic, discipline: 'history', paperRoot: root });
+    await run('medieval Icelandic sagas');
+    const first = fs.readFileSync(rPath, 'utf8');
+    assert.match(first, /^> OFFLINE MODE \(test runner\)/, 'the marker stays the first line');
+    assert.ok(first.includes(mod.RESEARCH_LOG_END));
+    assert.ok(first.endsWith(notes), 'the existing notes are kept verbatim below the log');
+    // Notes appended below the end line survive a second run; the log is replaced.
+    fs.appendFileSync(rPath, '\n### appended2020\nsupports: an appended finding\n');
+    await run('norse skaldic poetry');
+    const second = fs.readFileSync(rPath, 'utf8');
+    assert.equal(second.split(mod.RESEARCH_LOG_END).length, 2, 'exactly one end line');
+    const [log, kept] = second.split(mod.RESEARCH_LOG_END) as [string, string];
+    assert.match(log, /1\. norse skaldic poetry/);
+    assert.ok(!log.includes('medieval Icelandic sagas'), 'the previous log is replaced, not stacked');
+    assert.ok(kept.includes(notes) && kept.includes('### appended2020'), 'every note below the end line is kept');
   },
 );
 

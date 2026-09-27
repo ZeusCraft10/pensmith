@@ -22,6 +22,8 @@ import { syncFolderDetectionProbe } from '../bin/lib/doctor/probes/sync-folder-d
 import { runtimeConfigPresenceProbe } from '../bin/lib/doctor/probes/runtime-config-presence.js';
 import { buildArtifactResolvesProbe } from '../bin/lib/doctor/probes/build-artifact-resolves.js';
 import { httpCrossrefPingProbe } from '../bin/lib/doctor/probes/http-crossref-ping.js';
+import { networkModeProbe } from '../bin/lib/doctor/probes/network-mode.js';
+import { defaultProbes } from '../bin/lib/doctor/probes.js';
 
 test('DOCT-01 node-version returns PASS on current Node', async () => {
   const r = await nodeVersionProbe.run();
@@ -138,14 +140,58 @@ test('DOCT-05 build-artifact-resolves returns one of {PASS,FAIL}', async () => {
   assert.ok(['PASS', 'FAIL'].includes(r.severity));
 });
 
-test('D-03(d) http-crossref-ping returns SKIP (shipped reality — cassette path active, SKIP outside repo)', async () => {
-  // bin/lib/http-mock.ts shipped in Phase 3 as the production-tree cassette chokepoint.
-  // The probe returns SKIP when cassettes are not shipped (i.e. outside the repo).
-  // PASS/FAIL discrimination is active in CI (OFFLINE mode with cassettes present).
+test('D-03(d) http-crossref-ping loads the exact-match fixture store in a source checkout (PASS)', async () => {
+  // Phase 17: the probe is real. In a source checkout every committed fixture
+  // must parse and the recorded Crossref fixtures must be present → PASS with the
+  // count. In an installed package (no tests/ shipped) it is SKIP — exercised by
+  // tests/installed-offline.test.ts. (It used to return SKIP unconditionally.)
   const r = await httpCrossrefPingProbe.run();
   assert.equal(r.id, 'http-crossref-ping');
-  assert.equal(r.severity, 'SKIP', 'probe returns SKIP outside the repo where cassettes are not shipped');
-  assert.match(r.summary, /cassette-wiring probe|SKIP outside the repo/i, 'summary must describe the shipped cassette-wiring probe');
+  assert.equal(r.severity, 'PASS');
+  assert.match(r.summary, /fixture file\(s\) load \(\d+ Crossref entr(y|ies)\); offline replay is exact-match only/);
+});
+
+test('RUN-02 network-mode probe: OFFLINE under the test runner, live without it, never leaks values', async () => {
+  // This process runs under node --test → sources offline (reason: test runner).
+  const saved = { net: process.env['PENSMITH_NETWORK_TESTS'], off: process.env['PENSMITH_OFFLINE'], dry: process.env['PENSMITH_DRY_RUN'] };
+  delete process.env['PENSMITH_NETWORK_TESTS'];
+  delete process.env['PENSMITH_OFFLINE'];
+  delete process.env['PENSMITH_DRY_RUN'];
+  try {
+    const offline = await networkModeProbe.run();
+    assert.equal(offline.id, 'network-mode');
+    assert.equal(offline.severity, 'WARN');
+    assert.equal(offline.summary, 'network: OFFLINE (test runner)');
+
+    process.env['PENSMITH_OFFLINE'] = '1';
+    const explicit = await networkModeProbe.run();
+    assert.equal(explicit.summary, 'network: OFFLINE (PENSMITH_OFFLINE=1)');
+    assert.match(explicit.fix ?? '', /Unset PENSMITH_OFFLINE/);
+    delete process.env['PENSMITH_OFFLINE'];
+
+    process.env['PENSMITH_DRY_RUN'] = '1';
+    const dry = await networkModeProbe.run();
+    assert.equal(dry.summary, 'network: OFFLINE (--dry-run)');
+    assert.match(dry.detail ?? '', /synthetic dry-run sources; no network or model call/);
+    delete process.env['PENSMITH_DRY_RUN'];
+
+    process.env['PENSMITH_NETWORK_TESTS'] = '1'; // the live test lane
+    const live = await networkModeProbe.run();
+    assert.equal(live.severity, 'PASS');
+    assert.equal(live.summary, 'network: live');
+  } finally {
+    for (const [k, v] of [['PENSMITH_NETWORK_TESTS', saved.net], ['PENSMITH_OFFLINE', saved.off], ['PENSMITH_DRY_RUN', saved.dry]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+test('RUN-02: network-mode is registered directly after contact-email-presence', () => {
+  const ids = defaultProbes().map((p) => p.id);
+  const i = ids.indexOf('contact-email-presence');
+  assert.ok(i >= 0);
+  assert.equal(ids[i + 1], 'network-mode');
 });
 
 test('DOCT-07 runtime-config-presence WARN when no provider keys present + no value leak', async () => {
@@ -203,7 +249,7 @@ test('D-19: runDoctor is read-only — does not create files in the configured p
   assert.deepEqual(after, before, 'D-19: doctor MUST NOT create files under the paper root');
 });
 
-test('D-20: runDoctor returns Record keyed by probe.id (11 probes)', async () => {
+test('D-20: runDoctor returns Record keyed by probe.id (12 probes)', async () => {
   const r = await runDoctor();
   assert.ok(!Array.isArray(r), 'must be object, not array');
   assert.ok('node-version' in r);
@@ -218,5 +264,7 @@ test('D-20: runDoctor returns Record keyed by probe.id (11 probes)', async () =>
   assert.ok('http-crossref-ping' in r);
   // DOCT-05 (Plan 03-09 Task 9.1) — the real intake/outline/verify wiring probe.
   assert.ok('intake-outline-verify-wiring' in r);
-  assert.equal(Object.keys(r).length, 11, 'expected exactly 11 probes');
+  // RUN-02 (Phase 17): the network-mode probe. The count moved 11 → 12.
+  assert.ok('network-mode' in r);
+  assert.equal(Object.keys(r).length, 12, 'expected exactly 12 probes');
 });

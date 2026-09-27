@@ -37,7 +37,8 @@ import { atomicWriteFile } from '../lib/atomic-write.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
 import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
 import { extractCitekeys } from '../lib/citation-token.js';
-import { parseVerdictRows } from '../lib/verify/verdict-rows.js';
+import { parseBlockingVerdictRows, blockingRowReason } from '../lib/verify/verdict-rows.js';
+import { offlineMarkerLine } from '../lib/http-mock.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -267,11 +268,10 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
     if (statusMatch[1]?.toLowerCase() === 'failed') {
       reasons.push(`section ${name}: VERIFICATION.md Status is 'failed'`);
     }
-    // Blocking verdicts — same parser + blocking set compile uses.
-    for (const ck of parseVerdictRows(md)) {
-      reasons.push(
-        `section ${name}: citation [@${ck}] has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND)`,
-      );
+    // Blocking verdicts — same parser + blocking set compile uses. UNVERIFIABLE
+    // rows (checked offline / under --dry-run, D-17-07) block with "re-run online".
+    for (const row of parseBlockingVerdictRows(md)) {
+      reasons.push(`section ${name}: ${blockingRowReason(row)}`);
     }
   }
 
@@ -543,7 +543,11 @@ function buildVerificationReport(
   plagiarismResults: PlagiarismResult[],
   pass4Results: Pass4Result[],
 ): string {
+  // D-17-08: an offline run's report carries the marker as its first line (the
+  // export never does — exporters read DRAFT.md / FINAL.md, not this file).
+  const offlineMarker = offlineMarkerLine();
   return [
+    ...(offlineMarker !== null ? [offlineMarker, ''] : []),
     '# Paper Verification (done)',
     '',
     '## Honesty (DONE-04)',

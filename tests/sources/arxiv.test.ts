@@ -1,37 +1,48 @@
-// tests/sources/arxiv.test.ts — Wave 0 stub for RSCH-03/04 / T-3-13.
-// Per-adapter parse test against committed cassette.
-//
-// Production code required: bin/lib/sources/arxiv.ts + cassette
-// Until then: existence assertions fire RED; behavioral tests skip gracefully.
+// tests/sources/arxiv.test.ts — arXiv adapter against RECORDED cassettes (https,
+// CI-07; RSCH-03/04, T-3-13). Offline replay is exact-match only (RUN-03).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync } from 'node:fs';
+import * as arxiv from '../../bin/lib/sources/arxiv.js';
+import { RECORDED_QUERY, RECORDED_ARXIV_ID, recorded, assertOfflineMiss } from './recorded.js';
 
-const ADAPTER = 'arxiv';
-const adapterPath = new URL(`../../bin/lib/sources/${ADAPTER}.ts`, import.meta.url);
-const cassetteDir = new URL(`../../tests/fixtures/cassettes/${ADAPTER}/`, import.meta.url);
+function entryTitles(xml: string): string[] {
+  return [...xml.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry>/g)].map((m) => {
+    const t = /<title\b[^>]*>([\s\S]*?)<\/title>/.exec(m[1] ?? '');
+    return (t?.[1] ?? '').replace(/\s+/g, ' ').trim();
+  });
+}
 
-test(`${ADAPTER}: production adapter exists (RSCH-03/04, T-3-13)`, () => {
-  assert.ok(existsSync(adapterPath), `MISSING: bin/lib/sources/${ADAPTER}.ts — Plan 04 must create before this test passes`);
+test('arxiv: the recorded cassettes come from the https endpoint (the http host answers 301)', () => {
+  for (const name of ['search-attention-neural-networks', 'id-1706.03762']) {
+    for (const e of recorded('arxiv', name)) assert.equal(e.scope, 'https://export.arxiv.org');
+  }
 });
 
-test(`${ADAPTER}: at least one cassette exists (T-3-13)`, () => {
-  const hasCassettes = existsSync(cassetteDir) && readdirSync(cassetteDir).some(f => f.endsWith('.json'));
-  assert.ok(hasCassettes, `MISSING: tests/fixtures/cassettes/${ADAPTER}/*.json — Plan 04 Task 4.1 must create`);
+test('arxiv.search() parses every recorded Atom entry (RSCH-03)', async () => {
+  const [entry] = recorded('arxiv', 'search-attention-neural-networks');
+  const titles = entryTitles(String(entry!.response));
+  assert.ok(titles.length > 0);
+  const results = await arxiv.search(RECORDED_QUERY, { limit: 10 });
+  assert.deepEqual(results.map((r) => r.title), titles);
+  for (const r of results) {
+    assert.equal(r.source, 'arxiv');
+    assert.match(r.id, /^https?:\/\/arxiv\.org\/abs\//);
+    assert.ok(r.authors.length > 0);
+    assert.ok(typeof r.year === 'number' && r.year >= 1991);
+  }
 });
 
-const skip = !existsSync(adapterPath);
-
-test(`${ADAPTER}.search() parses cassette into SourceCandidate[] (RSCH-03)`, { skip }, async () => {
-  const adapter = await import(`../../bin/lib/sources/${ADAPTER}.js`);
-  const results = await adapter.search('attention mechanisms transformers');
-  assert.ok(Array.isArray(results), 'search returns array');
-  assert.ok(results.length >= 0, 'search returns non-negative count');
+test('arxiv.fetchById() hydrates the recorded id (RSCH-04)', async () => {
+  const r = await arxiv.fetchById(RECORDED_ARXIV_ID);
+  assert.ok(r, 'the recorded id resolves');
+  assert.equal(r.title, 'Attention Is All You Need');
+  assert.match(r.id, /1706\.03762/);
+  assert.equal(r.year, 2017);
+  assert.ok(r.authors.includes('Ashish Vaswani'));
 });
 
-test(`${ADAPTER}.fetchById() parses cassette into SourceCandidate | null (RSCH-04)`, { skip }, async () => {
-  const adapter = await import(`../../bin/lib/sources/${ADAPTER}.js`);
-  const result = await adapter.fetchById('1706.03762');
-  assert.ok(result === null || typeof result === 'object', 'fetchById returns object or null');
+test('RUN-03: an unrecorded arXiv query or id is a typed offline miss', async () => {
+  await assertOfflineMiss(() => arxiv.search('medieval Icelandic sagas', { limit: 10 }), 'search miss');
+  await assertOfflineMiss(() => arxiv.fetchById('2101.00001'), 'fetchById miss');
 });

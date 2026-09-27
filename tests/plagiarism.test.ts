@@ -9,15 +9,18 @@
 // offline DDG HTML search via the committed cassette, advisory-never-throws, and
 // the VERIFICATION.md render section.
 //
-// Offline by construction: isOfflineMode() is true unless PENSMITH_NETWORK_TESTS=1,
-// so runPlagiarism reads tests/fixtures/cassettes/duckduckgo/html-search.json and
-// never touches the network.
+// Phase 17 (RUN-03): offline (the test runner default) the check is "skipped
+// (offline)" with 0 matches and sends nothing — it no longer replays a canned
+// search page for every phrase. The live parse path runs in the live test lane
+// (PENSMITH_NETWORK_TESTS=1) against the V5 MockAgent serving the synthetic
+// tests/fixtures/cassettes/synthetic/duckduckgo/html-search.json page.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { loadCassetteFile } from '../bin/lib/http-mock.js';
+import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 
 const plagiarismSrcPath = fileURLToPath(new URL('../bin/lib/plagiarism.ts', import.meta.url));
 const plagiarismModUrl = new URL('../bin/lib/plagiarism.js', import.meta.url);
@@ -59,20 +62,79 @@ test('plagiarism: extractDistinctivePhrases returns <=10 phrases each >=5 words 
   },
 );
 
-test('plagiarism: runPlagiarism (offline cassette) returns matches with >=2 result URLs (DONE-02)',
+interface PlagMod {
+  runPlagiarism: (draftMd: string, opts?: { maxPhrases?: number }) => Promise<Array<{
+    phrase: string; matches: string[]; skipped?: string;
+  }>>;
+  renderPlagiarismSection: (results: ReadonlyArray<{ phrase: string; matches: string[]; skipped?: 'offline' | 'dry-run' }>) => string;
+}
+
+async function captureStdout<T>(fn: () => Promise<T>): Promise<{ value: T; out: string }> {
+  const chunks: string[] = [];
+  const orig = process.stdout.write.bind(process.stdout);
+  // Tee, never swallow: the node:test child reports results on stdout, and a
+  // swallowed report line makes earlier tests silently vanish from the run.
+  (process.stdout as unknown as { write: (s: string) => boolean }).write = (s: string) => {
+    chunks.push(String(s));
+    return orig(s);
+  };
+  try {
+    return { value: await fn(), out: chunks.join('') };
+  } finally {
+    (process.stdout as unknown as { write: typeof orig }).write = orig;
+  }
+}
+
+test('RUN-03: offline, runPlagiarism is "skipped (offline)" with 0 matches — no query, no canned page',
   { skip: !existsSync(plagiarismSrcPath) },
   async () => {
-    const mod = await import(plagiarismModUrl.href) as {
-      runPlagiarism: (draftMd: string, opts?: { maxPhrases?: number }) => Promise<Array<{
-        phrase: string; matches: string[];
-      }>>;
-    };
-    const draft = 'The transformer relies solely on attention mechanisms.';
-    const results = await mod.runPlagiarism(draft);
-    assert.ok(Array.isArray(results), 'runPlagiarism must return an array');
-    const withHits = results.filter((r) => r.matches.length > 0);
-    assert.ok(withHits.length >= 1, 'at least one phrase must match the cassette');
-    assert.ok(withHits[0]!.matches.length >= 2, 'a matched phrase must carry >=2 result URLs from the cassette HTML');
+    const mod = await import(plagiarismModUrl.href) as PlagMod;
+    // Nonsense text that no search page could match — and the canned DDG page
+    // that used to be replayed for ANY phrase is never consulted.
+    const draft = 'Zorblax quintessential frumious bandersnatch gyred gimbling wabe outgrabe.';
+    const { value: results, out } = await captureStdout(() => mod.runPlagiarism(draft));
+    assert.ok(results.length > 0, 'the distinctive phrases are still extracted locally');
+    for (const r of results) {
+      assert.deepEqual(r.matches, [], 'offline: 0 matches');
+      assert.equal(r.skipped, 'offline');
+    }
+    assert.match(out, /plagiarism check skipped \(offline\) — \d+ distinctive phrase\(s\) not queried\./);
+    const md = mod.renderPlagiarismSection(results as Parameters<PlagMod['renderPlagiarismSection']>[0]);
+    assert.match(md, /_\(skipped \(offline\) — not queried\)_/);
+    assert.ok(!/<https?:/.test(md), 'no result URL is ever rendered for a skipped check');
+  },
+);
+
+test('plagiarism (live lane): runPlagiarism parses DDG results into >=2 result URLs (DONE-02)',
+  { skip: !existsSync(plagiarismSrcPath) },
+  async () => {
+    const mod = await import(plagiarismModUrl.href) as PlagMod;
+    const cs = loadCassetteFile('duckduckgo', 'html-search');
+    const html = String(cs?.[0]?.response ?? '');
+    const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
+    process.env['PENSMITH_NETWORK_TESTS'] = '1';
+    const { agent, restore } = installMockAgent();
+    const queried: string[] = [];
+    agent
+      .get('https://html.duckduckgo.com')
+      .intercept({ path: /^\/html\/\?q=/, method: 'GET' })
+      .reply((req) => {
+        queried.push(String(req.path));
+        return { statusCode: 200, data: html, responseOptions: { headers: { 'content-type': 'text/html' } } };
+      })
+      .persist();
+    try {
+      const results = await mod.runPlagiarism('The transformer relies solely on attention mechanisms.');
+      const withHits = results.filter((r) => r.matches.length > 0);
+      assert.ok(withHits.length >= 1, 'a live phrase query parses its result page');
+      assert.ok(withHits[0]!.matches.length >= 2, 'a matched phrase carries >=2 result URLs');
+      assert.ok(results.every((r) => r.skipped === undefined), 'live results are never marked skipped');
+      assert.ok(queried.length >= 1 && queried.every((p) => p.startsWith('/html/?q=')));
+    } finally {
+      await restore();
+      if (savedLane === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
+      else process.env['PENSMITH_NETWORK_TESTS'] = savedLane;
+    }
   },
 );
 

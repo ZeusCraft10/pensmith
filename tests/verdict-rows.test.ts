@@ -166,3 +166,30 @@ test('GATE-02 (audit #2): uppercase-first citekey (Smith2020) IS parsed and bloc
     'parseVerdictRows must now match an uppercase-first blocking verdict row (fail-closed)',
   );
 });
+
+// ---------------------------------------------------------------------------
+// D-17-07 (Phase 17): a Pass-1 UNVERIFIABLE row (the re-fetch was unavailable
+// offline / under --dry-run) BLOCKS, and its refusal says "re-run online".
+// Pass-3 PDF_UNAVAILABLE / TEXT_UNAVAILABLE stay advisory (non-blocking).
+// ---------------------------------------------------------------------------
+test('D-17-07: an UNVERIFIABLE Pass-1 row is blocking with a "re-run online" refusal; unavailable Pass-3 rows are not', async () => {
+  const mod = await import('../bin/lib/verify/verdict-rows.js');
+  const md = [
+    mod.renderPass1VerdictRow('jumper2021', 'UNVERIFIABLE', 0, 0, 'offline: no recorded fixture — re-run online'),
+    mod.renderPass1VerdictRow('ok2020', 'OK', 1, 1, 'D-11 AND-gate passed'),
+    mod.renderPass3VerdictRow('ok2020', 'a quoted passage', 'PDF_UNAVAILABLE', 0, 'text unavailable (offline)'),
+    mod.renderPass3VerdictRow('ok2020', 'a quoted passage', 'TEXT_UNAVAILABLE', 0, 'no text layer'),
+  ].join('\n');
+  assert.ok(mod.BLOCKING_VERDICTS.has('UNVERIFIABLE'));
+  assert.deepEqual(mod.parseVerdictRows(md), ['jumper2021']);
+  const rows = mod.parseBlockingVerdictRows(md);
+  assert.deepEqual(rows, [{ citekey: 'jumper2021', verdict: 'UNVERIFIABLE' }]);
+  assert.match(
+    mod.blockingRowReason(rows[0]!),
+    /^citation \[@jumper2021\] is UNVERIFIABLE \(checked offline or under --dry-run\) — re-run online$/,
+  );
+  assert.match(
+    mod.blockingRowReason({ citekey: 'x', verdict: 'FABRICATED' }),
+    /has a blocking verdict \(FABRICATED\/MIS-CITED\/NOT_FOUND\)/,
+  );
+});

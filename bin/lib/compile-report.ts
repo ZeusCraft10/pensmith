@@ -17,8 +17,14 @@
 //
 // This renderer/schema is SUPPORTING infrastructure for Plan 05's COMP-07
 // emission — it is NOT itself a canonical COMP requirement.
+//
+// RUN-02 / D-17-08: when the compile ran offline (PENSMITH_OFFLINE=1, --dry-run,
+// the test runner), the FIRST line of the body (right after the frontmatter) is
+// the offline marker. The marker never reaches an export: exporters read
+// DRAFT.md / FINAL.md, never COMPILE-REPORT.md.
 
 import { CompileReportSchema, COMPILE_REPORT_SCHEMA_VERSION } from './schemas/compile-report.js';
+import { offlineMarkerLine } from './http-mock.js';
 
 /** The Phase-4 empty marker for the Advisory Findings slot (D-14). */
 export const ADVISORY_EMPTY_MARKER = '_No advisory passes ran — Phase 5 will populate._';
@@ -64,6 +70,11 @@ export interface CompileReportInput {
   consistency_flags?: ConsistencyEntry[];
   citation_density?: CitationDensityEntry[];
   staleness_resolved?: StalenessEntry[];
+  /**
+   * The offline marker line for the body (D-17-08). undefined → derived from the
+   * current network mode (http-mock.ts offlineMarkerLine); null → no marker.
+   */
+  offline_marker?: string | null;
 }
 
 function yamlScalar(v: string): string {
@@ -141,9 +152,12 @@ export function renderCompileReport(input: CompileReportInput): string {
       )
     : ['_No stale sections resolved._'];
 
+  const marker = input.offline_marker !== undefined ? input.offline_marker : offlineMarkerLine();
+
   return [
     renderFrontmatter(input),
     '',
+    ...(marker !== null ? [marker, ''] : []),
     section('## Transitions Changed', transitionsBody),
     '',
     section('## Cross-Section Consistency Flags', consistencyBody),
