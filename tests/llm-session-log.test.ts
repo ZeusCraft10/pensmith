@@ -1,4 +1,4 @@
-// tests/session-log-llm.test.ts — RUN-15 (D-17-29): SESSION.log kind:"llm" records.
+// tests/llm-session-log.test.ts — RUN-15 (D-17-29): SESSION.log kind:"llm" records.
 //
 // Each model call appends one record per billed attempt to .paper/SESSION.log:
 // {id "<run_id>:<seq>", verb, section, slug, provider, model, served_model,

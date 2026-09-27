@@ -1,4 +1,4 @@
-// tests/doctor-runtime-config.test.ts — RUN-07 / RUN-08: the doctor
+// tests/llm-doctor-probe.test.ts — RUN-07 / RUN-08: the doctor
 // runtime-config-presence probe.
 //
 // It names the resolved provider, model and key variable (with their source),
