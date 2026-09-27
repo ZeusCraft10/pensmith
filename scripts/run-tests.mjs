@@ -44,7 +44,7 @@
 
 import { readdir, stat } from 'node:fs/promises';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -120,6 +120,16 @@ const env = {
   XDG_DATA_HOME: runDataDir,
   LOCALAPPDATA: runDataDir,
 };
+
+// On Windows npm's default cache is %LOCALAPPDATA%\npm-cache, which the
+// redirect above would point at the empty per-run dir. Tests that drive npm
+// (tests/installed-bin.test.ts reads dependency tarballs from the cache) need
+// the real one, so pin it first unless npm already exported it (`npm test`).
+if (process.platform === 'win32' && !process.env.npm_config_cache) {
+  const r = spawnSync('npm.cmd', ['config', 'get', 'cache'], { shell: true, encoding: 'utf8', env: process.env });
+  const cache = r.status === 0 ? String(r.stdout).trim() : '';
+  if (cache) env.npm_config_cache = cache;
+}
 
 function cleanup() {
   if (keep) return;
