@@ -6,8 +6,8 @@
 // API and the chat-completions shape used by OpenAI, Ollama, vLLM and any
 // OpenAI-compatible server. All network I/O goes through bin/lib/http.ts; every
 // call sets the V3 `llm: {endpoint}` marker and a `maxBytes` cap. The vendor
-// SDKs are never imported (not even for types — the wire shapes are declared
-// below).
+// SDKs are imported for TYPES ONLY (audit #7): `new Anthropic()` / `new
+// OpenAI()` would bypass the http.ts chokepoint.
 //
 // complete({slug, …}) — order is load-bearing:
 //   1. PENSMITH_NO_LLM → deterministic stub (schema-valid object for structured
@@ -36,6 +36,8 @@
 // handed to http.ts. It is never logged, never in an error message, and every
 // SESSION.log line is scrubbed of it (session-log.ts registerSecret).
 
+import type Anthropic from '@anthropic-ai/sdk';                  // types only — no network
+import type { ChatCompletion } from 'openai/resources/index.js'; // types only — no network
 import { createHash } from 'node:crypto';
 import { fetch, type HttpResponse } from './http.js';
 import { isOfflineMode } from './http-mock.js';
@@ -272,7 +274,7 @@ export async function assertLlmConfigured(verb: string): Promise<void> {
 }
 
 // ============================================================
-//   Wire shapes (declared here; the SDKs are never imported)
+//   Wire shapes (anchored on the SDK types; the SDK clients are never constructed)
 // ============================================================
 
 interface AnthropicUsage {
@@ -300,7 +302,8 @@ interface AnthropicMessage {
   type?: string;
   model?: string;
   content?: AnthropicBlock[];
-  stop_reason?: string | null;
+  /** Anthropic.StopReason plus any value a newer API adds (handled as end_turn-like). */
+  stop_reason?: Anthropic.StopReason | (string & {}) | null;
   stop_details?: { type?: string; category?: string | null; explanation?: string | null; recommended_model?: string | null } | null;
   usage?: AnthropicUsage;
   error?: { type?: string; message?: string };
@@ -310,7 +313,7 @@ interface ChatCompletionShape {
   model?: string;
   choices?: Array<{
     message?: { content?: string | Array<{ type?: string; text?: string }> | null; refusal?: string | null };
-    finish_reason?: string | null;
+    finish_reason?: ChatCompletion.Choice['finish_reason'] | null;
   }>;
   usage?: {
     prompt_tokens?: number;
@@ -614,7 +617,7 @@ export function anthropicFromSse(body: string): AnthropicMessage {
 export function chatFromSse(body: string): ChatCompletionShape {
   let text = '';
   let refusal = '';
-  let finish: string | null = null;
+  let finish: ChatCompletion.Choice['finish_reason'] | null = null;
   let model: string | undefined;
   let usage: ChatCompletionShape['usage'];
   for (const { data } of parseSse(body)) {
@@ -627,7 +630,7 @@ export function chatFromSse(body: string): ChatCompletionShape {
       const delta = (c['delta'] ?? {}) as Record<string, unknown>;
       if (typeof delta['content'] === 'string') text += delta['content'];
       if (typeof delta['refusal'] === 'string') refusal += delta['refusal'];
-      if (typeof c['finish_reason'] === 'string') finish = c['finish_reason'];
+      if (typeof c['finish_reason'] === 'string') finish = c['finish_reason'] as ChatCompletion.Choice['finish_reason'];
     }
   }
   return {
