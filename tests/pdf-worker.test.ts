@@ -277,6 +277,15 @@ test('SEC-02: the worker entry resolves from dist/ (.js) and parses (run `npm ru
 // extractPdf / extractPdfText contracts.
 // ---------------------------------------------------------------------------
 
+test('SEC-02: .planning/SECURITY.md records row 9 (PDF OOM / hang) as PROVEN, the WR-05 residual closed', () => {
+  const sec = fs.readFileSync(path.join(REPO, '.planning', 'SECURITY.md'), 'utf8');
+  const row = sec.split('\n').find((l) => l.startsWith('| 9 |'));
+  assert.ok(row, 'SECURITY.md has a row 9');
+  assert.match(row, /\*\*PROVEN\*\* \(SEC-02, Phase 19\)/);
+  assert.match(row, /worker\.terminate\(\)/);
+  assert.doesNotMatch(row, /PROVEN-with-residual/);
+});
+
 test('SEC-02: extractPdf returns text, pages, numpages, info and xmp; an image-only PDF is imageOnly', async () => {
   const out = await extractPdf(fs.readFileSync(path.join(REPO, 'tests', 'fixtures', 'byo', 'metadata-doi.pdf')));
   assert.equal(out.imageOnly, false);

@@ -41,6 +41,19 @@ Everything lives on your filesystem. Paper files are in `.paper/` in the paper's
 - **`.paper/COSTS.jsonl`** — the cost ledger (tokens and USD per call; no prompt text).
 - **`.paper/INTAKE.md`** — your assignment and the clarified brief.
 
+## Your own PDFs (bring-your-own)
+
+`pensmith new --pdfs <folder>`, `pensmith add <folder>`, `pensmith add <file.pdf>` and `pensmith add <id> --pdf <file>` add PDFs you already have (SRC-15).
+
+- **The PDF and its text stay on your machine.** The text is extracted locally (pdf-parse in a worker thread, or PyMuPDF when installed); it is never uploaded, and no PDF bytes are sent anywhere.
+- **Only a title or an identifier leaves.** To find which published work a PDF is, pensmith looks up an identifier it finds in the PDF (a DOI at Crossref, an arXiv id at arXiv) — or, when there is none, sends the PDF's title as one search query to Crossref and, only if Crossref has no confident match, to OpenAlex. The author names, abstract and body text of the PDF are not sent. A PDF that no service matches confidently is kept with the metadata it carries itself and marked unhydrated; nothing more is sent for it.
+- **What is stored.** A copy of each PDF in `.paper/sources/<citekey>.pdf` (inside the paper folder — which may be a synced folder), and in `.paper/LIBRARY.json` the sha256 of the PDF and of its extracted text. The extracted text itself is cached only in your user data folder (`byo-text/<sha256>.txt`), never in `.paper/`.
+- **Text is used only after a re-hash.** Before a PDF's text is used (quote checks, the drafter's full-text flag), pensmith re-hashes the PDF: a PDF edited after it was added, or a text file placed in `.paper/sources/`, is never trusted as the source's text.
+- `[sources] byo_pdf_dir` in `.paper/config.toml` records the folder you passed to `new --pdfs`, so research can pick up PDFs added there later.
+- To remove your PDFs, delete `.paper/sources/` (and the `byo-text/` folder in your user data folder); the library entries remain as citations.
+
+`pensmith add <url>` downloads the page or PDF at the URL you give it (a request to that host, through the same SSRF guard as every request); a downloaded PDF is identified exactly as above.
+
 ## PII redaction (opt-in)
 
 By default the assignment text is used as you gave it. With `pensmith new --pii-redact` (or `[project] pii_redaction = true`), emails, phone numbers, ID-like numbers and similar spans are redacted **before** anything reaches the model: the redacted text is what the model sees and what `INTAKE.md` keeps, each redaction is printed for review, and the raw text is kept only in `.paper/INTAKE.raw.local` (gitignored, never sent anywhere).
