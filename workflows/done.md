@@ -58,6 +58,14 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
 - `.paper/VERIFICATION.md` — a SOURCE artifact (not in the export dir) carrying
   the honesty report (DONE-04, framed verbatim), the plagiarism section
   (DONE-02), and the whole-paper Pass-4 orphan summary (DONE-01).
+- stdout: `pensmith done: exported <path>` — the deliverable's path.
+- **Under `--dry-run`** (GRND-19, D-18-29) the paper is the dry-run workspace
+  `./.paper-dry-run/` (seeded from `.paper/`, which is never written): the
+  deliverable is `.paper-dry-run/export/DRAFT.dry-run.<ext>` (`.dry-run` before
+  the extension), its bibliography sits beside it, FINAL.md and VERIFICATION.md
+  are written in the workspace, and done prints the path plus one line saying it
+  is a dry-run export (synthetic sources, stub text) and the real paper was not
+  touched. The document itself stays zero-trace: the name and place disclose it.
 
 ## Body
 

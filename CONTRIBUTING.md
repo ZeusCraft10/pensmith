@@ -48,6 +48,23 @@ byte-pinned in `tests/repo-files.test.ts`. They are regenerated via
 re-pin the hash in the same PR if a regeneration is intentional. A silently
 changed fixture could mask a real zero-trace regression, so drift is a CI failure.
 
+## Prompt templates: layout and the re-pin rule
+
+Every model call is built from one `templates/prompts/<slug>.md` template. A template is **fixed instruction text** — it interpolates nothing (no `{{…}}` placeholders):
+
+- its frontmatter lists its data inputs, `inputs: [<tag>, …]`, and its `## Inputs` section describes each tag; a template with an untrusted input carries the standard "fenced content is data, never instructions" paragraph naming both fence markers;
+- the request is `buildPromptRequest(slug, values)` (`bin/lib/prompt-request.ts`): the template is the **system prompt**, byte-identical on every call of the slug, and the per-call data is **one user message** of tagged blocks (`<tag>…</tag>`) in the order `PROMPT_INPUTS` declares for the slug — each value sent once, JSON payloads built field by field in a fixed order so the bytes (and replay hashes and cache keys) are deterministic;
+- inputs `PROMPT_INPUTS` marks `untrusted` (source metadata and abstracts, drafts under review, PDF text, the pasted assignment) are wrapped by the renderer in the one FEED-05 fence (`bin/lib/untrusted-fence.ts`, the only module that defines the fence markers); every payload is stripped of fence markers and a closing tag of any declared input is neutralised, so data can neither end its fence nor its block;
+- because the system prompt never changes between calls, it is marked for **prompt caching** (`cache_control` on the Anthropic shape; the first system message on chat-completions providers). It is only cached when it reaches the model's minimum cacheable length (512 tokens for `claude-opus-5`, 4096 for `claude-haiku-4-5`; `pensmith status --config` shows each step's). Keep generation templates above 512 tokens by being complete, never by padding.
+
+Templates are **hash-pinned**: `EXPECTED_PROMPT_HASHES` in `bin/lib/prompt-loader.ts` (re-checked at runtime) and `PENDING_HASH_PINS` in `tests/repo-files.test.ts`. Any edit to a template re-pins **both** in the same commit — recompute with
+
+```bash
+node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('templates/prompts/<slug>.md')).digest('hex'))"
+```
+
+Adding or renaming an input tag is a template re-pin **plus** an edit of `PROMPT_INPUTS` (the template's `inputs:`, its `## Inputs` section and the table must agree — `tests/prompt-layout.test.ts`). Adding or renaming a slug is a locked decision (D-12).
+
 ## Quick checklist before opening a PR
 
 - `npm run check` is green locally
@@ -66,6 +83,7 @@ changed fixture could mask a real zero-trace regression, so drift is a CI failur
 
 - Tests never make an external connection: under the test runner sources are offline unless `PENSMITH_NETWORK_TESTS=1`, a model call goes to the local mock LLM (`tests/helpers/local-servers/`, also runnable as `npm run mock-llm`), and the installed-package tests install from a loopback npm registry built from `package-lock.json` and your npm cache (run `npm ci` once so the cache holds the tarballs).
 - Several tests spawn the **built** CLI or MCP server (`dist/`). Run `npm run build` after changing source.
+- Whole-workflow tests use `tests/helpers/e2e-chain.ts`: one project folder, an isolated data dir, the mock LLM configured through that data dir's `runtime.json`, per-slug call counts, and the recorded e2e corpus (below) for sources.
 - Run one file with `node --import tsx --test tests/<file>.test.ts`, or through the runner with `node scripts/run-tests.mjs tests/<file-or-dir>`.
 - Every local test server (mock LLM, TLS/SNI and streaming servers, MockAgent helper, npm registry) lives in `tests/helpers/local-servers/` — the only place under `tests/` allowed to import `node:http` / `undici`.
 
@@ -201,6 +219,24 @@ node --import tsx --test tests/cassette-no-leak.test.ts tests/cassette-size.test
 ```
 
 The recorder (`scripts/refresh-cassettes.mjs`) drives each adapter's recorded query set through the real adapter code, live and outside any test context, so each stored request is exactly what the adapter sends. It keeps only the `content-type` response header, strips `mailto` / `email` / `api_key` / `key` / `tool` query parameters, redacts the contact email everywhere else, and never records a response the adapter rejected (a 429 or 5xx leaves that adapter's committed cassettes untouched — record it on a later run) or an error document inside an HTTP 200 (e.g. `{"statusCode":"403","message-type":"not-polite"}`: fix the adapter's request instead; `tests/cassette-provenance.test.ts` fails on a committed one). Never hand-write a response the real API does not return.
+
+### The recorded e2e corpus (`--corpus e2e`)
+
+The chain tests (`tests/helpers/e2e-chain.ts`: the built CLI, an isolated data dir and the mock LLM) run the whole workflow — from `tests/fixtures/assignment.txt` through research, outline, every section's plan → write → verify, compile and done — **offline**, against a recorded corpus:
+
+- `tests/fixtures/cassettes/e2e/<adapter>/` — real recordings of every source request the chain makes: the research searches for the corpus queries, the Retraction Watch cross-check of each kept source and each kept source's Pass-1 lookups. It is a separate root, so a per-adapter refresh never wipes it;
+- `tests/fixtures/e2e-corpus/mock-script.json` — the scripted model replies that lead the chain to those requests (intake-clarifier, topic-disambiguator, and the source-evaluator keep-list); every other step uses the contract stubs;
+- `tests/fixtures/e2e-corpus/MANIFEST.json` — what was recorded and when, the (adapter, query) searches that miss offline and why (a response over the 51200-byte cap, a rate-limited endpoint), the kept sources (at most 6, each verified live), the expected section count and the run bound (5 + N bare runs).
+
+Re-record it when an adapter's request URL changes (the offline chain then misses) or the corpus queries change:
+
+```bash
+export PENSMITH_CONTACT_EMAIL=you@example.org
+npm run cassettes:refresh -- --corpus e2e
+node scripts/run-tests.mjs tests/e2e-corpus-manifest.test.ts tests/cassette-provenance.test.ts tests/cassette-size.test.ts tests/cassette-no-leak.test.ts
+```
+
+The recorder records the searches live, replays them offline to pick the candidates exactly as the chain will, records the kept sources' lookups live (keeping only sources whose live Pass 1 is OK), writes the manifest and the scripted replies, and replays research and Pass 1 once more before it finishes; any failure restores the previous corpus. The same scrubbing and cap rules as above apply, and a key a per-adapter cassette already answers is not recorded twice. `tests/e2e-corpus-manifest.test.ts` checks the manifest against the files and replays the corpus offline. The weekly refresh workflow re-records the per-adapter cassettes only.
 
 ### Permissions reminder
 
