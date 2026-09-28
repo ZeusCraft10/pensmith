@@ -26,5 +26,56 @@
     "responseHeaders": {
       "content-type": "application/json"
     }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.5555/rw-inner-403",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "DOI": "10.5555/rw-inner-403",
+        "title": [
+          "A Work Whose Retraction Lookup Answers With An Error Document"
+        ],
+        "author": [
+          {
+            "family": "Gap",
+            "given": "Rita"
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2019
+            ]
+          ]
+        },
+        "container-title": [
+          "Journal of Tests"
+        ],
+        "type": "journal-article"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?filter=updates:10.5555/rw-inner-403&select=DOI,title,author,update-to&rows=20",
+    "status": 200,
+    "response": {
+      "statusCode": "403",
+      "message-type": "not-polite",
+      "message": "Please add a mailto parameter or a User-Agent with a contact email to identify yourself."
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
   }
 ]

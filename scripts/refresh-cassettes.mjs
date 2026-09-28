@@ -131,6 +131,10 @@ const QUERY_SETS = {
     { file: 'updates-nphys1170', calls: [{ fn: 'fetchById', arg: RECORDED_DOI }] },
     // A real retracted work (Wakefield et al. 1998, retracted 2010).
     { file: 'updates-wakefield-1998', calls: [{ fn: 'fetchById', arg: RECORDED_RETRACTED_DOI }] },
+    // The retraction re-query Pass 1 makes for the recorded Crossref works (offline verify).
+    { file: 'updates-nature14539', calls: [{ fn: 'fetchById', arg: '10.1038/nature14539' }] },
+    { file: 'updates-nature11247-encode', calls: [{ fn: 'fetchById', arg: '10.1038/nature11247' }] },
+    { file: 'updates-foreco-2013', calls: [{ fn: 'fetchById', arg: '10.1016/j.foreco.2013.06.030' }] },
   ],
   books: [
     // SRC-11: Kuhn, The Structure of Scientific Revolutions (3rd ed., 1996).

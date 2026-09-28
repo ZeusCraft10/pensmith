@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import * as arxiv from '../../bin/lib/sources/arxiv.js';
 import { SourceCandidateSchema } from '../../bin/lib/schemas/source-candidate.js';
 import { RECORDED_QUERY, RECORDED_ARXIV_ID, recorded, assertOfflineMiss } from './recorded.js';
-import { threeWayContract } from './three-way.js';
+import { threeWayContract, liveLane } from './three-way.js';
 
 function entryTitles(xml: string): string[] {
   return [...xml.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry>/g)].map((m) => {
@@ -100,6 +100,21 @@ function atomEntry(id: string): string {
   </entry>
 </feed>`;
 }
+
+test('the Atom parser reads a CRLF feed exactly like an LF one', async () => {
+  await liveLane(async (agent) => {
+    const id = '2201.00042';
+    agent
+      .get('https://export.arxiv.org')
+      .intercept({ path: `/api/query?id_list=${id}`, method: 'GET' })
+      .reply(200, atomEntry(id).replace(/\n/g, '\r\n').replace('A Found Preprint', 'A Found\r\n  Preprint'), { headers: { 'content-type': 'application/atom+xml' } });
+    const c = await arxiv.fetchById(id);
+    assert.equal(c?.title, 'A Found Preprint');
+    assert.equal(c?.abstract, 'An abstract.');
+    assert.equal(c?.venue, 'J. Tests 1 (2021) 1-2');
+    assert.deepEqual(c?.authors, ['Fay Found']);
+  });
+});
 
 /** A modern arXiv id per token (the contract needs unique ids). */
 const idFor = (t: string): string => {

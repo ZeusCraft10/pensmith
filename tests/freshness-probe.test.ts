@@ -160,3 +160,23 @@ test('freshness (live): a 200 carrying an error body is an unknown retraction st
     assert.equal(r.skipped?.find((s) => s.probe === 'retraction-watch')?.detail, 'unavailable');
   });
 });
+
+test('freshness (D-19-05): an exhausted or open-breaker retraction host is an "unavailable" row naming why — never "ok"', async () => {
+  const { __setRegistrarSendForTest } = await import('../bin/lib/sources/registrar-response.js');
+  const { RateLimitExhaustedError } = await import('../bin/lib/http.js');
+  await liveLane(async (agent) => {
+    agent.get('https://doi.org').intercept({ path: '/10.5555/exhausted-rw', method: 'HEAD' }).reply(200, '');
+    try {
+      __setRegistrarSendForTest(async () => {
+        throw new RateLimitExhaustedError('api.crossref.org', 3_600_000, 429);
+      });
+      const r = await probeFreshness('late2020', '10.5555/exhausted-rw');
+      const rw = r.skipped?.find((s) => s.probe === 'retraction-watch');
+      assert.equal(rw?.detail, 'unavailable');
+      assert.match(rw?.note ?? '', /retraction status unknown for 10\.5555\/exhausted-rw: the Crossref lookup failed \(rate limit exhausted \(retry after ~60 min\)\) — re-run verify/);
+      assert.match(renderFreshnessTable([r]), /\| late2020 \| retraction-watch \| unavailable \| retraction status unknown/);
+    } finally {
+      __setRegistrarSendForTest(null);
+    }
+  });
+});

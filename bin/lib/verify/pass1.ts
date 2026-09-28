@@ -88,6 +88,9 @@ interface BibAuthor {
   given?: string;
   /** A corporate / literal name (citation-js spelling of a braced BibTeX name). */
   literal?: string;
+  /** Surname particles citation-js splits off (`van der` of `van der Maaten, Ernst`). */
+  'non-dropping-particle'?: string;
+  'dropping-particle'?: string;
 }
 
 interface BibEntry {
@@ -117,7 +120,15 @@ interface BibEntry {
 function normalizeBibAuthors(rawAuthors: BibAuthor[] | undefined): string[] {
   return (rawAuthors ?? [])
     .map((a) => {
-      const family = String(a?.family ?? '').trim();
+      // The particles belong to the surname the AND-gate compares (SRC-12):
+      // `van der Maaten, Ernst` is compared as "van der maaten", as the
+      // registrar's record spells it.
+      const particle = [a?.['dropping-particle'], a?.['non-dropping-particle']]
+        .map((x) => String(x ?? '').trim())
+        .filter(Boolean)
+        .join(' ');
+      const bare = String(a?.family ?? '').trim();
+      const family = bare && particle ? `${particle} ${bare}` : bare;
       const given = String(a?.given ?? '').trim();
       const literal = String(a?.literal ?? '').trim();
       if (!family) return literal ? `{${literal}}` : '';

@@ -1,0 +1,88 @@
+// tests/verify-retraction-cli.test.ts — SRC-04 through the real CLI (Phase 19
+// stream adapters): a section citing the retracted Wakefield et al. 1998 paper
+// (10.1016/S0140-6736(97)11096-0) is BLOCKED.
+//
+// The built CLI runs in a sandboxed paper under the test runner, so sources are
+// offline and every request is answered by the REAL recordings: the Crossref
+// record of the work (whose `updated-by` carries the Retraction Watch notice)
+// and the retraction re-query. `verify 1` records a blocking verdict that names
+// the retraction, the section's status is `failed`, and `compile --yolo` and
+// `done --yolo` refuse with EXIT_BLOCKED (4). (The verdict label becomes
+// RETRACTED in Phase 20, VRFY-15; today it is the blocking MIS-CITED.)
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  sandbox,
+  runCli,
+  writeState,
+  writeOutline,
+  writePlan,
+  sectionDirOf,
+  STACK_LINE,
+} from './helpers/paper-cli-harness.js';
+
+const WAKEFIELD_DOI = '10.1016/S0140-6736(97)11096-0';
+
+function seedWakefieldPaper(root: string): string {
+  writeState(root, [{ n: 1, slug: 'background' }], 'retraction-cli');
+  writeOutline(root, [{ n: 1, slug: 'background', sources: ['wakefield1998'] }]);
+  writeFileSync(
+    join(root, '.paper', 'CITATIONS.bib'),
+    [
+      '@article{wakefield1998,',
+      '  author = {Wakefield, AJ and Murch, SH and Anthony, A},',
+      '  title = {Ileal-lymphoid-nodular hyperplasia, non-specific colitis, and pervasive developmental disorder in children},',
+      '  journal = {The Lancet},',
+      '  volume = {351},',
+      '  number = {9103},',
+      '  pages = {637--641},',
+      `  doi = {${WAKEFIELD_DOI}},`,
+      '  year = {1998},',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  writeFileSync(join(root, '.paper', 'LIBRARY.json'), JSON.stringify({ $schemaVersion: 1, entries: [] }));
+  writeFileSync(join(root, '.paper', 'RESEARCH.md'), '# Research\n');
+  writePlan(root, 1, 'background', { status: 'written', assigned_sources: '[wakefield1998]' });
+  const dir = sectionDirOf(root, 1, 'background');
+  writeFileSync(
+    join(dir, 'DRAFT.md'),
+    '# Background\n\nAn early case series proposed a link between vaccination and developmental disorders [@wakefield1998].\n',
+  );
+  return dir;
+}
+
+test('SRC-04: `verify 1` citing the retracted Wakefield paper records a blocking verdict naming the retraction; compile and done exit 4', () => {
+  const sb = sandbox('retraction-cli');
+  const root = sb.project('paper');
+  const dir = seedWakefieldPaper(root);
+
+  const v = runCli(sb, root, ['verify', '1', '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(v.status, 4, `verify exits EXIT_BLOCKED (4)\nstdout=${v.stdout}\nstderr=${v.stderr}`);
+  assert.doesNotMatch(v.stderr, STACK_LINE, 'no stack trace');
+
+  const md = readFileSync(join(dir, 'VERIFICATION.md'), 'utf8');
+  assert.match(md, /^Status: failed$/m);
+  // The blocking Pass 1 verdict names the retraction notice (Crossref record + Retraction Watch).
+  assert.match(
+    md,
+    /- wakefield1998: \*\*MIS-CITED\*\* .*retracted.*2010-02-06: Retraction \(notice 10\.1016\/s0140-6736\(10\)60175-4; Retraction Watch record 4036\)/,
+  );
+  assert.ok(!/- wakefield1998: \*\*OK\*\*/.test(md), 'never OK');
+  assert.match(readFileSync(join(dir, 'PLAN.md'), 'utf8'), /^status: failed$/m);
+
+  const c = runCli(sb, root, ['compile', '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(c.status, 4, `compile refuses with EXIT_BLOCKED (4)\nstdout=${c.stdout}\nstderr=${c.stderr}`);
+  assert.match(c.stdout + c.stderr, /wakefield1998/);
+  assert.ok(!existsSync(join(root, '.paper', 'DRAFT.md')), 'compile writes no DRAFT.md');
+
+  const d = runCli(sb, root, ['done', '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(d.status, 4, `done refuses with EXIT_BLOCKED (4)\nstdout=${d.stdout}\nstderr=${d.stderr}`);
+  const exportDir = join(root, '.paper', 'export');
+  const exported = existsSync(exportDir) ? readdirSync(exportDir).filter((f) => /\.(docx|pdf|md|tex|html)$/i.test(f)) : [];
+  assert.deepEqual(exported, [], 'nothing is exported');
+});

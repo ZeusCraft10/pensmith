@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?filter=updates%3A10.1038%2Fnphys1170&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
+    "path": "/works?filter=updates%3A10.1016%2Fj.foreco.2013.06.030&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
     "status": 200,
     "response": {
       "status": "ok",
