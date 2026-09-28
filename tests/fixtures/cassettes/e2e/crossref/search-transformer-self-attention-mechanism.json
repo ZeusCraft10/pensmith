@@ -1,0 +1,445 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=transformer+self-attention+mechanism&rows=10&select=DOI%2Ctitle%2Cauthor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 2266777,
+        "items": [
+          {
+            "DOI": "10.7717/peerj-cs.3829/fig-3",
+            "title": [
+              "Figure 3: Schematic of Swin Transformer self-attention mechanism."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component"
+          },
+          {
+            "DOI": "10.5244/c.35.86",
+            "title": [
+              "PS-Transformer: Learning Sparse Photometric Stereo Network using Self-Attention Mechanism"
+            ],
+            "author": [
+              {
+                "given": "Satoshi",
+                "family": "Ikehata",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2021
+                ]
+              ]
+            },
+            "container-title": [
+              "Proceedings of the British Machine Vision Conference 2021"
+            ],
+            "type": "proceedings-article"
+          },
+          {
+            "DOI": "10.21203/rs.3.rs-3545247/v1",
+            "title": [
+              "Easy attention: A simple self-attention mechanism for transformer-based time-series reconstruction and prediction"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0001-6570-5499",
+                "authenticated-orcid": false,
+                "given": "Ricardo",
+                "family": "Vinuesa",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "KTH Royal Institute of Technology"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Marcial",
+                "family": "Sanchis-Agudo",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "KTH Royal Institute of Technology"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Yuning",
+                "family": "Wang",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "KTH Royal Institute of Technology"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-8589-1572",
+                "authenticated-orcid": false,
+                "given": "Luca",
+                "family": "Guastoni",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "KTH Royal Institute of Technology"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Karthik",
+                "family": "Duraisamy",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "University of Michigan"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2023,
+                  11,
+                  16
+                ]
+              ]
+            },
+            "abstract": "<title>Abstract</title>\n        <p>To improve the robustness of transformer neural networks used for temporal-dynamics prediction of chaotic systems, we propose a novel attention mechanism called easy attention which we\ndemonstrate in time-series reconstruction and prediction. As a consequence of the fact that self attention only makes use of the inner product of queries and keys, it is demonstrated that the keys, queries and softmax are not necessary for obtaining the attention score required to capture\nlong-term dependencies in temporal sequences. Through the singular-value decomposition (SVD)\non the softmax attention score, we further observe that self attention compresses the contributions\nfrom both queries and keys in the spanned space of the attention score. Therefore, our proposed\neasy-attention method directly treats the attention scores as learnable parameters. This approach\nproduces excellent results when reconstructing and predicting the temporal dynamics of chaotic\nsystems exhibiting more robustness and less complexity than self attention or the widely-used long\nshort-term memory (LSTM) network. Our results show great potential for applications in more\ncomplex high-dimensional dynamical systems.</p>",
+            "type": "posted-content"
+          },
+          {
+            "DOI": "10.2139/ssrn.6136211",
+            "title": [
+              "Single-lead ECG arrhythmia detection based on a hybrid transformer model with self-attention mechanism"
+            ],
+            "author": [
+              {
+                "given": "Xinqiang",
+                "family": "Wang",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Gang",
+                "family": "Li",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Ruimin",
+                "family": "Yang",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026
+                ]
+              ]
+            },
+            "type": "posted-content"
+          },
+          {
+            "DOI": "10.7717/peerj-cs.3733/supp-8",
+            "title": [
+              "Supplemental Information 8: Multi-Head Self-Attention transformer encoder implementation with position-wise feed-forward networks and layer normalization, serving as a baseline attention mechanism for comparison with Mamba’s selective state space approach."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component"
+          },
+          {
+            "DOI": "10.32469/10355/96193",
+            "title": [
+              "Multi-headed self-attention mechanism-based Transformer model for predicting bus travel times across multiple bus routes using heterogeneous datasets"
+            ],
+            "author": [
+              {
+                "given": "Md Ahnaf",
+                "family": "Zahin",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "abstract": "<jats:p xml:lang=\"en\">Bus transit is a crucial component of transportation networks, especially in urban areas. Bus agencies must enhance the quality of their real-time bus travel information service to serve their passengers better and attract more travelers. Various models have recently been developed for estimating bus travel times to increase the quality of real-time information service. However, most are concentrated on smaller road networks due to their generally subpar performance in densely populated urban regions on a vast network and failure to produce good results with long-range dependencies. This paper develops a deep learning-based architecture using a single-step multi-station forecasting approach to predict average bus travel times for numerous routes, stops, and trips on a large-scale network using heterogeneous bus transit data collected from the GTFS database and the vehicle probe data. Over one week, data was gathered from multiple bus routes in Saint Louis, Missouri. This study developed a multi-headed self-attention mechanism-based Univariate Transformer neural network to predict the mean vehicle travel times for different hours of the day for multiple stations across multiple routes. In addition, we developed Multivariate GRU and LSTM neural network models for our research to compare the prediction accuracy and comprehend the robustness of the Transformer model. To validate the Transformer Model's performance more in comparison to the GRU and LSTM models, we employed the Historical Average Model and XGBoost model as benchmark models. Historical time steps and prediction horizon were set up to 5 and 1, respectively, which means that five hours of historical average travel time data were used to predict average travel time for the following hour. Only the historical average bus travel time was used as the input parameter for the Transformer model. Other features, including spatial and temporal information, volatility measures (e.g., the standard deviation and variance of travel time), dwell time, expected travel time, jam factors, hours of a day, etc., were captured from our dataset. These parameters were employed to develop the Multivariate GRU and LSTM models. The model's performance was evaluated based on a performance metric called Mean Absolute Percentage Error (MAPE). The results showed that the Transformer model outperformed other models for one-hour ahead prediction having minimum and mean MAPE values of 4.32 percent and 8.29 percent, respectively. We also investigated that the Transformer model performed the best during different traffic conditions (e.g., peak and off-peak hours). Furthermore, we also displayed the model computation time for the prediction; XGBoost was found to be the quickest, with a prediction time of 6.28 seconds, while the Transformer model had a prediction time of 7.42 seconds. The study's findings demonstrate that the Transformer model showed its applicability for real-time travel time prediction and guaranteed the high quality of the predictions produced by the model in the context of a complicated extensive transportation network in high-density urban areas and capturing long-range dependencies.</jats:p>",
+            "type": "dissertation"
+          },
+          {
+            "DOI": "10.2139/ssrn.4329702",
+            "title": [
+              "A Personalized Paper Recommendation Method Based on Knowledge Graph and Transformer Encoder with a Self-Attention Mechanism"
+            ],
+            "author": [
+              {
+                "given": "Li",
+                "family": "Gao",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Yu",
+                "family": "Lan",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Qingkui",
+                "family": "Chen",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Yi",
+                "family": "Liu",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2023
+                ]
+              ]
+            },
+            "type": "posted-content"
+          },
+          {
+            "DOI": "10.1016/j.procs.2025.05.168",
+            "title": [
+              "Research on Transformer Point Cloud Segmentation Technology under Self Attention Mechanism"
+            ],
+            "author": [
+              {
+                "given": "Yong",
+                "family": "Bao",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025
+                ]
+              ]
+            },
+            "container-title": [
+              "Procedia Computer Science"
+            ],
+            "type": "journal-article"
+          },
+          {
+            "DOI": "10.1007/s10792-026-03966-3",
+            "title": [
+              "GDPooled transformer: glaucoma detection using pooled attention based transformer with attention mechanism"
+            ],
+            "author": [
+              {
+                "given": "V. C.",
+                "family": "Bharathi",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Sharmila",
+                "family": "Shaik",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026,
+                  1,
+                  31
+                ]
+              ]
+            },
+            "container-title": [
+              "International Ophthalmology"
+            ],
+            "type": "journal-article"
+          },
+          {
+            "DOI": "10.31224/2476",
+            "title": [
+              "Generalized Attention Mechanism and Relative Position for Transformer"
+            ],
+            "author": [
+              {
+                "given": "Raja Vikram",
+                "family": "Pandya",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2022,
+                  7,
+                  27
+                ]
+              ]
+            },
+            "type": "posted-content"
+          }
+        ],
+        "items-per-page": 10,
+        "query": {
+          "start-index": 0,
+          "search-terms": "transformer self-attention mechanism"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T06:25:02.777Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

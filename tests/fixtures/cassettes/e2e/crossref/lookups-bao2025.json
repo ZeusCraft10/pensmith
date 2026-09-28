@@ -1,0 +1,366 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1016%2Fj.procs.2025.05.168",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              6,
+              11
+            ]
+          ],
+          "date-time": "2026-06-11T05:53:33Z",
+          "timestamp": 1781157213526,
+          "version": "3.54.1"
+        },
+        "reference-count": 13,
+        "publisher": "Elsevier BV",
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2025,
+                  1,
+                  1
+                ]
+              ],
+              "date-time": "2025-01-01T00:00:00Z",
+              "timestamp": 1735689600000
+            },
+            "content-version": "tdm",
+            "delay-in-days": 0,
+            "URL": "https://www.elsevier.com/tdm/userlicense/1.0/"
+          },
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2025,
+                  1,
+                  1
+                ]
+              ],
+              "date-time": "2025-01-01T00:00:00Z",
+              "timestamp": 1735689600000
+            },
+            "content-version": "tdm",
+            "delay-in-days": 0,
+            "URL": "https://www.elsevier.com/legal/tdmrep-license"
+          },
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2025,
+                  5,
+                  30
+                ]
+              ],
+              "date-time": "2025-05-30T00:00:00Z",
+              "timestamp": 1748563200000
+            },
+            "content-version": "vor",
+            "delay-in-days": 149,
+            "URL": "http://creativecommons.org/licenses/by-nc-nd/4.0/"
+          }
+        ],
+        "content-domain": {
+          "domain": [
+            "elsevier.com",
+            "sciencedirect.com"
+          ],
+          "crossmark-restriction": true
+        },
+        "short-container-title": [
+          "Procedia Computer Science"
+        ],
+        "published-print": {
+          "date-parts": [
+            [
+              2025
+            ]
+          ]
+        },
+        "DOI": "10.1016/j.procs.2025.05.168",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2025,
+              6,
+              10
+            ]
+          ],
+          "date-time": "2025-06-10T12:37:19Z",
+          "timestamp": 1749559039000
+        },
+        "page": "1259-1266",
+        "update-policy": "https://doi.org/10.1016/elsevier_cm_policy",
+        "source": "Crossref",
+        "is-referenced-by-count": 4,
+        "special_numbering": "C",
+        "title": [
+          "Research on Transformer Point Cloud Segmentation Technology under Self Attention Mechanism"
+        ],
+        "prefix": "10.1016",
+        "volume": "262",
+        "author": [
+          {
+            "given": "Yong",
+            "family": "Bao",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "78",
+        "reference": [
+          {
+            "issue": "12",
+            "key": "10.1016/j.procs.2025.05.168_bib1",
+            "first-page": "130",
+            "article-title": "A review of Transformer research in computer vision scenarios [J]",
+            "volume": "50",
+            "author": "Luoxuan",
+            "year": "2023",
+            "journal-title": "Computer Science"
+          },
+          {
+            "issue": "11",
+            "key": "10.1016/j.procs.2025.05.168_bib2",
+            "first-page": "3835",
+            "article-title": "SwinT-Unet: Ultrasound image segmentation method based on dual channel self attention mechanism [J]",
+            "volume": "52",
+            "author": "Yantao",
+            "year": "2024",
+            "journal-title": "Acta Sinica"
+          },
+          {
+            "key": "10.1016/j.procs.2025.05.168_bib3",
+            "unstructured": "Zhang Haibo, Shen Yang, Xu Hao, etc Point cloud feature extraction method based on local neighborhood Transformer [J]. Software Engineering, 2023, 26 (6): 24-29,35"
+          },
+          {
+            "issue": "3",
+            "key": "10.1016/j.procs.2025.05.168_bib4",
+            "first-page": "62",
+            "article-title": "Research on Point Cloud Branch and Leaf Separation Method Based on Point Transformer v2 [J]",
+            "volume": "45",
+            "author": "Jin",
+            "year": "2024",
+            "journal-title": "Aerospace Return and Remote Sensing"
+          },
+          {
+            "issue": "12",
+            "key": "10.1016/j.procs.2025.05.168_bib5",
+            "first-page": "160",
+            "article-title": "Real scene point cloud semantic segmentation method based on dual channel feature fusion [J]",
+            "volume": "60",
+            "author": "Liujie",
+            "year": "2024",
+            "journal-title": "Computer Engineering and Applications"
+          },
+          {
+            "issue": "7",
+            "key": "10.1016/j.procs.2025.05.168_bib6",
+            "doi-asserted-by": "crossref",
+            "first-page": "840",
+            "DOI": "10.37188/OPE.20223007.0840",
+            "article-title": "Three dimensional point cloud semantic segmentation based on self attention feature fusion group convolutional neural network [J]",
+            "volume": "30",
+            "author": "Jun",
+            "year": "2022",
+            "journal-title": "Optical Precision Engineering"
+          },
+          {
+            "key": "10.1016/j.procs.2025.05.168_bib7",
+            "unstructured": "Zhang Yimin Hyperpatch Transformer point cloud segmentation network based on contrastive boundary learning [J]. Computer Age, 2023 (9): 75-80,86"
+          },
+          {
+            "issue": "2",
+            "key": "10.1016/j.procs.2025.05.168_bib8",
+            "first-page": "237",
+            "article-title": "Multi source image instance segmentation network for composite materials based on Transformer [J]",
+            "volume": "52",
+            "author": "Yan",
+            "year": "2023",
+            "journal-title": "Infrared and Laser Engineering"
+          },
+          {
+            "issue": "11",
+            "key": "10.1016/j.procs.2025.05.168_bib9",
+            "first-page": "1509",
+            "article-title": "Design of mandibular angle osteotomy surface based on point cloud semantic segmentation algorithm [J]",
+            "volume": "56",
+            "author": "Chaofan",
+            "year": "2022",
+            "journal-title": "Journal of Shanghai Jiao Tong University"
+          },
+          {
+            "issue": "19",
+            "key": "10.1016/j.procs.2025.05.168_bib10",
+            "first-page": "8",
+            "article-title": "Research on Semantic Segmentation Algorithm of Forest Point Cloud Data Based on TF PortNet++[J]",
+            "volume": "55",
+            "author": "Siwen",
+            "year": "2024",
+            "journal-title": "Southern Agricultural Machinery"
+          },
+          {
+            "issue": "2",
+            "key": "10.1016/j.procs.2025.05.168_bib11",
+            "doi-asserted-by": "crossref",
+            "first-page": "483",
+            "DOI": "10.11834/jig.210787",
+            "article-title": "Radar point cloud segmentation combining sparse attention and instance enhancement [J]",
+            "volume": "28",
+            "author": "Sheng",
+            "year": "2023",
+            "journal-title": "Chinese Journal of Image and Graphics"
+          },
+          {
+            "issue": "4",
+            "key": "10.1016/j.procs.2025.05.168_bib12",
+            "first-page": "76",
+            "article-title": "Pig Back Transformer, an automatic calculation model for 3D point cloud body size of pigs [J]",
+            "volume": "6",
+            "author": "Yuxiao",
+            "year": "2024",
+            "journal-title": "Smart Agriculture (Chinese and English)"
+          },
+          {
+            "issue": "4",
+            "key": "10.1016/j.procs.2025.05.168_bib13",
+            "first-page": "591",
+            "article-title": "Real time LiDAR point cloud semantic segmentation based on multi-scale attention mechanism [J]",
+            "volume": "15",
+            "author": "Chen",
+            "year": "2024",
+            "journal-title": "Journal of Automotive Safety and Energy Conservation"
+          }
+        ],
+        "container-title": [
+          "Procedia Computer Science"
+        ],
+        "original-title": [],
+        "language": "en",
+        "link": [
+          {
+            "URL": "https://api.elsevier.com/content/article/PII:S1877050925020150?httpAccept=text/xml",
+            "content-type": "text/xml",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://api.elsevier.com/content/article/PII:S1877050925020150?httpAccept=text/plain",
+            "content-type": "text/plain",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2025,
+              9,
+              17
+            ]
+          ],
+          "date-time": "2025-09-17T21:52:13Z",
+          "timestamp": 1758145933000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://linkinghub.elsevier.com/retrieve/pii/S1877050925020150"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2025
+            ]
+          ]
+        },
+        "references-count": 13,
+        "alternative-id": [
+          "S1877050925020150"
+        ],
+        "URL": "https://doi.org/10.1016/j.procs.2025.05.168",
+        "relation": {},
+        "ISSN": [
+          "1877-0509"
+        ],
+        "issn-type": [
+          {
+            "value": "1877-0509",
+            "type": "print"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2025
+            ]
+          ]
+        },
+        "assertion": [
+          {
+            "value": "Elsevier",
+            "name": "publisher",
+            "label": "This article is maintained by"
+          },
+          {
+            "value": "Research on Transformer Point Cloud Segmentation Technology under Self Attention Mechanism",
+            "name": "articletitle",
+            "label": "Article Title"
+          },
+          {
+            "value": "Procedia Computer Science",
+            "name": "journaltitle",
+            "label": "Journal Title"
+          },
+          {
+            "value": "https://doi.org/10.1016/j.procs.2025.05.168",
+            "name": "articlelink",
+            "label": "CrossRef DOI link to publisher maintained version"
+          },
+          {
+            "value": "article",
+            "name": "content_type",
+            "label": "Content Type"
+          },
+          {
+            "value": "© 2025 Published by Elsevier B.V.",
+            "name": "copyright",
+            "label": "Copyright"
+          }
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T06:25:11.650Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

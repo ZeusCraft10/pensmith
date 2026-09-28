@@ -19,13 +19,22 @@ that same `resolveNextAction` decision table — do NOT duplicate the routing
 logic here. (Tier-2 CLI runs the identical `resolveNextAction`; Tier-1 reaches
 it via the bare-command dispatch in `bin/pensmith.ts`.)
 
+One `/pensmith` completes ONE step (PRD §5.1): intake, research, outline,
+compile or done — or, for a section, its whole plan → write → verify (see
+`workflows/next.md`). It ends by telling the user what ran and what comes next
+(`ran plan §2, write §2; next: plan §3`), so "continue" simply means another
+`/pensmith`. `--dry-run` works in `./.paper-dry-run/` (the real `.paper/` is
+never written) and keeps stepping until the paper is done or a gate needs an
+answer.
+
 ## Natural-language → verb (PRD §5.4)
 
 | The user says… | Route to |
 | --- | --- |
 | "where am I?" / "what's next?" | `pensmith status` |
 | "resume" / "continue where I left off" | `pensmith resume` |
-| "write the next section" / "continue" | `pensmith next` (plan → write → verify of the next incomplete section) |
+| "write the next section" / "continue" | `pensmith next` (one step: plan → write → verify of the next incomplete section) |
+| "try it without spending anything" / "dry run" | `pensmith --dry-run` (a trial run in `./.paper-dry-run/`; no network or model call) |
 | "make it sound less AI" | `pensmith done` (the humanizer runs as part of the done gate) |
 | "compile" / "put it all together" | `pensmith compile` |
 | anything that just means "do the next thing" | the bare state-aware route above |

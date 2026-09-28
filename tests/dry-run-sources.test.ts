@@ -13,7 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -137,7 +137,9 @@ test('RUN-27: dry-run research uses ONLY the synthetic provider — >=5 sources,
   assert.ok(cands.length >= 5, `>=5 synthetic sources, got ${cands.length}`);
   assert.ok(cands.every((c) => c.synthetic === true && isReservedDryRunId(c.doi)));
   assert.deepEqual(rec.events, [], `no dial, DNS lookup or cassette read: ${JSON.stringify(rec.events)}`);
-  const log = readFileSync(join(root, '.paper', 'RESEARCH.md'), 'utf8');
+  // GRND-19: under --dry-run the research log is written in the workspace, never in .paper/.
+  assert.ok(!existsSync(join(root, '.paper', 'RESEARCH.md')), 'nothing was written to .paper/');
+  const log = readFileSync(join(root, '.paper-dry-run', 'RESEARCH.md'), 'utf8');
   assert.match(log, /^> OFFLINE MODE \(--dry-run\) — synthetic dry-run sources, not live results\.$/m);
   assert.match(log, /synthetic dry-run source/);
 });
@@ -225,25 +227,23 @@ function runCli(args: string[], cwd: string): { status: number | null; stdout: s
 
 test('RUN-27: `add <reserved DOI>` is refused outside --dry-run (non-zero) and reports unavailable (dry-run) under it', () => {
   const doi = dryRun.syntheticSource('00c0ffee').doi ?? '';
-  const seed = (prefix: string, madeByDryRun: boolean): string => {
+  const seed = (prefix: string): string => {
     const root = tmp(prefix);
     mkdirSync(join(root, '.paper'), { recursive: true });
     writeFileSync(join(root, '.paper', 'STATE.json'), JSON.stringify({ $schemaVersion: 2, paperId: 'dryrun', createdAt: new Date().toISOString(), sections: [] }));
-    if (madeByDryRun) writeFileSync(join(root, '.paper', 'DRY-RUN.md'), '# made by pensmith --dry-run\n');
     return root;
   };
-  const real = seed('pensmith-dryrun-add-real-', false);
+  const real = seed('pensmith-dryrun-add-real-');
   const outside = runCli(['add', doi, '--yolo'], real);
   assert.notEqual(outside.status, 0, `refused: ${outside.stderr}`);
   assert.match(outside.stderr, /is a reserved dry-run identifier .*Source NOT added/);
-  // A --dry-run works only on a paper a dry run made (never over a real one).
-  const preview = seed('pensmith-dryrun-add-preview-', true);
+  // A --dry-run works in its workspace, seeded from the paper (GRND-19).
+  const preview = seed('pensmith-dryrun-add-preview-');
   const inside = runCli(['--dry-run', 'add', doi, '--yolo'], preview);
   assert.equal(inside.status, 0, `a dry-run preview is not an error: ${inside.stderr}`);
   assert.match(inside.stderr, /DOI verification unavailable \(dry-run\) — .* NOT added\./);
-  for (const root of [real, preview]) {
-    const bibPath = join(root, '.paper', 'CITATIONS.bib');
-    assert.ok(!existsSync(bibPath) || !readFileSync(bibPath, 'utf8').includes('pensmith-dryrun'), 'nothing is added in either mode');
+  for (const bibPath of [real, preview].flatMap((root) => [join(root, '.paper', 'CITATIONS.bib'), join(root, '.paper-dry-run', 'CITATIONS.bib')])) {
+    assert.ok(!existsSync(bibPath) || !readFileSync(bibPath, 'utf8').includes('pensmith-dryrun'), `nothing is added in either mode (${bibPath})`);
   }
 });
 
@@ -303,6 +303,9 @@ test('RUN-27: a section verified under --dry-run never compiles or exports outsi
   assert.equal(block.blocked, true);
   assert.ok(block.reasons.some((r) => /verified under --dry-run/.test(r)), JSON.stringify(block.reasons));
 
+  // Under --dry-run the same paper — as its workspace copy (GRND-19) — compiles.
+  cpSync(join(root, '.paper'), join(root, '.paper-dry-run'), { recursive: true });
   const preview = await underDryRun(() => runCompile({ paperRoot: root, yolo: true, onWarn: () => {} }));
   assert.equal(preview.refused, false, `the --dry-run preview compiles: ${JSON.stringify(preview.refuseReasons)}`);
+  assert.ok(existsSync(join(root, '.paper-dry-run', 'COMPILE-REPORT.md')), 'the preview compiled in the workspace');
 });

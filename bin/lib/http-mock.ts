@@ -30,8 +30,10 @@
 // null here, and bin/lib/http.ts turns it into a typed OfflineEgressError.
 //
 // Fixtures live in tests/fixtures/cassettes/<adapter>/*.json (real recordings
-// made by scripts/refresh-cassettes.mjs) and tests/fixtures/cassettes/
-// synthetic/<adapter>/*.json (hand-written negative-test fixtures). This is the
+// made by scripts/refresh-cassettes.mjs), tests/fixtures/cassettes/e2e/
+// <adapter>/*.json (the recorded end-to-end corpus, `--corpus e2e`, D-18-31)
+// and tests/fixtures/cassettes/synthetic/<adapter>/*.json (hand-written
+// negative-test fixtures). The exact-match index reads all three. This is the
 // ONLY runtime module that resolves a tests/ path (chokepoint row
 // tests-path-at-runtime); an installed package does not ship tests/, so
 // fixturesAvailable is false there and offline replay is refused up front
@@ -83,6 +85,13 @@ function findPkgRoot(start: string): string {
 const PKG_ROOT = findPkgRoot(__dirname);
 const CASSETTES_ROOT = join(PKG_ROOT, 'tests', 'fixtures', 'cassettes');
 const SYNTHETIC_DIR = 'synthetic';
+/**
+ * The recorded end-to-end corpus (GRND-18, D-18-31): tests/fixtures/cassettes/
+ * e2e/<adapter>/, written only by `npm run cassettes:refresh -- --corpus e2e`
+ * and described by tests/fixtures/e2e-corpus/MANIFEST.json. A separate root, so
+ * a per-adapter refresh (which replaces <adapter>/ wholesale) never wipes it.
+ */
+export const E2E_CASSETTES_DIR = 'e2e';
 
 // ---------------------------------------------------------------------
 //   Public types
@@ -244,11 +253,18 @@ export function isRecordingEnabled(): boolean {
 //   Disclosure strings (D-17-08 — fixed copy)
 // ---------------------------------------------------------------------
 
-/** The stderr banner for an offline run, or null when live. */
-export function offlineBanner(mode: NetworkMode = networkMode()): string | null {
+/**
+ * The stderr banner for an offline run, or null when live. A dry run names its
+ * workspace (GRND-19, D-18-30) when the caller passes it — the folder every
+ * file of the dry run is written to (`<root>/.paper-dry-run`).
+ */
+export function offlineBanner(mode: NetworkMode = networkMode(), workspace?: string): string | null {
   if (!mode.sourcesOffline || mode.reason === null) return null;
   if (mode.dryRun) {
-    return 'OFFLINE MODE (reason: --dry-run): sources are labelled synthetic dry-run sources; no network or model call is made';
+    const base = 'OFFLINE MODE (reason: --dry-run): sources are labelled synthetic dry-run sources; no network or model call is made';
+    return workspace !== undefined && workspace.length > 0
+      ? `${base}; working in ${workspace} (the real .paper/ is never written)`
+      : base;
   }
   return `OFFLINE MODE (reason: ${mode.reason}): sources, verification, detector and plagiarism results are recorded fixtures, not live`;
 }
@@ -311,6 +327,8 @@ export interface AnnounceOptions {
   readonly verb: string | null;
   /** The raw argv, when available: --version / --help / --estimate are exempt. */
   readonly argv?: readonly string[];
+  /** A dry run's workspace folder, named in the OFFLINE MODE banner (GRND-19). */
+  readonly workspace?: string;
 }
 
 /**
@@ -328,7 +346,7 @@ export function announceModes(opts: AnnounceOptions): void {
   const mode = networkMode();
   if (!announced && !meta) {
     announced = true;
-    const lines = [offlineBanner(mode), llmStubbedBanner(mode)].filter(
+    const lines = [offlineBanner(mode, opts.workspace), llmStubbedBanner(mode)].filter(
       (l): l is string => l !== null,
     );
     if (lines.length > 0) process.stderr.write(lines.join('\n') + '\n');
@@ -413,9 +431,13 @@ function parseCassetteFile(file: string): Cassette[] {
   return parsed;
 }
 
-/** The directories searched for an adapter: <adapter>/ then synthetic/<adapter>/. */
+/** The directories searched for an adapter: <adapter>/, then e2e/<adapter>/, then synthetic/<adapter>/. */
 function adapterDirs(adapter: string): string[] {
-  return [join(CASSETTES_ROOT, adapter), join(CASSETTES_ROOT, SYNTHETIC_DIR, adapter)];
+  return [
+    join(CASSETTES_ROOT, adapter),
+    join(CASSETTES_ROOT, E2E_CASSETTES_DIR, adapter),
+    join(CASSETTES_ROOT, SYNTHETIC_DIR, adapter),
+  ];
 }
 
 /**

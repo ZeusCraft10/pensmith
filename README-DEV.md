@@ -27,11 +27,33 @@ npm link && pensmith --version          # a global symlink, exactly like `npm i 
 
 Entry points use `bin/lib/main-guard.ts` `isMainModule(import.meta.url)`, which compares realpaths, so the CLI and `dist/mcp/server.js` also run through `npm link`, `npm i -g`, `node_modules/.bin` shims and symlinked (or, on Windows, junctioned) plugin roots. A hand-rolled `import.meta.url === pathToFileURL(process.argv[1]).href` guard is false under a symlink and is rejected by the `main-guard` chokepoint row.
 
+## Trying the workflow without a key
+
+Three ways to drive a paper from a checkout without a provider key, from least to most real:
+
+```bash
+# 1. A dry run: zero sockets, synthetic sources, stubbed model — in ./.paper-dry-run/
+#    (seeded from .paper/ when there is one; .paper/ is never written).
+cd /some/scratch/folder && cp <checkout>/tests/fixtures/assignment.txt .
+node <checkout>/dist/bin/pensmith.js --dry-run --yolo      # assignment → .paper-dry-run/export/DRAFT.dry-run.md
+
+# 2. Stubbed model, live sources: PENSMITH_NO_LLM=1 answers every model call with its contract stub.
+PENSMITH_NO_LLM=1 node <checkout>/dist/bin/pensmith.js --yolo   # one step per run
+
+# 3. The mock LLM (RUN-21) as the provider, through the global runtime.json of an isolated data dir.
+npm run mock-llm -- --port 18080
+#   <data dir>/pensmith/runtime.json: {"$schemaVersion":2,"provider":"anthropic","endpoint":"http://127.0.0.1:18080"}
+```
+
+Each bare run is one step (a section's step is plan → write → verify) and ends with `pensmith: ran …; next: …`. Run CLI experiments from a scratch folder with `XDG_DATA_HOME` (and `HOME` on macOS) pointing inside it, never from the checkout itself.
+
 ## Test runner
 
 `npm test` runs `node scripts/run-tests.mjs`, which programmatically discovers `tests/**/*.test.ts` (no shell glob — works identically on linux, macos, and windows) and executes them via `node --import tsx --test`. The runner exits 1 if zero test files are found (avoids a vacuous CI pass on Windows). Pass files or directories to run a subset (`node scripts/run-tests.mjs tests/tier-contract/`) and `--`-flags to forward them to `node --test`.
 
 The runner also isolates the data dir (CI-09): it points `XDG_DATA_HOME`, `LOCALAPPDATA` and `PENSMITH_TEST_DATA_DIR` at a per-run temp dir and sets `PENSMITH_TEST=1`, which also keeps sources offline unless `PENSMITH_NETWORK_TESTS=1`. `bin/lib/paths.ts` refuses a non-temp data dir under any test context, so `node --import tsx --test tests/<file>.test.ts` is isolated as well.
+
+Whole-workflow tests drive the built CLI through `tests/helpers/e2e-chain.ts` (`openChainSandbox`: a project folder, an isolated data dir, the mock LLM and per-slug call counts; `loop()` repeats bare runs until a condition) over the recorded e2e corpus (`tests/fixtures/e2e-corpus/`, re-recorded with `npm run cassettes:refresh -- --corpus e2e`; see CONTRIBUTING.md).
 
 ## Chokepoint rule
 

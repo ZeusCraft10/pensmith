@@ -1,0 +1,1261 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=attention+mechanism+neural+machine+translation&retmode=json&retmax=10",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esearch",
+        "version": "0.3"
+      },
+      "esearchresult": {
+        "count": "66",
+        "retmax": "10",
+        "retstart": "0",
+        "idlist": [
+          "42767241",
+          "42721195",
+          "42183030",
+          "42058357",
+          "42031884",
+          "41836271",
+          "41753681",
+          "41740394",
+          "41678571",
+          "41606105"
+        ],
+        "translationset": [
+          {
+            "from": "attention",
+            "to": "\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention's\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]"
+          },
+          {
+            "from": "mechanism",
+            "to": "\"mechanism\"[All Fields] OR \"mechanisms\"[All Fields]"
+          },
+          {
+            "from": "neural",
+            "to": "\"neural\"[All Fields] OR \"neuralization\"[All Fields] OR \"neuralize\"[All Fields] OR \"neuralized\"[All Fields] OR \"neuralizes\"[All Fields] OR \"neuralizing\"[All Fields] OR \"neurally\"[All Fields]"
+          },
+          {
+            "from": "machine translation",
+            "to": "\"Mach Transl\"[Journal:__jid9884454] OR (\"machine\"[All Fields] AND \"translation\"[All Fields]) OR \"machine translation\"[All Fields]"
+          }
+        ],
+        "querytranslation": "(\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention s\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]) AND (\"mechanism\"[All Fields] OR \"mechanisms\"[All Fields]) AND (\"neural\"[All Fields] OR \"neuralization\"[All Fields] OR \"neuralize\"[All Fields] OR \"neuralized\"[All Fields] OR \"neuralizes\"[All Fields] OR \"neuralizing\"[All Fields] OR \"neurally\"[All Fields]) AND (\"mach transl\"[Journal] OR (\"machine\"[All Fields] AND \"translation\"[All Fields]) OR \"machine translation\"[All Fields])"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T06:25:02.777Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  },
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42767241%2C42721195%2C42183030%2C42058357%2C42031884%2C41836271%2C41753681%2C41740394%2C41678571%2C41606105&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "41606105": {
+          "uid": "41606105",
+          "pubdate": "2026 Jan 28",
+          "epubdate": "2026 Jan 28",
+          "source": "Sci Rep",
+          "authors": [
+            {
+              "name": "Shahin N",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ismail L",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Ismail L",
+          "title": "ADAT novel time-series-aware adaptive transformer architecture for sign language translation.",
+          "sorttitle": "adat novel time series aware adaptive transformer architecture for sign language translation",
+          "volume": "16",
+          "issue": "1",
+          "pages": "6551",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101563288",
+          "issn": "",
+          "essn": "2045-2322",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "41606105"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC12910085"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC12910085;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1038/s41598-026-36293-9"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "10.1038/s41598-026-36293-9"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/04/21 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/01/12 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/01/29 01:49"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/01/29 01:48"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/01/28 23:26"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/01/28 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 54,
+          "fulljournalname": "Scientific reports",
+          "elocationid": "doi: 10.1038/s41598-026-36293-9",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/01/28 00:00",
+          "sortfirstauthor": "Shahin N",
+          "vernaculartitle": ""
+        },
+        "41678571": {
+          "uid": "41678571",
+          "pubdate": "2026",
+          "epubdate": "2026 Feb 12",
+          "source": "PLoS One",
+          "authors": [
+            {
+              "name": "Chi C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Li F",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Liu Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Xie P",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yan H",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Yan H",
+          "title": "Dependency-aware self-attention for robust neural machine translation.",
+          "sorttitle": "dependency aware self attention for robust neural machine translation",
+          "volume": "21",
+          "issue": "2",
+          "pages": "e0342772",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101285081",
+          "issn": "",
+          "essn": "1932-6203",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "258",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "41678571"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC12900430"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC12900430;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1371/journal.pone.0342772"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "PONE-D-25-55383"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/10/13 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/01/23 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/02/12 20:34"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/02/12 20:33"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/02/12 13:53"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/02/12 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 26,
+          "fulljournalname": "PloS one",
+          "elocationid": "doi: 10.1371/journal.pone.0342772",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/02/12 00:00",
+          "sortfirstauthor": "Chi C",
+          "vernaculartitle": ""
+        },
+        "41740394": {
+          "uid": "41740394",
+          "pubdate": "2026 Jun 5",
+          "epubdate": "2026 Feb 21",
+          "source": "Spectrochim Acta A Mol Biomol Spectrosc",
+          "authors": [
+            {
+              "name": "Gu M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yu B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Liu H",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Kong H",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Kong H",
+          "title": "Multivariate feature analysis of early-stage laryngeal cancer serum components using surface-enhanced Raman spectroscopy.",
+          "sorttitle": "multivariate feature analysis of early stage laryngeal cancer serum components using surface enhanced raman spectroscopy",
+          "volume": "354",
+          "issue": "",
+          "pages": "127625",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "9602533",
+          "issn": "1386-1425",
+          "essn": "1873-3557",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "256",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "41740394"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1016/j.saa.2026.127625"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "S1386-1425(26)00196-4"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/12/02 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/02/18 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/02/19 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/03/15 06:49"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/02/26 15:26"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/02/25 18:07"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Spectrochimica acta. Part A, Molecular and biomolecular spectroscopy",
+          "elocationid": "doi: 10.1016/j.saa.2026.127625",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/06/05 00:00",
+          "sortfirstauthor": "Gu M",
+          "vernaculartitle": ""
+        },
+        "41753681": {
+          "uid": "41753681",
+          "pubdate": "2026 Feb 6",
+          "epubdate": "2026 Feb 6",
+          "source": "Microorganisms",
+          "authors": [
+            {
+              "name": "Boudza R",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Bounou S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Segura-Garcia J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Moukadiri I",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Maicas S",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Maicas S",
+          "title": "Artificial Intelligence as a Catalyst for Antimicrobial Discovery: From Predictive Models to De Novo Design.",
+          "sorttitle": "artificial intelligence as a catalyst for antimicrobial discovery from predictive models to de novo design",
+          "volume": "14",
+          "issue": "2",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101625893",
+          "issn": "2076-2607",
+          "essn": "2076-2607",
+          "pubtype": [
+            "Journal Article",
+            "Review"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "41753681"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC12943268"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC12943268;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/microorganisms14020394"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "microorganisms14020394"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/01/14 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/01/29 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/02/03 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/02/27 06:32"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/02/27 06:31"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/02/27 01:15"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/02/06 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 73,
+          "fulljournalname": "Microorganisms",
+          "elocationid": "doi: 10.3390/microorganisms14020394",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/02/06 00:00",
+          "sortfirstauthor": "Boudza R",
+          "vernaculartitle": ""
+        },
+        "41836271": {
+          "uid": "41836271",
+          "pubdate": "2025 May",
+          "epubdate": "",
+          "source": "Transact Mach Learn Res",
+          "authors": [
+            {
+              "name": "Cranney C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Meyer JG",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Meyer JG",
+          "title": "AttentionSmithy: A Modular Framework for Rapid Transformer Development.",
+          "sorttitle": "attentionsmithy a modular framework for rapid transformer development",
+          "volume": "2025",
+          "issue": "",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "9918574385206676",
+          "issn": "",
+          "essn": "2835-8856",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "4",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "41836271"
+            },
+            {
+              "idtype": "mid",
+              "idtypen": 8,
+              "value": "NIHMS2109656"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC12987691"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC12987691;manuscript-id: NIHMS2109656;"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "4519"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2026/03/16 21:58"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/03/16 21:57"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/03/16 06:05"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/03/14 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 37,
+          "fulljournalname": "Transactions on machine learning research",
+          "elocationid": "pii: 4519",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2025/05/01 00:00",
+          "sortfirstauthor": "Cranney C",
+          "vernaculartitle": ""
+        },
+        "42031884": {
+          "uid": "42031884",
+          "pubdate": "2026 Apr 24",
+          "epubdate": "2026 Apr 24",
+          "source": "Sci Rep",
+          "authors": [
+            {
+              "name": "Li F",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yin F",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Deng S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Cui Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Sun H",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Sun H",
+          "title": "Gated transformer with shallow decoder for machine translation.",
+          "sorttitle": "gated transformer with shallow decoder for machine translation",
+          "volume": "16",
+          "issue": "1",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101563288",
+          "issn": "",
+          "essn": "2045-2322",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42031884"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13280153"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13280153;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1038/s41598-026-49583-z"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "10.1038/s41598-026-49583-z"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/12/23 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/04/15 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/04/25 00:35"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/04/25 00:34"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/04/24 23:20"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/04/24 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 39,
+          "fulljournalname": "Scientific reports",
+          "elocationid": "doi: 10.1038/s41598-026-49583-z",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/04/24 00:00",
+          "sortfirstauthor": "Li F",
+          "vernaculartitle": ""
+        },
+        "42058357": {
+          "uid": "42058357",
+          "pubdate": "2026 Mar",
+          "epubdate": "2026 Mar 29",
+          "source": "Cureus",
+          "authors": [
+            {
+              "name": "Tsouka M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Gkolfaki A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Tzila E",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Panagouli E",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Panagouli E",
+          "title": "Functional Magnetic Resonance Imaging and Electroencephalography in Psychiatric Disease Diagnosis: A Review of New Findings and Comparisons.",
+          "sorttitle": "functional magnetic resonance imaging and electroencephalography in psychiatric disease diagnosis a review of new findings and comparisons",
+          "volume": "18",
+          "issue": "3",
+          "pages": "e106048",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101596737",
+          "issn": "2168-8184",
+          "essn": "2168-8184",
+          "pubtype": [
+            "Journal Article",
+            "Review"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "258",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42058357"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13122403"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13122403;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.7759/cureus.106048"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "accepted",
+              "date": "2026/03/29 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/04/30 06:34"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/04/30 06:33"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/04/30 04:49"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/03/29 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 34,
+          "fulljournalname": "Cureus",
+          "elocationid": "doi: 10.7759/cureus.106048",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/03/29 00:00",
+          "sortfirstauthor": "Tsouka M",
+          "vernaculartitle": ""
+        },
+        "42183030": {
+          "uid": "42183030",
+          "pubdate": "2026",
+          "epubdate": "2026 May 8",
+          "source": "Front Neurorobot",
+          "authors": [
+            {
+              "name": "Qi X",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Bao H",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Bao H",
+          "title": "A lightweight Chinese-English translation model integrating compressed BERT attention and phrase discard mechanism.",
+          "sorttitle": "lightweight chinese english translation model integrating compressed bert attention and phrase discard mechanism",
+          "volume": "20",
+          "issue": "",
+          "pages": "1795490",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101477958",
+          "issn": "1662-5218",
+          "essn": "1662-5218",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "258",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42183030"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13194120"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13194120;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3389/fnbot.2026.1795490"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/01/25 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/04/21 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/04/23 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/05/25 12:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/05/25 12:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/05/25 08:15"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/05/08 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 46,
+          "fulljournalname": "Frontiers in neurorobotics",
+          "elocationid": "doi: 10.3389/fnbot.2026.1795490",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/05/08 00:00",
+          "sortfirstauthor": "Qi X",
+          "vernaculartitle": ""
+        },
+        "42721195": {
+          "uid": "42721195",
+          "pubdate": "2026 Sep 10",
+          "epubdate": "2026 Sep 10",
+          "source": "JMIR Rehabil Assist Technol",
+          "authors": [
+            {
+              "name": "Wang J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yuan Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Xu H",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Luan G",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Luan G",
+          "title": "Scientific and Technological Developments in Brain-Computer Interfaces: Dual Bibliometric Analysis of Articles and Patents.",
+          "sorttitle": "scientific and technological developments in brain computer interfaces dual bibliometric analysis of articles and patents",
+          "volume": "13",
+          "issue": "",
+          "pages": "e95902",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101703412",
+          "issn": "2369-2529",
+          "essn": "2369-2529",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42721195"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13561149"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13561149;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.2196/95902"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "v13i1e95902"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/03/23 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/06/18 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/07/14 00:00"
+            },
+            {
+              "pubstatus": "aheadofprint",
+              "date": "2026/07/14 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/10 17:43"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/10 17:42"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/10 13:43"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/09/10 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 26,
+          "fulljournalname": "JMIR rehabilitation and assistive technologies",
+          "elocationid": "doi: 10.2196/95902",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/10 00:00",
+          "sortfirstauthor": "Wang J",
+          "vernaculartitle": ""
+        },
+        "42767241": {
+          "uid": "42767241",
+          "pubdate": "2026 Sep 21",
+          "epubdate": "2026 Sep 21",
+          "source": "Rofo",
+          "authors": [
+            {
+              "name": "Stueckle CA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Limbrock M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Haage P",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Haage P",
+          "title": "Artificial Intelligence in Radiology: Methodological Foundations, Clinical Applications, and Emerging Multimodal Models.",
+          "sorttitle": "artificial intelligence in radiology methodological foundations clinical applications and emerging multimodal models",
+          "volume": "",
+          "issue": "",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "7507497",
+          "issn": "",
+          "essn": "1438-9010",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - as supplied by publisher",
+          "pubstatus": "10",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42767241"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1055/a-2944-0073"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/21 23:33"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/21 23:33"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/21 18:53"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "RoFo : Fortschritte auf dem Gebiete der Rontgenstrahlen und der Nuklearmedizin",
+          "elocationid": "doi: 10.1055/a-2944-0073",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/21 00:00",
+          "sortfirstauthor": "Stueckle CA",
+          "vernaculartitle": "Künstliche Intelligenz in der Radiologie: Methodische Grundlagen, klinische Anwendungen und neue multimodale Modelle."
+        },
+        "uids": [
+          "42767241",
+          "42721195",
+          "42183030",
+          "42058357",
+          "42031884",
+          "41836271",
+          "41753681",
+          "41740394",
+          "41678571",
+          "41606105"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T06:25:02.777Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

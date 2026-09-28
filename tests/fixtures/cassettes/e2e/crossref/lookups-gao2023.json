@@ -1,0 +1,159 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.2139%2Fssrn.4329702",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2023,
+              7,
+              28
+            ]
+          ],
+          "date-time": "2023-07-28T08:31:55Z",
+          "timestamp": 1690533115920
+        },
+        "posted": {
+          "date-parts": [
+            [
+              2023
+            ]
+          ]
+        },
+        "group-title": "SSRN",
+        "reference-count": 0,
+        "publisher": "Elsevier BV",
+        "content-domain": {
+          "domain": [],
+          "crossmark-restriction": false
+        },
+        "short-container-title": [],
+        "DOI": "10.2139/ssrn.4329702",
+        "type": "posted-content",
+        "created": {
+          "date-parts": [
+            [
+              2023,
+              1,
+              31
+            ]
+          ],
+          "date-time": "2023-01-31T16:45:32Z",
+          "timestamp": 1675183532000
+        },
+        "source": "Crossref",
+        "is-referenced-by-count": 1,
+        "title": [
+          "A Personalized Paper Recommendation Method Based on Knowledge Graph and Transformer Encoder with a Self-Attention Mechanism"
+        ],
+        "prefix": "10.2139",
+        "author": [
+          {
+            "given": "Li",
+            "family": "Gao",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Yu",
+            "family": "Lan",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Qingkui",
+            "family": "Chen",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "given": "Yi",
+            "family": "Liu",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          }
+        ],
+        "member": "78",
+        "container-title": [],
+        "original-title": [],
+        "deposited": {
+          "date-parts": [
+            [
+              2023,
+              4,
+              14
+            ]
+          ],
+          "date-time": "2023-04-14T09:40:47Z",
+          "timestamp": 1681465247000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://www.ssrn.com/abstract=4329702"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2023
+            ]
+          ]
+        },
+        "references-count": 0,
+        "URL": "https://doi.org/10.2139/ssrn.4329702",
+        "relation": {},
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2023
+            ]
+          ]
+        },
+        "subtype": "preprint"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T06:25:11.650Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

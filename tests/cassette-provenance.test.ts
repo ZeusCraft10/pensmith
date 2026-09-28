@@ -3,7 +3,8 @@
 //
 //   - Every cassette OUTSIDE tests/fixtures/cassettes/synthetic/ is a real
 //     recording: every entry carries the provenance scripts/refresh-cassettes.mjs
-//     writes ({ recordedAt, recorder, adapter }), with adapter = its directory.
+//     writes ({ recordedAt, recorder, adapter }), with adapter = its directory
+//     (`<adapter>/`, or `e2e/<adapter>/` for the recorded e2e corpus, D-18-31).
 //   - Synthetic identifiers (10.0000/…, 10.1234/example) appear only under
 //     synthetic/ (the packaged RUN-27 dry-run corpus is not a cassette).
 //   - The exact-match store is unambiguous: no two committed entries share a
@@ -22,6 +23,7 @@ import {
   lookupFixture,
   recordedErrorBody,
   SCRUBBED_QUERY_PARAMS,
+  E2E_CASSETTES_DIR,
   type Cassette,
 } from '../bin/lib/http-mock.js';
 
@@ -34,6 +36,15 @@ function rel(file: string): string {
 
 const files = listCassetteFiles();
 const recorded = files.filter((f) => !rel(f).startsWith('synthetic/'));
+
+/**
+ * The adapter a recorded cassette belongs to: its directory — `<adapter>/…`,
+ * or `e2e/<adapter>/…` for the recorded end-to-end corpus (D-18-31).
+ */
+function adapterOf(file: string): string {
+  const parts = rel(file).split('/');
+  return (parts[0] === E2E_CASSETTES_DIR ? parts[1] : parts[0]) ?? '';
+}
 
 /**
  * Search adapters whose real recording is still OPEN (CI-07), each with why.
@@ -64,7 +75,7 @@ test('CI-07: an adapter with no real recording yet is an explicit open item, nev
 
 test('CI-07: every entry outside synthetic/ carries recorder provenance for its own adapter', () => {
   for (const file of recorded) {
-    const adapter = rel(file).split('/')[0];
+    const adapter = adapterOf(file);
     const entries = JSON.parse(readFileSync(file, 'utf8')) as Cassette[];
     assert.ok(Array.isArray(entries) && entries.length > 0, `${rel(file)} is a non-empty Cassette[]`);
     for (const e of entries) {

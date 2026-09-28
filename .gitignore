@@ -27,8 +27,10 @@ mcp/__fixtures__/
 
 # Runtime artifacts
 # .paper/ is the active paper workspace created by `pensmith new`.
+# .paper-dry-run/ is the `--dry-run` workspace (seeded from .paper/, GRND-19).
 # ~/.pensmith/ is the global library — outside the repo, listed for awareness only.
 .paper/
+.paper-dry-run/
 
 # Phase 9 tutorial/PII outputs
 # The .paper/ line above already ignores these (they live under .paper/), but we

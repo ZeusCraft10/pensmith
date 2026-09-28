@@ -1,6 +1,6 @@
 # pensmith resume
 
-> Resume an interrupted workflow: summarize the last handoff, compute the next work verb, and dispatch it.
+> Resume an interrupted workflow: summarize the last handoff, then take the next step — the same step bare `/pensmith` takes (a section: plan → write → verify).
 
 <capability_check>
 required:
@@ -13,16 +13,23 @@ degrade_if_missing:
 ## Overview
 
 `pensmith resume` follows the H4 lifecycle: it reads HANDOFF.json for the SUMMARY only
-(never routes from it — no resume→resume loop), then calls `resolveNextAction()` to
-compute the next WORK verb (HANDOFF-blind), dispatches via `dispatchVerb()`, then
-clears HANDOFF.json (best-effort `rmSync` — stale pointer must not re-trigger resume).
+(never routes from it — no resume→resume loop), then runs ONE step through the same
+chain as bare `pensmith` and `pensmith next` (`runNextStep`, GRND-18, D-18-28):
+`resolveNextAction()` computes the next WORK verb (HANDOFF-blind); a section's step is
+plan → write → verify, each stage only after the previous one succeeded and the router
+names the same section's next stage; any other decision is its one verb. It ends with the
+`pensmith: ran …; next: …` line and the last verb's exit code, then clears HANDOFF.json
+(best-effort `rmSync` — a stale pointer must not re-trigger resume). Under `--dry-run` it
+loops like `next` (the dry-run workspace `./.paper-dry-run/`, D-18-30).
 
 The resume verb MUST NEVER dispatch to itself (H4). `resolveNextAction()` is
 structurally incapable of returning `{ verb:'resume' }`.
 
 ## Outputs
 
-- Delegates entirely to the dispatched verb. HANDOFF.json cleared after dispatch.
+- Delegates entirely to the dispatched verbs. HANDOFF.json cleared after the step (also after a failed one).
+- stderr: `pensmith resume: → <verb>` (the first decision), then `pensmith: ran <steps>; next: <step>`.
+- Exit code: the last dispatched verb's (RUN-09).
 
 ## Replay (`--replay <entryId>`, Tier 2 only)
 
@@ -40,7 +47,7 @@ structurally incapable of returning `{ verb:'resume' }`.
 
 4. **Mode-specific end-state check**: if `stopAfterResearch` is active and the resolved action is `{ verb:'status', reason:'done' }`, call the mode end-state renderer → writes `TUTORIAL.md`. Then consume HANDOFF.json (best-effort rmSync) and return.
 
-5. **Dispatch** via `dispatchVerb(decision.verb, verbArgs)` forwarding `--dry-run`, `--estimate`, `--yolo`, `--show-prompts` flags (C3-HIGH-2).
+5. **Run the step** via `runRouted` (`bin/pensmith.ts`): each verb is dispatched with `dispatchVerb(verb, verbArgs)` forwarding `--dry-run`, `--estimate`, `--yolo`, `--show-prompts` (C3-HIGH-2); a section's step is plan → write → verify; under `--dry-run` steps repeat until done, attention, a failure or a refused gate. In Tier 1, run the same step with the per-verb workflows.
 
 6. **Consume HANDOFF.json** (best-effort `rmSync` in finally — stale pointer must not re-trigger a resume loop).
 

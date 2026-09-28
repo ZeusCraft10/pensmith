@@ -9,6 +9,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { upsertSources, loadLibrary } from '../../../bin/lib/library.js';
 import { syntheticSource } from '../../../bin/lib/sources/dry-run.js';
+import { setDryRunWorkspace } from '../../../bin/lib/paths.js';
 import type { SourceCandidate } from '../../../bin/lib/schemas/source-candidate.js';
 
 const [root] = process.argv.slice(2);
@@ -29,7 +30,10 @@ const real = (doi: string, title: string, family: string, key: string): SourceCa
 
 async function main(): Promise<unknown> {
   mkdirSync(join(root!, '.paper'), { recursive: true });
-  // As a dry run left it: one real and one synthetic source.
+  // As a Phase 17 dry run left it IN `.paper/` (before GRND-19 moved dry runs
+  // to `.paper-dry-run/`): one real and one synthetic source. The workspace
+  // switch is pinned off so the dry-run upsert lands in `.paper/` itself.
+  setDryRunWorkspace(false);
   process.env['PENSMITH_DRY_RUN'] = '1';
   await upsertSources(root!, [real('10.5555/real-one', 'A Real Study of Tides', 'Marsh', 'marsh2009'), syntheticSource('00c0ffee')], { provenance: 'dry-run-research' });
   const before = (await loadLibrary(root!)).entries.length;

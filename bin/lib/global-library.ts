@@ -47,7 +47,7 @@ import { loadAndMigrate } from './migrations/loader.js';
 import { loadState, StateNotFoundError, readStateTextSync, migrateStateValue } from './state.js';
 import { Schema as StateSchema, type State } from './schemas/state.js';
 import { readSectionState } from './router.js';
-import { paperDir, sectionPlan, pensmithGlobalLibraryIndexPath } from './paths.js';
+import { paperDir, sectionPlan, pensmithGlobalLibraryIndexPath, dryRunWorkspaceActive } from './paths.js';
 import {
   GlobalLibrarySchema,
   GlobalLibraryEntrySchema,
@@ -210,6 +210,11 @@ export async function registerPaperInGlobalLibrary(
   // without contending the critical section).
   const validatedEntry: GlobalLibraryEntry = GlobalLibraryEntrySchema.parse(entry);
 
+  // GRND-19 (D-18-29): a dry-run paper is never registered — `pensmith list`
+  // and `open` only ever show real papers, and a dry run writes nothing
+  // global. The registry is returned as it is on disk (read-only).
+  if (dryRunWorkspaceActive()) return readRegistryReadOnly(file);
+
   // The library/ dir may not exist yet if registerPaper is the very first call.
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
 
@@ -281,6 +286,25 @@ export async function registerPaperInGlobalLibrary(
   });
 
   return next;
+}
+
+/**
+ * The registry as it is on disk, without writing (no auto-init, no migration
+ * write-back): the dry-run answer of registerPaperInGlobalLibrary. An absent
+ * or unreadable index reads as empty.
+ */
+async function readRegistryReadOnly(file: string): Promise<GlobalLibrary> {
+  try {
+    return (await loadAndMigrate({
+      file,
+      schema: GlobalLibrarySchema,
+      schemaName: 'global-library',
+      currentVersion: CURRENT_GLOBAL_LIBRARY_VERSION,
+      writeBack: false,
+    })) as GlobalLibrary;
+  } catch {
+    return GlobalLibrarySchema.parse({ $schemaVersion: CURRENT_GLOBAL_LIBRARY_VERSION, entries: [] });
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -45,6 +45,17 @@
 //     in a PRE-DISPATCH argv pre-parse BEFORE runMain (NOT a root run() — citty
 //     falls through to a root run() after every verb, H2). The root command
 //     keeps subCommands ONLY and NO run().
+//
+// Phase 18 (GRND-18/19, D-18-28..30):
+//   - runNextStep is the ONE routed step bare `pensmith`, `next` and `resume`
+//     share: a section's step is plan → write → verify (each stage runs only if
+//     the previous one succeeded and the router names the same section's next
+//     stage), any other decision is its one verb; it prints
+//     `pensmith: ran <steps>; next: <step>` and ends with the last verb's code.
+//   - runRouted adds the --dry-run loop: steps repeat until done / attention, a
+//     failure or gate refusal, or a decision that does not advance.
+//   - --dry-run works in `<root>/.paper-dry-run/` (paths.ts paperDir, seeded by
+//     dry-run-paper.ts under the session lock) and never writes `.paper/`.
 
 // FIRST import: filters a dependency's DEP0040 (punycode) deprecation noise
 // before any module that loads citation-js is evaluated (RUN-12).
@@ -55,9 +66,11 @@ import { VERSION } from './lib/version.generated.js';
 import { UX02_VERBS, type Ux02Verb, canonicalVerb, VERB_ALIASES, nearest } from './lib/verbs.js';
 import {
   projectRoot,
+  paperDir,
   workingDirectory,
   resolvePaperRoot,
   setActivePaperRoot,
+  setDryRunWorkspace,
   activePaperBanner,
   hasPaper,
   mutatingVerbNeedsPaper,
@@ -69,7 +82,7 @@ import { migratePaperConfigFile, parseCostCapEnv } from './lib/config.js';
 import { enforceDryRunBoundary } from './lib/dry-run-paper.js';
 import { acquireSessionLock, releaseSessionLock } from './lib/session-lock.js';
 import { runGate, declineGate, canPrompt } from './lib/gates.js';
-import { EXIT_CODES, EXIT_USAGE, EXIT_ERROR, PensmithError } from './lib/exit-codes.js';
+import { EXIT_CODES, EXIT_OK, EXIT_USAGE, EXIT_ERROR, PensmithError, type ExitCode } from './lib/exit-codes.js';
 import { classifyFailure, finalExitCode, failureLine, stripAnsi } from './lib/verb-outcome.js';
 import { setMirrorPromptsToStderr, setSessionArgv } from './lib/session-log.js';
 import { announceModes, networkMode } from './lib/http-mock.js';
@@ -77,7 +90,7 @@ import { projectEstimate, renderEstimate, type EstimateScope } from './lib/estim
 import { assertInvocationBudget } from './lib/budget.js';
 import { argvFlagValue, runtimeFlagsFromArgv, setRuntimeOverride } from './lib/runtime.js';
 import { isProviderName, PROVIDER_NAMES } from './lib/llm-models.js';
-import { resolveNextAction } from './lib/router.js';
+import { resolveNextAction, type RouterDecision } from './lib/router.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
@@ -226,7 +239,7 @@ export const command = defineCommand({
   // application is the argv pre-parse below (NOT a root run() — H2).
   args: {
     paper: { type: 'string', description: 'Work on this paper: a name from `pensmith list`, or a folder containing .paper/.', valueHint: 'name|path' },
-    'dry-run': { type: 'boolean', description: 'Trial run in a folder with no paper: no network or model call (sources and model replies are labelled stand-ins); refused on an existing paper.', default: false },
+    'dry-run': { type: 'boolean', description: 'Trial run in ./.paper-dry-run/ (a copy of .paper/, which is never written): no network or model call (sources and model replies are labelled stand-ins); bare/next/resume loop to the end of the paper.', default: false },
     estimate: { type: 'boolean', description: 'Project the remaining token + USD cost, then offer to proceed.', default: false },
     yolo: { type: 'boolean', description: 'Skip the approval gates --yolo may skip (outline approval, export confirmation, research scope/prune, add remap, revise swap, sketch confirm). Never skips the cost cap, detector consent or the active-paper choice.', default: false },
     'show-prompts': { type: 'boolean', description: 'Mirror every outbound request (and full LLM prompts) to stderr before it is sent.', default: false },
@@ -570,6 +583,8 @@ interface InvocationSession {
   readonly cwd: string;
   /** The root is the paper-less cwd the resolver fell back to (step 5). */
   readonly cwdFallback: boolean;
+  /** A dry-run workspace note (seeded / re-seeded / reset) still to print after the banners. */
+  workspaceNote: string | null;
 }
 
 let currentSession: InvocationSession | null = null;
@@ -606,9 +621,11 @@ async function choosePointerOrNew(pointer: PaperPointer, cwd: string, yolo: bool
 
 /**
  * Take the session lock for a mutating run (idempotent; re-entrant by PID),
- * then keep --dry-run and real papers apart (RUN-27, dry-run-paper.ts) and
- * write an older config.toml back (CONF-01) — both under the lock, before the
- * verb touches anything.
+ * then keep --dry-run and real papers apart (RUN-27, dry-run-paper.ts: a dry
+ * run's workspace `.paper-dry-run/` is created, kept or seeded from `.paper/`,
+ * GRND-19) and write an older config.toml back (CONF-01) — both under the
+ * lock, before the verb touches anything. A dry run holds the paper's own
+ * session lock, so it never interleaves with a real run on the same folder.
  */
 async function enterMutatingSession(session: InvocationSession, verb: Ux02Verb | null, yolo: boolean, dryRun: boolean): Promise<void> {
   if (session.pointer !== null && !session.pointerConfirmed) {
@@ -621,9 +638,11 @@ async function enterMutatingSession(session: InvocationSession, verb: Ux02Verb |
   if (session.locked) return;
   await acquireSessionLock(session.root, { kind: 'cli', verb: verb ?? 'pensmith' });
   session.locked = true;
-  // RUN-27: a --dry-run never writes into a real paper, and a normal run never
-  // continues a dry-run one — refused before any file is touched.
-  await enforceDryRunBoundary(session.root, dryRun);
+  // RUN-27 / GRND-19: a --dry-run works only in its workspace (prepared here),
+  // and a normal run never continues a paper a Phase 17 dry run made in
+  // `.paper/` — refused before any file is touched.
+  const workspace = await enforceDryRunBoundary(session.root, dryRun);
+  session.workspaceNote = workspace?.note ?? null;
   // CONF-01: an older config.toml is written back at the current schema only
   // here, under the session lock (comments kept) — read-only runs never write.
   if (!dryRun) await migratePaperConfigFile(session.root);
@@ -668,6 +687,213 @@ async function invocationScope(argv: string[], checked: ValidatedArgv): Promise<
   return { verb: decision.verb, section: decision.suffix !== undefined ? `${decision.n}${decision.suffix}` : decision.n };
 }
 
+/**
+ * Every step THIS invocation runs, for the --yolo pre-flight (D-17-27). An
+ * explicit verb is its own scope. A routed run (bare / next / resume) runs one
+ * step of the chain (GRND-18, D-18-28): a `plan` decision also writes and
+ * verifies that section, a `write` decision also verifies it — so all of them
+ * are projected. A routed --dry-run loops to the end of the paper (D-18-30):
+ * the whole remaining paper (undefined scope; its model calls are stubs).
+ */
+async function invocationScopes(argv: string[], checked: ValidatedArgv): Promise<Array<EstimateScope | undefined>> {
+  const routed = checked.verb === null || checked.verb === 'next' || checked.verb === 'resume';
+  if (routed && isDryRunInvocation(argv)) return [undefined];
+  const scope = await invocationScope(argv, checked);
+  if (!routed || scope.section === undefined) return [scope];
+  const at = SECTION_CHAIN.indexOf(scope.verb as SectionChainVerb);
+  if (at < 0) return [scope];
+  return SECTION_CHAIN.slice(at).map((verb) => ({ ...scope, verb }));
+}
+
+/** Project several invocation scopes and add them up (the rows in order, the USD summed). */
+async function projectScopes(
+  paperRoot: string,
+  scopes: ReadonlyArray<EstimateScope | undefined>,
+  from: string | undefined,
+): Promise<Awaited<ReturnType<typeof projectEstimate>>> {
+  const parts: Array<Awaited<ReturnType<typeof projectEstimate>>> = [];
+  for (const scope of scopes) {
+    parts.push(await projectEstimate({ paperRoot, ...(scope !== undefined ? { scope } : {}), ...(from !== undefined ? { from } : {}) }));
+  }
+  const [first] = parts;
+  if (first === undefined) throw new PensmithError('no estimate scope', EXIT_ERROR);
+  const rows = parts.flatMap((p) => p.rows);
+  const totalUsd = parts.reduce((acc, p) => acc + p.totalUsd, 0);
+  return { ...first, rows, totalUsd, exceedsCap: totalUsd > first.capUsd, nothingLeft: rows.length === 0 };
+}
+
+// ---------------------------------------------------------------------------
+// The routed chain: one bare / next / resume step (GRND-18, D-18-28) and the
+// --dry-run loop (GRND-19, D-18-30).
+// ---------------------------------------------------------------------------
+
+/** A section's lifecycle, in order: one routed step runs it from the router's stage to verify. */
+const SECTION_CHAIN = ['plan', 'write', 'verify'] as const;
+type SectionChainVerb = (typeof SECTION_CHAIN)[number];
+
+/** The section a plan / write / verify decision names, or null for any other decision. */
+function decisionSection(d: RouterDecision): { n: number; slug: string; suffix: string } | null {
+  if (d.verb !== 'plan' && d.verb !== 'write' && d.verb !== 'verify') return null;
+  // `suffix` (GRND-09, §1a) is optional on the decision; read it without assuming it.
+  const suffix = (d as { suffix?: unknown }).suffix;
+  return { n: d.n, slug: d.slug, suffix: typeof suffix === 'string' ? suffix : '' };
+}
+
+/**
+ * One line naming a router decision: `plan §1`, `write §1a`, `research`,
+ * `status (done)`, `status (attention: <what and the command that fixes it>)`.
+ */
+export function describeDecision(d: RouterDecision): string {
+  const s = decisionSection(d);
+  if (s !== null) return `${d.verb} §${s.n}${s.suffix}`;
+  if (d.verb === 'status') {
+    const detail = (d as { detail?: unknown }).detail;
+    const at = d.section !== undefined ? ` §${d.section.n}` : '';
+    return typeof detail === 'string' && detail.length > 0
+      ? `status (${d.reason}: ${detail})`
+      : `status (${d.reason}${at})`;
+  }
+  return d.verb;
+}
+
+/** The dispatch arguments of a decision (n / slug / reason where it has them). */
+function decisionArgs(d: RouterDecision): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+  if ('n' in d) args['n'] = d.n;
+  if ('slug' in d) args['slug'] = d.slug;
+  if ('reason' in d) args['reason'] = d.reason;
+  return args;
+}
+
+/** One verb the chain ran, and the exit code it ended with. */
+export interface ChainStep {
+  readonly label: string;
+  readonly code: ExitCode;
+}
+
+/** What one routed step ran and where the paper stands after it. */
+export interface RoutedStep {
+  /** The last verb's result (what dispatch() maps to the exit code). */
+  readonly result: unknown;
+  readonly steps: readonly ChainStep[];
+  /** The decision the step started from. */
+  readonly first: RouterDecision;
+  /** The router's decision after the step. */
+  readonly next: RouterDecision;
+  /** The exit code of the last verb (0 when every verb succeeded). */
+  readonly code: ExitCode;
+  /** The learning-goal end state was rendered instead of a verb (see goal.ts). */
+  readonly learningEnd: boolean;
+}
+
+export interface RoutedOptions {
+  readonly globalFlags: GlobalFlags;
+  /** The decision to start from (next / resume resolved it already to announce it). */
+  readonly first?: RouterDecision;
+}
+
+/** `pensmith: ran plan §1, write §1, verify §1 (exit 4); next: verify §1`. */
+function chainLine(steps: readonly ChainStep[], next: RouterDecision): string {
+  const ran = steps.map((s) => (s.code === EXIT_OK ? s.label : `${s.label} (exit ${s.code})`)).join(', ');
+  return `pensmith: ran ${ran}; next: ${describeDecision(next)}`;
+}
+
+/**
+ * Run ONE step of the paper (GRND-18, D-18-28) — the chain bare `pensmith`,
+ * `next` and `resume` share. The router's decision is dispatched with the
+ * forwarded global flags; a section step runs that section from the router's
+ * stage to verify: a `plan` decision plans, then (if it succeeded and the
+ * router now names the same section's `write`) writes, then (if the router
+ * then names its `verify` — `write` may already have verified it) verifies.
+ * Any other decision runs its one verb. The chain stops at the first verb that
+ * does not succeed; its exit code is the step's. It prints what ran and the
+ * router's next step on stderr (stdout stays the verbs' own output).
+ */
+export async function runNextStep(opts: RoutedOptions): Promise<RoutedStep> {
+  const root = projectRoot();
+  const stop = stopAfterResearchFor(readGoalFromConfig(root));
+  const route = (): Promise<RouterDecision> => resolveNextAction(root, { stopAfterResearch: stop });
+  const first = opts.first ?? (await route());
+
+  // Learning hard-stop: render the per-claim learning end-state to TUTORIAL.md
+  // INSTEAD OF dispatching the status verb's generic "ready to export" message.
+  if (stop && first.verb === 'status' && first.reason === 'done') {
+    await renderLearningEndState(root);
+    return { result: { ok: true, mode: 'learning-end-state' }, steps: [], first, next: first, code: EXIT_OK, learningEnd: true };
+  }
+
+  const steps: ChainStep[] = [];
+  let decision = first;
+  let result: unknown;
+  for (;;) {
+    const saved = process.exitCode;
+    process.exitCode = undefined;
+    try {
+      result = await dispatchVerb(decision.verb, { args: decisionArgs(decision), globalFlags: opts.globalFlags });
+    } catch (e) {
+      // An expected failure (a gate refusal, a cost cap): say what ran, then let
+      // dispatch() print its one line and exit with its code.
+      process.exitCode = saved;
+      steps.push({ label: describeDecision(decision), code: classifyFailure(e).code });
+      process.stderr.write(`${chainLine(steps, await route())}\n`);
+      throw e;
+    }
+    const code = finalExitCode(result, process.exitCode);
+    if (code === EXIT_OK) process.exitCode = saved;
+    steps.push({ label: describeDecision(decision), code });
+    const after = await route();
+    const here = decisionSection(decision);
+    const there = decisionSection(after);
+    const advances =
+      code === EXIT_OK &&
+      here !== null &&
+      there !== null &&
+      there.n === here.n &&
+      there.slug === here.slug &&
+      there.suffix === here.suffix &&
+      SECTION_CHAIN.indexOf(after.verb as SectionChainVerb) > SECTION_CHAIN.indexOf(decision.verb as SectionChainVerb);
+    if (advances) {
+      decision = after;
+      continue;
+    }
+    process.stderr.write(`${chainLine(steps, after)}\n`);
+    return { result, steps, first, next: after, code, learningEnd: false };
+  }
+}
+
+/** The most steps one --dry-run loop takes (5 + N steps for N ≤ 99 sections, with room). */
+const DRY_RUN_MAX_STEPS = 256;
+
+/**
+ * Bare `pensmith`, `next` and `resume`: one routed step (GRND-18), or — under
+ * --dry-run — the dry-run loop (GRND-19, D-18-30): steps are repeated until
+ * the router reports done or attention, a step fails or a gate refuses (its
+ * exit code, e.g. 3 at the first gate a run without --yolo cannot answer), or
+ * a decision repeats without progress (EXIT_ERROR). With --yolo a dry run goes
+ * from the assignment to the export in one invocation.
+ */
+export async function runRouted(opts: RoutedOptions & { announce?: (d: RouterDecision) => void }): Promise<unknown> {
+  const root = projectRoot();
+  const stop = stopAfterResearchFor(readGoalFromConfig(root));
+  const first = opts.first ?? (await resolveNextAction(root, { stopAfterResearch: stop }));
+  // The learning end state (runNextStep) is not a verb to announce.
+  if (opts.announce && !(stop && first.verb === 'status' && first.reason === 'done')) opts.announce(first);
+  let step = await runNextStep({ ...opts, first });
+  if (opts.globalFlags.dryRun !== true) return step.result;
+  for (let i = 1; i < DRY_RUN_MAX_STEPS; i += 1) {
+    if (step.code !== EXIT_OK || step.learningEnd || step.next.verb === 'status') return step.result;
+    if (describeDecision(step.next) === describeDecision(step.first)) {
+      process.stderr.write(
+        `pensmith: the dry run stopped — \`${describeDecision(step.first)}\` ran without advancing the paper\n`,
+      );
+      return { ok: false, exitCode: EXIT_ERROR };
+    }
+    step = await runNextStep({ ...opts, first: step.next });
+  }
+  process.stderr.write(`pensmith: the dry run stopped after ${DRY_RUN_MAX_STEPS} steps without reaching the end of the paper\n`);
+  return { ok: false, exitCode: EXIT_ERROR };
+}
+
 /** `outline`, or `write §1, write §2, write §3`, or `write §1 … write §9 (9 steps)`. */
 function describeSteps(rows: ReadonlyArray<{ step: string }>): string {
   const steps = rows.map((r) => r.step);
@@ -696,6 +922,23 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   // is a dry run, `--no-yolo` is not --yolo) — never the raw spellings.
   argv = [...checked.argv];
   const meta = checked.help || checked.version;
+
+  // (b) --dry-run → both channels off (D-17-04) and the paper moves to the
+  //     dry-run workspace (GRND-19, D-18-29). PENSMITH_DRY_RUN=1 makes the
+  //     http.ts gate refuse every request (zero sockets), routes research to
+  //     the labelled synthetic provider (RUN-27) and points paths.ts paperDir()
+  //     at `<root>/.paper-dry-run`; PENSMITH_NO_LLM=1 stubs every model call.
+  //     Both are env vars so child processes inherit the mode. Set BEFORE the
+  //     paper root is resolved: the resolver, the legacy-layout move and the
+  //     session all see the workspace, never the real `.paper/`. An inherited
+  //     PENSMITH_DRY_RUN=1 is the same dry run (the cost pre-flight then prices
+  //     the stubbed calls at $0, as they are).
+  if (isDryRunInvocation(argv)) {
+    process.env['PENSMITH_DRY_RUN'] = '1';
+    process.env['PENSMITH_NO_LLM'] = '1';
+    setDryRunWorkspace(true);
+  }
+
   if (!meta) {
     const readOnly = (checked.verb !== null && READ_ONLY_VERBS.has(checked.verb)) || hasFlag(argv, 'estimate');
     const cwd = workingDirectory();
@@ -707,6 +950,7 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
       locked: false,
       cwd,
       cwdFallback: resolved.kind === 'root' && resolved.source === 'fallback',
+      workspaceNote: null,
     };
     currentSession = session;
     if (resolved.kind !== 'ask-pointer') {
@@ -728,17 +972,15 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   //     (RUN-16, D-17-12).
   if (hasFlag(argv, 'show-prompts')) setMirrorPromptsToStderr(true);
 
-  // (b) --dry-run → both channels off (D-17-04). PENSMITH_DRY_RUN=1 makes the
-  //     http.ts gate refuse every request (zero sockets) and routes research to
-  //     the labelled synthetic provider (RUN-27); PENSMITH_NO_LLM=1 stubs every
-  //     model call. Both are env vars so child processes inherit the mode.
-  if (hasFlag(argv, 'dry-run')) {
-    process.env['PENSMITH_DRY_RUN'] = '1';
-    process.env['PENSMITH_NO_LLM'] = '1';
-  }
   // RUN-02 banners (once, stderr, before other output) + the D-17-15
   // installed-package refusal (throws OfflineFixturesNotShippedError, EXIT_ERROR).
-  announceModes({ verb: firstVerb(argv), argv });
+  // A dry run's banner names its workspace (GRND-19, D-18-30).
+  announceModes({
+    verb: firstVerb(argv),
+    argv,
+    ...(isDryRunInvocation(argv) ? { workspace: paperDir(projectRoot()) } : {}),
+  });
+  printWorkspaceNote();
 
   // (b2) --runtime / --model (RUN-08, D-17-19): pre-parse into the runtime
   //      override so every model call in this invocation resolves them first,
@@ -762,8 +1004,7 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
     let est: Awaited<ReturnType<typeof projectEstimate>>;
     try {
       const from = argvFlagValue(argv, 'from');
-      const scope = await invocationScope(argv, checked);
-      est = await projectEstimate({ paperRoot: projectRoot(), scope, ...(from !== undefined ? { from } : {}) });
+      est = await projectScopes(projectRoot(), await invocationScopes(argv, checked), from);
     } catch (e) {
       // An invalid runtime config (or any projection failure) is one line
       // through dispatch() — which also releases the session lock.
@@ -833,6 +1074,7 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
       throw new PensmithError(noPaperHereMessage(s.cwd), EXIT_USAGE);
     }
     await enterMutatingSession(s, firstVerb(argv), hasFlag(argv, 'yolo'), isDryRunInvocation(argv));
+    printWorkspaceNote();
   }
 
   const verb = firstVerb(argv);
@@ -848,26 +1090,31 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
     return result;
   }
 
-  // Either a bare invocation OR a section-scoped verb invoked without its
-  // section number (UX-01). Resolve via resolveNextAction (NEVER throws,
-  // C4/C5-HIGH) and dispatch via the shared helper, forwarding the parsed
-  // global flags (C3-HIGH-2). Do NOT also call runCommand (citty would throw
-  // 'No command specified' on bare, or reject the missing required positional).
-  //
-  // Goal-aware tier: map goal → the router's goal-AGNOSTIC stopAfterResearch.
+  const globalFlags: GlobalFlags = {
+    yolo: hasFlag(argv, 'yolo'),
+    dryRun: isDryRunInvocation(argv),
+    estimate: hasFlag(argv, 'estimate'),
+    showPrompts: hasFlag(argv, 'show-prompts'),
+  };
+
+  // A bare invocation (verb === null): one routed step of the paper — for a
+  // section, its plan → write → verify — or, under --dry-run, the dry-run loop
+  // (GRND-18/19, D-18-28/30). resolveNextAction NEVER throws (C4/C5-HIGH) and
+  // the verbs are dispatched through the shared helper with the global flags
+  // forwarded (C3-HIGH-2); the result (and so the exit code) is the last verb's.
+  if (verb === null) return runRouted({ globalFlags });
+
+  // A section-scoped verb (plan/verify) typed WITHOUT its section number (UX-01).
+  // Do NOT call runCommand (citty would reject the missing required positional).
+  // Audit #10: it defaults to the next section that needs THAT verb — it must
+  // NEVER silently run whatever DIFFERENT verb the router happens to pick. When
+  // the router's next action is not the requested verb, no section is ready for
+  // it — tell the user the real next step instead of running a command they did
+  // not ask for. It runs that one verb (never the bare chain).
   const paperRoot = projectRoot();
   const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
   const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
-
-  // Audit #10: a section-scoped verb (plan/verify) typed WITHOUT its section
-  // number must default to the next section that needs THAT verb — it must NEVER
-  // silently run whatever DIFFERENT verb the router happens to pick. `verb` is
-  // non-null ONLY on the section-verb-without-number path here (an explicit verb
-  // with its number returned via runMain above; a bare invocation has
-  // verb === null and is unaffected). When the router's next action is not the
-  // requested verb, no section is ready for it — tell the user the real next step
-  // instead of running a command they did not ask for.
-  if (verb !== null && decision.verb !== verb) {
+  if (decision.verb !== verb) {
     const at =
       'n' in decision && 'slug' in decision ? ` (section ${decision.n} ${decision.slug})` : '';
     process.stderr.write(
@@ -877,28 +1124,15 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
     );
     return { ok: false, exitCode: EXIT_ERROR };
   }
+  return dispatchVerb(decision.verb, { args: decisionArgs(decision), globalFlags });
+}
 
-  // Learning hard-stop: render the per-claim learning end-state to TUTORIAL.md
-  // INSTEAD OF dispatching the status verb's generic "ready to export" message.
-  if (stop && decision.verb === 'status' && decision.reason === 'done') {
-    await renderLearningEndState(paperRoot);
-    return { ok: true, mode: 'learning-end-state' };
-  }
-
-  const verbArgs: Record<string, unknown> = {};
-  if ('n' in decision) verbArgs.n = decision.n;
-  if ('slug' in decision) verbArgs.slug = decision.slug;
-  if ('reason' in decision) verbArgs.reason = decision.reason;
-  // Bare runs propagate the dispatched verb's result (and so its exit code).
-  return dispatchVerb(decision.verb, {
-    args: verbArgs,
-    globalFlags: {
-      yolo: hasFlag(argv, 'yolo'),
-      dryRun: hasFlag(argv, 'dry-run'),
-      estimate: hasFlag(argv, 'estimate'),
-      showPrompts: hasFlag(argv, 'show-prompts'),
-    },
-  });
+/** Print (once) the dry-run workspace note the session recorded — after the RUN-02 banners. */
+function printWorkspaceNote(): void {
+  const note = currentSession?.workspaceNote ?? null;
+  if (note === null || currentSession === null) return;
+  currentSession.workspaceNote = null;
+  process.stderr.write(`${note}\n`);
 }
 
 /** The CommandDef for `verb` (real loader, or the stub). */
@@ -926,7 +1160,7 @@ export const ENVIRONMENT_DOCS: ReadonlyArray<readonly [string, string]> = Object
 const GLOBAL_FLAG_DOCS: ReadonlyArray<readonly [string, string]> = Object.freeze([
   ['--paper <name|path>', 'work on this paper (a name from `pensmith list`, or a folder containing .paper/)'],
   ['--yolo', 'skip the gates --yolo may skip; never the cost cap, detector consent or the active-paper choice'],
-  ['--dry-run', 'trial run in a folder with no paper: no network or model call (refused on an existing paper)'],
+  ['--dry-run', 'trial run in ./.paper-dry-run/ (seeded from .paper/, never writing it): no network or model call'],
   ['--estimate', 'project the remaining cost, then offer to proceed'],
   ['--show-prompts', 'mirror outbound requests and LLM prompts to stderr before they are sent'],
   ['--runtime <provider>', 'LLM provider for this run: anthropic | openai | ollama | vllm | openai-compatible'],

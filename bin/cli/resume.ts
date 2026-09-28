@@ -1,14 +1,18 @@
 // bin/cli/resume.ts — `pensmith resume` verb entrypoint (UX-02, HOOK-02 Tier-2).
 //
 // THIN ORCHESTRATOR + H4 LIFECYCLE: `resume` reads HANDOFF.json for the resume
-// SUMMARY only, then computes the NEXT WORK VERB via resolveNextAction() — which
-// IGNORES HANDOFF and NEVER returns 'resume' — dispatches to that work verb
-// through the SHARED dispatchVerb helper (forwarding global flags ≥ yolo so a
-// resolved compile/done skips its OWN approval gate, C3-HIGH-2), and then CLEARS
-// HANDOFF.json (best-effort rmSync) so a stale pointer cannot re-trigger resume.
-// resume MUST NEVER dispatch to itself — no resume→resume loop (H4).
+// SUMMARY only, then runs ONE routed step through the SHARED runRouted helper
+// of bin/pensmith.ts — the step a bare `pensmith` runs (GRND-18, D-18-28):
+// resolveNextAction() (which IGNORES HANDOFF and NEVER returns 'resume') picks
+// the work verb, a section's step is plan → write → verify, and every verb is
+// dispatched with the global flags forwarded (≥ yolo so a resolved compile/done
+// skips its OWN approval gate, C3-HIGH-2); under --dry-run it loops (D-18-30).
+// It then CLEARS HANDOFF.json (best-effort rmSync) so a stale pointer cannot
+// re-trigger resume. resume MUST NEVER dispatch to itself — no resume→resume
+// loop (H4).
 //
-// stdout-only for the underlying verb; the resume summary goes to STDERR (parity).
+// stdout-only for the underlying verbs; the resume summary and the step
+// summary go to STDERR (parity).
 //
 // `resume --replay <entryId>` (RUN-17, D-17-30) is a flag on this verb, not a
 // new verb: it finds the kind:"llm" record `<entryId>` in .paper/SESSION.log,
@@ -25,10 +29,8 @@ import { defineCommand, runCommand } from 'citty';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { paperDir, projectRoot } from '../lib/paths.js';
-import { resolveNextAction } from '../lib/router.js';
 import { HandoffSchema, type Handoff } from '../lib/schemas/handoff.js';
-import { dispatchVerb, REAL_VERB_LOADERS } from '../pensmith.js';
-import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './goal.js';
+import { runRouted, REAL_VERB_LOADERS } from '../pensmith.js';
 import { UX02_VERBS, type Ux02Verb } from '../lib/verbs.js';
 import { isOfflineMode } from '../lib/http-mock.js';
 import { getRuntimeOverride, runtimeFlagsFromArgv, setRuntimeOverride } from '../lib/runtime.js';
@@ -219,51 +221,33 @@ export const resumeCommand = defineCommand({
       );
     }
 
-    // Compute the next WORK verb via the HANDOFF-BLIND resolver — returns
-    // plan/write/verify/compile/done (or a status terminus), NEVER 'resume'.
-    // Goal-aware tier: map goal → the router's goal-AGNOSTIC stopAfterResearch.
-    const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
-    const decision = await resolveNextAction(paperRoot, { stopAfterResearch: stop });
-
-    // Learning hard-stop: render the per-claim learning end-state to TUTORIAL.md
-    // INSTEAD OF dispatching the status verb's generic "ready to export" message.
-    // Still CONSUME the HANDOFF afterward so a stale pointer cannot re-trigger.
-    if (stop && decision.verb === 'status' && decision.reason === 'done') {
-      await renderLearningEndState(paperRoot);
+    // ONE routed step through the HANDOFF-BLIND resolver — the same step a bare
+    // `pensmith` runs (GRND-18, D-18-28): a section's plan → write → verify,
+    // any other decision its one verb (plan/write/verify/compile/done or a
+    // status terminus, NEVER 'resume'); under --dry-run the loop (D-18-30). The
+    // learning hard-stop (goal-aware tier) is handled inside the step.
+    try {
+      return await runRouted({
+        globalFlags: {
+          yolo: args.yolo === true,
+          dryRun: args['dry-run'] === true || process.env['PENSMITH_DRY_RUN'] === '1',
+          estimate: args.estimate === true,
+          showPrompts: args['show-prompts'] === true,
+        },
+        announce: (decision) => {
+          process.stderr.write(`pensmith resume: → ${decision.verb}\n`);
+        },
+      });
+    } finally {
+      // CONSUME the HANDOFF: best-effort delete so a stale pointer can never
+      // re-trigger resume on the next bare invocation (H4 lifecycle) — also
+      // after a failed step: the next resume starts from the router again.
       try {
         rmSync(join(paperDir(paperRoot), 'HANDOFF.json'), { force: true });
       } catch {
         /* best-effort consume */
       }
-      return { ok: true, mode: 'learning-end-state' };
     }
-
-    process.stderr.write(`pensmith resume: → ${decision.verb}\n`);
-
-    const verbArgs: Record<string, unknown> = {};
-    if ('n' in decision) verbArgs.n = decision.n;
-    if ('slug' in decision) verbArgs.slug = decision.slug;
-    if ('reason' in decision) verbArgs.reason = decision.reason;
-
-    const result = await dispatchVerb(decision.verb, {
-      args: verbArgs,
-      globalFlags: {
-        yolo: args.yolo === true,
-        dryRun: args['dry-run'] === true,
-        estimate: args.estimate === true,
-        showPrompts: args['show-prompts'] === true,
-      },
-    });
-
-    // CONSUME the HANDOFF: best-effort delete so a stale pointer can never
-    // re-trigger resume on the next bare invocation (H4 lifecycle).
-    try {
-      rmSync(join(paperDir(paperRoot), 'HANDOFF.json'), { force: true });
-    } catch {
-      /* best-effort consume */
-    }
-
-    return result;
   },
 });
 

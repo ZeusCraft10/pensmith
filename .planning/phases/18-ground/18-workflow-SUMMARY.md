@@ -1,0 +1,75 @@
+---
+phase: 18-ground
+stream: workflow
+branch: v1/p18-workflow
+base_commit: 20f2641 (docs(18): plan phase 18 GROUND)
+requirements: [GRND-18, GRND-19]
+decisions: [D-18-28, D-18-29, D-18-30, D-18-31]
+status: stream complete — GRND-18 and GRND-19 acceptance that needs all four streams is the integration pass's (18-PLAN.md §7)
+---
+
+# Phase 18 — stream `workflow`: Summary
+
+## What shipped
+
+### One bare step per invocation (GRND-18, D-18-28)
+- `bin/pensmith.ts` `runNextStep()` is the ONE routed step shared by bare `pensmith`, `next` and `resume`. A decision runs its one verb; a section's step is plan → write → verify: after a verb succeeds, the router is asked again and the chain continues only when it names the **same section's later stage** (`write` after `plan`, `verify` after `write`). So it works with the base `write` (which does not verify) and with the sections stream's `write` (which chains verify itself — the router then names the next section and the chain stops). The step stops at the first verb that does not succeed; its exit code is the last verb's (a thrown `PensmithError` keeps its own code). It prints `pensmith: ran <steps>; next: <step>` on stderr (`ran plan §1, write §1 (exit 4); next: …`, `next: status (attention: <detail>)` when the sections router gives a detail). The learning end state is handled inside the step.
+- `bin/cli/next.ts` and `bin/cli/resume.ts` call `runRouted()`; they keep their `pensmith next|resume: → <verb>` announce line; resume still consumes HANDOFF.json (now also after a failed step).
+- `plan` / `verify` typed without a number keep the audit #10 behaviour (the router's section if it needs that verb, else the refusal) and never chain.
+- The `--yolo` cost pre-flight projects every verb the step runs (`invocationScopes`: plan §n + write §n + verify §n for a routed plan decision), not just the first.
+
+### The dry-run workspace (GRND-19, D-18-29)
+- `bin/lib/paths.ts`: `paperDir()` is `<root>/.paper-dry-run` under a dry run (`setDryRunWorkspace` from the pre-parse, or `PENSMITH_DRY_RUN=1`); `realPaperDir`, `dryRunPaperDir`, `isPaperDirName`, `PAPER_DIR_NAME`, `DRY_RUN_PAPER_DIR_NAME`, `dryRunWorkspaceActive`. `.paper-dry-run` folds like `.paper` in `asProjectRoot`; `hasPaper` counts a workspace (or a real `.paper/` to seed from) only under a dry run; `isLegacyPensmithState` is false under a dry run, so neither the resolver nor `state.ts`'s legacy move ever touches a pre-v1 root layout in a dry run.
+- `bin/pensmith.ts`: the dry-run env and the workspace switch are set **before** the paper root is resolved (they used to be set after the session was entered); the RUN-02 banner names the workspace; the workspace note (seeded / re-seeded / reset) prints after the banners.
+- `bin/lib/dry-run-paper.ts` (rewritten): `prepareDryRunWorkspace()` under the session lock — `fingerprintPaper()` (sorted relative paths, sizes, sha256; `SESSION.log`, `COSTS.jsonl`, `INTAKE.raw.local`, `export/` excluded from copy and fingerprint), copy through `atomicWriteFile`, `DRY-RUN.md`, `SEED.json` last; kept while the fingerprint matches; wiped and re-seeded when it changes (a read-only real run that only logs does not discard a dry run's progress). `enforceDryRunBoundary()` keeps its signature (the MCP `withPaperSession` calls it unchanged) and now returns the workspace outcome; the refusal of a normal run on a Phase-17 `.paper/DRY-RUN.md` paper stays; the refusal of `--dry-run` over a real paper is gone.
+- `bin/lib/http-mock.ts`: `offlineBanner(mode, workspace?)` and `AnnounceOptions.workspace` (the no-workspace string is unchanged — `tests/net-mode.test.ts`).
+- `bin/lib/global-library.ts`: `registerPaperInGlobalLibrary` returns the on-disk registry read-only under a dry run — nothing is registered, no index is created.
+- `bin/lib/exporter.ts` `exportStem()`: `DRAFT.dry-run.<ext>` under a dry run; `bin/cli/done.ts` prints the path and one "dry-run export … the real paper was not touched" line.
+- `.gitignore`: `.paper-dry-run/`.
+
+### The dry-run loop (D-18-30)
+`runRouted()` repeats `runNextStep()` under `--dry-run` until the router reports done or attention, a step fails or a gate refuses (its code — 3 at the first gate without `--yolo` in a non-TTY), or a decision repeats without progress (EXIT_ERROR, one line), bounded at 256 steps. Verified: `pensmith --dry-run --yolo` beside `assignment.txt` reaches `.paper-dry-run/export/DRAFT.dry-run.md` in ONE invocation, with no `.paper/` and no registry entry, at the base and on the trial merge with intake + sections.
+
+### The recorded e2e corpus (D-18-31)
+- `npm run cassettes:refresh -- --corpus e2e` (`scripts/refresh-cassettes.mjs`): six isolated children with fresh data dirs — search (live, recorded), stage (write the search cassettes; over-cap / rate-limited / error answers become expected misses), select (offline replay, candidates exactly as the chain sees them), lookups (live: each preselected source's retraction cross-check, Pass 1 and freshness lookups, with its live verdict), assemble (≤ 6 sources whose live Pass 1 is OK; their cassettes; `mock-script.json`; `MANIFEST.json`), verify (offline replay of research + Pass 1). Any failure restores the previous corpus; keys a per-adapter cassette already answers are not duplicated. `--list` shows the corpus.
+- Recorded 2026-09-28 with `PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org` (redacted in the files): 18 cassettes under `tests/fixtures/cassettes/e2e/{arxiv,crossref,pubmed,retraction-watch}/`, all ≤ 51200 bytes; expected misses: openalex (both queries, 88–103 KB, over the cap) and semanticscholar (both queries, keyless rate limit). Kept sources: ikehata2021, vinuesa2023, wang2026, zahinnoyear, gao2023, bao2025. Expected sections 3, run bound 8.
+- `mock-script.json`: intake-clarifier (the Phase 18 v2 contract fields **plus** the pre-Phase-18 `questions` field — see below), topic-disambiguator (one scope, the two recorded queries), source-evaluator (a verdict per replayed candidate; keep = the kept sources).
+- `http-mock.ts` `E2E_CASSETTES_DIR` and `adapterDirs` search `e2e/<adapter>/` (the exact-match index already walked the whole tree).
+- `tests/helpers/e2e-chain.ts`: `openChainSandbox()` (project folder, isolated data dir incl. `HOME`, the RUN-21 mock wired through that data dir's global `runtime.json`, a fake key and a high cap, the test context inherited so sources replay offline), `run()`, `loop()`, `calls()`, `callCounts()`, `applyCorpusScript()`, `loadE2eManifest()`, `loadE2eMockScript()`.
+
+### Docs
+README (quick start from an assignment with the real step lines; "Starting a paper": assignment sources, the battery, flags, `--answers`; outline `--force` / `--no-counter`; write `--no-verify` / `--max-parallel`; the dry-run workspace; `PENSMITH_NO_LLM` contract stubs; prompt caching; project status), CONTRIBUTING (the prompt layout and re-pin rule incl. `PROMPT_INPUTS`; recording the e2e corpus; the chain helper), README-DEV (trying the workflow without a key), CLAUDE.md (the bare chain, the dry-run workspace, the prompt layout, the hash-pin rule's `PROMPT_INPUTS`, the fence chokepoint row, the e2e corpus, the built-CLI test list), PRD §5.1 and §7.19, `workflows/next.md`, `resume.md`, `done.md`, `skills/pensmith.md`.
+
+## Tests
+
+New:
+- `tests/bare-chain.test.ts` — one bare `--yolo` on a seeded paper (stub PLAN.md files, a library through `upsertSources`, the recorded 10.1038/nphys1170 source): exactly one section-planner and one section-drafter call, §1 verified, `ran plan §1, write §1(, verify §1)?; next: plan §2`, §2 untouched; `next --yolo` does §2 (`next: compile`); compile and done are one verb each; `resume --yolo` takes the same step; a blocking verify (an assigned source with no fixture → UNVERIFIABLE) ends the step with 4 and `next`/`resume` propagate 4; `plan` without a number never chains.
+- `tests/dry-run-workspace.test.ts` — seed / keep / (read-only real run keeps) / re-seed with `.paper/` sha256 **and** mtime unchanged throughout; excluded files not copied or fingerprinted; `DRAFT.dry-run.md` on a seeded compiled paper, the printed path, zero-trace export, nothing in `.paper/`; no registry entry (and a real paper is registered — the check is live); the banner names the workspace; without `--yolo` the loop stops with exit 3 (fresh folder, and `outline` exit 3 on a researched paper); a pre-v1 root STATE.json is never moved; `paths.ts` folding.
+- `tests/e2e-corpus-manifest.test.ts` — the manifest against the files (listed = on disk, cap, provenance, https, no secret header, no scrubbed param, contact redacted), the scripted replies against their contracts and the manifest, an offline replay of research (every kept source with its DOI), expected misses really miss (`OfflineEgressError`), and the retraction check + Pass 1 of every kept source OK offline; every cassette answers from its own file.
+
+Updated (superseded behaviour — the Phase 17 refusal of `--dry-run` over a real paper is replaced by the workspace, per 18-PLAN.md §8):
+- `tests/dry-run-boundary.test.ts` — rewritten: a dry run over a real paper works in the workspace and leaves `.paper/` byte-identical (research, `plan 1`, the loop stopping at `verify §2 (exit 4)` on a hand-written citation it cannot verify, `write 2`); the legacy `.paper/DRY-RUN.md` refusal (the paper rebuilt from a real dry run's workspace); a fresh-folder dry run creates no `.paper/` and a normal run there starts clean; one `--dry-run --yolo` reaches the export with only the cited sources; the settings-only `.paper/` seeds the workspace.
+- `tests/fixtures/paper-cli/library-purge.ts` — pins the workspace off (`setDryRunWorkspace(false)`) so its "a Phase 17 dry run left a synthetic source in `.paper/`" setup still lands in `.paper/`.
+- `tests/dry-run-sources.test.ts` — dry-run research writes `.paper-dry-run/RESEARCH.md`; the add preview no longer needs a marker; the dry-run compile preview runs on the workspace copy.
+- `tests/flags.test.ts` — the H3 zero-egress dry-run chain no longer seeds a marker, reads the workspace, asserts `.paper/` unchanged and the `DRAFT.dry-run.md` export.
+- `tests/unknown-verb.test.ts` — bare `--yolo` prints `ran new; next: research` and runs one step; `--dry-run --yolo` over the real paper leaves `.paper/` unchanged and loops to the end; in a fresh folder one invocation loops new → … → done; `--dry-run=true research` writes the workspace.
+- `tests/installed-offline.test.ts` — the dry-run research reads the workspace; NEW case: from the packed-and-installed tarball, one `--dry-run --yolo` beside an assignment reaches `DRAFT.dry-run.*` with no `.paper/` and no registry entry.
+- `tests/cassette-provenance.test.ts` — the adapter of an `e2e/<adapter>/` cassette is its second path segment.
+
+## Verification (stream worktree)
+- `npm run prebuild`, `npm run lint`, `npm run typecheck`, `npm run build`: green. Full `npm test`: every test passes except the documented root-only `atomic-write` "preserves OLD content" case. `npm run test:tier-contract` and `npm run validate:manifests`: green.
+- User path (scratchpad/p18/workflow, built CLI, standalone mock LLM, LIVE sources): bare `--yolo` → `ran new; next: research` → live research (29 sources; Semantic Scholar 429 reported) → `ran outline; next: plan §1` → `ran plan §1, write §1, verify §1; next: plan §2`; `next --yolo` → §2 the same; `resume --yolo` → §3 the same (`next: compile`); compile; `done` without a terminal → `ran done (exit 3)` and the export-confirm line; `done --yolo` → export, `next: status (done)`. 3 planner + 3 drafter calls in all.
+- `--dry-run --yolo research` in a folder with a real `.paper/`: seeded note after the banners, synthetic sources only in `.paper-dry-run/`, `.paper/` sha256- and mtime-identical, registry unchanged, banner names the workspace; keep / re-seed checked by hand as well.
+- `npm run cassettes:refresh -- --corpus e2e` recorded the corpus live (above); `tests/e2e-corpus-manifest.test.ts` replays it offline under the test runner.
+- Trial merge (discarded) of intake + sections onto this branch: this stream's tests pass; with the mock reading request blocks (the llm stream's D-18-06 work) the bare-chain tests pass and a bare `--yolo` loop from `assignment.txt` over the corpus reaches `status (done)` in exactly 8 = 5 + 3 runs with the brief the corpus scripts (topic, computer-science, literature-review, 1500, apa).
+
+## For the integrator
+- **Expected conflicts** (hot files, keep every region): `CLAUDE.md` — this stream's fence row sits directly above the intake stream's discipline-literals row (keep both; drop the old "Discipline literals … enforced from GRND-06" line); `bin/pensmith.ts` merges cleanly with the sections stream's regex/`invocationScope` lines (verified); `bin/lib/paths.ts` merges cleanly with intake (stdin clause) and sections (section folders) (verified).
+- **`tests/bare-chain.test.ts` relies on the mock deriving stub hints from the request blocks** (D-18-06, llm stream). Without that, the sections planner rejects the base mock's planner reply (slug `section-1`). Verified green once the mock uses `promptHints`.
+- **`mock-script.json` intake-clarifier reply** carries the pre-Phase-18 `questions` field besides the v2 fields so the corpus also drives a pre-merge checkout; the v2 contract strips it. Drop it when convenient (then re-run `tests/e2e-corpus-manifest.test.ts`) — or re-record, which regenerates the file.
+- **`tests/e2e-chain.test.ts` / `tests/dry-run-chain.test.ts`** (integration pass) should build on `openChainSandbox` + `applyCorpusScript` + `loop({maxRuns: manifest.runBound, until: /next: status \(done\)/})`. The ran-line for a section is `ran plan §N, write §N; next: …` once `write` chains verify (the chain only adds `verify §N` when the router still names it).
+- **Explicit `write N` pre-flight**: the `--yolo` pre-flight of an explicit `write N` projects `write §N` only; once write chains verify (sections), `invocationScope` could add `verify §N` unless `--no-verify` (sections' region of `invocationScope`).
+- **`bin/lib/tutorial.ts`** sanitises `\.paper[\\/]sections…` paths in its output; under a dry run the path is `.paper-dry-run/sections/…` — widen the regex to `\.paper(?:-dry-run)?[\\/]sections` (intake's region).
+- **`bin/lib/http.ts` `httpLogger`** keys its logger cache on `path.join(cwd, '.paper')`; `paperDir(cwd)` would follow the workspace. Harmless today (a dry run makes no HTTP request); Phase 19 owns `http.ts`.
+- **Style fingerprints**: `style-match.ts` writes the global `style-fingerprints.json` when style-match is on; under a dry run that is a global write (the global library registration is already skipped). Consider skipping it when `dryRunWorkspaceActive()`.
+- **Phase 19**: its adapter URL changes (https arXiv, Unpaywall email, Crossref `mailto` UA, SRC-10 adapter order by preset) change the recorded requests — re-record with `npm run cassettes:refresh -- --corpus e2e` and keep `tests/e2e-corpus-manifest.test.ts` and the e2e chain green (18-PLAN.md §9.9).
