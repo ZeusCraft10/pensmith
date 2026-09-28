@@ -23,6 +23,12 @@
 //          bin/lib/bibtex-write.ts before persistence (BL-4 chokepoint).
 
 import { z } from 'zod';
+import {
+  SourceTypeSchema,
+  RetractionStatusSchema,
+  ZoteroRefSchema,
+  OaLocationSchema,
+} from './source-types.js';
 
 const BaseFields = {
   id: z.string().min(1),
@@ -42,6 +48,26 @@ const BaseFields = {
   synthetic: z.boolean().optional(),
   arxiv: z.string().optional(),
   isbn: z.string().optional(),
+  // Phase 19 seam S-B — the fields a full reference and the evaluator need
+  // (SRC-02, SRC-03, SRC-04, SRC-05, SRC-11, SRC-16). All optional: an adapter
+  // sets what its registrar returns. The library writer copies them into the
+  // LIBRARY.json v3 entry (bin/lib/migrations/library/shape.ts).
+  pmid: z.string().optional(),
+  pmcid: z.string().optional(),
+  venue: z.string().optional(),
+  volume: z.string().optional(),
+  issue: z.string().optional(),
+  pages: z.string().optional(),
+  publisher: z.string().optional(),
+  type: SourceTypeSchema.optional(),
+  /** Editors, for edited volumes / editor-only works (author strings, same forms). */
+  editors: z.array(z.string()).optional(),
+  /** Every open-access location Unpaywall lists (SRC-03); oa_pdf_url is the best PDF among them. */
+  oa_locations: z.array(OaLocationSchema).optional(),
+  /** Retraction lookup outcome when the adapter's own record carries it (Crossref updated-by, SRC-04). */
+  retraction_status: RetractionStatusSchema.optional(),
+  /** The Zotero item identity (SRC-16). */
+  zotero: ZoteroRefSchema.optional(),
 };
 
 export const SourceCandidateSchema = z.discriminatedUnion('source', [
@@ -60,5 +86,11 @@ export const SourceCandidateSchema = z.discriminatedUnion('source', [
   // RUN-27: the labelled synthetic dry-run provider (bin/lib/sources/dry-run.ts).
   // Only ever produced under --dry-run; outside it research filters reserved ids.
   z.object({ ...BaseFields, source: z.literal('dry-run') }),
+  // Phase 19 seam S-B: the books adapter (Open Library / Google Books, SRC-11),
+  // the Zotero Web / local API client (SRC-16) and bring-your-own PDFs entering
+  // the research candidate pool (SRC-15).
+  z.object({ ...BaseFields, source: z.literal('books') }),
+  z.object({ ...BaseFields, source: z.literal('zotero') }),
+  z.object({ ...BaseFields, source: z.literal('byo') }),
 ]);
 export type SourceCandidate = z.infer<typeof SourceCandidateSchema>;
