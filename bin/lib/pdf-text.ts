@@ -118,29 +118,16 @@ export function pdfWorkerEntry(): string {
   return path.join(path.dirname(here), `pdf-worker${ext}`);
 }
 
-/** Node options that carry a module loader (and so must reach a `.ts` worker). */
-const LOADER_FLAGS = new Set(['--import', '--require', '-r', '--loader', '--experimental-loader']);
-
 /**
- * execArgv for the worker — never the parent's full execArgv, which may hold
- * options a worker rejects (`-e <code>`, `--input-type`, `--test`, …). A `.js`
- * entry (dist/) needs none. A `.ts` entry (source) needs the module loaders
- * the parent was started with — tsx — and gets tsx added (resolved to an
- * absolute URL, so it works from any cwd) when the parent had none.
+ * execArgv for the worker — never the parent's execArgv, which may hold
+ * options a worker rejects (`-e <code>`, `--input-type`, `--test`, …) or a
+ * bare `--import tsx` that no longer resolves once the process has changed
+ * directory. A `.js` entry (dist/) needs no option. A `.ts` entry (running
+ * from source) needs exactly the tsx loader, resolved here — from this
+ * module's own location — to an absolute URL.
  */
-export function workerExecArgv(entry: string, parentExecArgv: readonly string[] = process.execArgv): string[] {
-  if (path.extname(entry) !== '.ts') return [];
-  const kept: string[] = [];
-  for (let i = 0; i < parentExecArgv.length; i++) {
-    const a = parentExecArgv[i]!;
-    const eq = a.indexOf('=');
-    const flag = eq > 0 ? a.slice(0, eq) : a;
-    if (!LOADER_FLAGS.has(flag)) continue;
-    if (eq > 0) kept.push(a);
-    else if (i + 1 < parentExecArgv.length) kept.push(a, parentExecArgv[++i]!);
-  }
-  if (!kept.some((a) => a.includes('tsx'))) kept.push('--import', import.meta.resolve('tsx'));
-  return kept;
+export function workerExecArgv(entry: string): string[] {
+  return path.extname(entry) === '.ts' ? ['--import', import.meta.resolve('tsx')] : [];
 }
 
 /** The subset of a worker_threads Worker the settle guard drives (a test can supply a fake). */

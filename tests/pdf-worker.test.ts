@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
@@ -223,16 +224,23 @@ test('SEC-02: the test seam is refused outside a test context', () => {
   assert.equal(r.stdout.trim(), 'refused', r.stderr);
 });
 
-test('SEC-02: the worker gets only the parent\'s module loaders (never -e, --input-type, --test), and tsx for a .ts entry', () => {
-  assert.deepEqual(workerExecArgv('/x/pdf-worker.js', ['--import', 'tsx', '-e', 'code']), [], 'dist needs no loader');
-  assert.deepEqual(
-    workerExecArgv('/x/pdf-worker.ts', ['--require', '/t/preflight.cjs', '--import', 'file:///t/tsx/loader.mjs', '--input-type=module', '-e', 'code', '--test']),
-    ['--require', '/t/preflight.cjs', '--import', 'file:///t/tsx/loader.mjs'],
-  );
-  assert.deepEqual(workerExecArgv('/x/pdf-worker.ts', ['--import=tsx']), ['--import=tsx']);
-  const added = workerExecArgv('/x/pdf-worker.ts', ['--no-warnings']);
-  assert.equal(added[0], '--import');
-  assert.match(added[1] ?? '', /tsx/, 'tsx is added when the parent had no loader');
+test('SEC-02: the worker never inherits the parent\'s execArgv; a .ts entry gets exactly an absolute tsx loader', () => {
+  assert.deepEqual(workerExecArgv(path.join('x', 'pdf-worker.js')), [], 'dist needs no option');
+  const ts = workerExecArgv(path.join('x', 'pdf-worker.ts'));
+  assert.equal(ts.length, 2);
+  assert.equal(ts[0], '--import');
+  assert.match(ts[1] ?? '', /^file:\/\/.*tsx/, 'resolved to an absolute URL, so a changed cwd cannot break it');
+});
+
+test('SEC-02: extraction works after the process changed directory (a bare `--import tsx` would not resolve)', async () => {
+  const prev = process.cwd();
+  process.chdir(fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-worker-cwd-')));
+  try {
+    const out = await extractPdf(fs.readFileSync(FIXTURE));
+    assert.equal(out.engine, 'pdf-parse');
+  } finally {
+    process.chdir(prev);
+  }
 });
 
 test('SEC-02: the worker entry resolves from source (tsx, .ts) and parses', async () => {
