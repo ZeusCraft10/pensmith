@@ -1,0 +1,336 @@
+{
+  "intake-clarifier": [
+    {
+      "data": {
+        "topic": "attention mechanisms in transformers",
+        "discipline": "computer-science",
+        "paper_type": "literature-review",
+        "thesis": "",
+        "length_target_words": 1500,
+        "citation_style": "APA",
+        "sectioning_notes": [],
+        "follow_ups": [],
+        "questions": [
+          {
+            "id": "length",
+            "question": "How long should the paper be?",
+            "suggested_answer": "1500 words"
+          }
+        ]
+      }
+    }
+  ],
+  "topic-disambiguator": [
+    {
+      "data": {
+        "scopes": [
+          {
+            "label": "transformer-attention",
+            "queries": [
+              "transformer self-attention mechanism",
+              "attention mechanism neural machine translation"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "source-evaluator": [
+    {
+      "data": {
+        "verdicts": [
+          {
+            "citekey": "ikehata2021",
+            "keep": true,
+            "reason": "recorded e2e corpus: kept"
+          },
+          {
+            "citekey": "vinuesa2023",
+            "keep": true,
+            "reason": "recorded e2e corpus: kept"
+          },
+          {
+            "citekey": "wang2026",
+            "keep": true,
+            "reason": "recorded e2e corpus: kept"
+          },
+          {
+            "citekey": "zahinnoyear",
+            "keep": true,
+            "reason": "recorded e2e corpus: kept"
+          },
+          {
+            "citekey": "gao2023",
+            "keep": true,
+            "reason": "recorded e2e corpus: kept"
+          },
+          {
+            "citekey": "bao2025",
+            "keep": true,
+            "reason": "recorded e2e corpus: kept"
+          },
+          {
+            "citekey": "bharathi2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "pandya2022",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "liaow2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "pann2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "xuy2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "veragonzalezv2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "suny2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "baip2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "kr2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "ouz2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "lium2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "qius2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "qi2025",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "venkataraman2022",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "venkataraman2022a",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "shu2017",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "jauregiunanue2018",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "sani2023",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "wang2025",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "he2021",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "li2024",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "imamura2018",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "freitag2017",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "wok2015",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "kocmi2018",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "khayrallah2018",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "ca2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "wangj2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "qix2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "tsoukam2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "lif2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "boudzar2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "gum2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "chic2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "shahinn2026",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "leem2024",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "wu2020",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "huang2018",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "chen2023",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "mehta2025",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "won2019",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "kartiman2025",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "yang2020",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "hassani2022",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "penunuri2011",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "mishra2024",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "koehn2017",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "stahlberg2019",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "baker2014",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "nishimura2018",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "moradi2019",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          },
+          {
+            "citekey": "cranneyc2025",
+            "keep": false,
+            "reason": "recorded e2e corpus: not in the keep-list"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,482 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=attention+mechanism+neural+machine+translation&rows=10&select=DOI%2Ctitle%2Cauthor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 2852347,
+        "items": [
+          {
+            "DOI": "10.1109/ssitcon66133.2025.11342115",
+            "title": [
+              "Improved Neural Machine Translation Algorithm for English-Chinese Translation Based on Multi-Head Attention Mechanism"
+            ],
+            "author": [
+              {
+                "given": "Lin",
+                "family": "Qi",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Sichuan Judicial and Police Officers Professional College,Deyang,Sichuan,China"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  10,
+                  17
+                ]
+              ]
+            },
+            "container-title": [
+              "2025 2nd International Conference on Software, Systems and Information Technology (SSITCON)"
+            ],
+            "type": "proceedings-article"
+          },
+          {
+            "DOI": "10.36227/techrxiv.20369091",
+            "title": [
+              "English to Swedish Neural Machine Translation Using Attention"
+            ],
+            "author": [
+              {
+                "given": "Prashanth",
+                "family": "Venkataraman",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2022,
+                  7,
+                  29
+                ]
+              ]
+            },
+            "abstract": "<jats:p>&lt;p&gt;The paper implements a neural machine translation model with attention using tensorflow and keras libraries for the task of translating English to Swedish.&lt;/p&gt;</jats:p>",
+            "type": "posted-content"
+          },
+          {
+            "DOI": "10.36227/techrxiv.20369091.v1",
+            "title": [
+              "English to Swedish Neural Machine Translation Using Attention"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0002-5351-8415",
+                "authenticated-orcid": false,
+                "given": "Prashanth",
+                "family": "Venkataraman",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Vellore Institute of Technology"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2022,
+                  7,
+                  29
+                ]
+              ]
+            },
+            "abstract": "<jats:p>The paper implements a neural machine translation model with attention\nusing tensorflow and keras libraries for the task of translating English\nto Swedish.</jats:p>",
+            "type": "posted-content"
+          },
+          {
+            "DOI": "10.18653/v1/w17-3201",
+            "title": [
+              "An Empirical Study of Adequate Vision Span for Attention-Based\n            Neural Machine Translation"
+            ],
+            "author": [
+              {
+                "given": "Raphael",
+                "family": "Shu",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Hideki",
+                "family": "Nakayama",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2017
+                ]
+              ]
+            },
+            "container-title": [
+              "Proceedings of the First Workshop on Neural Machine Translation"
+            ],
+            "type": "proceedings-article"
+          },
+          {
+            "DOI": "10.18653/v1/w18-2702",
+            "title": [
+              "A Shared Attention Mechanism for Interpretation of Neural Automatic Post-Editing Systems"
+            ],
+            "author": [
+              {
+                "given": "Inigo",
+                "family": "Jauregi Unanue",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Ehsan",
+                "family": "Zare Borzeshi",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Massimo",
+                "family": "Piccardi",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2018
+                ]
+              ]
+            },
+            "container-title": [
+              "Proceedings of the 2nd Workshop on Neural Machine Translation and Generation"
+            ],
+            "type": "proceedings-article"
+          },
+          {
+            "DOI": "10.62254/jmt.2023.19.1.7",
+            "title": [
+              "Development of English-to-Igala machine translation system using neural machine translation with attention mechanism"
+            ],
+            "author": [
+              {
+                "name": "Department of Computer Science, The Federal Polytechnic, Idah, Kogi State, Nigeria",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "F. A.",
+                "family": "Sani",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2023,
+                  8,
+                  15
+                ]
+              ]
+            },
+            "abstract": "<jats:p>Translation is a matter of absolute necessity in the globally united and yet; linguistically and culturally separated world in which we live. Translation allows individuals who speak different languages to communicate and understand one another. The obvious limitations in human translation in terms of speed, scalability and high cost gave birth to the quest for alternative means of translation which is machine translation. Machine translation involves the use of computers to translate from one natural language (source) to another natural language (target).  Machine translation applications can be developed using rule-based, example- based and statistical-based technologies. Machine translation applications have been developed to translate English language text to Igala language text using rule-based and example-based approaches. Recently, Neural Machine Translation (NMT) emerged as a new paradigm that swiftly superseded other methods of machine translation evolved with the development of deep learning. This study is aimed at developing a system that can translate contents rendered in English language to Igala language using the Neural Machine Translation with attention mechanism approach. The Neural Machine Translation model for English-to-Igala translation was built with encoder-decoder architecture with an attention layer. The model was trained with a dataset using English-Igala parallel corpus that contains 50,000 parallel sentences. The dataset was partitioned into training, validation and test set in the ratio of 80/20 percent. The model was implemented using python programming language. After training, validation and testing, the output of the model was tested on a corpus of 276 selected English texts using the Bilingual Evaluation Understudy (BLEU) method for evaluating Machine Translation system. An accuracy of 71.0% was obtained. The adoption of this model will play crucial role in facilitating everyday interaction, information exchange and active participation in society among Igala people. It will give Igala people access to information in Igala language that will enhance their standard of living as it will enable them to participate in abundant business opportunities available in the online community, and ensure proper integration in the emerging information society.</jats:p>",
+            "container-title": [
+              "Journal of Management and Technology"
+            ],
+            "type": "journal-article"
+          },
+          {
+            "DOI": "10.1109/dapic66097.2025.00037",
+            "title": [
+              "Research on Korean Neural Machine Translation Model Based on Attention Mechanism"
+            ],
+            "author": [
+              {
+                "given": "Xinfeng",
+                "family": "Wang",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Weifang Engineering Vocational College,Qingzhou,Shandong,China,262500"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Qingsong",
+                "family": "Chang",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Weifang Engineering Vocational College,Qingzhou,Shandong,China,262500"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  2,
+                  26
+                ]
+              ]
+            },
+            "container-title": [
+              "2025 International Conference on Digital Analysis and Processing, Intelligent Computation (DAPIC)"
+            ],
+            "type": "proceedings-article"
+          },
+          {
+            "DOI": "10.1109/itnec52019.2021.9586824",
+            "title": [
+              "Attention Mechanism for Neural Machine Translation: A survey"
+            ],
+            "author": [
+              {
+                "given": "Weihua",
+                "family": "He",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Yongyun",
+                "family": "Wu",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Xiaohua",
+                "family": "Li",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2021,
+                  10,
+                  15
+                ]
+              ]
+            },
+            "container-title": [
+              "2021 IEEE 5th Information Technology,Networking,Electronic and Automation Control Conference (ITNEC)"
+            ],
+            "type": "proceedings-article"
+          },
+          {
+            "DOI": "10.1109/acait63902.2024.11022229",
+            "title": [
+              "Design of a Neural Machine Translation Model for English Based on LSTM and Enhanced Attention Mechanism"
+            ],
+            "author": [
+              {
+                "given": "Jieying",
+                "family": "Li",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Xi'an Fanyi University,School of English Language and Culture,Xi'an,China"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2024,
+                  11,
+                  8
+                ]
+              ]
+            },
+            "container-title": [
+              "2024 8th Asian Conference on Artificial Intelligence Technology (ACAIT)"
+            ],
+            "type": "proceedings-article"
+          },
+          {
+            "DOI": "10.18653/v1/w18-2707",
+            "title": [
+              "Enhancement of Encoder and Attention Using Target Monolingual Corpora in Neural Machine Translation"
+            ],
+            "author": [
+              {
+                "given": "Kenji",
+                "family": "Imamura",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Atsushi",
+                "family": "Fujita",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Eiichiro",
+                "family": "Sumita",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2018
+                ]
+              ]
+            },
+            "container-title": [
+              "Proceedings of the 2nd Workshop on Neural Machine Translation and Generation"
+            ],
+            "type": "proceedings-article"
+          }
+        ],
+        "items-per-page": 10,
+        "query": {
+          "start-index": 0,
+          "search-terms": "attention mechanism neural machine translation"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T06:25:02.777Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

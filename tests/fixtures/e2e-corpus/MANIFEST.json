@@ -1,0 +1,106 @@
+{
+  "$schemaVersion": 1,
+  "description": "The recorded end-to-end corpus (GRND-18, D-18-31): real recordings of every source request the chain from tests/fixtures/assignment.txt makes, the scripted model replies that lead to them, and what to expect. Re-record with `npm run cassettes:refresh -- --corpus e2e` (CONTRIBUTING.md).",
+  "assignment": "tests/fixtures/assignment.txt",
+  "assignmentSha256": "2a4043c907e52cc6151879504d9b1e7980747861705b483fc59b7bddf248cac7",
+  "mockScript": "tests/fixtures/e2e-corpus/mock-script.json",
+  "cassetteRoot": "tests/fixtures/cassettes/e2e",
+  "topic": "attention mechanisms in transformers",
+  "discipline": "computer-science",
+  "queries": [
+    "transformer self-attention mechanism",
+    "attention mechanism neural machine translation"
+  ],
+  "adapters": {
+    "recorded": [
+      "arxiv",
+      "crossref",
+      "pubmed",
+      "retraction-watch"
+    ],
+    "expectedMiss": [
+      {
+        "adapter": "openalex",
+        "query": "transformer self-attention mechanism",
+        "why": "the recorded response is 103492 bytes, over the 51200-byte cassette cap"
+      },
+      {
+        "adapter": "semanticscholar",
+        "query": "transformer self-attention mechanism",
+        "why": "no response was recorded (rate-limited, unreachable or a transport error)"
+      },
+      {
+        "adapter": "openalex",
+        "query": "attention mechanism neural machine translation",
+        "why": "the recorded response is 87786 bytes, over the 51200-byte cassette cap"
+      },
+      {
+        "adapter": "semanticscholar",
+        "query": "attention mechanism neural machine translation",
+        "why": "no response was recorded (rate-limited, unreachable or a transport error)"
+      }
+    ]
+  },
+  "keptSources": [
+    {
+      "citekey": "ikehata2021",
+      "doi": "10.5244/c.35.86",
+      "title": "PS-Transformer: Learning Sparse Photometric Stereo Network using Self-Attention Mechanism",
+      "adapter": "crossref"
+    },
+    {
+      "citekey": "vinuesa2023",
+      "doi": "10.21203/rs.3.rs-3545247/v1",
+      "title": "Easy attention: A simple self-attention mechanism for transformer-based time-series reconstruction and prediction",
+      "adapter": "crossref"
+    },
+    {
+      "citekey": "wang2026",
+      "doi": "10.2139/ssrn.6136211",
+      "title": "Single-lead ECG arrhythmia detection based on a hybrid transformer model with self-attention mechanism",
+      "adapter": "crossref"
+    },
+    {
+      "citekey": "zahinnoyear",
+      "doi": "10.32469/10355/96193",
+      "title": "Multi-headed self-attention mechanism-based Transformer model for predicting bus travel times across multiple bus routes using heterogeneous datasets",
+      "adapter": "crossref"
+    },
+    {
+      "citekey": "gao2023",
+      "doi": "10.2139/ssrn.4329702",
+      "title": "A Personalized Paper Recommendation Method Based on Knowledge Graph and Transformer Encoder with a Self-Attention Mechanism",
+      "adapter": "crossref"
+    },
+    {
+      "citekey": "bao2025",
+      "doi": "10.1016/j.procs.2025.05.168",
+      "title": "Research on Transformer Point Cloud Segmentation Technology under Self Attention Mechanism",
+      "adapter": "crossref"
+    }
+  ],
+  "expectedSections": 3,
+  "runBound": 8,
+  "recordedAt": "2026-09-28T06:25:11.650Z",
+  "recorder": "scripts/refresh-cassettes.mjs --corpus e2e",
+  "cassettes": [
+    "tests/fixtures/cassettes/e2e/arxiv/search-attention-mechanism-neural-machine-translation.json",
+    "tests/fixtures/cassettes/e2e/arxiv/search-transformer-self-attention-mechanism.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-bao2025.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-gao2023.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-ikehata2021.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-vinuesa2023.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-wang2026.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-zahinnoyear.json",
+    "tests/fixtures/cassettes/e2e/crossref/search-attention-mechanism-neural-machine-translation.json",
+    "tests/fixtures/cassettes/e2e/crossref/search-transformer-self-attention-mechanism.json",
+    "tests/fixtures/cassettes/e2e/pubmed/search-attention-mechanism-neural-machine-translation.json",
+    "tests/fixtures/cassettes/e2e/pubmed/search-transformer-self-attention-mechanism.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-bao2025.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-gao2023.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-ikehata2021.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-vinuesa2023.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-wang2026.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-zahinnoyear.json"
+  ]
+}
