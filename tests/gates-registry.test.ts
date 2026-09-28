@@ -23,7 +23,7 @@ import {
   GateRefusedError,
   type GateId,
 } from '../bin/lib/gates.js';
-import { EXIT_OK, EXIT_USAGE, EXIT_APPROVAL, EXIT_COST_CAP } from '../bin/lib/exit-codes.js';
+import { EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_APPROVAL, EXIT_COST_CAP } from '../bin/lib/exit-codes.js';
 import { CURRENT_PLAN_FRONTMATTER_VERSION } from '../bin/lib/schemas/plan-frontmatter.js';
 import {
   REPO,
@@ -179,6 +179,9 @@ test('RUN-28 research-prune: no terminal → 3 before any search, and nothing wr
   const sb = sandbox('gate-prune');
   const root = sb.project('p');
   assert.equal(runCli(sb, root, ['new', '--yolo', '--from', ASSIGNMENT_FIXTURE]).status, EXIT_OK);
+  // SRC-08: research seeds its queries from the brief's topic; this one is the
+  // query the source cassettes record, so the stubbed run finds real hits.
+  writeFileSync(join(root, '.paper', 'INTAKE.md'), `---\ntopic: ${SEARCHABLE}\ndiscipline: computer-science\n---\n# Intake\n\n## Assignment\n\nWrite a 1500-word review of ${SEARCHABLE}.\n`);
   const before = snapshot(root);
   const r = runCli(sb, root, ['research']);
   assert.equal(r.status, EXIT_APPROVAL, `${r.stdout}\n${r.stderr}`);
@@ -186,7 +189,10 @@ test('RUN-28 research-prune: no terminal → 3 before any search, and nothing wr
   assert.deepEqual(changedPaths(before, snapshot(root), IGNORE_LOGS), [], 'nothing written (no RESEARCH.md, no LIBRARY.json)');
   const y = runCli(sb, root, ['research', '--yolo']);
   assert.equal(y.status, EXIT_OK, `${y.stdout}\n${y.stderr}`);
-  assert.ok(existsSync(join(root, '.paper', 'LIBRARY.json')));
+  const lib = JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: unknown[] };
+  const kept = /^pensmith research: (\d+) kept/m.exec(y.stdout);
+  assert.ok(kept, y.stdout);
+  assert.ok(lib.entries.length >= 1 && lib.entries.length === Number(kept[1]), `--yolo kept every candidate the evaluator kept: ${y.stdout}`);
 });
 
 // The research and outline gates through the REAL verbs against the mock LLM:
@@ -232,12 +238,19 @@ test('RUN-28 research-scope + research-prune: scripted answers drive both questi
     const lib = JSON.parse(readFileSync(join(sb.paper, 'LIBRARY.json'), 'utf8')) as { entries: unknown[] };
     assert.equal(lib.entries.length, 1, 'the prune answer kept one source');
 
-    // --yolo takes the registry choice for both: the first scope, every candidate.
+    // --yolo takes the registry choice for both: the first scope (announced),
+    // every kept candidate. That scope's queries have no recorded results, so
+    // the run finds no source: SRC-07 exits 1 naming why, logs the run in
+    // RESEARCH.md and leaves LIBRARY.json as it was.
     sb.mock!.script('topic-disambiguator', { data: scopes });
+    const libBefore = readFileSync(join(sb.paper, 'LIBRARY.json'), 'utf8');
     const y = await sb.runTsx(null, ['research', '--yolo']);
-    assert.equal(y.status, EXIT_OK, y.stderr);
+    assert.equal(y.status, EXIT_ERROR, y.stderr);
     assert.doesNotMatch(y.stderr, /Which research scope should I use\?/);
+    assert.match(y.stdout, /--yolo: using scope 1 of 2 — "unrelated-scope"/);
+    assert.match(y.stderr, /^pensmith research: no sources found — /m);
     assert.match(readFileSync(join(sb.paper, 'RESEARCH.md'), 'utf8'), /unrelated-scope/, '--yolo searched the first proposed scope');
+    assert.equal(readFileSync(join(sb.paper, 'LIBRARY.json'), 'utf8'), libBefore, 'LIBRARY.json unchanged');
   });
 });
 

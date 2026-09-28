@@ -331,8 +331,8 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // CYCLE-4 M-1 REVIEWS CONVERGENCE — `export` keyword present so Plan 09 Task 9.3.5
   // dynamic-imports this array (not undefined); single source of truth for the 9 hash-pin slugs.
   { slug: 'intake-clarifier',    path: 'templates/prompts/intake-clarifier.md',    decision: 'D-12', hash: 'e2fa74ba6add0cac5f2fae1cb285d1023ed3e7057fa46f69320b38e207be9a39' },  // re-pinned Plan 10-04 Task 1 — Q3 now offers all 8 styles; WN-3 lockstep with prompt-loader pin
-  { slug: 'topic-disambiguator', path: 'templates/prompts/topic-disambiguator.md', decision: 'D-12', hash: '165e533fa1119ffca44a4876212679207d65501d7b71d0b9ed9de123df84b96e' },
-  { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12', hash: '45488935a0bd44f08b4077978c66767f369b7fb4e72696ef5d17b5c6c453c762' },
+  { slug: 'topic-disambiguator', path: 'templates/prompts/topic-disambiguator.md', decision: 'D-12', hash: '34587e4f81be0e16848f7aa19bd176f050da2381cba31a1ea6b36c54816b1378' },
+  { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12', hash: 'b10cd38425ab01dd5572592dc01f11b646006dbd86b13be311f8b0eb9ca0eed4' },
   { slug: 'outline-author',      path: 'templates/prompts/outline-author.md',      decision: 'D-12', hash: 'f5124245f29c71de31ed2c330097d2141bba80c04d8a2d2cef955e0669068f42' },
   { slug: 'section-planner',     path: 'templates/prompts/section-planner.md',     decision: 'D-12', hash: 'e2991033be0f7e0b28a20ffc0bfa03355e999daf445070b709077c310d5ee5b5' },
   { slug: 'section-drafter',     path: 'templates/prompts/section-drafter.md',     decision: 'D-12', hash: 'baf0172b4e2e96a2d2a1a6c35b5cf548faafd9436f1405e863060c619caa1d34' },

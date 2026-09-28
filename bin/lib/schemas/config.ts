@@ -76,7 +76,13 @@ export const ProjectSchema = z.object({
   pii_redaction: z.boolean().optional(),
 });
 
-export const SOURCE_DATABASES = ['openalex', 'semanticscholar', 'crossref', 'arxiv', 'pubmed', 'zotero'] as const;
+/**
+ * `[sources] allowed_databases` values (SRC-10, SRC-11): the registry adapters
+ * research can query, plus `nber` (Crossref restricted to NBER's DOI prefix
+ * 10.3386) and `books` (Open Library / Google Books). bin/lib/adapter-plan.ts
+ * maps each to the adapter it searches.
+ */
+export const SOURCE_DATABASES = ['openalex', 'semanticscholar', 'crossref', 'arxiv', 'pubmed', 'zotero', 'books', 'nber'] as const;
 
 export const SourcesSchema = z.object({
   require_doi: z.boolean().optional(),
