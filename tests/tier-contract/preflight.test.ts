@@ -88,10 +88,10 @@ test('preflight: MCP server registers exactly 5 resources (D-13)', async () => {
   assert.deepEqual(names, EXPECTED_RESOURCES, 'resource name set mismatch');
 });
 
-test('preflight: MCP server registers exactly 9 tools (6 Phase-2 + 3 Phase-3 Plan 03-07 Task 7.3)', async () => {
+test('preflight: MCP server registers exactly 10 tools (6 Phase-2 + 3 Phase-3 Plan 03-07 Task 7.3 + 1 Phase-19)', async () => {
   const res = await client.listTools();
   const names = (res.tools ?? []).map((t: { name: string }) => t.name).sort();
-  assert.equal(names.length, 9, `expected 9 tools (6 Phase-2 + 3 Phase-3), got ${names.length}: ${JSON.stringify(names)}`);
+  assert.equal(names.length, 10, `expected 10 tools (6 Phase-2 + 3 Phase-3 + paper_ingest_zotero_items), got ${names.length}: ${JSON.stringify(names)}`);
   assert.deepEqual(names, EXPECTED_TOOLS, 'tool name set mismatch (TIER-02 snake_case + Plan 03-07 pensmith_<verb> names are LOCKED)');
 });
 

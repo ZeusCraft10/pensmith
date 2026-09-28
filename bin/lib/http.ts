@@ -86,8 +86,10 @@
 //      configured LLM endpoint rules (D-17-09) and the two configured local
 //      services (FetchOptions.localService: the Zotero 7 local API at exactly
 //      http://127.0.0.1:23119 with PENSMITH_ZOTERO_LOCAL=1, and the loopback
-//      origin of PENSMITH_GROBID_URL — environment only, so a paper file can
-//      enable neither; link-local and metadata addresses stay refused).
+//      origin of PENSMITH_GROBID_URL — read from the environment only, by
+//      bin/lib/local-services.ts, so a paper file can enable neither;
+//      link-local and metadata addresses stay refused). http.ts itself reads
+//      no environment variable.
 //   3. Pin: a per-request dispatcher whose connect lookup answers ONLY with the
 //      validated addresses (no second DNS resolution — closes WR-03 / DNS
 //      rebinding), keeping the hostname for TLS SNI and the Host header.
@@ -138,6 +140,7 @@ import {
 } from './http-mock.js';
 import { openSessionLog, isMirrorPromptsEnabled, type SessionLogger } from './session-log.js';
 import { contactEmail, DEFAULT_CONTACT_EMAIL_ENV } from './contact-email.js';
+import { enabledLocalServiceOrigin, type LocalService } from './local-services.js';
 
 // ============================================================
 //   Typed egress errors (D-17-05)
@@ -554,57 +557,20 @@ export async function checkLlmEndpoint(
 //   Configured local services (SRC-15, SRC-16, D-19-21, D-19-24)
 // ============================================================
 
-/**
- * A service on the user's own machine that pensmith may reach even though its
- * address is loopback — only when the user enabled it in the ENVIRONMENT (a
- * paper's files can enable neither, so a shared paper cannot aim pensmith at a
- * local port):
- *   zotero-local — the Zotero 7 local API, exactly http://127.0.0.1:23119, when
- *                  PENSMITH_ZOTERO_LOCAL=1;
- *   grobid       — a GROBID server at the loopback origin PENSMITH_GROBID_URL
- *                  names (127.0.0.1, ::1 or localhost).
- */
-export type LocalService = 'zotero-local' | 'grobid';
-
-/** The one origin the Zotero 7 local API listens on. */
-export const ZOTERO_LOCAL_ORIGIN = 'http://127.0.0.1:23119';
-
-const LOOPBACK_HOSTNAMES: ReadonlySet<string> = new Set(['127.0.0.1', '[::1]', '::1', 'localhost']);
+// Which local services are enabled is read from the environment by
+// bin/lib/local-services.ts (never from a paper file); http.ts only enforces
+// the policy. Re-exported here for the modules and tests that speak to the gate.
+export { ZOTERO_LOCAL_ORIGIN, grobidOrigin, isZoteroLocalEnabled, type LocalService } from './local-services.js';
 
 /**
- * The loopback origin of PENSMITH_GROBID_URL, or null when it is unset, not a
- * URL, not http(s), or not a loopback host (a remote GROBID would receive the
- * user's PDFs, which never leave the machine — D-19-21).
+ * The origin an ENABLED local service may be reached at right now, or null
+ * when the environment has not enabled it. (Under a test context a seam may
+ * move an enabled service to a loopback test server's origin.)
  */
-export function grobidOrigin(raw: string | undefined = process.env.PENSMITH_GROBID_URL): string | null {
-  const v = raw?.trim();
-  if (!v) return null;
-  let u: URL;
-  try {
-    u = new URL(v);
-  } catch {
-    return null;
-  }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-  if (!LOOPBACK_HOSTNAMES.has(u.hostname.toLowerCase())) return null;
-  return u.origin;
-}
-
-/** True when PENSMITH_ZOTERO_LOCAL=1 enables the Zotero 7 local API. */
-export function isZoteroLocalEnabled(): boolean {
-  return process.env.PENSMITH_ZOTERO_LOCAL === '1';
-}
-
-/** The origin a local service may be reached at right now, or null when it is not enabled. */
 export function localServiceOrigin(kind: LocalService): string | null {
-  const override = activeSeams()?.localServiceOrigins?.[kind];
-  if (kind === 'zotero-local') {
-    if (!isZoteroLocalEnabled()) return null;
-    return override ?? ZOTERO_LOCAL_ORIGIN;
-  }
-  const origin = grobidOrigin();
+  const origin = enabledLocalServiceOrigin(kind);
   if (origin === null) return null;
-  return override ?? origin;
+  return activeSeams()?.localServiceOrigins?.[kind] ?? origin;
 }
 
 const LOCAL_SERVICE_HOW: Readonly<Record<LocalService, string>> = {

@@ -202,7 +202,7 @@ export async function checkZoteroKey(
       noCache: true,
       noRetry: opts.retry !== true,
       timeoutMs: opts.timeoutMs ?? 10_000,
-      maxBytes: 64 * 1024,
+      maxBytes: MAX_JSON_RESPONSE_BYTES,
     });
   } catch (e) {
     if (isOfflineEgressError(e)) {

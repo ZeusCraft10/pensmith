@@ -28,6 +28,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { fetch as httpFetch, localServiceOrigin } from './http.js';
+import { grobidUrlSetting } from './local-services.js';
 import { normalizeDoi } from './doi.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 
@@ -66,8 +67,8 @@ export function _resetGrobidWarningForTest(): void {
  * when none is configured (or the configured one is not loopback — warned once).
  */
 export function grobidEndpoint(): string | null {
-  const raw = process.env.PENSMITH_GROBID_URL?.trim();
-  if (!raw) return null;
+  const raw = grobidUrlSetting();
+  if (raw === null) return null;
   const origin = localServiceOrigin('grobid');
   if (origin === null) {
     if (!warnedNotLoopback) {
