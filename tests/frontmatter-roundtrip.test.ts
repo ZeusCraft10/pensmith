@@ -71,10 +71,10 @@ test('CONF-04: schema_version survives parse, serialize, and updates of other ke
     fm.status = 'written';
   });
   assert.match(out, /^---\nschema_version: 1\nsection: 2\nstatus: written\n---\nbody$/);
-  // A v0 file migrated, then updated, keeps the stamp first and the comment.
+  // A v0 file migrated (v0 → v1 → v2, GRND-09), then updated, keeps the stamp first and the comment.
   const migrated = migrateFrontmatterText('plan', '---\n# note\nsection: 1\n---\nbody').text;
   const updated = updateFrontmatter(migrated, (fm) => {
     fm.status = 'writing';
   });
-  assert.match(updated, /^---\nschema_version: 1\n# note\nsection: 1\nstatus: writing\n---\nbody$/);
+  assert.match(updated, /^---\nschema_version: 2\n# note\nsection: 1\nstatus: writing\n---\nbody$/);
 });

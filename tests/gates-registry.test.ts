@@ -24,6 +24,7 @@ import {
   type GateId,
 } from '../bin/lib/gates.js';
 import { EXIT_OK, EXIT_USAGE, EXIT_APPROVAL, EXIT_COST_CAP } from '../bin/lib/exit-codes.js';
+import { CURRENT_PLAN_FRONTMATTER_VERSION } from '../bin/lib/schemas/plan-frontmatter.js';
 import {
   REPO,
   ASSIGNMENT_FIXTURE,
@@ -164,7 +165,7 @@ test('RUN-28 add-remap: no terminal → the source is added, the remap skipped w
   const later = runCli(sb, root, ['add', '--remap', key, '--section', '1']);
   assert.equal(later.status, EXIT_OK, `${later.stdout}\n${later.stderr}`);
   assert.match(readFileSync(plan, 'utf8'), new RegExp(`- ${key}`), 'the printed command remaps the section');
-  assert.match(readFileSync(plan, 'utf8'), /^schema_version: 1$/m, 'the remap write stamps the frontmatter version');
+  assert.match(readFileSync(plan, 'utf8'), new RegExp(`^schema_version: ${CURRENT_PLAN_FRONTMATTER_VERSION}$`, 'm'), 'the remap write stamps the frontmatter version');
 
   const sb2 = sandbox('gate-remap-yolo');
   const root2 = sb2.project('p');
@@ -331,7 +332,8 @@ test('RUN-28: PRD §7.20 carries the gate table and it matches GATES (drift test
   for (const row of rows.filter((r) => !ids.has(r.id))) {
     assert.match(row.owner, /^[A-Z]+-\d+ \(planned\)$/, `${row.id} is not in GATES, so it must be marked (planned) with its landing requirement`);
   }
-  for (const req of ['GRND-02', 'GRND-17', 'VRFY-22', 'VRFY-20', 'GRND-09']) {
+  // GRND-01, GRND-02 and GRND-09 landed their gates in Phase 18 (seam S-A).
+  for (const req of ['GRND-17', 'VRFY-22', 'VRFY-20']) {
     assert.ok(rows.some((r) => r.owner === `${req} (planned)`), `future gate from ${req} is listed`);
   }
 });
