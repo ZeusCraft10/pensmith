@@ -57,6 +57,7 @@ import {
   renderAdapterTable,
   evaluatorNotes,
   tierSummary,
+  upsertCounts,
   type ResearchItem,
   type ResearchPassResult,
 } from './research-orchestrator.js';
@@ -308,7 +309,8 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
   });
   const upsert = await upsertSources(opts.root, final.map(toLibrary), { provenance: `plan-research:§${opts.n}` });
   const realKeys = final.map((i, index) => upsert.outcomes.find((o) => o.index === index)?.citekey ?? i.candidate.citekey);
-  const newToLibrary = upsert.outcomes.filter((o) => o.status === 'added').map((o) => o.citekey);
+  const counts = upsertCounts(upsert.outcomes);
+  const newToLibrary = counts.added;
 
   // Only section N's PLAN.md gains the keys.
   const added = await assignToSection(planPath, realKeys);
@@ -344,7 +346,8 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
   }
   out(
     `${label}: added ${added.length} source(s) to section ${opts.n}'s assigned_sources` +
-      ` (${newToLibrary.length} new to LIBRARY.json, ${realKeys.length - newToLibrary.length} already in the library)` +
+      ` (${newToLibrary.length} new to LIBRARY.json, ${counts.known.length} already in the library` +
+      `${counts.duplicates > 0 ? `, ${counts.duplicates} duplicate(s) merged` : ''})` +
       `${added.length > 0 ? `: ${added.join(', ')}` : ''}; logged in ${path.relative(opts.root, logPath)}`,
   );
   return {

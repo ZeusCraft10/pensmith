@@ -70,6 +70,7 @@ import {
   logExclusions,
   evaluatorNotes,
   tierSummary,
+  upsertCounts,
   type ResearchItem,
   type ResearchPassResult,
   type AdapterRegistry,
@@ -479,8 +480,8 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     };
   };
   const upsert = await upsertSources(root, final.map(toLibrary), { provenance: 'research' });
-  const added = upsert.outcomes.filter((o) => o.status === 'added').length;
-  const known = upsert.outcomes.length - added;
+  const counts = upsertCounts(upsert.outcomes);
+  const added = counts.added.length;
   const keyOf = (index: number): string => upsert.outcomes.find((o) => o.index === index)?.citekey ?? (candidates[index] as SourceCandidate).citekey;
 
   const retracted: LogRetraction[] = [];
@@ -513,7 +514,8 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
   }
   out(
     `pensmith research: wrote LIBRARY.json (${upsert.library.entries.length} source(s); ${added} new` +
-      `${known > 0 ? `, ${known} already in library` : ''}), RESEARCH.md, CITATIONS.bib and CITATIONS.ris`,
+      `${counts.known.length > 0 ? `, ${counts.known.length} already in library` : ''}` +
+      `${counts.duplicates > 0 ? `, ${counts.duplicates} duplicate(s) merged` : ''}), RESEARCH.md, CITATIONS.bib and CITATIONS.ris`,
   );
   return {
     ok: true,

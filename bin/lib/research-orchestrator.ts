@@ -684,6 +684,34 @@ export function tierSummary(items: readonly { tier: SourceTier | null }[]): stri
   return `${items.length} kept${parts.length > 0 ? ` (${parts.join(', ')})` : ''}`;
 }
 
+/** How one upsert's outcomes split, for the count lines research prints. */
+export interface UpsertCounts {
+  /** Citekeys of the works new to LIBRARY.json. */
+  readonly added: string[];
+  /** Distinct citekeys of works LIBRARY.json already held before this write. */
+  readonly known: string[];
+  /**
+   * Candidates that collapsed into another candidate of the same write (the
+   * same work found twice, a preprint and its version of record), or hit a
+   * known work a second time — neither new nor a separate library entry.
+   */
+  readonly duplicates: number;
+}
+
+/**
+ * Split upsertSources outcomes into new works, works the library already had
+ * and within-write duplicates. A non-`added` outcome whose citekey was added
+ * by this same write matched a sibling candidate, not the prior library, so it
+ * is a duplicate — counting it as "already in library" would claim a fresh
+ * library held sources it never had.
+ */
+export function upsertCounts(outcomes: readonly { citekey: string; status: string }[]): UpsertCounts {
+  const added = [...new Set(outcomes.filter((o) => o.status === 'added').map((o) => o.citekey))];
+  const fresh = new Set(added);
+  const known = [...new Set(outcomes.filter((o) => o.status !== 'added' && !fresh.has(o.citekey)).map((o) => o.citekey))];
+  return { added, known, duplicates: outcomes.length - added.length - known.length };
+}
+
 function cell(s: string): string {
   return s.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 }

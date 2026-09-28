@@ -14,7 +14,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { withLlmSandbox, type LlmSandbox } from './helpers/llm-sandbox.js';
 import { runResearch } from '../bin/cli/research.js';
-import { __setResearchRegistryForTest, EVALUATOR_BATCH, type AdapterRegistry } from '../bin/lib/research-orchestrator.js';
+import { __setResearchRegistryForTest, EVALUATOR_BATCH, upsertCounts, type AdapterRegistry } from '../bin/lib/research-orchestrator.js';
+import { upsertSources } from '../bin/lib/library.js';
 import { renderIntakeDocument } from '../bin/lib/intake-brief.js';
 import { Schema as LibrarySchema } from '../bin/lib/schemas/library.js';
 import { parsePromptBlocks } from '../bin/lib/prompt-request.js';
@@ -318,6 +319,61 @@ test('SRC-09 / SRC-07: tiers, relevance and the evaluator reason persist; RESEAR
     assert.equal(sent.find((c) => c['citekey'] === 'author12020')?.['tier_hint'], 'peer-reviewed');
     assert.equal(sent.find((c) => c['citekey'] === 'author22020')?.['tier_hint'], null);
   });
+});
+
+test('SRC-07: the LIBRARY.json count line tells works new to the library from works it already had and from duplicates merged within the run', async () => {
+  await withResearch({}, async (sb) => {
+    writeBrief(sb);
+    // A work the library already holds before the run.
+    await upsertSources(sb.root, [cand('crossref', 2)], { provenance: 'add' });
+    const { registry } = fakeRegistry({
+      // The version of record carries its preprint's arXiv id; the preprint's
+      // title differs, so discovery keeps both and the library merges them.
+      crossref: [cand('crossref', 1, { arxiv: '2001.00009' }), cand('crossref', 2)],
+      arxiv: [cand('arxiv', 9, { id: '2001.00009', doi: undefined, arxiv: '2001.00009', type: 'preprint', venue: undefined, title: 'A preprint on sparse transformer heads' })],
+    });
+    __setResearchRegistryForTest(registry);
+    sb.mock!.script('topic-disambiguator', { data: { ambiguous: false, scopes: [{ label: 'attention', description: 'Attention in neural networks.', queries: ['q one', 'q two', 'q three', 'q four', 'q five'] }] } });
+    sb.mock!.script('source-evaluator', {
+      data: {
+        verdicts: [
+          { citekey: 'author12020', keep: true, reason: 'The published study.', relevance: 0.9, tier: 'peer-reviewed' },
+          { citekey: 'author22020', keep: true, reason: 'Already cited background.', relevance: 0.8, tier: 'peer-reviewed' },
+          { citekey: 'author92020', keep: true, reason: 'The preprint of the published study.', relevance: 0.7, tier: 'preprint' },
+        ],
+      },
+    });
+    const r = await research({ root: sb.root, yolo: true });
+    assert.equal(r.error, null, `${String(r.error)}\n${r.stderr}`);
+    assert.match(r.stdout, /^pensmith research: 3 kept \(peer-reviewed 2, preprint 1\);/m);
+    assert.match(
+      r.stdout,
+      /^pensmith research: wrote LIBRARY\.json \(2 source\(s\); 1 new, 1 already in library, 1 duplicate\(s\) merged\), RESEARCH\.md, CITATIONS\.bib and CITATIONS\.ris$/m,
+    );
+    const lib = LibrarySchema.parse(JSON.parse(fs.readFileSync(path.join(sb.paper, 'LIBRARY.json'), 'utf8')));
+    assert.deepEqual(lib.entries.map((e) => e.citekey).sort(), ['author12020', 'author22020']);
+  });
+});
+
+test('upsertCounts: a fresh library never reports sources "already in library"; repeated hits on one known work count once', () => {
+  assert.deepEqual(
+    upsertCounts([
+      { citekey: 'a2020', status: 'added' },
+      { citekey: 'a2020', status: 'merged' },
+      { citekey: 'b2020', status: 'added' },
+      { citekey: 'b2020', status: 'unchanged' },
+    ]),
+    { added: ['a2020', 'b2020'], known: [], duplicates: 2 },
+  );
+  assert.deepEqual(
+    upsertCounts([
+      { citekey: 'k2019', status: 'unchanged' },
+      { citekey: 'k2019', status: 'merged' },
+      { citekey: 'n2021', status: 'added' },
+    ]),
+    { added: ['n2021'], known: ['k2019'], duplicates: 1 },
+  );
+  assert.deepEqual(upsertCounts([]), { added: [], known: [], duplicates: 0 });
 });
 
 test('SRC-07: an evaluator that rejects every candidate → "no relevant sources" + guidance, exit 1, LIBRARY.json byte-identical, the log written', async () => {
