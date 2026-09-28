@@ -188,11 +188,14 @@ test('CONF-01 / RUN-26: `pensmith status --config` prints values, runtime and pe
     assert.match(out, /model \(generation\)\s+= claude-sonnet-5\s+\(flag\)/);
     assert.match(out, /api_key_env\s+= ANTHROPIC_API_KEY \(set\)/);
     assert.ok(!out.includes('sk-test-config-0001'), 'a key value is never printed');
-    assert.match(out, /section-drafter\s+generation\s+claude-sonnet-5\s+effort high\s+\(model: flag; effort: default\)/);
+    // RUN-26 (D-18-05): each slug row also says whether its system prompt reaches
+    // the minimum cacheable prefix of the model it runs on (claude-sonnet-5: 1024).
+    assert.match(out, /section-drafter\s+generation\s+claude-sonnet-5\s+effort high\s+cache (?:yes|no)\s+\(model: flag; effort: default; cache: system prompt ~\d+ tokens (?:reaches|is below) the 1024-token minimum for claude-sonnet-5/);
     assert.match(out, /claim-support\s+judgment\s+claude-sonnet-5\s+.*\(model: config/);
     assert.match(out, /orphan-label\s+judgment\s+claude-haiku-4-5\s+.*\(model: default/);
-    // The effort shown is the one SENT: claude-haiku-4-5 takes no effort parameter.
-    assert.match(out, /orphan-label\s+judgment\s+claude-haiku-4-5\s+effort n\/a\s+\(model: default; effort: not sent for this model\)/);
+    // The effort shown is the one SENT: claude-haiku-4-5 takes no effort parameter;
+    // its 4096-token cache minimum is above every judgment template.
+    assert.match(out, /orphan-label\s+judgment\s+claude-haiku-4-5\s+effort n\/a\s+cache no\s+\(model: default; effort: not sent for this model; cache: system prompt ~\d+ tokens is below the 4096-token minimum for claude-haiku-4-5 \(marked, not cached\)\)/);
   });
 });
 

@@ -27,7 +27,9 @@ import { parseOutline } from './outline-parse.js';
 import { lastSessionSpend, resolveCostCap, sessionSpend, totalCost } from './budget.js';
 import { currentSessionId, readSessionLock, staleReason } from './session-lock.js';
 import { isApiKeyPresent, resolveRuntime, resolveSlug } from './runtime.js';
-import { SLUG_NAMES, slugSpec, LOCAL_PROVIDERS, effectiveEffort, modelCapabilities } from './llm-models.js';
+import { SLUG_NAMES, slugSpec, LOCAL_PROVIDERS, effectiveEffort, modelCapabilities, describeCacheReach, systemCacheReach } from './llm-models.js';
+import { loadPrompt } from './prompt-loader.js';
+import { estimateTokens } from './estimator.js';
 
 export type GlyphSet = 'unicode' | 'ascii';
 export type SectionPhase = 'verified' | 'in-progress' | 'pending' | 'attention';
@@ -249,11 +251,29 @@ export function renderStatusView(view: StatusView): string {
 
 // ---------------------------------------------------------------------------
 // `pensmith status --config` (CONF-01, RUN-26): every effective value and its
-// source — default, preset, intake, config, env, flag or global (runtime.json).
+// source — default, preset, intake, config, env, flag or global (runtime.json),
+// and per prompt slug its model, the effort sent and whether its system prompt
+// reaches that model's minimum cacheable prefix (the cache column, D-18-05).
 // ---------------------------------------------------------------------------
 
 function fmtValue(v: unknown): string {
   return JSON.stringify(v) ?? String(v);
+}
+
+/**
+ * The prompt-cache column of a slug row (RUN-26, D-18-05): whether the slug's
+ * system prompt — its fixed template, sent cache_control-marked on every call —
+ * reaches the minimum cacheable prefix of the model the slug runs on.
+ */
+function cacheCell(provider: Parameters<typeof systemCacheReach>[0], model: string | null, slug: string): { column: string; detail: string } {
+  if (model === null) return { column: 'n/a', detail: 'no model set' };
+  let systemTokens: number;
+  try {
+    systemTokens = estimateTokens(loadPrompt(slug).length);
+  } catch {
+    return { column: 'n/a', detail: 'the prompt template failed its hash check' };
+  }
+  return describeCacheReach(systemCacheReach(provider, model, systemTokens));
 }
 
 function slugSourceLabel(s: string): string {
@@ -306,9 +326,12 @@ export async function renderConfigView(root: string, env: NodeJS.ProcessEnv = pr
     const sent = sr.model === null || LOCAL_PROVIDERS.has(rt.provider)
       ? null
       : effectiveEffort(modelCapabilities(rt.provider, sr.model), sr.effort);
+    const cache = cacheCell(rt.provider, sr.model, slug);
     lines.push(
       `    ${slug.padEnd(w)} ${spec.tier.padEnd(10)} ${(sr.model ?? '(unset)').padEnd(18)} effort ${(sent ?? 'n/a').padEnd(6)} ` +
-        `(model: ${slugSourceLabel(sr.modelSource)}; effort: ${sent === null ? 'not sent for this model' : slugSourceLabel(sr.effortSource)})`,
+        `cache ${cache.column.padEnd(3)} ` +
+        `(model: ${slugSourceLabel(sr.modelSource)}; effort: ${sent === null ? 'not sent for this model' : slugSourceLabel(sr.effortSource)}; ` +
+        `cache: ${cache.detail})`,
     );
   }
   return lines.join('\n');

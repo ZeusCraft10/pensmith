@@ -105,7 +105,7 @@ test('known-bad-pass2: runPass2 returns UNCLEAR for all adversarial fixtures und
       const results = await mod.runPass2(draftMd, bib, { n: 1 });
       assert.ok(Array.isArray(results) && results.length >= 1, `runPass2 must return >=1 result for citekey ${citekey}`);
       for (const r of results) {
-        assert.equal(r['verdict'], 'UNCLEAR', `PENSMITH_NO_LLM placeholder must return UNCLEAR for ${citekey}, got ${JSON.stringify(r['verdict'])}`);
+        assert.equal(r['verdict'], 'UNCLEAR', `the PENSMITH_NO_LLM stubbed row must be UNCLEAR for ${citekey}, got ${JSON.stringify(r['verdict'])}`);
         // Result-object shape — keys the DONE-09 consumer relies on.
         for (const k of ['citekey', 'claimSentence', 'verdict', 'rationale', 'evidence']) {
           assert.ok(k in r, `Pass2Result must carry "${k}" key (got keys: ${Object.keys(r).join(', ')})`);

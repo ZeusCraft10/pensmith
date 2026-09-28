@@ -59,27 +59,21 @@
 import { complete, isFatalLlmError, MissingApiKeyError } from '../anthropic.js';
 import { reportAdvisoryFailure } from './pass2.js';
 import type { OrphanLabel as OrphanLabelData } from '../llm-contracts.js';
-import { loadPrompt, interpolate } from '../prompt-loader.js';
+import { buildPromptRequest, requestHints, type PromptRequest } from '../prompt-request.js';
 
-// WR-04 (HARD-04c fence-marker breakout mitigation).
-//
-// The fence delimiter is in public source, so untrusted text that contains the
-// exact CLOSE marker could break out of the data block and inject instructions.
-// Strip/neutralize any occurrence of the fence open/close substrings from
-// user-supplied variables BEFORE interpolation. The prompt template bodies are
-// NOT changed by this fix, so no WN-3 re-pin is needed.
-const FENCE_UUID  = '7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a';
-const FENCE_OPEN  = `<<<PENSMITH_UNTRUSTED_DATA_${FENCE_UUID}>>>`;
-const FENCE_CLOSE = `<<<END_PENSMITH_UNTRUSTED_DATA_${FENCE_UUID}>>>`;
+// FEED-05 (D-18-04): the sentence and its paragraph are draft text —
+// untrusted. They reach the model only as data blocks the ONE renderer fences
+// (prompt-request.ts → untrusted-fence.ts), after every spelling of a fence
+// marker and every closing block tag in them has been neutralised. The fence
+// constants live in bin/lib/untrusted-fence.ts alone.
 
 /**
- * Remove any occurrence of the fence open/close markers from a string that
- * is about to be interpolated into an LLM prompt. This prevents a crafted
- * draft sentence or paragraph context from breaking out of the data fence.
+ * The orphan-label request for one AMBIGUOUS sentence: the fixed template as
+ * the system prompt (the cacheable prefix, RUN-26) and one data message with
+ * the fenced `paragraph` (at most 500 characters) and `sentence` blocks.
  */
-function stripFenceMarkers(s: string): string {
-  return s.replaceAll(FENCE_OPEN, '[REDACTED-FENCE-MARKER]')
-          .replaceAll(FENCE_CLOSE, '[REDACTED-FENCE-MARKER]');
+export function orphanLabelRequest(sentence: string, paragraph: string): PromptRequest {
+  return buildPromptRequest('orphan-label', { paragraph: paragraph.slice(0, 500), sentence });
 }
 
 // ---- Named knob constants (PINNED rule — quote-extractor.ts constant-at-top style).
@@ -398,10 +392,7 @@ export async function runPass4(
     return results;
   }
 
-  // Live branch (only reached with a real key + LLM enabled + >=1 AMBIGUOUS).
-  // Never reached in CI: the noLlm short-circuit above is the test path.
-  const promptTemplate = loadPrompt('orphan-label');
-
+  // Live branch (a configured model + >=1 AMBIGUOUS sentence).
   // Set once no provider key is configured: the remaining AMBIGUOUS claims keep
   // the conservative UNCLEAR label with no further call (advisory; verify still
   // writes its deterministic verdict — D-V1-04).
@@ -414,14 +405,8 @@ export async function runPass4(
       let label: OrphanLabel = orphanLabelPlaceholder();
       if (noKey) continue;
       try {
-        // WR-04: sanitize untrusted variables (sentence comes from draft text;
-        // paragraph_context is a slice of the same draft) before interpolation
-        // so neither can embed the fence close marker and break out of the
-        // data block.
-        const prompt = interpolate(promptTemplate, {
-          sentence: stripFenceMarkers(claim.sentence),
-          paragraph_context: stripFenceMarkers(paraText.slice(0, 500)),
-        });
+        // WR-04 / FEED-05: the renderer fences both blocks (orphanLabelRequest).
+        const request = orphanLabelRequest(claim.sentence, paraText);
 
         // Route through the transport chokepoint (complete() → http.ts, D-06):
         // the session cost-cap check before sending, retry/backoff, and the
@@ -429,8 +414,9 @@ export async function runPass4(
         const res = await complete<OrphanLabelData>({
           slug: 'orphan-label',
           section: opts.n,
-          system: '',
-          messages: [{ role: 'user', content: prompt }],
+          system: request.system,
+          messages: request.messages,
+          stubHint: requestHints(request),
         });
         label = (res.data as OrphanLabelData).label;
       } catch (err) {

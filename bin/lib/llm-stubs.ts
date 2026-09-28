@@ -1,29 +1,49 @@
 // bin/lib/llm-stubs.ts — deterministic, schema-valid stubs for structured slugs
-// (D-17-25; RUN-04 LLM-stubbed mode, RUN-21 mock defaults).
+// (D-17-25, D-18-06; RUN-04 LLM-stubbed mode, RUN-21 mock defaults, GRND-19).
 //
 // Under PENSMITH_NO_LLM=1 (and --dry-run, which sets it) complete() returns
 // these instead of contacting a provider; the RUN-21 mock LLM serves the same
 // objects as its default replies, so there is one source of stub truth.
 //
+// A stub reads the request like a model would: its hint object is the
+// request's data blocks (prompt-request.ts promptHints — JSON blocks parsed,
+// text blocks as strings; see stubHintsFor below) merged with the caller's
+// `stubHint`, which call sites set to requestHints(req) — the same object —
+// so a stubbed call and a mocked call agree.
+//
 // Every structured slug gets a minimal instance that its llm-contracts.ts
 // schema accepts, with slug overrides where a bare minimum is useless: an
 // outline has three sections (intro → body → conclusion) so the pipeline can
-// advance, the disambiguator's queries come from the caller's stubHint (the
-// topic), and the evaluator keeps every candidate citekey it is handed.
+// advance, the disambiguator's queries come from the request's topic, and the
+// evaluator keeps every candidate citekey it is handed.
 //
-// Text slugs (section-drafter, smoother, revise-swap, tutorial-*) keep the
-// `[PENSMITH_NO_LLM placeholder — …]` string in Phase 17; GRND-19 (Phase 18)
-// adds contract-valid prose stubs and moves stub text into a data file.
+// Text slugs (section-drafter, smoother, revise-swap, tutorial-*) get
+// contract-valid prose from bin/lib/llm-text-stubs.ts (D-18-06).
 
 import { contractFor } from './llm-contracts.js';
+import { hintsFromMessages, type StubMessage } from './llm-text-stubs.js';
 
 /** Optional per-call hint: a topic string, or a small object of call context. */
 export type StubHint = string | Readonly<Record<string, unknown>> | undefined;
 
+/**
+ * The hint object a stub sees: the data blocks of the request's last user
+ * message that carries blocks, overlaid with the caller's `stubHint` (a bare
+ * string hint is the topic). complete() and the mock LLM both build it here.
+ */
+export function stubHintsFor(messages: readonly StubMessage[], hint?: StubHint): Record<string, unknown> {
+  const base = hintsFromMessages(messages);
+  if (typeof hint === 'string') return { ...base, topic: hint };
+  return { ...base, ...(hint ?? {}) };
+}
+
+/** The renderer's marker for an empty payload (prompt-request.ts renderPromptBlocks). */
+const EMPTY_PAYLOAD = '(none)';
+
 function hintString(hint: StubHint, key: string): string | undefined {
   if (typeof hint === 'string') return key === 'topic' ? hint : undefined;
   const v = hint?.[key];
-  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+  return typeof v === 'string' && v.trim() && v.trim() !== EMPTY_PAYLOAD ? v.trim() : undefined;
 }
 
 function hintNumber(hint: StubHint, key: string): number | undefined {
@@ -36,6 +56,19 @@ function hintStrings(hint: StubHint, key: string): string[] {
   if (typeof hint !== 'object' || hint === null) return [];
   const v = hint[key];
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
+}
+
+/** Citekeys of a list of records (`[{citekey, …}]`, e.g. the evaluator's `candidates` block). */
+function hintRecordCitekeys(hint: StubHint, key: string): string[] {
+  if (typeof hint !== 'object' || hint === null) return [];
+  const v = hint[key];
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const item of v) {
+    const k = item !== null && typeof item === 'object' ? (item as Record<string, unknown>)['citekey'] : undefined;
+    if (typeof k === 'string' && k.length > 0 && !out.includes(k)) out.push(k);
+  }
+  return out;
 }
 
 function queryFrom(topic: string): string {
@@ -60,17 +93,23 @@ function outlineStub(hint: StubHint): unknown {
 }
 
 const STUBS: Readonly<Record<string, (hint: StubHint) => unknown>> = Object.freeze({
+  // The `topic` block (the brief's topic); a request with no topic falls back
+  // to the first words of its `assignment` block.
   'topic-disambiguator': (hint) => {
-    const topic = hintString(hint, 'topic') ?? 'research topic';
+    const topic = hintString(hint, 'topic') ?? hintString(hint, 'assignment') ?? 'research topic';
     return { scopes: [{ label: 'primary-scope', queries: [queryFrom(topic)] }] };
   },
-  'source-evaluator': (hint) => ({
-    verdicts: hintStrings(hint, 'citekeys').map((citekey) => ({
-      citekey,
-      keep: true,
-      reason: 'stub verdict (LLM stubbed): kept for review',
-    })),
-  }),
+  // Keeps every candidate of the `candidates` block (or a bare `citekeys` list).
+  'source-evaluator': (hint) => {
+    const fromRecords = hintRecordCitekeys(hint, 'candidates');
+    return {
+      verdicts: (fromRecords.length > 0 ? fromRecords : hintStrings(hint, 'citekeys')).map((citekey) => ({
+        citekey,
+        keep: true,
+        reason: 'stub verdict (LLM stubbed): kept for review',
+      })),
+    };
+  },
   'intake-clarifier': (hint) => ({
     topic: hintString(hint, 'topic') ?? 'the assigned topic',
     discipline: hintString(hint, 'discipline') ?? 'other',
@@ -116,9 +155,4 @@ export function structuredStub(slug: string, hint?: StubHint): unknown {
   const contract = contractFor(slug);
   if (!make || !contract) throw new Error(`llm-stubs: no structured stub for slug "${slug}"`);
   return contract.schema.parse(make(hint));
-}
-
-/** The Phase-17 text-slug placeholder (unchanged contract: tests and GRND-19 key on it). */
-export function textPlaceholder(lastUserContent: string): string {
-  return `[PENSMITH_NO_LLM placeholder — ${lastUserContent.slice(0, 80)}]`;
 }

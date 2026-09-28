@@ -1,0 +1,43 @@
+{
+  "$comment": "Prose for the deterministic text-slug stubs (bin/lib/llm-text-stubs.ts; GRND-19, D-18-06). Used only under PENSMITH_NO_LLM=1 / --dry-run and as the RUN-21 mock LLM's default text replies. {name} marks a value the stub fills in; every other character is emitted as written. The drafter prose never quotes (no double quotes, no block quotes) and cites only through the {cite} / {cites} slots, which the stub fills with [@citekey] tokens of the section's assigned sources.",
+  "section-drafter": {
+    "default_word_target": 300,
+    "opening_with_topic": "This section, {title}, develops one part of the paper's account of {topic}.",
+    "opening": "This section, {title}, develops one part of the paper's argument.",
+    "cited": [
+      "Prior work examined here offers direct evidence for the point at hand {cite}.",
+      "A related study extends the argument and clarifies where its conclusions apply {cite}.",
+      "Further evidence qualifies this reading and marks the limits of the claim {cite}.",
+      "One account in the literature frames the problem in the terms the rest of the section adopts {cite}.",
+      "The findings of another source support the same conclusion from a different direction {cite}.",
+      "A later analysis tests the claim against new cases and reports where it holds {cite}."
+    ],
+    "cited_group": "Several sources inform this part of the argument {cites}.",
+    "filler": [
+      "The section develops this point in steps, so that each claim can be checked against its source.",
+      "It first states the claim, then sets out the reasoning that connects it to the evidence.",
+      "Where the evidence is partial, the text says so rather than overstating the case.",
+      "The argument keeps to what the assigned sources can support.",
+      "Each step builds on the one before it and prepares the next.",
+      "Terms are used in the same sense as in the rest of the paper.",
+      "Counterexamples are acknowledged where they bear on the claim.",
+      "This keeps the section focused on its purpose within the paper.",
+      "The reasoning stays explicit so a reader can follow it.",
+      "Open questions are named rather than passed over."
+    ],
+    "closing": "The next section takes up the argument from this point."
+  },
+  "revise-swap": {
+    "rationale": "No model was called (LLM stubbed), so the flagged citation is removed mechanically rather than replaced."
+  },
+  "tutorial-section-provenance": {
+    "with_claim": "**{citekey}**: cited for the claim that {claim}. Check that the source reports this finding directly, and note its scope before relying on it.",
+    "without_claim": "**{citekey}**: assigned to this section, but no claim cites it yet. Find the claim it supports, or drop it from the section.",
+    "none": "No sources are assigned to this section, so there is no evidence trail to explain yet."
+  },
+  "tutorial-research-rationale": {
+    "per_source": "**{citekey}**: selected as evidence on {topic}. Name the specific facet of the topic it will support, and note what it leaves uncovered.",
+    "coverage": "Before writing, check which facet of the topic the set as a whole still leaves under-supported.",
+    "none": "The working bibliography is empty, so there are no sources to explain yet."
+  }
+}

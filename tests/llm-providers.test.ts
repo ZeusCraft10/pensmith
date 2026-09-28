@@ -45,13 +45,18 @@ test('RUN-24: Opus 5 / Sonnet 5 send adaptive thinking + effort; Haiku 4.5 sends
   });
 });
 
-test('RUN-26: cacheSystem slugs send cache_control ephemeral on the system block', async () => {
+test('RUN-26 (D-18-05): every slug sends its system prompt as one cache_control ephemeral block', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     await complete({ slug: 'section-planner', section: 1, system: 'stable planner system', messages: [{ role: 'user', content: 'plan' }] });
     await complete({ slug: 'outline-author', system: 'outline system', messages: [{ role: 'user', content: 'outline' }] });
+    await complete({ slug: 'claim-support', system: 'claim system', messages: [{ role: 'user', content: 'judge' }] });
     const planner = sb.mock!.bodiesFor('section-planner')[0]!;
     assert.deepEqual(planner['system'], [{ type: 'text', text: 'stable planner system', cache_control: { type: 'ephemeral' } }]);
-    assert.equal(sb.mock!.bodiesFor('outline-author')[0]!['system'], 'outline system');
+    assert.deepEqual(sb.mock!.bodiesFor('outline-author')[0]!['system'], [{ type: 'text', text: 'outline system', cache_control: { type: 'ephemeral' } }]);
+    assert.deepEqual(sb.mock!.bodiesFor('claim-support')[0]!['system'], [{ type: 'text', text: 'claim system', cache_control: { type: 'ephemeral' } }]);
+    // An empty system prompt sends no system field at all.
+    await complete({ slug: 'orphan-label', system: '', messages: [{ role: 'user', content: 'x' }] });
+    assert.equal('system' in sb.mock!.bodiesFor('orphan-label')[0]!, false);
   });
 });
 

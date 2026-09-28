@@ -7,8 +7,11 @@
 //
 // The server speaks the Anthropic Messages and OpenAI chat-completions shapes
 // (both on one port by default; --shape anthropic|openai answers only that one
-// and 404s the other) plus GET /v1/models, and exposes the captured requests at
-// GET /__mock/requests (key headers shown only as "[present]"). Point a paper
+// and 404s the other) plus GET /v1/models, and exposes the captured requests —
+// each with the usage it was answered with, prompt-cache tokens included
+// (RUN-26) — at GET /__mock/requests (key headers shown only as "[present]").
+// Default replies are the contract stubs PENSMITH_NO_LLM uses, built from the
+// request's data blocks (D-18-06). Point a paper
 // at it through the GLOBAL runtime.json in an isolated data dir, e.g.
 //   {"$schemaVersion":2,"provider":"anthropic","endpoint":"http://127.0.0.1:18080",
 //    "api_key_env":"ANTHROPIC_API_KEY"}
@@ -18,6 +21,11 @@
 // refusal | content_filter | max_tokens | incomplete (no stop reason: a cut
 // stream) — applied to every request, or to the
 // first <times> requests. Runs through tsx (the helper is TypeScript).
+//
+// --capture <file> appends one JSON line per request as it arrives
+// ({"kind":"request", …}) and one when it has been answered
+// ({"kind":"response", slug, model, status, usage}); stdout logs each reply's
+// usage, e.g. `usage input=12 output=40 cache_read=870 cache_write=0`.
 
 import { appendFileSync } from 'node:fs';
 import { startMockLlm } from '../tests/helpers/local-servers/mock-llm.ts';
@@ -59,7 +67,20 @@ const mock = await startMockLlm({
       const headers = Object.fromEntries(
         Object.entries(r.headers).map(([k, v]) => [k, k === 'x-api-key' || k === 'authorization' ? '[present]' : v]),
       );
-      appendFileSync(capture, JSON.stringify({ ...r, headers }) + '\n');
+      appendFileSync(capture, JSON.stringify({ kind: 'request', ...r, headers }) + '\n');
+    }
+  },
+  onResponse: (r) => {
+    const model = r.body && typeof r.body.model === 'string' ? r.body.model : '-';
+    const u = r.response?.usage ?? null;
+    const usage = u === null
+      ? 'error reply'
+      : 'input_tokens' in u
+        ? `usage input=${u.input_tokens} output=${u.output_tokens} cache_read=${u.cache_read_input_tokens} cache_write=${u.cache_creation_input_tokens}`
+        : `usage prompt=${u.prompt_tokens} completion=${u.completion_tokens} cached=${u.prompt_tokens_details?.cached_tokens ?? 0}`;
+    process.stdout.write(`[mock-llm]   -> ${r.response?.status ?? '-'} slug=${r.slug ?? '-'} ${usage}\n`);
+    if (capture) {
+      appendFileSync(capture, JSON.stringify({ kind: 'response', slug: r.slug, model, status: r.response?.status ?? null, usage: u, at: r.at }) + '\n');
     }
   },
 });
