@@ -16,7 +16,7 @@ import * as pubmed from './pubmed.js';
 import * as semanticscholar from './semanticscholar.js';
 import * as unpaywall from './unpaywall.js';
 import * as retractionWatch from './retraction-watch.js';
-import * as zoteroMcp from './zotero-mcp.js';
+import * as zotero from './zotero.js';
 
 export const sources = {
   crossref,
@@ -26,11 +26,12 @@ export const sources = {
   semanticscholar,
   unpaywall,
   'retraction-watch': retractionWatch,
-  // RSCH-06: Zotero MCP source provider. Unlike 'retraction-watch', this key
-  // DOES expose `search` — generic iterators that guard `if ('search' in
-  // adapter)` include it. On CI (absent + no client wired) search() safely
-  // returns [] (absence-non-breaking, ARCH-03).
-  'zotero-mcp': zoteroMcp,
+  // SRC-16 (D-19-24): the user's Zotero library through the Zotero Web API
+  // (ZOTERO_API_KEY) or the Zotero 7 local API (PENSMITH_ZOTERO_LOCAL=1) —
+  // registry key `zotero` (was `zotero-mcp`). Not configured → search()
+  // returns [] without a request. Tier 1 reaches Zotero through the user's
+  // Zotero MCP server and the paper_ingest_zotero_items tool instead.
+  zotero,
 } as const;
 
 export type AdapterName = keyof typeof sources;

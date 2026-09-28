@@ -27,10 +27,13 @@ const EXPECTED_RESOURCES = ['capabilities', 'library', 'outline', 'section', 'st
 // per-section verb tools = 9 total. Phase 2 names stay snake_case (D-13
 // LOCKED); Phase 3 verb tools use the `pensmith_<verb>` prefix to distinguish
 // the "Tier-1 surface of a CLI verb" from the state-mutation tools.
+// Phase 19 (SRC-16, D-19-24) adds paper_ingest_zotero_items — the Tier 1 half
+// of the Zotero source (a paper_* data tool: it upserts LIBRARY.json).
 const EXPECTED_TOOLS = [
   'paper_advance_section',
   'paper_capability_probe',
   'paper_doi_verify',
+  'paper_ingest_zotero_items',
   'paper_init_section',
   'paper_record_verification',
   'paper_set_status',
