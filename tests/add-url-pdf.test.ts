@@ -4,8 +4,11 @@
 //      fs.readFile(path.resolve(url)) with an unhandled ENOENT — URL-PDF
 //      ingestion was dead. URLs now route to the URL branch BEFORE the local one.
 // #11: the URL branch's httpFetch(source:'generic') is not cassette-backed, so
-//      `--dry-run`/offline `add <url>` made a live network call. It is now refused
-//      in offline mode (zero external calls).
+//      `--dry-run`/offline `add <url>` made a live network call. Offline it now
+//      goes through the transport's exact-fixture store like every other
+//      request (D-19-20) — with no recorded answer that is the named offline
+//      refusal (OfflineEgressError), still zero external calls. (The old blanket
+//      "URL ingestion requires network access" refusal is gone, 19-PLAN §8.)
 // #30: a missing/unreadable local .pdf dumped a raw ENOENT stack trace; it now
 //      yields a friendly diagnostic.
 
@@ -54,8 +57,10 @@ test('audit #11/#12: `add <url>.pdf` offline is refused (no network) and does NO
   const out = runCli(['add', 'https://example.com/paper.pdf', '--yolo'], root);
 
   const all = out.stdout + out.stderr;
-  // #11: offline URL ingestion is refused — it took the URL branch, not a live call.
-  assert.match(out.stderr, /URL ingestion requires network access/i, `stderr=${out.stderr}`);
+  // #11: offline, a URL with no recorded answer is the named offline refusal —
+  // it took the URL branch through the transport, not a live call.
+  assert.match(out.stderr, /pensmith add: fetching https:\/\/example\.com\/paper\.pdf unavailable \(offline\) — nothing added/, `stderr=${out.stderr}`);
+  assert.equal(out.status, 1, 'an offline refusal is EXIT_ERROR (D-19-27)');
   // #12: a URL ending in .pdf must NOT have been read as a local file.
   assert.ok(!/ENOENT/.test(all), `must not crash with ENOENT on a URL; got: ${all}`);
   assert.ok(!STACK_RE.test(all), `must not dump a raw stack trace; got: ${all}`);
@@ -66,7 +71,8 @@ test('audit #11/#12: `add <url>.pdf` offline is refused (no network) and does NO
 test('audit #11: `add <url>` (non-pdf) offline is refused with no live call', () => {
   const root = paperRoot('pensmith-addurl2-');
   const out = runCli(['add', 'https://example.com/some/article', '--yolo'], root);
-  assert.match(out.stderr, /URL ingestion requires network access/i);
+  assert.match(out.stderr, /pensmith add: fetching https:\/\/example\.com\/some\/article unavailable \(offline\) — nothing added/);
+  assert.equal(out.status, 1);
   assert.ok(!STACK_RE.test(out.stdout + out.stderr));
 });
 
