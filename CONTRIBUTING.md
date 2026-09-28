@@ -194,13 +194,15 @@ A separate workflow (`.github/workflows/cassette-refresh.yml`) re-records the ca
 **Option B — local re-record:**
 
 ```bash
-export PENSMITH_CONTACT_EMAIL=you@example.com   # required: polite-pool contact (the recorder fails fast without it)
+export PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org   # required: the project's polite-pool contact — never a personal address
 npm run cassettes:refresh                        # every adapter
 npm run cassettes:refresh -- --only crossref     # one adapter
 node --import tsx --test tests/cassette-no-leak.test.ts tests/cassette-size.test.ts tests/cassette-provenance.test.ts
 ```
 
-The recorder (`scripts/refresh-cassettes.mjs`) drives each adapter's recorded query set through the real adapter code, live and outside any test context, so each stored request is exactly what the adapter sends. It keeps only the `content-type` response header, strips `mailto` / `email` / `api_key` / `key` / `tool` query parameters, redacts the contact email everywhere else, and never records a response the adapter rejected (a 429 or 5xx leaves that adapter's committed cassettes untouched — record it on a later run) or an error document inside an HTTP 200 (e.g. `{"statusCode":"403","message-type":"not-polite"}`: fix the adapter's request instead; `tests/cassette-provenance.test.ts` fails on a committed one). Never hand-write a response the real API does not return.
+The recorder (`scripts/refresh-cassettes.mjs`) drives each adapter's recorded query set through the real adapter code, live and outside any test context, so each stored request is exactly what the adapter sends. It keeps only the `content-type` response header, strips `mailto` / `email` / `api_key` / `key` / `tool` query parameters, redacts the contact email and every other email address a response carries (`tests/cassette-no-leak.test.ts` fails on one), and never records a response the adapter rejected (a 429 or 5xx, an exhausted host, a body the adapter's shape check refuses: that FILE keeps its committed copy and is reported as not recorded — record it on a later run) or an error document inside an HTTP 200 (e.g. `{"statusCode":"403","message-type":"not-polite"}`: fix the adapter's request instead; `tests/cassette-provenance.test.ts` fails on a committed one). Files no longer in an adapter's query set are removed. Never hand-write a response the real API does not return.
+
+`npm run live:sources` (`scripts/live-sources.mjs`, with `PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org`) runs the adapter-level assertions against the live services — arXiv, Crossref (ENCODE, `nature14539`, Wakefield retracted), Unpaywall, PubMed, OpenAlex, Semantic Scholar and the books adapter — and exits non-zero on a failed check. A check whose key is absent (`OPENALEX_API_KEY`, `PENSMITH_S2_API_KEY`) prints a visible `SKIP` line. The default `npm test` never calls these services.
 
 ### Permissions reminder
 
@@ -222,8 +224,10 @@ permissions block; do NOT promote them to repo-wide `contents: write`.
 Every recorded cassette file MUST be ≤ 51200 bytes. The `cassette-size`
 test enforces this on every PR. The recorder meets the cap by re-recording a
 search with a lower result count (and reports the new count so the test that
-replays it can be updated) — never by truncating JSON, and never by raising
-the cap.
+replays it can be updated), or — for a single record that only fits without
+indentation, such as Crossref's `/works/{doi}` (no `select` on that route) — by
+writing that one response on a single line; never by truncating JSON, and
+never by raising the cap.
 
 ### Sensitive-header scan (T-3-02 / T-01-07)
 
