@@ -81,8 +81,17 @@ verbs bijective with the 16 workflow bodies).
 3. **Dispatch `new` with the thesis seed** (Open-Q2): ONLY after confirm,
    dispatch the existing `new` verb via `dispatchVerb('new', { args: { thesis },
    globalFlags: { yolo, dryRun } })`. `new` is the single state-init site; sketch
-   never calls `initState` itself. The thesis is forwarded so it is not dropped
-   (`intake --thesis` pre-fills the intake brief — NOT a new verb).
+   never calls `initState` itself. The thesis is forwarded so it is not dropped:
+   it becomes the brief's `thesis` in `.paper/INTAKE.md` (`new --thesis` — NOT a
+   new verb). With no assignment file in the folder, the thesis seed stands in
+   for the assignment (no paste is asked). `new` then asks its own intake
+   questions (see `workflows/new.md`: PII redaction first, then discipline,
+   mode, the paper's purpose, class, counterargument, style-match, length,
+   citation style, and the clarifier's follow-ups): in a terminal one by one;
+   with `--yolo` the suggested defaults are accepted and printed; with scripted
+   numbered answers the piped lines continue after sketch's own, one per
+   question, and answers that run out part-way through the battery stop at the
+   `intake-defaults` gate (exit 3, nothing created).
 
 4. **Shell fallback** (TIER-06 equivalence path): `pensmith sketch [--yolo]
    [--dry-run]`. `--yolo` auto-confirms; `--dry-run` makes zero external API

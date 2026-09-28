@@ -191,23 +191,26 @@ Each subsection below describes a workflow stage. Most are invoked transparently
 
 ### 7.1 Intake (`/pensmith new`)
 
-- Accepts assignment prompt as `@file.{pdf,md,txt}`, pasted text, or piped stdin.
-- Asks 4–6 clarifying questions via AskUserQuestion (or stdin in Tier 2):
-  1. **Discipline preset** (see §8) — CS / Bio / History / Lit / Psych / Econ / Other / Custom. Pre-fills sensible defaults for the rest.
-  2. **Mode** — `draft` (full paper through compile) or `outline-only` (stops after outline approval; produces sourced outline + annotated bibliography).
-  3. **Goal** — `producing a draft` / `learning the topic` / `both` (see §7.13 educator mode).
-  4. **Class** for library grouping (optional; defaults to "Unfiled").
-  5. **Counterargument & rebuttal section?** — yes/no/auto-by-paper-type (§7.4).
-  6. **Style-match to past writing?** — opt-in; if yes, prompt for path to writing samples (§7.17).
-  7. **PII redaction?** — opt-in (§13). If yes, intake redacts names/dates/identifiers before any LLM call leaves the box.
-- Discipline preset's defaults can be overridden inline ("use MLA instead of APA" in plain English; pensmith parses).
-- Writes `.paper/PROJECT.md` and `.paper/config.toml`.
+- **The assignment** (amended by GRND-01): `--from <file>` or `@file.{pdf,md,txt}` (a PDF is reduced to its text through the pdf-text chokepoint; no PDF bytes are stored), an assignment piped on stdin (read only when no file is named, stdin is a pipe or a file and not scripted numbered answers, and given up after 2 s of silence), an `assignment.{txt,md,pdf}` in the folder (the `assignment-pickup` gate: confirmed in a terminal, used and named under `--yolo` or without a terminal; several such files need a choice), or an interactive multi-line paste in a terminal. A `--thesis` seed (from `sketch`) may stand in for it. Missing, unreadable, unsupported or empty input fails with one line; no assignment in a run that cannot prompt exits 2 (`no assignment found`) and writes nothing.
+- **The questions** (amended by GRND-02), asked deterministically — via AskUserQuestion (Tier 1), in the terminal or through scripted numbered answers (Tier 2), or answered up front with flags or `--answers <file.toml>` (`pensmith new --questions` lists each question's id, options, flag and answers-file key):
+  1. **PII redaction?** — opt-in, default no. Asked first: it must be settled before the assignment reaches any model. If yes, intake redacts names, IDs, emails, phones and dates before the LLM call and before INTAKE.md is written (§14, GRND-05).
+  2. **Discipline preset** (see §8) — the presets of `templates/presets/disciplines.json`; names and abbreviations are accepted. Pre-fills sensible defaults for the rest.
+  3. **Mode** — `draft` (full paper through compile) or `outline` (outline-only: stops after outline approval; produces sourced outline + annotated bibliography).
+  4. **Goal** — `producing a draft` / `learning the topic` / `both` (see §7.13 educator mode).
+  5. **Class** for library grouping (optional; defaults to "Unfiled").
+  6. **Counterargument & rebuttal section?** — yes/no/auto-by-paper-type (§7.4).
+  7. **Style-match to past writing?** — opt-in; a folder of writing samples (§7.18).
+  8. **Length target** — the assignment's stated length ("1500-word", "6 pages" at 300 words a page), else the clarifier's suggestion, else 1500 words.
+  9. **Citation style** — one of the 8 styles of §10; names match an alias table (APA 7, MLA 9, Chicago → Chicago notes-bibliography, Chicago Author-Date, …) and an unknown name is refused listing the 8.
+- **The clarifier only suggests** (GRND-02): one structured model call reads the assignment and suggests a topic phrase, a discipline, the paper type, a working thesis, the stated length and style, sectioning notes and at most 3 assignment-specific follow-up questions. The suggestions are the defaults offered for the questions above; `--yolo` accepts and prints them (gate `intake-defaults`, §7.20); a run that cannot prompt, has no `--yolo` and leaves a question unanswered exits 3 naming them, before any model call or write. The follow-ups are asked (a run that cannot ask them records the suggested answer and says so). The clarifier's reply is never written as INTAKE.md.
+- Discipline preset's defaults can be overridden inline, in the assignment or any answer ("use MLA instead of APA", "APA 7", "I need a literature review section before methods" in plain English): pensmith parses them deterministically (GRND-04). A style override becomes the offered default; sectioning notes go into the brief and on to the outline.
+- Writes `.paper/INTAKE.md` — **the project brief** (amended by GRND-03; there is no PROJECT.md): versioned frontmatter (topic, thesis, discipline, paper type, mode, goal, class, counterargument, length target, citation style, sectioning notes, PII and style-match flags, where the assignment came from, the follow-ups and their answers), then the assignment and a questions-and-answers section. It also writes `.paper/config.toml` (`[project]` and `[style]` mirror the answers, §10), `.paper/STATE.json`, `.paper/STYLE.json` when style-match is on, and the paper's entry in the library under its class.
 - Prints the disclaimer.
 - Routes to `/pensmith research`.
 
 ### 7.2 Research (`/pensmith research`)
 
-- Reads PROJECT.md + config.toml.
+- Reads the brief (`.paper/INTAKE.md`, §7.1) + config.toml; its queries are seeded from the brief's structured topic and the assignment, never from clarifier text (GRND-03).
 - **Topic disambiguation gate**: spawns a tiny disambiguation subagent that scans the assignment for ambiguous terms (e.g., "transformer" could be ML or EE). If ambiguous, asks the user before searching. Saves wasted research passes.
 - Generates 5–10 focused search queries from the assignment.
 - Spawns one `pensmith-source-researcher` subagent per query (Tier 1) or loops sequentially (Tier 2). Each returns 3–5 candidates.
@@ -465,11 +468,14 @@ Pensmith ships with discipline presets at intake. Each preset configures source 
 | Psychology | APA 7 | PubMed → APA PsycNET (if configured) → OpenAlex | Abstract / Intro / Method / Results / Discussion | mixed (asks at intake) | 2–4 |
 | Economics | APA or Chicago Author-Date | NBER (if configured) → OpenAlex → Crossref | Abstract / Intro / Lit Review / Model / Results / Conclusion | off | 1–3 |
 | Philosophy | Chicago Author-Date | OpenAlex → PhilPapers (if configured) → books | Thesis / Argument / Objections / Reply / Conclusion | **on** | 0.5–2 |
+| Sociology (extra preset) | APA 7 | OpenAlex → Crossref → Semantic Scholar | Intro / Lit Review / Methods / Findings / Discussion / Conclusion | off | 1–3 |
 | Other / Custom | APA 7 (default) | OpenAlex → Crossref → arXiv | (free-form) | off | 1–3 |
 
-Override examples:
+The table lives in `templates/presets/disciplines.json`, read and validated by one module, `bin/lib/disciplines.ts` (GRND-06): every consumer — intake's defaults, the outline's sectioning convention and counterargument default, the plan and draft tone, the export's citation style, the per-paragraph density band of the compile report — asks it, and no other module holds a discipline literal (chokepoint row `discipline-literals`). Precedence for every preset-backed value: preset < intake answer < config.toml < CLI flag. Source preferences are stored as ids — `arxiv`, `semanticscholar`, `openalex`, `pubmed`, `crossref`, `books`, `jstor`, `psycnet`, `nber`, `philpapers` — in the order shown; the ids with no adapter yet (books, JSTOR, PsycNET, NBER, PhilPapers) are skipped until their adapters land. `sociology` is shipped as an extra preset (amended: it was always in the preset file).
+
+Override examples (parsed deterministically from the assignment and every intake answer, GRND-04):
 - "Use MLA for this paper" at intake → swaps citation style; everything else stays preset.
-- "I need a literature review section before methods" at intake → modifies sectioning.
+- "I need a literature review section before methods" at intake → modifies sectioning (the note reaches the outline).
 - Edit `.paper/config.toml` directly for power users.
 
 ---
@@ -505,13 +511,16 @@ Edge cases documented in PRIVACY.md: PDF contents stay local; only Crossref/Open
 schema_version = 1                   # MANDATORY — see §14 NFRs
 
 [project]
+# `pensmith new` writes mode, goal, class, discipline_preset, citation_style,
+# length_target_words, counterargument_required (only for a yes/no answer; auto
+# leaves it unset) and pii_redaction from the intake answers (§7.1, GRND-03).
 title = "..."
 class = "PHIL 101"
 assignment_prompt = "@./assignment.pdf"
 mode = "draft"                       # draft | outline
 goal = "draft"                       # draft | learning | both (the §7.13 intake choices)
 length_target_words = 2500
-citation_style = "APA"               # APA | MLA | Chicago (Notes-Bibliography) | Chicago (Author-Date) | IEEE | AMA | Vancouver | Harvard
+citation_style = "APA"               # APA | MLA | Chicago (Notes-Bibliography) | Chicago (Author-Date) | IEEE | AMA | Vancouver | Harvard — or a CSL key (intake writes one, e.g. chicago-notes-bib) or an alias ("APA 7", "Chicago")
 discipline_preset = "psychology"
 due_date = "2026-05-20"
 counterargument_required = true
@@ -546,7 +555,7 @@ honesty_score = true                 # show GPTZero score
 honesty_backend = "gptzero"          # gptzero | originality | sapling
 
 [style]
-match_past_writing = false
+match_past_writing = false           # written by intake from the style-match answer (§7.18)
 samples_dir = ""
 
 [runtime]
@@ -711,7 +720,8 @@ The `.paper/` directory layout per project. The project folder that contains `.p
 
 ```
 .paper/
-├── PROJECT.md
+├── INTAKE.md                # the project brief (§7.1; amended by GRND-03 — there is no PROJECT.md)
+├── INTAKE.raw.local         # only with PII redaction: the raw intake text (gitignored)
 ├── config.toml
 ├── RESEARCH.md
 ├── CITATIONS.bib

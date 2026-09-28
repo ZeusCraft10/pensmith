@@ -39,11 +39,18 @@ Everything lives on your filesystem. Paper files are in `.paper/` in the paper's
 
 - **`.paper/SESSION.log`** records every model call **in full by default** (`[logging] session_bodies = "full"`): the step, provider, model, the prompt exactly as sent (so your assignment and your drafts), the response, token counts and cost. This is what lets you see what was sent and replay a step (`pensmith resume --replay <id>`). Set `[logging] session_bodies = "redacted"` in `.paper/config.toml` to keep only hashes, counts, cost and short previews instead (such steps can no longer be replayed). Every source request is recorded with its URL, status and cache use — secrets and the contact email removed. API keys, cookies and authorization headers are never stored. Calls made outside any paper are logged to `session.log` in the user data folder.
 - **`.paper/COSTS.jsonl`** — the cost ledger (tokens and USD per call; no prompt text).
-- **`.paper/INTAKE.md`** — your assignment and the clarified brief.
+- **`.paper/INTAKE.md`** — the paper's brief: your assignment (redacted when you opted in to PII redaction) and your answers to the intake questions.
 
 ## PII redaction (opt-in)
 
-By default the assignment text is used as you gave it. With `pensmith new --pii-redact` (or `[project] pii_redaction = true`), emails, phone numbers, ID-like numbers and similar spans are redacted **before** anything reaches the model: the redacted text is what the model sees and what `INTAKE.md` keeps, each redaction is printed for review, and the raw text is kept only in `.paper/INTAKE.raw.local` (gitignored, never sent anywhere).
+Redaction is **off by default**: the assignment is used as you gave it. `pensmith new` asks "Redact personal information … before any model call?" first, before anything is sent; answer yes, or pass `--pii-redact` (`pii_redaction = true` in an `--answers` file), and:
+
+- **What is redacted:** names — including middle initials ("Jane Q. Doe"), hyphenated names, particles ("van der Berg", "de la Cruz") and a surname after a title ("Prof. Smith") —, labelled identifiers ("Student ID: 2024-00173", "ID no. …", "SSN: …"), dates ("March 3, 2026", "3 March 2026", "Mar. 3", 2026-03-03, 03/03/2026), emails, phone numbers (US and +international), IP addresses and IBAN-like account numbers. Each span becomes a `[REDACTED:KIND]` tag, and each redaction is printed for you to review.
+- **What is left alone:** entity phrases a paper is about ("French Revolution", "Treaty of Versailles", "Roman Empire", "Stanford University Press"), month fragments ("Due March"), the words of a labelled `Topic:` / `Title:` line in the assignment (so a paper about a person keeps that person's name), and identifiers — DOIs, ISBNs, arXiv ids, UUIDs, timestamps — which are never rewritten anywhere, the session log included.
+- **Where it applies:** the only way your personal data enters the pipeline is intake — the assignment, the thesis seed, the class and the answers to the follow-up questions. All of them are redacted before the one intake model call and before `.paper/INTAKE.md` is written, and every later step (research, outline, plan, write, verify) reads the redacted brief, so no model request carries the raw text.
+- **The raw copy:** the unredacted text is kept only in `.paper/INTAKE.raw.local` — gitignored through `.paper/.gitignore`, never sent to a model, never exported. Delete it if you do not want it.
+
+Redaction is a pattern matcher, not a guarantee: it errs toward redacting, and a name written in an unusual form can slip through. Review the printed list, and keep personal details out of the assignment text when you can.
 
 ## Humanizer
 
