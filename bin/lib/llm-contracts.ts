@@ -23,6 +23,7 @@
 import { z, type ZodTypeAny } from 'zod';
 import { parse as parseYaml } from 'yaml';
 import { PlanFrontmatterSchema } from './schemas/plan-frontmatter.js';
+import { SourceTierSchema } from './schemas/source-types.js';
 import { parseFrontmatter } from './frontmatter.js';
 
 // ---------------------------------------------------------------------------
@@ -31,18 +32,38 @@ import { parseFrontmatter } from './frontmatter.js';
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 
+/**
+ * topic-disambiguator (SRC-08, D-19-15): whether the topic is ambiguous and 1–3
+ * candidate scopes, most likely first, each with a label, a one-line
+ * description and its search queries. The schema accepts 1–20 queries per
+ * scope; research normalises them and clamps each scope to 5–10
+ * (bin/lib/query-expansion.ts clampQueries).
+ */
 export const TopicDisambiguatorSchema = z.object({
+  ambiguous: z.boolean().describe('true when the topic plausibly names more than one research area'),
   scopes: z.array(z.object({
-    label: z.string().min(1).describe('kebab-case scope label'),
-    queries: z.array(z.string().min(1)).min(1).describe('free-text search queries, at most 8 words each'),
-  })).min(1).describe('candidate scopes, most likely first'),
+    label: z.string().min(1).describe('short kebab-case scope label'),
+    description: z.string().min(1).describe('one sentence: what this reading of the topic covers'),
+    queries: z.array(z.string().min(1)).min(1).max(20).describe('5 to 10 search queries, at most 8 words each'),
+  })).min(1).max(3).describe('candidate scopes, most likely first'),
 });
 
+/** Longest evaluator reason kept (it becomes the source's why-relevant note). */
+export const EVALUATOR_REASON_MAX = 200;
+
+/**
+ * source-evaluator (SRC-09, D-19-16): one verdict per candidate — keep or
+ * reject, a short reason (the why-relevant note of a kept source), a relevance
+ * score and a tier. The deterministic tier (bin/lib/source-tier.ts) wins over
+ * the model's where the metadata decides it.
+ */
 export const SourceEvaluatorSchema = z.object({
   verdicts: z.array(z.object({
-    citekey: z.string().min(1).describe('the adapter-emitted citekey, copied exactly'),
+    citekey: z.string().min(1).describe('the candidate citekey, copied exactly'),
     keep: z.boolean(),
-    reason: z.string().optional().describe('at most 120 characters'),
+    reason: z.string().max(EVALUATOR_REASON_MAX).describe('why keep or reject, at most 200 characters'),
+    relevance: z.number().min(0).max(1).describe('relevance to the topic and scope, 0 to 1'),
+    tier: SourceTierSchema.describe('peer-reviewed, preprint, book, gov-report or other'),
   })).describe('one verdict per candidate, in candidate order'),
 });
 
@@ -152,6 +173,82 @@ function coerceOutline(v: unknown): unknown {
   };
 }
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * topic-disambiguator replies without the newer fields (a bare `scopes` object,
+ * or an array of scopes): a missing `ambiguous` is true exactly when more than
+ * one scope was proposed, and a missing or empty `description` repeats the
+ * label. Nothing is invented beyond that; queries are validated as sent.
+ */
+export function coerceDisambiguation(v: unknown): unknown {
+  const obj = wrapArray('scopes')(v);
+  if (!isRecord(obj) || !Array.isArray(obj['scopes'])) return obj;
+  const scopes = (obj['scopes'] as unknown[]).map((s) => {
+    if (!isRecord(s)) return s;
+    const label = typeof s['label'] === 'string' ? s['label'].trim() : s['label'];
+    const description = typeof s['description'] === 'string' && s['description'].trim().length > 0
+      ? s['description'].trim()
+      : label;
+    return { ...s, label, description };
+  });
+  const ambiguous = typeof obj['ambiguous'] === 'boolean' ? obj['ambiguous'] : scopes.length > 1;
+  return { ...obj, ambiguous, scopes };
+}
+
+const TIER_SYNONYMS: Readonly<Record<string, string>> = Object.freeze({
+  'peer-reviewed': 'peer-reviewed',
+  peerreviewed: 'peer-reviewed',
+  'peer-review': 'peer-reviewed',
+  journal: 'peer-reviewed',
+  preprint: 'preprint',
+  'pre-print': 'preprint',
+  book: 'book',
+  'book-chapter': 'book',
+  chapter: 'book',
+  'gov-report': 'gov-report',
+  'government-report': 'gov-report',
+  'gov-reports': 'gov-report',
+  other: 'other',
+});
+
+/**
+ * source-evaluator replies: a bare array root becomes `{verdicts}`; a tier is
+ * matched case- and spacing-insensitively (`Peer reviewed` → peer-reviewed); a
+ * numeric string relevance becomes a number; an over-long reason is cut at a
+ * word boundary to EVALUATOR_REASON_MAX. A missing tier, relevance or keep is
+ * NOT filled in — such a verdict fails the schema and the one corrective retry
+ * asks for it.
+ */
+export function coerceEvaluation(v: unknown): unknown {
+  const obj = wrapArray('verdicts')(v);
+  if (!isRecord(obj) || !Array.isArray(obj['verdicts'])) return obj;
+  const verdicts = (obj['verdicts'] as unknown[]).map((raw) => {
+    if (!isRecord(raw)) return raw;
+    const r: Record<string, unknown> = { ...raw };
+    if (typeof r['tier'] === 'string') {
+      const key = r['tier'].trim().toLowerCase().replace(/[\s_]+/g, '-');
+      r['tier'] = TIER_SYNONYMS[key] ?? TIER_SYNONYMS[key.replace(/-/g, '')] ?? r['tier'];
+    }
+    if (typeof r['relevance'] === 'string' && r['relevance'].trim() !== '' && Number.isFinite(Number(r['relevance']))) {
+      r['relevance'] = Number(r['relevance']);
+    }
+    if (typeof r['reason'] === 'string') {
+      const reason = r['reason'].replace(/\s+/g, ' ').trim();
+      if (reason.length <= EVALUATOR_REASON_MAX) r['reason'] = reason;
+      else {
+        const cut = reason.slice(0, EVALUATOR_REASON_MAX - 1);
+        const at = cut.lastIndexOf(' ');
+        r['reason'] = `${(at > EVALUATOR_REASON_MAX * 0.6 ? cut.slice(0, at) : cut).replace(/[\s,;:.]+$/, '')}…`;
+      }
+    }
+    return r;
+  });
+  return { ...obj, verdicts };
+}
+
 function plannerFromText(text: string): unknown {
   const doc = /^\s*```(?:markdown|md|yaml)?\s*\n([\s\S]*?)\n```\s*$/.exec(text)?.[1] ?? text;
   const trimmed = doc.replace(/^\s+/, '');
@@ -179,8 +276,8 @@ function intakeFromText(text: string): unknown {
 }
 
 export const CONTRACTS: Readonly<Record<string, Contract>> = Object.freeze({
-  'topic-disambiguator': { slug: 'topic-disambiguator', schema: TopicDisambiguatorSchema },
-  'source-evaluator': { slug: 'source-evaluator', schema: SourceEvaluatorSchema, coerce: wrapArray('verdicts') },
+  'topic-disambiguator': { slug: 'topic-disambiguator', schema: TopicDisambiguatorSchema, coerce: coerceDisambiguation },
+  'source-evaluator': { slug: 'source-evaluator', schema: SourceEvaluatorSchema, coerce: coerceEvaluation },
   'intake-clarifier': { slug: 'intake-clarifier', schema: IntakeClarifierSchema, fromText: intakeFromText },
   'outline-author': { slug: 'outline-author', schema: OutlineSchema, coerce: coerceOutline },
   'section-planner': { slug: 'section-planner', schema: SectionPlannerSchema, fromText: plannerFromText },

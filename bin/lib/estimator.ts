@@ -20,6 +20,12 @@
 // NO network and NO LLM call: this module reads files only (STATE.json,
 // PLAN.md frontmatter, SESSION.log, config files, the assignment text). It
 // never writes COSTS.jsonl. Under PENSMITH_NO_LLM every model row is $0.00.
+//
+// The research row (SRC-08, SRC-09) is one topic-disambiguator call plus
+// ceil(candidates / EVALUATOR_BATCH) source-evaluator calls, where the
+// candidate count is estimated from the adapter plan the paper would use (its
+// discipline preset and `[sources] allowed_databases`) at the maximum query
+// count (bin/lib/adapter-plan.ts estimatedResearchCandidates).
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -32,6 +38,10 @@ import { resolveRuntime, resolveSlug, type ResolvedRuntime } from './runtime.js'
 import { parseLlmRecords } from './replay.js';
 import { tryReadPaperConfigSync } from './config.js';
 import { resolveCostCap } from './budget.js';
+import { planAdapters, zoteroConfigured, estimatedResearchCandidates, evaluatorCallsFor, PLANNABLE_ADAPTERS } from './adapter-plan.js';
+import { MAX_QUERIES } from './query-expansion.js';
+import { resolveDiscipline } from './disciplines.js';
+import { readIntakeBrief } from './intake-brief.js';
 
 // ---------------------------------------------------------------------------
 // Per-call projection
@@ -265,10 +275,33 @@ export interface EstimateScope {
   section?: number;
 }
 
-/** The model calls one run of each cost-incurring verb makes (other verbs make none). */
+/**
+ * The model calls of one `pensmith research` run: one topic-disambiguator call
+ * and one source-evaluator call per EVALUATOR_BATCH candidates, the candidates
+ * estimated from the adapter plan this paper would use (never reads the
+ * network; an unreadable brief or config falls back to the preset defaults).
+ */
+export function researchCalls(root: string, env: Readonly<Record<string, string | undefined>> = process.env): Array<[string, number]> {
+  const config = tryReadPaperConfigSync(root);
+  let intakeDiscipline: string | undefined;
+  try {
+    intakeDiscipline = readIntakeBrief(root)?.brief.discipline;
+  } catch {
+    intakeDiscipline = undefined;
+  }
+  const plan = planAdapters({
+    preference: resolveDiscipline({ discipline: { intake: intakeDiscipline, config: config?.project?.discipline_preset } }).sourcePreference,
+    allowed: config?.sources?.allowed_databases,
+    zoteroConfigured: zoteroConfigured(env),
+    available: PLANNABLE_ADAPTERS,
+  });
+  const candidates = estimatedResearchCandidates(MAX_QUERIES, plan.entries.length);
+  return [['topic-disambiguator', 1], ['source-evaluator', Math.max(1, evaluatorCallsFor(candidates))]];
+}
+
+/** The model calls one run of each cost-incurring verb makes (other verbs make none; research: researchCalls). */
 const STEP_SLUGS: Readonly<Record<string, ReadonlyArray<readonly [string, number]>>> = Object.freeze({
   new: [['intake-clarifier', 1]],
-  research: [['topic-disambiguator', 1], ['source-evaluator', 1]],
   outline: [['outline-author', 1]],
   plan: [['section-planner', 1]],
   write: [['section-drafter', 1]],
@@ -288,8 +321,9 @@ function scopeRows(
   scope: EstimateScope,
   wave: readonly number[],
   price: (step: string, slugs: Array<[string, number]>) => EstimateRow,
+  research: ReadonlyArray<readonly [string, number]>,
 ): EstimateRow[] {
-  const slugs = STEP_SLUGS[scope.verb];
+  const slugs = scope.verb === 'research' ? research : STEP_SLUGS[scope.verb];
   if (!slugs) {
     // compile, done, add, status, … make no model call.
     return [{ step: scope.verb, calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' }];
@@ -341,8 +375,9 @@ export async function projectEstimate(args: {
 
   const intakeDone = existsSync(path.join(pDir, 'INTAKE.md')) || stateOk;
   if (!intakeDone) rows.push(row(rt, root, 'new', [['intake-clarifier', 1]], stubbed));
+  const research = researchCalls(root);
   if (!existsSync(path.join(pDir, 'LIBRARY.json'))) {
-    rows.push(row(rt, root, 'research', [['topic-disambiguator', 1], ['source-evaluator', 1]], stubbed));
+    rows.push(row(rt, root, 'research', research, stubbed));
   }
 
   const verifyCalls: Array<[string, number]> = Object.entries(VERIFY_CALLS_PER_SECTION);
@@ -376,7 +411,7 @@ export async function projectEstimate(args: {
 
   if (args.scope !== undefined) {
     const wave = sections.filter(({ n, slug }) => !readSectionState(sectionPlan(n, slug, root)).absent).map((s) => s.n);
-    rows = scopeRows(rows, args.scope, wave, (step, slugs) => row(rt, root, step, slugs, stubbed));
+    rows = scopeRows(rows, args.scope, wave, (step, slugs) => row(rt, root, step, slugs, stubbed), research);
   }
 
   const totalUsd = rows.reduce((acc, r) => acc + r.usd, 0);

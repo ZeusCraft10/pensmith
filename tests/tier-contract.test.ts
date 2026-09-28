@@ -582,6 +582,20 @@ function seedPaperFixture(): string {
 }
 
 /**
+ * research-scoped brief (SRC-07, D-19-03): `pensmith research` reads the
+ * paper's INTAKE.md and exits 1 when it finds no usable source. The topic is
+ * the query the recorded source cassettes answer, so the offline (test
+ * runner) run finds real recorded hits under PENSMITH_NO_LLM (the stubbed
+ * disambiguator's first query is the topic itself).
+ */
+function seedResearchBrief(root: string): void {
+  writeFileSync(
+    join(root, '.paper', 'INTAKE.md'),
+    '---\ntopic: attention mechanisms in neural networks\ndiscipline: computer-science\n---\n# Intake\n\n## Assignment\n\nWrite a review of attention mechanisms in neural networks.\n',
+  );
+}
+
+/**
  * verify-section-scoped DRAFT.md seed (Plan 05-04 Task 2). Writes a minimal,
  * deterministic section DRAFT.md carrying a single [@citekey] sentence into the
  * MIDDLE_SECTION placeholder dir so `pensmith verify` reaches the advisory Pass
@@ -647,6 +661,12 @@ for (const tc of PHASE_3_CASES) {
     // (vaswani2017attention) so Pass 1 does not flag it FABRICATED.
     if (tc.name === 'verify-section') {
       seedVerifySectionDraft(root);
+    }
+    // SRC-07 / D-19-03: research is seeded from the paper's brief and exits 1
+    // when it finds no source, so its case gets a brief (research-scoped seed,
+    // like verify-section's) whose topic is the query the cassettes record.
+    if (tc.name === 'research') {
+      seedResearchBrief(root);
     }
 
     // --- Tier 2 (CLI) ---
@@ -1702,6 +1722,7 @@ test('tier-contract: research — emits CITATIONS.ris alongside CITATIONS.bib (C
   // when no candidates — parity with the empty .bib). This proves the CITE-05
   // RIS surface is reached through the research verb on both tiers.
   const root = seedPaperFixture();
+  seedResearchBrief(root);
   const r = runCliInDir(['research', '--yolo'], root);
   assert.equal(
     r.exitCode,
