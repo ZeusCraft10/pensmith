@@ -1,5 +1,6 @@
 // tests/frontmatter-versioning.test.ts — CONF-04 (D-17-38): section PLAN.md
-// frontmatter carries `schema_version: 1`; every reader goes through the
+// frontmatter carries `schema_version` (v2 since GRND-09 added the outline
+// entry; INTAKE.md is v1 since GRND-03); every reader goes through the
 // versioned loader (loadFrontmatterDoc / loadFrontmatterDocSync) with text
 // migrations under bin/lib/migrations/<kind>/; a legacy file is migrated —
 // written back with exactly one added line, otherwise byte-identical — by the
@@ -18,6 +19,7 @@ import {
 } from '../bin/lib/frontmatter.js';
 import { setFrontmatterVersionText } from '../bin/lib/migrations/loader.js';
 import { PlanFrontmatterSchema, CURRENT_PLAN_FRONTMATTER_VERSION } from '../bin/lib/schemas/plan-frontmatter.js';
+import { CURRENT_INTAKE_FRONTMATTER_VERSION } from '../bin/lib/intake-brief.js';
 import { readSectionState } from '../bin/lib/router.js';
 import { EXIT_ERROR } from '../bin/lib/exit-codes.js';
 import {
@@ -52,32 +54,42 @@ const LEGACY_PLAN = [
   '',
 ].join('\n');
 
-test('CONF-04: PLAN.md is at v1; the registry knows plan, intake, draft and verification', () => {
-  assert.equal(CURRENT_PLAN_FRONTMATTER_VERSION, 1);
+test('CONF-04: PLAN.md is at v2 and INTAKE.md at v1; the registry knows plan, intake, draft and verification', () => {
+  assert.equal(CURRENT_PLAN_FRONTMATTER_VERSION, 2);
   assert.deepEqual(Object.keys(FRONTMATTER_KINDS).sort(), ['draft', 'intake', 'plan', 'verification']);
-  assert.equal(FRONTMATTER_KINDS.plan.current, 1);
-  for (const k of ['intake', 'draft', 'verification'] as const) {
-    assert.equal(FRONTMATTER_KINDS[k].current, 0, `${k} has no frontmatter yet (GRND-03 / later requirements bump it)`);
+  assert.equal(FRONTMATTER_KINDS.plan.current, 2);
+  assert.equal(FRONTMATTER_KINDS.intake.current, 1);
+  assert.equal(FRONTMATTER_KINDS.intake.current, CURRENT_INTAKE_FRONTMATTER_VERSION);
+  for (const k of ['draft', 'verification'] as const) {
+    assert.equal(FRONTMATTER_KINDS[k].current, 0, `${k} has no frontmatter yet (a later requirement bumps it)`);
   }
-  assert.equal(PlanFrontmatterSchema.parse({ section: 1, slug: 'a', title: 'A' }).schema_version, 1);
-  assert.throws(() => PlanFrontmatterSchema.parse({ section: 1, slug: 'a', title: 'A', schema_version: 2 }));
+  assert.equal(PlanFrontmatterSchema.parse({ section: 1, slug: 'a', title: 'A' }).schema_version, 2);
+  assert.throws(() => PlanFrontmatterSchema.parse({ section: 1, slug: 'a', title: 'A', schema_version: 1 }));
+  assert.throws(() => PlanFrontmatterSchema.parse({ section: 1, slug: 'a', title: 'A', schema_version: 3 }));
+  // v2 fields (GRND-09): the outline entry and the stub flag, all optional.
+  const v2 = PlanFrontmatterSchema.parse({
+    section: 1, suffix: 'a', slug: 'a', title: 'A', purpose: 'p', role: 'intro', word_target: 300, voice: 'plain', stub: true,
+  });
+  assert.deepEqual([v2.suffix, v2.role, v2.word_target, v2.voice, v2.stub], ['a', 'intro', 300, 'plain', true]);
+  assert.throws(() => PlanFrontmatterSchema.parse({ section: 1, slug: 'a', title: 'A', suffix: 'ab' }));
+  assert.throws(() => PlanFrontmatterSchema.parse({ section: 1, slug: 'a', title: 'A', role: 'preface' }));
 });
 
-test('CONF-04: v0 → v1 inserts exactly one line and keeps every other byte (LF and CRLF)', () => {
+test('CONF-04: v0 → v2 inserts exactly one line and keeps every other byte (LF and CRLF)', () => {
   const doc = migrateFrontmatterText('plan', LEGACY_PLAN);
   assert.equal(doc.diskVersion, 0);
-  assert.equal(doc.version, 1);
+  assert.equal(doc.version, 2);
   assert.equal(doc.migrated, true);
-  assert.equal(doc.text, LEGACY_PLAN.replace('---\n', '---\nschema_version: 1\n'));
-  assert.equal(doc.frontmatter['schema_version'], 1);
+  assert.equal(doc.text, LEGACY_PLAN.replace('---\n', '---\nschema_version: 2\n'));
+  assert.equal(doc.frontmatter['schema_version'], 2);
   assert.equal(doc.frontmatter['title'], 'Target: a quoted title');
 
   const crlf = LEGACY_PLAN.replace(/\n/g, '\r\n');
   const docCrlf = migrateFrontmatterText('plan', crlf);
-  assert.equal(docCrlf.text, crlf.replace('---\r\n', '---\r\nschema_version: 1\r\n'));
+  assert.equal(docCrlf.text, crlf.replace('---\r\n', '---\r\nschema_version: 2\r\n'));
 
   const again = migrateFrontmatterText('plan', doc.text);
-  assert.equal(again.migrated, false, 'idempotent at v1');
+  assert.equal(again.migrated, false, 'idempotent at v2');
   assert.equal(again.text, doc.text);
 
   // A version line is rewritten in place (the vN → vN+1 steps later phases add).
@@ -86,19 +98,21 @@ test('CONF-04: v0 → v1 inserts exactly one line and keeps every other byte (LF
 });
 
 test('CONF-04: a newer schema_version is refused with "upgrade pensmith"; a malformed one too', () => {
-  const newer = LEGACY_PLAN.replace('---\n', '---\nschema_version: 2\n');
+  const newer = LEGACY_PLAN.replace('---\n', '---\nschema_version: 3\n');
   assert.throws(() => migrateFrontmatterText('plan', newer, 'PLAN.md'), (e: unknown) => {
     assert.ok(e instanceof FrontmatterVersionError);
     assert.equal(e.exitCode, EXIT_ERROR);
-    assert.equal(e.diskVersion, 2);
-    assert.match(e.message, /^PLAN\.md: plan frontmatter schema_version 2 is newer than this pensmith supports \(1\) — upgrade pensmith$/);
+    assert.equal(e.diskVersion, 3);
+    assert.match(e.message, /^PLAN\.md: plan frontmatter schema_version 3 is newer than this pensmith supports \(2\) — upgrade pensmith$/);
     return true;
   });
   assert.throws(() => migrateFrontmatterText('plan', LEGACY_PLAN.replace('---\n', '---\nschema_version: one\n')), /must be a non-negative integer/);
-  // Kinds without frontmatter yet refuse any versioned file (it came from a newer build).
-  assert.throws(() => migrateFrontmatterText('intake', '---\nschema_version: 1\n---\n# Intake\n'), /upgrade pensmith/);
+  // An INTAKE.md from a newer build is refused; a v0 one migrates to the v1 brief (GRND-03).
+  assert.throws(() => migrateFrontmatterText('intake', '---\nschema_version: 2\n---\n# Intake\n'), /upgrade pensmith/);
   const plain = migrateFrontmatterText('intake', '# Intake\n\nTopic: x\n');
-  assert.deepEqual({ v: plain.version, migrated: plain.migrated }, { v: 0, migrated: false });
+  assert.deepEqual({ v: plain.version, migrated: plain.migrated, topic: plain.frontmatter['topic'] }, { v: 1, migrated: true, topic: 'x' });
+  // Kinds without frontmatter yet refuse any versioned file (it came from a newer build).
+  assert.throws(() => migrateFrontmatterText('draft', '---\nschema_version: 1\n---\n# Draft\n'), /upgrade pensmith/);
 });
 
 test('CONF-04: loadFrontmatterDoc writes a migrated file back only when asked', () => {
@@ -113,7 +127,7 @@ test('CONF-04: loadFrontmatterDoc writes a migrated file back only when asked', 
     runLibScript(sb, 'frontmatter-ops.ts', ['load', 'plan', file, 'true']),
   );
   assert.ok(rw.ok && rw.result.migrated);
-  assert.equal(readFileSync(file, 'utf8'), LEGACY_PLAN.replace('---\n', '---\nschema_version: 1\n'), 'written back: one added line');
+  assert.equal(readFileSync(file, 'utf8'), LEGACY_PLAN.replace('---\n', '---\nschema_version: 2\n'), 'written back: one added line');
 
   writeFileSync(file, LEGACY_PLAN.replace('---\n', '---\nschema_version: 9\n'));
   const newer = lastJson<{ ok: boolean; name: string; message: string }>(runLibScript(sb, 'frontmatter-ops.ts', ['load', 'plan', file, 'true']));
@@ -122,7 +136,7 @@ test('CONF-04: loadFrontmatterDoc writes a migrated file back only when asked', 
   assert.match(newer.message, /upgrade pensmith/);
 });
 
-test('CONF-04: updatePlanFrontmatter stamps schema_version: 1 and keeps comments; refuses a newer file', () => {
+test('CONF-04: updatePlanFrontmatter stamps schema_version: 2 and keeps comments; refuses a newer file', () => {
   const sb = sandbox('fm-update');
   const dir = sb.project('p');
   const file = join(dir, 'PLAN.md');
@@ -130,7 +144,7 @@ test('CONF-04: updatePlanFrontmatter stamps schema_version: 1 and keeps comments
   const r = lastJson<{ ok: boolean; result: { updated: boolean } }>(runLibScript(sb, 'frontmatter-ops.ts', ['update-plan', file, 'writing']));
   assert.deepEqual(r, { ok: true, result: { updated: true } });
   const text = readFileSync(file, 'utf8');
-  assert.match(text, /^---\nschema_version: 1\n# a comment the migration must keep\n/);
+  assert.match(text, /^---\nschema_version: 2\n# a comment the migration must keep\n/);
   assert.match(text, /^status: writing$/m);
   writeFileSync(file, LEGACY_PLAN.replace('---\n', '---\nschema_version: 3\n'));
   const n = lastJson<{ ok: boolean; message: string }>(runLibScript(sb, 'frontmatter-ops.ts', ['update-plan', file, 'written']));
@@ -149,7 +163,7 @@ test('CONF-04: the router reads through the loader WITHOUT write-back; a newer f
   assert.equal(readFileSync(file, 'utf8'), before, 'the pure router never writes');
   assert.equal(loadFrontmatterDocSync('plan', file).migrated, true);
 
-  writeFileSync(file, LEGACY_PLAN.replace('---\n', '---\nschema_version: 2\n'));
+  writeFileSync(file, LEGACY_PLAN.replace('---\n', '---\nschema_version: 3\n'));
   const stderrWrite = process.stderr.write.bind(process.stderr);
   const lines: string[] = [];
   process.stderr.write = ((c: string | Uint8Array, ...rest: unknown[]): boolean => {
@@ -164,7 +178,7 @@ test('CONF-04: the router reads through the loader WITHOUT write-back; a newer f
   assert.match(lines.join(''), /upgrade pensmith/);
 });
 
-test('CONF-04: through the CLI — verify writes a legacy PLAN.md back at v1; a newer PLAN.md stops write with one line', () => {
+test('CONF-04: through the CLI — verify writes a legacy PLAN.md back at v2; a newer PLAN.md stops write with one line', () => {
   const sb = sandbox('fm-cli');
   const root = sb.project('p');
   seedFabricatedSection(root);
@@ -173,15 +187,15 @@ test('CONF-04: through the CLI — verify writes a legacy PLAN.md back at v1; a 
   assert.doesNotMatch(legacy, /schema_version/);
   runCli(sb, root, ['verify', '1']);
   const after = readFileSync(plan, 'utf8');
-  assert.match(after, /^---\nschema_version: 1\n/);
+  assert.match(after, /^---\nschema_version: 2\n/);
   assert.match(after, /^status: failed$/m);
 
   const root2 = sb.project('q');
   writeState(root2, [{ n: 1, slug: 'intro' }]);
   writeOutline(root2, [{ n: 1, slug: 'intro' }]);
-  writePlan(root2, 1, 'intro', { schema_version: '2' });
+  writePlan(root2, 1, 'intro', { schema_version: '3' });
   const w = runCli(sb, root2, ['write', '1']);
   assert.equal(w.status, EXIT_ERROR, `${w.stdout}\n${w.stderr}`);
-  assert.match(w.stderr, /^pensmith: .*PLAN\.md: plan frontmatter schema_version 2 is newer than this pensmith supports \(1\) — upgrade pensmith$/m);
+  assert.match(w.stderr, /^pensmith: .*PLAN\.md: plan frontmatter schema_version 3 is newer than this pensmith supports \(2\) — upgrade pensmith$/m);
   assert.doesNotMatch(w.stderr, STACK_LINE);
 });

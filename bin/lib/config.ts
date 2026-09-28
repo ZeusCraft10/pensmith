@@ -26,7 +26,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { z } from 'zod';
 import { atomicWriteFile } from './atomic-write.js';
@@ -44,6 +43,7 @@ import {
 import { PROJECT_CONFIG_FRAGMENT, PROJECT_CONFIG_FRAGMENT_DEFAULTS } from './tutorial.js';
 import { migrate as v0ToV1 } from './migrations/config/v0_to_v1.js';
 import { editTomlText } from './config-text.js';
+import { isDisciplineSlug, presetFor } from './disciplines.js';
 
 export type { PaperConfig } from './schemas/config.js';
 export { CURRENT_CONFIG_VERSION } from './schemas/config.js';
@@ -492,29 +492,19 @@ const PRESET_STYLE_NAMES: Readonly<Record<string, string>> = Object.freeze({
   'chicago-notes-bib': 'Chicago (Notes-Bibliography)',
 });
 
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i += 1) {
-    if (existsSync(path.join(cur, 'package.json'))) return cur;
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
+/**
+ * The preset-backed [project] defaults of a discipline preset, for
+ * `status --config` (source "preset"). The preset table has ONE reader,
+ * bin/lib/disciplines.ts (GRND-06); an unknown preset contributes nothing.
+ */
 function presetDefaults(preset: string | undefined): Record<string, unknown> {
-  if (!preset) return {};
+  if (!preset || !isDisciplineSlug(preset)) return {};
   try {
-    const root = findPkgRoot(path.dirname(fileURLToPath(import.meta.url)));
-    const all = JSON.parse(readFileSync(path.join(root, 'templates', 'presets', 'disciplines.json'), 'utf8')) as
-      Record<string, { defaultCitationStyle?: string; counterargDefault?: string }>;
-    const p = all[preset];
-    if (!p) return {};
-    const out: Record<string, unknown> = {};
-    if (p.defaultCitationStyle) out['project.citation_style'] = PRESET_STYLE_NAMES[p.defaultCitationStyle] ?? p.defaultCitationStyle;
-    if (p.counterargDefault) out['project.counterargument_required'] = p.counterargDefault === 'required';
-    return out;
+    const p = presetFor(preset);
+    return {
+      'project.citation_style': PRESET_STYLE_NAMES[p.defaultCitationStyle] ?? p.defaultCitationStyle,
+      'project.counterargument_required': p.counterargDefault === 'on',
+    };
   } catch {
     return {};
   }
