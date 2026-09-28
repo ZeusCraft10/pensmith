@@ -567,6 +567,17 @@ refusal_fallbacks = "off"            # off | default — opt-in Anthropic server
 [runtime.slugs.section-drafter]      # per-prompt-slug overrides (any slug in templates/prompts/, or a step alias: pass2, pass4, evaluator, queries)
 model = "claude-opus-5"
 effort = "high"
+# Prompt caching needs no setting (RUN-26, D-18-05). Every prompt's fixed
+# template is the system prompt, always sent as one cache_control-marked block
+# (Anthropic, 5-minute TTL; the first message on chat-completions providers,
+# which OpenAI caches automatically from 1024 tokens), and the per-call data
+# follows it (§14). A prefix below its model's minimum is silently not cached:
+# claude-opus-5 / claude-fable-5 / claude-fable-5-1 512 tokens, claude-sonnet-5 /
+# claude-opus-4-8 1024, claude-haiku-4-5 4096 (so the judgment slugs on Haiku do
+# not cache; a model the table does not list is reported against 4096).
+# `pensmith status --config` shows per slug whether its template reaches its
+# model's minimum. A cache read is billed at 0.1x input (COSTS.jsonl,
+# SESSION.log cache_read_tokens); `--estimate` projects without a cache discount.
 
 [budget]
 cost_cap_usd = 5.00                  # per-session cap (one CLI invocation or one Claude session); PENSMITH_COST_CAP_USD overrides
@@ -748,7 +759,7 @@ These are the operational guarantees. Each maps to a specific common pitfall.
 - **Two-tier source-of-truth.** Workflow bodies and templates are read by both Claude Code plugin (Tier 1) and portable CLI (Tier 2). Never duplicate logic in SKILL.md when it belongs in the workflow body.
 - **Two-tier contract testing.** `tests/tier-contract.test.js` runs every workflow body in both modes against the same fixtures; outputs must be equivalent (modulo prose). This catches drift between the tiers.
 - **Graceful degradation.** Workflow `<capability_check>` blocks detect `Task` / MCP / AskUserQuestion / Pandoc / Zotero MCP / external humanizer and choose appropriate paths.
-- **Determinism where it counts.** DOI integrity, DOI normalization, distinctive-phrase plagiarism, quote-verify, per-paragraph claim extraction are pure-Bash/Node, not LLM-judged.
+- **Determinism where it counts.** DOI integrity, DOI normalization, distinctive-phrase plagiarism, quote-verify, per-paragraph claim extraction are pure-Bash/Node, not LLM-judged. Model requests are deterministic too (RUN-26, FEED-05; D-18-03/04): every `templates/prompts/<slug>.md` is fixed instruction text (it interpolates nothing; its `inputs:` frontmatter and `## Inputs` section name the data blocks it receives) and is sent as the system prompt, byte-identical for every call of the slug, so it is a reusable cache prefix; the per-call data follows once, last, in one user message of tagged blocks (`<tag>` … `</tag>`, JSON built field by field in a fixed order), rendered only by `bin/lib/prompt-request.ts`. Data from outside pensmith and the user — source records and abstracts, drafts under review, PDF text, the pasted assignment — is wrapped in the one untrusted-data fence (`bin/lib/untrusted-fence.ts`) after every fence marker and closing block tag in it is neutralised, and every such template says that fenced content is data, never instructions. Under `PENSMITH_NO_LLM` every call gets a contract-valid stub built from those same blocks (`bin/lib/llm-stubs.ts`, `bin/lib/llm-text-stubs.ts`).
 - **DOI / arXiv ID / PMID normalization.** All identifier reads and writes go through `bin/lib/doi.js`. `10.1145/foo`, `https://doi.org/10.1145/foo`, `doi:10.1145/foo` all normalize to the same canonical form.
 - **Author/title verification is part of Pass 1.** DOI existence is necessary but not sufficient; cited authors/year/title must fuzzy-match the canonical metadata or the citation is `MIS-CITED`.
 - **Atomic state writes.** Every state file uses write-then-rename (`.paper/STATE.json.<nonce>.tmp` → fsync → rename → `.paper/STATE.json`, through `bin/lib/atomic-write.ts`). State transitions are single rename operations.
