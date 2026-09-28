@@ -222,33 +222,40 @@ Each subsection below describes a workflow stage. Most are invoked transparently
 
 This is the equivalent of GSD's `roadmap` step — it produces the section structure that the rest of the workflow iterates over.
 
-- Produces section structure with thesis, target word count per section, and a `sections/` plan: each section gets an entry naming it, declaring its purpose, listing its mapped sources from the source pool, and declaring its dependencies on other sections (e.g., "Discussion depends on Results").
+- Produces section structure with thesis, target word count per section, and a `sections/` plan: each section gets an entry naming it, declaring its purpose and role, listing its mapped sources from the source pool, and declaring its dependencies on other sections (e.g., "Discussion depends on Results").
+- The request is fed by the intake brief (topic, thesis, discipline and its sectioning convention, paper type, length target, sectioning notes) and every LIBRARY.json source, fenced as untrusted data.
+- The reply is one validated contract: unique slugs, known and acyclic dependencies, every mapped source in the library, word targets within ±20% of the length target, at most two body sections without sources, and the §7.4 rule. An invalid reply gets one corrective turn; if it is still invalid, the replies are kept in `.paper/OUTLINE.rejected.md`, nothing else changes, and the router reports the problem instead of calling the model again (no silent re-billing).
 - **If counterargument enabled** (§7.4): refuses to proceed unless the outline contains a counterargument + rebuttal section.
 - **Approval gate** before any section gets written.
-- Writes `.paper/OUTLINE.md` AND creates `.paper/sections/<N>/` folders, each pre-populated with a stub `PLAN.md` containing that section's outline entry. Section folders are numbered (`01-introduction/`, `02-background/`, etc.) so they sort cleanly.
+- Writes `.paper/OUTLINE.md` AND creates `.paper/sections/<N>/` folders, each pre-populated with a stub `PLAN.md` containing that section's outline entry (`stub: true`, `status: planned`); every section is registered in STATE.json. Section folders are numbered (`01-introduction/`, `02-background/`, etc.) so they sort cleanly, and a section's folder is found by its slug.
+- `OUTLINE.md` is rendered by pensmith, never copied from model text: a `Thesis:` line, the table `| # | slug | title | role | depends_on | word target | assigned_sources | voice |` and a `## Sections` list with each purpose. The older six-column table is still read.
+- **Re-outline** (`outline --force`; a paper with drafts also asks the `reoutline` gate): sections are matched by slug. A kept section keeps its number, folder and files byte-identical; a dropped section moves to `sections/_archive/`; an inserted section gets a lettered id after the section it follows (`1a`, folder `01a-<slug>/`) or the next free number at the end. Nothing is renumbered, so the order of kept sections cannot change. Section ids (`3`, `1a`) are accepted wherever a section number is (`plan 1a`, `paper://section/1a`).
 
 ### 7.4 Counterargument enforcement
 
 - For papers tagged `argumentative` or `persuasive` in the discipline preset (or auto-detected from the assignment prompt), the outline approval gate refuses unless the outline contains a counterargument + rebuttal section.
 - User can disable per-paper at intake or via `--no-counter` on the outline command.
 - Skipped for non-argumentative paper types (lab reports, summaries, primers).
+- Whether it is required resolves once (`bin/lib/counterargument.ts`): `--no-counter`, then the paper's `counterargument_required` config, then the intake answer, then the paper type, then the discipline preset. The rule is enforced on the outline reply before the approval gate (one corrective turn, then `counterargument + rebuttal section required (§7.4); use --no-counter to disable`); a section with the `counterargument` role and one with the `rebuttal` role (or one `counterargument-rebuttal` section) satisfy it.
 
 ### 7.5 Plan section (`/pensmith plan <N>` — equivalent to `/gsd:plan-phase`)
 
 - Reads the section's stub PLAN.md from outline.
 - For each claim the section will make: identifies which sources support it, what evidence is required, what counterexamples should be addressed.
+- The planner is fed the intake brief, the section's OUTLINE row (title, purpose, role, dependencies, word target, voice), short summaries of the claims its dependencies already planned, and only the section's own sources. Its reply is validated — the section it names, its dependencies, and every citekey within the section's sources — with one corrective turn; a reply that is still invalid writes nothing and leaves the stub as it was.
 - Optional `--revise` flag: re-plans an existing section based on new feedback (e.g., from a verification gap).
 - Optional `--research <query>` flag: triggers a section-scoped research pass for additional sources if the outline allocation is insufficient.
-- Writes `.paper/sections/<N>/PLAN.md` (claim-source mapping, paragraph-level structure, target word count, voice hints).
+- Writes `.paper/sections/<N>/PLAN.md` (claim-source mapping, paragraph-level structure, target word count, voice hints) with `status: planned` and no `stub` flag. A stub routes to `plan`; a planned section routes to `write`. (Before v1.0 a planned PLAN.md without `stub` routed to `plan`; only hand-made files had that shape.)
 
 ### 7.6 Write section (`/pensmith write <N>` — equivalent to `/gsd:execute-phase`)
 
-- Reads `sections/<N>/PLAN.md`.
-- The write subagent's prompt receives ONLY the sources mapped to this section (source-isolation enforced by directory structure, not just prompt convention).
+- Reads `sections/<N>/PLAN.md`. A section still holding the outline's stub is not planned, and `write` refuses it, naming `pensmith plan <N>`.
+- The write subagent's prompt receives ONLY the sources mapped to this section (source-isolation enforced by directory structure, not just prompt convention). The request is built only from a validated drafter input (the brief, the section's outline entry, its plan, its voice and its sources' records), and every draft is checked: a draft that cites a source outside the section gets one corrective turn, and if it still does, it is not kept — it is saved as `DRAFT.rejected.md`, the section is marked `failed` with the reason, and no other section is touched.
 - Drafts the section.
 - Writes `.paper/sections/<N>/DRAFT.md`.
-- **Style-match (§7.18)** is applied per-section if enabled.
+- **Style-match (§7.18)** is applied per-section if enabled. A voice the outline gives the section takes precedence over the style-match profile.
 - After writing, automatically chains to verify (§7.7) unless `--no-verify` is set.
+- `write` with no section drafts every planned section in dependency waves (bounded by `--max-parallel`, default 5), verifying each; a malformed PLAN.md is reported by file and field while the independent sections still draft.
 
 ### 7.7 Verify section (`/pensmith verify <N>` — equivalent to `/gsd:verify-work`)
 

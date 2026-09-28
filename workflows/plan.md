@@ -17,42 +17,45 @@ degrade_if_missing:
 ## Overview
 
 `pensmith plan <N>` is the first of the three per-section verbs (plan → write → verify).
-It reads the global OUTLINE.md + LIBRARY.json, runs the section-planner prompt, and
-writes a single `PLAN.md` inside the target section directory.
+It turns the section's stub PLAN.md (written when the outline was approved) into a planned
+PLAN.md: claims, the sources each claim rests on, a paragraph structure, the word target and
+the voice. `N` is a section id: a number, or a number and a letter for a section a re-outline
+inserted (`1a`).
+
+The planner is fed the paper brief, the section's own OUTLINE row, short summaries of the
+claims its `depends_on` sections already planned, and ONLY the section's own sources
+(FEED-01, GRND-12). Its reply is validated (GRND-13): one corrective turn, and a reply that
+is still invalid writes nothing.
 
 **Section-isolation invariant (TEST-09 / ARCH-02 / SC-4 — locked)**: this verb MUST NOT
 mutate any file outside `.paper/sections/<NN>-<slug>/`. The `tests/section-isolation.test.ts`
 mtime invariant gate enforces this — any cross-section write is a CI-blocking failure.
 
-The implementation lives in `bin/cli/plan.ts` (created by Plan 07).
-
-## Steps
-
-1. (see Body below)
+The implementation lives in `bin/cli/plan.ts`; the source records in
+`bin/lib/source-context.ts`, validation in `bin/lib/plan-validate.ts`, rendering in
+`bin/lib/plan-render.ts`.
 
 ## Outputs
 
-- `.paper/sections/<NN>-<slug>/PLAN.md` — frontmatter (D-08-AMENDED status enum, validated by `PlanFrontmatterSchema`) + `## Brief` body
+- `.paper/sections/<NN>-<slug>/PLAN.md` — the v2 frontmatter (validated by `PlanFrontmatterSchema`) with the outline entry kept, `stub` dropped, `status: planned` and the validated `assigned_sources`; the body `## Claims` / `## Structure` / `## Word target` / `## Voice`
 
 ## Body
 
-1. **Parse args**: `pensmith plan <N>` — `N` is the 1-based section number. Read `.paper/OUTLINE.md` to resolve the slug for `N`. A `N` that is not a number from 1 to 99, a section the outline does not have, or a `--slug` that is not the outline's slug for `N` is a usage error (exit 2) before any model call or write — a paper with an outline never gets a `NN-placeholder` section folder (RUN-09).
+1. **Parse args**: `pensmith plan <N>` — `N` is the section id (`3`, or `1a`). Read `.paper/OUTLINE.md` to resolve the slug for `N`; the section's folder is found by slug. An `N` that is not a section id from 1 to 99 (optionally with one letter), a section the outline does not have, or a `--slug` that is not the outline's slug for `N` is a usage error (exit 2) before any model call or write — a paper with an outline never gets a `NN-placeholder` section folder (RUN-09).
 
 2. **Read inputs** (read-only file accesses, no mutation):
-   - `.paper/OUTLINE.md` → resolve section `{n, slug, title, depends_on, estimated_word_count, assigned_sources}` for the target N.
-   - `.paper/LIBRARY.json` → the deduped `SourceCandidate[]` (full library — the planner has read access to the whole library; the drafter does NOT per PRD §7.6).
-   - `templates/prompts/section-planner.md` (D-12 LOCKED slug per Plan 03 CONTEXT D-12) — the planner prompt template.
+   - `.paper/INTAKE.md` (+ `.paper/config.toml`) → the brief: topic, thesis (the outline's `Thesis:` line, else the brief's), discipline and its tone, paper type.
+   - `.paper/OUTLINE.md` → the section's row: id, slug, title, purpose, role, `depends_on`, word target, voice (the stub PLAN.md's values fill anything the row lacks).
+   - The section's current PLAN.md `assigned_sources` (the outline allocation plus any `--research` / `add` additions; the OUTLINE row when there is no PLAN.md) → the **allowed set**. `.paper/LIBRARY.json` → one source-context record per allowed citekey (citekey, title, authors, year, venue, abstract, tier, `full_text`). A source assigned only to another section never appears (FEED-01). A section with no sources gets one WARN naming how to add some.
+   - The planned PLAN.md of each `depends_on` section → a short summary of its claims (without their citekeys). A stub is not summarised.
 
-3. **Run planner**: invoke the section-planner prompt with `{section, library_subset, intake}` interpolation → returns `PlanFrontmatter` YAML + a `## Brief` narrative section.
+3. **Run the planner**: the fixed `templates/prompts/section-planner.md` instructions (D-12 LOCKED slug) plus the data blocks `brief`, `section`, `upstream` (when any) and `sources` (fenced as untrusted data, FEED-05) → a structured object `{frontmatter: {section, slug, title, depends_on, assigned_sources}, claims: [{claim, sources, evidence, counterexamples}], structure: [{paragraph, purpose, claims}], voice}`.
 
-4. **Validate PlanFrontmatter**: `PlanFrontmatterSchema.parse(yaml)`. The schema refuses self-ref via `depends_on` (D-04) and validates the D-08-AMENDED `status` enum. The initial status MUST be `'planned'` (D-08-AMENDED enum default for a newly-planned section).
+4. **Validate** (`plan-validate.ts`, GRND-13): the echoed `section`, `slug` and `depends_on` equal the OUTLINE row; `assigned_sources` ⊆ the allowed set ⊆ LIBRARY.json; every claim's sources ⊆ `assigned_sources`; every structure paragraph names existing claims. Any problem gets ONE corrective turn naming it (e.g. `assigned_sources has citekeys that are not this section's sources: X, Y`). Still invalid → exit 1 with `planner output invalid: <problems> — nothing was written; <PLAN.md> is unchanged`: the stub stays byte-identical and the router still sends the section to `plan`.
 
-5. **Write `<sectionPlan(n, slug)>`** = `.paper/sections/<NN>-<slug>/PLAN.md` via `bin/lib/atomic-write.ts` (D-07 chokepoint):
-   - YAML frontmatter (validated) with `status: 'planned'` (D-08-AMENDED LOCKED enum default).
-   - `## Brief` section with the planner-authored narrative.
-   - Set `verified_against_draft_hash: null` (no draft yet → hash invalidated by definition).
+5. **Write `<sectionPlan(n, slug)>`** = `.paper/sections/<NN>-<slug>/PLAN.md` via `bin/lib/atomic-write.ts` (D-07 chokepoint), under the file's lock, rendered from the validated object (never the model's text): the outline entry kept, a `wave:` override carried over, `stub` dropped, `status: 'planned'`, `verified_against_draft_hash: null`. A planned section routes to `write`; only `write` sets `writing`.
 
-6. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/`. Use `bin/lib/paths.ts sectionDir(n, slug)` (Plan 03 Wave 2) as the only filesystem-write target. The `tests/section-isolation.test.ts` mtime gate enforces this in CI.
+6. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/`. The `tests/section-isolation.test.ts` mtime gate enforces this in CI.
 
 7. **Shell fallback** (TIER-06 equivalence path): `pensmith plan <N> [--revise] [--research <query>] [--yolo]`.
 

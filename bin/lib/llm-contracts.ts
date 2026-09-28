@@ -17,8 +17,12 @@
 // numeric bounds, array sizes, regex patterns) stay zod-only: they are not
 // emitted into the JSON schema and are enforced by validation.
 //
-// No templates/prompts/*.md edit happens in Phase 17 (GRND-07 / GRND-13 re-pin
-// the prompts); the schemas here already carry the GRND-07 outline fields.
+// Phase 18 made the outline-author and section-planner templates ask for
+// exactly these objects (GRND-07 / GRND-13, re-pinned in both hash maps). The
+// schemas check shape only; the relational rules (known slugs and citekeys,
+// cycles, the word budget, the counterargument rule, the planner's allowed
+// sources) live in outline-validate.ts and plan-validate.ts, which the verbs
+// run on the parsed object before one corrective turn.
 
 import { z, type ZodTypeAny } from 'zod';
 import { parse as parseYaml } from 'yaml';

@@ -8,6 +8,13 @@ name: pensmith:plan-section
 Scriptable namespace for planning a single section. This is a routing shim onto
 the existing `plan` verb; it adds no workflow logic.
 
+`N` is the section id as `pensmith status` shows it: a number (`3`), or a number
+and a letter for a section a re-outline inserted (`1a`). Outline approval leaves
+every section a stub PLAN.md ("outlined (not planned)" in status); `plan N`
+replaces the stub with the section's claims, structure and sources. The planner
+sees only that section's own sources, and a reply that names any other citekey
+is refused — nothing is written and the stub stays as it was.
+
 ## Routing
 
 | The user says… | Route to |
