@@ -103,24 +103,156 @@ export function replaceCitekeys(md: string, fn: (key: string) => string): string
 export function extractCitedKeysForVerification(md: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  // A citation cluster: a bracketed run with NO nested brackets that contains an
-  // @token. `[^[\]]` = "not '[' and not ']'", so we never cross bracket bounds.
-  const clusterRe = /\[([^[\]]*@[^[\]]*)\]/g;
-  // Within a cluster, a key is `@` preceded by start / whitespace / ';'. Pandoc
-  // citekeys begin with a letter/digit/underscore and may contain internal
-  // punctuation; trailing locator punctuation is stripped after capture.
-  const keyRe = /(?:^|[\s;])@([A-Za-z0-9_][A-Za-z0-9_:.#$%&+?<>~/-]*)/g;
-  for (const cm of md.matchAll(clusterRe)) {
-    const cluster = cm[1] ?? '';
-    for (const km of cluster.matchAll(keyRe)) {
-      let key = km[1];
-      if (key === undefined) continue;
-      key = key.replace(/[.,;:]+$/, '');
-      if (key && !seen.has(key)) {
+  for (const cluster of findCitationClusters(md)) {
+    for (const key of cluster.keys) {
+      if (!seen.has(key)) {
         seen.add(key);
         out.push(key);
       }
     }
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Citation CLUSTERS — the broad Pandoc grammar the fail-closed consumers share.
+//
+// The drafter is told to write one bare `[@key]` per source, but a model (or the
+// humanizer) can still write `[@a; @b]`, `[@a, p. 5]` or `[see @a]`. Every
+// consumer that GATES or REPAIRS a draft (the GATE-04 humanizer re-check, the
+// Pass-3 quote extractor, revise remove/swap, the GRND-06 density count) must
+// see those forms too — an unparseable citation must never look "absent"
+// (AUDIT-FINDINGS #2/#3). They all read clusters through these helpers.
+// ---------------------------------------------------------------------------
+
+/**
+ * A bracketed run with NO nested brackets that contains an `@` (group 1: the
+ * inner text). Exported only so a caller can anchor a cluster after other text
+ * (the Pass-3 quote extractor); keys are always read with findCitationClusters.
+ */
+export const CITATION_CLUSTER_RE_SOURCE = String.raw`\[([^[\]]*@[^[\]]*)\]`;
+const CLUSTER_RE_SOURCE = CITATION_CLUSTER_RE_SOURCE;
+/**
+ * Within a cluster, a key is `@` preceded by start / whitespace / ';'. Pandoc
+ * citekeys begin with a letter/digit/underscore and may contain internal
+ * punctuation; trailing locator punctuation is stripped after capture. The
+ * anchor keeps an email-style `name@host` from matching.
+ */
+const CLUSTER_KEY_RE_SOURCE = String.raw`(?:^|[\s;])@([A-Za-z0-9_][A-Za-z0-9_:.#$%&+?<>~/-]*)`;
+
+/** One citation cluster in a text: its span, its bracketed text and its keys in order. */
+export interface CitationCluster {
+  /** Offset of the opening `[`. */
+  readonly start: number;
+  /** Offset just past the closing `]`. */
+  readonly end: number;
+  /** The whole bracketed cluster, brackets included. */
+  readonly text: string;
+  /** Every `@key` in the cluster, verbatim (case preserved), in order (duplicates kept). */
+  readonly keys: readonly string[];
+}
+
+/** The citekeys of one cluster's inner text (between the brackets), in order. */
+function clusterKeys(inner: string): string[] {
+  const out: string[] = [];
+  for (const km of inner.matchAll(new RegExp(CLUSTER_KEY_RE_SOURCE, 'g'))) {
+    const key = (km[1] ?? '').replace(/[.,;:]+$/, '');
+    if (key) out.push(key);
+  }
+  return out;
+}
+
+/**
+ * Every citation cluster in `md` — `[@a]`, `[@a, p. 5]`, `[@a; @b]`,
+ * `[see @a; also @b]`, `[@Vaswani2017]` — in document order. A bracketed run
+ * whose `@` is not a citation (`[mail a@b.org]`) is not a cluster.
+ */
+export function findCitationClusters(md: string): CitationCluster[] {
+  const out: CitationCluster[] = [];
+  for (const cm of md.matchAll(new RegExp(CLUSTER_RE_SOURCE, 'g'))) {
+    const keys = clusterKeys(cm[1] ?? '');
+    if (keys.length === 0) continue;
+    const start = cm.index;
+    out.push({ start, end: start + cm[0].length, text: cm[0], keys });
+  }
+  return out;
+}
+
+/** How many citations `md` carries: every key of every cluster (`[@a; @b]` counts 2). */
+export function countCitations(md: string): number {
+  let n = 0;
+  for (const c of findCitationClusters(md)) n += c.keys.length;
+  return n;
+}
+
+/** Remove every citation cluster from `md` (for word counts over the prose alone). */
+export function stripCitationClusters(md: string): string {
+  let out = '';
+  let at = 0;
+  for (const c of findCitationClusters(md)) {
+    out += md.slice(at, c.start);
+    at = c.end;
+  }
+  return out + md.slice(at);
+}
+
+/** The first citation cluster in `md`, or null. */
+export function firstCitationCluster(md: string): CitationCluster | null {
+  return findCitationClusters(md)[0] ?? null;
+}
+
+/**
+ * Rewrite the clusters that cite `key`. `edit` gets the cluster's inner text
+ * split into its `;` segments and returns the segments to keep (possibly
+ * edited); an empty result removes the whole cluster together with the
+ * horizontal whitespace before it (or after it, at the start of a line).
+ */
+function editClustersCiting(md: string, key: string, edit: (segments: string[]) => string[]): string {
+  let out = '';
+  let at = 0;
+  for (const c of findCitationClusters(md)) {
+    if (!c.keys.includes(key)) continue;
+    const segments = c.text.slice(1, -1).split(';');
+    const kept = edit(segments).map((s) => s.trim()).filter((s) => s.length > 0);
+    if (kept.length > 0) {
+      out += md.slice(at, c.start) + `[${kept.join('; ')}]`;
+      at = c.end;
+      continue;
+    }
+    // Remove the whole cluster: the whitespace before it goes with it (" [@k]." -> "."),
+    // or, when it opens a line, the whitespace after it ("[@k] Text" -> "Text").
+    const trimmedBefore = md.slice(at, c.start).replace(/[ \t]+$/, '');
+    out += trimmedBefore;
+    const opensLine = out.length === 0 || out.endsWith('\n');
+    at = c.end;
+    if (opensLine) {
+      const ws = /^[ \t]*/.exec(md.slice(at));
+      at += ws ? ws[0].length : 0;
+    }
+  }
+  return out + md.slice(at);
+}
+
+/** True when a `;` segment of a cluster cites exactly `key` (as one of its keys). */
+function segmentCites(segment: string, key: string): boolean {
+  return clusterKeys(segment).includes(key);
+}
+
+/**
+ * Remove citekey `key` from `md` wherever it is cited: a bare `[@key]` (with the
+ * space before it) disappears; inside a cluster only its `;` segment goes
+ * (`[@a; @key]` -> `[@a]`). Every other citation is left untouched.
+ */
+export function removeCitekey(md: string, key: string): string {
+  return editClustersCiting(md, key, (segments) => segments.filter((s) => !segmentCites(s, key)));
+}
+
+/**
+ * Replace citekey `from` with `to` wherever it is cited, bare or inside a
+ * cluster, keeping any prefix or locator (`[see @from, p. 5]` -> `[see @to, p. 5]`).
+ */
+export function renameCitekey(md: string, from: string, to: string): string {
+  const esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const keyRe = new RegExp(`((?:^|[\\s;])@)${esc}(?![A-Za-z0-9_:#$%&+?<>~/-]|[.][A-Za-z0-9_])`, 'g');
+  return editClustersCiting(md, from, (segments) => segments.map((s) => s.replace(keyRe, `$1${to}`)));
 }

@@ -49,9 +49,11 @@ counterexamples acknowledged, serving the paper's thesis. Land within ±20% of
 `word_target`. Write in the voice given.
 
 ## Citations
-- Cite with Pandoc tokens only: `[@citekey]`, or `[@a; @b]` for two sources,
-  where every citekey appears exactly as written in the sources block. Place
-  the token at the end of the sentence or clause it supports.
+- Cite with Pandoc tokens only: every citation is exactly `[@citekey]`, one
+  token per source, where the citekey appears exactly as written in the
+  sources block. For two sources write `[@a] [@b]`; never group keys in one
+  bracket and never add a page or locator. Place the token at the end of the
+  sentence or clause it supports.
 - NEVER cite a citekey that is not in the sources block, even if the plan,
   another section or a fenced record mentions one. NEVER invent a DOI, author,
   year, venue or title, and never write `[1]`, `(Author, 2024)`, footnote

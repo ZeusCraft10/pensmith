@@ -8,9 +8,10 @@
 //     deepRedactPii: a fast-check property over 10 000 random v4 UUIDs, plus
 //     DOIs, ISBNs, arXiv ids and ISO-8601 timestamps (today's paperIds used to
 //     log as `1[REDACTED:PHONE]-4333-…`);
-//   - the intake keep list: the assignment's labelled topic line is never
-//     redacted as a NAME, while the same name elsewhere is kept only when the
-//     line names it.
+//   - the intake keep list (topicKeepPhrases): the labelled topic line and the
+//     task sentence's topic phrase are never redacted as a NAME; a Title: or
+//     Subject: line is not a keep source, and the keep list never applies on a
+//     person-labelled line or after an honorific.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +19,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as fc from 'fast-check';
 import { classifyPii, deepRedactPii, diffPii, protectedSpans, redactPii } from '../bin/lib/pii.js';
-import { labelledTopicLines } from '../bin/lib/intake-overrides.js';
+import { labelledTopicLines, topicKeepPhrases } from '../bin/lib/intake-overrides.js';
 
 interface GoldItem {
   id: string;
@@ -37,7 +38,7 @@ test('GRND-05 gold set: recall 1.0 on the PII items, every keep phrase verbatim'
   let total = 0;
   const misses: string[] = [];
   for (const item of GOLD.items) {
-    const keep = item.keep_terms ?? labelledTopicLines(item.text);
+    const keep = item.keep_terms ?? topicKeepPhrases(item.text);
     const out = redactPii(item.text, { keep });
     for (const p of item.pii) {
       total += 1;
@@ -114,6 +115,33 @@ test('GRND-05: the keep list (a labelled topic line) protects names the paper is
   assert.deepEqual(diffPii(text, undefined, { keep }).map((d) => d.raw), ['Jane Sentinel']);
 });
 
+test('GRND-05: a Title:/Subject: line is not a keep source; the keep list never un-redacts a person line or an honorific', () => {
+  // A student's name on a Title line and an instructor's on an e-mailed Subject line.
+  const titled = 'Title: Final Paper - Maria Gonzalez\nName: Maria Gonzalez\nWrite a 1500-word essay on the causes of the French Revolution.';
+  assert.deepEqual(labelledTopicLines(titled), [], 'Title: is not a topic label');
+  const t1 = redactPii(titled, { keep: topicKeepPhrases(titled) });
+  assert.ok(!t1.includes('Maria Gonzalez'), t1);
+  assert.ok(t1.includes('French Revolution'), t1);
+  const subject = 'Subject: HIST 201 essay for Prof. Jane Doe\nWrite about the Cold War.\nPlease contact Jane Doe.';
+  const t2 = redactPii(subject, { keep: topicKeepPhrases(subject) });
+  assert.ok(!t2.includes('Jane Doe'), t2);
+  // Even when the topic phrase names the same words, a person-labelled line and an
+  // honorific stay redacted; the topic keeps them elsewhere.
+  const same = 'Topic: Abraham Lincoln and the Gettysburg Address\nStudent: Abraham Lincoln\nAdvisor: Dr. Abraham Lincoln\nWrite about how Abraham Lincoln framed the war.';
+  const t3 = redactPii(same, { keep: topicKeepPhrases(same) });
+  assert.match(t3, /^Topic: Abraham Lincoln and the Gettysburg Address$/m, t3);
+  assert.match(t3, /^Student: \[REDACTED:NAME\]$/m, t3);
+  assert.match(t3, /^Advisor: Dr\. \[REDACTED:NAME\]$/m, t3);
+  assert.match(t3, /how Abraham Lincoln framed/, t3);
+  // CRLF alike.
+  assert.equal(redactPii(same.replace(/\n/g, '\r\n'), { keep: topicKeepPhrases(same) }).replace(/\r\n/g, '\n'), t3);
+});
+
+test('GRND-05: topicKeepPhrases — the labelled topic and the task sentence topic; never Title/Subject', () => {
+  assert.deepEqual(topicKeepPhrases('Title: The Speeches\nWrite about Abraham Lincoln and the Emancipation Proclamation.'), ['Abraham Lincoln and the Emancipation Proclamation']);
+  assert.deepEqual(topicKeepPhrases('Topic: Abraham Lincoln\r\nSubject: X Y\r\nArgue whether Social Media harms adolescents.'), ['Abraham Lincoln', 'whether Social Media harms adolescents']);
+});
+
 test('GRND-05 property: 10 000 random v4 UUIDs pass through redactPii and deepRedactPii unchanged', () => {
   fc.assert(
     fc.property(fc.uuid({ version: 4 }), (uuid) => {
@@ -155,7 +183,7 @@ test('GRND-05: DOIs, ISBNs, arXiv ids and ISO-8601 timestamps are never rewritte
 
 test('GRND-05: redaction is idempotent and CRLF-safe', () => {
   for (const item of GOLD.items) {
-    const keep = item.keep_terms ?? labelledTopicLines(item.text);
+    const keep = item.keep_terms ?? topicKeepPhrases(item.text);
     const once = redactPii(item.text, { keep });
     assert.equal(redactPii(once, { keep }), once, `${item.id}: idempotent`);
     const crlf = item.text.replace(/\r?\n/g, '\r\n');

@@ -60,17 +60,19 @@
 // FIRST import: filters a dependency's DEP0040 (punycode) deprecation noise
 // before any module that loads citation-js is evaluated (RUN-12).
 import './lib/node-warnings.js';
+import { existsSync } from 'node:fs';
 import { defineCommand, runCommand, renderUsage, type CommandDef } from 'citty';
 import { makeStub } from './cli/stubs.js';
 import { VERSION } from './lib/version.generated.js';
 import { UX02_VERBS, type Ux02Verb, canonicalVerb, VERB_ALIASES, nearest } from './lib/verbs.js';
 import {
   projectRoot,
-  paperDir,
   workingDirectory,
   resolvePaperRoot,
   setActivePaperRoot,
   setDryRunWorkspace,
+  dryRunPaperDir,
+  realPaperDir,
   activePaperBanner,
   hasPaper,
   mutatingVerbNeedsPaper,
@@ -91,6 +93,7 @@ import { assertInvocationBudget } from './lib/budget.js';
 import { argvFlagValue, runtimeFlagsFromArgv, setRuntimeOverride } from './lib/runtime.js';
 import { isProviderName, PROVIDER_NAMES } from './lib/llm-models.js';
 import { resolveNextAction, type RouterDecision } from './lib/router.js';
+import { sameSectionId, sectionIdOf, sectionLabel, type SectionId } from './lib/section-id.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
@@ -442,6 +445,30 @@ function globalBooleanName(tok: string): string | null {
 export async function validateArgv(argv: readonly string[]): Promise<ValidatedArgv> {
   const at = verbTokenIndex(argv);
   let verb: Ux02Verb | null = null;
+  // GRND-02: the intake answers (`--class`, `--discipline`, `--pii-redact`, …)
+  // are options of `pensmith new`; a bare run takes only the global flags. Say
+  // so, instead of reading `--class "PHIL 101"` as the unknown command "PHIL 101".
+  // Only for a bare run: with a verb, a flag before it is that verb's (`pensmith --force outline`).
+  const bareRun = at < 0 || canonicalVerb(argv[at] ?? '') === null;
+  const leading = bareRun ? argv.slice(0, at >= 0 ? at : argv.length) : [];
+  const endAt = leading.indexOf('--');
+  const bareFlags = (endAt >= 0 ? leading.slice(0, endAt) : leading).filter((t) =>
+    t.startsWith('--') && globalBooleanName(t) === null && !GLOBAL_VALUE_FLAGS.includes(flagName(t))
+    && !HELP_FLAGS.includes(t) && !VERSION_FLAGS.includes(t));
+  if (bareFlags.length > 0) {
+    const intake = await verbArgShape('new');
+    for (const flag of bareFlags) {
+      const name = flagName(flag);
+      const negated = !flag.includes('=') && flag.startsWith('--no-') ? flag.slice(5) : null;
+      if (intake.options.has(name) || (negated !== null && intake.options.get(negated) === false)) {
+        const spelled = flag.split('=')[0];
+        throw usage(
+          `'${spelled}' is an intake option of 'pensmith new' — a bare pensmith takes only the global flags; ` +
+            `start the paper with 'pensmith new ${spelled} …', then run pensmith`,
+        );
+      }
+    }
+  }
   if (at >= 0) {
     const tok = argv[at] ?? '';
     verb = canonicalVerb(tok);
@@ -738,11 +765,11 @@ const SECTION_CHAIN = ['plan', 'write', 'verify'] as const;
 type SectionChainVerb = (typeof SECTION_CHAIN)[number];
 
 /** The section a plan / write / verify decision names, or null for any other decision. */
-function decisionSection(d: RouterDecision): { n: number; slug: string; suffix: string } | null {
+function decisionSection(d: RouterDecision): (SectionId & { slug: string }) | null {
   if (d.verb !== 'plan' && d.verb !== 'write' && d.verb !== 'verify') return null;
   // `suffix` (GRND-09, §1a) is optional on the decision; read it without assuming it.
   const suffix = (d as { suffix?: unknown }).suffix;
-  return { n: d.n, slug: d.slug, suffix: typeof suffix === 'string' ? suffix : '' };
+  return { ...sectionIdOf(d.n, typeof suffix === 'string' ? suffix : undefined), slug: d.slug };
 }
 
 /**
@@ -751,10 +778,10 @@ function decisionSection(d: RouterDecision): { n: number; slug: string; suffix: 
  */
 export function describeDecision(d: RouterDecision): string {
   const s = decisionSection(d);
-  if (s !== null) return `${d.verb} §${s.n}${s.suffix}`;
+  if (s !== null) return `${d.verb} ${sectionLabel(s)}`;
   if (d.verb === 'status') {
     const detail = (d as { detail?: unknown }).detail;
-    const at = d.section !== undefined ? ` §${d.section.n}` : '';
+    const at = d.section !== undefined ? ` ${sectionLabel(d.section)}` : '';
     return typeof detail === 'string' && detail.length > 0
       ? `status (${d.reason}: ${detail})`
       : `status (${d.reason}${at})`;
@@ -854,9 +881,8 @@ export async function runNextStep(opts: RoutedOptions): Promise<RoutedStep> {
       code === EXIT_OK &&
       here !== null &&
       there !== null &&
-      there.n === here.n &&
+      sameSectionId(there, here) &&
       there.slug === here.slug &&
-      there.suffix === here.suffix &&
       SECTION_CHAIN.indexOf(after.verb as SectionChainVerb) > SECTION_CHAIN.indexOf(decision.verb as SectionChainVerb);
     if (advances) {
       decision = after;
@@ -971,6 +997,16 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
     // or projects spend (--estimate); `status` shows it instead of failing.
     if (!readOnly || hasFlag(argv, 'estimate')) parseCostCapEnv(process.env['PENSMITH_COST_CAP_USD']);
     if (!readOnly) await enterMutatingSession(session, checked.verb, hasFlag(argv, 'yolo'), isDryRunInvocation(argv));
+    // GRND-19: a read-only dry run (`status --dry-run`) on a real paper whose
+    // workspace does not exist yet seeds it first — a copy into
+    // `.paper-dry-run/` under the session lock, exactly as a mutating dry run
+    // does; `.paper/` is only read — so it reports the paper, never "no active
+    // paper" for a folder that holds one.
+    if (readOnly && isDryRunInvocation(argv) && (checked.verb === 'status' || hasFlag(argv, 'estimate'))
+      && resolved.kind === 'root'
+      && !existsSync(dryRunPaperDir(session.root)) && existsSync(realPaperDir(session.root))) {
+      session.workspaceNote = await seedWorkspaceForReadOnly(session.root, checked.verb);
+    }
   }
 
   // (a) --show-prompts → the http.ts egress gate mirrors every outbound request
@@ -984,7 +1020,7 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   announceModes({
     verb: firstVerb(argv),
     argv,
-    ...(isDryRunInvocation(argv) ? { workspace: paperDir(projectRoot()) } : {}),
+    ...(isDryRunInvocation(argv) ? { workspace: dryRunPaperDir(projectRoot()) } : {}),
   });
   printWorkspaceNote();
 
@@ -1132,6 +1168,30 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
 }
 
 /** Print (once) the dry-run workspace note the session recorded — after the RUN-02 banners. */
+/**
+ * Seed the dry-run workspace of `root` for a read-only dry run (see the
+ * pre-flight): the session lock is held only while the workspace is copied.
+ * Returns the note to print. When another session holds the paper the
+ * workspace is not seeded, and the note says how to seed it.
+ */
+async function seedWorkspaceForReadOnly(root: string, verb: string | null): Promise<string> {
+  try {
+    await acquireSessionLock(root, { kind: 'cli', verb: verb ?? 'pensmith' });
+  } catch (e) {
+    const why = e instanceof PensmithError ? e.message : String(e);
+    return (
+      `pensmith: the dry-run workspace ${dryRunPaperDir(root)} does not exist yet and could not be seeded now (${why}); ` +
+      `a dry run (\`pensmith --dry-run\`) seeds it from ${realPaperDir(root)}`
+    );
+  }
+  try {
+    const outcome = await enforceDryRunBoundary(root, true);
+    return outcome?.note ?? `pensmith: prepared the dry-run workspace ${dryRunPaperDir(root)}`;
+  } finally {
+    await releaseSessionLock(root);
+  }
+}
+
 function printWorkspaceNote(): void {
   const note = currentSession?.workspaceNote ?? null;
   if (note === null || currentSession === null) return;

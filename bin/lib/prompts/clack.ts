@@ -96,11 +96,24 @@ export async function askClack(
     }
 
     case 'text': {
+      // GRND-02: a default is clack's `defaultValue` (what an empty submit
+      // returns) shown as the dim placeholder — never `initialValue`, which
+      // pre-types it so the user's answer is appended to it ("Unfiled" +
+      // "HIST 200" → "UnfiledHIST 200").
       const textOpts: Parameters<typeof text>[0] = { message: question.label };
-      if (question.placeholder !== undefined) textOpts.placeholder = question.placeholder;
-      if (question.default !== undefined) textOpts.initialValue = question.default;
+      const def = question.default !== undefined && question.default !== '' ? question.default : undefined;
+      if (def !== undefined) {
+        textOpts.defaultValue = def;
+        textOpts.placeholder = def;
+      } else {
+        // clack echoes `value || placeholder` once submitted: without a
+        // placeholder a blank answer would be shown as "undefined".
+        textOpts.placeholder = question.placeholder ?? '(blank)';
+      }
       const value = unwrap(await text(textOpts), question.id);
-      return { id: question.id, kind: 'text', value: String(value) };
+      // An empty submit with no default comes back as undefined: that is the
+      // empty answer ("leave blank to skip"), never the text "undefined".
+      return { id: question.id, kind: 'text', value: typeof value === 'string' ? value : (question.default ?? '') };
     }
 
     case 'multiline': {

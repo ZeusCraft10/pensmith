@@ -150,7 +150,15 @@ test('RUN-09: bare `pensmith --yolo`, `pensmith next` and `pensmith resume` exit
   // The router picks `verify §1` (status written): the dispatched verify fails.
   const bare = runCli(sb, root, ['--yolo'], { env: { PENSMITH_COST_CAP_USD: '1000000' } });
   assert.equal(bare.status, EXIT_BLOCKED, `bare: ${bare.stdout}\n${bare.stderr}`);
-  const next = runCli(sb, root, ['next']);
+  // GRND-18: that verdict is deterministic and the draft has not changed, so the
+  // next step names the fix instead of re-running (and re-billing) verify.
+  const again = runCli(sb, root, ['next']);
+  assert.equal(again.status, 0, `next after the failure: ${again.stdout}\n${again.stderr}`);
+  assert.match(again.stderr, /pensmith next: → status/);
+  assert.match(again.stdout, /attention: section 1 failed verification .* `pensmith plan 1 --revise`/);
+  const other = sb.project('p-next');
+  seedFabricatedSection(other);
+  const next = runCli(sb, other, ['next']);
   assert.equal(next.status, EXIT_BLOCKED, `next: ${next.stdout}\n${next.stderr}`);
   assert.match(next.stderr, /pensmith next: → verify/);
   const fresh = sb.project('p-resume');

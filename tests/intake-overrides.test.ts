@@ -141,7 +141,13 @@ test('GRND-02: paper type, topic phrase and discipline mention (LF and CRLF)', (
   assert.equal(disciplineMentionFrom('Discipline: Psychology\nWrite an essay on memory.'), 'psychology');
   assert.equal(disciplineMentionFrom(A1), null, '"literature review" is a paper type, not the Literature discipline');
   assert.equal(disciplineMentionFrom('Write a paper in English about Hamlet.'), null, 'a language is not a course');
-  assert.deepEqual(labelledTopicLines('Topic: Abraham Lincoln\r\nTitle: The Speeches\r\nName: X'), ['Abraham Lincoln', 'The Speeches']);
+  // GRND-05: a Title: line names a document (often with the student's name), so it is not a topic label.
+  assert.deepEqual(labelledTopicLines('Topic: Abraham Lincoln\r\nTitle: The Speeches\r\nName: X'), ['Abraham Lincoln']);
+  // A Title: line is the topic only when nothing better exists; a task sentence wins over it.
+  assert.equal(topicFromAssignment('Title: Final Paper - Jane Doe\nWrite an essay on the causes of the French Revolution.'), 'the causes of the French Revolution');
+  assert.equal(topicFromAssignment('Title: The Causes of the French Revolution\nWrite 6-8 pages.'), 'The Causes of the French Revolution');
+  // A candidate holding a PII redaction tag is the last resort.
+  assert.equal(topicFromAssignment('Topic: [REDACTED:NAME] and his letters\nWrite about the Gettysburg Address.'), 'the Gettysburg Address');
 });
 
 test('GRND-02: a clarifier topic is used only when it shares a content word with the assignment', () => {

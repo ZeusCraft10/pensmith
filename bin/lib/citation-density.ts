@@ -17,7 +17,7 @@
 // D-14 §3 (LOCKED): the report still carries each section's
 // citations_per_1000_words and the paper-wide mean and stdev of those.
 
-import { CITATION_TOKEN_RE } from './citation-token.js';
+import { countCitations as countCitationKeys } from './citation-token.js';
 import { densityBandFor, normalizeDisciplineSlug } from './disciplines.js';
 
 export type DensityStatus = 'below' | 'within' | 'above';
@@ -39,6 +39,8 @@ export interface CitationDensityParagraph {
 
 export interface CitationDensitySectionEntry {
   n: number;
+  /** GRND-09: the section's letter (§1a); absent for a plain §N. */
+  suffix?: string;
   slug: string;
   /** Number of `[@key]` citation markers in the section text. */
   citations: number;
@@ -87,12 +89,12 @@ function countWords(text: string): number {
   return trimmed.split(/\s+/).length;
 }
 
-/** Count `[@key]` citation markers (occurrences, not distinct keys). */
+/**
+ * Count citations (occurrences, not distinct keys): every key of every
+ * citation — `[@a]` counts 1, a cluster `[@a; @b]` counts 2.
+ */
 function countCitations(text: string): number {
-  const re = new RegExp(CITATION_TOKEN_RE.source, 'g');
-  let count = 0;
-  while (re.exec(text) !== null) count += 1;
-  return count;
+  return countCitationKeys(text);
 }
 
 /** A line that is not prose: a heading, list item, block quote, table row, rule or HTML comment. */
@@ -159,12 +161,12 @@ export function bandLabel(band: DensityBand): string {
  * Compute each section's citations per paragraph against the discipline's
  * band (plus the D-14 per-1000-words figures). WARN-only; NEVER throws.
  *
- * @param sections the compiled sections ({ n, slug, text }).
+ * @param sections the compiled sections ({ n, suffix?, slug, text }).
  * @param discipline a preset slug, name or alias (anything unknown gets the
  *   fallback preset's band).
  */
 export function computeCitationDensity(
-  sections: Array<{ n: number; slug: string; text: string }>,
+  sections: Array<{ n: number; suffix?: string | undefined; slug: string; text: string }>,
   discipline: string,
 ): CitationDensityReport {
   const slug = normalizeDisciplineSlug(discipline ?? '');
@@ -190,13 +192,15 @@ export function computeCitationDensity(
       if (st !== 'within') outOfBand.push({ index: i + 1, citations: c, firstWords: firstWords(paras[i] as string), status: st });
     });
     const status = paras.length > 0 ? statusOf(perParagraph, band) : 'within';
+    const suffix = typeof s.suffix === 'string' && s.suffix.length > 0 ? s.suffix : undefined;
     if (status !== 'within') {
       warnings.push({
-        detail: `§${s.n} (${s.slug}): ${fmt(perParagraph)} citations per paragraph is ${status.toUpperCase()} the ${slug} band ${bandLabel(band)} (${paras.length} paragraph(s), ${outOfBand.length} outside the band)`,
+        detail: `§${s.n}${suffix ?? ''} (${s.slug}): ${fmt(perParagraph)} citations per paragraph is ${status.toUpperCase()} the ${slug} band ${bandLabel(band)} (${paras.length} paragraph(s), ${outOfBand.length} outside the band)`,
       });
     }
     return {
       n: s.n,
+      ...(suffix !== undefined ? { suffix } : {}),
       slug: s.slug,
       citations,
       words,

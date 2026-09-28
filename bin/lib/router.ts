@@ -50,12 +50,13 @@
 // the Handoff type (schemas/handoff.ts — type-only; the router does NOT read
 // HANDOFF.json per H4).
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadState, StateNotFoundError } from './state.js';
-import { paperDir, sectionDraft, sectionPlan } from './paths.js';
+import { paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
 import { loadFrontmatterDocSync } from './frontmatter.js';
 import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
+import { computeDraftHash } from './draft-hash.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
@@ -105,6 +106,10 @@ export interface SectionInfoRead extends SectionStateRead {
   stub: boolean;
   /** `failure_reason` (FEED-04: why write failed the section), or null. */
   failureReason: string | null;
+  /** `verified_against_draft_hash` — the draft hash the last verify judged (null when never verified). */
+  verifiedHash: string | null;
+  /** `assigned_sources` (an input of the draft hash, D-07). */
+  assignedSources: string[];
 }
 
 /**
@@ -135,27 +140,86 @@ export function readSectionState(planPath: string): SectionStateRead {
  * file), also returning `stub` and `failure_reason` (GRND-13, FEED-04).
  */
 export function readSectionInfo(planPath: string): SectionInfoRead {
+  const none = { stub: false, failureReason: null, verifiedHash: null, assignedSources: [] };
   if (!existsSync(planPath)) {
-    return { status: 'planned', corrupt: false, absent: true, stub: false, failureReason: null };
+    return { status: 'planned', corrupt: false, absent: true, ...none };
   }
   try {
     // CONF-04: the versioned loader, WITHOUT write-back (the router stays pure).
     // A PLAN.md newer than this build throws "upgrade pensmith" → corrupt below.
     const { frontmatter } = loadFrontmatterDocSync('plan', planPath);
-    const fm = frontmatter as { status?: unknown; stub?: unknown; failure_reason?: unknown };
+    const fm = frontmatter as {
+      status?: unknown;
+      stub?: unknown;
+      failure_reason?: unknown;
+      verified_against_draft_hash?: unknown;
+      assigned_sources?: unknown;
+    };
     return {
       status: typeof fm.status === 'string' ? fm.status : 'planned',
       corrupt: false,
       absent: false,
       stub: fm.stub === true,
       failureReason: typeof fm.failure_reason === 'string' && fm.failure_reason.trim() ? fm.failure_reason.trim() : null,
+      verifiedHash: typeof fm.verified_against_draft_hash === 'string' ? fm.verified_against_draft_hash : null,
+      assignedSources: Array.isArray(fm.assigned_sources) ? fm.assigned_sources.map(String) : [],
     };
   } catch (e) {
     process.stderr.write(
       `[pensmith] PLAN.md at ${planPath} is unreadable/corrupt: ${(e as Error).message}\n`,
     );
-    return { status: 'planned', corrupt: true, absent: false, stub: false, failureReason: null };
+    return { status: 'planned', corrupt: true, absent: false, ...none };
   }
+}
+
+/** The D-07 draft hash of a section's DRAFT.md (null when it cannot be read). Never throws. */
+function draftHashOf(draftPath: string, assignedSources: readonly string[]): string | null {
+  try {
+    return computeDraftHash(readFileSync(draftPath), [...assignedSources]);
+  } catch {
+    return null;
+  }
+}
+
+/** A file's mtime (ms), or null when it is absent or unreadable. Never throws. */
+function mtimeOf(p: string): number | null {
+  try {
+    return statSync(p).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/** `sections_count` from COMPILE-REPORT.md's frontmatter, or null. Never throws. */
+function compiledSectionCount(pDir: string): number | null {
+  try {
+    const m = /^sections_count:\s*(\d+)\s*$/m.exec(readFileSync(join(pDir, 'COMPILE-REPORT.md'), 'utf8'));
+    return m ? Number(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when `.paper/DRAFT.md` is absent, older than any registered section's
+ * DRAFT.md or VERIFICATION.md, or compiled from a different number of sections
+ * than are registered now (COMPILE-REPORT.md `sections_count`). Never throws.
+ */
+function compiledDraftStale(
+  pDir: string,
+  sections: ReadonlyArray<{ n: number; slug: string }>,
+  paperRoot: string,
+): boolean {
+  const compiledAt = mtimeOf(join(pDir, 'DRAFT.md'));
+  if (compiledAt === null) return true;
+  for (const { n, slug } of sections) {
+    for (const file of [sectionDraft(n, slug, paperRoot), sectionVerification(n, slug, paperRoot)]) {
+      const at = mtimeOf(file);
+      if (at !== null && at > compiledAt) return true;
+    }
+  }
+  const count = compiledSectionCount(pDir);
+  return count !== null && count !== sections.length;
 }
 
 /**
@@ -301,7 +365,23 @@ export async function resolveNextAction(
                 `adjust its plan or sources if needed, then run \`pensmith write ${label}\``,
             };
           }
-          return { verb: 'verify', ...id }; // re-attempt verification — NOT continue
+          // GRND-18 / PRD §5.1: verify already judged THIS draft (its hash is
+          // the one the failed verdict recorded) and a blocking verdict
+          // (FABRICATED, MIS-CITED, NOT_FOUND) is deterministic — re-running
+          // it would re-bill the advisory passes and change nothing. Name the
+          // fix instead; an explicit `pensmith verify N` still runs.
+          if (r.verifiedHash !== null && draftHashOf(sectionDraft(n, slug, paperRoot), r.assignedSources) === r.verifiedHash) {
+            return {
+              verb: 'status',
+              reason: 'attention',
+              section: id,
+              detail:
+                `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since — ` +
+                `repair the flagged citations with \`pensmith plan ${label} --revise\`, or re-draft with \`pensmith write ${label}\` ` +
+                `(\`pensmith verify ${label}\` re-checks it as it is)`,
+            };
+          }
+          return { verb: 'verify', ...id }; // the draft changed: re-attempt verification — NOT continue
         case 'written':
         case 'verifying':
         case 'unverifiable': // re-attempt verification — NOT continue
@@ -320,8 +400,14 @@ export async function resolveNextAction(
 
     // All sections verified (the walk fell through ONLY because every section
     // was 'verified' — 'failed'/'unverifiable' would have returned 'verify').
-    if (!existsSync(join(pDir, 'DRAFT.md'))) return { verb: 'compile' };
-    if (!existsSync(join(pDir, 'FINAL.md'))) return { verb: 'done' };
+    // The compiled DRAFT.md is current only when no section's draft or
+    // verification changed after it and it covers the registered sections: a
+    // section redone, re-verified or added by a re-outline (GRND-09/10) since
+    // the last compile is compiled again, never reported as done.
+    if (compiledDraftStale(pDir, sections, paperRoot)) return { verb: 'compile' };
+    // FINAL.md is current only when it is not older than the compiled draft.
+    const finalAt = mtimeOf(join(pDir, 'FINAL.md'));
+    if (finalAt === null || finalAt < (mtimeOf(join(pDir, 'DRAFT.md')) ?? 0)) return { verb: 'done' };
     return { verb: 'status', reason: 'done' };
   } catch (e) {
     // C5-HIGH BACKSTOP: any fs/parse op that throws despite the per-read guards

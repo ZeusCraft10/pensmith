@@ -228,8 +228,9 @@ async function seedLibrary(sb: LlmSandbox): Promise<void> {
   fs.writeFileSync(path.join(sb.paper, 'LIBRARY.json'), JSON.stringify({
     $schemaVersion: 1,
     entries: [
-      { citekey: 'smith2020', title: 'Tidal arrays', authors: ['Smith, A.'], year: 2020 },
-      { citekey: 'jones2021', title: 'Marine turbines', authors: ['Jones, B.'], year: 2021 },
+      // DOIs: outline and plan offer only sources the citation verifier can check (GRND-18).
+      { citekey: 'smith2020', title: 'Tidal arrays', authors: ['Smith, A.'], year: 2020, doi: '10.5555/fixture.smith2020' },
+      { citekey: 'jones2021', title: 'Marine turbines', authors: ['Jones, B.'], year: 2021, doi: '10.5555/fixture.jones2021' },
     ],
   }));
 }

@@ -38,9 +38,12 @@ import { resolveStyleName, parseBibFileAt } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
 import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
-import { extractCitekeys } from '../lib/citation-token.js';
+import { extractCitedKeysForVerification } from '../lib/citation-token.js';
 import { sectionVerificationReasons } from '../lib/verify/verdict-rows.js';
 import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
+import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
+import { sectionWriteBlockReason } from '../lib/plan-status.js';
+import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -224,6 +227,19 @@ export interface ExportBlock {
  * non-negotiable — verifier gates are unconditional; `--yolo` skips ONLY the
  * advisory DONE-09 confirmation). Deterministic, offline, never throws.
  */
+/** The FEED-04 write block of a section's PLAN.md (plan-status.ts), or null (absent or unreadable: the VERIFICATION.md gate decides). */
+function planWriteBlock(planPath: string): string | null {
+  if (!existsSync(planPath)) return null;
+  try {
+    const fm = loadFrontmatterDocSync('plan', planPath).frontmatter;
+    const n = typeof fm['section'] === 'number' ? fm['section'] : 0;
+    const suffix = typeof fm['suffix'] === 'string' ? fm['suffix'] : undefined;
+    return sectionWriteBlockReason(fm, n > 0 ? formatSectionId(sectionIdOf(n, suffix)) : '<n>');
+  } catch {
+    return null;
+  }
+}
+
 export function runExportBlockingGate(paperRoot: string): ExportBlock {
   const reasons: string[] = [];
   const sectionsDir = join(paperDir(paperRoot), 'sections');
@@ -253,6 +269,10 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
 
   const verdictReasons: string[] = [];
   for (const name of dirNames) {
+    // FEED-04: a failed or unfinished write left an OLDER draft in place; the
+    // compiled DRAFT.md holds that older draft, so it must not be exported.
+    const writeBlock = planWriteBlock(join(sectionsDir, name, 'PLAN.md'));
+    if (writeBlock !== null) reasons.push(`section ${name}: ${writeBlock}`);
     const vpath = join(sectionsDir, name, 'VERIFICATION.md');
     // A section directory with NO VERIFICATION.md was never verified. It must
     // BLOCK, never be invisible — filtering missing files out would let an
@@ -444,8 +464,10 @@ export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
 /**
  * Re-verify the humanized FINAL.md immediately before export (GATE-04).
  *
- * (a) Citekey-set diff: the set of [@key] tokens in finalMd MUST equal the
- *     set in draftMd. Any add/drop/swap is a HARD block.
+ * (a) Citekey-set diff: the set of cited keys in finalMd MUST equal the set
+ *     in draftMd. Any add/drop/swap is a HARD block. Keys are read with the
+ *     broad cluster grammar (`[@a; @b]`, locators, mixed case), so a key dropped
+ *     from or swapped into a cluster is seen — never treated as absent.
  * (b) Pass-3 quote re-check on finalMd: absent or empty bib → skip-clean
  *     (no quotes to check); else build bibByCitekey from the FULL CITATIONS.bib
  *     (Pitfall 4 — NOT filtered by DRAFT keys) and run runPass3. Any NOT_FOUND
@@ -459,8 +481,8 @@ export async function reCheckFinalMd(
   bibPath: string,
 ): Promise<{ passed: boolean; reason: string }> {
   // Step (a): citekey-set diff (runs FIRST — Pitfall 5).
-  const finalKeys = new Set(extractCitekeys(finalMd));
-  const draftKeys = new Set(extractCitekeys(draftMd));
+  const finalKeys = new Set(extractCitedKeysForVerification(finalMd));
+  const draftKeys = new Set(extractCitedKeysForVerification(draftMd));
 
   const added = [...finalKeys].filter((k) => !draftKeys.has(k));
   const dropped = [...draftKeys].filter((k) => !finalKeys.has(k));

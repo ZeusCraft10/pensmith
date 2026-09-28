@@ -131,7 +131,7 @@ async function writeOneSection(
   if (input.sources.length === 0) {
     process.stderr.write(
       `pensmith write: WARN — section ${id} has no assigned sources; drafting it without citations. ` +
-        `Add sources with \`pensmith plan ${id} --research "<query>"\` or \`pensmith add <doi> --section ${input.section.n} --slug ${input.section.slug}\`, then re-plan.\n`,
+        `Add sources with \`pensmith plan ${id} --research "<query>"\` or \`pensmith add <doi> --section ${id} --slug ${input.section.slug}\`, then re-plan.\n`,
     );
   } else if (missingRecords.length > 0) {
     process.stderr.write(
@@ -265,8 +265,12 @@ export const writeCommand = defineCommand({
       // diagnostic, not a raw parseOutline stack trace from the wave orchestrator.
       const outlinePath = path.join(paperDir(paperRoot), 'OUTLINE.md');
       let outlineSectionCount = 0;
+      // GRND-09: each section as the user types it (`1a`), by slug — for the failure lines.
+      const idBySlug = new Map<string, string>();
       try {
-        outlineSectionCount = parseOutline(readFileSync(outlinePath, 'utf8')).sections.length;
+        const rows = parseOutline(readFileSync(outlinePath, 'utf8')).sections;
+        outlineSectionCount = rows.length;
+        for (const r of rows) idBySlug.set(r.slug, formatSectionId(sectionIdOf(r.n, r.suffix)));
       } catch {
         outlineSectionCount = 0;
       }
@@ -358,7 +362,7 @@ export const writeCommand = defineCommand({
       for (const f of failures) {
         const c = classifyFailure(f.cause ?? new Error(f.error ?? 'unknown error'));
         codes.push(c.code);
-        process.stderr.write(`${failureLine(`pensmith write: section ${f.n} (${f.slug}) failed: ${c.message}`)}\n`);
+        process.stderr.write(`${failureLine(`pensmith write: section ${idBySlug.get(f.slug) ?? String(f.n)} (${f.slug}) failed: ${c.message}`)}\n`);
       }
       codes.push(...invalid.map((): ExitCode => EXIT_ERROR));
       codes.push(...verifyCodes);

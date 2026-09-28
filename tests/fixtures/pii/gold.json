@@ -1,5 +1,5 @@
 {
-  "$comment": "GRND-05 gold set (D-18-12). Every `pii` string must be gone from redactPii(text, {keep}) (recall 1.0); every `keep` string must survive verbatim. `keep_terms` are the labelled topic lines intake passes as the keep list. All people, IDs, emails and numbers are invented; example.edu / example.org / example.test are reserved domains.",
+  "$comment": "GRND-05 gold set (D-18-12). Every `pii` string must be gone from redactPii(text, {keep}) (recall 1.0); every `keep` string must survive verbatim. The keep list is what intake passes: `keep_terms` when given, else topicKeepPhrases(text) (the labelled Topic line and the task sentence's topic phrase; never a Title:/Subject: line, and never applied on a person-labelled line or after an honorific). All people, IDs, emails and numbers are invented; example.edu / example.org / example.test are reserved domains.",
   "items": [
     {
       "id": "cover-block",
@@ -61,6 +61,36 @@
       "text": "Name: Tomás Ruiz-Delgado\r\nStudent ID: S-2201-887\r\nEmail: truizd@example.edu\r\nDue March 14.\r\nWrite about the Industrial Revolution.\r\n",
       "pii": ["Tomás Ruiz-Delgado", "S-2201-887", "truizd@example.edu", "March 14"],
       "keep": ["Industrial Revolution", "Due", "Student ID:"]
+    },
+    {
+      "id": "title-line-name",
+      "text": "Title: Final Paper - Maria Gonzalez\nName: Maria Gonzalez\nStudent ID: 2024-00173\nWrite a 1500-word essay on the causes of the French Revolution for my History class.",
+      "pii": ["Maria Gonzalez", "2024-00173"],
+      "keep": ["Final Paper", "French Revolution", "Student ID:"]
+    },
+    {
+      "id": "subject-line-instructor",
+      "text": "Subject: HIST 201 essay for Prof. Jane Doe\nWrite about the Cold War and how it ended.\nPlease contact Jane Doe with questions.",
+      "pii": ["Jane Doe"],
+      "keep": ["HIST 201", "Cold War", "Prof."]
+    },
+    {
+      "id": "topic-sentence-phrases",
+      "text": "Student: John Q. Public\nArgue whether Social Media harms adolescents, and how Black Death, Machine Learning in Medicine and World War One were framed. 1200 words, APA.",
+      "pii": ["John Q. Public"],
+      "keep": ["Social Media", "Black Death", "Machine Learning in Medicine", "World War One"]
+    },
+    {
+      "id": "places-and-regions",
+      "text": "Name: Tomás Ruiz\nWrite a 1500-word essay on deforestation in Southeast Asia and the Amazon Basin. Also compare CRISPR-Cas9 applications in Sub-Saharan Africa, the Middle East and Latin America. Email: truiz@example.edu",
+      "pii": ["Tomás Ruiz", "truiz@example.edu"],
+      "keep": ["Southeast Asia", "Amazon Basin", "Sub-Saharan Africa", "Middle East", "Latin America"]
+    },
+    {
+      "id": "topic-person-in-task-sentence",
+      "text": "Name: Priya Natarajan-Wells\nWrite about Abraham Lincoln and the Emancipation Proclamation, and on Martin Luther King.",
+      "pii": ["Priya Natarajan-Wells"],
+      "keep": ["Abraham Lincoln", "Emancipation Proclamation", "Martin Luther King"]
     }
   ]
 }

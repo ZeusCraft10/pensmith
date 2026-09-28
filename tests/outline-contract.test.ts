@@ -49,19 +49,39 @@ test('GRND-07: the example renders to the canonical table and reads back through
 });
 
 test('GRND-09: an NN- slug prefix from the model is normalised (never 01-01-introduction)', () => {
-  assert.equal(bareOutlineSlug('01-introduction'), 'introduction');
-  assert.equal(bareOutlineSlug('1a-background'), 'background');
-  assert.equal(bareOutlineSlug('2024-review'), '2024-review', 'a 4-digit year is not a section number');
-  assert.equal(bareOutlineSlug('introduction'), 'introduction');
+  assert.equal(bareOutlineSlug('01-introduction', 1), 'introduction');
+  assert.equal(bareOutlineSlug('01a-background', 1), 'background');
+  assert.equal(bareOutlineSlug('1-introduction', 1), 'introduction');
+  assert.equal(bareOutlineSlug('2024-review', 2), '2024-review', 'a 4-digit year is not a section number');
+  assert.equal(bareOutlineSlug('introduction', 1), 'introduction');
+  // Only the section's OWN folder number is a prefix: topical slugs keep their digits.
+  assert.equal(bareOutlineSlug('02-body', 3), '02-body', 'not this section\'s number');
+  for (const [slug, n] of [['3d-printing', 3], ['5g-networks', 5], ['2d-materials', 2], ['90s-music', 4], ['9-11-attacks', 2]] as const) {
+    assert.equal(bareOutlineSlug(slug, n), slug, `${slug} as section ${n} keeps its digits`);
+  }
+  const topical = OutlineSchema.parse({
+    thesis: 't',
+    sections: [
+      { n: 1, slug: '3d-printing', title: 'A', depends_on: [], estimated_word_count: 100 },
+      { n: 2, slug: '5g-networks', title: 'B', depends_on: ['3d-printing'], estimated_word_count: 100 },
+      { n: 3, slug: '2d-materials', title: 'C', depends_on: [], estimated_word_count: 100 },
+      { n: 4, slug: '9-11-attacks', title: 'D', depends_on: [], estimated_word_count: 100 },
+      { n: 5, slug: 'printing', title: 'E', depends_on: [], estimated_word_count: 100 },
+    ],
+  });
+  assert.deepEqual(topical.sections.map((s) => s.slug), ['3d-printing', '5g-networks', '2d-materials', '9-11-attacks', 'printing'], 'no mangling, no duplicate slug');
+  assert.deepEqual(topical.sections[1]!.depends_on, ['3d-printing']);
   const parsed = OutlineSchema.parse({
     thesis: 't',
     sections: [
       { n: 1, slug: '01-introduction', title: 'Intro', depends_on: [], estimated_word_count: 100, role: 'intro' },
       { n: 2, slug: '02-body', title: 'Body', depends_on: ['01-introduction'], estimated_word_count: 100, voice: '  ' },
+      { n: 3, slug: 'end', title: 'End', depends_on: ['02-body'], estimated_word_count: 100 },
     ],
   });
-  assert.deepEqual(parsed.sections.map((s) => s.slug), ['introduction', 'body']);
+  assert.deepEqual(parsed.sections.map((s) => s.slug), ['introduction', 'body', 'end']);
   assert.deepEqual(parsed.sections[1]!.depends_on, ['introduction']);
+  assert.deepEqual(parsed.sections[2]!.depends_on, ['body']);
   assert.equal('voice' in parsed.sections[1]!, false, 'a blank voice is dropped');
   // YAML with the Phase-17 `number` key and no `n` still parses (the model's n is only order).
   const yaml = parseStructured('outline-author', '```yaml\nsections:\n  - number: 1\n    slug: intro\n    title: Intro\n    estimated_word_count: 300\n  - slug: end\n    title: End\n    estimated_word_count: 300\n```');

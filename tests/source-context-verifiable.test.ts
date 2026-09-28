@@ -1,0 +1,36 @@
+// tests/source-context-verifiable.test.ts — GRND-18: outline and plan are fed
+// only the sources the citation verifier can check (source-context.ts
+// verifierBlindSpot). Pass 1 re-fetches every cited source by its DOI through
+// Crossref, so a source with no DOI or a DataCite DOI always fails verify.
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DATACITE_DOI_PREFIXES, describeExcluded, partitionCheckable, verifierBlindSpot } from '../bin/lib/source-context.js';
+
+test('GRND-18: verifierBlindSpot — no DOI, a DataCite DOI, or a synthetic source outside a dry run', () => {
+  assert.equal(verifierBlindSpot({ doi: '10.18653/v1/N19-1423' }, false), null, 'a Crossref DOI is checkable');
+  assert.equal(verifierBlindSpot({ doi: null }, false), 'no DOI');
+  assert.equal(verifierBlindSpot({ doi: '  ' }, false), 'no DOI');
+  assert.equal(verifierBlindSpot({}, false), 'no DOI');
+  for (const prefix of DATACITE_DOI_PREFIXES) {
+    assert.match(verifierBlindSpot({ doi: `${prefix}/x.1` }, false) ?? '', /DataCite DOI/, prefix);
+  }
+  assert.match(verifierBlindSpot({ doi: '10.48550/ARXIV.1706.03762' }, false) ?? '', /DataCite/, 'case-insensitive');
+  assert.equal(verifierBlindSpot({ doi: '10.0000/pensmith-dryrun.a', synthetic: true }, true), null, 'a dry run checks its synthetic sources');
+  assert.equal(verifierBlindSpot({ doi: '10.0000/pensmith-dryrun.a', synthetic: true }, false), 'a synthetic --dry-run source');
+});
+
+test('GRND-18: partitionCheckable keeps library order and names every excluded source', () => {
+  const entries = [
+    { citekey: 'a', doi: '10.1000/a' },
+    { citekey: 'b', doi: null },
+    { citekey: 'c', doi: '10.1000/c' },
+    { citekey: 'd', doi: '10.5281/zenodo.1' },
+  ];
+  const { checkable, excluded } = partitionCheckable(entries, false);
+  assert.deepEqual(checkable.map((e) => e.citekey), ['a', 'c']);
+  assert.deepEqual(excluded.map((e) => e.citekey), ['b', 'd']);
+  assert.equal(describeExcluded(excluded), 'b (no DOI), d (a DataCite DOI (10.5281) Crossref does not resolve)');
+  const many = Array.from({ length: 10 }, (_, i) => ({ citekey: `k${i}`, reason: 'no DOI' }));
+  assert.match(describeExcluded(many, 3), /^k0 \(no DOI\), k1 \(no DOI\), k2 \(no DOI\), and 7 more$/);
+});

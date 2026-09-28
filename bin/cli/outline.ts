@@ -44,7 +44,7 @@ import { renderOutlineMd, type OutlineRow } from '../lib/outline-parse.js';
 import { outlinePath, outlineRejectedPath, readOutlineSync } from '../lib/outline.js';
 import { readPaperBrief, type PaperBrief } from '../lib/paper-brief.js';
 import { tryLoadLibrary } from '../lib/library.js';
-import { buildOutlineSources, libraryCitekeys, type SourceContextInput } from '../lib/source-context.js';
+import { buildOutlineSources, describeExcluded, libraryCitekeys, partitionCheckable, type SourceContextInput } from '../lib/source-context.js';
 import { resolveCounterargument, type CounterargumentDecision } from '../lib/counterargument.js';
 import { formatOutlineIssues, outlineCorrection, validateOutline, type OutlineIssue } from '../lib/outline-validate.js';
 import {
@@ -308,7 +308,17 @@ export const outlineCommand = defineCommand({
     // ── 3. The request: the brief, the existing sections, every library source (FEED-03) ──
     const registered = await registeredSections(paperRoot);
     const brief = readPaperBrief(paperRoot);
-    const entries: SourceContextInput[] = (await tryLoadLibrary(paperRoot))?.entries ?? [];
+    // GRND-18: only the sources the citation verifier can check are offered
+    // (source-context.ts verifierBlindSpot) — citing one it cannot check always
+    // fails verify and strands the section. The others are named once.
+    const library: SourceContextInput[] = (await tryLoadLibrary(paperRoot))?.entries ?? [];
+    const { checkable: entries, excluded } = partitionCheckable(library, networkMode().dryRun);
+    if (excluded.length > 0) {
+      process.stderr.write(
+        `pensmith outline: WARN — ${excluded.length} of ${library.length} source(s) in LIBRARY.json are not offered to the outline ` +
+          `because the citation verifier cannot check them: ${describeExcluded(excluded)}\n`,
+      );
+    }
     const counter = resolveCounterargument({
       noCounter: args.counter === false,
       configRequired: brief.configCounterargument,

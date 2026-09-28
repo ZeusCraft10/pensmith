@@ -168,6 +168,9 @@ export function readPipedStdin(
   });
 }
 
+/** The fewest words a piped stdin must hold to be read as an assignment ("Write about tides." is 3). */
+export const MIN_STDIN_ASSIGNMENT_WORDS = 3;
+
 export interface ResolveAssignmentOptions {
   /** The paper's project root (where `assignment.*` is looked for). */
   readonly root: string;
@@ -281,7 +284,19 @@ export async function resolveAssignment(o: ResolveAssignmentOptions): Promise<Re
   const mayStdin = o.stdinMayCarry ?? (!process.stdin.isTTY && stdinMayCarryAssignment());
   if (mayStdin) {
     const text = await (o.readStdin ? o.readStdin() : readPipedStdin());
-    if (text !== null) return { text, source: { kind: 'stdin', name: '' } };
+    if (text !== null) {
+      // A confirmation piped into the run (`printf 'y\n' | pensmith`) is not
+      // an assignment: refuse it before anything is written.
+      const words = text.trim().split(/\s+/).filter(Boolean).length;
+      if (words < MIN_STDIN_ASSIGNMENT_WORDS) {
+        const shown = text.trim().length > 40 ? `${text.trim().slice(0, 40)}…` : text.trim();
+        throw usage(
+          `the text piped on stdin (${JSON.stringify(shown)}) is too short to be an assignment ` +
+            `(fewer than ${MIN_STDIN_ASSIGNMENT_WORDS} words); pipe the assignment itself, or pass --from <file>`,
+        );
+      }
+      return { text, source: { kind: 'stdin', name: '' } };
+    }
   }
   const picked = await pickUpFromFolder(o);
   if (picked !== null) {

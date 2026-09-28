@@ -260,7 +260,6 @@ export function normalizePaperType(raw: string): PaperType {
 // Topic phrase (a first guess; the clarifier's topic wins)
 // ---------------------------------------------------------------------------
 
-const LABELLED_TOPIC = /^\s*(?:paper\s+)?(?:topic|title|subject|research\s+question|prompt)\s*[:–—-]\s*(.+?)\s*$/im;
 const TASK_VERB = /^(?:please\s+)?(?:write|compose|draft|prepare|produce|create|discuss|analy[sz]e|argue|examine|explore|describe|explain|review|evaluate|compare|contrast|investigate|research|assess|consider|summari[sz]e|critique|reflect|develop|present)\b/i;
 /** A sentence that only instructs ("Use MLA for this paper", "Cite five sources", "Include a limitations section"). */
 const INSTRUCTION_ONLY = /^(?:please\s+)?(?:use|follow|cite|include|add|submit|format|double[\s-]space|no|omit|skip|avoid|make\s+sure|remember|note|ensure)\b/i;
@@ -296,22 +295,17 @@ function unlabelled(clause: string): string | null {
 }
 
 /**
- * A short topic phrase from the assignment: a labelled `Topic:` / `Title:`
- * line, else the first task sentence with its instruction and requirements
- * stripped ("Write a 1500-word literature review on attention mechanisms in
- * transformers, APA style." → "attention mechanisms in transformers"). Label
- * lines (`Name: …`, `Due: …`) and instruction-only sentences ("Use MLA for
- * this paper") are never a topic. '' when nothing usable is left.
+ * The first task sentence's topic phrase, with its instruction and requirements
+ * stripped ('' when none). `taskVerbOnly` (the PII keep list) accepts only a
+ * sentence that opens with a task verb ("Write …", "Argue …") — never the first
+ * clause as a fallback, which may be "Reach me at …, or my advisor Jane Doe".
  */
-export function topicFromAssignment(text: string): string {
-  const t = text.replace(/\r\n?/g, '\n');
-  const labelled = LABELLED_TOPIC.exec(t)?.[1];
-  if (labelled && oneLine(labelled).length >= 3) return oneLine(labelled).replace(/[.]+$/, '').slice(0, 200);
+function taskTopicPhrase(t: string, taskVerbOnly = false): string {
   const clauses = clausesOf(t)
     .filter((c) => !/^thesis\s+seed\s*:/i.test(c))
     .map(unlabelled)
     .filter((c): c is string => c !== null && !INSTRUCTION_ONLY.test(c) && sectioningNotesFrom(c).length === 0 && stripRequirementParts(oneLine(c).replace(/[.!?]+$/, '')).length > 0);
-  const sentence = clauses.find((c) => TASK_VERB.test(c)) ?? clauses[0] ?? '';
+  const sentence = clauses.find((c) => TASK_VERB.test(c)) ?? (taskVerbOnly ? '' : clauses[0] ?? '');
   let s = stripRequirementParts(oneLine(sentence).replace(/[.!?]+$/, ''));
   s = s
     .replace(TASK_VERB, '')
@@ -325,17 +319,67 @@ export function topicFromAssignment(text: string): string {
     .replace(COURSE_TAIL, '')
     .replace(/[,;:]+$/, '')
     .trim();
-  return s.length >= 3 ? s.slice(0, 200) : '';
+  // "Write 6-8 pages." leaves only a requirement: no topic.
+  return s.length >= 3 && !isRequirementPart(s) ? s.slice(0, 200) : '';
+}
+
+/** The value of the first `Label: …` line whose label matches `labels`, one line, no trailing dots ('' when none). */
+function labelledLine(t: string, labels: RegExp): string {
+  const re = new RegExp(String.raw`^\s*(?:paper\s+)?(?:${labels.source})\s*[:–—-]\s*(.+?)\s*$`, 'im');
+  const v = re.exec(t)?.[1];
+  return v && oneLine(v).length >= 3 ? oneLine(v).replace(/[.]+$/, '').slice(0, 200) : '';
+}
+
+/** Labels that state the paper's topic outright. */
+const TOPIC_LABELS = /topic|research\s+question|prompt/;
+/** Labels that name a document, not always its topic ("Title: Final Paper - Jane Doe", an e-mail "Subject:"). */
+const TITLE_LABELS = /title|subject/;
+/** A PII redaction tag (GRND-05): a topic that holds one is the last resort. */
+const REDACTION_TAG = /\[REDACTED:[A-Z]+\]/;
+
+/**
+ * A short topic phrase from the assignment: a labelled `Topic:` / `Research
+ * question:` line, else the first task sentence with its instruction and
+ * requirements stripped ("Write a 1500-word literature review on attention
+ * mechanisms in transformers, APA style." → "attention mechanisms in
+ * transformers"), else a `Title:` / `Subject:` line (often a document name —
+ * "Final Paper - Jane Doe" — so only when nothing better exists). A candidate
+ * holding a PII redaction tag is used only when no other one is left. Label
+ * lines (`Name: …`, `Due: …`) and instruction-only sentences ("Use MLA for this
+ * paper") are never a topic. '' when nothing usable is left.
+ */
+export function topicFromAssignment(text: string): string {
+  const t = text.replace(/\r\n?/g, '\n');
+  const candidates = [labelledLine(t, TOPIC_LABELS), taskTopicPhrase(t), labelledLine(t, TITLE_LABELS)].filter((c) => c.length > 0);
+  return candidates.find((c) => !REDACTION_TAG.test(c)) ?? candidates[0] ?? '';
 }
 
 /**
- * The assignment's labelled topic lines (`Topic: …`, `Title: …`, `Subject:
- * …`, `Research question: …`) — the words a PII redaction must keep so a paper
- * may be ABOUT a named person or place (GRND-05 "terms from the topic line").
+ * The assignment's labelled topic lines (`Topic: …`, `Research question: …`,
+ * `Prompt: …`). A `Title:` or `Subject:` line is NOT one: it often names the
+ * student or the instructor ("Title: Final Paper - Jane Doe", an e-mailed
+ * "Subject: HIST 201 essay for Prof. Doe"), GRND-05.
  */
 export function labelledTopicLines(text: string): string[] {
-  const re = /^\s*(?:paper\s+)?(?:topic|title|subject|research\s+question)\s*[:–—-]\s*(.+?)\s*$/gim;
+  const re = new RegExp(String.raw`^\s*(?:paper\s+)?(?:${TOPIC_LABELS.source})\s*[:–—-]\s*(.+?)\s*$`, 'gim');
   return [...text.replace(/\r\n?/g, '\n').matchAll(re)].map((m) => oneLine(m[1] ?? '')).filter((l) => l.length > 0);
+}
+
+/**
+ * The phrases a PII redaction keeps (GRND-05 "terms from the topic line", D-18-12):
+ * the labelled topic lines and the task sentence's topic phrase ("Write about
+ * Abraham Lincoln and the Emancipation Proclamation" keeps both), so a paper may
+ * be ABOUT a named person, place or event. Never a `Title:` / `Subject:` line.
+ * pii.ts never applies the keep list on a person-labelled line (`Name:`,
+ * `Student:`, `Instructor:` …) or after an honorific, so a student's own name
+ * is redacted even when a topic phrase repeats it.
+ */
+export function topicKeepPhrases(text: string): string[] {
+  const t = text.replace(/\r\n?/g, '\n');
+  const out = labelledTopicLines(t);
+  const task = taskTopicPhrase(t, true);
+  if (task) out.push(task);
+  return out;
 }
 
 const STOPWORDS: ReadonlySet<string> = new Set([

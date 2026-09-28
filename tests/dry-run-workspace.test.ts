@@ -234,3 +234,51 @@ test('GRND-19: paths.ts treats .paper-dry-run/ like .paper/ (paperDir, asProject
     setDryRunWorkspace(saved ? true : null);
   }
 });
+
+test('GRND-19: the library resolves to the workspace in a dry run — libraryPaths and the Tier-1 paper://library resource', async () => {
+  const sb = sandbox('ws-library');
+  const root = sb.project('p');
+  const saved = dryRunWorkspaceActive();
+  const { libraryPaths } = await import('../bin/lib/library.js');
+  const { registerPaperResources } = await import('../mcp/resources.js');
+  try {
+    setDryRunWorkspace(true);
+    const want = join(root, '.paper-dry-run', 'LIBRARY.json');
+    assert.equal(libraryPaths(paperDir(root)).library, want, 'the workspace folder is a paper folder (never .paper-dry-run/.paper-dry-run/)');
+    assert.equal(libraryPaths(root).library, want);
+    mkdirSync(join(root, '.paper-dry-run'), { recursive: true });
+    const at = '2026-01-01T00:00:00.000Z';
+    const entry = { citekey: 'dryrun2024', title: 'A synthetic source', authors: ['Doe, J.'], year: 2024, synthetic: true, provenance: ['research'], addedAt: at, updatedAt: at };
+    writeFileSync(want, JSON.stringify({ $schemaVersion: 2, entries: [entry] }, null, 2) + '\n');
+    // The MCP server's library resource, driven in-process through a capturing server.
+    const handlers = new Map<string, (uri: URL) => Promise<{ contents: Array<{ text: string }> }>>();
+    const server = {
+      registerResource: (name: string, _uri: unknown, _meta: unknown, handler: (uri: URL) => Promise<{ contents: Array<{ text: string }> }>) => {
+        handlers.set(name, handler);
+      },
+    };
+    registerPaperResources(server as unknown as Parameters<typeof registerPaperResources>[0], root);
+    const read = handlers.get('library');
+    assert.ok(read, 'paper://library is registered');
+    const res = await read(new URL('paper://library'));
+    const lib = JSON.parse(res.contents[0]!.text) as { entries: Array<{ citekey: string }> };
+    assert.deepEqual(lib.entries.map((e) => e.citekey), ['dryrun2024'], 'paper://library serves the workspace library');
+  } finally {
+    setDryRunWorkspace(saved ? true : null);
+  }
+});
+
+test('GRND-19: `status --dry-run` on a real paper before any dry run seeds the workspace and reports the paper — never "no active paper"; .paper/ untouched', () => {
+  const sb = sandbox('ws-status');
+  const root = sb.project('p');
+  seedRealPaper(sb, root);
+  const before = fingerprint(join(root, '.paper'));
+  const r = runCli(sb, root, ['status', '--dry-run']);
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+  assert.doesNotMatch(`${r.stdout}${r.stderr}`, /no active paper/);
+  assert.match(r.stderr, /seeded the dry-run workspace .+\.paper-dry-run from .+\.paper/);
+  assert.match(r.stdout, /paper: attention mechanisms in transformers/, 'the paper\'s status');
+  assert.match(r.stdout, /next: outline/, 'its research is done (LIBRARY.json)');
+  assert.ok(existsSync(join(root, '.paper-dry-run', SEED_FILE)), 'the workspace is seeded');
+  assert.deepEqual(fingerprint(join(root, '.paper')), before, '.paper/ is byte- and mtime-identical');
+});

@@ -95,10 +95,39 @@ export const IntakeClarifierSchema = z.object({
  */
 export const OUTLINE_ROLES = SECTION_ROLES;
 
-/** `01-introduction` / `1a-background` → the bare slug (D-18-14). */
-export function bareOutlineSlug(slug: string): string {
-  const bare = slug.replace(/^\d{1,2}[a-z]?-(?=[a-z0-9])/, '');
+/**
+ * A slug the model prefixed with its section folder number → the bare slug
+ * (D-18-14): `01-introduction` / `01a-background` / `1-introduction` for
+ * section `n` 1 → `introduction` / `background`. Only the folder shape is
+ * stripped — two digits (optionally a letter), or one digit with no letter —
+ * and only when the number IS the section's `n`, so a topical slug keeps its
+ * digits: `3d-printing`, `5g-networks`, `2d-materials`, `90s-music`,
+ * `9-11-attacks` as any section but §9, `2024-review`.
+ */
+export function bareOutlineSlug(slug: string, n: number): string {
+  const m = /^(\d{1,2})([a-z]?)-(?=[a-z0-9])/.exec(slug);
+  if (!m) return slug;
+  const digits = m[1] as string;
+  const letter = m[2] as string;
+  if (Number(digits) !== n || (digits.length === 1 && letter !== '')) return slug;
+  const bare = slug.slice(m[0].length);
   return bare.length > 0 ? bare : slug;
+}
+
+/**
+ * A depends_on entry → the slug it names: an entry equal to a section's slug as
+ * the model wrote it maps to that section's bare slug (`01-introduction` →
+ * `introduction`); an entry that is a section's bare slug behind a folder
+ * number (`01-introduction` when the section was written `introduction`) maps
+ * to it; any other entry is kept as written (outline-validate.ts reports one
+ * that names no section).
+ */
+function resolveDependsOn(entry: string, bareByRaw: ReadonlyMap<string, string>, bare: ReadonlySet<string>): string {
+  const mapped = bareByRaw.get(entry);
+  if (mapped !== undefined) return mapped;
+  if (bare.has(entry)) return entry;
+  const m = /^\d{1,2}[a-z]?-(.+)$/.exec(entry);
+  return m && bare.has(m[1] as string) ? (m[1] as string) : entry;
 }
 
 /**
@@ -127,14 +156,22 @@ export const OutlineSchema = z.object({
     role: z.enum(OUTLINE_ROLES).default('body'),
     voice: z.string().optional().describe('optional voice hint (PRD §7.18)'),
   })).min(1),
-}).transform((o) => ({
-  thesis: o.thesis,
-  sections: o.sections.map((s) => {
-    const out = { ...s, slug: bareOutlineSlug(s.slug), depends_on: s.depends_on.map(bareOutlineSlug) };
-    if (out.voice !== undefined && out.voice.trim().length === 0) delete out.voice;
-    return out;
-  }),
-}));
+}).transform((o) => {
+  const bareByRaw = new Map(o.sections.map((s) => [s.slug, bareOutlineSlug(s.slug, s.n)] as const));
+  const bare = new Set(bareByRaw.values());
+  return {
+    thesis: o.thesis,
+    sections: o.sections.map((s) => {
+      const out = {
+        ...s,
+        slug: bareByRaw.get(s.slug) ?? s.slug,
+        depends_on: s.depends_on.map((d) => resolveDependsOn(d, bareByRaw, bare)),
+      };
+      if (out.voice !== undefined && out.voice.trim().length === 0) delete out.voice;
+      return out;
+    }),
+  };
+});
 
 /**
  * section-planner contract (GRND-13, D-18-23): the frontmatter the model echoes

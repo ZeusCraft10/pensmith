@@ -1,0 +1,13 @@
+{
+  "id": "untrusted-fence",
+  "requirement": "FEED-05",
+  "module": "bin/lib/untrusted-fence.ts",
+  "description": "The untrusted-data fence markers (`<<<PENSMITH_UNTRUSTED_DATA_<uuid>>>>` / `<<<END_PENSMITH_UNTRUSTED_DATA_<uuid>>>>`) and their UUID have ONE home, bin/lib/untrusted-fence.ts: it alone builds a fenced block (fenceUntrusted), strips a marker that appears inside fenced data (stripFenceMarkers) and reads a block back (unfence). A second copy of the marker text is a fence an attacker's source record can close early, or a check that drifts from the one the templates describe. Call fenceUntrusted() / unfence() / stripFenceMarkers() / FENCE_OPEN / FENCE_CLOSE instead.",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs"],
+  "allow": ["bin/lib/untrusted-fence.ts"],
+  "match": {
+    "kind": "string-literal",
+    "pattern": "PENSMITH_UNTRUSTED_DATA|7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a"
+  },
+  "fixture": "tests/fixtures/chokepoints/untrusted-fence.violation.ts.txt"
+}

@@ -7,7 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { UX02_VERBS, VERB_ALIASES, canonicalVerb, nearest, editDistance } from '../bin/lib/verbs.js';
 import { EXIT_USAGE } from '../bin/lib/exit-codes.js';
@@ -54,6 +54,23 @@ test('RUN-11: a typo is rejected even where the bare router WOULD start a paper 
   }
   const far = runCli(sb, cwd, ['hello']);
   assert.ok(!/did you mean/.test(far.stderr), 'no suggestion beyond edit distance 2');
+});
+
+test('GRND-02: an intake flag on a bare run names `pensmith new` (never "unknown command PHIL 101") and starts nothing', () => {
+  const sb = sandbox('bare-intake-flag');
+  const cwd = sb.project('p');
+  writeFileSync(join(cwd, 'assignment.txt'), 'Write an essay on tides.\n');
+  for (const args of [['--class', 'PHIL 101', '--yolo'], ['--discipline', 'history', '--yolo'], ['--yolo', '--pii-redact'], ['--no-pii-redact']]) {
+    const r = runCli(sb, cwd, args);
+    assert.equal(r.status, EXIT_USAGE, `${args.join(' ')}: ${r.stderr}`);
+    assert.match(r.stderr, /^pensmith: '--[a-z-]+' is an intake option of 'pensmith new' — a bare pensmith takes only the global flags; start the paper with 'pensmith new --[a-z-]+ …', then run pensmith$/m, args.join(' '));
+    assert.doesNotMatch(r.stderr, /unknown command/);
+    assert.ok(!existsSync(join(cwd, '.paper')), `${args.join(' ')}: no paper was started`);
+  }
+  // The same flags work on `pensmith new`.
+  const made = runCli(sb, cwd, ['new', '--class', 'PHIL 101', '--discipline', 'history', '--yolo'], { env: { PENSMITH_NO_LLM: '1' } });
+  assert.equal(made.status, 0, `${made.stdout}\n${made.stderr}`);
+  assert.match(readFileSync(join(cwd, '.paper', 'INTAKE.md'), 'utf8'), /^class: PHIL 101$/m);
 });
 
 test('RUN-11: unknown flags on a verb are rejected — `done --no-scor` exits 2 and writes nothing', () => {

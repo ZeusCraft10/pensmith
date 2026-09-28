@@ -62,7 +62,8 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
 - **Under `--dry-run`** (GRND-19, D-18-29) the paper is the dry-run workspace
   `./.paper-dry-run/` (seeded from `.paper/`, which is never written): the
   deliverable is `.paper-dry-run/export/DRAFT.dry-run.<ext>` (`.dry-run` before
-  the extension), its bibliography sits beside it, FINAL.md and VERIFICATION.md
+  the extension), its bibliography sits beside it as `CITATIONS.dry-run.bib` /
+  `CITATIONS.dry-run.ris` (every exported file is named `.dry-run`), FINAL.md and VERIFICATION.md
   are written in the workspace, and done prints the path plus one line saying it
   is a dry-run export (synthetic sources, stub text) and the real paper was not
   touched. The document itself stays zero-trace: the name and place disclose it.

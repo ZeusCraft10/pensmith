@@ -72,7 +72,7 @@ import {
 } from '../lib/intake-answers.js';
 import {
   disciplineMentionFrom,
-  labelledTopicLines,
+  topicKeepPhrases,
   paperTypeFrom,
   parseIntakeOverrides,
   statedLengthWords,
@@ -424,7 +424,7 @@ export const intakeCommand = defineCommand({
       }
     }
     const piiOn = fixed.values.get(Q.pii)?.value === true;
-    const keep = labelledTopicLines(assignment.text);
+    const keep = topicKeepPhrases(assignment.text);
     const redact = (s: string): string => (piiOn ? redactPii(s, { keep }) : s);
     // The model-bound text: LF line ends, no trailing blank lines (a byte-stable request on every platform).
     const rawModelText = withThesisSeed(assignment.text.replace(/\r\n?/g, '\n').replace(/\s+$/, ''), thesisSeed);

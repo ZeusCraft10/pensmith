@@ -72,7 +72,7 @@ import { parseBib, parseBibFileAt, parseBibSync } from './citations.js';
 import { jaroWinkler } from './fuzzy.js';
 import { firstAuthorSurname } from './author-normalize.js';
 import { generateCitekey } from './citekey.js';
-import { paperDir } from './paths.js';
+import { isPaperDirName, paperDir } from './paths.js';
 import { openSessionLog, type SessionLogger } from './session-log.js';
 import { isReservedDryRunId } from './doi.js';
 import { networkMode } from './http-mock.js';
@@ -139,7 +139,9 @@ export interface LibraryPaths {
 /** The three library files of the paper at `root` (project root, or its `.paper`). */
 export function libraryPaths(root: string): LibraryPaths {
   const abs = path.resolve(root);
-  const dir = path.basename(abs) === '.paper' ? abs : paperDir(abs);
+  // A paper folder itself (`.paper/`, or the `.paper-dry-run/` workspace,
+  // GRND-19) is used as is; a project root resolves its paper folder.
+  const dir = isPaperDirName(path.basename(abs)) ? abs : paperDir(abs);
   return {
     dir,
     library: path.join(dir, 'LIBRARY.json'),
@@ -786,6 +788,8 @@ export async function exportCitedCitations(
   root: string,
   citekeys: readonly string[],
   exportDir: string,
+  /** The exported files' name stem: `CITATIONS`, or `CITATIONS.dry-run` in a dry run (GRND-19). */
+  stem = 'CITATIONS',
 ): Promise<CitedExportResult> {
   const paths = libraryPaths(root);
   if (path.resolve(exportDir) === path.resolve(paths.dir)) {
@@ -834,8 +838,8 @@ export async function exportCitedCitations(
     .map((r) => r.text)
     .join('');
 
-  const bibDst = path.join(exportDir, 'CITATIONS.bib');
-  const risDst = path.join(exportDir, 'CITATIONS.ris');
+  const bibDst = path.join(exportDir, `${stem}.bib`);
+  const risDst = path.join(exportDir, `${stem}.ris`);
   await fsp.mkdir(exportDir, { recursive: true });
   if (keptBib) await atomicWriteFile(bibDst, keptBib);
   else await fsp.rm(bibDst, { force: true });

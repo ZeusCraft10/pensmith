@@ -111,6 +111,34 @@ test('GRND-05 × GRND-04: with --pii-redact a style instruction still sets the c
   });
 });
 
+test('GRND-05: with --pii-redact a name on a Title: line is redacted everywhere, and the brief topic is the task sentence', async () => {
+  await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1' }, paper: false }, async (sb) => {
+    fs.writeFileSync(
+      path.join(sb.root, 'assignment.txt'),
+      'Title: Final Paper - Maria Gonzalez\nName: Maria Gonzalez\nStudent ID: 2024-00173\nWrite a 1500-word essay on the causes of the French Revolution for my History class.\n',
+    );
+    const r = await sb.runTsx(null, ['new', '--from', 'assignment.txt', '--yolo', '--pii-redact']);
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    const intake = fs.readFileSync(path.join(sb.paper, 'INTAKE.md'), 'utf8');
+    assert.ok(!intake.includes('Maria') && !intake.includes('Gonzalez'), `the student's name is gone from INTAKE.md:\n${intake}`);
+    assert.match(intake, /^topic: the causes of the French Revolution$/m);
+  });
+});
+
+test('GRND-05: with --pii-redact an assignment with no personal data keeps its topic phrases (no redaction tag in the brief)', async () => {
+  await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1' }, paper: false }, async (sb) => {
+    fs.writeFileSync(
+      path.join(sb.root, 'assignment.txt'),
+      'Write a 1500-word essay on deforestation in Southeast Asia and the Amazon Basin, APA style.\nArgue whether Social Media coverage changed policy, with a note on Sub-Saharan Africa and World War One.\n',
+    );
+    const r = await sb.runTsx(null, ['new', '--from', 'assignment.txt', '--yolo', '--pii-redact']);
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    const intake = fs.readFileSync(path.join(sb.paper, 'INTAKE.md'), 'utf8');
+    assert.doesNotMatch(intake, /\[REDACTED:/, `nothing is redacted in a PII-free assignment:\n${intake}`);
+    assert.match(intake, /^topic: deforestation in Southeast Asia and the Amazon Basin$/m);
+  });
+});
+
 test('GRND-05: with PII redaction off (the default) nothing is redacted and no INTAKE.raw.local is written', async () => {
   await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1' }, paper: false }, async (sb) => {
     fs.writeFileSync(path.join(sb.root, 'assignment.txt'), ASSIGNMENT);

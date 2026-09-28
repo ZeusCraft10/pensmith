@@ -219,12 +219,15 @@ export class ProviderHttpError extends PensmithError {
 }
 
 export class StructuredOutputError extends PensmithError {
+  /** Why the last reply failed the contract (the parse or schema problem). */
+  readonly detail: string;
   constructor(slug: string, model: string, detail: string) {
     super(
       `${slug}: the reply from ${model} did not match the required schema after one corrective retry (${detail}); nothing was written`,
       EXIT_ERROR,
     );
     this.name = 'StructuredOutputError';
+    this.detail = detail;
   }
 }
 

@@ -19,8 +19,8 @@ degrade_if_missing:
 
 `pensmith new` bootstraps a paper project in the current folder. It is the front
 door of the workflow: new → research → outline → (plan → write → verify)* →
-compile → done. A bare `pensmith` in a folder with an assignment file (or with an
-assignment piped on stdin) runs it.
+compile → done. A bare `pensmith` in a folder with an assignment file (or, when no
+`pensmith open` pointer is set, with an assignment piped on stdin) runs it.
 
 The intake asks a fixed battery of questions (PRD §7.1) and makes ONE model call,
 the `intake-clarifier`, which only *suggests*: a topic phrase, a discipline preset,
@@ -57,7 +57,8 @@ as INTAKE.md.
      reduced to its text; no PDF bytes are stored);
    - an assignment piped on stdin (`printf '…' | pensmith new`, `pensmith new <
      assignment.txt`) — read only when no file was named and stdin is a pipe or a
-     file, never in numbered-answer mode, and given up after 2 s of silence;
+     file, never in numbered-answer mode, and given up after 2 s of silence; piped
+     text of fewer than 3 words (a confirmation such as `y`) is refused;
    - an `assignment.txt` / `assignment.md` / `assignment.pdf` in the folder, through
      the `assignment-pickup` gate: a terminal confirms it; `--yolo` or a run without
      a terminal uses it and names it; several such files need a choice (a terminal
@@ -68,7 +69,9 @@ as INTAKE.md.
    all in a run that cannot prompt is exit 2 (`no assignment found`) with nothing
    written.
 
-2. **Collect the answers given up front** (GRND-02): flags, or `--answers
+2. **Collect the answers given up front** (GRND-02): flags of `pensmith new`
+   (a bare `pensmith` takes only the global flags and refuses an intake flag,
+   naming `pensmith new`), or `--answers
    <file.toml>` (keys are the question ids below, plus `thesis` and a
    `[follow_ups]` table keyed by follow-up id). `pensmith new --questions` prints
    the battery — id, question, options, flag, answers-file key — as JSON. An

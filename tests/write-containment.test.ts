@@ -156,7 +156,7 @@ test('FEED-04: a drafter citing an unassigned key gets one retry, then exit 4 �
   });
 });
 
-test('FEED-04: a failed RE-write keeps the older DRAFT.md byte-identical, reports attention, and verify clears the failure reason', async () => {
+test('FEED-04: a failed RE-write keeps the older DRAFT.md byte-identical, reports attention, and neither verify nor compile passes the older draft off as the section', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     await plannedPaper(sb);
     const sections = path.join(sb.paper, 'sections');
@@ -178,12 +178,30 @@ test('FEED-04: a failed RE-write keeps the older DRAFT.md byte-identical, report
     assert.equal(d.verb, 'status', 'the failure is reported, the older draft is not silently verified');
     assert.match(d.verb === 'status' ? d.detail ?? '' : '', /section 2 failed: citekey evil9999 not assigned to section 2 — .*`pensmith write 2`/);
 
-    // Verifying the older draft on purpose is a verify verdict: the write failure reason goes.
+    // (Superseded Phase 18 behaviour: verify used to verify the older draft and
+    // clear the failure — hiding the failed write.) verify refuses, naming the
+    // retry; PLAN.md keeps the failure; nothing is written.
+    const planPath = path.join(sections, '02-background', 'PLAN.md');
+    const planBefore = fs.readFileSync(planPath, 'utf8');
     const v = await sb.runTsx(null, ['verify', '2'], { env: { ANTHROPIC_API_KEY: KEY } });
-    assert.equal(v.status, 0, `${v.stdout}\n${v.stderr}`);
-    const fm = loadFrontmatterDocSync('plan', path.join(sections, '02-background', 'PLAN.md')).frontmatter;
-    assert.equal(fm['status'], 'verified');
-    assert.equal(fm['failure_reason'], undefined);
+    assert.equal(v.status, 4, `${v.stdout}\n${v.stderr}`);
+    assert.match(v.stderr, /pensmith verify: section 2 not verified — its last write failed \(citekey evil9999 not assigned to section 2\); the DRAFT\.md on disk is older — run `pensmith write 2`/);
+    assert.equal(fs.readFileSync(planPath, 'utf8'), planBefore, 'PLAN.md keeps status failed and the failure reason');
+    assert.ok(!fs.existsSync(path.join(sections, '02-background', 'VERIFICATION.md')), 'no verification of the older draft');
+    const fm = loadFrontmatterDocSync('plan', planPath).frontmatter;
+    assert.equal(fm['status'], 'failed');
+    assert.equal(fm['failure_reason'], 'citekey evil9999 not assigned to section 2');
+
+    // compile (and so done) refuses the section as well, even with a passing VERIFICATION.md.
+    fs.writeFileSync(path.join(sections, '02-background', 'VERIFICATION.md'), '# VERIFICATION\n\nStatus: verified\n');
+    const c = await sb.runTsx(null, ['compile', '--yolo'], { env: { ANTHROPIC_API_KEY: KEY } });
+    assert.equal(c.status, 4, `${c.stdout}\n${c.stderr}`);
+    assert.match(`${c.stdout}${c.stderr}`, /section 2 \(background\): its last write failed \(citekey evil9999 not assigned to section 2\); the DRAFT\.md on disk is older — run `pensmith write 2`/);
+    assert.ok(!fs.existsSync(path.join(sb.paper, 'DRAFT.md')), 'no compiled draft');
+    const { runExportBlockingGate } = await import('../bin/cli/done.js');
+    const gate = runExportBlockingGate(sb.root);
+    assert.equal(gate.blocked, true);
+    assert.ok(gate.reasons.some((r) => /02-background: its last write failed/.test(r)), gate.reasons.join(' | '));
   });
 });
 

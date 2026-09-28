@@ -41,6 +41,7 @@ import { runGate } from '../lib/gates.js';
 import { migrateFrontmatterText } from '../lib/frontmatter.js';
 import { sectionPlan, projectRoot } from '../lib/paths.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
+import { parseSectionId } from '../lib/section-id.js';
 import { loadState } from '../lib/state.js';
 import { fetch as httpFetch, isOfflineEgressError, offlineLabel } from '../lib/http.js';
 import { isOfflineMode, networkMode } from '../lib/http-mock.js';
@@ -136,10 +137,12 @@ async function remapCommand(
 ): Promise<{ ok: boolean; citekey: string; remapped: number; exitCode?: typeof EXIT_USAGE }> {
   let only: { n: number; slug: string } | undefined;
   if (secRaw !== undefined) {
-    const n = Number(secRaw);
+    // GRND-09: `--section 1a` names the lettered section, as `plan 1a` does.
+    const id = parseSectionId(secRaw);
     const explicit = typeof slugRaw === 'string' && slugRaw.length > 0 ? slugRaw : undefined;
-    const slug = Number.isInteger(n) && n >= 1 ? resolveSectionSlug(paperRoot, n, explicit) : 'placeholder';
-    if (!Number.isInteger(n) || n < 1 || (slug === 'placeholder' && explicit === undefined)) {
+    const slug = id !== null ? resolveSectionSlug(paperRoot, id.n, explicit, id.suffix) : 'placeholder';
+    const n = id?.n ?? 0;
+    if (id === null || (slug === 'placeholder' && explicit === undefined)) {
       process.stdout.write(
         `pensmith add: ${citekey} is in CITATIONS.bib; --section ${String(secRaw)} could not be ` +
         `resolved to a section slug (pass --slug, or run \`pensmith outline\` first) — ` +

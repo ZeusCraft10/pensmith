@@ -36,7 +36,11 @@
 //     first token opens an entity name ("Treaty …", "Lake …", "Mount …");
 //   - its last token is a month or weekday — a date fragment ("Due March");
 //   - every token belongs to a caller-supplied keep list (intake passes the
-//     assignment's labelled Topic/Title line: a paper may be ABOUT a person);
+//     assignment's topic phrases — a labelled Topic line and the task
+//     sentence's topic, intake-overrides.ts topicKeepPhrases: a paper may be
+//     ABOUT a person) — except on a person-labelled line ("Name:", "Student:",
+//     "Instructor:" …) or right after an honorific, where it never applies;
+//   - it ends in a number word after an entity head ("World War One");
 //   - it ends in a citation-style name followed by a style word ("Use Chicago
 //     style", "Follow Harvard referencing"): an instruction, not a person.
 //
@@ -159,13 +163,42 @@ const ENTITY_HEADS: ReadonlySet<string> = new Set([
   'Conference', 'Festival', 'Games', 'Olympics', 'Cup', 'Syndrome', 'Disease', 'Effect', 'Theory', 'Theorem',
   'Law', 'Laws', 'Principle', 'Paradox', 'Hypothesis', 'Model', 'Test', 'Scale', 'Index', 'Program', 'Programme',
   'Project', 'Mission', 'Initiative', 'Policy', 'Report', 'Survey', 'Census', 'Study', 'Trial', 'Trials',
+  // Continents, regions and landforms ("Southeast Asia", "Amazon Basin", "Sub-Saharan Africa").
+  'Asia', 'Africa', 'America', 'Americas', 'Europe', 'Oceania', 'Antarctica', 'Arctic', 'Basin', 'Delta',
+  'Plateau', 'Highlands', 'Lowlands', 'Rainforest', 'Strait', 'Straits', 'Archipelago', 'Subcontinent',
+  'Hemisphere', 'Canyon', 'Reef', 'Glacier',
+  // Topics and events that read as two capitalised words ("Social Media", "Black Death",
+  // "Emancipation Proclamation", "Climate Change", "Civil Rights"; a field of study whose
+  // head word is lint-reserved outside tutorial.ts is in name-suppression.json instead).
+  'Media', 'Intelligence', 'Networks', 'Warming', 'Change', 'Rights', 'Proclamation', 'Death',
+  'Plague', 'Famine', 'Pandemic', 'Epidemic', 'Genocide', 'Holocaust',
+  // Coursework documents ("Final Paper", "Term Essay").
+  'Paper', 'Essay', 'Assignment', 'Exam', 'Thesis', 'Dissertation',
 ]);
 
 // Words that OPEN an entity name ("Treaty …", "Lake …", "Mount …", "Fort …").
 const ENTITY_OPENERS: ReadonlySet<string> = new Set([
   'Treaty', 'Battle', 'Siege', 'Act', 'Bank', 'University', 'Kingdom', 'Republic', 'Empire', 'Church', 'Council',
   'House', 'Ministry', 'Department', 'Museum', 'Lake', 'Mount', 'Fort', 'Cape', 'Port', 'Gulf', 'Isle',
+  // Region and era qualifiers no one bears as a first name ("Southeast Asia", "Middle East",
+  // "Latin America", "World War One", "Soviet Union", "Global South").
+  'Southeast', 'Southwest', 'Northeast', 'Northwest', 'Sub-Saharan', 'Middle', 'Global', 'Latin', 'Central',
+  'Northern', 'Southern', 'Eastern', 'Western', 'Greater', 'Upper', 'Lower', 'Ancient', 'Medieval', 'Imperial',
+  'Colonial', 'Soviet', 'World',
 ]);
+
+// Number words: a candidate that ends in one after an entity head is an event ("World War One").
+const NUMBER_TOKENS: ReadonlySet<string> = new Set([
+  'One', 'Two', 'Three', 'Four', 'Five', 'First', 'Second', 'Third', 'Fourth', 'Fifth',
+]);
+
+// Person labels (GRND-05): a line opening with one of these ("Name: …", "Student: …",
+// "Instructor: …") holds people, so the caller's keep list never applies on it — a
+// topic phrase that repeats the student's name must not un-redact the cover block.
+const PERSON_LINE = /^[ \t]*(?:(?:full[ \t]+)?name|student(?:[ \t]+name)?|author|authors|by|written[ \t]+by|submitted[ \t]+by|prepared[ \t]+by|instructor|professor|prof\.?|teacher|lecturer|tutor|ta|teaching[ \t]+assistant|advis[eo]r|supervisor|mentor|from|to|cc|group[ \t]+members?|team[ \t]+members?|members?|partners?|contact|signed|signature)[ \t]*:[^\n]*/gimu;
+
+// An honorific right before a candidate: a person, whatever the keep list says.
+const HONORIFIC_BEFORE = /(?:^|[^\p{L}])(?:Dr|Prof|Professor|Mr|Mrs|Ms|Mx|Miss|Sir|Dame|Rev|Hon)\.?[ ]+$/u;
 
 // Citation-style names (GRND-05 × GRND-04): a candidate ending in one of these
 // and followed by a style word names a citation style ("Use Chicago style"),
@@ -282,6 +315,7 @@ function resolveName(raw: string, keep: ReadonlySet<string>, after = ''): { raw:
   if (CITATION_STYLE_NAMES.has(last) && STYLE_WORD_AFTER.test(after)) return null;
   if (DATE_WORDS.has(last) || DATE_WORDS.has(lastBase)) return null;
   if (ENTITY_HEADS.has(last) || ENTITY_HEADS.has(lastBase) || ENTITY_OPENERS.has(first)) return null;
+  if (NUMBER_TOKENS.has(last) && tokens.slice(0, -1).some((t) => ENTITY_HEADS.has(t))) return null;
   if (keep.size > 0 && tokens.every((t) => keep.has(t))) return null;
   // Strip leading suppressed words while at least two name tokens remain.
   const words = raw.split(' ');
@@ -325,10 +359,30 @@ function overlapsAny(span: [number, number], spans: ReadonlyArray<[number, numbe
   return spans.some(([a, b]) => span[0] < b && span[1] > a);
 }
 
+/** Spans of the person-labelled lines ("Name: …", "Student: …", "Instructor: …"). */
+function personLineSpans(text: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const m of text.matchAll(PERSON_LINE)) {
+    const at = m.index ?? 0;
+    out.push([at, at + m[0].length]);
+  }
+  return out;
+}
+
 export function classifyPii(text: string, opts: PiiOptions = {}): PiiMatch[] {
   if (typeof text !== 'string' || text.length === 0) return [];
-  const keep = keepTokens(opts.keep);
+  const keepAll = keepTokens(opts.keep);
+  const noKeep: ReadonlySet<string> = new Set();
   const shielded = protectedSpans(text);
+  const personLines = keepAll.size > 0 ? personLineSpans(text) : [];
+  // The keep list protects a topic phrase, never a person in a person context:
+  // on a person-labelled line or right after an honorific it does not apply.
+  const keepAt = (start: number, end: number): ReadonlySet<string> =>
+    keepAll.size === 0 ||
+    overlapsAny([start, end], personLines) ||
+    HONORIFIC_BEFORE.test(text.slice(Math.max(0, start - 14), start))
+      ? noKeep
+      : keepAll;
 
   const candidates: Array<PiiMatch & { order: number }> = [];
   PATTERNS.forEach(({ kind, re, group }, order) => {
@@ -350,8 +404,9 @@ export function classifyPii(text: string, opts: PiiOptions = {}): PiiMatch[] {
       }
       if (kind === 'NAME') {
         if (re === RE_NAME_HONORIFIC) {
-          if (!resolveSurname(raw, keep)) continue;
+          if (!resolveSurname(raw, noKeep)) continue;
         } else {
+          const keep = keepAt(start, start + raw.length);
           const resolved = resolveName(raw, keep, text.slice(start + raw.length, start + raw.length + 40));
           if (resolved === null) continue;
           raw = resolved.raw;

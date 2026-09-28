@@ -52,3 +52,22 @@ export async function updatePlanFrontmatter(
     return false;
   }
 }
+
+/**
+ * Why a section's DRAFT.md must not be verified, compiled or exported even
+ * though its VERIFICATION.md may pass (FEED-04, D-18-25): its last write failed
+ * (`failure_reason` — write kept the OLDER draft, so that draft is not the one
+ * the failed write was asked to produce; the router reports it as attention),
+ * or a write is unfinished (`status: writing`). null when neither holds. `id`
+ * is the section as the user types it (`2`, `1a`), for the retry it names.
+ */
+export function sectionWriteBlockReason(frontmatter: Readonly<Record<string, unknown>>, id: string): string | null {
+  const reason = frontmatter['failure_reason'];
+  if (typeof reason === 'string' && reason.trim().length > 0) {
+    return `its last write failed (${reason.trim()}); the DRAFT.md on disk is older — run \`pensmith write ${id}\``;
+  }
+  if (frontmatter['status'] === 'writing') {
+    return `its write is unfinished (status: writing) — run \`pensmith write ${id}\``;
+  }
+  return null;
+}

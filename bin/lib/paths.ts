@@ -458,7 +458,9 @@ export function findAssignmentFile(root: string): string | null {
 //
 // Order: (1) `--paper <name|path>` or PENSMITH_PAPER_ROOT; (2) the cwd when it
 // holds a paper; (3) a new paper in the cwd for `new`/`sketch`, or for a bare
-// run with an assignment file; (4) the `pensmith open` pointer — served to
+// run with an assignment file; (3b) with NO pointer set, a new paper in the
+// cwd for a bare run whose stdin is a pipe or a file (GRND-01 — a pipe never
+// outranks the pointer); (4) the `pensmith open` pointer — served to
 // read-only invocations with a banner, and only offered (never followed
 // silently) to mutating ones; (5) the cwd — for read-only invocations and for
 // bare/next/resume (which route to `new`) only: any other verb in a paper-less
@@ -692,15 +694,23 @@ export function resolvePaperRoot(opts: ResolvePaperRootOptions): PaperRootResolu
   if (envRoot) return { kind: 'root', root: asProjectRoot(envRoot), source: 'env' };
   if (hasPaper(cwd)) return { kind: 'root', root: cwd, source: 'cwd' };
   // A bare run starts a new paper here when the folder holds an assignment
-  // file OR an assignment is piped on stdin (GRND-01, D-18-08: the fstat test
-  // only — stdin is read later, by `new`).
+  // file (GRND-01, D-18-08).
   if (
     (opts.verb !== null && NEW_PAPER_VERBS.has(opts.verb))
-    || (opts.verb === null && (findAssignmentFile(cwd) !== null || (opts.stdinAssignment ?? stdinMayCarryAssignment(env))))
+    || (opts.verb === null && findAssignmentFile(cwd) !== null)
   ) {
     return { kind: 'root', root: cwd, source: 'new' };
   }
   const pointer = readActivePaperPointer();
+  // A piped stdin starts a new paper on a bare run only when no `open` pointer
+  // exists (the fstat test only — stdin is read later, by `new`). With a
+  // pointer, RUN-14's ask/refuse comes first: harnesses, CI steps and
+  // child_process give a child a pipe on stdin whether or not it holds an
+  // assignment, and `printf 'y\n' | pensmith` is a confirmation, not a paper.
+  // `pensmith new` (an explicit verb) still reads a piped assignment.
+  if (!pointer && opts.verb === null && (opts.stdinAssignment ?? stdinMayCarryAssignment(env))) {
+    return { kind: 'root', root: cwd, source: 'new' };
+  }
   if (pointer) {
     return opts.readOnly === true
       ? { kind: 'pointer', root: pointer.root, pointer }

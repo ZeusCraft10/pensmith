@@ -28,12 +28,14 @@ export function resolveSectionSlug(
   paperRoot: string | undefined,
   n: number,
   explicitSlug?: unknown,
+  suffix?: string,
 ): string {
   if (typeof explicitSlug === 'string' && explicitSlug.length > 0) return explicitSlug;
   try {
     const outlinePath = join(paperDir(paperRoot), 'OUTLINE.md');
     const parsed = parseOutline(readFileSync(outlinePath, 'utf8'));
-    const section = parsed.sections.find((s) => s.n === n && s.suffix === undefined);
+    // GRND-09: §1a is its own row (n 1, suffix a); §1 is the row without a letter.
+    const section = parsed.sections.find((s) => s.n === n && s.suffix === suffix);
     if (section?.slug) return section.slug;
   } catch {
     // OUTLINE.md absent or malformed — fall through to the placeholder default.

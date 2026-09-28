@@ -128,3 +128,43 @@ test('GRND-12 / GRND-13: plan 1 then plan 2 — the request carries the brief, t
     assert.equal(view.nextLine, 'next: write §1', 'a planned section routes to write');
   });
 });
+
+test('GRND-13: a re-plan may use an outline source the previous plan dropped (the allowed set never shrinks)', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await outlined(sb);
+    const planPath = path.join(sb.paper, 'sections', '02-background', 'PLAN.md');
+    // The first plan picks one of §2's two outline sources.
+    sb.mock!.script('section-planner', plannerReply(2, 'background', ['introduction'], ['bahdanau2015'], 'Attention predates transformers'));
+    const first = await plan(sb, '2');
+    assert.equal(first.status, 0, first.stderr);
+    assert.deepEqual(loadFrontmatterDocSync('plan', planPath).frontmatter['assigned_sources'], ['bahdanau2015']);
+
+    // The re-plan still sees both outline sources and may pick the dropped one.
+    sb.mock!.script('section-planner', plannerReply(2, 'background', ['introduction'], ['luong2015'], 'Alignment came first'));
+    const again = await plan(sb, '2');
+    assert.equal(again.status, 0, again.stderr);
+    const user = userMessage(sb.mock!.bodiesFor('section-planner')[1]!);
+    assert.deepEqual(
+      (JSON.parse(parsePromptBlocks(user).get('sources')!) as Array<{ citekey: string }>).map((s) => s.citekey),
+      ['bahdanau2015', 'luong2015'],
+      'the outline allocation, not the previous pick',
+    );
+    assert.equal(sb.mock!.callCount('section-planner'), 2, 'no corrective turn: luong2015 is allowed');
+    assert.deepEqual(loadFrontmatterDocSync('plan', planPath).frontmatter['assigned_sources'], ['luong2015']);
+  });
+});
+
+test('GRND-13: a planner reply that never parses reports `planner output invalid`; PLAN.md is unchanged; status says plan §N', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await outlined(sb);
+    const stubPath = path.join(sb.paper, 'sections', '01-introduction', 'PLAN.md');
+    const stub = fs.readFileSync(stubPath, 'utf8');
+    sb.mock!.script('section-planner', { text: 'Here is my plan: write about attention.' }, { text: 'Still no JSON, sorry.' });
+    const r = await plan(sb, '1');
+    assert.equal(r.status, 1, `${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, /^pensmith: planner output invalid: the reply did not match the plan contract \(.+\) — nothing was written; .+PLAN\.md is unchanged$/m);
+    assert.equal(fs.readFileSync(stubPath, 'utf8'), stub, 'PLAN.md is byte-identical');
+    const view = await buildStatusView(sb.root, { tier: 'cli', glyphs: 'unicode' });
+    assert.equal(view.nextLine, 'next: plan §1', 'the router still plans the failed section');
+  });
+});

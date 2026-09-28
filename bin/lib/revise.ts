@@ -14,7 +14,7 @@
 //      LLM-response-injection mitigation — no new citekeys ever enter DRAFT.md).
 //   4. Approval gate (default-on, PRD §19): render a before/after diff and
 //      prompt. Skipped under --yolo. Non-TTY without --yolo → exit code 3.
-//   5. On accept: `swap` substitutes the flagged [@k] via replaceCitekeys
+//   5. On accept: `swap` substitutes the flagged key via renameCitekey
 //      (Plan 01 citation-token helper); `remove` mechanically deletes the
 //      bracketed citation clause (NO LLM prose rewrite — 04-RESEARCH §I). Write
 //      DRAFT.md via atomicWriteFile; reset PLAN.md verified_against_draft_hash
@@ -39,10 +39,11 @@ import { atomicWriteFile } from './atomic-write.js';
 import { updateFrontmatter, migrateFrontmatterText, loadFrontmatterDoc } from './frontmatter.js';
 import { runGate, declineGate, canPrompt } from './gates.js';
 import { withLock } from './lock.js';
-import { replaceCitekeys } from './citation-token.js';
+import { findCitationClusters, removeCitekey, renameCitekey } from './citation-token.js';
 import { upsertSources } from './library.js';
 import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
+import { formatSectionId, sectionIdOf, type SectionId } from './section-id.js';
 
 // --yolo retry cap (D-06): 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
@@ -85,6 +86,8 @@ export interface ResearchHit {
 export interface ReviseOptions {
   paperRoot: string;
   n: number;
+  /** The section's letter (GRND-09: §1a); absent for a plain §N. */
+  suffix?: string | undefined;
   slug: string;
   yolo: boolean;
   /** Section-scoped additional research query (PLAN-03 / D-09). */
@@ -158,9 +161,9 @@ export function firstFailingCitation(verificationMd: string): FailingCitation | 
 // ---------------------------------------------------------------------------
 
 function claimContext(draftMd: string, citekey: string): string {
-  const token = `[@${citekey}]`;
+  // Bare `[@k]` or inside a cluster (`[@a; @k]`) — the one citation grammar.
   for (const line of draftMd.split(/\r?\n/)) {
-    if (line.includes(token)) return line.trim();
+    if (findCitationClusters(line).some((c) => c.keys.includes(citekey))) return line.trim();
   }
   return '(token not found in DRAFT.md)';
 }
@@ -177,17 +180,13 @@ function voiceHint(planMd: string): string {
 
 // ---------------------------------------------------------------------------
 // Mechanical bracket-clause removal for action: "remove".
-// Deletes the flagged [@citekey] token plus a single adjacent space and a
-// trailing punctuation-preserving cleanup. NO prose rewrite (04-RESEARCH §I).
+// Deletes the flagged citation — a bare [@citekey] token with the space before
+// it, or only its `;` segment inside a cluster ([@a; @k] -> [@a]). NO prose
+// rewrite (04-RESEARCH §I). citation-token.ts owns the grammar.
 // ---------------------------------------------------------------------------
 
 function mechanicalRemove(draftMd: string, citekey: string): string {
-  const token = `\\[@${citekey}\\]`;
-  // " [@k]." -> "." ; " [@k]" -> "" ; "[@k] " -> "" ; "[@k]" -> ""
-  return draftMd
-    .replace(new RegExp(`\\s*${token}(?=[.,;:])`, 'g'), '')
-    .replace(new RegExp(`\\s*${token}`, 'g'), '')
-    .replace(new RegExp(`${token}\\s*`, 'g'), '');
+  return removeCitekey(draftMd, citekey);
 }
 
 // ---------------------------------------------------------------------------
@@ -286,11 +285,10 @@ async function applyProposal(
   let patched: string;
   if (proposal.action === 'swap') {
     const replacement = proposal.replacement_citekey as string;
-    // Locate + swap the flagged token via the Plan 01 citation-token helper
-    // (NOT a bespoke regex) — only the flagged citekey is rewritten.
-    patched = replaceCitekeys(draftMd, (k) =>
-      k === proposal.flagged_citekey ? `[@${replacement}]` : `[@${k}]`,
-    );
+    // Locate + swap the flagged key via the citation-token helper (NOT a
+    // bespoke regex) — only the flagged citekey is rewritten, bare or inside a
+    // cluster, keeping any prefix or locator.
+    patched = renameCitekey(draftMd, proposal.flagged_citekey, replacement);
   } else {
     patched = mechanicalRemove(draftMd, proposal.flagged_citekey);
   }
@@ -310,6 +308,21 @@ async function applyProposal(
 // ---------------------------------------------------------------------------
 // --research: project RESEARCH.md + bib merge + section RESEARCH-LOG.md.
 // ---------------------------------------------------------------------------
+
+/**
+ * The LIBRARY.json provenance tag of a `plan <N> --research` addition
+ * (`plan-research:§2`, `plan-research:§1a`; an adapter suffix may follow). The
+ * planner's allowed set includes every source tagged for its section (GRND-13).
+ */
+export function planResearchProvenance(id: SectionId): string {
+  return `plan-research:§${formatSectionId(id)}`;
+}
+
+/** True when a provenance tag records a `plan --research` addition for section `id`. */
+export function isPlanResearchFor(tag: string, id: SectionId): boolean {
+  const base = planResearchProvenance(id);
+  return tag === base || tag.startsWith(`${base}:`);
+}
 
 async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<void> {
   const query = opts.research ?? '';
@@ -332,7 +345,7 @@ async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<
       ...(h.source !== undefined ? { source: h.source } : {}),
       last_verified: now,
     })),
-    { provenance: `plan-research:§${opts.n}` },
+    { provenance: planResearchProvenance(sectionIdOf(opts.n, opts.suffix)) },
   );
   const keyOf = (i: number): string => upsert.outcomes[i]?.citekey ?? hits[i]!.citekey;
   const citekeysAdded = upsert.outcomes.filter((o) => o.status === 'added').map((o) => o.citekey);

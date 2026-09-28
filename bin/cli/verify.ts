@@ -35,7 +35,7 @@ import { sectionDraft, sectionVerification, sectionPlan, paperDir, projectRoot }
 import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
 import { loadFrontmatterDoc } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
-import { updatePlanFrontmatter } from '../lib/plan-status.js';
+import { sectionWriteBlockReason, updatePlanFrontmatter } from '../lib/plan-status.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
 import { formatSectionId, loggedSectionId, sectionIdOf } from '../lib/section-id.js';
 import { offlineMarkerLine } from '../lib/http-mock.js';
@@ -91,6 +91,27 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
     }
     process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${id}\` first\n`);
     return { ok: false, status: 'unverifiable', path: verifPath };
+  }
+
+  // FEED-04 (D-18-25): the section's last write failed and kept the OLDER
+  // draft. Verifying that draft would mark the section verified (and clear the
+  // failure) although the failed write was never retried — the gate bypass the
+  // router's attention guards against. Refuse, naming the retry; nothing is
+  // written.
+  const planForBlock = sectionPlan(n, slug);
+  if (existsSync(planForBlock)) {
+    let block: string | null = null;
+    try {
+      const { frontmatter } = await loadFrontmatterDoc('plan', planForBlock);
+      const reason = frontmatter['failure_reason'];
+      block = typeof reason === 'string' && reason.trim().length > 0 ? sectionWriteBlockReason(frontmatter, id) : null;
+    } catch {
+      block = null; // an unreadable PLAN.md is reported by the status write below
+    }
+    if (block !== null) {
+      process.stderr.write(`pensmith verify: section ${id} not verified — ${block}\n`);
+      return { ok: false, status: 'failed', blocked: true, path: verifPath };
+    }
   }
 
   // The ONE citation grammar (citation-token.ts): every cited key, whatever

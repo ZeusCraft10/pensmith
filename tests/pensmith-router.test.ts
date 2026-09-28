@@ -14,7 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -459,4 +459,63 @@ test('UX-01 / H4: a valid non-done HANDOFF resolves to the next WORK verb, NEVER
       'H4: resolveNextAction must NEVER return resume (bare /pensmith must always advance)');
     assert.equal(decision.verb, 'plan',
       'H4: with a planned section the next WORK verb is plan (HANDOFF is ignored)');
+  });
+
+// === Phase 18 review round 1 ===
+
+// A deterministic verify failure on an unchanged draft is not re-run by a bare step (GRND-18, PRD §5.1).
+test('GRND-18: "failed" whose draft hash equals verified_against_draft_hash → status/attention naming the fix, never a re-billed verify',
+  { skip: !built }, async () => {
+    const resolveNextAction = await loadResolve();
+    const { computeDraftHash } = (await import(new URL('../bin/lib/draft-hash.js', import.meta.url).href)) as {
+      computeDraftHash: (b: Buffer, s: string[]) => string;
+    };
+    const root = totalityRoot([{ n: 1, slug: 'intro' }]);
+    const hash = computeDraftHash(Buffer.from('Draft text.\n'), ['a2020']);
+    writeSectionPlan(root, 1, 'intro', 'failed', `assigned_sources:\n  - a2020\nverified_against_draft_hash: ${hash}\n`);
+    writeDraft(root, 1, 'intro');
+    const same = await resolveNextAction(root);
+    assert.equal(same.verb, 'status');
+    assert.equal(same.reason, 'attention');
+    assert.deepEqual(same.section, { n: 1, slug: 'intro' });
+    assert.match(same.detail ?? '', /section 1 failed verification .* has not changed since — .*`pensmith plan 1 --revise`.*`pensmith write 1`.*`pensmith verify 1`/);
+    // The draft changed since that verdict: verify it again.
+    writeFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'Draft text, revised.\n');
+    assert.equal((await resolveNextAction(root)).verb, 'verify');
+  });
+
+// A section redone or added after the last compile is compiled again (GRND-09/10, HARDEN-01's section redo).
+test('GRND-18: a section newer than the compiled DRAFT.md → compile; FINAL.md older than DRAFT.md → done; a changed section count → compile',
+  { skip: !built }, async () => {
+    const resolveNextAction = await loadResolve();
+    const { utimesSync } = await import('node:fs');
+    const root = totalityRoot([{ n: 1, slug: 'intro' }]);
+    writeSectionPlan(root, 1, 'intro', 'verified');
+    writeDraft(root, 1, 'intro');
+    writePaperFile(root, 'DRAFT.md');
+    writePaperFile(root, 'COMPILE-REPORT.md', '---\nschema_version: 1\nsections_count: 1\n---\n');
+    writePaperFile(root, 'FINAL.md');
+    const t = (s: number): Date => new Date(Date.UTC(2026, 0, 1, 0, 0, s));
+    const sec = join(root, '.paper', 'sections', '01-intro', 'DRAFT.md');
+    utimesSync(sec, t(1), t(1));
+    utimesSync(join(root, '.paper', 'DRAFT.md'), t(2), t(2));
+    utimesSync(join(root, '.paper', 'FINAL.md'), t(3), t(3));
+    assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' });
+    // §1 redone after the compile.
+    utimesSync(sec, t(4), t(4));
+    assert.equal((await resolveNextAction(root)).verb, 'compile');
+    // Recompiled; FINAL.md is now older than the compiled draft.
+    utimesSync(join(root, '.paper', 'DRAFT.md'), t(5), t(5));
+    assert.equal((await resolveNextAction(root)).verb, 'done');
+    utimesSync(join(root, '.paper', 'FINAL.md'), t(6), t(6));
+    assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' });
+    // A re-outline registered a second (verified) section the compiled draft does not hold.
+    // (The first resolve moved the legacy root STATE.json into .paper/.)
+    const statePath = join(root, '.paper', 'STATE.json');
+    const state = JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+    writeFileSync(statePath, JSON.stringify({ ...state, sections: [{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }] }));
+    writeSectionPlan(root, 2, 'methods', 'verified');
+    writeDraft(root, 2, 'methods');
+    utimesSync(join(root, '.paper', 'sections', '02-methods', 'DRAFT.md'), t(1), t(1));
+    assert.equal((await resolveNextAction(root)).verb, 'compile', 'sections_count 1 ≠ 2 registered');
   });

@@ -241,13 +241,17 @@ function isBinaryDocxEntry(name: string, text: string): boolean {
  * zeroTracePatch — MANDATORY last step of every .docx export (DONE-07).
  *
  * Loads `docxPath` as a ZIP, blanks the FULL identifying field set in
- * docProps/core.xml + docProps/app.xml, epochs the dcterms timestamps, sweeps
+ * docProps/core.xml + docProps/app.xml, epochs the dcterms timestamps, removes
+ * docProps/custom.xml (Pandoc's absolute bibliography/CSL paths), sweeps
  * EVERY non-binary entry (including non-.xml entries like `_rels/.rels`) for the
  * literal 'pensmith', and writes the result back atomically.
  *
  * Idempotent (running twice yields the same clean output) and tolerant (missing
  * core.xml/app.xml is skipped without error).
  */
+/** The OOXML custom-properties part (Pandoc's home for non-standard metadata fields). */
+const CUSTOM_PROPS_PART = 'docProps/custom.xml';
+
 export async function zeroTracePatch(docxPath: string): Promise<void> {
   const buf = await fsp.readFile(docxPath);
   const zip = await JSZip.loadAsync(buf);
@@ -268,6 +272,27 @@ export async function zeroTracePatch(docxPath: string): Promise<void> {
     let app = await appEntry.async('string');
     for (const tag of APP_BLANK_TAGS) app = blankXmlTag(app, tag);
     zip.file('docProps/app.xml', app, { date: EPOCH });
+  }
+
+  // (2b) docProps/custom.xml — Pandoc writes every metadata field it has no
+  //      core/app slot for here, including `bibliography` and `csl` as
+  //      ABSOLUTE LOCAL PATHS (the user's home folder, the install's
+  //      templates/citation-styles/<style>.csl). Nothing in it belongs in a
+  //      deliverable (GRND-19, DONE-07): the part is removed with its
+  //      [Content_Types].xml override and its _rels/.rels relationship, so the
+  //      package stays valid.
+  if (zip.file(CUSTOM_PROPS_PART)) {
+    zip.remove(CUSTOM_PROPS_PART);
+    const ctEntry = zip.file('[Content_Types].xml');
+    if (ctEntry) {
+      const ct = await ctEntry.async('string');
+      zip.file('[Content_Types].xml', ct.replace(/<Override\b[^>]*\bPartName="\/docProps\/custom\.xml"[^>]*\/>/g, ''), { date: EPOCH });
+    }
+    const relsEntry = zip.file('_rels/.rels');
+    if (relsEntry) {
+      const rels = await relsEntry.async('string');
+      zip.file('_rels/.rels', rels.replace(/<Relationship\b[^>]*\bTarget="\/?docProps\/custom\.xml"[^>]*\/>/g, ''), { date: EPOCH });
+    }
   }
 
   // (3) Defense-in-depth sweep — strip the literal 'pensmith' from non-binary
@@ -675,14 +700,17 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   // research library (uncited, unverified, retracted-flagged or synthetic
   // candidates stay in .paper/); library.ts writes both files (BRDTH-01).
   const cited = extractCitedKeysForVerification(await fsp.readFile(inputPath, 'utf8'));
-  const citations = await exportCitedCitations(opts.paperRoot ?? projectRoot(), cited, exportDir);
+  // GRND-19: under --dry-run every exported file is named `.dry-run`
+  // (`CITATIONS.dry-run.bib` / `.ris`), like the document.
+  const bibStem = exportStem('CITATIONS.bib');
+  const citations = await exportCitedCitations(opts.paperRoot ?? projectRoot(), cited, exportDir, bibStem);
   if (citations.missing.length > 0) {
     process.stderr.write(
       `pensmith export: WARN — cited key(s) not in .paper/CITATIONS.bib: ${citations.missing.join(', ')}\n`,
     );
   }
   const bibCopied = citations.bibPath !== null;
-  const bibDst = join(exportDir, 'CITATIONS.bib');
+  const bibDst = join(exportDir, `${bibStem}.bib`);
 
   // Compute CSL path for Pandoc citeproc args and offline rendering.
   // style is only meaningful when bibCopied (no bib → no citation rendering).
@@ -773,7 +801,8 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     }
   }
 
-  // CITE-05 (DONE-08 extension): export/CITATIONS.ris, the cited records of
+  // CITE-05 (DONE-08 extension): export/CITATIONS.ris (CITATIONS.dry-run.ris in
+  // a dry run), the cited records of
   // .paper/CITATIONS.ris, was written with the bib above. RIS is plain-text
   // bibliographic data with NO pensmith fingerprint (same zero-trace posture as
   // .bib — no metadata to scrub).

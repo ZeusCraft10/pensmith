@@ -27,9 +27,9 @@ npm link && pensmith --version          # a global symlink, exactly like `npm i 
 
 Entry points use `bin/lib/main-guard.ts` `isMainModule(import.meta.url)`, which compares realpaths, so the CLI and `dist/mcp/server.js` also run through `npm link`, `npm i -g`, `node_modules/.bin` shims and symlinked (or, on Windows, junctioned) plugin roots. A hand-rolled `import.meta.url === pathToFileURL(process.argv[1]).href` guard is false under a symlink and is rejected by the `main-guard` chokepoint row.
 
-## Trying the workflow without a key
+## Trying the workflow without a real key
 
-Three ways to drive a paper from a checkout without a provider key, from least to most real:
+Three ways to drive a paper from a checkout without a provider account, from least to most real (the third takes a placeholder key, which only ever reaches the loopback mock):
 
 ```bash
 # 1. A dry run: zero sockets, synthetic sources, stubbed model — in ./.paper-dry-run/
@@ -41,8 +41,10 @@ node <checkout>/dist/bin/pensmith.js --dry-run --yolo      # assignment → .pap
 PENSMITH_NO_LLM=1 node <checkout>/dist/bin/pensmith.js --yolo   # one step per run
 
 # 3. The mock LLM (RUN-21) as the provider, through the global runtime.json of an isolated data dir.
+#    The anthropic provider requires a key even for a local endpoint: give it a placeholder.
 npm run mock-llm -- --port 18080
 #   <data dir>/pensmith/runtime.json: {"$schemaVersion":2,"provider":"anthropic","endpoint":"http://127.0.0.1:18080"}
+ANTHROPIC_API_KEY=sk-local-mock node <checkout>/dist/bin/pensmith.js --yolo
 ```
 
 Each bare run is one step (a section's step is plan → write → verify) and ends with `pensmith: ran …; next: …`. Run CLI experiments from a scratch folder with `XDG_DATA_HOME` (and `HOME` on macOS) pointing inside it, never from the checkout itself.

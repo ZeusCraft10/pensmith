@@ -31,6 +31,10 @@ export interface SourceContextInput {
   readonly byo?: unknown;
   /** Source tier (SRC-09, Phase 19); read when present. */
   readonly tier?: unknown;
+  /** The DOI (read by verifierBlindSpot). */
+  readonly doi?: string | null | undefined;
+  /** A synthetic --dry-run source (RUN-27). */
+  readonly synthetic?: boolean | null | undefined;
 }
 
 /** One source as the planner and the drafter see it (18-PLAN.md §3.3). */
@@ -179,4 +183,56 @@ export function buildOutlineSources(entries: readonly SourceContextInput[]): Out
 /** The citekeys a library holds. */
 export function libraryCitekeys(entries: readonly SourceContextInput[]): Set<string> {
   return new Set(byCitekey(entries).keys());
+}
+
+// ---------------------------------------------------------------------------
+// Which sources the citation verifier can check (GRND-18).
+//
+// Pass 1 (verify/pass1.ts) re-fetches every cited source by its DOI through
+// Crossref: a source with no DOI is FABRICATED ("no DOI in citation entry") and
+// one whose DOI Crossref does not register — arXiv's DataCite DOIs and the other
+// DataCite repositories — is FABRICATED ("did not resolve via Crossref"), on
+// every run. Offering such a source to the outline or the planner only strands
+// the section at verify, so outline and plan are fed the checkable ones and
+// name the others. When Pass 1 gains an arXiv / DataCite path (Phase 19/20),
+// THIS predicate is what widens.
+// ---------------------------------------------------------------------------
+
+/** DOI prefixes registered with DataCite, which Crossref does not resolve: arXiv, Zenodo, figshare, Dryad. */
+export const DATACITE_DOI_PREFIXES: readonly string[] = Object.freeze(['10.48550', '10.5281', '10.6084', '10.5061']);
+
+/**
+ * Why the citation verifier cannot check `entry` (null when it can): no DOI, a
+ * DataCite DOI, or a synthetic --dry-run source outside a dry run. Pure: the
+ * caller passes whether this is a dry run.
+ */
+export function verifierBlindSpot(entry: Pick<SourceContextInput, 'doi' | 'synthetic'>, dryRun: boolean): string | null {
+  const doi = typeof entry.doi === 'string' ? entry.doi.trim().toLowerCase() : '';
+  if (doi.length === 0) return 'no DOI';
+  const prefix = doi.split('/')[0] ?? '';
+  if (DATACITE_DOI_PREFIXES.includes(prefix)) return `a DataCite DOI (${prefix}) Crossref does not resolve`;
+  if (entry.synthetic === true && !dryRun) return 'a synthetic --dry-run source';
+  return null;
+}
+
+/** The library split into the sources the verifier can check and the others (with why), in library order. */
+export function partitionCheckable<T extends SourceContextInput>(
+  entries: readonly T[],
+  dryRun: boolean,
+): { checkable: T[]; excluded: Array<{ citekey: string; reason: string }> } {
+  const checkable: T[] = [];
+  const excluded: Array<{ citekey: string; reason: string }> = [];
+  for (const e of entries) {
+    if (e === null || typeof e !== 'object') continue;
+    const why = verifierBlindSpot(e, dryRun);
+    if (why === null) checkable.push(e);
+    else excluded.push({ citekey: e.citekey, reason: why });
+  }
+  return { checkable, excluded };
+}
+
+/** One line naming the sources left out because the verifier cannot check them (at most `max` named). */
+export function describeExcluded(excluded: ReadonlyArray<{ citekey: string; reason: string }>, max = 8): string {
+  const named = excluded.slice(0, max).map((x) => `${x.citekey} (${x.reason})`).join(', ');
+  return excluded.length > max ? `${named}, and ${excluded.length - max} more` : named;
 }

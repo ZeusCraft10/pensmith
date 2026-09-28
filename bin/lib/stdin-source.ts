@@ -1,8 +1,9 @@
 // bin/lib/stdin-source.ts — may stdin carry the assignment? (GRND-01, D-18-08).
 //
 // One predicate shared by the active-paper resolver (paths.ts resolvePaperRoot:
-// a bare run with an assignment piped on stdin starts a new paper here, RUN-14
-// row 3) and by the assignment reader (assignment.ts). It never reads stdin: it
+// a bare run with an assignment piped on stdin starts a new paper here when no
+// `open` pointer is set, RUN-14 step 5) and by the assignment reader
+// (assignment.ts). It never reads stdin: it
 // only fstat()s file descriptor 0, so the resolver stays side-effect free and a
 // never-closing stdin (an agent harness, a CI runner) can never hang it.
 //

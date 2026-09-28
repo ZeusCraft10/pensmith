@@ -20,7 +20,6 @@ import { loadOutline } from '../bin/lib/outline.js';
 import { loadSection } from '../bin/lib/section.js';
 import { parseSectionId } from '../bin/lib/section-id.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
-import { paperDir } from '../bin/lib/paths.js';
 import { buildStatusView } from '../bin/lib/status-view.js';
 
 // RUN-13 (D-17-32): `paperRoot` is the PROJECT root (the folder containing
@@ -82,7 +81,9 @@ export function registerPaperResources(server: McpServer, paperRoot: string): vo
     'paper://library',
     { title: 'Citation library', description: 'All cited works with DOI verification status.', mimeType: 'application/json' },
     async (uri) => {
-      const library = await loadLibrary(paperDir(paperRoot));
+      // The project root: loadLibrary resolves the paper folder itself (`.paper/`,
+      // or `.paper-dry-run/` in a dry run, GRND-19).
+      const library = await loadLibrary(paperRoot);
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(library, null, 2) }] };
     },
   );

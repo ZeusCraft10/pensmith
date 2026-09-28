@@ -40,7 +40,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
 import { loadOutline } from './outline.js';
-import { orderedOutlineSections, parseOutline, type ParsedOutlineSection } from './outline-parse.js';
+import { orderedOutlineSections, outlineSectionId, parseOutline, type ParsedOutlineSection } from './outline-parse.js';
 import { loadFrontmatterDoc } from './frontmatter.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
@@ -56,6 +56,7 @@ import {
   type StalenessEntry,
 } from './compile-report.js';
 import { sectionVerificationReasons } from './verify/verdict-rows.js';
+import { sectionWriteBlockReason } from './plan-status.js';
 import { networkMode } from './http-mock.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
@@ -126,6 +127,8 @@ interface LoadedSection {
   draftBytes: Buffer;
   assignedSources: string[];
   storedHash: string | null;
+  /** Set when the PLAN.md says the draft must not ship (a failed or unfinished write, FEED-04). */
+  writeBlock: string | null;
 }
 
 /** Normalize a draft to end in exactly one '\n' (§F). */
@@ -224,6 +227,7 @@ async function loadSection(
     draftBytes,
     assignedSources,
     storedHash,
+    writeBlock: sectionWriteBlockReason(frontmatter, outlineSectionId(outlineSection)),
   };
 }
 
@@ -272,12 +276,23 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     const stalenessResolved: StalenessEntry[] = [];
 
     for (const os of ordered) {
+      // GRND-09: the section as the user types it (`1a`), so a refusal names
+      // the command that fixes THIS section, never its neighbour §1.
+      const label = `section ${outlineSectionId(os)} (${os.slug})`;
       const sec = await loadSection(opts.paperRoot, os);
       if (!sec) {
-        refuseReasons.push(`section ${os.n} (${os.slug}): missing PLAN.md or DRAFT.md`);
+        refuseReasons.push(`${label}: missing PLAN.md or DRAFT.md`);
         continue;
       }
       loaded.push(sec);
+
+      // FEED-04 (D-18-25): a failed or unfinished write keeps the OLDER draft on
+      // disk; the router reports the section as attention, so compile must not
+      // ship that older draft as if it were the section.
+      if (sec.writeBlock !== null) {
+        refuseReasons.push(`${label}: ${sec.writeBlock}`);
+        continue;
+      }
 
       const verifPath = sectionVerification(os.n, os.slug, opts.paperRoot);
       const verificationMd = existsSync(verifPath) ? readFileSync(verifPath, 'utf8') : '';
@@ -290,14 +305,14 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       // 'Status: unverifiable' with no blocking row passes (Pitfall 3).
       const gateReasons = sectionVerificationReasons(verificationMd, networkMode().dryRun);
       if (gateReasons.length > 0) {
-        for (const reason of gateReasons) refuseReasons.push(`section ${os.n} (${os.slug}): ${reason}`);
+        for (const reason of gateReasons) refuseReasons.push(`${label}: ${reason}`);
         continue; // already refused: skip the staleness re-verify
       }
 
       // Staleness (COMP-01 / D-08): recompute the per-section hash.
       const freshHash = computeDraftHash(sec.draftBytes, sec.assignedSources);
       if (sec.storedHash !== freshHash) {
-        warn(`WARN: section ${os.n} (${os.slug}) stale — re-verifying (Pass 1+3)`);
+        warn(`WARN: ${label} stale — re-verifying (Pass 1+3)`);
         const reVerify =
           opts.reVerify ??
           (async () => ({ passed: false, failingCitekeys: [] } as ReVerifyResult));
@@ -322,10 +337,10 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
             result.failingCitekeys.length > 0
               ? result.failingCitekeys.map((ck) => `[@${ck}]`).join(', ')
               : '(stale, re-verify failed)';
-          refuseReasons.push(`section ${os.n} (${os.slug}): staleness re-verify FAILED — ${named}`);
+          refuseReasons.push(`${label}: staleness re-verify FAILED — ${named}`);
         } else {
           stalenessResolved.push({
-            section: `${os.n} (${os.slug})`,
+            section: `${outlineSectionId(os)} (${os.slug})`,
             prior_hash: (sec.storedHash ?? 'null').slice(0, 12),
             new_hash: freshHash.slice(0, 12),
             re_verify_passed: true,
@@ -362,9 +377,13 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       const tailRaw = left[li] ?? '';
       const headRaw = right[ri] ?? '';
       const beforeChars = tailRaw.length + headRaw.length;
+      // The boundary between the two sections' ids (GRND-09: `1→1a`, `1a→2`).
+      const leftSec = loaded[k] as LoadedSection;
+      const rightSec = loaded[k + 1] as LoadedSection;
+      const boundary = `${outlineSectionId(leftSec.outline)}→${outlineSectionId(rightSec.outline)}`;
 
       if (!opts.smoothBoundary) {
-        transitions.push({ boundary: `${k + 1}→${k + 2}`, status: 'skipped', before_chars: beforeChars, after_chars: beforeChars });
+        transitions.push({ boundary, status: 'skipped', before_chars: beforeChars, after_chars: beforeChars });
         continue;
       }
 
@@ -384,7 +403,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       } catch (err) {
         // Smoothing is best-effort prose — a seam error NEVER refuses compile.
         warn(`WARN: boundary ${k + 1}→${k + 2} smoothing threw (${err instanceof Error ? err.message : String(err)}) — keeping original prose`);
-        transitions.push({ boundary: `${k + 1}→${k + 2}`, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
+        transitions.push({ boundary, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
         continue;
       }
 
@@ -392,7 +411,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       const outputSet = placeholderSet(smoothed);
       if (!setsEqual(inputSet, outputSet)) {
         warn(`WARN: boundary ${k + 1}→${k + 2} smoothing rejected — citation placeholder set drifted; keeping original prose`);
-        transitions.push({ boundary: `${k + 1}→${k + 2}`, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
+        transitions.push({ boundary, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
         continue;
       }
 
@@ -407,7 +426,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       if (newHead.trim().length > 0) right[ri] = newHead;
       drafts[k] = left.join('\n\n');
       drafts[k + 1] = right.join('\n\n');
-      transitions.push({ boundary: `${k + 1}→${k + 2}`, status: 'smoothed', before_chars: beforeChars, after_chars: newTail.length + newHead.length });
+      transitions.push({ boundary, status: 'smoothed', before_chars: beforeChars, after_chars: newTail.length + newHead.length });
     }
 
     // Build the compiled manuscript (outline order, one blank line between).
@@ -430,7 +449,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     const consistencyEntries: ConsistencyEntry[] = consistencyWarnings.map((w) => ({ detail: w.detail }));
 
     const densityReport = computeCitationDensity(
-      loaded.map((s) => ({ n: s.outline.n, slug: s.slug, text: s.draft })),
+      loaded.map((s) => ({ n: s.outline.n, suffix: s.outline.suffix, slug: s.slug, text: s.draft })),
       opts.discipline ?? 'default',
     );
     // GRND-06: citations per paragraph against the preset's band (PRD §8).

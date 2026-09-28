@@ -82,5 +82,6 @@
   "System", "Systems", "Process", "Processes", "Function", "Functions",
   "Variable", "Variables", "Parameter", "Parameters", "Value", "Values",
   "Input", "Inputs", "Output", "Outputs", "Type", "Types", "Class", "Classes",
-  "Object", "Objects", "Method", "Property", "Field", "Fields", "Key", "Keys"
+  "Object", "Objects", "Method", "Property", "Field", "Fields", "Key", "Keys",
+  "Machine", "Learning"
 ]

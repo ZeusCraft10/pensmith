@@ -42,8 +42,12 @@ State machine: `new → research → outline → (plan → write → verify per 
 The resolver reads the configured paper mode and may halt early for mode-specific termination
 states (`{ verb:'status', reason:'done' }` or `{ verb:'status', reason:'attention' }`). An
 attention decision carries a detail naming the command that fixes it (a rejected outline:
-`pensmith outline`; a section whose draft was refused: `pensmith write N`), so a failed
-paid step is never re-run by the next bare invocation.
+`pensmith outline`; a section whose draft was refused: `pensmith write N`; a section that
+failed verification and whose draft has not changed since: `pensmith plan N --revise` or
+`pensmith write N`), so a failed paid step is never re-run by the next bare invocation.
+Once every section is verified, compile runs whenever the compiled `DRAFT.md` is missing
+or older than a section's draft or verification (a redone or added section), and done runs
+whenever `FINAL.md` is missing or older than the compiled draft.
 
 **`--dry-run` loops (GRND-19, D-18-30).** Under `--dry-run` the paper lives in
 `./.paper-dry-run/` (seeded from `.paper/`, which is never written) and `next` repeats
@@ -74,7 +78,7 @@ without `--yolo` it stops at the first gate it cannot answer (no terminal: exit 
    - `{ verb:'compile' }` → run compile
    - `{ verb:'done' }` → run done (export; the export confirmation gate unless `--yolo`)
    - `{ verb:'status', reason:'done' }` → mode-specific end-state termination
-   - `{ verb:'status', reason:'attention' }` → print the attention terminus and its detail (STATE.json or a section corrupt, a rejected outline, a refused draft)
+   - `{ verb:'status', reason:'attention' }` → print the attention terminus and its detail (STATE.json or a section corrupt, a rejected outline, a refused draft, an unchanged draft that failed verification)
 
 4. **Dispatch** each verb via `dispatchVerb(verb, verbArgs)` forwarding `yolo` + other global flags (C3-HIGH-2); the chain is `runNextStep` in `bin/pensmith.ts`, shared by bare `pensmith`, `next` and `resume`.
 

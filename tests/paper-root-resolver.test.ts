@@ -189,6 +189,36 @@ test('RUN-14: with no assignment, bare `--yolo` and a non-interactive `write 1` 
   assert.ok(!existsSync(join(empty, '.paper')), 'nothing created in the empty folder');
 });
 
+test('RUN-14 × GRND-01: with a pointer set, a bare run with a piped stdin still gets the pointer refusal — never a junk paper', () => {
+  const { sb, p2 } = openedP2('resolver-piped');
+  const empty = sb.project('empty');
+  const before = snapshot(p2);
+  // An empty pipe (a harness, a CI step) and a piped confirmation.
+  for (const input of ['', 'y\n']) {
+    for (const args of [[], ['--yolo']]) {
+      const r = runCli(sb, empty, args, { input });
+      assert.equal(r.status, EXIT_USAGE, `${JSON.stringify(input)} ${args.join(' ')}: ${r.stdout}\n${r.stderr}`);
+      assert.match(r.stderr, /^pensmith: no paper in .+, and the active paper "p2" is at .+\. Pass --paper "p2" to work on it, or run pensmith new to start a paper here/m);
+    }
+  }
+  assert.ok(!existsSync(join(empty, '.paper')), 'nothing created in the empty folder');
+  assert.deepEqual(changedPaths(before, snapshot(p2), IGNORE_LOGS), [], 'p2 is untouched');
+  // An explicit `pensmith new` still reads a piped assignment in the empty folder.
+  const made = runCli(sb, empty, ['new', '--yolo'], { input: 'Write a 1500-word essay on tidal power.\n' });
+  assert.equal(made.status, 0, `${made.stdout}\n${made.stderr}`);
+  assert.ok(existsSync(join(empty, '.paper', 'INTAKE.md')));
+});
+
+test('GRND-01: a piped confirmation is not an assignment — a bare run with no pointer refuses it with one line', () => {
+  const sb = sandbox('resolver-short-stdin');
+  const empty = sb.project('empty');
+  const r = runCli(sb, empty, ['--yolo'], { input: 'y\n' });
+  assert.equal(r.status, EXIT_USAGE, `${r.stdout}\n${r.stderr}`);
+  assert.match(r.stderr, /the text piped on stdin \("y"\) is too short to be an assignment/);
+  assert.doesNotMatch(r.stderr, STACK_LINE);
+  assert.ok(!existsSync(join(empty, '.paper', 'INTAKE.md')), 'no brief is written');
+});
+
 test('RUN-14 / S-21: with no paper and no pointer, a mutating verb exits 2 and creates nothing and calls no model', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: 'sk-test-no-paper-0001', PENSMITH_NO_LLM: undefined }, paper: false }, async (sb) => {
     const cases: string[][] = [

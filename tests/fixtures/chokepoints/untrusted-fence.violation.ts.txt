@@ -1,0 +1,9 @@
+// Chokepoint fixture (untrusted-fence, FEED-05): a second copy of the fence
+// marker outside bin/lib/untrusted-fence.ts. A hand-built fence drifts from the
+// one the templates describe and skips the marker neutralisation — the rule
+// must flag it.
+const OPEN = '<<<PENSMITH_UNTRUSTED_DATA_7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a>>>';
+
+export function fenceByHand(data: string): string {
+  return `${OPEN}\n${data}\n<<<END_PENSMITH_UNTRUSTED_DATA_7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a>>>`;
+}

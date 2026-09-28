@@ -18,6 +18,12 @@ export interface FixtureSource {
   year: number;
   abstract?: string;
   oaUrl?: string | null;
+  /**
+   * The DOI (default `10.5555/fixture.<citekey>`, under Crossref's test prefix):
+   * outline and plan offer only sources the citation verifier can check
+   * (source-context.ts verifierBlindSpot). `null` makes a source it cannot.
+   */
+  doi?: string | null;
 }
 
 export const DEFAULT_SOURCES: readonly FixtureSource[] = Object.freeze([
@@ -31,7 +37,7 @@ export const DEFAULT_SOURCES: readonly FixtureSource[] = Object.freeze([
 export function libraryEntry(s: FixtureSource): Record<string, unknown> {
   return {
     citekey: s.citekey,
-    doi: null,
+    doi: s.doi === undefined ? `10.5555/fixture.${s.citekey}` : s.doi,
     arxiv: null,
     pmid: null,
     pmcid: null,

@@ -118,15 +118,19 @@ export function registerPaperTools(server: McpServer): void {
     'paper_init_section',
     {
       title: 'Initialize a new section',
-      description: 'Append a new section to state.sections. Idempotent: re-init on existing N returns prior state unchanged.',
+      description:
+        'Append a new section to state.sections. Idempotent by slug: re-init of a registered slug returns the prior state unchanged. ' +
+        'A section is N, or N plus a letter (suffix "a" → §1a, a section a re-outline inserted after §N, GRND-09). ' +
+        'A different slug at an (n, suffix) that is already taken is an error.',
       inputSchema: {
         paperRoot: PaperRootArg,
         n: z.number().int().min(1),
         slug: z.string().min(1),
+        suffix: z.string().regex(/^[a-z]$/).optional().describe('The letter of an inserted section (§1a → "a"); omit for §N.'),
       },
     },
-    async ({ paperRoot, n, slug }) =>
-      toolResult(await mutate(asProjectRoot(paperRoot), { verb: 'paper_init_section' }, () => initSection(asProjectRoot(paperRoot), n, slug))),
+    async ({ paperRoot, n, slug, suffix }) =>
+      toolResult(await mutate(asProjectRoot(paperRoot), { verb: 'paper_init_section' }, () => initSection(asProjectRoot(paperRoot), n, slug, suffix))),
   );
 
   // Tool 2: paper_advance_section — transition section state (planned→writing→written→...).

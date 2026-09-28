@@ -122,6 +122,55 @@ test('zero-trace Test B: zeroTracePatch removes ALL trace from every docx entry 
 );
 
 // =====================================================================
+//   Test B2 — docProps/custom.xml (Pandoc's bibliography/csl paths) is removed
+// =====================================================================
+test('zero-trace Test B2: zeroTracePatch removes docProps/custom.xml (absolute bibliography/CSL paths) and every reference to it',
+  { skip: !existsSync(exporterSrcPath) },
+  async () => {
+    const mod = await import(exporterModUrl.href) as { zeroTracePatch: (docxPath: string) => Promise<void> };
+    const dir = mkdtempSync(join(tmpdir(), 'pensmith-ztcustom-'));
+    const tmpDocx = join(dir, 'out.docx');
+    // What Pandoc writes for `--bibliography`/`--csl`: absolute local paths in custom properties.
+    const paperRoot = join(dir, 'home', 'student', 'papers', 'essay');
+    const bib = join(paperRoot, '.paper', 'export', 'CITATIONS.bib');
+    const csl = join(dir, 'lib', 'node_modules', 'pensmith', 'templates', 'citation-styles', 'apa.csl');
+    const zip = await JSZip.loadAsync(readFileSync(FIXTURE_DOCX));
+    zip.file('docProps/custom.xml',
+      '<?xml version="1.0" encoding="UTF-8"?>\n<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" ' +
+      'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
+      `<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="bibliography"><vt:lpwstr>${bib}</vt:lpwstr></property>` +
+      `<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="3" name="csl"><vt:lpwstr>${csl}</vt:lpwstr></property></Properties>`);
+    const ct = await zip.file('[Content_Types].xml')!.async('string');
+    zip.file('[Content_Types].xml', ct.replace('</Types>',
+      '<Override PartName="/docProps/custom.xml" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/></Types>'));
+    const rels = await zip.file('_rels/.rels')!.async('string');
+    zip.file('_rels/.rels', rels.replace('</Relationships>',
+      '<Relationship Id="rIdCustom" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties" Target="docProps/custom.xml"/></Relationships>'));
+    writeFileSync(tmpDocx, await zip.generateAsync({ type: 'nodebuffer' }));
+
+    await mod.zeroTracePatch(tmpDocx);
+
+    const out = await JSZip.loadAsync(readFileSync(tmpDocx));
+    assert.equal(out.file('docProps/custom.xml'), null, 'custom.xml is gone');
+    assert.doesNotMatch(await out.file('[Content_Types].xml')!.async('string'), /custom\.xml/, 'no content-type override for it');
+    assert.doesNotMatch(await out.file('_rels/.rels')!.async('string'), /custom\.xml/, 'no relationship to it');
+    const violations: string[] = [];
+    for (const [name, file] of Object.entries(out.files)) {
+      if (file.dir) continue;
+      const text = await file.async('string').catch(() => '');
+      for (const needle of [paperRoot, dir, 'citation-styles', 'CITATIONS.bib']) {
+        if (text.includes(needle)) violations.push(`${name}: contains ${needle}`);
+      }
+    }
+    assert.deepEqual(violations, [], 'no part holds a local path');
+    // Still a loadable package, and patching again changes nothing.
+    const once = readFileSync(tmpDocx);
+    await mod.zeroTracePatch(tmpDocx);
+    assert.ok(readFileSync(tmpDocx).equals(once), 'idempotent');
+  },
+);
+
+// =====================================================================
 //   Test G (#18) — author body content is NOT mutated by the scrub
 // =====================================================================
 test('zero-trace Test G (#18): a "pensmith" in word/document.xml (author prose) SURVIVES; metadata trace still scrubbed',

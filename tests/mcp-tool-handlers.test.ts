@@ -80,6 +80,24 @@ test('TIER-06: paper_init_section rejects n=0', async () => {
   assertToolError(res, 'n=0 should return isError=true (min(1) violated)');
 });
 
+test('GRND-09 (Tier 1): paper_init_section registers a lettered section (§1a); idempotent by slug; a taken id with another slug is an error', async () => {
+  const root = freshPaperRoot();
+  const { client } = await pair(root);
+  const one = await client.callTool({ name: 'paper_init_section', arguments: { paperRoot: root, n: 1, slug: 'intro' } });
+  assert.notEqual(one.isError, true);
+  const lettered = await client.callTool({ name: 'paper_init_section', arguments: { paperRoot: root, n: 1, suffix: 'a', slug: 'background' } });
+  assert.notEqual(lettered.isError, true, JSON.stringify(lettered.content));
+  const state = await client.readResource({ uri: 'paper://state' });
+  const sections = (JSON.parse(String((state.contents[0] as { text: string }).text)) as { sections: Array<{ n: number; suffix?: string; slug: string }> }).sections;
+  assert.deepEqual(sections, [{ n: 1, slug: 'intro' }, { n: 1, suffix: 'a', slug: 'background' }]);
+  const again = await client.callTool({ name: 'paper_init_section', arguments: { paperRoot: root, n: 1, suffix: 'a', slug: 'background' } });
+  assert.notEqual(again.isError, true, 'idempotent by slug');
+  const taken = await client.callTool({ name: 'paper_init_section', arguments: { paperRoot: root, n: 1, suffix: 'a', slug: 'other' } });
+  assertToolError(taken, 'a different slug at a taken id is an error');
+  const badLetter = await client.callTool({ name: 'paper_init_section', arguments: { paperRoot: root, n: 1, suffix: 'AB', slug: 'x' } });
+  assertToolError(badLetter, 'suffix must be one lowercase letter');
+});
+
 // ===== paper_advance_section =====
 test('TIER-06: paper_advance_section rejects invalid toState', async () => {
   const root = freshPaperRoot();

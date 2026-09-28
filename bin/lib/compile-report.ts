@@ -84,7 +84,7 @@ export function citationDensityForReport(r: CitationDensityReport): { entries: C
   const band = bandLabel(r.band);
   return {
     entries: r.sections.map((d) => ({
-      section: `${d.n} (${d.slug})`,
+      section: `${d.n}${d.suffix ?? ''} (${d.slug})`,
       citations_per_1000_words: round1(d.citations_per_1000_words),
       citations_per_paragraph: round1(d.citations_per_paragraph),
       paragraphs: d.paragraphs,

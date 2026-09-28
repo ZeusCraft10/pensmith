@@ -124,3 +124,29 @@ test('GRND-07: a legacy OUTLINE.md (6 columns) registers with stubs seeded from 
     assert.equal(stub.frontmatter['role'], 'body', 'a legacy row without a role is a body section');
   });
 });
+
+test('GRND-18: outline offers only the sources the citation verifier can check; an arXiv-only or identifier-less one is named, never allocated', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    const { DEFAULT_SOURCES } = await import('./helpers/section-fixture.js');
+    await seedBriefPaper(sb.root, {}, {
+      sources: [
+        ...DEFAULT_SOURCES,
+        { citekey: 'raffel2019', title: 'Exploring the Limits of Transfer Learning', author: 'Raffel, Colin', year: 2019, doi: '10.48550/arXiv.1910.10683' },
+        { citekey: 'huang2018', title: 'An untitled preprint', author: 'Huang, Wei', year: 2018, doi: null },
+      ],
+    });
+    // A reply that allocates a source outline was never offered is rejected like an invented key.
+    const bad = threeSectionOutline();
+    bad.sections[1] = { ...bad.sections[1]!, assigned_sources: ['bahdanau2015', 'raffel2019'] };
+    sb.mock!.script('outline-author', { data: bad }, { data: threeSectionOutline() });
+    const r = await sb.runTsx(null, ['outline', '--yolo'], { env: { ANTHROPIC_API_KEY: KEY } });
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, /pensmith outline: WARN — 2 of 6 source\(s\) in LIBRARY\.json are not offered to the outline because the citation verifier cannot check them: raffel2019 \(a DataCite DOI \(10\.48550\) Crossref does not resolve\), huang2018 \(no DOI\)/);
+    const { user } = requestParts(sb.mock!.bodiesFor('outline-author')[0]!);
+    const offered = (JSON.parse(parsePromptBlocks(user).get('sources')!) as Array<{ citekey: string }>).map((s) => s.citekey);
+    assert.deepEqual(offered, DEFAULT_SOURCES.map((s) => s.citekey));
+    assert.equal(sb.mock!.callCount('outline-author'), 2, 'the unofferable key got the corrective turn');
+    const rows = parseOutline(fs.readFileSync(path.join(sb.paper, 'OUTLINE.md'), 'utf8')).sections;
+    assert.ok(rows.every((row) => !row.assigned_sources.includes('raffel2019') && !row.assigned_sources.includes('huang2018')));
+  });
+});

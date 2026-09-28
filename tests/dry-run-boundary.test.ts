@@ -56,10 +56,11 @@ test('GRND-19: --dry-run over a REAL paper works in .paper-dry-run/ and leaves e
 
   // The loop drafts and verifies §1, then reaches §2, whose hand-written draft
   // cites a source that is not in the library: FABRICATED, exit 4 — a dry run
-  // reports real verdicts, it never fakes one.
+  // reports real verdicts, it never fakes one. The next step names the fix
+  // (the draft is unchanged, so re-verifying it would change nothing).
   const loop = runCli(sb, root, ['--dry-run', '--yolo'], { timeoutMs: 120_000 });
   assert.equal(loop.status, EXIT_BLOCKED, `bare --dry-run: ${loop.stdout}\n${loop.stderr}`);
-  assert.match(loop.stderr, /^pensmith: ran verify §2 \(exit 4\); next: verify §2$/m, 'the loop stopped at the failing step');
+  assert.match(loop.stderr, /^pensmith: ran verify §2 \(exit 4\); next: status \(attention: section 2 failed verification .*`pensmith write 2`/m, 'the loop stopped at the failing step');
   assert.doesNotMatch(loop.stderr, STACK_LINE);
 
   const write = runCli(sb, root, ['--dry-run', 'write', '2']);
@@ -161,8 +162,10 @@ test('RUN-27 / BRDTH-01 / GRND-19: one --dry-run --yolo reaches a .dry-run expor
   // GRND-19 (D-18-06): a dry-run draft cites its sections' synthetic sources.
   const cited = new Set(extractCitedKeysForVerification(readFileSync(join(ws, 'DRAFT.md'), 'utf8')));
   assert.ok(cited.size > 0, 'the dry-run draft cites synthetic sources');
-  const exportedBib = join(exportDir, 'CITATIONS.bib');
+  // GRND-19: every exported file of a dry run is named `.dry-run` (the references too).
+  const exportedBib = join(exportDir, 'CITATIONS.dry-run.bib');
   assert.ok(existsSync(exportedBib), 'the export carries its references');
+  assert.ok(!existsSync(join(exportDir, 'CITATIONS.bib')) && !existsSync(join(exportDir, 'CITATIONS.ris')), 'no un-suffixed export file');
   const exportedText = readFileSync(exportedBib, 'utf8');
   const exportedKeys = [...exportedText.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
   assert.deepEqual(exportedKeys.sort(), [...cited].sort(), 'the exported key set is exactly the cited key set');
@@ -179,7 +182,7 @@ test('RUN-27 / BRDTH-01 / GRND-19: one --dry-run --yolo reaches a .dry-run expor
   for (const f of readdirSync(exportDir)) {
     const text = readFileSync(join(exportDir, f), 'utf8');
     assert.doesNotMatch(text, /OFFLINE MODE|DRY RUN|made by pensmith/i, `${f} carries no dry-run marker`);
-    if (f.startsWith('DRAFT')) assert.match(f, /^DRAFT\.dry-run\./, `${f} is named as a dry-run export`);
+    assert.match(f, /^(?:DRAFT|CITATIONS)\.dry-run\./, `${f} is named as a dry-run export`);
   }
   assert.ok(!existsSync(join(root, '.paper')), 'the dry run never created .paper/');
 });

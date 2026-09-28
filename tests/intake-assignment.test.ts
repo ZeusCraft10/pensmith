@@ -116,12 +116,14 @@ test('GRND-01: the order — --from, then @path; both at once is refused', async
   const d = dir();
   fs.writeFileSync(path.join(d, 'notes.md'), 'Write about notes.');
   fs.writeFileSync(path.join(d, 'assignment.txt'), 'Write about the folder file.');
-  const o = opts(d, { stdinMayCarry: true, readStdin: async () => 'from stdin' });
+  const o = opts(d, { stdinMayCarry: true, readStdin: async () => 'Write about stdin.' });
   assert.deepEqual(await resolveAssignment({ ...o, from: 'notes.md' }), { text: 'Write about notes.', source: { kind: 'file', name: 'notes.md' } });
   assert.deepEqual(await resolveAssignment({ ...o, at: '@notes.md' }), { text: 'Write about notes.', source: { kind: 'at-file', name: 'notes.md' } });
   await assert.rejects(resolveAssignment({ ...o, from: 'notes.md', at: '@notes.md' }), usageError(/give the assignment once/));
   await assert.rejects(resolveAssignment({ ...o, at: '@' }), usageError(/name the assignment file after the @/));
-  assert.deepEqual(await resolveAssignment(o), { text: 'from stdin', source: { kind: 'stdin', name: '' } }, 'stdin before the folder file');
+  assert.deepEqual(await resolveAssignment(o), { text: 'Write about stdin.', source: { kind: 'stdin', name: '' } }, 'stdin before the folder file');
+  // A piped confirmation ("y") is not an assignment (fewer than 3 words): one line, EXIT_USAGE.
+  await assert.rejects(resolveAssignment(opts(d, { stdinMayCarry: true, readStdin: async () => 'y\n' })), usageError(/^the text piped on stdin \("y"\) is too short to be an assignment \(fewer than 3 words\)/));
 });
 
 test('GRND-01: the folder\'s assignment file — used without a terminal or under --yolo (and named); several files refuse', async () => {

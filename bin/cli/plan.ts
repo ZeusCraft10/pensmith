@@ -11,9 +11,9 @@
 //     paper type), the section (from its OUTLINE row, the stub's values where
 //     the row lacks them), summaries of the claims of its planned depends_on
 //     sections, and — fenced (FEED-05) — the source records of the section's
-//     allowed set ONLY (FEED-01: source-context.ts; its current PLAN.md
-//     `assigned_sources`, else the outline allocation). A source assigned only
-//     to another section never appears.
+//     allowed set ONLY (FEED-01: source-context.ts; the outline allocation ∪
+//     its current PLAN.md `assigned_sources` ∪ its `plan --research`
+//     additions). A source assigned only to another section never appears.
 //   - The reply is validated (plan-validate.ts): the echoed section, slug and
 //     depends_on equal the OUTLINE row; assigned_sources ⊆ the allowed set ⊆
 //     LIBRARY.json; every claim's sources ⊆ assigned_sources. One corrective
@@ -35,15 +35,15 @@ import { defineCommand } from 'citty';
 import { existsSync } from 'node:fs';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionPlan, projectRoot } from '../lib/paths.js';
-import { runRevise } from '../lib/revise.js';
+import { isPlanResearchFor, runRevise } from '../lib/revise.js';
 import { proposeSwap } from '../lib/revise-swap.js';
-import { complete, assertLlmConfigured, correctiveMessages, type ChatMessage } from '../lib/anthropic.js';
+import { complete, assertLlmConfigured, correctiveMessages, StructuredOutputError, type ChatMessage } from '../lib/anthropic.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
-import { loggedSectionId } from '../lib/section-id.js';
+import { loggedSectionId, sectionIdOf } from '../lib/section-id.js';
 import { readOutlineSync } from '../lib/outline.js';
 import { readPaperBrief } from '../lib/paper-brief.js';
 import { tryLoadLibrary } from '../lib/library.js';
-import { buildSourceContext, libraryCitekeys, type SourceContextInput } from '../lib/source-context.js';
+import { buildSourceContext, describeExcluded, libraryCitekeys, partitionCheckable, type SourceContextInput } from '../lib/source-context.js';
 import { buildPromptRequest, requestHints } from '../lib/prompt-request.js';
 import { formatPlanIssues, planCorrection, validatePlan } from '../lib/plan-validate.js';
 import { renderPlannedPlanMd, summarizePlanClaims } from '../lib/plan-render.js';
@@ -134,6 +134,7 @@ export const planCommand = defineCommand({
       const result = await runRevise({
         paperRoot: projectRoot(),
         n,
+        suffix,
         slug,
         yolo: args.yolo === true,
         ...(research ? { research } : {}),
@@ -153,7 +154,11 @@ export const planCommand = defineCommand({
     const row = outline?.sections.find((s) => s.slug === slug) ?? null;
     const fm = readPlanFrontmatter(planPath);
     const brief = readPaperBrief(paperRoot);
-    const entries: SourceContextInput[] = (await tryLoadLibrary(paperRoot))?.entries ?? [];
+    const library: Array<SourceContextInput & { readonly provenance?: readonly string[] }> = (await tryLoadLibrary(paperRoot))?.entries ?? [];
+    // GRND-18: the planner may only pick sources the citation verifier can
+    // check (source-context.ts verifierBlindSpot).
+    const { checkable: entries, excluded } = partitionCheckable(library, networkMode().dryRun);
+    const blind = new Map(excluded.map((x) => [x.citekey, x.reason]));
 
     // The section: its OUTLINE row, the stub's values where the row lacks them.
     const title = row?.title ?? str(fm?.['title']) ?? slug;
@@ -162,15 +167,29 @@ export const planCommand = defineCommand({
     const dependsOn = row?.depends_on ?? strings(fm?.['depends_on']) ?? [];
     const wordTarget = row?.estimated_word_count ?? num(fm?.['word_target']);
     const voice = row?.voice ?? str(fm?.['voice']);
-    // FEED-04: the section's allowed set is its current PLAN.md assigned_sources
-    // (the outline allocation plus research/remap additions); a section with no
-    // PLAN.md yet takes the outline allocation.
-    const allowed = strings(fm?.['assigned_sources']) ?? row?.assigned_sources ?? [];
+    // GRND-13 / FEED-04: the section's allowed set is the outline allocation ∪
+    // its current PLAN.md assigned_sources (`add --remap` additions) ∪ the
+    // sources `plan <N> --research` added for it (LIBRARY provenance
+    // `plan-research:§<N>`). Never only the previous plan's pick: a planner
+    // that used a subset last time must not shrink what a re-plan may use.
+    const sectionId = sectionIdOf(n, suffix);
+    const researched = entries
+      .filter((e) => (e.provenance ?? []).some((t) => isPlanResearchFor(t, sectionId)))
+      .map((e) => e.citekey);
+    const candidates = [...new Set([...(row?.assigned_sources ?? []), ...(strings(fm?.['assigned_sources']) ?? []), ...researched])];
+    const unusable = candidates.filter((k) => blind.has(k));
+    if (unusable.length > 0) {
+      process.stderr.write(
+        `pensmith plan: WARN — section ${id} leaves out ${describeExcluded(unusable.map((k) => ({ citekey: k, reason: blind.get(k) as string })))}: ` +
+          `the citation verifier cannot check them\n`,
+      );
+    }
+    const allowed = candidates.filter((k) => !blind.has(k));
     const sources = buildSourceContext(entries, allowed);
     if (sources.length === 0) {
       process.stderr.write(
         `pensmith plan: WARN — section ${id} has no assigned sources, so its plan and draft will cite nothing; ` +
-          `add some with \`pensmith plan ${id} --research "<query>"\` or \`pensmith add <doi> --section ${n} --slug ${slug}\`\n`,
+          `add some with \`pensmith plan ${id} --research "<query>"\` or \`pensmith add <doi> --section ${id} --slug ${slug}\`\n`,
       );
     }
 
@@ -216,8 +235,16 @@ export const planCommand = defineCommand({
 
     const known = libraryCitekeys(entries);
     const call = async (messages: ChatMessage[]): Promise<{ data: SectionPlan; text: string }> => {
-      const r = await complete<SectionPlan>({ slug: 'section-planner', section: loggedSectionId(n, suffix), system: req.system, messages, stubHint: requestHints(req) });
-      return { data: r.data as SectionPlan, text: r.text };
+      try {
+        const r = await complete<SectionPlan>({ slug: 'section-planner', section: loggedSectionId(n, suffix), system: req.system, messages, stubHint: requestHints(req) });
+        return { data: r.data as SectionPlan, text: r.text };
+      } catch (e) {
+        // GRND-13: a reply that never parses (after complete()'s one corrective
+        // retry) is the same outcome as one that fails validation — one
+        // `planner output invalid` line, nothing written.
+        if (e instanceof StructuredOutputError) throw new PlannerInvalidError(`the reply did not match the plan contract (${e.detail})`, planPath);
+        throw e;
+      }
     };
     const check = (data: SectionPlan) =>
       validatePlan({ plan: data, section: { n, slug, depends_on: dependsOn }, allowed, libraryCitekeys: known });
