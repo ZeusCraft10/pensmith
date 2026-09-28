@@ -6,8 +6,14 @@
 //   1. Extract quoted-claim ranges from DRAFT.md via bin/lib/quote-extractor.ts
 //      (>= 10 words, with associated [@citekey]).
 //   2. Resolve citekey -> DOI from .paper/CITATIONS.bib.
-//   3. Look up Unpaywall OA PDF URL for that DOI (HTTP via bin/lib/http.ts).
-//   4. Fetch the PDF bytes and extract text via bin/lib/pdf-text.ts.
+//   3. Look up the DOI's open-access copy through Unpaywall's three-way lookup
+//      (D-19-05): a failed lookup reports its reason (e.g. `Unpaywall skipped:
+//      set PENSMITH_CONTACT_EMAIL`, `HTTP 503 after retries`), never "no OA PDF".
+//   4. Fetch the OA PDF (source 'generic': the PDF host is not a polite pool and
+//      never receives the contact email), check that the final response really
+//      is a PDF (pdf-response.ts checkPdfResponse on the byte-faithful
+//      bodyBytes), then extract its text via bin/lib/pdf-text.ts; an extraction
+//      error is reported, never thrown.
 //   5. NFKC-normalize both the claimed quote AND the extracted PDF text.
 //   6. Compute levenshteinSubstring(quote, pdfText); compare to QUOTE_LEV_THRESHOLD.
 //
@@ -35,8 +41,10 @@
 import { levenshteinSubstring, QUOTE_LEV_THRESHOLD } from '../fuzzy.js';
 import { nfkcNormalize } from '../normalize.js';
 import { extractPdfText, MAX_PDF_BYTES } from '../pdf-text.js';
-import { sources } from '../sources/index.js';
-import { fetch as httpFetch, isOfflineEgressError, offlineLabel } from '../http.js';
+import { lookupById as unpaywallLookupById } from '../sources/unpaywall.js';
+import { fetch as httpFetch, isOfflineEgressError, offlineLabel, type HttpResponse } from '../http.js';
+import { checkPdfResponse } from '../pdf-response.js';
+import { errorFailureReason } from '../sources/search-failure.js';
 import { networkMode } from '../http-mock.js';
 import { isReservedDryRunId } from '../doi.js';
 import { extractQuotes } from '../quote-extractor.js';
@@ -111,69 +119,81 @@ export async function runPass3(
       continue;
     }
 
-    let oaCandidate: Awaited<ReturnType<typeof sources.unpaywall.fetchById>>;
+    const unavailable = (reason: string): void => {
+      results.push({ citekey: q.citekey, quoteSnippet: snippet, verdict: 'PDF_UNAVAILABLE', levRatio: 0, reason });
+    };
+
+    let lookup: Awaited<ReturnType<typeof unpaywallLookupById>>;
     try {
-      oaCandidate = await sources.unpaywall.fetchById(claimed.DOI);
+      lookup = await unpaywallLookupById(claimed.DOI);
     } catch (err) {
       if (!isOfflineEgressError(err)) throw err;
-      results.push({
-        citekey: q.citekey, quoteSnippet: snippet,
-        verdict: 'PDF_UNAVAILABLE', levRatio: 0,
-        reason: `text unavailable (${offlineLabel(err)}) — re-run online to check the quote`,
-      });
+      unavailable(`text unavailable (${offlineLabel(err)}) — re-run online to check the quote`);
       continue;
     }
-    const oaUrl = oaCandidate?.oa_pdf_url;
+    if (lookup.kind === 'failed') {
+      // D-19-05: the reason, never "no OA PDF" (e.g. the missing contact email).
+      unavailable(`${lookup.reason} — the open-access copy of DOI ${claimed.DOI} was not looked up`);
+      continue;
+    }
+    if (lookup.kind === 'not-found') {
+      unavailable(`Unpaywall has no record of DOI ${claimed.DOI} (${lookup.reason})`);
+      continue;
+    }
+    const oaUrl = lookup.candidate.oa_pdf_url;
     if (!oaUrl) {
-      results.push({
-        citekey: q.citekey, quoteSnippet: snippet,
-        verdict: 'PDF_UNAVAILABLE', levRatio: 0,
-        reason: `No OA PDF available for DOI ${claimed.DOI}`,
-      });
+      unavailable(`No OA PDF available for DOI ${claimed.DOI}`);
       continue;
     }
 
+    // The OA PDF host is an arbitrary site: 'generic' (plain User-Agent, no
+    // contact email), every hop SSRF-checked by the transport; noCache so the
+    // byte-faithful bodyBytes is always present (audit #29).
+    let resp: HttpResponse;
     try {
-      // noCache: a live fetch always carries byte-faithful bodyBytes (audit #29).
-      const resp = await httpFetch(oaUrl, { source: 'unpaywall', noCache: true, maxBytes: MAX_PDF_BYTES });
-      if (resp.status !== 200) {
-        results.push({
-          citekey: q.citekey, quoteSnippet: snippet,
-          verdict: 'PDF_UNAVAILABLE', levRatio: 0,
-          reason: `OA PDF fetch returned HTTP ${resp.status}`,
-        });
+      resp = await httpFetch(oaUrl, { source: 'generic', noCache: true, maxBytes: MAX_PDF_BYTES });
+    } catch (err) {
+      if (isOfflineEgressError(err)) {
+        unavailable(`text unavailable (${offlineLabel(err)}) — re-run online to check the quote`);
         continue;
       }
-      const buf = resp.bodyBytes ?? Buffer.from(resp.body, 'utf8');
-      const text = await extractPdfText(buf);
-      if (text.replace(/\s/g, '').length < 50) {
-        results.push({
-          citekey: q.citekey, quoteSnippet: snippet,
-          verdict: 'TEXT_UNAVAILABLE', levRatio: 0,
-          reason: 'PDF appears image-only or scanned (<50 non-whitespace chars)',
-        });
-        continue;
-      }
-      const ratio = levenshteinSubstring(nfkcNormalize(q.text), nfkcNormalize(text));
-      if (ratio >= QUOTE_LEV_THRESHOLD) {
-        results.push({
-          citekey: q.citekey, quoteSnippet: snippet,
-          verdict: 'OK', levRatio: ratio,
-          reason: 'levenshtein-substring above threshold',
-        });
-      } else {
-        results.push({
-          citekey: q.citekey, quoteSnippet: snippet,
-          verdict: 'NOT_FOUND', levRatio: ratio,
-          reason: `quote not found in OA PDF (lev=${ratio.toFixed(3)} < ${QUOTE_LEV_THRESHOLD})`,
-        });
-      }
+      unavailable(`OA PDF fetch failed: ${errorFailureReason(err)}`);
+      continue;
+    }
+    const pdf = checkPdfResponse(resp);
+    if (!pdf.ok) {
+      unavailable(`OA PDF fetch returned ${pdf.reason}`);
+      continue;
+    }
+
+    let text: string;
+    try {
+      text = await extractPdfText(pdf.bytes);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      unavailable(`OA PDF text extraction failed: ${(msg.split(/\r?\n/)[0] ?? '').slice(0, 200)}`);
+      continue;
+    }
+    if (text.replace(/\s/g, '').length < 50) {
       results.push({
         citekey: q.citekey, quoteSnippet: snippet,
-        verdict: 'PDF_UNAVAILABLE', levRatio: 0,
-        reason: `PDF fetch/parse failed: ${msg}`,
+        verdict: 'TEXT_UNAVAILABLE', levRatio: 0,
+        reason: 'PDF appears image-only or scanned (<50 non-whitespace chars)',
+      });
+      continue;
+    }
+    const ratio = levenshteinSubstring(nfkcNormalize(q.text), nfkcNormalize(text));
+    if (ratio >= QUOTE_LEV_THRESHOLD) {
+      results.push({
+        citekey: q.citekey, quoteSnippet: snippet,
+        verdict: 'OK', levRatio: ratio,
+        reason: 'levenshtein-substring above threshold',
+      });
+    } else {
+      results.push({
+        citekey: q.citekey, quoteSnippet: snippet,
+        verdict: 'NOT_FOUND', levRatio: ratio,
+        reason: `quote not found in OA PDF (lev=${ratio.toFixed(3)} < ${QUOTE_LEV_THRESHOLD})`,
       });
     }
   }

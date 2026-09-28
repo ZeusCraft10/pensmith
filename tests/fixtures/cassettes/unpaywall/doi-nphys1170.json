@@ -32,7 +32,7 @@
           "author_position": "first",
           "is_corresponding": true,
           "raw_affiliation_strings": [
-            "Markus Aspelmeyer is at the Institute for Quantum Optics and Quantum Information, Austrian Academy of Sciences, Boltzmanngasse 3, A-1090 Vienna, Austria. markus.aspelmeyer@quantum.at,"
+            "Markus Aspelmeyer is at the Institute for Quantum Optics and Quantum Information, Austrian Academy of Sciences, Boltzmanngasse 3, A-1090 Vienna, Austria. REDACTED_EMAIL,"
           ],
           "raw_author_name": "Markus Aspelmeyer"
         }
@@ -42,7 +42,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-27T18:21:40.558Z",
+      "recordedAt": "2026-09-28T05:46:13.370Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "unpaywall"
     }

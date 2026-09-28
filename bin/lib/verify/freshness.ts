@@ -13,6 +13,10 @@
 //   - retraction-watch hit    → WARN
 //   - transport error (ECONNREFUSED / ETIMEDOUT / no response) → SILENT
 //     (network noise is not source staleness — optional DEBUG only)
+//   - a host the transport is not asking right now (its rate-limit budget is
+//     exhausted, or its circuit breaker is open — SRC-17) → an "unavailable"
+//     row naming why, for either probe: the answer is unknown, never "ok"
+//     (D-19-05)
 //   - offline (PENSMITH_OFFLINE=1, --dry-run, the test runner) → the DOI HEAD
 //     probe is "skipped (offline)" / "skipped (dry-run)" and says so in the
 //     table; it never replays a canned HEAD answer (RUN-03). The Retraction
@@ -27,7 +31,8 @@
 // `https://doi.org/<normalized-doi>` — never an arbitrary caller-supplied URL.
 
 import { normalizeDoi } from '../doi.js';
-import { fetch as httpFetch, isOfflineEgressError, offlineLabel } from '../http.js';
+import { fetch as httpFetch, isOfflineEgressError, isHostUnavailableError, offlineLabel } from '../http.js';
+import { errorFailureReason } from '../sources/search-failure.js';
 import { networkMode } from '../http-mock.js';
 import { fetchById as retractionWatchFetchById, isRetractionLookupError } from '../sources/retraction-watch.js';
 import { Semaphore } from '../budget.js';
@@ -104,9 +109,14 @@ export async function probeFreshness(
           });
         }
       } catch (err) {
-        // Transport error (ECONNREFUSED / ETIMEDOUT / DNS) is network noise,
-        // NOT source staleness (D-10). Silent — optional DEBUG only.
-        debug(`citekey=${citekey} doi=${normalized} HEAD transport error: ${String(err)} — silent`);
+        if (isHostUnavailableError(err)) {
+          // D-19-05: doi.org is not being asked right now — say so, never "ok".
+          skipped.push({ probe: 'DOI HEAD', detail: 'unavailable', note: `${errorFailureReason(err).replace(/\|/g, '/')} — re-run verify` });
+        } else {
+          // Transport error (ECONNREFUSED / ETIMEDOUT / DNS) is network noise,
+          // NOT source staleness (D-10). Silent — optional DEBUG only.
+          debug(`citekey=${citekey} doi=${normalized} HEAD transport error: ${String(err)} — silent`);
+        }
       }
     }
 
@@ -128,7 +138,7 @@ export async function probeFreshness(
         // Never block on the advisory probe, but never hide a failed lookup
         // either: an unknown retraction status is an "unavailable" row, not a
         // silent "ok" (SRC-04). Pass 1 records the blocking verdict.
-        const why = isRetractionLookupError(err) ? err.message : `retraction status unknown: ${String(err)}`;
+        const why = isRetractionLookupError(err) ? err.message : `retraction status unknown: ${errorFailureReason(err)}`;
         skipped.push({ probe: 'retraction-watch', detail: 'unavailable', note: `${why.replace(/\|/g, '/')} — re-run verify` });
       }
     }

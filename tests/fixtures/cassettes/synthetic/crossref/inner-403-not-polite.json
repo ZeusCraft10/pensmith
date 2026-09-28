@@ -1,0 +1,30 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.5555/inner-403",
+    "status": 200,
+    "response": {
+      "statusCode": "403",
+      "message-type": "not-polite",
+      "message": "Please add a mailto parameter or a User-Agent with a contact email to identify yourself."
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?filter=updates:10.5555/inner-403&select=DOI,title,author,update-to&rows=20",
+    "status": 200,
+    "response": {
+      "statusCode": "403",
+      "message-type": "not-polite",
+      "message": "Please add a mailto parameter or a User-Agent with a contact email to identify yourself."
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
+  }
+]

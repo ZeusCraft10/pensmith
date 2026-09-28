@@ -1,0 +1,806 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1016%2Fj.foreco.2013.06.030",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              8,
+              19
+            ]
+          ],
+          "date-time": "2026-08-19T01:40:45Z",
+          "timestamp": 1787103645810,
+          "version": "build-2736575974"
+        },
+        "reference-count": 60,
+        "publisher": "Elsevier BV",
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2013,
+                  10,
+                  1
+                ]
+              ],
+              "date-time": "2013-10-01T00:00:00Z",
+              "timestamp": 1380585600000
+            },
+            "content-version": "tdm",
+            "delay-in-days": 0,
+            "URL": "https://www.elsevier.com/tdm/userlicense/1.0/"
+          }
+        ],
+        "content-domain": {
+          "domain": [
+            "elsevier.com",
+            "sciencedirect.com"
+          ],
+          "crossmark-restriction": true
+        },
+        "short-container-title": [
+          "Forest Ecology and Management"
+        ],
+        "published-print": {
+          "date-parts": [
+            [
+              2013,
+              10
+            ]
+          ]
+        },
+        "DOI": "10.1016/j.foreco.2013.06.030",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2013,
+              7,
+              18
+            ]
+          ],
+          "date-time": "2013-07-18T01:18:30Z",
+          "timestamp": 1374110310000
+        },
+        "page": "135-141",
+        "update-policy": "https://doi.org/10.1016/elsevier_cm_policy",
+        "source": "Crossref",
+        "is-referenced-by-count": 55,
+        "special_numbering": "C",
+        "title": [
+          "Thinning prolongs growth duration of European beech (Fagus sylvatica L.) across a valley in southwestern Germany"
+        ],
+        "prefix": "10.1016",
+        "volume": "306",
+        "author": [
+          {
+            "given": "Ernst",
+            "family": "van der Maaten",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "78",
+        "reference": [
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0005",
+            "unstructured": "Ammer, C., Albrecht, L., Borchert, H., Brosinger, F., Dittmar, C., Elling, W., Ewald, J., Felbermeier, B., Von Gilsa, H., Huss, J., Kenk, G., Kölling, C., Kohnle, U., Meyer, P., Mosandl, R., Moosmayer, H.U., Palmer, S., Reif, A., Rehfuess, K.E., Stimm, B., 2005. Zur Zukunft der Buche (Fagus sylvatica L.). In: Mitteleuropa: kritische Anmerkungen zu einem Beitrag von Rennenberg et al. (2004), vol. 176. Allg. Forst. Jagdztg, pp. 60–67."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0010",
+            "doi-asserted-by": "crossref",
+            "first-page": "344",
+            "DOI": "10.1007/s004680050229",
+            "article-title": "Water relations and gas exchange in Fagus sylvatica L. and Quercus petraea (Mattuschka) Liebl. in a mixed stand at their southern limit of distribution in Europe",
+            "volume": "14",
+            "author": "Aranda",
+            "year": "2000",
+            "journal-title": "Trees"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0015",
+            "doi-asserted-by": "crossref",
+            "first-page": "60",
+            "DOI": "10.1016/j.foreco.2012.03.009",
+            "article-title": "Natural regeneration of Fagus sylvatica L. adapts with maturation to warmer and drier microclimatic conditions",
+            "volume": "275",
+            "author": "Bilela",
+            "year": "2012",
+            "journal-title": "Forest Ecol. Manage."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0020",
+            "doi-asserted-by": "crossref",
+            "first-page": "651",
+            "DOI": "10.1093/treephys/25.6.651",
+            "article-title": "Intra-annual variations in climate influence growth and wood density of Norway spruce",
+            "volume": "25",
+            "author": "Bouriaud",
+            "year": "2005",
+            "journal-title": "Tree Physiol."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0025",
+            "doi-asserted-by": "crossref",
+            "first-page": "295",
+            "DOI": "10.1093/treephys/15.5.295",
+            "article-title": "Effects of thinning on soil and tree water relations, transpiration and growth in an oak forest (Quercus petraea (Matt.) Liebl.)",
+            "volume": "15",
+            "author": "Bréda",
+            "year": "1995",
+            "journal-title": "Tree Physiol."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0030",
+            "doi-asserted-by": "crossref",
+            "first-page": "281",
+            "DOI": "10.1093/treephys/12.3.281",
+            "article-title": "Rapid response of large, drought-stressed beech trees to irrigation",
+            "volume": "12",
+            "author": "Čermák",
+            "year": "1993",
+            "journal-title": "Tree Physiol."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0035",
+            "doi-asserted-by": "crossref",
+            "first-page": "213",
+            "DOI": "10.1016/S0378-1127(97)00163-1",
+            "article-title": "Silvicultural alternatives, competition regime and sensitivity to climate in a European beech forest",
+            "volume": "102",
+            "author": "Cescatti",
+            "year": "1998",
+            "journal-title": "Forest Ecol. Manage."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0040",
+            "doi-asserted-by": "crossref",
+            "first-page": "103",
+            "DOI": "10.1016/S0378-1127(98)00242-4",
+            "article-title": "Potential sampling bias in long-term forest growth trends reconstructed from tree rings: a case study from the Italian Alps",
+            "volume": "109",
+            "author": "Cherubini",
+            "year": "1998",
+            "journal-title": "Forest Ecol. Manage."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0045",
+            "doi-asserted-by": "crossref",
+            "first-page": "1084",
+            "DOI": "10.1111/j.1365-2745.2007.01280.x",
+            "article-title": "Effects of size, competition and altitude on tree growth",
+            "volume": "95",
+            "author": "Coomes",
+            "year": "2007",
+            "journal-title": "J. Ecol."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0050",
+            "doi-asserted-by": "crossref",
+            "first-page": "1065",
+            "DOI": "10.1007/s00468-009-0349-5",
+            "article-title": "Size mediated climate-growth relationships in Pinus halepensis and Pinus pinea",
+            "volume": "23",
+            "author": "de Luis",
+            "year": "2009",
+            "journal-title": "Trees"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0055",
+            "doi-asserted-by": "crossref",
+            "first-page": "190",
+            "DOI": "10.1139/x02-178",
+            "article-title": "Cellular phenology of annual ring formation of Abies balsamea in the Quebec boreal forest (Canada)",
+            "volume": "33",
+            "author": "Deslauriers",
+            "year": "2003",
+            "journal-title": "Can. J. Forest Res."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0060",
+            "doi-asserted-by": "crossref",
+            "first-page": "63",
+            "DOI": "10.1016/S0378-1127(01)00816-7",
+            "article-title": "Growth variations of common beech (Fagus sylvatica L.) under different climatic and environmental conditions in Europe – a dendroecological study",
+            "volume": "173",
+            "author": "Dittmar",
+            "year": "2003",
+            "journal-title": "Forest Ecol. Manage."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0065",
+            "doi-asserted-by": "crossref",
+            "first-page": "159",
+            "DOI": "10.1016/j.dendro.2009.06.008",
+            "article-title": "The use of precision dendrometers in research on daily stem size and wood property variation: a review",
+            "volume": "27",
+            "author": "Drew",
+            "year": "2009",
+            "journal-title": "Dendrochronologia"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0070",
+            "doi-asserted-by": "crossref",
+            "first-page": "2160",
+            "DOI": "10.1016/j.foreco.2010.01.037",
+            "article-title": "Masting behavior and dendrochronology of European beech (Fagus sylvatica L.) in southern Sweden",
+            "volume": "259",
+            "author": "Drobyshev",
+            "year": "2010",
+            "journal-title": "Forest Ecol. Manage."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0075",
+            "doi-asserted-by": "crossref",
+            "first-page": "863",
+            "DOI": "10.1016/j.foreco.2011.05.027",
+            "article-title": "Modelling day-to-day stem diameter variation and annual growth of balsam fir (Abies balsamea (L.) Mill.) from daily climate",
+            "volume": "262",
+            "author": "Duchesne",
+            "year": "2011",
+            "journal-title": "Forest Ecol. Manage."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0080",
+            "unstructured": "Ellenberg, H., 1996. Vegetation Mitteleuropas mit den Alpen in ökologischer, dynamischer und historischer Sicht. Ulmer, Stuttgart (DE)."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0085",
+            "doi-asserted-by": "crossref",
+            "first-page": "157",
+            "DOI": "10.1007/s00468-003-0289-4",
+            "article-title": "Climate and forest management affect 15N-uptake, N balance and biomass of European beech seedlings",
+            "volume": "18",
+            "author": "Fotelli",
+            "year": "2004",
+            "journal-title": "Trees"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0090",
+            "doi-asserted-by": "crossref",
+            "first-page": "729",
+            "DOI": "10.1007/s00468-009-0315-2",
+            "article-title": "Species-specific climate sensitivity of tree growth in Central-West Germany",
+            "volume": "23",
+            "author": "Friedrichs",
+            "year": "2009",
+            "journal-title": "Trees"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0095",
+            "doi-asserted-by": "crossref",
+            "first-page": "497",
+            "DOI": "10.1093/treephys/23.7.497",
+            "article-title": "Climatic signal of earlywood vessels of oak on a maritime site",
+            "volume": "23",
+            "author": "García González",
+            "year": "2003",
+            "journal-title": "Tree Physiol."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0100",
+            "doi-asserted-by": "crossref",
+            "first-page": "95",
+            "DOI": "10.1007/s10342-005-0055-9",
+            "article-title": "Climate and forest management influence nitrogen balance of European beech forests: microbial N transformations and inorganic N net uptake capacity of mycorrhizal roots",
+            "volume": "124",
+            "author": "Geßler",
+            "year": "2005",
+            "journal-title": "Eur. J. Forest Res."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0105",
+            "doi-asserted-by": "crossref",
+            "first-page": "289",
+            "DOI": "10.1055/s-2004-820878",
+            "article-title": "Water shortage effects the water and nitrogen balance in Central European beech forests",
+            "volume": "6",
+            "author": "Geßler",
+            "year": "2004",
+            "journal-title": "Plant Biol."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0110",
+            "doi-asserted-by": "crossref",
+            "first-page": "653",
+            "DOI": "10.1046/j.1469-8137.2001.00136.x",
+            "article-title": "Radiation modifies the effect of water availability on the carbon isotope composition of beech (Fagus sylvatica)",
+            "volume": "150",
+            "author": "Geßler",
+            "year": "2001",
+            "journal-title": "New Phytol."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0115",
+            "doi-asserted-by": "crossref",
+            "first-page": "2400",
+            "DOI": "10.1111/j.1365-2486.2011.02421.x",
+            "article-title": "Disentangling the relative importance of climate, size and competition on tree growth in Iberian forests: implications for forest management under global change",
+            "volume": "17",
+            "author": "Gómez-Aparicio",
+            "year": "2011",
+            "journal-title": "Glob. Change Biol."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0120",
+            "unstructured": "Hauser, S., 2003. Dynamik hochaufgelöster radialer Schaftveränderungen und des Dickenwachstums bei Buchen (Fagus sylvatica L.) der Schwäbischen Alb unter dem Einfluss von Witterung und Bewirtschaftung. Institute for Forest Growth. Albert-Ludwigs-University, Freiburg, pp. 218."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0125",
+            "unstructured": "Hildebrand, E., Augustin, S., Schack-Kirchner, H., 1998. Bodenkundliche Charakterisierung der Kernflächen. In: Rennenberg, H. (Ed.). Buchendominierte Laubwälder unter dem Einfluß von Klima und Bewirtschaftung: ökologische, waldbauliche und sozialwissenschaftliche Analysen – Vorcharakterisierung der Untersuchungsflächen. Antrag auf Finanzierung eines Sonderforschungsbereiches – Anlage, Freiburg, pp. 7–12."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0130",
+            "doi-asserted-by": "crossref",
+            "first-page": "275",
+            "DOI": "10.1007/s00484-004-0251-1",
+            "article-title": "Net radiation balance for two forested slopes on opposite sides of a valley",
+            "volume": "49",
+            "author": "Holst",
+            "year": "2005",
+            "journal-title": "Int. J. Biometeorol."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0135",
+            "doi-asserted-by": "crossref",
+            "first-page": "227",
+            "DOI": "10.1016/j.dendro.2011.01.009",
+            "article-title": "The impact of the 2003–2008 weather variability on intra-annual stem diameter changes of beech trees at a submontane site in central Slovakia",
+            "volume": "29",
+            "author": "Ježík",
+            "year": "2011",
+            "journal-title": "Dendrochronologia"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0140",
+            "unstructured": "Kahle, H.P., 2006. Impact of the drought in 2003 on intra- and inter-annual stem radial growth of beech and spruce along an altitudinal gradient in the Black Forest, Germany. In, Tree Rings in Archeology, Climateology and Ecology, TRACE 2005 Conference, April 21st – 23rd 2005, Department of Geosciences, Geography, University of Fribourg, Switzerland, pp. 151-163."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0145",
+            "doi-asserted-by": "crossref",
+            "first-page": "1492",
+            "DOI": "10.1111/j.1365-3040.2006.01520.x",
+            "article-title": "Carbon isotopic composition and oxygen isotopic enrichment in phloem and total leaf organic matter of European beech (Fagus sylvatica L.) along a climate gradient",
+            "volume": "29",
+            "author": "Keitel",
+            "year": "2006",
+            "journal-title": "Plant Cell Environ."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0150",
+            "doi-asserted-by": "crossref",
+            "first-page": "146",
+            "DOI": "10.1086/336185",
+            "article-title": "Seasonal growth of dominant, intermediate, and suppressed red pine trees",
+            "volume": "124",
+            "author": "Kozlowski",
+            "year": "1962",
+            "journal-title": "Bot. Gaz."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0155",
+            "unstructured": "Kraft, G., 1884. Zur Lehre von den Durchforstungen, Schlagstellungen und Lichtungshieben. Klindworth, Hannover."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0160",
+            "first-page": "355",
+            "article-title": "Effects of thinning on beech growth. Interaction with climatic factors",
+            "volume": "51",
+            "author": "Le Goff",
+            "year": "1999",
+            "journal-title": "Rev. Forest. Fr."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0165",
+            "doi-asserted-by": "crossref",
+            "first-page": "385",
+            "DOI": "10.1007/s00468-004-0397-9",
+            "article-title": "Climate−tree-growth relationships of European beech (Fagus sylvatica L.) in the French Permanent Plot Network (RENECOFOR)",
+            "volume": "19",
+            "author": "Lebourgeois",
+            "year": "2005",
+            "journal-title": "Trees"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0170",
+            "doi-asserted-by": "crossref",
+            "first-page": "1525",
+            "DOI": "10.1093/treephys/tpp084",
+            "article-title": "Plastic responses of Abies pinsapo xylogenesis to drought and competition",
+            "volume": "29",
+            "author": "Linares",
+            "year": "2009",
+            "journal-title": "Tree Physiol."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0175",
+            "doi-asserted-by": "crossref",
+            "first-page": "967",
+            "DOI": "10.1016/j.foreco.2009.12.001",
+            "article-title": "Response of climate-growth relationships and water use efficiency to thinning in a Pinus nigra afforestation",
+            "volume": "259",
+            "author": "Martín-Benito",
+            "year": "2010",
+            "journal-title": "Forest. Ecol. Manage."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0180",
+            "doi-asserted-by": "crossref",
+            "first-page": "301",
+            "DOI": "10.1046/j.1439-0337.2002.02038.x",
+            "article-title": "Microclimate within beech stands - part I: photosynthetically active radiation",
+            "volume": "121",
+            "author": "Mayer",
+            "year": "2002",
+            "journal-title": "Forstwiss. Centralbl."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0185",
+            "unstructured": "Meining, S., von Wilpert, K., 2006. Waldzustandsbericht 2006 der Forstlichen Versuchs – und Forschungsanstalt Baden-Württemberg. FVA, Freiburg, pp. 57."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0190",
+            "doi-asserted-by": "crossref",
+            "first-page": "1382",
+            "DOI": "10.1016/j.foreco.2011.01.019",
+            "article-title": "Size-mediated climate-growth relationships in temperate forests: a multi-species analysis",
+            "volume": "261",
+            "author": "Mérian",
+            "year": "2011",
+            "journal-title": "Forest Ecol. Manage."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0195",
+            "doi-asserted-by": "crossref",
+            "first-page": "47",
+            "DOI": "10.1016/S0378-1127(03)00098-7",
+            "article-title": "Effects of different thinning intensities on drought response in Norway spruce (Picea abies (L.) Karst.)",
+            "volume": "183",
+            "author": "Misson",
+            "year": "2003",
+            "journal-title": "Forest Ecol. Manage."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0200",
+            "doi-asserted-by": "crossref",
+            "first-page": "225",
+            "DOI": "10.1093/treephys/tpp108",
+            "article-title": "Timing and duration of European larch growing season along altitudinal gradients in the Swiss Alps",
+            "volume": "30",
+            "author": "Moser",
+            "year": "2010",
+            "journal-title": "Tree Physiol."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0205",
+            "series-title": "SPSS 15 0 Advanced Statistical Procedures Companion",
+            "author": "Norusis",
+            "year": "2007"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0210",
+            "first-page": "1039",
+            "article-title": "Masting behaviour in beech: linking reproduction and climatic variation",
+            "volume": "79",
+            "author": "Piovesan",
+            "year": "2001",
+            "journal-title": "Can. J. Bot."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0215",
+            "doi-asserted-by": "crossref",
+            "first-page": "277",
+            "DOI": "10.1139/x96-176",
+            "article-title": "A quantitative analysis of the interactions between climatic response and intraspecific competition in European beech",
+            "volume": "27",
+            "author": "Piutti",
+            "year": "1997",
+            "journal-title": "Can. J. Forest Res."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0220",
+            "doi-asserted-by": "crossref",
+            "first-page": "193",
+            "DOI": "10.1007/s10342-005-0068-4",
+            "article-title": "Stand density and growth of Norway spruce (Picea abies (L.) Karst.) and European beech (Fagus sylvatica L.): evidence from long-term experimental plots",
+            "volume": "124",
+            "author": "Pretzsch",
+            "year": "2005",
+            "journal-title": "Eur. J. Forest Res."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0225",
+            "doi-asserted-by": "crossref",
+            "first-page": "723",
+            "DOI": "10.1093/aob/mcf133",
+            "article-title": "Physiological responses of beech and sessile oak in a natural mixed stand during a dry summer",
+            "volume": "89",
+            "author": "Raftoyannis",
+            "year": "2002",
+            "journal-title": "Ann. Bot."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0230",
+            "doi-asserted-by": "crossref",
+            "first-page": "429",
+            "DOI": "10.1093/aob/mcr168",
+            "article-title": "Cambial activity related to tree size in a mature silver-fir plantation",
+            "volume": "108",
+            "author": "Rathgeber",
+            "year": "2011",
+            "journal-title": "Ann. Bot."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0235",
+            "doi-asserted-by": "crossref",
+            "first-page": "457",
+            "DOI": "10.1038/nature04282",
+            "article-title": "Universal scaling of respiratory metabolism, size and nitrogen in plants",
+            "volume": "439",
+            "author": "Reich",
+            "year": "2006",
+            "journal-title": "Nature"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0240",
+            "first-page": "210",
+            "article-title": "Die Buche (Fagus sylvatica L.) - ein Waldbaum ohne Zukunft im südlichen Mitteleuropa?",
+            "volume": "175",
+            "author": "Rennenberg",
+            "year": "2004",
+            "journal-title": "Allg. Forst. Jagdztg."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0245",
+            "doi-asserted-by": "crossref",
+            "first-page": "1",
+            "DOI": "10.1007/s00442-006-0625-7",
+            "article-title": "Evidence of threshold temperatures for xylogenesis in conifers at high altitudes",
+            "volume": "152",
+            "author": "Rossi",
+            "year": "2007",
+            "journal-title": "Oecologia"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0250",
+            "doi-asserted-by": "crossref",
+            "first-page": "947",
+            "DOI": "10.1016/j.foreco.2011.05.026",
+            "article-title": "Drought matters - declining precipitation influences growth of Fagus sylvatica L. and Quercus robur L. in north-eastern Germany",
+            "volume": "262",
+            "author": "Scharnweber",
+            "year": "2011",
+            "journal-title": "Forest Ecol. Manage."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0255",
+            "first-page": "10",
+            "article-title": "Seasonal wood formation dynamics of beech (Fagus sylvatica L.) and black locust (Robinia pseudoacacia L.) as determined by the ‘‘pinning’’ technique",
+            "volume": "74",
+            "author": "Schmitt",
+            "year": "2000",
+            "journal-title": "J. Appl. Bot."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0260",
+            "doi-asserted-by": "crossref",
+            "first-page": "571",
+            "DOI": "10.1007/s00468-006-0072-4",
+            "article-title": "Inter-annual and seasonal variability of radial growth, wood density and carbon isotope ratios in tree rings of beech (Fagus sylvatica) growing in Germany and Italy",
+            "volume": "20",
+            "author": "Skomarkova",
+            "year": "2006",
+            "journal-title": "Trees"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0265",
+            "doi-asserted-by": "crossref",
+            "first-page": "173",
+            "DOI": "10.1016/0378-1127(95)03608-3",
+            "article-title": "Growth of Eucalyptus marginata (jarrah) seedlings in mediterranean-climate forest in south-west Australia in response to overstorey, site and fertiliser application",
+            "volume": "79",
+            "author": "Stoneman",
+            "year": "1995",
+            "journal-title": "Forest Ecol. Manage."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0270",
+            "doi-asserted-by": "crossref",
+            "first-page": "777",
+            "DOI": "10.1007/s00468-011-0645-8",
+            "article-title": "Climate sensitivity of radial growth in European beech (Fagus sylvatica L.) at different aspects in southwestern Germany",
+            "volume": "26",
+            "author": "van der Maaten",
+            "year": "2012",
+            "journal-title": "Trees"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0275",
+            "doi-asserted-by": "crossref",
+            "first-page": "103",
+            "DOI": "10.1016/j.dendro.2007.03.004",
+            "article-title": "The impact of the 2003 summer drought on the intra-annual growth pattern of beech (Fagus sylvatica L.) and oak (Quercus robur L.) on a dry site in the Netherlands",
+            "volume": "25",
+            "author": "van der Werf",
+            "year": "2007",
+            "journal-title": "Dendrochronologia"
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0280",
+            "unstructured": "WebWerdis, 2011. German Weather Serivce (DWD): Web-based Weather Request and Distribution System. Accessed on 15.3.2011: <www.dwd.de/webwerdis>."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0285",
+            "doi-asserted-by": "crossref",
+            "first-page": "293",
+            "DOI": "10.1115/1.4010337",
+            "article-title": "A statistical distribution function of wide applicability",
+            "volume": "18",
+            "author": "Weibull",
+            "year": "1951",
+            "journal-title": "J. Appl. Mech."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0290",
+            "doi-asserted-by": "crossref",
+            "first-page": "135",
+            "DOI": "10.1007/s10342-008-0255-1",
+            "article-title": "Intra-annual growth response of adult Norway spruce (Picea abies [L.] KARST.) and European beech (Fagus sylvatica L.) to an experimentally enhanced, free-air ozone regime",
+            "volume": "128",
+            "author": "Wipfler",
+            "year": "2009",
+            "journal-title": "Eur. J. Forest Res."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0295",
+            "doi-asserted-by": "crossref",
+            "first-page": "424",
+            "DOI": "10.1139/x78-062",
+            "article-title": "The potential of Weibull-type functions as flexible growth curves",
+            "volume": "8",
+            "author": "Yang",
+            "year": "1978",
+            "journal-title": "Can. J. Forest Res."
+          },
+          {
+            "key": "10.1016/j.foreco.2013.06.030_b0300",
+            "doi-asserted-by": "crossref",
+            "first-page": "50",
+            "DOI": "10.1007/s004680000072",
+            "article-title": "Stem radius changes and their relation to stored water in stems of young Norway spruce trees",
+            "volume": "15",
+            "author": "Zweifel",
+            "year": "2000",
+            "journal-title": "Trees"
+          }
+        ],
+        "container-title": [
+          "Forest Ecology and Management"
+        ],
+        "original-title": [],
+        "language": "en",
+        "link": [
+          {
+            "URL": "https://api.elsevier.com/content/article/PII:S0378112713003988?httpAccept=text/xml",
+            "content-type": "text/xml",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://api.elsevier.com/content/article/PII:S0378112713003988?httpAccept=text/plain",
+            "content-type": "text/plain",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2022,
+              3,
+              1
+            ]
+          ],
+          "date-time": "2022-03-01T17:08:32Z",
+          "timestamp": 1646154512000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://linkinghub.elsevier.com/retrieve/pii/S0378112713003988"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2013,
+              10
+            ]
+          ]
+        },
+        "references-count": 60,
+        "alternative-id": [
+          "S0378112713003988"
+        ],
+        "URL": "https://doi.org/10.1016/j.foreco.2013.06.030",
+        "relation": {},
+        "ISSN": [
+          "0378-1127"
+        ],
+        "issn-type": [
+          {
+            "value": "0378-1127",
+            "type": "print"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2013,
+              10
+            ]
+          ]
+        },
+        "assertion": [
+          {
+            "value": "Elsevier",
+            "name": "publisher",
+            "label": "This article is maintained by"
+          },
+          {
+            "value": "Thinning prolongs growth duration of European beech (Fagus sylvatica L.) across a valley in southwestern Germany",
+            "name": "articletitle",
+            "label": "Article Title"
+          },
+          {
+            "value": "Forest Ecology and Management",
+            "name": "journaltitle",
+            "label": "Journal Title"
+          },
+          {
+            "value": "https://doi.org/10.1016/j.foreco.2013.06.030",
+            "name": "articlelink",
+            "label": "CrossRef DOI link to publisher maintained version"
+          },
+          {
+            "value": "article",
+            "name": "content_type",
+            "label": "Content Type"
+          },
+          {
+            "value": "Copyright © 2013 Elsevier B.V. All rights reserved.",
+            "name": "copyright",
+            "label": "Copyright"
+          }
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T05:26:48.315Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

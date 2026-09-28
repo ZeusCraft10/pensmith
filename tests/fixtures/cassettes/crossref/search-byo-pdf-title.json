@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=Attention+Is+All+You+Need&rows=1&select=DOI%2Ctitle%2Cauthor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype",
+    "path": "/works?query=Attention+Is+All+You+Need&rows=1&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,10 +10,13 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 1386224,
+        "total-results": 1386272,
         "items": [
           {
+            "publisher": "Springer Nature Switzerland",
             "DOI": "10.1007/978-3-031-84300-6_13",
+            "type": "book-chapter",
+            "page": "297-314",
             "title": [
               "Is Attention All You Need?"
             ],
@@ -33,6 +36,9 @@
                 ]
               }
             ],
+            "container-title": [
+              "From Human Attention to Computational Attention"
+            ],
             "issued": {
               "date-parts": [
                 [
@@ -40,10 +46,10 @@
                 ]
               ]
             },
-            "container-title": [
-              "From Human Attention to Computational Attention"
-            ],
-            "type": "book-chapter"
+            "ISBN": [
+              "9783031842993",
+              "9783031843006"
+            ]
           }
         ],
         "items-per-page": 1,
@@ -57,7 +63,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-27T18:38:36.353Z",
+      "recordedAt": "2026-09-28T05:26:48.315Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }
@@ -758,7 +764,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-27T18:38:36.353Z",
+      "recordedAt": "2026-09-28T05:26:48.315Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }
