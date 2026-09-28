@@ -82,6 +82,7 @@ export async function verifySection(n: number, slug: string) {
     if (existsSync(planPath)) {
       await updatePlanFrontmatter(planPath, (fm) => {
         if (fm.status !== 'planned') fm.status = 'writing';
+        delete fm.failure_reason;
       });
     }
     process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${n}\` first\n`);
@@ -234,6 +235,9 @@ export async function verifySection(n: number, slug: string) {
   const persisted = await updatePlanFrontmatter(planPath, (fm) => {
     fm.status = status;
     fm.verified_against_draft_hash = draftHash;
+    // FEED-04: a write failure's reason no longer describes the section once
+    // verify has judged its draft.
+    delete fm.failure_reason;
   });
   if (!persisted) {
     process.stderr.write(

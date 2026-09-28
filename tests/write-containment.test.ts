@@ -156,6 +156,37 @@ test('FEED-04: a drafter citing an unassigned key gets one retry, then exit 4 â€
   });
 });
 
+test('FEED-04: a failed RE-write keeps the older DRAFT.md byte-identical, reports attention, and verify clears the failure reason', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await plannedPaper(sb);
+    const sections = path.join(sb.paper, 'sections');
+    for (const d of ['01-introduction']) {
+      const p = path.join(sections, d, 'PLAN.md');
+      fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace('status: planned', 'status: verified'));
+    }
+    sb.mock!.script('section-drafter', { text: 'Attention predates transformers.\n' });
+    assert.equal((await write(sb, '2', '--no-verify')).status, 0);
+    const draft = path.join(sections, '02-background', 'DRAFT.md');
+    const kept = fs.readFileSync(draft, 'utf8');
+
+    const evil = { text: 'See [@evil9999].\n' };
+    sb.mock!.script('section-drafter', evil, evil);
+    const r = await write(sb, '2');
+    assert.equal(r.status, 4, `${r.stdout}\n${r.stderr}`);
+    assert.equal(fs.readFileSync(draft, 'utf8'), kept, 'the older draft is not overwritten by the rejected one');
+    const d = await resolveNextAction(sb.root);
+    assert.equal(d.verb, 'status', 'the failure is reported, the older draft is not silently verified');
+    assert.match(d.verb === 'status' ? d.detail ?? '' : '', /section 2 failed: citekey evil9999 not assigned to section 2 â€” .*`pensmith write 2`/);
+
+    // Verifying the older draft on purpose is a verify verdict: the write failure reason goes.
+    const v = await sb.runTsx(null, ['verify', '2'], { env: { ANTHROPIC_API_KEY: KEY } });
+    assert.equal(v.status, 0, `${v.stdout}\n${v.stderr}`);
+    const fm = loadFrontmatterDocSync('plan', path.join(sections, '02-background', 'PLAN.md')).frontmatter;
+    assert.equal(fm['status'], 'verified');
+    assert.equal(fm['failure_reason'], undefined);
+  });
+});
+
 test('FEED-04: an unassigned key in a citation group is caught too; a corrected retry succeeds', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     await plannedPaper(sb);

@@ -280,6 +280,20 @@ test('FEED-04: a section write failed (no DRAFT.md kept) → status/attention na
     assert.match(decision.detail ?? '', /section 2 failed: citekey evil9999 not assigned to section 2 — .*`pensmith write 2`/);
   });
 
+// === (j3) a re-write failed while an OLDER DRAFT.md is still there → still attention ===
+test('FEED-04: a failed re-write (failure_reason) with an older DRAFT.md still routes to attention, never to verifying the old draft',
+  { skip: !built }, async () => {
+    const resolveNextAction = await loadResolve();
+    const root = totalityRoot([{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }]);
+    writeSectionPlan(root, 1, 'intro', 'verified');
+    writeSectionPlan(root, 2, 'methods', 'failed', 'failure_reason: citekey evil9999 not assigned to section 2\n');
+    writeDraft(root, 2, 'methods');
+    const decision = await resolveNextAction(root);
+    assert.equal(decision.verb, 'status');
+    assert.equal(decision.reason, 'attention');
+    assert.match(decision.detail ?? '', /section 2 failed: citekey evil9999 not assigned to section 2 — .*`pensmith write 2`/);
+  });
+
 // === (l) MIXED STUCK CASE: [verified, failed, verified] + a draft for the failed one ===
 test('UX-01 / C3-HIGH-1 (l): mixed [verified,failed,verified] + no compiled DRAFT.md → valid non-undefined verify at the failed section',
   { skip: !built }, async () => {

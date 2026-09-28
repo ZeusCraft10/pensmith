@@ -283,10 +283,15 @@ export async function resolveNextAction(
         case 'writing':
           return { verb: 'write', ...id };
         case 'failed':
-          // FEED-04 (D-18-25): write failed the section and kept no draft
-          // (e.g. the drafter cited a source outside its assignment twice).
-          // Never a paid loop: report it and name the retry.
-          if (!existsSync(sectionDraft(n, slug, paperRoot))) {
+          // FEED-04 (D-18-25): write failed the section (`failure_reason`,
+          // e.g. the drafter cited a source outside its assignment twice) and
+          // kept no new draft. Never a paid loop: report it and name the
+          // retry — also when an OLDER DRAFT.md is still there, because that
+          // draft is not the one the failed write was asked to produce, and
+          // verifying it would silently hide the failure. A failed section
+          // with a draft and no failure_reason is verify's own verdict:
+          // re-attempt verification.
+          if (r.failureReason !== null || !existsSync(sectionDraft(n, slug, paperRoot))) {
             return {
               verb: 'status',
               reason: 'attention',
