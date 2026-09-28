@@ -18,8 +18,8 @@ import { addCommand, UNIDENTIFIED_PDF_MESSAGE } from '../bin/cli/add.js';
 import { loadLibrary, upsertSources } from '../bin/lib/library.js';
 import { sources } from '../bin/lib/sources/index.js';
 import { lookupFailed, lookupNotFound } from '../bin/lib/sources/lookup.js';
-import { _resetBucketsForTest, clearCache } from '../bin/lib/http.js';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
+import { withLlmSandbox } from './helpers/llm-sandbox.js';
 
 const BYO = fileURLToPath(new URL('./fixtures/byo/', import.meta.url));
 
@@ -94,7 +94,7 @@ for (const input of ['arXiv:1706.03762', '1706.03762', 'arXiv:1706.03762v7.', 'h
     const r = await runAdd(root, { source: input });
     assert.equal(r.result['ok'], true, r.stderr);
     assert.equal(r.result['citekey'], 'vaswani2017');
-    assert.match(r.stdout, /pensmith add: added vaswani2017 — Attention Is All You Need \(2017\)\./);
+    assert.match(r.stdout, /^pensmith add: added vaswani2017\.\npensmith add: vaswani2017 — Attention Is All You Need \(2017\)$/m);
     assert.match(bibOf(root), /@misc\{vaswani2017,[\s\S]*eprint = \{1706\.03762\},\n {2}archivePrefix = \{arXiv\},/);
     assert.deepEqual(httpRecords(root), ['https://export.arxiv.org/api/query?id_list=1706.03762'], 'an arXiv URL is an identifier: nothing is downloaded');
     const research = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
@@ -107,7 +107,7 @@ test('SRC-14: a known work keeps its key; a colliding new work gets the suffixed
   await upsertSources(root, [{ citekey: 'aspelmeyer2009', doi: '10.5555/other.work', title: 'Another paper by the same author', authors: ['Aspelmeyer, Markus'], year: 2009 }], { provenance: 'research' });
   const first = await runAdd(root, { source: '10.1038/nphys1170' });
   assert.equal(first.result['citekey'], 'aspelmeyer2009a');
-  assert.match(first.stdout, /added aspelmeyer2009a — Measured measurement \(2009\)/);
+  assert.match(first.stdout, /^pensmith add: added aspelmeyer2009a\.\npensmith add: aspelmeyer2009a — Measured measurement \(2009\)$/m);
   assert.match(bibOf(root), /@article\{aspelmeyer2009a,/);
   const again = await runAdd(root, { source: 'https://doi.org/10.1038%2Fnphys1170' });
   assert.equal(again.result['citekey'], 'aspelmeyer2009a');
@@ -212,19 +212,20 @@ test('SRC-15: `add <dir>` ingests every PDF in the folder (bring-your-own)', asy
 // Live lane (MockAgent): URLs, SSRF, the unidentified PDF.
 // ---------------------------------------------------------------------------
 
+/**
+ * One live-lane case in a private data dir (tests/helpers/llm-sandbox.ts), so
+ * it sees only its own MockAgent answers: the runner's data dir — and so its
+ * HTTP cache — is shared by every test file of a run.
+ */
 async function liveLane<T>(fn: (agent: ReturnType<typeof installMockAgent>['agent']) => Promise<T>): Promise<T> {
-  const saved = process.env['PENSMITH_NETWORK_TESTS'];
-  process.env['PENSMITH_NETWORK_TESTS'] = '1';
-  _resetBucketsForTest();
-  await clearCache();
-  const { agent, restore } = installMockAgent();
-  try {
-    return await fn(agent);
-  } finally {
-    await restore();
-    if (saved === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
-    else process.env['PENSMITH_NETWORK_TESTS'] = saved;
-  }
+  return withLlmSandbox({ paper: false, env: { PENSMITH_NETWORK_TESTS: '1' } }, async () => {
+    const { agent, restore } = installMockAgent();
+    try {
+      return await fn(agent);
+    } finally {
+      await restore();
+    }
+  });
 }
 
 test('SRC-01/SRC-13 (MockAgent): a .pdf URL answering text/html prints "not a PDF (got text/html)" — no pdf-parse output, exit 1', async () => {

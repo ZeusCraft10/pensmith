@@ -240,7 +240,8 @@ test('RUN-09: `add` with something that is not an identifier exits 2 before any 
   writeState(root, []);
   const before = snapshot(root);
   const usageCases: Array<[string, RegExp]> = [
-    ['not a doi at all', /^pensmith add: "not a doi at all" is not a DOI \(10\.…\), an http\(s\) URL or a local PDF/m],
+    // SRC-13 (D-19-20): the accepted forms grew — arXiv ids, PMID:, isbn:, folders.
+    ['not a doi at all', /^pensmith add: "not a doi at all" is not a DOI, arXiv id, PMID:<id>, isbn:<ISBN>, http\(s\) URL, local PDF or folder$/m],
     ['./missing.pdf', /^pensmith add: \.\/missing\.pdf: no such file$/m],
   ];
   for (const [arg, message] of usageCases) {
@@ -258,11 +259,18 @@ test('RUN-09: `add` with something that is not an identifier exits 2 before any 
   const offline = runCli(sb, root, ['add', '10.9999/pensmith-no-such-work'], { env: { PENSMITH_OFFLINE: '1' } });
   assert.equal(offline.status, EXIT_ERROR, `${offline.stdout}\n${offline.stderr}`);
   assert.match(offline.stderr, /DOI verification unavailable \(offline\)/);
-  // An existing file that is not a readable PDF cannot be hydrated.
+  // An existing file that is not a PDF is classified before any work (SRC-13,
+  // D-19-27: an unusable `add` argument is EXIT_USAGE) ...
   writeFileSync(join(root, 'notes.txt'), 'plain text, not a PDF\n');
   const notPdf = runCli(sb, root, ['add', 'notes.txt'], { env: { PENSMITH_OFFLINE: '1' } });
-  assert.equal(notPdf.status, EXIT_ERROR, `${notPdf.stdout}\n${notPdf.stderr}`);
-  assert.match(notPdf.stdout, /could not hydrate/);
+  assert.equal(notPdf.status, EXIT_USAGE, `${notPdf.stdout}\n${notPdf.stderr}`);
+  assert.match(notPdf.stderr, /^pensmith add: notes\.txt is not a PDF$/m);
+  // ... and a .pdf that is not a readable PDF cannot be identified: exit 1.
+  writeFileSync(join(root, 'broken.pdf'), 'plain text, not a PDF\n');
+  const broken = runCli(sb, root, ['add', 'broken.pdf'], { env: { PENSMITH_OFFLINE: '1' } });
+  assert.equal(broken.status, EXIT_ERROR, `${broken.stdout}\n${broken.stderr}`);
+  assert.match(broken.stderr, /^pensmith add: broken\.pdf: .+ — nothing added\.$/m);
+  assert.ok(!existsSync(join(root, '.paper', 'LIBRARY.json')), 'nothing was added');
 });
 
 test('RUN-09: an unknown --runtime provider is EXIT_USAGE for every verb, before any work', () => {

@@ -63,8 +63,9 @@ with an identifier and attaches that PDF as the work's bring-your-own copy.
   end marker are never touched.
 - On remap: each chosen section's `PLAN.md` gains the citekey in
   `assigned_sources[]` only.
-- stdout — `added <citekey> — <title> (<year>)`, or `already in library as
-  <citekey>`; every message uses the REAL key (with its collision suffix).
+- stdout — `added <citekey>.` or `already in library as <citekey>.`, then
+  `<citekey> — <title> (<year>)`; every message uses the REAL key (with its
+  collision suffix).
 
 ## Body
 
@@ -81,7 +82,11 @@ with an identifier and attaches that PDF as the work's bring-your-own copy.
    two (D-19-05): found → the record is added; not found → `not found (<why>) —
    nothing added`, exit 1; the lookup failed (HTTP 503, rate limit, network) →
    `lookup failed (<reason>) — nothing added`, exit 1. A failed lookup is never
-   read as "no such work". A reserved `--dry-run` identifier is refused.
+   read as "no such work". Offline with no recorded answer it is `DOI
+   verification unavailable (offline) — <id> NOT added; re-run online to verify
+   and add it` (arXiv / PMID / ISBN likewise), exit 1; under `--dry-run` the
+   line reads `(dry-run)` and exits 0. A reserved `--dry-run` identifier is
+   refused.
 
 3. **A URL** is fetched through the one egress gate (redirects followed and
    re-checked hop by hop, size-capped). An SSRF target (loopback, private,
@@ -123,7 +128,9 @@ with an identifier and attaches that PDF as the work's bring-your-own copy.
    - `--section N` maps to §N only (answered up front, nothing else changes);
    - `--remap` without `--section` maps to the relevant sections it lists;
    - `--yolo` and a run without a terminal skip the remap and print
-     `pensmith add --remap <key> [--section N]`.
+     `remap skipped (non-interactive); run pensmith add --remap <key> --section N`
+     (or `(--yolo)`), then the relevant sections, which `pensmith add --remap
+     <key>` alone maps it to.
    `add --remap <key> [--section N]` does the same for a source already in the
    library (nothing is fetched).
 

@@ -99,11 +99,35 @@ function failed(extra: Record<string, unknown> = {}): AddResult {
   return { ok: false, exitCode: EXIT_ERROR, added: false, ...extra };
 }
 
-/** The dry-run / offline outcome of a lookup that needs the network (RUN-03 / RUN-04). */
-function unavailable(e: unknown, what: string): AddResult {
+/**
+ * The dry-run / offline outcome of a lookup that needs the network (RUN-03 /
+ * RUN-04): offline is a refusal (exit 1), --dry-run a preview (exit 0).
+ */
+function unavailable(e: unknown, message: (label: string) => string): AddResult {
   const label = isOfflineEgressError(e) ? offlineLabel(e) : 'offline';
-  err(`${P}: ${what} unavailable (${label}) — nothing added${label === 'offline' ? '; re-run online to add it' : ''}.`);
+  err(`${P}: ${message(label)}`);
   return label === 'dry-run' ? { ok: true, added: false, mode: label } : failed({ refused: true, mode: label });
+}
+
+/** A request for `what` (a URL fetch, a PDF's identification) that needs the network. */
+function networkUnavailable(e: unknown, what: string): AddResult {
+  return unavailable(e, (label) => `${what} unavailable (${label}) — nothing added${label === 'offline' ? '; re-run online to add it' : ''}.`);
+}
+
+/** An identifier lookup that needs the network — the Phase 17 wording (RUN-03). */
+function verificationUnavailable(e: unknown, input: IdentifierInput): AddResult {
+  const [kind, id] =
+    input.kind === 'doi'
+      ? ['DOI', input.doi]
+      : input.kind === 'arxiv'
+        ? ['arXiv', `arXiv:${input.arxiv}`]
+        : input.kind === 'pmid'
+          ? ['PMID', `PMID:${input.pmid}`]
+          : ['ISBN', `isbn:${input.isbn}`];
+  return unavailable(
+    e,
+    (label) => `${kind} verification unavailable (${label}) — ${id} NOT added${label === 'offline' ? '; re-run online to verify and add it' : ''}.`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -220,8 +244,13 @@ async function remapStep(
   });
   if (outcome.kind !== 'answered') {
     const why = outcome.kind === 'yolo' ? '--yolo' : 'non-interactive';
-    out(`${P}: ${key}: remap skipped (${why}); relevant: ${describeRelevant(ranked)}.`);
-    out(`${P}: to map it: pensmith add --remap ${key}${relevant.length === 0 ? ' --section N' : ''}   (or --section N for one section)`);
+    // RUN-28 acceptance wording (REQUIREMENTS.md): the command to run later.
+    out(`${P}: remap skipped (${why}); run pensmith add --remap ${key} --section N`);
+    out(
+      relevant.length === 0
+        ? `${P}: ${key}: ${describeRelevant(ranked)}.`
+        : `${P}: ${key}: relevant sections: ${describeRelevant(ranked)} — pensmith add --remap ${key} maps it to these.`,
+    );
     return { remapped: [] };
   }
   const values = outcome.answer.kind === 'multiselect' ? outcome.answer.value : [];
@@ -246,14 +275,14 @@ async function hydrateIdentifier(input: IdentifierInput): Promise<Hydrated> {
   // RUN-27: a reserved dry-run identifier is never a real source.
   const id = input.kind === 'doi' ? input.doi : input.kind === 'arxiv' ? input.arxiv : input.kind === 'isbn' ? input.isbn : null;
   if (id !== null && isReservedDryRunId(id) && !networkMode().dryRun) {
-    err(`${P}: ${id} is a reserved dry-run identifier (synthetic --dry-run sources are never real citations) — nothing added.`);
+    err(`${P}: ${id} is a reserved dry-run identifier (synthetic --dry-run sources are never real citations). Source NOT added.`);
     return { result: failed({ refused: true }) };
   }
   let r;
   try {
     r = await lookupIdentifier(input);
   } catch (e) {
-    if (isOfflineEgressError(e)) return { result: unavailable(e, `the lookup of ${label}`) };
+    if (isOfflineEgressError(e)) return { result: verificationUnavailable(e, input) };
     throw e;
   }
   if (r.kind === 'failed') {
@@ -284,7 +313,7 @@ async function hydratePdfBytes(bytes: Buffer, what: string): Promise<Hydrated> {
   try {
     id = await identifyPdf(ex);
   } catch (e) {
-    if (isOfflineEgressError(e)) return { result: unavailable(e, `identifying ${what}`) };
+    if (isOfflineEgressError(e)) return { result: networkUnavailable(e, `identifying ${what}`) };
     throw e;
   }
   if (id.kind !== 'identified') {
@@ -302,7 +331,7 @@ async function hydrateUrl(url: string): Promise<Hydrated> {
     // noCache: a live fetch keeps the byte-faithful bodyBytes (audit #29).
     res = await httpFetch(url, { source: 'generic', noCache: true, maxBytes: MAX_PDF_BYTES });
   } catch (e) {
-    if (isOfflineEgressError(e)) return { result: unavailable(e, `fetching ${url}`) };
+    if (isOfflineEgressError(e)) return { result: networkUnavailable(e, `fetching ${url}`) };
     if (e instanceof SsrfBlockedError) {
       err(`${P}: ${url}: refused — ${e.message}`);
       return { result: failed({ refused: true }) };
@@ -416,7 +445,7 @@ export const addCommand = defineCommand({
       try {
         o = await ingestByoPdf(paperRoot, input.path, { provenance: 'add', strict: true });
       } catch (e) {
-        if (isOfflineEgressError(e)) return unavailable(e, `identifying ${input.raw}`);
+        if (isOfflineEgressError(e)) return networkUnavailable(e, `identifying ${input.raw}`);
         throw e;
       }
       if ('code' in o) {
@@ -457,8 +486,9 @@ export const addCommand = defineCommand({
     await refreshResearchSources(paperRoot);
     const entry = (await tryLoadLibrary(paperRoot))?.entries.find((e) => e.citekey === key);
     const title = entry?.title ? ` — ${entry.title}${entry.year ? ` (${entry.year})` : ''}` : '';
-    if (status === 'added') out(`${P}: added ${key}${title}.`);
-    else out(`${P}: already in library as ${key}${title}${status === 'merged' ? ' (its record was updated)' : ''}.`);
+    if (status === 'added') out(`${P}: added ${key}.`);
+    else out(`${P}: already in library as ${key}${status === 'merged' ? ' (its record was updated)' : ''}.`);
+    if (title) out(`${P}: ${key}${title}`);
 
     const { remapped } = await remapStep(paperRoot, entry ?? { citekey: key, title: null, abstract: null }, remapArgs);
     return { ok: true, citekey: key, added: status === 'added', alreadyInLibrary: status !== 'added', remapped: remapped.length };

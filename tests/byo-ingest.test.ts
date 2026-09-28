@@ -24,8 +24,8 @@ import { loadLibrary, upsertSources } from '../bin/lib/library.js';
 import { provenanceTags } from '../bin/lib/research-md.js';
 import { sha256Hex } from '../bin/lib/byo-text.js';
 import { readPaperConfigSync } from '../bin/lib/config.js';
-import { _resetBucketsForTest, clearCache } from '../bin/lib/http.js';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
+import { withLlmSandbox } from './helpers/llm-sandbox.js';
 
 const BYO = fileURLToPath(new URL('./fixtures/byo/', import.meta.url));
 
@@ -130,19 +130,20 @@ test('SRC-15: new --pdfs records [sources] byo_pdf_dir relative to the project w
 // Live lane (MockAgent): unhydrated entries, re-identification, what leaves.
 // ---------------------------------------------------------------------------
 
+/**
+ * One live-lane case in a private data dir (tests/helpers/llm-sandbox.ts), so
+ * it sees only its own MockAgent answers: the runner's data dir — and so its
+ * HTTP cache — is shared by every test file of a run.
+ */
 async function liveLane<T>(fn: (agent: ReturnType<typeof installMockAgent>['agent'], seen: string[]) => Promise<T>): Promise<T> {
-  const saved = process.env['PENSMITH_NETWORK_TESTS'];
-  process.env['PENSMITH_NETWORK_TESTS'] = '1';
-  _resetBucketsForTest();
-  await clearCache(); // each lane sees only its own MockAgent answers
-  const { agent, restore } = installMockAgent();
-  try {
-    return await fn(agent, []);
-  } finally {
-    await restore();
-    if (saved === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
-    else process.env['PENSMITH_NETWORK_TESTS'] = saved;
-  }
+  return withLlmSandbox({ paper: false, env: { PENSMITH_NETWORK_TESTS: '1' } }, async () => {
+    const { agent, restore } = installMockAgent();
+    try {
+      return await fn(agent, []);
+    } finally {
+      await restore();
+    }
+  });
 }
 
 function reply(seen: string[], body: unknown): (opts: { path: string }) => { statusCode: number; data: string; responseOptions: { headers: Record<string, string> } } {

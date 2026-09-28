@@ -24,8 +24,8 @@ import {
 import { TITLE_JW_THRESHOLD as PASS1_TITLE, AUTHOR_JW_THRESHOLD as PASS1_AUTHOR } from '../bin/lib/fuzzy.js';
 import { lookupFound, lookupNotFound, lookupFailed, type LookupResult } from '../bin/lib/sources/lookup.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
-import { _resetBucketsForTest } from '../bin/lib/http.js';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
+import { withLlmSandbox } from './helpers/llm-sandbox.js';
 
 const BYO = fileURLToPath(new URL('./fixtures/byo/', import.meta.url));
 const load = async (name: string): Promise<PdfExtraction> => extractPdf(fs.readFileSync(path.join(BYO, name)));
@@ -181,19 +181,22 @@ test('SRC-13: a failed lookup is reported (never read as "no such record"); an i
 // Through the real adapters (MockAgent): what leaves the machine.
 // ---------------------------------------------------------------------------
 
+/**
+ * One live-lane case in a private data dir (tests/helpers/llm-sandbox.ts): the
+ * runner's data dir — and so its HTTP cache — is shared by every test file of
+ * a run, and another file's cached answer to the same request would stand in
+ * for this lane's MockAgent.
+ */
 async function liveLane<T>(fn: (agent: ReturnType<typeof installMockAgent>['agent'], seen: string[]) => Promise<T>): Promise<T> {
-  const saved = process.env['PENSMITH_NETWORK_TESTS'];
-  process.env['PENSMITH_NETWORK_TESTS'] = '1';
-  _resetBucketsForTest();
-  const { agent, restore } = installMockAgent();
-  const seen: string[] = [];
-  try {
-    return await fn(agent, seen);
-  } finally {
-    await restore();
-    if (saved === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
-    else process.env['PENSMITH_NETWORK_TESTS'] = saved;
-  }
+  return withLlmSandbox({ paper: false, env: { PENSMITH_NETWORK_TESTS: '1' } }, async () => {
+    const { agent, restore } = installMockAgent();
+    const seen: string[] = [];
+    try {
+      return await fn(agent, seen);
+    } finally {
+      await restore();
+    }
+  });
 }
 
 /** A MockAgent reply that records each request's path in `seen`. */

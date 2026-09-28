@@ -109,11 +109,16 @@ test('SRC-14: --yolo and a run without a terminal skip the remap and print the c
   const { root, plans } = await paper();
   const y = cli(root, ['add', 'arXiv:1706.03762', '--yolo']);
   assert.equal(y.status, 0, y.stderr);
-  assert.match(y.stdout, /vaswani2017: remap skipped \(--yolo\); relevant: §2 Attention-based sequence models/);
-  assert.match(y.stdout, /to map it: pensmith add --remap vaswani2017/);
+  assert.match(y.stdout, /^pensmith add: remap skipped \(--yolo\); run pensmith add --remap vaswani2017 --section N$/m);
+  assert.match(
+    y.stdout,
+    /^pensmith add: vaswani2017: relevant sections: §2 Attention-based sequence models \(shared: [^)]+\) — pensmith add --remap vaswani2017 maps it to these\.$/m,
+  );
+  assert.doesNotMatch(y.stdout, /§1/, 'the unrelated section is not listed');
   const other = await paper();
   const n = cli(other.root, ['add', '10.1038/nphys1170']);
   assert.equal(n.status, 0, n.stderr);
-  assert.match(n.stdout, /aspelmeyer2009: remap skipped \(non-interactive\)/);
+  assert.match(n.stdout, /^pensmith add: remap skipped \(non-interactive\); run pensmith add --remap aspelmeyer2009 --section N$/m);
+  assert.match(n.stdout, /^pensmith add: aspelmeyer2009: no section of the outline shares its topic\.$/m);
   for (const p of [...plans, ...other.plans]) assert.deepEqual(assigned(p), []);
 });
