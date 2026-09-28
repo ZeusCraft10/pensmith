@@ -19,12 +19,15 @@ import {
   readFileSync,
   statSync,
   utimesSync,
+  readdirSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runAllSections } from '../bin/lib/write-orchestrator.js';
 import { sectionDraft } from '../bin/lib/paths.js';
+import { withLlmSandbox } from './helpers/llm-sandbox.js';
+import { fingerprint, outlineSection, seedBriefPaper } from './helpers/section-fixture.js';
 
 const SLUGS = ['intro', 'background', 'methods', 'results']; // N=4, 1-based
 
@@ -125,4 +128,46 @@ test('section-isolation-N: re-running section 3 only leaves sections 1,2,4 mtime
       `Section-as-phase isolation broken: ${slug}/DRAFT.md content-hash changed.`,
     );
   }
+});
+
+// GRND-09 / D-18-18 (Phase 18): a re-outline is section-as-phase too. With N=4
+// drafted sections, `outline --force --yolo` that keeps §1, §2 and §4 and drops
+// §3 leaves every file of the kept sections byte- and mtime-identical, moves §3
+// to sections/_archive/, and renames nothing.
+test('section-isolation-N: outline --force keeps every kept section byte- and mtime-identical', async () => {
+  const KEY = 'sk-test-section-iso-n-0001';
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await seedBriefPaper(sb.root);
+    const four = {
+      thesis: 'Self-attention displaced recurrence because it models long-range dependencies in parallel.',
+      sections: [
+        outlineSection(1, 'intro', { role: 'intro', assigned_sources: ['vaswani2017'], estimated_word_count: 375 }),
+        outlineSection(2, 'background', { depends_on: ['intro'], assigned_sources: ['bahdanau2015'], estimated_word_count: 375 }),
+        outlineSection(3, 'methods', { depends_on: ['background'], assigned_sources: ['luong2015'], estimated_word_count: 375 }),
+        outlineSection(4, 'results', { role: 'conclusion', depends_on: ['background'], assigned_sources: ['devlin2019'], estimated_word_count: 375 }),
+      ],
+    };
+    sb.mock!.script('outline-author', { data: four });
+    const first = await sb.runTsx(null, ['outline', '--yolo'], { env: { ANTHROPIC_API_KEY: KEY } });
+    assert.equal(first.status, 0, first.stderr);
+    const sections = join(sb.paper, 'sections');
+    for (const d of ['01-intro', '02-background', '03-methods', '04-results']) {
+      writeFileSync(join(sections, d, 'DRAFT.md'), `Draft of ${d}.\n`);
+      writeFileSync(join(sections, d, 'VERIFICATION.md'), `Verification of ${d}.\n`);
+    }
+    const kept = ['01-intro', '02-background', '04-results'];
+    const before = new Map(kept.map((d) => [d, fingerprint(join(sections, d))]));
+
+    const three = { ...four, sections: [four.sections[0]!, four.sections[1]!, { ...four.sections[3]!, estimated_word_count: 750 }] };
+    sb.mock!.script('outline-author', { data: three });
+    const r = await sb.runTsx(null, ['outline', '--force', '--yolo'], { env: { ANTHROPIC_API_KEY: KEY } });
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    for (const d of kept) assert.deepEqual(fingerprint(join(sections, d)), before.get(d), `${d}: every file byte- and mtime-identical`);
+    assert.deepEqual(
+      readdirSync(sections).sort(),
+      ['01-intro', '02-background', '04-results', '_archive'],
+      'nothing renamed or renumbered',
+    );
+    assert.deepEqual(readdirSync(join(sections, '_archive')), ['03-methods']);
+  });
 });
