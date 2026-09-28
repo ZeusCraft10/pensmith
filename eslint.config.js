@@ -510,6 +510,10 @@ export default [
       'dist/**',
       'coverage/**',
       'node_modules/**',
+      // Claude Code keeps agent worktrees (full repo checkouts) and local
+      // settings under .claude/ (gitignored); linting them would lint every
+      // worktree's copy of the repo from the main checkout.
+      '.claude/**',
     ],
   },
 
