@@ -168,7 +168,7 @@ test('CONF-01: effective values carry their source (default, preset, intake, con
     assert.deepEqual(rows.get('project.length_target_words'), { key: 'project.length_target_words', value: 2000, source: 'config' });
     assert.equal(rows.get('project.pii_redaction')?.source, 'intake', 'pensmith new writes pii_redaction');
     assert.equal(rows.get('project.citation_style')?.source, 'preset');
-    assert.equal(rows.get('project.citation_style')?.value, 'Chicago (Author-Date)', 'the history preset style');
+    assert.equal(rows.get('project.citation_style')?.value, 'Chicago (Notes-Bibliography)', 'the history preset style (PRD §8, GRND-06)');
     assert.deepEqual(rows.get('project.counterargument_required'), { key: 'project.counterargument_required', value: true, source: 'preset' });
     assert.equal(rows.get('humanizer.enabled')?.source, 'default');
     assert.deepEqual(rows.get('budget.cost_cap_usd'), { key: 'budget.cost_cap_usd', value: 7.5, source: 'env' });

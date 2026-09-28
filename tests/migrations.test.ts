@@ -31,25 +31,33 @@ import v1_to_v2 from '../bin/lib/migrations/state/v1_to_v2.js';
 import { atomicWriteFile } from '../bin/lib/atomic-write.js';
 import { migrateFrontmatterText, FrontmatterVersionError } from '../bin/lib/frontmatter.js';
 import { migrate as planV0ToV1 } from '../bin/lib/migrations/plan/v0_to_v1.js';
+import { migrate as planV1ToV2 } from '../bin/lib/migrations/plan/v1_to_v2.js';
+import { migrate as intakeV0ToV1, legacyTopic, legacyDiscipline } from '../bin/lib/migrations/intake/v0_to_v1.js';
 
 // ---------------------------------------------------------------------------
 // Frontmatter migrations (CONF-04, D-17-38) — bin/lib/migrations/<kind>/.
-// Section PLAN.md is v1 (v0_to_v1 inserts `schema_version: 1`); INTAKE.md,
-// DRAFT.md and VERIFICATION.md have no frontmatter yet (v0) and refuse a file
-// from a newer build. tests/frontmatter-versioning.test.ts covers the loader's
-// write-back and the CLI paths.
+// Section PLAN.md is v2 (v0_to_v1 inserts `schema_version: 1`, v1_to_v2
+// rewrites it to 2 — GRND-09); INTAKE.md is v1 (v0_to_v1 prepends the brief's
+// frontmatter — GRND-03); DRAFT.md and VERIFICATION.md have no frontmatter yet
+// (v0) and refuse a file from a newer build. tests/frontmatter-versioning.test.ts
+// covers the loader's write-back and the CLI paths.
 // ---------------------------------------------------------------------------
 
 const SECTION_PLAN_V0 = '---\nsection: 1\nslug: intro\ntitle: Intro\nstatus: written\n---\n\n## Brief\n';
 
-test('frontmatter: section PLAN.md v0 → v1 adds schema_version and nothing else', () => {
-  assert.equal(planV0ToV1(SECTION_PLAN_V0), SECTION_PLAN_V0.replace('---\n', '---\nschema_version: 1\n'));
+test('frontmatter: section PLAN.md v0 → v1 → v2 adds schema_version and nothing else', () => {
+  const v1 = planV0ToV1(SECTION_PLAN_V0);
+  assert.equal(v1, SECTION_PLAN_V0.replace('---\n', '---\nschema_version: 1\n'));
+  assert.equal(planV1ToV2(v1), SECTION_PLAN_V0.replace('---\n', '---\nschema_version: 2\n'), 'v1 → v2 only rewrites the version line (GRND-09)');
   const doc = migrateFrontmatterText('plan', SECTION_PLAN_V0);
   assert.deepEqual(
     { disk: doc.diskVersion, now: doc.version, migrated: doc.migrated, status: doc.frontmatter['status'] },
-    { disk: 0, now: 1, migrated: true, status: 'written' },
+    { disk: 0, now: 2, migrated: true, status: 'written' },
   );
-  assert.equal(migrateFrontmatterText('plan', doc.text).migrated, false, 'a v1 file is left as is');
+  assert.equal(doc.text, SECTION_PLAN_V0.replace('---\n', '---\nschema_version: 2\n'));
+  assert.equal(migrateFrontmatterText('plan', doc.text).migrated, false, 'a v2 file is left as is');
+  const fromV1 = migrateFrontmatterText('plan', v1);
+  assert.deepEqual({ disk: fromV1.diskVersion, now: fromV1.version }, { disk: 1, now: 2 });
 });
 
 test('frontmatter: section PLAN.md newer than the build is refused (never downgraded)', () => {
@@ -59,8 +67,28 @@ test('frontmatter: section PLAN.md newer than the build is refused (never downgr
   );
 });
 
-test('frontmatter: INTAKE.md (and DRAFT.md / VERIFICATION.md) are v0 until a requirement adds a field', () => {
-  for (const kind of ['intake', 'draft', 'verification'] as const) {
+test('frontmatter: INTAKE.md v0 → v1 prepends the brief (topic, discipline) and keeps the old text as the body (GRND-03)', () => {
+  const legacy = '# Intake\n\nTopic: attention mechanisms in transformers\nDiscipline: CS\n\n## Assignment\n\nWrite a review.\n';
+  const out = intakeV0ToV1(legacy);
+  assert.ok(out.endsWith(legacy), 'every byte of the v0 document is kept after the new frontmatter');
+  const doc = migrateFrontmatterText('intake', legacy);
+  assert.deepEqual({ v: doc.version, disk: doc.diskVersion, migrated: doc.migrated }, { v: 1, disk: 0, migrated: true });
+  assert.equal(doc.frontmatter['topic'], 'attention mechanisms in transformers');
+  assert.equal(doc.frontmatter['discipline'], 'computer-science');
+  assert.equal(migrateFrontmatterText('intake', doc.text).migrated, false, 'a v1 file is left as is');
+  const crlf = legacy.replace(/\n/g, '\r\n');
+  assert.ok(intakeV0ToV1(crlf).endsWith(crlf) && intakeV0ToV1(crlf).startsWith('---\r\nschema_version: 1\r\n'), 'CRLF kept');
+  // Older INTAKE.md files held only the clarifier's questions.
+  assert.equal(legacyTopic('1. Which discipline?\n2. What length?\n'), '');
+  assert.equal(legacyDiscipline('1. Which discipline?\n'), 'other');
+  assert.equal(legacyTopic('# Intake\n\n## Assignment\n\nWrite a 1500-word literature review on the French Revolution. Use MLA.\n'), 'the French Revolution');
+  // A document that already has frontmatter only gains the version line.
+  assert.equal(intakeV0ToV1('---\ntopic: x\n---\nbody\n'), '---\nschema_version: 1\ntopic: x\n---\nbody\n');
+  assert.throws(() => migrateFrontmatterText('intake', '---\nschema_version: 2\n---\n# H\n'), FrontmatterVersionError);
+});
+
+test('frontmatter: DRAFT.md and VERIFICATION.md are v0 until a requirement adds a field', () => {
+  for (const kind of ['draft', 'verification'] as const) {
     const plain = migrateFrontmatterText(kind, '# Heading\n\nText.\n');
     assert.deepEqual({ v: plain.version, migrated: plain.migrated }, { v: 0, migrated: false }, kind);
     assert.throws(() => migrateFrontmatterText(kind, '---\nschema_version: 1\n---\n# H\n'), FrontmatterVersionError, kind);
