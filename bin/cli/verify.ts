@@ -29,7 +29,8 @@ import { runPass2, renderPass2Section, pass2NotRun, NO_LLM_SKIP_REASON, type Pas
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { isFatalLlmError } from '../lib/anthropic.js';
 import { extractCitedKeysForVerification } from '../lib/citation-token.js';
-import { parseBibFileAt } from '../lib/citations.js';
+import { parseBibFile, parseBibFileAt } from '../lib/citations.js';
+import { rerenderCitations, LibraryNotFoundError } from '../lib/library.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, sectionPlan, paperDir, projectRoot } from '../lib/paths.js';
 import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
@@ -45,6 +46,39 @@ import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
 // stays GREEN even if a refactor later inlines runPass1/runPass3.
 void jaroWinkler;
 void levenshteinSubstring;
+
+/**
+ * SRC-12: when CITATIONS.bib does not parse and the paper has a LIBRARY.json,
+ * re-render the bib (and RIS) from the library — one stderr notice, the
+ * unreadable file kept as a backup — so verification proceeds on a bib that
+ * holds exactly the library's sources. Without a library nothing changes and
+ * Pass 1 reports the parse error (fail closed).
+ */
+async function rerenderBibIfBroken(root: string, bibPath: string): Promise<void> {
+  let text: string;
+  try {
+    text = readFileSync(bibPath, 'utf8');
+  } catch {
+    return;
+  }
+  try {
+    await parseBibFile(text);
+    return;
+  } catch {
+    /* does not parse — re-render below */
+  }
+  let result;
+  try {
+    result = await rerenderCitations(root);
+  } catch (e) {
+    if (e instanceof LibraryNotFoundError) return;
+    throw e;
+  }
+  process.stderr.write(
+    `pensmith verify: .paper/CITATIONS.bib did not parse (${result.previousProblem ?? 'invalid BibTeX'}) — re-rendered it from LIBRARY.json` +
+      `${result.backup ? `; the old file is kept at ${result.backup}` : ''}\n`,
+  );
+}
 
 /** One line naming why the advisory passes stopped (for the "not run" rows). */
 function stopReason(err: unknown): string {
@@ -119,6 +153,12 @@ export const verifyCommand = defineCommand({
       process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote failed VERIFICATION.md to ${verifPath}\n`);
       return { ok: false, status: 'failed', path: verifPath, exitCode: EXIT_ERROR };
     }
+
+    // SRC-12 (D-19-19): a CITATIONS.bib that does not parse — e.g. one an older
+    // pensmith wrote with `{\u …}` name escapes (E2E-12) — is re-rendered from
+    // LIBRARY.json, the paper's source of truth, with one notice; the old file
+    // is kept as a backup. With no LIBRARY.json the parse error below stands.
+    if (bibExists) await rerenderBibIfBroken(projectRoot(), bibPath);
 
     // An empty CITATIONS.bib is zero entries (the library writer renders an
     // empty library as an empty bib, BRDTH-01), and a draft that cites nothing

@@ -31,7 +31,9 @@ equivalence.
 - `.paper/INTAKE.md` — the clarified assignment: topic, discipline and the clarifying
   questions (rendered from the validated `intake-clarifier` object, never copied from
   model prose)
-- `.paper/config.toml` — the paper's `[project]` settings (`pii_redaction` when `--pii-redact` is given)
+- `.paper/config.toml` — the paper's `[project]` settings (`pii_redaction` when `--pii-redact` is given), and `[sources] byo_pdf_dir` with `--pdfs`
+- with `--pdfs <dir>`: `.paper/LIBRARY.json`, `.paper/CITATIONS.bib` / `.ris`, `.paper/RESEARCH.md` and
+  `.paper/sources/<citekey>.pdf` for the bring-your-own PDFs
 - `.paper/INTAKE.raw.local` — ONLY with PII redaction on: the raw, un-redacted text
   (gitignored via `.paper/.gitignore`, never committed, never sent to a model)
 
@@ -72,5 +74,19 @@ equivalence.
    With `--style-samples <dir>` (opt-in), a statistical style profile is written to
    `.paper/STYLE.json`.
 
-6. **Shell fallback** (TIER-06 equivalence path): `pensmith new [--from <file>]
-   [--thesis <text>] [--pii-redact] [--style-samples <dir>] [--yolo]`.
+6. **Bring-your-own PDFs** (SRC-15, PRD §7.15 / §9): with `--pdfs <dir>` — checked
+   before anything is written (a missing folder is exit 2) — the folder is recorded
+   as `[sources] byo_pdf_dir` in `.paper/config.toml` (relative to the paper folder
+   when it lies inside it), and every PDF in it is ingested after `INTAKE.md` exists
+   (`bin/lib/byo-ingest.ts`): hashed (sha256; re-ingest is idempotent), read in the
+   SEC-02 worker, identified from its metadata, the identifiers on its first pages,
+   or its title and first author (only an identifier or the title leaves the
+   machine, one lookup per registrar consulted), copied to
+   `.paper/sources/<citekey>.pdf`, and added to `.paper/LIBRARY.json` tagged
+   bring-your-own with the PDF's and its text's sha256. A PDF no registrar matches
+   confidently is kept with its own metadata, flagged unhydrated, with a warning.
+   One line per PDF; a PDF that cannot be ingested never fails `new`. RESEARCH.md's
+   source list shows them with the bring-your-own tag.
+
+7. **Shell fallback** (TIER-06 equivalence path): `pensmith new [--from <file>]
+   [--thesis <text>] [--pii-redact] [--style-samples <dir>] [--pdfs <dir>] [--yolo]`.

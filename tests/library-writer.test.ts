@@ -425,6 +425,43 @@ test('BRDTH-01: Cyrillic, Greek, CJK and Arabic authors and titles render a CITA
   assert.doesNotMatch(bibText, /author = \{, \}/, 'no empty author is ever rendered');
 });
 
+test('SRC-12: a bib-only entry is imported with its eprint, abstract, editors and bibliographic fields, then re-rendered whole', async () => {
+  const root = project();
+  await upsertSources(root, [ENGEL], { provenance: 'research' });
+  const bibPath = path.join(root, '.paper', 'CITATIONS.bib');
+  fs.appendFileSync(
+    bibPath,
+    [
+      '',
+      '@incollection{handmade2019,',
+      '  author = {{van der Maaten}, Laurens and King, Jr., Martin Luther},',
+      '  editor = {Editor, Eve},',
+      '  title = {A hand-made chapter},',
+      '  booktitle = {The Handbook},',
+      '  publisher = {Pub House},',
+      '  pages = {10--20},',
+      '  year = {2019},',
+      '  eprint = {1906.00001},',
+      '  archivePrefix = {arXiv},',
+      '  abstract = {An abstract \\& more.},',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  await upsertSources(root, [cand({ citekey: 'x2020', doi: '10.5555/lib.x', title: 'Trigger a render', year: 2020 })], { provenance: 'research' });
+  const e = (await loadLibrary(root)).entries.find((x) => x.citekey === 'handmade2019')!;
+  assert.deepEqual(e.provenance, ['bib-import']);
+  assert.equal(e.arxiv, '1906.00001', 'the eprint is the arXiv id');
+  assert.equal(e.abstract, 'An abstract & more.');
+  assert.deepEqual(e.authors, ['van der Maaten, Laurens', 'King, Martin Luther, Jr.']);
+  assert.deepEqual(e.editors, ['Editor, Eve']);
+  assert.equal(e.type, 'chapter');
+  assert.equal(e.venue, 'The Handbook');
+  assert.equal(e.pages, '10-20');
+  const rendered = fs.readFileSync(bibPath, 'utf8');
+  assert.match(rendered, /@incollection\{handmade2019,[\s\S]*booktitle = \{The Handbook\}[\s\S]*eprint = \{1906\.00001\}[\s\S]*abstract = \{An abstract \\& more\.\}/);
+});
+
 test('BRDTH-01: verify on an unparseable CITATIONS.bib is one classified line (no stack hint), never "no citations"', () => {
   const root = project();
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-libwriter-data-'));

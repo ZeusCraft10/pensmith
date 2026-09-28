@@ -363,6 +363,8 @@ Same patterns as GSD:
 
 For when the researcher misses something the user knows about. Accepts a DOI / arXiv ID / URL / local PDF path; verifies it; adds to RESEARCH.md. **Surfaces a "should I remap sections to use this?" prompt** so the user doesn't end up with a stranded source not mapped to any section.
 
+*(Amended in v1.0.0 Phase 19 — SRC-13, SRC-14, SRC-15; reason: `add` hydrated the wrong work from a PDF's licence line, missed arXiv / PMID / ISBN inputs, and remapped every section.)* The argument is classified before any request: a DOI (including `DOI: 10.…` and percent-encoded doi.org links), an arXiv id (new or old style, versioned, `arxiv.org/abs|pdf` links — never downloaded), `PMID:<id>`, `isbn:<ISBN>` (or a checksum-valid ISBN), any other URL, a local PDF, or a folder of PDFs (bring-your-own ingest, §9); anything else is a usage error. An identifier is resolved at its registrar with three outcomes — found, not found, or a failed lookup that is reported and never read as "not found". A URL is fetched through the one transport (SSRF guard, redirects re-checked, size cap); a `.pdf` link that answers HTML is `not a PDF`, and a landing page must declare its identifier in its own `<meta>` tags. A PDF is identified from its embedded identifiers, then the arXiv stamp or a DOI on its first pages, then its title and first author — accepted only above the Pass-1 title and author thresholds; otherwise `add` refuses with `could not confidently identify this PDF — pass its DOI: pensmith add <doi> --pdf <file>` and changes nothing, so a wrong work is never added. `add <id> --pdf <file>` attaches the PDF as the work's bring-your-own copy. The remap is a multi-select that preselects only the sections whose title, purpose or plan share topic words with the source; `add --remap <key> --section N` changes only §N, and `--yolo` or a run without a terminal skips the remap and prints the command. Every message and PLAN.md use the real citekey, collision suffix included.
+
 ### 7.16 Sketch / thinking-partner mode (`/pensmith sketch`)
 
 Entry point for users who haven't found their angle yet.
@@ -496,6 +498,14 @@ Pensmith then:
 5. Verification works on them: if the PDF text is locally available, claim-support and quote-verify can read it directly (no need to re-fetch).
 
 Edge cases documented in PRIVACY.md: PDF contents stay local; only Crossref/OpenAlex hydration calls leave the box (and only the title — not the full text).
+
+*(Amended in v1.0.0 Phase 19 — SRC-15, SEC-02, D-19-21; reason: an ingested PDF's text must be trusted only while the PDF is unchanged, and hydration must never pick the wrong work.)* The folder is recorded as `[sources] byo_pdf_dir`; `pensmith add <folder>` and `pensmith add <file.pdf>` use the same path. Per PDF:
+1. The size cap and the `%PDF-` header are checked and the PDF's sha256 taken; re-ingest is idempotent by it.
+2. Text and metadata are extracted in a worker thread that is terminated on timeout (pdf-parse; PyMuPDF when pdf-parse fails or finds no text; a PDF with no extractable text is image-only).
+3. Identification uses, in order, the PDF's embedded Info/XMP identifiers, the arXiv stamp or a DOI on its first pages (accepted only when the record's title is on the page), then its title and first author (from real metadata or a layout heuristic that skips licence and boilerplate lines) searched at Crossref, then OpenAlex, accepted only above the Pass-1 title and first-author thresholds. Only an identifier or the title is sent.
+4. An identified PDF enters LIBRARY.json through the one library writer with provenance `byo` (tag `bring-your-own`); a later research hit for the same work merges into it. A PDF with no confident match is kept with its own metadata, `hydrated: false`, and a warning — never as a search hit.
+5. The PDF is kept at `.paper/sources/<citekey>.pdf`; LIBRARY.json records `byo: {file, sha256, text_sha256}`.
+6. Its text is read only through a re-hash (`bin/lib/byo-text.ts`): a PDF whose sha256 changed makes the text unavailable; the text is served from a cache in the user data folder only when its hash equals `text_sha256`, otherwise the PDF is extracted again and checked; a loose `.paper/sources/<citekey>.txt` is never read (S-17). The drafter's full-text flag counts a BYO PDF with a recorded text hash (GRND-14).
 
 ---
 

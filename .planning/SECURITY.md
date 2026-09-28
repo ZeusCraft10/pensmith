@@ -29,7 +29,7 @@ This is a planning artifact — it lives in `.planning/` and is NOT a public-fac
 | 6 | Lock-race — cross-process concurrent write (BLOCKER-01/02) | `bin/lib/lock.ts` → `withLock()` / `proper-lockfile` | `tests/lock.test.ts` (TEST-07 cross-process spawn) | **PROVEN** |
 | 7 | Prompt injection — untrusted source abstract / claim sentence in Pass-2/Pass-4 prompt | `templates/prompts/claim-support.md` + `orphan-label.md` — PENSMITH_UNTRUSTED_DATA fence marker | `tests/pass2-injection.test.ts` | **PROVEN** |
 | 8 | PDF supply-chain — pdf-parse version drift (malicious or breaking update) | `package.json` exact pin `pdf-parse@1.1.1` + dual-surface pin guard | `tests/repo-files.test.ts` ("pdf-parse stays pinned exact at 1.1.1") | **PROVEN** |
-| 9 | PDF OOM / hang — unbounded input causes memory exhaustion or infinite parse loop | `bin/lib/pdf-text.ts` → `MAX_PDF_BYTES` cap + `PDF_TIMEOUT_MS` Promise.race | `tests/pdf-text-bounds.test.ts` | **PROVEN-with-residual**: byte cap (50 MB) bounds memory. The `Promise.race` timeout correctly unblocks the caller, but `Promise.race` does NOT cancel the losing promise — pdf-parse continues executing in the background consuming CPU until complete. For pathological PDFs this may be seconds to minutes of background CPU. Risk LOW for a local CLI (the 50 MB cap bounds OOM; the post-timeout compute is bounded by the file size). Follow-up: migrate parse to `worker_threads` and call `worker.terminate()` on timeout to cleanly reclaim both memory and CPU. Deferred: larger change, risks destabilizing the PDF path. |
+| 9 | PDF OOM / hang — unbounded input causes memory exhaustion or infinite parse loop | `bin/lib/pdf-text.ts` → `MAX_PDF_BYTES` cap (50 MB) before any parse; pdf-parse runs only in the `worker_threads` worker `bin/lib/pdf-worker.ts` (heap limit 1.5 GB) under `PDF_TIMEOUT_MS`; a one-shot settle guard over message / error / exit / timeout, and on timeout the parent AWAITS `worker.terminate()` before rejecting (SEC-02, D-19-22) | `tests/pdf-text-bounds.test.ts` (byte cap) + `tests/pdf-worker.test.ts` (a result 1 ms before the timeout is returned; a hanging parse is terminated and `activePdfWorkers()` returns to 0; a process whose parse timed out exits on its own; worker entry from source and from `dist/`) | **PROVEN** (SEC-02, Phase 19): the WR-05 residual — pdf-parse burning CPU after a `Promise.race` timeout — is closed; a timed-out parse is killed with its thread, reclaiming CPU and memory. PLUG-02 (Phase 23) adds the plugin-bundle layout to the worker-entry test. |
 | 10 | GPTZero API-key never logged | `bin/lib/honesty.ts` → presence-only check; value reaches only the `x-api-key` header | `tests/honesty.test.ts` (key-never-logged assertion) | **PROVEN** |
 | 11 | GPTZero full-body egress without consent — raw essay text sent to third-party service | `bin/lib/honesty.ts` → the V2 `detector-consent` gate (asks in a terminal; `--yolo` NEVER skips it; a run that cannot prompt gives "score unavailable (no consent)"); offline never sends | `tests/honesty.test.ts` (consent declined / no terminal / `--yolo` → no POST; offline → "score unavailable (offline)") | **PROVEN** |
 | 12 | GPTZero over-sized POST — excessive bandwidth / API cost on large papers | `bin/lib/honesty.ts` → `GPTZERO_MAX_BYTES` truncation before POST | `tests/honesty.test.ts` (HARD-05: "over-cap input → POST body truncated") | **PROVEN** |
@@ -96,12 +96,12 @@ These were identified before Phase 15 and are included for completeness:
 ## Counts
 
 - **Total threats enumerated:** 28 table rows (1–27 plus 2a) + 2 manual-only (M-1, M-2); rows 2a and updated 9 added Phase 15 fix; rows 25–27 added Phase 17 (counts recounted from the table in Phase 17)
-- **PROVEN (CI-verified):** 25
+- **PROVEN (CI-verified):** 26 (row 9 moved here in Phase 19, SEC-02)
 - **PROVEN-in-CI / UNPROVEN-live:** 1 (row 2 — live DNS SSRF)
-- **PROVEN-with-residual (documented gap, deferred fix):** 1 (row 9 — post-timeout PDF CPU)
+- **PROVEN-with-residual (documented gap, deferred fix):** 0
 - **UNPROVEN-in-CI (manual-only):** 2 (rows 13, M-2 — live GPTZero)
 - **UNPROVEN (no test, follow-up required):** 0
 
-Row 9 is HONEST about its residual gap (WR-05 post-timeout PDF CPU); its deferred fix is documented. Row 2a's WR-03 DNS TOCTOU gap was closed in Phase 17 (SEC-01).
+Row 9's WR-05 residual (post-timeout PDF CPU) was closed in Phase 19 (SEC-02: the parse runs in a worker that is terminated on timeout). Row 2a's WR-03 DNS TOCTOU gap was closed in Phase 17 (SEC-01).
 
 All enforcing tests confirmed green at time of authoring (Wave 4, 2026-06-24). Phase 15 fix audit: 2026-06-24.

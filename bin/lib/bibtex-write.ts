@@ -1,58 +1,67 @@
 // bin/lib/bibtex-write.ts — source records -> BibTeX serializer for
-// .paper/CITATIONS.bib (D-19 LOCKED citation-js chokepoint, D-07 LOCKED
-// atomic-write chokepoint, D-20, VRFY-04).
+// .paper/CITATIONS.bib (SRC-12 / D-19-19; D-07 atomic-write chokepoint;
+// BRDTH-01 one library writer).
 //
 // BRDTH-01 / D-17-43: .paper/CITATIONS.bib is RENDERED from LIBRARY.json by the
 // one library writer (bin/lib/library.ts). Only library.ts may call
 // renderBibtex / writeBibtex (chokepoint row `library-writer`); every ingest
 // path goes through upsertSources instead. The input is the structural
-// BibSource shape, which both a LIBRARY.json v2 entry and a research
+// BibSource shape, which both a LIBRARY.json v3 entry and a research
 // SourceCandidate satisfy.
 //
-// This module rides two chokepoints:
-//   1. citation-js — we import formatBibtex / parseBibSync from './citations.js'
-//      (the SOLE module that imports the library directly). ESLint backstops the
-//      chokepoint via no-restricted-imports on 'citation-js'.
-//   2. atomic-write — writeBibtex calls atomicWriteFile from './atomic-write.js'
-//      for the final write; we NEVER call raw fs write/append directly. ESLint
-//      backstops via the callee-property selector banning those node:fs methods.
+// SRC-12 (D-19-19) — what an entry carries, so a reference can be formatted
+// from the bib alone and the bib always parses back as the same work:
+//   - names parsed by person-name.ts ("Family, Given[, Suffix]", "Given
+//     Family" with lower-case particles joining the family, "{Corporate}",
+//     a single token = family) and written as raw UTF-8 — never `{\u …}`
+//     escapes, which the old citation-js formatter produced for Cyrillic and
+//     its own parser then rejected (E2E-12). A family name with a space or a
+//     lower-case first letter is braced ({van der Maaten}, Laurens), so BibTeX
+//     never splits it into a particle and a family;
+//   - title, abstract, journal / booktitle, volume, number (issue), pages,
+//     publisher (institution / school), editor, isbn, doi, eprint +
+//     archivePrefix = {arXiv} + primaryClass for arXiv works, note = {RETRACTED};
+//   - the entry type from the CSL `type`: article-journal / -newspaper /
+//     -magazine → @article, book → @book, chapter → @incollection,
+//     paper-conference → @inproceedings, report → @techreport, thesis →
+//     @phdthesis, preprint / dataset / webpage / other → @misc.
+//
+// The serializer is written here, not delegated to citation-js's BibTeX
+// formatter: that formatter escapes non-ASCII as LaTeX its parser cannot read,
+// drops abstracts and eprints, and cannot keep a particle in the family name.
+// Every entry is still parsed back through the ONE parser verify, compile and
+// done use (citations.ts parseBibSync, the citation-js chokepoint) before it
+// is returned; an entry that does not read back as the same work throws
+// BibRenderError and library.ts refuses the write.
+//
+// Value encoding (escapeBibtexUtf8): NFC, control characters dropped,
+// whitespace collapsed, the BibTeX-special ASCII characters escaped
+// (\ { } $ & % # _ ~ ^ `), and the TeX ligatures -- --- '' broken with an
+// empty group, so every character the library holds comes back exactly.
 //
 // Citekey strategy:
-//   - Every emitted entry is keyed by a deterministic citekey set as CslEntry.id
-//     BEFORE Cite.format() is called. citation-js then renders @article{<id>, …}
-//     verbatim — no auto-generation, no surprise spelling.
-//   - Collisions resolve via base-26 spreadsheet-column encoding (seen=1 -> 'a',
-//     26 -> 'z', 27 -> 'aa', 53 -> 'ba', etc.). This stays deterministic for
-//     pathologically deep collision chains (e.g. a "Wu, 2017" literature dump)
-//     and still satisfies the D-14 citekey regex /^[a-z][a-z0-9_-]*$/. (Library
-//     citekeys are already unique — LIBRARY.json v2 enforces it — so this only
-//     fires for callers that hand in raw candidates.)
+//   - Entries are keyed by their (collision-suffixed) citekeys. Collisions
+//     resolve via base-26 spreadsheet-column encoding (seen=1 -> 'a', 26 -> 'z',
+//     27 -> 'aa', …). (Library citekeys are already unique — LIBRARY.json
+//     enforces it — so this only fires for callers that hand in raw candidates.)
+//   - Entries are sorted by final citekey (diff-stable output).
 //
-// Sorting:
-//   - Entries are sorted by FINAL citekey BEFORE being rendered so the
-//     emitted .bib is diff-stable. We do NOT post-process the output by
-//     splitting on a newline-before-@ lookahead — that is fragile for field
-//     values containing a literal newline followed by @ (URLs in notes, email
-//     addresses in abstracts).
+// Which sources are written: those with a persistent identifier (DOI, ISBN,
+// arXiv id, PMID, PMCID) and bring-your-own PDFs (their hashes identify them;
+// VRFY-14 checks them). A source with neither cannot be cited and is dropped.
 //
-// Non-Latin text:
-//   - Every entry is parsed back before it is returned. citation-js's default
-//     LaTeX escaping drops CJK / Arabic letters and writes Cyrillic / Greek
-//     LaTeX its own parser rejects, so such an entry is rendered as raw UTF-8
-//     (BibTeX-special ASCII still escaped); an entry that reads back wrong
-//     either way throws BibRenderError (library.ts refuses the upsert).
-//
-// Empty array:
-//   - renderBibtex([]) is '' and writeBibtex([], target) writes a zero-length
-//     file. verify reads .paper/CITATIONS.bib via citations.parseBib(); it must
-//     never ENOENT just because a paper happens to have zero sources.
+// Empty array: renderBibtex([]) is '' and writeBibtex([], target) writes a
+// zero-length file (verify reads CITATIONS.bib; it must never ENOENT just
+// because a paper has zero sources).
 
-import { formatBibtex, parseBibSync } from './citations.js';
+import { parseBibSync } from './citations.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { generateCitekey } from './citekey.js';
+import { parsePersonName, type PersonName } from './person-name.js';
+import { normArxiv, normDoi, normIsbn, normPmcid, normPmid } from './migrations/library/shape.js';
 
 /**
- * The fields the BibTeX/RIS renderers read. A LIBRARY.json v2 entry and a
+ * The fields the BibTeX/RIS renderers read. A LIBRARY.json v3 entry and a
  * research SourceCandidate both satisfy it structurally.
  */
 export interface BibSource {
@@ -62,74 +71,385 @@ export interface BibSource {
   year?: number | null | undefined;
   doi?: string | null | undefined;
   isbn?: string | null | undefined;
-  /** Bare arXiv id (LIBRARY.json v2). */
+  /** Bare arXiv id (LIBRARY.json). */
   arxiv?: string | null | undefined;
   /** Legacy spelling carried by bib-derived candidates. */
   arxivId?: string | null | undefined;
+  pmid?: string | null | undefined;
+  pmcid?: string | null | undefined;
   retracted?: boolean | undefined;
   /** SourceCandidate adapter name — 'arxiv' renders as a preprint. */
   source?: string | undefined;
+  /** SourceCandidate id (the arXiv id when `source` is 'arxiv'). */
+  id?: string | undefined;
+  venue?: string | null | undefined;
+  abstract?: string | null | undefined;
+  /** CSL type (schemas/source-types.ts). */
+  type?: string | null | undefined;
+  publisher?: string | null | undefined;
+  volume?: string | number | null | undefined;
+  issue?: string | number | null | undefined;
+  pages?: string | null | undefined;
+  editors?: string[] | undefined;
+  /** A bring-your-own PDF record (SRC-15): such a source is citable without a registrar id. */
+  byo?: { file: string; sha256: string } | null | undefined;
 }
 
-interface CslAuthor {
-  family: string;
+// ---------------------------------------------------------------------------
+// Identifiers and type.
+// ---------------------------------------------------------------------------
+
+interface Ids {
+  doi: string | null;
+  isbn: string | null;
+  arxiv: string | null;
+  pmid: string | null;
+  pmcid: string | null;
+}
+
+function idsOf(c: BibSource): Ids {
+  // A LIBRARY entry's DOI is already doi.ts-normalized; a raw candidate's DOI
+  // that does not normalize is still its identifier and is written as given.
+  const doi = normDoi(c.doi) ?? (typeof c.doi === 'string' && c.doi.trim() ? c.doi.trim() : null);
+  const arxiv =
+    normArxiv(c.arxiv) ??
+    normArxiv(c.arxivId) ??
+    (c.source === 'arxiv' && typeof c.id === 'string' ? normArxiv(c.id) : null) ??
+    (doi ? normArxiv(doi) : null);
+  return { doi, isbn: normIsbn(c.isbn), arxiv, pmid: normPmid(c.pmid), pmcid: normPmcid(c.pmcid) };
+}
+
+function citable(c: BibSource, ids: Ids): boolean {
+  return Boolean(ids.doi || ids.isbn || ids.arxiv || ids.pmid || ids.pmcid || c.byo);
+}
+
+/** A DataCite arXiv DOI (10.48550/arxiv.<id>) — the arXiv record, not a journal version. */
+function isArxivDoi(doi: string | null): boolean {
+  return doi !== null && normArxiv(doi) !== null;
+}
+
+const KNOWN_TYPES = new Set([
+  'article-journal', 'paper-conference', 'chapter', 'book', 'report', 'thesis', 'preprint', 'dataset',
+  'article-newspaper', 'article-magazine', 'webpage', 'other',
+]);
+
+/** The CSL type of a source: its recorded `type`, else inferred from its identifiers. */
+export function cslTypeOf(c: BibSource): string {
+  if (typeof c.type === 'string' && KNOWN_TYPES.has(c.type)) return c.type;
+  const ids = idsOf(c);
+  if (ids.arxiv && (!ids.doi || isArxivDoi(ids.doi))) return 'preprint';
+  if (c.source === 'arxiv') return 'preprint';
+  if (!ids.doi && ids.isbn) return 'book';
+  // A bring-your-own PDF no registrar identified: nothing says what kind of work it is.
+  if (!ids.doi && !ids.pmid && !ids.pmcid && c.byo) return 'other';
+  return 'article-journal';
+}
+
+const BIBTEX_TYPE: Readonly<Record<string, string>> = {
+  'article-journal': 'article',
+  'article-newspaper': 'article',
+  'article-magazine': 'article',
+  book: 'book',
+  chapter: 'incollection',
+  'paper-conference': 'inproceedings',
+  report: 'techreport',
+  thesis: 'phdthesis',
+  preprint: 'misc',
+  dataset: 'misc',
+  webpage: 'misc',
+  other: 'misc',
+};
+
+// ---------------------------------------------------------------------------
+// Value encoding.
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a text value the way the bib stores it: NFC, control characters
+ * dropped, whitespace runs collapsed to one space, trimmed. This is the form a
+ * value reads back in (the round trip is exact on it).
+ */
+export function normalizeBibValue(value: string): string {
+  return value
+    .normalize('NFC')
+    .replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// The BibTeX-special ASCII characters. Braces are written as \textbraceleft{} /
+// \textbraceright{} (not \{ \}) so every value keeps balanced braces for BibTeX
+// itself; `<`/`>` stay raw (citation-js reads them as the rich-text tags —
+// <i>, <sub> — Crossref titles carry).
+const BIBTEX_SPECIAL: Readonly<Record<string, string>> = {
+  '\\': '\\textbackslash{}',
+  '{': '\\textbraceleft{}',
+  '}': '\\textbraceright{}',
+  $: '\\textdollar{}',
+  '&': '\\&',
+  '%': '\\%',
+  '#': '\\#',
+  _: '\\textunderscore{}',
+  '~': '\\textasciitilde{}',
+  '^': '\\textasciicircum{}',
+  '`': '\\textasciigrave{}',
+};
+
+/**
+ * Encode a text value for a braced BibTeX field: normalizeBibValue, the
+ * special ASCII characters escaped, and the TeX ligatures `--`, `---` and `''`
+ * broken with an empty group (`-{}-`, `'{}'`) so they read back as typed.
+ */
+export function escapeBibtexUtf8(value: string): string {
+  return normalizeBibValue(value)
+    .replace(/[\\{}$&%#_~^`]/g, (ch) => BIBTEX_SPECIAL[ch] ?? ch)
+    .replace(/-(?=-)/g, '-{}')
+    .replace(/'(?=')/g, "'{}");
+}
+
+/** A verbatim field (doi, eprint): written as is; null when it cannot be (unbalanced braces). */
+function verbatim(value: string): string | null {
+  const v = value.trim();
+  let depth = 0;
+  for (const ch of v) {
+    if (ch === '{') depth++;
+    else if (ch === '}' && --depth < 0) return null;
+  }
+  return depth === 0 && !/[\r\n\\]/.test(v) ? v : null;
+}
+
+/** A name-list or publisher-list value containing the word "and" must be braced whole. */
+function hasAndToken(s: string): boolean {
+  return /(?:^|\s)and(?:\s|$)/i.test(s);
+}
+
+/**
+ * A name part BibTeX's name grammar would re-tokenize: the word "and", or a
+ * hyphen at a word edge ("Jean -Paul", "X- y"), which BibTeX reads as a
+ * token separator. Such a part is braced so it reads back verbatim.
+ */
+function needsNameBraces(s: string): boolean {
+  return hasAndToken(s) || /(?:^|\s)-|-(?:\s|$)/.test(s);
+}
+
+/**
+ * True when BibTeX would not read `family` back as one family name: it has a
+ * space, or a space- or hyphen-separated part whose first cased letter is
+ * lower case (BibTeX's "von" rule: "van der Maaten" → particle "van der" +
+ * "Maaten"; "de-Souza" → "de" + "Souza"), or a part the name grammar
+ * re-tokenizes.
+ */
+function familyNeedsBraces(family: string): boolean {
+  if (/\s/.test(family) || needsNameBraces(family)) return true;
+  return family.split('-').some((part) => {
+    const cased = /[\p{Lu}\p{Ll}\p{Lt}]/u.exec(part);
+    return cased !== null && /\p{Ll}/u.test(cased[0]);
+  });
+}
+
+/** One personal / corporate name in BibTeX "Family, Given" form. */
+export function bibtexName(n: PersonName): string {
+  const family = escapeBibtexUtf8(n.family);
+  if (n.literal) return `{${family}}`;
+  // Brace a family BibTeX would otherwise split ("van der Maaten" → a "van der"
+  // particle and "Maaten") or read as a name-list separator.
+  const bracedFamily = familyNeedsBraces(n.family) ? `{${family}}` : family;
+  const given = n.given ? escapeBibtexUtf8(n.given) : '';
+  const givenOut = given && needsNameBraces(n.given ?? '') ? `{${given}}` : given;
+  if (n.suffix) {
+    const suffix = escapeBibtexUtf8(n.suffix);
+    return givenOut ? `${bracedFamily}, ${suffix}, ${givenOut}` : `{${family} ${suffix}}`;
+  }
+  return givenOut ? `${bracedFamily}, ${givenOut}` : bracedFamily;
+}
+
+/** Parsed names of a display-string list (empty strings dropped). */
+export function parseNames(list: readonly string[] | undefined): PersonName[] {
+  return (list ?? []).map((a) => parsePersonName(a)).filter((n): n is PersonName => n !== null);
+}
+
+/** "436-444" / "436–444" → "436--444"; any other page string escaped as text. */
+function bibtexPages(pages: string): string {
+  const p = normalizeBibValue(pages);
+  const range = /^([^\s\-–—]+)\s*(?:-+|–|—)\s*([^\s\-–—]+)$/.exec(p);
+  if (range) return `${escapeBibtexUtf8(range[1]!)}--${escapeBibtexUtf8(range[2]!)}`;
+  return escapeBibtexUtf8(p);
+}
+
+function text(v: unknown): string | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  if (typeof v !== 'string') return null;
+  const s = normalizeBibValue(v);
+  return s.length > 0 ? s : null;
+}
+
+/** The primary arXiv class of an old-style id ("hep-th/9901001" → "hep-th"), else null. */
+function primaryClassOf(arxiv: string): string | null {
+  const slash = arxiv.indexOf('/');
+  return slash > 0 ? arxiv.slice(0, slash) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Entries.
+// ---------------------------------------------------------------------------
+
+/** One rendered entry (the fields in writing order). */
+export interface BibRecord {
+  readonly citekey: string;
+  /** BibTeX entry type without the `@`. */
+  readonly entryType: string;
+  readonly fields: ReadonlyArray<readonly [string, string]>;
+  /** What the round-trip check compares against. */
+  readonly expect: {
+    readonly title: string;
+    readonly authors: readonly PersonName[];
+    readonly abstract: string | null;
+    readonly eprint: string | null;
+  };
+}
+
+/** The BibTeX record for one citable source (null when it has no identifier and no BYO PDF). */
+export function toBibRecord(c: BibSource, citekey: string): BibRecord | null {
+  const ids = idsOf(c);
+  if (!citable(c, ids)) return null;
+  const csl = cslTypeOf(c);
+  const entryType = BIBTEX_TYPE[csl] ?? 'misc';
+  const fields: Array<[string, string]> = [];
+  const push = (name: string, value: string | null): void => {
+    if (value !== null && value.length > 0) fields.push([name, value]);
+  };
+
+  const authors = parseNames(c.authors);
+  const editors = parseNames(c.editors);
+  const nameList = (names: PersonName[]): string | null => (names.length > 0 ? names.map(bibtexName).join(' and ') : null);
+  push('author', nameList(authors));
+  push('editor', nameList(editors));
+
+  const title = text(c.title) ?? citekey;
+  push('title', escapeBibtexUtf8(title));
+
+  const venue = text(c.venue);
+  const publisher = text(c.publisher);
+  const listValue = (s: string): string => (hasAndToken(s) ? `{${escapeBibtexUtf8(s)}}` : escapeBibtexUtf8(s));
+  if (venue) {
+    if (entryType === 'article') push('journal', escapeBibtexUtf8(venue));
+    else if (entryType === 'incollection' || entryType === 'inproceedings') push('booktitle', escapeBibtexUtf8(venue));
+    else if (entryType === 'misc') push('howpublished', escapeBibtexUtf8(venue));
+  }
+  if (typeof c.year === 'number' && Number.isInteger(c.year)) push('year', String(c.year));
+  const volume = text(c.volume);
+  if (volume) push('volume', escapeBibtexUtf8(volume));
+  const issue = text(c.issue);
+  if (issue) push('number', escapeBibtexUtf8(issue));
+  const pages = text(c.pages);
+  if (pages) push('pages', bibtexPages(pages));
+  const org = publisher ?? (entryType === 'techreport' || entryType === 'phdthesis' ? venue : null);
+  if (org) {
+    if (entryType === 'techreport') push('institution', listValue(org));
+    else if (entryType === 'phdthesis') push('school', listValue(org));
+    else push('publisher', listValue(org));
+  }
+  if (ids.isbn) push('isbn', ids.isbn);
+  const doi = ids.doi ? verbatim(ids.doi) : null;
+  if (ids.doi && doi === null) throw new BibRenderError(citekey, `the DOI ${ids.doi} cannot be written as a BibTeX field`);
+  push('doi', doi);
+  let eprint: string | null = null;
+  if (ids.arxiv) {
+    eprint = verbatim(ids.arxiv);
+    push('eprint', eprint);
+    push('archivePrefix', 'arXiv');
+    push('primaryClass', primaryClassOf(ids.arxiv));
+  }
+  const abstract = text(c.abstract);
+  if (abstract) push('abstract', escapeBibtexUtf8(abstract));
+  if (c.retracted === true) push('note', 'RETRACTED');
+
+  return {
+    citekey,
+    entryType,
+    fields,
+    expect: { title, authors, abstract, eprint },
+  };
+}
+
+/** The text of one record: `@type{key,\n  field = {value},\n…}\n`. */
+export function formatBibRecord(r: BibRecord): string {
+  const body = r.fields.map(([k, v]) => `  ${k} = {${v}},`).join('\n');
+  return `@${r.entryType}{${r.citekey},\n${body}\n}\n`;
+}
+
+// ---------------------------------------------------------------------------
+// The CSL view (the RIS writer renders it).
+// ---------------------------------------------------------------------------
+
+export interface CslName {
+  family?: string;
   given?: string;
+  suffix?: string;
+  literal?: string;
 }
 
 export interface CslEntry {
-  // CYCLE-3 MEDIUM REVIEWS CONVERGENCE — id is assigned downstream (in the
-  // collision loop). Marking optional so toCsl() can return a CslEntry without
-  // pre-computing the citekey AND TS still accepts the later assignment.
   id?: string;
-  type: 'article-journal' | 'paper-conference' | 'article' | 'book';
+  type: string;
   title: string;
-  author: CslAuthor[];
+  author: CslName[];
+  editor?: CslName[];
   issued?: { 'date-parts': [[number]] };
+  'container-title'?: string;
+  volume?: string;
+  issue?: string;
+  page?: string;
+  publisher?: string;
   DOI?: string;
   ISBN?: string;
-  // arXiv id surfaces here per CSL-JSON convention for arxiv preprints.
+  PMID?: string;
+  PMCID?: string;
+  /** The arXiv id of a preprint (CSL `number`, as citation-js's RIS mapping expects). */
   number?: string;
-  // CYCLE-3 D-15 retracted-flag persistence: a retracted source surfaces in
-  // compiled output via CSL `note = "RETRACTED"`. citation-js >=0.7 preserves
-  // `note` verbatim in BibTeX output, so the flag survives the serializer
-  // round-trip and verify can scan emitted .bib for `note = {RETRACTED}` to fail
-  // loudly on citing retracted works.
+  // A retracted source surfaces as CSL `note = "RETRACTED"` (D-15).
   note?: string;
 }
 
-function parseAuthor(s: string): CslAuthor {
-  const comma = s.indexOf(',');
-  if (comma === -1) return { family: s.trim() };
-  const family = s.slice(0, comma).trim();
-  const given = s.slice(comma + 1).trim();
-  return given ? { family, given } : { family };
+function cslName(n: PersonName): CslName {
+  if (n.literal) return { literal: n.family };
+  return { family: n.family, ...(n.given ? { given: n.given } : {}), ...(n.suffix ? { suffix: n.suffix } : {}) };
 }
 
-/** CSL-JSON for one source, or null when it has no persistent identifier. */
+/** CSL-JSON for one source, or null when it cannot be cited (no identifier, no BYO PDF). */
 export function toCsl(c: BibSource): CslEntry | null {
-  // CYCLE-3 REVIEWS — entries lacking ANY persistent identifier (DOI, ISBN,
-  // arXiv id) are dropped. The verifier needs a stable id to cross-reference;
-  // a source without one cannot be safely cited.
-  const arxiv = c.arxiv ?? c.arxivId ?? null;
-  const hasId = Boolean(c.doi) || Boolean(c.isbn) || Boolean(arxiv);
-  if (!hasId) return null;
-
+  const ids = idsOf(c);
+  if (!citable(c, ids)) return null;
   const entry: CslEntry = {
-    type: c.source === 'arxiv' || (!c.doi && !c.isbn && Boolean(arxiv)) ? 'article' : 'article-journal',
-    title: c.title ?? c.citekey,
-    author: (c.authors ?? []).map(parseAuthor),
+    type: cslTypeOf(c),
+    title: text(c.title) ?? c.citekey,
+    author: parseNames(c.authors).map(cslName),
   };
-
-  if (typeof c.year === 'number') {
-    entry.issued = { 'date-parts': [[c.year]] };
-  }
-  if (c.doi) entry.DOI = c.doi;
-  if (c.isbn) entry.ISBN = c.isbn;
-  if (arxiv) entry.number = arxiv;
+  const editors = parseNames(c.editors).map(cslName);
+  if (editors.length > 0) entry.editor = editors;
+  if (typeof c.year === 'number') entry.issued = { 'date-parts': [[c.year]] };
+  const venue = text(c.venue);
+  if (venue) entry['container-title'] = venue;
+  const volume = text(c.volume);
+  if (volume) entry.volume = volume;
+  const issue = text(c.issue);
+  if (issue) entry.issue = issue;
+  const pages = text(c.pages);
+  if (pages) entry.page = pages;
+  const publisher = text(c.publisher);
+  if (publisher) entry.publisher = publisher;
+  if (ids.doi) entry.DOI = ids.doi;
+  if (ids.isbn) entry.ISBN = ids.isbn;
+  if (ids.pmid) entry.PMID = ids.pmid;
+  if (ids.pmcid) entry.PMCID = ids.pmcid;
+  if (ids.arxiv) entry.number = ids.arxiv;
   if (c.retracted === true) entry.note = 'RETRACTED';
-
   return entry;
 }
+
+// ---------------------------------------------------------------------------
+// Citekeys.
+// ---------------------------------------------------------------------------
 
 /**
  * Base-26 spreadsheet-column collision suffix.
@@ -160,10 +480,9 @@ export function suffixForCollision(seen: number): string {
  * RIS export, and the research keep-sets (audit #21/#31/#32).
  *
  * Two sources sharing a base key (same first-author + year) get
- * base / base+'a' / base+'b' …. Crucially, the suffix loop also skips any value
- * already taken, so a base key that happens to equal another source's
- * suffixed form (e.g. a literal 'wu2017a' alongside a second 'wu2017') ends up
- * unique rather than silently duplicated — the bug a naive per-base counter has.
+ * base / base+'a' / base+'b' …. The suffix loop also skips any value already
+ * taken, so a base key that happens to equal another source's suffixed form
+ * (e.g. a literal 'wu2017a' alongside a second 'wu2017') ends up unique.
  *
  * Order-preserving. A source whose citekey is already unique is returned by
  * reference; others get a shallow copy with the new `citekey`.
@@ -187,11 +506,15 @@ export function assignUniqueCitekeys<T extends { citekey: string; authors?: stri
   });
 }
 
+// ---------------------------------------------------------------------------
+// Round-trip check and rendering.
+// ---------------------------------------------------------------------------
+
 /**
  * A source whose BibTeX entry does not read back as the same work (it does not
- * parse, or its title / author letters or citekey differ) in either the
- * LaTeX-escaped or the UTF-8 rendering. library.ts refuses the upsert with a
- * one-line error rather than write a CITATIONS.bib that verify cannot read.
+ * parse, or its citekey, title, authors, abstract or eprint differ). library.ts
+ * refuses the upsert with a one-line error rather than write a CITATIONS.bib
+ * that verify cannot read.
  */
 export class BibRenderError extends Error {
   readonly citekey: string;
@@ -202,157 +525,74 @@ export class BibRenderError extends Error {
   }
 }
 
-// The BibTeX-special ASCII characters, escaped exactly as citation-js's own
-// ASCII mode escapes them, so a UTF-8 entry differs from a LaTeX-escaped one
-// only in its non-ASCII letters. `<`/`>` stay raw: citation-js reads them as the
-// rich-text tags (<i>, <sub>, …) Crossref titles carry.
-const BIBTEX_SPECIAL: Readonly<Record<string, string>> = {
-  '\\': '\\textbackslash{}',
-  '{': '\\textbraceleft{}',
-  '}': '\\textbraceright{}',
-  $: '\\textdollar{}',
-  '&': '\\&',
-  '%': '\\%',
-  '#': '\\#',
-  _: '\\textunderscore{}',
-  '~': '\\textasciitilde{}',
-  '^': '\\textasciicircum{}',
-};
-
-/** Escape the BibTeX-special ASCII characters of a UTF-8 value (NFC). */
-export function escapeBibtexUtf8(value: string): string {
-  return value.normalize('NFC').replace(/[\\{}$&%#_~^]/g, (ch) => BIBTEX_SPECIAL[ch] ?? ch);
-}
-
-/** The CSL entry with every text value pre-escaped for citation-js's UTF-8 mode. */
-function utf8Csl(csl: CslEntry): CslEntry {
+function parsedName(a: unknown): PersonName {
+  const o = (a ?? {}) as Record<string, unknown>;
+  const str = (k: string): string => (typeof o[k] === 'string' ? (o[k] as string) : '');
+  const family = [str('non-dropping-particle'), str('dropping-particle'), str('family') || str('literal')]
+    .filter(Boolean)
+    .join(' ');
   return {
-    ...csl,
-    title: escapeBibtexUtf8(csl.title),
-    author: csl.author.map((a) => {
-      const family = escapeBibtexUtf8(a.family);
-      // citation-js writes a family-only name containing " and " unbraced, which
-      // BibTeX then reads as two authors; brace it so it stays one.
-      const fam = a.given === undefined && family.includes(' and ') ? `{${family}}` : family;
-      return a.given === undefined ? { family: fam } : { family: fam, given: escapeBibtexUtf8(a.given) };
-    }),
+    family,
+    ...(str('given') ? { given: str('given') } : {}),
+    ...(str('suffix') ? { suffix: str('suffix') } : {}),
   };
 }
 
-/** Letters and digits only (NFKC; rich-text tags dropped) — what must survive a round trip. */
-function letters(s: string): string {
-  return s
-    .replace(/<\/?[a-z][^>]*>/gi, '')
-    .normalize('NFKC')
-    .replace(/[^\p{L}\p{N}]+/gu, '');
-}
-
-function sortedLetters(s: string): string {
-  return [...letters(s)].sort().join('');
-}
-
-function parsedAuthorText(a: unknown): string {
-  if (!a || typeof a !== 'object') return '';
-  const o = a as Record<string, unknown>;
-  return ['non-dropping-particle', 'dropping-particle', 'family', 'given', 'suffix', 'literal']
-    .map((k) => (typeof o[k] === 'string' ? (o[k] as string) : ''))
-    .join(' ');
-}
-
-/**
- * Why `text` (one rendered entry) does not read back as `csl` under `citekey`,
- * or null when it does: it parses, keeps the citekey, keeps every letter of
- * the title, and keeps each author (same count; same letters per author, in
- * any order — BibTeX may move a particle or suffix).
- */
-function roundTripProblem(text: string, citekey: string, csl: CslEntry): string | null {
+/** Why `entryText` does not read back as `r`, or null when it does. */
+function roundTripProblem(entryText: string, r: BibRecord): string | null {
   let parsed: Array<Record<string, unknown>>;
   try {
-    parsed = parseBibSync(text);
+    parsed = parseBibSync(entryText);
   } catch (e) {
     return ((e instanceof Error ? e.message : String(e)).split('\n')[0] ?? '').replace(/^parseBib: /, '');
   }
   const got = parsed[0];
   if (parsed.length !== 1 || !got) return `parsed ${parsed.length} entries`;
-  if (got['id'] !== citekey) return `citekey became "${String(got['id'])}"`;
-  if (letters(typeof got['title'] === 'string' ? got['title'] : '') !== letters(csl.title)) return 'title text lost';
+  if (got['id'] !== r.citekey) return `citekey became "${String(got['id'])}"`;
+  if (got['title'] !== r.expect.title) return 'title changed';
   const authors = Array.isArray(got['author']) ? (got['author'] as unknown[]) : [];
-  if (authors.length !== csl.author.length) return `${csl.author.length} author(s) read back as ${authors.length}`;
+  if (authors.length !== r.expect.authors.length) return `${r.expect.authors.length} author(s) read back as ${authors.length}`;
   for (let i = 0; i < authors.length; i++) {
-    const want = csl.author[i]!;
-    if (sortedLetters(parsedAuthorText(authors[i])) !== sortedLetters(`${want.family} ${want.given ?? ''}`)) {
-      return `author ${i + 1} text lost`;
+    const want = r.expect.authors[i]!;
+    const have = parsedName(authors[i]);
+    if (have.family !== want.family || (have.given ?? '') !== (want.given ?? '') || (have.suffix ?? '') !== (want.suffix ?? '')) {
+      // A suffix without a given name is written braced into the family.
+      const folded = !want.given && want.suffix ? `${want.family} ${want.suffix}` : null;
+      if (folded === null || have.family !== folded) return `author ${i + 1} changed`;
     }
   }
+  if (r.expect.abstract !== null && got['abstract'] !== r.expect.abstract) return 'abstract changed';
+  if (r.expect.eprint !== null && got['eprint'] !== r.expect.eprint) return 'eprint changed';
   return null;
-}
-
-/** citation-js output for one entry, its auto-generated key replaced by `citekey`. */
-function formatOne(csl: CslEntry, citekey: string, utf8: boolean): string {
-  const rendered = formatBibtex([utf8 ? utf8Csl(csl) : csl], { utf8 });
-  // One entry: `@type{<autokey>,…}\n` plus the bibliography container's
-  // trailing `\n`, which renderBibtex adds back once for the whole file.
-  return rendered.replace(/^(@\w+\{)[^,]+(,)/, `$1${citekey}$2`).replace(/\n$/, '');
 }
 
 /**
  * Render sources as BibTeX text: keyed by their (collision-suffixed) citekeys,
- * sorted by citekey (diff-stable), id-less sources dropped. '' for none.
- *
- * Every entry is round-tripped through the parser verify uses. An entry
- * citation-js's LaTeX escaping cannot carry (Cyrillic, Greek, CJK, Arabic
- * names and titles — it drops or garbles them) is written as raw UTF-8
- * instead, which BibTeX, Pandoc and citation-js all read. An entry that reads
- * back wrong either way throws BibRenderError: CITATIONS.bib is never written
- * with an entry verify cannot parse or whose first author differs.
+ * sorted by citekey (diff-stable), uncitable sources dropped. '' for none.
+ * Every entry is parsed back through parseBibSync; one that does not read back
+ * as the same work throws BibRenderError.
  */
 export function renderBibtex(sources: BibSource[]): string {
-  // Keep only serializable sources (toCsl drops id-less ones), THEN assign
-  // globally-unique citekeys over that surviving set. assignUniqueCitekeys is the
-  // single uniqueness authority (audit #21) — it handles base-vs-suffix collisions
-  // a per-base counter would silently duplicate. Computing toCsl once per
-  // source avoids re-deriving it after keying.
-  const survivors: Array<{ source: BibSource; csl: CslEntry }> = [];
-  for (const c of sources) {
-    const csl = toCsl(c);
-    if (csl) survivors.push({ source: c, csl });
-  }
-  const keyed = assignUniqueCitekeys(survivors.map((s) => s.source));
-  const entries: Array<{ citekey: string; csl: CslEntry }> = keyed.map((c, i) => {
-    const csl = survivors[i]!.csl;
-    csl.id = c.citekey;
-    return { citekey: c.citekey, csl };
+  const survivors = sources.filter((c) => citable(c, idsOf(c)));
+  const keyed = assignUniqueCitekeys(survivors);
+  const records = keyed
+    .map((c) => toBibRecord(c, c.citekey))
+    .filter((r): r is BibRecord => r !== null)
+    .sort((a, b) => a.citekey.localeCompare(b.citekey));
+  if (records.length === 0) return '';
+  const parts = records.map((r) => {
+    const entry = formatBibRecord(r);
+    const problem = roundTripProblem(entry, r);
+    if (problem !== null) throw new BibRenderError(r.citekey, problem);
+    return entry;
   });
-
-  // Sort by FINAL citekey before rendering — output order is input order.
-  entries.sort((a, b) => a.citekey.localeCompare(b.citekey));
-  if (entries.length === 0) return '';
-
-  // citation-js auto-generates its own BibTeX citekeys (label) regardless of
-  // CslEntry.id — e.g. our 'wu2017' becomes 'Wu2017Foo' — so each entry's
-  // `@<type>{<autokey>,` header is rewritten with our citekey (D-14, CYCLE-2
-  // H-4). Rendering one entry at a time keeps that rewrite exact and lets each
-  // entry be checked on its own; the concatenation is byte-identical to one
-  // citation-js call over the whole list.
-  const parts = entries.map(({ citekey, csl }) => {
-    const latex = formatOne(csl, citekey, false);
-    const latexProblem = roundTripProblem(latex, citekey, csl);
-    if (latexProblem === null) return latex;
-    const utf8 = formatOne(csl, citekey, true);
-    const utf8Problem = roundTripProblem(utf8, citekey, csl);
-    if (utf8Problem === null) return utf8;
-    throw new BibRenderError(citekey, utf8Problem);
-  });
-  return `${parts.join('')}\n`;
+  return parts.join('\n');
 }
 
 /**
  * Render `sources` (renderBibtex) and write them atomically to `targetPath`.
  * Only bin/lib/library.ts calls this in shipped code (chokepoint row
  * `library-writer`).
- *
- * @param sources LIBRARY.json v2 entries (or SourceCandidate[]).
- * @param targetPath Absolute or relative path; parent dir created if missing.
  */
 export async function writeBibtex(sources: BibSource[], targetPath: string): Promise<void> {
   await atomicWriteFile(targetPath, renderBibtex(sources));
