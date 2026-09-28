@@ -107,6 +107,29 @@ test('seam S-B: a v3 entry never has retracted and retraction_status disagreeing
   assert.equal(LibraryEntrySchema.safeParse({ ...e, zotero: { library: 'users/12', key: 'short' } }).success, false);
 });
 
+test('SRC-12: v2 → v3 rewrites PubMed compact names ("Zhu N" → "Zhu, N.") on PubMed-sourced entries only; citekeys are kept', () => {
+  const out = v2ToV3({
+    $schemaVersion: 2,
+    entries: [
+      v2Entry({
+        citekey: 'zhun2020',
+        doi: '10.1056/nejmoa2001017',
+        authors: ['Zhu N', 'Zhang D', 'King ML Jr', '{China Novel Coronavirus Investigating and Research Team}'],
+        provenance: ['research:pubmed'],
+      }),
+      v2Entry({ citekey: 'addedpm', doi: '10.5555/pm', authors: ['Gao GF'], provenance: ['add:pubmed', 'research:crossref'] }),
+      // Not from PubMed: an arXiv display name whose last word is upper case stays as it is.
+      v2Entry({ citekey: 'lee2020', doi: '10.5555/ax', authors: ['Kim LEE'], provenance: ['research:arxiv'] }),
+    ],
+  }) as { entries: Array<Record<string, unknown>> };
+  const [zhu, gao, lee] = out.entries as [Record<string, unknown>, Record<string, unknown>, Record<string, unknown>];
+  assert.deepEqual(zhu['authors'], ['Zhu, N.', 'Zhang, D.', 'King, M. L., Jr', '{China Novel Coronavirus Investigating and Research Team}']);
+  assert.equal(zhu['citekey'], 'zhun2020', 'an existing citekey never changes (drafts cite it)');
+  assert.deepEqual(gao['authors'], ['Gao, G. F.']);
+  assert.deepEqual(lee['authors'], ['Kim LEE']);
+  assert.equal(LibrarySchema.safeParse(out).success, true);
+});
+
 test('seam S-B: loadLibrary migrates a v2 file on disk to v3', async () => {
   const root = project();
   const file = libraryPaths(root).library;
@@ -201,7 +224,7 @@ test('seam S-B: a hydrated record replaces an unhydrated BYO entry\'s local meta
   assert.equal(e!.title, 'Attention Is All You Need');
   assert.deepEqual(e!.authors, ['Ashish Vaswani', 'Noam Shazeer']);
   assert.equal(e!.type, 'preprint');
-  assert.deepEqual(e!.byo, byo, 'the BYO record is kept');
+  assert.deepEqual(e!.byo, { ...byo, asserted: false }, 'the BYO record is kept (a v3 record states `asserted`)');
 });
 
 test('seam S-B: retraction status — retracted is sticky, otherwise the newest lookup wins', async () => {

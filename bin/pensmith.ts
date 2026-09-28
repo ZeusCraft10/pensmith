@@ -637,6 +637,19 @@ async function enterMutatingSession(session: InvocationSession, verb: Ux02Verb |
 // `pensmith write` must reach citty/runMain, not the single-section router path.
 const SECTION_SCOPED_VERBS: readonly Ux02Verb[] = ['plan', 'verify'];
 
+/** True when argv carries a non-empty `--research <query>` (or `--research=<query>`). */
+function hasResearchFlag(argv: readonly string[]): boolean {
+  for (let i = 0; i < argv.length; i++) {
+    const tok = argv[i] ?? '';
+    if (tok.startsWith('--research=')) return tok.slice('--research='.length).trim().length > 0;
+    if (tok === '--research') {
+      const next = argv[i + 1];
+      return next !== undefined && !next.startsWith('--') && next.trim().length > 0;
+    }
+  }
+  return false;
+}
+
 /** True if `verb` is section-scoped AND no numeric positional follows it in argv. */
 function isSectionVerbWithoutNumber(argv: string[], verb: Ux02Verb): boolean {
   if (!SECTION_SCOPED_VERBS.includes(verb)) return false;
@@ -659,7 +672,13 @@ async function invocationScope(argv: string[], checked: ValidatedArgv): Promise<
   const verb = checked.verb;
   if (verb !== null && verb !== 'next' && verb !== 'resume' && !isSectionVerbWithoutNumber(argv, verb)) {
     const n = checked.positionals.find((p) => /^\d+$/.test(p));
-    return n !== undefined ? { verb, section: Number(n) } : { verb };
+    const base: EstimateScope = n !== undefined ? { verb, section: Number(n) } : { verb };
+    // GRND-17: `plan N --research <q>` is the section research pass
+    // (evaluator calls), not the planner's call (unless --revise follows it).
+    if (verb === 'plan' && hasResearchFlag(argv)) {
+      return { ...base, research: true, ...(argv.includes('--revise') ? { revise: true } : {}) };
+    }
+    return base;
   }
   const root = projectRoot();
   const decision = await resolveNextAction(root, { stopAfterResearch: stopAfterResearchFor(readGoalFromConfig(root)) });

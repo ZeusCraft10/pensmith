@@ -12,6 +12,11 @@
 //   2. (live branch only) asks the hash-pinned `claim-support` prompt for a
 //      verdict in {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}.
 //
+// The source text the judge reads is the bib abstract; for a source whose
+// bring-your-own PDF still matches its recorded hashes (SRC-15, S-17), also
+// the passages of that PDF's text nearest the claim (byo-text.ts byoPassages),
+// and `evidence` must be a verbatim substring of that text.
+//
 // UNCLEAR-bias is the load-bearing correctness property (VRFY-03): both the
 // offline placeholder AND the prompt default to UNCLEAR rather than manufacturing
 // a confident SUPPORTED on thin evidence.
@@ -31,6 +36,9 @@
 import { complete, isFatalLlmError, MissingApiKeyError } from '../anthropic.js';
 import type { ClaimSupport } from '../llm-contracts.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
+import { byoText, byoPassages, type ByoTextResult } from '../byo-text.js';
+import { tryLoadLibrary } from '../library.js';
+import type { LibraryEntry } from '../schemas/library.js';
 
 // WR-04 (HARD-04c fence-marker breakout mitigation).
 //
@@ -178,6 +186,33 @@ function clampText(text: string, max: number): string {
 }
 
 /**
+ * The source text Pass 2 sends for one claim: the bib abstract, plus — for a
+ * source whose bring-your-own PDF still matches its recorded hashes — the
+ * passages of that PDF's text nearest the claim (byo-text.ts). A source
+ * without a usable PDF gets its abstract alone.
+ */
+function byoSourceText(root: string | undefined): (citekey: string, claim: string, abstract: string) => Promise<string> {
+  let entries: Promise<Map<string, LibraryEntry>> | null = null;
+  const texts = new Map<string, Promise<ByoTextResult>>();
+  return async (citekey, claim, abstract) => {
+    if (root === undefined) return abstract;
+    entries ??= tryLoadLibrary(root).then((lib) => new Map((lib?.entries ?? []).filter((e) => e.byo !== null).map((e) => [e.citekey, e])));
+    const entry = (await entries).get(citekey);
+    if (entry === undefined) return abstract;
+    let t = texts.get(citekey);
+    if (t === undefined) {
+      t = byoText(root, entry);
+      texts.set(citekey, t);
+    }
+    const r = await t;
+    if (!r.available) return abstract;
+    const passages = byoPassages(r.text, claim);
+    const head = abstract ? `${abstract}\n\n` : '';
+    return `${head}Passages from the full text of the user's own copy (${entry.byo!.file}):\n${passages}`;
+  };
+}
+
+/**
  * Turn the validated claim-support object into a Pass2Result. The schema
  * already pins the verdict enum; this step keeps the table-cell and
  * anti-fabrication guarantees:
@@ -204,7 +239,15 @@ function toPass2Result(
 export async function runPass2(
   draftMd: string,
   bibByCitekey: Map<string, Pass2BibEntry>,
-  opts: { n: number },
+  opts: {
+    n: number;
+    /**
+     * The project root: a source with a hash-verified bring-your-own PDF is
+     * judged on its abstract plus the passages of its own text nearest the
+     * claim (SRC-15; read only through byo-text.ts, which re-hashes the PDF).
+     */
+    root?: string;
+  },
 ): Promise<Pass2Result[]> {
   // Provider-agnostic offline gate: only PENSMITH_NO_LLM short-circuits to the
   // placeholder. complete() owns provider + key resolution; if no provider key
@@ -223,6 +266,7 @@ export async function runPass2(
   const promptTemplate = loadPrompt('claim-support');
 
   const results: Pass2Result[] = [];
+  const byoSource = byoSourceText(opts.root);
   // Set once no provider key is configured: the remaining pairs are skipped
   // (every call would fail the same way). Verify still writes its frozen
   // Pass-1/Pass-3 verdict — the advisory passes never need a key (D-V1-04:
@@ -236,7 +280,7 @@ export async function runPass2(
       continue;
     }
     const bibEntry = bibByCitekey.get(pair.citekey);
-    const abstract = bibEntry?.abstract ?? '';
+    const abstract = await byoSource(pair.citekey, pair.claimSentence, bibEntry?.abstract ?? '');
     try {
       // WR-04: sanitize untrusted variables (claim_sentence comes from draft
       // text; source_abstract comes from CrossRef API) before interpolation

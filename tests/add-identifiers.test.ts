@@ -124,11 +124,16 @@ test('SRC-13: `add <doi> --pdf <file>` attaches the PDF as the work\'s bring-you
   assert.equal(e.byo?.file, 'sources/aspelmeyer2009.pdf');
   assert.ok(fs.existsSync(path.join(root, '.paper', 'sources', 'aspelmeyer2009.pdf')));
   assert.match(r.stdout, /attached doi-footer\.pdf to aspelmeyer2009/);
-  // a PDF that does not mention the work is attached with a warning
+  // A PDF that is not the work is never attached silently (SRC-13, review
+  // round 1): without a terminal the `pdf-attach-unmatched` gate refuses (exit
+  // 3, --yolo does not answer it) and nothing is written.
   const other = paper();
-  const w = await runAdd(other, { source: '10.1038/nphys1170', pdf: path.join(BYO, 'no-match.pdf') });
-  assert.equal(w.result['ok'], true);
-  assert.match(w.stderr, /WARN — the PDF's first pages do not mention "Measured measurement"/);
+  await assert.rejects(
+    runAdd(other, { source: '10.1038/nphys1170', pdf: path.join(BYO, 'no-match.pdf'), yolo: true }),
+    (e: Error & { exitCode?: number }) => e.exitCode === 3 && /--yolo does not skip this gate/.test(e.message),
+  );
+  assert.equal(fs.existsSync(path.join(other, '.paper', 'LIBRARY.json')), false, 'nothing was added');
+  assert.equal(fs.existsSync(path.join(other, '.paper', 'sources')), false, 'nothing was copied');
 });
 
 test('SRC-13: an unclassifiable argument, and --pdf without an identifier, are usage errors (exit 2) before any request', async () => {

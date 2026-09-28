@@ -24,7 +24,13 @@
 //                                      (byo-ingest.ts; unidentified PDFs kept
 //                                      unhydrated with a warning)
 //   `--pdf <file>` with an identifier attaches that PDF as the work's
-//   bring-your-own copy (.paper/sources/<citekey>.pdf, hashed).
+//   bring-your-own copy (.paper/sources/<citekey>.pdf, hashed) — once the PDF
+//   is checked to BE that work (byo-ingest.ts checkPdfForRecord: its own
+//   identifiers, or its title and first author). One that is not needs the
+//   user's confirmation at the `pdf-attach-unmatched` gate (never --yolo;
+//   without a terminal, exit 3 and nothing changes) and is recorded
+//   `byo.asserted` (its text is never evidence). A work that already has its
+//   own PDF keeps it unless `--replace-pdf`.
 //   Anything else is a usage error (exit 2) before any request.
 //
 // Writes go through bin/lib/library.ts (BRDTH-01: the one writer of
@@ -53,7 +59,7 @@ import { isReservedDryRunId } from '../lib/doi.js';
 import { updateFrontmatter, migrateFrontmatterText } from '../lib/frontmatter.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { withLock } from '../lib/lock.js';
-import { runGate } from '../lib/gates.js';
+import { runGate, declineGate } from '../lib/gates.js';
 import { sectionPlan, projectRoot } from '../lib/paths.js';
 import { resolveSectionSlug } from '../lib/section-slug.js';
 import { fetch as httpFetch, isOfflineEgressError, offlineLabel, SsrfBlockedError } from '../lib/http.js';
@@ -62,6 +68,7 @@ import { EXIT_ERROR, EXIT_USAGE, PensmithError } from '../lib/exit-codes.js';
 import { MAX_PDF_BYTES, extractPdf } from '../lib/pdf-text.js';
 import { checkPdfResponse, hasPdfMagic } from '../lib/pdf-response.js';
 import { identifyPdf } from '../lib/pdf-identify.js';
+import { enrichOpenAccess } from '../lib/open-access.js';
 import {
   classifySourceInput,
   identifierFromHtml,
@@ -76,6 +83,7 @@ import {
   listPdfsInDir,
   describeByoOutcome,
   upsertWithPdf,
+  checkPdfForRecord,
 } from '../lib/byo-ingest.js';
 import { loadSectionInfos, rankSections, type SectionInfo, type SectionRelevance } from '../lib/section-relevance.js';
 import type { SourceCandidate } from '../lib/schemas/source-candidate.js';
@@ -299,7 +307,12 @@ async function hydrateIdentifier(input: IdentifierInput, io: AddIo = ADD_IO): Pr
     throw e;
   }
   if (r.kind === 'failed') {
-    io.err(`${io.prefix}: ${label}: lookup failed (${r.reason}) — nothing added.`);
+    // A definitive but unusable record is not a transient failure: never imply a retry helps.
+    io.err(
+      r.permanent === true
+        ? `${io.prefix}: ${label}: ${r.reason} — nothing added.`
+        : `${io.prefix}: ${label}: lookup failed (${r.reason}) — nothing added.`,
+    );
     return { result: failed() };
   }
   if (r.kind === 'not-found') {
@@ -413,7 +426,12 @@ export const addCommand = defineCommand({
       description: 'DOI, arXiv id, PMID:<id>, isbn:<ISBN>, URL, local PDF, or a folder of PDFs.',
       required: true,
     },
-    pdf: { type: 'string', description: 'With an identifier: attach this PDF as the work\'s bring-your-own copy.' },
+    pdf: { type: 'string', description: 'With an identifier: attach this PDF as the work\'s bring-your-own copy (checked to be that work).' },
+    'replace-pdf': {
+      type: 'boolean',
+      description: 'With --pdf: replace the PDF the work already has.',
+      default: false,
+    },
     section: { type: 'string', description: 'Map the source to this section number only.' },
     slug: { type: 'string', description: 'Section slug paired with --section (optional).' },
     remap: {
@@ -502,12 +520,38 @@ export const addCommand = defineCommand({
       const h = input.kind === 'url' ? await hydrateUrl(input.url) : await hydrateIdentifier(input);
       if ('result' in h) return h.result;
       const candidate = h.candidate as LibraryCandidate;
+      // GRND-14: record the open-access PDF Pass 3 would check (an enrichment:
+      // a failed or skipped lookup adds the work all the same).
+      await enrichOpenAccess([candidate]);
       if (pdfArg !== null) {
-        const r = await upsertWithPdf(paperRoot, candidate, pdfArg, 'add');
+        // SRC-13: the PDF must be this work, or the user says so.
+        const checked = await checkPdfForRecord(pdfArg, candidate);
+        if (!checked.matches) {
+          const what = `${path.basename(pdfArg)} → ${candidate.title ?? source}`;
+          err(`${P}: WARN — ${path.basename(pdfArg)}: ${checked.why}`);
+          const outcome = await runGate('pdf-attach-unmatched', {
+            yolo: args.yolo === true,
+            detail: `${what}; nothing was changed`,
+          });
+          const yes = outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
+          if (!yes) declineGate('pdf-attach-unmatched', `${P}: ${path.basename(pdfArg)} was not attached; nothing was changed`);
+        }
+        const r = await upsertWithPdf(paperRoot, candidate, checked, 'add', {
+          replace: args['replace-pdf'] === true,
+          asserted: !checked.matches,
+        });
         for (const w of r.warnings) err(`${P}: WARN — ${w}`);
         key = r.citekey;
         status = r.status;
-        out(`${P}: attached ${path.basename(pdfArg)} to ${key} as its bring-your-own copy (.paper/sources/).`);
+        if (!r.stored) {
+          await refreshResearchSources(paperRoot);
+          err(`${P}: ${path.basename(pdfArg)} was not attached to ${key}.`);
+          return failed();
+        }
+        out(
+          `${P}: attached ${path.basename(pdfArg)} to ${key} as its bring-your-own copy (.paper/sources/)` +
+            `${checked.matches ? '' : ' — at your word: its text is not used to verify quotes'}.`,
+        );
       } else {
         // BRDTH-01: the ONE library writer dedups (DOI, arXiv, PMID, ISBN, the
         // version rule) and re-renders CITATIONS.bib / .ris; a known work keeps

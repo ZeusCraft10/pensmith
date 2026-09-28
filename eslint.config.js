@@ -45,6 +45,11 @@ const PROJECT_WIDE_RESTRICTED_SYNTAX = [
     message: 'os.homedir() is a chokepoint (D-41) — use bin/lib/paths.ts',
   },
   {
+    // The same call through a named import (`import { homedir } from 'node:os'`).
+    selector: "ImportDeclaration[source.value=/^(node:)?os$/] > ImportSpecifier[imported.name='homedir']",
+    message: 'homedir from node:os is a chokepoint (D-41) — use bin/lib/paths.ts userHomeDir()',
+  },
+  {
     selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='LOCALAPPDATA']",
     message: 'process.env.LOCALAPPDATA is a chokepoint (D-41) — use bin/lib/paths.ts',
   },
@@ -385,9 +390,10 @@ export default [
 
   // === D-12: capabilities-no-leak chokepoint (file-scoped to mcp/**/*.ts) ===
   // D-12 forbids (a) computed process.env[…] reads and (b) inline calls to the
-  // runtime.ts secret-resolution helpers (getProviderApiKey / getOpenAlexApiKey /
-  // loadRuntimeConfig) inside mcp/**. The paper://capabilities handler MUST expose
-  // only presence flags — never resolved key values.
+  // helpers that return a secret or personal value (runtime.ts getProviderApiKey /
+  // openAlexKey / s2ApiKeyValue / loadRuntimeConfig, contact-email.ts
+  // contactEmail — the user's address) inside mcp/**. The paper://capabilities
+  // handler MUST expose only presence flags — never resolved key values.
   //
   // ESLint 9 flat-config semantics: this file-scoped block OVERRIDES the
   // previous mcp/**/*.ts block for no-restricted-syntax (last-match wins per
@@ -411,8 +417,8 @@ export default [
           message: 'D-12: computed process.env[…] read forbidden in mcp/**. Capabilities must surface only presence flags. Read secrets via bin/lib/runtime.ts in non-mcp code, then expose boolean to mcp via paper://state.',
         },
         {
-          selector: "CallExpression[callee.name=/^(getProviderApiKey|getOpenAlexApiKey|loadRuntimeConfig)$/]",
-          message: 'D-12: do not call runtime.ts secret-resolution helpers inside mcp/**. Those return the resolved value to the caller. Expose presence flags only via paper://capabilities.',
+          selector: "CallExpression[callee.name=/^(getProviderApiKey|openAlexKey|s2ApiKeyValue|contactEmail|loadRuntimeConfig)$/]",
+          message: 'D-12: do not call the secret / personal-value resolvers (runtime.ts key helpers, contact-email.ts contactEmail) inside mcp/**. Those return the resolved value to the caller. Expose presence flags only via paper://capabilities.',
         },
       ],
     },

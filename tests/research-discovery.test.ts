@@ -1,9 +1,10 @@
 // tests/research-discovery.test.ts — the research pass's discovery half
 // (GEN-03, D-17-10, SRC-07; bin/lib/research-orchestrator.ts).
 //
-// runResearchOrchestrator(queries, opts) is the programmatic entry: one
-// research pass (adapters → dedup → tiers → policy → evaluator) plus its log in
-// .paper/RESEARCH.md, without the library write the verb owns. These cases run
+// runResearchPassWithLog(queries, opts) (tests/helpers/research-pass.ts) runs
+// one research pass (adapters → dedup → tiers → policy → evaluator) plus its
+// log in .paper/RESEARCH.md from the same exported pieces `pensmith research`
+// runs, without the library write the verb owns. These cases run
 // it against the recorded source cassettes (the test runner is sources-offline,
 // RUN-01: exact fixtures or a fail-closed miss) and against injected fake
 // adapters.
@@ -37,6 +38,7 @@ function mkPaperRoot(): string {
 
 const SEARCHABLE = 'attention mechanisms in neural networks';
 const orch = await import('../bin/lib/research-orchestrator.js');
+const { runResearchPassWithLog } = await import('./helpers/research-pass.js');
 const { RESEARCH_LOG_END } = await import('../bin/lib/research-md.js');
 
 async function captureStderr<T>(fn: () => Promise<T>): Promise<{ value: T; stderr: string }> {
@@ -56,7 +58,7 @@ async function captureStderr<T>(fn: () => Promise<T>): Promise<{ value: T; stder
 test('research-discovery: the recorded fan-out returns deduped, validated candidates and logs every adapter per query (GEN-03, SRC-07)', async () => {
   const root = mkPaperRoot();
   const { value: candidates } = await captureStderr(() =>
-    orch.runResearchOrchestrator([SEARCHABLE], { topic: SEARCHABLE, discipline: 'cs', paperRoot: root }),
+    runResearchPassWithLog([SEARCHABLE], { topic: SEARCHABLE, discipline: 'cs', paperRoot: root }),
   );
   assert.ok(candidates.length >= 1, `>=1 candidate from the cassettes (got ${candidates.length})`);
   for (const c of candidates) {
@@ -86,7 +88,7 @@ test('research-discovery: the recorded fan-out returns deduped, validated candid
 test('RUN-03 / D-17-10: an unrecorded query offline prints "offline: no recorded results for this query" and yields 0 candidates', async () => {
   const root = mkPaperRoot();
   const { value: candidates, stderr } = await captureStderr(() =>
-    orch.runResearchOrchestrator(['medieval Icelandic sagas'], { topic: 'medieval Icelandic sagas', discipline: 'history', paperRoot: root }),
+    runResearchPassWithLog(['medieval Icelandic sagas'], { topic: 'medieval Icelandic sagas', discipline: 'history', paperRoot: root }),
   );
   assert.equal(candidates.length, 0, 'no fixture is ever substituted for another query');
   assert.match(stderr, /offline: no recorded results for this query \("medieval Icelandic sagas"\)/);
@@ -103,7 +105,7 @@ test('D-17-10: a research re-run rewrites only the generated log — notes below
   const notes = '### vaswani2017\nsupports: attention alone suffices for translation\n';
   fs.writeFileSync(rPath, notes);
   const run = (topic: string): Promise<unknown> =>
-    captureStderr(() => orch.runResearchOrchestrator([topic], { topic, discipline: 'history', paperRoot: root }));
+    captureStderr(() => runResearchPassWithLog([topic], { topic, discipline: 'history', paperRoot: root }));
   await run('medieval Icelandic sagas');
   const first = fs.readFileSync(rPath, 'utf8');
   assert.match(first, /^> OFFLINE MODE \(test runner\)/, 'the marker stays the first line');
@@ -162,7 +164,7 @@ test('D-17-10: an adapter whose request failed (HTTP 429 after retries) is `fail
     empty: { async search() { return []; } },
   };
   const { stderr } = await captureStderr(() =>
-    orch.runResearchOrchestrator(['query one', 'query two'], { topic: 'attention', discipline: 'other', paperRoot: root, __adapterRegistry: registry }),
+    runResearchPassWithLog(['query one', 'query two'], { topic: 'attention', discipline: 'other', paperRoot: root, registry }),
   );
   const md = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
   assert.match(md, /\| query one \| rate-limited \| 0 \| failed \(HTTP 429 after retries\) \|/);

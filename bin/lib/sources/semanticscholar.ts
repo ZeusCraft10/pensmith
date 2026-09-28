@@ -240,7 +240,7 @@ export async function lookupById(id: string): Promise<LookupResult> {
     return lookupFailed(statusReason(ex.res), { status: ex.res.status });
   }
   const candidate = s2ToCandidate(JSON.parse(ex.res.body) as S2Paper);
-  if (candidate === null) return lookupFailed('the Semantic Scholar record has no title or no authors', { status: 200 });
+  if (candidate === null) return lookupFailed('the Semantic Scholar record has no title or no authors (an incomplete registrar record — asking again gives the same answer)', { status: 200, permanent: true });
   return lookupFound(candidate);
 }
 

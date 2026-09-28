@@ -202,6 +202,43 @@ test('SRC-17: a search whose 200 is not a Crossref answer reports failed and ret
   });
 });
 
+test('a Crossref record with no author or editor (a standard) is a PERMANENT failure: never not-found, never "retry"; Pass 1 says so', async () => {
+  await liveLane(async (agent) => {
+    const t = uniq('crossref-standard');
+    const doi = `10.5555/${t}`;
+    agent
+      .get('https://api.crossref.org')
+      .intercept({ path: (p: string) => decodeURIComponent(p).startsWith(`/works/10.5555/${t}`), method: 'GET' })
+      .reply(
+        200,
+        JSON.stringify({
+          status: 'ok',
+          'message-type': 'work',
+          message: { DOI: doi, type: 'standard', title: ['IEEE Standard for Floating-Point Arithmetic'], issued: { 'date-parts': [[2008]] } },
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      )
+      .persist();
+    const r = await crossref.lookupById(doi);
+    assert.equal(r.kind, 'failed');
+    assert.equal(r.kind === 'failed' ? r.permanent : undefined, true);
+    assert.match(r.kind === 'failed' ? r.reason : '', /no author or editor.*asking again gives the same answer/);
+    await assert.rejects(() => crossref.fetchById(doi), (e: { permanent?: boolean }) => e.permanent === true);
+
+    const { runPass1 } = await import('../../bin/lib/verify/pass1.js');
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-pass1-standard-'));
+    const bib = path.join(dir, 'CITATIONS.bib');
+    fs.writeFileSync(bib, `@misc{ieee2008,\n  author = {{IEEE}},\n  title = {IEEE Standard for Floating-Point Arithmetic},\n  year = {2008},\n  doi = {${doi}},\n}\n`);
+    const [v] = await runPass1('Floats round [@ieee2008].', bib);
+    assert.equal(v!.verdict, 'UNVERIFIABLE', 'still blocking');
+    assert.match(v!.reason, /no author or editor/);
+    assert.doesNotMatch(v!.reason, /re-run verify once the lookup answers/, 'no false promise that a retry helps');
+  });
+});
+
 threeWayContract({
   adapter: 'crossref',
   lookupById: crossref.lookupById,

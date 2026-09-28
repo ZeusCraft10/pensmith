@@ -1,0 +1,993 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1371%2Fjournal.pone.0000001",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              14
+            ]
+          ],
+          "date-time": "2026-09-14T06:02:36Z",
+          "timestamp": 1789365756467,
+          "version": "build-2803163510"
+        },
+        "reference-count": 70,
+        "publisher": "Public Library of Science (PLoS)",
+        "issue": "1",
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2006,
+                  12,
+                  20
+                ]
+              ],
+              "date-time": "2006-12-20T00:00:00Z",
+              "timestamp": 1166572800000
+            },
+            "content-version": "unspecified",
+            "delay-in-days": 0,
+            "URL": "http://creativecommons.org/licenses/by/4.0/"
+          }
+        ],
+        "content-domain": {
+          "domain": [
+            "www.plosone.org"
+          ],
+          "crossmark-restriction": false
+        },
+        "short-container-title": [
+          "PLoS ONE"
+        ],
+        "DOI": "10.1371/journal.pone.0000001",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2006,
+              12,
+              20
+            ]
+          ],
+          "date-time": "2006-12-20T13:46:16Z",
+          "timestamp": 1166622376000
+        },
+        "page": "e1",
+        "update-policy": "https://doi.org/10.1371/journal.pone.corrections_policy",
+        "source": "Crossref",
+        "is-referenced-by-count": 142,
+        "title": [
+          "Neural Substrate of Cold-Seeking Behavior in Endotoxin Shock"
+        ],
+        "prefix": "10.1371",
+        "volume": "1",
+        "author": [
+          {
+            "given": "Maria C",
+            "family": "Almeida",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Alexandre A",
+            "family": "Steiner",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Luiz G S",
+            "family": "Branco",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Andrej A",
+            "family": "Romanovsky",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "340",
+        "published-online": {
+          "date-parts": [
+            [
+              2006,
+              12,
+              20
+            ]
+          ]
+        },
+        "reference": [
+          {
+            "key": "ref1",
+            "first-page": "603",
+            "article-title": "Chapter 23. Temperature regulation.",
+            "author": "AA Romanovsky",
+            "year": "2006"
+          },
+          {
+            "key": "ref2",
+            "doi-asserted-by": "crossref",
+            "first-page": "363",
+            "DOI": "10.1111/j.1749-6632.1988.tb38620.x",
+            "article-title": "Differential thermosensor control of thermoregulatory grooming, locomotion, and relaxed postural extension.",
+            "volume": "525",
+            "author": "WW Roberts",
+            "year": "1988",
+            "journal-title": "Ann N Y Acad Sci"
+          },
+          {
+            "key": "ref3",
+            "doi-asserted-by": "crossref",
+            "first-page": "18",
+            "DOI": "10.1016/S1566-0702(00)00216-2",
+            "article-title": "Neuronal circuitries involved in thermoregulation.",
+            "volume": "85",
+            "author": "K Nagashima",
+            "year": "2000",
+            "journal-title": "Auton Neurosci"
+          },
+          {
+            "key": "ref4",
+            "doi-asserted-by": "crossref",
+            "first-page": "R1457",
+            "DOI": "10.1152/ajpregu.2001.280.5.R1457",
+            "article-title": "Fever and behavioral thermoregulation in young and old rats.",
+            "volume": "280",
+            "author": "M Florez-Duquet",
+            "year": "2001",
+            "journal-title": "Am J Physiol Regul Integr Comp Physiol"
+          },
+          {
+            "key": "ref5",
+            "doi-asserted-by": "crossref",
+            "first-page": "3359",
+            "DOI": "10.1111/j.1460-9568.2006.04854.x",
+            "article-title": "Cold-seeking behavior as a thermoregulatory strategy in systemic inflammation.",
+            "volume": "23",
+            "author": "M Almeida",
+            "year": "2006",
+            "journal-title": "Eur J Neurosci"
+          },
+          {
+            "key": "ref6",
+            "first-page": "R693",
+            "article-title": "Endotoxin shock: thermoregulatory mechanisms.",
+            "volume": "270",
+            "author": "AA Romanovsky",
+            "year": "1996",
+            "journal-title": "Am J Physiol"
+          },
+          {
+            "key": "ref7",
+            "doi-asserted-by": "crossref",
+            "first-page": "93",
+            "DOI": "10.1152/physrev.1991.71.1.93",
+            "article-title": "Fever: role of pyrogens and cryogens.",
+            "volume": "71",
+            "author": "MJ Kluger",
+            "year": "1991",
+            "journal-title": "Physiol Rev"
+          },
+          {
+            "key": "ref8",
+            "doi-asserted-by": "crossref",
+            "first-page": "733",
+            "DOI": "10.1111/j.1749-6632.1997.tb51775.x",
+            "article-title": "Endotoxin shock-associated hypothermia. How and why does it occur?",
+            "volume": "813",
+            "author": "AA Romanovsky",
+            "year": "1997",
+            "journal-title": "Ann N Y Acad Sci"
+          },
+          {
+            "key": "ref9",
+            "doi-asserted-by": "crossref",
+            "first-page": "123",
+            "DOI": "10.1016/S0149-7634(88)80004-6",
+            "article-title": "Biological basis of the behavior of sick animals.",
+            "volume": "12",
+            "author": "BL Hart",
+            "year": "1988",
+            "journal-title": "Neurosci Biobehav Rev"
+          },
+          {
+            "key": "ref10",
+            "doi-asserted-by": "crossref",
+            "first-page": "355",
+            "DOI": "10.1615/CritRevImmunol.v14.i3-4.70",
+            "article-title": "Microbial products and cytokines in sleep and fever regulation.",
+            "volume": "14",
+            "author": "JM Krueger",
+            "year": "1994",
+            "journal-title": "Crit Rev Immunol"
+          },
+          {
+            "key": "ref11",
+            "first-page": "R244",
+            "article-title": "First and second phases of biphasic fever: two sequential stages of the sickness syndrome?",
+            "volume": "271",
+            "author": "AA Romanovsky",
+            "year": "1996",
+            "journal-title": "Am J Physiol"
+          },
+          {
+            "key": "ref12",
+            "doi-asserted-by": "crossref",
+            "first-page": "3513",
+            "DOI": "10.1242/jeb.205.22.3513",
+            "article-title": "Discrete electrolytic lesion of the preoptic area prevents LPS-induced behavioral fever in toads.",
+            "volume": "205",
+            "author": "KC Bicego",
+            "year": "2002",
+            "journal-title": "J Exp Biol"
+          },
+          {
+            "key": "ref13",
+            "doi-asserted-by": "crossref",
+            "first-page": "4600",
+            "DOI": "10.1523/JNEUROSCI.22-11-04600.2002",
+            "article-title": "The rostral raphe pallidus nucleus mediates pyrogenic transmission from the preoptic area.",
+            "volume": "22",
+            "author": "K Nakamura",
+            "year": "2002",
+            "journal-title": "J Neurosci"
+          },
+          {
+            "key": "ref14",
+            "doi-asserted-by": "crossref",
+            "first-page": "1848",
+            "DOI": "10.1046/j.1460-9568.2003.02919.x",
+            "article-title": "Neurons of the rat preoptic area and the raphe pallidus nucleus innervating the brown adipose tissue express the prostaglandin E receptor subtype EP3.",
+            "volume": "18",
+            "author": "K Yoshida",
+            "year": "2003",
+            "journal-title": "Eur J Neurosci"
+          },
+          {
+            "key": "ref15",
+            "doi-asserted-by": "crossref",
+            "first-page": "1880",
+            "DOI": "10.1056/NEJM199406303302609",
+            "article-title": "The neurologic basis of fever.",
+            "volume": "330",
+            "author": "CB Saper",
+            "year": "1994",
+            "journal-title": "N Engl J Med"
+          },
+          {
+            "key": "ref16",
+            "doi-asserted-by": "crossref",
+            "first-page": "20",
+            "DOI": "10.1002/1096-9861(20001204)428:1<20::AID-CNE3>3.0.CO;2-X",
+            "article-title": "Relationship of EP(1–4) prostaglandin receptors with rat hypothalamic cell groups involved in lipopolysaccharide fever responses.",
+            "volume": "428",
+            "author": "T Oka",
+            "year": "2000",
+            "journal-title": "J Comp Neurol"
+          },
+          {
+            "key": "ref17",
+            "doi-asserted-by": "crossref",
+            "first-page": "1356",
+            "DOI": "10.1152/ajplegacy.1974.226.6.1356",
+            "article-title": "Effects of brainstem lesions on temperature regulation in hot and cold environments.",
+            "volume": "226",
+            "author": "JM Lipton",
+            "year": "1974",
+            "journal-title": "Am J Physiol"
+          },
+          {
+            "key": "ref18",
+            "doi-asserted-by": "crossref",
+            "first-page": "553",
+            "DOI": "10.1016/0361-9230(76)90082-4",
+            "article-title": "Thermoregulatory cold-defense deficits in rats with preoptic/anterior hypothalamic lesions.",
+            "volume": "1",
+            "author": "E Satinoff",
+            "year": "1976",
+            "journal-title": "Brain Res Bull"
+          },
+          {
+            "key": "ref19",
+            "doi-asserted-by": "crossref",
+            "first-page": "932",
+            "DOI": "10.1152/ajplegacy.1976.230.4.932",
+            "article-title": "Thermal homeostasis in rats after intrahypothalamic injections of 6-hyroxydopamine.",
+            "volume": "230",
+            "author": "JG Van Zoeren",
+            "year": "1976",
+            "journal-title": "Am J Physiol"
+          },
+          {
+            "key": "ref20",
+            "doi-asserted-by": "crossref",
+            "first-page": "43",
+            "DOI": "10.1007/BF00503311",
+            "article-title": "Operant thermoregulation of rats with anterior hypothalamic lesions.",
+            "volume": "318",
+            "author": "G Schulze",
+            "year": "1981",
+            "journal-title": "Naunyn Schmiedebergs Arch Pharmacol"
+          },
+          {
+            "key": "ref21",
+            "doi-asserted-by": "crossref",
+            "first-page": "391",
+            "DOI": "10.1037/h0028170",
+            "article-title": "Effect of preoptic and anterior hypothalamic lesions on behavioral thermoregulation in the cold.",
+            "volume": "69",
+            "author": "HJ Carlisle",
+            "year": "1969",
+            "journal-title": "J Comp Physiol Psychol"
+          },
+          {
+            "key": "ref22",
+            "doi-asserted-by": "crossref",
+            "first-page": "301",
+            "DOI": "10.1126/science.7367860",
+            "article-title": "Mild cold exposure increases survival in rats with medial preoptic lesions.",
+            "volume": "208",
+            "author": "JA Nagel",
+            "year": "1980",
+            "journal-title": "Science"
+          },
+          {
+            "key": "ref23",
+            "doi-asserted-by": "crossref",
+            "first-page": "161",
+            "DOI": "10.1016/0031-9384(82)90118-4",
+            "article-title": "Acute thermoregulatory effects of unilateral electrolytic lesions of the medial and lateral preoptic area in rats.",
+            "volume": "28",
+            "author": "R Szymusiak",
+            "year": "1982",
+            "journal-title": "Physiol Behav"
+          },
+          {
+            "key": "ref24",
+            "doi-asserted-by": "crossref",
+            "first-page": "853",
+            "DOI": "10.1016/j.neuroscience.2006.01.003",
+            "article-title": "Differences in the effects of medial and lateral preoptic lesions on thermoregulation and sleep in rats.",
+            "volume": "139",
+            "author": "R Srividya",
+            "year": "2006",
+            "journal-title": "Neuroscience"
+          },
+          {
+            "key": "ref25",
+            "first-page": "145",
+            "article-title": "Central mechanisms of fever.",
+            "author": "E Korneva",
+            "year": "1992"
+          },
+          {
+            "key": "ref26",
+            "doi-asserted-by": "crossref",
+            "first-page": "4864",
+            "DOI": "10.1523/JNEUROSCI.21-13-04864.2001",
+            "article-title": "Contrasting effects of ibotenate lesions of the paraventricular nucleus and subparaventricular zone on sleep-wake cycle and temperature regulation.",
+            "volume": "21",
+            "author": "J Lu",
+            "year": "2001",
+            "journal-title": "J Neurosci"
+          },
+          {
+            "key": "ref27",
+            "doi-asserted-by": "crossref",
+            "first-page": "294",
+            "DOI": "10.1111/j.1749-6632.1998.tb08342.x",
+            "article-title": "Bilateral lesion of hypothalamic paraventricular nucleus abolishes fever induced by endotoxin and bradykinin in rats.",
+            "volume": "856",
+            "author": "JC Caldeira",
+            "year": "1998",
+            "journal-title": "Ann N Y Acad Sci"
+          },
+          {
+            "key": "ref28",
+            "first-page": "R323",
+            "article-title": "Reduced febrile responses to pyrogens after lesions of the hypothalamic paraventricular nucleus.",
+            "volume": "267",
+            "author": "T Horn",
+            "year": "1994",
+            "journal-title": "Am J Physiol"
+          },
+          {
+            "key": "ref29",
+            "first-page": "67",
+            "article-title": "Central pathways controlling brown adipose tissue thermogenesis.",
+            "volume": "19",
+            "author": "SF Morrison",
+            "year": "2004",
+            "journal-title": "News Physiol Sci"
+          },
+          {
+            "key": "ref30",
+            "doi-asserted-by": "crossref",
+            "first-page": "469",
+            "DOI": "10.1016/S0091-3057(01)00689-X",
+            "article-title": "The dorsomedial hypothalamus and the response to stress: part renaissance, part revolution.",
+            "volume": "71",
+            "author": "JA DiMicco",
+            "year": "2002",
+            "journal-title": "Pharmacol Biochem Behav"
+          },
+          {
+            "key": "ref31",
+            "doi-asserted-by": "crossref",
+            "first-page": "R320",
+            "DOI": "10.1152/ajpregu.00515.2003",
+            "article-title": "Excitatory amino acid receptors in the dorsomedial hypothalamus mediate prostaglandin-evoked thermogenesis in brown adipose tissue.",
+            "volume": "286",
+            "author": "CJ Madden",
+            "year": "2004",
+            "journal-title": "Am J Physiol Regul Integr Comp Physiol"
+          },
+          {
+            "key": "ref32",
+            "doi-asserted-by": "crossref",
+            "first-page": "1",
+            "DOI": "10.1016/S0304-3940(03)00047-8",
+            "article-title": "Role of the dorsomedial hypothalamus in thermogenesis and tachycardia caused by microinjection of prostaglandin E2 into the preoptic area in anesthetized rats.",
+            "volume": "340",
+            "author": "MV Zaretskaia",
+            "year": "2003",
+            "journal-title": "Neurosci Lett"
+          },
+          {
+            "key": "ref33",
+            "doi-asserted-by": "crossref",
+            "first-page": "R1116",
+            "DOI": "10.1152/ajpregu.00166.2002",
+            "article-title": "Brain regions expressing Fos during thermoregulatory behavior in rats.",
+            "volume": "285",
+            "author": "M Maruyama",
+            "year": "2003",
+            "journal-title": "Am J Physiol Regul Integr Comp Physiol"
+          },
+          {
+            "key": "ref34",
+            "doi-asserted-by": "crossref",
+            "first-page": "6246",
+            "DOI": "10.1523/JNEUROSCI.16-19-06246.1996",
+            "article-title": "Ventromedial preoptic prostaglandin E<sub>2</sub> activates fever-producing autonomic pathways.",
+            "volume": "16",
+            "author": "TE Scammell",
+            "year": "1996",
+            "journal-title": "J Neurosci"
+          },
+          {
+            "key": "ref35",
+            "doi-asserted-by": "crossref",
+            "first-page": "3137",
+            "DOI": "10.1111/j.1460-9568.2005.04515.x",
+            "article-title": "Direct pyrogenic input from prostaglandin EP3 receptor-expressing preoptic neurons to the dorsomedial hypothalamus.",
+            "volume": "22",
+            "author": "Y Nakamura",
+            "year": "2005",
+            "journal-title": "Eur J Neurosci"
+          },
+          {
+            "key": "ref36",
+            "doi-asserted-by": "crossref",
+            "first-page": "1638",
+            "DOI": "10.1152/ajplegacy.1976.231.6.1638",
+            "article-title": "Persistence of febrile response to pyrogens after PO/AH lesions in squirrel monkeys.",
+            "volume": "231",
+            "author": "JM Lipton",
+            "year": "1976",
+            "journal-title": "Am J Physiol"
+          },
+          {
+            "key": "ref37",
+            "doi-asserted-by": "crossref",
+            "first-page": "515",
+            "DOI": "10.1016/0306-4522(89)90269-8",
+            "article-title": "Resiniferatoxin, a phorbol-related diterpene, acts as an ultrapotent analog of capsaicin, the irritant constituent in red pepper.",
+            "volume": "30",
+            "author": "A Szallasi",
+            "year": "1989",
+            "journal-title": "Neuroscience"
+          },
+          {
+            "key": "ref38",
+            "doi-asserted-by": "crossref",
+            "first-page": "487",
+            "DOI": "10.1146/annurev.neuro.24.1.487",
+            "article-title": "The vanilloid receptor: a molecular gateway to the pain pathway.",
+            "volume": "24",
+            "author": "MJ Caterina",
+            "year": "2001",
+            "journal-title": "Annu Rev Neurosci"
+          },
+          {
+            "key": "ref39",
+            "doi-asserted-by": "crossref",
+            "first-page": "529",
+            "DOI": "10.1038/nrn1141",
+            "article-title": "ThermoTRP channels and beyond: mechanisms of temperature sensation.",
+            "volume": "4",
+            "author": "A Patapoutian",
+            "year": "2003",
+            "journal-title": "Nat Rev Neurosci"
+          },
+          {
+            "key": "ref40",
+            "doi-asserted-by": "crossref",
+            "first-page": "705",
+            "DOI": "10.1016/S0092-8674(02)00652-9",
+            "article-title": "A TRP channel that senses cold stimuli and menthol.",
+            "volume": "108",
+            "author": "AM Peier",
+            "year": "2002",
+            "journal-title": "Cell"
+          },
+          {
+            "key": "ref41",
+            "doi-asserted-by": "crossref",
+            "first-page": "1304",
+            "DOI": "10.1523/JNEUROSCI.4745.04.2005",
+            "article-title": "Altered thermal selection behavior in mice lacking transient receptor potential vanilloid 4.",
+            "volume": "25",
+            "author": "H Lee",
+            "year": "2005",
+            "journal-title": "J Neurosci"
+          },
+          {
+            "key": "ref42",
+            "doi-asserted-by": "crossref",
+            "first-page": "1468",
+            "DOI": "10.1126/science.1108609",
+            "article-title": "Impaired thermosensation in mice lacking TRPV3, a heat and camphor sensor in the skin.",
+            "volume": "307",
+            "author": "A Moqrich",
+            "year": "2005",
+            "journal-title": "Science"
+          },
+          {
+            "key": "ref43",
+            "doi-asserted-by": "crossref",
+            "first-page": "419",
+            "DOI": "10.1101/gad.1278205",
+            "article-title": "The Drosophila ortholog of vertebrate TRPA1 regulates thermotaxis.",
+            "volume": "19",
+            "author": "M Rosenzweig",
+            "year": "2005",
+            "journal-title": "Genes Dev"
+          },
+          {
+            "key": "ref44",
+            "doi-asserted-by": "crossref",
+            "first-page": "503",
+            "DOI": "10.1016/0031-9384(77)90226-8",
+            "article-title": "Effects of lesions in central thermosensitive areas on thermoregulatory responses in rat.",
+            "volume": "19",
+            "author": "WW Roberts",
+            "year": "1977",
+            "journal-title": "Physiol Behav"
+          },
+          {
+            "key": "ref45",
+            "doi-asserted-by": "crossref",
+            "first-page": "77",
+            "DOI": "10.1037/h0028959",
+            "article-title": "Behavioral thermoregulation in rats with anterior hypothalamic lesions.",
+            "volume": "71",
+            "author": "E Satinoff",
+            "year": "1970",
+            "journal-title": "J Comp Physiol Psychol"
+          },
+          {
+            "key": "ref46",
+            "doi-asserted-by": "crossref",
+            "first-page": "165",
+            "DOI": "10.1016/0031-9384(68)90049-8",
+            "article-title": "Effects of preoptic lesions on heat-escape responding and colonic temperature in the rat.",
+            "volume": "3",
+            "author": "J Lipton",
+            "year": "1968",
+            "journal-title": "Physiology & Behavior"
+          },
+          {
+            "key": "ref47",
+            "doi-asserted-by": "crossref",
+            "first-page": "2667",
+            "DOI": "10.1152/japplphysiol.01173.2001",
+            "article-title": "Selected contribution: ambient temperature for experiments in rats: a new method for determining the zone of thermal neutrality.",
+            "volume": "92",
+            "author": "AA Romanovsky",
+            "year": "2002",
+            "journal-title": "J Appl Physiol"
+          },
+          {
+            "key": "ref48",
+            "first-page": "265",
+            "article-title": "Endotoxin fever in the rat.",
+            "volume": "53",
+            "author": "M Szekely",
+            "year": "1979",
+            "journal-title": "Acta Physiol Acad Sci Hung"
+          },
+          {
+            "key": "ref49",
+            "doi-asserted-by": "crossref",
+            "first-page": "197",
+            "DOI": "10.1113/jphysiol.1975.sp010791",
+            "article-title": "Behavioural and autonomic induction of prostaglandin E<sub>1</sub> fever in squirrel monkeys.",
+            "volume": "244",
+            "author": "LI Crawshaw",
+            "year": "1975",
+            "journal-title": "J Physiol"
+          },
+          {
+            "key": "ref50",
+            "doi-asserted-by": "crossref",
+            "first-page": "121",
+            "DOI": "10.1016/0006-8993(93)91702-T",
+            "article-title": "Sympathetic nerve activity after discrete hypothalamic injections of L-glutamate.",
+            "volume": "601",
+            "author": "H Yoshimatsu",
+            "year": "1993",
+            "journal-title": "Brain Res"
+          },
+          {
+            "key": "ref51",
+            "doi-asserted-by": "crossref",
+            "first-page": "152",
+            "DOI": "10.1016/0006-8993(90)91129-5",
+            "article-title": "Stimulation of the paraventricular nucleus with glutamate activates interscapular brown adipose tissue thermogenesis in rats.",
+            "volume": "508",
+            "author": "S Amir",
+            "year": "1990",
+            "journal-title": "Brain Res"
+          },
+          {
+            "key": "ref52",
+            "doi-asserted-by": "crossref",
+            "first-page": "461",
+            "DOI": "10.1016/0361-9230(88)90135-9",
+            "article-title": "Sympathetic activity following paraventricular or ventromedial hypothalamic lesions in rats.",
+            "volume": "20",
+            "author": "T Sakaguchi",
+            "year": "1988",
+            "journal-title": "Brain Res Bull"
+          },
+          {
+            "key": "ref53",
+            "doi-asserted-by": "crossref",
+            "first-page": "251",
+            "DOI": "10.1016/0165-0270(89)90149-0",
+            "article-title": "On the use of ibotenic acid to lesion selectively different components of the hippocampal formation.",
+            "volume": "29",
+            "author": "LE Jarrard",
+            "year": "1989",
+            "journal-title": "J Neurosci Methods"
+          },
+          {
+            "key": "ref54",
+            "doi-asserted-by": "crossref",
+            "first-page": "129",
+            "DOI": "10.1016/j.brainres.2006.03.080",
+            "article-title": "Microinjection of muscimol into caudal periaqueductal gray lowers body temperature and attenuates increases in temperature and activity evoked from the dorsomedial hypothalamus.",
+            "volume": "1092",
+            "author": "RC de Menezes",
+            "year": "2006",
+            "journal-title": "Brain Res"
+          },
+          {
+            "key": "ref55",
+            "doi-asserted-by": "crossref",
+            "first-page": "231",
+            "DOI": "10.1016/0361-9230(86)90038-9",
+            "article-title": "The projections of the dorsomedial hypothalamic nucleus in the rat.",
+            "volume": "16",
+            "author": "GJ ter Horst",
+            "year": "1986",
+            "journal-title": "Brain Res Bull"
+          },
+          {
+            "key": "ref56",
+            "doi-asserted-by": "crossref",
+            "first-page": "19",
+            "DOI": "10.1016/0166-4328(93)90087-7",
+            "article-title": "The periaqueductal gray-rostral medulla connection in the defence reaction: efferent pathways and descending control mechanisms.",
+            "volume": "58",
+            "author": "TA Lovick",
+            "year": "1993",
+            "journal-title": "Behav Brain Res"
+          },
+          {
+            "key": "ref57",
+            "doi-asserted-by": "crossref",
+            "first-page": "111",
+            "DOI": "10.1002/cne.20734",
+            "article-title": "Neural mechanisms of freezing and passive aversive behaviors.",
+            "volume": "493",
+            "author": "T Jhou",
+            "year": "2005",
+            "journal-title": "J Comp Neurol"
+          },
+          {
+            "key": "ref58",
+            "doi-asserted-by": "crossref",
+            "first-page": "655",
+            "DOI": "10.1038/nrn894",
+            "article-title": "How do you feel? Interoception: the sense of the physiological condition of the body.",
+            "volume": "3",
+            "author": "AD Craig",
+            "year": "2002",
+            "journal-title": "Nat Rev Neurosci"
+          },
+          {
+            "key": "ref59",
+            "doi-asserted-by": "crossref",
+            "first-page": "500",
+            "DOI": "10.1016/S0959-4388(03)00090-4",
+            "article-title": "Interoception: the sense of the physiological condition of the body.",
+            "volume": "13",
+            "author": "AD Craig",
+            "year": "2003",
+            "journal-title": "Curr Opin Neurobiol"
+          },
+          {
+            "key": "ref60",
+            "doi-asserted-by": "crossref",
+            "first-page": "624",
+            "DOI": "10.1002/cne.902950408",
+            "article-title": "Organization of cortical, basal forebrain, and hypothalamic afferents to the parabrachial nucleus in the rat.",
+            "volume": "295",
+            "author": "MM Moga",
+            "year": "1990",
+            "journal-title": "J Comp Neurol"
+          },
+          {
+            "key": "ref61",
+            "doi-asserted-by": "crossref",
+            "first-page": "143",
+            "DOI": "10.1002/(SICI)1096-9861(19961202)376:1<143::AID-CNE9>3.0.CO;2-3",
+            "article-title": "Organization of projections from the dorsomedial nucleus of the hypothalamus: a PHA-L study in the rat.",
+            "volume": "376",
+            "author": "RH Thompson",
+            "year": "1996",
+            "journal-title": "J Comp Neurol"
+          },
+          {
+            "key": "ref62",
+            "doi-asserted-by": "crossref",
+            "first-page": "313",
+            "DOI": "10.1002/cne.903150307",
+            "article-title": "Functional and anatomical organization of cardiovascular pressor and depressor sites in the lateral hypothalamic area: I. Descending projections.",
+            "volume": "315",
+            "author": "GV Allen",
+            "year": "1992",
+            "journal-title": "J Comp Neurol"
+          },
+          {
+            "key": "ref63",
+            "doi-asserted-by": "crossref",
+            "first-page": "21",
+            "DOI": "10.1002/cne.902370103",
+            "article-title": "Organization of cerebral cortical afferent systems in the rat. II. Hypothalamocortical projections.",
+            "volume": "237",
+            "author": "CB Saper",
+            "year": "1985",
+            "journal-title": "J Comp Neurol"
+          },
+          {
+            "key": "ref64",
+            "doi-asserted-by": "crossref",
+            "first-page": "48",
+            "DOI": "10.1159/000064385",
+            "article-title": "Connections of the dorsomedial hypothalamic nucleus from the forebrain structures in the rat.",
+            "volume": "172",
+            "author": "FY Onat",
+            "year": "2002",
+            "journal-title": "Cells Tissues Organs"
+          },
+          {
+            "key": "ref65",
+            "doi-asserted-by": "crossref",
+            "first-page": "175",
+            "DOI": "10.1016/j.neuron.2005.09.025",
+            "article-title": "Contributions of the amygdala to emotion processing: from animal models to human behavior.",
+            "volume": "48",
+            "author": "EA Phelps",
+            "year": "2005",
+            "journal-title": "Neuron"
+          },
+          {
+            "key": "ref66",
+            "doi-asserted-by": "crossref",
+            "first-page": "126",
+            "DOI": "10.1016/j.neubiorev.2005.06.006",
+            "article-title": "The limbic lobe and its output channels: implications for emotional functions and adaptive behavior.",
+            "volume": "30",
+            "author": "L Heimer",
+            "year": "2006",
+            "journal-title": "Neurosci Biobehav Rev"
+          },
+          {
+            "key": "ref67",
+            "doi-asserted-by": "crossref",
+            "first-page": "221",
+            "DOI": "10.1016/S0959-4388(96)80076-6",
+            "article-title": "The amygdala and emotion.",
+            "volume": "6",
+            "author": "M Gallagher",
+            "year": "1996",
+            "journal-title": "Curr Opin Neurobiol"
+          },
+          {
+            "key": "ref68",
+            "doi-asserted-by": "crossref",
+            "first-page": "470",
+            "DOI": "10.1037/h0036147",
+            "article-title": "Brain areas controlling thermoregulatory grooming, prone extension, locomotion, and tail vasodilation in rats.",
+            "volume": "86",
+            "author": "WW Roberts",
+            "year": "1974",
+            "journal-title": "J Comp Physiol Psychol"
+          },
+          {
+            "key": "ref69",
+            "doi-asserted-by": "crossref",
+            "first-page": "89",
+            "DOI": "10.1016/S0165-0173(98)00010-1",
+            "article-title": "Organization of inputs to the dorsomedial nucleus of the hypothalamus: a reexamination with Fluorogold and PHAL in the rat.",
+            "volume": "27",
+            "author": "RH Thompson",
+            "year": "1998",
+            "journal-title": "Brain Res Rev"
+          },
+          {
+            "key": "ref70",
+            "article-title": "The Rat Brain in Stereotaxic Coordinates.",
+            "author": "G Paxinos",
+            "year": "1986"
+          }
+        ],
+        "container-title": [
+          "PLoS ONE"
+        ],
+        "original-title": [],
+        "language": "en",
+        "link": [
+          {
+            "URL": "http://dx.plos.org/10.1371/journal.pone.0000001",
+            "content-type": "unspecified",
+            "content-version": "vor",
+            "intended-application": "similarity-checking"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2021,
+              8,
+              6
+            ]
+          ],
+          "date-time": "2021-08-06T19:49:15Z",
+          "timestamp": 1628279355000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://dx.plos.org/10.1371/journal.pone.0000001"
+          }
+        },
+        "subtitle": [],
+        "editor": [
+          {
+            "given": "Alejandro",
+            "family": "Aballay",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "editor"
+              }
+            ]
+          }
+        ],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2006,
+              12,
+              20
+            ]
+          ]
+        },
+        "references-count": 70,
+        "journal-issue": {
+          "issue": "1",
+          "published-online": {
+            "date-parts": [
+              [
+                2006,
+                12,
+                20
+              ]
+            ]
+          }
+        },
+        "URL": "https://doi.org/10.1371/journal.pone.0000001",
+        "relation": {
+          "has-review": [
+            {
+              "id-type": "doi",
+              "id": "10.3410/f.1095061.550055",
+              "asserted-by": "object"
+            }
+          ]
+        },
+        "ISSN": [
+          "1932-6203"
+        ],
+        "issn-type": [
+          {
+            "value": "1932-6203",
+            "type": "electronic"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2006,
+              12,
+              20
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T10:07:33.190Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

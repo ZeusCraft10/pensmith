@@ -75,6 +75,28 @@ test('SRC-12: corporate names stay one literal name; suffixes survive', () => {
   assert.equal(king[1]!.family, 'Bill and Melinda Gates');
 });
 
+test('SRC-12: a PubMed record\'s names (the adapter\'s "Family, Initials" form) are written and read back surname first; APA prints "Zhu, N., Gao, G. F."', async () => {
+  const { pubmedToCandidate } = await import('../bin/lib/sources/pubmed.js');
+  const c = pubmedToCandidate({
+    uid: '31978945',
+    title: 'A Novel Coronavirus from Patients with Pneumonia in China, 2019.',
+    authors: [{ name: 'Zhu N', authtype: 'Author' }, { name: 'Gao GF', authtype: 'Author' }, { name: 'van den Berg R', authtype: 'Author' }],
+    pubdate: '2020 Feb 20',
+    fulljournalname: 'The New England journal of medicine',
+    articleids: [{ idtype: 'doi', value: '10.1056/NEJMoa2001017' }],
+  });
+  assert.ok(c);
+  assert.equal(c.citekey, 'zhu2020');
+  const bib = renderBibtex([{ citekey: c.citekey, title: c.title, authors: c.authors, year: c.year ?? null, doi: c.doi ?? null, venue: c.venue ?? null }]);
+  assert.match(bib, /author = \{Zhu, N\. and Gao, G\. F\. and \{van den Berg\}, R\.\}/);
+  const authors = entryById(bib, 'zhu2020')['author'] as ParsedName[];
+  assert.deepEqual(
+    authors.map((a) => [[a['non-dropping-particle'], a.family].filter(Boolean).join(' '), a.given]),
+    [['Zhu', 'N.'], ['Gao', 'G. F.'], ['van den Berg', 'R.']],
+  );
+  assert.match(await renderApa([entryById(bib, 'zhu2020')]), /^Zhu, N\., Gao, G\. F\., & van den Berg, R\./);
+});
+
 test('SRC-12: every bibliographic field is written and read back; types map to BibTeX entry types', () => {
   const sources: BibSource[] = [
     {

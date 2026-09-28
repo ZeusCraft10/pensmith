@@ -453,6 +453,8 @@ export async function reCheckFinalMd(
   finalMd: string,
   draftMd: string,
   bibPath: string,
+  /** The project root: Pass 3 re-checks quotes against the hash-verified bring-your-own PDFs too (SRC-15). */
+  root?: string,
 ): Promise<{ passed: boolean; reason: string }> {
   // Step (a): citekey-set diff (runs FIRST — Pitfall 5).
   const finalKeys = new Set(extractCitekeys(finalMd));
@@ -497,7 +499,7 @@ export async function reCheckFinalMd(
 
   let pass3Results;
   try {
-    pass3Results = await runPass3(finalMd, bibByCitekey);
+    pass3Results = await runPass3(finalMd, bibByCitekey, root !== undefined ? { root } : {});
   } catch (err) {
     // GATE-04 FAIL-CLOSED: an unexpected runPass3 error is NOT a clean pass.
     // We already have a valid bibByCitekey map here, so an exception is unexpected
@@ -672,7 +674,7 @@ export const doneCommand = defineCommand({
     if (finalPath !== null) {
       const finalMd = readFileSync(finalPath, 'utf8');
       const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
-      const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath);
+      const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath, paperRoot);
       if (!gate4.passed) {
         process.stdout.write(
           `pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification: ${gate4.reason}\n`,

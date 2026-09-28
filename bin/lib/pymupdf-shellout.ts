@@ -185,12 +185,3 @@ export async function pymupdfExtract(buf: Buffer | Uint8Array): Promise<PymupdfR
     if (dir !== null) await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
-
-/**
- * The text-only view of pymupdfExtract (RSCH-05b contract): the extracted
- * text, or null when PyMuPDF is unavailable, failed, or found no text.
- */
-export async function pymupdfShellout(buf: Buffer | Uint8Array): Promise<string | null> {
-  const r = await pymupdfExtract(buf);
-  return r !== null && r.text.trim().length > 0 ? r.text : null;
-}

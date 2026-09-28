@@ -22,7 +22,9 @@
 //      draft may use. An unparseable bib is kept as a backup next to it.
 //   2. For each candidate, finds the existing entry for the same work:
 //        a. doi.ts-normalized DOI (primary or alternate), then
-//        b. arXiv id, PMID, PMCID, ISBN(-13), then
+//        b. arXiv id, PMID, PMCID, ISBN(-13) — an ISBN only between two
+//           book-level records: a chapter or a proceedings paper carries its
+//           book's ISBN, and is never the same work as the book — then
 //        c. the version rule: normalized titles with Jaro-Winkler >= 0.95, the
 //           same first-author family name, and years at most 1 apart — applied
 //           only when at least one side is NOT a version of record (a
@@ -65,7 +67,7 @@ import {
   ByoRecordSchema,
   CURRENT_LIBRARY_VERSION,
   CITEKEY_GRAMMAR,
-  type ByoRecord,
+  type ByoRecordInput,
   type Library,
   type LibraryEntry,
 } from './schemas/library.js';
@@ -357,14 +359,23 @@ export function sameWorkVersion(a: LibraryEntry, b: LibraryEntry): boolean {
   return jaroWinkler(ta, tb) >= VERSION_TITLE_JW;
 }
 
+/** A work that is part of a book (its ISBN is the container's): a chapter or a proceedings paper. */
+function isPartOfBook(e: Pick<LibraryEntry, 'type'>): boolean {
+  return e.type === 'chapter' || e.type === 'paper-conference';
+}
+
 function findMatch(entries: LibraryEntry[], d: LibraryEntry): { entry: LibraryEntry; by: MatchKind } | null {
   if (d.doi || d.alternate_dois.length > 0) {
     const mine = new Set([d.doi, ...d.alternate_dois].filter((x): x is string => x !== null));
     const hit = entries.find((e) => [e.doi, ...e.alternate_dois].some((x) => x !== null && mine.has(x)));
     if (hit) return { entry: hit, by: 'doi' };
   }
-  const byField = (k: 'arxiv' | 'pmid' | 'pmcid' | 'isbn'): LibraryEntry | undefined =>
-    d[k] ? entries.find((e) => e[k] === d[k]) : undefined;
+  const byField = (k: 'arxiv' | 'pmid' | 'pmcid' | 'isbn'): LibraryEntry | undefined => {
+    if (!d[k]) return undefined;
+    // A part (chapter, proceedings paper) shares its container's ISBN.
+    if (k === 'isbn') return isPartOfBook(d) ? undefined : entries.find((e) => e.isbn === d.isbn && !isPartOfBook(e));
+    return entries.find((e) => e[k] === d[k]);
+  };
   for (const k of ['arxiv', 'pmid', 'pmcid', 'isbn'] as const) {
     const hit = byField(k);
     if (hit) return { entry: hit, by: k };
@@ -863,7 +874,7 @@ export type AttachByoStatus = 'attached' | 'unchanged' | 'kept-existing';
 export async function attachByoRecord(
   root: string,
   citekey: string,
-  byo: ByoRecord,
+  byo: ByoRecordInput,
   opts: { replace?: boolean; now?: () => Date } = {},
 ): Promise<{ status: AttachByoStatus; entry: LibraryEntry }> {
   const paths = libraryPaths(root);

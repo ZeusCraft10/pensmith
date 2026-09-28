@@ -51,6 +51,12 @@ export interface LookupFailed {
   readonly status?: number;
   /** How long the service asked callers to wait, when it said so (Retry-After). */
   readonly retryAfterMs?: number;
+  /**
+   * True when the registrar DID answer, definitively, with a record that cannot
+   * be used (e.g. Crossref's record of a standard lists no author or editor):
+   * asking again gives the same answer, so a caller never says "retry".
+   */
+  readonly permanent?: boolean;
 }
 
 export type LookupResult = LookupFound | LookupNotFound | LookupFailed;
@@ -63,12 +69,16 @@ export function lookupNotFound(reason: string): LookupNotFound {
   return { kind: 'not-found', reason };
 }
 
-export function lookupFailed(reason: string, extra: { status?: number; retryAfterMs?: number } = {}): LookupFailed {
+export function lookupFailed(
+  reason: string,
+  extra: { status?: number; retryAfterMs?: number; permanent?: boolean } = {},
+): LookupFailed {
   return {
     kind: 'failed',
     reason,
     ...(extra.status !== undefined ? { status: extra.status } : {}),
     ...(extra.retryAfterMs !== undefined ? { retryAfterMs: extra.retryAfterMs } : {}),
+    ...(extra.permanent === true ? { permanent: true } : {}),
   };
 }
 
@@ -84,7 +94,9 @@ export class SourceLookupError extends PensmithError {
   readonly reason: string;
   readonly status: number | undefined;
   readonly retryAfterMs: number | undefined;
-  constructor(source: string, id: string, failed: Pick<LookupFailed, 'reason' | 'status' | 'retryAfterMs'>) {
+  /** The registrar's definitive answer is unusable; retrying cannot help (LookupFailed.permanent). */
+  readonly permanent: boolean;
+  constructor(source: string, id: string, failed: Pick<LookupFailed, 'reason' | 'status' | 'retryAfterMs' | 'permanent'>) {
     super(`${source} lookup of ${id} failed: ${failed.reason}`, EXIT_ERROR);
     this.name = 'SourceLookupError';
     this.source = source;
@@ -92,6 +104,7 @@ export class SourceLookupError extends PensmithError {
     this.reason = failed.reason;
     this.status = failed.status;
     this.retryAfterMs = failed.retryAfterMs;
+    this.permanent = failed.permanent === true;
   }
 }
 

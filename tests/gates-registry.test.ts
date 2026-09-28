@@ -45,13 +45,23 @@ import {
 import { withLlmSandbox } from './helpers/llm-sandbox.js';
 
 const IGNORE_LOGS = /^\.paper[\\/](SESSION\.log|sessions)/;
-const NEVER: ReadonlySet<GateId> = new Set(['cost-cap', 'estimate-proceed', 'detector-consent', 'paper-pointer']);
+// The own-source gates (Phase 19 review round 1): a paper file can name the
+// reader's folder or Zotero collection, only the user can approve reading it.
+const NEVER: ReadonlySet<GateId> = new Set([
+  'cost-cap',
+  'estimate-proceed',
+  'detector-consent',
+  'paper-pointer',
+  'byo-folder',
+  'zotero-collection',
+  'pdf-attach-unmatched',
+]);
 
 // ---------------------------------------------------------------------------
 // 1. The registry
 // ---------------------------------------------------------------------------
 
-test('RUN-28: GATES is one table of unique gates; --yolo never skips cost-cap, estimate-proceed, detector-consent or paper-pointer', () => {
+test('RUN-28: GATES is one table of unique gates; --yolo never skips cost-cap, estimate-proceed, detector-consent, paper-pointer or the own-source gates', () => {
   const ids = GATES.map((g) => g.id);
   assert.equal(new Set(ids).size, ids.length, 'unique ids');
   assert.deepEqual(new Set(GATES.filter((g) => g.yolo === 'never').map((g) => g.id)), NEVER);

@@ -81,6 +81,12 @@ function olIsbn(agent: Agent, isbn: string, status: number, body: unknown): void
     .reply(status, typeof body === 'string' ? body : JSON.stringify(body), { headers: { 'content-type': 'application/json', 'retry-after': '0' } });
   // A retried status (429 / 5xx) is asked again by the transport.
   if (status === 429 || status >= 500) scope.persist();
+  // olDoc's edition record: no author keys, no by_statement — the index's names stand.
+  agent
+    .get(OL)
+    .intercept({ path: '/books/OL1M.json', method: 'GET' })
+    .reply(200, JSON.stringify({ key: '/books/OL1M' }), { headers: { 'content-type': 'application/json' } })
+    .persist();
 }
 function gbIsbn(agent: Agent, isbn: string, status: number, body: unknown): void {
   const scope = agent
@@ -97,9 +103,13 @@ test('the registry carries the books adapter (search + three-way lookups)', () =
 });
 
 test('SRC-11: isbn:9780226458083 → Kuhn, The Structure of Scientific Revolutions — @book with publisher, year, ISBN-13 (recorded)', async () => {
-  const [entry] = recorded('books', 'isbn-9780226458083');
+  const entries = recorded('books', 'isbn-9780226458083');
+  const [entry] = entries;
   assert.equal(entry!.scope, OL);
-  assert.equal(entry!.status, 200, 'one request, answered directly (no redirect)');
+  assert.equal(entry!.status, 200, 'the search is answered directly (no redirect)');
+  // The search index aggregates names across editions ("Dennis Holland" too);
+  // the edition record and its author record name the edition's own author.
+  assert.deepEqual(entries.map((e) => e.path.split('?')[0]), ['/search.json', '/books/OL976099M.json', '/authors/OL531166A.json']);
   for (const spelling of ['isbn:9780226458083', '9780226458083', 'ISBN 978-0-226-45808-3', '0226458083', 'isbn:0-226-45808-3']) {
     const r = await books.lookupById(spelling);
     assert.equal(r.kind, 'found', spelling);
@@ -108,7 +118,7 @@ test('SRC-11: isbn:9780226458083 → Kuhn, The Structure of Scientific Revolutio
     assert.equal(c.source, 'books');
     assert.equal(c.id, 'isbn:9780226458083');
     assert.equal(c.title, 'The Structure of Scientific Revolutions');
-    assert.equal(c.authors[0], 'Thomas S. Kuhn');
+    assert.deepEqual(c.authors, ['Thomas S. Kuhn'], 'the edition\'s own author — no aggregated co-author');
     assert.equal(c.publisher, 'University of Chicago Press');
     assert.equal(c.year, 1996, 'the edition\'s date, not the work\'s first publication');
     assert.equal(c.isbn, '9780226458083');
@@ -161,6 +171,40 @@ test('D-19-14: Open Library has no such edition → the Google Books fallback an
     assert.equal(r.candidate.year, 2011);
     assert.equal(r.candidate.isbn, isbn);
     assert.equal(r.candidate.abstract, 'A description.');
+  });
+});
+
+test('SRC-11: an ISBN\'s authors are the matched edition\'s own — its author records, else its by_statement filters the index\'s aggregate', async () => {
+  await liveLane(async (agent) => {
+    const json = { headers: { 'content-type': 'application/json' } };
+    const aggregate = (isbn: string, edition: string): unknown => ({
+      numFound: 1,
+      docs: [{
+        key: '/works/OL7W',
+        title: 'An Edited Book',
+        author_name: ['Ann Author', 'Nora Narrator'],
+        editions: { docs: [{ key: `/books/${edition}`, title: 'An Edited Book', author_name: ['Ann Author', 'Nora Narrator'], publish_date: ['2001'], isbn: [isbn] }] },
+      }],
+    });
+    // 1. Author keys on the edition record.
+    const a = freshIsbn();
+    olIsbn(agent, a, 200, aggregate(a, 'OL71M'));
+    agent.get(OL).intercept({ path: '/books/OL71M.json', method: 'GET' }).reply(200, JSON.stringify({ key: '/books/OL71M', authors: [{ key: '/authors/OL9A' }] }), json);
+    agent.get(OL).intercept({ path: '/authors/OL9A.json', method: 'GET' }).reply(200, JSON.stringify({ key: '/authors/OL9A', name: 'Ann Author' }), json);
+    const ra = await books.lookupById(`isbn:${a}`);
+    assert.deepEqual(ra.kind === 'found' ? ra.candidate.authors : ra, ['Ann Author']);
+    // 2. No author keys: the by_statement filters the index's names.
+    const b = freshIsbn();
+    olIsbn(agent, b, 200, aggregate(b, 'OL72M'));
+    agent.get(OL).intercept({ path: '/books/OL72M.json', method: 'GET' }).reply(200, JSON.stringify({ key: '/books/OL72M', by_statement: 'by Ann Author.' }), json);
+    const rb = await books.lookupById(`isbn:${b}`);
+    assert.deepEqual(rb.kind === 'found' ? rb.candidate.authors : rb, ['Ann Author']);
+    // 3. The edition record cannot be read: the book is still found, with the index's names.
+    const c = freshIsbn();
+    olIsbn(agent, c, 200, aggregate(c, 'OL73M'));
+    agent.get(OL).intercept({ path: '/books/OL73M.json', method: 'GET' }).reply(404, 'Not Found', json);
+    const rc = await books.lookupById(`isbn:${c}`);
+    assert.deepEqual(rc.kind === 'found' ? rc.candidate.authors : rc, ['Ann Author', 'Nora Narrator']);
   });
 });
 

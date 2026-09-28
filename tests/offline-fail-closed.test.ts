@@ -37,7 +37,7 @@ const { runExportBlockingGate } = await import('../bin/cli/done.js');
 const { computeDraftHash } = await import('../bin/lib/draft-hash.js');
 const { runPlagiarism } = await import('../bin/lib/plagiarism.js');
 const { scoreHonestyWithOptions } = await import('../bin/lib/honesty.js');
-const { runResearchOrchestrator } = await import('../bin/lib/research-orchestrator.js');
+const { runResearchPassWithLog } = await import('./helpers/research-pass.js');
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -146,7 +146,7 @@ test('RUN-03: offline research on an unrecorded query yields 0 candidates with t
   const root = tmp('pensmith-offline-research-');
   mkdirSync(join(root, '.paper'), { recursive: true });
   const { value, err } = await captureStreams(() =>
-    runResearchOrchestrator(['medieval Icelandic sagas'], {
+    runResearchPassWithLog(['medieval Icelandic sagas'], {
       topic: 'medieval Icelandic sagas', discipline: 'history', paperRoot: root,
     }),
   );

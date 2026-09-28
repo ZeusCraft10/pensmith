@@ -166,6 +166,58 @@ test('SRC-13: a DOI in the footer identifies the PDF; a DOI in running text that
   assert.deepEqual(calls.title, ['Measured measurement'], 'it fell through to the title search');
 });
 
+test('SRC-13: a DOI in a footnote / reference list names a CITED work — never the PDF (the essay is not LeCun 2015)', async () => {
+  const ex = await load('cites-in-footnote.pdf');
+  const lecun = cand({ doi: '10.1038/nature14539', title: 'Deep learning', authors: ['LeCun, Yann', 'Bengio, Yoshua'], year: 2015 });
+  const { deps: d, calls } = deps({
+    doi: (x) => (x === '10.1038/nature14539' ? lookupFound(lecun) : lookupNotFound('404')),
+    title: () => [lecun],
+  });
+  const r = await identifyPdf(ex, d);
+  assert.equal(r.kind, 'unidentified', 'the cited work is refused');
+  assert.deepEqual(calls.doi, ['10.1038/nature14539'], 'the DOI was looked up once');
+  assert.deepEqual(calls.title, ['Machine Perception and the Limits of Representation'], 'the essay\'s own title was searched');
+  assert.match(r.kind === 'unidentified' ? r.reason : '', /10\.1038\/nature14539 \("Deep learning"\) is a work the PDF cites, not the PDF itself/);
+});
+
+test('SRC-13: a record found by identifier is accepted when its title is printed AS the title with its author in the byline', async () => {
+  const { isOwnWork } = await import('../bin/lib/pdf-identify.js');
+  const lecun = cand({ title: 'Deep learning', authors: ['LeCun, Yann'] });
+  const noLocal = { title: null, authors: [], year: null, titleSource: null } as const;
+  // Printed as the title, byline below: own work.
+  assert.equal(isOwnWork(lecun, 'REVIEW\nDeep learning\nYann LeCun, Yoshua Bengio & Geoffrey Hinton\nBody text.', noLocal), true);
+  // Embedded in a citation line: not.
+  assert.equal(isOwnWork(lecun, 'My Essay\nA. Writer\n1 Y. LeCun, Deep learning, Nature 521 (2015).', noLocal), false);
+  // A reference wrapped so the title sits on its own line, the author ABOVE it: not.
+  assert.equal(isOwnWork(lecun, 'My Essay\nA. Writer\n[1] Y. LeCun, Y. Bengio and G. Hinton,\nDeep learning,\nNature 521 (2015).', noLocal), false);
+  // Matches the PDF's own title and first author: own work (rule a).
+  const local = { title: 'Deep Learning', authors: ['Yann LeCun'], year: 2015, titleSource: 'metadata' } as const;
+  assert.equal(isOwnWork(lecun, '', local), true);
+  // The PDF's own title with a different first author: not.
+  assert.equal(isOwnWork(lecun, '', { ...local, authors: ['Jane Student'] }), false);
+});
+
+test('SRC-05 / SRC-13: a title search that failed at OpenAlex is named — never folded into "no Crossref or OpenAlex record matches"', async () => {
+  const ex = await load('attention-title-only.pdf');
+  const d: IdentifyDeps = {
+    lookupDoi: async () => lookupNotFound('404'),
+    lookupArxiv: async () => lookupNotFound('empty'),
+    searchTitle: async () => ({
+      candidates: WRONG_HITS,
+      failures: ['openalex title search: rate limited (retry after ~38 s) — a free OPENALEX_API_KEY avoids this'],
+    }),
+  };
+  const r = await identifyPdf(ex, d);
+  assert.equal(r.kind, 'unidentified');
+  const reason = r.kind === 'unidentified' ? r.reason : '';
+  assert.match(reason, /^no Crossref record matches the title "Attention Is All You Need" and its first author closely enough, and openalex title search: rate limited \(retry after ~38 s\)/);
+  assert.match(reason, /retry later or pass the DOI$/);
+  assert.doesNotMatch(reason, /no Crossref or OpenAlex record/);
+  // Every search failed: "the title search failed (…)".
+  const none = await identifyPdf(ex, { ...d, searchTitle: async () => ({ candidates: [], failures: ['crossref title search: HTTP 503 after retries', 'openalex title search: HTTP 503 after retries'] }) });
+  assert.match(none.kind === 'unidentified' ? none.reason : '', /^the title search failed \(crossref title search: HTTP 503 after retries; openalex title search: HTTP 503 after retries\) — retry later or pass the DOI$/);
+});
+
 test('SRC-13: a failed lookup is reported (never read as "no such record"); an image-only PDF has no title to search', async () => {
   const ex = await load('doi-footer.pdf');
   const r = await identifyPdf(ex, deps({ doi: () => lookupFailed('HTTP 503 after retries') }).deps);

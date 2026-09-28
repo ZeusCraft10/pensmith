@@ -1,7 +1,9 @@
 # pensmith verify
 
-> Verify citations + claims in one section. Per-section verb — touches ONLY
-> `.paper/sections/<NN>-<slug>/` (TEST-09 section-isolation invariant).
+> Verify citations + claims in one section. Per-section verb — writes ONLY
+> inside `.paper/sections/<NN>-<slug>/` (TEST-09 section-isolation invariant),
+> with one paper-level repair: an unparseable `.paper/CITATIONS.bib` is
+> re-rendered from `LIBRARY.json` (step 3; SRC-12).
 >
 > **D-13 LOCKED INVARIANT — the blocking verdict is 100% deterministic.**
 > No model call decides a Pass-1 or Pass-3 verdict or the section status; the
@@ -39,6 +41,7 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
 
 - `.paper/sections/<NN>-<slug>/VERIFICATION.md` — Pass-1 + Pass-3 narratives + overall verdict
 - `.paper/sections/<NN>-<slug>/PLAN.md` — frontmatter status updated to `'verifying'` → `'verified'` | `'failed'` | `'unverifiable'` (D-08-AMENDED)
+- Only when `.paper/CITATIONS.bib` does not parse and `.paper/LIBRARY.json` exists: `.paper/CITATIONS.bib` and `.paper/CITATIONS.ris` re-rendered from the library, the unreadable file kept as `.paper/CITATIONS.bib.unparsed-<time>.bak`, one stderr notice (SRC-12). This is the one write verify makes outside the section folder.
 
 ## Body
 
@@ -59,7 +62,9 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
 3. **Read inputs**:
    - `<sectionDraft(n, slug)>` = `.paper/sections/<NN>-<slug>/DRAFT.md` — Markdown body with Pandoc `[@citekey]` tokens (D-21).
    - `<sectionPlan(n, slug)>` = `.paper/sections/<NN>-<slug>/PLAN.md` — for `assigned_sources` and the `verified_against_draft_hash` invalidation check.
-   - **`.paper/CITATIONS.bib`** — canonical BibTeX (D-20), parsed through `bin/lib/citations.ts parseBibtex` (D-19 citation-js chokepoint). This file is the **single source of truth** for citation metadata at verify time; `LIBRARY.json` is NOT consulted at verify time. An empty bib is zero entries (BRDTH-01).
+   - **`.paper/CITATIONS.bib`** — canonical BibTeX (D-20), parsed through `bin/lib/citations.ts parseBibtex` (D-19 citation-js chokepoint). This file is the **single source of truth** for citation METADATA at verify time (title, authors, identifiers). An empty bib is zero entries (BRDTH-01).
+   - **Bib repair (SRC-12)**: when CITATIONS.bib does not parse and `.paper/LIBRARY.json` exists, verify first re-renders CITATIONS.bib and CITATIONS.ris from the library through the one library writer (`bin/lib/library.ts rerenderCitations`), keeps the unreadable file as `CITATIONS.bib.unparsed-<time>.bak`, and prints one stderr notice. Without a LIBRARY.json nothing is rewritten and the parse error fails closed.
+   - **`.paper/LIBRARY.json`** is read for one more thing: which cited sources have a bring-your-own PDF (`byo`). Its text is read ONLY through `bin/lib/byo-text.ts`, which re-hashes `.paper/sources/<citekey>.pdf` against the recorded sha256 first (S-17): Pass 3 checks quotes against it (step 6) and the advisory Pass 2 reads its passages nearest each claim. An edited PDF, a loose `.paper/sources/<citekey>.txt`, a poisoned cache or a PDF the user attached although it does not show the work (`byo.asserted`) is never used.
    - **Early exits** (each keeps the router moving): no DRAFT.md → an unverifiable VERIFICATION.md naming `pensmith write N`, PLAN.md `status: 'writing'` (the router re-drafts), exit 1. No CITATIONS.bib while the draft cites sources (any citation shape, `bin/lib/citation-token.ts`) → `Status: failed` naming `pensmith research` (fail closed; PLAN.md untouched), exit 1. A draft that cites nothing needs no bib: it takes the normal path, Pass 1 and Pass 3 have nothing to check, and the section is `verified` (with a note line) — so an empty library never loops the router on verify.
 
 4. **PASS 1 — Citation Integrity (DETERMINISTIC, VRFY-01)**:
@@ -67,8 +72,9 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
    - For each citekey, look up the parsed `.paper/CITATIONS.bib` entry → `claimed = {title, authors, doi, retracted}`.
    - If the citekey is absent from `.paper/CITATIONS.bib` → `verdict = 'FABRICATED'`, `reason = 'citekey ${citekey} not present in .paper/CITATIONS.bib (citation invented by drafter)'`. Skip the rest of step 4 for this citekey.
    - For each DOI present in claimed: call `sources.crossref.fetchById(doi)` (the three-way lookup, D-19-05; recorded fixtures in CI) → `actual = {title, authors, doi, retraction_status}`.
+   - **An entry without a DOI** is re-fetched at its OWN registrar and runs the same AND-gate: an arXiv-only preprint (`eprint` + `archivePrefix = {arXiv}`) at the arXiv API, a PubMed record (`pmid`) at PubMed E-utilities, a book (`isbn`) at the books registries (Open Library / Google Books). A found record runs the AND-gate (a PubMed "Retracted Publication" is `MIS-CITED`); a failed or offline lookup is `UNVERIFIABLE` (blocking); only a definitive not-found from every identifier the entry carries is `FABRICATED` (`reason = 'no registrar has this work (…)'`). An entry with no DOI, arXiv id, PMID or ISBN is `FABRICATED` (`'no DOI, arXiv id, PMID or ISBN in citation entry (cannot verify upstream)'`).
    - If `fetchById(doi)` returns null — Crossref's definitive "no such record" (HTTP 404) → `verdict = 'FABRICATED'`, `reason = 'DOI ${doi} did not resolve via Crossref'`.
-   - If the lookup FAILED (it throws `SourceLookupError`: a 429 or 5xx after retries, an exhausted host, an open circuit breaker, a transport error, or a 200 whose body is not a Crossref answer) → `verdict = 'UNVERIFIABLE'`, `reason = 'Crossref re-fetch of ${doi} failed: <reason> — re-run verify once the lookup answers'`. A failed lookup is never "did not resolve": it BLOCKS compile and done like a failing verdict.
+   - If the lookup FAILED (it throws `SourceLookupError`: a 429 or 5xx after retries, an exhausted host, an open circuit breaker, a transport error, or a 200 whose body is not a Crossref answer) → `verdict = 'UNVERIFIABLE'`, `reason = 'Crossref re-fetch of ${doi} failed: <reason> — re-run verify once the lookup answers'`. A failed lookup is never "did not resolve": it BLOCKS compile and done like a failing verdict. A definitive record that cannot be compared (Crossref's record of a standard lists no author or editor) is `UNVERIFIABLE` too, with a reason that does not promise a retry helps.
    - If the Crossref record itself carries a retraction notice (`updated-by` of a retraction / withdrawal / removal kind — Crossref serves the Retraction Watch data there) → `verdict = 'MIS-CITED'`, `reason = 'cited work is retracted (Crossref record, Retraction Watch notice at verify time): <notice>'` (SRC-04; the label becomes RETRACTED in Phase 20).
    - If the re-fetch is UNAVAILABLE because of the network mode — a sources-offline fixture miss (`PENSMITH_OFFLINE=1`, the test runner) or `--dry-run` — → `verdict = 'UNVERIFIABLE'`, `reason = 'offline: no recorded fixture — re-run online'` (or `'dry-run: no live re-fetch under --dry-run — re-run online'`). It is never OK, MIS-CITED or FABRICATED (RUN-03, D-17-07), and it BLOCKS compile and done like a failing verdict. The same holds when the live Retraction Watch re-query (Crossref REST `works?filter=updates:<doi>`, `update-to` notices of a retraction kind) is unavailable offline, or its live lookup fails — a non-200, an error document inside an HTTP 200, unreadable JSON or a transport failure is "retraction status unknown", never "not retracted": `verdict = 'UNVERIFIABLE'` unless the other DOI confirms a retraction (a confirmed retraction is `MIS-CITED`).
    - Compute `titleJW = jaroWinkler(nfkcNormalize(actual.title), nfkcNormalize(claimed.title))` against `TITLE_JW_THRESHOLD = 0.92` (CONTEXT D-11).
@@ -98,6 +104,7 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
    - Quotes with fewer than 10 words are NOT extracted (the writer is responsible for inline-cite integrity at Pass-1 level for short attribution).
 
    For each extracted quote with an associated citekey:
+   - **(0)** The source's own bring-your-own PDF first (SRC-15, S-17 — local, so offline too): its text through `bin/lib/byo-text.ts` (re-hashed against LIBRARY.json). The quote found there → `verdict = 'OK'`, `reason = 'verified against your local file sources/<citekey>.pdf (sha256 …)'`. Not found there → the open-access copy below is checked as well, and the verdict is `NOT_FOUND` unless that copy has the quote (`reason = 'quote not found in your local file …'`). A PDF whose text is unavailable (edited since ingest, image-only, attached at the user's word) adds its reason to the open-access verdict.
    - **(a)** Look up the open-access copy: `sources.unpaywall.lookupById(doi)` (the three-way lookup, D-19-05). Unpaywall requires a contact email: without `PENSMITH_CONTACT_EMAIL` (or the variable `[network] contact_email_env` names) the lookup is failed with `Unpaywall skipped: set PENSMITH_CONTACT_EMAIL` and no request is made.
      A failed lookup → `verdict = 'PDF_UNAVAILABLE'`, `reason = '<the lookup reason> — the open-access copy of DOI ${doi} was not looked up'` (never "No OA PDF available"). Unpaywall has no record → `reason = 'Unpaywall has no record of DOI ${doi} (…)'`. A record without an OA PDF (`oa_pdf_url`: the best location's PDF, then any other location's PDF, then an arXiv / PMC / `.pdf` link) → `reason = 'No OA PDF available for DOI ${doi}'`.
    - **(b)** Else fetch the PDF as a plain request (source `generic`: the PDF host never receives the contact email; every redirect hop is SSRF-checked) under the `MAX_PDF_BYTES` cap, and check what came back with `bin/lib/pdf-response.ts checkPdfResponse` on the byte-faithful `bodyBytes`: a non-200 → `reason = 'OA PDF fetch returned HTTP <status>'`; a landing page → `reason = 'OA PDF fetch returned not a PDF (got text/html)'`; a refused request → `reason = 'OA PDF fetch failed: <why>'` — each `PDF_UNAVAILABLE`, never fed to the extractor.
@@ -128,7 +135,7 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
    - **Offline marker** (RUN-02): when sources were offline, the FIRST line is `> OFFLINE MODE (<reason>) — recorded fixtures, not live results.` (or the `--dry-run` synthetic-sources form). A VERIFICATION.md written under `--dry-run` never lets a real compile or export through (RUN-27): re-verify without `--dry-run`.
    - `# VERIFICATION (Section N, slug)` and the `Status: verified | failed | unverifiable` line (compile and done refuse a missing Status line and a `Status: failed` even when no row parses — fail closed).
    - The Pass-1 rows (step 5) and the Pass-3 rows (step 7).
-   - The source-freshness table and the ADVISORY claim-support (Pass 2) and orphan-claim (Pass 4) sections. They are computed after the status above is frozen and never change it (VRFY-07). With no model configured (Tier 1, or a Tier-2 user checking a hand-written draft, D-V1-04) they record `skipped (no LLM configured)` rows and verify still exits by the frozen status. When the session cost cap (or an invalid runtime config) stops them, their rows say `not run (…)`, VERIFICATION.md and step 10 are still written, and verify then exits with that failure's code (5 for the cost cap). A failed Retraction Watch probe is an `unavailable` freshness row, never silence.
+   - The source-freshness table and the ADVISORY claim-support (Pass 2) and orphan-claim (Pass 4) sections. They are computed after the status above is frozen and never change it (VRFY-07). With no model configured (Tier 1, or a Tier-2 user checking a hand-written draft, D-V1-04) they record `skipped (no LLM configured)` rows and verify still exits by the frozen status. When the session cost cap (or an invalid runtime config) stops them, their rows say `not run (…)`, VERIFICATION.md and step 10 are still written, and verify then exits with that failure's code (5 for the cost cap). A failed Retraction Watch probe is an `unavailable` freshness row, never silence. The DOI HEAD probe asks only whether doi.org resolves the handle: its redirect is the answer (never followed), and only a 4xx/5xx from doi.org is a WARN row.
 
 10. **Update PlanFrontmatter** per D-08-AMENDED LOCKED enum:
     - **PASS** → `status: 'verified'`.
@@ -139,6 +146,6 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
 
     **Exit code** (RUN-09): 0 for `verified` and for an advisory `unverifiable`; **4** (EXIT_BLOCKED) for `failed` and for a blocking Pass-1 UNVERIFIABLE.
 
-11. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/`.
+11. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/` — except the bib repair of step 3 (a paper-level file rendered from LIBRARY.json; no other section's files are ever touched).
 
 12. **Shell fallback** (TIER-06 equivalence path): `pensmith verify <N> [--yolo]`.

@@ -278,7 +278,16 @@ export async function askNumbered(
     }
 
     case 'text': {
-      const line = await readOneLineEchoed(question.id, stdin, timeoutMs);
+      let line: string;
+      try {
+        line = await readOneLineEchoed(question.id, stdin, timeoutMs);
+      } catch (e) {
+        // Scripted answers ended before an optional line: its default.
+        if (question.optional === true && e instanceof PromptAbortedError) {
+          return { id: question.id, kind: 'text', value: question.default ?? '' };
+        }
+        throw e;
+      }
       if (line === '') {
         return { id: question.id, kind: 'text', value: question.default ?? '' };
       }

@@ -120,6 +120,29 @@ test('freshness (live): DOI HEAD 200 produces NO warning', async () => {
   });
 });
 
+test('freshness (live): doi.org\'s 302 is the answer — never followed to the content-negotiation endpoint (which answers HEAD with 405)', async () => {
+  await liveLane(async (agent) => {
+    // What doi.org answers today: a 302 to Crossref's transform endpoint, which refuses HEAD.
+    agent
+      .get('https://doi.org')
+      .intercept({ path: '/10.1038/nature14539', method: 'HEAD' })
+      .reply(302, '', { headers: { location: 'https://api.crossref.org/v1/works/10.1038%2Fnature14539/transform' } });
+    const followed: string[] = [];
+    const crossref = agent.get('https://api.crossref.org');
+    crossref
+      .intercept({ path: (p: string) => { if (p.includes('/transform')) followed.push(p); return p.includes('/transform'); }, method: 'HEAD' })
+      .reply(405, '')
+      .persist();
+    crossref
+      .intercept({ path: /^\/works\?filter=updates/, method: 'GET' })
+      .reply(200, NO_RETRACTION, { headers: { 'content-type': 'application/json' } });
+    const r = await probeFreshness('lecun2015', '10.1038/nature14539');
+    assert.deepEqual(r.warnings, [], 'a resolving DOI is fresh');
+    assert.deepEqual(followed, [], 'the redirect was not followed');
+    assert.match(renderFreshnessTable([r]), /\| lecun2015 \| DOI HEAD \| ok \|/);
+  });
+});
+
 test('freshness (live): DOI HEAD 404 produces a WARN row (advisory, not blocking)', async () => {
   await liveLane(async (agent) => {
     agent.get('https://doi.org').intercept({ path: '/10.5555/does-not-resolve', method: 'HEAD' }).reply(404, '');

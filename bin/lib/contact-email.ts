@@ -7,8 +7,9 @@
 //
 // Crossref (and its retraction lookup), OpenAlex and Unpaywall ask callers to
 // identify themselves with a contact email. Which environment variable holds it
-// is `[network] contact_email_env` in .paper/config.toml, default
-// PENSMITH_CONTACT_EMAIL. Every consumer — http.ts's User-Agent, the adapters'
+// is, in order: `[network] contact_email_env` in .paper/config.toml; the
+// user's global runtime.json `contactEmailEnv` (a user-level setting in the
+// pensmith data dir, never in a paper); PENSMITH_CONTACT_EMAIL. Every consumer — http.ts's User-Agent, the adapters'
 // `mailto` / `email` parameters, Unpaywall's "skipped: set …" notice and the
 // doctor probe — asks this module, so the configured variable is honoured
 // everywhere or nowhere.
@@ -25,9 +26,10 @@
 // The value is personal data (PRIVACY.md): it is never logged here, and
 // http.ts drops it from every log record.
 
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { paperConfigPath, tryReadPaperConfigSync } from './config.js';
 import { projectRoot } from './paths.js';
+import { globalRuntimeConfigPath } from './runtime.js';
 
 /** The variable read when no valid `[network] contact_email_env` is configured. */
 export const DEFAULT_CONTACT_EMAIL_ENV = 'PENSMITH_CONTACT_EMAIL';
@@ -43,8 +45,8 @@ export interface ContactEmail {
   readonly email: string | null;
   /** The environment variable that was read. */
   readonly envName: string;
-  /** Where the variable name came from. */
-  readonly source: 'config' | 'default';
+  /** Where the variable name came from: the paper's config, the user's runtime.json, or the default. */
+  readonly source: 'config' | 'runtime' | 'default';
 }
 
 const warned = new Set<string>();
@@ -81,25 +83,54 @@ function configStamp(file: string): string {
   }
 }
 
-/** The variable name for the paper at `root` (cached per config file stamp). */
+/**
+ * The user's own choice of variable: runtime.json `contactEmailEnv` (the
+ * global, user-level config; v1 and v2 files alike), when it names an
+ * upper-case variable other than the default. Null otherwise (absent,
+ * unreadable, or not a variable name — warned once).
+ */
+function runtimeEnvName(): string | null {
+  const file = globalRuntimeConfigPath();
+  let raw: unknown;
+  try {
+    raw = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { contactEmailEnv?: unknown }).contactEmailEnv : undefined;
+  } catch {
+    return null;
+  }
+  if (typeof raw !== 'string') return null;
+  const name = raw.trim();
+  if (name === '' || name === DEFAULT_CONTACT_EMAIL_ENV) return null;
+  if (!ALLOWED_ENV_NAME.test(name)) {
+    warnOnce(`runtime:${name}`, `ignoring runtime.json contactEmailEnv = "${name}": it must name an upper-case environment variable; reading ${DEFAULT_CONTACT_EMAIL_ENV} instead.`);
+    return null;
+  }
+  return name;
+}
+
+/** The variable name for the paper at `root` (cached per config file stamps). */
 function envNameFor(root: string): { envName: string; source: ContactEmail['source'] } {
   const file = paperConfigPath(root);
-  const stamp = configStamp(file);
+  const stamp = `${configStamp(file)}|${configStamp(globalRuntimeConfigPath())}`;
   const hit = nameCache.get(file);
   if (hit && hit.stamp === stamp) return hit;
   let envName = DEFAULT_CONTACT_EMAIL_ENV;
   let source: ContactEmail['source'] = 'default';
   const configured = tryReadPaperConfigSync(root)?.network?.contact_email_env?.trim();
-  if (configured) {
-    if (isAllowedContactEnvName(configured)) {
-      envName = configured;
-      source = 'config';
-    } else {
+  if (configured && isAllowedContactEnvName(configured)) {
+    envName = configured;
+    source = 'config';
+  } else {
+    if (configured) {
       warnOnce(
         `name:${configured}`,
         `ignoring [network] contact_email_env = "${configured}": it must name an upper-case variable ` +
           `containing EMAIL or MAILTO (e.g. MY_WORK_EMAIL); reading ${DEFAULT_CONTACT_EMAIL_ENV} instead.`,
       );
+    }
+    const user = runtimeEnvName();
+    if (user !== null) {
+      envName = user;
+      source = 'runtime';
     }
   }
   const entry: CachedName = { stamp, envName, source };

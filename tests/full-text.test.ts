@@ -5,20 +5,31 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fullTextAvailable, fullTextSource, fullTextByCitekey, quotesWithoutFullText } from '../bin/lib/full-text.js';
 
-const NONE = { byo: null, oa_url: null, arxiv: null, pmcid: null };
+const NONE = { byo: null, oa_url: null, doi: null };
 const SHA = 'a'.repeat(64);
+const byo = (over: { text_sha256?: string | null; asserted?: boolean } = {}) => ({
+  file: 'sources/x.pdf',
+  sha256: SHA,
+  text_sha256: over.text_sha256 === undefined ? SHA : over.text_sha256,
+  asserted: over.asserted ?? false,
+});
 
-test('GRND-14: full text = a hashed BYO PDF, an OA PDF, an arXiv id or a PMCID', () => {
+test('GRND-14: full text = what Pass 3 can check — a hashed BYO PDF, or the open-access PDF of a DOI', () => {
   assert.equal(fullTextAvailable(NONE), false);
-  assert.equal(fullTextSource({ ...NONE, byo: { file: 'sources/x.pdf', sha256: SHA, text_sha256: SHA } }), 'bring-your-own PDF');
-  assert.equal(fullTextAvailable({ ...NONE, byo: { file: 'sources/x.pdf', sha256: SHA, text_sha256: null } }), false, 'an image-only BYO PDF has no text');
-  assert.equal(fullTextSource({ ...NONE, oa_url: 'https://example.org/x.pdf' }), 'open-access PDF');
-  assert.equal(fullTextSource({ ...NONE, arxiv: '1706.03762' }), 'arXiv');
-  assert.equal(fullTextSource({ ...NONE, pmcid: 'PMC123' }), 'PubMed Central');
+  assert.equal(fullTextSource({ ...NONE, byo: byo() }), 'bring-your-own PDF');
+  assert.equal(fullTextAvailable({ ...NONE, byo: byo({ text_sha256: null }) }), false, 'an image-only BYO PDF has no text');
+  assert.equal(fullTextAvailable({ ...NONE, byo: byo({ asserted: true }) }), false, 'a PDF attached against a failed identity check is not evidence');
+  assert.equal(fullTextSource({ ...NONE, doi: '10.1371/journal.pone.0000001', oa_url: 'https://example.org/x.pdf' }), 'open-access PDF');
+  assert.equal(fullTextAvailable({ ...NONE, oa_url: 'https://example.org/x.pdf' }), false, 'Pass 3 finds the OA copy through the DOI');
   assert.deepEqual(
-    [...fullTextByCitekey([{ citekey: 'a2020', ...NONE }, { citekey: 'b2021', ...NONE, arxiv: '2101.00001' }])],
+    [...fullTextByCitekey([{ citekey: 'a2020', ...NONE }, { citekey: 'b2021', ...NONE, doi: '10.5555/b', oa_url: 'https://example.org/b.pdf' }])],
     [['a2020', false], ['b2021', true]],
   );
+});
+
+test('GRND-14: an arXiv id or a PMCID alone is not checkable full text (Pass 3 cannot fetch it)', () => {
+  const arxivOnly = { ...NONE, arxiv: '1706.03762', pmcid: 'PMC123' };
+  assert.equal(fullTextAvailable(arxivOnly), false);
 });
 
 const DRAFT = [

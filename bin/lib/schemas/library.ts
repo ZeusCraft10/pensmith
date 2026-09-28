@@ -39,6 +39,8 @@
 //   - retraction_status: unchecked | clear | retracted | unknown (SRC-04). An
 //     unanswerable lookup is `unknown`, never `clear`; `retracted` mirrors it.
 //   - zotero: the Zotero item identity, when the entry came from Zotero (SRC-16).
+//   - byo.asserted: the PDF was attached by the user's say-so, not because it
+//     shows the work (SRC-13); false for every v2 record.
 //
 // Author strings: "Family, Given" where the family is known, "Given Family"
 // as a registrar displays it, or "{Corporate Name}" (braced) for a corporate
@@ -67,6 +69,11 @@ export const ByoRecordSchema = z
     file: z.string().min(1),
     sha256: z.string().regex(/^[0-9a-f]{64}$/),
     text_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable().default(null),
+    // v3: true when the user attached this PDF to a registrar record
+    // (`add <id> --pdf <file>`) although its first page does not show that
+    // work's title and first author, and confirmed it at the
+    // `pdf-attach-unmatched` gate. Its text is never evidence (byo-text.ts).
+    asserted: z.boolean().default(false),
   })
   .strict();
 
@@ -147,3 +154,5 @@ export type LibraryEntry = z.infer<typeof LibraryEntrySchema>;
 export type LibraryEntryInput = z.input<typeof LibraryEntrySchema>;
 export type Library = z.infer<typeof Schema>;
 export type ByoRecord = z.infer<typeof ByoRecordSchema>;
+/** A BYO record as a writer passes it (`asserted` / `text_sha256` default). */
+export type ByoRecordInput = z.input<typeof ByoRecordSchema>;

@@ -51,7 +51,8 @@ test('SRC-05: PMID 31978945 — NEJM 382(8) 727-733, DOI, PMCID, the group autho
     assert.equal(c.pages, '727-733');
     assert.equal(c.year, 2020);
     assert.equal(c.type, 'article-journal');
-    assert.equal(c.authors[0], 'Zhu N');
+    assert.equal(c.authors[0], 'Zhu, N.', 'PubMed "Zhu N" is written Family, Initials (SRC-12)');
+    assert.equal(c.citekey, 'zhu2020');
     assert.equal(c.authors.at(-1), '{China Novel Coronavirus Investigating and Research Team}');
   }
 });

@@ -2,10 +2,10 @@
 // Regression gate for the D-41 paths chokepoint lint rule (Phase 1, Wave 1).
 //
 // Why this test exists (do not delete):
-//   D-41 bans direct `os.homedir()` and `process.env.{LOCALAPPDATA,APPDATA,
-//   XDG_DATA_HOME}` outside `bin/lib/paths.ts`. The rule lives in
-//   `eslint.config.js` as four no-restricted-syntax MemberExpression
-//   selectors. Without this regression gate, a single typo in any of the
+//   D-41 bans direct `os.homedir()` (and a named `homedir` import from
+//   node:os) and `process.env.{LOCALAPPDATA,APPDATA,XDG_DATA_HOME}` outside
+//   `bin/lib/paths.ts`. The rule lives in `eslint.config.js` as five
+//   no-restricted-syntax selectors. Without this regression gate, a single typo in any of the
 //   four AST selectors silently disables that branch (Pitfall B5 — the same
 //   class of failure the D-07 DOI chokepoint test exists to prevent).
 //
@@ -20,14 +20,15 @@
 //       not just that the rule shape works in theory.
 //
 // The W0 fixture (`tests/fixtures/lint-paths-chokepoint-fixture.ts`) has
-// exactly 4 violations: os.homedir(), LOCALAPPDATA, XDG_DATA_HOME, APPDATA.
+// exactly 5 violations: os.homedir(), the named homedir import, LOCALAPPDATA,
+// XDG_DATA_HOME, APPDATA.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ESLint } from 'eslint';
 import path from 'node:path';
 
-test('paths chokepoint flags all 4 fixture violations (inline rule)', async () => {
+test('paths chokepoint flags all 5 fixture violations (inline rule)', async () => {
   const eslint = new ESLint({
     overrideConfigFile: true,
     overrideConfig: [
@@ -39,6 +40,10 @@ test('paths chokepoint flags all 4 fixture violations (inline rule)', async () =
             'error',
             {
               selector: "MemberExpression[object.name='os'][property.name='homedir']",
+              message: 'paths chokepoint',
+            },
+            {
+              selector: "ImportDeclaration[source.value=/^(node:)?os$/] > ImportSpecifier[imported.name='homedir']",
               message: 'paths chokepoint',
             },
             {
@@ -68,8 +73,8 @@ test('paths chokepoint flags all 4 fixture violations (inline rule)', async () =
     (m) => m.ruleId === 'no-restricted-syntax',
   ).length;
   assert.ok(
-    restrictedSyntaxCount >= 4,
-    `expected >=4 no-restricted-syntax messages on fixture; got ${restrictedSyntaxCount}: ${JSON.stringify(results[0]?.messages)}`,
+    restrictedSyntaxCount >= 5,
+    `expected >=5 no-restricted-syntax messages on fixture; got ${restrictedSyntaxCount}: ${JSON.stringify(results[0]?.messages)}`,
   );
 });
 
@@ -98,7 +103,7 @@ test('PROJECT eslint.config.js flags paths violations on the fixture', async () 
   const ruleIds = (results[0]?.messages ?? []).map((m) => m.ruleId);
   const restrictedSyntaxCount = ruleIds.filter((r) => r === 'no-restricted-syntax').length;
   assert.ok(
-    restrictedSyntaxCount >= 4,
-    `project eslint.config.js must flag all 4 paths violations on fixture; got ${restrictedSyntaxCount} no-restricted-syntax messages, total: ${JSON.stringify(ruleIds)}`,
+    restrictedSyntaxCount >= 5,
+    `project eslint.config.js must flag all 5 paths violations on fixture; got ${restrictedSyntaxCount} no-restricted-syntax messages, total: ${JSON.stringify(ruleIds)}`,
   );
 });

@@ -28,6 +28,12 @@
 //      the user's own choices (never judged by the evaluator, never pruned),
 //      and appear as rows of the per-adapter table. Without a collection the
 //      Zotero library is searched per query like every other adapter.
+//      config.toml travels with a shared paper, so it can only NAME these
+//      sources (bin/lib/own-source-approvals.ts): a folder outside the project
+//      and any Zotero collection are read only once this user approved them
+//      for this paper (`new --pdfs`, or the `byo-folder` / `zotero-collection`
+//      gates, which --yolo never skips; without a terminal the source is
+//      skipped with a WARN and the row says why).
 //   4. The research pass (bin/lib/research-orchestrator.ts): the preset's
 //      adapters, per-adapter outcomes, dedup, deterministic tiers, the
 //      `[sources]` policy, the source evaluator, ranking.
@@ -71,6 +77,13 @@ import { networkMode } from '../lib/http-mock.js';
 import { formatReference, renderSourcesBlock } from '../lib/research-md.js';
 import { ingestByoPdfs, listPdfsInDir, describeByoOutcome } from '../lib/byo-ingest.js';
 import { pullZoteroIntoLibrary } from '../lib/zotero-ingest.js';
+import { enrichOpenAccess, describeOpenAccess } from '../lib/open-access.js';
+import {
+  isByoFolderApproved,
+  approveByoFolder,
+  isZoteroCollectionApproved,
+  approveZoteroCollection,
+} from '../lib/own-source-approvals.js';
 import { configuredZoteroCollection, ZoteroError } from '../lib/sources/zotero.js';
 import { isOfflineEgressError, offlineLabel } from '../lib/http.js';
 import { errorFailureReason } from '../lib/sources/search-failure.js';
@@ -363,6 +376,8 @@ async function pruneSelection(pass: ResearchPassResult, yolo: boolean, io: Resea
       kind: 'text',
       label: 'Add a source you know — a DOI, arXiv id, PMID:<id>, isbn:<ISBN> or URL (several separated by spaces; blank for none)',
       default: '',
+      // A script that answers only the selection (one line) is not aborted here.
+      optional: true,
     },
   });
   const raw = more.kind === 'answered' && more.answer.kind === 'text' ? more.answer.value : '';
@@ -415,7 +430,30 @@ function isDirectory(p: string): boolean {
  * is read; failures are reported as the row's status, never thrown (an offline
  * miss included). Under --dry-run nothing of the user's is touched.
  */
-async function ingestOwnSources(root: string, config: PaperConfig, plan: AdapterPlan, io: ResearchIo): Promise<OwnSources> {
+/**
+ * Ask (gate `byo-folder` / `zotero-collection`) whether the user approves an
+ * own source their paper's config.toml names; an approval is recorded in the
+ * data dir. --yolo never answers it; without a terminal it is not approved.
+ */
+async function approveOwnSource(
+  gate: 'byo-folder' | 'zotero-collection',
+  label: string,
+  yolo: boolean,
+): Promise<boolean> {
+  const outcome = await runGate(gate, {
+    yolo,
+    question: { id: gate, kind: 'confirm', label, default: false },
+  });
+  return outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
+}
+
+async function ingestOwnSources(
+  root: string,
+  config: PaperConfig,
+  plan: AdapterPlan,
+  io: ResearchIo,
+  yolo: boolean,
+): Promise<OwnSources> {
   const rows: AdapterOutcome[] = [];
   let added = 0;
   let outPlan = plan;
@@ -424,12 +462,27 @@ async function ingestOwnSources(root: string, config: PaperConfig, plan: Adapter
   const byoSetting = config.sources?.byo_pdf_dir?.trim();
   if (byoSetting) {
     const dir = path.resolve(root, byoSetting);
+    let approved = false;
     if (networkMode().dryRun) {
       rows.push({ adapter: 'bring-your-own', count: 0, status: 'skipped (--dry-run)' });
     } else if (!existsSync(dir) || !isDirectory(dir)) {
       io.err(`${P}: WARN — [sources] byo_pdf_dir = "${byoSetting}" is not a folder; no bring-your-own PDFs were read`);
       rows.push({ adapter: 'bring-your-own', count: 0, status: `failed ([sources] byo_pdf_dir "${byoSetting}" is not a folder)` });
+    } else if (
+      !(approved = isByoFolderApproved(root, dir)) &&
+      !(await approveOwnSource(
+        'byo-folder',
+        `This paper's config.toml names ${dir} as its bring-your-own folder. Read the PDFs in it (outside the paper folder), copy them into .paper/sources/ and look up their titles?`,
+        yolo,
+      ))
+    ) {
+      io.err(
+        `${P}: WARN — [sources] byo_pdf_dir points outside the paper folder and you have not approved it for this paper; ` +
+          'no PDFs were read. Approve it by running pensmith research in a terminal, pass it with pensmith new --pdfs, or move the folder into the paper.',
+      );
+      rows.push({ adapter: 'bring-your-own', count: 0, status: 'skipped ([sources] byo_pdf_dir is outside the paper folder and not approved)' });
     } else {
+      if (!approved) await approveByoFolder(root, dir);
       const outcomes = await ingestByoPdfs(root, await listPdfsInDir(dir), { provenance: 'byo' });
       let inLibrary = 0;
       let fresh = 0;
@@ -459,6 +512,22 @@ async function ingestOwnSources(root: string, config: PaperConfig, plan: Adapter
     // of searching it per query (Tier 1 does the same through its Zotero MCP
     // server and paper_ingest_zotero_items).
     outPlan = { entries: plan.entries.filter((e) => e.adapter !== 'zotero'), skipped: plan.skipped };
+    const approved =
+      isZoteroCollectionApproved(root, collection) ||
+      (await approveOwnSource(
+        'zotero-collection',
+        `This paper's config.toml names the Zotero collection "${collection}". Pull its items from your Zotero library into this paper's LIBRARY.json?`,
+        yolo,
+      ));
+    if (!approved) {
+      io.err(
+        `${P}: WARN — [sources] zotero_collection "${collection}" has not been approved for this paper; Zotero was not read. ` +
+          'Approve it by running pensmith research in a terminal.',
+      );
+      rows.push({ adapter: 'zotero', count: 0, status: 'skipped ([sources] zotero_collection not approved for this paper)' });
+      return { plan: outPlan, rows, added };
+    }
+    await approveZoteroCollection(root, collection);
     try {
       const pulled = await pullZoteroIntoLibrary(root, { collection });
       added += pulled.added.length;
@@ -475,11 +544,15 @@ async function ingestOwnSources(root: string, config: PaperConfig, plan: Adapter
       io.out(`${P}: Zotero collection "${collection}" (${pulled.library}): ${pulled.added.length} new, ${known} already in library`);
       for (const bad of pulled.invalid.slice(0, 5)) io.err(`${P}: WARN — Zotero item skipped (malformed): ${bad}`);
     } catch (e) {
+      // RESEARCH.md travels with the paper: its row never carries what a
+      // failed lookup revealed about the user's library (collection names,
+      // the library id); stderr, seen only by this user, has the whole reason.
       const status = isOfflineEgressError(e)
         ? `${offlineLabel(e)}: no recorded fixture`
-        : `failed (${e instanceof ZoteroError ? e.message : errorFailureReason(e)})`;
+        : `failed (${e instanceof ZoteroError ? e.publicReason : errorFailureReason(e)})`;
+      const detail = isOfflineEgressError(e) ? status : `failed (${e instanceof ZoteroError ? e.message : errorFailureReason(e)})`;
       rows.push({ adapter: 'zotero', count: 0, status });
-      io.err(`${P}: WARN — Zotero collection "${collection}" was not read: ${status}`);
+      io.err(`${P}: WARN — Zotero collection "${collection}" was not read: ${detail}`);
     }
   }
   return { plan: outPlan, rows, added };
@@ -563,7 +636,7 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     allowed: config.sources?.allowed_databases,
   });
   const scopeText = `${chosen.label} — ${chosen.description}`;
-  const own = await ingestOwnSources(root, config, plan, { out, err });
+  const own = await ingestOwnSources(root, config, plan, { out, err }, opts.yolo);
   // The user's own entries the evaluator has not judged yet join its batch:
   // they get a tier, a relevance and a why-relevant note, never a removal.
   const ownToEvaluate = networkMode().dryRun ? [] : ownSourcesToEvaluate((await tryLoadLibrary(root))?.entries ?? []);
@@ -653,6 +726,9 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
   if (!networkMode().dryRun) {
     // (--dry-run: synthetic sources have no retraction record to look up.)
     await crossCheckRetractions([...candidates, ...userAdded], lookup);
+    // GRND-14: the open-access PDF Pass 3 would check, as each entry's oa_url.
+    const oa = describeOpenAccess(await enrichOpenAccess([...candidates, ...userAdded]));
+    if (oa !== null) out(`pensmith research: ${oa}`);
   }
   const toLibrary = (i: ResearchItem): LibraryCandidate => {
     const rescued = i.decision === 'rejected';

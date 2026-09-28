@@ -16,6 +16,7 @@ import {
   ingestByoPdfs,
   listPdfsInDir,
   upsertWithPdf,
+  checkPdfForRecord,
   describeByoOutcome,
   recordByoPdfDir,
   resolveByoDirArg,
@@ -240,14 +241,41 @@ test('SRC-15: `add <id> --pdf <file>` for a PDF ingested unhydrated hydrates tha
     agent.get('https://api.openalex.org').intercept({ path: /.*/, method: 'GET' }).reply(reply(seen, EMPTY_OPENALEX));
     await ingestByoPdf(root, path.join(BYO, 'no-match.pdf'));
   });
-  const r = await upsertWithPdf(
-    root,
-    { source: 'crossref', doi: '10.5555/moss.2024', title: 'Field Notes on Moss Growth Beside the Old Mill Stream', authors: ['Quillfeather, Harriet'], year: 2024 },
-    path.join(BYO, 'no-match.pdf'),
-    'add',
-  );
-  assert.deepEqual({ citekey: r.citekey, status: r.status }, { citekey: 'quillfeathernoyear', status: 'merged' });
+  const record = { source: 'crossref', doi: '10.5555/moss.2024', title: 'Field Notes on Moss Growth Beside the Old Mill Stream', authors: ['Quillfeather, Harriet'], year: 2024 };
+  const checked = await checkPdfForRecord(path.join(BYO, 'no-match.pdf'), record);
+  assert.equal(checked.matches, true, 'the PDF shows the record\'s title and first author');
+  const r = await upsertWithPdf(root, record, checked, 'add');
+  assert.deepEqual({ citekey: r.citekey, status: r.status, stored: r.stored }, { citekey: 'quillfeathernoyear', status: 'merged', stored: true });
   const lib = await loadLibrary(root);
   assert.equal(lib.entries.length, 1);
   assert.equal(lib.entries[0]!.doi, '10.5555/moss.2024');
+  assert.equal(lib.entries[0]!.byo?.asserted, false);
+});
+
+test('SRC-13: `add <id> --pdf <file>` never attaches a PDF that is not the work without the user\'s word, and never replaces an identified copy without --replace-pdf', async () => {
+  const root = paper();
+  const measured = { source: 'crossref', doi: '10.1038/nphys1170', title: 'Measured measurement', authors: ['Aspelmeyer, Markus'], year: 2009 };
+  // The right PDF (its footer DOI, its title and author): attached, not asserted.
+  const right = await checkPdfForRecord(path.join(BYO, 'doi-footer.pdf'), measured);
+  assert.equal(right.matches, true);
+  const first = await upsertWithPdf(root, measured, right, 'add');
+  assert.equal(first.stored, true);
+  const sha = (await loadLibrary(root)).entries[0]!.byo!.sha256;
+
+  // A different work's PDF: does not match, and is refused unless asserted.
+  const wrong = await checkPdfForRecord(path.join(BYO, 'no-match.pdf'), measured);
+  assert.equal(wrong.matches, false);
+  assert.match(wrong.why ?? '', /does not show "Measured measurement" by Aspelmeyer, Markus/);
+  await assert.rejects(() => upsertWithPdf(root, measured, wrong, 'add'), /nothing attached/);
+  // Even asserted, the identified copy is kept without --replace-pdf.
+  const kept = await upsertWithPdf(root, measured, wrong, 'add', { asserted: true });
+  assert.equal(kept.stored, false);
+  assert.match(kept.warnings.join('\n'), /already has a PDF .*pass --replace-pdf/);
+  assert.equal((await loadLibrary(root)).entries[0]!.byo!.sha256, sha, 'the identified copy is untouched');
+  // Replaced on the user's explicit word: recorded as asserted.
+  const replaced = await upsertWithPdf(root, measured, wrong, 'add', { asserted: true, replace: true });
+  assert.equal(replaced.stored, true);
+  const byo = (await loadLibrary(root)).entries[0]!.byo!;
+  assert.notEqual(byo.sha256, sha);
+  assert.equal(byo.asserted, true, 'attached at the user\'s word');
 });

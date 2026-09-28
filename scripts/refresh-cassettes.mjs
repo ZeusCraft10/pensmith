@@ -80,6 +80,8 @@ export const RECORDED_OLD_ARXIV_ID = 'hep-th/9901001';
 export const BYO_PDF_TITLE = 'Attention Is All You Need';
 /** The title of tests/fixtures/byo/no-match.pdf (a work no registrar knows). */
 export const NO_MATCH_PDF_TITLE = 'Field Notes on Moss Growth Beside the Old Mill Stream';
+/** tests/fixtures/byo/cites-in-footnote.pdf's own title (its DOIs name a cited work, SRC-13). */
+export const CITES_IN_FOOTNOTE_PDF_TITLE = 'Machine Perception and the Limits of Representation';
 /** `plan 2 --research` (GRND-17): the query, and the query joined to the seeded section title. */
 export const PLAN_RESEARCH_QUERY = 'instagram adolescent depression longitudinal';
 export const PLAN_RESEARCH_SECTION_TITLE = 'Social media and depression';
@@ -107,10 +109,11 @@ const planResearch = () => [
     calls: [{ fn: 'search', arg: `${PLAN_RESEARCH_QUERY} ${PLAN_RESEARCH_SECTION_TITLE}`, limit: RESEARCH_LIMIT, minLimit: RESEARCH_LIMIT }],
   },
 ];
-/** PDF identification's title searches (SRC-13 / SRC-15): the attention paper and the no-match PDF. */
+/** PDF identification's title searches (SRC-13 / SRC-15): the attention paper, the no-match PDF and the essay that cites in a footnote. */
 const titleSearches = () => [
   { file: 'search-title-attention', calls: [{ fn: 'search', arg: BYO_PDF_TITLE, limit: TITLE_LIMIT, minLimit: TITLE_LIMIT }] },
   { file: 'search-title-no-match', calls: [{ fn: 'search', arg: NO_MATCH_PDF_TITLE, limit: TITLE_LIMIT, minLimit: TITLE_LIMIT }] },
+  { file: 'search-title-cites-in-footnote', calls: [{ fn: 'search', arg: CITES_IN_FOOTNOTE_PDF_TITLE, limit: TITLE_LIMIT, minLimit: TITLE_LIMIT }] },
 ];
 
 /**
@@ -140,6 +143,10 @@ const QUERY_SETS = {
     { file: 'works-wakefield-1998', calls: [{ fn: 'lookupById', arg: RECORDED_RETRACTED_DOI }] },
     // SRC-12: a particle surname (van der Maaten).
     { file: 'works-foreco-2013', calls: [{ fn: 'lookupById', arg: '10.1016/j.foreco.2013.06.030' }] },
+    // SRC-12: the Crossref record of PMID 31978945 (Pass 1 of a PubMed-added source).
+    { file: 'works-nejmoa2001017', calls: [{ fn: 'lookupById', arg: '10.1056/NEJMoa2001017' }] },
+    // GRND-14: an open-access PLOS ONE article (`add` records its Unpaywall OA PDF, unpaywall/doi-pone-0000001).
+    { file: 'works-pone-0000001', calls: [{ fn: 'lookupById', arg: '10.1371/journal.pone.0000001' }] },
     researchFrom2015(),
     ...titleSearches(),
     ...planResearch(),
@@ -193,6 +200,7 @@ const QUERY_SETS = {
     { file: 'updates-nature14539', calls: [{ fn: 'fetchById', arg: '10.1038/nature14539' }] },
     { file: 'updates-nature11247-encode', calls: [{ fn: 'fetchById', arg: '10.1038/nature11247' }] },
     { file: 'updates-foreco-2013', calls: [{ fn: 'fetchById', arg: '10.1016/j.foreco.2013.06.030' }] },
+    { file: 'updates-nejmoa2001017', calls: [{ fn: 'fetchById', arg: '10.1056/nejmoa2001017' }] },
   ],
   books: [
     // SRC-11: Kuhn, The Structure of Scientific Revolutions (3rd ed., 1996).

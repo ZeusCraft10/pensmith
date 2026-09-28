@@ -260,8 +260,8 @@ Bounded to a single section. Four passes, all scoped to this section's draft:
 **Pass 1 — DOI/identifier integrity (deterministic):**
 - Extract every DOI / arXiv ID / PMID from the section.
 - DOI normalization (`bin/lib/doi.js` — strips prefixes, normalizes case) before lookup.
-- Re-fetch each via Crossref / arXiv / PubMed.
-- 404 → `FABRICATED` (hard fail; blocks compile).
+- Re-fetch each via Crossref / arXiv / PubMed. *(Amended in v1.0.0 Phase 19 review round 1 — SRC-11, SRC-13: an entry without a DOI is re-fetched at its own registrar — its arXiv id at arXiv, its PMID at PubMed, its ISBN at the books registries — so a book or an arXiv-only preprint can pass; a failed lookup is UNVERIFIABLE and blocks.)*
+- 404 → `FABRICATED` (hard fail; blocks compile) — for a DOI-less entry, only when every registrar it names answers not-found.
 - Fuzzy-match cited authors/year/title against canonical metadata; mismatch → `MIS-CITED`. *Author/title verification is part of Pass 1, not optional.*
 
 **Pass 2 — Claim support (LLM-judged):**
@@ -433,6 +433,9 @@ For power users / batch processing / CI testing:
 | `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |
 | `quote-accept` | Accept this quote match? | never | refuse: 3 | 3 | VRFY-20 (planned) |
 | `reoutline` | Re-outline a paper that already has drafts? | skip: re-outline (only with --force) | refuse: 3 | 3 | GRND-09 |
+| `byo-folder` | Read the PDFs in this folder outside the paper and copy them into it? | never | skip: 0 | 0 | SRC-15 |
+| `zotero-collection` | Pull this Zotero collection from your library into the paper? | never | skip: 0 | 0 | SRC-16 |
+| `pdf-attach-unmatched` | Attach this PDF although its first page does not show the work's title and first author? | never | refuse: 3 | 3 | SRC-13 |
 
 Automatic revision of a failed section is not a gate `--yolo` can open: it is its own opt-in, `--auto-revise` or `[project] auto_revise = true` (REV-01). Detector consent persisted in `config.toml` (EXP-17) is the only way that gate is answered without asking.
 
@@ -505,10 +508,11 @@ Edge cases documented in PRIVACY.md: PDF contents stay local; only Crossref/Open
 *(Amended in v1.0.0 Phase 19 — SRC-15, SEC-02, D-19-21; reason: an ingested PDF's text must be trusted only while the PDF is unchanged, and hydration must never pick the wrong work.)* The folder is recorded as `[sources] byo_pdf_dir`; `pensmith add <folder>` and `pensmith add <file.pdf>` use the same path. Per PDF:
 1. The size cap and the `%PDF-` header are checked and the PDF's sha256 taken; re-ingest is idempotent by it.
 2. Text and metadata are extracted in a worker thread that is terminated on timeout (pdf-parse; PyMuPDF when pdf-parse fails or finds no text; a PDF with no extractable text is image-only).
-3. Identification uses, in order, the PDF's embedded Info/XMP identifiers, the arXiv stamp or a DOI on its first pages (accepted only when the record's title is on the page), then its title and first author (from real metadata or a layout heuristic that skips licence and boilerplate lines) searched at Crossref, then OpenAlex, accepted only above the Pass-1 title and first-author thresholds. Only an identifier or the title is sent.
+3. Identification uses, in order, the PDF's embedded Info/XMP identifiers, the arXiv stamp or a DOI on its first pages (accepted only when the record is the PDF's own work — its title and first author match the PDF's, or its title is printed as the PDF's title with that author below it; a DOI in a footnote or reference list names a cited work and is never accepted), then its title and first author (from real metadata or a layout heuristic that skips licence and boilerplate lines) searched at Crossref, then OpenAlex, accepted only above the Pass-1 title and first-author thresholds. Only an identifier or the title is sent.
 4. An identified PDF enters LIBRARY.json through the one library writer with provenance `byo` (tag `bring-your-own`); a later research hit for the same work merges into it. A PDF with no confident match is kept with its own metadata, `hydrated: false`, and a warning — never as a search hit.
-5. The PDF is kept at `.paper/sources/<citekey>.pdf`; LIBRARY.json records `byo: {file, sha256, text_sha256}`.
-6. Its text is read only through a re-hash (`bin/lib/byo-text.ts`): a PDF whose sha256 changed makes the text unavailable; the text is served from a cache in the user data folder only when its hash equals `text_sha256`, otherwise the PDF is extracted again and checked; a loose `.paper/sources/<citekey>.txt` is never read (S-17). The drafter's full-text flag counts a BYO PDF with a recorded text hash (GRND-14).
+5. The PDF is kept at `.paper/sources/<citekey>.pdf`; LIBRARY.json records `byo: {file, sha256, text_sha256, asserted}`. `add <id> --pdf <file>` checks that the PDF shows that work (its own identifier, or its title and first author); one that does not is attached only after the user confirms it in a terminal (registry gate `pdf-attach-unmatched`, never `--yolo`) and is recorded `asserted` — its text is never evidence. A work's identified copy is replaced only with `--replace-pdf`.
+5a. A `byo_pdf_dir` inside the project folder is the paper's own. `.paper/config.toml` travels with a shared paper, so a folder outside the project — and any `[sources] zotero_collection` — is read only once the user approved it for that paper (`new --pdfs <dir>`, or the `byo-folder` / `zotero-collection` gates, never `--yolo`; approvals live in the user data folder).
+6. Its text is read only through a re-hash (`bin/lib/byo-text.ts`): a PDF whose sha256 changed makes the text unavailable; the text is served from a cache in the user data folder only when its hash equals `text_sha256`, otherwise the PDF is extracted again and checked; a loose `.paper/sources/<citekey>.txt` is never read (S-17). Pass 3 checks a quote against this text first (verify, compile and done), Pass 2 reads its passages nearest each claim, and the drafter's full-text flag counts a non-asserted BYO PDF with a recorded text hash (GRND-14).
 
 ---
 

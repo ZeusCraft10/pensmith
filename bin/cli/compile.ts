@@ -53,7 +53,7 @@ async function productionReVerify(paperRoot: string, input: ReVerifyInput): Prom
   const bibByCitekey = new Map<string, { DOI?: string }>(
     bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
   );
-  const pass3 = await runPass3(draftMd, bibByCitekey);
+  const pass3 = await runPass3(draftMd, bibByCitekey, { root: paperRoot });
 
   const failing: string[] = [];
   for (const r of pass1) if (r.verdict !== 'OK') failing.push(r.citekey);

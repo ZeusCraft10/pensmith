@@ -12,6 +12,12 @@
 //   - With Zotero configured but no collection, the `zotero` adapter is
 //     searched per query like every other adapter, and its hits are tagged
 //     zotero.
+//   - config.toml travels with a shared paper, so the collection it names is
+//     pulled only once this user approved it for this paper
+//     (own-source-approvals.ts): unapproved, with --yolo and no terminal,
+//     Zotero is not asked at all and the row says why; a collection that is
+//     not found never puts the library's other collection names or its id
+//     into RESEARCH.md (stderr, seen only by this user, has them).
 //
 // The research verb runs in-process (PENSMITH_NO_LLM: the stubbed
 // disambiguator and evaluator) with fake scholarly adapters injected through
@@ -29,6 +35,7 @@ import { upsertSources, loadLibrary } from '../bin/lib/library.js';
 import { renderIntakeDocument } from '../bin/lib/intake-brief.js';
 import { _resetHostStateForTest } from '../bin/lib/http.js';
 import { provenanceTags } from '../bin/lib/research-md.js';
+import { approveZoteroCollection } from '../bin/lib/own-source-approvals.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
 
 const WOOD = {
@@ -134,6 +141,7 @@ const ZOTERO_ENV = {
 test('SRC-16: research pulls the whole `zotero_collection = "Thesis"` into LIBRARY.json tagged zotero — only that collection — and an item whose DOI exists merges', async () => {
   await withLlmSandbox({ env: ZOTERO_ENV }, async (sb) => {
     seed(sb, 'zotero_collection = "Thesis"\n');
+    await approveZoteroCollection(sb.root, 'Thesis');
     // The user already added Wood & Duffy by its DOI.
     await upsertSources(sb.root, [{ source: 'crossref', doi: '10.1068/D416T', title: 'The art of doing (geographies of) music', authors: ['Wood, Nichola'], year: 2007 }], { provenance: 'add' });
     const zoteroCalls: string[] = [];
@@ -180,6 +188,7 @@ test('SRC-16: research pulls the whole `zotero_collection = "Thesis"` into LIBRA
 test('SRC-16: research reports the zotero row on stdout, and a Zotero failure is a row with its reason — the research still completes', async () => {
   await withLlmSandbox({ env: ZOTERO_ENV }, async (sb) => {
     seed(sb, 'zotero_collection = "Thesis"\n');
+    await approveZoteroCollection(sb.root, 'Thesis');
     __setResearchRegistryForTest(fakes([]));
     _resetHostStateForTest();
     const { agent, restore } = installMockAgent();
@@ -216,5 +225,57 @@ test('SRC-16: with Zotero configured and no collection, the zotero adapter is se
     const z = lib.entries.find((e) => e.doi === '10.5555/zotero.9');
     assert.ok(z, 'the Zotero hit is in the library');
     assert.deepEqual(provenanceTags(z), ['zotero']);
+  });
+});
+
+test('SRC-16: a collection named only by config.toml (not approved by this user) is never read: no Zotero request, a skipped row, a WARN', async () => {
+  await withLlmSandbox({ env: ZOTERO_ENV }, async (sb) => {
+    seed(sb, 'zotero_collection = "Thesis"\n');
+    __setResearchRegistryForTest(fakes([]));
+    _resetHostStateForTest();
+    const { agent, restore } = installMockAgent();
+    let r: Awaited<ReturnType<typeof research>>;
+    try {
+      const pool = agent.get('https://api.zotero.org');
+      pool.intercept({ path: () => true, method: 'GET' }).reply(500, 'must not be asked').persist();
+      r = await research(sb);
+    } finally {
+      await restore();
+      __setResearchRegistryForTest(null);
+    }
+    assert.equal(r.error, null, `${String(r.error)}\n${r.io.err}`);
+    assert.match(r.io.out, /^ {2}zotero +0 {2}skipped \(\[sources\] zotero_collection not approved for this paper\)$/m);
+    assert.match(r.io.err, /WARN — \[sources\] zotero_collection "Thesis" has not been approved for this paper; Zotero was not read/);
+    const lib = await loadLibrary(sb.root);
+    assert.deepEqual(lib.entries.filter((e) => provenanceTags(e).includes('zotero')), [], 'nothing from Zotero');
+  });
+});
+
+test('SRC-16: a collection that is not found keeps the library\'s other collection names and its id out of RESEARCH.md', async () => {
+  await withLlmSandbox({ env: ZOTERO_ENV }, async (sb) => {
+    seed(sb, 'zotero_collection = "Dissertation"\n');
+    await approveZoteroCollection(sb.root, 'Dissertation');
+    __setResearchRegistryForTest(fakes([]));
+    _resetHostStateForTest();
+    const { agent, restore } = installMockAgent();
+    let r: Awaited<ReturnType<typeof research>>;
+    try {
+      const pool = agent.get('https://api.zotero.org');
+      const json = { headers: { 'content-type': 'application/json' } };
+      pool.intercept({ path: '/keys/current', method: 'GET' }).reply(200, { userID: 777, access: { user: { library: true } } }, json);
+      pool.intercept({ path: '/users/777/collections?format=json&limit=100&start=0', method: 'GET' }).reply(200, [
+        { key: 'THESIS01', data: { name: 'Thesis' } },
+        { key: 'MEDICAL1', data: { name: 'My medical records' } },
+      ], json);
+      r = await research(sb);
+    } finally {
+      await restore();
+      __setResearchRegistryForTest(null);
+    }
+    assert.equal(r.error, null, `${String(r.error)}\n${r.io.err}`);
+    const md = fs.readFileSync(path.join(sb.paper, 'RESEARCH.md'), 'utf8');
+    assert.match(md, /^\| zotero \| 0 \| failed \(Zotero collection "Dissertation" not found in the Zotero library\) \|$/m);
+    assert.doesNotMatch(md, /My medical records|Thesis|users\/777/, 'no collection names, no library id in the paper');
+    assert.match(r.io.err, /not found in users\/777 \(collections: Thesis, My medical records\)/, 'the user sees the choices on stderr');
   });
 });

@@ -22,9 +22,8 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { isInsideSyncFolder, paperDir, activePaperRoot, servicePaperRoot } from './paths.js';
+import { isInsideSyncFolder, paperDir, activePaperRoot, servicePaperRoot, userHomeDir } from './paths.js';
 
 /**
  * Probe whether `pandoc` is on PATH and answers `--version`.
@@ -90,7 +89,7 @@ export function describeZoteroMcpSearch(d: ZoteroMcpDetection): string {
 /** The Claude Code config folder: $CLAUDE_CONFIG_DIR, else the home folder. */
 function claudeConfigHome(env: NodeJS.ProcessEnv): string {
   const dir = env['CLAUDE_CONFIG_DIR']?.trim();
-  return dir ? resolve(dir) : homedir();
+  return dir ? resolve(dir) : userHomeDir();
 }
 
 function readJson(file: string): unknown {
@@ -166,7 +165,7 @@ export function detectZoteroMcpServers(root?: string, env: NodeJS.ProcessEnv = p
     servers.push(...zoteroServersIn((readJson(file) as { mcpServers?: unknown } | null)?.mcpServers, 'project', file));
   }
 
-  const home = homedir();
+  const home = userHomeDir();
   const legacyFiles = [join(home, '.claude', 'mcp_servers.json'), join(home, '.config', 'claude', 'mcp_servers.json')];
   for (const file of legacyFiles) {
     checked.push(file);
@@ -188,7 +187,7 @@ export function isZoteroMcpPresent(): boolean {
  * Present iff the directory exists, is a directory, and is non-empty.
  */
 export function isHumanizerSkillPresent(): boolean {
-  const skillPath = join(homedir(), '.claude', 'skills', 'humanizer');
+  const skillPath = join(userHomeDir(), '.claude', 'skills', 'humanizer');
   if (!existsSync(skillPath)) return false;
   try {
     const stat = statSync(skillPath);

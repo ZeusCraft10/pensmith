@@ -48,6 +48,7 @@ import { redactPii } from './pii.js';
 import { networkMode } from './http-mock.js';
 import { sourcePolicyFrom } from './source-policy.js';
 import { crossCheckRetractions, retractionCheckReason, type RetractionLookup } from './sources/retraction-cross-check.js';
+import { enrichOpenAccess, describeOpenAccess } from './open-access.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 import { refreshResearchSources, formatReference } from './research-md.js';
 import {
@@ -299,7 +300,12 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
   const candidates: SourceCandidate[] = final.map((i) => i.candidate);
   const injected = registry['retraction-watch'] as Partial<RetractionLookup> | undefined;
   const lookup = typeof injected?.fetchById === 'function' ? (injected as RetractionLookup) : undefined;
-  if (!networkMode().dryRun) await crossCheckRetractions(candidates, lookup);
+  if (!networkMode().dryRun) {
+    await crossCheckRetractions(candidates, lookup);
+    // GRND-14: the open-access PDF Pass 3 would check, as each entry's oa_url.
+    const oa = describeOpenAccess(await enrichOpenAccess(candidates));
+    if (oa !== null) out(`${label}: ${oa}`);
+  }
 
   const toLibrary = (i: ResearchItem): LibraryCandidate => ({
     ...i.candidate,

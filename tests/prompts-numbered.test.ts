@@ -196,6 +196,15 @@ test('numbered: EOF mid-question → PromptAbortedError with id', async () => {
   );
 });
 
+test('numbered: EOF on an OPTIONAL text question → its default; on a required one → PromptAbortedError', async () => {
+  const { stream: stderr } = makeStderrCollector();
+  const optional = { id: 'research-prune', kind: 'text' as const, label: 'Add a source you know (blank for none)', default: '', optional: true };
+  const ans = await askNumbered(optional, { stdin: makeEofStdin(), stderr });
+  assert.deepEqual(ans, { id: 'research-prune', kind: 'text', value: '' });
+  const required = { id: 'topic', kind: 'text' as const, label: 'Topic?', default: '' };
+  await assert.rejects(() => askNumbered(required, { stdin: makeEofStdin(), stderr }), PromptAbortedError);
+});
+
 test('numbered: timeout fires within 100ms when stdin never delivers', async () => {
   const { stream: stderr } = makeStderrCollector();
   // Never write to this stdin — timeout should fire

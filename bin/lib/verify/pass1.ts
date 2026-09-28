@@ -41,6 +41,18 @@
 // naming the notice) before the live re-query. The label becomes RETRACTED in
 // Phase 20 (VRFY-15).
 //
+// Entries without a DOI (SRC-11, SRC-13, ROADMAP Phase 19 criterion 7): an
+// arXiv-only preprint (`eprint` + `archivePrefix = {arXiv}`), a PubMed record
+// with no DOI (`pmid`) or a book (`isbn`) is re-fetched at its OWN registrar —
+// the arXiv API, PubMed E-utilities, the books adapter (Open Library / Google
+// Books) — and runs the same title / first-author AND-gate. The three-way
+// lookup decides: found → the AND-gate (a PubMed "Retracted Publication"
+// blocks); failed / offline → UNVERIFIABLE (blocking); only a definitive
+// not-found from EVERY identifier the entry carries is FABRICATED. An entry
+// with no DOI, arXiv id, PMID or ISBN stays FABRICATED ("cannot verify
+// upstream"). DataCite DOIs, the metadata search for identifier-less entries
+// and the remaining registrars are Phase 20 (VRFY-11, VRFY-12).
+//
 // Reserved dry-run identifiers (RUN-27, D-17-11): under --dry-run a reserved
 // `10.0000/pensmith-dryrun.*` DOI is re-fetched from the synthetic provider and
 // runs the same title/author AND-gate; outside --dry-run it is FABRICATED
@@ -57,7 +69,8 @@ import { fetchById as dryRunFetchById } from '../sources/dry-run.js';
 import { extractCitedKeysForVerification } from '../citation-token.js';
 import { isReservedDryRunId, normalizeDoi } from '../doi.js';
 import { isOfflineEgressError, type OfflineEgressError } from '../http.js';
-import { isSourceLookupError } from '../sources/lookup.js';
+import { isSourceLookupError, type LookupResult } from '../sources/lookup.js';
+import type { SourceCandidate } from '../schemas/source-candidate.js';
 import { networkMode } from '../http-mock.js';
 
 export type { FreshnessResult } from './freshness.js';
@@ -98,6 +111,13 @@ interface BibEntry {
   title?: string | string[];
   author?: BibAuthor[];
   DOI?: string;
+  /** The arXiv id of a preprint (parseBib keeps BibTeX `eprint` / `archivePrefix` verbatim). */
+  eprint?: string;
+  archivePrefix?: string;
+  /** BibTeX `isbn` (citation-js CSL `ISBN`). */
+  ISBN?: string;
+  /** BibTeX `pmid` (parseBib's CSL `PMID`). */
+  PMID?: string;
   retracted?: boolean;
   // D-15 retracted-flag persistence: writeBibtex serializes a retracted source
   // as BibTeX `note = {RETRACTED}` (bibtex-write.ts:93), and citation-js
@@ -195,12 +215,7 @@ async function verdictForCitekey(
       reason: 'cited a retracted work (per Retraction Watch cross-check at research time)',
     };
   }
-  if (!claimed.DOI) {
-    return {
-      citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
-      reason: 'no DOI in citation entry (cannot verify upstream)',
-    };
-  }
+  if (!claimed.DOI) return verdictWithoutDoi(ck, claimed, claimedTitle, claimedAuthorsD14);
 
   // RUN-27: a reserved dry-run DOI is accepted ONLY under --dry-run, where the
   // synthetic provider stands in for the registrar (zero sockets).
@@ -225,9 +240,13 @@ async function verdictForCitekey(
     if (isOfflineEgressError(err)) return unverifiable(ck, err, `Crossref re-fetch of ${claimed.DOI}`);
     // D-19-05: a lookup that could not be answered is never "did not resolve".
     if (isSourceLookupError(err)) {
+      // A definitive but unusable record (e.g. no author or editor to compare)
+      // is still blocking, but re-running cannot change it: say so.
       return {
         citekey: ck, verdict: 'UNVERIFIABLE', titleJW: 0, authorJW: 0,
-        reason: `Crossref re-fetch of ${claimed.DOI} failed: ${err.reason} — re-run verify once the lookup answers`,
+        reason: err.permanent
+          ? `Crossref re-fetch of ${claimed.DOI}: ${err.reason}`
+          : `Crossref re-fetch of ${claimed.DOI} failed: ${err.reason} — re-run verify once the lookup answers`,
       };
     }
     throw err;
@@ -346,9 +365,100 @@ async function verdictForCitekey(
   };
 }
 
+/** The registrars Pass 1 asks for an entry without a DOI, in the order it asks them. */
+type NoDoiRegistrar = 'arxiv' | 'pubmed' | 'books';
+const REGISTRAR_LABEL: Record<NoDoiRegistrar, string> = { arxiv: 'arXiv', pubmed: 'PubMed', books: 'the books registries' };
+
+/** The identifiers a DOI-less entry carries, each with the registrar that answers for it. */
+function doilessIdentifiers(claimed: BibEntry): Array<{ registrar: NoDoiRegistrar; id: string; label: string }> {
+  const out: Array<{ registrar: NoDoiRegistrar; id: string; label: string }> = [];
+  const eprint = typeof claimed.eprint === 'string' ? claimed.eprint.trim() : '';
+  const prefix = typeof claimed.archivePrefix === 'string' ? claimed.archivePrefix.trim() : '';
+  if (eprint && (prefix === '' || /^arxiv$/i.test(prefix))) out.push({ registrar: 'arxiv', id: eprint, label: `arXiv:${eprint}` });
+  const pmid = typeof claimed.PMID === 'string' ? claimed.PMID.trim() : '';
+  if (pmid) out.push({ registrar: 'pubmed', id: pmid, label: `PMID ${pmid}` });
+  const isbn = typeof claimed.ISBN === 'string' ? claimed.ISBN.trim() : '';
+  if (isbn) out.push({ registrar: 'books', id: `isbn:${isbn}`, label: `ISBN ${isbn}` });
+  return out;
+}
+
+async function lookupAt(registrar: NoDoiRegistrar, id: string): Promise<LookupResult> {
+  switch (registrar) {
+    case 'arxiv':
+      return sources.arxiv.lookupById(id);
+    case 'pubmed':
+      return sources.pubmed.lookupById(id);
+    case 'books':
+      return sources.books.lookupById(id);
+  }
+}
+
+/**
+ * Pass 1 for an entry with no DOI (see the header): each identifier at its own
+ * registrar; the first record found runs the AND-gate; a failed or offline
+ * lookup is UNVERIFIABLE; FABRICATED only when every registrar said not-found.
+ */
+async function verdictWithoutDoi(
+  ck: string,
+  claimed: BibEntry,
+  claimedTitle: string,
+  claimedAuthorsD14: string[],
+): Promise<Pass1Result> {
+  const ids = doilessIdentifiers(claimed);
+  if (ids.length === 0) {
+    return {
+      citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
+      reason: 'no DOI, arXiv id, PMID or ISBN in citation entry (cannot verify upstream)',
+    };
+  }
+  let undecided: Pass1Result | null = null;
+  const notFound: string[] = [];
+  for (const { registrar, id, label } of ids) {
+    const who = REGISTRAR_LABEL[registrar];
+    let res: LookupResult;
+    try {
+      res = await lookupAt(registrar, id);
+    } catch (err) {
+      if (isOfflineEgressError(err)) {
+        undecided ??= unverifiable(ck, err, `${who} lookup of ${label}`);
+        continue;
+      }
+      throw err;
+    }
+    if (res.kind === 'failed') {
+      undecided ??= {
+        citekey: ck, verdict: 'UNVERIFIABLE', titleJW: 0, authorJW: 0,
+        reason: res.permanent
+          ? `${who} lookup of ${label}: ${res.reason}`
+          : `${who} lookup of ${label} failed: ${res.reason} — re-run verify once the lookup answers`,
+      };
+      continue;
+    }
+    if (res.kind === 'not-found') {
+      notFound.push(`${label}: ${res.reason}`);
+      continue;
+    }
+    const actual: SourceCandidate = res.candidate;
+    if (actual.retracted === true || actual.retraction_status === 'retracted') {
+      const why = actual.retraction_details ? `: ${actual.retraction_details}` : '';
+      return {
+        citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
+        reason: `cited work is retracted (${who} record of ${label} at verify time)${why}`,
+      };
+    }
+    return andGate(ck, actual, claimedTitle, claimedAuthorsD14, `${label} re-fetched from ${who}; `);
+  }
+  if (undecided !== null) return undecided;
+  return {
+    citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
+    reason: `no registrar has this work (${notFound.join('; ')})`,
+  };
+}
+
 /**
  * The D-11 AND-gate against a re-fetched record with the same claimed DOI
- * (the dry-run synthetic path; the Crossref path inlines the same thresholds).
+ * (the dry-run synthetic path), or against the record a DOI-less entry's own
+ * registrar returned (the Crossref path inlines the same thresholds).
  */
 function andGate(
   ck: string,

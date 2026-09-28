@@ -24,6 +24,16 @@ function unwrap<T>(value: CancelOr<T>, id: string): T {
   return value as T;
 }
 
+/**
+ * clack's text() resolves `undefined` for an empty submission (Enter on a blank
+ * line): that is the question's default (blank when it has none), never the
+ * string "undefined".
+ */
+export function textAnswer(value: unknown, fallback: string | undefined): string {
+  if (value === undefined || value === null) return fallback ?? '';
+  return String(value);
+}
+
 export async function askClack(
   question: PromptQuestion,
   // opts is accepted for interface symmetry with askNumbered but clack manages
@@ -68,7 +78,7 @@ export async function askClack(
       if (question.placeholder !== undefined) textOpts.placeholder = question.placeholder;
       if (question.default !== undefined) textOpts.initialValue = question.default;
       const value = unwrap(await text(textOpts), question.id);
-      return { id: question.id, kind: 'text', value: String(value) };
+      return { id: question.id, kind: 'text', value: textAnswer(value, question.default) };
     }
 
     case 'confirm': {

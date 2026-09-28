@@ -15,9 +15,15 @@
 //      again (in the SEC-02 worker) and its text must hash to `text_sha256`.
 //   3. A loose `.paper/sources/<citekey>.txt` is never read: nothing here even
 //      looks for one.
+//   4. A PDF the user attached to a registrar record although its first page
+//      does not show that work (`byo.asserted`, the `pdf-attach-unmatched`
+//      gate of `add <id> --pdf`) is never evidence: its text is unavailable.
 //
-// Pass 2 / Pass 3 and the compile / done recomputation consume byoText in
-// Phase 20 (VRFY-19); GRND-14 uses the recorded hash through full-text.ts.
+// Consumers: Pass 3 checks a quote against this text first (verify, and the
+// compile / done recomputation re-run it — every read re-hashes the PDF);
+// Pass 2 gives the claim-support judge the passages of it nearest the claim
+// (byoPassages); GRND-14's full-text flag reads the same record through
+// full-text.ts.
 
 import { createHash } from 'node:crypto';
 import * as fsp from 'node:fs/promises';
@@ -92,6 +98,13 @@ export function resolveByoFile(root: string, file: string): string | null {
 export async function byoText(root: string, entry: Pick<LibraryEntry, 'citekey' | 'byo'>): Promise<ByoTextResult> {
   const byo = entry.byo;
   if (byo === null) return { available: false, reason: `${entry.citekey} has no bring-your-own PDF`, file: null };
+  if (byo.asserted === true) {
+    return {
+      available: false,
+      reason: `${byo.file} was attached although its first page does not show this work, so its text is not used as evidence`,
+      file: null,
+    };
+  }
   const file = resolveByoFile(root, byo.file);
   if (file === null) {
     return { available: false, reason: `the recorded PDF path ${byo.file} is outside .paper/sources/`, file: null };
@@ -129,4 +142,57 @@ export async function byoText(root: string, entry: Pick<LibraryEntry, 'citekey' 
   }
   await writeByoTextCache(byo.sha256, text);
   return { available: true, text, file, sha256: byo.sha256, fromCache: false };
+}
+
+// ---------------------------------------------------------------------------
+// Passages for the claim-support judge (Pass 2).
+// ---------------------------------------------------------------------------
+
+/** How much of a bring-your-own text Pass 2 sends with one claim. */
+export const BYO_PASSAGE_CHARS = 2400;
+const PASSAGE_WINDOW = 600;
+
+const STOP = new Set([
+  'the', 'and', 'for', 'that', 'with', 'this', 'from', 'are', 'was', 'were', 'which', 'their', 'have', 'has', 'been',
+  'not', 'but', 'its', 'can', 'than', 'these', 'those', 'into', 'more', 'most', 'such', 'also', 'they', 'them', 'our',
+]);
+
+function words(s: string): string[] {
+  return s
+    .normalize('NFKC')
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((w) => w.length >= 3 && !STOP.has(w));
+}
+
+/**
+ * The passages of a bring-your-own text that share the most content words with
+ * `claim` — deterministic, in document order, at most `maxChars` in all (the
+ * judge sees what the source says about the claim, not the whole PDF).
+ */
+export function byoPassages(text: string, claim: string, maxChars: number = BYO_PASSAGE_CHARS): string {
+  const want = new Set(words(claim.replace(/\[@[^\]]*\]/g, ' ')));
+  const flat = text.replace(/\s+/g, ' ').trim();
+  if (flat.length <= maxChars) return flat;
+  const windows: Array<{ start: number; text: string; score: number }> = [];
+  for (let start = 0; start < flat.length; start += PASSAGE_WINDOW / 2) {
+    const chunk = flat.slice(start, start + PASSAGE_WINDOW);
+    let score = 0;
+    for (const w of new Set(words(chunk))) if (want.has(w)) score += 1;
+    windows.push({ start, text: chunk, score });
+    if (start + PASSAGE_WINDOW >= flat.length) break;
+  }
+  const picked: Array<{ start: number; text: string }> = [];
+  let used = 0;
+  for (const w of [...windows].sort((a, b) => b.score - a.score || a.start - b.start)) {
+    if (w.score === 0 || used + w.text.length > maxChars) continue;
+    if (picked.some((p) => Math.abs(p.start - w.start) < PASSAGE_WINDOW)) continue;
+    picked.push(w);
+    used += w.text.length;
+  }
+  if (picked.length === 0) return flat.slice(0, maxChars);
+  return picked
+    .sort((a, b) => a.start - b.start)
+    .map((p) => p.text.trim())
+    .join(' … ');
 }

@@ -83,6 +83,53 @@ test('SRC-06: the keyless 429 "Insufficient budget" answer → keyless daily bud
   assert.deepEqual(reasons, ['keyless daily budget exhausted — set OPENALEX_API_KEY (free)']);
 });
 
+test('SRC-06: "daily budget exhausted" only when OpenAlex says so; its short load-shedding 429 is "rate limited (retry after ~N s)"', async () => {
+  const { isBudgetExhausted } = await import('../../bin/lib/sources/openalex.js');
+  assert.equal(isBudgetExhausted({ body: '{"error":"Insufficient budget","message":"…"}' }), true);
+  assert.equal(isBudgetExhausted({ headers: { 'x-ratelimit-remaining-usd': '0' } }), true);
+  assert.equal(isBudgetExhausted({ headers: { 'x-ratelimit-remaining-usd': '0.4' } }), false);
+  assert.equal(isBudgetExhausted({ body: '{"error":"Rate limit exceeded","message":"Anonymous search is temporarily rate-limited … retry in 38s"}' }), false);
+  // Through the transport: a 38 s Retry-After is beyond the 30 s cap (the host is
+  // exhausted for 38 s), and the reason says how long — not "wait a day".
+  await liveLane(async (agent) => {
+    agent
+      .get('https://api.openalex.org')
+      .intercept({ path: (p: string) => p.startsWith('/works?'), method: 'GET' })
+      .reply(
+        429,
+        JSON.stringify({ error: 'Rate limit exceeded', message: 'Anonymous search is temporarily rate-limited while the search cluster is under elevated load. Please retry in 38s' }),
+        { headers: { 'content-type': 'application/json', 'retry-after': '38' } },
+      );
+    const reasons: string[] = [];
+    const saved = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    try {
+      assert.deepEqual(await openalex.search(uniq('load shedding'), { limit: 3, onFailure: (r) => reasons.push(r) }), []);
+    } finally {
+      process.stderr.write = saved;
+    }
+    assert.deepEqual(reasons, ['rate limited (retry after ~38 s) — a free OPENALEX_API_KEY avoids this']);
+  });
+  // The budget answer through the transport (Retry-After hours away) is still the budget.
+  await liveLane(async (agent) => {
+    agent
+      .get('https://api.openalex.org')
+      .intercept({ path: (p: string) => p.startsWith('/works?'), method: 'GET' })
+      .reply(429, JSON.stringify({ error: 'Insufficient budget', message: 'daily budget used' }), {
+        headers: { 'content-type': 'application/json', 'retry-after': '22400', 'x-ratelimit-remaining-usd': '0' },
+      });
+    const reasons: string[] = [];
+    const saved = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    try {
+      await openalex.search(uniq('budget'), { limit: 3, onFailure: (r) => reasons.push(r) });
+    } finally {
+      process.stderr.write = saved;
+    }
+    assert.deepEqual(reasons, ['keyless daily budget exhausted — set OPENALEX_API_KEY (free)']);
+  });
+});
+
 test('SRC-06: with OPENALEX_API_KEY the request carries api_key and mailto; a keyed 429 reads "rate limited (retry after …)"', async () => {
   const savedKey = process.env['OPENALEX_API_KEY'];
   process.env['OPENALEX_API_KEY'] = 'oa-test-key-123';
@@ -166,6 +213,7 @@ threeWayContract({
     assert.equal(c.pages, '10-20');
   },
   invalid: (m) => ({ body: { error: 'Internal error', message: `something went wrong ${m}` } }),
-  rateLimitReason: /^keyless daily budget exhausted — set OPENALEX_API_KEY \(free\)$/,
+  // The contract's exhausted host carries no body: a wait, not a spent budget.
+  rateLimitReason: /^rate limited \(retry after ~6 h\) — a free OPENALEX_API_KEY avoids this$/,
   offlineMissId: '10.9999/three-way-offline-miss',
 });

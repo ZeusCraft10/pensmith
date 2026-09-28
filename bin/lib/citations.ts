@@ -285,6 +285,7 @@ function balancedInside(s: string): boolean {
  * D-19-19):
  *   - `abstract` → CSL `abstract` (Pass 2 reads it), decoded by citation-js's
  *     own BibLaTeX mapping (the same LaTeX decoder as every other field);
+ *   - `pmid` → CSL `PMID` (Pass 1 resolves a DOI-less PubMed record by it);
  *   - `eprint`, `archivePrefix` (or BibLaTeX `eprinttype`) and `primaryClass`
  *     (or `eprintclass`) → the same-named keys, verbatim — the arXiv identity
  *     of a preprint — plus CSL `URL` = its arXiv abstract page (what pandoc
@@ -300,6 +301,9 @@ function carryDroppedFields(raw: RawBibEntry[], data: Array<Record<string, unkno
     const out = data[index]!;
     const abs = e.properties?.['abstract'];
     if (typeof abs === 'string' && abs.trim().length > 0) withAbstract.push({ index, abstract: abs });
+    // `pmid` → CSL `PMID` (citation-js maps it for BibLaTeX input only).
+    const pmid = rawField(e, 'pmid');
+    if (pmid && typeof out['PMID'] !== 'string') out['PMID'] = pmid;
     const eprint = rawField(e, 'eprint');
     if (eprint) {
       out['eprint'] = eprint;

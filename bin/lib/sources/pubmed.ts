@@ -12,9 +12,14 @@
 // A complete record (SRC-05, D-19-13): PMID, PMCID, DOI, the journal's full
 // name as venue, volume, issue, pages, the CSL type from the publication types,
 // and collective (group) authors written braced (`{COVID-19 Study Group}`).
-// PubMed personal names come in surname-first compact form: "Vaswani A" (NO
-// comma); bin/lib/author-normalize.ts handles both forms. pubdate is a loose
-// string like "2019 Jul" or "2020 May 12" — the year is its first 4-digit token.
+// PubMed personal names come in surname-first compact form with NO comma
+// ("Zhu N", "Gao GF", "King ML Jr"): the adapter rewrites each into the
+// canonical "Family, Initials" form ("Zhu, N") through person-name.ts
+// fromPubmedCompactName — read as a display name, "Zhu N" would be given
+// "Zhu", family "N", and every BibTeX / RIS / Pass-1 consumer would swap the
+// parts. A record PubMed types "Retracted Publication" is retracted. pubdate is
+// a loose string like "2019 Jul" or "2020 May 12" — the year is its first
+// 4-digit token.
 //
 // Three-way lookups (D-19-05): found | not-found (esummary's per-record
 // `error`, e.g. "cannot get document summary") | failed (a non-200 after
@@ -28,6 +33,7 @@ import { exchange, jsonShape, statusReason, validator, type Exchange, type Shape
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
 import { normalizePmid, normalizePmcid } from '../doi.js';
+import { fromPubmedCompactName } from '../person-name.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import type { SourceType } from '../schemas/source-types.js';
 
@@ -102,7 +108,7 @@ export function pubmedToCandidate(rec: PubmedRecord): SourceCandidate | null {
       const name = String(a.name ?? '').trim();
       if (!name) return '';
       // A group author ("CollectiveName") is one corporate name, never a surname + initials.
-      return a.authtype === 'CollectiveName' ? `{${name.replace(/[{}]/g, '')}}` : name;
+      return a.authtype === 'CollectiveName' ? `{${name.replace(/[{}]/g, '')}}` : fromPubmedCompactName(name);
     })
     .filter(Boolean);
   if (authors.length === 0) return null;
@@ -116,6 +122,7 @@ export function pubmedToCandidate(rec: PubmedRecord): SourceCandidate | null {
   const issue = str(rec.issue);
   const pages = str(rec.pages);
   const publisher = str(rec.publishername);
+  const retracted = (rec.pubtype ?? []).some((t) => t.toLowerCase() === 'retracted publication');
 
   return {
     source: 'pubmed',
@@ -132,7 +139,10 @@ export function pubmedToCandidate(rec: PubmedRecord): SourceCandidate | null {
     ...(pages !== undefined ? { pages } : {}),
     ...(publisher !== undefined ? { publisher } : {}),
     type: pubmedCslType(rec),
-    retracted: false,
+    retracted,
+    ...(retracted
+      ? { retraction_status: 'retracted' as const, retraction_details: 'PubMed publication type: Retracted Publication' }
+      : {}),
     last_verified: new Date().toISOString(),
     citekey: generateCitekey({ authors, ...(year !== undefined ? { year } : {}) }),
     raw: rec,
@@ -219,7 +229,7 @@ export async function lookupById(id: string): Promise<LookupResult> {
   if (!rec) return lookupNotFound(`PubMed has no record for PMID ${pmid}`);
   if (typeof rec.error === 'string') return lookupNotFound(`PubMed has no record for PMID ${pmid} (${rec.error})`);
   const candidate = pubmedToCandidate(rec);
-  if (candidate === null) return lookupFailed('the PubMed record has no title or no authors', { status: 200 });
+  if (candidate === null) return lookupFailed('the PubMed record has no title or no authors (an incomplete registrar record — asking again gives the same answer)', { status: 200, permanent: true });
   return lookupFound(candidate);
 }
 

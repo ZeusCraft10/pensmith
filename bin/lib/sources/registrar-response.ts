@@ -51,6 +51,8 @@ export interface RateLimitInfo {
   readonly exhausted: boolean;
   /** The body of the last 429, when there was one (bounded). */
   readonly body?: string;
+  /** The headers of the response that rate-limited the request, when there was one. */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 export interface ExchangeOptions {
@@ -183,7 +185,12 @@ export async function exchange(send: () => Promise<HttpResponse>, opts: Exchange
     if (err instanceof RateLimitExhaustedError) {
       return rateLimitedFailure(
         opts,
-        { retryAfterMs: err.retryAfterMs, exhausted: true },
+        {
+          retryAfterMs: err.retryAfterMs,
+          exhausted: true,
+          ...(err.detail?.body !== undefined ? { body: err.detail.body } : {}),
+          ...(err.detail?.headers !== undefined ? { headers: err.detail.headers } : {}),
+        },
         err.status,
         errorFailureReason(err),
       );
@@ -204,7 +211,7 @@ export async function exchange(send: () => Promise<HttpResponse>, opts: Exchange
           {
             exhausted: false,
             ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
-            ...(e.response ? { body: e.response.body.slice(0, 2000) } : {}),
+            ...(e.response ? { body: e.response.body.slice(0, 2000), headers: e.response.headers } : {}),
           },
           429,
           httpFailureReason(429),
@@ -232,7 +239,7 @@ export async function exchange(send: () => Promise<HttpResponse>, opts: Exchange
     const retryAfterMs = retryAfterOf(res);
     return rateLimitedFailure(
       opts,
-      { exhausted: false, ...(retryAfterMs !== undefined ? { retryAfterMs } : {}), body: res.body.slice(0, 2000) },
+      { exhausted: false, ...(retryAfterMs !== undefined ? { retryAfterMs } : {}), body: res.body.slice(0, 2000), headers: res.headers },
       429,
       statusReason(res),
     );

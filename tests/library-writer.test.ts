@@ -168,6 +168,40 @@ test('BRDTH-01 dedup: a DOI in URL / doi: / upper-case form matches the stored e
   assert.equal(lib.entries[0]!.title, ENGEL.title, 'an existing title is not replaced by a poorer record');
 });
 
+test('BRDTH-01 dedup: a chapter carries its book\'s ISBN but is a different work — never merged by ISBN', async () => {
+  const root = project();
+  await upsertSources(
+    root,
+    [
+      cand({
+        doi: '10.1093/0199242380.003.0011',
+        type: 'chapter',
+        isbn: '9780199291922',
+        title: 'Reparations for historical injustice',
+        authors: ['Colonomos, Ariel'],
+        year: 2006,
+        venue: 'The Handbook of Reparations',
+      }),
+    ],
+    { provenance: 'research' },
+  );
+  const book = await upsertSources(
+    root,
+    [cand({ source: 'books', isbn: '9780199291922', type: 'book', title: 'The Handbook of Reparations', authors: ['De Greiff, Pablo'], year: 2006 })],
+    { provenance: 'research' },
+  );
+  assert.equal(book.outcomes[0]!.status, 'added', 'the book is its own entry');
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 2);
+  const chapter = lib.entries.find((e) => e.type === 'chapter')!;
+  assert.equal(chapter.title, 'Reparations for historical injustice', 'the chapter keeps its own title');
+  assert.deepEqual(chapter.provenance, ['research:crossref']);
+  // The same book again merges with the book, not the chapter.
+  const again = await upsertSources(root, [cand({ source: 'books', isbn: '978-0-19-929192-2', type: 'book', title: 'The Handbook of Reparations', authors: ['De Greiff, P.'], year: 2006 })], { provenance: 'add' });
+  assert.deepEqual([again.outcomes[0]!.status === 'added', again.outcomes[0]!.matchedBy], [false, 'isbn']);
+  assert.equal((await loadLibrary(root)).entries.length, 2);
+});
+
 test('BRDTH-01 dedup: arXiv id (abs URL, versioned, DataCite DOI), PMID and ISBN-10 vs ISBN-13', async () => {
   const root = project();
   const r1 = await upsertSources(

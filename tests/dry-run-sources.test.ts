@@ -23,7 +23,7 @@ process.env['PENSMITH_NO_LLM'] = '1';
 
 const dryRun = await import('../bin/lib/sources/dry-run.js');
 const { isReservedDryRunId, isbn13CheckDigit, DRY_RUN_DOI_PREFIX } = await import('../bin/lib/doi.js');
-const { runResearchOrchestrator } = await import('../bin/lib/research-orchestrator.js');
+const { runResearchPassWithLog } = await import('./helpers/research-pass.js');
 const { runPass1, RESERVED_DRY_RUN_REASON } = await import('../bin/lib/verify/pass1.js');
 const { runPass3 } = await import('../bin/lib/verify/pass3.js');
 const { networkMode } = await import('../bin/lib/http-mock.js');
@@ -127,7 +127,7 @@ test('RUN-27: dry-run research uses ONLY the synthetic provider — >=5 sources,
   try {
     cands = await underDryRun(() => {
       assert.equal(networkMode().dryRun, true);
-      return runResearchOrchestrator(['medieval Icelandic sagas'], {
+      return runResearchPassWithLog(['medieval Icelandic sagas'], {
         topic: 'medieval Icelandic sagas', discipline: 'history', paperRoot: root,
       });
     });
@@ -160,9 +160,9 @@ test('RUN-27: outside --dry-run the orchestrator filters reserved identifiers ou
   (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => { err.push(String(s)); return saved(s); };
   let out;
   try {
-    out = await runResearchOrchestrator(['anything'], {
+    out = await runResearchPassWithLog(['anything'], {
       topic: 'anything', discipline: 'other', paperRoot: root,
-      __adapterRegistry: {
+      registry: {
         fake: { search: async () => [smuggled, realCandidate] },
       },
     });

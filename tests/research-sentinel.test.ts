@@ -93,3 +93,63 @@ test('router (D-19-16): a library (from an earlier run, add or bring-your-own) w
   assert.equal(isFailedResearchLog('# Notes\nResult: no sources found\n'), false, 'only a research log counts as failed');
   assert.equal(isFailedResearchLog(failedLog('no sources found').replace(/\n/g, '\r\n')), true, 'CRLF');
 });
+
+// ---------------------------------------------------------------------------
+// Phase 19 review round 1: the user's own sources never end the research stage.
+// ---------------------------------------------------------------------------
+
+import { renderSourcesBlock, upsertSourcesBlock, SOURCES_START, SOURCES_END, RESEARCH_LOG_END } from '../bin/lib/research-md.js';
+import { isSourcesViewOnly } from '../bin/lib/research-sentinel.js';
+
+function lib(entries: Array<{ citekey: string; provenance: string[] }>): string {
+  return `${JSON.stringify({ $schemaVersion: 3, entries: entries.map((e) => ({ ...e, title: 'T' })) })}\n`;
+}
+
+/** What `new --pdfs` / `add` / a Zotero ingest leave: the sources view only. */
+function sourcesView(notes = ''): string {
+  return upsertSourcesBlock(null, renderSourcesBlock([])) + notes;
+}
+
+test('SRC-15: after `new --pdfs` (bring-your-own entries, the sources view only) the next step is research, not outline', async () => {
+  const root = await seed({ 'LIBRARY.json': lib([{ citekey: 'vaswani2017', provenance: ['byo:arxiv'] }]), 'RESEARCH.md': sourcesView() });
+  assert.equal((await resolveNextAction(root)).verb, 'research');
+  assert.equal(isResearchDone(join(root, '.paper')), false);
+  assert.equal(deriveLibraryStatus(root).status, 'intake', 'list/status agree: not past research');
+});
+
+test('SRC-16 / SRC-13: Zotero-ingested or `add`-ed sources alone do not end research either (notes below the log end are the user\'s)', async () => {
+  for (const provenance of [['zotero:zotero'], ['add:crossref'], ['byo:crossref', 'add:crossref', 'zotero:zotero']]) {
+    const root = await seed({ 'LIBRARY.json': lib([{ citekey: 'k2020', provenance }]), 'RESEARCH.md': sourcesView('\nMy notes.\n') });
+    assert.equal(isResearchDone(join(root, '.paper')), false, provenance.join(','));
+  }
+});
+
+test('research done: a successful research log, a research-provenance entry, a curated RESEARCH.md, or an outline', async () => {
+  const withRun = await seed({ 'RESEARCH.md': '# Research log\n\nResult: 12 peer-reviewed\n' });
+  assert.equal(isResearchDone(join(withRun, '.paper')), true);
+  const researched = await seed({ 'LIBRARY.json': lib([{ citekey: 'a2020', provenance: ['byo:arxiv'] }, { citekey: 'b2021', provenance: ['research:crossref'] }]), 'RESEARCH.md': sourcesView() });
+  assert.equal(isResearchDone(join(researched, '.paper')), true);
+  const planResearch = await seed({ 'LIBRARY.json': lib([{ citekey: 'c2022', provenance: ['plan-research:§2:crossref'] }]) });
+  assert.equal(isResearchDone(join(planResearch, '.paper')), true);
+  const curated = await seed({ 'RESEARCH.md': '# Research\n\n### Smith 2020\n\nsupports: claim 1\n' });
+  assert.equal(isResearchDone(join(curated, '.paper')), true);
+  const outlined = await seed({ 'LIBRARY.json': lib([{ citekey: 'v2017', provenance: ['byo:arxiv'] }]), 'RESEARCH.md': sourcesView(), 'OUTLINE.md': '# Outline\n' });
+  assert.equal(isResearchDone(join(outlined, '.paper')), true);
+});
+
+test('research done: a FAILED run with the user\'s own sources in the library moves on (research ran; nothing more was found)', async () => {
+  const root = await seed({
+    'LIBRARY.json': lib([{ citekey: 'vaswani2017', provenance: ['byo:arxiv'] }]),
+    'RESEARCH.md': '# Research log\n\nResult: no sources found — openalex 0 (offline)\n',
+  });
+  assert.equal(isResearchDone(join(root, '.paper')), true);
+});
+
+test('the sentinel\'s markers are research-md.ts\'s', () => {
+  assert.ok(SOURCES_START.startsWith('<!-- pensmith:sources:start'));
+  assert.equal(SOURCES_END, '<!-- pensmith:sources:end -->');
+  assert.ok(RESEARCH_LOG_END.startsWith('<!-- end of the research log:'));
+  assert.equal(isSourcesViewOnly(sourcesView()), true);
+  assert.equal(isSourcesViewOnly(`${sourcesView()}\nnotes`), true, 'notes below the end line are the user\'s');
+  assert.equal(isSourcesViewOnly('# Research\n\nMy own curated list.\n'), false);
+});

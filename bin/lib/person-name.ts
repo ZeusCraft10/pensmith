@@ -136,3 +136,41 @@ export function formatPersonName(n: PersonName): string {
   if (!n.suffix) return `${n.family}, ${n.given}`;
   return `${n.family}, ${n.given ?? ''}, ${n.suffix}`;
 }
+
+// ---------------------------------------------------------------------------
+// PubMed's compact personal-name form.
+// ---------------------------------------------------------------------------
+
+/** A generational suffix as PubMed writes it after the initials ("King ML Jr", "Smith J 3rd"). */
+const PUBMED_SUFFIX_RE = /^(?:Jr|Sr|2nd|3rd|4th|5th|II|III|IV|V)\.?$/;
+/** PubMed initials: one to four upper-case letters, no dots ("N", "GF", "JRR"). */
+const PUBMED_INITIALS_RE = /^\p{Lu}{1,4}$/u;
+
+/**
+ * PubMed (E-utilities esummary) writes personal names surname-first with no
+ * comma: the LAST token is the initials — "Zhu N", "Gao GF", "van den Berg R",
+ * "King ML Jr". Read as a display name, "Zhu N" would be given "Zhu", family
+ * "N" (parsePersonName's "Given Family" rule), so the PubMed adapter rewrites
+ * each one into the canonical "Family, Initials[, Suffix]" form with dotted
+ * initials (what a reference renderer initializes correctly — citeproc reads
+ * a bare "GF" as one name and prints "G."): "Zhu, N.", "Gao, G. F.",
+ * "van den Berg, R.", "King, M. L., Jr".
+ *
+ * A string that is not in the compact form (one token, a comma already, a
+ * braced group name, or a last token that is not upper-case initials) comes
+ * back unchanged.
+ */
+export function fromPubmedCompactName(input: string): string {
+  if (typeof input !== 'string') return input;
+  const s = clean(input);
+  if (!s || s.includes(',') || isBracedLiteral(s)) return input;
+  const words = s.split(' ');
+  let suffix = '';
+  if (words.length >= 3 && PUBMED_SUFFIX_RE.test(words[words.length - 1]!)) suffix = words.pop()!;
+  if (words.length < 2) return input;
+  const initials = words[words.length - 1]!;
+  if (!PUBMED_INITIALS_RE.test(initials)) return input;
+  const family = words.slice(0, -1).join(' ');
+  const dotted = [...initials].map((ch) => `${ch}.`).join(' ');
+  return formatPersonName(build(family, dotted, suffix));
+}

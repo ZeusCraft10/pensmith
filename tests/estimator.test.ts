@@ -154,3 +154,22 @@ test('SRC-08 / SRC-09: the research row is one disambiguator call plus ceil(cand
     assert.deepEqual(researchCalls(sb.root, { ZOTERO_API_KEY: 'set' }), [['topic-disambiguator', 1], ['source-evaluator', evaluatorCallsFor(estimatedResearchCandidates(10, 6))]]);
   });
 });
+
+test('GRND-17: `plan N --research` is priced as the section research pass — evaluator calls over its two queries, the planner only with --revise', async () => {
+  const { sectionResearchCalls, SECTION_RESEARCH_QUERIES } = await import('../bin/lib/estimator.js');
+  const { estimatedResearchCandidates, evaluatorCallsFor } = await import('../bin/lib/adapter-plan.js');
+  await withLlmSandbox({}, async (sb) => {
+    fs.writeFileSync(path.join(sb.paper, 'INTAKE.md'), '---\ntopic: attention\ndiscipline: computer-science\n---\n# Intake\n');
+    assert.equal(SECTION_RESEARCH_QUERIES, 2);
+    const evaluator = Math.max(1, evaluatorCallsFor(estimatedResearchCandidates(2, 5)));
+    assert.deepEqual(sectionResearchCalls(sb.root, {}), [['source-evaluator', evaluator]]);
+    const research = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100, scope: { verb: 'plan', section: 2, research: true } });
+    assert.equal(research.rows.length, 1);
+    assert.equal(research.rows[0]!.step, 'plan §2 --research');
+    assert.deepEqual(research.rows[0]!.calls.map((c) => [c.slug, c.calls]), [['source-evaluator', evaluator]], 'no planner call without --revise');
+    const revise = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100, scope: { verb: 'plan', section: 2, research: true, revise: true } });
+    assert.deepEqual(revise.rows[0]!.calls.map((c) => [c.slug, c.calls]), [['source-evaluator', evaluator], ['section-planner', 1]]);
+    const plain = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100, scope: { verb: 'plan', section: 2 } });
+    assert.deepEqual(plain.rows[0]!.calls.map((c) => [c.slug, c.calls]), [['section-planner', 1]], 'a plain plan is the planner call');
+  });
+});

@@ -5,6 +5,8 @@
 //   search:     GET https://openlibrary.org/search.json?q=<q>&fields=<fields>&limit=<n>
 //   lookupById: GET https://openlibrary.org/search.json?isbn=<isbn-13>&fields=<fields>&limit=1
 //               GET https://openlibrary.org/search.json?q=key:/works/<OL…W>&fields=<fields>&limit=1
+//   authors:    GET https://openlibrary.org/books/<OL…M>.json  (the matched edition)
+//               GET https://openlibrary.org/authors/<OL…A>.json (each of its authors)
 //   fallback:   GET https://www.googleapis.com/books/v1/volumes?q=isbn:<isbn-13>
 //
 // Why these routes: `search.json` answers in ONE request, with no redirect, and
@@ -12,6 +14,15 @@
 // publisher, date and ISBNs (the /isbn/<isbn> route redirects to an edition
 // record whose authors are only keys — more requests for less). A title or
 // author search returns works, each with its best-matching edition.
+//
+// An ISBN lookup's authors come from the matched EDITION's own record: the
+// search index's `author_name` (work and edition alike) aggregates names across
+// every edition of the work — an audiobook's narrator, a translator — so for
+// Kuhn's ISBN 9780226458083 it lists "Dennis Holland" too. The edition record
+// names its authors by key (one request per author, at most MAX_EDITION_AUTHORS);
+// when it names none, its `by_statement` ("Thomas S. Kuhn.") filters the
+// index's list. A failed edition or author request keeps the index's list
+// (the book was found; only the refinement was not).
 //
 // A book candidate: `type: 'book'`, title (the work's casing when the edition
 // title is the same words), authors (the edition's, else the work's; Open
@@ -262,6 +273,55 @@ function attemptFrom(ex: Exchange, service: string, parse: (body: string) => Sou
   return c ? { kind: 'found', candidate: c } : { kind: 'not-found', reason: `${service}: ${missing}` };
 }
 
+/** How many of an edition's authors are resolved by name (one request each). */
+export const MAX_EDITION_AUTHORS = 10;
+
+const OL_RECORD: ShapeCheck = jsonShape((b) => isObject(b) && typeof b['key'] === 'string', 'Open Library record (key)');
+
+async function openLibraryRecord(url: string): Promise<Record<string, unknown> | null> {
+  const ex = await exchange(
+    () => httpFetch(url, { source: 'books', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(OL_RECORD) }),
+    { service: 'Open Library', check: OL_RECORD },
+  );
+  return ex.kind === 'ok' ? (JSON.parse(ex.res.body) as Record<string, unknown>) : null;
+}
+
+/** The last word of a display name, lower-cased and without diacritics. */
+function familyToken(name: string): string {
+  const words = name.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  return words[words.length - 1] ?? '';
+}
+
+/**
+ * The authors of the edition `editionKey` (`/books/OL…M`) from its own record
+ * (see the header), or null to keep the search index's list.
+ */
+async function editionAuthors(editionKey: string, indexNames: readonly string[]): Promise<string[] | null> {
+  const m = /^\/?books\/(OL\d+M)$/.exec(editionKey.trim());
+  if (!m) return null;
+  const record = await openLibraryRecord(`${OPEN_LIBRARY}/books/${m[1]}.json`);
+  if (record === null) return null;
+  const keys = (Array.isArray(record['authors']) ? (record['authors'] as unknown[]) : [])
+    .map((a) => (isObject(a) && isObject(a['author']) ? a['author']['key'] : isObject(a) ? a['key'] : undefined))
+    .filter((k): k is string => typeof k === 'string' && /^\/authors\/OL\d+A$/.test(k))
+    .slice(0, MAX_EDITION_AUTHORS);
+  if (keys.length > 0) {
+    const names: string[] = [];
+    for (const key of keys) {
+      const a = await openLibraryRecord(`${OPEN_LIBRARY}${key}.json`);
+      const name = a ? str(a['name']) ?? str(a['personal_name']) : undefined;
+      if (name === undefined) return null;
+      names.push(name);
+    }
+    return names;
+  }
+  const by = str(record['by_statement']);
+  if (by === undefined) return null;
+  const byWords = new Set(by.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+  const kept = indexNames.filter((n) => byWords.has(familyToken(n)));
+  return kept.length > 0 ? kept : null;
+}
+
 async function lookupIsbn(isbn: string): Promise<LookupResult> {
   const ol = attemptFrom(
     await openLibrary(`${OPEN_LIBRARY}/search.json?isbn=${isbn}&fields=${encodeURIComponent(FIELDS)}&limit=1`),
@@ -276,7 +336,13 @@ async function lookupIsbn(isbn: string): Promise<LookupResult> {
     },
     `no edition with ISBN ${isbn}`,
   );
-  if (ol.kind === 'found') return lookupFound(ol.candidate);
+  if (ol.kind === 'found') {
+    const c = ol.candidate;
+    const edition = (c.raw as { openLibrary?: { edition?: string } }).openLibrary?.edition;
+    const authors = edition ? await editionAuthors(edition, c.authors) : null;
+    if (authors === null || authors.length === 0) return lookupFound(c);
+    return lookupFound({ ...c, authors, citekey: generateCitekey({ authors, ...(c.year !== undefined ? { year: c.year } : {}) }) });
+  }
 
   // The keyless fallback (D-19-14).
   const gb = attemptFrom(

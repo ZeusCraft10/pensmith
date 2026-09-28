@@ -54,9 +54,13 @@
 // per-host floor table (the lower wins):
 //   arXiv 1 request per 3 s, Crossref 3/s, PubMed 3/s, Semantic Scholar 1/s,
 //   OpenAlex 10/s, Unpaywall 10/s, Open Library 1/s, Zotero 5/s, generic 5/s.
-// A service's own `X-Rate-Limit-Limit` / `X-Rate-Limit-Interval` (e.g. 3 / 1s)
-// lowers that host's rate and never raises it; Zotero's `Backoff: <s>` holds
-// the host for that long.
+// A scholarly API's own `X-Rate-Limit-Limit` / `X-Rate-Limit-Interval` (e.g.
+// 3 / 1s; RATE_HEADER_HOSTS only — any other host cannot lower pensmith's
+// rate) lowers that host's rate and never raises it; a declared rate slower
+// than one request per RETRY_AFTER_CAP_MS marks the host exhausted instead of
+// sleeping. Zotero's `Backoff: <s>` holds the host for that long. Waiting for a
+// token counts against the request's timeoutMs (a RateLimitExhaustedError
+// when it runs out): the rate limit never hangs a request.
 // Host availability (never for a model request, never for a fixture answer):
 //   - a Retry-After (or Backoff) beyond RETRY_AFTER_CAP_MS marks the host
 //     exhausted until then: the request is not retried, RateLimitExhaustedError
@@ -220,12 +224,24 @@ export class RateLimitExhaustedError extends PensmithError {
   readonly host: string;
   readonly retryAfterMs: number;
   readonly status: number;
-  constructor(host: string, retryAfterMs: number, status: number = 429) {
+  /**
+   * What the response that exhausted the host said (its bounded body and its
+   * headers), so an adapter can tell WHY (e.g. OpenAlex's keyless daily budget
+   * versus its short load-shedding limit). Absent for a token-wait timeout.
+   */
+  readonly detail: { readonly body?: string; readonly headers?: Readonly<Record<string, string>> } | undefined;
+  constructor(
+    host: string,
+    retryAfterMs: number,
+    status: number = 429,
+    detail?: { readonly body?: string; readonly headers?: Readonly<Record<string, string>> },
+  ) {
     super(`${host}: rate limit exhausted (retry after ${formatRetryAfter(retryAfterMs)})`, EXIT_ERROR);
     this.name = 'RateLimitExhaustedError';
     this.host = host;
     this.retryAfterMs = retryAfterMs;
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -835,6 +851,14 @@ export interface FetchOptions {
   /** Phase 17 seam (verbatim V3): abort once the response body exceeds this many bytes (SEC-03). */
   maxBytes?: number;
   /**
+   * false: return a GET / HEAD's 3xx as the answer instead of following it
+   * (default true, SRC-01). The DOI freshness probe asks only whether doi.org
+   * resolves the handle — its 302 IS the answer; following it would land on
+   * Crossref's content-negotiation endpoint (which answers HEAD with 405) or
+   * on a publisher host.
+   */
+  followRedirects?: boolean;
+  /**
    * Phase 19 seam S-B (SRC-17): the caller's schema check. Called with a live
    * response before it is cached or recorded; a non-null return (the reason
    * the body is not the service's answer) keeps it out of the HTTP cache and
@@ -962,7 +986,13 @@ class TokenBucket {
     this.lastRefillMs = now;
   }
 
-  async acquire(): Promise<void> {
+  /**
+   * Take one token, waiting in FIFO order. With `timeoutMs`, a wait longer
+   * than that rejects with `onTimeout()` and gives up its place in the queue:
+   * the rate limit never holds a request longer than the request's own
+   * timeout (SRC-17, audit #22 — "back off, but never hang").
+   */
+  async acquire(timeoutMs?: number, onTimeout?: () => Error): Promise<void> {
     this.refill();
     // Fast-path: tokens available AND no one waiting ahead of us.
     if (this.tokens >= 1 && this.waiters.length === 0) {
@@ -970,8 +1000,22 @@ class TokenBucket {
       return;
     }
     // Slow-path: enqueue and wait for the single grant timer to fire.
-    return new Promise<void>((resolve) => {
-      this.waiters.push(resolve);
+    return new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waiter = (): void => {
+        if (timer !== undefined) clearTimeout(timer);
+        resolve();
+      };
+      this.waiters.push(waiter);
+      if (timeoutMs !== undefined && Number.isFinite(timeoutMs) && timeoutMs >= 0) {
+        timer = setTimeout(() => {
+          const i = this.waiters.indexOf(waiter);
+          if (i < 0) return;
+          this.waiters.splice(i, 1);
+          reject(onTimeout?.() ?? new Error(`waited more than ${timeoutMs} ms for the rate limit`));
+        }, timeoutMs);
+        timer.unref?.();
+      }
       if (!this.timerPending) this._scheduleGrant();
     });
   }
@@ -1020,6 +1064,36 @@ const HOST_RPS_FLOOR: Readonly<Record<string, number>> = {
   'api.zotero.org': 5,
 };
 
+/**
+ * The hosts whose `X-Rate-Limit-Limit` / `X-Rate-Limit-Interval` headers are
+ * honoured (SRC-17): the scholarly APIs pensmith is written against. Any other
+ * host — a URL from `add`, an open-access PDF host, a redirect target — cannot
+ * lower pensmith's rate: a server may ask to be asked less often, but only a
+ * service we are polite to by design gets to say how.
+ */
+const RATE_HEADER_HOSTS: ReadonlySet<string> = new Set([
+  'api.crossref.org',
+  'api.openalex.org',
+  'export.arxiv.org',
+  'eutils.ncbi.nlm.nih.gov',
+  'api.semanticscholar.org',
+  'api.unpaywall.org',
+  'openlibrary.org',
+  'www.googleapis.com',
+  'api.zotero.org',
+]);
+
+/**
+ * The slowest declared rate a bucket is lowered to: one request per
+ * RETRY_AFTER_CAP_MS. A server that declares a slower rate asks for a wait
+ * longer than the cap, which pensmith never sleeps through: the host is marked
+ * exhausted instead (fail fast, RateLimitExhaustedError), exactly like a long
+ * Retry-After (audit #22).
+ */
+export function minHonouredRate(): number {
+  return 1000 / RETRY_AFTER_CAP_MS;
+}
+
 /** Consecutive 429/5xx responses from one host that open its circuit breaker. */
 export const BREAKER_THRESHOLD = 3;
 /** How long an open breaker waits before it lets one probe request through. */
@@ -1028,12 +1102,16 @@ export const BREAKER_HALF_OPEN_MS = 10 * 60_000;
 interface HostState {
   /** The URL host (hostname, plus the port when it is not the default). */
   readonly host: string;
+  /** The bare hostname (lower case). */
+  readonly hostname: string;
   readonly bucket: TokenBucket;
   /** Epoch ms before which no request goes to the host (a short Backoff). */
   notBefore: number;
   /** Epoch ms until which the host is exhausted (a long Retry-After / Backoff); 0 = not. */
   exhaustedUntil: number;
   exhaustedStatus: number;
+  /** What the response that exhausted the host said (RateLimitExhaustedError.detail). */
+  exhaustedDetail: { body?: string; headers?: Record<string, string> } | undefined;
   /** Consecutive 429/5xx responses. */
   failures: number;
   lastStatus: number;
@@ -1054,10 +1132,12 @@ function hostStateFor(host: string, hostname: string, source: HttpSource): HostS
   if (!st) {
     st = {
       host,
+      hostname,
       bucket: new TokenBucket(Math.max(1, seed), seed),
       notBefore: 0,
       exhaustedUntil: 0,
       exhaustedStatus: 0,
+      exhaustedDetail: undefined,
       failures: 0,
       lastStatus: 0,
       openedAt: null,
@@ -1081,10 +1161,10 @@ const sleepMs = (ms: number): Promise<void> => new Promise<void>((r) => setTimeo
  * (llm) only takes the token: provider failures are classified by
  * anthropic.ts, not by the breaker.
  */
-async function enterHost(st: HostState, llm: boolean): Promise<void> {
+async function enterHost(st: HostState, llm: boolean, timeoutMs: number): Promise<void> {
   if (!llm) {
     const now = Date.now();
-    if (st.exhaustedUntil > now) throw new RateLimitExhaustedError(st.host, st.exhaustedUntil - now, st.exhaustedStatus);
+    if (st.exhaustedUntil > now) throw new RateLimitExhaustedError(st.host, st.exhaustedUntil - now, st.exhaustedStatus, st.exhaustedDetail);
     if (st.exhaustedUntil !== 0) st.exhaustedUntil = 0;
     if (st.openedAt !== null) {
       if (st.probing || now - st.openedAt < BREAKER_HALF_OPEN_MS) {
@@ -1094,7 +1174,8 @@ async function enterHost(st: HostState, llm: boolean): Promise<void> {
     }
     if (st.notBefore > now) await sleepMs(st.notBefore - now);
   }
-  await st.bucket.acquire();
+  // The wait for a token counts against the request's timeout: never a hang.
+  await st.bucket.acquire(timeoutMs, () => new RateLimitExhaustedError(st.host, Math.ceil(1000 / st.bucket.rate), 0));
 }
 
 /** A request that got no response from the host (transport error, refusal): a half-open probe re-opens. */
@@ -1116,11 +1197,17 @@ export function declaredRate(headers: Record<string, string>): number | null {
   return seconds > 0 ? limit / seconds : null;
 }
 
-function markExhausted(st: HostState, waitMs: number, status: number): RateLimitExhaustedError {
+function markExhausted(
+  st: HostState,
+  waitMs: number,
+  status: number,
+  detail?: { body?: string; headers?: Record<string, string> },
+): RateLimitExhaustedError {
   st.exhaustedUntil = Date.now() + waitMs;
   st.exhaustedStatus = status;
+  st.exhaustedDetail = detail;
   st.probing = false;
-  const err = new RateLimitExhaustedError(st.host, waitMs, status);
+  const err = new RateLimitExhaustedError(st.host, waitMs, status, detail);
   if (!st.announcedExhausted) {
     st.announcedExhausted = true;
     process.stderr.write(`pensmith: ${err.message} — no further requests go to it in this run\n`);
@@ -1136,12 +1223,18 @@ function markExhausted(st: HostState, waitMs: number, status: number): RateLimit
  * (the BREAKER_THRESHOLD-th consecutive failure, or a failed half-open probe);
  * any other answer resets the count and closes the breaker.
  */
-function noteHostResponse(st: HostState, status: number, headers: Record<string, string>): void {
+function noteHostResponse(st: HostState, status: number, headers: Record<string, string>, body = ''): void {
   const now = Date.now();
-  const declared = declaredRate(headers);
-  if (declared !== null) st.bucket.lower(declared, true);
+  const detail = { body: body.slice(0, 2000), headers };
+  // Only the scholarly APIs may lower the rate, and never below one request
+  // per RETRY_AFTER_CAP_MS: slower is "exhausted", never a sleep.
+  const declared = RATE_HEADER_HOSTS.has(st.hostname) ? declaredRate(headers) : null;
+  if (declared !== null) {
+    if (declared < minHonouredRate()) markExhausted(st, Math.ceil(1000 / declared), status, detail);
+    else st.bucket.lower(declared, true);
+  }
   const backoffMs = parseRetryAfter(headers['backoff'], now);
-  if (backoffMs > RETRY_AFTER_CAP_MS) markExhausted(st, backoffMs, status);
+  if (backoffMs > RETRY_AFTER_CAP_MS) markExhausted(st, backoffMs, status, detail);
   else if (backoffMs > 0) st.notBefore = Math.max(st.notBefore, now + backoffMs);
   if (!RETRYABLE_STATUSES.has(status)) {
     st.failures = 0;
@@ -1152,7 +1245,7 @@ function noteHostResponse(st: HostState, status: number, headers: Record<string,
   st.failures += 1;
   st.lastStatus = status;
   const retryAfterMs = parseRetryAfter(headers['retry-after'], now);
-  if (retryAfterMs > RETRY_AFTER_CAP_MS) throw markExhausted(st, retryAfterMs, status);
+  if (retryAfterMs > RETRY_AFTER_CAP_MS) throw markExhausted(st, retryAfterMs, status, detail);
   if (st.probing || st.failures >= BREAKER_THRESHOLD) {
     st.openedAt = now;
     st.probing = false;
@@ -1974,7 +2067,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
       mirrorRequest(hopMethod, hopUrl, hopBody, false);
       let next: RedirectHop | null = null;
       try {
-        next = redirectTarget(fx, hopUrl, hopMethod, redirects, visited, false);
+        next = opts.followRedirects === false ? null : redirectTarget(fx, hopUrl, hopMethod, redirects, visited, false);
         if (next !== null) assertReplayHopAllowed(next.url);
       } catch (e) {
         refuse(e as Error, hopUrl, hopMethod);
@@ -2035,7 +2128,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     const hopLabel = `${hopMethod} ${redactUrl(hopUrl, { dropContact: true })}`;
     const st = hostStateFor(parsed.host.toLowerCase(), host.toLowerCase(), source);
     // Exhausted host / open breaker: refused here, before DNS or any socket.
-    await enterHost(st, llm !== undefined);
+    await enterHost(st, llm !== undefined, timeoutMs);
     let answered = false;
     try {
       let addrs: ResolvedAddress[];
@@ -2111,7 +2204,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
       }
       answered = true;
       // SRC-17: rate headers, Backoff, the exhausted marker and the breaker.
-      if (llm === undefined) noteHostResponse(st, res.status, res.headers);
+      if (llm === undefined) noteHostResponse(st, res.status, res.headers, RETRYABLE_STATUSES.has(res.status) ? res.body : '');
       return res;
     } finally {
       if (!answered) hostNoAnswer(st);
@@ -2131,7 +2224,10 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
       const hopStarted = Date.now();
       const res = await hopOnce(hopUrl, hopMethod, hopHeaders, hopBody, originOf(hopUrl) === startOrigin);
       hops.push({ method: hopMethod, url: hopUrl, body: hopBody, requestHeaders: hopHeaders, res });
-      const next = redirectTarget(res, hopUrl, hopMethod, redirects, visited, llm !== undefined);
+      const next =
+        opts.followRedirects === false && llm === undefined
+          ? null
+          : redirectTarget(res, hopUrl, hopMethod, redirects, visited, llm !== undefined);
       if (next === null) return hopUrl === url ? res : { ...res, finalUrl: hopUrl };
       // Each hop gets its own kind:"http" record (the final answer's is below).
       recordHttp({

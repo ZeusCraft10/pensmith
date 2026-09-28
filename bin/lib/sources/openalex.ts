@@ -13,14 +13,20 @@
 //     traffic draws on a small daily budget shared by everyone behind the same
 //     IP address; a free key has its own. Both parameters are scrubbed from
 //     SESSION.log, recordings and the fixture key (the transport's job).
-//   - A keyless 429 or an exhausted host reads `keyless daily budget exhausted
-//     — set OPENALEX_API_KEY (free)`; with a key, `rate limited (retry after …)`.
+//   - A keyless 429 that says the daily budget is spent (`Insufficient
+//     budget`, or `x-ratelimit-remaining-usd: 0`) reads `keyless daily budget
+//     exhausted — set OPENALEX_API_KEY (free)`; any other keyless 429 (e.g.
+//     OpenAlex's ~40 s load shedding) reads `rate limited (retry after ~N s) —
+//     a free OPENALEX_API_KEY avoids this`; with a key, `rate limited (retry
+//     after …)`.
 //
 // A complete record (SRC-05): venue and publisher from the primary location's
 // source, the CSL type, volume / issue / pages from `biblio`, the abstract
 // rebuilt from `abstract_inverted_index`, the DOI (without its doi.org
-// prefix), PMID / PMCID from `ids`, and `is_retracted` (a retracted record is
-// decided; anything else is left for the research cross-check).
+// prefix), PMID / PMCID from `ids`, `is_retracted` (a retracted record is
+// decided; anything else is left for the research cross-check), and the
+// primary location's PDF when that location is open access (`oa_pdf_url`,
+// the library's `oa_url` — full-text.ts, GRND-14).
 //
 // Three-way lookups (D-19-05): found | not-found (HTTP 404) | failed. The
 // typed OfflineEgressError is rethrown (RUN-03).
@@ -57,7 +63,7 @@ export interface OpenAlexWork {
   authorships?: OpenAlexAuthorship[];
   abstract_inverted_index?: Record<string, number[]> | null;
   type?: string | null;
-  primary_location?: { source?: OpenAlexSource | null } | null;
+  primary_location?: { source?: OpenAlexSource | null; is_oa?: boolean | null; pdf_url?: string | null } | null;
   biblio?: { volume?: string | null; issue?: string | null; first_page?: string | null; last_page?: string | null } | null;
   ids?: { pmid?: string | null; pmcid?: string | null } | null;
   is_retracted?: boolean | null;
@@ -125,6 +131,18 @@ function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined;
 }
 
+/** An http(s) URL, else undefined. */
+function httpUrl(v: unknown): string | undefined {
+  const s = str(v);
+  if (s === undefined) return undefined;
+  try {
+    const u = new URL(s);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? s : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function openAlexToCandidate(item: OpenAlexWork): SourceCandidate | null {
   const doi = stripDoiUrl(item.doi);
   const id = str(item.id) ?? doi;
@@ -153,6 +171,7 @@ export function openAlexToCandidate(item: OpenAlexWork): SourceCandidate | null 
   const pmid = normalizePmid(String(item.ids?.pmid ?? '').replace(/^https?:\/\/pubmed\.ncbi\.nlm\.nih\.gov\//i, '').replace(/\/$/, ''));
   const pmcid = normalizePmcid(String(item.ids?.pmcid ?? '').replace(/^https?:\/\/(?:www\.)?ncbi\.nlm\.nih\.gov\/pmc\/articles\//i, '').replace(/\/$/, ''));
   const retracted = item.is_retracted === true;
+  const oaPdf = item.primary_location?.is_oa === true ? httpUrl(item.primary_location.pdf_url) : undefined;
 
   return {
     source: 'openalex',
@@ -170,6 +189,7 @@ export function openAlexToCandidate(item: OpenAlexWork): SourceCandidate | null 
     ...(type !== undefined ? { type } : {}),
     ...(pmid !== null ? { pmid } : {}),
     ...(pmcid !== null ? { pmcid } : {}),
+    ...(oaPdf !== undefined ? { oa_pdf_url: oaPdf } : {}),
     retracted,
     ...(retracted
       ? { retraction_status: 'retracted' as const, retraction_details: 'OpenAlex marks this work as retracted' }
@@ -203,11 +223,28 @@ function identityParams(key: KeyState): string {
   return (email ? `&mailto=${encodeURIComponent(email)}` : '') + (key.value ? `&api_key=${encodeURIComponent(key.value)}` : '');
 }
 
-function rateLimitReason(key: KeyState): (info: { retryAfterMs?: number }) => string {
-  return (info) =>
-    key.value === undefined
-      ? `keyless daily budget exhausted — set ${key.envName} (free)`
-      : `rate limited${info.retryAfterMs !== undefined ? ` (retry after ${formatRetryAfter(info.retryAfterMs)})` : ''}`;
+/**
+ * True when OpenAlex said the (keyless) daily budget is spent: its
+ * `Insufficient budget` answer, or `x-ratelimit-remaining-usd: 0`. Its other
+ * 429s — e.g. "Anonymous search is temporarily rate-limited while the search
+ * cluster is under elevated load. Please retry in 38s" — are short waits.
+ */
+export function isBudgetExhausted(info: { body?: string; headers?: Readonly<Record<string, string>> }): boolean {
+  if (/insufficient budget/i.test(info.body ?? '')) return true;
+  const remaining = info.headers?.['x-ratelimit-remaining-usd'];
+  return remaining !== undefined && remaining.trim() !== '' && Number(remaining) <= 0;
+}
+
+function rateLimitReason(key: KeyState): (info: { retryAfterMs?: number; body?: string; headers?: Readonly<Record<string, string>> }) => string {
+  return (info) => {
+    const wait = info.retryAfterMs !== undefined ? ` (retry after ${formatRetryAfter(info.retryAfterMs)})` : '';
+    if (key.value === undefined) {
+      return isBudgetExhausted(info)
+        ? `keyless daily budget exhausted — set ${key.envName} (free)`
+        : `rate limited${wait} — a free ${key.envName} avoids this`;
+    }
+    return `rate limited${wait}`;
+  };
 }
 
 function missingKeyReason(key: KeyState): string {
@@ -284,7 +321,7 @@ export async function lookupById(id: string): Promise<LookupResult> {
     return lookupFailed(statusReason(ex.res), { status: ex.res.status });
   }
   const candidate = openAlexToCandidate(JSON.parse(ex.res.body) as OpenAlexWork);
-  if (candidate === null) return lookupFailed('the OpenAlex record has no title or no authors', { status: 200 });
+  if (candidate === null) return lookupFailed('the OpenAlex record has no title or no authors (an incomplete registrar record — asking again gives the same answer)', { status: 200, permanent: true });
   return lookupFound(candidate);
 }
 

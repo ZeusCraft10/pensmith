@@ -142,8 +142,9 @@ The fix is never to disable the rule. The fix is to write the code differently.
   `StdioServerTransport`.
 
 - **D-12 capabilities-no-leak** (`tests/lint-capabilities-noleak.test.ts`): no
-  computed `process.env[<expr>]` reads and no inline calls to
-  `getProviderApiKey()` / `getOpenAlexApiKey()` / `loadRuntimeConfig()` inside
+  computed `process.env[<expr>]` reads and no inline calls to the helpers that
+  return a secret or personal value — `getProviderApiKey()`, `openAlexKey()`,
+  `s2ApiKeyValue()`, `loadRuntimeConfig()` and `contactEmail()` — inside
   `mcp/**`. The `paper://capabilities` resource emits only boolean presence
   flags. If you need to know whether a key is set in an MCP handler, expose
   the boolean through `paper://state` (which is loaded from

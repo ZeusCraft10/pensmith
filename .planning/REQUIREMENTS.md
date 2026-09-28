@@ -1196,7 +1196,7 @@ Which phases cover which requirements.
 | SRC-15 | Phase 19 | Complete |
 | SRC-16 | Phase 19 | Complete |
 | SRC-17 | Phase 19 | Complete |
-| GRND-14 | Phase 19 | Pending (implemented; acceptance at the Phase 18/19 merge) |
+| GRND-14 | Phase 19 | Pending (library half built; drafter half and acceptance at the Phase 18/19 merge) |
 | GRND-17 | Phase 19 | Complete |
 | SEC-02 | Phase 19 | Complete |
 | VRFY-09 | Phase 20 | Pending |

@@ -147,6 +147,8 @@ async function runChild() {
     const c = await found(pubmed, 'PMID:31978945');
     expect(c.volume === '382' && c.issue === '8' && c.pages === '727-733', `${c.volume}/${c.issue}/${c.pages}`);
     expect(c.doi === '10.1056/NEJMoa2001017' && c.pmcid === 'PMC7092803', `${c.doi} ${c.pmcid}`);
+    // SRC-12: PubMed's compact "Zhu N" is stored surname first.
+    expect(c.authors[0] === 'Zhu, N.', `first author ${c.authors[0]}`);
   });
 
   // --- Unpaywall (SRC-03) ---
@@ -195,7 +197,7 @@ async function runChild() {
   await check('books: isbn:9780226458083 is Kuhn, The Structure of Scientific Revolutions (@book, publisher, year)', async () => {
     const c = await found(books, 'isbn:9780226458083');
     expect(/^The Structure of Scientific Revolutions/i.test(c.title), `title ${c.title}`);
-    expect(/Kuhn/.test(c.authors[0] ?? ''), `authors ${JSON.stringify(c.authors)}`);
+    expect(c.authors.length === 1 && /Kuhn/.test(c.authors[0] ?? ''), `authors ${JSON.stringify(c.authors)} (the edition's own author, not the work's aggregate)`);
     expect(c.type === 'book' && typeof c.publisher === 'string' && typeof c.year === 'number', `${c.type} ${c.publisher} ${c.year}`);
     expect(c.isbn === '9780226458083', `isbn ${c.isbn}`);
   });
@@ -203,6 +205,17 @@ async function runChild() {
     const hits = await books.search('The Economic Consequences of the Peace', { limit: 5 });
     expect(hits.some((h) => /economic consequences of the peace/i.test(h.title) && h.authors.some((a) => /Keynes/.test(a))), JSON.stringify(hits.map((h) => h.title)));
   });
+
+  // --- Freshness (RSCH-10): doi.org's redirect is the answer ---
+  const { probeFreshness } = await import(lib('verify/freshness.js'));
+  for (const doi of ['10.1038/nature14539', '10.1016/j.foreco.2013.06.030']) {
+    await check(`freshness: DOI HEAD of ${doi} (a resolving Crossref DOI) raises no WARN`, async () => {
+      const r = await probeFreshness('live', doi);
+      const head = r.warnings.filter((w) => w.probe === 'DOI HEAD');
+      expect(head.length === 0, head.map((w) => w.detail).join('; '));
+      expect(!(r.skipped ?? []).some((x) => x.probe === 'DOI HEAD'), JSON.stringify(r.skipped));
+    });
+  }
 
   process.stdout.write(`live-sources: ${results.pass} passed, ${results.fail} failed, ${results.skip} skipped\n`);
   return results.fail > 0 ? 1 : 0;

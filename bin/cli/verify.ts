@@ -180,7 +180,7 @@ export const verifyCommand = defineCommand({
     const bibByCitekey = new Map<string, BibValue>(
       bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as BibValue]),
     );
-    const pass3 = await runPass3(draftMd, bibByCitekey);
+    const pass3 = await runPass3(draftMd, bibByCitekey, { root: projectRoot() });
 
     // RSCH-10 freshness probe (D-10, WARN-only). Runs AFTER the blocking
     // verdict computation and NEVER influences `status` — a stale DOI or a
@@ -219,7 +219,7 @@ export const verifyCommand = defineCommand({
     let pass2: Pass2Result[];
     let pass4: Pass4Result[] | null = null;
     try {
-      pass2 = await runPass2(draftMd, bibByCitekey, { n });
+      pass2 = await runPass2(draftMd, bibByCitekey, { n, root: projectRoot() });
     } catch (err) {
       if (!isFatalLlmError(err)) throw err;
       advisoryStop = err;

@@ -92,6 +92,26 @@ test('SRC-09: the prune question preselects the evaluator\'s picks, lists its re
   });
 });
 
+test('SRC-09: a script that answers only the selection (one line, as before the add line existed) is not aborted — the add line takes its blank default', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY, PENSMITH_NO_LLM: undefined } }, async (sb) => {
+    fs.writeFileSync(
+      path.join(sb.paper, 'INTAKE.md'),
+      renderIntakeDocument({ topic: 'attention heads in transformers', discipline: 'computer-science' }, 'Write about attention heads.', []),
+    );
+    sb.mock!.script('topic-disambiguator', { data: { ambiguous: false, scopes: [{ label: 'attention-heads', description: 'How attention heads specialise.', queries: ['attention heads', 'head pruning', 'head specialisation', 'attention layers', 'transformer heads'] }] } });
+    sb.mock!.script('source-evaluator', { data: { verdicts: [
+      { citekey: 'author12016', keep: true, reason: 'Measures head specialisation directly.', relevance: 0.9, tier: 'peer-reviewed' },
+      { citekey: 'author22017', keep: true, reason: 'Background on pruning heads.', relevance: 0.7, tier: 'peer-reviewed' },
+    ] } });
+    const script = driver(sb.root, [candidate(1), candidate(2)]);
+    const r = await sb.runTsx(script, [], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '1\n' });
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /no answer for "research-prune"/);
+    const lib = LibrarySchema.parse(JSON.parse(fs.readFileSync(path.join(sb.paper, 'LIBRARY.json'), 'utf8')));
+    assert.deepEqual(lib.entries.map((e) => e.citekey), ['author12016']);
+  });
+});
+
 test('SRC-07: every candidate rejected, and the user keeps none at the question → "no relevant sources", exit 1, no library', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY, PENSMITH_NO_LLM: undefined } }, async (sb) => {
     fs.writeFileSync(path.join(sb.paper, 'INTAKE.md'), renderIntakeDocument({ topic: 'attention heads', discipline: 'computer-science' }, 'x', []));

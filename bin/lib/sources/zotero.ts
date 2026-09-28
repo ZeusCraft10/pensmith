@@ -79,10 +79,17 @@ export interface ZoteroConnection {
 /** A failure the Zotero client reports as one line (a failed search / pull / lookup). */
 export class ZoteroError extends PensmithError {
   readonly status: number | undefined;
-  constructor(reason: string, status?: number) {
+  /**
+   * The reason without anything it reveals about the user's library (its
+   * collection names, its user / group id): what may be written into files
+   * that travel with a paper (RESEARCH.md). Defaults to the message.
+   */
+  readonly publicReason: string;
+  constructor(reason: string, status?: number, publicReason?: string) {
     super(reason, EXIT_ERROR);
     this.name = 'ZoteroError';
     this.status = status;
+    this.publicReason = publicReason ?? reason;
   }
 }
 
@@ -314,11 +321,17 @@ export async function findZoteroCollection(conn: ZoteroConnection, lib: ZoteroLi
   const loose = exact.length > 0 ? exact : all.filter((c) => c.data.name.trim().toLowerCase() === name.trim().toLowerCase());
   if (loose.length === 1) return loose[0]!.key;
   if (loose.length > 1) {
-    throw new ZoteroError(`Zotero has ${loose.length} collections named "${name}" in ${lib.ref} — rename one so [sources] zotero_collection names exactly one`);
+    throw new ZoteroError(
+      `Zotero has ${loose.length} collections named "${name}" in ${lib.ref} — rename one so [sources] zotero_collection names exactly one`,
+      undefined,
+      `the Zotero library has ${loose.length} collections named "${name}" — rename one so [sources] zotero_collection names exactly one`,
+    );
   }
   const names = all.map((c) => c.data.name).slice(0, 12);
   throw new ZoteroError(
     `Zotero collection "${name}" not found in ${lib.ref}` + (names.length > 0 ? ` (collections: ${names.join(', ')}${all.length > names.length ? ', …' : ''})` : ' (the library has no collections)'),
+    undefined,
+    `Zotero collection "${name}" not found in the Zotero library`,
   );
 }
 

@@ -61,11 +61,10 @@ import type { SourceEvaluation } from './llm-contracts.js';
 import { buildPromptRequest, requestHints, type PromptJson } from './prompt-request.js';
 import { candidateToEntry } from './migrations/library/shape.js';
 import { deterministicTier } from './source-tier.js';
-import { applySourcePolicy, DEFAULT_SOURCE_POLICY, sourcePolicyFrom, type PolicyExclusion, type PolicyInput, type SourcePolicy } from './source-policy.js';
+import { applySourcePolicy, type PolicyExclusion, type PolicyInput, type SourcePolicy } from './source-policy.js';
 import { planAdapters, zoteroConfigured, RESEARCH_PER_QUERY_LIMIT, EVALUATOR_BATCH, evaluatorCallsFor, type AdapterPlan } from './adapter-plan.js';
 import { resolveDiscipline } from './disciplines.js';
-import { tryReadPaperConfigSync } from './config.js';
-import { RESEARCH_LOG_END, renderSourcesBlock, formatReference } from './research-md.js';
+import { RESEARCH_LOG_END, formatReference } from './research-md.js';
 
 export { RESEARCH_LOG_END };
 
@@ -193,6 +192,17 @@ export interface DiscoveryResult {
 function firstLine(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   return (msg.split(/\r?\n/)[0] ?? '').slice(0, 200);
+}
+
+/**
+ * An evaluator batch's failure, as research reports it. The provider errors
+ * end with the advice for a verb that writes the model's output ("nothing was
+ * written — re-run"); research keeps these candidates as "not evaluated"
+ * (D-19-16) and does write them, so that clause is replaced by what happens.
+ */
+function evaluatorFailure(err: unknown): string {
+  const line = firstLine(err).replace(/[;,]?\s*(?:the truncated reply was discarded and )?nothing was written(?:\s*—.*)?$/i, '');
+  return `${line}; these candidates are kept unevaluated`;
 }
 
 /** True when a candidate carries any reserved dry-run identifier (RUN-27). */
@@ -512,7 +522,7 @@ export async function runSourceEvaluator(
       verdicts.push(...(result.data as SourceEvaluation).verdicts);
     } catch (err) {
       if (isFatalLlmError(err)) throw err;
-      failures.push(`${batch.length} candidate(s): ${firstLine(err)}`);
+      failures.push(`${batch.length} candidate(s): ${evaluatorFailure(err)}`);
     }
   }
   return { verdicts, calls, failures };
@@ -747,12 +757,6 @@ export async function runResearchPass(args: {
   };
 }
 
-/** The policy of a paper (`[sources]` in .paper/config.toml; PRD §10 defaults when absent or unreadable). */
-export function paperSourcePolicy(root: string | null): SourcePolicy {
-  if (root === null) return DEFAULT_SOURCE_POLICY;
-  return sourcePolicyFrom(tryReadPaperConfigSync(root)?.sources);
-}
-
 // ---------------------------------------------------------------------------
 // Presentation: the per-adapter table, the tier summary, the research log
 // ---------------------------------------------------------------------------
@@ -943,81 +947,6 @@ export function logExclusions(excluded: readonly ResearchItem[], rejected: reado
     ...excluded.map((x) => ({ citekey: x.candidate.citekey, reference: formatReference(x.view), why: `policy: ${x.exclusion?.reason ?? 'excluded'}` })),
     ...rejected.map((x) => ({ citekey: x.candidate.citekey, reference: formatReference(x.view), why: `evaluator: ${x.reason ?? 'rejected'}` })),
   ];
-}
-
-// ---------------------------------------------------------------------------
-// Programmatic entry (tests, the dry-run acceptance): one pass + its log
-// ---------------------------------------------------------------------------
-
-/**
- * Run one research pass for `queries` and write its log to the paper's
- * RESEARCH.md (when `paperRoot` is given). Returns the kept candidates. The
- * library is NOT written — `pensmith research` gates, cross-checks
- * retractions and writes it.
- */
-export async function runResearchOrchestrator(
-  queries: string[],
-  opts: {
-    topic: string;
-    discipline: string;
-    assignment?: string;
-    scopeLabel?: string;
-    paperRoot?: string;
-    __adapterRegistry?: AdapterRegistry;
-  },
-): Promise<SourceCandidate[]> {
-  const registry = opts.__adapterRegistry ?? researchRegistry();
-  const root = opts.paperRoot ?? null;
-  const cfg = root !== null ? tryReadPaperConfigSync(root) : null;
-  const plan = researchAdapterPlan({
-    registry,
-    byPreference: opts.__adapterRegistry === undefined && !networkMode().dryRun,
-    discipline: opts.discipline,
-    configDiscipline: cfg?.project?.discipline_preset,
-    allowed: cfg?.sources?.allowed_databases,
-  });
-  const scope = opts.scopeLabel ?? 'auto';
-  const pass = await runResearchPass({
-    queries,
-    plan,
-    registry,
-    policy: paperSourcePolicy(root),
-    topic: opts.topic,
-    discipline: opts.discipline,
-    scope,
-  });
-  if (root !== null) {
-    const entries = candidatesAsEntries(pass.kept);
-    await writeResearchLog(root, renderResearchLog({
-      scope,
-      topic: opts.topic,
-      discipline: opts.discipline,
-      generated: new Date().toISOString(),
-      queries,
-      queryNote: null,
-      summary: `${tierSummary(pass.kept)}; ${pass.excluded.length} excluded by [sources] policy; ${pass.rejected.length} rejected by the evaluator (not yet in LIBRARY.json)`,
-      notes: evaluatorNotes(pass),
-      adapters: pass.adapters,
-      perQuery: pass.perQuery,
-      excluded: logExclusions(pass.excluded, pass.rejected),
-      retracted: [],
-      retractionUnknown: [],
-      sourcesBlock: renderSourcesBlock(entries),
-    }));
-  }
-  return pass.kept.map((k) => k.candidate);
-}
-
-/** The kept items as LIBRARY entries carrying their evaluation (a preview of what research would add). */
-export function candidatesAsEntries(items: readonly ResearchItem[]): LibraryEntry[] {
-  const now = new Date().toISOString();
-  return items.map((k) =>
-    candidateToEntry(
-      { ...k.candidate, tier: k.tier, relevance: k.relevance, why_relevant: k.reason },
-      [`research:${k.candidate.source}`],
-      now,
-    ),
-  );
 }
 
 /** The evaluator disclosure lines of a pass (not evaluated, failed calls, unknown citekeys). */

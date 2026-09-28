@@ -1,16 +1,18 @@
 // bin/lib/full-text.ts — which sources have legitimately available full text,
 // and which draft quotes lean on a source without it (GRND-14, D-19-23).
 //
-// The drafter may quote directly only from a source whose full text can be
-// checked (VRFY-19 checks every quote against real text; a quote from an
-// abstract-only source can only end as UNVERIFIABLE-QUOTE, VRFY-20). A source
-// has full text when it has:
-//   - a bring-your-own PDF whose extracted text was hashed at ingest
-//     (`byo.text_sha256`, SRC-15 — read later only through byo-text.ts, which
-//     re-hashes the PDF);
-//   - an open-access PDF location (`oa_url`, Unpaywall SRC-03);
-//   - an arXiv id (the arXiv PDF is open);
-//   - a PubMed Central id (PMC full text is open).
+// The drafter may quote directly only from a source whose full text Pass 3
+// can actually check (a quote from an abstract-only source can only end as
+// UNVERIFIABLE-QUOTE, VRFY-20). Pass 3 checks a quote against (pass3.ts):
+//   - the source's own bring-your-own PDF, read only through byo-text.ts,
+//     which re-hashes the PDF (SRC-15, S-17): an entry whose `byo` record has
+//     an extracted-text hash and was not attached by the user's say-so against
+//     a failed title / first-author check (`byo.asserted`);
+//   - the open-access PDF Unpaywall lists for its DOI (SRC-03): an entry with
+//     a DOI whose `oa_url` was recorded at ingest (open-access.ts, or
+//     OpenAlex's open primary location).
+// Nothing else counts: an arXiv id or a PMCID alone is not text Pass 3 can
+// fetch, so such a source is paraphrased.
 //
 // Phase 18's source-context.ts `fullTextAvailable` delegates to this function
 // at the Phase 18/19 merge, and its draft-containment.ts adds the
@@ -20,16 +22,14 @@
 import { extractQuotes } from './quote-extractor.js';
 import type { LibraryEntry } from './schemas/library.js';
 
-export type FullTextSource = 'bring-your-own PDF' | 'open-access PDF' | 'arXiv' | 'PubMed Central';
+export type FullTextSource = 'bring-your-own PDF' | 'open-access PDF';
 
-type FullTextFields = Pick<LibraryEntry, 'byo' | 'oa_url' | 'arxiv' | 'pmcid'>;
+type FullTextFields = Pick<LibraryEntry, 'byo' | 'oa_url' | 'doi'>;
 
-/** Where a source's full text comes from, or null when it has none (in the order above). */
+/** Where a source's checkable full text comes from, or null when it has none (in the order above). */
 export function fullTextSource(entry: FullTextFields): FullTextSource | null {
-  if (entry.byo !== null && entry.byo.text_sha256 !== null) return 'bring-your-own PDF';
-  if (entry.oa_url) return 'open-access PDF';
-  if (entry.arxiv) return 'arXiv';
-  if (entry.pmcid) return 'PubMed Central';
+  if (entry.byo !== null && entry.byo.text_sha256 !== null && entry.byo.asserted !== true) return 'bring-your-own PDF';
+  if (entry.oa_url && entry.doi) return 'open-access PDF';
   return null;
 }
 

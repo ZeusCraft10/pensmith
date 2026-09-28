@@ -56,3 +56,25 @@ test('SRC-12: formatPersonName is the inverse of parsePersonName', () => {
     assert.deepEqual(parsePersonName(formatPersonName(parsed)), parsed, input);
   }
 });
+
+test('SRC-12: PubMed compact names ("Zhu N") become "Family, Initials" and parse with the right family', async () => {
+  const { fromPubmedCompactName } = await import('../bin/lib/person-name.js');
+  const cases: Array<[string, string, { family: string; given?: string; suffix?: string }]> = [
+    ['Zhu N', 'Zhu, N.', { family: 'Zhu', given: 'N.' }],
+    ['Gao GF', 'Gao, G. F.', { family: 'Gao', given: 'G. F.' }],
+    ['van den Berg R', 'van den Berg, R.', { family: 'van den Berg', given: 'R.' }],
+    ['King ML Jr', 'King, M. L., Jr', { family: 'King', given: 'M. L.', suffix: 'Jr' }],
+    ['Smith J 3rd', 'Smith, J., 3rd', { family: 'Smith', given: 'J.', suffix: '3rd' }],
+    ['Öztürk Ö', 'Öztürk, Ö.', { family: 'Öztürk', given: 'Ö.' }],
+    ['Garcia-Lopez JA', 'Garcia-Lopez, J. A.', { family: 'Garcia-Lopez', given: 'J. A.' }],
+  ];
+  for (const [input, display, parsed] of cases) {
+    const out = fromPubmedCompactName(input);
+    assert.equal(out, display, input);
+    assert.deepEqual({ ...parsePersonName(out)! }, parsed, input);
+  }
+  // Not the compact form: returned unchanged.
+  for (const s of ['Zhu, N.', '{China Novel Coronavirus Investigating and Research Team}', 'Aristotle', 'Ashish Vaswani', 'Na Zhu', '']) {
+    assert.equal(fromPubmedCompactName(s), s, s);
+  }
+});

@@ -31,7 +31,17 @@ import * as path from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { extractPdf, MAX_PDF_BYTES, PdfTimeoutError, type PdfExtraction } from './pdf-text.js';
 import { hasPdfMagic } from './pdf-response.js';
-import { identifyPdf, type IdentifyDeps, type IdentifyVia, type LocalPdfMetadata } from './pdf-identify.js';
+import {
+  identifyPdf,
+  isOwnWork,
+  localPdfMetadata,
+  metadataIdentifiers,
+  type IdentifyDeps,
+  type IdentifyVia,
+  type LocalPdfMetadata,
+} from './pdf-identify.js';
+import { normalizeDoi, findArxivIdsInText } from './doi.js';
+import { normArxiv } from './migrations/library/shape.js';
 import {
   upsertSources,
   tryLoadLibrary,
@@ -167,7 +177,7 @@ function localCandidate(local: LocalPdfMetadata, file: string): LibraryCandidate
   };
 }
 
-interface Prepared {
+export interface Prepared {
   readonly bytes: Buffer;
   readonly sha256: string;
 }
@@ -197,9 +207,10 @@ async function storePdf(
   prepared: Prepared,
   textSha: string | null,
   replace: boolean,
+  asserted = false,
 ): Promise<string | undefined> {
   const name = pdfFileName(citekey);
-  const record = { file: `sources/${name}`, sha256: prepared.sha256, text_sha256: textSha };
+  const record = { file: `sources/${name}`, sha256: prepared.sha256, text_sha256: textSha, asserted };
   const lib = await tryLoadLibrary(root);
   const existing = lib?.entries.find((e) => e.citekey === citekey)?.byo ?? null;
   if (existing !== null && existing.sha256 !== prepared.sha256 && !replace) {
@@ -304,55 +315,91 @@ export async function ingestByoPdfs(root: string, files: readonly string[], opts
   return outcomes;
 }
 
+/** A PDF named by `add <id> --pdf <file>`, read and checked against the record it is for. */
+export interface PdfForRecord {
+  readonly file: string;
+  readonly prepared: Prepared;
+  readonly textSha: string | null;
+  readonly imageOnly: boolean;
+  /** True when the PDF shows the record's work (see checkPdfForRecord). */
+  readonly matches: boolean;
+  /** Why it does not (one line), when it does not. */
+  readonly why: string | null;
+}
+
 /**
- * Attach `file` as the bring-your-own copy of the work `citekey` names
- * (`add <id> --pdf <file>`): the user named the PDF, so it replaces an
- * earlier one. The PDF is extracted (text hash + cache) and a PDF whose first
- * pages do not mention the work's title is still attached, with a warning.
+ * Read the PDF the user named for a registrar record and check that it IS
+ * that work (SRC-13: a wrong work is never attached silently). It is when its
+ * embedded metadata or its arXiv margin stamp carries the record's DOI / arXiv
+ * id, or when its own title and first author match the record's
+ * (pdf-identify.ts isOwnWork: the Pass-1 thresholds, or the title printed as a
+ * title with the author below). No network: only the record already fetched.
  */
-export async function attachPdfToEntry(
-  root: string,
-  citekey: string,
+export async function checkPdfForRecord(
   file: string,
-): Promise<{ stored: boolean; warning?: string; imageOnly: boolean }> {
+  record: Pick<LibraryCandidate, 'title' | 'authors' | 'doi' | 'arxiv'>,
+): Promise<PdfForRecord> {
   const prepared = await prepare(path.resolve(file));
   if ('skip' in prepared) throw new PensmithError(`--pdf ${file}: ${prepared.skip}`, EXIT_USAGE);
-  const ex = await extractPdf(prepared.bytes);
+  let ex: PdfExtraction;
+  try {
+    ex = await extractPdf(prepared.bytes);
+  } catch (e) {
+    const reason = e instanceof PdfTimeoutError ? 'reading it took too long (the parser was stopped)' : `could not be read (${(e as Error).message.split('\n')[0]})`;
+    throw new PensmithError(`--pdf ${file}: ${reason}`, EXIT_USAGE);
+  }
   const textSha = textShaOf(ex);
   if (textSha !== null) await writeByoTextCache(prepared.sha256, ex.text);
-  const warning = await storePdf(root, citekey, prepared, textSha, true);
-  const entry = (await tryLoadLibrary(root))?.entries.find((e) => e.citekey === citekey);
-  const title = entry?.title ?? '';
-  const norm = (s: string): string => s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-  const mentions = title !== '' && norm(ex.pages.slice(0, 2).join(' ')).includes(norm(title));
-  const caveat = ex.imageOnly
-    ? 'the PDF has no extractable text (an image-only or scanned PDF)'
-    : !mentions && title
-      ? `the PDF's first pages do not mention "${title}" — check that it is the right file`
-      : undefined;
-  const note = warning ?? caveat;
-  return { stored: warning === undefined, imageOnly: ex.imageOnly, ...(note !== undefined ? { warning: note } : {}) };
+  const base = { file: path.resolve(file), prepared, textSha, imageOnly: ex.imageOnly };
+  const title = record.title ?? '';
+  if (ex.imageOnly) {
+    return { ...base, matches: false, why: 'the PDF has no extractable text (an image-only or scanned PDF), so it cannot be checked against the record' };
+  }
+  const doi = typeof record.doi === 'string' ? normalizeDoi(record.doi) : null;
+  const arxiv = typeof record.arxiv === 'string' ? normArxiv(record.arxiv) : null;
+  const meta = metadataIdentifiers(ex);
+  const stamped = findArxivIdsInText(ex.pages.slice(0, 2).join('\n')).stamped.map((a) => normArxiv(a));
+  const selfIdentified =
+    (doi !== null && meta.doi !== null && normalizeDoi(meta.doi) === doi) ||
+    (arxiv !== null && ((meta.arxiv !== null && normArxiv(meta.arxiv) === arxiv) || stamped.includes(arxiv)));
+  const firstPage = ex.pages[0] ?? ex.text.slice(0, 6000);
+  if (selfIdentified || (title !== '' && isOwnWork({ title, authors: [...(record.authors ?? [])] }, firstPage, localPdfMetadata(ex)))) {
+    return { ...base, matches: true, why: null };
+  }
+  const first = record.authors?.[0];
+  return {
+    ...base,
+    matches: false,
+    why: `its first page does not show "${title}"${first ? ` by ${first}` : ''} (the title and first author), and it carries no identifier of that work`,
+  };
 }
 
 /**
  * `add <id> --pdf <file>`: put the registrar record in the library and attach
- * the PDF the user named. When that PDF is already in the library as an
- * UNHYDRATED entry (ingested earlier without a confident match), the record
- * hydrates that entry — its citekey stays, so drafts citing it keep resolving
- * — instead of adding the work a second time.
+ * the PDF the user named, checked by checkPdfForRecord. A PDF that does not
+ * show the work is attached only when the caller passes `asserted` (the user
+ * confirmed it at the `pdf-attach-unmatched` gate): it is recorded
+ * `byo.asserted`, and its text is never evidence (byo-text.ts). An entry that
+ * already carries a DIFFERENT PDF keeps it unless `replace` (`--replace-pdf`).
+ * When that PDF is already in the library as an UNHYDRATED entry (ingested
+ * earlier without a confident match), the record hydrates that entry — its
+ * citekey stays, so drafts citing it keep resolving — instead of adding the
+ * work a second time.
  */
 export async function upsertWithPdf(
   root: string,
   candidate: LibraryCandidate,
-  file: string,
+  pdf: PdfForRecord,
   provenance: string,
-): Promise<{ citekey: string; status: 'added' | 'merged' | 'unchanged'; warnings: string[] }> {
-  const prepared = await prepare(path.resolve(file));
-  if ('skip' in prepared) throw new PensmithError(`--pdf ${file}: ${prepared.skip}`, EXIT_USAGE);
+  opts: { readonly replace?: boolean; readonly asserted?: boolean } = {},
+): Promise<{ citekey: string; status: 'added' | 'merged' | 'unchanged'; stored: boolean; warnings: string[] }> {
+  if (!pdf.matches && opts.asserted !== true) {
+    throw new PensmithError(`--pdf ${path.basename(pdf.file)}: ${pdf.why ?? 'it does not show this work'} — nothing attached`, EXIT_USAGE);
+  }
   const warnings: string[] = [];
   let citekey: string | null = null;
   let status: 'added' | 'merged' | 'unchanged' = 'unchanged';
-  const holder = await entryWithPdf(root, prepared.sha256);
+  const holder = await entryWithPdf(root, pdf.prepared.sha256);
   if (holder !== undefined && !holder.hydrated) {
     const h = await hydrateEntry(root, holder.citekey, candidate, { provenance });
     if (h.status !== 'conflict') {
@@ -367,9 +414,13 @@ export async function upsertWithPdf(
     citekey = upsert.outcomes[0]!.citekey;
     status = upsert.outcomes[0]!.status;
   }
-  const attached = await attachPdfToEntry(root, citekey, file);
-  if (attached.warning) warnings.push(attached.warning);
-  return { citekey, status, warnings };
+  const kept = await storePdf(root, citekey, pdf.prepared, pdf.textSha, opts.replace === true, !pdf.matches);
+  if (kept !== undefined) {
+    warnings.push(`${kept} — pass --replace-pdf to replace it`);
+    return { citekey, status, stored: false, warnings };
+  }
+  if (pdf.imageOnly) warnings.push('the PDF has no extractable text (an image-only or scanned PDF)');
+  return { citekey, status, stored: true, warnings };
 }
 
 /** One human-readable line for an outcome (`<prefix>: bring-your-own: …`). */

@@ -19,7 +19,7 @@
 //     lower-case first letter is braced ({van der Maaten}, Laurens), so BibTeX
 //     never splits it into a particle and a family;
 //   - title, abstract, journal / booktitle, volume, number (issue), pages,
-//     publisher (institution / school), editor, isbn, doi, eprint +
+//     publisher (institution / school), editor, isbn, pmid, doi, eprint +
 //     archivePrefix = {arXiv} + primaryClass for arXiv works, note = {RETRACTED};
 //   - the entry type from the CSL `type`: article-journal / -newspaper /
 //     -magazine → @article, book → @book, chapter → @incollection,
@@ -350,6 +350,9 @@ export function toBibRecord(c: BibSource, citekey: string): BibRecord | null {
     else push('publisher', listValue(org));
   }
   if (ids.isbn) push('isbn', ids.isbn);
+  // The PMID (BibLaTeX's `pmid` field): Pass 1 resolves a DOI-less PubMed
+  // record at PubMed through it (parseBib reads it back as CSL `PMID`).
+  if (ids.pmid) push('pmid', ids.pmid);
   const doi = ids.doi ? verbatim(ids.doi) : null;
   if (ids.doi && doi === null) throw new BibRenderError(citekey, `the DOI ${ids.doi} cannot be written as a BibTeX field`);
   push('doi', doi);

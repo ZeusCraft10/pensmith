@@ -488,18 +488,6 @@ export function isApiKeyPresent(envName: string | null, env: NodeJS.ProcessEnv =
 // OpenAlex / Semantic Scholar key slots (unchanged contracts)
 // ---------------------------------------------------------------------------
 
-export async function getOpenAlexApiKey(): Promise<string | undefined> {
-  const cfg = await loadRuntimeConfig();
-  const envName = cfg.openalexApiKeyEnv ?? 'OPENALEX_API_KEY';
-  const optional = cfg.openalexApiKeyOptional ?? true;
-  const resolved = process.env[envName];
-  const present = !!(resolved && resolved.length > 0);
-  log().event({ event: 'runtime.openalex', envName, optional, present });
-  if (present) return resolved;
-  if (optional) return undefined;
-  throw new MissingApiKeyError(`env var ${envName} is not set (OpenAlex API key is required by current config)`);
-}
-
 /**
  * The OpenAlex key for one request (SRC-06, D-19-10): the value of the
  * variable the global runtime.json names (`openalexApiKeyEnv`, default

@@ -201,8 +201,11 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   // and OPENALEX_API_KEY is reported as "not used yet"; then in review round 3:
   // the pandoc and humanizer probes describe what `pensmith done` does without
   // them (there is no `export` or `humanize` verb); then in Phase 19 (SRC-06):
-  // OPENALEX_API_KEY is sent, so it is no longer marked "not used yet".
-  const PINNED = '481fdde022d4576c65d1a5706d3d70f387e79e1c0da044727b760b2aa71ba0e8';
+  // OPENALEX_API_KEY is sent, so it is no longer marked "not used yet"; then in
+  // Phase 19 review round 1: the contact-email and Zotero probe entries
+  // describe what those probes actually check (the resolved variable; the
+  // authenticated Zotero key check, local API / group, MCP detection).
+  const PINNED = 'b97be8c653accee7ecc401269c5ded9607cf40903e7f78d9d45a51b31d39e9aa';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

@@ -315,7 +315,10 @@ export async function lookupById(id: string): Promise<LookupResult> {
   const msg = (JSON.parse(ex.res.body) as { message: CrossrefItem }).message;
   const candidate = crossrefToCandidate(msg);
   if (candidate === null) {
-    return lookupFailed('the Crossref record has no title, or no author or editor to cite', { status: 200 });
+    return lookupFailed(
+      "Crossref's record of this DOI lists no title, or no author or editor, so it cannot be cited or checked (an incomplete registrar record — asking again gives the same answer)",
+      { status: 200, permanent: true },
+    );
   }
   return lookupFound(candidate);
 }

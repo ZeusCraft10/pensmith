@@ -25,7 +25,10 @@
 // ceil(candidates / EVALUATOR_BATCH) source-evaluator calls, where the
 // candidate count is estimated from the adapter plan the paper would use (its
 // discipline preset and `[sources] allowed_databases`) at the maximum query
-// count (bin/lib/adapter-plan.ts estimatedResearchCandidates).
+// count (bin/lib/adapter-plan.ts estimatedResearchCandidates). `plan N
+// --research` (GRND-17) is priced as its own pass: the source-evaluator calls
+// over its two queries' candidates (no disambiguator), plus the
+// section-planner call only with `--revise`.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -274,6 +277,14 @@ function row(rt: ResolvedRuntime, root: string, step: string, slugs: Array<[stri
 export interface EstimateScope {
   verb: string;
   section?: number;
+  /**
+   * `plan N --research <q>` (GRND-17): the section-scoped research pass —
+   * source-evaluator calls over its two queries' candidates — instead of the
+   * planner's call; the section-planner call is added only with `--revise`.
+   */
+  research?: boolean;
+  /** `plan N --revise` (with --research: the planner runs after the pass). */
+  revise?: boolean;
 }
 
 /**
@@ -283,6 +294,25 @@ export interface EstimateScope {
  * network; an unreadable brief or config falls back to the preset defaults).
  */
 export function researchCalls(root: string, env: Readonly<Record<string, string | undefined>> = process.env): Array<[string, number]> {
+  const candidates = estimatedResearchCandidates(MAX_QUERIES, researchAdapterCount(root, env));
+  return [['topic-disambiguator', 1], ['source-evaluator', Math.max(1, evaluatorCallsFor(candidates))]];
+}
+
+/** How many queries a section-scoped research pass runs (the query, and the query joined to the section title). */
+export const SECTION_RESEARCH_QUERIES = 2;
+
+/**
+ * The model calls of one `plan N --research` pass
+ * (bin/lib/section-research.ts): no disambiguator, one source-evaluator call
+ * per EVALUATOR_BATCH candidates of its two queries.
+ */
+export function sectionResearchCalls(root: string, env: Readonly<Record<string, string | undefined>> = process.env): Array<[string, number]> {
+  const candidates = estimatedResearchCandidates(SECTION_RESEARCH_QUERIES, researchAdapterCount(root, env));
+  return [['source-evaluator', Math.max(1, evaluatorCallsFor(candidates))]];
+}
+
+/** How many adapters this paper's research plan would ask (its preset and `[sources] allowed_databases`). */
+function researchAdapterCount(root: string, env: Readonly<Record<string, string | undefined>>): number {
   const config = tryReadPaperConfigSync(root);
   let intakeDiscipline: string | undefined;
   try {
@@ -296,8 +326,7 @@ export function researchCalls(root: string, env: Readonly<Record<string, string 
     zoteroConfigured: zoteroConfigured(env),
     available: PLANNABLE_ADAPTERS,
   });
-  const candidates = estimatedResearchCandidates(MAX_QUERIES, plan.entries.length);
-  return [['topic-disambiguator', 1], ['source-evaluator', Math.max(1, evaluatorCallsFor(candidates))]];
+  return plan.entries.length;
 }
 
 /** The model calls one run of each cost-incurring verb makes (other verbs make none; research: researchCalls). */
@@ -323,7 +352,17 @@ function scopeRows(
   wave: readonly number[],
   price: (step: string, slugs: Array<[string, number]>) => EstimateRow,
   research: ReadonlyArray<readonly [string, number]>,
+  sectionResearch: ReadonlyArray<readonly [string, number]>,
 ): EstimateRow[] {
+  if (scope.research === true && scope.verb === 'plan') {
+    // GRND-17: the section pass's evaluator calls; `plan --revise` re-plans after it.
+    const calls: Array<[string, number]> = [
+      ...sectionResearch.map(([sl, c]) => [sl, c] as [string, number]),
+      ...(scope.revise === true ? [['section-planner', 1] as [string, number]] : []),
+    ];
+    const at = scope.section !== undefined ? ` §${scope.section}` : '';
+    return [price(`${scope.verb}${at} --research`, calls)];
+  }
   const slugs = scope.verb === 'research' ? research : STEP_SLUGS[scope.verb];
   if (!slugs) {
     // compile, done, add, status, … make no model call.
@@ -412,7 +451,7 @@ export async function projectEstimate(args: {
 
   if (args.scope !== undefined) {
     const wave = sections.filter(({ n, slug }) => !readSectionState(sectionPlan(n, slug, root)).absent).map((s) => s.n);
-    rows = scopeRows(rows, args.scope, wave, (step, slugs) => row(rt, root, step, slugs, stubbed), research);
+    rows = scopeRows(rows, args.scope, wave, (step, slugs) => row(rt, root, step, slugs, stubbed), research, sectionResearchCalls(root));
   }
 
   const totalUsd = rows.reduce((acc, r) => acc + r.usd, 0);

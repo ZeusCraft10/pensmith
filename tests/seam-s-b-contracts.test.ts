@@ -188,6 +188,32 @@ test('seam S-B: contact email — default variable, configured variable, refusal
   assert.equal(isPlausibleEmail(`${'x'.repeat(250)}@b.co`), false);
 });
 
+test('contact email: the user\'s global runtime.json contactEmailEnv is honoured (a paper\'s [network] setting still wins)', async () => {
+  const { withLlmSandbox } = await import('./helpers/llm-sandbox.js');
+  await withLlmSandbox({ paper: false }, async (sb) => {
+    _resetContactEmailForTest();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-contact-rt-'));
+    fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
+    await withEnv({ PENSMITH_CONTACT_EMAIL: 'pensmith-dev@example.org', LAB_ADDRESS: 'lab@example.org', MY_WORK_EMAIL: 'work@example.org' }, async () => {
+      sb.writeGlobalRuntime({ $schemaVersion: 2, contactEmailEnv: 'LAB_ADDRESS' });
+      assert.deepEqual(contactEmail(root), { email: 'lab@example.org', envName: 'LAB_ADDRESS', source: 'runtime' });
+      await updatePaperConfig(root, (raw) => {
+        rawTable(raw, 'network')['contact_email_env'] = 'MY_WORK_EMAIL';
+      });
+      assert.deepEqual(contactEmail(root), { email: 'work@example.org', envName: 'MY_WORK_EMAIL', source: 'config' });
+      const other = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-contact-rt2-'));
+      const err = captureStderr();
+      try {
+        sb.writeGlobalRuntime({ $schemaVersion: 2, contactEmailEnv: 'not a variable' });
+        assert.deepEqual(contactEmail(other), { email: 'pensmith-dev@example.org', envName: DEFAULT_CONTACT_EMAIL_ENV, source: 'default' });
+      } finally {
+        err.restore();
+      }
+      assert.match(err.text(), /ignoring runtime\.json contactEmailEnv = "not a variable"/);
+    });
+  });
+});
+
 test('seam S-B: host-availability and redirect errors read as what happened', () => {
   assert.equal(formatRetryAfter(35_000), '~35 s');
   assert.equal(formatRetryAfter(12 * 60_000), '~12 min');

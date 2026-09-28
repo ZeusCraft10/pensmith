@@ -33,6 +33,11 @@
 //                               never identified
 //   image-only.pdf              a page with shapes and no text → no
 //                               extractable text
+//   cites-in-footnote.pdf       a student essay whose page-1 footnote and
+//                               page-2 reference list cite "Deep learning"
+//                               with its DOI (10.1038/nature14539, recorded)
+//                               → never identified as LeCun 2015: the DOI
+//                               names a work the essay cites, not the essay
 //
 // Run via: node scripts/gen-byo-pdf.mjs   (from the repository root)
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -202,6 +207,35 @@ for (const [name, stamp] of [
     'and a title search must not return a confident match.',
   ]);
   await save(doc, path.join(BYO, 'no-match.pdf'));
+}
+
+{
+  const { doc, font, bold } = await newDoc();
+  const page = doc.addPage([612, 792]);
+  drawLines(page, { font, bold }, [
+    { text: 'Machine Perception and the Limits of Representation', size: 16, bold: true },
+    { text: 'Jane Q. Student', gap: 8 },
+    { text: 'Essay for PHIL 210, Philosophy of Mind', gap: 4 },
+    { text: 'Whether a machine can be said to perceive depends on what we take representation to be.', gap: 14 },
+    'Layered statistical models now label images and transcribe speech with striking accuracy,',
+    'and some writers take this as evidence that such systems form representations of the world.1',
+    'This essay argues that accuracy alone settles nothing about representation, because the same',
+    'behaviour is compatible with several accounts of what, if anything, the system represents.',
+  ]);
+  page.drawText('1 Y. LeCun, Y. Bengio and G. Hinton, Deep learning, Nature 521 (2015) 436-444, https://doi.org/10.1038/nature14539.', {
+    x: 56,
+    y: 60,
+    size: 8,
+    font,
+  });
+  const page2 = doc.addPage([612, 792]);
+  drawLines(page2, { font, bold }, [
+    'The argument of the previous section applies to any system trained only on labelled examples.',
+    { text: 'References', bold: true, size: 12, gap: 14 },
+    'LeCun, Y., Bengio, Y., & Hinton, G. (2015). Deep learning. Nature, 521(7553), 436-444.',
+    'https://doi.org/10.1038/nature14539',
+  ]);
+  await save(doc, path.join(BYO, 'cites-in-footnote.pdf'));
 }
 
 {

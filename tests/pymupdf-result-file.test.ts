@@ -16,7 +16,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pymupdfExtract, pymupdfShellout, pythonCandidates, PYMUPDF_SCRIPT } from '../bin/lib/pymupdf-shellout.js';
+import { pymupdfExtract, pythonCandidates, PYMUPDF_SCRIPT } from '../bin/lib/pymupdf-shellout.js';
 import { extractPdf } from '../bin/lib/pdf-text.js';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
@@ -78,7 +78,7 @@ test('SWP-59: the script imports pymupdf first, falls back to fitz, and writes a
 test('SWP-59: interpreter warnings on stdout/stderr are never returned as PDF text', async (t) => {
   if (python() === null) {
     t.diagnostic('no Python interpreter on PATH: only the null contract can be checked here');
-    assert.equal(await pymupdfShellout(Buffer.from('%PDF-1.4\n')), null);
+    assert.equal(await pymupdfExtract(Buffer.from('%PDF-1.4\n')), null);
     return;
   }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-fakepymupdf-'));
@@ -91,7 +91,6 @@ test('SWP-59: interpreter warnings on stdout/stderr are never returned as PDF te
     assert.equal(r.text, `\n\n${RECOVERED}\n\nPage two.`);
     assert.doesNotMatch(r.text, /deprecated|DeprecationWarning|warning:/i);
     assert.deepEqual(r.info, { Title: 'Recovered Title', Author: 'Ada Lovelace' });
-    assert.equal(await pymupdfShellout(Buffer.from('%PDF-1.4\n%fake\n')), r.text);
   });
 });
 

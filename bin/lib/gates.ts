@@ -42,7 +42,11 @@ export type GateId =
   | 'intake-defaults'
   | 'reoutline'
   // Phase 19 (GRND-17): seam S-B, applied byte-identically by every Phase 19 stream.
-  | 'plan-research';
+  | 'plan-research'
+  // Phase 19 review round 1 (SRC-13, SRC-15, SRC-16): the user's own sources.
+  | 'byo-folder'
+  | 'zotero-collection'
+  | 'pdf-attach-unmatched';
 
 export interface GateDef {
   readonly id: GateId;
@@ -78,6 +82,9 @@ export const GATES: readonly GateDef[] = Object.freeze([
   { id: 'intake-defaults', label: 'Accept the intake defaults?', yolo: 'skip', yoloChoice: 'accept the defaults', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-02' },
   { id: 'reoutline', label: 'Re-outline a paper that already has drafts?', yolo: 'skip', yoloChoice: 're-outline (only with --force)', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-09' },
   { id: 'plan-research', label: 'Add these research hits to the section?', yolo: 'skip', yoloChoice: 'add every hit to the section', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-17' },
+  { id: 'byo-folder', label: 'Read the PDFs in this folder outside the paper and copy them into it?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'SRC-15' },
+  { id: 'zotero-collection', label: 'Pull this Zotero collection from your library into the paper?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'SRC-16' },
+  { id: 'pdf-attach-unmatched', label: "Attach this PDF although its first page does not show the work's title and first author?", yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'SRC-13' },
 ] satisfies GateDef[]);
 
 export function gateDef(id: GateId): GateDef {

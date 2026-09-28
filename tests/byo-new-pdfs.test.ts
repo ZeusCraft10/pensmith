@@ -62,6 +62,13 @@ test('SRC-15: `new --from a.txt --pdfs pdfs --yolo` ingests both PDFs tagged bri
     ['GET https://export.arxiv.org/api/query?id_list=1706.03762', 'GET https://api.crossref.org/works/10.1038%2Fnphys1170'],
     'one identifier lookup per PDF; no PDF text in any request',
   );
+
+  // PRD §7.1 / §7.2: `new` routes to research — the user's own PDFs are ingested
+  // first, the discovery search still runs (never an outline built on two PDFs).
+  const next = run(root, ['next']);
+  assert.match(`${next.stdout}\n${next.stderr}`, /pensmith next: → research/);
+  const status = run(root, ['status']);
+  assert.match(status.stdout, /next: research/, status.stdout);
 });
 
 test('SRC-15: an unusable --pdfs folder is a usage error before anything is written', () => {

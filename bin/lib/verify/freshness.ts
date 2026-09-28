@@ -8,7 +8,10 @@
 //      adapter, NOT a Phase-3 stub).
 //
 // WARN-only policy (D-10 / PRD §14):
-//   - DOI HEAD 200            → ok, no warning
+//   - DOI HEAD 2xx / 3xx      → ok, no warning: doi.org resolves the handle
+//     (its redirect is the answer, never followed — a followed hop would reach
+//     Crossref's content-negotiation endpoint, which answers HEAD with 405, or
+//     a publisher host)
 //   - DOI HEAD 4xx/5xx (real HTTP status, after 1 retry) → WARN
 //   - retraction-watch hit    → WARN
 //   - transport error (ECONNREFUSED / ETIMEDOUT / no response) → SILENT
@@ -100,6 +103,7 @@ export async function probeFreshness(
         const res = await httpFetch(`https://doi.org/${normalized}`, {
           method: 'HEAD',
           timeoutMs: 10_000,
+          followRedirects: false,
         });
         if (res.status >= 400) {
           warnings.push({

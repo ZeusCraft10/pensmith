@@ -144,3 +144,17 @@ test('TIER-05 invariant: only prompts/clack.ts imports @clack/prompts', () => {
   assert.equal(hasImport(sch), false, 'schema must not import clack');
   assert.equal(hasImport(clk), true, 'clack.ts MUST be the file that imports clack');
 });
+
+// ── clack's blank text answer (Phase 19 review round 1) ─────────────────────
+// clack's text() resolves `undefined` when the user presses Enter on a blank
+// line; the answer is the question's default ('' for research's "add a source
+// you know" line), never the string "undefined" (which research would then try
+// to identify as a source).
+test('TIER-05: a blank clack text answer is the default, never "undefined"', async () => {
+  const { textAnswer } = await import('../bin/lib/prompts/clack.js');
+  assert.equal(textAnswer(undefined, ''), '');
+  assert.equal(textAnswer(undefined, undefined), '');
+  assert.equal(textAnswer(undefined, '10.1038/nature14539'), '10.1038/nature14539');
+  assert.equal(textAnswer(null, ''), '');
+  assert.equal(textAnswer('arXiv:1706.03762', ''), 'arXiv:1706.03762');
+});

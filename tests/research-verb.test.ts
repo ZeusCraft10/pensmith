@@ -428,7 +428,8 @@ test('SRC-07: an evaluator that fails (after its corrective retry) or omits a ca
     const r = await research({ root: sb.root, yolo: true });
     assert.equal(r.error, null, String(r.error));
     assert.match(r.stderr, /pensmith research: WARN — 2 source\(s\) were not evaluated/);
-    assert.match(r.stderr, /the source evaluator failed for 2 candidate\(s\): source-evaluator: the reply .* did not match the required schema after one corrective retry/);
+    assert.match(r.stderr, /the source evaluator failed for 2 candidate\(s\): source-evaluator: the reply .* did not match the required schema after one corrective retry \([^\n]*\); these candidates are kept unevaluated/);
+    assert.doesNotMatch(r.stderr, /nothing was written/, 'research does write them (as not evaluated)');
     const md = fs.readFileSync(path.join(sb.paper, 'RESEARCH.md'), 'utf8');
     assert.match(md, /^Note: 2 source\(s\) were not evaluated/m);
     const lib = LibrarySchema.parse(JSON.parse(fs.readFileSync(path.join(sb.paper, 'LIBRARY.json'), 'utf8')));

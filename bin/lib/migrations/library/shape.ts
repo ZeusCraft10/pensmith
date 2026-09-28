@@ -17,7 +17,7 @@
 
 import { normalizeDoi, normalizeArxiv, normalizePmid, normalizePmcid } from '../../doi.js';
 import { generateCitekey } from '../../citekey.js';
-import { CITEKEY_GRAMMAR, ByoRecordSchema, type ByoRecord, type LibraryEntry } from '../../schemas/library.js';
+import { CITEKEY_GRAMMAR, ByoRecordSchema, type ByoRecordInput, type LibraryEntry } from '../../schemas/library.js';
 import {
   SourceTypeSchema,
   SourceTierSchema,
@@ -77,7 +77,7 @@ export interface LibraryCandidate {
   retraction_status?: RetractionStatus | string | null | undefined;
   zotero?: ZoteroRef | null | undefined;
   /** The bring-your-own PDF record (file under .paper/, sha256s) — SRC-15. */
-  byo?: ByoRecord | null | undefined;
+  byo?: ByoRecordInput | null | undefined;
 }
 
 export function normDoi(v: unknown): string | null {

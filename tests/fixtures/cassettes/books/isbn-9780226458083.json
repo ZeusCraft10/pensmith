@@ -56,7 +56,259 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-28T05:27:04.214Z",
+      "recordedAt": "2026-09-28T10:18:02.091Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "books"
+    }
+  },
+  {
+    "scope": "https://openlibrary.org",
+    "method": "GET",
+    "path": "/books/OL976099M.json",
+    "status": 200,
+    "response": {
+      "notes": {
+        "type": "/type/text",
+        "value": "Includes index."
+      },
+      "identifiers": {
+        "librarything": [
+          "9032361"
+        ],
+        "goodreads": [
+          "61539",
+          "935072"
+        ],
+        "wikidata": [
+          "Q126699543"
+        ]
+      },
+      "title": "The structure of scientific revolutions",
+      "authors": [
+        {
+          "key": "/authors/OL531166A"
+        }
+      ],
+      "publish_date": "1996",
+      "publishers": [
+        "University of Chicago Press",
+        "University Of Chicago Press"
+      ],
+      "ia_box_id": [
+        "IA154101"
+      ],
+      "covers": [
+        6773735,
+        141652,
+        141651
+      ],
+      "local_id": [
+        "urn:bwbsku:O8-DFY-488",
+        "urn:phillips:31867007053395",
+        "urn:mgc:31927000775319",
+        "urn:evs:39663100131945",
+        "urn:scms:0188600534120",
+        "urn:bwbsku:P7-EIP-926"
+      ],
+      "ia_loaded_id": [
+        "structureofscie100kuhn"
+      ],
+      "lc_classifications": [
+        "Q175 .K95 1996",
+        "Q175.K95 1996"
+      ],
+      "url": [
+        "http://www.loc.gov/catdir/description/uchi051/96013195.html",
+        "http://www.loc.gov/catdir/toc/uchi051/96013195.html"
+      ],
+      "ocaid": "structurescienti00kuhn_800",
+      "publish_places": [
+        "Chicago, IL"
+      ],
+      "subjects": [
+        "Science -- Philosophy.",
+        "Science -- History."
+      ],
+      "uri_descriptions": [
+        "Publisher description",
+        "Table of contents"
+      ],
+      "edition_name": "3rd ed.",
+      "pagination": "xiv, 212 p. ;",
+      "source_records": [
+        "promise:bwb_daily_pallets_2022-08-30:O8-DFY-488",
+        "ia:structureofscie100kuhn",
+        "ia:structurescienti00kuhn_800",
+        "ia:structurescienti00kuhn_140",
+        "marc:marc_openlibraries_phillipsacademy/PANO_FOR_IA_05072019.mrc:42116032:2034",
+        "ia:structurescienti00kuhn",
+        "ia:structurescienti00kuhn_141",
+        "ia:structurescienti00kuhn_227",
+        "ia:structurescienti00kuhn_437",
+        "ia:structurescienti00kuhn_507",
+        "ia:structurescienti00kuhn_834",
+        "marc:marc_marygrove/marygrovecollegelibrary.full.D20191108.T213022.internetarchive2nd_REPACK.mrc:123942836:4792",
+        "ia:structureofscien0003kuhn_k955",
+        "bwb:9780226458076",
+        "marc:marc_evangelical_seminary/Evangelical_Seminary_20200728.mrc:29705142:812",
+        "marc:marc_loc_2016/BooksAll.2016.part25.utf8:82223571:884",
+        "bwb:9780226458083",
+        "marc:marc_scms/20220805_ADAM_MARC_records.mrc:110736976:4693",
+        "amazon:0226458083",
+        "amazon:0226458075",
+        "promise:bwb_daily_pallets_2021-09-14:P7-EIP-926",
+        "idb:9780226458083",
+        "idb:9780226458076",
+        "marc:marc_columbia/Columbia-extract-20221130-004.mrc:518359067:2670",
+        "marc:harvard_bibliographic_metadata/20220215_067.bib.mrc:209189677:6507"
+      ],
+      "lccn": [
+        "96013195"
+      ],
+      "languages": [
+        {
+          "key": "/languages/eng"
+        }
+      ],
+      "dewey_decimal_class": [
+        "501"
+      ],
+      "isbn_10": [
+        "0226458075",
+        "0226458083"
+      ],
+      "publish_country": "ilu",
+      "by_statement": "Thomas S. Kuhn.",
+      "type": {
+        "key": "/type/edition"
+      },
+      "uris": [
+        "http://www.loc.gov/catdir/description/uchi051/96013195.html",
+        "http://www.loc.gov/catdir/toc/uchi051/96013195.html"
+      ],
+      "oclc_numbers": [
+        "34548541"
+      ],
+      "key": "/books/OL976099M",
+      "number_of_pages": 212,
+      "works": [
+        {
+          "key": "/works/OL3259254W"
+        }
+      ],
+      "description": {
+        "type": "/type/text",
+        "value": "Thomas S. Kuhn's classic book is now available with a new index."
+      },
+      "latest_revision": 42,
+      "revision": 42,
+      "created": {
+        "type": "/type/datetime",
+        "value": "2008-04-01T03:28:50.625462"
+      },
+      "last_modified": {
+        "type": "/type/datetime",
+        "value": "2025-05-20T16:02:27.230005"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T10:18:02.091Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "books"
+    }
+  },
+  {
+    "scope": "https://openlibrary.org",
+    "method": "GET",
+    "path": "/authors/OL531166A.json",
+    "status": 200,
+    "response": {
+      "name": "Thomas S. Kuhn",
+      "bio": {
+        "type": "/type/text",
+        "value": "American historian, physicist and philosopher"
+      },
+      "title": "(Kuhn, Thomas S., 1922-)",
+      "remote_ids": {
+        "wikidata": "Q184980",
+        "isni": "0000000120997889",
+        "librarything": "kuhnthomass",
+        "amazon": "B000AQ4R12",
+        "goodreads": "4735497",
+        "viaf": "22144060",
+        "bookbrainz": "47961b85-1b1d-4f4e-ad84-f0876ca35831",
+        "lc_naf": "n50046179",
+        "opac_sbn": "CFIV065261"
+      },
+      "birth_date": "18 July 1922",
+      "death_date": "17 June 1996",
+      "links": [
+        {
+          "url": "https://en.wikipedia.org/wiki/Thomas_Kuhn",
+          "title": "Wikipedia",
+          "type": {
+            "key": "/type/link"
+          }
+        },
+        {
+          "title": "BookBrainz",
+          "url": "https://bookbrainz.org/author/47961b85-1b1d-4f4e-ad84-f0876ca35831",
+          "type": {
+            "key": "/type/link"
+          }
+        },
+        {
+          "url": "https://inventaire.io/entity/wd:Q184980",
+          "title": "inventaire.io",
+          "type": {
+            "key": "/type/link"
+          }
+        }
+      ],
+      "type": {
+        "key": "/type/author"
+      },
+      "photos": [
+        12855801
+      ],
+      "alternate_names": [
+        "Thomas S Kuhn",
+        "Thomas S. (Thomas Samuel) Kuhn",
+        "Thomas Samuel Kuhn",
+        "Kuhn.",
+        "Kong en (Kuhn, Thomas S., 1922-)",
+        "THOMAS S. KUHN",
+        "S.; Thomas S. Kuhn (Author) Kuhn Thomas"
+      ],
+      "personal_name": "Thomas S. Kuhn",
+      "source_records": [
+        "ia:structureofscien0000unse",
+        "amazon:6055411563",
+        "bwb:9783663019060",
+        "promise:bwb_daily_pallets_2022-05-23",
+        "promise:bwb_daily_pallets_2024-05-09:P9-BAT-081",
+        "marc:harvard_bibliographic_metadata/ab.bib.10.20150123.full.mrc:701440269:511"
+      ],
+      "key": "/authors/OL531166A",
+      "latest_revision": 13,
+      "revision": 13,
+      "created": {
+        "type": "/type/datetime",
+        "value": "2008-04-01T03:28:50.625462"
+      },
+      "last_modified": {
+        "type": "/type/datetime",
+        "value": "2025-08-01T04:25:59.762335"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T10:18:02.091Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "books"
     }

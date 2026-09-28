@@ -33,6 +33,7 @@ import { tryReadPaperConfigSync, updatePaperConfig, rawTable } from '../lib/conf
 import { parseIntakeMd } from '../lib/intake-parse.js';
 import type { IntakeClarification } from '../lib/llm-contracts.js';
 import { resolveByoDirArg, recordByoPdfDir, listPdfsInDir, ingestByoPdfs, describeByoOutcome } from '../lib/byo-ingest.js';
+import { approveByoFolder } from '../lib/own-source-approvals.js';
 
 // EGRESS SEAM (H3 — test-observable model-bound payload). intake calls the
 // model-bound interpolate THROUGH this module-local indirection so the egress
@@ -283,13 +284,18 @@ export function renderIntakeMd(c: IntakeClarification, assignment: string, fallb
 
 /**
  * SRC-15 (D-19-21): `new --pdfs <dir>` — record the folder as `[sources]
- * byo_pdf_dir` and ingest every PDF in it through byo-ingest.ts (hashed,
+ * byo_pdf_dir` (and, in the data dir, the user's approval to read it for this
+ * paper) and ingest every PDF in it through byo-ingest.ts (hashed,
  * identified, tagged bring-your-own; an unidentified PDF is kept unhydrated
  * with a warning). One line per PDF; a PDF that cannot be ingested never
  * fails intake.
  */
 async function ingestByoFolderForNew(cwd: string, dir: string): Promise<void> {
   const stored = await recordByoPdfDir(cwd, dir);
+  // The user named the folder on the command line: research may re-read it
+  // for this paper (own-source-approvals.ts; a folder inside the project
+  // needs no record).
+  await approveByoFolder(cwd, dir);
   const files = await listPdfsInDir(dir);
   process.stdout.write(`pensmith new: bring-your-own: ${files.length} PDF(s) in ${stored} (recorded as [sources] byo_pdf_dir)\n`);
   const outcomes = await ingestByoPdfs(cwd, files, { provenance: 'byo' });

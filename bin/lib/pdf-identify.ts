@@ -25,12 +25,21 @@
 //      title's Jaro-Winkler similarity reaches TITLE_JW_THRESHOLD AND its first
 //      author's family name reaches AUTHOR_JW_THRESHOLD (the Pass-1 thresholds).
 //
-// A record found through an identifier printed in the TEXT is accepted only
-// when the record's title actually appears on the PDF's first pages (or
-// matches the layout title): a DOI or arXiv id in running text may belong to a
-// cited work. Anything short of that is `unidentified` — `add` refuses, BYO
-// keeps the PDF with its local metadata flagged unhydrated. A wrong work is
-// never returned.
+// A record found through an identifier (GROBID's, the metadata's or one
+// printed in the text) is accepted only when it is the PDF's OWN work: a DOI
+// or arXiv id on the first pages may belong to a work the PDF cites — in a
+// footnote, a reference list, a "see also" line — and that work's title sits
+// right next to its identifier there. So a record is accepted when
+//   (a) its title matches the PDF's own title (metadata, GROBID or the layout
+//       heuristic) at TITLE_JW_THRESHOLD and, when the PDF names an author,
+//       its first author's family name matches at AUTHOR_JW_THRESHOLD — the
+//       title-search rule; or
+//   (b) its title is printed AS a title: it fills one to four whole lines
+//       among the first TITLE_BLOCK_LINES lines of page 1, and the record's
+//       first author's family name appears in the byline just below it — a
+//       title embedded in a citation line never qualifies.
+// Anything short of that is `unidentified` — `add` refuses, BYO keeps the PDF
+// with its local metadata flagged unhydrated. A wrong work is never returned.
 //
 // Privacy (PRD §9, PRIVACY.md): only an identifier or the title leaves the
 // machine — one lookup per registrar consulted, never the PDF's text.
@@ -380,12 +389,45 @@ export function matchScores(record: Pick<SourceCandidate, 'title' | 'authors'>, 
   return { titleJW, authorJW };
 }
 
-/** True when the record's title is printed on the PDF's first pages (or equals the layout title). */
-function titleOnPages(record: Pick<SourceCandidate, 'title'>, firstPagesText: string, local: LocalPdfMetadata): boolean {
+/** How many leading lines of page 1 hold the title block (rule (b) of the header). */
+export const TITLE_BLOCK_LINES = 25;
+/** How many lines below a printed title the byline may sit. */
+const BYLINE_LINES = 6;
+
+/** Rule (b): the record's title fills whole lines of page 1's title block, with its first author in the byline below. */
+function printedAsTitle(record: Pick<SourceCandidate, 'title' | 'authors'>, firstPage: string): boolean {
   const want = normTitle(record.title);
-  if (!want) return false;
-  if (normTitle(firstPagesText).includes(want)) return true;
-  return local.title !== null && jaroWinkler(want, normTitle(local.title)) >= TITLE_JW_THRESHOLD;
+  const first = record.authors[0];
+  if (!want || !first) return false;
+  const surname = family(first).replace(/[^\p{L}\p{N}]+/gu, '');
+  if (!surname) return false;
+  const lines = firstPage
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .filter((l) => l.length > 0)
+    .slice(0, TITLE_BLOCK_LINES + BYLINE_LINES);
+  for (let i = 0; i < Math.min(lines.length, TITLE_BLOCK_LINES); i++) {
+    for (let n = 1; n <= 4 && i + n <= lines.length; n++) {
+      const run = normTitle(lines.slice(i, i + n).join(' '));
+      if (!run || jaroWinkler(run, want) < TITLE_JW_THRESHOLD) continue;
+      const byline = lines.slice(i + n, i + n + BYLINE_LINES);
+      if (byline.some((l) => normTitle(l).replace(/\s+/g, '').includes(surname))) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True when `record` is the PDF's own work, not a work it cites (see the
+ * header: rule (a) against the PDF's own title and first author, or rule (b)
+ * the title printed as a title with its byline).
+ */
+export function isOwnWork(record: Pick<SourceCandidate, 'title' | 'authors'>, firstPage: string, local: LocalPdfMetadata): boolean {
+  if (local.title !== null) {
+    const s = matchScores(record, local);
+    if (s.titleJW >= TITLE_JW_THRESHOLD && (local.authors.length === 0 || s.authorJW >= AUTHOR_JW_THRESHOLD)) return true;
+  }
+  return printedAsTitle(record, firstPage);
 }
 
 function failureLine(what: string, r: Extract<LookupResult, { kind: 'failed' }>): string {
@@ -400,6 +442,7 @@ function failureLine(what: string, r: Extract<LookupResult, { kind: 'failed' }>)
 export async function identifyPdf(ex: PdfExtraction, deps: IdentifyDeps = DEFAULT_DEPS, opts: IdentifyOptions = {}): Promise<IdentifyResult> {
   let local = localPdfMetadata(ex);
   const firstPages = ex.pages.length > 0 ? ex.pages.slice(0, IDENTIFY_PAGES).join('\n') : ex.text.slice(0, 12000);
+  const firstPage = ex.pages[0] ?? ex.text.slice(0, 6000);
   const hasText = firstPages.replace(/\s/g, '').length > 0;
   const failures: string[] = [];
   const tried = new Set<string>();
@@ -416,11 +459,14 @@ export async function identifyPdf(ex: PdfExtraction, deps: IdentifyDeps = DEFAUL
     if (grobid !== null) local = withGrobid(local, grobid);
   }
 
+  // A record found by identifier must be the PDF's own work (the header);
+  // one that is not is remembered for the refusal line.
+  const citedWorks: string[] = [];
   const byId = async (
     kind: 'doi' | 'arxiv',
     id: string,
     via: IdentifyVia,
-    requireTitleOnPage: boolean,
+    requireOwnWork: boolean,
   ): Promise<IdentifyResult | null> => {
     const key = `${kind}:${id}`;
     if (tried.has(key)) return null;
@@ -431,7 +477,10 @@ export async function identifyPdf(ex: PdfExtraction, deps: IdentifyDeps = DEFAUL
       return null;
     }
     if (r.kind === 'not-found') return null;
-    if (requireTitleOnPage && hasText && !titleOnPages(r.candidate, firstPages, local)) return null;
+    if (requireOwnWork && hasText && !isOwnWork(r.candidate, firstPage, local)) {
+      citedWorks.push(`${kind === 'doi' ? id : `arXiv:${id}`} ("${r.candidate.title}")`);
+      return null;
+    }
     return { kind: 'identified', candidate: r.candidate, via, query: kind === 'doi' ? id : `arXiv:${id}`, local };
   };
 
@@ -470,17 +519,23 @@ export async function identifyPdf(ex: PdfExtraction, deps: IdentifyDeps = DEFAUL
     if (hit) return hit;
   }
 
+  // Identifiers that named a cited work, not this PDF: said in every refusal.
+  const cited =
+    citedWorks.length > 0
+      ? `; ${citedWorks.join(', ')} ${citedWorks.length === 1 ? 'is a work' : 'are works'} the PDF cites, not the PDF itself`
+      : '';
+
   // 3. Title (+ first author) search.
   if (!local.title) {
     return {
       kind: 'unidentified',
-      reason: hasText ? 'no identifier and no recognizable title on the first page' : 'no extractable text and no identifier in its metadata',
+      reason: (hasText ? 'no identifier and no recognizable title on the first page' : 'no extractable text and no identifier in its metadata') + cited,
       local,
       failures,
     };
   }
   if (local.authors.length === 0) {
-    return { kind: 'unidentified', reason: `no author found under the title "${local.title}" to confirm a match`, local, failures };
+    return { kind: 'unidentified', reason: `no author found under the title "${local.title}" to confirm a match${cited}`, local, failures };
   }
   const confident = (c: SourceCandidate): boolean => {
     const s = matchScores(c, local);
@@ -497,12 +552,19 @@ export async function identifyPdf(ex: PdfExtraction, deps: IdentifyDeps = DEFAUL
   if (best !== null) {
     return { kind: 'identified', candidate: best.candidate, via: 'title-search', query: local.title, local };
   }
-  return {
-    kind: 'unidentified',
-    reason: search.candidates.length === 0 && search.failures.length > 0
-      ? `the title search failed (${search.failures.join('; ')})`
-      : `no Crossref or OpenAlex record matches the title "${local.title}" and its first author closely enough`,
-    local,
-    failures,
-  };
+  // A failed search is never "no match" (SRC-05): name every search that
+  // could not be answered next to the ones that answered without a match.
+  let reason: string;
+  if (search.failures.length === 0) {
+    reason = `no Crossref or OpenAlex record matches the title "${local.title}" and its first author closely enough`;
+  } else if (search.candidates.length === 0) {
+    reason = `the title search failed (${search.failures.join('; ')}) — retry later or pass the DOI`;
+  } else {
+    const failedNames = new Set(search.failures.map((f) => f.split(' ')[0]));
+    const answered = ['crossref', 'openalex'].filter((n) => !failedNames.has(n)).map((n) => (n === 'crossref' ? 'Crossref' : 'OpenAlex'));
+    reason =
+      `no ${answered.join(' or ') || 'answered'} record matches the title "${local.title}" and its first author closely enough, ` +
+      `and ${search.failures.join('; ')} — retry later or pass the DOI`;
+  }
+  return { kind: 'unidentified', reason: reason + cited, local, failures };
 }

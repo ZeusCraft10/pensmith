@@ -7,7 +7,7 @@
 
 import type { Probe, ProbeResult } from '../probes.js';
 import { isHumanizerSkillPresent } from '../../ecosystem-presence.js';
-import { homedir } from 'node:os';
+import { userHomeDir } from '../../paths.js';
 import { join } from 'node:path';
 
 export const humanizerSkillPresenceProbe: Probe = {
@@ -15,7 +15,7 @@ export const humanizerSkillPresenceProbe: Probe = {
   async run(): Promise<ProbeResult> {
     // CR-01: share the detection algorithm with bin/lib/capabilities.ts via
     // ecosystem-presence.ts so both tiers report the same boolean.
-    const skillPath = join(homedir(), '.claude', 'skills', 'humanizer');
+    const skillPath = join(userHomeDir(), '.claude', 'skills', 'humanizer');
     if (isHumanizerSkillPresent()) {
       return {
         id: 'humanizer-skill-presence',
