@@ -472,6 +472,8 @@ Override examples:
 - "I need a literature review section before methods" at intake → modifies sectioning.
 - Edit `.paper/config.toml` directly for power users.
 
+**How the source preferences are reached (Phase 19, D-19-14).** `books` is the books adapter: Open Library title/author search and ISBN lookups, with Google Books as the keyless ISBN fallback; it returns `@book` records with publisher, year and ISBN-13. `NBER` is Crossref search restricted to NBER's DOI prefix `10.3386` (its working papers are registered there). JSTOR and APA PsycNET offer no free, terms-of-service-compliant search API, and PhilPapers' documented API has no search endpoint, needs a registered key and blocks automated clients, so pensmith does not call them: their content is reached through the coverage of OpenAlex, Crossref and PubMed (`jstor` → OpenAlex + Crossref, `psycnet` → PubMed + OpenAlex, `philpapers` → OpenAlex). The "(if configured)" preferences above therefore name the substitutes that run, never a service pensmith would scrape.
+
 ---
 
 ## 9. Bring-your-own sources (BYO PDFs)

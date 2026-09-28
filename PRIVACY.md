@@ -15,10 +15,11 @@ Model requests carry a plain `pensmith/<version>` User-Agent — never your cont
 
 **Scholarly services** (metadata only — search queries, DOIs and identifiers, not your draft):
 
-- **OpenAlex** — paper metadata search
+- **OpenAlex** — paper metadata search (with your `OPENALEX_API_KEY` as `api_key` when you set one)
 - **Crossref** — DOI resolution and citation verification (polite pool)
-- **Crossref Labs / Retraction Watch** — retraction checks at research and verify time
-- **Semantic Scholar** — paper metadata search
+- **Crossref / Retraction Watch** — retraction checks at research and verify time (the Retraction Watch data Crossref serves)
+- **Semantic Scholar** — paper metadata search (with your `PENSMITH_S2_API_KEY` as `x-api-key` when you set one)
+- **Open Library** and, as a fallback for an ISBN it does not know, **Google Books** — book search and ISBN lookups (a title, an author or an ISBN)
 - **arXiv** — preprint metadata and full text
 - **PubMed / NCBI** — biomedical paper metadata
 - **Unpaywall** — open-access PDF discovery (quote verification downloads the open-access PDF it finds)

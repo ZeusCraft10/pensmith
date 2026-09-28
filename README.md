@@ -220,8 +220,8 @@ Expected failures print one line (`pensmith: …`); `PENSMITH_DEBUG=1` adds a st
 | `PENSMITH_NO_LLM=1` | Replaces every LLM call with a deterministic stub (testing and dry-run). |
 | `PENSMITH_COST_CAP_USD` | Per-session cost cap in USD (overrides `[budget] cost_cap_usd`, default 5.00). Must be a positive number such as `2.50`; any other value (`0`, `$1`) is refused with exit 2, never replaced by the default. |
 | `PENSMITH_CONTACT_EMAIL` | Polite-pool contact sent to Crossref (including its retraction lookup), OpenAlex and Unpaywall only, so your queries are well-behaved. No other service receives it (see [PRIVACY.md](PRIVACY.md)). |
-| `OPENALEX_API_KEY` | *Reserved.* Not sent yet: OpenAlex requests are keyless for now, so setting it changes nothing (`pensmith doctor` says "not used yet"). |
-| `PENSMITH_S2_API_KEY` | *Optional.* Semantic Scholar API key. |
+| `OPENALEX_API_KEY` | *Optional, free.* Sent to OpenAlex as `api_key` (never logged, cached or recorded). Keyless OpenAlex requests share a small daily budget with everyone on your network; when it runs out, research reports `openalex: failed (keyless daily budget exhausted — set OPENALEX_API_KEY (free))`. |
+| `PENSMITH_S2_API_KEY` | *Optional.* Semantic Scholar API key, sent as `x-api-key`. Keyless requests share Semantic Scholar's public pool, which often answers HTTP 429 (`set PENSMITH_S2_API_KEY`). |
 | `GPTZERO_API_KEY` | *Optional.* Enables the AI-likelihood transparency check; it still asks for your consent before sending text (`--yolo` never grants it). |
 | `ZOTERO_API_KEY` | *Optional.* Enables the Zotero library adapter. |
 | `PENSMITH_PAPER_ROOT` | The project folder (the one containing `.paper/`) for the CLI, the MCP server and the hooks. |

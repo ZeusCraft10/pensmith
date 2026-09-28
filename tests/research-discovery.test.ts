@@ -575,7 +575,8 @@ test('D-17-10: a source adapter reports its failed search request through onFail
     const again: string[] = [];
     assert.deepEqual(await openalex.search('pensmith onfailure probe two', { onFailure: (r) => again.push(r) }), []);
     assert.equal(again.length, 1);
-    assert.match(again[0]!, /^SyntaxError: /);
+    // SRC-17 / D-19-05: a 200 whose body is not the service's answer is a named failure (and never cached).
+    assert.equal(again[0]!, 'response is not an OpenAlex answer (unreadable JSON)');
     // A retryable status fetch() gave up on arrives as a thrown error carrying it.
     const { errorFailureReason } = await import('../bin/lib/sources/search-failure.js');
     assert.equal(errorFailureReason(Object.assign(new Error('HTTP 503'), { status: 503 })), 'HTTP 503 after retries');

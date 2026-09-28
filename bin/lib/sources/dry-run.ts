@@ -30,6 +30,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateCitekey } from '../citekey.js';
 import { DRY_RUN_DOI_PREFIX, isbn13CheckDigit, normalizeDoi } from '../doi.js';
+import { lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
 interface DryRunCorpus {
@@ -155,6 +156,10 @@ export function syntheticSource(hex: string): SourceCandidate {
     last_verified: new Date().toISOString(),
     citekey,
     synthetic: true,
+    // The same bibliographic fields a registrar record carries (SRC-05), so a
+    // dry run exercises the whole reference path.
+    type: kind === 'book' ? 'book' : kind === 'preprint' ? 'preprint' : 'article-journal',
+    ...(kind === 'book' ? { publisher: venue } : { venue }),
     raw: { synthetic: true, kind, hex, venue },
   };
   if (kind === 'preprint') cand.arxiv = `pensmith-dryrun.${hex}`;
@@ -196,9 +201,10 @@ export async function search(query: string, opts: { limit?: number } = {}): Prom
 /**
  * Reconstruct the synthetic source for a reserved identifier (DOI, arXiv-style
  * or ISBN-style is not invertible, so only the DOI and arXiv-style ids are).
- * Returns null for anything outside the reserved namespace.
+ * The three-way contract (D-19-05): found, or not-found for anything outside
+ * the reserved namespace — the provider never fails (no request is made).
  */
-export async function fetchById(id: string): Promise<SourceCandidate | null> {
+export async function lookupById(id: string): Promise<LookupResult> {
   const s = id.trim();
   const doi = normalizeDoi(s);
   let hex: string | undefined;
@@ -207,6 +213,13 @@ export async function fetchById(id: string): Promise<SourceCandidate | null> {
     const m = /^(?:arxiv:)?pensmith-dryrun\.([0-9a-f]{8})$/i.exec(s);
     if (m?.[1]) hex = m[1].toLowerCase();
   }
-  if (hex === undefined || !/^[0-9a-f]{8}$/.test(hex)) return null;
-  return syntheticSource(hex);
+  if (hex === undefined || !/^[0-9a-f]{8}$/.test(hex)) {
+    return lookupNotFound('not a synthetic --dry-run identifier');
+  }
+  return lookupFound(syntheticSource(hex));
+}
+
+/** The fetchById view: the synthetic source, or null outside the reserved namespace. */
+export async function fetchById(id: string): Promise<SourceCandidate | null> {
+  return unwrapLookup(await lookupById(id), 'dry-run', id);
 }

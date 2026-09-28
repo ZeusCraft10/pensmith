@@ -500,6 +500,40 @@ export async function getOpenAlexApiKey(): Promise<string | undefined> {
   throw new MissingApiKeyError(`env var ${envName} is not set (OpenAlex API key is required by current config)`);
 }
 
+/**
+ * The OpenAlex key for one request (SRC-06, D-19-10): the value of the
+ * variable the global runtime.json names (`openalexApiKeyEnv`, default
+ * OPENALEX_API_KEY), that variable's name (for the "set …" hints), and
+ * whether runtime.json requires a key. Never throws; the OpenAlex adapter is
+ * the only caller and sends the value as `api_key` (scrubbed from logs, cache
+ * keys and recordings by the transport).
+ */
+export async function openAlexKey(): Promise<{ value: string | undefined; envName: string; required: boolean }> {
+  let envName = 'OPENALEX_API_KEY';
+  let required = false;
+  try {
+    const cfg = await loadRuntimeConfig();
+    envName = cfg.openalexApiKeyEnv ?? envName;
+    required = cfg.openalexApiKeyOptional === false;
+  } catch {
+    // An unreadable runtime.json: the default variable, key optional.
+  }
+  const raw = process.env[envName];
+  const value = raw !== undefined && raw.trim().length > 0 ? raw.trim() : undefined;
+  log().event({ event: 'runtime.openalex', envName, optional: !required, present: value !== undefined });
+  return { value, envName, required };
+}
+
+/**
+ * The Semantic Scholar key value for the `x-api-key` header (D-16, SRC-06).
+ * Only the Semantic Scholar adapter calls it; the value never reaches a log,
+ * a cache key or a recording (the transport drops secret headers).
+ */
+export function s2ApiKeyValue(): string | undefined {
+  const raw = process.env['PENSMITH_S2_API_KEY'];
+  return raw !== undefined && raw.trim().length > 0 ? raw.trim() : undefined;
+}
+
 let _s2WarnedOnce = false;
 
 /** Presence-only accessor for PENSMITH_S2_API_KEY (D-16): the value never leaves here. */

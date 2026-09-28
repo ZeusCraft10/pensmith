@@ -29,6 +29,18 @@
 // dry-run equivalent). It is BLOCKING — compile and done refuse it with a
 // "re-run online" message — and it is never OK, MIS-CITED or FABRICATED.
 //
+// A FAILED registrar lookup (D-19-05, SRC-05): when the Crossref re-fetch could
+// not be answered — a 429 / 5xx after retries, an exhausted host, an open
+// circuit breaker, a transport error, or a body that is not a Crossref answer —
+// the adapter throws SourceLookupError and the verdict is UNVERIFIABLE with
+// that reason (blocking, S-03). A failure never reads as "did not resolve"
+// (FABRICATED): only Crossref's definitive 404 does.
+//
+// Retraction (SRC-04, D-19-11): the Crossref record carries its Retraction
+// Watch notices (`updated-by`); a record that says retracted blocks (MIS-CITED,
+// naming the notice) before the live re-query. The label becomes RETRACTED in
+// Phase 20 (VRFY-15).
+//
 // Reserved dry-run identifiers (RUN-27, D-17-11): under --dry-run a reserved
 // `10.0000/pensmith-dryrun.*` DOI is re-fetched from the synthetic provider and
 // runs the same title/author AND-gate; outside --dry-run it is FABRICATED
@@ -43,8 +55,9 @@ import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { fetchById as retractionWatchFetchById, isRetractionLookupError } from '../sources/retraction-watch.js';
 import { fetchById as dryRunFetchById } from '../sources/dry-run.js';
 import { extractCitedKeysForVerification } from '../citation-token.js';
-import { isReservedDryRunId } from '../doi.js';
+import { isReservedDryRunId, normalizeDoi } from '../doi.js';
 import { isOfflineEgressError, type OfflineEgressError } from '../http.js';
+import { isSourceLookupError } from '../sources/lookup.js';
 import { networkMode } from '../http-mock.js';
 
 export type { FreshnessResult } from './freshness.js';
@@ -73,6 +86,11 @@ export interface Pass1Result {
 interface BibAuthor {
   family?: string;
   given?: string;
+  /** A corporate / literal name (citation-js spelling of a braced BibTeX name). */
+  literal?: string;
+  /** Surname particles citation-js splits off (`van der` of `van der Maaten, Ernst`). */
+  'non-dropping-particle'?: string;
+  'dropping-particle'?: string;
 }
 
 interface BibEntry {
@@ -102,12 +120,30 @@ interface BibEntry {
 function normalizeBibAuthors(rawAuthors: BibAuthor[] | undefined): string[] {
   return (rawAuthors ?? [])
     .map((a) => {
-      const family = String(a?.family ?? '').trim();
+      // The particles belong to the surname the AND-gate compares (SRC-12):
+      // `van der Maaten, Ernst` is compared as "van der maaten", as the
+      // registrar's record spells it.
+      const particle = [a?.['dropping-particle'], a?.['non-dropping-particle']]
+        .map((x) => String(x ?? '').trim())
+        .filter(Boolean)
+        .join(' ');
+      const bare = String(a?.family ?? '').trim();
+      const family = bare && particle ? `${particle} ${bare}` : bare;
       const given = String(a?.given ?? '').trim();
-      if (!family) return '';
+      const literal = String(a?.literal ?? '').trim();
+      if (!family) return literal ? `{${literal}}` : '';
       return given ? `${family}, ${given}` : family;
     })
     .filter(Boolean);
+}
+
+/**
+ * The first-author surname for the AND-gate. A corporate author is written
+ * braced (`{The ENCODE Project Consortium}`, D-19-13); its braces are not part
+ * of the name.
+ */
+function surnameOf(author: string | undefined): string {
+  return firstAuthorSurname(String(author ?? '').replace(/[{}]/g, ''));
 }
 
 function bibTitle(claimed: BibEntry): string {
@@ -187,12 +223,28 @@ async function verdictForCitekey(
     actual = await sources.crossref.fetchById(claimed.DOI);
   } catch (err) {
     if (isOfflineEgressError(err)) return unverifiable(ck, err, `Crossref re-fetch of ${claimed.DOI}`);
+    // D-19-05: a lookup that could not be answered is never "did not resolve".
+    if (isSourceLookupError(err)) {
+      return {
+        citekey: ck, verdict: 'UNVERIFIABLE', titleJW: 0, authorJW: 0,
+        reason: `Crossref re-fetch of ${claimed.DOI} failed: ${err.reason} — re-run verify once the lookup answers`,
+      };
+    }
     throw err;
   }
   if (!actual) {
     return {
       citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
       reason: `DOI ${claimed.DOI} did not resolve via Crossref`,
+    };
+  }
+
+  // SRC-04 (D-19-11): the Crossref record's own Retraction Watch notice blocks.
+  if (actual.retracted === true || actual.retraction_status === 'retracted') {
+    const why = actual.retraction_details ? `: ${actual.retraction_details}` : '';
+    return {
+      citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
+      reason: `cited work is retracted (Crossref record, Retraction Watch notice at verify time)${why}`,
     };
   }
 
@@ -210,9 +262,12 @@ async function verdictForCitekey(
   // DOI misses a retraction recorded against the canonical record (the original
   // bug); querying only the canonical DOI would miss one recorded against the
   // claimed/alias DOI. Check BOTH (deduped) and block on the first hit.
-  const retractionDois = [...new Set(
-    [claimed.DOI, actual.doi].filter((d): d is string => typeof d === 'string' && d.length > 0),
-  )];
+  // Deduped by the normalized DOI (DOIs are case-insensitive): one lookup per work.
+  const retractionDois = [...new Map(
+    [claimed.DOI, actual.doi]
+      .filter((d): d is string => typeof d === 'string' && d.length > 0)
+      .map((d) => [normalizeDoi(d) ?? d.toLowerCase(), d] as const),
+  ).values()];
   let liveRetraction: Awaited<ReturnType<typeof retractionWatchFetchById>> = null;
   let retractionUnavailable: { err: OfflineEgressError; doi: string } | null = null;
   let retractionUnknown: string | null = null;
@@ -259,16 +314,14 @@ async function verdictForCitekey(
   }
 
   const titleJW = jaroWinkler(actual.title, claimedTitle);
-  const authorJW = jaroWinkler(
-    firstAuthorSurname(actual.authors?.[0] ?? ''),
-    firstAuthorSurname(claimedAuthorsD14[0] ?? ''),
-  );
+  const authorJW = jaroWinkler(surnameOf(actual.authors?.[0]), surnameOf(claimedAuthorsD14[0]));
 
   // Multi-DOI redirect handling — the claimed DOI may have redirected to a
   // different canonical DOI; strict-match (≥0.98 title / ≥0.95 author) lets
   // it pass with a diagnostic, otherwise MIS-CITED.
+  // DOIs are case-insensitive: only a different DOI is a redirect.
   const actualDoi: string = actual.doi ?? claimed.DOI;
-  if (actualDoi !== claimed.DOI) {
+  if ((normalizeDoi(actualDoi) ?? actualDoi.toLowerCase()) !== (normalizeDoi(claimed.DOI) ?? claimed.DOI.toLowerCase())) {
     if (titleJW >= 0.98 && authorJW >= 0.95) {
       return {
         citekey: ck, verdict: 'OK', titleJW, authorJW,
@@ -305,10 +358,7 @@ function andGate(
   prefix: string,
 ): Pass1Result {
   const titleJW = jaroWinkler(actual.title, claimedTitle);
-  const authorJW = jaroWinkler(
-    firstAuthorSurname(actual.authors?.[0] ?? ''),
-    firstAuthorSurname(claimedAuthorsD14[0] ?? ''),
-  );
+  const authorJW = jaroWinkler(surnameOf(actual.authors?.[0]), surnameOf(claimedAuthorsD14[0]));
   if (titleJW >= TITLE_JW_THRESHOLD && authorJW >= AUTHOR_JW_THRESHOLD) {
     return { citekey: ck, verdict: 'OK', titleJW, authorJW, reason: `${prefix}D-11 AND-gate passed` };
   }

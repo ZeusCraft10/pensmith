@@ -114,3 +114,16 @@ test('cassette-no-leak: the path scan catches a key in a path (self-check)', () 
   assert.deepEqual(secretParamsIn('https://www.googleapis.com/books/v1/volumes?q=isbn:1&key=abc'), ['key']);
   assert.deepEqual(secretParamsIn('https://api.crossref.org/works?query=x'), []);
 });
+
+// D-19-26 (Phase 19): no personal data in any fixture. The contact email is
+// the project address and is scrubbed at record time; any other email address a
+// response carries (an author's address inside an Unpaywall affiliation
+// string, say) is redacted by scripts/refresh-cassettes.mjs too.
+test('cassette-no-leak: no committed cassette carries an email address (D-19-26)', () => {
+  if (!existsSync(CASSETTE_ROOT)) return;
+  const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+  for (const file of walkDir(CASSETTE_ROOT)) {
+    const m = EMAIL.exec(readFileSync(file, 'utf8'));
+    assert.equal(m, null, `Cassette ${file} carries an email address (${m?.[0]}) — re-record it (the recorder redacts them)`);
+  }
+});

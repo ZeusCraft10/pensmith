@@ -1,0 +1,64 @@
+[
+  {
+    "scope": "https://openlibrary.org",
+    "method": "GET",
+    "path": "/search.json?isbn=9780226458083&fields=key%2Ctitle%2Csubtitle%2Cauthor_name%2Cfirst_publish_year%2Ceditions%2Ceditions.key%2Ceditions.title%2Ceditions.subtitle%2Ceditions.author_name%2Ceditions.publisher%2Ceditions.publish_date%2Ceditions.isbn&limit=1",
+    "status": 200,
+    "response": {
+      "numFound": 1,
+      "start": 0,
+      "numFoundExact": true,
+      "num_found": 1,
+      "documentation_url": "https://openlibrary.org/dev/docs/api/search",
+      "q": "",
+      "offset": null,
+      "docs": [
+        {
+          "author_name": [
+            "Thomas S. Kuhn",
+            "Dennis Holland"
+          ],
+          "first_publish_year": 1955,
+          "key": "/works/OL3259254W",
+          "title": "The Structure of Scientific Revolutions",
+          "editions": {
+            "numFound": 1,
+            "start": 0,
+            "numFoundExact": true,
+            "docs": [
+              {
+                "key": "/books/OL976099M",
+                "title": "The structure of scientific revolutions",
+                "author_name": [
+                  "Thomas S. Kuhn",
+                  "Dennis Holland"
+                ],
+                "publisher": [
+                  "University of Chicago Press",
+                  "University Of Chicago Press"
+                ],
+                "publish_date": [
+                  "1996"
+                ],
+                "isbn": [
+                  "0226458075",
+                  "0226458083",
+                  "9780226458076",
+                  "9780226458083"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T05:27:04.214Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "books"
+    }
+  }
+]

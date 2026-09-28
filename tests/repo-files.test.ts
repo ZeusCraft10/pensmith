@@ -200,8 +200,9 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   // round 2: http-crossref-ping is SKIP unless offline replay is active (RUN-05)
   // and OPENALEX_API_KEY is reported as "not used yet"; then in review round 3:
   // the pandoc and humanizer probes describe what `pensmith done` does without
-  // them (there is no `export` or `humanize` verb).
-  const PINNED = '1ac6aeec14feefdc7db3f330ac9bb130ff77c9f79b3c15d6df84c59b138a80e6';
+  // them (there is no `export` or `humanize` verb); then in Phase 19 (SRC-06):
+  // OPENALEX_API_KEY is sent, so it is no longer marked "not used yet".
+  const PINNED = '481fdde022d4576c65d1a5706d3d70f387e79e1c0da044727b760b2aa71ba0e8';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

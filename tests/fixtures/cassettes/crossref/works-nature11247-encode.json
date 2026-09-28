@@ -1,0 +1,1022 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1038%2Fnature11247",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              28
+            ]
+          ],
+          "date-time": "2026-09-28T03:14:04Z",
+          "timestamp": 1790565244822,
+          "version": "4.1.0"
+        },
+        "reference-count": 80,
+        "publisher": "Springer Science and Business Media LLC",
+        "issue": "7414",
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2012,
+                  9,
+                  1
+                ]
+              ],
+              "date-time": "2012-09-01T00:00:00Z",
+              "timestamp": 1346457600000
+            },
+            "content-version": "tdm",
+            "delay-in-days": 0,
+            "URL": "https://creativecommons.org/licenses/by-nc-sa/3.0/"
+          }
+        ],
+        "content-domain": {
+          "domain": [],
+          "crossmark-restriction": false
+        },
+        "short-container-title": [
+          "Nature"
+        ],
+        "published-print": {
+          "date-parts": [
+            [
+              2012,
+              9
+            ]
+          ]
+        },
+        "DOI": "10.1038/nature11247",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2012,
+              9,
+              4
+            ]
+          ],
+          "date-time": "2012-09-04T10:12:59Z",
+          "timestamp": 1346753579000
+        },
+        "page": "57-74",
+        "source": "Crossref",
+        "is-referenced-by-count": 17557,
+        "title": [
+          "An integrated encyclopedia of DNA elements in the human genome"
+        ],
+        "prefix": "10.1038",
+        "volume": "489",
+        "author": [
+          {
+            "name": "The ENCODE Project Consortium",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "297",
+        "published-online": {
+          "date-parts": [
+            [
+              2012,
+              9,
+              5
+            ]
+          ]
+        },
+        "reference": [
+          {
+            "key": "BFnature11247_CR1",
+            "doi-asserted-by": "publisher",
+            "first-page": "636",
+            "DOI": "10.1126/science.1105136",
+            "volume": "306",
+            "author": "ENCODE Project Consortium.",
+            "year": "2004",
+            "unstructured": "ENCODE Project Consortium. The ENCODE (ENCyclopedia Of DNA Elements) Project. Science 306, 636–640 (2004)",
+            "journal-title": "Science"
+          },
+          {
+            "key": "BFnature11247_CR2",
+            "doi-asserted-by": "publisher",
+            "first-page": "799",
+            "DOI": "10.1038/nature05874",
+            "volume": "447",
+            "author": "E Birney",
+            "year": "2007",
+            "unstructured": "Birney, E. et al. Identification and analysis of functional elements in 1% of the human genome by the ENCODE pilot project. Nature 447, 799–816 (2007)",
+            "journal-title": "Nature"
+          },
+          {
+            "key": "BFnature11247_CR3",
+            "doi-asserted-by": "publisher",
+            "first-page": "e1001046",
+            "DOI": "10.1371/journal.pbio.1001046",
+            "volume": "9",
+            "author": "The ENCODE Project Consortium.",
+            "year": "2011",
+            "unstructured": "The ENCODE Project Consortium. A user’s guide to the encyclopedia of DNA elements (ENCODE). PLoS Biol. 9, e1001046 (2011)",
+            "journal-title": "PLoS Biol."
+          },
+          {
+            "key": "BFnature11247_CR4",
+            "doi-asserted-by": "publisher",
+            "first-page": "520",
+            "DOI": "10.1038/nature01262",
+            "volume": "420",
+            "author": "Mouse Genome Sequencing Consortium.",
+            "year": "2002",
+            "unstructured": "Mouse Genome Sequencing Consortium. Initial sequencing and comparative analysis of the mouse genome. Nature 420, 520–562 (2002)",
+            "journal-title": "Nature"
+          },
+          {
+            "key": "BFnature11247_CR5",
+            "doi-asserted-by": "publisher",
+            "first-page": "245",
+            "DOI": "10.1101/sqb.2003.68.245",
+            "volume": "68",
+            "author": "F Chiaromonte",
+            "year": "2003",
+            "unstructured": "Chiaromonte, F. et al. The share of human genomic DNA under selection estimated from human-mouse genomic alignments. Cold Spring Harb. Symp. Quant. Biol. 68, 245–254 (2003)",
+            "journal-title": "Cold Spring Harb. Symp. Quant. Biol."
+          },
+          {
+            "key": "BFnature11247_CR6",
+            "doi-asserted-by": "publisher",
+            "first-page": "901",
+            "DOI": "10.1101/gr.3577405",
+            "volume": "15",
+            "author": "GM Cooper",
+            "year": "2005",
+            "unstructured": "Cooper, G. M. et al. Distribution and intensity of constraint in mammalian genomic sequence. Genome Res. 15, 901–913 (2005)",
+            "journal-title": "Genome Res."
+          },
+          {
+            "key": "BFnature11247_CR7",
+            "doi-asserted-by": "publisher",
+            "first-page": "389",
+            "DOI": "10.1126/science.1169050",
+            "volume": "324",
+            "author": "SC Parker",
+            "year": "2009",
+            "unstructured": "Parker, S. C., Hansen, L., Abaan, H. O., Tullius, T. D. & Margulies, E. H. Local DNA topography correlates with functional noncoding regions of the human genome. Science 324, 389–392 (2009)",
+            "journal-title": "Science"
+          },
+          {
+            "key": "BFnature11247_CR8",
+            "doi-asserted-by": "publisher",
+            "first-page": "476",
+            "DOI": "10.1038/nature10530",
+            "volume": "478",
+            "author": "K Lindblad-Toh",
+            "year": "2011",
+            "unstructured": "Lindblad-Toh, K. et al. A high-resolution map of human evolutionary constraint using 29 mammals. Nature 478, 476–482 (2011)",
+            "journal-title": "Nature"
+          },
+          {
+            "key": "BFnature11247_CR9",
+            "doi-asserted-by": "publisher",
+            "first-page": "1245",
+            "DOI": "10.1101/gr.6406307",
+            "volume": "17",
+            "author": "M Pheasant",
+            "year": "2007",
+            "unstructured": "Pheasant, M. & Mattick, J. S. Raising the estimate of functional human sequences. Genome Res. 17, 1245–1253 (2007)",
+            "journal-title": "Genome Res."
+          },
+          {
+            "key": "BFnature11247_CR10",
+            "doi-asserted-by": "publisher",
+            "first-page": "1769",
+            "DOI": "10.1101/gr.116814.110",
+            "volume": "21",
+            "author": "CP Ponting",
+            "year": "2011",
+            "unstructured": "Ponting, C. P. & Hardison, R. C. What fraction of the human genome is functional? Genome Res. 21, 1769–1776 (2011)",
+            "journal-title": "Genome Res."
+          },
+          {
+            "key": "BFnature11247_CR11",
+            "doi-asserted-by": "publisher",
+            "first-page": "12410",
+            "DOI": "10.1073/pnas.0705140104",
+            "volume": "104",
+            "author": "S Asthana",
+            "year": "2007",
+            "unstructured": "Asthana, S. et al. Widely distributed noncoding purifying selection in the human genome. Proc. Natl Acad. Sci. USA 104, 12410–12415 (2007)",
+            "journal-title": "Proc. Natl Acad. Sci. USA"
+          },
+          {
+            "key": "BFnature11247_CR12",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Landt, S. G. et al. ChIP-seq guidelines and practices used by the ENCODE and modENCODE consortia. Genome Res. \n                    http://dx.doi.org/10.1101/gr.136184.111\n                    \n                   (2012)",
+            "DOI": "10.1101/gr.136184.111"
+          },
+          {
+            "key": "BFnature11247_CR13",
+            "doi-asserted-by": "publisher",
+            "first-page": "1752",
+            "DOI": "10.1214/11-AOAS466",
+            "volume": "5",
+            "author": "Q Li",
+            "year": "2011",
+            "unstructured": "Li, Q., Brown, J. B., Huang, H. & Bickel, P. J. Measuring reproducibility of high-throughput experiments. Ann. Appl. Stat. 5, 1752–1779 (2011)",
+            "journal-title": "Ann. Appl. Stat."
+          },
+          {
+            "key": "BFnature11247_CR14",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Harrow, J. et al. GENCODE: The reference human genome annotation for the ENCODE project. Genome Res. \n                    http://dx.doi.org/10.1101/gr.135350.111\n                    \n                   (2012)",
+            "DOI": "10.1101/gr.135350.111"
+          },
+          {
+            "key": "BFnature11247_CR15",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Howald, C. et al. Combining RT-PCR-seq and RNA-seq to catalog all genic elements encoded in the human genome. Genome Res. \n                    http://dx.doi.org/10.1101/gr.134478.111\n                    \n                   (2012)",
+            "DOI": "10.1101/gr.134478.111"
+          },
+          {
+            "key": "BFnature11247_CR16",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Djebali, S. et al. Landscape of transcription in human cells. Nature\n                    http://dx.doi.org/10.1038/nature11233\n                    \n                   (this issue)",
+            "DOI": "10.1038/nature11233"
+          },
+          {
+            "key": "BFnature11247_CR17",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Derrien, T. et al. The GENCODE v7 catalog of human long noncoding RNAs: Analysis of their gene structure, evolution, and expression. Genome Res. \n                    http://dx.doi.org/10.1101/gr.132159.111\n                    \n                   (2012)",
+            "DOI": "10.1101/gr.132159.111"
+          },
+          {
+            "key": "BFnature11247_CR18",
+            "doi-asserted-by": "publisher",
+            "first-page": "R51",
+            "DOI": "10.1186/gb-2012-13-9-r51",
+            "volume": "13",
+            "author": "B Pei",
+            "year": "2012",
+            "unstructured": "Pei, B. et al. The GENCODE pseudogene resource. Genome Biol. 13, R51 (2012)",
+            "journal-title": "Genome Biol."
+          },
+          {
+            "key": "BFnature11247_CR19",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Gerstein, M. B. et al. Architecture of the human regulatory network derived from ENCODE data. Nature \n                    http://dx.doi.org/10.1038/nature11245\n                    \n                   (this issue)",
+            "DOI": "10.1038/nature11245"
+          },
+          {
+            "key": "BFnature11247_CR20",
+            "doi-asserted-by": "publisher",
+            "first-page": "1660",
+            "DOI": "10.1214/10-AOAS363",
+            "volume": "4",
+            "author": "PJ Bickel",
+            "year": "2010",
+            "unstructured": "Bickel, P. J., Boley, N., Brown, J. B., Huang, H. Y. & Zhang, N. R. Subsampling methods for genomic inference. Ann. Appl. Stat. 4, 1660–1697 (2010)",
+            "journal-title": "Ann. Appl. Stat."
+          },
+          {
+            "key": "BFnature11247_CR21",
+            "doi-asserted-by": "publisher",
+            "first-page": "e1001290",
+            "DOI": "10.1371/journal.pgen.1001290",
+            "volume": "7",
+            "author": "T Kaplan",
+            "year": "2011",
+            "unstructured": "Kaplan, T. et al. Quantitative models of the mechanisms that control genome-wide patterns of transcription factor binding during early Drosophila development. PLoS Genet. 7, e1001290 (2011)",
+            "journal-title": "PLoS Genet."
+          },
+          {
+            "key": "BFnature11247_CR22",
+            "doi-asserted-by": "publisher",
+            "first-page": "R34",
+            "DOI": "10.1186/gb-2011-12-4-r34",
+            "volume": "12",
+            "author": "XY Li",
+            "year": "2011",
+            "unstructured": "Li, X. Y. et al. The role of chromatin accessibility in directing the widespread, overlapping patterns of Drosophila transcription factor binding. Genome Biol. 12, R34 (2011)",
+            "journal-title": "Genome Biol."
+          },
+          {
+            "key": "BFnature11247_CR23",
+            "doi-asserted-by": "publisher",
+            "first-page": "447",
+            "DOI": "10.1101/gr.112623.110",
+            "volume": "21",
+            "author": "R Pique-Regi",
+            "year": "2011",
+            "unstructured": "Pique-Regi, R. et al. Accurate inference of transcription factor binding from DNA sequence and chromatin accessibility data. Genome Res. 21, 447–455 (2011)",
+            "journal-title": "Genome Res."
+          },
+          {
+            "key": "BFnature11247_CR24",
+            "doi-asserted-by": "publisher",
+            "first-page": "7024",
+            "DOI": "10.1093/nar/gkp747",
+            "volume": "37",
+            "author": "Y Zhang",
+            "year": "2009",
+            "unstructured": "Zhang, Y. et al. Primary sequence and epigenetic determinants of in vivo occupancy of genomic DNA by GATA1. Nucleic Acids Res. 37, 7024–7038 (2009)",
+            "journal-title": "Nucleic Acids Res."
+          },
+          {
+            "key": "BFnature11247_CR25",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Neph, S. et al. An expansive human regulatory lexicon encoded in transcription factor footprints. Nature \n                    http://dx.doi.org/10.1038/nature11212\n                    \n                   (this issue)",
+            "DOI": "10.1038/nature11212"
+          },
+          {
+            "key": "BFnature11247_CR26",
+            "doi-asserted-by": "publisher",
+            "first-page": "R50",
+            "DOI": "10.1186/gb-2012-13-9-r50",
+            "volume": "13",
+            "author": "TW Whitfield",
+            "year": "2012",
+            "unstructured": "Whitfield, T. W. et al. Functional analysis of transcription factor binding sites in human promoters. Genome Biol. 13, R50 (2012)",
+            "journal-title": "Genome Biol."
+          },
+          {
+            "key": "BFnature11247_CR27",
+            "doi-asserted-by": "publisher",
+            "first-page": "159",
+            "DOI": "10.1146/annurev.bi.57.070188.001111",
+            "volume": "57",
+            "author": "DS Gross",
+            "year": "1988",
+            "unstructured": "Gross, D. S. & Garrard, W. T. Nuclease hypersensitive sites in chromatin. Annu. Rev. Biochem. 57, 159–197 (1988)",
+            "journal-title": "Annu. Rev. Biochem."
+          },
+          {
+            "key": "BFnature11247_CR28",
+            "doi-asserted-by": "publisher",
+            "first-page": "684",
+            "DOI": "10.1002/jcb.10397",
+            "volume": "88",
+            "author": "FD Urnov",
+            "year": "2003",
+            "unstructured": "Urnov, F. D. Chromatin remodeling as a guide to transcriptional regulatory networks in mammals. J. Cell. Biochem. 88, 684–694 (2003)",
+            "journal-title": "J. Cell. Biochem."
+          },
+          {
+            "key": "BFnature11247_CR29",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Thurman, R. E. et al. The accessible chromatin landscape of the human genome. Nature\n                    http://dx.doi.org/10.1038/nature11232\n                    \n                   (this issue)",
+            "DOI": "10.1038/nature11232"
+          },
+          {
+            "key": "BFnature11247_CR30",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Kundaje, A. et al. Ubiquitous heterogeneity and asymmetry of the chromatin environment at regulatory elements. Genome Res. \n                    http://dx.doi.org/10.1101/gr.136366.111\n                    \n                   (2012)",
+            "DOI": "10.1101/gr.136366.111"
+          },
+          {
+            "key": "BFnature11247_CR31",
+            "doi-asserted-by": "publisher",
+            "first-page": "919",
+            "DOI": "10.1101/gad.973302",
+            "volume": "16",
+            "author": "DC Schultz",
+            "year": "2002",
+            "unstructured": "Schultz, D. C., Ayyanathan, K., Negorev, D., Maul, G. G. & Rauscher, F. J., III SETDB1: a novel KAP-1-associated histone H3, lysine 9-specific methyltransferase that contributes to HP1-mediated silencing of euchromatic genes by KRAB zinc-finger proteins. Genes Dev. 16, 919–932 (2002)",
+            "journal-title": "Genes Dev."
+          },
+          {
+            "key": "BFnature11247_CR32",
+            "doi-asserted-by": "publisher",
+            "first-page": "e15082",
+            "DOI": "10.1371/journal.pone.0015082",
+            "volume": "5",
+            "author": "S Frietze",
+            "year": "2010",
+            "unstructured": "Frietze, S., O’Geen, H., Blahnik, K. R., Jin, V. X. & Farnham, P. J. ZNF274 recruits the histone methyltransferase SETDB1 to the 3′ ends of ZNF genes. PLoS ONE 5, e15082 (2010)",
+            "journal-title": "PLoS ONE"
+          },
+          {
+            "key": "BFnature11247_CR33",
+            "doi-asserted-by": "publisher",
+            "first-page": "456",
+            "DOI": "10.1101/gr.112656.110",
+            "volume": "21",
+            "author": "AP Boyle",
+            "year": "2011",
+            "unstructured": "Boyle, A. P. et al. High-resolution genome-wide in vivo footprinting of diverse transcription factors in human cells. Genome Res. 21, 456–464 (2011)",
+            "journal-title": "Genome Res."
+          },
+          {
+            "key": "BFnature11247_CR34",
+            "doi-asserted-by": "publisher",
+            "first-page": "283",
+            "DOI": "10.1038/nmeth.1313",
+            "volume": "6",
+            "author": "JR Hesselberth",
+            "year": "2009",
+            "unstructured": "Hesselberth, J. R. et al. Global mapping of protein-DNA interactions in vivo by digital genomic footprinting. Nature Methods 6, 283–289 (2009)",
+            "journal-title": "Nature Methods"
+          },
+          {
+            "key": "BFnature11247_CR35",
+            "doi-asserted-by": "publisher",
+            "first-page": "R137",
+            "DOI": "10.1186/gb-2008-9-9-r137",
+            "volume": "9",
+            "author": "Y Zhang",
+            "year": "2008",
+            "unstructured": "Zhang, Y. et al. Model-based analysis of ChIP-Seq (MACS). Genome Biol. 9, R137 (2008)",
+            "journal-title": "Genome Biol."
+          },
+          {
+            "key": "BFnature11247_CR36",
+            "doi-asserted-by": "publisher",
+            "first-page": "693",
+            "DOI": "10.1016/j.cell.2007.02.005",
+            "volume": "128",
+            "author": "T Kouzarides",
+            "year": "2007",
+            "unstructured": "Kouzarides, T. Chromatin modifications and their function. Cell 128, 693–705 (2007)",
+            "journal-title": "Cell"
+          },
+          {
+            "key": "BFnature11247_CR37",
+            "doi-asserted-by": "publisher",
+            "first-page": "707",
+            "DOI": "10.1016/j.cell.2007.01.015",
+            "volume": "128",
+            "author": "B Li",
+            "year": "2007",
+            "unstructured": "Li, B., Carey, M. & Workman, J. L. The role of chromatin during transcription. Cell 128, 707–719 (2007)",
+            "journal-title": "Cell"
+          },
+          {
+            "key": "BFnature11247_CR38",
+            "doi-asserted-by": "publisher",
+            "first-page": "R195",
+            "DOI": "10.1093/hmg/ddp409",
+            "volume": "18",
+            "author": "GC Hon",
+            "year": "2009",
+            "unstructured": "Hon, G. C., Hawkins, R. D. & Ren, B. Predictive chromatin signatures in the mammalian genome. Hum. Mol. Genet. 18, R195–R201 (2009)",
+            "journal-title": "Hum. Mol. Genet."
+          },
+          {
+            "key": "BFnature11247_CR39",
+            "doi-asserted-by": "publisher",
+            "first-page": "7",
+            "DOI": "10.1038/nrg2905",
+            "volume": "12",
+            "author": "VW Zhou",
+            "year": "2011",
+            "unstructured": "Zhou, V. W., Goren, A. & Bernstein, B. E. Charting histone modifications and the functional organization of mammalian genomes. Nature Rev. Genet. 12, 7–18 (2011)",
+            "journal-title": "Nature Rev. Genet."
+          },
+          {
+            "key": "BFnature11247_CR40",
+            "doi-asserted-by": "publisher",
+            "first-page": "43",
+            "DOI": "10.1038/nature09906",
+            "volume": "473",
+            "author": "J Ernst",
+            "year": "2011",
+            "unstructured": "Ernst, J. et al. Mapping and analysis of chromatin state dynamics in nine human cell types. Nature 473, 43–49 (2011)",
+            "journal-title": "Nature"
+          },
+          {
+            "key": "BFnature11247_CR41",
+            "doi-asserted-by": "publisher",
+            "first-page": "e1000566",
+            "DOI": "10.1371/journal.pcbi.1000566",
+            "volume": "5",
+            "author": "G Hon",
+            "year": "2009",
+            "unstructured": "Hon, G., Wang, W. & Ren, B. Discovery and annotation of functional chromatin signatures in the human genome. PLoS Comput. Biol. 5, e1000566 (2009)",
+            "journal-title": "PLoS Comput. Biol."
+          },
+          {
+            "key": "BFnature11247_CR42",
+            "doi-asserted-by": "publisher",
+            "first-page": "361",
+            "DOI": "10.1038/nbt.1533",
+            "volume": "27",
+            "author": "MP Ball",
+            "year": "2009",
+            "unstructured": "Ball, M. P. et al. Targeted and genome-scale strategies reveal gene-body methylation signatures in human cells. Nature Biotechnol. 27, 361–368 (2009)",
+            "journal-title": "Nature Biotechnol."
+          },
+          {
+            "key": "BFnature11247_CR43",
+            "doi-asserted-by": "publisher",
+            "first-page": "766",
+            "DOI": "10.1038/nature07107",
+            "volume": "454",
+            "author": "A Meissner",
+            "year": "2008",
+            "unstructured": "Meissner, A. et al. Genome-scale DNA methylation maps of pluripotent and differentiated cells. Nature 454, 766–770 (2008)",
+            "journal-title": "Nature"
+          },
+          {
+            "key": "BFnature11247_CR44",
+            "doi-asserted-by": "publisher",
+            "first-page": "953",
+            "DOI": "10.1016/S0092-8674(00)82001-2",
+            "volume": "87",
+            "author": "VV Ogryzko",
+            "year": "1996",
+            "unstructured": "Ogryzko, V. V., Schiltz, R. L., Russanova, V., Howard, B. H. & Nakatani, Y. The transcriptional coactivators p300 and CBP are histone acetyltransferases. Cell 87, 953–959 (1996)",
+            "journal-title": "Cell"
+          },
+          {
+            "key": "BFnature11247_CR45",
+            "doi-asserted-by": "publisher",
+            "first-page": "315",
+            "DOI": "10.1038/nature08514",
+            "volume": "462",
+            "author": "R Lister",
+            "year": "2009",
+            "unstructured": "Lister, R. et al. Human DNA methylomes at base resolution show widespread epigenomic differences. Nature 462, 315–322 (2009)",
+            "journal-title": "Nature"
+          },
+          {
+            "key": "BFnature11247_CR46",
+            "doi-asserted-by": "publisher",
+            "first-page": "1793",
+            "DOI": "10.1126/science.1152850",
+            "volume": "319",
+            "author": "J Dekker",
+            "year": "2008",
+            "unstructured": "Dekker, J. Gene regulation in the third dimension. Science 319, 1793–1794 (2008)",
+            "journal-title": "Science"
+          },
+          {
+            "key": "BFnature11247_CR47",
+            "doi-asserted-by": "publisher",
+            "first-page": "1299",
+            "DOI": "10.1101/gr.5571506",
+            "volume": "16",
+            "author": "J Dostie",
+            "year": "2006",
+            "unstructured": "Dostie, J. et al. Chromosome Conformation Capture Carbon Copy (5C): a massively parallel solution for mapping interactions between genomic elements. Genome Res. 16, 1299–1309 (2006)",
+            "journal-title": "Genome Res."
+          },
+          {
+            "key": "BFnature11247_CR48",
+            "doi-asserted-by": "publisher",
+            "first-page": "690",
+            "DOI": "10.1038/nmeth1009-690",
+            "volume": "6",
+            "author": "BR Lajoie",
+            "year": "2009",
+            "unstructured": "Lajoie, B. R., van Berkum, N. L., Sanyal, A. & Dekker, J. My5C: web tools for chromosome conformation capture studies. Nature Methods 6, 690–691 (2009)",
+            "journal-title": "Nature Methods"
+          },
+          {
+            "key": "BFnature11247_CR49",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Sanyal, A., Lajoie, B., Jain, G. & Dekker, J. The long-range interaction landscape of gene promoters. Nature \n                    http://dx.doi.org/10.1038/nature11279\n                    \n                   (this issue)",
+            "DOI": "10.1038/nature11279"
+          },
+          {
+            "key": "BFnature11247_CR50",
+            "doi-asserted-by": "publisher",
+            "first-page": "58",
+            "DOI": "10.1038/nature08497",
+            "volume": "462",
+            "author": "MJ Fullwood",
+            "year": "2009",
+            "unstructured": "Fullwood, M. J. et al. An oestrogen-receptor-alpha-bound human chromatin interactome. Nature 462, 58–64 (2009)",
+            "journal-title": "Nature"
+          },
+          {
+            "key": "BFnature11247_CR51",
+            "doi-asserted-by": "publisher",
+            "first-page": "84",
+            "DOI": "10.1016/j.cell.2011.12.014",
+            "volume": "148",
+            "author": "G Li",
+            "year": "2012",
+            "unstructured": "Li, G. et al. Extensive promoter-centered chromatin interactions provide a topological basis for transcription regulation. Cell 148, 84–98 (2012)",
+            "journal-title": "Cell"
+          },
+          {
+            "key": "BFnature11247_CR52",
+            "doi-asserted-by": "publisher",
+            "first-page": "815",
+            "DOI": "10.1126/science.1140748",
+            "volume": "317",
+            "author": "AR Borneman",
+            "year": "2007",
+            "unstructured": "Borneman, A. R. et al. Divergence of transcription factor binding sites across related yeast species. Science 317, 815–819 (2007)",
+            "journal-title": "Science"
+          },
+          {
+            "key": "BFnature11247_CR53",
+            "doi-asserted-by": "publisher",
+            "first-page": "730",
+            "DOI": "10.1038/ng2047",
+            "volume": "39",
+            "author": "DT Odom",
+            "year": "2007",
+            "unstructured": "Odom, D. T. et al. Tissue-specific transcriptional regulation has diverged significantly between human and mouse. Nature Genet. 39, 730–732 (2007)",
+            "journal-title": "Nature Genet."
+          },
+          {
+            "key": "BFnature11247_CR54",
+            "doi-asserted-by": "publisher",
+            "first-page": "1036",
+            "DOI": "10.1126/science.1186176",
+            "volume": "328",
+            "author": "D Schmidt",
+            "year": "2010",
+            "unstructured": "Schmidt, D. et al. Five-vertebrate ChIP-seq reveals the evolutionary dynamics of transcription factor binding. Science 328, 1036–1040 (2010)",
+            "journal-title": "Science"
+          },
+          {
+            "key": "BFnature11247_CR55",
+            "doi-asserted-by": "crossref",
+            "unstructured": "A map of human genome variation from population-scale sequencing. Nature 467, 1061–1073 (2010)",
+            "DOI": "10.1038/nature09534"
+          },
+          {
+            "key": "BFnature11247_CR56",
+            "doi-asserted-by": "publisher",
+            "first-page": "107",
+            "DOI": "10.1126/science.1090005",
+            "volume": "188",
+            "author": "MC King",
+            "year": "1975",
+            "unstructured": "King, M. C. & Wilson, A. C. Evolution at two levels in humans and chimpanzees. Science 188, 107–116 (1975)",
+            "journal-title": "Science"
+          },
+          {
+            "key": "BFnature11247_CR57",
+            "doi-asserted-by": "publisher",
+            "first-page": "R49",
+            "DOI": "10.1186/gb-2012-13-9-r49",
+            "volume": "13",
+            "author": "M Spivakov",
+            "year": "2012",
+            "unstructured": "Spivakov, M. et al. Analysis of variation at transcription factor binding sites in Drosophila and humans. Genome Biol. 13, R49 (2012)",
+            "journal-title": "Genome Biol."
+          },
+          {
+            "key": "BFnature11247_CR58",
+            "doi-asserted-by": "publisher",
+            "first-page": "424",
+            "DOI": "10.1038/nrg2026",
+            "volume": "8",
+            "author": "A Sandelin",
+            "year": "2007",
+            "unstructured": "Sandelin, A. et al. Mammalian RNA polymerase II core promoters: insights from genome-wide studies. Nature Rev. Genet. 8, 424–436 (2007)",
+            "journal-title": "Nature Rev. Genet."
+          },
+          {
+            "key": "BFnature11247_CR59",
+            "doi-asserted-by": "publisher",
+            "first-page": "R53",
+            "DOI": "10.1186/gb-2012-13-9-r53",
+            "volume": "13",
+            "author": "X Dong",
+            "year": "2012",
+            "unstructured": "Dong, X. et al. Modeling gene expression using chromatin features in various cellular contexts. Genome Biol. 13, R53 (2012)",
+            "journal-title": "Genome Biol."
+          },
+          {
+            "key": "BFnature11247_CR60",
+            "doi-asserted-by": "publisher",
+            "first-page": "1495",
+            "DOI": "10.1038/nsmb.1924",
+            "volume": "17",
+            "author": "JT Huff",
+            "year": "2010",
+            "unstructured": "Huff, J. T., Plocik, A. M., Guthrie, C. & Yamamoto, K. R. Reciprocal intronic and exonic histone modification regions in humans. Nature Struct. Mol. Biol. 17, 1495–1499 (2010)",
+            "journal-title": "Nature Struct. Mol. Biol."
+          },
+          {
+            "key": "BFnature11247_CR61",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Tilgner, H. et al. Deep sequencing of subcellular RNA fractions shows splicing to be predominantly co-transcriptional in the human genome but inefficient for lncRNAs. Genome Res. \n                    http://dx.doi.org/10.1101/gr.134445.111\n                    \n                   (2012)",
+            "DOI": "10.1101/gr.134445.111"
+          },
+          {
+            "key": "BFnature11247_CR62",
+            "doi-asserted-by": "publisher",
+            "first-page": "e1000138",
+            "DOI": "10.1371/journal.pgen.1000138",
+            "volume": "4",
+            "author": "Y Fu",
+            "year": "2008",
+            "unstructured": "Fu, Y., Sinha, M., Peterson, C. L. & Weng, Z. The insulator binding protein CTCF positions 20 nucleosomes around its binding sites across the human genome. PLoS Genet. 4, e1000138 (2008)",
+            "journal-title": "PLoS Genet."
+          },
+          {
+            "key": "BFnature11247_CR63",
+            "doi-asserted-by": "publisher",
+            "first-page": "6677",
+            "DOI": "10.1093/nar/16.14.6677",
+            "volume": "16",
+            "author": "RD Kornberg",
+            "year": "1988",
+            "unstructured": "Kornberg, R. D. & Stryer, L. Statistical distributions of nucleosomes: nonrandom locations by a stochastic mechanism. Nucleic Acids Res. 16, 6677–6690 (1988)",
+            "journal-title": "Nucleic Acids Res."
+          },
+          {
+            "key": "BFnature11247_CR64",
+            "doi-asserted-by": "publisher",
+            "first-page": "887",
+            "DOI": "10.1016/j.cell.2008.02.022",
+            "volume": "132",
+            "author": "DE Schones",
+            "year": "2008",
+            "unstructured": "Schones, D. E. et al. Dynamic regulation of nucleosome positioning in the human genome. Cell 132, 887–898 (2008)",
+            "journal-title": "Cell"
+          },
+          {
+            "key": "BFnature11247_CR65",
+            "doi-asserted-by": "publisher",
+            "first-page": "516",
+            "DOI": "10.1038/nature10002",
+            "volume": "474",
+            "author": "A Valouev",
+            "year": "2011",
+            "unstructured": "Valouev, A. et al. Determinants of nucleosome organization in primary human cells. Nature 474, 516–520 (2011)",
+            "journal-title": "Nature"
+          },
+          {
+            "key": "BFnature11247_CR66",
+            "doi-asserted-by": "publisher",
+            "first-page": "R52",
+            "DOI": "10.1186/gb-2012-13-9-r52",
+            "volume": "13",
+            "author": "S Frietze",
+            "year": "2012",
+            "unstructured": "Frietze, S. et al. Cell type-specific binding patterns reveal that TCF7L2 can be tethered to the genome by association with GATA3. Genome Biol. 13, R52 (2012)",
+            "journal-title": "Genome Biol."
+          },
+          {
+            "key": "BFnature11247_CR67",
+            "doi-asserted-by": "publisher",
+            "first-page": "R48",
+            "DOI": "10.1186/gb-2012-13-9-r48",
+            "volume": "13",
+            "author": "KY Yip",
+            "year": "2012",
+            "unstructured": "Yip, K. Y. et al. Classification of human genomic regions based on experimentally-determined binding sites of more than 100 transcription-related factors. Genome Biol. 13, R48 (2012)",
+            "journal-title": "Genome Biol."
+          },
+          {
+            "key": "BFnature11247_CR68",
+            "doi-asserted-by": "publisher",
+            "first-page": "473",
+            "DOI": "10.1038/nmeth.1937",
+            "volume": "9",
+            "author": "MM Hoffman",
+            "year": "2012",
+            "unstructured": "Hoffman, M. M. et al. Unsupervised pattern discovery in human chromatin structure through genomic segmentation. Nature Methods 9, 473–476 (2012)",
+            "journal-title": "Nature Methods"
+          },
+          {
+            "key": "BFnature11247_CR69",
+            "doi-asserted-by": "publisher",
+            "first-page": "1484",
+            "DOI": "10.1126/science.1138341",
+            "volume": "316",
+            "author": "P Kapranov",
+            "year": "2007",
+            "unstructured": "Kapranov, P. et al. RNA maps reveal new RNA classes and a possible function for pervasive transcription. Science 316, 1484–1488 (2007)",
+            "journal-title": "Science"
+          },
+          {
+            "key": "BFnature11247_CR70",
+            "doi-asserted-by": "publisher",
+            "first-page": "956",
+            "DOI": "10.1038/nsmb.2085",
+            "volume": "18",
+            "author": "F Koch",
+            "year": "2011",
+            "unstructured": "Koch, F. et al. Transcription initiation platforms and GTF recruitment at tissue-specific enhancers and promoters. Nature Struct. Mol. Biol. 18, 956–963 (2011)",
+            "journal-title": "Nature Struct. Mol. Biol."
+          },
+          {
+            "key": "BFnature11247_CR71",
+            "doi-asserted-by": "publisher",
+            "first-page": "495",
+            "DOI": "10.1038/nbt.1630",
+            "volume": "28",
+            "author": "CY McLean",
+            "year": "2010",
+            "unstructured": "McLean, C. Y. et al. GREAT improves functional interpretation of cis-regulatory regions. Nature Biotechnol. 28, 495–501 (2010)",
+            "journal-title": "Nature Biotechnol."
+          },
+          {
+            "key": "BFnature11247_CR72",
+            "doi-asserted-by": "publisher",
+            "first-page": "522",
+            "DOI": "10.1038/msb.2011.54",
+            "volume": "7",
+            "author": "J Rozowsky",
+            "year": "2011",
+            "unstructured": "Rozowsky, J. et al. AlleleSeq: analysis of allele-specific expression and binding in a network framework. Mol. Syst. Biol. 7, 522 (2011)",
+            "journal-title": "Mol. Syst. Biol."
+          },
+          {
+            "key": "BFnature11247_CR73",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Boyle, A. P. et al. Annotation of functional variation in personal genomes using RegulomeDB. Genome Res. \n                    http://dx.doi.org/10.1101/gr.137323.112\n                    \n                   (2012)",
+            "DOI": "10.1101/gr.137323.112"
+          },
+          {
+            "key": "BFnature11247_CR74",
+            "doi-asserted-by": "publisher",
+            "first-page": "9362",
+            "DOI": "10.1073/pnas.0903103106",
+            "volume": "106",
+            "author": "LA Hindorff",
+            "year": "2009",
+            "unstructured": "Hindorff, L. A. et al. Potential etiologic and functional implications of genome-wide association loci for human diseases and traits. Proc. Natl Acad. Sci. USA 106, 9362–9367 (2009)",
+            "journal-title": "Proc. Natl Acad. Sci. USA"
+          },
+          {
+            "key": "BFnature11247_CR75",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Schaub, M. A., Boyle, A. P., Kundaje, A., Batzoglou, S. & Snyder, M. Linking disease associations with regulatory information in the human genome. Genome Res. \n                    http://dx.doi.org/10.1101/gr.136127.111\n                    \n                   (2012)",
+            "DOI": "10.1101/gr.136127.111"
+          },
+          {
+            "key": "BFnature11247_CR76",
+            "doi-asserted-by": "publisher",
+            "first-page": "e58",
+            "DOI": "10.1371/journal.pgen.0030058",
+            "volume": "3",
+            "author": "C Libioulle",
+            "year": "2007",
+            "unstructured": "Libioulle, C. et al. Novel Crohn disease locus identified by genome-wide association maps to a gene desert on 5p13.1 and modulates expression of PTGER4. PLoS Genet. 3, e58 (2007)",
+            "journal-title": "PLoS Genet."
+          },
+          {
+            "key": "BFnature11247_CR77",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Vernot, B. et al. Personal and population genomics of human regulatory variation. Genome Res. \n                    http://dx.doi.org/10.1101/gr.134890.111\n                    \n                   (2012)",
+            "DOI": "10.1101/gr.134890.111"
+          },
+          {
+            "key": "BFnature11247_CR78",
+            "doi-asserted-by": "publisher",
+            "first-page": "264",
+            "DOI": "10.1038/nature09753",
+            "volume": "470",
+            "author": "O Harismendy",
+            "year": "2011",
+            "unstructured": "Harismendy, O. et al. 9p21 DNA variants associated with coronary artery disease impair interferon-γ signalling response. Nature 470, 264–268 (2011)",
+            "journal-title": "Nature"
+          },
+          {
+            "key": "BFnature11247_CR79",
+            "doi-asserted-by": "publisher",
+            "unstructured": "Cheng, C. et al. Understanding transcriptional regulation by integrative analysis of transcription factor binding data. Genome Res. \n                    http://dx.doi.org/10.1101/gr.136838.111\n                    \n                   (2012)",
+            "DOI": "10.1101/gr.136838.111"
+          },
+          {
+            "key": "BFnature11247_CR80",
+            "doi-asserted-by": "publisher",
+            "first-page": "943",
+            "DOI": "10.1038/nature08795",
+            "volume": "463",
+            "author": "SC Schuster",
+            "year": "2010",
+            "unstructured": "Schuster, S. C. et al. Complete Khoisan and Bantu genomes from southern Africa. Nature 463, 943–947 (2010)",
+            "journal-title": "Nature"
+          }
+        ],
+        "container-title": [
+          "Nature"
+        ],
+        "original-title": [],
+        "language": "en",
+        "link": [
+          {
+            "URL": "http://www.nature.com/articles/nature11247.pdf",
+            "content-type": "application/pdf",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "http://www.nature.com/articles/nature11247",
+            "content-type": "text/html",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "http://www.nature.com/articles/nature11247.pdf",
+            "content-type": "application/pdf",
+            "content-version": "vor",
+            "intended-application": "similarity-checking"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2023,
+              5,
+              18
+            ]
+          ],
+          "date-time": "2023-05-18T14:02:10Z",
+          "timestamp": 1684418530000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://www.nature.com/articles/nature11247"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2012,
+              9
+            ]
+          ]
+        },
+        "references-count": 80,
+        "journal-issue": {
+          "issue": "7414",
+          "published-print": {
+            "date-parts": [
+              [
+                2012,
+                9
+              ]
+            ]
+          }
+        },
+        "alternative-id": [
+          "BFnature11247"
+        ],
+        "URL": "https://doi.org/10.1038/nature11247",
+        "relation": {
+          "has-review": [
+            {
+              "id-type": "doi",
+              "id": "10.3410/f.717957010.793464805",
+              "asserted-by": "object"
+            },
+            {
+              "id-type": "doi",
+              "id": "10.3410/f.717957010.793461503",
+              "asserted-by": "object"
+            }
+          ]
+        },
+        "ISSN": [
+          "0028-0836",
+          "1476-4687"
+        ],
+        "issn-type": [
+          {
+            "value": "0028-0836",
+            "type": "print"
+          },
+          {
+            "value": "1476-4687",
+            "type": "electronic"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2012,
+              9
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T05:26:48.315Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

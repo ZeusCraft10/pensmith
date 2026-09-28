@@ -45,8 +45,8 @@ const OPEN_RECORDINGS: Readonly<Record<string, string>> = Object.freeze({});
 
 test('CI-07: the store has real recordings (recorded cassettes exist outside synthetic/)', () => {
   assert.ok(files.length > 0, 'cassettes exist');
-  assert.ok(recorded.length >= 7, `real recordings for the source adapters, got ${recorded.map(rel).join(', ')}`);
-  for (const adapter of ['crossref', 'openalex', 'arxiv', 'pubmed', 'unpaywall', 'retraction-watch', 'semanticscholar']) {
+  assert.ok(recorded.length >= 8, `real recordings for the source adapters, got ${recorded.map(rel).join(', ')}`);
+  for (const adapter of ['crossref', 'openalex', 'arxiv', 'pubmed', 'unpaywall', 'retraction-watch', 'semanticscholar', 'books']) {
     assert.ok(recorded.some((f) => rel(f).startsWith(`${adapter}/`)), `a recorded ${adapter} cassette`);
   }
 });

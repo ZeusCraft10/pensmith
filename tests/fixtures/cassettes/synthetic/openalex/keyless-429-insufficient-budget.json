@@ -1,0 +1,16 @@
+[
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works?search=insufficient+budget+probe&per-page=10&select=id%2Cdoi%2Ctitle%2Cpublication_year%2Cauthorships%2Ctype%2Cprimary_location%2Cbiblio%2Cabstract_inverted_index%2Cids%2Cis_retracted",
+    "status": 429,
+    "response": {
+      "error": "Rate limit exceeded",
+      "message": "Insufficient budget. This request has no API key, so it counts against the free daily budget shared by everyone on your network's IP address, and that budget is used up ($0 remaining; resets at midnight UTC). Use your own key instead: add ?api_key=YOUR_KEY to the URL, or send it as an \"Authorization: Bearer YOUR_KEY\" header. Keys are free and have their own daily budget: https://openalex.org/settings/api"
+    },
+    "responseHeaders": {
+      "content-type": "application/json",
+      "retry-after": "67802"
+    }
+  }
+]
