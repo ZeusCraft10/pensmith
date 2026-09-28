@@ -1,90 +1,154 @@
-// tests/disciplines-schema.test.ts — Phase 10 Plan 10-00 Wave-0 RED scaffold
-// (RSCH-06 / CITE-02 discipline→style coverage).
+// tests/disciplines-schema.test.ts — GRND-06 (PRD §8): templates/presets/
+// disciplines.json holds the PRD §8 table, row by row, and bin/lib/disciplines.ts
+// is its one validated loader and resolver.
 //
-// Asserts templates/presets/disciplines.json carries the full 6-field PRD §8
-// schema on every entry.
-//
-// RED-by-skip (Phase-10 Wave-0 convention — matches 05-01/06-01/08-00: Wave-0
-// scaffolds skip rather than hard-fail so the FULL suite stays GREEN with zero
-// failures). The schema assertions skip NOW because Plan 10-03 has not yet
-// expanded disciplines.json (it currently carries only 2 fields per entry —
-// defaultTone + defaultCitationStyle). The `schemaComplete` guard inverts and
-// these become real assertions automatically once 10-03 lands the 6-field schema.
+// Every PRD §8 value is asserted (not only field presence): default citation
+// style (plus the selectable alternates), source preference in order, the
+// sectioning convention, the counterargument default and the per-paragraph
+// citation-density band. `sociology` is the extra preset PRD §8 lists.
+// Replaces the Phase 10 Wave-0 scaffold, whose assertions skipped until the
+// file had six fields (it never did).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import {
+  DISCIPLINES_PATH,
+  PresetsFileSchema,
+  loadDisciplinePresets,
+  disciplineSlugs,
+  normalizeDisciplineSlug,
+  presetFor,
+  resolveDiscipline,
+  resolveLayered,
+  defaultCitationStyleFor,
+  densityBandFor,
+  FALLBACK_DISCIPLINE,
+} from '../bin/lib/disciplines.js';
 
-const disciplinesPath = fileURLToPath(
-  new URL('../templates/presets/disciplines.json', import.meta.url),
-);
-
-const REQUIRED_FIELDS = [
-  'defaultTone',
-  'defaultCitationStyle',
-  'sourcePreference',
-  'sectioningConvention',
-  'counterargDefault',
-  'densityTarget',
-] as const;
-
-function loadPresets(): Record<string, Record<string, unknown>> {
-  const raw = readFileSync(disciplinesPath, 'utf8');
-  return JSON.parse(raw) as Record<string, Record<string, unknown>>;
+interface Row {
+  style: string;
+  alternates: string[];
+  sources: string[];
+  sections: string[];
+  counter: 'on' | 'off' | 'ask';
+  density: [number, number];
 }
 
-// schemaComplete is TRUE only once every entry carries all 6 PRD §8 fields
-// (i.e. after Plan 10-03 expands disciplines.json). Until then the schema
-// assertions below skip with a clear reason rather than hard-failing the suite.
-function isSchemaComplete(): boolean {
-  if (!existsSync(disciplinesPath)) return false;
-  try {
-    const presets = loadPresets();
-    const entries = Object.values(presets);
-    if (entries.length === 0) return false;
-    return entries.every((preset) => REQUIRED_FIELDS.every((f) => f in preset));
-  } catch {
-    return false;
-  }
-}
+// PRD §8, one row per preset (source ids: bin/lib/disciplines.ts SOURCE_PREFERENCE_IDS).
+const PRD_8: Readonly<Record<string, Row>> = {
+  'computer-science': {
+    style: 'ieee', alternates: [], sources: ['arxiv', 'semanticscholar', 'openalex'],
+    sections: ['Abstract', 'Introduction', 'Related Work', 'Methods', 'Results', 'Conclusion'], counter: 'off', density: [1, 3],
+  },
+  biology: {
+    style: 'ama', alternates: ['vancouver'], sources: ['pubmed', 'openalex', 'crossref'],
+    sections: ['Abstract', 'Introduction', 'Methods', 'Results', 'Discussion', 'Conclusion'], counter: 'off', density: [2, 4],
+  },
+  history: {
+    style: 'chicago-notes-bib', alternates: [], sources: ['openalex', 'jstor', 'books'],
+    sections: ['Thesis', 'Body', 'Counterargument', 'Conclusion'], counter: 'on', density: [0.5, 2],
+  },
+  literature: {
+    style: 'mla', alternates: [], sources: ['openalex', 'jstor', 'books'],
+    sections: ['Thesis', 'Body', 'Counterargument', 'Conclusion'], counter: 'on', density: [0.5, 2],
+  },
+  psychology: {
+    style: 'apa', alternates: [], sources: ['pubmed', 'psycnet', 'openalex'],
+    sections: ['Abstract', 'Introduction', 'Method', 'Results', 'Discussion'], counter: 'ask', density: [2, 4],
+  },
+  economics: {
+    style: 'apa', alternates: ['chicago-author-date'], sources: ['nber', 'openalex', 'crossref'],
+    sections: ['Abstract', 'Introduction', 'Literature Review', 'Model', 'Results', 'Conclusion'], counter: 'off', density: [1, 3],
+  },
+  philosophy: {
+    style: 'chicago-author-date', alternates: [], sources: ['openalex', 'philpapers', 'books'],
+    sections: ['Thesis', 'Argument', 'Objections', 'Reply', 'Conclusion'], counter: 'on', density: [0.5, 2],
+  },
+  sociology: {
+    style: 'apa', alternates: [], sources: ['openalex', 'crossref', 'semanticscholar'],
+    sections: ['Introduction', 'Literature Review', 'Methods', 'Findings', 'Discussion', 'Conclusion'], counter: 'off', density: [1, 3],
+  },
+  other: {
+    style: 'apa', alternates: [], sources: ['openalex', 'crossref', 'arxiv'],
+    sections: [], counter: 'off', density: [1, 3],
+  },
+};
 
-const schemaComplete = isSchemaComplete();
-const skipUntil6Fields = !schemaComplete;
-
-test('disciplines-schema: disciplines.json exists', () => {
-  assert.ok(existsSync(disciplinesPath), 'MISSING: templates/presets/disciplines.json');
+test('GRND-06: disciplines.json validates and holds exactly the PRD §8 presets (plus sociology)', () => {
+  const raw = JSON.parse(readFileSync(DISCIPLINES_PATH, 'utf8')) as unknown;
+  assert.doesNotThrow(() => PresetsFileSchema.parse(raw));
+  assert.deepEqual(disciplineSlugs().sort(), Object.keys(PRD_8).sort());
 });
 
-test('disciplines-schema: every entry contains all 6 required PRD §8 fields', { skip: skipUntil6Fields }, () => {
-  const presets = loadPresets();
-  for (const [discipline, preset] of Object.entries(presets)) {
-    for (const field of REQUIRED_FIELDS) {
-      assert.ok(
-        field in preset,
-        `disciplines.json['${discipline}'] missing required field '${field}'`,
-      );
-    }
+test('GRND-06: every PRD §8 row value — style, alternates, source order, sections, counterargument, density band', () => {
+  const presets = loadDisciplinePresets();
+  for (const [slug, row] of Object.entries(PRD_8)) {
+    const p = presets[slug];
+    assert.ok(p, slug);
+    assert.equal(p.defaultCitationStyle, row.style, `${slug}: citation style`);
+    assert.deepEqual([...p.alternateCitationStyles], row.alternates, `${slug}: selectable styles`);
+    assert.deepEqual([...p.sourcePreference], row.sources, `${slug}: source preference order`);
+    assert.deepEqual([...p.sectioningConvention], row.sections, `${slug}: sectioning convention`);
+    assert.equal(p.counterargDefault, row.counter, `${slug}: counterargument default`);
+    assert.deepEqual([p.densityPerParagraph.min, p.densityPerParagraph.max], row.density, `${slug}: citations per paragraph`);
   }
 });
 
-test('disciplines-schema: computer-science defaultCitationStyle is ieee, not apa (PRD §8 fix)', { skip: skipUntil6Fields }, () => {
-  const presets = loadPresets();
-  const cs = presets['computer-science'] as { defaultCitationStyle?: unknown } | undefined;
-  assert.equal(
-    cs?.defaultCitationStyle,
-    'ieee',
-    'CS preset must default to IEEE per PRD §8 (was apa)',
-  );
+test('GRND-06: an invalid preset file is rejected (unknown style, empty sources, inverted band, missing fallback)', () => {
+  const good = JSON.parse(readFileSync(DISCIPLINES_PATH, 'utf8')) as { presets: Record<string, Record<string, unknown>> };
+  const mutate = (fn: (f: typeof good) => void): unknown => {
+    const copy = JSON.parse(JSON.stringify(good)) as typeof good;
+    fn(copy);
+    return copy;
+  };
+  assert.throws(() => PresetsFileSchema.parse(mutate((f) => { f.presets['history']!['defaultCitationStyle'] = 'turabian'; })));
+  assert.throws(() => PresetsFileSchema.parse(mutate((f) => { f.presets['history']!['sourcePreference'] = []; })));
+  assert.throws(() => PresetsFileSchema.parse(mutate((f) => { f.presets['history']!['densityPerParagraph'] = { min: 3, max: 1 }; })));
+  assert.throws(() => PresetsFileSchema.parse(mutate((f) => { delete f.presets['other']; })));
+  assert.throws(() => PresetsFileSchema.parse(mutate((f) => { f.presets['history']!['extra'] = 1; })));
 });
 
-test('disciplines-schema: every densityTarget has low/center/high keys', { skip: skipUntil6Fields }, () => {
-  const presets = loadPresets();
-  for (const [discipline, preset] of Object.entries(presets)) {
-    const dt = preset['densityTarget'] as Record<string, unknown> | undefined;
-    assert.ok(
-      dt && 'low' in dt && 'center' in dt && 'high' in dt,
-      `disciplines.json['${discipline}'].densityTarget must have low/center/high`,
-    );
-  }
+test('GRND-06: free-text disciplines normalise to a preset; unknown text falls back to other', () => {
+  const cases: Array<[string, string]> = [
+    ['CS', 'computer-science'],
+    ['computer science', 'computer-science'],
+    ['Biology / Life Sci', 'biology'],
+    ['History', 'history'],
+    ['Lit', 'literature'],
+    ['Psych', 'psychology'],
+    ['econ, micro', 'economics'],
+    ['Philosophy', 'philosophy'],
+    ['sociology', 'sociology'],
+    ['Other', 'other'],
+    ['', FALLBACK_DISCIPLINE],
+    ['underwater basket weaving', FALLBACK_DISCIPLINE],
+    ['email marketing', FALLBACK_DISCIPLINE],
+  ];
+  for (const [text, slug] of cases) assert.equal(normalizeDisciplineSlug(text), slug, text);
+  assert.equal(presetFor('no-such-preset').slug, FALLBACK_DISCIPLINE);
+  assert.equal(defaultCitationStyleFor('History'), 'chicago-notes-bib');
+  assert.deepEqual(densityBandFor('Biology'), { min: 2, max: 4 });
+});
+
+test('GRND-06: precedence is preset < intake answer < config.toml < CLI flag, with the winning layer named', () => {
+  assert.deepEqual(resolveLayered({ preset: 'a' }), { value: 'a', source: 'preset' });
+  assert.deepEqual(resolveLayered({ preset: 'a', intake: 'b' }), { value: 'b', source: 'intake' });
+  assert.deepEqual(resolveLayered({ preset: 'a', intake: 'b', config: 'c' }), { value: 'c', source: 'config' });
+  assert.deepEqual(resolveLayered({ preset: 'a', intake: 'b', config: 'c', flag: 'd' }), { value: 'd', source: 'flag' });
+  assert.deepEqual(resolveLayered({ preset: 'a', intake: undefined, config: undefined, flag: undefined }), { value: 'a', source: 'preset' });
+
+  const bio = resolveDiscipline({ discipline: { intake: 'Biology' }, intake: { citationStyle: 'mla' } });
+  assert.deepEqual([bio.slug.value, bio.slug.source], ['biology', 'intake']);
+  assert.deepEqual([bio.citationStyle.value, bio.citationStyle.source], ['mla', 'intake'], '"Use MLA" beats the AMA preset');
+  const hist = resolveDiscipline({
+    discipline: { intake: 'history', config: 'philosophy', flag: 'psychology' },
+    config: { counterargument: 'off' },
+  });
+  assert.deepEqual([hist.slug.value, hist.slug.source], ['psychology', 'flag']);
+  assert.deepEqual([hist.counterargument.value, hist.counterargument.source], ['off', 'config']);
+  assert.deepEqual([...hist.sourcePreference], ['pubmed', 'psycnet', 'openalex']);
+  assert.equal(hist.tone, presetFor('psychology').defaultTone);
+  const none = resolveDiscipline({ discipline: {} });
+  assert.deepEqual([none.slug.value, none.slug.source, none.citationStyle.value], [FALLBACK_DISCIPLINE, 'preset', 'apa']);
 });

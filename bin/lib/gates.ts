@@ -36,7 +36,11 @@ export type GateId =
   | 'estimate-proceed'
   | 'detector-consent'
   | 'paper-pointer'
-  | 'sketch-confirm';
+  | 'sketch-confirm'
+  // Phase 18 (GRND-01, GRND-02, GRND-09): seam S-A, applied byte-identically by every stream.
+  | 'assignment-pickup'
+  | 'intake-defaults'
+  | 'reoutline';
 
 export interface GateDef {
   readonly id: GateId;
@@ -68,6 +72,9 @@ export const GATES: readonly GateDef[] = Object.freeze([
   { id: 'detector-consent', label: 'Send the full paper text to GPTZero for an AI-detection score?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'EXP-17' },
   { id: 'paper-pointer', label: 'Continue the active paper, or start a new paper here?', yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_USAGE, declineExit: EXIT_USAGE, requirement: 'RUN-14' },
   { id: 'sketch-confirm', label: 'Proceed to intake with this thesis?', yolo: 'skip', yoloChoice: 'proceed to intake', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'ERGO-05' },
+  { id: 'assignment-pickup', label: 'Use the assignment file in this folder?', yolo: 'skip', yoloChoice: 'use the file', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'GRND-01' },
+  { id: 'intake-defaults', label: 'Accept the intake defaults?', yolo: 'skip', yoloChoice: 'accept the defaults', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-02' },
+  { id: 'reoutline', label: 'Re-outline a paper that already has drafts?', yolo: 'skip', yoloChoice: 're-outline (only with --force)', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-09' },
 ] satisfies GateDef[]);
 
 export function gateDef(id: GateId): GateDef {

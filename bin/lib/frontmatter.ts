@@ -35,6 +35,8 @@ import { withLock } from './lock.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 import { CURRENT_PLAN_FRONTMATTER_VERSION } from './schemas/plan-frontmatter.js';
 import { migrate as planV0ToV1 } from './migrations/plan/v0_to_v1.js';
+import { migrate as planV1ToV2 } from './migrations/plan/v1_to_v2.js';
+import { migrate as intakeV0ToV1 } from './migrations/intake/v0_to_v1.js';
 
 // Frontmatter delimiter regex — accepts \n or \r\n line endings.
 // Group 1: the YAML body between the --- fences. Group 2: the markdown body
@@ -127,15 +129,21 @@ export function updateFrontmatter(
 // ---------------------------------------------------------------------------
 
 /**
- * The markdown documents whose frontmatter is versioned. Only PLAN.md carries
- * frontmatter today (v1). INTAKE.md frontmatter arrives with GRND-03, and
- * DRAFT.md / VERIFICATION.md gain it only when a later requirement adds a
- * field — each through this registry, with its migration under
- * bin/lib/migrations/<kind>/ and a version bump in the same change (S-20).
+ * The markdown documents whose frontmatter is versioned: PLAN.md (v2 since
+ * GRND-09 added the outline entry) and INTAKE.md (v1 since GRND-03 made it the
+ * structured brief). DRAFT.md / VERIFICATION.md gain frontmatter only when a
+ * later requirement adds a field — each through this registry, with its
+ * migration under bin/lib/migrations/<kind>/ and a version bump in the same
+ * change (S-20). The intake version constant lives here (not in
+ * bin/lib/intake-brief.ts, which imports this module) and intake-brief.ts
+ * asserts they agree.
  */
 export type FrontmatterKind = 'plan' | 'intake' | 'draft' | 'verification';
 
 type TextMigration = (text: string) => string;
+
+/** The INTAKE.md frontmatter version (GRND-03); intake-brief.ts CURRENT_INTAKE_FRONTMATTER_VERSION equals it. */
+export const INTAKE_FRONTMATTER_VERSION = 1;
 
 interface FrontmatterKindDef {
   /** The version this build writes and reads. 0 = no frontmatter yet. */
@@ -145,8 +153,8 @@ interface FrontmatterKindDef {
 }
 
 export const FRONTMATTER_KINDS: Readonly<Record<FrontmatterKind, FrontmatterKindDef>> = Object.freeze({
-  plan: { current: CURRENT_PLAN_FRONTMATTER_VERSION, migrations: { 0: planV0ToV1 } },
-  intake: { current: 0, migrations: {} },
+  plan: { current: CURRENT_PLAN_FRONTMATTER_VERSION, migrations: { 0: planV0ToV1, 1: planV1ToV2 } },
+  intake: { current: INTAKE_FRONTMATTER_VERSION, migrations: { 0: intakeV0ToV1 } },
   draft: { current: 0, migrations: {} },
   verification: { current: 0, migrations: {} },
 });

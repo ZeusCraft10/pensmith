@@ -1,6 +1,9 @@
 // bin/lib/schemas/plan-frontmatter.ts — section PLAN.md frontmatter schema.
 //
-// Phase 3 Plan 03-03 Task 3.1 (D-04, D-08, D-10).
+// Phase 3 Plan 03-03 Task 3.1 (D-04, D-08, D-10); v2 in Phase 18 (GRND-09, D-18-06).
+//
+// SEAM FILE (Phase 18 plan, S-A). Every stream copies it byte-identically from
+// .planning/phases/18-ground/seams/; no stream edits it during Phase 18.
 //
 // PLAN.md is the source of truth for section state from v2 onward (D-08).
 // This schema validates the YAML frontmatter of each per-section PLAN.md.
@@ -15,6 +18,16 @@
 //                 is runtime (in the plan loader / wave scheduler) since zod
 //                 cannot cross-reference siblings during parse.
 //   - assigned_sources: citekey strings (gen'd by bin/lib/citekey.ts).
+//   - suffix: optional single lowercase letter for a section inserted between
+//             two others (`01a-<slug>/`, GRND-09 / REV-05); absent for `NN-slug`.
+//   - purpose / role / word_target / voice: the section's outline entry
+//             (GRND-09 v2): what it must establish, its role in the argument,
+//             its word target and its optional voice hint (PRD §7.18).
+//   - failure_reason: why `write` failed the section (FEED-04), shown by status.
+//   - stub: true on the stub PLAN.md outline writes (GRND-09); `plan` renders
+//             the planned PLAN.md without it, so the router can tell a stub
+//             (→ plan) from a planned section (→ write) while both are
+//             status `planned` (GRND-13, D-18-06).
 //   - verified_against_draft_hash: string|null (D-10) — set by the verify
 //     verb after Pass-3 OA PDF acceptance against this DRAFT.md's hash.
 //   - status: section state enum, MIRRORS SectionStateSchema in state.ts
@@ -36,7 +49,16 @@ const SLUG = /^[a-z0-9-]+$/;
  * (bin/lib/frontmatter.ts); a newer file is refused with "upgrade pensmith".
  * Adding a field bumps this and ships vN_to_vN+1.ts in the same change (S-20).
  */
-export const CURRENT_PLAN_FRONTMATTER_VERSION = 1;
+export const CURRENT_PLAN_FRONTMATTER_VERSION = 2;
+
+/**
+ * A section's role in the argument (GRND-07 / GRND-10). The outline contract
+ * (llm-contracts.ts OUTLINE_ROLES) uses this list; the counterargument rule
+ * (PRD §7.4) is met by a `counterargument` plus a `rebuttal` section, or by one
+ * combined `counterargument-rebuttal` section.
+ */
+export const SECTION_ROLES = ['intro', 'body', 'counterargument', 'rebuttal', 'counterargument-rebuttal', 'conclusion'] as const;
+export type SectionRole = (typeof SECTION_ROLES)[number];
 
 export const PlanFrontmatterSchema = z.object({
   // CONF-04: the frontmatter version. Every writer stamps it
@@ -44,10 +66,23 @@ export const PlanFrontmatterSchema = z.object({
   // schema sees them — the default only covers in-memory objects.
   schema_version: z.literal(CURRENT_PLAN_FRONTMATTER_VERSION).default(CURRENT_PLAN_FRONTMATTER_VERSION),
   section: z.number().int().min(1),
+  // GRND-09 (v2): a section inserted between two others keeps its neighbour's
+  // number plus a letter (`01a-<slug>/`); never renumbered afterwards.
+  suffix: z.string().regex(/^[a-z]$/).optional(),
   slug: z.string().regex(SLUG),
   title: z.string(),
+  // GRND-09 (v2): the section's outline entry.
+  purpose: z.string().optional(),
+  role: z.enum(SECTION_ROLES).optional(),
   depends_on: z.array(z.string().regex(SLUG)).default([]),
+  word_target: z.number().int().positive().optional(),
+  voice: z.string().optional(),
   assigned_sources: z.array(z.string()).default([]),
+  // GRND-09 / GRND-13 (v2): true on the stub outline writes; `plan` drops it.
+  stub: z.boolean().optional(),
+  // FEED-04 (v2): why write set status `failed` (e.g. "citekey x2020 not
+  // assigned to section 2"); cleared by the next successful write.
+  failure_reason: z.string().optional(),
   // Phase 4 PLAN-02 / D-01: optional per-section wave override. When present,
   // the wave scheduler (bin/lib/scheduler.ts) validates it against
   // max(deps.computed_wave)+1 (PLAN-03) and promotes computed_wave to it.

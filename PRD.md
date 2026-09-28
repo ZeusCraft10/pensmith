@@ -422,11 +422,12 @@ For power users / batch processing / CI testing:
 | `detector-consent` | Send the full paper text to GPTZero for an AI-detection score? | never | skip: 0 | 0 | EXP-17 |
 | `paper-pointer` | Continue the active paper, or start a new paper here? | never | refuse: 2 | 2 | RUN-14 |
 | `sketch-confirm` | Proceed to intake with this thesis? | skip: proceed to intake | refuse: 3 | 3 | ERGO-05 |
-| `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 (planned) |
+| `assignment-pickup` | Use the assignment file in this folder? | skip: use the file | skip: 0 | 0 | GRND-01 |
+| `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 |
 | `plan-research` | Run this section-scoped research? | skip: run it | refuse: 3 | 3 | GRND-17 (planned) |
 | `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |
 | `quote-accept` | Accept this quote match? | never | refuse: 3 | 3 | VRFY-20 (planned) |
-| `reoutline` | Re-outline a paper that already has drafts? | skip only with `--force`: re-outline | refuse: 3 | 3 | GRND-09 (planned) |
+| `reoutline` | Re-outline a paper that already has drafts? | skip: re-outline (only with --force) | refuse: 3 | 3 | GRND-09 |
 
 Automatic revision of a failed section is not a gate `--yolo` can open: it is its own opt-in, `--auto-revise` or `[project] auto_revise = true` (REV-01). Detector consent persisted in `config.toml` (EXP-17) is the only way that gate is answered without asking.
 
