@@ -75,7 +75,7 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
   8. 40 concurrent lock contenders all succeed, a second mutating session on the same paper is refused with the holder's PID while MCP-style per-section sub-locks let different sections proceed, and a mock LLM server in the real current response shape (Anthropic and OpenAI) is available to every test over the real transport
   9. Every new chokepoint is in the CLAUDE.md table and enforced without `eslint-disable`; CI runs on Node 22 and 24; no test touches the real data dir; `npm run cassettes:refresh` re-records scrubbed cassettes locally
   10. Every one of the 158 previously Complete requirements has a stub-sweep verdict with evidence, and each not-done item is a register gap mapped to a v1.0.0 requirement before Phase 18 is planned
-**Plans**: TBD
+**Plans**: 1 plan, [17-PLAN.md](phases/17-runtime/17-PLAN.md), executed as four parallel streams (egress, llm, paper-cli, foundations). **Status (2026-09-28):** 35/37 in-scope requirements Complete. RUN-26 (prompt caching is a no-op) and CI-06 (the Node 22/24 × 3-OS CI run has not been observed) are open. Success criterion 9 is not met until CI-06 closes, and criterion 10 (SWEEP-01) was run by a separate workflow. See [17-SUMMARY.md](phases/17-runtime/17-SUMMARY.md) and [17-VERIFICATION.md](phases/17-runtime/17-VERIFICATION.md).
 
 ### Phase 18: Grounded Generation (GROUND)
 **Goal**: Every generative step is fed the real assignment, answers, topic, outline entry, voice and the section's own sources, every model output is validated against a contract the next step consumes, and bare `pensmith` goes from an assignment file to an exported paper with no hand edits. Absorbs v0.3.0 FEED-01..05.
@@ -218,7 +218,7 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|-----------------|--------|-----------|
-| 17. Tier-2 Runtime Foundations (RUNTIME) | 0/TBD | Not started | - |
+| 17. Tier-2 Runtime Foundations (RUNTIME) | 1/1 | In progress: 35/37 requirements Complete; RUN-26, CI-06 open | - |
 | 18. Grounded Generation (GROUND) | 0/TBD | Not started | - |
 | 19. Sources and Library (SOURCES) | 0/TBD | Not started | - |
 | 20. Verifier Completeness (VERIFY) | 0/TBD | Not started | - |
@@ -241,3 +241,4 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
 *Roadmap initialized: 2026-05-06 from PRD.md*
 *v0.1.0 archived 2026-06-22 · v0.2.0 archived 2026-06-24*
 *v0.3.0 phases 17–19 added: 2026-07-06 · absorbed into v1.0.0 (phases 17–27): 2026-09-27 · refined after critique (180 requirements): 2026-09-27 · SWEEP-01 stub sweep mapped (184 requirements, 333 gap items): 2026-09-27*
+*Phase 17 executed and verified: 2026-09-28 (35/37 Complete; RUN-26 and CI-06 open, so the phase box stays unticked)*

@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: Open Source Release
-status: roadmapped
-last_updated: "2026-09-27T00:00:00.000Z"
-last_activity: 2026-09-27
+status: executing
+last_updated: "2026-09-28T00:00:00.000Z"
+last_activity: 2026-09-28
 progress:
   total_phases: 11
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 1
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,14 +20,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-27 for the v1.0.0 Open Source Release milestone)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** v1.0.0 Open Source Release roadmapped (Phases 17–27, 168 requirements covering all 200 items of the 2026-09-25 gap register). Goal: every completeness category at 100% and the product ready for open source. v0.3.0 Truly End-to-End never started and is absorbed (FEED → Phase 18, SEC → Phase 24, HARDEN → Phase 26, HARDEN-03 → Phase 20). Phase 17 RUNTIME comes first: live network by default (D-V1-01), valid models and runtimes (D-V1-02), documented exit codes, one paper root, session log, cost cap, and the deterministic mock LLM every later phase tests against. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
+**Current focus:** v1.0.0 Open Source Release roadmapped (Phases 17–27, 168 requirements covering all 200 items of the 2026-09-25 gap register). Goal: every completeness category at 100% and the product ready for open source. v0.3.0 Truly End-to-End never started and is absorbed (FEED → Phase 18, SEC → Phase 24, HARDEN → Phase 26, HARDEN-03 → Phase 20). Phase 17 RUNTIME has shipped its runtime foundations: live network by default (D-V1-01), valid models and runtimes (D-V1-02), documented exit codes, one paper root, the session log, the cost cap, and the deterministic mock LLM that every later phase tests against. 35/37 of its requirements are Complete; RUN-26 and CI-06 are open. Next is Phase 18 GROUND. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
 
 ## Current Position
 
-Phase: 17 — Tier-2 Runtime Foundations (RUNTIME) (not started; next up per roadmap)
-Plan: —
-Status: Roadmap created, ready for `/gsd:plan-phase 17`
-Last activity: 2026-09-27 — v1.0.0 milestone defined: REQUIREMENTS.md (168 requirements, 200/200 gap-register items mapped, 0 descoped), ROADMAP.md (Phases 17–27); v0.3.0 absorbed
+Phase: 17 — Tier-2 Runtime Foundations (RUNTIME). Executed and verified, but **not complete**: 2 of its 37 in-scope requirements are open. Next up: Phase 18, Grounded Generation (GROUND).
+Plan: 17-PLAN.md (1/1 executed as four parallel streams, then an integration pass and three review rounds)
+Status: 35/37 in-scope Phase 17 requirements are Complete (`.planning/phases/17-runtime/17-VERIFICATION.md`). Two are open:
+- RUN-26: stable system prompts are not actually cached, because the templates interpolate per-call data, so `cache_control` never hits. Fold the fix into Phase 18's GRND-07 / GRND-13 prompt re-pins.
+- CI-06: the Node 22/24 × ubuntu/macOS/Windows CI run has not been observed. The branch has not been pushed, and the first green run is also the cross-OS evidence for RUN-10, RUN-22, RUN-23 and CI-09.
+
+SWEEP-01 is Complete, done by its own workflow (1d38094), so Phase 18 can be planned.
+Last activity: 2026-09-28. Phase 17 closed as in-progress. Full gate green except the documented root-only atomic-write case (1502/1503). 31 user-path checks were run on the built CLI and on the installed tarball, with live sources and the mock LLM.
 
 ## Performance Metrics
 
@@ -276,10 +280,25 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [v1.0.0 roadmap] Supersedes the v0.3.0 note above: the outline allocation seeds each stub PLAN.md `assigned_sources`, and PLAN.md is the authoritative section→source map, backstopped at write time (FEED-04) and at verify time (VRFY-17, blocking UNASSIGNED)
 - [v1.0.0 roadmap] Synthesis decisions S-01..S-14 (REQUIREMENTS.md) settle the slice drafts' conflicts: exit codes 0/1/2/3 approval (kept)/4 blocked/5 cost cap; RETRACTED blocks; UNVERIFIABLE never FABRICATED but blocks; uncheckable quotes need explicit per-quote acceptance (--yolo does not accept); http.ts follows redirects in its own pinned loop while undici maxRedirections stays 0; new prompt slugs only claim-consistency and the sketch synthesizer (D-12 amendments); export/humanize/score/plagiarism are aliases, 16 verbs stay locked
 - [v1.0.0 roadmap] Sequencing: 17 → 18 → 20 → 21 → 22 → 23 → 25 → 26 → 27; Phase 19 needs 17 and can overlap 18; Phase 24 needs 17 + 19 and can run alongside 20–23. The mock LLM (RUN-21) and per-slug contract stubs (GRND-19) land in 17–18 because every later acceptance test uses them
+- [Phase 17] Decisions D-17-01..49 are in `.planning/phases/17-runtime/17-CONTEXT.md`. Later phases rely on:
+  - D-17-04/05: network mode in http-mock.ts; one egress gate in http.ts callOnce.
+  - D-17-07: blocking UNVERIFIABLE.
+  - D-17-23: one zod schema per structured slug.
+  - D-17-24: per-slug model table.
+  - D-17-27: the `--yolo` pre-flight projects only this run.
+  - D-17-36: prompts read stdin only from a TTY or with PENSMITH_PROMPT_MODE=numbered.
+  - D-17-38: INTAKE/DRAFT/VERIFICATION stay at frontmatter v0 until they gain fields.
+  - D-17-44: later chokepoints add their own rows.
+  - D-17-46: `--dry-run` only in a folder with no paper, until GRND-19.
+  - D-17-47: retraction lookup via Crossref REST.
+- [Phase 17] Ollama structured output goes through its OpenAI-compatible endpoint (`response_format` json_schema, non-strict), generated from the same zod schema.
 
 ### Pending Todos
 
-None yet.
+- RUN-26: restructure the prompt templates so stable text comes first and per-call data last. Mark the stable prefix with `cache_control`, re-pin the hashes, and prove `cache_read_input_tokens > 0` against the mock. Planned with Phase 18's prompt re-pins.
+- CI-06: after the maintainer pushes, record the first green 6-leg `ci.yml` run, then mark CI-06 Complete and tick Phase 17 in ROADMAP.md.
+- Phase 20 (VRFY): the freshness table prints `DOI HEAD | ok` for a citekey with no DOI. It is advisory, but misleading.
+- Phase 23 (PLUG-01 / CI-05): `claude plugin validate .` fails on the `plugin.json` `skills` shape. This predates Phase 17.
 
 ### Blockers/Concerns
 
@@ -297,16 +316,16 @@ Items acknowledged and carried forward at the v0.2.0 milestone close (2026-06-24
 | manual-verify | Live LLM-key generation (GEN-02) + live adapter network round-trip (GEN-03) — Phase 12 | now HARDEN-02 live lane (Phase 26) in v1.0.0 | v0.2.0 close |
 | manual-verify | Live Retraction Watch re-query (GATE-03) — Phase 14 | now SRC-04 + HARDEN-02 (Phases 19, 26) in v1.0.0 | v0.2.0 close |
 | manual-verify | Live-DNS SSRF block (HARD-02) + live GPTZero consent/cap (HARD-05) — Phase 15 | now HARDEN-02 live lane (Phase 26) in v1.0.0 | v0.2.0 close |
-| security-residual | DNS-rebind socket-pinning (WR-03) + worker-thread PDF abort (WR-05) — SECURITY.md | now Phase 24 (SEC-01/02) in v1.0.0 | v0.2.0 close |
+| security-residual | DNS-rebind socket-pinning (WR-03) + worker-thread PDF abort (WR-05) — SECURITY.md | WR-03 closed in Phase 17 (SEC-01, SECURITY.md row 2a PROVEN); WR-05 → Phase 19 (SEC-02) | v0.2.0 close |
 
 ## Session Continuity
 
-Last session: 2026-09-27T00:00:00.000Z
-Stopped at: v1.0.0 Open Source Release defined — REQUIREMENTS.md (168 requirements, 200/200 gap items mapped), ROADMAP.md (Phases 17–27); ready for /gsd:plan-phase 17
+Last session: 2026-09-28T00:00:00.000Z
+Stopped at: Phase 17 closed as in-progress. 35/37 requirements are Complete; RUN-26 and CI-06 are open (17-VERIFICATION.md §5). Ready for /gsd:plan-phase 18.
 Resume file: None
 
 ## Operator Next Steps
 
-- Review .planning/REQUIREMENTS.md: locked decisions D-V1-01..08, synthesis decisions S-01..S-14, the PRD amendments table, and Appendix A/B (gap coverage, partial descopes)
-- Review .planning/ROADMAP.md Phase 17–27 detail and dependencies
-- Run /gsd:plan-phase 17 to begin planning Phase 17 (Tier-2 Runtime Foundations / RUNTIME)
+- Push the branch and confirm that the `ci.yml` matrix (Node 22 and 24 × ubuntu/macOS/Windows) is green. That closes CI-06 and provides the cross-OS evidence for RUN-10, RUN-22, RUN-23 and CI-09; then tick Phase 17 once RUN-26 is also closed.
+- Run /gsd:plan-phase 18 (Grounded Generation). Include the RUN-26 prompt-caching restructure with the GRND-07 / GRND-13 prompt re-pins.
+- Phase 19 (Sources) can be planned alongside Phase 18. It depends only on Phase 17.
