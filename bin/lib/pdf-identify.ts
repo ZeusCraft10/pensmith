@@ -6,6 +6,11 @@
 // took the first line as the title and the first Crossref hit as the answer.
 // This module identifies a PDF from, in order:
 //
+//   0. when the user runs a GROBID server on this machine
+//      (PENSMITH_GROBID_URL, loopback only — bin/lib/grobid.ts) and the caller
+//      passes the PDF's bytes: the DOI / arXiv id GROBID reads from the header,
+//      and GROBID's title and authors in place of the layout heuristic's
+//      (a GROBID failure is a failure line; the heuristic below still runs);
 //   1. identifiers in the embedded metadata — the Info dictionary and XMP
 //      (`prism:doi`, `pdfx:doi`, `crossmark:DOI`, `dc:identifier`, a DOI in
 //      Subject / Keywords, an `arXiv:` id);
@@ -39,6 +44,8 @@ import { lookupIdentifier, searchByTitle, type TitleSearchOutcome } from './sour
 import type { LookupResult } from './sources/lookup.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 import type { PdfExtraction } from './pdf-text.js';
+import { grobidHeader, type GrobidHeader } from './grobid.js';
+import { isOfflineEgressError } from './http.js';
 
 export { TITLE_JW_THRESHOLD, AUTHOR_JW_THRESHOLD };
 
@@ -52,10 +59,12 @@ export interface LocalPdfMetadata {
   readonly authors: readonly string[];
   readonly year: number | null;
   /** Where the title came from. */
-  readonly titleSource: 'metadata' | 'layout' | null;
+  readonly titleSource: 'metadata' | 'layout' | 'grobid' | null;
 }
 
 export type IdentifyVia =
+  | 'grobid-doi'
+  | 'grobid-arxiv'
   | 'metadata-doi'
   | 'metadata-arxiv'
   | 'text-arxiv-stamp'
@@ -87,13 +96,32 @@ export interface IdentifyDeps {
   lookupArxiv(id: string): Promise<LookupResult>;
   /** Search the title; `accept` says whether a hit is a confident match (the search may stop there). */
   searchTitle(title: string, accept: (c: SourceCandidate) => boolean): Promise<TitleSearchOutcome>;
+  /**
+   * The user's local GROBID header for these PDF bytes, or null when GROBID is
+   * not configured / found no header (default: bin/lib/grobid.ts grobidHeader).
+   */
+  grobidHeader?(pdf: Buffer): Promise<GrobidHeader | null>;
 }
 
 const DEFAULT_DEPS: IdentifyDeps = {
   lookupDoi: (doi) => lookupIdentifier({ kind: 'doi', raw: doi, doi }),
   lookupArxiv: (arxiv) => lookupIdentifier({ kind: 'arxiv', raw: arxiv, arxiv }),
   searchTitle: (title, accept) => searchByTitle(title, accept),
+  grobidHeader: (pdf) => grobidHeader(pdf),
 };
+
+/** Options for identifyPdf beyond the extraction. */
+export interface IdentifyOptions {
+  /** The PDF's bytes — needed only for the GROBID header (step 0). */
+  readonly pdf?: Buffer;
+}
+
+/** GROBID's header as the PDF's own metadata (GROBID's title and authors win over the heuristic's). */
+function withGrobid(local: LocalPdfMetadata, g: GrobidHeader): LocalPdfMetadata {
+  const title = g.title.replace(/\s+/g, ' ').trim();
+  if (!title) return local;
+  return { title, authors: g.authors.length > 0 ? g.authors : local.authors, year: local.year, titleSource: 'grobid' };
+}
 
 // ---------------------------------------------------------------------------
 // Metadata.
@@ -369,12 +397,24 @@ function failureLine(what: string, r: Extract<LookupResult, { kind: 'failed' }>)
  * the typed OfflineEgressError (sources offline with no recorded answer, or
  * --dry-run); callers report that as "needs the network".
  */
-export async function identifyPdf(ex: PdfExtraction, deps: IdentifyDeps = DEFAULT_DEPS): Promise<IdentifyResult> {
-  const local = localPdfMetadata(ex);
+export async function identifyPdf(ex: PdfExtraction, deps: IdentifyDeps = DEFAULT_DEPS, opts: IdentifyOptions = {}): Promise<IdentifyResult> {
+  let local = localPdfMetadata(ex);
   const firstPages = ex.pages.length > 0 ? ex.pages.slice(0, IDENTIFY_PAGES).join('\n') : ex.text.slice(0, 12000);
   const hasText = firstPages.replace(/\s/g, '').length > 0;
   const failures: string[] = [];
   const tried = new Set<string>();
+
+  // 0. The user's local GROBID server, when configured (SRC-15, D-19-21).
+  let grobid: GrobidHeader | null = null;
+  if (opts.pdf !== undefined && deps.grobidHeader !== undefined) {
+    try {
+      grobid = await deps.grobidHeader(opts.pdf);
+    } catch (e) {
+      if (isOfflineEgressError(e)) throw e;
+      failures.push(`GROBID: ${(e as Error).message.split(/\r?\n/)[0] ?? 'failed'}`);
+    }
+    if (grobid !== null) local = withGrobid(local, grobid);
+  }
 
   const byId = async (
     kind: 'doi' | 'arxiv',
@@ -394,6 +434,15 @@ export async function identifyPdf(ex: PdfExtraction, deps: IdentifyDeps = DEFAUL
     if (requireTitleOnPage && hasText && !titleOnPages(r.candidate, firstPages, local)) return null;
     return { kind: 'identified', candidate: r.candidate, via, query: kind === 'doi' ? id : `arXiv:${id}`, local };
   };
+
+  if (grobid?.doi) {
+    const hit = await byId('doi', grobid.doi, 'grobid-doi', true);
+    if (hit) return hit;
+  }
+  if (grobid?.arxiv) {
+    const hit = await byId('arxiv', grobid.arxiv, 'grobid-arxiv', true);
+    if (hit) return hit;
+  }
 
   // 1. Embedded metadata identifiers.
   const meta = metadataIdentifiers(ex);

@@ -4,6 +4,7 @@
 //
 //   PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org npm run cassettes:refresh
 //   PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org npm run cassettes:refresh -- --only crossref
+//   PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org npm run cassettes:refresh -- --only crossref --files search-title-attention
 //   npm run cassettes:refresh -- --list
 //
 // How it works:
@@ -39,7 +40,13 @@
 //     run". Hand-writing a response the real API does not return is never an
 //     option; the tests list such files as open recordings.
 //   - Files of the adapter's recorded directory that are no longer in its
-//     query set are removed (their requests are no longer made).
+//     query set are removed (their requests are no longer made) — except with
+//     `--files`, which records only the named files and leaves every other
+//     file of the directory as it is.
+//   - Redirects and binary bodies (D-19-07): a call answered through redirects
+//     records one entry per hop (a 3xx keeps its `location`); a non-text body
+//     (a PDF) is stored base64 with `bodyEncoding: "base64"`. The `generic`
+//     group records plain URL fetches (`fn: 'fetch'`) through http.ts.
 //     tests/fixtures/cassettes/synthetic/ is never touched (hand-written
 //     negative-test fixtures live there).
 //
@@ -71,6 +78,36 @@ export const RECORDED_ARXIV_ID = '1706.03762';
 export const RECORDED_OLD_ARXIV_ID = 'hep-th/9901001';
 /** The title add.ts extracts from tests/fixtures/pdf/byo-text.pdf. */
 export const BYO_PDF_TITLE = 'Attention Is All You Need';
+/** The title of tests/fixtures/byo/no-match.pdf (a work no registrar knows). */
+export const NO_MATCH_PDF_TITLE = 'Field Notes on Moss Growth Beside the Old Mill Stream';
+/** `plan 2 --research` (GRND-17): the query, and the query joined to the seeded section title. */
+export const PLAN_RESEARCH_QUERY = 'instagram adolescent depression longitudinal';
+export const PLAN_RESEARCH_SECTION_TITLE = 'Social media and depression';
+/** Research's results per query (bin/lib/adapter-plan.ts RESEARCH_PER_QUERY_LIMIT) — a lowered count would not replay. */
+const RESEARCH_LIMIT = 10;
+/** The title search's hits per registrar (bin/lib/source-input.ts TITLE_SEARCH_LIMIT). */
+const TITLE_LIMIT = 5;
+/** A small real PDF behind a 301 (http → https): SRC-01 / D-19-07. */
+export const REDIRECT_PDF_URL = 'http://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+
+/** The research fixture lane (19-PLAN §7.3): the attention query from 2015 (SRC-10), exactly as research asks it. */
+const researchFrom2015 = () => ({
+  file: 'search-attention-from-2015',
+  calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: RESEARCH_LIMIT, minLimit: RESEARCH_LIMIT, opts: { fromYear: 2015 } }],
+});
+/** `plan 2 --research` (GRND-17): both of its queries, exactly as research asks them. */
+const planResearch = () => [
+  { file: 'search-plan-research-query', calls: [{ fn: 'search', arg: PLAN_RESEARCH_QUERY, limit: RESEARCH_LIMIT, minLimit: RESEARCH_LIMIT }] },
+  {
+    file: 'search-plan-research-section',
+    calls: [{ fn: 'search', arg: `${PLAN_RESEARCH_QUERY} ${PLAN_RESEARCH_SECTION_TITLE}`, limit: RESEARCH_LIMIT, minLimit: RESEARCH_LIMIT }],
+  },
+];
+/** PDF identification's title searches (SRC-13 / SRC-15): the attention paper and the no-match PDF. */
+const titleSearches = () => [
+  { file: 'search-title-attention', calls: [{ fn: 'search', arg: BYO_PDF_TITLE, limit: TITLE_LIMIT, minLimit: TITLE_LIMIT }] },
+  { file: 'search-title-no-match', calls: [{ fn: 'search', arg: NO_MATCH_PDF_TITLE, limit: TITLE_LIMIT, minLimit: TITLE_LIMIT }] },
+];
 
 /**
  * The recorded query sets. Each cassette file is a list of calls; `limit` calls
@@ -99,6 +136,9 @@ const QUERY_SETS = {
     { file: 'works-wakefield-1998', calls: [{ fn: 'lookupById', arg: RECORDED_RETRACTED_DOI }] },
     // SRC-12: a particle surname (van der Maaten).
     { file: 'works-foreco-2013', calls: [{ fn: 'lookupById', arg: '10.1016/j.foreco.2013.06.030' }] },
+    researchFrom2015(),
+    ...titleSearches(),
+    ...planResearch(),
   ],
   openalex: [
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3 }] },
@@ -107,18 +147,29 @@ const QUERY_SETS = {
     { file: 'works-W2919115771', calls: [{ fn: 'lookupById', arg: 'W2919115771' }] },
     // A W-id OpenAlex does not know: a real 404 (not-found).
     { file: 'works-W2963403868-404', calls: [{ fn: 'lookupById', arg: 'W2963403868' }] },
+    // Title searches only: research's own queries ask OpenAlex for 10 works
+    // with abstracts, which exceeds the 51200-byte cassette cap at any size
+    // research requests — the fixture lane reports those as `offline: no
+    // recorded fixture`, and the live lane (npm run live:sources) covers them.
+    ...titleSearches(),
   ],
   arxiv: [
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3, pauseMs: 3500 }] },
     { file: 'id-1706.03762', calls: [{ fn: 'lookupById', arg: RECORDED_ARXIV_ID, pauseMs: 3500 }] },
     { file: 'id-hep-th-9901001', calls: [{ fn: 'lookupById', arg: RECORDED_OLD_ARXIV_ID, pauseMs: 3500 }] },
+    // (No from-2015 file: the arXiv API has no date filter, so research's
+    // request with min_year set is search-attention-neural-networks — the
+    // [sources] policy drops the older works afterwards.)
   ],
   pubmed: [
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3 }] },
     { file: 'esummary-31978945', calls: [{ fn: 'lookupById', arg: '31978945' }] },
+    researchFrom2015(),
+    ...planResearch(),
   ],
   semanticscholar: [
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3 }] },
+    researchFrom2015(),
   ],
   unpaywall: [
     { file: 'doi-nphys1170', calls: [{ fn: 'lookupById', arg: RECORDED_DOI }] },
@@ -140,6 +191,10 @@ const QUERY_SETS = {
     // SRC-11: Kuhn, The Structure of Scientific Revolutions (3rd ed., 1996).
     { file: 'isbn-9780226458083', calls: [{ fn: 'lookupById', arg: 'isbn:9780226458083' }] },
     { file: 'search-economic-consequences-of-the-peace', calls: [{ fn: 'search', arg: 'The Economic Consequences of the Peace', limit: 5, minLimit: 2 }] },
+  ],
+  // Plain URL fetches through http.ts (source 'generic'), redirects recorded hop by hop.
+  generic: [
+    { file: 'redirect-w3-dummy-pdf', calls: [{ fn: 'fetch', arg: REDIRECT_PDF_URL }] },
   ],
 };
 
@@ -174,12 +229,18 @@ function fitting(entries) {
 // Child: record one adapter (runs under `node --import tsx`)
 // ---------------------------------------------------------------------------
 
-async function runChild(adapter) {
-  const spec = QUERY_SETS[adapter];
-  if (!spec) throw new Error(`unknown adapter "${adapter}"`);
+async function runChild(adapter, files = []) {
+  const all = QUERY_SETS[adapter];
+  if (!all) throw new Error(`unknown adapter "${adapter}"`);
+  const unknownFiles = files.filter((f) => !all.some((c) => c.file === f));
+  if (unknownFiles.length > 0) throw new Error(`unknown file(s) for ${adapter}: ${unknownFiles.join(', ')}`);
+  const spec = files.length > 0 ? all.filter((c) => files.includes(c.file)) : all;
   const bin = (rel) => pathToFileURL(path.join(REPO_ROOT, 'bin', 'lib', rel)).href;
-  const mod = await import(bin(path.join('sources', `${adapter}.js`)));
   const http = await import(bin('http.js'));
+  // `generic`: plain URL fetches through the one transport (no adapter module).
+  const mod = adapter === 'generic'
+    ? { fetch: (url) => http.fetch(url, { source: 'generic', noCache: true, maxBytes: 16 * 1024 * 1024 }) }
+    : await import(bin(path.join('sources', `${adapter}.js`)));
   const mock = await import(bin('http-mock.js'));
   const { atomicWriteFile } = await import(bin('atomic-write.js'));
 
@@ -208,6 +269,8 @@ async function runChild(adapter) {
       status: f.status,
       response: f.response,
       responseHeaders: headers,
+      // D-19-07: a non-text body (a PDF) is base64 — replay decodes it by this field.
+      ...(f.bodyEncoding ? { bodyEncoding: f.bodyEncoding } : {}),
       ...(f.bodySha256 ? { bodySha256: f.bodySha256 } : {}),
       provenance: { recordedAt, recorder: 'scripts/refresh-cassettes.mjs', adapter },
     };
@@ -234,6 +297,11 @@ async function runChild(adapter) {
     if (call.fn === 'lookupById') {
       const r = await mod.lookupById(call.arg);
       if (r.kind === 'failed') throw new Error(`lookup failed: ${r.reason}`);
+      return;
+    }
+    if (call.fn === 'fetch') {
+      const res = await mod.fetch(call.arg);
+      if (res.status !== 200) throw new Error(`fetch answered HTTP ${res.status}`);
       return;
     }
     await mod[call.fn](call.arg);
@@ -288,13 +356,40 @@ async function runChild(adapter) {
   // whose requests the adapter no longer makes (synthetic/ untouched).
   const dir = path.join(CASSETTES_ROOT, adapter);
   mkdirSync(dir, { recursive: true });
-  const wanted = new Set(spec.map((c) => `${c.file}.json`));
-  for (const f of readdirSync(dir)) {
+  const wanted = new Set(all.map((c) => `${c.file}.json`));
+  for (const f of files.length > 0 ? [] : readdirSync(dir)) {
     if (f.endsWith('.json') && !wanted.has(f)) {
       rmSync(path.join(dir, f));
       process.stdout.write(`  removed ${adapter}/${f} (no longer in the recorded query set)\n`);
     }
   }
+  // The exact-match store must stay unambiguous (tests/cassette-provenance):
+  // a request another file of this directory already answers (PubMed's
+  // esummary of the same ids, reached by two searches) is left to that file.
+  const { readFileSync } = await import('node:fs');
+  const keysElsewhere = (file) => {
+    const keys = new Set();
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith('.json') || f === `${file}.json`) continue;
+      if (outcomes.some((o) => `${o.file}.json` === f && o.error === null)) continue; // re-recorded below
+      for (const e of JSON.parse(readFileSync(path.join(dir, f), 'utf8'))) keys.add(mock.cassetteKey(e));
+    }
+    for (const o of outcomes) {
+      if (o.file === file || o.error !== null) continue;
+      if (outcomes.indexOf(o) < outcomes.findIndex((x) => x.file === file)) for (const e of o.entries) keys.add(mock.cassetteKey(e));
+    }
+    return keys;
+  };
+  for (const o of outcomes) {
+    if (o.error !== null) continue;
+    const taken = keysElsewhere(o.file);
+    const kept = o.entries.filter((e) => !taken.has(mock.cassetteKey(e)));
+    if (kept.length !== o.entries.length) {
+      o.notes.push(`${o.entries.length - kept.length} entr${o.entries.length - kept.length === 1 ? 'y' : 'ies'} already answered by another file — left there`);
+      o.entries = kept;
+    }
+  }
+
   let failed = 0;
   for (const o of outcomes) {
     const target = path.join(dir, `${o.file}.json`);
@@ -318,7 +413,7 @@ async function runChild(adapter) {
 // ---------------------------------------------------------------------------
 
 function parseArgs(argv) {
-  const out = { only: [], child: null, list: false };
+  const out = { only: [], files: [], child: null, list: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--only') {
@@ -327,12 +422,16 @@ function parseArgs(argv) {
       out.only.push(...v.split(',').map((s) => s.trim()).filter(Boolean));
     } else if (a.startsWith('--only=')) {
       out.only.push(...a.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean));
+    } else if (a === '--files') {
+      const v = argv[++i];
+      if (!v) throw new Error('--files needs file names (without .json)');
+      out.files.push(...v.split(',').map((f) => f.trim().replace(/\.json$/, '')).filter(Boolean));
     } else if (a === '--child') {
       out.child = argv[++i] ?? null;
     } else if (a === '--list') {
       out.list = true;
     } else {
-      throw new Error(`unknown argument "${a}" (usage: npm run cassettes:refresh -- [--only <adapter>[,<adapter>]] [--list])`);
+      throw new Error(`unknown argument "${a}" (usage: npm run cassettes:refresh -- [--only <adapter>[,<adapter>]] [--files <file>[,<file>]] [--list])`);
     }
   }
   return out;
@@ -360,6 +459,10 @@ function runParent(args) {
     return 2;
   }
   const targets = args.only.length > 0 ? args.only : ADAPTERS;
+  if (args.files.length > 0 && targets.length !== 1) {
+    process.stderr.write('refresh-cassettes: --files goes with exactly one --only <adapter>\n');
+    return 2;
+  }
   const failed = [];
   for (const adapter of targets) {
     process.stdout.write(`refresh-cassettes: recording ${adapter} …\n`);
@@ -375,7 +478,8 @@ function runParent(args) {
     env.LOCALAPPDATA = dataDir;
     env.HOME = dataDir;
     // tsx resolved to an absolute URL: the child's cwd is the temp data dir.
-    const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), __filename, '--child', adapter], {
+    const childArgs = [__filename, '--child', adapter, ...(args.files.length > 0 ? ['--files', args.files.join(',')] : [])];
+    const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), ...childArgs], {
       cwd: dataDir,
       env,
       stdio: 'inherit',
@@ -405,7 +509,7 @@ if (invokedDirectly) {
   }
   if (args.child) {
     if (!existsSync(CASSETTES_ROOT)) mkdirSync(CASSETTES_ROOT, { recursive: true });
-    runChild(args.child).then(
+    runChild(args.child, args.files).then(
       () => process.exit(0),
       (e) => {
         process.stderr.write(`refresh-cassettes: ${args.child}: ${e.message}\n`);

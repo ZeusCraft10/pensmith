@@ -82,6 +82,8 @@ test('Zotero joins when configured (last); allowed_databases can leave it out; a
   assert.equal(zoteroConfigured({ ZOTERO_API_KEY: 'k' }), true);
   assert.equal(zoteroConfigured({ PENSMITH_ZOTERO_LOCAL: '1' }), true);
   assert.equal(zoteroConfigured({}), false);
+  assert.equal(zoteroConfigured({ ZOTERO_GROUP_ID: '100' }), true, 'a public group library needs no key (sources/zotero.ts isZoteroConfigured)');
+  assert.equal(zoteroConfigured({ ZOTERO_API_KEY: '  ' }), false);
 });
 
 test('config: [sources] allowed_databases accepts every plannable database, including books and nber', () => {

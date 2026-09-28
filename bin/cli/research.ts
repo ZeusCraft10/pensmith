@@ -19,6 +19,15 @@
 //   3. The research-scope question runs when the topic is ambiguous or more
 //      than one scope came back: `--scope <n|text>` answers it, `--yolo` takes
 //      scope 1 and says so, a terminal asks.
+//   3b. The user's own sources come first (19-PLAN §7.2): new PDFs in
+//      `[sources] byo_pdf_dir` (bin/lib/byo-ingest.ts: hashed, identified from
+//      a title or identifier only, tagged bring-your-own) and — when Zotero is
+//      configured and `[sources] zotero_collection` names a collection — that
+//      collection's items (bin/lib/zotero-ingest.ts, tagged zotero; D-19-24).
+//      They go through the one library writer as soon as they are read, are
+//      the user's own choices (never judged by the evaluator, never pruned),
+//      and appear as rows of the per-adapter table. Without a collection the
+//      Zotero library is searched per query like every other adapter.
 //   4. The research pass (bin/lib/research-orchestrator.ts): the preset's
 //      adapters, per-adapter outcomes, dedup, deterministic tiers, the
 //      `[sources]` policy, the source evaluator, ranking.
@@ -46,7 +55,7 @@ import { defineCommand } from 'citty';
 import { loadPrompt } from '../lib/prompt-loader.js';
 import { upsertSources, assertLibraryReadable, tryLoadLibrary, type LibraryCandidate } from '../lib/library.js';
 import { projectRoot } from '../lib/paths.js';
-import { crossCheckRetractions, type RetractionLookup } from '../lib/sources/retraction-cross-check.js';
+import { crossCheckRetractions, retractionCheckReason, type RetractionLookup } from '../lib/sources/retraction-cross-check.js';
 import type { SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, assertLlmConfigured, isNoLlmMode, StructuredOutputError } from '../lib/anthropic.js';
 import type { TopicDisambiguation } from '../lib/llm-contracts.js';
@@ -60,6 +69,16 @@ import { clampQueries, expandTopicQueries, topicKeywords, topicLabel, MAX_QUERIE
 import { sourcePolicyFrom } from '../lib/source-policy.js';
 import { networkMode } from '../lib/http-mock.js';
 import { formatReference, renderSourcesBlock } from '../lib/research-md.js';
+import { ingestByoPdfs, listPdfsInDir, describeByoOutcome } from '../lib/byo-ingest.js';
+import { pullZoteroIntoLibrary } from '../lib/zotero-ingest.js';
+import { configuredZoteroCollection } from '../lib/sources/zotero.js';
+import { isOfflineEgressError, offlineLabel } from '../lib/http.js';
+import { errorFailureReason } from '../lib/sources/search-failure.js';
+import type { PaperConfig } from '../lib/schemas/config.js';
+import { deterministicTier } from '../lib/source-tier.js';
+import { identifySource } from './add.js';
+import path from 'node:path';
+import { existsSync, statSync } from 'node:fs';
 import {
   researchRegistry,
   researchAdapterPlan,
@@ -74,9 +93,11 @@ import {
   type ResearchItem,
   type ResearchPassResult,
   type AdapterRegistry,
+  type AdapterOutcome,
   type LogExclusion,
   type LogRetraction,
 } from '../lib/research-orchestrator.js';
+import type { AdapterPlan } from '../lib/adapter-plan.js';
 
 /** An expected research failure: one line, exit 1 (D-19-27). */
 export class ResearchError extends PensmithError {
@@ -280,8 +301,42 @@ function pruneOption(item: ResearchItem, rejected: boolean): { value: string; la
   };
 }
 
-/** The research-prune question: which of the kept (and rejected) candidates the library gets. */
-async function pruneSelection(pass: ResearchPassResult, yolo: boolean): Promise<Set<string>> {
+/**
+ * The sources typed at the prune question: separated by spaces, commas or
+ * semicolons, a bare prefix joined to what follows it (`DOI: 10.1038/x`,
+ * `PMID: 31978945`).
+ */
+export function sourceTokens(raw: string): string[] {
+  const parts = raw.split(/[\s,;]+/).map((t) => t.trim()).filter(Boolean);
+  const out: string[] = [];
+  for (let i = 0; i < parts.length; i += 1) {
+    const p = parts[i] as string;
+    const next = parts[i + 1];
+    if (/^(?:doi|arxiv|pmid|pmcid|isbn(?:-1[03])?):$/i.test(p) && next !== undefined) {
+      out.push(`${p} ${next}`);
+      i += 1;
+    } else out.push(p);
+  }
+  return out;
+}
+
+/** What the research-prune question decided. */
+interface PruneDecision {
+  /** Citekeys of the candidates the library gets. */
+  readonly selected: Set<string>;
+  /** Sources the user added at the question (identified like `pensmith add`). */
+  readonly added: SourceCandidate[];
+}
+
+/**
+ * The research-prune question: which of the kept (and rejected) candidates the
+ * library gets, then "add a source you know" — DOIs, arXiv ids, PMIDs, ISBNs or
+ * URLs, each identified exactly as `pensmith add` identifies it (bin/cli/add.ts
+ * identifySource: found / not-found / failed, a URL through the one transport,
+ * a PDF answer identified or refused) before the library is written. --yolo
+ * keeps the evaluator's picks and adds nothing.
+ */
+async function pruneSelection(pass: ResearchPassResult, yolo: boolean, io: ResearchIo): Promise<PruneDecision> {
   const kept = pass.kept.map((k) => k.candidate.citekey);
   const n = pass.kept.length + pass.rejected.length;
   const outcome = await runGate('research-prune', {
@@ -295,8 +350,28 @@ async function pruneSelection(pass: ResearchPassResult, yolo: boolean): Promise<
       default: kept,
     },
   });
-  if (outcome.kind === 'answered' && outcome.answer.kind === 'multiselect') return new Set(outcome.answer.value);
-  return new Set(kept);
+  if (outcome.kind !== 'answered' || outcome.answer.kind !== 'multiselect') return { selected: new Set(kept), added: [] };
+  const selected = new Set(outcome.answer.value);
+
+  const more = await runGate('research-prune', {
+    yolo,
+    question: {
+      id: 'research-prune',
+      kind: 'text',
+      label: 'Add a source you know — a DOI, arXiv id, PMID:<id>, isbn:<ISBN> or URL (several separated by spaces; blank for none)',
+      default: '',
+    },
+  });
+  const raw = more.kind === 'answered' && more.answer.kind === 'text' ? more.answer.value : '';
+  const added: SourceCandidate[] = [];
+  for (const token of sourceTokens(raw)) {
+    const c = await identifySource(token, { prefix: 'pensmith research', out: io.out, err: io.err });
+    if (c !== null) {
+      io.out(`pensmith research: ${token} → ${c.title}${c.year ? ` (${c.year})` : ''}`);
+      added.push(c);
+    }
+  }
+  return { selected, added };
 }
 
 /** The adapters that returned nothing, with their status, for a no-sources message. */
@@ -312,6 +387,97 @@ function exclusionCounts(items: readonly ResearchItem[]): string {
     counts.set(rule, (counts.get(rule) ?? 0) + 1);
   }
   return [...counts.entries()].map(([r, c]) => `${r} ${c}`).join(', ');
+}
+
+/** What the own-sources step did: the table rows, and the plan without an entry it replaced. */
+interface OwnSources {
+  readonly plan: AdapterPlan;
+  readonly rows: AdapterOutcome[];
+  /** Works these sources added to LIBRARY.json in this run. */
+  readonly added: number;
+}
+
+function isDirectory(p: string): boolean {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Step 3b (see the module header): ingest the user's own sources before the
+ * search — the `[sources] byo_pdf_dir` PDFs and the `[sources]
+ * zotero_collection` items. Each writes through the one library writer as it
+ * is read; failures are reported as the row's status, never thrown (an offline
+ * miss included). Under --dry-run nothing of the user's is touched.
+ */
+async function ingestOwnSources(root: string, config: PaperConfig, plan: AdapterPlan, io: ResearchIo): Promise<OwnSources> {
+  const rows: AdapterOutcome[] = [];
+  let added = 0;
+  let outPlan = plan;
+  const P = 'pensmith research';
+
+  const byoSetting = config.sources?.byo_pdf_dir?.trim();
+  if (byoSetting) {
+    const dir = path.resolve(root, byoSetting);
+    if (networkMode().dryRun) {
+      rows.push({ adapter: 'bring-your-own', count: 0, status: 'skipped (--dry-run)' });
+    } else if (!existsSync(dir) || !isDirectory(dir)) {
+      io.err(`${P}: WARN — [sources] byo_pdf_dir = "${byoSetting}" is not a folder; no bring-your-own PDFs were read`);
+      rows.push({ adapter: 'bring-your-own', count: 0, status: `failed ([sources] byo_pdf_dir "${byoSetting}" is not a folder)` });
+    } else {
+      const outcomes = await ingestByoPdfs(root, await listPdfsInDir(dir), { provenance: 'byo' });
+      let inLibrary = 0;
+      let fresh = 0;
+      let skipped = 0;
+      for (const o of outcomes) {
+        // Already-ingested PDFs are quiet; new, merged and skipped ones are told.
+        if (o.status !== 'already-ingested' || o.warning !== undefined) {
+          const d = describeByoOutcome(o, P);
+          (d.stream === 'stdout' ? io.out : io.err)(d.line);
+        }
+        if (o.status === 'refused' || o.status === 'skipped') skipped += 1;
+        else {
+          inLibrary += 1;
+          if (o.status === 'added') fresh += 1;
+        }
+      }
+      added += fresh;
+      const parts = [`${fresh} new`, `${inLibrary - fresh} already in library`];
+      if (skipped > 0) parts.push(`${skipped} skipped`);
+      rows.push({ adapter: 'bring-your-own', count: inLibrary, status: `${outcomes.length === 0 ? 'no PDFs' : 'ok'} (${byoSetting}: ${parts.join(', ')})` });
+    }
+  }
+
+  const collection = configuredZoteroCollection(root);
+  if (collection !== null && plan.entries.some((e) => e.adapter === 'zotero')) {
+    // The collection is the user's curated list: pull all of it once instead
+    // of searching it per query (Tier 1 does the same through its Zotero MCP
+    // server and paper_ingest_zotero_items).
+    outPlan = { entries: plan.entries.filter((e) => e.adapter !== 'zotero'), skipped: plan.skipped };
+    try {
+      const pulled = await pullZoteroIntoLibrary(root, { collection });
+      added += pulled.added.length;
+      const known = pulled.merged.length + pulled.unchanged.length;
+      const extra = [
+        ...(pulled.skipped.length > 0 ? [`${pulled.skipped.length} not a citable work`] : []),
+        ...(pulled.invalid.length > 0 ? [`${pulled.invalid.length} malformed`] : []),
+      ];
+      rows.push({
+        adapter: 'zotero',
+        count: pulled.added.length + known,
+        status: `ok (collection "${collection}": ${pulled.added.length} new, ${known} already in library${extra.length > 0 ? `, ${extra.join(', ')}` : ''})`,
+      });
+      io.out(`${P}: Zotero collection "${collection}" (${pulled.library}): ${pulled.added.length} new, ${known} already in library`);
+      for (const bad of pulled.invalid.slice(0, 5)) io.err(`${P}: WARN — Zotero item skipped (malformed): ${bad}`);
+    } catch (e) {
+      const status = isOfflineEgressError(e) ? `${offlineLabel(e)}: no recorded fixture` : `failed (${errorFailureReason(e)})`;
+      rows.push({ adapter: 'zotero', count: 0, status });
+      io.err(`${P}: WARN — Zotero collection "${collection}" was not read: ${status}`);
+    }
+  }
+  return { plan: outPlan, rows, added };
 }
 
 export interface ResearchRunOptions {
@@ -392,9 +558,10 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     allowed: config.sources?.allowed_databases,
   });
   const scopeText = `${chosen.label} — ${chosen.description}`;
-  const pass = await runResearchPass({
+  const own = await ingestOwnSources(root, config, plan, { out, err });
+  const pass0 = await runResearchPass({
     queries: chosen.queries,
-    plan,
+    plan: own.plan,
     registry,
     policy: sourcePolicyFrom(config.sources),
     topic,
@@ -402,6 +569,8 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     scope: scopeText,
     warn: err,
   });
+  // The own-source rows join the per-adapter table (stdout and RESEARCH.md).
+  const pass: ResearchPassResult = own.rows.length > 0 ? { ...pass0, adapters: [...pass0.adapters, ...own.rows] } : pass0;
   out('pensmith research: sources by adapter');
   for (const line of renderAdapterTable(pass.adapters)) out(line);
   for (const n of evaluatorNotes(pass)) err(`pensmith research: WARN — ${n}`);
@@ -434,7 +603,11 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
   // Zero usable sources → exit 1 naming why (the log is still written).
   if (pass.distinct === 0) {
     await writeLog({ summary: 'no sources found', excluded: [], sourcesBlock: await currentBlock() });
-    throw new ResearchError(`pensmith research: no sources found — ${adapterReasons(pass)}; ${GUIDANCE}; see .paper/RESEARCH.md`);
+    const ownKept = own.rows.filter((r) => r.count > 0).map((r) => `${r.adapter} ${r.count}`);
+    throw new ResearchError(
+      `pensmith research: no sources found — ${adapterReasons(pass0)}; ${GUIDANCE}; ` +
+        `${ownKept.length > 0 ? `your own sources are in LIBRARY.json (${ownKept.join(', ')}); ` : ''}see .paper/RESEARCH.md`,
+    );
   }
   if (pass.kept.length === 0 && pass.rejected.length === 0) {
     await writeLog({ summary: `no usable sources: all ${pass.excluded.length} candidate(s) excluded by the [sources] policy`, excluded: logExclusions(pass.excluded, []), sourcesBlock: await currentBlock() });
@@ -444,15 +617,17 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     );
   }
 
-  // 5. The research-prune question.
-  const selected = await pruneSelection(pass, opts.yolo);
+  // 5. The research-prune question (and the sources the user adds at it).
+  const prune = await pruneSelection(pass, opts.yolo, { out, err });
+  const selected = prune.selected;
+  const userAdded = prune.added;
   const final = [...pass.kept, ...pass.rejected].filter((i) => selected.has(i.candidate.citekey));
   const deselected: LogExclusion[] = pass.kept
     .filter((k) => !selected.has(k.candidate.citekey))
     .map((k) => ({ citekey: k.candidate.citekey, reference: formatReference(k.view), why: 'deselected at the approval gate' }));
   const rejectedStill = pass.rejected.filter((r) => !selected.has(r.candidate.citekey));
   const excludedLog = [...logExclusions(pass.excluded, rejectedStill), ...deselected];
-  if (final.length === 0) {
+  if (final.length === 0 && userAdded.length === 0) {
     const relevantNone = pass.kept.length === 0;
     await writeLog({ summary: relevantNone ? 'no relevant sources' : 'no sources kept', excluded: excludedLog, sourcesBlock: await currentBlock() });
     throw new ResearchError(
@@ -468,7 +643,7 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
   const lookup = typeof injected?.fetchById === 'function' ? (injected as RetractionLookup) : undefined;
   if (!networkMode().dryRun) {
     // (--dry-run: synthetic sources have no retraction record to look up.)
-    await crossCheckRetractions(candidates, lookup);
+    await crossCheckRetractions([...candidates, ...userAdded], lookup);
   }
   const toLibrary = (i: ResearchItem): LibraryCandidate => {
     const rescued = i.decision === 'rejected';
@@ -479,24 +654,40 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
       why_relevant: rescued ? `Kept at your choice; the evaluator said: ${i.reason ?? 'no reason given'}` : i.reason,
     };
   };
-  const upsert = await upsertSources(root, final.map(toLibrary), { provenance: 'research' });
-  const counts = upsertCounts(upsert.outcomes);
+  // The user's additions first (provenance `add`, tagged "added"), then the
+  // kept search results — so a work the user named that the search also found
+  // keeps the user's tag too.
+  const addedUpsert = userAdded.length > 0
+    ? await upsertSources(
+        root,
+        userAdded.map((c): LibraryCandidate => ({ ...c, tier: deterministicTier({ ...c }), why_relevant: 'Added at the approval gate' })),
+        { provenance: 'add' },
+      )
+    : null;
+  const researchUpsert = final.length > 0 ? await upsertSources(root, final.map(toLibrary), { provenance: 'research' }) : null;
+  const upsert = (researchUpsert ?? addedUpsert) as NonNullable<typeof researchUpsert>;
+  const counts = upsertCounts([...(addedUpsert?.outcomes ?? []), ...(researchUpsert?.outcomes ?? [])]);
   const added = counts.added.length;
-  const keyOf = (index: number): string => upsert.outcomes.find((o) => o.index === index)?.citekey ?? (candidates[index] as SourceCandidate).citekey;
+  const keyIn = (u: typeof researchUpsert, list: readonly SourceCandidate[], index: number): string =>
+    u?.outcomes.find((o) => o.index === index)?.citekey ?? (list[index] as SourceCandidate).citekey;
 
   const retracted: LogRetraction[] = [];
   const unknown: LogRetraction[] = [];
-  candidates.forEach((c, index) => {
-    if (c.retracted === true || c.retraction_status === 'retracted') retracted.push({ citekey: keyOf(index), detail: c.retraction_details ?? null });
-    else if (c.retraction_status === 'unknown') unknown.push({ citekey: keyOf(index), detail: c.retraction_details ?? null });
-  });
+  const noteRetraction = (c: SourceCandidate, citekey: string): void => {
+    if (retracted.some((r) => r.citekey === citekey) || unknown.some((r) => r.citekey === citekey)) return;
+    if (c.retracted === true || c.retraction_status === 'retracted') retracted.push({ citekey, detail: c.retraction_details ?? null });
+    else if (c.retraction_status === 'unknown') unknown.push({ citekey, detail: retractionCheckReason(c) ?? c.retraction_details ?? null });
+  };
+  userAdded.forEach((c, index) => noteRetraction(c, keyIn(addedUpsert, userAdded, index)));
+  candidates.forEach((c, index) => noteRetraction(c, keyIn(researchUpsert, candidates, index)));
 
   // 7. RESEARCH.md: the log plus the sources block of the library just written.
   const rescuedCount = final.filter((i) => i.decision === 'rejected').length;
   const summary =
     `${tierSummary(final)}; ${pass.excluded.length} excluded by [sources] policy; ${rejectedStill.length} rejected by the evaluator` +
     `${deselected.length > 0 ? `; ${deselected.length} deselected at the approval gate` : ''}` +
-    `${rescuedCount > 0 ? `; ${rescuedCount} kept at your choice despite the evaluator` : ''}`;
+    `${rescuedCount > 0 ? `; ${rescuedCount} kept at your choice despite the evaluator` : ''}` +
+    `${userAdded.length > 0 ? `; ${userAdded.length} added at the approval gate` : ''}`;
   const researchPath = await writeLog({
     summary,
     excluded: excludedLog,
@@ -523,7 +714,7 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     bib: upsert.paths.bib,
     ris: upsert.paths.ris,
     research: researchPath,
-    kept: final.length,
+    kept: final.length + userAdded.length,
     added,
     scope: chosen.label,
     queries: chosen.queries,

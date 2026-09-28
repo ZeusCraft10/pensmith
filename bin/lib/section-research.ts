@@ -47,7 +47,7 @@ import { resolveDiscipline } from './disciplines.js';
 import { redactPii } from './pii.js';
 import { networkMode } from './http-mock.js';
 import { sourcePolicyFrom } from './source-policy.js';
-import { crossCheckRetractions, type RetractionLookup } from './sources/retraction-cross-check.js';
+import { crossCheckRetractions, retractionCheckReason, type RetractionLookup } from './sources/retraction-cross-check.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 import { refreshResearchSources, formatReference } from './research-md.js';
 import {
@@ -324,6 +324,11 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
     ...pass.excluded.map((x) => `[@${x.candidate.citekey}] ${formatReference(x.view)} — policy: ${x.exclusion?.reason ?? 'excluded'}`),
   ];
   const retracted = candidates.map((c, i) => ({ c, key: realKeys[i] as string })).filter(({ c }) => c.retracted === true || c.retraction_status === 'retracted');
+  // SRC-04: a failed retraction lookup is `unknown`, reported — never "clear".
+  const unknown = candidates
+    .map((c, i) => ({ c, key: realKeys[i] as string }))
+    .filter(({ c }) => c.retracted !== true && c.retraction_status === 'unknown')
+    .map(({ c, key }) => ({ key, reason: retractionCheckReason(c) ?? c.retraction_details ?? null }));
   const entryLines = [
     `## ${now} — "${query}"`,
     '',
@@ -333,6 +338,9 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
     `- Added to this section's assigned_sources: ${added.length > 0 ? added.join(', ') : '(none new — already assigned)'}`,
     `- New to LIBRARY.json: ${newToLibrary.length > 0 ? newToLibrary.join(', ') : '(none)'}`,
     ...(retracted.length > 0 ? [`- RETRACTED (fails Pass 1 if cited): ${retracted.map((r) => r.key).join(', ')}`] : []),
+    ...(unknown.length > 0
+      ? [`- Retraction status unknown (re-checked at verify time): ${unknown.map((u) => `${u.key}${u.reason ? ` — ${oneLine(u.reason)}` : ''}`).join('; ')}`]
+      : []),
     ...(notAdded.length > 0 ? ['- Not added:', ...notAdded.map((x) => `  - ${x}`)] : []),
   ];
   await appendSectionLog(logPath, `# Research log — section ${opts.n}: ${title}\n\nEach \`pensmith plan ${opts.n} --research\` run appends an entry (newest last).`, entryLines.join('\n'));
@@ -343,6 +351,9 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
   out(`${label}: ${tierSummary(final)}; ${pass.excluded.length} excluded by [sources] policy; ${pass.rejected.length - final.filter((i) => i.decision === 'rejected').length} rejected by the evaluator`);
   if (retracted.length > 0) {
     err(`WARN: ${retracted.length} retracted source(s) found in LIBRARY.json: ${retracted.map((r) => r.key).join(', ')}. These will FAIL Pass-1 if cited.`);
+  }
+  if (unknown.length > 0) {
+    err(`WARN: retraction status unknown for ${unknown.length} source(s): ${unknown.map((u) => u.key).join(', ')} — the lookup failed; verify re-checks them.`);
   }
   out(
     `${label}: added ${added.length} source(s) to section ${opts.n}'s assigned_sources` +

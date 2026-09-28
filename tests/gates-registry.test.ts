@@ -226,8 +226,8 @@ test('RUN-28 research-scope + research-prune: scripted answers drive both questi
     seedIntake(sb.paper);
     const scopes = { scopes: [{ label: 'unrelated-scope', queries: ['zz no recorded results zz'] }, { label: 'attention-scope', queries: [SEARCHABLE] }] };
     sb.mock!.script('topic-disambiguator', { data: scopes });
-    // Scope question → option 2; prune question → keep only candidate 1.
-    const r = await sb.runTsx(null, ['research'], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '2\n1\n' });
+    // Scope question → option 2; prune question → keep only candidate 1; add nothing.
+    const r = await sb.runTsx(null, ['research'], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '2\n1\n\n' });
     assert.equal(r.status, EXIT_OK, `${r.stdout}\n${r.stderr}`);
     assert.match(r.stderr, /Which research scope should I use\?/, 'the scope question was asked');
     assert.match(r.stderr, /Select candidates to keep \(\d+ found\)/, 'the prune question was asked');

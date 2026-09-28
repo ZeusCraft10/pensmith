@@ -25,6 +25,7 @@ import { provenanceTags } from '../bin/lib/research-md.js';
 import { sha256Hex } from '../bin/lib/byo-text.js';
 import { readPaperConfigSync } from '../bin/lib/config.js';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
+import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { withLlmSandbox } from './helpers/llm-sandbox.js';
 
 const BYO = fileURLToPath(new URL('./fixtures/byo/', import.meta.url));
@@ -96,12 +97,43 @@ test('SRC-15: a later search hit with the same DOI merges into the BYO entry —
   assert.ok(lib.entries[0]!.byo, 'the PDF record survives the merge');
 });
 
-test('SRC-15: offline, a PDF that needs a title search is skipped with a reason (never added unidentified)', async () => {
+/** A one-page PDF with a title and an author line and no identifier (pdf-lib, as scripts/gen-byo-pdf.mjs). */
+async function titledPdf(title: string, author: string): Promise<Buffer> {
+  const doc = await PDFDocument.create();
+  doc.setCreationDate(new Date(0));
+  doc.setModificationDate(new Date(0));
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.addPage([612, 792]);
+  page.drawText(title, { x: 56, y: 700, size: 18, font });
+  page.drawText(author, { x: 56, y: 670, size: 11, font });
+  page.drawText('Abstract. A short note with no identifier of any kind printed on it.', { x: 56, y: 630, size: 10, font });
+  return Buffer.from(await doc.save({ useObjectStreams: false }));
+}
+
+test('SRC-15: offline, a PDF whose title search has no recorded answer is skipped with a reason (never added unidentified)', async () => {
   const root = paper();
-  const o = await ingestByoPdf(root, path.join(BYO, 'no-match.pdf'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-byo-unrecorded-'));
+  const file = path.join(dir, 'unrecorded.pdf');
+  fs.writeFileSync(file, await titledPdf('Tidal Rhythms of Estuarine Snail Populations in Late Autumn', 'Perpetua Wendlebury'));
+  const o = await ingestByoPdf(root, file);
   assert.equal(o.status, 'skipped');
   assert.match('reason' in o ? o.reason : '', /identifying it needs the network \(offline\)/);
   assert.equal(fs.existsSync(path.join(root, '.paper', 'LIBRARY.json')), false);
+});
+
+test('SRC-15: the no-match PDF — its title searches recorded at Crossref and OpenAlex — is added UNHYDRATED with a warning, never as a search hit', async () => {
+  const root = paper();
+  const o = await ingestByoPdf(root, path.join(BYO, 'no-match.pdf'));
+  assert.equal(o.status, 'added', JSON.stringify(o));
+  assert.equal('hydrated' in o && o.hydrated, false);
+  assert.match('warning' in o ? String(o.warning) : '', /no Crossref or OpenAlex record matches the title "Field Notes on Moss Growth Beside the Old Mill Stream"/);
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 1);
+  const e = lib.entries[0]!;
+  assert.equal(e.hydrated, false);
+  assert.equal(e.doi, null, 'no registrar identifier was borrowed from a non-matching hit');
+  assert.equal(e.title, 'Field Notes on Moss Growth Beside the Old Mill Stream');
+  assert.deepEqual(provenanceTags(e), ['bring-your-own']);
 });
 
 test('SRC-15: a non-PDF, a missing file and an unusable folder argument are reported, not ingested', async () => {

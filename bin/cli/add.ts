@@ -92,6 +92,18 @@ function err(line: string): void {
   process.stderr.write(`${line}\n`);
 }
 
+/**
+ * Where the identification steps print (the `add` verb's own lines by
+ * default; research's prune question passes its own prefix and sinks).
+ */
+export interface AddIo {
+  readonly prefix: string;
+  readonly out: (line: string) => void;
+  readonly err: (line: string) => void;
+}
+
+const ADD_IO: AddIo = { prefix: P, out, err };
+
 type AddResult = Record<string, unknown> & { ok: boolean };
 
 /** A failed add: the message is already printed; exit 1 (D-19-27). */
@@ -103,19 +115,19 @@ function failed(extra: Record<string, unknown> = {}): AddResult {
  * The dry-run / offline outcome of a lookup that needs the network (RUN-03 /
  * RUN-04): offline is a refusal (exit 1), --dry-run a preview (exit 0).
  */
-function unavailable(e: unknown, message: (label: string) => string): AddResult {
+function unavailable(e: unknown, message: (label: string) => string, io: AddIo = ADD_IO): AddResult {
   const label = isOfflineEgressError(e) ? offlineLabel(e) : 'offline';
-  err(`${P}: ${message(label)}`);
+  io.err(`${io.prefix}: ${message(label)}`);
   return label === 'dry-run' ? { ok: true, added: false, mode: label } : failed({ refused: true, mode: label });
 }
 
 /** A request for `what` (a URL fetch, a PDF's identification) that needs the network. */
-function networkUnavailable(e: unknown, what: string): AddResult {
-  return unavailable(e, (label) => `${what} unavailable (${label}) — nothing added${label === 'offline' ? '; re-run online to add it' : ''}.`);
+function networkUnavailable(e: unknown, what: string, io: AddIo = ADD_IO): AddResult {
+  return unavailable(e, (label) => `${what} unavailable (${label}) — nothing added${label === 'offline' ? '; re-run online to add it' : ''}.`, io);
 }
 
 /** An identifier lookup that needs the network — the Phase 17 wording (RUN-03). */
-function verificationUnavailable(e: unknown, input: IdentifierInput): AddResult {
+function verificationUnavailable(e: unknown, input: IdentifierInput, io: AddIo = ADD_IO): AddResult {
   const [kind, id] =
     input.kind === 'doi'
       ? ['DOI', input.doi]
@@ -127,6 +139,7 @@ function verificationUnavailable(e: unknown, input: IdentifierInput): AddResult 
   return unavailable(
     e,
     (label) => `${kind} verification unavailable (${label}) — ${id} NOT added${label === 'offline' ? '; re-run online to verify and add it' : ''}.`,
+    io,
   );
 }
 
@@ -270,73 +283,73 @@ async function remapStep(
 
 type Hydrated = { candidate: SourceCandidate } | { result: AddResult };
 
-async function hydrateIdentifier(input: IdentifierInput): Promise<Hydrated> {
+async function hydrateIdentifier(input: IdentifierInput, io: AddIo = ADD_IO): Promise<Hydrated> {
   const label = identifierLabel(input);
   // RUN-27: a reserved dry-run identifier is never a real source.
   const id = input.kind === 'doi' ? input.doi : input.kind === 'arxiv' ? input.arxiv : input.kind === 'isbn' ? input.isbn : null;
   if (id !== null && isReservedDryRunId(id) && !networkMode().dryRun) {
-    err(`${P}: ${id} is a reserved dry-run identifier (synthetic --dry-run sources are never real citations). Source NOT added.`);
+    io.err(`${io.prefix}: ${id} is a reserved dry-run identifier (synthetic --dry-run sources are never real citations). Source NOT added.`);
     return { result: failed({ refused: true }) };
   }
   let r;
   try {
     r = await lookupIdentifier(input);
   } catch (e) {
-    if (isOfflineEgressError(e)) return { result: verificationUnavailable(e, input) };
+    if (isOfflineEgressError(e)) return { result: verificationUnavailable(e, input, io) };
     throw e;
   }
   if (r.kind === 'failed') {
-    err(`${P}: ${label}: lookup failed (${r.reason}) — nothing added.`);
+    io.err(`${io.prefix}: ${label}: lookup failed (${r.reason}) — nothing added.`);
     return { result: failed() };
   }
   if (r.kind === 'not-found') {
-    err(`${P}: ${label}: not found (${r.reason}) — nothing added; check the identifier.`);
+    io.err(`${io.prefix}: ${label}: not found (${r.reason}) — nothing added; check the identifier.`);
     return { result: failed() };
   }
   return { candidate: r.candidate };
 }
 
 /** Identify fetched or local PDF bytes (strict: refuse unless confident). */
-async function hydratePdfBytes(bytes: Buffer, what: string): Promise<Hydrated> {
+async function hydratePdfBytes(bytes: Buffer, what: string, io: AddIo = ADD_IO): Promise<Hydrated> {
   let ex;
   try {
     ex = await extractPdf(bytes);
   } catch (e) {
-    err(`${P}: ${what}: could not be read (${(e as Error).message.split('\n')[0]}) — nothing added.`);
+    io.err(`${io.prefix}: ${what}: could not be read (${(e as Error).message.split('\n')[0]}) — nothing added.`);
     return { result: failed() };
   }
   if (ex.imageOnly) {
-    err(`${P}: ${what}: no extractable text (an image-only or scanned PDF) — pass its DOI: pensmith add <doi> --pdf <file>`);
+    io.err(`${io.prefix}: ${what}: no extractable text (an image-only or scanned PDF) — pass its DOI: pensmith add <doi> --pdf <file>`);
     return { result: failed({ refused: true }) };
   }
   let id;
   try {
-    id = await identifyPdf(ex);
+    id = await identifyPdf(ex, undefined, { pdf: bytes });
   } catch (e) {
-    if (isOfflineEgressError(e)) return { result: networkUnavailable(e, `identifying ${what}`) };
+    if (isOfflineEgressError(e)) return { result: networkUnavailable(e, `identifying ${what}`, io) };
     throw e;
   }
   if (id.kind !== 'identified') {
-    err(`${P}: ${UNIDENTIFIED_PDF_MESSAGE}`);
-    err(`${P}: ${what}: ${id.reason}`);
+    io.err(`${io.prefix}: ${UNIDENTIFIED_PDF_MESSAGE}`);
+    io.err(`${io.prefix}: ${what}: ${id.reason}`);
     return { result: failed({ refused: true }) };
   }
-  out(`${P}: ${what} identified by ${id.via === 'title-search' ? `its title "${id.query}" and first author` : id.query}.`);
+  io.out(`${io.prefix}: ${what} identified by ${id.via === 'title-search' ? `its title "${id.query}" and first author` : id.query}.`);
   return { candidate: id.candidate };
 }
 
-async function hydrateUrl(url: string): Promise<Hydrated> {
+async function hydrateUrl(url: string, io: AddIo = ADD_IO): Promise<Hydrated> {
   let res;
   try {
     // noCache: a live fetch keeps the byte-faithful bodyBytes (audit #29).
     res = await httpFetch(url, { source: 'generic', noCache: true, maxBytes: MAX_PDF_BYTES });
   } catch (e) {
-    if (isOfflineEgressError(e)) return { result: networkUnavailable(e, `fetching ${url}`) };
+    if (isOfflineEgressError(e)) return { result: networkUnavailable(e, `fetching ${url}`, io) };
     if (e instanceof SsrfBlockedError) {
-      err(`${P}: ${url}: refused — ${e.message}`);
+      io.err(`${io.prefix}: ${url}: refused — ${e.message}`);
       return { result: failed({ refused: true }) };
     }
-    err(`${P}: ${url}: could not fetch it (${(e as Error).message.split('\n')[0]}) — nothing added.`);
+    io.err(`${io.prefix}: ${url}: could not fetch it (${(e as Error).message.split('\n')[0]}) — nothing added.`);
     return { result: failed() };
   }
   const type = (res.headers['content-type'] ?? '').toLowerCase();
@@ -345,22 +358,44 @@ async function hydrateUrl(url: string): Promise<Hydrated> {
   if (pdfish) {
     const check = checkPdfResponse(res);
     if (!check.ok) {
-      err(`${P}: ${url}: ${check.reason} — nothing added.`);
+      io.err(`${io.prefix}: ${url}: ${check.reason} — nothing added.`);
       return { result: failed() };
     }
-    return hydratePdfBytes(check.bytes, url);
+    return hydratePdfBytes(check.bytes, url, io);
   }
   if (res.status !== 200) {
-    err(`${P}: ${url}: HTTP ${res.status} — nothing added.`);
+    io.err(`${io.prefix}: ${url}: HTTP ${res.status} — nothing added.`);
     return { result: failed() };
   }
   const declared = identifierFromHtml(res.body);
   if (declared === null) {
-    err(`${P}: ${url}: the page declares no DOI, arXiv id or PMID in its metadata — pass the identifier: pensmith add <doi>`);
+    io.err(`${io.prefix}: ${url}: the page declares no DOI, arXiv id or PMID in its metadata — pass the identifier: pensmith add <doi>`);
     return { result: failed() };
   }
-  out(`${P}: ${url} declares ${identifierLabel(declared)}.`);
-  return hydrateIdentifier(declared);
+  io.out(`${io.prefix}: ${url} declares ${identifierLabel(declared)}.`);
+  return hydrateIdentifier(declared, io);
+}
+
+/**
+ * Identify one source the user names — a DOI, arXiv id, PMID, ISBN or URL —
+ * exactly as `add` does (the registrar lookup with its three outcomes; a URL
+ * through the one transport, a PDF answer checked and identified or refused),
+ * WITHOUT writing anything. Every failure is printed through `io`; null is
+ * returned. A local PDF or a folder is refused here (use `pensmith add`).
+ * Used by research's prune question ("add a source you know", SRC-09).
+ */
+export async function identifySource(raw: string, io: AddIo): Promise<SourceCandidate | null> {
+  const input = classifySourceInput(raw);
+  if (input.kind === 'unknown') {
+    io.err(`${io.prefix}: ${input.reason}`);
+    return null;
+  }
+  if (input.kind === 'pdf' || input.kind === 'dir') {
+    io.err(`${io.prefix}: ${raw}: a local ${input.kind === 'pdf' ? 'PDF' : 'folder'} is added with pensmith add ${raw} — nothing added here.`);
+    return null;
+  }
+  const h = input.kind === 'url' ? await hydrateUrl(input.url, io) : await hydrateIdentifier(input, io);
+  return 'candidate' in h ? h.candidate : null;
 }
 
 // ---------------------------------------------------------------------------

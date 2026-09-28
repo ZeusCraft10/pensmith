@@ -1,0 +1,920 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=instagram+adolescent+depression+longitudinal&retmode=json&retmax=10",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esearch",
+        "version": "0.3"
+      },
+      "esearchresult": {
+        "count": "7",
+        "retmax": "7",
+        "retstart": "0",
+        "idlist": [
+          "42574044",
+          "40350583",
+          "37563766",
+          "34524103",
+          "31256313",
+          "29039700",
+          "28966426"
+        ],
+        "translationset": [
+          {
+            "from": "adolescent",
+            "to": "\"adolescences\"[All Fields] OR \"adolescency\"[All Fields] OR \"adolescent\"[MeSH Terms] OR \"adolescent\"[All Fields] OR \"adolescence\"[All Fields] OR \"adolescents\"[All Fields] OR \"adolescent's\"[All Fields]"
+          },
+          {
+            "from": "depression",
+            "to": "\"depressed\"[All Fields] OR \"depression\"[MeSH Terms] OR \"depression\"[All Fields] OR \"depressions\"[All Fields] OR \"depression's\"[All Fields] OR \"depressive disorder\"[MeSH Terms] OR (\"depressive\"[All Fields] AND \"disorder\"[All Fields]) OR \"depressive disorder\"[All Fields] OR \"depressivity\"[All Fields] OR \"depressive\"[All Fields] OR \"depressively\"[All Fields] OR \"depressiveness\"[All Fields] OR \"depressives\"[All Fields]"
+          },
+          {
+            "from": "longitudinal",
+            "to": "\"longitudinal\"[All Fields] OR \"longitudinally\"[All Fields]"
+          }
+        ],
+        "querytranslation": "\"instagram\"[All Fields] AND (\"adolescences\"[All Fields] OR \"adolescency\"[All Fields] OR \"adolescent\"[MeSH Terms] OR \"adolescent\"[All Fields] OR \"adolescence\"[All Fields] OR \"adolescents\"[All Fields] OR \"adolescent s\"[All Fields]) AND (\"depressed\"[All Fields] OR \"depression\"[MeSH Terms] OR \"depression\"[All Fields] OR \"depressions\"[All Fields] OR \"depression s\"[All Fields] OR \"depressive disorder\"[MeSH Terms] OR (\"depressive\"[All Fields] AND \"disorder\"[All Fields]) OR \"depressive disorder\"[All Fields] OR \"depressivity\"[All Fields] OR \"depressive\"[All Fields] OR \"depressively\"[All Fields] OR \"depressiveness\"[All Fields] OR \"depressives\"[All Fields]) AND (\"longitudinal\"[All Fields] OR \"longitudinally\"[All Fields])"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T08:03:40.522Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  },
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42574044%2C40350583%2C37563766%2C34524103%2C31256313%2C29039700%2C28966426&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "28966426": {
+          "uid": "28966426",
+          "pubdate": "2017 Jul",
+          "epubdate": "2017 Mar 1",
+          "source": "J Appl Dev Psychol",
+          "authors": [
+            {
+              "name": "Nesi J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Miller AB",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Prinstein MJ",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Prinstein MJ",
+          "title": "Adolescents' Depressive Symptoms and Subsequent Technology-Based Interpersonal Behaviors: A Multi-Wave Study.",
+          "sorttitle": "adolescents depressive symptoms and subsequent technology based interpersonal behaviors a multi wave study",
+          "volume": "51",
+          "issue": "",
+          "pages": "12-19",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "8001905",
+          "issn": "0193-3973",
+          "essn": "",
+          "pubtype": [
+            "Research Support, U.S. Gov't, Non-P.H.S.",
+            "Research Support, N.I.H., Extramural",
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "256",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "28966426"
+            },
+            {
+              "idtype": "mid",
+              "idtypen": 8,
+              "value": "NIHMS858492"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC5619675"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC5619675;manuscript-id: NIHMS858492;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1016/j.appdev.2017.02.002"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "entrez",
+              "date": "2017/10/03 06:00"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2017/10/03 06:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2017/10/03 06:01"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2018/07/01 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 40,
+          "fulljournalname": "Journal of applied developmental psychology",
+          "elocationid": "doi: 10.1016/j.appdev.2017.02.002",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2017/07/01 00:00",
+          "sortfirstauthor": "Nesi J",
+          "vernaculartitle": ""
+        },
+        "29039700": {
+          "uid": "29039700",
+          "pubdate": "2017 Oct",
+          "epubdate": "",
+          "source": "Cyberpsychol Behav Soc Netw",
+          "authors": [
+            {
+              "name": "Frison E",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Eggermont S",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Eggermont S",
+          "title": "Browsing, Posting, and Liking on Instagram: The Reciprocal Relationships Between Different Types of Instagram Use and Adolescents' Depressed Mood.",
+          "sorttitle": "browsing posting and liking on instagram the reciprocal relationships between different types of instagram use and adolescents depressed mood",
+          "volume": "20",
+          "issue": "10",
+          "pages": "603-609",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101528721",
+          "issn": "2152-2715",
+          "essn": "2152-2723",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "4",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "29039700"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1089/cyber.2017.0156"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "entrez",
+              "date": "2017/10/18 06:00"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2017/10/19 06:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2018/05/01 06:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Cyberpsychology, behavior and social networking",
+          "elocationid": "doi: 10.1089/cyber.2017.0156",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2017/10/01 00:00",
+          "sortfirstauthor": "Frison E",
+          "vernaculartitle": ""
+        },
+        "31256313": {
+          "uid": "31256313",
+          "pubdate": "2019 Aug",
+          "epubdate": "2019 Jun 29",
+          "source": "J Youth Adolesc",
+          "authors": [
+            {
+              "name": "Vannucci A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "McCauley Ohannessian C",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "McCauley Ohannessian C",
+          "title": "Social Media Use Subgroups Differentially Predict Psychosocial Well-Being During Early Adolescence.",
+          "sorttitle": "social media use subgroups differentially predict psychosocial well being during early adolescence",
+          "volume": "48",
+          "issue": "8",
+          "pages": "1469-1493",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "0333507",
+          "issn": "0047-2891",
+          "essn": "1573-6601",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "256",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "31256313"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1007/s10964-019-01060-9"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "10.1007/s10964-019-01060-9"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2019/04/03 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2019/06/12 00:00"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2019/07/01 06:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2019/11/19 06:00"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2019/07/01 06:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Journal of youth and adolescence",
+          "elocationid": "doi: 10.1007/s10964-019-01060-9",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2019/08/01 00:00",
+          "sortfirstauthor": "Vannucci A",
+          "vernaculartitle": ""
+        },
+        "34524103": {
+          "uid": "34524103",
+          "pubdate": "2021 Sep 15",
+          "epubdate": "2021 Sep 15",
+          "source": "JMIR Ment Health",
+          "authors": [
+            {
+              "name": "Kutok ER",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Dunsiger S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Patena JV",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Nugent NR",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Riese A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Rosen RK",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ranney ML",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Ranney ML",
+          "title": "A Cyberbullying Media-Based Prevention Intervention for Adolescents on Instagram: Pilot Randomized Controlled Trial.",
+          "sorttitle": "cyberbullying media based prevention intervention for adolescents on instagram pilot randomized controlled trial",
+          "volume": "8",
+          "issue": "9",
+          "pages": "e26029",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101658926",
+          "issn": "2368-7959",
+          "essn": "2368-7959",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "34524103"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC8482167"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC8482167;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.2196/26029"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "v8i9e26029"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2020/11/30 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2021/04/12 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2021/03/10 00:00"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2021/09/15 12:25"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2021/09/16 06:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2021/09/16 06:01"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2021/09/15 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 68,
+          "fulljournalname": "JMIR mental health",
+          "elocationid": "doi: 10.2196/26029",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2021/09/15 00:00",
+          "sortfirstauthor": "Kutok ER",
+          "vernaculartitle": ""
+        },
+        "37563766": {
+          "uid": "37563766",
+          "pubdate": "2023 Aug 11",
+          "epubdate": "2023 Aug 11",
+          "source": "BJPsych Open",
+          "authors": [
+            {
+              "name": "Hilty DM",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Stubbe D",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "McKean AJ",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Hoffman PE",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zalpuri I",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Myint MT",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Joshi SV",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Pakyurek M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Li ST",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Li ST",
+          "title": "A scoping review of social media in child, adolescents and young adults: research findings in depression, anxiety and other clinical challenges.",
+          "sorttitle": "scoping review of social media in child adolescents and young adults research findings in depression anxiety and other clinical challenges",
+          "volume": "9",
+          "issue": "5",
+          "pages": "e152",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101667931",
+          "issn": "2056-4724",
+          "essn": "2056-4724",
+          "pubtype": [
+            "Journal Article",
+            "Scoping Review"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "37563766"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC10594088"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC10594088;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1192/bjo.2023.523"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "S2056472423005239"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2023/08/11 06:44"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2023/08/11 06:43"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2023/08/11 00:13"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2023/08/11 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 168,
+          "fulljournalname": "BJPsych open",
+          "elocationid": "doi: 10.1192/bjo.2023.523",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2023/08/11 00:00",
+          "sortfirstauthor": "Hilty DM",
+          "vernaculartitle": ""
+        },
+        "40350583": {
+          "uid": "40350583",
+          "pubdate": "2025 Jun",
+          "epubdate": "2025 May 11",
+          "source": "Ann N Y Acad Sci",
+          "authors": [
+            {
+              "name": "Matthews T",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Arseneault L",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Bryan BT",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Fisher HL",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Gray R",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Henchy J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Moffitt TE",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Odgers CL",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Odgers CL",
+          "title": "Social media use, online experiences, and loneliness among young adults: A cohort study.",
+          "sorttitle": "social media use online experiences and loneliness among young adults a cohort study",
+          "volume": "1548",
+          "issue": "1",
+          "pages": "194-205",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "7506858",
+          "issn": "0077-8923",
+          "essn": "1749-6632",
+          "pubtype": [
+            "Journal Article",
+            "Research Support, N.I.H., Extramural"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "256",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "40350583"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC12220285"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC12220285;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1111/nyas.15370"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2025/07/02 12:30"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2025/05/12 06:33"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2025/05/12 00:33"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2025/07/02 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 57,
+          "fulljournalname": "Annals of the New York Academy of Sciences",
+          "elocationid": "doi: 10.1111/nyas.15370",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2025/06/01 00:00",
+          "sortfirstauthor": "Matthews T",
+          "vernaculartitle": ""
+        },
+        "42574044": {
+          "uid": "42574044",
+          "pubdate": "2026 Aug 10",
+          "epubdate": "2026 Aug 10",
+          "source": "JMIR Ment Health",
+          "authors": [
+            {
+              "name": "Bilston A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Daniels S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Hasan Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Schweizer S",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Schweizer S",
+          "title": "Momentary Mood and Affiliation Following Social Interactions in the Digital Age: Longitudinal Study Investigating Associations With Anxiety and Depression.",
+          "sorttitle": "momentary mood and affiliation following social interactions in the digital age longitudinal study investigating associations with anxiety and depression",
+          "volume": "13",
+          "issue": "",
+          "pages": "e94753",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101658926",
+          "issn": "",
+          "essn": "2368-7959",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42574044"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13455724"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13455724;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.2196/94753"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "v13i1e94753"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/03/05 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/06/21 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/06/22 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/08/10 12:38"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/08/10 12:37"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/08/10 11:43"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/08/10 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 92,
+          "fulljournalname": "JMIR mental health",
+          "elocationid": "doi: 10.2196/94753",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/08/10 00:00",
+          "sortfirstauthor": "Bilston A",
+          "vernaculartitle": ""
+        },
+        "uids": [
+          "42574044",
+          "40350583",
+          "37563766",
+          "34524103",
+          "31256313",
+          "29039700",
+          "28966426"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T08:03:40.522Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

@@ -21,6 +21,7 @@ import { Schema as LibrarySchema } from '../bin/lib/schemas/library.js';
 import { parsePromptBlocks } from '../bin/lib/prompt-request.js';
 import { EXIT_APPROVAL, EXIT_ERROR, EXIT_USAGE, isPensmithError } from '../bin/lib/exit-codes.js';
 import { RESEARCH_LOG_END, SOURCES_START } from '../bin/lib/research-md.js';
+import { isResearchDone } from '../bin/lib/research-sentinel.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
 import type { SearchOptions } from '../bin/lib/sources/search-failure.js';
 
@@ -54,10 +55,18 @@ interface Call {
   opts: SearchOptions | undefined;
 }
 
+/**
+ * A retraction lookup that finds no notice for any DOI. The fake works' DOIs
+ * (10.5555/…) have no recorded Crossref answer, so the real lookup would leave
+ * them `unknown` offline (SRC-04: a failed lookup is never "clear"); a test
+ * that is not about retractions injects this instead.
+ */
+const NO_RETRACTIONS = { fetchById: async (): Promise<SourceCandidate | null> => null };
+
 /** Fake adapters named like the real registry keys; each returns `results[adapter]` for every query. */
 function fakeRegistry(results: Partial<Record<string, SourceCandidate[] | ((q: string) => SourceCandidate[])>>, extra: AdapterRegistry = {}): { calls: Call[]; registry: AdapterRegistry } {
   const calls: Call[] = [];
-  const registry: AdapterRegistry = { ...extra };
+  const registry: AdapterRegistry = { 'retraction-watch': NO_RETRACTIONS, ...extra };
   for (const name of ['arxiv', 'semanticscholar', 'openalex', 'crossref', 'pubmed', 'books']) {
     registry[name] = {
       async search(query: string, opts?: SearchOptions): Promise<SourceCandidate[]> {
@@ -507,9 +516,14 @@ test('D-15 / SRC-04: the retraction cross-check runs before the library write; r
   await withResearch({}, async (sb) => {
     writeBrief(sb);
     const retractedDoi = '10.5555/crossref.1';
-    const { registry } = fakeRegistry({ crossref: [cand('crossref', 1), cand('crossref', 2, { retraction_status: 'unknown', retraction_details: 'lookup failed: HTTP 503' })] }, {
+    // A lookup that fails (here an HTTP 503 after retries) leaves the status
+    // `unknown` with its reason (SRC-04, D-19-11) — never "clear".
+    const { registry } = fakeRegistry({ crossref: [cand('crossref', 1), cand('crossref', 2)] }, {
       'retraction-watch': {
-        fetchById: async (doi: string) => (doi === retractedDoi ? { ...cand('crossref', 1), retracted: true, retraction_details: 'Retraction notice 2010' } : null),
+        fetchById: async (doi: string) => {
+          if (doi === '10.5555/crossref.2') throw new Error('lookup failed: HTTP 503 after retries');
+          return doi === retractedDoi ? { ...cand('crossref', 1), retracted: true, retraction_details: 'Retraction notice 2010' } : null;
+        },
       },
     });
     __setResearchRegistryForTest(registry);
@@ -560,12 +574,15 @@ test('SRC-07: no source found, or every candidate excluded by policy → exit 1 
     assert.match((r.error as Error).message, /^pensmith research: no sources found — arxiv 0 \(no results\), semanticscholar 0 \(failed \(HTTP 429 — rate limited; set PENSMITH_S2_API_KEY\)\)/);
     assert.ok(!fs.existsSync(path.join(sb.paper, 'LIBRARY.json')), 'no library');
     assert.match(fs.readFileSync(path.join(sb.paper, 'RESEARCH.md'), 'utf8'), /^Result: no sources found$/m, 'the log is written');
+    // D-19-16: the failed run's log is not a library — bare `pensmith` / next routes back to research.
+    assert.equal(isResearchDone(sb.paper), false, 'a failed research run leaves the paper at the research stage');
 
     sb.writePaperConfig('schema_version = 1\n\n[sources]\nmin_year = 2030\n');
     __setResearchRegistryForTest(fakeRegistry({ crossref: [cand('crossref', 1)] }).registry);
     const p = await research({ root: sb.root, yolo: true });
     assert.ok(isPensmithError(p.error) && p.error.exitCode === EXIT_ERROR);
     assert.match((p.error as Error).message, /no usable sources — all 1 candidate\(s\) were excluded by the \[sources\] policy \(min_year 1\); relax \[sources\]/);
+    assert.equal(isResearchDone(sb.paper), false, 'an all-excluded run is not research output either');
 
     fs.rmSync(path.join(sb.paper, 'INTAKE.md'));
     const before = sb.mock!.callCount();

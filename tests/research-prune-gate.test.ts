@@ -73,8 +73,9 @@ test('SRC-09: the prune question preselects the evaluator\'s picks, lists its re
       { citekey: 'author32018', keep: false, reason: 'Off-scope: attention in human vision.', relevance: 0.1, tier: 'peer-reviewed' },
     ] } });
     const script = driver(sb.root, [candidate(1), candidate(2), candidate(3)]);
-    // Numbered answers: keep option 1 (a pick) and option 3 (the rejection); leave pick 2 out.
-    const r = await sb.runTsx(script, [], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '1,3\n' });
+    // Numbered answers: keep option 1 (a pick) and option 3 (the rejection); leave pick 2 out;
+    // then a blank line: no source to add.
+    const r = await sb.runTsx(script, [], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '1,3\n\n' });
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
     assert.match(r.stderr, /Select candidates to keep \(3 found\): the evaluator's picks are preselected/);
     assert.match(r.stderr, /1\) author12016 {2}— \[peer-reviewed\] Attention heads in transformer models, part 1 \(2016\)/);
@@ -96,11 +97,49 @@ test('SRC-07: every candidate rejected, and the user keeps none at the question 
     fs.writeFileSync(path.join(sb.paper, 'INTAKE.md'), renderIntakeDocument({ topic: 'attention heads', discipline: 'computer-science' }, 'x', []));
     sb.mock!.script('source-evaluator', { data: { verdicts: [{ citekey: 'author12016', keep: false, reason: 'Off-scope.', relevance: 0.1, tier: 'peer-reviewed' }] } });
     const script = driver(sb.root, [candidate(1)]);
-    // A blank answer takes the default: nothing preselected.
-    const r = await sb.runTsx(script, [], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '\n' });
+    // A blank answer takes the default: nothing preselected; nothing added either.
+    const r = await sb.runTsx(script, [], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '\n\n' });
     assert.equal(r.status, 1, `${r.stdout}\n${r.stderr}`);
     assert.match(r.stdout, /"message":"pensmith research: no relevant sources — the evaluator rejected all 1 candidate\(s\)/);
     assert.ok(!fs.existsSync(path.join(sb.paper, 'LIBRARY.json')));
     assert.match(fs.readFileSync(path.join(sb.paper, 'RESEARCH.md'), 'utf8'), /^- \[@author12016\] .* — evaluator: Off-scope\.$/m);
+  });
+});
+
+test('SRC-09 (19-PLAN §7.2): the prune question accepts a DOI to add — identified like `pensmith add`, written with the kept sources, tagged "added"', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY, PENSMITH_NO_LLM: undefined } }, async (sb) => {
+    fs.writeFileSync(
+      path.join(sb.paper, 'INTAKE.md'),
+      renderIntakeDocument({ topic: 'deep learning review', discipline: 'computer-science' }, 'Write about deep learning.', []),
+    );
+    sb.mock!.script('topic-disambiguator', { data: { ambiguous: false, scopes: [{ label: 'deep-learning', description: 'Deep learning methods.', queries: ['deep learning', 'neural networks', 'representation learning', 'backpropagation', 'convolutional networks'] }] } });
+    sb.mock!.script('source-evaluator', { data: { verdicts: [
+      { citekey: 'author12016', keep: true, reason: 'On topic.', relevance: 0.8, tier: 'peer-reviewed' },
+      { citekey: 'author22017', keep: true, reason: 'Also on topic.', relevance: 0.6, tier: 'peer-reviewed' },
+    ] } });
+    const script = driver(sb.root, [candidate(1), candidate(2)]);
+    // Keep pick 1; then add the LeCun et al. review by its DOI (the recorded Crossref answer
+    // replays under the test runner) and a DOI Crossref does not know.
+    const r = await sb.runTsx(script, [], {
+      env: { PENSMITH_PROMPT_MODE: 'numbered' },
+      input: '1\nDOI: 10.1038/nature14539 10.5555/not-a-registered-work-0000\n',
+    });
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, /Add a source you know — a DOI, arXiv id, PMID:<id>, isbn:<ISBN> or URL/);
+    // Offline (the test runner) an unrecorded DOI is refused with add's RUN-03 wording; live it reads "not found".
+    assert.match(r.stderr, /^pensmith research: DOI verification unavailable \(offline\) — 10\.5555\/not-a-registered-work-0000 NOT added; re-run online to verify and add it\.$/m, 'an unknown DOI is refused with the add wording');
+    assert.match(r.stdout, /^pensmith research: DOI: 10\.1038\/nature14539 → Deep learning \(2015\)$/m);
+    const lib = LibrarySchema.parse(JSON.parse(fs.readFileSync(path.join(sb.paper, 'LIBRARY.json'), 'utf8')));
+    const lecun = lib.entries.find((e) => e.doi === '10.1038/nature14539');
+    assert.ok(lecun, `the added DOI is in the library: ${lib.entries.map((e) => e.citekey).join(', ')}`);
+    assert.equal(lecun.title, 'Deep learning');
+    assert.deepEqual(lecun.provenance, ['add:crossref']);
+    assert.equal(lecun.why_relevant, 'Added at the approval gate');
+    assert.equal(lecun.tier, 'peer-reviewed');
+    assert.deepEqual(lib.entries.map((e) => e.citekey).sort(), ['author12016', lecun.citekey].sort());
+    const md = fs.readFileSync(path.join(sb.paper, 'RESEARCH.md'), 'utf8');
+    assert.match(md, /; 1 added at the approval gate$/m);
+    assert.match(md, new RegExp(`^- \\[@${lecun.citekey}\\] LeCun, Yann; Bengio, Yoshua; Hinton, Geoffrey \\(2015\\)\\. Deep learning\\. Nature`, 'm'));
+    assert.match(md, /Tags: added/);
   });
 });

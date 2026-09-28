@@ -1,0 +1,637 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=instagram+adolescent+depression+longitudinal&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 829140,
+        "items": [
+          {
+            "DOI": "10.18297/etd/2721",
+            "title": [
+              "A meta-analysis of the longitudinal relationship between adolescent depression and academic achievement."
+            ],
+            "author": [
+              {
+                "given": "Rachel",
+                "family": "Buehner",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "dissertation",
+            "publisher": "University of Louisville"
+          },
+          {
+            "DOI": "10.2139/ssrn.7388902",
+            "title": [
+              "Temporal pathways linking childhood maltreatment to adolescent depression: A longitudinal network study"
+            ],
+            "author": [
+              {
+                "given": "Zhengyi",
+                "family": "Liu",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Yunyi",
+                "family": "Xiao",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Xiao",
+                "family": "Zhou",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026
+                ]
+              ]
+            },
+            "abstract": "<jats:p>Background: Childhood maltreatment is associated with adolescent depressive symptoms, but the prospective organization of relevant risk and protective processes remains unclear.Objective: To examine prospective associations among trait vulnerabilities, coping strategies, school connectedness, and depressive symptoms and compare these patterns by maltreatment exposure.Participants and Setting: Participants were 957 students aged 15–18 years from one vocational high school in Zhejiang Province, China. Of these, 393 met threshold criteria for at least one maltreatment subtype, and 564 formed the low/no-exposure group.Methods: Three-wave data were analyzed using regularized undirected networks, Bayesian directed acyclic graphs, and cross-lagged panel networks. Cross-lagged models adjusted for autoregressive effects and demographic covariates; network comparison tests assessed group differences.Results: At baseline, maltreatment-exposed adolescents reported more depressive symptoms (p &lt; .001) and lower school connectedness (p &lt; .001). In this group, insecurity showed positive nonzero prospective associations with depressive symptoms from T1 to T2 (β = .10) and T2 to T3 (β = .07), whereas school connectedness showed a negative nonzero association from T2 to T3 (β = -.17). In both groups, depressive symptoms predicted lower subsequent school connectedness and greater insecurity. Formal comparisons provided limited evidence of overall between-group structural differences.Conclusions: Insecurity may be a persistent vulnerability marker, whereas school connectedness may represent a potentially modifiable relational resource for maltreatment-exposed adolescents. These prospective associations do not establish causality.</jats:p>",
+            "type": "posted-content",
+            "publisher": "Elsevier BV"
+          },
+          {
+            "publisher": "MDPI AG",
+            "issue": "8",
+            "abstract": "<jats:p>Background/Objectives: Adolescence is a critical period for mental health, with depression increasing rapidly and often leading to lifelong consequences. In recent decades, the prevalence of elevated depressive symptoms among adolescents has steadily risen, making it a significant public health concern. While research supports the benefits of mindfulness-based practices in reducing adolescent depressive symptoms, the role of trait mindfulness remains underexplored. Although some studies suggest a link between trait mindfulness and lower depressive symptomatology, a longitudinal perspective could provide deeper insights into this relationship. Given adolescents’ heightened vulnerability to mental health issues, understanding the potential causal link between trait mindfulness and depression is crucial for both prevention and intervention efforts. Methods: This study examines the relationship between mindfulness and depression in a three-wave longitudinal study of 1618 secondary school students (Males: N = 671, M = 16.4 years, SD = 0.60; Females: N = 947, M = 16.3 years, SD = 0.65) using a random intercept cross-lagged panel model. Results: Findings indicate that mindfulness and depression share a substantial proportion of variance (r = 0.48) at the stable trait level, suggesting that sustained attentional focus, a hallmark of mindfulness, is consistently associated with fewer depressive symptoms. At the within-person level, momentary deviations from stable mindfulness levels in the first and second waves were linked to lower depressive symptoms in subsequent waves (β = −0.21, p = 0.016; β = −0.44, p = 0.03, respectively). These findings suggest that even temporary increases in mindfulness may provide additional protection against depression. Conclusions: Overall, the results suggest that trait mindfulness is associated with a reduced risk of developing depressive symptoms at both the between-person and within-person levels. Specifically, adolescents with higher stable levels of mindfulness tend to report fewer depressive symptoms over time, and even momentary increases in mindfulness beyond an individual’s typical level are linked to reductions in subsequent depressive symptoms. These findings highlight the potential of mindfulness-based interventions in mitigating adolescent depression and underscore the importance of cultivating mindfulness as a protective factor during this critical stage of development.</jats:p>",
+            "DOI": "10.3390/healthcare13080906",
+            "type": "journal-article",
+            "page": "906",
+            "title": [
+              "Exploring the Effects of Mindfulness on Adolescent Depression—Findings from a Longitudinal Study"
+            ],
+            "volume": "13",
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0003-4869-9167",
+                "authenticated-orcid": false,
+                "given": "Filipa",
+                "family": "Ćavar",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Institute of Social Sciences “Ivo Pilar”, 10000 Zagreb, Croatia"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-3678-097X",
+                "authenticated-orcid": false,
+                "given": "Josipa",
+                "family": "Mihić",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Faculty of Education and Rehabilitation Sciences, University of Zagreb, 10000 Zagreb, Croatia"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-7202-3338",
+                "authenticated-orcid": false,
+                "given": "Goran",
+                "family": "Milas",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Institute of Social Sciences “Ivo Pilar”, 10000 Zagreb, Croatia"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Healthcare"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  4,
+                  15
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "Elsevier BV",
+            "issue": "2",
+            "DOI": "10.1016/j.jadohealth.2007.11.018",
+            "type": "journal-article",
+            "page": "5",
+            "title": [
+              "5: Adolescent Media Use and Young Adult Depression: A Longitudinal Study"
+            ],
+            "volume": "42",
+            "author": [
+              {
+                "given": "Brian A.",
+                "family": "Primack",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Brandi",
+                "family": "Swanier",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Anna M.",
+                "family": "Georgiopoulos",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Stephanie R.",
+                "family": "Land",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Michael J.",
+                "family": "Fine",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Journal of Adolescent Health"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2008,
+                  2
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "Elsevier BV",
+            "issue": "6",
+            "DOI": "10.1016/j.jadohealth.2010.09.012",
+            "type": "journal-article",
+            "page": "591-596",
+            "title": [
+              "Longitudinal Effects of Hostility, Depression, and Bullying on Adolescent Smoking Initiation"
+            ],
+            "volume": "48",
+            "author": [
+              {
+                "given": "Jie W.",
+                "family": "Weiss",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Michele",
+                "family": "Mouttapa",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Steven",
+                "family": "Cen",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "C. Anderson",
+                "family": "Johnson",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Jennifer",
+                "family": "Unger",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Journal of Adolescent Health"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2011,
+                  6
+                ]
+              ]
+            }
+          },
+          {
+            "DOI": "10.21203/rs.3.rs-8615948/v1",
+            "title": [
+              "The Longitudinal Association between Peer Victimization and Adolescent Depression: A Moderated Mediation Model"
+            ],
+            "author": [
+              {
+                "given": "yueqin",
+                "family": "Hui",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Southwest University"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "jianjun",
+                "family": "Huang",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Southwest University"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "zhongju",
+                "family": "Xie",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Southwest University"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "jin-liang",
+                "family": "Wang",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Southwest University"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  27
+                ]
+              ]
+            },
+            "abstract": "<title>Abstract</title>\n                <p>Peer victimization significantly threatens adolescent mental health, yet longitudinal research on the interplay of intra-individual risk and protective factors remains scarce. This study tested a moderated mediation model in a sample of 874 Chinese adolescents (Mage = 12.41, SD = 1.52, 52.4% girls), surveyed over 1.5 years. The results indicated that MCERSs were an underlying mechanism linking peer victimization to depression, while self-compassion served as a protective factor that weakened the strength between peer victimization and depression as well as between MCERSs and depression. This provides a theoretical and empirical basis for interventions aimed at mitigating the impact of peer victimization by targeting emotion regulation and fostering self-compassion.</p>",
+            "type": "posted-content",
+            "publisher": "Springer Science and Business Media LLC"
+          },
+          {
+            "DOI": "10.31234/osf.io/mfs5j_v1",
+            "title": [
+              "Longitudinal trajectories of depression across adolescence, emerging adulthood and adulthood: findings from the National Longitudinal Study of Adolescent to Adult Health (Add Health) (1994-2008)."
+            ],
+            "author": [
+              {
+                "given": "Catriona",
+                "family": "Ross",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-3399-9466",
+                "authenticated-orcid": true,
+                "given": "Orla",
+                "family": "McBride",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Ellen",
+                "family": "Henderson",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Gary",
+                "family": "Adamson",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  9,
+                  15
+                ]
+              ]
+            },
+            "abstract": "<p>Background: The heterogeneity of depression is well documented. Considering the Life Course Theory, longitudinal analysis establishing trajectories may demonstrate the stability and variation of depression. Methods: Data from four waves of the National Longitudinal Study of Adolescent to Adult Health (Add Health) were used to investigate depression trajectories. Nine items from the Center for Epidemiological Studies (CES-D) measured depression of 9421 participants. Trajectories were established using growth mixture modelling (GMM) and multinomial regression was employed to explore the influence of gender and ethnicity.Results: Five distinct and unique trajectories were established as minimal (66.8%), moderate (19.1%), Emerging Adulthood (EA) trough (7.6%), persistently high (3.3%) and EA peak (3.1%). Being female and non-white increased the probability of being in the elevated trajectories during adolescence.  Conclusion: Three stable and two fluctuating trajectories demonstrate both the predictability and heterogeneity of depression across three distinct developmental stages.</p>",
+            "type": "posted-content",
+            "publisher": "Center for Open Science"
+          },
+          {
+            "publisher": "Elsevier BV",
+            "issue": "4",
+            "DOI": "10.1016/j.contraception.2015.06.034",
+            "type": "journal-article",
+            "page": "360",
+            "title": [
+              "Abortion and subsequent depression: an analysis of the national longitudinal study on adolescent health"
+            ],
+            "volume": "92",
+            "author": [
+              {
+                "given": "A.",
+                "family": "Gomez",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Contraception"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2015,
+                  10
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "MDPI AG",
+            "issue": "5",
+            "abstract": "<jats:p>Objective: The purpose of this study is to gain insight into the effect of family support, school connectedness, and school environments on depressive symptoms among adolescents across racial/ethnic groups on both the student-level and school-level. Method: This study uses a sample of 4228 students (2122 girls and 2016 boys) from the public use data of the National Longitudinal Study of Adolescent Health. Students were measured at two time points (one year apart) on school connectedness, family support, socio-demographic factors, and the Center for Epidemiological Studies’ Depression Scale. Hierarchical Linear Modeling was used to examine potential predictors on adolescent depressive symptoms. This is, to the best of the author’s knowledge, the first study to examine the interplay of school connectedness, school racial composition, and adolescent depression. Results: School connectedness partially mediates the effects of family support on depressive symptoms, but both remain strong predictors of depressive symptoms. African American adolescents are the only racial/ethnic group that has constantly higher CES-D scores than the non-Hispanic white adolescents. School-level connectedness is positively related to students’ depressive symptoms. The racial composition of a school has different effects on students’ depressive symptoms on student’s race. Conclusions: Low perceived family support, low school connectedness, being female, and being African American are consistently associated with greater depressive symptoms one year later. The overall level of school connectedness of a school is found to be related with greater individual student’s depressive symptoms, while the effects of school proportion of minority students on students’ depressive symptoms differ significantly across the race/ethnicity of students. Future study is needed to explore the association between racial/ethnic segregation and adolescent depression while considering students’ racial/ethnic status.</jats:p>",
+            "DOI": "10.3390/socsci7050072",
+            "type": "journal-article",
+            "page": "72",
+            "title": [
+              "A Multi-Level Analysis on School Connectedness, Family Support, and Adolescent Depression: Evidence from the National Longitudinal Study of Adolescent Health, 1995–1996"
+            ],
+            "volume": "7",
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0002-4671-1129",
+                "authenticated-orcid": false,
+                "given": "Lin",
+                "family": "Zhu",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Center for Asian Health, Lewis Katz School of Medicine, Temple University, 3440 N Broad St., Kresge Bldg, Ste. 320, Philadelphia, PA 19140, USA"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Social Sciences"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2018,
+                  4,
+                  25
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "Emerald",
+            "issue": "6",
+            "abstract": "<jats:sec><jats:title content-type=\"abstract-subheading\">Purpose</jats:title><jats:p>This study longitudinally investigated the predictors and mediators of adolescent smartphone addiction by examining the impact of parental smartphone addiction at T1 on adolescent smartphone addiction at T3, as well as the separate and sequential role of adolescent self-esteem and depression at T2 as mediating factors.</jats:p></jats:sec><jats:sec><jats:title content-type=\"abstract-subheading\">Design/methodology/approach</jats:title><jats:p>This study used a hierarchical regression and the PROCESS macro (Model 6) to investigate research model by collecting 3,904 parent-adolescent pairs. Panel data were collected from three waves of the Korean Children and Youth Panel Survey (KCYPS).</jats:p></jats:sec><jats:sec><jats:title content-type=\"abstract-subheading\">Findings</jats:title><jats:p>First, the result showed that parental smartphone addiction at T1 significantly and positively predicted adolescent smartphone addiction at T3. Second, the serial mediation analysis revealed that the impact of parental smartphone addiction at T1 on adolescent smartphone addiction at T3 was mediated by adolescent self-esteem and depression at T2 independently and serially.</jats:p></jats:sec><jats:sec><jats:title content-type=\"abstract-subheading\">Originality/value</jats:title><jats:p>The findings enhance our comprehension of the impact of parental smartphone addiction, adolescent self-esteem and depression, on adolescent smartphone addiction.</jats:p></jats:sec>",
+            "DOI": "10.1108/intr-02-2023-0110",
+            "type": "journal-article",
+            "page": "2031-2056",
+            "title": [
+              "Longitudinal relationship between parental and adolescent smartphone addiction: serial mediating effects of adolescent self-esteem and depression"
+            ],
+            "volume": "34",
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0003-1375-9182",
+                "authenticated-orcid": false,
+                "given": "Il Bong",
+                "family": "Mun",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Internet Research"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2024,
+                  2,
+                  6
+                ]
+              ]
+            }
+          }
+        ],
+        "items-per-page": 10,
+        "query": {
+          "start-index": 0,
+          "search-terms": "instagram adolescent depression longitudinal"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T08:03:23.650Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

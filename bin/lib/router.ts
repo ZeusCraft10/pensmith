@@ -40,6 +40,7 @@ import { join } from 'node:path';
 import { loadState, StateNotFoundError } from './state.js';
 import { paperDir, sectionPlan } from './paths.js';
 import { loadFrontmatterDocSync } from './frontmatter.js';
+import { isResearchDone } from './research-sentinel.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
@@ -168,15 +169,13 @@ export async function resolveNextAction(
 
     const pDir = paperDir(paperRoot);
 
-    // "Research done" sentinel (audit M1): the research verb writes LIBRARY.json
-    // (+ CITATIONS.bib) — its canonical output per workflows/research.md §Outputs —
-    // NOT RESEARCH.md (a later curated-notes artifact written by `revise
-    // --research` / learning mode). Gating on RESEARCH.md alone left bare
-    // `pensmith`/next/resume looping on `research` forever after a real research
-    // run. Accept EITHER so the canonical output advances the pipeline while the
-    // legacy RESEARCH.md still counts.
-    const researchDone =
-      existsSync(join(pDir, 'LIBRARY.json')) || existsSync(join(pDir, 'RESEARCH.md'));
+    // "Research done" sentinel (audit M1, D-19-16): a LIBRARY.json with at
+    // least one entry — the research verb's canonical output per
+    // workflows/research.md §Outputs — or, without one, a legacy / curated
+    // RESEARCH.md that is not the log of a failed research run (a run that
+    // found nothing usable writes its log and leaves LIBRARY.json untouched).
+    // bin/lib/research-sentinel.ts; never throws.
+    const researchDone = isResearchDone(pDir);
 
     // H4 PINNED ORDERING: HANDOFF.json is NOT read here. existsSync never throws.
     if (!researchDone) return { verb: 'research' };

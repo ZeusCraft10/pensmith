@@ -42,6 +42,7 @@ import { planAdapters, zoteroConfigured, estimatedResearchCandidates, evaluatorC
 import { MAX_QUERIES } from './query-expansion.js';
 import { resolveDiscipline } from './disciplines.js';
 import { readIntakeBrief } from './intake-brief.js';
+import { isResearchDone } from './research-sentinel.js';
 
 // ---------------------------------------------------------------------------
 // Per-call projection
@@ -376,7 +377,7 @@ export async function projectEstimate(args: {
   const intakeDone = existsSync(path.join(pDir, 'INTAKE.md')) || stateOk;
   if (!intakeDone) rows.push(row(rt, root, 'new', [['intake-clarifier', 1]], stubbed));
   const research = researchCalls(root);
-  if (!existsSync(path.join(pDir, 'LIBRARY.json'))) {
+  if (!isResearchDone(pDir)) {
     rows.push(row(rt, root, 'research', research, stubbed));
   }
 

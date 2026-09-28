@@ -156,12 +156,14 @@ export function planAdapters(input: AdapterPlanInput): AdapterPlan {
 }
 
 /**
- * True when the user's Zotero library is configured for Tier 2: a Zotero Web
- * API key, or the Zotero 7 local API switched on (SRC-16). Presence only — the
- * key's value is never read here.
+ * True when the user's Zotero library is configured for Tier 2 — the same
+ * rule as bin/lib/sources/zotero.ts isZoteroConfigured(): a Zotero Web API
+ * key, the Zotero 7 local API switched on, or a group library id (a public
+ * group needs no key) (SRC-16). Presence only — the key's value is never read
+ * here.
  */
 export function zoteroConfigured(env: Readonly<Record<string, string | undefined>>): boolean {
-  return Boolean(env['ZOTERO_API_KEY']) || env['PENSMITH_ZOTERO_LOCAL'] === '1';
+  return Boolean(env['ZOTERO_API_KEY']?.trim()) || env['PENSMITH_ZOTERO_LOCAL'] === '1' || Boolean(env['ZOTERO_GROUP_ID']?.trim());
 }
 
 // ---------------------------------------------------------------------------

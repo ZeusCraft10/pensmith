@@ -1,0 +1,13 @@
+{
+  "id": "contact-email",
+  "requirement": "SRC-17",
+  "module": "bin/lib/contact-email.ts",
+  "description": "bin/lib/contact-email.ts contactEmail() is the one resolver of the polite-pool contact email (D-19-09): it reads the variable named by [network] contact_email_env (default PENSMITH_CONTACT_EMAIL), honours a configured name only when it is an upper-case identifier containing EMAIL or MAILTO (a paper's config travels with the paper and must not aim pensmith at a secret), and sends a value only when it looks like an email. A second reader of process.env.PENSMITH_CONTACT_EMAIL or of the config's contact_email_env would ignore the configured variable or skip those checks. http.ts's User-Agent, the OpenAlex / Unpaywall / retraction-lookup parameters and the doctor probe all call contactEmail().",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs"],
+  "allow": ["bin/lib/contact-email.ts"],
+  "match": [
+    { "kind": "member", "pattern": "^process\\.env\\.PENSMITH_CONTACT_EMAIL$" },
+    { "kind": "member", "pattern": "\\.contact_email_env$" }
+  ],
+  "fixture": "tests/fixtures/chokepoints/contact-email.violation.ts.txt"
+}

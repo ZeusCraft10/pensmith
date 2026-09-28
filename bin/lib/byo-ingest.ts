@@ -253,7 +253,7 @@ export async function ingestByoPdf(root: string, file: string, opts: ByoIngestOp
 
   let identified: Awaited<ReturnType<typeof identifyPdf>>;
   try {
-    identified = await identifyPdf(ex, opts.deps);
+    identified = await identifyPdf(ex, opts.deps, { pdf: prepared.bytes });
   } catch (e) {
     if (!isOfflineEgressError(e) || opts.strict) throw e;
     return refuse(`identifying it needs the network (${offlineLabel(e)}) — re-run online to add it`, 'offline');
