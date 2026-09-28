@@ -1,74 +1,104 @@
 {
-  "psychology": {
-    "defaultTone": "academic-formal",
-    "defaultCitationStyle": "apa",
-    "sourcePreference": ["pubmed", "openalex", "semanticscholar"],
-    "sectioningConvention": ["Introduction", "Method", "Results", "Discussion", "References"],
-    "counterargDefault": "optional",
-    "densityTarget": { "low": 12, "center": 22, "high": 32 }
-  },
-  "computer-science": {
-    "defaultTone": "technical",
-    "defaultCitationStyle": "ieee",
-    "sourcePreference": ["arxiv", "semanticscholar", "openalex"],
-    "sectioningConvention": ["Introduction", "Related Work", "Method", "Evaluation", "Conclusion", "References"],
-    "counterargDefault": "optional",
-    "densityTarget": { "low": 10, "center": 20, "high": 30 }
-  },
-  "history": {
-    "defaultTone": "narrative",
-    "defaultCitationStyle": "chicago-author-date",
-    "sourcePreference": ["crossref", "openalex"],
-    "sectioningConvention": ["Introduction", "Background", "Analysis", "Conclusion", "Bibliography"],
-    "counterargDefault": "required",
-    "densityTarget": { "low": 4, "center": 12, "high": 22 }
-  },
-  "philosophy": {
-    "defaultTone": "argumentative",
-    "defaultCitationStyle": "chicago-author-date",
-    "sourcePreference": ["crossref", "openalex"],
-    "sectioningConvention": ["Introduction", "Argument", "Objections", "Reply", "Conclusion", "Bibliography"],
-    "counterargDefault": "required",
-    "densityTarget": { "low": 4, "center": 12, "high": 22 }
-  },
-  "biology": {
-    "defaultTone": "technical",
-    "defaultCitationStyle": "apa",
-    "sourcePreference": ["pubmed", "openalex", "crossref"],
-    "sectioningConvention": ["Introduction", "Materials and Methods", "Results", "Discussion", "References"],
-    "counterargDefault": "optional",
-    "densityTarget": { "low": 15, "center": 25, "high": 35 }
-  },
-  "sociology": {
-    "defaultTone": "academic-formal",
-    "defaultCitationStyle": "apa",
-    "sourcePreference": ["openalex", "crossref", "semanticscholar"],
-    "sectioningConvention": ["Introduction", "Literature Review", "Methods", "Findings", "Discussion", "References"],
-    "counterargDefault": "optional",
-    "densityTarget": { "low": 7, "center": 15, "high": 25 }
-  },
-  "economics": {
-    "defaultTone": "analytical",
-    "defaultCitationStyle": "apa",
-    "sourcePreference": ["openalex", "crossref", "semanticscholar"],
-    "sectioningConvention": ["Introduction", "Literature Review", "Model", "Results", "Conclusion", "References"],
-    "counterargDefault": "optional",
-    "densityTarget": { "low": 9, "center": 18, "high": 28 }
-  },
-  "literature": {
-    "defaultTone": "interpretive",
-    "defaultCitationStyle": "mla",
-    "sourcePreference": ["crossref", "openalex"],
-    "sectioningConvention": ["Introduction", "Close Reading", "Discussion", "Conclusion", "Works Cited"],
-    "counterargDefault": "optional",
-    "densityTarget": { "low": 3, "center": 10, "high": 20 }
-  },
-  "other": {
-    "defaultTone": "academic-formal",
-    "defaultCitationStyle": "apa",
-    "sourcePreference": ["crossref", "openalex"],
-    "sectioningConvention": ["Introduction", "Body", "Conclusion", "References"],
-    "counterargDefault": "optional",
-    "densityTarget": { "low": 7, "center": 15, "high": 25 }
+  "$schemaVersion": 1,
+  "presets": {
+    "computer-science": {
+      "name": "Computer Science",
+      "aliases": ["cs", "computer science", "computing", "comp sci", "ai", "ml", "artificial intelligence", "machine learning", "software engineering"],
+      "defaultTone": "technical",
+      "defaultCitationStyle": "ieee",
+      "alternateCitationStyles": [],
+      "sourcePreference": ["arxiv", "semanticscholar", "openalex"],
+      "sectioningConvention": ["Abstract", "Introduction", "Related Work", "Methods", "Results", "Conclusion"],
+      "counterargDefault": "off",
+      "densityPerParagraph": { "min": 1, "max": 3 }
+    },
+    "biology": {
+      "name": "Biology / Life Sciences",
+      "aliases": ["bio", "life sciences", "life science", "biomedical", "medicine", "ecology", "genetics"],
+      "defaultTone": "technical",
+      "defaultCitationStyle": "ama",
+      "alternateCitationStyles": ["vancouver"],
+      "sourcePreference": ["pubmed", "openalex", "crossref"],
+      "sectioningConvention": ["Abstract", "Introduction", "Methods", "Results", "Discussion", "Conclusion"],
+      "counterargDefault": "off",
+      "densityPerParagraph": { "min": 2, "max": 4 }
+    },
+    "history": {
+      "name": "History",
+      "aliases": ["hist"],
+      "defaultTone": "narrative",
+      "defaultCitationStyle": "chicago-notes-bib",
+      "alternateCitationStyles": [],
+      "sourcePreference": ["openalex", "jstor", "books"],
+      "sectioningConvention": ["Thesis", "Body", "Counterargument", "Conclusion"],
+      "counterargDefault": "on",
+      "densityPerParagraph": { "min": 0.5, "max": 2 }
+    },
+    "literature": {
+      "name": "Literature",
+      "aliases": ["lit", "english", "english literature", "literary studies", "comparative literature"],
+      "defaultTone": "interpretive",
+      "defaultCitationStyle": "mla",
+      "alternateCitationStyles": [],
+      "sourcePreference": ["openalex", "jstor", "books"],
+      "sectioningConvention": ["Thesis", "Body", "Counterargument", "Conclusion"],
+      "counterargDefault": "on",
+      "densityPerParagraph": { "min": 0.5, "max": 2 }
+    },
+    "psychology": {
+      "name": "Psychology",
+      "aliases": ["psych", "psy", "cognitive science", "behavioral science", "behavioural science"],
+      "defaultTone": "academic-formal",
+      "defaultCitationStyle": "apa",
+      "alternateCitationStyles": [],
+      "sourcePreference": ["pubmed", "psycnet", "openalex"],
+      "sectioningConvention": ["Abstract", "Introduction", "Method", "Results", "Discussion"],
+      "counterargDefault": "ask",
+      "densityPerParagraph": { "min": 2, "max": 4 }
+    },
+    "economics": {
+      "name": "Economics",
+      "aliases": ["econ", "econs", "economy", "finance"],
+      "defaultTone": "analytical",
+      "defaultCitationStyle": "apa",
+      "alternateCitationStyles": ["chicago-author-date"],
+      "sourcePreference": ["nber", "openalex", "crossref"],
+      "sectioningConvention": ["Abstract", "Introduction", "Literature Review", "Model", "Results", "Conclusion"],
+      "counterargDefault": "off",
+      "densityPerParagraph": { "min": 1, "max": 3 }
+    },
+    "philosophy": {
+      "name": "Philosophy",
+      "aliases": ["phil", "ethics", "philosophy of mind", "logic"],
+      "defaultTone": "argumentative",
+      "defaultCitationStyle": "chicago-author-date",
+      "alternateCitationStyles": [],
+      "sourcePreference": ["openalex", "philpapers", "books"],
+      "sectioningConvention": ["Thesis", "Argument", "Objections", "Reply", "Conclusion"],
+      "counterargDefault": "on",
+      "densityPerParagraph": { "min": 0.5, "max": 2 }
+    },
+    "sociology": {
+      "name": "Sociology",
+      "aliases": ["soc", "social science", "social sciences", "anthropology"],
+      "defaultTone": "academic-formal",
+      "defaultCitationStyle": "apa",
+      "alternateCitationStyles": [],
+      "sourcePreference": ["openalex", "crossref", "semanticscholar"],
+      "sectioningConvention": ["Introduction", "Literature Review", "Methods", "Findings", "Discussion", "Conclusion"],
+      "counterargDefault": "off",
+      "densityPerParagraph": { "min": 1, "max": 3 }
+    },
+    "other": {
+      "name": "Other / Custom",
+      "aliases": ["custom", "general", "none", "unknown"],
+      "defaultTone": "academic-formal",
+      "defaultCitationStyle": "apa",
+      "alternateCitationStyles": [],
+      "sourcePreference": ["openalex", "crossref", "arxiv"],
+      "sectioningConvention": [],
+      "counterargDefault": "off",
+      "densityPerParagraph": { "min": 1, "max": 3 }
+    }
   }
 }
