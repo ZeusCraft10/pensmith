@@ -34,6 +34,7 @@ import {
   importGraphViolations,
   relativeImports,
   toRepoRelative,
+  fromRepoRelative,
   type ChokepointRow,
 } from '../scripts/eslint-rules/chokepoint.mjs';
 
@@ -287,41 +288,119 @@ test('RUN-29: globs — ** spans directories, * stays in a segment, {a,b} altern
   assert.ok(!globToRegExp('bin/lib/library.ts').test('bin/lib/library.tsx'));
 });
 
+/** The synthetic tree the import-graph self-tests walk ('/'-separated, relative to its root). */
+const GRAPH_FILES: Readonly<Record<string, string>> = {
+  'a.ts': `import { b } from './b.js';\nexport const a = b;\n`,
+  'b.ts': `import './c.js';\nexport const b = 1;\n`,
+  'c.ts': `export async function c() { return import('./secret/transport.js'); }\n`,
+  'secret/transport.ts': `export const t = 1;\n`,
+  'clean.ts': `import type { T } from './types.js';\nexport const x: T | null = null;\n`,
+  'types.ts': `export type T = string;\n`,
+};
+
+/** A synthetic import-graph row whose scope is every top-level module under `rootRel`. */
+function graphRow(rootRel: string): ChokepointRow {
+  return {
+    id: 'synthetic-graph',
+    requirement: 'RUN-29',
+    module: 'x',
+    description: 'synthetic import-graph row for the harness self-test',
+    scope: [`${rootRel}/*.ts`],
+    allow: [],
+    match: { kind: 'import-graph', pattern: '/secret/transport\\.ts$' },
+    fixture: 'tests/fixtures/chokepoints/synthetic-graph.violation.ts.txt',
+  };
+}
+
+/**
+ * The walk's findings for the tree whose entries are spelled under `entryRoot`:
+ * which entries reach the target, and a's chain. Reached modules and chains are
+ * reported in toRepoRelative() form, `reportRoot` (= entryRoot unless the
+ * entries are spelled absolute on a platform where the tree has a relative form).
+ */
+function graphFindings(
+  entryRoot: string,
+  io: Parameters<typeof importGraphViolations>[2],
+  reportRoot: string = entryRoot,
+): { entries: string[]; chainFromA: string[] | undefined } {
+  const v = importGraphViolations(graphRow(entryRoot), Object.keys(GRAPH_FILES).map((f) => `${entryRoot}/${f}`), io);
+  assert.ok(v.every((x) => x.reached === `${reportRoot}/secret/transport.ts`), `every chain ends at the target: ${JSON.stringify(v)}`);
+  return {
+    entries: [...new Set(v.map((x) => x.entry.slice(entryRoot.length + 1)))].sort(),
+    chainFromA: v.find((x) => x.entry === `${entryRoot}/a.ts`)?.chain.map((c) => c.slice(reportRoot.length + 1)),
+  };
+}
+
 test('RUN-29: import-graph walks static, side-effect and dynamic relative imports and reports the chain', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-graph-'));
-  const files: Record<string, string> = {
-    'a.ts': `import { b } from './b.js';\nexport const a = b;\n`,
-    'b.ts': `import './c.js';\nexport const b = 1;\n`,
-    'c.ts': `export async function c() { return import('./secret/transport.js'); }\n`,
-    'secret/transport.ts': `export const t = 1;\n`,
-    'clean.ts': `import type { T } from './types.js';\nexport const x: T | null = null;\n`,
-    'types.ts': `export type T = string;\n`,
-  };
-  const abs = (rel: string): string => path.join(dir, rel);
-  for (const [rel, text] of Object.entries(files)) {
+  const abs = (rel: string): string => path.join(dir, ...rel.split('/'));
+  for (const [rel, text] of Object.entries(GRAPH_FILES)) {
     fs.mkdirSync(path.dirname(abs(rel)), { recursive: true });
     fs.writeFileSync(abs(rel), text);
   }
   try {
-    assert.deepEqual(relativeImports(files['a.ts']!), ['./b.js']);
-    const rootRel = toRepoRelative(dir);
-    const row: ChokepointRow = {
-      id: 'synthetic-graph',
-      requirement: 'RUN-29',
-      module: 'x',
-      description: 'synthetic import-graph row for the harness self-test',
-      scope: [`${rootRel}/*.ts`],
-      allow: [],
-      match: { kind: 'import-graph', pattern: '/secret/transport\\.ts$' },
-      fixture: 'tests/fixtures/chokepoints/synthetic-graph.violation.ts.txt',
-    };
+    assert.deepEqual(relativeImports(GRAPH_FILES['a.ts']!), ['./b.js']);
     const io = { read: (f: string) => fs.readFileSync(f, 'utf8'), exists: (f: string) => fs.existsSync(f) };
-    const v = importGraphViolations(row, Object.keys(files).map((f) => `${rootRel}/${f}`), io);
-    const entries = [...new Set(v.map((x) => x.entry.slice(rootRel.length + 1)))].sort();
-    assert.deepEqual(entries, ['a.ts', 'b.ts', 'c.ts'], 'every module that reaches the target, directly or transitively');
-    const fromA = v.find((x) => x.entry.endsWith('/a.ts'))!;
-    assert.deepEqual(fromA.chain.map((c) => c.slice(rootRel.length + 1)), ['a.ts', 'b.ts', 'c.ts', 'secret/transport.ts']);
+    // The temp dir's repo-relative form: `../../tmp/…` on one drive, but an
+    // ABSOLUTE `C:/Users/…/Temp/…` on a Windows runner whose checkout is on D:.
+    const rootRel = toRepoRelative(dir);
+    const found = graphFindings(rootRel, io);
+    assert.deepEqual(found.entries, ['a.ts', 'b.ts', 'c.ts'], 'every module that reaches the target, directly or transitively');
+    assert.deepEqual(found.chainFromA, ['a.ts', 'b.ts', 'c.ts', 'secret/transport.ts']);
+
+    // An absolute entry (what toRepoRelative returns for another drive) is
+    // walked from that file itself, not from `<repo>/<absolute path>` — the
+    // same tree through this platform's absolute spelling.
+    const absolute = graphFindings(dir.split(path.sep).join('/'), io, rootRel);
+    assert.deepEqual(absolute, found, 'an absolute entry is walked exactly like a repo-relative one');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('RUN-29: import-graph walks a tree on another Windows drive (temp dir on C:, checkout on D:)', () => {
+  // The windows-latest CI layout, walked with win32 path semantics on any host:
+  // the checkout is D:\a\pensmith\pensmith and os.tmpdir() is the 8.3-named
+  // C:\Users\RUNNER~1\AppData\Local\Temp, so every entry is an absolute
+  // `C:/…` path. Joining it under the repo root found nothing (CI run 62).
+  const W = path.win32;
+  const repo = 'D:\\a\\pensmith\\pensmith';
+  const dir = 'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\pensmith-graph-AbC123';
+  const disk = new Map(Object.entries(GRAPH_FILES).map(([rel, text]) => [W.join(dir, ...rel.split('/')), text]));
+  const io = {
+    read: (f: string): string => {
+      const text = disk.get(f);
+      if (text === undefined) throw Object.assign(new Error(`ENOENT: ${f}`), { code: 'ENOENT' });
+      return text;
+    },
+    exists: (f: string): boolean => disk.has(f),
+    root: repo,
+    path: W,
+  };
+  const rootRel = toRepoRelative(dir, repo, W);
+  assert.equal(rootRel, 'C:/Users/RUNNER~1/AppData/Local/Temp/pensmith-graph-AbC123', 'another drive has no relative form');
+  const found = graphFindings(rootRel, io);
+  assert.deepEqual(found.entries, ['a.ts', 'b.ts', 'c.ts'], 'every module that reaches the target, directly or transitively');
+  assert.deepEqual(found.chainFromA, ['a.ts', 'b.ts', 'c.ts', 'secret/transport.ts']);
+  // …and a tree inside the checkout keeps its repo-relative spelling.
+  const inRepo = W.join(repo, 'tests', 'graph');
+  const inRepoDisk = new Map([...disk].map(([f, text]) => [W.join(inRepo, W.relative(dir, f)), text]));
+  const inRepoFound = graphFindings('tests/graph', { ...io, read: (f) => inRepoDisk.get(f) ?? '', exists: (f) => inRepoDisk.has(f) });
+  assert.deepEqual(inRepoFound, found);
+});
+
+test('RUN-29: repo-relative paths round-trip on win32, including a file on another drive', () => {
+  const repo = 'D:\\a\\pensmith\\pensmith';
+  const sameDrive = 'D:\\a\\pensmith\\pensmith\\bin\\lib\\http.ts';
+  const otherDrive = 'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\pensmith-graph-AbC123\\a.ts';
+  assert.equal(toRepoRelative(sameDrive, repo, path.win32), 'bin/lib/http.ts');
+  assert.equal(toRepoRelative(otherDrive, repo, path.win32), 'C:/Users/RUNNER~1/AppData/Local/Temp/pensmith-graph-AbC123/a.ts');
+  for (const file of [sameDrive, otherDrive]) {
+    assert.equal(fromRepoRelative(toRepoRelative(file, repo, path.win32), repo, path.win32), file, `${file} round-trips`);
+  }
+  // And on this platform, for the real repo root.
+  const here = path.join(REPO_ROOT, 'bin', 'lib', 'http.ts');
+  assert.equal(fromRepoRelative(toRepoRelative(here)), here);
+  const outside = path.join(os.tmpdir(), 'pensmith-graph-x', 'a.ts');
+  assert.equal(fromRepoRelative(toRepoRelative(outside)), path.resolve(outside));
 });

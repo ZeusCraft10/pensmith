@@ -101,8 +101,23 @@ export function matchesAny(rel, globs) {
   return (globs ?? []).some((g) => globToRegExp(g).test(rel));
 }
 
-export function toRepoRelative(file) {
-  return path.relative(REPO_ROOT, path.resolve(file)).split(path.sep).join('/');
+/**
+ * The '/'-separated path of `file` relative to the repo root. A file on another
+ * Windows drive has no relative path (os.tmpdir() is on C: while a CI checkout
+ * is on D:): path.relative returns it absolute, e.g. `C:/Users/…/a.ts`.
+ * `root` and `p` (a node:path flavour) are seams for the win32 self-test.
+ */
+export function toRepoRelative(file, root = REPO_ROOT, p = path) {
+  return p.relative(root, p.resolve(file)).split(p.sep).join('/');
+}
+
+/**
+ * The absolute path of a toRepoRelative() result — the inverse. It resolves
+ * rather than joins, so an absolute result (another drive) stays itself instead
+ * of being glued under the repo root (`D:\repo\C:\Users\…`).
+ */
+export function fromRepoRelative(rel, root = REPO_ROOT, p = path) {
+  return p.resolve(root, rel);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,14 +205,17 @@ export function relativeImports(text) {
   return out;
 }
 
-/** Resolve a relative specifier to an existing source file (`.js` → `.ts`, …), or null. */
-export function resolveImport(fromFile, spec, exists) {
-  const base = path.resolve(path.dirname(fromFile), spec);
+/**
+ * Resolve a relative specifier to an existing source file (`.js` → `.ts`, …), or
+ * null. `p` (a node:path flavour) is a seam for the win32 self-test.
+ */
+export function resolveImport(fromFile, spec, exists, p = path) {
+  const base = p.resolve(p.dirname(fromFile), spec);
   const candidates = [base];
   if (/\.js$/.test(base)) candidates.push(base.replace(/\.js$/, '.ts'), base.replace(/\.js$/, '.mts'));
   if (/\.mjs$/.test(base)) candidates.push(base.replace(/\.mjs$/, '.mts'));
   if (/\.cjs$/.test(base)) candidates.push(base.replace(/\.cjs$/, '.cts'));
-  if (!/\.[cm]?[jt]s$/.test(base)) candidates.push(`${base}.ts`, path.join(base, 'index.ts'));
+  if (!/\.[cm]?[jt]s$/.test(base)) candidates.push(`${base}.ts`, p.join(base, 'index.ts'));
   return candidates.find((c) => exists(c)) ?? null;
 }
 
@@ -205,15 +223,23 @@ export function resolveImport(fromFile, spec, exists) {
  * import-graph enforcement: for every entry (repo-relative path) in scope and
  * not allowed, walk its relative imports; a reached module whose repo-relative
  * path matches the row's pattern is a violation, reported with the import chain.
- * `io` = { read(abs) → text, exists(abs) → boolean } (injectable for tests).
+ * `io` = { read(abs) → text, exists(abs) → boolean } (injectable for tests),
+ * plus the optional seams `root` (the repo root, default REPO_ROOT) and `path`
+ * (a node:path flavour, default the host's) for the win32 self-test.
+ *
+ * An entry is a toRepoRelative() result, which is absolute for a file on
+ * another Windows drive (a temp dir on C: while the checkout is on D:), so the
+ * walk starts from fromRepoRelative(entry) — never `path.join(root, entry)`.
  */
 export function importGraphViolations(row, entries, io) {
+  const root = io.root ?? REPO_ROOT;
+  const p = io.path ?? path;
   const out = [];
   for (const matcher of matchersOf(row).filter((m) => m.kind === 'import-graph')) {
     const target = new RegExp(matcher.pattern, matcher.flags ?? '');
     for (const rel of entries) {
       if (!matchesAny(rel, row.scope) || matchesAny(rel, row.allow)) continue;
-      const start = path.join(REPO_ROOT, rel);
+      const start = fromRepoRelative(rel, root, p);
       const seen = new Map([[start, null]]);
       const queue = [start];
       while (queue.length > 0) {
@@ -225,13 +251,13 @@ export function importGraphViolations(row, entries, io) {
           continue;
         }
         for (const spec of relativeImports(text)) {
-          const next = resolveImport(file, spec, io.exists);
+          const next = resolveImport(file, spec, io.exists, p);
           if (!next || seen.has(next)) continue;
           seen.set(next, file);
-          const nextRel = toRepoRelative(next);
+          const nextRel = toRepoRelative(next, root, p);
           if (target.test(nextRel)) {
             const chain = [nextRel];
-            for (let at = file; at; at = seen.get(at)) chain.unshift(toRepoRelative(at));
+            for (let at = file; at; at = seen.get(at)) chain.unshift(toRepoRelative(at, root, p));
             out.push({ row: row.id, entry: rel, reached: nextRel, chain });
             continue;
           }
