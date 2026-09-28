@@ -1,7 +1,8 @@
 // tests/ssrf-pinning.test.ts — SEC-01: the SSRF guard pins the connection to the
 // validated IP (closes WR-03 / DNS rebinding) while keeping the hostname for TLS
-// SNI and the Host header; redirects are never followed by undici
-// (maxRedirections stays 0); the test seams exist only under a test context.
+// SNI and the Host header; undici follows no redirect (its redirect count stays
+// zero) — http.ts follows them itself and re-resolves, re-validates and re-pins
+// every hop (SRC-01, D-19-06); the test seams exist only under a test context.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -110,7 +111,7 @@ test('SEC-01: certificate verification stays on — without the test CA the SNI 
   }
 });
 
-test('SEC-01: redirects are never followed by undici (maxRedirections stays 0)', async () => {
+test('SEC-01 / SRC-01: undici follows no redirect — http.ts re-validates the hop, so a redirect to the metadata address is refused before any dial', async () => {
   const server = await startHttpServer((_req, res) => {
     res.writeHead(302, { location: 'http://169.254.169.254/latest/meta-data/' });
     res.end();
@@ -118,15 +119,96 @@ test('SEC-01: redirects are never followed by undici (maxRedirections stays 0)',
   try {
     await liveLane(async () => {
       const host = 'redirect.pensmith.test';
-      const r = await withLocalHosts([host], () =>
-        httpFetch(`http://${host}:${server.port}/start`, { source: 'generic', noCache: true, noRetry: true }),
-      );
-      assert.equal(r.status, 302, 'the 302 is returned to the caller, not followed');
-      assert.equal(r.headers['location'], 'http://169.254.169.254/latest/meta-data/');
-      assert.equal(server.requests.length, 1);
+      const rec = installDialRecorder({ refuseConnects: false });
+      try {
+        await assert.rejects(
+          () => withLocalHosts([host], () => httpFetch(`http://${host}:${server.port}/start`, { source: 'generic', noCache: true, noRetry: true })),
+          (e: unknown) => {
+            assert.equal((e as Error).name, 'SsrfBlockedError');
+            assert.match((e as Error).message, /169\.254\.169\.254/);
+            return true;
+          },
+        );
+      } finally {
+        rec.restore();
+      }
+      assert.equal(server.requests.length, 1, 'only the first hop was sent');
+      const dials = rec.dials();
+      assert.equal(dials.length, 1, 'one dial (the first hop); none to the metadata address');
+      assert.ok(!dials.some((d) => String(d.host).includes('169.254')), 'the metadata address is never dialed');
     });
   } finally {
     await server.close();
+  }
+});
+
+test('SRC-01: every redirect hop is resolved, validated and pinned on its own (a fresh dispatcher per hop)', async () => {
+  const second = await startHttpServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end('{"hop":2}');
+  });
+  const first = await startHttpServer((_req, res) => {
+    res.writeHead(301, { location: `http://hop2.pensmith.test:${second.port}/next` });
+    res.end();
+  });
+  try {
+    await liveLane(async () => {
+      const resolved: string[] = [];
+      const resolve = async (h: string): Promise<ResolvedAddress[]> => {
+        resolved.push(h);
+        return [{ address: '127.0.0.1', family: 4 }];
+      };
+      const rec = installDialRecorder({ refuseConnects: false });
+      let r;
+      try {
+        r = await withLocalHosts(['hop1.pensmith.test', 'hop2.pensmith.test'], () =>
+          httpFetch(`http://hop1.pensmith.test:${first.port}/start`, { source: 'generic', noCache: true, noRetry: true }),
+        { resolve });
+      } finally {
+        rec.restore();
+      }
+      assert.equal(r.status, 200);
+      assert.deepEqual(JSON.parse(r.body), { hop: 2 });
+      assert.equal(r.finalUrl, `http://hop2.pensmith.test:${second.port}/next`);
+      assert.deepEqual(resolved, ['hop1.pensmith.test', 'hop2.pensmith.test'], 'each hop host is resolved once, in order');
+      const dials = rec.dials();
+      assert.equal(dials.length, 2, 'one dial per hop');
+      assert.deepEqual(dials.map((d) => d.host), ['hop1.pensmith.test', 'hop2.pensmith.test'], 'each dial keeps its hop hostname');
+      for (const d of dials) assert.deepEqual(d.addresses, ['127.0.0.1'], 'each hop is pinned to its validated address');
+      assert.equal(first.requests.length, 1);
+      assert.equal(second.requests.length, 1);
+    });
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test('SRC-01: a redirect whose target resolves to a private address is refused at the hop — the target host gets nothing', async () => {
+  const first = await startHttpServer((_req, res) => {
+    res.writeHead(302, { location: 'http://internal.pensmith.test/secret' });
+    res.end();
+  });
+  try {
+    await liveLane(async () => {
+      const resolve = async (h: string): Promise<ResolvedAddress[]> =>
+        h === 'internal.pensmith.test' ? [{ address: '10.0.0.5', family: 4 }] : [{ address: '127.0.0.1', family: 4 }];
+      const rec = installDialRecorder({ refuseConnects: false });
+      try {
+        await assert.rejects(
+          () => withLocalHosts(['start.pensmith.test'], () =>
+            httpFetch(`http://start.pensmith.test:${first.port}/go`, { source: 'generic', noCache: true, noRetry: true }),
+          { resolve }),
+          /private\/reserved IP 10\.0\.0\.5/,
+        );
+      } finally {
+        rec.restore();
+      }
+      const dials = rec.dials();
+      assert.equal(dials.length, 1, 'no dial to the private redirect target');
+    });
+  } finally {
+    await first.close();
   }
 });
 

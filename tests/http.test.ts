@@ -195,7 +195,7 @@ test('http: 404 cassette returns status 404 without throwing', async () => {
   );
 });
 
-test('http: User-Agent contains pensmith/{version} and the email', async () => {
+test('http: User-Agent is pensmith/{version} (mailto:<email>) for a polite-pool source (SRC-17, D-19-08)', async () => {
   await withFreshState(
     async () => {
       const cassette = loadCassette('crossref-doi-200');
@@ -219,7 +219,7 @@ test('http: User-Agent contains pensmith/{version} and the email', async () => {
       try {
         await fetch(cassette.request.url, { source: 'crossref' });
         assert.match(observedUA, /^pensmith\//, `UA should start with pensmith/, got "${observedUA}"`);
-        assert.match(observedUA, /\(test@example\.org\)/, 'UA should contain the email');
+        assert.match(observedUA, /\(mailto:test@example\.org\)$/, 'UA carries the email in the polite-pool form `(mailto:<email>)` (D-19-08)');
       } finally {
         await restoreAgents();
       }
