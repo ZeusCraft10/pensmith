@@ -16,9 +16,14 @@
 //      XDG_DATA_HOME) so the run never touches the user's real paper registry.
 //   2. Runs the pipeline as a --dry-run preview (D-17-04: the http.ts gate
 //      refuses every request, research uses the labelled synthetic dry-run
-//      provider, PENSMITH_NO_LLM stubs every model call — zero network, zero
-//      API key, zero cost).
-//   3. Asserts a battery of named checks and prints a PASS/FAIL/FINDING table.
+//      provider, PENSMITH_NO_LLM answers every model call with its contract
+//      stub — zero network, zero API key, zero cost). A dry run works in the
+//      `.paper-dry-run/` workspace and never creates `.paper/` (D-18-29).
+//   3. Walks the verbs one at a time (new → research → outline → plan → write,
+//      which verifies), checking after each that the router names the next
+//      step, then lets one bare `pensmith --dry-run --yolo` loop to the export
+//      (D-18-30).
+//   4. Asserts a battery of named checks and prints a PASS/FAIL/FINDING table.
 //
 // USAGE
 //   node scripts/e2e-smoke.mjs            # run all checks
@@ -31,7 +36,7 @@
 
 import { spawnSync } from 'node:child_process';
 import {
-  mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync,
+  mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -102,15 +107,33 @@ const results = [];
 function record(kind, name, detail) { results.push({ kind, name, detail }); }
 const pass    = (n, d) => record('PASS', n, d);
 const fail    = (n, d) => record('FAIL', n, d);            // hard regression -> nonzero exit
-const finding = (n, d) => record('FINDING', n, d);         // design/robustness issue, reported
 const info    = (n, d) => record('INFO', n, d);
 
-const ppaper = (f) => path.join(WORK, '.paper', f);
+// Every run below is a dry run, so the paper lives in the workspace (D-18-29).
+const ppaper = (f) => path.join(WORK, '.paper-dry-run', f);
 
 console.log(`workspace : ${WORK}`);
 console.log(`data dir  : ${DATA}`);
 console.log(`repo      : ${REPO}`);
 console.log('running the --dry-run pipeline (PENSMITH_NO_LLM=1, synthetic sources)…\n');
+
+/** A run that printed a raw Node stack trace instead of one line (RUN-12). */
+function looksLikeRawStack(s) {
+  return /\n\s+at\s+\w/.test(s) || /ERR_[A-Z_]+/.test(s) || /\.ts:\d+:\d+\)/.test(s);
+}
+
+/** The router's next step, as `pensmith status` prints it (`§` or the ASCII `#`). */
+function nextStep() {
+  const r = pen(['status']);
+  return (/^\s*next:\s*(.+)$/m.exec(r.stdout)?.[1] ?? '').replace('#', '§').trim();
+}
+
+/** A PLAN.md frontmatter value (flat keys only). */
+function planField(file, key) {
+  if (!existsSync(file)) return null;
+  const m = new RegExp(`^${key}:\\s*(.*)$`, 'm').exec(readFileSync(file, 'utf8'));
+  return m ? m[1].trim() : null;
+}
 
 // ── 0. doctor ──
 {
@@ -119,14 +142,20 @@ console.log('running the --dry-run pipeline (PENSMITH_NO_LLM=1, synthetic source
   else fail('doctor', `exit=${r.code}`);
 }
 
-// ── 1. new -> INTAKE.md ──
+// ── 1. new -> INTAKE.md (the brief) ──
 {
   const r = pen(['new', '--from', ASSIGNMENT, '--dry-run', '--yolo']);
-  if (r.code === 0 && existsSync(ppaper('INTAKE.md'))) pass('new', 'INTAKE.md written, exit 0');
+  if (r.code === 0 && existsSync(ppaper('INTAKE.md'))) pass('new', 'INTAKE.md written in .paper-dry-run/, exit 0');
   else fail('new', `exit=${r.code}; INTAKE.md exists=${existsSync(ppaper('INTAKE.md'))}\n${r.out}`);
+  const intake = existsSync(ppaper('INTAKE.md')) ? readFileSync(ppaper('INTAKE.md'), 'utf8') : '';
+  if (/^schema_version: 1$/m.test(intake) && /^citation_style: apa$/m.test(intake) && /^length_target_words: 1500$/m.test(intake)) {
+    pass('intake-brief', 'INTAKE.md is the v1 brief (APA 7 and 1500 words read from the assignment)');
+  } else {
+    fail('intake-brief', `INTAKE.md is not the expected brief:\n${intake.slice(0, 600)}`);
+  }
 }
 
-// ── 2. research -> LIBRARY.json (+ .bib/.ris) ──
+// ── 2. research -> LIBRARY.json (+ .bib/.ris, RESEARCH.md) ──
 {
   const r = pen(['research', '--dry-run', '--yolo']);
   const lib = existsSync(ppaper('LIBRARY.json'));
@@ -138,66 +167,75 @@ console.log('running the --dry-run pipeline (PENSMITH_NO_LLM=1, synthetic source
   const researchMd = existsSync(ppaper('RESEARCH.md'));
   if (researchMd) pass('research-artifact', 'RESEARCH.md written alongside LIBRARY.json');
   else fail('research-artifact', 'research did not write RESEARCH.md (D-17-10)');
+  const next = nextStep();
+  if (next === 'outline') pass('router-after-research', 'the router advanced: next: outline');
+  else fail('router-after-research', `after research the router says next: ${next || '(nothing)'}`);
 }
 
-// ── 3. outline -> OUTLINE.md ──
+// ── 3. outline -> OUTLINE.md + a stub PLAN.md per section (GRND-07, GRND-09) ──
+let sections = [];
 {
   const r = pen(['outline', '--dry-run', '--yolo']);
-  if (r.code === 0 && existsSync(ppaper('OUTLINE.md'))) pass('outline', 'OUTLINE.md written, exit 0');
-  else fail('outline', `exit=${r.code}; OUTLINE.md exists=${existsSync(ppaper('OUTLINE.md'))}\n${r.out}`);
-}
-
-// ── 4. BUG-1: bare router advancement past research ──
-// After research wrote LIBRARY.json, does the single-command router advance?
-{
-  const before = pen(['status']);
-  const stuckOnResearch = /next:\s*research/.test(before.stdout);
-  // Now create the file the router actually gates on, and re-check.
-  writeFileSync(ppaper('RESEARCH.md'), '# Research\n');
-  const after = pen(['status']);
-  const advanced = /next:\s*outline/.test(after.stdout);
-
-  if (stuckOnResearch && advanced) {
-    finding(
-      'router-research-sentinel',
-      'bare `pensmith` routes to `research` even after research wrote LIBRARY.json; ' +
-      'it only advances once RESEARCH.md exists. Root cause: bin/lib/router.ts:169 ' +
-      '(and bin/lib/global-library.ts:358) gate "research done" on RESEARCH.md, but the ' +
-      'research verb writes LIBRARY.json (workflows/research.md §Outputs). The single-command ' +
-      'UX cannot advance past research on its own.',
-    );
-  } else if (!stuckOnResearch) {
-    pass('router-research-sentinel', 'router advanced past research without RESEARCH.md (gap appears fixed)');
+  const dir = ppaper('sections');
+  sections = existsSync(dir) ? readdirSync(dir).filter((d) => d !== '_archive').sort() : [];
+  if (r.code === 0 && existsSync(ppaper('OUTLINE.md')) && /registered \d+ section\(s\)/.test(r.out)) {
+    pass('outline', `OUTLINE.md written, ${sections.length} section(s) registered, exit 0`);
   } else {
-    info('router-research-sentinel', `inconclusive: stuckOnResearch=${stuckOnResearch} advanced=${advanced}`);
+    fail('outline', `exit=${r.code}; OUTLINE.md exists=${existsSync(ppaper('OUTLINE.md'))}\n${r.out}`);
   }
+  const stubs = sections.filter((d) => planField(path.join(dir, d, 'PLAN.md'), 'stub') === 'true');
+  if (sections.length >= 3 && stubs.length === sections.length) pass('outline-stubs', 'every section has a stub PLAN.md');
+  else fail('outline-stubs', `sections=${sections.join(', ')} stubs=${stubs.length}`);
+  const next = nextStep();
+  if (next === 'plan §1') pass('router-after-outline', 'next: plan §1');
+  else fail('router-after-outline', `after outline the router says next: ${next || '(nothing)'}`);
 }
 
-// ── 5. write (wave mode) + compile after the stub outline ──
-// Under PENSMITH_NO_LLM the structured outline stub registers real sections
-// (RUN-25), so `write` drafts every section wave-by-wave and `compile` then
-// runs its refuse-gate over unverified sections. Neither may ever print a raw
-// Node stack trace (RUN-12): every failure is one line with a documented code.
-function looksLikeRawStack(s) {
-  return /\n\s+at\s+\w/.test(s) || /ERR_[A-Z_]+/.test(s) || /\.ts:\d+:\d+\)/.test(s);
-}
-for (const verb of ['write', 'compile']) {
-  const r = pen([verb, '--dry-run', '--yolo']);
-  if (looksLikeRawStack(r.out)) {
-    fail(`${verb}-after-outline`, `\`pensmith ${verb}\` printed a raw stack trace (RUN-12):\n${r.out}`);
-  } else if (r.code === 0) {
-    pass(`${verb}-after-outline`, 'exit 0');
-  } else {
-    pass(`${verb}-after-outline`, `exit ${r.code} with a one-line diagnostic (no stack)`);
-  }
-}
-
-// ── 6. done: graceful when no compiled draft ──
+// ── 4. done before compile: graceful ──
 {
   const r = pen(['done', '--dry-run', '--yolo']);
-  if (r.code === 0 && /run 'pensmith compile'/.test(r.out)) pass('done-no-draft', 'graceful "run compile first"');
-  else if (!looksLikeRawStack(r.out)) pass('done-no-draft', `exit ${r.code}, no raw stack`);
-  else fail('done-no-draft', `raw stack:\n${r.out}`);
+  if (looksLikeRawStack(r.out)) fail('done-no-draft', `raw stack:\n${r.out}`);
+  else if (r.code === 0 && /run 'pensmith compile'/.test(r.out)) pass('done-no-draft', 'graceful "run compile first"');
+  else pass('done-no-draft', `exit ${r.code}, no raw stack`);
+}
+
+// ── 5. plan 1 -> write 1 (which verifies §1; GRND-13, GRND-15) ──
+{
+  const first = sections[0];
+  const plan = first ? path.join(ppaper('sections'), first, 'PLAN.md') : '';
+  const p = pen(['plan', '1', '--dry-run', '--yolo']);
+  if (p.code === 0 && planField(plan, 'status') === 'planned' && planField(plan, 'stub') === null) pass('plan', '§1 planned (the stub replaced)');
+  else fail('plan', `exit=${p.code}; status=${planField(plan, 'status')}\n${p.out}`);
+  const w = pen(['write', '1', '--dry-run', '--yolo']);
+  const draft = first ? path.join(ppaper('sections'), first, 'DRAFT.md') : '';
+  const cites = existsSync(draft) ? (readFileSync(draft, 'utf8').match(/\[@[^\]]+\]/g) ?? []).length : 0;
+  if (looksLikeRawStack(w.out)) {
+    fail('write', `\`pensmith write 1\` printed a raw stack trace (RUN-12):\n${w.out}`);
+  } else if (w.code === 0 && planField(plan, 'status') === 'verified' && cites > 0) {
+    pass('write', `§1 drafted with ${cites} synthetic citation(s) and verified in one invocation`);
+  } else {
+    fail('write', `exit=${w.code}; status=${planField(plan, 'status')}; citations=${cites}\n${w.out}`);
+  }
+  const next = nextStep();
+  if (next === 'plan §2') pass('router-after-write', 'next: plan §2');
+  else fail('router-after-write', `after write 1 the router says next: ${next || '(nothing)'}`);
+}
+
+// ── 6. bare `pensmith --dry-run --yolo` loops to the export (D-18-30) ──
+{
+  const r = pen(['--dry-run', '--yolo']);
+  const exportDir = ppaper('export');
+  const exported = existsSync(exportDir) ? readdirSync(exportDir).filter((f) => f.startsWith('DRAFT.')) : [];
+  if (looksLikeRawStack(r.out)) {
+    fail('dry-run-loop', `the bare dry run printed a raw stack trace (RUN-12):\n${r.out}`);
+  } else if (r.code === 0 && /^pensmith: ran done; next: status \(done\)$/m.test(r.stderr) && existsSync(ppaper('FINAL.md')) &&
+    exported.length > 0 && exported.every((f) => f.startsWith('DRAFT.dry-run.'))) {
+    pass('dry-run-loop', `one invocation finished the paper: ${exported.join(', ')}`);
+  } else {
+    fail('dry-run-loop', `exit=${r.code}; FINAL.md=${existsSync(ppaper('FINAL.md'))}; export=${exported.join(', ')}\n${r.out}`);
+  }
+  if (!existsSync(path.join(WORK, '.paper'))) pass('no-real-paper', 'the dry run never created .paper/');
+  else fail('no-real-paper', 'a dry run created .paper/ (D-18-29)');
 }
 
 // ── 7. registry isolation (Bug-3 hygiene) ──
@@ -213,11 +251,11 @@ for (const verb of ['write', 'compile']) {
       n = arr.length;
       dead = arr.filter((e) => { const p = e.folderPath ?? e.path; return !(p && existsSync(p)); }).length;
     } catch { /* ignore */ }
-    if (n >= 0 && n <= 2) pass('registry-isolation', `isolated registry holds ${n} paper(s); real registry untouched`);
-    else info('registry-isolation', `isolated registry holds ${n} entries (${dead} dead)`);
+    if (n === 0) pass('registry-isolation', 'a dry-run paper is never registered; the real registry is untouched');
+    else fail('registry-isolation', `the isolated registry holds ${n} entries (${dead} dead): a dry run registered a paper (D-18-29)`);
     info('registry-gc', 'registering a paper prunes dead-folder entries (audit M3, tests/registry-gc.test.ts).');
   } else {
-    info('registry-isolation', 'no isolated registry written (intake may have WARN-skipped registration)');
+    pass('registry-isolation', 'no registry written: a dry-run paper is never registered (D-18-29)');
   }
 }
 

@@ -45,7 +45,7 @@ import * as path from 'node:path';
 import JSZip from 'jszip';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
-import { pensmithStyleFingerprintsPath } from './paths.js';
+import { dryRunWorkspaceActive, pensmithStyleFingerprintsPath } from './paths.js';
 import {
   StyleProfileSchema,
   CURRENT_STYLE_VERSION,
@@ -330,6 +330,10 @@ export async function writeStyleProfile(
  * Concurrency: the whole read-mutate-write runs inside withLock (T-08-02-04);
  * the registry is read tolerantly (ENOENT → empty), the current paper is
  * appended (never overwriting prior entries), and the result is atomicWriteFile'd.
+ *
+ * A --dry-run paper is never registered (D-18-29, as for the global paper
+ * registry): the registry is only read, so a later real paper styled from the
+ * same samples gets no reuse notice naming a throwaway workspace.
  */
 export async function checkAndRegisterFingerprint(
   fingerprint: string,
@@ -337,6 +341,10 @@ export async function checkAndRegisterFingerprint(
   paperName: string,
 ): Promise<{ priorPapers: PriorPaper[] }> {
   const registryPath = pensmithStyleFingerprintsPath();
+  if (dryRunWorkspaceActive()) {
+    const registry = await loadRegistry(registryPath);
+    return { priorPapers: (registry[fingerprint] ?? []).filter((p) => p.paperId !== paperId) };
+  }
   await fs.promises.mkdir(path.dirname(registryPath), { recursive: true });
 
   let priorPapers: PriorPaper[] = [];

@@ -175,3 +175,32 @@ test('STYL-02: checkAndRegisterFingerprint — priorPapers=[] first, then non-em
     'priorPapers must name the earlier paper that shared the fingerprint',
   );
 });
+
+test('D-18-29: under --dry-run the fingerprint registry is only read — reuse is still detected, the dry-run paper is never registered', { skip: !READY }, async () => {
+  mkDataRoot();
+  const { buildStyleProfile, checkAndRegisterFingerprint } = await sm();
+  const { setDryRunWorkspace, pensmithStyleFingerprintsPath } = await import('../bin/lib/paths.js');
+  const profile = await buildStyleProfile(PAPER_A);
+  const registry = pensmithStyleFingerprintsPath();
+
+  setDryRunWorkspace(true);
+  try {
+    const dry = await checkAndRegisterFingerprint(profile.fingerprint, 'dry-paper', 'Dry Run');
+    assert.deepEqual(dry.priorPapers, []);
+    assert.ok(!fs.existsSync(registry), 'a dry run writes no registry');
+  } finally {
+    setDryRunWorkspace(null);
+  }
+  const real = await checkAndRegisterFingerprint(profile.fingerprint, 'real-paper', 'Real Paper');
+  assert.deepEqual(real.priorPapers, [], 'the later real paper sees no reuse by the dry run');
+
+  setDryRunWorkspace(true);
+  try {
+    const before = fs.readFileSync(registry, 'utf8');
+    const dry = await checkAndRegisterFingerprint(profile.fingerprint, 'dry-paper-2', 'Dry Run 2');
+    assert.deepEqual(dry.priorPapers.map((p: PriorPaper) => p.paperId), ['real-paper'], 'a dry run still surfaces real reuse');
+    assert.equal(fs.readFileSync(registry, 'utf8'), before, 'the registry is unchanged');
+  } finally {
+    setDryRunWorkspace(null);
+  }
+});
