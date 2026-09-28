@@ -2,7 +2,7 @@
   "id": "library-writer",
   "requirement": "BRDTH-01",
   "module": "bin/lib/library.ts",
-  "description": "bin/lib/library.ts is the one writer of .paper/LIBRARY.json, .paper/CITATIONS.bib and .paper/CITATIONS.ris: upsertSources dedups (normalized DOI, arXiv/PMID/PMCID/ISBN, the preprint-to-version-of-record rule), merges, validates against the v2 schema under the library lock, and renders both citation files from LIBRARY.json. No other shipped module imports the BibTeX/RIS writers or renderers or writes one of those three files; every ingest path (research, add, plan --research, BYO, Zotero) calls upsertSources.",
+  "description": "bin/lib/library.ts is the one writer of .paper/LIBRARY.json, .paper/CITATIONS.bib and .paper/CITATIONS.ris: upsertSources dedups (normalized DOI, arXiv/PMID/PMCID/ISBN, the preprint-to-version-of-record rule), merges, validates against the v2 schema under the library lock, and renders both citation files from LIBRARY.json (every rendered entry is parsed back first); exportCitedCitations writes an export's cited-only CITATIONS.bib/.ris. No other shipped module imports the BibTeX/RIS writers or renderers or writes one of those three files; every ingest path (research, add, plan --research, BYO, Zotero) calls upsertSources.",
   "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs", "scripts/**/*.mjs"],
   "allow": ["bin/lib/library.ts"],
   "match": [

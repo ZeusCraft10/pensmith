@@ -221,6 +221,36 @@ function ipv6Groups(addr: string): number[] | null {
   return groups.some((g) => Number.isNaN(g)) ? null : groups;
 }
 
+/**
+ * The IPv4 address an IPv6 address stands for, or null: IPv4-mapped
+ * (::ffff:0:0/96) and IPv4-compatible (::/96), the NAT64 well-known prefix
+ * 64:ff9b::/96 (RFC 6052 — a DNS64 resolver answers with it on IPv6-only
+ * hosts and the gateway dials the embedded IPv4), 6to4 (2002::/16) and a
+ * Teredo client (2001::/32, the obfuscated low 32 bits). The SSRF rules
+ * re-check the embedded IPv4, so `64:ff9b::a9fe:a9fe` is 169.254.169.254.
+ */
+function embeddedV4(addr: string): string | null {
+  const m = mappedV4(addr);
+  if (m) return m;
+  const g = ipv6Groups(addr);
+  if (!g) return null;
+  const [g0, g1, g2, g3, g4, g5, g6, g7] = g as [number, number, number, number, number, number, number, number];
+  const v4 = (hi: number, lo: number): string => `${hi >>> 8}.${hi & 0xff}.${lo >>> 8}.${lo & 0xff}`;
+  const zeroTo = (k: number): boolean => g.slice(0, k).every((x) => x === 0);
+  if (zeroTo(5) && g5 === 0xffff) return v4(g6, g7); // ::ffff:a.b.c.d (any spelling)
+  if (zeroTo(6) && g6 !== 0) return v4(g6, g7); // ::a.b.c.d (IPv4-compatible; ::, ::1 stay IPv6)
+  if (g0 === 0x64 && g1 === 0xff9b && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0) return v4(g6, g7); // NAT64 WKP
+  if (g0 === 0x2002) return v4(g1, g2); // 6to4
+  if (g0 === 0x2001 && g1 === 0) return v4(~g6 & 0xffff, ~g7 & 0xffff); // Teredo client
+  return null;
+}
+
+/** 64:ff9b:1::/48 — the local-use NAT64 prefix (RFC 8215): a site-internal translator. */
+function isLocalUseNat64(addr: string): boolean {
+  const g = ipv6Groups(addr);
+  return g !== null && g[0] === 0x64 && g[1] === 0xff9b && g[2] === 1;
+}
+
 function v4Octets(addr: string): [number, number, number, number] | null {
   const v4 = addr.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (!v4) return null;
@@ -239,10 +269,11 @@ export function isLoopbackIp(addr: string): boolean {
 
 /**
  * Addresses NEVER dialed, even for a configured LLM endpoint (D-17-09):
- * 169.254.0.0/16 (link-local / cloud metadata), fe80::/10, fd00:ec2::254.
+ * 169.254.0.0/16 (link-local / cloud metadata), fe80::/10, fd00:ec2::254 —
+ * and any IPv6 form that embeds such an IPv4 (embeddedV4: NAT64, 6to4, …).
  */
 export function isNeverAllowedIp(addr: string): boolean {
-  const m = mappedV4(addr);
+  const m = embeddedV4(addr);
   if (m) return isNeverAllowedIp(m);
   const o = v4Octets(addr);
   if (o) return o[0] === 169 && o[1] === 254;
@@ -261,12 +292,15 @@ export function isNeverAllowedIp(addr: string): boolean {
  *           100.64.0.0/10 CGNAT (RFC 6598)
  *   IPv6 : ::1 (loopback), :: (unspecified), fe80::/10 (link-local),
  *           fc/fd::/7 (ULA), ff00::/8 (multicast)
- *   IPv4-mapped IPv6 (::ffff:x.x.x.x dotted OR ::ffff:hhhh:hhhh hex-colon) —
- *   extracts the embedded v4 and re-checks.
+ *   IPv6 that embeds an IPv4 — mapped (::ffff:x.x.x.x dotted OR hex-colon),
+ *   IPv4-compatible, NAT64 64:ff9b::/96, 6to4 2002::/16, Teredo — extracts the
+ *   embedded v4 and re-checks (embeddedV4); the local-use NAT64 prefix
+ *   64:ff9b:1::/48 is site-internal and always private.
  */
 export function isPrivateIp(addr: string): boolean {
-  const m = mappedV4(addr);
+  const m = embeddedV4(addr);
   if (m) return isPrivateIp(m);
+  if (isLocalUseNat64(addr)) return true;
 
   // IPv4
   const o = v4Octets(addr);

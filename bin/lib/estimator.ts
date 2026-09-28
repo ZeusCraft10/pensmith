@@ -26,7 +26,7 @@ import path from 'node:path';
 import { loadState } from './state.js';
 import { readSectionState } from './router.js';
 import { paperDir, sectionPlan } from './paths.js';
-import { SLUGS, slugSpec } from './llm-models.js';
+import { slugSpec } from './llm-models.js';
 import { costOf, resolvePrice, type ResolvedPrice } from './pricing.js';
 import { resolveRuntime, resolveSlug, type ResolvedRuntime } from './runtime.js';
 import { parseLlmRecords } from './replay.js';
@@ -255,9 +255,10 @@ function row(rt: ResolvedRuntime, root: string, step: string, slugs: Array<[stri
 }
 
 /**
- * The steps ONE invocation runs (the --yolo cost pre-flight, D-17-27): the named
- * verb, and for plan / write / verify the named section — or, for `write` with
- * no section (wave mode), every section still to write.
+ * The steps ONE invocation runs (the --yolo cost pre-flight, D-17-27, and
+ * `--estimate` on an explicit verb): the named verb, and for plan / write /
+ * verify the named section — or, for `write` with no section (wave mode), every
+ * section with a PLAN.md (a wave re-drafts verified sections too).
  */
 export interface EstimateScope {
   verb: string;
@@ -276,21 +277,32 @@ const STEP_SLUGS: Readonly<Record<string, ReadonlyArray<readonly [string, number
 
 /**
  * Narrow the remaining-pipeline rows to the steps of `scope`. A step that is
- * already done but run again (re-research, a re-plan of §2) is priced anyway:
- * this invocation will make those calls.
+ * already done but run again (re-research, a re-plan of §2, a re-draft of a
+ * verified section) is priced anyway: this invocation will make those calls.
+ * `wave` lists the sections a wave `write` (no section) drafts — every section
+ * with a PLAN.md, verified ones included (write-orchestrator runAllSections).
+ * A verb that makes no model call is one `no model calls` row.
  */
 function scopeRows(
   all: readonly EstimateRow[],
   scope: EstimateScope,
+  wave: readonly number[],
   price: (step: string, slugs: Array<[string, number]>) => EstimateRow,
 ): EstimateRow[] {
   const slugs = STEP_SLUGS[scope.verb];
-  if (!slugs) return []; // compile, done, add, status, … make no model call
+  if (!slugs) {
+    // compile, done, add, status, … make no model call.
+    return [{ step: scope.verb, calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' }];
+  }
   const calls = slugs.map(([s, c]) => [s, c] as [string, number]);
+  const sectionRow = (n: number): EstimateRow => {
+    const step = `${scope.verb} §${n}`;
+    return all.find((r) => r.step === step) ?? price(step, calls);
+  };
   if (scope.verb === 'plan' || scope.verb === 'write' || scope.verb === 'verify') {
-    if (scope.section === undefined) return all.filter((r) => r.step.startsWith(`${scope.verb} §`));
-    const step = `${scope.verb} §${scope.section}`;
-    return [all.find((r) => r.step === step) ?? price(step, calls)];
+    if (scope.section !== undefined) return [sectionRow(scope.section)];
+    if (scope.verb === 'write') return wave.map(sectionRow);
+    return all.filter((r) => r.step.startsWith(`${scope.verb} §`));
   }
   return [all.find((r) => r.step === scope.verb) ?? price(scope.verb, calls)];
 }
@@ -362,7 +374,10 @@ export async function projectEstimate(args: {
     rows.push({ step: 'done', calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' });
   }
 
-  if (args.scope !== undefined) rows = scopeRows(rows, args.scope, (step, slugs) => row(rt, root, step, slugs, stubbed));
+  if (args.scope !== undefined) {
+    const wave = sections.filter(({ n, slug }) => !readSectionState(sectionPlan(n, slug, root)).absent).map((s) => s.n);
+    rows = scopeRows(rows, args.scope, wave, (step, slugs) => row(rt, root, step, slugs, stubbed));
+  }
 
   const totalUsd = rows.reduce((acc, r) => acc + r.usd, 0);
   const capUsd = args.sessionCapUsd ?? resolveCostCap(root).capUsd;
@@ -416,6 +431,3 @@ export function renderEstimate(est: EstimateResult): string {
   );
   return lines.join('\n');
 }
-
-/** Every slug the estimator can price (used by tests). */
-export const ESTIMATED_SLUGS: readonly string[] = Object.freeze(Object.keys(SLUGS));

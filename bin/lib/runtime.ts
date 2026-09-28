@@ -47,6 +47,8 @@ import {
   isProviderName,
   resolveModelAlias,
   slugSpec,
+  SLUGS,
+  canonicalSlug,
   type Effort,
   type ProviderName,
 } from './llm-models.js';
@@ -54,6 +56,17 @@ import { loadPaperConfig } from './config.js';
 import type { PriceOverride } from './pricing.js';
 
 export type { RuntimeConfig };
+
+/**
+ * Per-slug override entries keyed by prompt slug: a step alias (`pass2`,
+ * RUN-26) names its prompt slug, and an explicit slug entry comes last, so it
+ * wins over its alias.
+ */
+function byAliasLast<T>(o: Record<string, T>): Array<[string, T]> {
+  return Object.entries(o)
+    .sort(([a], [b]) => Number(a in SLUGS) - Number(b in SLUGS))
+    .map(([name, v]): [string, T] => [canonicalSlug(name) ?? name, v]);
+}
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -351,11 +364,11 @@ export async function resolveRuntime(
 
   // per-slug overrides (paper wins per field)
   const slugOverrides: Record<string, { model?: string; effort?: Effort; source: 'slug-config' | 'slug-global' }> = {};
-  for (const [slug, o] of Object.entries(global.slugs ?? {})) {
+  for (const [slug, o] of byAliasLast(global.slugs ?? {})) {
     if (!globalMatches) break;
     slugOverrides[slug] = { ...(o.model ? { model: resolveModelAlias(o.model) } : {}), ...(o.effort ? { effort: o.effort } : {}), source: 'slug-global' };
   }
-  for (const [slug, o] of Object.entries(paper.slugs ?? {})) {
+  for (const [slug, o] of byAliasLast(paper.slugs ?? {})) {
     if (!paperMatches) break;
     const prev = slugOverrides[slug];
     slugOverrides[slug] = {

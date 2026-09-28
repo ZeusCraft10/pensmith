@@ -99,6 +99,42 @@ test('RUN-20: completed steps are excluded; a finished paper has nothing left to
   });
 });
 
+test('RUN-20: --estimate on an explicit verb projects that verb (and section) — a wave `write` prices every planned section', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await researchedPaper(sb);
+    await initSection(sb.root, 1, 'intro');
+    await initSection(sb.root, 2, 'body');
+    for (const [n, slug] of [[1, 'intro'], [2, 'body']] as const) {
+      const dir = path.join(sb.paper, 'sections', `0${n}-${slug}`);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'PLAN.md'), `---\nsection: ${n}\nslug: ${slug}\ntitle: T\ndepends_on: []\nassigned_sources: []\nstatus: verified\nverified_against_draft_hash: null\n---\n## Brief\n\nx\n`);
+    }
+    fs.writeFileSync(path.join(sb.paper, 'DRAFT.md'), '# Draft\n');
+    fs.writeFileSync(path.join(sb.paper, 'FINAL.md'), '# Final\n');
+    // The whole paper is done: bare --estimate has nothing left …
+    const bare = await sb.runTsx(null, ['--estimate']);
+    assert.equal(bare.status, 0, bare.stderr);
+    assert.match(bare.stdout, /nothing left to run \(\$0\.00\)/);
+    // … but `write 1` still makes a paid drafter call, and says so.
+    const one = await sb.runTsx(null, ['write', '1', '--estimate']);
+    assert.equal(one.status, 0, one.stderr);
+    assert.match(one.stdout, /^  write §1\s/m);
+    assert.doesNotMatch(one.stdout, /^  (write §2|verify|compile|done)\s/m, 'only the named step');
+    assert.ok(totalOf(one.stdout) > 0, 'a re-draft is priced');
+    // A wave `write` re-drafts every planned section, verified ones included.
+    const wave = await sb.runTsx(null, ['write', '--estimate']);
+    assert.equal(wave.status, 0, wave.stderr);
+    assert.match(wave.stdout, /^  write §1\s/m);
+    assert.match(wave.stdout, /^  write §2\s/m);
+    assert.ok(Math.abs(totalOf(wave.stdout) - 2 * totalOf(one.stdout)) < 0.011, 'two drafter calls');
+    // A verb with no model call says so.
+    const compile = await sb.runTsx(null, ['compile', '--estimate']);
+    assert.equal(compile.status, 0, compile.stderr);
+    assert.match(compile.stdout, /^  compile\s.*no model calls$/m);
+    assert.equal(sb.mock!.requests.length, 0, 'estimating makes no LLM call');
+  });
+});
+
 test('RUN-20 / RUN-26: a cheaper generation model lowers the total in proportion; an unknown model is flagged', async () => {
   await withLlmSandbox({ env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     fs.writeFileSync(path.join(sb.root, 'assignment.txt'), ASSIGNMENT);

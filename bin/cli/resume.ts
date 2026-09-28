@@ -12,11 +12,14 @@
 //
 // `resume --replay <entryId>` (RUN-17, D-17-30) is a flag on this verb, not a
 // new verb: it finds the kind:"llm" record `<entryId>` in .paper/SESSION.log,
-// re-dispatches its verb and section with the argv that session logged, and —
-// when sources are offline (PENSMITH_OFFLINE=1) — serves every logged model
-// response matched by (slug, sha256 of the request body), so the artifact is
-// reproduced exactly with no provider call. A log written with
-// `[logging] session_bodies = "redacted"` is reported as not replayable.
+// re-dispatches its verb — for plan/write/verify only the logged section — with
+// the options that session logged, and — when sources are offline
+// (PENSMITH_OFFLINE=1) — serves every logged model response matched by (slug,
+// sha256 of the request body), so the artifact is reproduced exactly with no
+// provider call. A replay never inherits the logged --yolo: only
+// `resume --replay <id> --yolo` skips the replayed verb's approval gates. A log
+// written with `[logging] session_bodies = "redacted"` is reported as not
+// replayable.
 
 import { defineCommand, runCommand } from 'citty';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
@@ -38,8 +41,14 @@ import {
   ReplayError,
 } from '../lib/replay.js';
 
-/** Global switches that never belong to a replayed verb's own argv. */
-const REPLAY_DROPPED_FLAGS = new Set(['--estimate', '--show-prompts', '--dry-run']);
+/**
+ * Global switches that never belong to a replayed verb's own argv. `--yolo` is
+ * among them: a replay never inherits the logged run's approval-gate skip (a
+ * SESSION.log sits in `.paper/`, which may be synced or cloned — S-18). Only
+ * the replaying invocation's own `--yolo` reaches the verb, so every gate runs
+ * through runGate exactly as in a live run (RUN-28).
+ */
+const REPLAY_DROPPED_FLAGS = new Set(['--estimate', '--show-prompts', '--dry-run', '--yolo', '--no-yolo']);
 /**
  * Value-taking flags stripped WITH their value: the global --paper / --runtime
  * / --model (the dispatcher consumes them, a verb never sees them — --runtime
@@ -67,21 +76,67 @@ function verbTokens(logged: readonly string[]): string[] {
   return out;
 }
 
-/**
- * The argv to re-dispatch `verb` with: the logged invocation's own tokens after
- * the verb when it was that verb, else the section positional plus the logged
- * --yolo (a bare-router chain logged no verb-specific flags).
- */
-function replayArgs(verb: string, section: number | undefined, logged: string[] | null): string[] {
-  const argv = verbTokens(logged ?? []);
-  const idx = argv.indexOf(verb);
-  if (idx >= 0) return argv.slice(idx + 1);
-  const out = section !== undefined && section > 0 ? [String(section)] : [];
-  if (argv.includes('--yolo')) out.push('--yolo');
+/** Verbs whose positional is a section number: a replay runs only the logged section. */
+const SECTION_VERBS: ReadonlySet<string> = new Set(['plan', 'write', 'verify']);
+
+/** Option name → whether it takes a value, for the verb's own flags (citty args). */
+async function optionShape(cmd: { args?: unknown }): Promise<Map<string, boolean>> {
+  const raw = typeof cmd.args === 'function' ? await (cmd.args as () => unknown)() : cmd.args;
+  const defs = (raw ?? {}) as Record<string, { type?: string }>;
+  const shape = new Map<string, boolean>();
+  for (const [name, def] of Object.entries(defs)) {
+    if (def.type === 'positional') continue;
+    const takesValue = def.type === 'string' || def.type === 'enum';
+    shape.set(name, takesValue);
+    shape.set(name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`), takesValue);
+  }
+  return shape;
+}
+
+/** The option tokens of `tokens` (each with its value), positionals dropped. */
+function optionTokens(tokens: readonly string[], shape: ReadonlyMap<string, boolean>): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const tok = tokens[i] ?? '';
+    if (tok === '--') break;
+    if (!tok.startsWith('-')) continue;
+    out.push(tok);
+    const name = tok.replace(/^-+/, '').split('=')[0] ?? '';
+    if (!tok.includes('=') && shape.get(name) === true && tokens[i + 1] !== undefined) {
+      out.push(tokens[i + 1] as string);
+      i += 1;
+    }
+  }
   return out;
 }
 
-async function runReplay(paperRoot: string, entryId: string): Promise<unknown> {
+/**
+ * The argv to re-dispatch `verb` with. A per-section verb replays ONLY the
+ * logged section (a record from a wave `write` re-drafts that one section, not
+ * the wave) with the logged invocation's own options; any other verb gets the
+ * logged tokens after the verb. A bare-router chain logged no verb-specific
+ * options, so it replays the section alone. `--yolo` comes only from the
+ * replaying invocation (see REPLAY_DROPPED_FLAGS).
+ */
+function replayArgs(
+  verb: string,
+  section: number | undefined,
+  logged: string[] | null,
+  shape: ReadonlyMap<string, boolean>,
+  yolo: boolean,
+): string[] {
+  const argv = verbTokens(logged ?? []);
+  const idx = argv.indexOf(verb);
+  const hasSection = section !== undefined && section > 0;
+  let out: string[];
+  if (idx < 0) out = hasSection ? [String(section)] : [];
+  else if (SECTION_VERBS.has(verb) && hasSection) out = [String(section), ...optionTokens(argv.slice(idx + 1), shape)];
+  else out = argv.slice(idx + 1);
+  if (yolo) out.push('--yolo');
+  return out;
+}
+
+async function runReplay(paperRoot: string, entryId: string, yolo: boolean): Promise<unknown> {
   const records = readLlmRecords(paperRoot);
   const rec = records.find((r) => r.id === entryId);
   if (!rec) throw new ReplayError(`replay: no SESSION.log model-call record with id ${entryId} in ${join(paperDir(paperRoot), 'SESSION.log')}`);
@@ -98,7 +153,8 @@ async function runReplay(paperRoot: string, entryId: string): Promise<unknown> {
   const loader = REAL_VERB_LOADERS[verb as Ux02Verb];
   if (!loader) throw new ReplayError(`replay: verb ${verb} has no implementation to re-dispatch`);
   const logged = loggedArgv(paperRoot, rec.run_id);
-  const rawArgs = replayArgs(verb, rec.section, logged);
+  const cmd = await loader();
+  const rawArgs = replayArgs(verb, rec.section, logged, await optionShape(cmd), yolo);
   // The logged run's --runtime / --model chose the provider and model its
   // requests were built for; re-apply them so the replayed request is the same
   // request (same body hash) — otherwise every step run with --model would
@@ -114,7 +170,6 @@ async function runReplay(paperRoot: string, entryId: string): Promise<unknown> {
   );
   if (offline) activateReplay(records);
   try {
-    const cmd = await loader();
     return await runCommand(cmd, { rawArgs });
   } finally {
     deactivateReplay();
@@ -152,7 +207,7 @@ export const resumeCommand = defineCommand({
     const paperRoot = projectRoot();
 
     if (typeof args.replay === 'string' && args.replay.length > 0) {
-      return runReplay(paperRoot, args.replay);
+      return runReplay(paperRoot, args.replay, args.yolo === true);
     }
 
     // SUMMARY only — reading HANDOFF does NOT route (H4). safeParse never throws.

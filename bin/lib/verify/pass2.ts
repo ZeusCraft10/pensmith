@@ -228,6 +228,8 @@ export async function runPass2(
   // Pass-1/Pass-3 verdict — the advisory passes never need a key (D-V1-04:
   // Tier 1 has none; a user checking a hand-written draft may have none).
   let noKey: string | null = null;
+  let failed = 0;
+  let firstError: unknown;
   for (const pair of pairs) {
     if (noKey !== null) {
       results.push(pass2Skipped(pair.claimSentence, pair.citekey, noKey));
@@ -272,6 +274,8 @@ export async function runPass2(
       // that never matched the schema) surfaces as a conservative UNCLEAR —
       // advisory must not crash verify.
       if (isFatalLlmError(err)) throw err;
+      failed += 1;
+      firstError ??= err;
       results.push({
         citekey: pair.citekey,
         claimSentence: pair.claimSentence,
@@ -281,7 +285,23 @@ export async function runPass2(
       });
     }
   }
+  if (failed > 0) reportAdvisoryFailure('Pass 2 (claim support)', failed, firstError);
   return results;
+}
+
+/**
+ * One stderr line when an advisory pass could not judge some claims because
+ * the model call failed (RUN-12): the rows are UNCLEAR in VERIFICATION.md and
+ * verify still exits on its deterministic verdict, but the failure — e.g. a
+ * model the provider does not serve, and the key that selects it — is never
+ * silent.
+ */
+export function reportAdvisoryFailure(pass: string, count: number, err: unknown): void {
+  const detail = (err instanceof Error ? err.message : String(err)).replace(/^pensmith: /, '').split('\n')[0] ?? '';
+  process.stderr.write(
+    `pensmith verify: WARN — ${pass}, advisory, could not judge ${count} claim(s): ${detail} ` +
+      '(recorded as UNCLEAR in VERIFICATION.md)\n',
+  );
 }
 
 /**

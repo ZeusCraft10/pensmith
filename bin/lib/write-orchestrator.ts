@@ -20,9 +20,9 @@
 //   - After a wave settles, any downstream node whose `depends_on` (transitively)
 //     includes a failed/blocked slug is marked `blocked` and SKIPPED in later
 //     waves (D-03). Orthogonal subtrees proceed normally.
-//   - Tier 2 forces maxParallel 1; when maxParallel === 1 we emit EXACTLY ONE
-//     WARN to stderr ("--max-parallel ignored") — stderr, never stdout, to keep
-//     the MCP stdio frame clean (T-04-13).
+//   - A serial run (maxParallel === 1) emits EXACTLY ONE WARN to stderr
+//     (workflows/write.md, D-02) — stderr, never stdout, to keep the MCP stdio
+//     frame clean (T-04-13). Both tiers otherwise honor maxParallel.
 //   - A thrown non-Error from writeSection is normalized to an Error by runWave
 //     (Research §P-5); we never nest Semaphore.withLock (§P-4).
 //   - A failure the caller marks FATAL (opts.stopOn — e.g. the session cost cap
@@ -75,7 +75,7 @@ export type SectionWrittenCallback = (opts: {
 }) => void;
 
 export interface RunAllSectionsOpts {
-  /** Per-wave concurrency cap. Tier 2 forces 1 (with a single WARN). */
+  /** Per-wave concurrency cap (1 = serial, with a single WARN). */
   maxParallel: number;
   /** The existing per-section writer, invoked once per non-blocked node. */
   writeSection: (node: SectionNode) => Promise<void>;
@@ -141,8 +141,8 @@ export async function runAllSections(
   paperRoot: string,
   opts: RunAllSectionsOpts,
 ): Promise<WaveResult[]> {
-  // D-02: Tier 2 forces serial execution. Emit EXACTLY ONE WARN to stderr
-  // (never stdout — keeps the MCP stdio frame clean, T-04-13).
+  // D-02: a serial run emits EXACTLY ONE WARN to stderr (never stdout — keeps
+  // the MCP stdio frame clean, T-04-13).
   if (opts.maxParallel === 1) {
     process.stderr.write(
       'WARN: Tier 2 runs sections serially; --max-parallel ignored\n',

@@ -24,6 +24,7 @@
 // also keeps recorded fixtures under the 51200-byte cap.
 
 import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
+import { errorFailureReason, httpFailureReason, type SearchOptions } from './search-failure.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -92,18 +93,22 @@ const SEARCH_SELECT = 'DOI,title,author,issued,abstract,container-title,type';
 
 export async function search(
   query: string,
-  opts: { limit?: number } = {},
+  opts: SearchOptions = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
   const url = `${BASE}/works?query=${encodeURIComponent(query)}&rows=${limit}&select=${encodeURIComponent(SEARCH_SELECT)}`;
   try {
     const res = await httpFetch(url, { source: 'crossref', maxBytes: MAX_JSON_RESPONSE_BYTES });
-    if (res.status !== 200) return [];
+    if (res.status !== 200) {
+      opts.onFailure?.(httpFailureReason(res.status));
+      return [];
+    }
     const body = JSON.parse(res.body) as unknown;
     const items = ((body as { message?: { items?: CrossrefItem[] } })?.message?.items) ?? [];
     return items.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
   } catch (err) {
     if (isOfflineEgressError(err)) throw err;
+    opts.onFailure?.(errorFailureReason(err));
     return [];
   }
 }

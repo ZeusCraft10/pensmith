@@ -31,7 +31,7 @@ import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 import { complete, isNoLlmMode, MissingApiKeyError, ProviderHttpError } from '../bin/lib/anthropic.js';
 import { GateRefusedError } from '../bin/lib/gates.js';
 import { currentSessionId } from '../bin/lib/session-log.js';
-import { _resetWarnedForTest } from '../bin/lib/http.js';
+import { _resetWarnedForTest, __setHttpTestSeams } from '../bin/lib/http.js';
 
 function repoRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -181,6 +181,34 @@ test('RUN-12: a connect timeout reads "could not connect" with the time spent �
       );
     } finally {
       await mock.restore();
+    }
+  });
+});
+
+test('RUN-12: an endpoint host that does not resolve reads "could not reach … fix endpoint", not an SSRF refusal; a metadata address keeps the SSRF wording', async () => {
+  await withLlmSandbox({ env: { ANTHROPIC_API_KEY: 'sk-ant-test-dns-failure', PENSMITH_NETWORK_TESTS: '1' } }, async () => {
+    try {
+      __setHttpTestSeams({
+        resolve: async () => {
+          throw Object.assign(new Error('getaddrinfo ENOTFOUND api.anthropic.com'), { code: 'ENOTFOUND' });
+        },
+      });
+      await assert.rejects(
+        complete({ slug: 'section-drafter', system: 's', messages: [{ role: 'user', content: 'go' }] }),
+        (e: unknown) => {
+          assert.ok(e instanceof ProviderHttpError, String(e));
+          assert.match(e.message, /^could not reach anthropic at https:\/\/api\.anthropic\.com\S* \(ENOTFOUND: the host name does not resolve\) — check the network, or fix /);
+          assert.doesNotMatch(e.message, /SSRF/);
+          return true;
+        },
+      );
+      __setHttpTestSeams({ resolve: async () => [{ address: '169.254.169.254', family: 4 }] });
+      await assert.rejects(
+        complete({ slug: 'section-drafter', system: 's', messages: [{ role: 'user', content: 'go' }] }),
+        /SSRF guard: .*cloud metadata/,
+      );
+    } finally {
+      __setHttpTestSeams(null);
     }
   });
 });

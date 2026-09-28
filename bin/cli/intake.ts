@@ -7,9 +7,10 @@
 // Tier-2 LLM transport (GEN-02, Phase 11).
 //
 // Phase 17 wiring (RUN-07, RUN-25, CONF-01):
-//   - assertLlmConfigured('new') runs before any model work: with no usable
-//     provider it throws the one-line MissingApiKeyError ("Set one of:
-//     ANTHROPIC_API_KEY, OPENAI_API_KEY (or configure a local endpoint)").
+//   - assertLlmConfigured('new') runs before anything is written or sent: with
+//     no usable provider it throws the one-line MissingApiKeyError ("Set one
+//     of: ANTHROPIC_API_KEY, OPENAI_API_KEY (or configure a local endpoint)")
+//     and the folder is left untouched (no partial .paper/).
 //     PENSMITH_NO_LLM=1 (and offline replay) skip it; complete() then returns
 //     the contract stub.
 //   - intake-clarifier is a STRUCTURED slug: complete() returns
@@ -371,6 +372,13 @@ export const intakeCommand = defineCommand({
     const hasThesisSeed = typeof args.thesis === 'string' && args.thesis.trim().length > 0;
     if (assignmentFile === null && !hasThesisSeed && !process.stdin.isTTY) throw missingAssignmentError(cwd);
 
+    // ── GEN-06 / RUN-07 fail-loud probe — BEFORE anything is written ──
+    // A run with no usable provider must leave the folder exactly as it found
+    // it: no .paper/, no config.toml, no .gitignore. A partial .paper/ would
+    // later read as "a paper" (a --dry-run beside the assignment would refuse
+    // to overwrite it) while `status` says there is none.
+    await assertLlmConfigured('new');
+
     // DOCS-01: PRD §3 disclaimer — print at intake start so CLI-only users see it.
     // Static copy — sourced verbatim from PRD §3 (non-negotiable per CLAUDE.md).
     // Must appear before any ask() or model call (PATTERNS.md placement constraint).
@@ -460,9 +468,6 @@ export const intakeCommand = defineCommand({
         await runStyleProducerNonFatal(cwd, styleSamples, paperId, meta.name);
       }
     };
-
-    // ── GEN-06 / RUN-07 fail-loud probe (BEFORE any prompt/complete() work) ──
-    await assertLlmConfigured('new');
 
     // ── CRITICAL (H3 / Pitfall 3): the value interpolated into the model-bound ──
     // payload is `egressSeed` — the REDACTED text when PII opt-in is on (never

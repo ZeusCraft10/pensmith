@@ -239,6 +239,9 @@ test('H1 / C2-H1: `write --yolo` (NON-GATE) over-cap WITHOUT --estimate exits no
     writeState(root, manySections(50));
     writePaperFile(root, 'RESEARCH.md');
     writePaperFile(root, 'OUTLINE.md');
+    // A wave `write` drafts every section that has a PLAN.md (verified ones
+    // included), and the pre-flight prices exactly those.
+    for (const s of manySections(50)) writeSectionPlan(root, s.n, s.slug, 'planned');
     const res = runCli(['write', '--yolo'], root, { PENSMITH_COST_CAP_USD: '0.0001' });
     assert.notEqual(res.status, 0,
       'H1/C2-H1: a NON-GATE verb under --yolo over the cap must EXIT NON-ZERO (cap cannot be skipped)');
@@ -276,7 +279,9 @@ test('H1 (D-17-27): a --yolo projection between 50% and 100% of the cap is NOT r
       writePaperFile(sb.root, 'RESEARCH.md');
       writePaperFile(sb.root, 'OUTLINE.md');
       // The pre-flight projects the steps THIS run makes: `write --yolo` (wave
-      // mode) is every section still to write — not the rest of the paper.
+      // mode) drafts every section with a PLAN.md — a verified one included —
+      // and nothing else of the paper.
+      for (const s of manySections(4)) writeSectionPlan(sb.root, s.n, s.slug, s.n === 2 ? 'verified' : 'planned');
       const est = await projectEstimate({ paperRoot: sb.root, scope: { verb: 'write' } });
       assert.ok(est.totalUsd > 0);
       assert.deepEqual(est.rows.map((r) => r.step), ['write §1', 'write §2', 'write §3', 'write §4']);

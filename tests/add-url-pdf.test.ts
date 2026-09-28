@@ -70,12 +70,13 @@ test('audit #11: `add <url>` (non-pdf) offline is refused with no live call', ()
   assert.ok(!STACK_RE.test(out.stdout + out.stderr));
 });
 
-test('audit #30: `add <missing>.pdf` (local) yields a friendly error, not a raw stack trace', () => {
+test('audit #30 / RUN-09: `add <missing>.pdf` (local) is a one-line usage error (exit 2), not a raw stack trace', () => {
   const root = paperRoot('pensmith-addpdf-');
   const missing = join(root, 'does-not-exist.pdf');
   const out = runCli(['add', missing, '--yolo'], root);
 
   const all = out.stdout + out.stderr;
-  assert.match(out.stderr, /could not read local PDF/i, `expected a friendly diagnostic; got: ${all}`);
+  assert.equal(out.status, 2, `a missing file is an invalid argument (EXIT_USAGE); got: ${all}`);
+  assert.match(out.stderr, /^pensmith add: .*does-not-exist\.pdf: no such file$/m, `expected a friendly diagnostic; got: ${all}`);
   assert.ok(!STACK_RE.test(all), `must not dump a raw stack trace; got: ${all}`);
 });

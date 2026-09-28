@@ -26,7 +26,7 @@ import { runCompile, type ReVerifyInput, type ReVerifyResult } from '../lib/comp
 import { EXIT_BLOCKED } from '../lib/exit-codes.js';
 import { runPass1 } from '../lib/verify/pass1.js';
 import { runPass3 } from '../lib/verify/pass3.js';
-import { parseBibFile } from '../lib/citations.js';
+import { parseBibFileAt } from '../lib/citations.js';
 import { sectionDraft, paperDir, projectRoot } from '../lib/paths.js';
 
 /**
@@ -49,7 +49,7 @@ async function productionReVerify(paperRoot: string, input: ReVerifyInput): Prom
     return { passed: false, failingCitekeys: [] };
   }
   const pass1 = await runPass1(draftMd, bibPath);
-  const bibEntries = await parseBibFile(bibText);
+  const bibEntries = await parseBibFileAt(bibText, bibPath);
   const bibByCitekey = new Map<string, { DOI?: string }>(
     bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
   );

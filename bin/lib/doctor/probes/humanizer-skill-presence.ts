@@ -26,7 +26,7 @@ export const humanizerSkillPresenceProbe: Probe = {
     return {
       id: 'humanizer-skill-presence',
       severity: 'WARN',
-      summary: `Humanizer skill not installed at ${skillPath} — the \`humanize\` verb (Phase 3+) will be unavailable.`,
+      summary: `Humanizer skill not installed at ${skillPath} — \`pensmith done\` will skip the humanize step.`,
       fix: 'Install the humanizer skill into ~/.claude/skills/humanizer/. See README humanizer disclosure (PRD §3 & §14).',
     };
   },

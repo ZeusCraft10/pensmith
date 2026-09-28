@@ -14,6 +14,7 @@
 // OfflineEgressError is rethrown so callers can report "unavailable (offline)".
 
 import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
+import { errorFailureReason, httpFailureReason, type SearchOptions } from './search-failure.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -87,18 +88,22 @@ const SELECT = 'id,doi,title,publication_year,authorships';
 
 export async function search(
   query: string,
-  opts: { limit?: number } = {},
+  opts: SearchOptions = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
   const url = `${BASE}/works?search=${encodeURIComponent(query)}&per-page=${limit}&select=${encodeURIComponent(SELECT)}${mailtoParam('&')}`;
   try {
     const res = await httpFetch(url, { source: 'openalex', maxBytes: MAX_JSON_RESPONSE_BYTES });
-    if (res.status !== 200) return [];
+    if (res.status !== 200) {
+      opts.onFailure?.(httpFailureReason(res.status));
+      return [];
+    }
     const body = JSON.parse(res.body) as unknown;
     const results = ((body as { results?: OpenAlexWork[] })?.results) ?? [];
     return results.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
   } catch (err) {
     if (isOfflineEgressError(err)) throw err;
+    opts.onFailure?.(errorFailureReason(err));
     return [];
   }
 }

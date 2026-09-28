@@ -60,12 +60,17 @@ type ExportDraft = (opts: {
   style?: string;
 }) => Promise<ExportResult>;
 
+// The cited entry (x2020) and an uncited research candidate (y2021): the export
+// carries only what the document cites.
+const CITED_BIB_ENTRY = '@article{x2020,\n\ttitle = {X},\n\tdoi = {10.1/x},\n}\n';
+const UNCITED_BIB_ENTRY = '@article{y2021,\n\ttitle = {Y},\n\tdoi = {10.1/y},\n\tnote = {RETRACTED},\n}\n';
+
 function seedPaper(slug: string): { root: string; inputPath: string } {
   const root = mkdtempSync(join(tmpdir(), `pensmith-exporter-${slug}-`));
   mkdirSync(join(root, '.paper'), { recursive: true });
   const inputPath = join(root, '.paper', 'DRAFT.md');
-  writeFileSync(inputPath, '# Draft\n\nA clean draft with no identifying trace.\n');
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '@article{x2020, title={X}}\n');
+  writeFileSync(inputPath, '# Draft\n\nA clean draft with no identifying trace [@x2020].\n');
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), CITED_BIB_ENTRY + UNCITED_BIB_ENTRY);
   return { root, inputPath };
 }
 
@@ -125,7 +130,7 @@ test('exporter: Pandoc-absent docx request → markdown fallback into a distinct
   },
 );
 
-test('exporter: CITATIONS.bib copied into export dir alongside the output, distinct source/dest (DONE-08)',
+test('exporter: the export dir gets a CITATIONS.bib holding ONLY the cited entries, byte for byte, distinct source/dest (DONE-08)',
   { skip: !existsSync(exporterSrcPath) },
   async () => {
     const mod = await import(exporterModUrl.href) as { exportDraft: ExportDraft };
@@ -134,10 +139,30 @@ test('exporter: CITATIONS.bib copied into export dir alongside the output, disti
 
     const exportDir = dirname(res.outputPath);
     const copiedBib = join(exportDir, 'CITATIONS.bib');
-    assert.ok(existsSync(copiedBib), 'CITATIONS.bib must be copied alongside the export output');
+    assert.ok(existsSync(copiedBib), 'CITATIONS.bib must be written alongside the export output');
     const srcBib = join(root, '.paper', 'CITATIONS.bib');
     assert.notEqual(resolve(copiedBib), resolve(srcBib), 'copy dest must be distinct from source');
-    assert.equal(readFileSync(copiedBib, 'utf8'), readFileSync(srcBib, 'utf8'), 'copied bib must match source bytes');
+    // The uncited (retracted-flagged) research candidate never leaves .paper/.
+    assert.equal(readFileSync(copiedBib, 'utf8'), CITED_BIB_ENTRY, 'the exported bib is exactly the cited entry');
+    assert.equal(res.bibCopied, true);
+    assert.equal(readFileSync(srcBib, 'utf8'), CITED_BIB_ENTRY + UNCITED_BIB_ENTRY, 'the library bib is untouched');
+  },
+);
+
+test('exporter: a document that cites nothing exports no bibliography, and a stale one is removed (DONE-08)',
+  { skip: !existsSync(exporterSrcPath) },
+  async () => {
+    const mod = await import(exporterModUrl.href) as { exportDraft: ExportDraft };
+    const { root, inputPath } = seedPaper('nocite');
+    writeFileSync(join(root, '.paper', 'CITATIONS.ris'), 'TY  - JOUR\nID  - y2021\nER  - \n');
+    mkdirSync(join(root, '.paper', 'export'), { recursive: true });
+    writeFileSync(join(root, '.paper', 'export', 'CITATIONS.bib'), UNCITED_BIB_ENTRY);
+    writeFileSync(inputPath, '# Draft\n\nNo citations here.\n');
+    const res = await mod.exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false });
+    assert.equal(res.bibCopied, false);
+    assert.equal(res.risCopied, false);
+    assert.ok(!existsSync(join(dirname(res.outputPath), 'CITATIONS.bib')), 'no bib (and the stale one is gone)');
+    assert.ok(!existsSync(join(dirname(res.outputPath), 'CITATIONS.ris')), 'no ris');
   },
 );
 
@@ -147,18 +172,20 @@ test('exporter: CITATIONS.ris copied into export dir alongside the output, disti
   async () => {
     const mod = await import(exporterModUrl.href) as { exportDraft: ExportDraft };
     const { root, inputPath } = seedPaper('riscopy');
-    // Seed a CITATIONS.ris fixture alongside the .bib the helper already wrote.
+    // Seed a CITATIONS.ris alongside the .bib the helper already wrote: the
+    // cited record and an uncited one.
     const srcRis = join(root, '.paper', 'CITATIONS.ris');
-    writeFileSync(srcRis, 'TY  - JOUR\nTI  - X\nER  -\n');
+    const citedRis = 'TY  - JOUR\nID  - x2020\nTI  - X\nER  - \n';
+    writeFileSync(srcRis, citedRis + 'TY  - JOUR\nID  - y2021\nTI  - Y\nER  - \n');
 
     const res = await mod.exportDraft({ inputPath, format: 'md', paperRoot: root, pandocPresent: false });
 
     const exportDir = dirname(res.outputPath);
     const copiedRis = join(exportDir, 'CITATIONS.ris');
-    assert.ok(existsSync(copiedRis), 'CITATIONS.ris must be copied alongside the export output');
+    assert.ok(existsSync(copiedRis), 'CITATIONS.ris must be written alongside the export output');
     assert.notEqual(resolve(copiedRis), resolve(srcRis), 'copy dest must be distinct from source');
-    assert.equal(readFileSync(copiedRis, 'utf8'), readFileSync(srcRis, 'utf8'), 'copied ris must match source bytes');
-    assert.equal(res.risCopied, true, 'res.risCopied must be true when the source .ris is present');
+    assert.equal(readFileSync(copiedRis, 'utf8'), citedRis, 'the exported ris is exactly the cited record');
+    assert.equal(res.risCopied, true, 'res.risCopied must be true when the source .ris holds a cited record');
   },
 );
 

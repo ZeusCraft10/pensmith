@@ -44,7 +44,7 @@ import { resolveSectionSlug } from '../lib/section-slug.js';
 import { loadState } from '../lib/state.js';
 import { fetch as httpFetch, isOfflineEgressError, offlineLabel } from '../lib/http.js';
 import { isOfflineMode, networkMode } from '../lib/http-mock.js';
-import { EXIT_ERROR } from '../lib/exit-codes.js';
+import { EXIT_ERROR, PensmithError } from '../lib/exit-codes.js';
 
 /** True for an http(s) URL — used to route URL ingestion away from the local-PDF
  *  branch (audit #12: a URL ending in .pdf must NOT be read as a local file). */
@@ -185,6 +185,20 @@ export const addCommand = defineCommand({
       }
     }
 
+    // RUN-09: an argument that is not a source identifier at all is a usage
+    // error (EXIT_USAGE) before any lookup: not a DOI, not an http(s) URL, not
+    // an existing file. A well-formed identifier that cannot be resolved stays
+    // EXIT_ERROR below.
+    if (!isDoi(source) && !isHttpUrl(source) && !fs.existsSync(path.resolve(source))) {
+      throw new PensmithError(
+        source.toLowerCase().endsWith('.pdf')
+          ? `pensmith add: ${source}: no such file`
+          : `pensmith add: "${source}" is not a DOI (10.…), an http(s) URL or a local PDF — pass one of those ` +
+              '(an arXiv paper by its DOI, 10.48550/arXiv.<id>)',
+        EXIT_USAGE,
+      );
+    }
+
     // (1) Detect type + hydrate into a SourceCandidate.
     let candidate: SourceCandidate | null = null;
 
@@ -253,7 +267,7 @@ export const addCommand = defineCommand({
           candidate = null;
         }
       }
-    } else if (source.toLowerCase().endsWith('.pdf') || fs.existsSync(path.resolve(source))) {
+    } else {
       // BYO LOCAL PDF — bytes-only chokepoint (T-08-04-03 path-traversal mitigation).
       // audit #30: guard the read so a missing/unreadable file yields a friendly
       // diagnostic, not a raw unhandled ENOENT stack trace.
@@ -280,9 +294,6 @@ export const addCommand = defineCommand({
         );
         candidate = null;
       }
-    } else {
-      // Not a DOI, an http(s) URL, or a readable local .pdf — nothing to hydrate.
-      candidate = null;
     }
 
     if (!candidate) {

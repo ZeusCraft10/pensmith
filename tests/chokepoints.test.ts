@@ -216,14 +216,24 @@ test('RUN-29: file-regex rows hold on every in-scope file (baselines are maxima)
   assert.deepEqual(offenders, []);
 });
 
-test('RUN-29: no-new-eslint-disable — the baseline only names existing files (no new occurrence anywhere)', () => {
+test('RUN-29: no-new-eslint-disable — the baseline is exactly the tree (each entry equals its file\'s count), and only shrinks', () => {
   const row = ROWS.find((r) => r.id === 'no-new-eslint-disable')!;
-  for (const rel of Object.keys(row.baseline ?? {})) {
+  const m = matchersOf(row).find((x) => x.kind === 'file-regex')!;
+  let treeTotal = 0;
+  for (const rel of TREE) {
+    if (!matchesAny(rel, row.scope) || matchesAny(rel, row.allow)) continue;
+    treeTotal += fileRegexMatches(m, fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8')).length;
+  }
+  for (const [rel, allowed] of Object.entries(row.baseline ?? {})) {
     assert.ok(fs.existsSync(path.join(REPO_ROOT, rel)), `baseline entry ${rel} exists`);
     assert.ok(matchesAny(rel, row.scope), `baseline entry ${rel} is in scope`);
+    const actual = fileRegexMatches(m, fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8')).length;
+    // A stale entry would let a NEW directive into that file unnoticed.
+    assert.equal(actual, Number(allowed), `baseline entry ${rel} (${String(allowed)}) must equal the file's directive count (${actual})`);
   }
-  const total = Object.values(row.baseline ?? {}).reduce((a, b) => a + b, 0);
-  assert.ok(total <= 13, 'the baseline may only shrink (13 directives predate RUN-29)');
+  const total = Object.values(row.baseline ?? {}).reduce((a, b) => a + Number(b), 0);
+  assert.equal(total, treeTotal, 'the baseline total equals the directives in the tree');
+  assert.ok(total <= 12, 'the baseline may only shrink (12 directives remain from before RUN-29)');
 });
 
 test('RUN-29: import-graph rows hold on the real tree', () => {

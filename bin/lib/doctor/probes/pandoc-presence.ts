@@ -24,7 +24,7 @@ export const pandocPresenceProbe: Probe = {
     return {
       id: 'pandoc-presence',
       severity: 'WARN',
-      summary: 'pandoc not found on PATH — the `export` verb (Phase 3+) will be unavailable.',
+      summary: 'pandoc not found on PATH — `pensmith done` cannot export .docx or .pdf (it falls back to Markdown).',
       fix: 'Install pandoc: https://pandoc.org/installing.html',
     };
   },

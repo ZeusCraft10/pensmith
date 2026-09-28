@@ -267,3 +267,43 @@ test('HARD-02: checkSsrf export presence is consistent with Wave-1 RED state',
     }
   },
 );
+
+// ---------------------------------------------------------------------------
+// IPv6 forms that embed an IPv4 (NAT64 / 6to4 / IPv4-compatible / Teredo): on
+// an IPv6-only host with DNS64 a hostname can resolve to 64:ff9b::<v4>, which
+// the NAT64 gateway dials as <v4>. The embedded IPv4 is re-checked.
+// ---------------------------------------------------------------------------
+test('SSRF guard: NAT64, 6to4, IPv4-compatible and Teredo addresses embedding a private or metadata IPv4 are rejected; public ones pass', async () => {
+  const http = await import(httpModUrl.href) as {
+    isPrivateIp: (a: string) => boolean;
+    isNeverAllowedIp: (a: string) => boolean;
+    checkSsrf: (url: string, resolveFn?: unknown) => Promise<unknown>;
+    checkLlmEndpoint: (url: string, endpoint: string, resolveFn?: unknown) => Promise<unknown>;
+  };
+  const privateForms = [
+    '64:ff9b::a00:1', // NAT64 → 10.0.0.1
+    '64:ff9b::7f00:1', // NAT64 → 127.0.0.1
+    '64:ff9b::a9fe:a9fe', // NAT64 → 169.254.169.254
+    '64:ff9b::169.254.169.254',
+    '64:ff9b:1::a00:1', // local-use NAT64 (RFC 8215)
+    '2002:a9fe:a9fe::1', // 6to4 → 169.254.169.254
+    '2002:a00:1::1', // 6to4 → 10.0.0.1
+    '::10.0.0.1', // IPv4-compatible
+    '2001:0:4136:e378:8000:63bf:f5ff:fffe', // Teredo client → 10.0.0.1
+  ];
+  for (const a of privateForms) assert.equal(http.isPrivateIp(a), true, `${a} is private`);
+  for (const a of ['64:ff9b::a9fe:a9fe', '64:ff9b::169.254.169.254', '2002:a9fe:a9fe::1']) {
+    assert.equal(http.isNeverAllowedIp(a), true, `${a} embeds the metadata address — never dialed, even for an LLM endpoint`);
+  }
+  for (const a of ['64:ff9b::808:808', '2002:808:808::1', '2606:4700::1111']) {
+    assert.equal(http.isPrivateIp(a), false, `${a} (public) passes — IPv6-only hosts still reach public APIs through NAT64`);
+  }
+  await assert.rejects(
+    http.checkSsrf('https://x.test/', async () => [{ address: '64:ff9b::a9fe:a9fe', family: 6 }]),
+    /private\/reserved IP 64:ff9b::a9fe:a9fe/,
+  );
+  await assert.rejects(
+    http.checkLlmEndpoint('https://llm.test/v1/messages', 'https://llm.test', async () => [{ address: '2002:a9fe:a9fe::1', family: 6 }]),
+    /link-local \/ cloud metadata/,
+  );
+});

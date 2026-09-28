@@ -528,8 +528,3 @@ export function lookupFixture(method: string, url: string, body?: string | Buffe
   }
   return { status: hit.entry.status, headers, body: bodyText, file: hit.file };
 }
-
-/** Test-only: drop the in-memory fixture index (after a test writes a fixture). */
-export function _resetFixtureIndexForTest(): void {
-  fixtureIndex = null;
-}

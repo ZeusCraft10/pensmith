@@ -295,6 +295,25 @@ export const SLUGS: Readonly<Record<string, SlugSpec>> = Object.freeze(
 
 export const SLUG_NAMES: readonly string[] = Object.freeze(SLUG_LIST.map((x) => x.slug));
 
+/**
+ * Step names accepted for a per-slug override (`[runtime.slugs.<name>]`) as
+ * aliases of the prompt slug that step calls: the verifier passes and the
+ * research judges are better known by these names (RUN-26).
+ */
+export const SLUG_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  pass2: 'claim-support',
+  pass4: 'orphan-label',
+  evaluator: 'source-evaluator',
+  queries: 'topic-disambiguator',
+});
+
+/** The prompt slug an override key names (an alias resolved), or null when it names none. */
+export function canonicalSlug(name: string): string | null {
+  if (name in SLUGS) return name;
+  const alias = SLUG_ALIASES[name];
+  return alias !== undefined && alias in SLUGS ? alias : null;
+}
+
 export class UnknownSlugError extends Error {
   constructor(slug: string) {
     super(`llm-models: unknown prompt slug "${slug}" — add it to the slug table in bin/lib/llm-models.ts`);

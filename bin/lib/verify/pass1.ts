@@ -37,7 +37,7 @@
 import { jaroWinkler, TITLE_JW_THRESHOLD, AUTHOR_JW_THRESHOLD } from '../fuzzy.js';
 import { firstAuthorSurname } from '../author-normalize.js';
 import { sources } from '../sources/index.js';
-import { parseBibFile } from '../citations.js';
+import { parseBibFileAt } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
 import { fetchById as retractionWatchFetchById, isRetractionLookupError } from '../sources/retraction-watch.js';
@@ -335,7 +335,7 @@ export async function runPass1(
   citationsBibPath: string,
 ): Promise<Pass1Result[]> {
   const bibText = readFileSync(citationsBibPath, 'utf8');
-  const entries = await parseBibFile(bibText);
+  const entries = await parseBibFileAt(bibText, citationsBibPath);
   const bibByCitekey = new Map<string, BibEntry>(
     entries.map((e) => [String(e['id'] ?? ''), e as BibEntry]),
   );
@@ -370,7 +370,7 @@ export async function runFreshnessForDraft(
   citationsBibPath: string,
 ): Promise<FreshnessResult[]> {
   const bibText = readFileSync(citationsBibPath, 'utf8');
-  const entries = await parseBibFile(bibText);
+  const entries = await parseBibFileAt(bibText, citationsBibPath);
   const doiByCitekey = new Map<string, string | null>(
     entries.map((e) => [
       String((e as BibEntry).id ?? ''),

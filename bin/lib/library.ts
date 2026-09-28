@@ -66,9 +66,9 @@ import {
   type Library,
   type LibraryEntry,
 } from './schemas/library.js';
-import { renderBibtex, suffixForCollision } from './bibtex-write.js';
+import { BibRenderError, renderBibtex, suffixForCollision } from './bibtex-write.js';
 import { renderRis } from './ris-write.js';
-import { parseBib } from './citations.js';
+import { parseBib, parseBibFileAt, parseBibSync } from './citations.js';
 import { jaroWinkler } from './fuzzy.js';
 import { firstAuthorSurname } from './author-normalize.js';
 import { generateCitekey } from './citekey.js';
@@ -195,12 +195,52 @@ async function writeIfChanged(file: string, text: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Render CITATIONS.bib for `entries` and prove it reads back: every rendered
+ * entry round-trips on its own (renderBibtex), and the whole file parses to
+ * exactly the rendered citekeys. A library that cannot be rendered is refused
+ * with one line (nothing is written) — verify, compile and done parse this
+ * file, so an unreadable bib would stop every section.
+ */
+function renderCheckedBib(file: string, entries: LibraryEntry[]): string {
+  let text: string;
+  try {
+    text = renderBibtex(entries);
+  } catch (e) {
+    if (e instanceof BibRenderError) {
+      throw new PensmithError(
+        `refusing to write ${file}: ${e.message} — fix that entry's title or authors in LIBRARY.json and re-run`,
+        EXIT_ERROR,
+      );
+    }
+    throw e;
+  }
+  if (!text.trim()) return text;
+  const want = [...text.matchAll(BIB_KEY_RE)].map((m) => m[1]!).sort();
+  let got: string[];
+  try {
+    got = parseBibSync(text)
+      .map((c) => String(c['id']))
+      .sort();
+  } catch (e) {
+    throw new PensmithError(`refusing to write ${file}: the rendered BibTeX does not parse (${(e as Error).message.split('\n')[0]})`, EXIT_ERROR);
+  }
+  if (got.join('\n') !== want.join('\n')) {
+    throw new PensmithError(`refusing to write ${file}: the rendered BibTeX reads back with different citekeys`, EXIT_ERROR);
+  }
+  return text;
+}
+
 /** Persist a validated library and its two rendered citation files (lock held). */
 async function persist(paths: LibraryPaths, library: Library): Promise<void> {
   const validated = LibrarySchema.parse(library);
+  // Render (and check) before anything is written: a refused render leaves
+  // LIBRARY.json and both citation files exactly as they were.
+  const bib = renderCheckedBib(paths.bib, validated.entries);
+  const ris = renderRis(validated.entries);
   await writeIfChanged(paths.library, JSON.stringify(validated, null, 2) + '\n');
-  await writeIfChanged(paths.bib, renderBibtex(validated.entries));
-  await writeIfChanged(paths.ris, renderRis(validated.entries));
+  await writeIfChanged(paths.bib, bib);
+  await writeIfChanged(paths.ris, ris);
 }
 
 // ---------------------------------------------------------------------------
@@ -647,3 +687,166 @@ export async function recordLastVerified(
   });
 }
 
+
+// ---------------------------------------------------------------------------
+// Export: the cited-only bibliography.
+// ---------------------------------------------------------------------------
+
+/** One top-level `@…` block of a BibTeX file (`key` is null for @string/@preamble/@comment). */
+export interface BibBlock {
+  kind: string;
+  key: string | null;
+  text: string;
+}
+
+const BIB_BLOCK_HEAD = /@([A-Za-z]+)\s*([{(])/y;
+const BIB_NON_ENTRY = new Set(['string', 'preamble', 'comment']);
+
+/**
+ * Split BibTeX text into its top-level `@type{…}` / `@type(…)` blocks, brace
+ * matched, each block's text byte-exact (with its line ending). Text between
+ * blocks (BibTeX comments) is dropped. Throws on an unterminated block.
+ */
+export function splitBibBlocks(text: string): BibBlock[] {
+  const blocks: BibBlock[] = [];
+  let i = 0;
+  for (;;) {
+    const at = text.indexOf('@', i);
+    if (at === -1) break;
+    BIB_BLOCK_HEAD.lastIndex = at;
+    const head = BIB_BLOCK_HEAD.exec(text);
+    if (!head) {
+      i = at + 1;
+      continue;
+    }
+    const byParen = head[2] === '(';
+    let depth = 0;
+    let j = BIB_BLOCK_HEAD.lastIndex;
+    for (; j < text.length; j++) {
+      const ch = text[j];
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        if (depth === 0 && !byParen) break;
+        depth--;
+      } else if (ch === ')' && byParen && depth === 0) break;
+    }
+    if (j >= text.length) throw new Error(`unterminated @${head[1]} block at offset ${at}`);
+    let end = j + 1;
+    if (text[end] === '\r') end++;
+    if (text[end] === '\n') end++;
+    const kind = head[1]!.toLowerCase();
+    const body = text.slice(BIB_BLOCK_HEAD.lastIndex, j);
+    const key = BIB_NON_ENTRY.has(kind) ? null : (body.split(',')[0] ?? '').trim() || null;
+    blocks.push({ kind, key, text: text.slice(at, end) });
+    i = end;
+  }
+  return blocks;
+}
+
+/** Split RIS text into records (TY … ER), each with its `ID` citekey. */
+function splitRisRecords(text: string): Array<{ key: string | null; text: string }> {
+  const out: Array<{ key: string | null; text: string }> = [];
+  let cur: string[] = [];
+  for (const line of text.split(/(?<=\n)/)) {
+    if (cur.length === 0 && !/^TY {2}- /.test(line)) continue;
+    cur.push(line);
+    if (/^ER {2}-/.test(line)) {
+      const rec = cur.join('');
+      const id = /^ID {2}- (.*?)\s*$/m.exec(rec);
+      out.push({ key: id ? id[1]! : null, text: rec.endsWith('\n') ? rec : `${rec}\n` });
+      cur = [];
+    }
+  }
+  return out;
+}
+
+export interface CitedExportResult {
+  /** The written export/CITATIONS.bib, or null when no cited source is in the bib. */
+  bibPath: string | null;
+  /** The written export/CITATIONS.ris, or null when no cited source is in the RIS. */
+  risPath: string | null;
+  /** Cited keys written to the exported bib (in bib order). */
+  exported: string[];
+  /** Cited keys the paper's bib does not hold. */
+  missing: string[];
+}
+
+/**
+ * Write the bibliography of an exported document into `exportDir`: ONLY the
+ * sources `citekeys` names (the keys the compiled draft cites), never the
+ * whole research library — uncited candidates, unverified and retracted-flagged
+ * entries and synthetic --dry-run records stay in `.paper/`. Each kept entry
+ * is the paper's `.paper/CITATIONS.bib` / `.ris` entry byte for byte (a hand
+ * edit survives); the result is re-parsed and must hold exactly the kept keys.
+ * A file with no cited source is not written (a stale one from an earlier
+ * export is removed). `.paper/CITATIONS.bib` that does not parse is a one-line
+ * BibParseError — the export never guesses.
+ */
+export async function exportCitedCitations(
+  root: string,
+  citekeys: readonly string[],
+  exportDir: string,
+): Promise<CitedExportResult> {
+  const paths = libraryPaths(root);
+  if (path.resolve(exportDir) === path.resolve(paths.dir)) {
+    throw new Error('exportCitedCitations: the export dir must not be the .paper folder (it would overwrite the library files)');
+  }
+  const wanted = new Set(citekeys);
+  const readText = async (file: string): Promise<string> => {
+    try {
+      return await fsp.readFile(file, 'utf8');
+    } catch (e) {
+      if (isEnoent(e)) return '';
+      throw e;
+    }
+  };
+
+  const { bibText, risText } = await withLock(paths.library, async () => ({
+    bibText: await readText(paths.bib),
+    risText: await readText(paths.ris),
+  }));
+
+  // Fail closed on a bib that does not parse (verify, compile and done read
+  // it the same way), then keep the cited entries verbatim.
+  await parseBibFileAt(bibText, paths.bib);
+  const blocks = bibText.trim() ? splitBibBlocks(bibText) : [];
+  const keptEntries = blocks.filter((b) => b.key !== null && wanted.has(b.key));
+  const exported = [...new Set(keptEntries.map((b) => b.key!))];
+  const keptBib =
+    keptEntries.length === 0
+      ? ''
+      : blocks
+          .filter((b) => b.kind === 'string' || b.kind === 'preamble' || (b.key !== null && wanted.has(b.key)))
+          .map((b) => b.text)
+          .join('');
+  if (keptBib) {
+    const readBack = parseBibSync(keptBib).map((c) => String(c['id']));
+    if ([...new Set(readBack)].sort().join('\n') !== [...exported].sort().join('\n')) {
+      throw new PensmithError(
+        `could not export the cited bibliography: ${paths.bib} reads back with different keys once filtered — check its entries`,
+        EXIT_ERROR,
+      );
+    }
+  }
+
+  const keptRis = splitRisRecords(risText)
+    .filter((r) => r.key !== null && wanted.has(r.key))
+    .map((r) => r.text)
+    .join('');
+
+  const bibDst = path.join(exportDir, 'CITATIONS.bib');
+  const risDst = path.join(exportDir, 'CITATIONS.ris');
+  await fsp.mkdir(exportDir, { recursive: true });
+  if (keptBib) await atomicWriteFile(bibDst, keptBib);
+  else await fsp.rm(bibDst, { force: true });
+  if (keptRis) await atomicWriteFile(risDst, keptRis);
+  else await fsp.rm(risDst, { force: true });
+
+  const present = new Set(blocks.map((b) => b.key).filter((k): k is string => k !== null));
+  return {
+    bibPath: keptBib ? bibDst : null,
+    risPath: keptRis ? risDst : null,
+    exported,
+    missing: [...wanted].filter((k) => !present.has(k)),
+  };
+}

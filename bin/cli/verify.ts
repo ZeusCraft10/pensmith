@@ -29,7 +29,7 @@ import { runPass2, renderPass2Section, pass2NotRun, NO_LLM_SKIP_REASON, type Pas
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { isFatalLlmError } from '../lib/anthropic.js';
 import { extractCitedKeysForVerification } from '../lib/citation-token.js';
-import { parseBibFile } from '../lib/citations.js';
+import { parseBibFileAt } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, sectionPlan, paperDir, projectRoot } from '../lib/paths.js';
 import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
@@ -127,7 +127,7 @@ export const verifyCommand = defineCommand({
     // exactly as it is against a non-empty bib; a cited key absent from the bib
     // is FABRICATED (fail closed).
     const pass1 = bibExists ? await runPass1(draftMd, bibPath) : [];
-    const bibEntries = bibExists ? await parseBibFile(readFileSync(bibPath, 'utf8')) : [];
+    const bibEntries = bibExists ? await parseBibFileAt(readFileSync(bibPath, 'utf8'), bibPath) : [];
     // Widened value type (additive): carries title/author/abstract so Pass 2
     // (claim support) has source metadata. runPass3 reads only DOI, so the
     // widening is backward-compatible with the runPass3 call below.

@@ -39,7 +39,7 @@
 import type Anthropic from '@anthropic-ai/sdk';                  // types only — no network
 import type { ChatCompletion } from 'openai/resources/index.js'; // types only — no network
 import { createHash } from 'node:crypto';
-import { fetch, isRetryableStatus, type HttpResponse } from './http.js';
+import { fetch, isRetryableStatus, SsrfBlockedError, type HttpResponse } from './http.js';
 import { isOfflineMode } from './http-mock.js';
 import {
   getProviderApiKey,
@@ -254,11 +254,6 @@ export function isNoLlmMode(): boolean {
   return process.env['PENSMITH_NO_LLM'] === '1';
 }
 
-/** The resolved provider id (single source of truth shared with complete()). */
-export async function resolveProviderId(): Promise<string> {
-  return (await resolveRuntime()).provider;
-}
-
 function modelConfigKey(rt: ResolvedRuntime, sr: SlugResolution): string {
   switch (sr.modelSource) {
     case 'flag': return '--model';
@@ -266,6 +261,10 @@ function modelConfigKey(rt: ResolvedRuntime, sr: SlugResolution): string {
     case 'slug-global': return `${globalRuntimeConfigPath()} slugs.${sr.slug}.model`;
     case 'config': return '.paper/config.toml [runtime] model';
     case 'global': return `${globalRuntimeConfigPath()} model`;
+    // A judgment slug's own default model (claude-haiku-4-5 …): `[runtime]
+    // model` and --model change only the generation slugs (D-17-24), so the
+    // key that changes THIS model is the slug override.
+    case 'tier-default': return `.paper/config.toml [runtime.slugs.${sr.slug}] model`;
     default: return rt.provider === 'anthropic' || rt.provider === 'openai'
       ? '.paper/config.toml [runtime] model (or --model)'
       : '[runtime] model (or --model)';
@@ -736,12 +735,26 @@ function duration(ms: number): string {
   return ms < 1000 ? `${Math.max(0, Math.round(ms))} ms` : `${Math.round(ms / 1000)}s`;
 }
 
+/** DNS failure codes: the endpoint's host name does not resolve (a typo, or no network). */
+const DNS_FAILURE_CODES: ReadonlySet<string> = new Set(['ENOTFOUND', 'EAI_AGAIN', 'EAI_NONAME', 'EAI_FAIL', 'ENODATA']);
+
 function transportError(plan: CallPlan, err: unknown, elapsedMs: number): PensmithError {
-  if (err instanceof PensmithError) return err;
   const e = err as { status?: number; response?: HttpResponse; code?: string; name?: string; message?: string };
+  const where = plan.rt.endpointSource === 'global' ? `"endpoint" in ${globalRuntimeConfigPath()}` : `the ${plan.provider} endpoint`;
+  // The SSRF guard fails closed on a resolver error (SsrfBlockedError carrying
+  // the DNS code). For the configured model endpoint that is not a policy
+  // refusal: the host name does not resolve — say where to fix it (RUN-12).
+  // A genuine policy refusal (a private or metadata address) keeps its wording.
+  if (err instanceof SsrfBlockedError && typeof e.code === 'string' && DNS_FAILURE_CODES.has(e.code)) {
+    return new ProviderHttpError(
+      `could not reach ${plan.provider} at ${plan.endpoint} (${e.code}: the host name does not resolve) — check the ` +
+        `network, or fix ${where}`,
+      null,
+    );
+  }
+  if (err instanceof PensmithError) return err;
   if (typeof e?.status === 'number' && e.response) return httpError(plan, e.status, e.response.body);
   const code = e?.code ?? e?.name ?? '';
-  const where = plan.rt.endpointSource === 'global' ? `"endpoint" in ${globalRuntimeConfigPath()}` : `the ${plan.provider} endpoint`;
   // A CONNECT timeout means the endpoint never answered the TCP/TLS handshake
   // (an unreachable host or port): say that, with the time actually spent
   // across the retries — not the 600 s request timeout, which never started.

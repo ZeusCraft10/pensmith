@@ -36,7 +36,8 @@ import type { SectionNode } from '../lib/schemas/wave-graph.js';
 import { styleMatchToVoiceHint } from '../lib/style-match.js';
 import { StyleProfileSchema, type StyleProfile } from '../lib/schemas/style.js';
 import { TutorialSubscriber } from '../lib/tutorial.js';
-import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
+import { loadFrontmatterDocSync, parseFrontmatter, serializeFrontmatter } from '../lib/frontmatter.js';
+import { isReplayActive } from '../lib/replay.js';
 import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
 import { complete, assertLlmConfigured, isFatalLlmError } from '../lib/anthropic.js';
@@ -168,6 +169,45 @@ function readAssignedSources(planPath: string): string[] {
 }
 
 /**
+ * PLAN.md frontmatter keys that record the section's lifecycle, not its
+ * content: `write` itself moves `status` (writing → written), verify sets
+ * `status` and `verified_against_draft_hash`, every writer stamps
+ * `schema_version`, and the v1→v2 migration leaves the two breadcrumbs.
+ */
+const PLAN_LIFECYCLE_KEYS: ReadonlySet<string> = new Set([
+  'schema_version',
+  'status',
+  'verified_against_draft_hash',
+  'last_verification',
+  'was_current_at_migration',
+]);
+
+/**
+ * The section plan as the drafter sees it: the PLAN.md content without its
+ * lifecycle bookkeeping (PLAN_LIFECYCLE_KEYS), the frontmatter re-serialized
+ * deterministically and line endings normalized. The drafter request — and so
+ * its SESSION.log hash — depends only on what the section should say, so
+ * `resume --replay` of a write step still matches after the step itself (and
+ * a later verify) moved the section's status (RUN-17). A PLAN.md without
+ * frontmatter (or with frontmatter that does not parse) is passed as-is.
+ */
+export function drafterBrief(planMd: string): string {
+  const text = planMd.replace(/\r\n/g, '\n');
+  let parsed: { frontmatter: Record<string, unknown>; body: string };
+  try {
+    parsed = parseFrontmatter(text);
+  } catch {
+    return text;
+  }
+  if (Object.keys(parsed.frontmatter).length === 0) return text;
+  const kept: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(parsed.frontmatter)) {
+    if (!PLAN_LIFECYCLE_KEYS.has(k)) kept[k] = v;
+  }
+  return `${serializeFrontmatter(kept)}${parsed.body}`;
+}
+
+/**
  * Write ONE section's DRAFT.md. This is the single-section drafter path,
  * factored out so BOTH `pensmith write <n>` and the wave orchestrator's
  * per-node callback share it verbatim. The WRTE-04 chokepoint
@@ -217,17 +257,22 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
   const drafterPrompt = loadPrompt('section-drafter');
   const interpolatedDrafterPrompt = interpolate(drafterPrompt, {
     section: JSON.stringify({ number: n, slug, title: slug, depends_on: [], estimated_word_count: 300 }),
-    brief: planMd || `Section ${n}: ${slug}`,
+    brief: planMd ? drafterBrief(planMd) : `Section ${n}: ${slug}`,
     assignedSources: '[]',
     voiceHint,
   });
 
   // Audit #9: mark the section 'writing' BEFORE drafting (D-08-AMENDED). If the
   // drafter throws, PLAN.md is left 'writing' so the router routes back to write
-  // (retry), never silently stranding the section.
-  await updatePlanFrontmatter(planPath, (fm) => {
-    fm.status = 'writing';
-  });
+  // (retry), never silently stranding the section. A `resume --replay` serving
+  // logged responses does not: a replay that finds no matching response must
+  // leave the paper exactly as it was (RUN-17), and a hit goes straight to
+  // 'written' below.
+  if (!isReplayActive()) {
+    await updatePlanFrontmatter(planPath, (fm) => {
+      fm.status = 'writing';
+    });
+  }
 
   const result = await complete({
     slug: 'section-drafter',
@@ -285,7 +330,7 @@ export const writeCommand = defineCommand({
     'max-parallel': {
       type: 'string',
       description:
-        'Wave-mode concurrency cap (Tier 1 default 5; Tier 2 forces 1 with a WARN).',
+        'Wave mode: how many sections of one wave are drafted at the same time (default 5).',
     },
     yolo: {
       type: 'boolean',

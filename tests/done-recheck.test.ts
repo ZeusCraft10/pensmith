@@ -206,3 +206,18 @@ test('GATE-04 CR-01: reCheckFinalMd has no --yolo escape — citekey mismatch al
     'Failure reason must describe the citekey-set mismatch',
   );
 });
+
+// ---------------------------------------------------------------------------
+// An unparseable CITATIONS.bib is never "no quotes to check": the Pass-3
+// re-check cannot run, so export is blocked (fail closed).
+// ---------------------------------------------------------------------------
+test('GATE-04: an unparseable CITATIONS.bib → { passed: false } naming the file (fail closed, never skip-clean)', {
+  skip: !moduleLoaded ? skipReason : false,
+}, async () => {
+  const root = makePaperRoot('@article{bad2025,\n\tauthor = {,{\\u  }},\n\tdoi = {10.1/x},\n}\n');
+  const bibPath = join(root, '.paper', 'CITATIONS.bib');
+  const md = 'A claim "a quoted phrase" [@bad2025].';
+  const result = await reCheckFinalMd!(md, md, bibPath);
+  assert.equal(result.passed, false, 'an unreadable bib must block export');
+  assert.match(result.reason, /CITATIONS\.bib is not valid BibTeX/);
+});

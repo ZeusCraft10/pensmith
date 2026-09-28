@@ -2,7 +2,7 @@
   "id": "no-new-eslint-disable",
   "requirement": "RUN-29",
   "module": "eslint.config.js",
-  "description": "No new inline ESLint disable directive or inline rule configuration anywhere in bin/, mcp/, hooks/, tests/ or scripts/. A chokepoint that fires is fixed by restructuring the code (usually a bin/lib helper), never silenced; a test that must redirect data dirs through env vars gets a narrowly scoped exemption block in eslint.config.js. The baseline lists the directives that predate this rule (all of them no-explicit-any / no-unused-vars); a file may keep at most that many, and every other file none.",
+  "description": "No new inline ESLint disable directive or inline rule configuration anywhere in bin/, mcp/, hooks/, tests/ or scripts/. A chokepoint that fires is fixed by restructuring the code (usually a bin/lib helper), never silenced; a test that must redirect data dirs through env vars gets a narrowly scoped exemption block in eslint.config.js. The baseline lists the directives that predate this rule (all of them no-explicit-any / no-unused-vars); each baseline entry equals that file's current count (removing a directive shrinks the baseline in the same change), and every other file has none.",
   "scope": [
     "bin/**/*.{ts,mts,cts,js,mjs,cjs}",
     "mcp/**/*.{ts,mts,cts,js,mjs,cjs}",
@@ -17,7 +17,6 @@
   },
   "baseline": {
     "bin/pensmith.ts": 1,
-    "bin/lib/http-mock.ts": 1,
     "bin/lib/prompts/clack.ts": 1,
     "bin/lib/sources/unpaywall.ts": 1,
     "mcp/tools.ts": 1,

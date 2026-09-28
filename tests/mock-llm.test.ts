@@ -125,6 +125,15 @@ test('RUN-21: failure injection maps to the RUN-12 / RUN-24 outcomes', async () 
 
     m.fail({ kind: 'model_not_found' });
     await assert.rejects(call(), (e: unknown) => e instanceof ProviderHttpError && /does not serve model "claude-opus-5"/.test(e.message) && /\[runtime\] model/.test(e.message));
+    // A judgment slug runs its own default model: `[runtime] model` / --model
+    // would not change it — the slug override does (RUN-12, D-17-24).
+    m.fail({ kind: 'model_not_found' });
+    await assert.rejects(call('claim-support'), (e: unknown) => {
+      assert.ok(e instanceof ProviderHttpError);
+      assert.match(e.message, /does not serve model "claude-haiku-4-5"/);
+      assert.match(e.message, /— change \.paper\/config\.toml \[runtime\.slugs\.claim-support\] model$/);
+      return true;
+    });
 
     m.fail({ kind: 'http', status: 429 }, { times: 5 });
     await assert.rejects(call(), (e: unknown) => e instanceof ProviderHttpError && /HTTP 429/.test(e.message));
@@ -186,5 +195,24 @@ test('RUN-21: close() stops listening and leaves no open socket', async () => {
     const again = await startMockLlm({ port });
     assert.equal(again.url, `http://127.0.0.1:${port}`);
     await again.close();
+  });
+});
+
+test('RUN-12: verify whose advisory Pass 2 hits a model the provider does not serve prints one WARN naming the slug key; the rows are UNCLEAR', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    const sec = path.join(sb.paper, 'sections', '01-intro');
+    fs.mkdirSync(sec, { recursive: true });
+    fs.writeFileSync(path.join(sb.paper, 'STATE.json'), JSON.stringify({ $schemaVersion: 2, paperId: 'p2-404', createdAt: new Date().toISOString(), sections: [{ n: 1, slug: 'intro' }] }));
+    fs.writeFileSync(path.join(sb.paper, 'OUTLINE.md'), ['# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', '| 1 | intro | Introduction | | 300 | aspelmeyer2009 |', ''].join('\n'));
+    fs.writeFileSync(path.join(sb.paper, 'CITATIONS.bib'), '@article{aspelmeyer2009,\n  title = {Measured measurement},\n  author = {Aspelmeyer, Markus},\n  doi = {10.1038/nphys1170},\n  year = {2009}\n}\n');
+    fs.writeFileSync(path.join(sec, 'PLAN.md'), ['---', 'section: 1', 'slug: intro', 'title: Introduction', 'depends_on: []', 'assigned_sources: [aspelmeyer2009]', 'status: written', '---', ''].join('\n'));
+    fs.writeFileSync(path.join(sec, 'DRAFT.md'), '# Introduction\n\nMeasurement shapes what an observer records [@aspelmeyer2009].\n');
+    sb.mock!.fail({ kind: 'model_not_found' }, { slug: 'claim-support', times: 5 });
+    const r = await sb.runTsx(null, ['verify', '1', '--yolo'], { env: { PENSMITH_OFFLINE: '1' } });
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    const warns = r.stderr.split('\n').filter((l) => l.startsWith('pensmith verify: WARN — Pass 2'));
+    assert.equal(warns.length, 1, `one WARN line:\n${r.stderr}`);
+    assert.match(warns[0]!, /could not judge 1 claim\(s\): anthropic does not serve model "claude-haiku-4-5" .*\[runtime\.slugs\.claim-support\] model \(recorded as UNCLEAR in VERIFICATION\.md\)$/);
+    assert.match(fs.readFileSync(path.join(sec, 'VERIFICATION.md'), 'utf8'), /\*\*UNCLEAR\*\* \| LLM error: /);
   });
 });

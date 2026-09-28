@@ -38,7 +38,9 @@ import { PDFDocument, PDFName } from 'pdf-lib';
 import { parseBib, renderStyle, renderInText } from './citations.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
-import { paperDir } from './paths.js';
+import { paperDir, projectRoot } from './paths.js';
+import { exportCitedCitations } from './library.js';
+import { extractCitedKeysForVerification } from './citation-token.js';
 
 // =====================================================================
 //   PKG_ROOT — locate templates/citation-styles/ relative to this file
@@ -636,9 +638,10 @@ function buildPandocArgs(
  *   - 'docx'/'pdf' with Pandoc (or the PDF engine) absent: md-only fallback +
  *     banner mentioning Pandoc; NEVER throws ENOENT.
  *
- * CITATIONS.bib is copied into the export dir BEFORE any pandoc shellout
- * (Pitfall-4 ordering) so --bibliography bibDst resolves. The copy guard
- * `bibSrc !== bibDst` + `existsSync(bibSrc)` stays unchanged (DONE-08).
+ * The cited-only CITATIONS.bib / .ris (library.ts exportCitedCitations) are
+ * written into the export dir BEFORE any pandoc shellout (Pitfall-4 ordering)
+ * so --bibliography bibDst resolves (DONE-08). A document that cites nothing
+ * gets no bibliography file.
  *
  * opts.style enables citation rendering: on the md-only/Pandoc-absent path
  * resolveAndRenderCitations resolves [@key] tokens and appends ## References.
@@ -653,16 +656,20 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   const pandoc = opts.pandocPresent ?? isPandocPresent();
   const stem = basename(inputPath, extname(inputPath));
 
-  // DONE-08 — copy CITATIONS.bib into the export dir BEFORE any pandoc shellout
-  // (Pitfall-4: --bibliography bibDst must resolve at pandoc call time).
-  // Guard: bibSrc !== bibDst && existsSync(bibSrc) — same as before, reordered.
-  let bibCopied = false;
-  const bibSrc = join(paperDir(opts.paperRoot), 'CITATIONS.bib');
-  const bibDst = join(exportDir, 'CITATIONS.bib');
-  if (bibSrc !== bibDst && existsSync(bibSrc)) {
-    await fsp.copyFile(bibSrc, bibDst);
-    bibCopied = true;
+  // DONE-08 — write the bibliography into the export dir BEFORE any pandoc
+  // shellout (Pitfall-4: --bibliography bibDst must resolve at pandoc call
+  // time). Only the sources the document cites are exported, never the whole
+  // research library (uncited, unverified, retracted-flagged or synthetic
+  // candidates stay in .paper/); library.ts writes both files (BRDTH-01).
+  const cited = extractCitedKeysForVerification(await fsp.readFile(inputPath, 'utf8'));
+  const citations = await exportCitedCitations(opts.paperRoot ?? projectRoot(), cited, exportDir);
+  if (citations.missing.length > 0) {
+    process.stderr.write(
+      `pensmith export: WARN — cited key(s) not in .paper/CITATIONS.bib: ${citations.missing.join(', ')}\n`,
+    );
   }
+  const bibCopied = citations.bibPath !== null;
+  const bibDst = join(exportDir, 'CITATIONS.bib');
 
   // Compute CSL path for Pandoc citeproc args and offline rendering.
   // style is only meaningful when bibCopied (no bib → no citation rendering).
@@ -753,18 +760,11 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
     }
   }
 
-  // CITE-05 (DONE-08 extension): copy CITATIONS.ris into the export dir
-  // alongside .bib. Same pattern as bibCopied — same-path guard + existsSync
-  // guard so it never throws when the .ris is absent and never overwrites the
-  // source. RIS is plain-text bibliographic data with NO pensmith fingerprint
-  // (same zero-trace posture as .bib — no metadata to scrub).
-  let risCopied = false;
-  const risSrc = join(paperDir(opts.paperRoot), 'CITATIONS.ris');
-  const risDst = join(exportDir, 'CITATIONS.ris');
-  if (risSrc !== risDst && existsSync(risSrc)) {
-    await fsp.copyFile(risSrc, risDst);
-    risCopied = true;
-  }
+  // CITE-05 (DONE-08 extension): export/CITATIONS.ris, the cited records of
+  // .paper/CITATIONS.ris, was written with the bib above. RIS is plain-text
+  // bibliographic data with NO pensmith fingerprint (same zero-trace posture as
+  // .bib — no metadata to scrub).
+  const risCopied = citations.risPath !== null;
 
   return { outputPath, format, pandocUsed, bibCopied, risCopied };
 }

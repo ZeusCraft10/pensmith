@@ -198,8 +198,10 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   // the Phase 17 integration: a rejected key (HTTP 401/403) is reported as such
   // and a hosted endpoint is not probed without its key (RUN-07); then in review
   // round 2: http-crossref-ping is SKIP unless offline replay is active (RUN-05)
-  // and OPENALEX_API_KEY is reported as "not used yet".
-  const PINNED = 'baa0b930e24d87765d80d204c4f2d445536698936d77093640135fd066e4c913';
+  // and OPENALEX_API_KEY is reported as "not used yet"; then in review round 3:
+  // the pandoc and humanizer probes describe what `pensmith done` does without
+  // them (there is no `export` or `humanize` verb).
+  const PINNED = '1ac6aeec14feefdc7db3f330ac9bb130ff77c9f79b3c15d6df84c59b138a80e6';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

@@ -10,9 +10,9 @@
 // SourceCandidate satisfy.
 //
 // This module rides two chokepoints:
-//   1. citation-js — we import { Cite } from './citations.js' (the SOLE module
-//      that imports the library directly). ESLint backstops the chokepoint via
-//      no-restricted-imports on 'citation-js'.
+//   1. citation-js — we import formatBibtex / parseBibSync from './citations.js'
+//      (the SOLE module that imports the library directly). ESLint backstops the
+//      chokepoint via no-restricted-imports on 'citation-js'.
 //   2. atomic-write — writeBibtex calls atomicWriteFile from './atomic-write.js'
 //      for the final write; we NEVER call raw fs write/append directly. ESLint
 //      backstops via the callee-property selector banning those node:fs methods.
@@ -29,18 +29,25 @@
 //     fires for callers that hand in raw candidates.)
 //
 // Sorting:
-//   - Entries are sorted by FINAL citekey BEFORE being handed to Cite() so the
+//   - Entries are sorted by FINAL citekey BEFORE being rendered so the
 //     emitted .bib is diff-stable. We do NOT post-process the output by
 //     splitting on a newline-before-@ lookahead — that is fragile for field
 //     values containing a literal newline followed by @ (URLs in notes, email
 //     addresses in abstracts).
+//
+// Non-Latin text:
+//   - Every entry is parsed back before it is returned. citation-js's default
+//     LaTeX escaping drops CJK / Arabic letters and writes Cyrillic / Greek
+//     LaTeX its own parser rejects, so such an entry is rendered as raw UTF-8
+//     (BibTeX-special ASCII still escaped); an entry that reads back wrong
+//     either way throws BibRenderError (library.ts refuses the upsert).
 //
 // Empty array:
 //   - renderBibtex([]) is '' and writeBibtex([], target) writes a zero-length
 //     file. verify reads .paper/CITATIONS.bib via citations.parseBib(); it must
 //     never ENOENT just because a paper happens to have zero sources.
 
-import { Cite } from './citations.js';
+import { formatBibtex, parseBibSync } from './citations.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { generateCitekey } from './citekey.js';
 
@@ -181,8 +188,123 @@ export function assignUniqueCitekeys<T extends { citekey: string; authors?: stri
 }
 
 /**
+ * A source whose BibTeX entry does not read back as the same work (it does not
+ * parse, or its title / author letters or citekey differ) in either the
+ * LaTeX-escaped or the UTF-8 rendering. library.ts refuses the upsert with a
+ * one-line error rather than write a CITATIONS.bib that verify cannot read.
+ */
+export class BibRenderError extends Error {
+  readonly citekey: string;
+  constructor(citekey: string, detail: string) {
+    super(`the BibTeX entry for "${citekey}" does not read back as the same source (${detail})`);
+    this.name = 'BibRenderError';
+    this.citekey = citekey;
+  }
+}
+
+// The BibTeX-special ASCII characters, escaped exactly as citation-js's own
+// ASCII mode escapes them, so a UTF-8 entry differs from a LaTeX-escaped one
+// only in its non-ASCII letters. `<`/`>` stay raw: citation-js reads them as the
+// rich-text tags (<i>, <sub>, …) Crossref titles carry.
+const BIBTEX_SPECIAL: Readonly<Record<string, string>> = {
+  '\\': '\\textbackslash{}',
+  '{': '\\textbraceleft{}',
+  '}': '\\textbraceright{}',
+  $: '\\textdollar{}',
+  '&': '\\&',
+  '%': '\\%',
+  '#': '\\#',
+  _: '\\textunderscore{}',
+  '~': '\\textasciitilde{}',
+  '^': '\\textasciicircum{}',
+};
+
+/** Escape the BibTeX-special ASCII characters of a UTF-8 value (NFC). */
+export function escapeBibtexUtf8(value: string): string {
+  return value.normalize('NFC').replace(/[\\{}$&%#_~^]/g, (ch) => BIBTEX_SPECIAL[ch] ?? ch);
+}
+
+/** The CSL entry with every text value pre-escaped for citation-js's UTF-8 mode. */
+function utf8Csl(csl: CslEntry): CslEntry {
+  return {
+    ...csl,
+    title: escapeBibtexUtf8(csl.title),
+    author: csl.author.map((a) => {
+      const family = escapeBibtexUtf8(a.family);
+      // citation-js writes a family-only name containing " and " unbraced, which
+      // BibTeX then reads as two authors; brace it so it stays one.
+      const fam = a.given === undefined && family.includes(' and ') ? `{${family}}` : family;
+      return a.given === undefined ? { family: fam } : { family: fam, given: escapeBibtexUtf8(a.given) };
+    }),
+  };
+}
+
+/** Letters and digits only (NFKC; rich-text tags dropped) — what must survive a round trip. */
+function letters(s: string): string {
+  return s
+    .replace(/<\/?[a-z][^>]*>/gi, '')
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function sortedLetters(s: string): string {
+  return [...letters(s)].sort().join('');
+}
+
+function parsedAuthorText(a: unknown): string {
+  if (!a || typeof a !== 'object') return '';
+  const o = a as Record<string, unknown>;
+  return ['non-dropping-particle', 'dropping-particle', 'family', 'given', 'suffix', 'literal']
+    .map((k) => (typeof o[k] === 'string' ? (o[k] as string) : ''))
+    .join(' ');
+}
+
+/**
+ * Why `text` (one rendered entry) does not read back as `csl` under `citekey`,
+ * or null when it does: it parses, keeps the citekey, keeps every letter of
+ * the title, and keeps each author (same count; same letters per author, in
+ * any order — BibTeX may move a particle or suffix).
+ */
+function roundTripProblem(text: string, citekey: string, csl: CslEntry): string | null {
+  let parsed: Array<Record<string, unknown>>;
+  try {
+    parsed = parseBibSync(text);
+  } catch (e) {
+    return ((e instanceof Error ? e.message : String(e)).split('\n')[0] ?? '').replace(/^parseBib: /, '');
+  }
+  const got = parsed[0];
+  if (parsed.length !== 1 || !got) return `parsed ${parsed.length} entries`;
+  if (got['id'] !== citekey) return `citekey became "${String(got['id'])}"`;
+  if (letters(typeof got['title'] === 'string' ? got['title'] : '') !== letters(csl.title)) return 'title text lost';
+  const authors = Array.isArray(got['author']) ? (got['author'] as unknown[]) : [];
+  if (authors.length !== csl.author.length) return `${csl.author.length} author(s) read back as ${authors.length}`;
+  for (let i = 0; i < authors.length; i++) {
+    const want = csl.author[i]!;
+    if (sortedLetters(parsedAuthorText(authors[i])) !== sortedLetters(`${want.family} ${want.given ?? ''}`)) {
+      return `author ${i + 1} text lost`;
+    }
+  }
+  return null;
+}
+
+/** citation-js output for one entry, its auto-generated key replaced by `citekey`. */
+function formatOne(csl: CslEntry, citekey: string, utf8: boolean): string {
+  const rendered = formatBibtex([utf8 ? utf8Csl(csl) : csl], { utf8 });
+  // One entry: `@type{<autokey>,…}\n` plus the bibliography container's
+  // trailing `\n`, which renderBibtex adds back once for the whole file.
+  return rendered.replace(/^(@\w+\{)[^,]+(,)/, `$1${citekey}$2`).replace(/\n$/, '');
+}
+
+/**
  * Render sources as BibTeX text: keyed by their (collision-suffixed) citekeys,
  * sorted by citekey (diff-stable), id-less sources dropped. '' for none.
+ *
+ * Every entry is round-tripped through the parser verify uses. An entry
+ * citation-js's LaTeX escaping cannot carry (Cyrillic, Greek, CJK, Arabic
+ * names and titles — it drops or garbles them) is written as raw UTF-8
+ * instead, which BibTeX, Pandoc and citation-js all read. An entry that reads
+ * back wrong either way throws BibRenderError: CITATIONS.bib is never written
+ * with an entry verify cannot parse or whose first author differs.
  */
 export function renderBibtex(sources: BibSource[]): string {
   // Keep only serializable sources (toCsl drops id-less ones), THEN assign
@@ -202,26 +324,26 @@ export function renderBibtex(sources: BibSource[]): string {
     return { citekey: c.citekey, csl };
   });
 
-  // Sort by FINAL citekey before rendering — input order is preserved by
-  // citation-js, so this guarantees the output is sorted.
+  // Sort by FINAL citekey before rendering — output order is input order.
   entries.sort((a, b) => a.citekey.localeCompare(b.citekey));
-
   if (entries.length === 0) return '';
-  const cite = new Cite(entries.map((e) => e.csl));
-  const rendered = (cite as { format: (...args: unknown[]) => unknown }).format('bibtex', { format: 'text' }) as string;
 
-  // citation-js auto-generates its own BibTeX citekeys (label) regardless
-  // of CslEntry.id — e.g. our 'wu2017' becomes 'Wu2017Foo' in the output.
-  // To honor the deterministic citekey contract (D-14) AND the collision-
-  // suffix policy (CYCLE-2 H-4), rewrite each `@<type>{<autokey>,` header
-  // in-place with our citekey. Input order is preserved by citation-js,
-  // so iterating `entries` and replacing the N-th header is safe.
-  let i = 0;
-  return rendered.replace(/^(@\w+\{)[^,]+(,)/gm, (_match, p1: string, p2: string) => {
-    const entry = entries[i++];
-    const key = entry?.citekey ?? 'unknown';
-    return `${p1}${key}${p2}`;
+  // citation-js auto-generates its own BibTeX citekeys (label) regardless of
+  // CslEntry.id — e.g. our 'wu2017' becomes 'Wu2017Foo' — so each entry's
+  // `@<type>{<autokey>,` header is rewritten with our citekey (D-14, CYCLE-2
+  // H-4). Rendering one entry at a time keeps that rewrite exact and lets each
+  // entry be checked on its own; the concatenation is byte-identical to one
+  // citation-js call over the whole list.
+  const parts = entries.map(({ citekey, csl }) => {
+    const latex = formatOne(csl, citekey, false);
+    const latexProblem = roundTripProblem(latex, citekey, csl);
+    if (latexProblem === null) return latex;
+    const utf8 = formatOne(csl, citekey, true);
+    const utf8Problem = roundTripProblem(utf8, citekey, csl);
+    if (utf8Problem === null) return utf8;
+    throw new BibRenderError(citekey, utf8Problem);
   });
+  return `${parts.join('')}\n`;
 }
 
 /**

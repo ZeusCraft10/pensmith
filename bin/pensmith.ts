@@ -76,6 +76,7 @@ import { announceModes, networkMode } from './lib/http-mock.js';
 import { projectEstimate, renderEstimate, type EstimateScope } from './lib/estimator.js';
 import { assertInvocationBudget } from './lib/budget.js';
 import { argvFlagValue, runtimeFlagsFromArgv, setRuntimeOverride } from './lib/runtime.js';
+import { isProviderName, PROVIDER_NAMES } from './lib/llm-models.js';
 import { resolveNextAction } from './lib/router.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 
@@ -505,6 +506,12 @@ export async function validateArgv(argv: readonly string[]): Promise<ValidatedAr
       i += 1;
     }
     if (name === 'paper') paperFlag = value;
+    // RUN-09: `--runtime <provider>` names one of the providers — an unknown
+    // one is an invalid argument (EXIT_USAGE) for every verb, before any work,
+    // never an EXIT_ERROR at the first model call (or silence on a read-only verb).
+    if (name === 'runtime' && !isProviderName(value)) {
+      throw usage(`unknown provider '${value}' for --runtime; valid values: ${PROVIDER_NAMES.join(', ')}`);
+    }
   }
   // RUN-09: a per-section verb's positional is a section number. `plan abc`
   // is a usage error — never routed as if no number were given.
@@ -740,7 +747,7 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   // (c) --yolo COST PRE-FLIGHT (D-17-27) — runs whenever --yolo is present for a
   //     COST-INCURRING execution (an explicit verb, next/resume, or a bare run).
   //     It projects the steps THIS invocation runs — the named verb (and
-  //     section; `write` with no section is every section still to write), or
+  //     section; `write` with no section is every section with a PLAN.md), or
   //     for bare/next/resume the step the router picks — never the rest of the
   //     paper, which this run will not touch. Over the session cap it goes
   //     through the same never-skippable cost-cap gate, with the same one-line
@@ -769,12 +776,20 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   // (d) --estimate (RUN-20) → print the projection (no network, no LLM call),
   //     then the V2 estimate-proceed gate: a terminal user may continue into
   //     the normal routing (with --estimate stripped); "no" or a run that
-  //     cannot prompt exits 0 after printing.
+  //     cannot prompt exits 0 after printing. An explicit verb projects what
+  //     "proceed" would run — that verb (and section), the same scope as the
+  //     --yolo pre-flight; bare/next/resume project the whole remaining paper.
   if (hasFlag(argv, 'estimate')) {
     let est: Awaited<ReturnType<typeof projectEstimate>>;
     try {
       const from = argvFlagValue(argv, 'from');
-      est = await projectEstimate({ paperRoot: projectRoot(), ...(from !== undefined ? { from } : {}) });
+      const explicit = checked.verb !== null && checked.verb !== 'next' && checked.verb !== 'resume';
+      const scope = explicit ? await invocationScope(argv, checked) : undefined;
+      est = await projectEstimate({
+        paperRoot: projectRoot(),
+        ...(from !== undefined ? { from } : {}),
+        ...(scope !== undefined ? { scope } : {}),
+      });
     } catch (e) {
       // An invalid runtime config (or any projection failure) is one line
       // through dispatch() — which also releases the session lock.

@@ -73,6 +73,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 
 // `citation-js@0.7` ships a single default-export class; the `plugins`
 // registry hangs off the class (`Cite.plugins`). A `import { plugins }`
@@ -203,6 +204,15 @@ export function _resetApaTemplateForTest(): void {
  * reference list (T-3-04 mitigation — see threat register in PLAN).
  */
 export async function parseBib(bibtex: string): Promise<Array<Record<string, unknown>>> {
+  return parseBibSync(bibtex);
+}
+
+/**
+ * The synchronous body of parseBib (citation-js parses BibTeX synchronously).
+ * bibtex-write.ts uses it to round-trip every entry it renders before the
+ * library writer persists CITATIONS.bib.
+ */
+export function parseBibSync(bibtex: string): Array<Record<string, unknown>> {
   if (typeof bibtex !== 'string') {
     throw new TypeError('parseBib: input must be a string (BibTeX source text)');
   }
@@ -239,6 +249,60 @@ export const parseBibtex = parseBib;
 export async function parseBibFile(text: string): Promise<Array<Record<string, unknown>>> {
   if (typeof text === 'string' && text.trim().length === 0) return [];
   return parseBib(text);
+}
+
+/**
+ * A `.paper/CITATIONS.bib` (or an exported bib) that does not parse — an
+ * expected, user-fixable condition: one line naming the file and the way out
+ * (RUN-12), never an internal-error hint. It is never read as "no entries":
+ * verify, compile and done stop here (fail closed).
+ */
+export class BibParseError extends PensmithError {
+  constructor(file: string, detail: string) {
+    super(
+      `${file} is not valid BibTeX (${detail}) — fix that entry by hand, or re-render the file from ` +
+        'LIBRARY.json: `pensmith research` or `pensmith add <id>` rewrites it',
+      EXIT_ERROR,
+    );
+    this.name = 'BibParseError';
+  }
+}
+
+/**
+ * parseBibFile for a file on disk: a parse failure is a one-line BibParseError
+ * naming `file` (verify, compile and done read CITATIONS.bib through this).
+ */
+export async function parseBibFileAt(text: string, file: string): Promise<Array<Record<string, unknown>>> {
+  try {
+    return await parseBibFile(text);
+  } catch (e) {
+    const raw = (e instanceof Error ? e.message : String(e)).replace(/^parseBib: invalid BibTeX — /, '');
+    const first = raw.split('\n')[0] ?? '';
+    throw new BibParseError(file, first.length > 160 ? `${first.slice(0, 160)}…` : first);
+  }
+}
+
+/**
+ * Format CSL-JSON entries as BibTeX text (citation-js `bibtex` output).
+ *
+ * By default citation-js escapes every non-ASCII character as LaTeX — and it
+ * silently DROPS what it has no LaTeX for (CJK, Arabic) and emits LaTeX its
+ * own parser rejects for others (Cyrillic breves, runs of Greek). `utf8: true`
+ * turns that escaping off for this one call so the values are written as raw
+ * UTF-8, which BibTeX (biber), Pandoc citeproc and citation-js all read. The
+ * caller must then have escaped the BibTeX-special ASCII characters itself
+ * (bibtex-write.ts escapeBibtexUtf8). The switch is process-global citation-js
+ * config, so it is set and restored around the synchronous format call.
+ */
+export function formatBibtex(entries: object[], opts: { utf8?: boolean } = {}): string {
+  const cfg = plugins.config.get('@bibtex') as { format: { asciiOnly: boolean } };
+  const prev = cfg.format.asciiOnly;
+  if (opts.utf8 === true) cfg.format.asciiOnly = false;
+  try {
+    return new Cite(entries).format('bibtex', { format: 'text' });
+  } finally {
+    cfg.format.asciiOnly = prev;
+  }
 }
 
 // =====================================================================

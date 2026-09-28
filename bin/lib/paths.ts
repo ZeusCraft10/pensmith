@@ -269,11 +269,14 @@ export function activePaperRoot(): string | null {
 }
 
 /**
- * The folder the user ran pensmith in (absolute). Only the resolver's callers
- * need it — to offer "start a new paper here" — never as a paper root.
+ * The folder the user ran pensmith in (absolute), read as a project folder: a
+ * run from inside a paper's `.paper/` (or deeper) is a run in that paper's
+ * project folder (asProjectRoot), so every reader and writer agrees on one
+ * root and nothing is created under `.paper/.paper/` (RUN-13). Only the
+ * resolver's callers need it — to offer "start a new paper here".
  */
 export function workingDirectory(): string {
-  return path.resolve(process.cwd());
+  return asProjectRoot(process.cwd());
 }
 
 /**
@@ -285,7 +288,7 @@ export function workingDirectory(): string {
  */
 export function projectRoot(cwd?: string): string {
   if (cwd !== undefined) return path.resolve(cwd);
-  return activeRoot ?? path.resolve(process.cwd());
+  return activeRoot ?? workingDirectory();
 }
 
 /**
@@ -552,14 +555,27 @@ export function resolvePaperFlag(value: string, cwd: string = process.cwd()): st
 }
 
 /**
- * A path that names a project root. PENSMITH_PAPER_ROOT and `--paper` name the
- * folder that CONTAINS `.paper/`; a path to the `.paper` folder itself (the
- * pre-v1 MCP convention) is read as its parent, so nothing is ever written to
- * `.paper/.paper/`.
+ * A path that names a project root. PENSMITH_PAPER_ROOT, `--paper` and the
+ * working directory name the folder that CONTAINS `.paper/`; a path to the
+ * `.paper` folder itself (the pre-v1 MCP convention) or to anything inside it
+ * (`.paper/sections/01-intro`) is read as the project folder that holds it, so
+ * nothing is ever written to `.paper/.paper/`.
  */
 export function asProjectRoot(p: string): string {
   const r = path.resolve(p);
-  return path.basename(r) === '.paper' ? path.dirname(r) : r;
+  // The innermost `.paper` ancestor-or-self; its parent is the project folder
+  // (a `.paper` inside a `.paper` — a phantom an older pensmith made — folds on).
+  let cur = r;
+  for (;;) {
+    if (path.basename(cur) === '.paper') {
+      let root = path.dirname(cur);
+      while (path.basename(root) === '.paper') root = path.dirname(root);
+      return root;
+    }
+    const up = path.dirname(cur);
+    if (up === cur) return r;
+    cur = up;
+  }
 }
 
 /**
@@ -573,7 +589,10 @@ export function servicePaperRoot(env: NodeJS.ProcessEnv = process.env): string {
 
 /** Resolve the paper root for one invocation (see the section comment). */
 export function resolvePaperRoot(opts: ResolvePaperRootOptions): PaperRootResolution {
-  const cwd = path.resolve(opts.cwd ?? process.cwd());
+  // A cwd inside a paper's `.paper/` is that paper's project folder (RUN-13):
+  // every reader, writer and lock then addresses one root.
+  const here = path.resolve(opts.cwd ?? process.cwd());
+  const cwd = asProjectRoot(here);
   const env = opts.env ?? process.env;
   const envRoot = env['PENSMITH_PAPER_ROOT'];
   if (opts.mode !== 'cli') {
@@ -582,7 +601,8 @@ export function resolvePaperRoot(opts: ResolvePaperRootOptions): PaperRootResolu
       : { kind: 'root', root: cwd, source: 'cwd' };
   }
   if (opts.paperFlag !== undefined) {
-    return { kind: 'root', root: resolvePaperFlag(opts.paperFlag, cwd), source: 'flag' };
+    // A relative --paper is relative to where the user typed it.
+    return { kind: 'root', root: resolvePaperFlag(opts.paperFlag, here), source: 'flag' };
   }
   if (envRoot) return { kind: 'root', root: asProjectRoot(envRoot), source: 'env' };
   if (hasPaper(cwd)) return { kind: 'root', root: cwd, source: 'cwd' };

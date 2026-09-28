@@ -45,6 +45,7 @@ import path from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { sources } from './sources/index.js';
 import * as dryRunProvider from './sources/dry-run.js';
+import type { SearchOptions } from './sources/search-failure.js';
 import { SourceCandidateSchema, type SourceCandidate } from './schemas/source-candidate.js';
 import { normalizeDoi, isReservedDryRunId } from './doi.js';
 import { isOfflineEgressError, offlineLabel } from './http.js';
@@ -69,7 +70,7 @@ import { escapeTemplateTokens } from './intake-parse.js';
  * expose `search` are included in the fan-out; others are excluded.
  */
 export interface SearchableAdapter {
-  search(query: string, opts?: { limit?: number }): Promise<SourceCandidate[]>;
+  search(query: string, opts?: SearchOptions): Promise<SourceCandidate[]>;
 }
 
 /** Registry type accepted by runResearchOrchestrator for DI. */
@@ -263,7 +264,7 @@ interface AdapterLogRow {
   query: string;
   adapter: string;
   count: number;
-  /** 'ok' | 'no results' | 'offline: no recorded fixture' | 'dry-run: no recorded fixture' | 'failed: <msg>' */
+  /** 'ok' | 'no results' | 'offline: no recorded fixture' | 'dry-run: no recorded fixture' | 'failed (<reason>)' */
   status: string;
 }
 
@@ -532,22 +533,39 @@ async function discover(
   const allRaw: SourceCandidate[] = [];
   const log: AdapterLogRow[] = [];
 
+  // D-17-10: an adapter whose request failed (a 429 after retries, a 5xx, a
+  // transport error) is `failed (<reason>)` in RESEARCH.md — never `no results`
+  // — and gets one stderr line after the fan-out (per adapter, all queries).
+  const failures = new Map<string, { reason: string; queries: number }>();
+  const noteFailure = (adapterName: string, reason: string): void => {
+    const f = failures.get(adapterName);
+    if (f) f.queries += 1;
+    else failures.set(adapterName, { reason, queries: 1 });
+  };
+
   for (const query of queries) {
     const perQueryResults = await Promise.allSettled(
       searchableEntries.map(async ([adapterName, adapter]) => {
+        let failure: string | null = null;
         try {
-          const results = await adapter.search(query, { limit: 10 });
+          const results = await adapter.search(query, {
+            limit: 10,
+            onFailure: (reason) => {
+              failure ??= reason;
+            },
+          });
+          if (failure !== null && results.length === 0) {
+            noteFailure(adapterName, failure);
+            return { adapterName, results, status: `failed (${failure})` };
+          }
           return { adapterName, results, status: 'ok' as const };
         } catch (err) {
           if (isOfflineEgressError(err)) {
             // RUN-03: an offline miss is a distinct "no recorded fixture" result.
             return { adapterName, results: [] as SourceCandidate[], status: `${offlineLabel(err)}: no recorded fixture` };
           }
-          process.stderr.write(
-            `pensmith research: WARN — adapter "${adapterName}" search("${query}") failed ` +
-            `(${String(err)}); skipping this adapter result.\n`,
-          );
-          return { adapterName, results: [] as SourceCandidate[], status: `failed: ${firstLine(err)}` };
+          noteFailure(adapterName, firstLine(err));
+          return { adapterName, results: [] as SourceCandidate[], status: `failed (${firstLine(err)})` };
         }
       }),
     );
@@ -597,6 +615,13 @@ async function discover(
     if (mode.sourcesOffline && !mode.dryRun && queryCount === 0 && offlineMisses > 0) {
       process.stderr.write(`offline: no recorded results for this query ("${query}")\n`);
     }
+  }
+
+  for (const [adapterName, f] of failures) {
+    process.stderr.write(
+      `pensmith research: WARN — ${adapterName} failed (${f.reason}) for ${f.queries} of ${queries.length} ` +
+        `quer${queries.length === 1 ? 'y' : 'ies'}; its results are missing from this run (see RESEARCH.md)\n`,
+    );
   }
 
   const writeLog = async (candidates: SourceCandidate[]): Promise<void> => {

@@ -51,10 +51,10 @@ The command exits 0 when no probe FAILs and 1 otherwise.
 > Zotero MCP server reachable via the user's ~/.claude/.mcp.json — WARN if not configured. Optional dependency surfaced for Phase 3+ intake.
 
 ### pandoc-presence (DOCT-02 ecosystem)
-> Pandoc binary on PATH — WARN if not found. Required by Phase 10 export.
+> Pandoc binary on PATH — WARN if not found: `pensmith done` then cannot export .docx or .pdf and falls back to Markdown.
 
 ### humanizer-skill-presence (DOCT-02 ecosystem)
-> Humanizer skill at ~/.claude/skills/humanizer/ — WARN if missing. Optional Phase 8 dependency.
+> Humanizer skill at ~/.claude/skills/humanizer/ — WARN if missing: `pensmith done` then skips the humanize step.
 
 ### build-artifact-resolves (Phase 2 substitute for deferred DOCT-05)
 

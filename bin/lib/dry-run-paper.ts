@@ -21,7 +21,7 @@
 import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
-import { paperDir } from './paths.js';
+import { paperDir, paperStateFile } from './paths.js';
 import { EXIT_ERROR, EXIT_USAGE, PensmithError } from './exit-codes.js';
 
 /** The marker's file name inside `.paper/`. */
@@ -45,7 +45,35 @@ export function isDryRunPaper(root: string): boolean {
   return existsSync(dryRunMarkerPath(root));
 }
 
-/** True when `.paper/` holds anything besides the marker (a paper, or part of one). */
+/**
+ * The files and folders that make `.paper/` a paper (or part of one): what
+ * intake, research, outline, the section steps, compile and done write. A
+ * `.paper/` holding only settings or bookkeeping (config.toml, .gitignore,
+ * SESSION.log, COSTS.jsonl — e.g. what a `pensmith new` that stopped before
+ * any model call left) is not a paper: there is nothing a dry run could
+ * overwrite.
+ */
+const PAPER_ARTIFACTS: ReadonlySet<string> = new Set([
+  path.basename(paperStateFile('.')),
+  'INTAKE.md',
+  'INTAKE.raw.local',
+  'LIBRARY.json',
+  'CITATIONS.bib',
+  'CITATIONS.ris',
+  'RESEARCH.md',
+  'OUTLINE.md',
+  'STYLE.json',
+  'TUTORIAL.md',
+  'DRAFT.md',
+  'COMPILE-REPORT.md',
+  'VERIFICATION.md',
+  'FINAL.md',
+  'HANDOFF.json',
+  'sections',
+  'export',
+]);
+
+/** True when `.paper/` holds a paper, or part of one (any PAPER_ARTIFACTS entry). */
 export function hasPaperFiles(root: string): boolean {
   let names: string[];
   try {
@@ -53,7 +81,7 @@ export function hasPaperFiles(root: string): boolean {
   } catch {
     return false;
   }
-  return names.some((n) => n !== DRY_RUN_MARKER);
+  return names.some((n) => PAPER_ARTIFACTS.has(n));
 }
 
 /**

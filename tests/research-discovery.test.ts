@@ -518,3 +518,72 @@ test('research-discovery: discoverySeamWired() resolves correctly (path sanity �
     `discoverySeamWired() returns a boolean (${String(SEAM_WIRED)}): ${reason}`,
   );
 });
+
+test('D-17-10: an adapter whose request failed (HTTP 429 after retries) is `failed (…)` in RESEARCH.md — never `no results` — with one stderr line', async () => {
+  const root = mkPaperRoot();
+  const { runResearchOrchestrator } = await import(orchestratorModUrl.href) as {
+    runResearchOrchestrator: (queries: string[], opts: Record<string, unknown>) => Promise<unknown[]>;
+  };
+  const { httpFailureReason } = await import(new URL('../bin/lib/sources/search-failure.js', import.meta.url).href) as {
+    httpFailureReason: (status: number) => string;
+  };
+  const registry = {
+    'rate-limited': {
+      async search(_q: string, opts: { onFailure?: (r: string) => void } = {}) {
+        opts.onFailure?.(httpFailureReason(429));
+        return [];
+      },
+    },
+    empty: { async search() { return []; } },
+  };
+  const stderr: string[] = [];
+  const orig = process.stderr.write.bind(process.stderr);
+  (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => {
+    stderr.push(s);
+    return true;
+  };
+  try {
+    await runResearchOrchestrator(['query one', 'query two'], {
+      topic: 'attention', discipline: 'other', paperRoot: root, __adapterRegistry: registry,
+    });
+  } finally {
+    (process.stderr as unknown as { write: typeof orig }).write = orig;
+  }
+  const md = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
+  assert.match(md, /\| query one \| rate-limited \| 0 \| failed \(HTTP 429 after retries\) \|/);
+  assert.match(md, /\| query two \| rate-limited \| 0 \| failed \(HTTP 429 after retries\) \|/);
+  assert.match(md, /\| query one \| empty \| 0 \| no results \|/, 'an empty answer is still `no results`');
+  const warns = stderr.join('').split('\n').filter((l) => l.includes('rate-limited failed'));
+  assert.deepEqual(warns, ['pensmith research: WARN — rate-limited failed (HTTP 429 after retries) for 2 of 2 queries; its results are missing from this run (see RESEARCH.md)']);
+});
+
+test('D-17-10: a source adapter reports its failed search request through onFailure (HTTP status, then a transport error) and still returns []', async () => {
+  const saved = process.env['PENSMITH_NETWORK_TESTS'];
+  process.env['PENSMITH_NETWORK_TESTS'] = '1';
+  const { installMockAgent } = await import('./helpers/local-servers/mock-agent.js');
+  const http = await import('../bin/lib/http.js');
+  const openalex = await import('../bin/lib/sources/openalex.js');
+  const mock = installMockAgent();
+  http.__setHttpTestSeams({ resolve: async () => [{ address: '203.0.113.9', family: 4 }] });
+  try {
+    mock.agent.get('https://api.openalex.org').intercept({ path: /\/works\?/, method: 'GET' }).reply(404, '{}');
+    const reasons: string[] = [];
+    const hits = await openalex.search('pensmith onfailure probe', { limit: 3, onFailure: (r) => reasons.push(r) });
+    assert.deepEqual(hits, []);
+    assert.deepEqual(reasons, ['HTTP 404']);
+    mock.agent.get('https://api.openalex.org').intercept({ path: /\/works\?/, method: 'GET' }).reply(200, 'not json');
+    const again: string[] = [];
+    assert.deepEqual(await openalex.search('pensmith onfailure probe two', { onFailure: (r) => again.push(r) }), []);
+    assert.equal(again.length, 1);
+    assert.match(again[0]!, /^SyntaxError: /);
+    // A retryable status fetch() gave up on arrives as a thrown error carrying it.
+    const { errorFailureReason } = await import('../bin/lib/sources/search-failure.js');
+    assert.equal(errorFailureReason(Object.assign(new Error('HTTP 503'), { status: 503 })), 'HTTP 503 after retries');
+    assert.equal(errorFailureReason(Object.assign(new Error('boom'), { code: 'ECONNRESET' })), 'boom');
+  } finally {
+    http.__setHttpTestSeams(null);
+    await mock.restore();
+    if (saved === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
+    else process.env['PENSMITH_NETWORK_TESTS'] = saved;
+  }
+});

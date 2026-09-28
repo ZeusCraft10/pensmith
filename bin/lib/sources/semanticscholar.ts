@@ -19,6 +19,7 @@
 // typed OfflineEgressError is rethrown so callers report "unavailable (offline)".
 
 import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
+import { errorFailureReason, httpFailureReason, type SearchOptions } from './search-failure.js';
 import { generateCitekey } from '../citekey.js';
 import { getS2ApiKey } from '../runtime.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
@@ -114,7 +115,7 @@ function toCandidate(item: S2Paper): SourceCandidate | null {
 
 export async function search(
   query: string,
-  opts: { limit?: number } = {},
+  opts: SearchOptions = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
   const url = `${BASE}/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&fields=${encodeURIComponent(FIELDS)}`;
@@ -125,12 +126,16 @@ export async function search(
       maxBytes: MAX_JSON_RESPONSE_BYTES,
       ...(headers ? { headers } : {}),
     });
-    if (res.status !== 200) return [];
+    if (res.status !== 200) {
+      opts.onFailure?.(httpFailureReason(res.status));
+      return [];
+    }
     const body = JSON.parse(res.body) as unknown;
     const data = ((body as { data?: S2Paper[] })?.data) ?? [];
     return data.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
   } catch (err) {
     if (isOfflineEgressError(err)) throw err;
+    opts.onFailure?.(errorFailureReason(err));
     return [];
   }
 }

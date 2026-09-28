@@ -33,7 +33,7 @@ import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { paperDir, pensmithDataDir, projectRoot } from './paths.js';
 import { EXIT_ERROR, EXIT_USAGE, PensmithError, type ExitCode } from './exit-codes.js';
-import { SLUGS } from './llm-models.js';
+import { SLUGS, canonicalSlug } from './llm-models.js';
 import {
   CONFIG_TABLES,
   CURRENT_CONFIG_VERSION,
@@ -206,9 +206,17 @@ function parseAndValidate(text: string, fileLabel: string): Parsed {
       }
       if (k === 'runtime' && ik === 'slugs' && isPlainObject(iv)) {
         const slugs: Record<string, unknown> = {};
-        for (const [slug, ov] of Object.entries(iv)) {
-          if (!(slug in SLUGS)) {
-            warnings.push(`unknown prompt slug "runtime.slugs.${slug}"`);
+        // A step alias (`pass2` → claim-support, RUN-26) names its prompt slug;
+        // an explicit [runtime.slugs.<slug>] table wins over its alias.
+        const entries = Object.entries(iv).sort(([a], [b]) => Number(a in SLUGS) - Number(b in SLUGS));
+        for (const [name, ov] of entries) {
+          const slug = canonicalSlug(name);
+          if (slug === null) {
+            warnings.push(`unknown prompt slug "runtime.slugs.${name}"`);
+            continue;
+          }
+          if (slug !== name && Object.prototype.hasOwnProperty.call(iv, slug)) {
+            warnings.push(`"runtime.slugs.${name}" and "runtime.slugs.${slug}" name the same step — using [runtime.slugs.${slug}]`);
             continue;
           }
           if (isPlainObject(ov)) {
@@ -216,7 +224,7 @@ function parseAndValidate(text: string, fileLabel: string): Parsed {
             const kept: Record<string, unknown> = {};
             for (const [sk, sv2] of Object.entries(ov)) {
               if (sk in slugShape) kept[sk] = sv2;
-              else warnings.push(`unknown key "runtime.slugs.${slug}.${sk}"`);
+              else warnings.push(`unknown key "runtime.slugs.${name}.${sk}"`);
             }
             slugs[slug] = kept;
           } else {

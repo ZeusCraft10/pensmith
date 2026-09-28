@@ -57,6 +57,7 @@
 //   (RUN-25, RUN-26): complete() returns the validated {label} object.
 
 import { complete, isFatalLlmError, MissingApiKeyError } from '../anthropic.js';
+import { reportAdvisoryFailure } from './pass2.js';
 import type { OrphanLabel as OrphanLabelData } from '../llm-contracts.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
 
@@ -405,6 +406,8 @@ export async function runPass4(
   // the conservative UNCLEAR label with no further call (advisory; verify still
   // writes its deterministic verdict — D-V1-04).
   let noKey = false;
+  let failed = 0;
+  let firstError: unknown;
   for (const audit of audits) {
     const paraText = (paragraphs[audit.result.paragraphIndex] ?? '').trim();
     for (const { index, claim } of audit.ambiguous) {
@@ -440,6 +443,8 @@ export async function runPass4(
         // verify writes its deterministic verdict first). Any other failure ->
         // conservative UNCLEAR (advisory must not crash verify).
         if (isFatalLlmError(err)) throw err;
+        failed += 1;
+        firstError ??= err;
         label = 'UNCLEAR';
       }
 
@@ -460,6 +465,7 @@ export async function runPass4(
     }
   }
 
+  if (failed > 0) reportAdvisoryFailure('Pass 4 (orphan labels)', failed, firstError);
   return results;
 }
 

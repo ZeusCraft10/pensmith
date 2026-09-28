@@ -392,6 +392,57 @@ test('BRDTH-01: an unparseable CITATIONS.bib is kept as a backup, then re-render
   assert.deepEqual(keys, ['engel2007', 'smith2021']);
 });
 
+test('BRDTH-01: Cyrillic, Greek, CJK and Arabic authors and titles render a CITATIONS.bib that parses back to the same names', async () => {
+  const root = project();
+  const names: Array<[string, string, string]> = [
+    ['esenamanov2025', 'Эсенаманов, Байэл', 'Исследование квантовой когерентности'],
+    ['papadopoulos2024', 'Παπαδόπουλος, Γιώργος', 'Κβαντική συνοχή στη φωτοσύνθεση'],
+    ['tanaka2023', '田中, 太郎', '光合成における量子コヒーレンス'],
+    ['li2022', '李, 明', '光合作用中的量子相干'],
+    ['muhammad2021', 'محمد, علي', 'التماسك الكمومي في التمثيل الضوئي'],
+    ['muller2020', 'Müller, Jürgen', 'Kohärenz & Energie: 50% {mehr} Effizienz'],
+  ];
+  const cands = names.map(([citekey, author, title], i) =>
+    cand({ citekey, authors: [author], title, doi: `10.5555/nonlatin.${i}`, year: 2020 + i }),
+  );
+  await upsertSources(root, cands, { provenance: 'research' });
+  const bibText = fs.readFileSync(path.join(root, '.paper', 'CITATIONS.bib'), 'utf8');
+  const parsed = await parseBib(bibText);
+  const byKey = new Map(parsed.map((e) => [String(e['id']), e as { title?: string; author?: Array<{ family?: string; given?: string }> }]));
+  for (const [citekey, author, title] of names) {
+    const e = byKey.get(citekey);
+    assert.ok(e, `${citekey} is in the rendered bib`);
+    const [family, given] = author.split(', ');
+    assert.equal(e.author?.[0]?.family, family, `${citekey}: first-author family name survives (Pass 1 matches on it)`);
+    assert.equal(e.author?.[0]?.given, given, `${citekey}: given name survives`);
+    assert.equal(e.title, title, `${citekey}: title survives`);
+  }
+  // Latin-script entries keep the LaTeX-escaped form BibTeX users expect.
+  assert.doesNotMatch(bibText, /author = \{, \}/, 'no empty author is ever rendered');
+});
+
+test('BRDTH-01: verify on an unparseable CITATIONS.bib is one classified line (no stack hint), never "no citations"', () => {
+  const root = project();
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-libwriter-data-'));
+  const sec = path.join(root, '.paper', 'sections', '01-intro');
+  fs.mkdirSync(sec, { recursive: true });
+  fs.writeFileSync(path.join(root, '.paper', 'STATE.json'), JSON.stringify({ $schemaVersion: 2, paperId: 'badbib', createdAt: new Date().toISOString(), sections: [{ n: 1, slug: 'intro' }] }));
+  fs.writeFileSync(path.join(root, '.paper', 'CITATIONS.bib'), '@article{bad2025,\n\tauthor = {,{\\u  }},\n\tdoi = {10.1/x},\n}\n');
+  fs.writeFileSync(path.join(sec, 'PLAN.md'), ['---', 'section: 1', 'slug: intro', 'title: Introduction', 'depends_on: []', 'assigned_sources: [bad2025]', 'status: written', '---', ''].join('\n'));
+  fs.writeFileSync(path.join(sec, 'DRAFT.md'), '# Introduction\n\nA claim [@bad2025].\n');
+  fs.writeFileSync(path.join(root, '.paper', 'OUTLINE.md'), ['# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', '| 1 | intro | Introduction | | 300 | bad2025 |', ''].join('\n'));
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
+  Object.assign(env, { XDG_DATA_HOME: data, LOCALAPPDATA: data, HOME: data, USERPROFILE: data, PENSMITH_OFFLINE: '1', PENSMITH_NO_LLM: '1' });
+  delete env['PENSMITH_DEBUG'];
+  const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), path.join(REPO, 'bin', 'pensmith.ts'), 'verify', '1', '--yolo'], {
+    cwd: root, env, encoding: 'utf8', timeout: 120_000,
+  });
+  assert.equal(r.status, 1, r.stderr);
+  assert.match(r.stderr, /CITATIONS\.bib is not valid BibTeX/);
+  assert.doesNotMatch(r.stderr, /PENSMITH_DEBUG/, 'a bad bib is a classified error, not an internal one');
+});
+
 test('BRDTH-01: recordLastVerified keeps the latest time per citekey through the same writer', async () => {
   const root = project();
   await upsertSources(root, [ENGEL], { provenance: 'research' });

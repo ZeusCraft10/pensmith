@@ -6,10 +6,13 @@
 //   included; the MCP server process is one session — session-log.ts
 //   currentSessionId()). The cap is `[budget] cost_cap_usd` (default $5.00),
 //   overridden by PENSMITH_COST_CAP_USD. Before every model call the transport
-//   calls assertSessionBudget(projected): spend-this-session + projected > cap
-//   runs the V2 `cost-cap` gate — a terminal user is asked ONCE per session; a
-//   run that cannot prompt (--yolo included; the gate is never yolo-skippable)
-//   sends nothing and fails with EXIT_COST_CAP. The projection is the input
+//   (anthropic.ts complete()) calls reserveSessionBudget(projected): spend this
+//   session + every in-flight reservation + projected > cap runs the V2
+//   `cost-cap` gate — a terminal user is asked ONCE per session; a run that
+//   cannot prompt (--yolo included; the gate is never yolo-skippable) sends
+//   nothing and fails with EXIT_COST_CAP. The reservation holds the projection
+//   until the call's actual cost is appended to the ledger, then is released,
+//   so parallel calls (wave `write`) see each other's in-flight spend. The projection is the input
 //   estimate plus min(recorded p90, max_tokens) output at the model price
 //   (estimator.ts projectCall). Crossing `[budget] warn_at_usd` prints one
 //   warning with the running total. This is the ONLY LLM cap: the per-scope
@@ -292,16 +295,6 @@ export async function reserveSessionBudget(args: {
       },
     };
   });
-}
-
-/** The per-call check without a reservation (callers that record nothing). */
-export async function assertSessionBudget(args: {
-  projectedUsd: number;
-  slug: string;
-  model: string;
-  root?: string;
-}): Promise<void> {
-  (await reserveSessionBudget(args)).release();
 }
 
 /**

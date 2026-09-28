@@ -32,7 +32,7 @@ import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
 import { exportDraft, runHumanizer, type ExportFormat } from '../lib/exporter.js';
 import { paperDir, projectRoot } from '../lib/paths.js';
 import { parseIntakeMd } from '../lib/intake-parse.js';
-import { resolveStyleName, parseBibtex } from '../lib/citations.js';
+import { resolveStyleName, parseBibFileAt } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
 import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
@@ -485,13 +485,14 @@ export async function reCheckFinalMd(
   // Build bibByCitekey from the FULL CITATIONS.bib (Pitfall 4).
   let bibByCitekey: Map<string, { DOI?: string }>;
   try {
-    const bibEntries = await parseBibtex(bibText);
+    const bibEntries = await parseBibFileAt(bibText, bibPath);
     bibByCitekey = new Map(
       bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
     );
-  } catch {
-    // Unparseable bib → skip-clean (no DOIs to check against).
-    return { passed: true, reason: '' };
+  } catch (err) {
+    // FAIL-CLOSED: a bib that does not parse is never "no quotes to check" —
+    // the quotes cannot be re-checked, so export is blocked (GATE-04).
+    return { passed: false, reason: err instanceof Error ? err.message : String(err) };
   }
 
   let pass3Results;

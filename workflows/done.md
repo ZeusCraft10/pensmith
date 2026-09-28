@@ -51,7 +51,10 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
 - The exported deliverable in the DISTINCT export dir (default `.paper/export/`):
   `DRAFT.docx` / `DRAFT.pdf` / `DRAFT.tex` / `DRAFT.md` per `--format` (with the
   Pandoc-absent markdown fallback) — carrying ZERO pensmith trace.
-- `.paper/export/CITATIONS.bib` — the bundled bibliography (DONE-08).
+- `.paper/export/CITATIONS.bib` and `.paper/export/CITATIONS.ris` — the bundled
+  bibliography (DONE-08): ONLY the sources the exported document cites, each
+  entry exactly as in `.paper/CITATIONS.bib` / `.ris` (never the whole research
+  library). A document that cites nothing gets neither file.
 - `.paper/VERIFICATION.md` — a SOURCE artifact (not in the export dir) carrying
   the honesty report (DONE-04, framed verbatim), the plagiarism section
   (DONE-02), and the whole-paper Pass-4 orphan summary (DONE-01).
@@ -106,7 +109,8 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
    export dir (`outputDir` LEFT UNSET so the md-fallback never overwrites the
    source `DRAFT.md`). docx → `zeroTracePatch`; pdf → `zeroTracePdf`; latex →
    the offline md→tex writer (no generator comment); md → the trace-free body.
-   Bundle `.paper/export/CITATIONS.bib`. Then write the source
+   Bundle the cited-only `.paper/export/CITATIONS.bib` / `.ris` (library.ts
+   `exportCitedCitations`, written before any Pandoc run). Then write the source
    `.paper/VERIFICATION.md` (honesty + plagiarism + Pass-4 sections).
 
 8. **Shell fallback** (TIER-06 equivalence path): `pensmith done [--yolo]

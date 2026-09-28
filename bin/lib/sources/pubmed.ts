@@ -18,6 +18,7 @@
 // typed OfflineEgressError is rethrown so callers report "unavailable (offline)".
 
 import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
+import { errorFailureReason, httpFailureReason, type SearchOptions } from './search-failure.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -109,14 +110,17 @@ function recordsFromEsummary(body: EsummaryResponse, ids: string[]): PubmedRecor
 
 export async function search(
   query: string,
-  opts: { limit?: number } = {},
+  opts: SearchOptions = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
   // Two-step request via the chokepoint.
   const esearchUrl = `${BASE}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmode=json&retmax=${limit}`;
   try {
     const res1 = await httpFetch(esearchUrl, { source: 'pubmed', maxBytes: MAX_JSON_RESPONSE_BYTES });
-    if (res1.status !== 200) return [];
+    if (res1.status !== 200) {
+      opts.onFailure?.(httpFailureReason(res1.status));
+      return [];
+    }
     const body1 = JSON.parse(res1.body) as unknown;
     const idlist = ((body1 as EsearchResponse)?.esearchresult?.idlist) ?? [];
     if (idlist.length === 0) return [];
@@ -124,12 +128,16 @@ export async function search(
     const idCsv = idlist.join(',');
     const esummaryUrl = `${BASE}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(idCsv)}&retmode=json`;
     const res2 = await httpFetch(esummaryUrl, { source: 'pubmed', maxBytes: MAX_JSON_RESPONSE_BYTES });
-    if (res2.status !== 200) return [];
+    if (res2.status !== 200) {
+      opts.onFailure?.(httpFailureReason(res2.status));
+      return [];
+    }
     const body2 = JSON.parse(res2.body) as unknown;
     const records = recordsFromEsummary(body2 as EsummaryResponse, idlist);
     return records.map(toCandidate).filter((c): c is SourceCandidate => c !== null);
   } catch (err) {
     if (isOfflineEgressError(err)) throw err;
+    opts.onFailure?.(errorFailureReason(err));
     return [];
   }
 }

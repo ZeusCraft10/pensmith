@@ -7,9 +7,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EXIT_ERROR, EXIT_USAGE } from '../bin/lib/exit-codes.js';
+import { extractCitedKeysForVerification } from '../bin/lib/citation-token.js';
 import {
   ASSIGNMENT_FIXTURE,
   sandbox,
@@ -93,4 +94,56 @@ test('RUN-27: outside --dry-run the library writer drops synthetic sources a dry
   assert.doesNotMatch(r.library, /pensmith-dryrun/);
   assert.doesNotMatch(r.bib, /pensmith-dryrun/);
   assert.match(r.bib, /10\.1038\/nphys1170/);
+});
+
+test('RUN-27 / BRDTH-01: a full --dry-run export carries only the cited sources — never the synthetic library', () => {
+  const sb = sandbox('dryrun-export');
+  const root = sb.project('p');
+  writeFileSync(join(root, 'assignment.txt'), readFileSync(ASSIGNMENT_FIXTURE, 'utf8'));
+  const exportDir = join(root, '.paper', 'export');
+  for (let i = 0; i < 25 && !(existsSync(exportDir) && readdirSync(exportDir).some((f) => f.startsWith('DRAFT.'))); i++) {
+    const r = runCli(sb, root, ['--dry-run', '--yolo'], { timeoutMs: 120_000 });
+    assert.equal(r.status, 0, `step ${i}: ${r.stdout}\n${r.stderr}`);
+  }
+  assert.ok(existsSync(exportDir), 'the dry run reached done');
+  const library = readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8');
+  assert.ok((library.match(/^@/gm) ?? []).length > 0, 'research left synthetic sources in the library');
+  const cited = new Set(extractCitedKeysForVerification(readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8')));
+  const exportedBib = join(exportDir, 'CITATIONS.bib');
+  const exportedKeys = existsSync(exportedBib)
+    ? [...readFileSync(exportedBib, 'utf8').matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!)
+    : [];
+  assert.deepEqual(exportedKeys.sort(), [...cited].sort(), 'the exported key set is exactly the cited key set');
+  for (const f of readdirSync(exportDir)) {
+    assert.doesNotMatch(readFileSync(join(exportDir, f), 'utf8'), /pensmith-dryrun/, `${f} carries no synthetic record`);
+  }
+});
+
+test('RUN-07 / RUN-27: a `pensmith new` with no key writes nothing, so a --dry-run beside the assignment still runs', () => {
+  const sb = sandbox('dryrun-after-failed-new');
+  const root = sb.project('p');
+  writeFileSync(join(root, 'assignment.txt'), readFileSync(ASSIGNMENT_FIXTURE, 'utf8'));
+  const noKey = { PENSMITH_NO_LLM: undefined, ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined };
+  for (const args of [['new', '--yolo', '--from', 'assignment.txt'], ['--yolo']]) {
+    const failed = runCli(sb, root, args, { env: noKey });
+    assert.equal(failed.status, EXIT_ERROR, `${args.join(' ')}: ${failed.stdout}\n${failed.stderr}`);
+    assert.match(failed.stderr, /no LLM key configured/);
+    assert.ok(!existsSync(join(root, '.paper')), `${args.join(' ')} left no partial .paper/`);
+  }
+  const dry = runCli(sb, root, ['--dry-run', '--yolo'], { env: noKey });
+  assert.equal(dry.status, 0, `${dry.stdout}\n${dry.stderr}`);
+  assert.doesNotMatch(dry.stderr, /would overwrite the paper/);
+  assert.ok(existsSync(join(root, '.paper', 'INTAKE.md')), 'the dry run started its paper');
+});
+
+test('RUN-27: a .paper/ holding only settings (config.toml, .gitignore) is not a paper a --dry-run would overwrite', () => {
+  const sb = sandbox('dryrun-settings-only');
+  const root = sb.project('p');
+  writeFileSync(join(root, 'assignment.txt'), readFileSync(ASSIGNMENT_FIXTURE, 'utf8'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  writeFileSync(join(root, '.paper', 'config.toml'), 'schema_version = 1\n[project]\ngoal = "draft"\n');
+  writeFileSync(join(root, '.paper', '.gitignore'), 'INTAKE.raw.local\n');
+  const dry = runCli(sb, root, ['--dry-run', '--yolo']);
+  assert.equal(dry.status, 0, `${dry.stdout}\n${dry.stderr}`);
+  assert.ok(existsSync(join(root, '.paper', 'DRY-RUN.md')), 'marked as a dry-run paper');
 });

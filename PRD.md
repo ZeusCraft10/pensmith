@@ -301,7 +301,7 @@ The umbrella for finishing. Equivalent to GSD's `/gsd:ship`.
 - Confirms with user if any UNSUPPORTED, orphan claims, or plagiarism hits.
 - Exports to `.docx` / `.pdf` / `.tex` / `.md` (via pandoc if present, else markdown for docx).
 - **No metadata stamp. No visible footer. No trace of pensmith in the exported document.** This is a deliberate user-facing design choice. The README disclaimer (§3) is the project's only integrity-disclosure mechanism.
-- Bundles `.paper/CITATIONS.bib` formatted in the configured citation style.
+- Bundles the bibliography of the cited sources only (`export/CITATIONS.bib` / `.ris`, never the whole research library), formatted in the configured citation style.
 - Flags: `--raw` skips humanize. `--no-verify` skips the final whole-paper verify pass (warns; refuses to combine with `--raw` without `--yolo`).
 
 ### 7.10 Humanize (folded into `done`)
@@ -396,7 +396,7 @@ If user provides a folder of their past writing samples at intake:
 ### 7.19 Dry-run + cost estimator + cost cap
 
 - `/pensmith --dry-run` runs the entire workflow without calling external APIs or LLMs. Uses cached fixtures and stub responses. Sources it finds are synthetic and labelled as such (reserved `10.0000/pensmith-dryrun.*` identifiers, a `synthetic` flag and an `OFFLINE MODE (reason: --dry-run)` banner); they are accepted by the verifier only under `--dry-run` and never reach an export.
-- `/pensmith --estimate` runs the workflow planner only and makes no LLM or network call. It projects the *remaining* work with the resolved runtime's per-slug models and prices (an unknown model is marked `(fallback price)`) and recorded per-slug output-token p90s from SESSION.log (shipped defaults until 5 samples exist). Completed steps are excluded; with nothing left it prints `nothing left to run ($0.00)`. Without a paper it derives the section count from the assignment (`assignment.*`, `--from` or INTAKE.md) and the length target. It prints per-step rows, the total, the model and the cap, then asks `Proceed? [y/N]` in a terminal: yes runs the next router action, no exits 0. A non-interactive run prints and exits 0. `--yolo` never answers this prompt.
+- `/pensmith --estimate` runs the workflow planner only and makes no LLM or network call. It projects the *remaining* work with the resolved runtime's per-slug models and prices (an unknown model is marked `(fallback price)`) and recorded per-slug output-token p90s from SESSION.log (shipped defaults until 5 samples exist). Completed steps are excluded; with nothing left it prints `nothing left to run ($0.00)`. Without a paper it derives the section count from the assignment (`assignment.*`, `--from` or INTAKE.md) and the length target. It prints per-step rows, the total, the model and the cap, then asks `Proceed? [y/N]` in a terminal: yes runs the next router action (or, for an explicit command such as `pensmith write 2 --estimate`, that command — whose own steps are what is projected, a completed step included), no exits 0. A non-interactive run prints and exits 0. `--yolo` never answers this prompt.
 - **Hard runtime cost cap.** Per `[budget] cost_cap_usd` in config (default: $5 per session; `PENSMITH_COST_CAP_USD` overrides). A *session* is one top-level CLI invocation (a bare-router chain included) or one Claude Code session (one MCP server process). Before every model call, the session's spend plus the call's projection (input estimate plus the slug's p90 output, never more than `max_tokens`) is compared with the cap. Over the cap, a terminal user is asked once per session whether to continue; a run that cannot prompt — `--yolo` included — sends nothing and exits 5 with one line. `warn_at_usd` prints one warning with the running total. This is the only cap: there are no per-step or per-section caps. The `--yolo` pre-flight refuses only when the projected remaining cost exceeds the cap. Running cost meter shown in `/pensmith status` (`cost: $X this session / $Y total (cap $Z)`; `n/a (Claude session)` in the plugin).
 - All three are critical for budget-conscious users.
 
@@ -563,7 +563,7 @@ refusal_fallbacks = "off"            # off | default — opt-in Anthropic server
 # (pensmithDataDir()/runtime.json); api_key_env must be ANTHROPIC_API_KEY,
 # OPENAI_API_KEY or match ^[A-Z][A-Z0-9_]*_API_KEY$ (never e.g. GITHUB_TOKEN).
 
-[runtime.slugs.section-drafter]      # per-prompt-slug overrides (any slug in templates/prompts/)
+[runtime.slugs.section-drafter]      # per-prompt-slug overrides (any slug in templates/prompts/, or a step alias: pass2, pass4, evaluator, queries)
 model = "claude-opus-5"
 effort = "high"
 

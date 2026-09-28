@@ -16,6 +16,7 @@
 // typed OfflineEgressError is rethrown so callers report "unavailable (offline)".
 
 import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
+import { errorFailureReason, httpFailureReason, type SearchOptions } from './search-failure.js';
 import { generateCitekey } from '../citekey.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -135,16 +136,20 @@ function parseFeed(xml: string): SourceCandidate[] {
 
 export async function search(
   query: string,
-  opts: { limit?: number } = {},
+  opts: SearchOptions = {},
 ): Promise<SourceCandidate[]> {
   const limit = opts.limit ?? 20;
   const url = `${BASE}/api/query?search_query=${encodeURIComponent(query)}&max_results=${limit}`;
   try {
     const res = await httpFetch(url, { source: 'arxiv', headers: ATOM_HEADERS, maxBytes: MAX_JSON_RESPONSE_BYTES });
-    if (res.status !== 200) return [];
+    if (res.status !== 200) {
+      opts.onFailure?.(httpFailureReason(res.status));
+      return [];
+    }
     return parseFeed(res.body);
   } catch (err) {
     if (isOfflineEgressError(err)) throw err;
+    opts.onFailure?.(errorFailureReason(err));
     return [];
   }
 }

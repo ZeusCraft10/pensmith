@@ -234,13 +234,50 @@ test('RUN-09: `new` with no assignment in a non-interactive run exits 2 before w
   assert.match(missing.stderr, /^pensmith: --from nope\.txt: no such file$/m);
 });
 
-test('RUN-09: `add` refusals exit 1 (a source that cannot be hydrated)', () => {
+test('RUN-09: `add` with something that is not an identifier exits 2 before any lookup; an identifier that cannot be resolved exits 1', () => {
   const sb = sandbox('exit-add');
   const root = sb.project('p');
   writeState(root, []);
-  const r = runCli(sb, root, ['add', 'not-a-doi-or-file']);
-  assert.equal(r.status, EXIT_ERROR, `${r.stdout}\n${r.stderr}`);
-  assert.match(r.stdout, /could not hydrate/);
+  const before = snapshot(root);
+  const usageCases: Array<[string, RegExp]> = [
+    ['not a doi at all', /^pensmith add: "not a doi at all" is not a DOI \(10\.…\), an http\(s\) URL or a local PDF/m],
+    ['./missing.pdf', /^pensmith add: \.\/missing\.pdf: no such file$/m],
+  ];
+  for (const [arg, message] of usageCases) {
+    const r = runCli(sb, root, ['add', arg]);
+    assert.equal(r.status, EXIT_USAGE, `${arg}: ${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, message);
+    assert.doesNotMatch(r.stderr, /PENSMITH_DEBUG/);
+  }
+  assert.deepEqual(changedPaths(before, snapshot(root), IGNORE_LOGS), [], 'nothing was written');
+  const logPath = join(root, '.paper', 'SESSION.log');
+  const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
+  assert.doesNotMatch(log, /"kind":"http"/, 'no request was made');
+  // A well-formed DOI with no verification available (sources offline under the
+  // test runner, no recorded fixture) is a refusal, not a usage error.
+  const offline = runCli(sb, root, ['add', '10.9999/pensmith-no-such-work'], { env: { PENSMITH_OFFLINE: '1' } });
+  assert.equal(offline.status, EXIT_ERROR, `${offline.stdout}\n${offline.stderr}`);
+  assert.match(offline.stderr, /DOI verification unavailable \(offline\)/);
+  // An existing file that is not a readable PDF cannot be hydrated.
+  writeFileSync(join(root, 'notes.txt'), 'plain text, not a PDF\n');
+  const notPdf = runCli(sb, root, ['add', 'notes.txt'], { env: { PENSMITH_OFFLINE: '1' } });
+  assert.equal(notPdf.status, EXIT_ERROR, `${notPdf.stdout}\n${notPdf.stderr}`);
+  assert.match(notPdf.stdout, /could not hydrate/);
+});
+
+test('RUN-09: an unknown --runtime provider is EXIT_USAGE for every verb, before any work', () => {
+  const sb = sandbox('exit-runtime');
+  const root = sb.project('p');
+  writeState(root, [{ n: 1, slug: 'alpha' }]);
+  writeOutline(root, [{ n: 1, slug: 'alpha' }]);
+  writePlan(root, 1, 'alpha');
+  const before = snapshot(root);
+  for (const args of [['write', '1', '--runtime', 'bogus', '--yolo'], ['--runtime=bogus', 'status'], ['--runtime', 'bogus', 'doctor']]) {
+    const r = runCli(sb, root, args);
+    assert.equal(r.status, EXIT_USAGE, `${args.join(' ')}: ${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, /^pensmith: unknown provider 'bogus' for --runtime; valid values: anthropic, openai, ollama, vllm, openai-compatible$/m);
+  }
+  assert.deepEqual(changedPaths(before, snapshot(root), IGNORE_LOGS), [], 'nothing was written');
 });
 
 test('RUN-09: a wave write with a failed section exits 1', () => {

@@ -29,6 +29,7 @@ import {
 } from '../bin/lib/runtime.js';
 import { CURRENT_RUNTIME_CONFIG_VERSION, isAllowedApiKeyEnv } from '../bin/lib/schemas/runtime-config.js';
 import { PensmithError } from '../bin/lib/exit-codes.js';
+import { parsePaperConfigText } from '../bin/lib/config.js';
 
 function captureStderr<T>(fn: () => Promise<T>): Promise<{ value: T; stderr: string }> {
   const orig = process.stderr.write.bind(process.stderr);
@@ -209,6 +210,32 @@ test('RUN-26: per-slug models — generation on the configured model, judgment o
     setRuntimeOverride({ provider: 'ollama', model: 'llama3.3' });
     rt = await resolveRuntime();
     assert.equal(resolveSlug(rt, 'orphan-label').model, 'llama3.3', 'local providers use the configured model for every slug');
+  });
+});
+
+test('RUN-26: the step aliases `[runtime.slugs.pass2]` / pass4 / evaluator / queries override their prompt slug; an explicit slug table wins', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    sb.writePaperConfig('schema_version = 1\n[runtime.slugs.pass2]\nmodel = "claude-sonnet-5"\n');
+    let rt = await resolveRuntime();
+    assert.equal(resolveSlug(rt, 'claim-support').model, 'claude-sonnet-5', '[runtime.slugs.pass2] changes Pass 2');
+    assert.equal(resolveSlug(rt, 'claim-support').modelSource, 'slug-config');
+    for (const other of ['orphan-label', 'source-evaluator', 'topic-disambiguator']) {
+      assert.equal(resolveSlug(rt, other).model, 'claude-haiku-4-5', `${other} is unchanged`);
+    }
+    assert.equal(resolveSlug(rt, 'section-drafter').model, 'claude-opus-5');
+
+    sb.writePaperConfig(
+      'schema_version = 1\n[runtime.slugs.pass4]\neffort = "medium"\n[runtime.slugs.evaluator]\nmodel = "claude-sonnet-5"\n' +
+        '[runtime.slugs.queries]\nmodel = "claude-sonnet-5"\n[runtime.slugs.pass2]\nmodel = "claude-opus-5"\n[runtime.slugs.claim-support]\nmodel = "claude-sonnet-5"\n',
+    );
+    rt = await resolveRuntime();
+    assert.equal(resolveSlug(rt, 'orphan-label').effort, 'medium');
+    assert.equal(resolveSlug(rt, 'source-evaluator').model, 'claude-sonnet-5');
+    assert.equal(resolveSlug(rt, 'topic-disambiguator').model, 'claude-sonnet-5');
+    assert.equal(resolveSlug(rt, 'claim-support').model, 'claude-sonnet-5', 'the explicit slug table wins over its alias');
+    const cfg = parsePaperConfigText(fs.readFileSync(path.join(sb.paper, 'config.toml'), 'utf8'));
+    assert.ok(cfg.warnings.some((w) => /"runtime\.slugs\.pass2" and "runtime\.slugs\.claim-support" name the same step/.test(w)), cfg.warnings.join('\n'));
+    assert.ok(!cfg.warnings.some((w) => /unknown prompt slug/.test(w)), 'the aliases are known');
   });
 });
 

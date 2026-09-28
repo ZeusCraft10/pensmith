@@ -21,6 +21,7 @@ import {
   runCli,
   writeOutline,
   writePlan,
+  seedCompiledPaper,
   snapshot,
   changedPaths,
   REPO,
@@ -81,6 +82,40 @@ test('RUN-14: resolver order — flag/env, the cwd paper, a new paper; MCP/hooks
   assert.throws(() => resolvePaperRoot({ verb: 'write', mode: 'cli', cwd: empty, env: {} }),
     (e: unknown) => (e as { exitCode?: number }).exitCode === EXIT_USAGE && /no paper in /.test((e as Error).message));
   assert.equal(activePaperBanner({ name: 'p2', root: '/x/p2' }), '(active paper "p2" at /x/p2)');
+});
+
+test('RUN-13 / RUN-14: a run from inside .paper/ (or deeper) addresses the paper in the parent folder — never .paper/.paper/', () => {
+  const sb = sandbox('resolver-inside');
+  const root = sb.project('p');
+  seedCompiledPaper(root);
+  writeFileSync(join(root, '.paper', 'RESEARCH.md'), '# Research\n');
+  writeFileSync(join(root, '.paper', 'INTAKE.md'), 'Topic: tidal power\n');
+  writeFileSync(join(root, '.paper', 'FINAL.md'), '# Paper\n\nOne.\n\nTwo.\n');
+  const inside = join(root, '.paper');
+  const deeper = join(root, '.paper', 'sections', '01-one');
+  // The resolver folds the cwd for every mode.
+  for (const cwd of [inside, deeper]) {
+    assert.deepEqual(resolvePaperRoot({ verb: 'status', mode: 'cli', cwd, env: {} }), { kind: 'root', root, source: 'cwd' });
+    assert.deepEqual(resolvePaperRoot({ verb: null, mode: 'mcp', cwd, env: {} }), { kind: 'root', root, source: 'cwd' });
+  }
+  const fromRoot = runCli(sb, root, ['status']);
+  assert.equal(fromRoot.status, 0, fromRoot.stderr);
+  const before = snapshot(root);
+  for (const cwd of [inside, deeper]) {
+    const st = runCli(sb, cwd, ['status']);
+    assert.equal(st.status, 0, st.stderr);
+    assert.equal(st.stdout, fromRoot.stdout, 'status from inside .paper/ shows the real paper');
+    // The paper is finished: the router's next action is the terminal status —
+    // never `research` against a phantom .paper/.paper/.
+    for (const args of [['next', '--yolo'], ['--yolo']]) {
+      const r = runCli(sb, cwd, args);
+      assert.equal(r.status, 0, `${args.join(' ')}: ${r.stdout}\n${r.stderr}`);
+      assert.doesNotMatch(`${r.stdout}${r.stderr}`, /pensmith research|wrote LIBRARY\.json/);
+    }
+    assert.ok(!existsSync(join(root, '.paper', '.paper')), 'no nested .paper/.paper/ is created');
+    assert.ok(!existsSync(join(deeper, '.paper')), 'no .paper/ inside a section folder');
+  }
+  assert.deepEqual(changedPaths(before, snapshot(root)).filter((p) => !IGNORE_LOGS.test(p)), [], 'nothing in the paper changed');
 });
 
 // ---------------------------------------------------------------------------
