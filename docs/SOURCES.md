@@ -26,7 +26,7 @@ Every request goes through one module, `bin/lib/http.ts`, so every rule below ap
 | Google Books | `www.googleapis.com` | books: keyless ISBN fallback | 1 request/s | plain `pensmith/<version>` | none |
 | Zotero Web API | `api.zotero.org` | the user's own Zotero library | 5 requests/s, and Zotero's `Backoff` header | plain `pensmith/<version>` | `ZOTERO_API_KEY`, sent only as the `Zotero-API-Key` header |
 | Zotero 7 local API | `127.0.0.1:23119` (this computer) | the user's own Zotero library, offline | 5 requests/s | plain `pensmith/<version>` | none |
-| GROBID | the loopback URL in `PENSMITH_GROBID_URL` (this computer) | reading a bring-your-own PDF's header (title, authors, DOI) | 5 requests/s | plain `pensmith/<version>` | none |
+| GROBID | the loopback URL in `PENSMITH_GROBID_URL` (this computer) | reading a PDF's header (title, authors, DOI, arXiv id) before pensmith's own heuristic — bring-your-own folders, `add <file.pdf>`, a PDF `add` fetched | 5 requests/s | plain `pensmith/<version>` | none |
 | any other host | a URL you pass to `add`, an open-access PDF host | fetching that document | 5 requests/s per host | plain `pensmith/<version>` | none |
 
 JSTOR, APA PsycNET and PhilPapers have no free search API pensmith can use within their terms, so their content is reached through OpenAlex, Crossref and PubMed coverage (PRD §8). The checks on a finished paper, DuckDuckGo (plagiarism phrases) and GPTZero (the AI-likelihood score, only with `GPTZERO_API_KEY` and your consent), are described in [PRIVACY.md](../PRIVACY.md).
@@ -35,7 +35,7 @@ JSTOR, APA PsycNET and PhilPapers have no free search API pensmith can use withi
 
 - **Search queries.** Research sends the queries it generated from your topic (5 to 10 per scope; the model call that writes them is separate, see PRIVACY.md). `plan N --research "<query>"` sends your query and the query joined to the section title. Your draft is never sent to a source.
 - **Identifiers.** DOIs, arXiv ids, PMIDs and ISBNs go to the registrar that can answer for them (Crossref, arXiv, PubMed, Open Library / Google Books, Unpaywall).
-- **A bring-your-own PDF.** Only a title or an identifier found in it leaves the machine, as one lookup request. The PDF itself goes nowhere, except to a GROBID server on your own computer when you set `PENSMITH_GROBID_URL` (a non-loopback URL is ignored with a warning).
+- **A bring-your-own PDF** (and a PDF you `add`). Only a title or an identifier found in it leaves the machine — an identifier to its registrar, or the title to Crossref and, when Crossref has no confident match, to OpenAlex. The PDF itself goes nowhere, except to a GROBID server on your own computer when you set `PENSMITH_GROBID_URL` (a non-loopback URL is ignored with a warning).
 - **Your contact email** goes only to Crossref, OpenAlex and Unpaywall (below).
 - **Your Zotero library** is read, never written. The Web API receives your key (as a header) and the collection and item requests; the local API never leaves your computer.
 

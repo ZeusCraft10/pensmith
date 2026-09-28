@@ -147,9 +147,9 @@ In normal use, bare `/pensmith` handles dispatch. The 16 verbs below let power u
 | `new` | Start a new paper — capture the assignment (`--from <file>`), run the clarifying questions, detect the discipline, write `.paper/INTAKE.md`. |
 | `next` | Run the next workflow step for the current paper (what bare `/pensmith` does). |
 | `status` | The paper's position, per-section progress, cost so far and the next action. `--config` prints every effective setting and where it came from. |
-| `research` | Discover sources across OpenAlex, Crossref, arXiv, PubMed, Semantic Scholar and Unpaywall, cross-check retractions, and merge the kept sources into `.paper/LIBRARY.json` (which renders `CITATIONS.bib` / `CITATIONS.ris`). |
+| `research` | Build the source library from the paper's brief: pick a scope (`--scope <n\|text>`), run 5–10 queries (`--queries <n>`) against the discipline's preferred databases (OpenAlex, Crossref, arXiv, PubMed, Semantic Scholar, Open Library books, your Zotero), report every database's outcome, tier and filter by `[sources]`, let the source evaluator judge, ask which to keep (and take any DOI / URL you add), cross-check retractions, and write `.paper/LIBRARY.json` (which renders `CITATIONS.bib` / `CITATIONS.ris`) and a readable `.paper/RESEARCH.md`. Your own PDFs (`[sources] byo_pdf_dir`) and Zotero collection (`[sources] zotero_collection`) are added first. |
 | `outline` | Propose the section outline from the research. Approval gate (skippable with `--yolo`). |
-| `plan` | Write one section's `PLAN.md` (`plan <n>`); `--revise` repairs a verifier-flagged citation. |
+| `plan` | Write one section's `PLAN.md` (`plan <n>`); `--revise` repairs a verifier-flagged citation; `plan <n> --research "<query>"` runs a research pass for that section only and adds the hits to its sources. |
 | `write` | Draft one section from only its mapped sources (`write <n>`), or every section in dependency waves (`write`). |
 | `verify` | Run the blocking verifier on one section: DOI/arXiv/PMID re-fetch with author/title match, and quote exact-match. |
 | `compile` | Assemble all verified sections into `.paper/DRAFT.md` + `COMPILE-REPORT.md` (refuses on any blocking verdict). |
@@ -158,7 +158,7 @@ In normal use, bare `/pensmith` handles dispatch. The 16 verbs below let power u
 | `list` | List every paper Pensmith knows about, grouped by class, with its live status. |
 | `open` | Make a paper the active one by name (as shown by `list`). |
 | `sketch` | Thinking-partner thesis discovery before intake — asks a few questions; nothing is created until you confirm. |
-| `add` | Add one source mid-paper (DOI, local PDF or URL): verify it, merge it into the library (a known work is reported as `already in library as <key>`), and optionally map it onto sections. |
+| `add` | Add a source mid-paper — a DOI, arXiv id, `PMID:<id>`, `isbn:<ISBN>`, URL, local PDF or a folder of PDFs: identify the right work or refuse (a PDF is identified from its identifiers or its title and first author, never guessed), merge it into the library (a known work is reported as `already in library as <key>`), and offer to map it onto the relevant sections. `--pdf <file>` attaches your copy of the PDF to an identifier. |
 
 ## Configuration
 
@@ -172,6 +172,14 @@ Pensmith is **live by default**: research, `add`, the Pass 1 / Pass 3 re-fetch, 
 | **Dry run** | `--dry-run` | Nothing leaves the machine — zero sockets. Sources come from a clearly labelled synthetic provider (`10.0000/pensmith-dryrun.*`), and every model call returns a deterministic stub. Run it in a folder with no paper (`pensmith --dry-run --yolo` next to an `assignment.txt`): it marks the paper it makes (`.paper/DRY-RUN.md`), refuses to run over an existing paper (exit 2, nothing touched), and a normal command refuses to continue a dry-run paper — delete its `.paper/` to start a real one. Synthetic identifiers are refused everywhere outside `--dry-run`, and the library drops any a dry run left behind. |
 
 `PENSMITH_NO_LLM=1` is independent of the network mode: it replaces every LLM call with a deterministic stub (testing and dry-run) and prints `LLM STUBBED …`. Without any model configured, `pensmith verify` still records the blocking Pass 1 / Pass 3 verdicts; the advisory claim-support and orphan checks are reported as `skipped (no LLM configured)`. `pensmith doctor` shows `network: live` or `network: OFFLINE (<reason>)`. The test suite (`npm test`) always runs sources offline unless a maintainer sets `PENSMITH_NETWORK_TESTS=1`.
+
+### Sources
+
+Research, `add` and the verifier talk to free scholarly services: Crossref, OpenAlex, arXiv, PubMed, Semantic Scholar, Unpaywall and Open Library (Google Books as the ISBN fallback), plus your own Zotero library when you connect it. Each one is asked politely — at most its published rate (arXiv one request every three seconds, Crossref three a second, …), lower when the service says so, and not at all for the rest of the run once it answers "come back in hours" or fails three times in a row — and every failure is reported with its reason and the fix, never as "no results". [`docs/SOURCES.md`](docs/SOURCES.md) lists each service, what it receives and the keys that help.
+
+- **Your own PDFs.** `pensmith new --pdfs <folder>` or `pensmith add <folder>` adds a folder of PDFs: each is hashed, copied to `.paper/sources/`, identified from its identifiers or its title (only the identifier or the title leaves the machine — never the text) and tagged `bring-your-own`; one no registrar matches confidently is kept, marked as local-only. `research` re-reads the folder (`[sources] byo_pdf_dir`) for new files.
+- **Zotero.** With `ZOTERO_API_KEY` (or `PENSMITH_ZOTERO_LOCAL=1`, or a public `ZOTERO_GROUP_ID`), research pulls the collection named by `[sources] zotero_collection` — or searches your library per query — and tags those sources `zotero`. In Claude Code, the plugin reads Zotero through your Zotero MCP server instead.
+- **Choosing sources.** `[sources]` in `.paper/config.toml` sets `min_year`, `allow_preprints`, `allow_books`, `allow_gov_reports`, `allow_news`, `peer_reviewed_only`, `require_doi` (a DOI, ISBN, arXiv id or PMID) and `allowed_databases`; research lists every source it excluded and why.
 
 ### Model runtimes
 
@@ -219,11 +227,14 @@ Expected failures print one line (`pensmith: …`); `PENSMITH_DEBUG=1` adds a st
 | `PENSMITH_OFFLINE=1` | Sources offline: exact recorded fixtures or fail closed (see [Network modes](#network-modes)). |
 | `PENSMITH_NO_LLM=1` | Replaces every LLM call with a deterministic stub (testing and dry-run). |
 | `PENSMITH_COST_CAP_USD` | Per-session cost cap in USD (overrides `[budget] cost_cap_usd`, default 5.00). Must be a positive number such as `2.50`; any other value (`0`, `$1`) is refused with exit 2, never replaced by the default. |
-| `PENSMITH_CONTACT_EMAIL` | Polite-pool contact sent to Crossref (including its retraction lookup), OpenAlex and Unpaywall only, so your queries are well-behaved. No other service receives it (see [PRIVACY.md](PRIVACY.md)). |
+| `PENSMITH_CONTACT_EMAIL` | Polite-pool contact sent to Crossref (including its retraction lookup), OpenAlex and Unpaywall only, so your queries are well-behaved. No other service receives it (see [PRIVACY.md](PRIVACY.md)). Unpaywall requires it: without it the open-access lookup is skipped with `Unpaywall skipped: set PENSMITH_CONTACT_EMAIL`. A paper can name a different variable with `[network] contact_email_env` (an upper-case name containing `EMAIL` or `MAILTO`). |
 | `OPENALEX_API_KEY` | *Optional, free.* Sent to OpenAlex as `api_key` (never logged, cached or recorded). Keyless OpenAlex requests share a small daily budget with everyone on your network; when it runs out, research reports `openalex: failed (keyless daily budget exhausted — set OPENALEX_API_KEY (free))`. |
 | `PENSMITH_S2_API_KEY` | *Optional.* Semantic Scholar API key, sent as `x-api-key`. Keyless requests share Semantic Scholar's public pool, which often answers HTTP 429 (`set PENSMITH_S2_API_KEY`). |
 | `GPTZERO_API_KEY` | *Optional.* Enables the AI-likelihood transparency check; it still asks for your consent before sending text (`--yolo` never grants it). |
-| `ZOTERO_API_KEY` | *Optional.* Enables the Zotero library adapter. |
+| `ZOTERO_API_KEY` | *Optional.* Reads your Zotero library through the Zotero Web API (a key from https://www.zotero.org/settings/keys, sent only as the `Zotero-API-Key` header). `pensmith doctor` says `Zotero: authenticated` only after Zotero accepts it. |
+| `ZOTERO_GROUP_ID` | *Optional.* Read a Zotero group library (the number in `zotero.org/groups/<number>`) instead of your own; a public group needs no key. |
+| `PENSMITH_ZOTERO_LOCAL=1` | *Optional.* Read Zotero 7's local API on this machine (`http://127.0.0.1:23119`; enable "Allow other applications on this computer to communicate with Zotero" in Zotero's settings). Nothing leaves the machine. |
+| `PENSMITH_GROBID_URL` | *Optional.* A GROBID server on this machine (`http://127.0.0.1:8070`) that reads the title, authors and DOI of your PDFs before Pensmith's own heuristic. Must be loopback: your PDFs never leave the machine. |
 | `PENSMITH_PAPER_ROOT` | The project folder (the one containing `.paper/`) for the CLI, the MCP server and the hooks. |
 | `PENSMITH_PROMPT_MODE=numbered` | Answer prompts from piped stdin, one line per question (scripts and CI). Piped answers are read only in this mode: without it a run that has no terminal refuses a question it cannot ask (exit 3) instead of consuming stdin. |
 | `PENSMITH_DEBUG=1` | Print a stack trace for unexpected errors. |

@@ -14,6 +14,10 @@
 // using base-26 spreadsheet encoding for >26 collisions). This module is the
 // PURE generator — same SourceCandidate -> same citekey, always.
 //
+// A corporate author, stored braced (`{The ENCODE Project Consortium}`, SRC-05
+// / D-19-19), keys by the name's first significant word (`encode2012`) — its
+// last word would give every consortium the same `consortium<year>` key.
+//
 // D-14 LOCKED citekey regex: ^[a-z][a-z0-9_-]*$. Every emit is asserted
 // against the regex; a candidate whose surname is empty falls back to
 // 'anon' so the first character is always a letter.
@@ -23,6 +27,18 @@ import type { SourceCandidate } from './schemas/source-candidate.js';
 
 /** D-14 LOCKED citekey regex — every citekey emitted by this module must match. */
 export const CITEKEY_RE = /^[a-z][a-z0-9_-]*$/;
+
+/** Leading words a corporate name's key skips ("The ENCODE Project Consortium" → ENCODE). */
+const CORPORATE_SKIP = /^(?:the|a|an|la|le|les|el|los|las|die|der|das)$/i;
+
+/** The key word of a braced corporate author (`{The ENCODE Project Consortium}` → `ENCODE`), else null. */
+function corporateKeyWord(author: string): string | null {
+  const m = /^\{(.+)\}$/.exec(author.trim());
+  if (!m) return null;
+  const words = (m[1] ?? '').replace(/[{}]/g, ' ').split(/\s+/).filter((w) => /\p{L}/u.test(w));
+  const word = words.find((w) => !CORPORATE_SKIP.test(w)) ?? words[0];
+  return word ?? null;
+}
 
 /**
  * Generates a deterministic citekey from a SourceCandidate.
@@ -47,7 +63,7 @@ export function generateCitekey(c: Partial<SourceCandidate>): string {
   // firstAuthorSurname already nfkc-normalizes + lowercases + strips
   // combining diacritics. We just need to drop the non-ASCII-letter
   // residue (particle spaces, hyphens, apostrophes).
-  let surname = firstAuthorSurname(firstAuthor).replace(/[^a-z]/g, '').slice(0, 20);
+  let surname = firstAuthorSurname(corporateKeyWord(firstAuthor) ?? firstAuthor).replace(/[^a-z]/g, '').slice(0, 20);
   if (!surname) surname = 'anon';
 
   const year = c.year ?? 'noyear';
