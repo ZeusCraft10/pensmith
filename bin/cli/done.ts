@@ -19,7 +19,9 @@
 // Exports go to the exporter's DISTINCT export dir (default `.paper/export/`) —
 // done.ts MUST NOT pass `outputDir=paperDir(paperRoot)`, so the md-fallback
 // never overwrites the source DRAFT.md and the verb-level zero-trace scan
-// targets a real distinct deliverable (cycle-2 MEDIUM).
+// targets a real distinct deliverable (cycle-2 MEDIUM). Under --dry-run the
+// export dir is `.paper-dry-run/export/` and the file is `DRAFT.dry-run.<ext>`
+// (GRND-19); done prints that path and says it is a dry-run export.
 
 import { defineCommand } from 'citty';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
@@ -752,6 +754,13 @@ export const doneCommand = defineCommand({
     }
 
     process.stdout.write(`pensmith done: exported ${result.outputPath}\n`);
+    if (networkMode().dryRun) {
+      // GRND-19 (D-18-29): say plainly that this is the dry run's trial export.
+      process.stdout.write(
+        `pensmith done: this is a dry-run export (synthetic sources, stub text) in ${join(paperDir(paperRoot), 'export')}; ` +
+          'the real paper was not touched\n',
+      );
+    }
     return { ok: true, ...result };
   },
 });

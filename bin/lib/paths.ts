@@ -301,14 +301,65 @@ export function projectHash(root: string = projectRoot()): string {
   return createHash('sha256').update(root).digest('hex').slice(0, 12);
 }
 
+// ---------------------------------------------------------------------------
+// The dry-run workspace (GRND-19, D-18-29).
+//
+// A `--dry-run` never reads or writes the real `.paper/` after seeding: every
+// paper file of a dry run lives in `<root>/.paper-dry-run/`, seeded from
+// `.paper/` (bin/lib/dry-run-paper.ts). paperDir() is the one switch — every
+// loader and writer goes through it, so they all follow the workspace. The
+// mode is on when the CLI pre-parse saw `--dry-run` (setDryRunWorkspace) or
+// when PENSMITH_DRY_RUN=1 — the channel the pre-parse sets for child processes
+// and the same variable bin/lib/http-mock.ts networkMode() reads (D-17-04).
+// ---------------------------------------------------------------------------
+
+/** The folder a paper lives in, under its project root. */
+export const PAPER_DIR_NAME = '.paper';
+/** The dry-run workspace folder, beside `.paper/` (GRND-19). */
+export const DRY_RUN_PAPER_DIR_NAME = '.paper-dry-run';
+
+let dryRunWorkspaceOverride: boolean | null = null;
+
 /**
- * Returns `<root>/.paper` — the per-project pensmith working directory
- * inside the user's repo. NOTE: `.paper/` is the OnlyDocuments-style root
- * users see; pensmith app state (locks, caches) lives OUTSIDE this in
- * `pensmithDataDir` precisely because `.paper/` may be inside a sync folder.
+ * Turn the dry-run workspace on or off for this process (the CLI pre-parse of
+ * `--dry-run`); null returns to the PENSMITH_DRY_RUN=1 default.
+ */
+export function setDryRunWorkspace(on: boolean | null): void {
+  dryRunWorkspaceOverride = on;
+}
+
+/** True when this process works in the dry-run workspace (see above). */
+export function dryRunWorkspaceActive(): boolean {
+  return dryRunWorkspaceOverride ?? process.env['PENSMITH_DRY_RUN'] === '1';
+}
+
+/** True for a folder name pensmith keeps a paper in (`.paper`, `.paper-dry-run`). */
+export function isPaperDirName(name: string): boolean {
+  return name === PAPER_DIR_NAME || name === DRY_RUN_PAPER_DIR_NAME;
+}
+
+/**
+ * Returns the per-project pensmith working directory inside the user's repo:
+ * `<root>/.paper`, or `<root>/.paper-dry-run` while the dry-run workspace is
+ * active (GRND-19). NOTE: `.paper/` is the OnlyDocuments-style root users see;
+ * pensmith app state (locks, caches) lives OUTSIDE this in `pensmithDataDir`
+ * precisely because `.paper/` may be inside a sync folder.
  */
 export function paperDir(root: string = projectRoot()): string {
-  return path.join(root, '.paper');
+  return path.join(root, dryRunWorkspaceActive() ? DRY_RUN_PAPER_DIR_NAME : PAPER_DIR_NAME);
+}
+
+/**
+ * `<root>/.paper` whatever the mode — only the dry-run seeding (dry-run-paper.ts)
+ * reads the real paper through it; nothing ever writes through it in a dry run.
+ */
+export function realPaperDir(root: string = projectRoot()): string {
+  return path.join(root, PAPER_DIR_NAME);
+}
+
+/** `<root>/.paper-dry-run` whatever the mode (the dry-run workspace, GRND-19). */
+export function dryRunPaperDir(root: string = projectRoot()): string {
+  return path.join(root, DRY_RUN_PAPER_DIR_NAME);
 }
 
 /** `<root>/.paper/STATE.json` — the one STATE.json location (RUN-13, D-17-32). */
@@ -344,12 +395,15 @@ const LEGACY_STATE_MAX_BYTES = 1_048_576;
  * It must be a JSON object carrying pensmith's envelope: an integer
  * `$schemaVersion` >= 1, a non-empty string `paperId` and an ISO `createdAt`.
  * Only then does the legacy-layout move touch it (or its config.toml), and only
- * then does the folder count as holding a paper. A `.paper` folder is never a
- * project root, so it never has a legacy state file.
+ * then does the folder count as holding a paper. A `.paper` (or
+ * `.paper-dry-run`) folder is never a project root, so it never has a legacy
+ * state file. A dry run never moves or reads a pre-v1 layout (GRND-19: the
+ * user's files are never written by a dry run) — its workspace starts empty.
  */
 export function isLegacyPensmithState(root: string): boolean {
   const r = path.resolve(root);
-  if (path.basename(r) === '.paper') return false;
+  if (isPaperDirName(path.basename(r))) return false;
+  if (dryRunWorkspaceActive()) return false;
   const file = legacyStateFile(r);
   try {
     const st = fs.statSync(file);
@@ -366,20 +420,29 @@ export function isLegacyPensmithState(root: string): boolean {
   }
 }
 
+function isDirectory(p: string): boolean {
+  try {
+    return fs.statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * True when `root` holds a paper: a `.paper/` directory, or a legacy root-level
  * pensmith STATE.json (isLegacyPensmithState) that the legacy-layout move will
  * relocate into `.paper/`. Any other root-level STATE.json is the user's own.
+ * Under a dry run (GRND-19) the folder holds a paper when it has a dry-run
+ * workspace or a real `.paper/` to seed one from; a normal run never counts a
+ * `.paper-dry-run/` as a paper.
  */
 export function hasPaper(root: string): boolean {
-  // A `.paper` folder is never itself a project root (its parent is).
-  if (path.basename(path.resolve(root)) === '.paper') return false;
-  try {
-    if (fs.statSync(paperDir(path.resolve(root))).isDirectory()) return true;
-  } catch {
-    // no .paper/ directory
-  }
-  return isLegacyPensmithState(root);
+  const r = path.resolve(root);
+  // A `.paper` (or `.paper-dry-run`) folder is never itself a project root (its parent is).
+  if (isPaperDirName(path.basename(r))) return false;
+  if (isDirectory(paperDir(r))) return true;
+  if (dryRunWorkspaceActive() && isDirectory(realPaperDir(r))) return true;
+  return isLegacyPensmithState(r);
 }
 
 /** The assignment file names bare `pensmith` and `new` pick up (PRD §5.1 row 1). */
@@ -559,17 +622,18 @@ export function resolvePaperFlag(value: string, cwd: string = process.cwd()): st
  * working directory name the folder that CONTAINS `.paper/`; a path to the
  * `.paper` folder itself (the pre-v1 MCP convention) or to anything inside it
  * (`.paper/sections/01-intro`) is read as the project folder that holds it, so
- * nothing is ever written to `.paper/.paper/`.
+ * nothing is ever written to `.paper/.paper/`. The dry-run workspace
+ * `.paper-dry-run/` folds the same way (GRND-19).
  */
 export function asProjectRoot(p: string): string {
   const r = path.resolve(p);
-  // The innermost `.paper` ancestor-or-self; its parent is the project folder
+  // The innermost paper-folder ancestor-or-self; its parent is the project folder
   // (a `.paper` inside a `.paper` — a phantom an older pensmith made — folds on).
   let cur = r;
   for (;;) {
-    if (path.basename(cur) === '.paper') {
+    if (isPaperDirName(path.basename(cur))) {
       let root = path.dirname(cur);
-      while (path.basename(root) === '.paper') root = path.dirname(root);
+      while (isPaperDirName(path.basename(root))) root = path.dirname(root);
       return root;
     }
     const up = path.dirname(cur);

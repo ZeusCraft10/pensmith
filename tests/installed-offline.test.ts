@@ -6,7 +6,9 @@
 // runs the installed CLI from a temp project:
 //   - `--dry-run research --yolo` finds >= 5 synthetic dry-run sources from the
 //     packaged corpus (templates/dry-run/corpus.json) — no ENOENT on
-//     tests/fixtures, which the package does not ship;
+//     tests/fixtures, which the package does not ship — and one bare
+//     `--dry-run --yolo` goes from an assignment to `.paper-dry-run/export/
+//     DRAFT.dry-run.*` (GRND-19) with no `.paper/` and no registry entry;
 //   - `PENSMITH_OFFLINE=1 … verify 1` fails closed with the "not shipped"
 //     message and writes no verdicts (never 0-result research or
 //     all-FABRICATED verdicts from missing fixtures);
@@ -23,6 +25,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withLlmSandbox, readJsonl } from './helpers/llm-sandbox.js';
+import { pensmithGlobalLibraryIndexPath } from '../bin/lib/paths.js';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
 const IS_WIN = process.platform === 'win32';
@@ -100,16 +103,38 @@ test('RUN-05 / RUN-27: the installed package runs `--dry-run research --yolo` fr
     join(project, '.paper', 'INTAKE.md'),
     '---\ntopic: medieval Icelandic sagas\ndiscipline: history\n---\n# Intake\n\nWrite a 1500-word essay on medieval Icelandic sagas.\n',
   );
-  // A paper a dry run made (RUN-27: --dry-run never runs over a real paper).
-  writeFileSync(join(project, '.paper', 'DRY-RUN.md'), '# made by pensmith --dry-run\n');
+  // GRND-19: the dry run works in .paper-dry-run/, seeded from this paper.
   const r = runInstalled(['--dry-run', 'research', '--yolo'], project);
   const out = `${r.stdout}\n${r.stderr}`;
   assert.equal(r.status, 0, `dry-run research exits 0: ${out.slice(0, 2000)}`);
   assert.ok(!/ENOENT|tests[\\/]fixtures/.test(out), `no ENOENT and no tests/fixtures path: ${out.slice(0, 2000)}`);
   assert.match(r.stderr, /OFFLINE MODE \(reason: --dry-run\)/);
-  const library = readFileSync(join(project, '.paper', 'LIBRARY.json'), 'utf8');
+  const library = readFileSync(join(project, '.paper-dry-run', 'LIBRARY.json'), 'utf8');
   const dois = new Set(library.match(/10\.0000\/pensmith-dryrun\.[0-9a-f]{8}/g) ?? []);
   assert.ok(dois.size >= 5, `>= 5 synthetic dry-run sources, got ${dois.size}`);
+  assert.ok(!existsSync(join(project, '.paper', 'LIBRARY.json')), 'the real .paper/ gained no library');
+});
+
+test('GRND-19: from the installed package, one `--dry-run --yolo` beside an assignment reaches a .dry-run export (no .paper/, no registry entry)', () => {
+  const { scratch } = install();
+  const project = mkdtempSync(join(scratch, 'dry-run-chain-'));
+  writeFileSync(join(project, 'assignment.txt'), 'Write a 1500-word literature review on attention mechanisms in transformers, APA style.\n');
+  // HOME inside the scratch dir too: on macOS the data dir derives from it.
+  const home = { HOME: join(scratch, 'data') };
+  const r = runInstalled(['--dry-run', '--yolo'], project, home);
+  const out = `${r.stdout}\n${r.stderr}`;
+  assert.equal(r.status, 0, `the dry run reaches done: ${out.slice(-3000)}`);
+  assert.ok(!/ENOENT|tests[\\/]fixtures/.test(out), `no ENOENT and no tests/fixtures path: ${out.slice(0, 2000)}`);
+  assert.match(r.stderr, /^pensmith: ran done; next: status \(done\)$/m);
+  const exported = readdirSync(join(project, '.paper-dry-run', 'export')).filter((f) => f.startsWith('DRAFT.'));
+  assert.ok(exported.length > 0 && exported.every((f) => f.startsWith('DRAFT.dry-run.')), `the export is named DRAFT.dry-run.*: ${exported.join(', ')}`);
+  assert.ok(existsSync(join(project, '.paper-dry-run', 'FINAL.md')));
+  assert.ok(!existsSync(join(project, '.paper')), 'a dry run never creates .paper/');
+  const registry = pensmithGlobalLibraryIndexPath(process.platform, userEnv(scratch, home));
+  const entries = existsSync(registry)
+    ? (JSON.parse(readFileSync(registry, 'utf8')) as { entries: Array<{ folderPath: string }> }).entries
+    : [];
+  assert.ok(!entries.some((e) => e.folderPath === project), 'the dry-run paper is not in the global library');
 });
 
 test('RUN-05: `PENSMITH_OFFLINE=1 verify 1` in the installed package fails closed with the not-shipped message and writes no verdicts', () => {

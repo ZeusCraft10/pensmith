@@ -129,12 +129,13 @@ test('RUN-11: global booleans are normalized — `--x=true|1` is on, `--x=false|
 test('RUN-11: `--dry-run=true` is a dry run and `--estimate=true` only estimates — neither reaches the model', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: 'sk-test-inline-bool-0001', PENSMITH_NO_LLM: undefined } }, async (sb) => {
     fs.writeFileSync(join(sb.paper, 'INTAKE.md'), '---\ntopic: medieval Icelandic sagas\ndiscipline: history\n---\n# Intake\n\nWrite a 1500-word essay on medieval Icelandic sagas.\n');
-    // A paper a dry run made (RUN-27: --dry-run never runs over a real paper).
-    fs.writeFileSync(join(sb.paper, 'DRY-RUN.md'), '# made by pensmith --dry-run\n');
     const dry = await sb.runTsx(null, ['research', '--dry-run=true', '--yolo']);
     assert.equal(dry.status, 0, `${dry.stdout}\n${dry.stderr}`);
     assert.match(dry.stderr, /OFFLINE MODE \(reason: --dry-run\)/);
     assert.equal(sb.mock!.callCount(), 0, '--dry-run=true made no model call');
+    // GRND-19: the dry run researched in its workspace, never in .paper/.
+    assert.ok(fs.existsSync(join(sb.root, '.paper-dry-run', 'LIBRARY.json')), 'the dry run wrote its library in .paper-dry-run/');
+    assert.ok(!fs.existsSync(join(sb.paper, 'LIBRARY.json')), 'the real .paper/ gained no library');
 
     const est = await sb.runTsx(null, ['outline', '--estimate=true']);
     assert.equal(est.status, 0, `${est.stdout}\n${est.stderr}`);
@@ -206,18 +207,25 @@ test('RUN-11: bare `pensmith --yolo` still routes through resolveNextAction (a f
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
   assert.ok(existsSync(join(cwd, '.paper', 'STATE.json')), 'the router dispatched `new`');
   assert.ok(existsSync(join(cwd, '.paper', 'INTAKE.md')));
-  // RUN-27: a --dry-run never runs over this (real) paper — refused, nothing written.
-  const refused = runCli(sb, cwd, ['--dry-run', '--yolo']);
-  assert.equal(refused.status, EXIT_USAGE, `${refused.stdout}\n${refused.stderr}`);
-  assert.match(refused.stderr, /--dry-run would overwrite the paper at .* this paper was not touched/);
-  assert.ok(!existsSync(join(cwd, '.paper', 'LIBRARY.json')), 'nothing was researched');
-  // In a fresh folder, bare `--dry-run --yolo` routes the same way: new, then research.
+  assert.match(r.stderr, /^pensmith: ran new; next: research$/m, 'one bare step: `new`, and the next step named');
+  assert.ok(!existsSync(join(cwd, '.paper', 'LIBRARY.json')), 'one bare run is one step: nothing was researched yet');
+  // GRND-19 (supersedes the RUN-27 refusal): a --dry-run over this real paper
+  // works in .paper-dry-run/ — seeded from .paper/ — and never touches .paper/.
+  const before = snapshot(join(cwd, '.paper'));
+  const overReal = runCli(sb, cwd, ['--dry-run', '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(overReal.status, 0, `${overReal.stdout}\n${overReal.stderr}`);
+  assert.deepEqual(changedPaths(before, snapshot(join(cwd, '.paper'))), [], 'the real paper is untouched');
+  assert.ok(!existsSync(join(cwd, '.paper', 'LIBRARY.json')), 'nothing was researched in the real paper');
+  assert.ok(existsSync(join(cwd, '.paper-dry-run', 'FINAL.md')), 'the dry run looped to the end in its workspace');
+  // In a fresh folder, bare `--dry-run --yolo` routes the same way — new,
+  // research, … — and loops to the export in one invocation (D-18-30).
   const fresh = sb.project('dry');
   writeFileSync(join(fresh, 'assignment.txt'), 'Write a 1500-word essay on tidal power.\n');
-  const dryNew = runCli(sb, fresh, ['--dry-run', '--yolo']);
-  assert.equal(dryNew.status, 0, `${dryNew.stdout}\n${dryNew.stderr}`);
-  assert.ok(existsSync(join(fresh, '.paper', 'STATE.json')), 'the router dispatched `new`');
-  const dry = runCli(sb, fresh, ['--dry-run', '--yolo']);
+  const dry = runCli(sb, fresh, ['--dry-run', '--yolo'], { timeoutMs: 120_000 });
   assert.equal(dry.status, 0, `${dry.stdout}\n${dry.stderr}`);
-  assert.ok(existsSync(join(fresh, '.paper', 'LIBRARY.json')), 'the router dispatched `research`');
+  assert.match(dry.stderr, /^pensmith: ran new; next: research$/m, 'the router dispatched `new`');
+  assert.match(dry.stderr, /^pensmith: ran research; next: outline$/m, 'then `research`');
+  assert.match(dry.stderr, /^pensmith: ran done; next: status \(done\)$/m, 'and looped to done');
+  assert.ok(!existsSync(join(fresh, '.paper')), 'a dry run never creates .paper/');
+  assert.ok(existsSync(join(fresh, '.paper-dry-run', 'LIBRARY.json')), 'research ran in the workspace');
 });

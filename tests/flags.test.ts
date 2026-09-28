@@ -32,6 +32,7 @@ import { syntheticSource } from '../bin/lib/sources/dry-run.js';
 import { readDialLog, type DialEvent } from './helpers/local-servers/dial-recorder.mjs';
 import { withLlmSandbox } from './helpers/llm-sandbox.js';
 import { projectEstimate } from '../bin/lib/estimator.js';
+import { snapshot as snapshotTree } from './helpers/paper-cli-harness.js';
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const DIAL_RECORDER = new URL('./helpers/local-servers/dial-recorder.mjs', import.meta.url).href;
@@ -524,7 +525,6 @@ interface ChainFixture {
  */
 function seedChain(
   entry: { citekey: string; doi: string; title: string; author: string; year: number },
-  opts: { dryRunPaper?: boolean } = {},
 ): ChainFixture {
   const researchRoot = freshRoot();
   mkdirSync(join(researchRoot, '.paper'), { recursive: true });
@@ -573,11 +573,6 @@ function seedChain(
       '',
     ].join('\n'),
   );
-  if (opts.dryRunPaper === true) {
-    // RUN-27: --dry-run never runs over a real paper — these are papers a dry
-    // run made (dry-run-paper.ts marker), which is where a dry run works.
-    for (const root of [researchRoot, paperRoot]) writeFileSync(join(root, '.paper', 'DRY-RUN.md'), '# made by pensmith --dry-run\n');
-  }
   return { researchRoot, paperRoot };
 }
 
@@ -621,9 +616,14 @@ test('H3 / RUN-04: --dry-run research, add, verify (incl. Pass 3), compile and d
       title: synthetic.title,
       author: synthetic.authors[0] ?? '',
       year: synthetic.year ?? 2020,
-    }, { dryRunPaper: true });
+    });
+    // GRND-19: a dry run over these papers works in their .paper-dry-run/
+    // workspaces (seeded from .paper/) and never writes .paper/.
+    const fingerprint = (root: string): string => JSON.stringify([...snapshotTree(join(root, '.paper'))]);
+    const before = [fx.researchRoot, fx.paperRoot].map(fingerprint);
     const runs = runChain(fx, ['--dry-run'], {}, '10.1038/nphys1170');
     assertZeroEgress(runs, '--dry-run');
+    assert.deepEqual([fx.researchRoot, fx.paperRoot].map(fingerprint), before, 'no dry run wrote .paper/');
 
     const byVerb = new Map(runs.map((r) => [r.verb, r.res]));
     // The runs are real, not vacuous refusals.
@@ -632,14 +632,16 @@ test('H3 / RUN-04: --dry-run research, add, verify (incl. Pass 3), compile and d
       assert.ok(!res.dials.some((e) => e.kind === 'read'), `--dry-run ${verb} never reads a cassette (RUN-27)`);
     }
     assert.equal(byVerb.get('research')?.status, 0, `research: ${byVerb.get('research')?.stderr}`);
-    const library = readFileSync(join(fx.researchRoot, '.paper', 'LIBRARY.json'), 'utf8');
-    assert.ok(/10\.0000\/pensmith-dryrun\./.test(library), 'dry-run research writes synthetic sources');
+    const library = readFileSync(join(fx.researchRoot, '.paper-dry-run', 'LIBRARY.json'), 'utf8');
+    assert.ok(/10\.0000\/pensmith-dryrun\./.test(library), 'dry-run research writes synthetic sources (in the workspace)');
     assert.match(byVerb.get('add')?.stderr ?? '', /unavailable \(dry-run\)/, 'add reports unavailable (dry-run)');
-    const verification = readFileSync(join(fx.paperRoot, '.paper', 'sections', '01-intro', 'VERIFICATION.md'), 'utf8');
+    const verification = readFileSync(join(fx.paperRoot, '.paper-dry-run', 'sections', '01-intro', 'VERIFICATION.md'), 'utf8');
     assert.match(verification, /text unavailable \(dry-run\)/, 'Pass 3 ran on the quote without a request');
     assert.match(verification, /- dryrunsrc2020: \*\*OK\*\* .*dry-run synthetic source/, 'Pass 1 accepted the synthetic source under --dry-run');
     assert.equal(byVerb.get('compile')?.status, 0, `compile: ${byVerb.get('compile')?.stderr}`);
     assert.equal(byVerb.get('done')?.status, 0, `done: ${byVerb.get('done')?.stderr}`);
+    assert.ok(existsSync(join(fx.paperRoot, '.paper-dry-run', 'export', 'DRAFT.dry-run.md')), 'the dry-run export is named DRAFT.dry-run.*');
+    assert.ok(!existsSync(join(fx.paperRoot, '.paper-dry-run', 'COSTS.jsonl')), 'no LLM cost was recorded');
     assert.ok(!existsSync(join(fx.paperRoot, '.paper', 'COSTS.jsonl')), 'no LLM cost was recorded');
   });
 

@@ -38,7 +38,7 @@ import { PDFDocument, PDFName } from 'pdf-lib';
 import { parseBib, renderStyle, renderInText } from './citations.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
-import { paperDir, projectRoot } from './paths.js';
+import { paperDir, projectRoot, dryRunWorkspaceActive } from './paths.js';
 import { exportCitedCitations } from './library.js';
 import { extractCitedKeysForVerification } from './citation-token.js';
 
@@ -398,6 +398,17 @@ export interface ExportOptions {
   style?: string;
 }
 
+/**
+ * The file-name stem of an export of `inputPath`: `DRAFT` for DRAFT.md, and
+ * under --dry-run `DRAFT.dry-run` (GRND-19, D-18-29) — a trial export in
+ * `.paper-dry-run/export/` is never mistaken for the real deliverable. The
+ * name is the only disclosure: the document itself stays zero-trace.
+ */
+export function exportStem(inputPath: string): string {
+  const stem = basename(inputPath, extname(inputPath));
+  return dryRunWorkspaceActive() ? `${stem}.dry-run` : stem;
+}
+
 export interface ExportResult {
   outputPath: string;
   format: ExportFormat;
@@ -628,7 +639,9 @@ function buildPandocArgs(
  *
  * Writes EVERY output into a DISTINCT export dir (default `<paperDir>/export`),
  * never `paperDir` itself — so an output never collides with the source
- * DRAFT.md/sections/CITATIONS.bib (MEDIUM-1). Behavior by format:
+ * DRAFT.md/sections/CITATIONS.bib (MEDIUM-1). Under --dry-run that is
+ * `.paper-dry-run/export/` and the document is named `<stem>.dry-run.<ext>`
+ * (exportStem, GRND-19). Behavior by format:
  *   - 'latex': deterministic OFFLINE md→tex writer (no Pandoc) → a REAL scanned
  *     .tex with NO generator comment. If Pandoc is present, the Pandoc latex
  *     path may be used, then any '% pensmith'/'% Generated' line is stripped.
@@ -654,7 +667,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   await fsp.mkdir(exportDir, { recursive: true });
 
   const pandoc = opts.pandocPresent ?? isPandocPresent();
-  const stem = basename(inputPath, extname(inputPath));
+  const stem = exportStem(inputPath);
 
   // DONE-08 — write the bibliography into the export dir BEFORE any pandoc
   // shellout (Pitfall-4: --bibliography bibDst must resolve at pandoc call
