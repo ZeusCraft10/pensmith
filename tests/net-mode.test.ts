@@ -248,11 +248,17 @@ test('RUN-04: bin/lib/http.ts has no environment bypass (the mode lives in http-
   const envReads = [...src.matchAll(/process\.env(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*['"]([^'"]+)['"]\s*\])/g)].map(
     (m) => m[1] ?? m[2],
   );
+  // Phase 19 (D-19-09, D-19-24): http.ts reads no environment variable at
+  // all. The contact email comes from contact-email.ts contactEmail(), the
+  // enabled local services from local-services.ts, and every mode decision
+  // from http-mock.ts networkMode().
   assert.deepEqual(
     [...new Set(envReads)],
-    ['PENSMITH_CONTACT_EMAIL'],
-    'http.ts may read only the contact email (User-Agent); every mode decision goes through networkMode()',
+    [],
+    'http.ts reads no environment variable: the contact email, the local services and the network mode each have one resolver module',
   );
+  assert.match(src, /from '\.\/contact-email\.js'/, 'the User-Agent contact email comes from contact-email.ts');
+  assert.match(src, /from '\.\/local-services\.js'/, 'the enabled local services come from local-services.ts');
   for (const name of ['NODE_TEST_CONTEXT', 'PENSMITH_TEST', 'PENSMITH_OFFLINE', 'PENSMITH_DRY_RUN', 'PENSMITH_NO_LLM', 'PENSMITH_NETWORK_TESTS', 'PENSMITH_RECORD_CASSETTES']) {
     assert.ok(!src.includes(name), `http.ts must not mention ${name}`);
   }

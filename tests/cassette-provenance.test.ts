@@ -103,13 +103,42 @@ test('CI-07: synthetic identifiers (10.0000/…, 10.1234/example) appear only un
   }
 });
 
-test('CI-07: recordings are https-only and commit no contact email or key in a path', () => {
+/**
+ * D-19-07: the one http:// entry a recording may hold is a redirect hop that
+ * upgrades to https (e.g. http://www.w3.org/…/dummy.pdf → 301 https://…) — the
+ * recorded first hop of a URL a user or a source gave as http.
+ */
+function isRecordedUpgradeHop(e: Cassette): boolean {
+  const location = e.responseHeaders?.['location'];
+  return e.status >= 300 && e.status < 400 && typeof location === 'string' && /^https:\/\//.test(new URL(location, `${e.scope}${e.path}`).href);
+}
+
+test('CI-07: recordings are https-only (bar an http→https redirect hop) and commit no contact email or key in a path', () => {
   for (const file of recorded) {
     for (const e of JSON.parse(readFileSync(file, 'utf8')) as Cassette[]) {
-      assert.match(e.scope, /^https:\/\//, `${rel(file)}: ${e.scope} is https (arXiv over http is gone)`);
+      if (!isRecordedUpgradeHop(e)) {
+        assert.match(e.scope, /^https:\/\//, `${rel(file)}: ${e.scope} is https (arXiv over http is gone)`);
+      }
       const q = new URL(`${e.scope}${e.path}`).searchParams;
       for (const k of q.keys()) {
         assert.ok(!SCRUBBED_QUERY_PARAMS.has(k.toLowerCase()), `${rel(file)}: scrubbed param "${k}" must not be committed`);
+      }
+    }
+  }
+});
+
+test('D-19-07: every base64 body decodes, every redirect hop has a Location, and a recorded chain resolves inside the store', () => {
+  for (const file of files) {
+    for (const e of JSON.parse(readFileSync(file, 'utf8')) as Cassette[]) {
+      if (e.bodyEncoding !== undefined) {
+        assert.equal(e.bodyEncoding, 'base64', `${rel(file)}: the only body encoding is base64`);
+        assert.ok(typeof e.response === 'string' && /^[A-Za-z0-9+/]*={0,2}$/.test(e.response), `${rel(file)}: ${e.scope}${e.path} is valid base64`);
+      }
+      if ([301, 302, 303, 307, 308].includes(e.status) && !rel(file).startsWith('synthetic/net/')) {
+        const location = e.responseHeaders?.['location'];
+        assert.ok(typeof location === 'string' && location.length > 0, `${rel(file)}: redirect ${e.scope}${e.path} records its location`);
+        const next = new URL(location, `${e.scope}${e.path}`).href;
+        assert.ok(lookupFixture('GET', next), `${rel(file)}: the recorded hop ${next} is in the store too`);
       }
     }
   }
@@ -138,8 +167,14 @@ test('D-17-06: every recorded entry replays through lookupFixture with its own s
       assert.ok(hit, `${rel(file)}: ${e.method} ${e.scope}${e.path} replays`);
       assert.equal(hit.status, e.status);
       assert.equal(rel(hit.file), rel(file), 'answered by its own file');
-      const expected = typeof e.response === 'string' ? e.response : JSON.stringify(e.response);
-      assert.equal(hit.body, expected);
+      if (e.bodyEncoding === 'base64') {
+        // D-19-07: a binary recording replays its exact bytes.
+        assert.equal(typeof e.response, 'string', `${rel(file)}: a base64 body is a string`);
+        assert.ok(hit.bodyBytes.equals(Buffer.from(e.response as string, 'base64')), `${rel(file)}: base64 body replays byte-exact`);
+      } else {
+        const expected = typeof e.response === 'string' ? e.response : JSON.stringify(e.response);
+        assert.equal(hit.body, expected);
+      }
     }
   }
 });

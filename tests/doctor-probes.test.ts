@@ -39,42 +39,46 @@ test('DOCT-02a mcp-sdk-presence returns one of {PASS,WARN,FAIL}', async () => {
   assert.ok(['PASS', 'WARN', 'FAIL'].includes(r.severity));
 });
 
-test('DOCT-02b zotero-mcp-presence returns one of {PASS,WARN}', async () => {
-  const r = await zoteroMcpPresenceProbe.run();
-  assert.equal(r.id, 'zotero-mcp-presence');
-  assert.ok(['PASS', 'WARN'].includes(r.severity));
-  // Detail mentions the paths checked.
-  if (r.severity === 'WARN') assert.match(r.detail ?? '', /Checked:/);
-});
-
-test('DOCT-02b zotero-mcp-presence tri-state contract + T-01-07 no-leak (RSCH-06)', async () => {
-  // The probe is now tri-state: ABSENT (WARN), CONFIGURED_NO_AUTH (WARN), and
-  // configured+authenticated (PASS). CONFIGURED_NO_AUTH can't be forced when
-  // Zotero is genuinely absent on CI (isZoteroMcpPresent() is false), so we
-  // assert the contract that holds on ANY machine:
-  //   - severity ∈ {PASS, WARN}
-  //   - when severity === 'WARN', detail contains 'Checked:'
-  //   - the ZOTERO_API_KEY VALUE never appears anywhere in the result (no-leak).
-  const SENTINEL = 'sk-zotero-LEAK-SENTINEL-67890';
-  const savedKey = process.env['ZOTERO_API_KEY'];
-  // Set a sentinel value: the probe must check presence as a boolean only and
-  // NEVER interpolate the value into summary/detail/fix (T-01-07 carry-forward).
-  process.env['ZOTERO_API_KEY'] = SENTINEL;
+test('DOCT-02b zotero-mcp-presence reports a `Zotero: ` state and always lists the MCP detection and the files checked', async () => {
+  const saved = { key: process.env['ZOTERO_API_KEY'], local: process.env['PENSMITH_ZOTERO_LOCAL'], group: process.env['ZOTERO_GROUP_ID'] };
+  delete process.env['ZOTERO_API_KEY'];
+  delete process.env['PENSMITH_ZOTERO_LOCAL'];
+  delete process.env['ZOTERO_GROUP_ID'];
   try {
     const r = await zoteroMcpPresenceProbe.run();
     assert.equal(r.id, 'zotero-mcp-presence');
-    assert.ok(['PASS', 'WARN'].includes(r.severity), 'tri-state collapses to PASS|WARN severities');
-    if (r.severity === 'WARN') assert.match(r.detail ?? '', /Checked:/);
-    // Load-bearing no-leak assertion: the sentinel value must NOT appear in the
-    // serialized probe output (mirrors the DOCT-07 SENTINEL pattern).
-    assert.equal(
-      JSON.stringify(r).includes(SENTINEL),
-      false,
-      'T-01-07: probe must NEVER include the ZOTERO_API_KEY value',
-    );
+    assert.equal(r.severity, 'WARN', 'nothing configured → WARN (Zotero is optional)');
+    assert.match(r.summary, /^Zotero: (not detected|MCP server detected)/);
+    assert.match(r.detail ?? '', /^MCP server: (detected|not detected)/m);
+    assert.match(r.detail ?? '', /Checked:/);
+    assert.match(r.fix ?? '', /https:\/\/www\.zotero\.org\/settings\/keys/);
+    assert.ok(!/example\.invalid|placeholder/i.test(JSON.stringify(r)), 'real fix links, no placeholder');
+  } finally {
+    for (const [k, v] of [['ZOTERO_API_KEY', saved.key], ['PENSMITH_ZOTERO_LOCAL', saved.local], ['ZOTERO_GROUP_ID', saved.group]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
+test('DOCT-02b / SRC-16: a key is never "authenticated" by presence — offline without a fixture it is "not checked (offline)", and its value never leaks (T-01-07)', async () => {
+  // The test runner is sources-offline: the authenticated check (GET
+  // /keys/current) has no recorded fixture, so the probe says it did not check.
+  const SENTINEL = 'sk-zotero-LEAK-SENTINEL-67890';
+  const savedKey = process.env['ZOTERO_API_KEY'];
+  const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
+  process.env['ZOTERO_API_KEY'] = SENTINEL;
+  delete process.env['PENSMITH_NETWORK_TESTS'];
+  try {
+    const r = await zoteroMcpPresenceProbe.run();
+    assert.equal(r.id, 'zotero-mcp-presence');
+    assert.equal(r.severity, 'SKIP');
+    assert.equal(r.summary, 'Zotero: not checked (offline)');
+    assert.equal(JSON.stringify(r).includes(SENTINEL), false, 'T-01-07: probe must NEVER include the ZOTERO_API_KEY value');
   } finally {
     if (savedKey === undefined) delete process.env['ZOTERO_API_KEY'];
     else process.env['ZOTERO_API_KEY'] = savedKey;
+    if (savedLane !== undefined) process.env['PENSMITH_NETWORK_TESTS'] = savedLane;
   }
 });
 
@@ -108,9 +112,48 @@ test('DOCT-03 contact-email-presence PASS when env set', async () => {
   try {
     const r = await contactEmailPresenceProbe.run();
     assert.equal(r.severity, 'PASS');
+    assert.match(r.summary, /mailto/);
+    assert.ok(!JSON.stringify(r).includes('test@example.com'), 'the address itself never appears');
   } finally {
     if (prev !== undefined) process.env.PENSMITH_CONTACT_EMAIL = prev;
     else delete process.env.PENSMITH_CONTACT_EMAIL;
+  }
+});
+
+test('DOCT-03 / D-19-09: contact-email-presence asks contactEmail() — a paper naming MY_WORK_EMAIL, and a value that is not an address', async () => {
+  const { atomicWriteFile } = await import('../bin/lib/atomic-write.js');
+  const { CURRENT_CONFIG_VERSION } = await import('../bin/lib/config.js');
+  const { _resetContactEmailForTest } = await import('../bin/lib/contact-email.js');
+  const { loadCapabilityFacts } = await import('../bin/lib/capabilities.js');
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-contact-probe-'));
+  await atomicWriteFile(join(root, '.paper', 'config.toml'), `schema_version = ${CURRENT_CONFIG_VERSION}\n[network]\ncontact_email_env = "MY_WORK_EMAIL"\n`);
+  const saved = { cwd: process.cwd(), mine: process.env['MY_WORK_EMAIL'], def: process.env['PENSMITH_CONTACT_EMAIL'], root: process.env['PENSMITH_PAPER_ROOT'] };
+  process.chdir(root);
+  delete process.env['PENSMITH_PAPER_ROOT'];
+  process.env['PENSMITH_CONTACT_EMAIL'] = 'default@example.org';
+  const stderr = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    _resetContactEmailForTest();
+    process.env['MY_WORK_EMAIL'] = 'lab@example.org';
+    const ok = await contactEmailPresenceProbe.run();
+    assert.equal(ok.severity, 'PASS');
+    assert.match(ok.summary, /^MY_WORK_EMAIL set \(named by \[network\] contact_email_env\)/);
+    assert.equal((await loadCapabilityFacts()).contact_email_set, true, 'paper://capabilities agrees');
+    process.env['MY_WORK_EMAIL'] = 'not an address';
+    _resetContactEmailForTest();
+    const bad = await contactEmailPresenceProbe.run();
+    assert.equal(bad.severity, 'WARN', 'a value that is not an address is not sent — even though PENSMITH_CONTACT_EMAIL is set');
+    assert.match(bad.summary, /^MY_WORK_EMAIL is not set \(or is not an email address\)/);
+    assert.equal((await loadCapabilityFacts()).contact_email_set, false, 'paper://capabilities agrees');
+  } finally {
+    process.stderr.write = stderr;
+    process.chdir(saved.cwd);
+    for (const [k, v] of [['MY_WORK_EMAIL', saved.mine], ['PENSMITH_CONTACT_EMAIL', saved.def], ['PENSMITH_PAPER_ROOT', saved.root]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    _resetContactEmailForTest();
   }
 });
 

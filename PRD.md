@@ -422,11 +422,12 @@ For power users / batch processing / CI testing:
 | `detector-consent` | Send the full paper text to GPTZero for an AI-detection score? | never | skip: 0 | 0 | EXP-17 |
 | `paper-pointer` | Continue the active paper, or start a new paper here? | never | refuse: 2 | 2 | RUN-14 |
 | `sketch-confirm` | Proceed to intake with this thesis? | skip: proceed to intake | refuse: 3 | 3 | ERGO-05 |
-| `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 (planned) |
-| `plan-research` | Run this section-scoped research? | skip: run it | refuse: 3 | 3 | GRND-17 (planned) |
+| `assignment-pickup` | Use the assignment file in this folder? | skip: use the file | skip: 0 | 0 | GRND-01 |
+| `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 |
+| `plan-research` | Add these research hits to the section? | skip: add every hit to the section | refuse: 3 | 3 | GRND-17 |
 | `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |
 | `quote-accept` | Accept this quote match? | never | refuse: 3 | 3 | VRFY-20 (planned) |
-| `reoutline` | Re-outline a paper that already has drafts? | skip only with `--force`: re-outline | refuse: 3 | 3 | GRND-09 (planned) |
+| `reoutline` | Re-outline a paper that already has drafts? | skip: re-outline (only with --force) | refuse: 3 | 3 | GRND-09 |
 
 Automatic revision of a failed section is not a gate `--yolo` can open: it is its own opt-in, `--auto-revise` or `[project] auto_revise = true` (REV-01). Detector consent persisted in `config.toml` (EXP-17) is the only way that gate is answered without asking.
 
@@ -586,33 +587,41 @@ session_bodies = "full"              # full | redacted — redacted keeps hashes
 
 ## 11. Ecosystem composition
 
-At startup, pensmith probes for and adapts to other installed tools:
+Pensmith detects and adapts to other tools the user has installed. Nothing here is required; each is detected when it is needed (`pensmith doctor`, the `paper://capabilities` resource and the step that uses it), not cached.
 
-- **Zotero MCP** (if installed AND authenticated): exposes a `pull-from-zotero` source provider. Auth status check, not just presence.
+- **Zotero** (SRC-16, D-19-24) — the user's own library as a source, read-only, in both tiers:
+  - *Tier 2 (CLI):* the Zotero Web API (`api.zotero.org`) with `ZOTERO_API_KEY` (the user id comes from `GET /keys/current`; the key is sent only as the `Zotero-API-Key` header, never logged, cached or recorded), `ZOTERO_GROUP_ID` for a group library (a public group needs no key), or the Zotero 7 local API at exactly `http://127.0.0.1:23119` when `PENSMITH_ZOTERO_LOCAL=1` (Zotero's "Allow other applications on this computer to communicate with Zotero" setting). `[sources] zotero_collection` limits the pull to one collection, by name. The adapter's registry key is `zotero`.
+  - *Tier 1 (Claude Code):* Claude reads Zotero through the user's own Zotero MCP server (e.g. [54yyyu/zotero-mcp](https://github.com/54yyyu/zotero-mcp)) and submits the items to the MCP tool `paper_ingest_zotero_items({paperRoot, items})`, which validates every item (one malformed item rejects the call with its schema error and writes nothing) and ingests them through `bin/lib/zotero-ingest.ts`.
+  - Both tiers normalize items the same way (creators → authors and editors, item type → CSL type, DOI, ISBN, arXiv / PMID from `extra`, venue, volume, issue, pages, publisher, the item's `zotero` ref), upsert them through the one library writer with provenance `zotero` (an item whose DOI is already in the library merges into that entry) and refresh RESEARCH.md; `tests/tier-contract/zotero-ingest.test.ts` asserts the same LIBRARY entries from both.
+  - `pensmith doctor` reports `Zotero: authenticated` only after `/keys/current` answers 200 (an auth check, never key presence), `Zotero: key rejected` on 403, whether the local API or a group answers, and whether a Zotero MCP server is configured for Claude Code (`.claude.json` user or project scope, the project's `.mcp.json`, legacy `mcp_servers.json`) — else `Zotero: not detected`.
+- **GROBID** (optional, SRC-15): when `PENSMITH_GROBID_URL` names a GROBID server on the user's own machine (a loopback URL; anything else is ignored with a warning, because the PDF is uploaded to it), bring-your-own PDF identification asks it for the header (title, authors, DOI) first, with consolidation off so the server itself calls out to nothing.
 - **Pandoc** (if installed): enables `.pdf` and richer `.docx` exports. Else degrades to markdown-based `.docx`, skips PDF with a clear note.
 - **The user's installed humanizer skill**: pensmith auto-detects and uses it. If absent, prints a clear note and skips with no error.
 
-Detection cached in `.paper/CAPABILITIES.json` for the run.
+The two local services (the Zotero local API and GROBID) are the only loopback addresses the egress gate allows besides a configured local model endpoint, and only the environment can enable them — a paper's own files cannot.
 
 ---
 
 ## 12. External dependencies (the source clients)
 
-All free, no keys required for the basics. Polite User-Agent with `PENSMITH_CONTACT_EMAIL`.
+All free; no key is required for the basics, and each optional key raises a service's limits. Crossref, OpenAlex and Unpaywall receive a polite `User-Agent: pensmith/<version> (mailto:<contact email>)` (the address from `PENSMITH_CONTACT_EMAIL`, or the variable `[network] contact_email_env` names, D-19-09); every other service gets the plain `pensmith/<version>`. The per-service rates, what each service receives, and the key rules are in [docs/SOURCES.md](docs/SOURCES.md).
 
-| Source | Endpoint | Use |
-|---|---|---|
-| OpenAlex | `api.openalex.org` | Primary search backend |
-| Crossref | `api.crossref.org` | DOI verification + canonical metadata for fuzzy match |
-| arXiv | `export.arxiv.org/api` | STEM preprints |
-| PubMed | NCBI E-utilities | Biomedical |
-| Semantic Scholar | `api.semanticscholar.org` | Citation graph (optional, rate-limited) |
-| Unpaywall | `api.unpaywall.org` | OA full-text PDF discovery |
-| GPTZero | `api.gptzero.me` (free tier) | Honesty score (§7.11) |
-| Retraction Watch | `api.crossref.org/works?filter=updates:<doi>` (the Retraction Watch data Crossref serves as `update-to` notices) | Recheck flagging (§7.12); an unanswerable lookup is "retraction status unknown", never "not retracted" |
-| DuckDuckGo HTML | (no formal API) | Free distinctive-phrase plagiarism check (§7.17) |
+| Source | Endpoint | Use | Rate pensmith keeps (per host) |
+|---|---|---|---|
+| OpenAlex | `api.openalex.org` | Primary search backend; `OPENALEX_API_KEY` (free) sent as `api_key` | 10/s within the key's daily budget |
+| Crossref | `api.crossref.org` | DOI verification + canonical metadata for fuzzy match; search | 3/s, lowered by Crossref's `X-Rate-Limit-*` headers |
+| arXiv | `export.arxiv.org/api` | STEM preprints | 1 request per 3 s |
+| PubMed | NCBI E-utilities | Biomedical | 3/s |
+| Semantic Scholar | `api.semanticscholar.org` | Citation graph (optional, rate-limited); `PENSMITH_S2_API_KEY` sent as `x-api-key` | 1/s |
+| Unpaywall | `api.unpaywall.org` | OA full-text PDF discovery. Requires a contact email (`email=`); without one it is skipped with a visible reason | 10/s |
+| Open Library | `openlibrary.org` | Books: title/author search and ISBN lookup (§8) | 1/s |
+| Google Books | `www.googleapis.com/books` | Books: keyless ISBN fallback | 1/s |
+| Zotero | `api.zotero.org`, or the Zotero 7 local API at `127.0.0.1:23119` | The user's own library (§11); `ZOTERO_API_KEY` sent as `Zotero-API-Key` | 5/s plus Zotero's `Backoff` header |
+| GPTZero | `api.gptzero.me` (free tier) | Honesty score (§7.11) | 5/s (the default per host) |
+| Retraction Watch | `api.crossref.org/works?filter=updates:<doi>` (the Retraction Watch data Crossref serves as `update-to` notices) | Recheck flagging (§7.12); an unanswerable lookup is "retraction status unknown", never "not retracted" | shares Crossref's budget |
+| DuckDuckGo HTML | (no formal API) | Free distinctive-phrase plagiarism check (§7.17) | 5/s (the default per host) |
 
-All HTTP traffic goes through `bin/lib/http.js` which provides: response cache (TTL per source), exponential backoff with jitter, retry on transient errors, polite User-Agent, DOI normalization on the way in.
+All HTTP traffic goes through `bin/lib/http.ts`, which provides: a response cache (TTL per source; only validated answers; keys never part of a cache key), full-jitter exponential backoff and retry on transient errors (a `Retry-After` up to 30 s honoured), a per-host token bucket, a host marked exhausted when a service asks for a longer wait, a per-host circuit breaker (three consecutive 429/5xx responses skip the host for the run, with a 10-minute half-open probe), redirects followed by its own loop with a fresh SSRF check and pinned connection per hop (SRC-01), and the polite User-Agent (SRC-17, D-19-06..10).
 
 ---
 

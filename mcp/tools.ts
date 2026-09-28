@@ -1,12 +1,15 @@
 // mcp/tools.ts
 //
 // TIER-02 + D-13: 6 Phase-2 state-mutation tools + 3 Phase-3 per-section
-// verb tools (Plan 03-07 Task 7.3) — total 9 tools:
-//   Phase 2: paper_init_section, paper_advance_section,
-//            paper_record_verification, paper_set_status,
-//            paper_doi_verify, paper_capability_probe
-//   Phase 3: pensmith_plan, pensmith_write, pensmith_verify (Tier 1
-//            equivalent of the Tier 2 CLI per-section verbs)
+// verb tools (Plan 03-07 Task 7.3) + 1 Phase-19 source tool — total 10 tools:
+//   Phase 2:  paper_init_section, paper_advance_section,
+//             paper_record_verification, paper_set_status,
+//             paper_doi_verify, paper_capability_probe
+//   Phase 3:  pensmith_plan, pensmith_write, pensmith_verify (Tier 1
+//             equivalent of the Tier 2 CLI per-section verbs)
+//   Phase 19: paper_ingest_zotero_items (SRC-16, D-19-24: the Tier 1 half of
+//             the Zotero source — items Claude read through the user's Zotero
+//             MCP server, validated and upserted by bin/lib/zotero-ingest.ts)
 // D-08: each handler body ≤30 stmts (AST-asserted in tests/mcp-server-thin-shim.test.ts).
 // RUN-23: every MUTATING tool runs inside the paper's session lock (mutate()
 //         → bin/lib/session-lock.ts withPaperSession): a CLI session working
@@ -40,6 +43,7 @@ import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
 import { projectRoot, asProjectRoot } from '../bin/lib/paths.js';
 import { withPaperSession } from '../bin/lib/session-lock.js';
 import { runClassified, type ClassifiedOutcome } from '../bin/lib/verb-outcome.js';
+import { ingestZoteroItems, MAX_ZOTERO_INGEST_ITEMS } from '../bin/lib/zotero-ingest.js';
 import {
   SectionStateSchema,
   SectionStatusSchema,
@@ -210,6 +214,28 @@ export function registerPaperTools(server: McpServer): void {
       const facts = await loadCapabilityFacts();
       return { content: [{ type: 'text' as const, text: JSON.stringify(facts, null, 2) }] };
     },
+  );
+
+  // Tool 10: paper_ingest_zotero_items — the Tier 1 half of the Zotero source
+  //          (SRC-16, D-19-24). THIN SHIM: bin/lib/zotero-ingest.ts validates
+  //          every item (one malformed item rejects the call with its schema
+  //          error and writes nothing), normalizes, upserts with provenance
+  //          `zotero` and refreshes RESEARCH.md — under the paper's session lock.
+  server.registerTool(
+    'paper_ingest_zotero_items',
+    {
+      title: 'Add Zotero items to the paper library',
+      description:
+        "Add items from the user's Zotero library to LIBRARY.json (tagged zotero). Pass the items a Zotero MCP server returned — " +
+        'full Zotero API items ({key, library, data}) or their data objects, e.g. zotero_get_item_metadata with format="json" — as-is. ' +
+        'A malformed item rejects the whole call with its schema error; notes and attachments are skipped with a reason.',
+      inputSchema: {
+        paperRoot: PaperRootArg,
+        items: z.array(z.record(z.string(), z.unknown())).min(1).max(MAX_ZOTERO_INGEST_ITEMS),
+      },
+    },
+    async ({ paperRoot, items }) =>
+      toolResult(await mutate(asProjectRoot(paperRoot), { verb: 'paper_ingest_zotero_items' }, () => ingestZoteroItems(asProjectRoot(paperRoot), items))),
   );
 
   // ===========================================================================

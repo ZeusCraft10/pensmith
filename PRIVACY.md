@@ -22,7 +22,7 @@ Model requests carry a plain `pensmith/<version>` User-Agent — never your cont
 - **arXiv** — preprint metadata and full text
 - **PubMed / NCBI** — biomedical paper metadata
 - **Unpaywall** — open-access PDF discovery (quote verification downloads the open-access PDF it finds)
-- **Zotero** — only if you configured a Zotero MCP server; it runs on your side
+- **Zotero** — only if you set it up, and read-only. With `ZOTERO_API_KEY`, the Zotero Web API (`api.zotero.org`) receives your key (as the `Zotero-API-Key` header only) and the requests for your library, a collection (`[sources] zotero_collection`) or a quick-search query; with `PENSMITH_ZOTERO_LOCAL=1`, pensmith reads the Zotero 7 local API on your own computer (`127.0.0.1:23119`) and nothing leaves the machine. In Claude Code, Claude reads Zotero through your own Zotero MCP server and hands the items to pensmith as data (`paper_ingest_zotero_items`); pensmith itself contacts nothing for that. Zotero items are stored in `.paper/LIBRARY.json` like any other source, tagged `zotero`. `pensmith doctor` checks a key with one request to `api.zotero.org/keys/current`, and reads your Claude Code MCP configuration (`.claude.json`, a project `.mcp.json`) only to see whether a Zotero server is configured.
 
 **Checks on the finished paper** (`pensmith done`):
 
@@ -31,7 +31,9 @@ Model requests carry a plain `pensmith/<version>` User-Agent — never your cont
 
 ## `PENSMITH_CONTACT_EMAIL` (recommended)
 
-Crossref, OpenAlex and Unpaywall ask callers to identify themselves (their "polite pool", with better rate limits). When `PENSMITH_CONTACT_EMAIL` is set, requests to those three services (including the Crossref retraction lookup) carry it in the `User-Agent`, and OpenAlex, Unpaywall and Crossref retraction requests also as their `mailto` / `email` query parameter. It is sent to those scholarly services only — never to a model provider, arXiv, PubMed, Semantic Scholar, DuckDuckGo, GPTZero, a URL you pass to `pensmith add`, or an open-access PDF host — and it is dropped from every log record, including the error text of a failed or refused request. When it is unset, pensmith still works (with a one-time warning), and `pensmith doctor` reports a WARN.
+Crossref, OpenAlex and Unpaywall ask callers to identify themselves (their "polite pool", with better rate limits). When `PENSMITH_CONTACT_EMAIL` is set, requests to those three services (including the Crossref retraction lookup) carry it in the `User-Agent` as `pensmith/<version> (mailto:<address>)`, and OpenAlex, Unpaywall and Crossref retraction requests also as their `mailto` / `email` query parameter. It is sent to those scholarly services only — never to a model provider, arXiv, PubMed, Semantic Scholar, the book services, Zotero, DuckDuckGo, GPTZero, a URL you pass to `pensmith add`, or an open-access PDF host, and never across a redirect that leaves one of those three services — and it is dropped from every log record (including the error text of a failed or refused request), every HTTP cache file and every recorded test fixture. When it is unset, pensmith still works (with a one-time warning; Unpaywall, which requires an address, is skipped), and `pensmith doctor` reports a WARN.
+
+A paper can name a different variable for the address with `[network] contact_email_env` in `.paper/config.toml` (for example `MY_WORK_EMAIL`). Because a paper's config travels with the paper (a shared or synced folder), that name is honoured only when it is an upper-case variable name containing `EMAIL` or `MAILTO`, and its value is sent only when it looks like an email address; anything else is ignored with a one-time warning and `PENSMITH_CONTACT_EMAIL` is read instead. A paper file can therefore never make pensmith send one of your secrets (an API key in another variable) to a scholarly service. `pensmith doctor` names the variable it read, never the address.
 
 ## What pensmith stores, and where
 

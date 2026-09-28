@@ -62,7 +62,7 @@ function countHandlerStmts(
   return results;
 }
 
-test('D-08: every mcp/tools.ts handler ≤30 statements (Phase 2 = 6 tools + Phase 3 Plan 03-07 Task 7.3 = 3 tools = 9 total)', () => {
+test('D-08: every mcp/tools.ts handler ≤30 statements (6 Phase 2 + 3 Phase 3 Plan 03-07 + 1 Phase 19 = 10 tools)', () => {
   const handlers = countHandlerStmts('mcp/tools.ts', 'registerTool');
   // Phase 2 (TIER-02): paper_init_section, paper_advance_section,
   //   paper_record_verification, paper_set_status, paper_doi_verify,
@@ -70,7 +70,9 @@ test('D-08: every mcp/tools.ts handler ≤30 statements (Phase 2 = 6 tools + Pha
   // Phase 3 Plan 03-07 Task 7.3: pensmith_plan, pensmith_write, pensmith_verify —
   //   Tier 1 equivalent of CLI per-section verbs; each handler imports the
   //   same bin/cli/<verb>.ts CommandDef the dispatcher uses.
-  assert.equal(handlers.length, 9, `expected 9 tools (6 Phase 2 + 3 Phase 3 Plan 03-07), got ${handlers.length}: ${JSON.stringify(handlers.map((h) => h.name))}`);
+  // Phase 19 (SRC-16, D-19-24): paper_ingest_zotero_items — the Tier 1 half of
+  //   the Zotero source, a thin shim over bin/lib/zotero-ingest.ts.
+  assert.equal(handlers.length, 10, `expected 10 tools (6 Phase 2 + 3 Phase 3 Plan 03-07 + 1 Phase 19), got ${handlers.length}: ${JSON.stringify(handlers.map((h) => h.name))}`);
   for (const h of handlers) {
     assert.ok(h.stmts <= 30, `${h.name}: ${h.stmts} stmts (max 30)`);
   }

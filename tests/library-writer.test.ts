@@ -34,6 +34,8 @@ import {
 } from '../bin/lib/library.js';
 import { Schema as LibrarySchema } from '../bin/lib/schemas/library.js';
 import { migrate } from '../bin/lib/migrations/library/v1_to_v2.js';
+import { migrate as migrateV2toV3 } from '../bin/lib/migrations/library/v2_to_v3.js';
+import { CURRENT_LIBRARY_VERSION } from '../bin/lib/schemas/library.js';
 import { isPreprintDoi } from '../bin/lib/migrations/library/shape.js';
 import { parseBib } from '../bin/lib/citations.js';
 
@@ -99,9 +101,11 @@ test('BRDTH-01 migration: the research-written v1 shape (SourceCandidate[], no a
       },
     ],
   };
-  const v2 = migrate(v1, '2026-09-27T00:00:00.000Z');
-  const lib = LibrarySchema.parse(v2);
-  assert.equal(lib.$schemaVersion, 2);
+  const v2 = migrate(v1, '2026-09-27T00:00:00.000Z') as { $schemaVersion: number };
+  assert.equal(v2.$schemaVersion, 2, 'the v1 → v2 step yields v2');
+  // Phase 19 seam S-B: the loader chains v2 → v3; the current schema is v3.
+  const lib = LibrarySchema.parse(migrateV2toV3(v2));
+  assert.equal(lib.$schemaVersion, CURRENT_LIBRARY_VERSION);
   const [a, b] = lib.entries;
   assert.equal(a!.citekey, 'vaswani2017');
   assert.equal(a!.doi, '10.48550/arxiv.1706.03762', 'DOI normalized (lowercase)');
@@ -124,24 +128,24 @@ test('BRDTH-01 migration: the strict v1 foundation shape migrates; duplicate key
       { id: 'cite-1', pmid: '123', addedAt: '2099-01-02T00:00:00.000Z' },
     ],
   };
-  const lib = LibrarySchema.parse(migrate(v1, '2026-09-27T00:00:00.000Z'));
+  const v2 = migrate(v1, '2026-09-27T00:00:00.000Z');
+  const lib = LibrarySchema.parse(migrateV2toV3(v2));
   assert.deepEqual(lib.entries.map((e) => e.citekey), ['cite-1', 'cite-1a']);
   assert.equal(lib.entries[0]!.doi, '10.5555/abc');
   assert.equal(lib.entries[0]!.addedAt, '2099-01-01T00:00:00.000Z');
   assert.deepEqual(lib.entries[1]!.provenance, ['v1']);
   assert.equal(lib.entries[1]!.title, null);
-  const again = migrate(lib);
-  assert.deepEqual(again, lib, 'idempotent on v2');
+  assert.deepEqual(migrate(v2), v2, 'idempotent on v2');
 });
 
-test('BRDTH-01 migration: loadLibrary migrates a research-written v1 file and writes the v2 file back', async () => {
+test('BRDTH-01 migration: loadLibrary migrates a research-written v1 file and writes the current-version file back', async () => {
   const root = project();
   const file = path.join(root, '.paper', 'LIBRARY.json');
   fs.writeFileSync(file, JSON.stringify({ $schemaVersion: 1, entries: [{ ...ENGEL, citekey: 'engel2007', raw: {} }] }, null, 2));
   const lib = await loadLibrary(root);
   assert.equal(lib.entries.length, 1);
   const onDisk = JSON.parse(fs.readFileSync(file, 'utf8')) as { $schemaVersion: number; entries: Array<Record<string, unknown>> };
-  assert.equal(onDisk.$schemaVersion, 2, 'the migrated file is written back');
+  assert.equal(onDisk.$schemaVersion, CURRENT_LIBRARY_VERSION, 'the migrated file is written back (v1 → v2 → v3)');
   assert.ok(typeof onDisk.entries[0]!['addedAt'] === 'string');
   LibrarySchema.parse(onDisk);
 });
@@ -563,7 +567,7 @@ async function readPaperLibraryOverMcp(cwd: string): Promise<{ entries: Array<{ 
   }
 }
 
-test('BRDTH-01 user path: `research --yolo` writes a v2 LIBRARY.json that paper://library returns; a re-run adds no duplicate', async () => {
+test('BRDTH-01 user path: `research --yolo` writes a current-version LIBRARY.json that paper://library returns; a re-run adds no duplicate', async () => {
   assert.ok(fs.existsSync(DIST_CLI) && fs.existsSync(DIST_MCP), 'run `npm run build` first');
   const root = project();
   fs.writeFileSync(
@@ -586,7 +590,7 @@ test('BRDTH-01 user path: `research --yolo` writes a v2 LIBRARY.json that paper:
     assert.ok(e.provenance.some((p) => p.startsWith('research')), `${e.citekey} carries a research provenance tag`);
   }
   const served = await readPaperLibraryOverMcp(root);
-  assert.equal(served.$schemaVersion, 2);
+  assert.equal(served.$schemaVersion, CURRENT_LIBRARY_VERSION);
   assert.deepEqual(served.entries.map((e) => e.citekey), lib.entries.map((e) => e.citekey), 'paper://library returns the entries');
 
   const second = run();

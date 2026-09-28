@@ -10,7 +10,8 @@
 // (PROCESS-ENV-SENTINEL-DO-NOT-LEAK-...) to prove no leak path exists.
 // Symmetric to mcp/ T-01-07 / T-02-04-02 mitigation.
 
-import { loadRuntimeConfig, providerKeyVariables } from './runtime.js';
+import { providerKeyVariables } from './runtime.js';
+import { contactEmail } from './contact-email.js';
 import {
   isPandocPresent,
   isZoteroMcpPresent,
@@ -65,10 +66,6 @@ function envPresent(name: string): boolean {
  * No resolved api-key values ever appear in the return shape.
  */
 export async function loadCapabilityFacts(): Promise<CapabilityFacts> {
-  // An invalid global runtime.json (e.g. an unknown provider) must not take
-  // paper://capabilities or doctor down: the facts fall back to the defaults
-  // and the runtime-config-presence probe reports the error (FAIL, RUN-08).
-  const cfg = await loadRuntimeConfig().catch(() => null);
 
   // The hosted provider key variables (anthropic, openai) plus the configured
   // provider's variable when it differs (runtime.ts providerKeyVariables returns
@@ -95,9 +92,16 @@ export async function loadCapabilityFacts(): Promise<CapabilityFacts> {
 
   return {
     mcp_self: true,
-    contact_email_set: envPresent(cfg?.contactEmailEnv ?? 'PENSMITH_CONTACT_EMAIL'),
+    // D-19-09: the ONE contact-email resolver (the variable `[network]
+    // contact_email_env` names, default PENSMITH_CONTACT_EMAIL; a value that
+    // is not an email address counts as unset) — the same fact the doctor's
+    // contact-email-presence probe reports. A boolean only, never the address.
+    contact_email_set: safeBool(() => contactEmail().email !== null),
     providers,
     pandoc: safeBool(isPandocPresent),
+    // SRC-16: a Zotero MCP server configured for Claude Code in any scope
+    // (user / local .claude.json, the project's .mcp.json, legacy files) —
+    // the MCP server line of the doctor's zotero-mcp-presence probe.
     zotero_mcp: safeBool(isZoteroMcpPresent),
     humanizer: safeBool(isHumanizerSkillPresent),
     onedrive_detected: syncFolder.detected,

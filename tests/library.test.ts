@@ -52,15 +52,16 @@ function src(i: number, extra: Record<string, unknown> = {}): Record<string, unk
   };
 }
 
-test('initLibrary then loadLibrary returns an empty v2 library', async () => {
+test('initLibrary then loadLibrary returns an empty current-version library', async () => {
   const root = mkPaperRoot();
   const { initLibrary, loadLibrary } = await import('../bin/lib/library.js');
+  const { CURRENT_LIBRARY_VERSION } = await import('../bin/lib/schemas/library.js');
 
   await initLibrary(root);
   const loaded = await loadLibrary(root);
 
   assert.deepEqual(loaded.entries, []);
-  assert.equal(loaded.$schemaVersion, 2);
+  assert.equal(loaded.$schemaVersion, CURRENT_LIBRARY_VERSION);
   assert.ok(fs.existsSync(path.join(root, '.paper', 'LIBRARY.json')), 'LIBRARY.json lives under .paper/');
 });
 
@@ -171,14 +172,14 @@ test('forward-incompat: $schemaVersion=999 throws ForwardIncompatError (never do
 });
 
 test('the library refuses to persist a duplicate citekey (schema invariant)', async () => {
-  const { Schema } = await import('../bin/lib/schemas/library.js');
+  const { Schema, CURRENT_LIBRARY_VERSION } = await import('../bin/lib/schemas/library.js');
   const e = {
     citekey: 'dup2020',
     title: 'x',
     addedAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   };
-  const r = Schema.safeParse({ $schemaVersion: 2, entries: [e, { ...e, doi: '10.5555/other' }] });
+  const r = Schema.safeParse({ $schemaVersion: CURRENT_LIBRARY_VERSION, entries: [e, { ...e, doi: '10.5555/other' }] });
   assert.equal(r.success, false);
   assert.match(JSON.stringify(r.error?.issues), /duplicate citekey/);
 });

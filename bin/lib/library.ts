@@ -11,7 +11,7 @@
 // It composes the lower-level chokepoints:
 //   atomicWriteFile (D-04)  — crash-safe writes via tmp+rename
 //   withLock        (D-26)  — one critical section per paper library
-//   loadAndMigrate  (D-37)  — version envelope, v1→v2 migration, zod validation
+//   loadAndMigrate  (D-37)  — version envelope, v1→v2→v3 migrations, zod validation
 //   openSessionLog  (D-49)  — JSONL structured log, kind:'event'
 //
 // upsertSources, under ONE lock on LIBRARY.json (read → merge → validate →
@@ -52,6 +52,7 @@ import { withLock } from './lock.js';
 import { loadAndMigrate, ForwardIncompatError } from './migrations/loader.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 import { migrate as migrateLibraryV1toV2 } from './migrations/library/v1_to_v2.js';
+import { migrate as migrateLibraryV2toV3 } from './migrations/library/v2_to_v3.js';
 import {
   candidateToEntry,
   isPreprintDoi,
@@ -86,6 +87,8 @@ export const VERSION_TITLE_JW = 0.95;
 /** Registered forward migrations for LIBRARY.json, keyed by FROM version. */
 export const LIBRARY_MIGRATIONS: Record<number, (input: unknown) => unknown> = {
   1: (input) => migrateLibraryV1toV2(input),
+  // Phase 19 seam S-B: the v3 bibliographic, evaluation, BYO, retraction and Zotero fields.
+  2: (input) => migrateLibraryV2toV3(input),
 };
 
 // ---------------------------------------------------------------------------
@@ -327,7 +330,7 @@ export async function findEntry(
 // Matching and merging.
 // ---------------------------------------------------------------------------
 
-export type MatchKind = 'doi' | 'arxiv' | 'pmid' | 'pmcid' | 'isbn' | 'version';
+export type MatchKind = 'doi' | 'arxiv' | 'pmid' | 'pmcid' | 'isbn' | 'zotero' | 'version';
 
 function familyName(authors: string[]): string {
   return firstAuthorSurname(authors[0] ?? '').replace(/[^\p{L}\p{N}]+/gu, '');
@@ -363,6 +366,12 @@ function findMatch(entries: LibraryEntry[], d: LibraryEntry): { entry: LibraryEn
   for (const k of ['arxiv', 'pmid', 'pmcid', 'isbn'] as const) {
     const hit = byField(k);
     if (hit) return { entry: hit, by: k };
+  }
+  // Phase 19 seam S-B (SRC-16): the same Zotero item re-pulled.
+  if (d.zotero) {
+    const z = d.zotero;
+    const hit = entries.find((e) => e.zotero !== null && e.zotero.library === z.library && e.zotero.key === z.key);
+    if (hit) return { entry: hit, by: 'zotero' };
   }
   const version = entries.find((e) => sameWorkVersion(e, d));
   return version ? { entry: version, by: 'version' } : null;
@@ -410,22 +419,49 @@ function mergeInto(e: LibraryEntry, d: LibraryEntry, now: string): boolean {
     if (e[k] === null && d[k] !== null) e[k] = d[k];
   }
 
+  // Phase 19 seam S-B (SRC-15): a registrar-hydrated record replaces the
+  // local metadata of an unhydrated bring-your-own entry.
+  if (!e.hydrated && d.hydrated) incomingIsRecord = true;
+
   if (incomingIsRecord) {
     e.title = d.title ?? e.title;
     e.year = d.year ?? e.year;
     e.venue = d.venue ?? e.venue;
     if (d.authors.length > 0) e.authors = d.authors;
+    e.type = d.type ?? e.type;
+    e.publisher = d.publisher ?? e.publisher;
+    e.volume = d.volume ?? e.volume;
+    e.issue = d.issue ?? e.issue;
+    e.pages = d.pages ?? e.pages;
+    if (d.editors.length > 0) e.editors = d.editors;
   } else {
     e.title = e.title ?? d.title;
     e.year = e.year ?? d.year;
     e.venue = e.venue ?? d.venue;
     if (d.authors.length > e.authors.length) e.authors = d.authors;
+    e.type = e.type ?? d.type;
+    e.publisher = e.publisher ?? d.publisher;
+    e.volume = e.volume ?? d.volume;
+    e.issue = e.issue ?? d.issue;
+    e.pages = e.pages ?? d.pages;
+    if (d.editors.length > e.editors.length) e.editors = d.editors;
   }
+  e.hydrated = e.hydrated || d.hydrated;
+  // The latest evaluation wins (SRC-09); an ingest path that did not evaluate
+  // (null) never erases an earlier judgement.
+  e.tier = d.tier ?? e.tier;
+  e.relevance = d.relevance ?? e.relevance;
+  e.why_relevant = d.why_relevant ?? e.why_relevant;
+  e.zotero = e.zotero ?? d.zotero;
   e.abstract = longer(e.abstract, d.abstract);
   e.oa_url = e.oa_url ?? d.oa_url;
   e.provenance = union(e.provenance, d.provenance);
   e.retracted = e.retracted || d.retracted;
   e.retraction_details = e.retraction_details ?? d.retraction_details;
+  // SRC-04: `retracted` is sticky; otherwise the newer lookup outcome wins
+  // (an `unchecked` incoming record never overrides a real outcome).
+  if (e.retracted) e.retraction_status = 'retracted';
+  else if (d.retraction_status !== 'unchecked') e.retraction_status = d.retraction_status;
   e.synthetic = e.synthetic || d.synthetic;
   e.last_verified = later(e.last_verified, d.last_verified);
   e.byo = e.byo ?? d.byo;
