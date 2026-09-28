@@ -43,7 +43,7 @@ function plansFor(outline: ParsedOutline): Map<string, PlanFrontmatter> {
   const m = new Map<string, PlanFrontmatter>();
   for (const s of outline.sections) {
     m.set(s.slug, {
-      schema_version: 1,
+      schema_version: 2,
       section: s.n,
       slug: s.slug,
       title: s.slug,
