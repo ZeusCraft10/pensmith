@@ -71,7 +71,7 @@ import { networkMode } from '../lib/http-mock.js';
 import { formatReference, renderSourcesBlock } from '../lib/research-md.js';
 import { ingestByoPdfs, listPdfsInDir, describeByoOutcome } from '../lib/byo-ingest.js';
 import { pullZoteroIntoLibrary } from '../lib/zotero-ingest.js';
-import { configuredZoteroCollection } from '../lib/sources/zotero.js';
+import { configuredZoteroCollection, ZoteroError } from '../lib/sources/zotero.js';
 import { isOfflineEgressError, offlineLabel } from '../lib/http.js';
 import { errorFailureReason } from '../lib/sources/search-failure.js';
 import type { PaperConfig } from '../lib/schemas/config.js';
@@ -472,7 +472,9 @@ async function ingestOwnSources(root: string, config: PaperConfig, plan: Adapter
       io.out(`${P}: Zotero collection "${collection}" (${pulled.library}): ${pulled.added.length} new, ${known} already in library`);
       for (const bad of pulled.invalid.slice(0, 5)) io.err(`${P}: WARN — Zotero item skipped (malformed): ${bad}`);
     } catch (e) {
-      const status = isOfflineEgressError(e) ? `${offlineLabel(e)}: no recorded fixture` : `failed (${errorFailureReason(e)})`;
+      const status = isOfflineEgressError(e)
+        ? `${offlineLabel(e)}: no recorded fixture`
+        : `failed (${e instanceof ZoteroError ? e.message : errorFailureReason(e)})`;
       rows.push({ adapter: 'zotero', count: 0, status });
       io.err(`${P}: WARN — Zotero collection "${collection}" was not read: ${status}`);
     }

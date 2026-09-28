@@ -83,10 +83,14 @@ export const NO_MATCH_PDF_TITLE = 'Field Notes on Moss Growth Beside the Old Mil
 /** `plan 2 --research` (GRND-17): the query, and the query joined to the seeded section title. */
 export const PLAN_RESEARCH_QUERY = 'instagram adolescent depression longitudinal';
 export const PLAN_RESEARCH_SECTION_TITLE = 'Social media and depression';
+/** A research query whose Crossref hits include Aspelmeyer's "Measured measurement" (10.1038/nphys1170). */
+export const BYO_MERGE_QUERY = 'measured measurement Aspelmeyer';
 /** Research's results per query (bin/lib/adapter-plan.ts RESEARCH_PER_QUERY_LIMIT) — a lowered count would not replay. */
 const RESEARCH_LIMIT = 10;
 /** The title search's hits per registrar (bin/lib/source-input.ts TITLE_SEARCH_LIMIT). */
 const TITLE_LIMIT = 5;
+/** A `.pdf` path a real site answers with a 200 HTML page (SRC-01). */
+export const HTML_AT_PDF_URL = 'https://duckduckgo.com/paper.pdf';
 /** A small real PDF behind a 301 (http → https): SRC-01 / D-19-07. */
 export const REDIRECT_PDF_URL = 'http://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
 
@@ -139,6 +143,9 @@ const QUERY_SETS = {
     researchFrom2015(),
     ...titleSearches(),
     ...planResearch(),
+    // SRC-15: a research query whose Crossref hits include a bring-your-own PDF's
+    // work (10.1038/nphys1170, tests/fixtures/byo/doi-footer.pdf) — the two merge.
+    { file: 'search-byo-merge', calls: [{ fn: 'search', arg: BYO_MERGE_QUERY, limit: RESEARCH_LIMIT, minLimit: RESEARCH_LIMIT }] },
   ],
   openalex: [
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3 }] },
@@ -195,6 +202,9 @@ const QUERY_SETS = {
   // Plain URL fetches through http.ts (source 'generic'), redirects recorded hop by hop.
   generic: [
     { file: 'redirect-w3-dummy-pdf', calls: [{ fn: 'fetch', arg: REDIRECT_PDF_URL }] },
+    // A `.pdf` URL that answers an HTML page with HTTP 200 (`add <url>` must say
+    // "not a PDF (got text/html)" and never hand it to the PDF parser).
+    { file: 'html-at-pdf-url', calls: [{ fn: 'fetch', arg: HTML_AT_PDF_URL }] },
   ],
 };
 
