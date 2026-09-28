@@ -839,11 +839,78 @@ export function slugify(s: string): string {
 //   contract and create a second source of truth (T-3-12 hardening).
 // ---------------------------------------------------------------------------
 
+/** `<root>/.paper/sections` — every section folder lives directly under it. */
+export function sectionsDir(root: string = projectRoot()): string {
+  return path.join(paperDir(root), 'sections');
+}
+
+/** The folder under `.paper/sections/` that holds dropped sections (GRND-09). */
+export const SECTION_ARCHIVE_DIRNAME = '_archive';
+
 /**
- * Returns the bare section directory `<root>/.paper/sections/NN-slug` using a
- * STRICTLY-validated bare slug (no slugify pass). Distinct from the legacy
- * `sectionDir` which slugifies its input. New code (post-plan, with slug
- * pulled from PlanFrontmatter) SHOULD call this helper.
+ * `<root>/.paper/sections/_archive` — where a re-outline moves the folder of a
+ * section it dropped (GRND-09, D-18-18). `_archive` never parses as a section
+ * folder name (parseSectionDirName), so no section lookup ever finds it, and
+ * the export gate and the PreCompact hook skip it.
+ */
+export function sectionArchiveDir(root: string = projectRoot()): string {
+  return path.join(sectionsDir(root), SECTION_ARCHIVE_DIRNAME);
+}
+
+/**
+ * The existing folder of the section whose slug is `slug`, or null (GRND-09,
+ * D-18-16): the one `sections/NN[a]-<slug>/` directory. A section's folder is
+ * found by its slug because its number is fixed at creation and may carry a
+ * letter (`01a-background`) that callers holding only `(n, slug)` do not know.
+ * When several folders carry the slug (a hand-made paper), the one whose
+ * number is `n` wins, then the first in (n, letter) order.
+ */
+export function findSectionFolder(slug: string, root: string = projectRoot(), n?: number): string | null {
+  validateSlug(slug);
+  let names: string[];
+  try {
+    names = fs.readdirSync(sectionsDir(root));
+  } catch {
+    return null;
+  }
+  const hits: Array<{ name: string; n: number; letter: string }> = [];
+  for (const name of names) {
+    const parsed = parseSectionDirName(name);
+    if (parsed === null || parsed.slug !== slug) continue;
+    try {
+      if (!fs.statSync(path.join(sectionsDir(root), name)).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    hits.push({ name, n: parsed.n, letter: parsed.letterSuffix ?? '' });
+  }
+  if (hits.length === 0) return null;
+  hits.sort((a, b) => (a.n !== b.n ? a.n - b.n : a.letter < b.letter ? -1 : a.letter > b.letter ? 1 : 0));
+  const exact = n !== undefined ? hits.find((h) => h.n === n) : undefined;
+  return path.join(sectionsDir(root), (exact ?? (hits[0] as { name: string })).name);
+}
+
+/**
+ * The folder a NEW section gets: `sections/NN[a]-<slug>`, the letter given
+ * explicitly (GRND-09 — a folder is created once, with its final name, and
+ * never renamed or renumbered). Strict bare slug; number 0..99.
+ */
+export function newSectionFolder(n: number, slug: string, root: string = projectRoot(), suffix?: string): string {
+  validateSlug(slug);
+  if (suffix !== undefined && !/^[a-z]$/.test(suffix)) {
+    throw new Error(`section letter must be one lowercase letter; got ${JSON.stringify(suffix)}`);
+  }
+  return path.join(sectionsDir(root), `${pad2(n)}${suffix ?? ''}-${slug}`);
+}
+
+/**
+ * The section directory for `(n, slug)`: the existing `sections/NN[a]-<slug>`
+ * folder found by slug (findSectionFolder), else `sections/NN-<slug>` for a
+ * folder not created yet — so every `(n, slug)` caller keeps working for a
+ * lettered section (D-18-16). STRICTLY-validated bare slug (no slugify pass),
+ * distinct from the legacy `sectionDir` which slugifies its input. New code
+ * (post-plan, with the slug pulled from PlanFrontmatter) SHOULD call the
+ * helpers below.
  */
 function strictSectionDir(
   n: number,
@@ -851,7 +918,10 @@ function strictSectionDir(
   root: string = projectRoot(),
 ): string {
   validateSlug(slug);
-  return path.join(paperDir(root), 'sections', `${pad2(n)}-${slug}`);
+  pad2(n);
+  const found = findSectionFolder(slug, root, n);
+  if (found !== null) return found;
+  return path.join(sectionsDir(root), `${pad2(n)}-${slug}`);
 }
 
 export function sectionPlan(

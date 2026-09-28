@@ -44,22 +44,98 @@ function queryFrom(topic: string): string {
   return topic.replace(/\s+/g, ' ').trim().split(' ').slice(0, 8).join(' ');
 }
 
+// --- sections-stream region (18-PLAN.md §6): the outline-author and
+// section-planner stubs. They read the request's data blocks (promptHints —
+// `brief`, `section`, `sources` as JSON) and still accept the Phase-17 flat
+// hint (`topic`, `length`, `sources` as citekey strings, `section`/`slug`/
+// `title`), so a stubbed or mocked pipeline advances like a real one (§3.4).
+
+/** A hint value as an object (a parsed JSON data block), or undefined. */
+function hintObject(hint: StubHint, key: string): Readonly<Record<string, unknown>> | undefined {
+  if (typeof hint !== 'object' || hint === null) return undefined;
+  const v = hint[key];
+  return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
+}
+
+/** The citekeys of a `sources` hint: SourceContextRecord-like objects or bare strings. */
+function hintCitekeys(hint: StubHint): string[] {
+  if (typeof hint !== 'object' || hint === null) return [];
+  const v = hint['sources'];
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  for (const s of v) {
+    const key = typeof s === 'string' ? s : typeof s === 'object' && s !== null ? (s as { citekey?: unknown }).citekey : undefined;
+    if (typeof key === 'string' && key.length > 0 && !out.includes(key)) out.push(key);
+  }
+  return out;
+}
+
+function objString(o: Readonly<Record<string, unknown>> | undefined, key: string): string | undefined {
+  const v = o?.[key];
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
+
+function objNumber(o: Readonly<Record<string, unknown>> | undefined, key: string): number | undefined {
+  const v = o?.[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}
+
+/** Split `total` into `parts` near-equal positive integers that sum to `total`. */
+function splitWords(total: number, parts: number): number[] {
+  const base = Math.max(1, Math.floor(total / parts));
+  const out = Array.from({ length: parts }, () => base);
+  out[0] = Math.max(1, total - base * (parts - 1));
+  return out;
+}
+
 function outlineStub(hint: StubHint): unknown {
-  const words = hintNumber(hint, 'length') ?? 1500;
-  const sources = hintStrings(hint, 'sources');
+  const brief = hintObject(hint, 'brief');
+  const words = Math.max(3, Math.round(objNumber(brief, 'length_target_words') ?? hintNumber(hint, 'length') ?? 1500));
+  const sources = hintCitekeys(hint);
+  const topic = objString(brief, 'topic') ?? hintString(hint, 'topic') ?? 'the assigned topic';
+  const thesis = objString(brief, 'thesis') ?? `A structured account of ${queryFrom(topic)}.`;
+  const counter = brief?.['counterargument_required'] === true;
+  const head = sources.slice(0, Math.min(3, sources.length));
   const intro = Math.max(1, Math.round(words * 0.2));
   const conclusion = Math.max(1, Math.round(words * 0.2));
-  const body = Math.max(1, words - intro - conclusion);
-  const topic = hintString(hint, 'topic') ?? 'the assigned topic';
+  const middle = splitWords(Math.max(counter ? 3 : 1, words - intro - conclusion), counter ? 3 : 1);
+  const sections: Array<Record<string, unknown>> = [
+    { n: 1, slug: 'introduction', title: 'Introduction', purpose: 'Frame the question and state the thesis.', depends_on: [], estimated_word_count: intro, assigned_sources: head, role: 'intro' },
+    { n: 2, slug: 'discussion', title: 'Discussion', purpose: 'Develop the main argument from the assigned sources.', depends_on: ['introduction'], estimated_word_count: middle[0], assigned_sources: sources, role: 'body' },
+  ];
+  if (counter) {
+    const tail = sources.length > 0 ? [sources[sources.length - 1] as string] : [];
+    sections.push(
+      { n: 3, slug: 'counterargument', title: 'Counterargument', purpose: 'State the strongest objection to the thesis.', depends_on: ['discussion'], estimated_word_count: middle[1], assigned_sources: tail, role: 'counterargument' },
+      { n: 4, slug: 'rebuttal', title: 'Rebuttal', purpose: 'Answer the objection from the evidence.', depends_on: ['counterargument'], estimated_word_count: middle[2], assigned_sources: head, role: 'rebuttal' },
+    );
+  }
+  const last = sections[sections.length - 1] as { slug: string };
+  sections.push({ n: sections.length + 1, slug: 'conclusion', title: 'Conclusion', purpose: 'Summarize the argument and its limits.', depends_on: [last.slug], estimated_word_count: conclusion, assigned_sources: head, role: 'conclusion' });
+  return { thesis, sections };
+}
+
+function plannerStub(hint: StubHint): unknown {
+  const section = hintObject(hint, 'section');
+  const brief = hintObject(hint, 'brief');
+  const n = objNumber(section, 'n') ?? hintNumber(hint, 'section') ?? 1;
+  const slug = objString(section, 'slug') ?? hintString(hint, 'slug') ?? `section-${n}`;
+  const title = objString(section, 'title') ?? hintString(hint, 'title') ?? slug;
+  const deps = Array.isArray(section?.['depends_on'])
+    ? (section?.['depends_on'] as unknown[]).filter((d): d is string => typeof d === 'string')
+    : hintStrings(hint, 'depends_on');
+  const sources = hintCitekeys(hint);
+  const claims = sources.length > 0
+    ? sources.map((key, i) => ({ claim: `Point ${i + 1} of "${title}", grounded in its source.`, sources: [key], evidence: 'The source reports the finding this point relies on.', counterexamples: '' }))
+    : [{ claim: `The central point of "${title}".`, sources: [], evidence: '', counterexamples: '' }];
   return {
-    thesis: `A structured account of ${queryFrom(topic)}.`,
-    sections: [
-      { n: 1, slug: 'introduction', title: 'Introduction', purpose: 'Frame the question and state the thesis.', depends_on: [], estimated_word_count: intro, assigned_sources: sources.slice(0, 3), role: 'intro' },
-      { n: 2, slug: 'discussion', title: 'Discussion', purpose: 'Develop the main argument from the assigned sources.', depends_on: ['introduction'], estimated_word_count: body, assigned_sources: sources, role: 'body' },
-      { n: 3, slug: 'conclusion', title: 'Conclusion', purpose: 'Summarize the argument and its limits.', depends_on: ['discussion'], estimated_word_count: conclusion, assigned_sources: sources.slice(0, 3), role: 'conclusion' },
-    ],
+    frontmatter: { section: n, slug, title, depends_on: deps, assigned_sources: sources },
+    claims,
+    structure: claims.map((_c, i) => ({ paragraph: i + 1, purpose: `Develop point ${i + 1}.`, claims: [i + 1] })),
+    voice: objString(brief, 'tone') ?? 'declarative, precise',
   };
 }
+// --- end sections-stream region
 
 /**
  * intake-clarifier (GRND-02 contract v2, D-18-06/10): suggestions read from the
@@ -115,21 +191,7 @@ const STUBS: Readonly<Record<string, (hint: StubHint) => unknown>> = Object.free
   }),
   'intake-clarifier': intakeClarifierStub,
   'outline-author': outlineStub,
-  'section-planner': (hint) => {
-    const n = hintNumber(hint, 'section') ?? 1;
-    const slug = hintString(hint, 'slug') ?? `section-${n}`;
-    const title = hintString(hint, 'title') ?? slug;
-    return {
-      frontmatter: {
-        section: n,
-        slug,
-        title,
-        depends_on: hintStrings(hint, 'depends_on'),
-        assigned_sources: hintStrings(hint, 'sources'),
-      },
-      body: `## Brief\n\nStub plan (LLM stubbed) for section ${n}, "${title}". Cover the section purpose using only the assigned sources. Voice: declarative, precise.`,
-    };
-  },
+  'section-planner': plannerStub,
   'claim-support': () => ({ verdict: 'UNCLEAR', rationale: 'LLM stubbed: no claim-support judgment was made.', evidence: '' }),
   'orphan-label': () => ({ label: 'UNCLEAR' }),
 });

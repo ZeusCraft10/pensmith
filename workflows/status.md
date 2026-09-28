@@ -21,7 +21,7 @@ moved into `.paper/` once, with a one-line notice.
 
 It loads `.paper/STATE.json` via `loadState()`
 (C4-HIGH: `StateNotFoundError` → prints "no active paper"; any other error → prints
-"STATE.json unreadable/corrupt"). Then it walks each section via `readSectionState()`
+"STATE.json unreadable/corrupt"). Then it walks each section via `readSectionInfo()`
 (C6-HIGH guarded path — the versioned PLAN.md reader, read without write-back; never a raw
 `parseFrontmatter(readFileSync(planPath))`). Finally
 it calls `resolveNextAction()` (never throws — C3-HIGH-1 totality invariant) and prints
@@ -30,7 +30,7 @@ session lock, so it works while another session is running (RUN-23).
 
 ## Outputs
 
-- stdout: per-section status table + `  next: <verb>` line
+- stdout: per-section status table + `  next: <verb>` line (+ an `  attention: …` line when the router stopped on a problem)
 - exit code 0 when a paper was reported; 1 (EXIT_ERROR) when there is no paper
   here or `.paper/STATE.json` is unreadable (RUN-09)
 
@@ -38,11 +38,13 @@ session lock, so it works while another session is running (RUN-23).
 
 1. **Load STATE.json** via `loadState(paperRoot)` (`bin/lib/state.ts`, which resolves `<paperRoot>/.paper/STATE.json`). On `StateNotFoundError`: print "no active paper" and return. On any other error: print "STATE.json unreadable/corrupt" and return.
 
-2. **Walk sections** (from `state.sections ?? []`, sorted by `n` ascending). For each section, call `readSectionState(sectionPlan(n, slug, paperRoot))` (`bin/lib/router.ts` — C6-HIGH: the SINGLE guarded per-section read path). Render:
+2. **Walk sections** (from `state.sections ?? []`, ordered by section id — `(n, suffix)`, so `§1`, `§1a`, `§1b`, `§2`). Each section's folder is found by its slug. For each section, call `readSectionInfo(sectionPlan(n, slug, paperRoot))` (`bin/lib/router.ts` — C6-HIGH: the SINGLE guarded per-section read path). Render the row as `§<id>` (`§3`, `§1a`) with:
    - `absent` → "not planned"
    - `corrupt` → "corrupt/unreadable PLAN.md — needs attention"
+   - the outline's stub PLAN.md (`stub: true`) → "outlined (not planned)"
+   - `failed` with a `failure_reason` → "failed — <reason>" (e.g. `failed — citekey X not assigned to section 2`)
    - else → `r.status`
 
-3. **Resolve next action** via `resolveNextAction(paperRoot, { stopAfterResearch })` where `stopAfterResearch` is derived from the paper mode config via `readGoalFromConfig(paperRoot)`. Never throws. Print `  next: <verb>` (or `<verb> §<n>` for per-section verbs).
+3. **Resolve next action** via `resolveNextAction(paperRoot, { stopAfterResearch })` where `stopAfterResearch` is derived from the paper mode config via `readGoalFromConfig(paperRoot)`. Never throws. Print `  next: <verb>` (or `<verb> §<id>` for per-section verbs — a stub routes to `plan`, a planned section to `write`). When the router stops on something that needs the user, print `  attention: <detail>` naming the problem and the command that fixes it — e.g. a rejected outline (`the last outline was rejected (the replies are in .paper/OUTLINE.rejected.md) — fix the problem it names, then run \`pensmith outline\``) or a section whose draft containment failed (`section N failed: <reason> — adjust its plan or sources if needed, then run \`pensmith write N\``). The router never re-runs a rejected outline by itself.
 
 4. Shell fallback (TIER-06): `pensmith status`.

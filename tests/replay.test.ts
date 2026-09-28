@@ -164,7 +164,8 @@ test('RUN-17: write N → verify N → resume --replay <write id> reproduces DRA
     seedPlannedPaper(sb, ['intro']);
     const draftPath = path.join(sectionDirOf(sb.root, 1, 'intro'), 'DRAFT.md');
     const planPath = path.join(sectionDirOf(sb.root, 1, 'intro'), 'PLAN.md');
-    const w = await sb.runTsx(null, ['write', '1', '--yolo']);
+    // --no-verify: write alone (GRND-15 chains verify otherwise); verify runs next.
+    const w = await sb.runTsx(null, ['write', '1', '--yolo', '--no-verify']);
     assert.equal(w.status, 0, w.stderr);
     const original = fs.readFileSync(draftPath, 'utf8');
     assert.equal(planStatus(planPath), 'written');
@@ -180,7 +181,7 @@ test('RUN-17: write N → verify N → resume --replay <write id> reproduces DRA
     const calls = sb.mock!.callCount();
     const replay = await sb.runTsx(null, ['resume', '--replay', String(rec['id'])], { env: { PENSMITH_OFFLINE: '1' } });
     assert.equal(replay.status, 0, replay.stderr);
-    assert.match(replay.stderr, new RegExp(`replaying ${String(rec['id'])} → write 1 \\(sources offline`));
+    assert.match(replay.stderr, new RegExp(`replaying ${String(rec['id'])} → write 1 --no-verify \\(sources offline`));
     assert.doesNotMatch(replay.stderr, /inputs changed/);
     assert.equal(fs.readFileSync(draftPath, 'utf8'), original, 'byte-for-byte');
     assert.equal(sb.mock!.callCount(), calls, 'the mock was not called again');

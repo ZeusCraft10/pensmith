@@ -1,129 +1,78 @@
-// bin/cli/write.ts — `pensmith write [<n>]` verb entrypoint (WRTE-01, WRTE-04).
+// bin/cli/write.ts — `pensmith write [<n>]` verb entrypoint (WRTE-01, WRTE-04;
+// Phase 18 FEED-02, FEED-04, GRND-15, GRND-16).
 //
-// Plan 03-07 Task 7.2 — Tier-2 thin orchestrator. In Tier 1 the workflow
-// body delegates to the model with the `section-drafter` prompt
-// (D-12 LOCKED slug). In Tier 2 (portable CLI) the verb calls complete()
-// via the Phase 11 transport (GEN-02).
+// Tier-2 orchestrator. In Tier 1 the workflow body delegates to the model with
+// the `section-drafter` prompt (D-12 LOCKED slug); here the verb calls
+// complete() through the Phase 11 transport (GEN-02).
 //
-// Plan 04-03 — wave mode. When invoked WITHOUT a positional <n>, the verb
-// schedules ALL planned sections into waves and writes them wave-by-wave via
-// `bin/lib/write-orchestrator.ts::runAllSections`, calling the SAME per-section
-// writer for each node (so the WRTE-04 chokepoint runs per section — no bypass).
-// The single-section `pensmith write <n>` path is unchanged.
-//
-// The drafter-input chokepoint (WRTE-04, T-3-10) closes here:
-// `assertDrafterInput` is invoked BEFORE any prompt invocation to prevent
-// caller-injected fields from widening the drafter's context. Both the
-// single-section path AND the per-node wave writer route through it.
+//   - The drafter request is built ONLY from the validated DrafterInput
+//     (drafter-input.ts buildDrafterRequest, WRTE-04 / T-3-10 / FEED-02): the
+//     PLAN.md body and entry, the paper brief, the resolved voice (+ the
+//     STYLE.json profile when style-match is on) and — fenced — the LIBRARY
+//     records of EXACTLY the PLAN.md assigned_sources. `write N` and every node
+//     of a wave write go through the same writeOneSection, so both send
+//     byte-identical requests.
+//   - A section with no sources is drafted without citations, with a WARN
+//     naming `plan N --research` and `add` — no citekey is ever invented.
+//   - Containment (FEED-04, D-18-25): every citation in the draft must be one
+//     of the section's assigned sources (draft-containment.ts). One corrective
+//     turn names the offending keys; a persistent violation keeps no draft
+//     (DRAFT.rejected.md), sets PLAN.md `status: failed` + `failure_reason`,
+//     touches no other section and exits EXIT_BLOCKED.
+//   - write → verify (GRND-15, D-18-26): after each successful draft the
+//     section is verified (verify.ts verifySection) and its verify status is
+//     printed; the command exits with verify's code. `--no-verify` leaves the
+//     section `written`.
+//   - Wave mode (no <n>, GRND-16, D-18-27): the sections are scheduled into
+//     waves from depends_on (+ `wave:` overrides) and drafted up to
+//     --max-parallel at a time (default 5). A malformed PLAN.md is one line
+//     naming the file and the field, the outline's stubs are skipped with a
+//     note, independent sections still draft, and any failure exits non-zero.
 //
 // Phase 17 wiring (RUN-07): run() calls assertLlmConfigured('write') before
-// any section is touched, in both modes — a missing key is one line through
-// the dispatcher ('Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY (or configure
-// a local endpoint)'). Under PENSMITH_NO_LLM=1 the probe is a no-op and
-// complete() returns the deterministic stub.
+// any section is touched, in both modes. Under PENSMITH_NO_LLM=1 the probe is a
+// no-op and complete() returns the deterministic stub.
 
 import { defineCommand } from 'citty';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { readGoalFromConfig } from './goal.js';
 import { sectionDraft, sectionPlan, paperDir, projectRoot } from '../lib/paths.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
-import { assertDrafterInput } from '../lib/drafter-input.js';
-import { runAllSections } from '../lib/write-orchestrator.js';
+import { assembleDrafterInput, buildDrafterRequest } from '../lib/drafter-input.js';
+import { checkDraft, containmentCorrection, failureReason } from '../lib/draft-containment.js';
+import { runAllSections, type SectionSkip } from '../lib/write-orchestrator.js';
 import { parseOutline } from '../lib/outline-parse.js';
 import type { SectionNode } from '../lib/schemas/wave-graph.js';
-import { styleMatchToVoiceHint } from '../lib/style-match.js';
-import { StyleProfileSchema, type StyleProfile } from '../lib/schemas/style.js';
 import { TutorialSubscriber } from '../lib/tutorial.js';
-import { loadFrontmatterDocSync, parseFrontmatter, serializeFrontmatter } from '../lib/frontmatter.js';
 import { isReplayActive } from '../lib/replay.js';
-import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
-import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { complete, assertLlmConfigured, isFatalLlmError } from '../lib/anthropic.js';
+import { complete, assertLlmConfigured, correctiveMessages, isFatalLlmError, type ChatMessage } from '../lib/anthropic.js';
+import { requestHints } from '../lib/prompt-request.js';
+import { tryLoadLibrary } from '../lib/library.js';
+import type { SourceContextInput } from '../lib/source-context.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
-import { EXIT_COST_CAP, EXIT_ERROR, type ExitCode } from '../lib/exit-codes.js';
-import { classifyFailure, failureLine } from '../lib/verb-outcome.js';
+import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
+import { EXIT_BLOCKED, EXIT_COST_CAP, EXIT_ERROR, EXIT_OK, PensmithError, type ExitCode } from '../lib/exit-codes.js';
+import { classifyFailure, exitCodeForResult, failureLine } from '../lib/verb-outcome.js';
+import { verifySection } from './verify.js';
 
-// Phase 11 — the section-draft placeholder constant has been removed. write now
-// calls complete() for real generation (GEN-02). With no key configured, run()
-// refuses up front (assertLlmConfigured, GEN-06 / RUN-07). With
-// PENSMITH_NO_LLM=1: complete() returns the deterministic stub.
+// STYL-03 voice precedence lives with the drafter contract (drafter-input.ts);
+// re-exported here for the write-style-integration contract test.
+export { resolveVoiceHint } from '../lib/drafter-input.js';
 
-const DEFAULT_MAX_PARALLEL = 5;
+/** Wave mode's default --max-parallel (workflows/write.md documents the same number). */
+export const DEFAULT_MAX_PARALLEL = 5;
 
-// STYL-03 default tone — the never-empty fallback when neither a PLAN.md voice
-// line nor a style-match profile is available.
-const DEFAULT_VOICE_HINT = 'Formal academic tone (Tier-2 placeholder).';
-
-// STYL-03 / Pitfall 7 — extract an EXPLICIT per-section voice direction from a
-// section PLAN.md. A user can pin the section's voice either in frontmatter
-// (`voice_hint: …`) or as a `Voice:` line inside the ## Brief body. Either form
-// is the user's explicit per-section direction and MUST win over the inferred
-// style-match render. Returns the trimmed direction, or '' when absent.
-function planVoiceDirection(planMd: string): string {
-  if (typeof planMd !== 'string' || planMd.length === 0) return '';
-  // (a) frontmatter `voice_hint:` (the artifact contract names this token).
-  const fmMatch = /(?:^|\n)voice_hint:\s*(.+)/.exec(planMd);
-  if (fmMatch && typeof fmMatch[1] === 'string') {
-    const v = fmMatch[1].replace(/^["']|["']$/g, '').trim();
-    if (v.length > 0) return v;
-  }
-  // (b) a body `Voice: …` line (the ## Brief convention the RED test pins).
-  const bodyMatch = /(?:^|\n)\s*Voice:\s*(.+)/.exec(planMd);
-  if (bodyMatch && typeof bodyMatch[1] === 'string') {
-    const v = bodyMatch[1].trim();
-    if (v.length > 0) return v;
-  }
-  return '';
-}
-
-/**
- * STYL-03 / Pitfall 7 — resolve the drafter's effective voice hint by STRICT
- * priority:
- *
- *   1. an EXPLICIT PLAN.md voice direction (frontmatter `voice_hint:` or a
- *      `Voice:` line in the body) ALWAYS wins — the user's per-section
- *      direction is never overridden by the inferred style profile (T-08-05-02);
- *   2. else, when a style profile is present, the style-match render
- *      (styleMatchToVoiceHint — PURE, no I/O);
- *   3. else, the non-empty DEFAULT_VOICE_HINT.
- *
- * PURE — no I/O. The caller (writeOneSection) reads the section PLAN.md +
- * STYLE.json from disk and passes the parsed values in. Exported so the
- * write-style-integration contract test can pin the precedence directly.
- */
-export function resolveVoiceHint(input: {
-  planMd: string;
-  styleProfile?: StyleProfile;
-}): string {
-  const planVoice = planVoiceDirection(input.planMd);
-  if (planVoice.length > 0) return planVoice; // (1) section override WINS.
-  if (input.styleProfile) return styleMatchToVoiceHint(input.styleProfile); // (2)
-  return DEFAULT_VOICE_HINT; // (3) never empty.
-}
-
-/**
- * STYL-03 consumer — load the paper's STYLE.json (when present) and parse it via
- * StyleProfileSchema INSIDE a try/catch. A malformed/partial STYLE.json must
- * fall back to the default tone, NEVER throw inside the write verb (T-08-05-05).
- * Returns the parsed profile + its path, or { profile: undefined } when the file
- * is absent or unparseable.
- */
-function loadStyleProfile(
-  paperRoot: string,
-): { profile?: StyleProfile; styleProfilePath?: string } {
-  // Resolve via paperDir() for producer/consumer path consistency — NOT a
-  // hardcoded join(paperRoot, '.paper', 'STYLE.json').
-  const stylePath = path.join(paperDir(paperRoot), 'STYLE.json');
-  if (!existsSync(stylePath)) return {};
-  try {
-    const raw = readFileSync(stylePath, 'utf8');
-    const profile = StyleProfileSchema.parse(JSON.parse(raw));
-    return { profile, styleProfilePath: stylePath };
-  } catch {
-    // Malformed / partial STYLE.json — fall back to the default tone.
-    return {};
+/** The drafter kept citing sources outside the section after one corrective turn (FEED-04): EXIT_BLOCKED. */
+export class DraftContainmentError extends PensmithError {
+  constructor(reason: string, id: string, rejected: string) {
+    super(
+      `section ${id} failed: ${reason} — the draft was not kept (it is in ${rejected}); ` +
+        `adjust the plan or sources, then run \`pensmith write ${id}\``,
+      EXIT_BLOCKED,
+    );
+    this.name = 'DraftContainmentError';
   }
 }
 
@@ -152,115 +101,46 @@ function makeSubscriberNonFatal(paperRoot: string): TutorialSubscriber | undefin
   }
 }
 
-/**
- * Best-effort read of a section PLAN.md's `assigned_sources` citekeys for the
- * single-section provenance emit. Returns [] when the PLAN.md is absent or
- * unparseable — never throws (mirrors loadStyleProfile's degrade-to-default).
- */
-function readAssignedSources(planPath: string): string[] {
-  try {
-    if (!existsSync(planPath)) return [];
-    // CONF-04: the versioned reader (writeSection has already stamped the file).
-    const { frontmatter } = loadFrontmatterDocSync('plan', planPath);
-    return PlanFrontmatterSchema.parse(frontmatter).assigned_sources;
-  } catch {
-    return [];
-  }
+/** What writeOneSection produced. */
+interface WrittenSection {
+  readonly draftPath: string;
+  readonly id: string;
+  readonly assignedSources: string[];
+}
+
+/** The library entries every drafter input is built from (none before research). */
+async function libraryEntries(paperRoot: string): Promise<SourceContextInput[]> {
+  return (await tryLoadLibrary(paperRoot))?.entries ?? [];
 }
 
 /**
- * PLAN.md frontmatter keys that record the section's lifecycle, not its
- * content: `write` itself moves `status` (writing → written), verify sets
- * `status` and `verified_against_draft_hash`, every writer stamps
- * `schema_version`, and the v1→v2 migration leaves the two breadcrumbs.
+ * Write ONE section's DRAFT.md. This is the single-section drafter path, shared
+ * verbatim by `pensmith write <n>` and the wave orchestrator's per-node
+ * callback. The drafter input is assembled and validated (WRTE-04) BEFORE the
+ * section is touched or any model call is made.
  */
-const PLAN_LIFECYCLE_KEYS: ReadonlySet<string> = new Set([
-  'schema_version',
-  'status',
-  'verified_against_draft_hash',
-  'last_verification',
-  'was_current_at_migration',
-]);
-
-/**
- * The section plan as the drafter sees it: the PLAN.md content without its
- * lifecycle bookkeeping (PLAN_LIFECYCLE_KEYS), the frontmatter re-serialized
- * deterministically and line endings normalized. The drafter request — and so
- * its SESSION.log hash — depends only on what the section should say, so
- * `resume --replay` of a write step still matches after the step itself (and
- * a later verify) moved the section's status (RUN-17). A PLAN.md without
- * frontmatter (or with frontmatter that does not parse) is passed as-is.
- */
-export function drafterBrief(planMd: string): string {
-  const text = planMd.replace(/\r\n/g, '\n');
-  let parsed: { frontmatter: Record<string, unknown>; body: string };
-  try {
-    parsed = parseFrontmatter(text);
-  } catch {
-    return text;
+async function writeOneSection(
+  paperRoot: string,
+  section: { n: number; slug: string },
+  entries: readonly SourceContextInput[],
+): Promise<WrittenSection> {
+  // Throws SectionNotPlannedError (EXIT_USAGE) for the outline's stub and
+  // PlanUnreadableError (file + field) for a malformed PLAN.md.
+  const { input, missingRecords } = assembleDrafterInput(paperRoot, section, entries);
+  const id = formatSectionId(sectionIdOf(input.section.n, input.section.suffix));
+  if (input.sources.length === 0) {
+    process.stderr.write(
+      `pensmith write: WARN — section ${id} has no assigned sources; drafting it without citations. ` +
+        `Add sources with \`pensmith plan ${id} --research "<query>"\` or \`pensmith add <doi> --section ${input.section.n} --slug ${input.section.slug}\`, then re-plan.\n`,
+    );
+  } else if (missingRecords.length > 0) {
+    process.stderr.write(
+      `pensmith write: WARN — section ${id} assigns ${missingRecords.join(', ')}, which LIBRARY.json does not hold; ` +
+        'the drafter sees no record for them.\n',
+    );
   }
-  if (Object.keys(parsed.frontmatter).length === 0) return text;
-  const kept: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(parsed.frontmatter)) {
-    if (!PLAN_LIFECYCLE_KEYS.has(k)) kept[k] = v;
-  }
-  return `${serializeFrontmatter(kept)}${parsed.body}`;
-}
-
-/**
- * Write ONE section's DRAFT.md. This is the single-section drafter path,
- * factored out so BOTH `pensmith write <n>` and the wave orchestrator's
- * per-node callback share it verbatim. The WRTE-04 chokepoint
- * (`assertDrafterInput`) runs HERE, before any write — so the wave branch can
- * never bypass it.
- */
-async function writeOneSection(n: number, slug: string): Promise<string> {
-  const paperRoot = projectRoot();
-
-  // STYL-03 — resolve the effective voiceHint by strict priority BEFORE the
-  // chokepoint: PLAN.md voice direction > style-match render > default. Read the
-  // section PLAN.md (best-effort) for the per-section override, and load
-  // STYLE.json (when the producer wrote one) for the style-match render. A
-  // malformed STYLE.json or missing PLAN.md degrades to the default tone —
-  // never throws (T-08-05-05).
-  const planPath = sectionPlan(n, slug, paperRoot);
-  let planMd = '';
-  try {
-    planMd = readFileSync(planPath, 'utf8');
-  } catch {
-    planMd = ''; // PLAN.md may not exist in Tier-2 placeholder mode.
-  }
-  const { profile, styleProfilePath } = loadStyleProfile(paperRoot);
-  const voiceHint = resolveVoiceHint({
-    planMd,
-    ...(profile ? { styleProfile: profile } : {}),
-  });
-
-  // T-3-10 / WRTE-04 chokepoint: validate the drafter input shape BEFORE any
-  // prompt invocation or complete() call. Strict-schema throws on extra fields,
-  // missing fields, or wrong types. assertDrafterInput MUST precede complete()
-  // (invariant 3 in 11-PATTERNS — WRTE-04 ordering preserved, T-11-07).
-  // styleProfilePath is passed ONLY when a STYLE.json was successfully loaded.
-  assertDrafterInput({
-    planPath: `.paper/sections/${String(n).padStart(2, '0')}-${slug}/PLAN.md`,
-    sources: [],
-    wordTarget: 300,
-    voiceHint,
-    ...(styleProfilePath ? { styleProfilePath } : {}),
-  });
-
-  // ── Phase 11: call complete() AFTER assertDrafterInput (WRTE-04 preserved) ──
-  // run() already asserted an LLM is configured (RUN-07); any provider error
-  // propagates upward — the wave orchestrator isolates it per section, and the
-  // single-section path reports it as one line through the dispatcher.
-  // PENSMITH_NO_LLM=1: complete() short-circuits to the deterministic stub.
-  const drafterPrompt = loadPrompt('section-drafter');
-  const interpolatedDrafterPrompt = interpolate(drafterPrompt, {
-    section: JSON.stringify({ number: n, slug, title: slug, depends_on: [], estimated_word_count: 300 }),
-    brief: planMd ? drafterBrief(planMd) : `Section ${n}: ${slug}`,
-    assignedSources: '[]',
-    voiceHint,
-  });
+  const req = buildDrafterRequest(input);
+  const planPath = sectionPlan(section.n, section.slug, paperRoot);
 
   // Audit #9: mark the section 'writing' BEFORE drafting (D-08-AMENDED). If the
   // drafter throws, PLAN.md is left 'writing' so the router routes back to write
@@ -274,28 +154,53 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
     });
   }
 
-  const result = await complete({
-    slug: 'section-drafter',
-    section: n,
-    system: interpolatedDrafterPrompt,
-    messages: [{ role: 'user', content: `Write section ${n} (${slug}).` }],
-  });
+  const call = async (messages: ChatMessage[]): Promise<string> =>
+    (await complete({ slug: 'section-drafter', section: section.n, system: req.system, messages, stubHint: requestHints(req) })).text;
 
-  const targetPath = sectionDraft(n, slug, paperRoot);
-  await atomicWriteFile(targetPath, result.text);
+  // FEED-04 containment: one corrective turn, then fail the section.
+  let draft = await call(req.messages);
+  let violations = checkDraft(draft, { assigned: input.sources, section: id });
+  if (violations.length > 0) {
+    draft = await call(correctiveMessages(req.messages, draft, containmentCorrection(violations, input.sources)));
+    violations = checkDraft(draft, { assigned: input.sources, section: id });
+  }
+  const draftPath = sectionDraft(section.n, section.slug, paperRoot);
+  const rejectedPath = path.join(path.dirname(draftPath), 'DRAFT.rejected.md');
+  if (violations.length > 0) {
+    const reason = failureReason(violations, id);
+    await atomicWriteFile(rejectedPath, draft);
+    await updatePlanFrontmatter(planPath, (fm) => {
+      fm.status = 'failed';
+      fm.failure_reason = reason;
+    });
+    throw new DraftContainmentError(reason, id, path.relative(paperRoot, rejectedPath).split(path.sep).join('/'));
+  }
 
-  // Audit #9: mark the section 'written' so the router (router.ts:202) advances
-  // to verify instead of re-routing the freshly-drafted section back to plan and
-  // re-drafting. verify owns verified_against_draft_hash — write deliberately
-  // does NOT set it, so a re-write leaves the old hash stale and compile's
-  // staleness check forces re-verification (the write<->verify cycle-break).
-  if (!(await updatePlanFrontmatter(planPath, (fm) => { fm.status = 'written'; }))) {
+  await atomicWriteFile(draftPath, draft);
+  if (existsSync(rejectedPath)) rmSync(rejectedPath, { force: true });
+
+  // Audit #9: mark the section 'written' so the router advances to verify.
+  // verify owns verified_against_draft_hash — write deliberately does NOT set
+  // it, so a re-write leaves the old hash stale and compile's staleness check
+  // forces re-verification (the write<->verify cycle-break).
+  if (!(await updatePlanFrontmatter(planPath, (fm) => {
+    fm.status = 'written';
+    delete fm.failure_reason;
+  }))) {
     process.stderr.write(
       `pensmith write: WARN — could not set status:'written' on ${planPath} ` +
       `(PLAN.md absent/unwritable); the router may not advance this section to verify.\n`,
     );
   }
-  return targetPath;
+  return { draftPath, id, assignedSources: input.sources };
+}
+
+/** Verify a freshly drafted section (GRND-15) and report its status. */
+async function verifyWritten(section: { n: number; slug: string }, id: string): Promise<{ status: string; code: ExitCode }> {
+  const v = await verifySection(section.n, section.slug);
+  const code = exitCodeForResult(v);
+  process.stdout.write(`pensmith write: section ${id} verify: ${String(v.status)}\n`);
+  return { status: String(v.status), code };
 }
 
 /**
@@ -314,12 +219,12 @@ export const writeCommand = defineCommand({
   meta: {
     name: 'write',
     description:
-      'Draft DRAFT.md for one section, or (no <n>) schedule all sections into waves.',
+      'Draft DRAFT.md for one section, or (no <n>) schedule all planned sections into waves; each draft is then verified.',
   },
   args: {
     n: {
       type: 'positional',
-      description: 'Section number (1-based). Omit to write ALL sections wave-by-wave.',
+      description: 'Section number (1-based; a letter for an inserted section, e.g. 1a). Omit to write ALL planned sections wave-by-wave.',
       required: false,
       valueHint: '3',
     },
@@ -329,8 +234,12 @@ export const writeCommand = defineCommand({
     },
     'max-parallel': {
       type: 'string',
-      description:
-        'Wave mode: how many sections of one wave are drafted at the same time (default 5).',
+      description: `Wave mode: how many sections of one wave are drafted at the same time (default ${DEFAULT_MAX_PARALLEL}).`,
+    },
+    verify: {
+      type: 'boolean',
+      description: 'Verify each section right after drafting it (default); --no-verify leaves it `written`.',
+      default: true,
     },
     yolo: {
       type: 'boolean',
@@ -339,15 +248,12 @@ export const writeCommand = defineCommand({
     },
   },
   async run({ args }) {
+    const chainVerify = args.verify !== false;
+
     // ---- Wave mode: no positional <n> ----
-    // When <n> is absent, schedule ALL planned sections into waves and write
-    // them wave-by-wave. Each node routes through writeOneSection (which runs
-    // the WRTE-04 chokepoint per section — no bypass). Progress streams as
-    // structured JSON lines to stdout (04-RESEARCH §L); WARN goes to stderr.
     if (args.n === undefined || args.n === null || args.n === '') {
       // CR-02 / RUN-07: GEN-06 fail-loud probe for wave mode, before any
       // section is dispatched (a per-section failure could not stop the wave).
-      // One line through dispatch(): 'Set one of: ANTHROPIC_API_KEY, …'.
       await assertLlmConfigured('write');
 
       const rawMax = typeof args['max-parallel'] === 'string' ? Number(args['max-parallel']) : DEFAULT_MAX_PARALLEL;
@@ -356,10 +262,7 @@ export const writeCommand = defineCommand({
       const paperRoot = projectRoot();
 
       // Audit M2: a missing or section-less OUTLINE.md must yield a friendly
-      // diagnostic, not a raw parseOutline stack trace from the wave orchestrator
-      // (write-orchestrator.ts calls parseOutline, which throws "no section
-      // table" on an absent/placeholder outline). Pre-check here and degrade
-      // gracefully, mirroring `done`'s "run 'pensmith compile' first" stance.
+      // diagnostic, not a raw parseOutline stack trace from the wave orchestrator.
       const outlinePath = path.join(paperDir(paperRoot), 'OUTLINE.md');
       let outlineSectionCount = 0;
       try {
@@ -376,6 +279,12 @@ export const writeCommand = defineCommand({
         return { ok: false, mode: 'no-outline' };
       }
 
+      const entries = await libraryEntries(paperRoot);
+      const invalid: SectionSkip[] = [];
+      const unplanned: SectionSkip[] = [];
+      const verifyCodes: ExitCode[] = [];
+      const verified: Record<string, string> = {};
+
       // Goal awareness is confined to the CLI tier. goal=draft yields undefined,
       // so the `subscriber ? … : undefined` below makes the Foundation callback a
       // no-op — the zero-branch mechanism. Foundation never imports tutorial.ts.
@@ -386,19 +295,34 @@ export const writeCommand = defineCommand({
           process.stdout.write(
             JSON.stringify({ event: 'section_start', wave: node.computed_wave, section: node.slug }) + '\n',
           );
-          await writeOneSection(node.n, node.slug);
+          const written = await writeOneSection(paperRoot, { n: node.n, slug: node.slug }, entries);
+          let verify = 'not run (--no-verify)';
+          if (chainVerify) {
+            const v = await verifyWritten({ n: node.n, slug: node.slug }, written.id);
+            verify = v.status;
+            if (v.code !== EXIT_OK) verifyCodes.push(v.code);
+          }
+          verified[node.slug] = verify;
           process.stdout.write(
-            JSON.stringify({ event: 'section_done', wave: node.computed_wave, section: node.slug, status: 'done' }) + '\n',
+            JSON.stringify({ event: 'section_done', wave: node.computed_wave, section: node.slug, status: 'done', verify }) + '\n',
           );
+        },
+        // RUN-09: a failure every later section would repeat (the session cost
+        // cap, a missing key, an invalid runtime config, a replay miss) stops
+        // the run — sections not yet started are reported `skipped`.
+        stopOn: isFatalLlmError,
+        onInvalidPlan: (skip) => {
+          invalid.push(skip);
+          process.stderr.write(`pensmith write: section ${skip.id} (${skip.slug}) skipped — ${skip.planPath}: ${skip.reason}\n`);
+        },
+        onUnplanned: (skip) => {
+          unplanned.push(skip);
+          process.stderr.write(`pensmith write: section ${skip.id} (${skip.slug}) is not planned yet — skipped; run \`pensmith plan ${skip.id}\`\n`);
         },
         // Additive observer: the key is present ONLY when a subscriber was
         // constructed (goal ∈ {learning, both}). goal=draft omits it entirely →
         // the Foundation guard is a no-op (zero-branch). The conditional spread
         // satisfies exactOptionalPropertyTypes (never pass an explicit undefined).
-        // RUN-09: a failure every later section would repeat (the session cost
-        // cap, a missing key, an invalid runtime config, a replay miss) stops
-        // the run — sections not yet started are reported `skipped`.
-        stopOn: isFatalLlmError,
         ...(subscriber
           ? {
               onSectionWritten: (evt: {
@@ -436,15 +360,18 @@ export const writeCommand = defineCommand({
         codes.push(c.code);
         process.stderr.write(`${failureLine(`pensmith write: section ${f.n} (${f.slug}) failed: ${c.message}`)}\n`);
       }
+      codes.push(...invalid.map((): ExitCode => EXIT_ERROR));
+      codes.push(...verifyCodes);
       const skipped = results.reduce((acc, w) => acc + w.sections.filter((s) => s.status === 'skipped').length, 0);
       if (skipped > 0) {
         process.stderr.write(`pensmith write: stopped — ${skipped} section(s) not attempted; fix the failure above and re-run \`pensmith write\`.\n`);
       }
-      if (failures.length === 0) return { ok: true, mode: 'wave', waves: results };
-      return { ok: false, mode: 'wave', waves: results, exitCode: waveExitCode(codes) };
+      const summary = { mode: 'wave', waves: results, verified, invalid, unplanned };
+      if (codes.length === 0) return { ok: true, ...summary };
+      return { ok: false, ...summary, exitCode: waveExitCode(codes) };
     }
 
-    // ---- Single-section mode: positional <n> present (UNCHANGED) ----
+    // ---- Single-section mode: positional <n> present ----
     // RUN-09: <n> must name one of the paper's sections (EXIT_USAGE otherwise —
     // before any model call, and no placeholder folder for a registered paper).
     const paperRoot = projectRoot();
@@ -452,29 +379,30 @@ export const writeCommand = defineCommand({
     // GEN-06 / RUN-07 fail-loud probe: an LLM must be configured before the
     // section is touched (writeOneSection marks it 'writing' first).
     await assertLlmConfigured('write');
+    const entries = await libraryEntries(paperRoot);
     // Construct the goal-aware subscriber for a single-section re-do too, so a
     // re-write in learning/both mode still re-annotates TUTORIAL.md. goal=draft
     // yields undefined → the emit/flush below are no-ops and DRAFT.md is
     // byte-unchanged for every goal (the writer never sees the subscriber).
     const subscriber = makeSubscriberNonFatal(paperRoot);
 
-    const targetPath = await writeOneSection(n, slug);
+    const written = await writeOneSection(paperRoot, { n, slug }, entries);
 
     if (subscriber) {
       subscriber.emit({
         kind: 'section.written',
-        payload: {
-          n,
-          slug,
-          planPath: sectionPlan(n, slug, paperRoot),
-          assignedSources: readAssignedSources(sectionPlan(n, slug, paperRoot)),
-        },
+        payload: { n, slug, planPath: sectionPlan(n, slug, paperRoot), assignedSources: written.assignedSources },
       });
       await subscriber.flush();
     }
 
-    process.stdout.write(`pensmith write: wrote DRAFT.md to ${targetPath}\n`);
-    return { ok: true, path: targetPath, mode: 'real' };
+    process.stdout.write(`pensmith write: wrote DRAFT.md to ${written.draftPath}\n`);
+    if (!chainVerify) {
+      process.stdout.write(`pensmith write: section ${written.id} left written (--no-verify); run \`pensmith verify ${written.id}\` next\n`);
+      return { ok: true, path: written.draftPath, mode: 'real', verify: 'not run' };
+    }
+    const v = await verifyWritten({ n, slug }, written.id);
+    return { ok: v.code === EXIT_OK, path: written.draftPath, mode: 'real', verify: v.status, exitCode: v.code };
   },
 });
 

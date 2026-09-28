@@ -38,9 +38,9 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { paperDir } from './paths.js';
+import { paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
 import { loadOutline } from './outline.js';
-import { parseOutline, type ParsedOutlineSection } from './outline-parse.js';
+import { orderedOutlineSections, parseOutline, type ParsedOutlineSection } from './outline-parse.js';
 import { loadFrontmatterDoc } from './frontmatter.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
@@ -201,9 +201,9 @@ async function loadSection(
   paperRoot: string,
   outlineSection: ParsedOutlineSection,
 ): Promise<LoadedSection | null> {
-  const dir = join(paperDir(paperRoot), 'sections', `${String(outlineSection.n).padStart(2, '0')}-${outlineSection.slug}`);
-  const draftPath = join(dir, 'DRAFT.md');
-  const planPath = join(dir, 'PLAN.md');
+  // GRND-09: the section's folder is found by its slug (`NN[a]-<slug>`).
+  const draftPath = sectionDraft(outlineSection.n, outlineSection.slug, paperRoot);
+  const planPath = sectionPlan(outlineSection.n, outlineSection.slug, paperRoot);
   if (!existsSync(draftPath) || !existsSync(planPath)) return null;
 
   const draftBytes = readFileSync(draftPath);
@@ -264,7 +264,8 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         staleResolvedCount: 0,
       };
     }
-    const ordered = outline.sections.slice().sort((a, b) => a.n - b.n);
+    // D-11 / GRND-09: OUTLINE order is (n, suffix) — §1 < §1a < §2.
+    const ordered = orderedOutlineSections(outline);
 
     const loaded: LoadedSection[] = [];
     const refuseReasons: string[] = [];
@@ -278,9 +279,7 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       }
       loaded.push(sec);
 
-      const verifPath = join(
-        paperDir(opts.paperRoot), 'sections', `${String(os.n).padStart(2, '0')}-${os.slug}`, 'VERIFICATION.md',
-      );
+      const verifPath = sectionVerification(os.n, os.slug, opts.paperRoot);
       const verificationMd = existsSync(verifPath) ? readFileSync(verifPath, 'utf8') : '';
 
       // Refuse-gate (GATE-01 / GATE-02 / COMP-01): the ONE per-section gate done

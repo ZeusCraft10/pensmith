@@ -19,6 +19,15 @@ A bare "rewrite section N" re-runs the `write` verb against that section's
 existing PLAN.md (section directories are independent — `section-as-phase`
 isolation means re-writing section N never touches the other sections).
 
+`N` is the section id as `pensmith status` shows it (`3`, or `1a`). The section
+must be planned first: on the outline's stub PLAN.md, `write N` stops with
+"section N is not planned yet — run `pensmith plan N` first". `write N` verifies
+the draft right away and reports the verify status (`--no-verify` leaves the
+section `written`). A draft that cites a source outside the section's
+`assigned_sources` twice is not kept (it goes to `DRAFT.rejected.md`, the section
+is marked failed with the reason, exit 4); adjust the plan or sources, then run
+`pensmith write N` again.
+
 ## No 17th verb
 
 `write` is one of the locked-16 verbs (bijective with `workflows/write.md`).

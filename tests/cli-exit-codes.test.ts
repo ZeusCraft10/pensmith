@@ -333,10 +333,14 @@ test('RUN-09: an invalid section argument is EXIT_USAGE before any model call �
 test('RUN-12: an unexpected error prints one line plus the PENSMITH_DEBUG hint — no stack', () => {
   const sb = sandbox('exit-unexpected');
   const root = sb.project('p');
-  writeState(root, [{ n: 1, slug: 'alpha' }]);
-  writeOutline(root, [{ n: 1, slug: 'alpha' }]);
-  // Frontmatter that parses but fails the PLAN schema (section is not a number).
-  writePlan(root, 1, 'alpha', { section: 'not-a-number' });
+  writeState(root, [{ n: 1, slug: 'alpha' }, { n: 2, slug: 'beta' }]);
+  // A dependency cycle hand-written into OUTLINE.md: the wave scheduler throws a
+  // plain Error (an unexpected failure). Phase 18 (GRND-16) turned the former
+  // trigger — a malformed PLAN.md — into an expected, named one-line refusal
+  // (tests/wave-write-plan-errors.test.ts).
+  writeOutline(root, [{ n: 1, slug: 'alpha', deps: ['beta'] }, { n: 2, slug: 'beta', deps: ['alpha'] }]);
+  writePlan(root, 1, 'alpha', { depends_on: '[beta]' });
+  writePlan(root, 2, 'beta', { depends_on: '[alpha]' });
   const r = runCli(sb, root, ['write', '--yolo']);
   assert.equal(r.status, EXIT_ERROR, `${r.stdout}\n${r.stderr}`);
   assert.match(r.stderr, /^pensmith: set PENSMITH_DEBUG=1 for a stack trace$/m);

@@ -8,6 +8,11 @@
 // Tier 2. This drives write then verify offline and asserts the PLAN.md
 // transitions planned -> written -> verified, after which the router reaches
 // compile.
+//
+// Phase 18 (GRND-13): plan writes `status: planned` WITHOUT `stub` — the router
+// tells the outline's stub (→ plan) from a planned section (→ write) by the
+// `stub` flag; only write sets `writing`. write chains verify unless
+// `--no-verify` (GRND-15), so the stepwise test below passes verify: false.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,6 +28,9 @@ import { verifyCommand } from '../bin/cli/verify.js';
 
 const PLAN = [
   '---',
+  'section: 1',
+  'slug: intro',
+  'title: Introduction',
   'status: planned',
   'assigned_sources: []',
   '---',
@@ -57,7 +65,7 @@ async function withEnvCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-test('section status (second-loop finding): plan sets status:writing so the router advances plan->write', async () => {
+test('section status (second-loop finding, GRND-13): plan writes status:planned without stub so the router advances plan->write', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-plan-'));
   mkdirSync(join(root, '.paper', 'sections', '01-intro'), { recursive: true });
   await initState(root);
@@ -81,7 +89,8 @@ test('section status (second-loop finding): plan sets status:writing so the rout
 
   const planPath = join(root, '.paper', 'sections', '01-intro', 'PLAN.md');
   assert.ok(existsSync(planPath), 'plan must write PLAN.md');
-  assert.equal(planStatus(planPath).status, 'writing', 'plan must set PLAN.md status to writing');
+  assert.equal(planStatus(planPath).status, 'planned', 'plan writes status planned (only write sets writing)');
+  assert.equal(parseFrontmatter(readFileSync(planPath, 'utf8')).frontmatter['stub'], undefined, 'a planned PLAN.md carries no stub flag');
 
   // The router now advances to write instead of looping on plan.
   const after = await resolveNextAction(root);
@@ -109,7 +118,7 @@ test('section status (audit #8/#9): write -> "written", verify -> "verified", ro
 
   await withEnvCwd(root, async () => {
     const wrun = writeCommand.run as (ctx: { args: Record<string, unknown> }) => Promise<unknown>;
-    await wrun({ args: { n: 1, slug: 'intro', yolo: true } });
+    await wrun({ args: { n: 1, slug: 'intro', yolo: true, verify: false } });
   });
 
   // #9: write set status -> 'written' and produced the section DRAFT.md.

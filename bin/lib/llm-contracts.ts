@@ -17,15 +17,20 @@
 // numeric bounds, array sizes, regex patterns) stay zod-only: they are not
 // emitted into the JSON schema and are enforced by validation.
 //
-// No templates/prompts/*.md edit happens in Phase 17 (GRND-07 / GRND-13 re-pin
-// the prompts); the schemas here already carry the GRND-07 outline fields.
+// Phase 18 made the outline-author and section-planner templates ask for
+// exactly these objects (GRND-07 / GRND-13, re-pinned in both hash maps). The
+// schemas check shape only; the relational rules (known slugs and citekeys,
+// cycles, the word budget, the counterargument rule, the planner's allowed
+// sources) live in outline-validate.ts and plan-validate.ts, which the verbs
+// run on the parsed object before one corrective turn.
 
 import { z, type ZodTypeAny } from 'zod';
 import { parse as parseYaml } from 'yaml';
-import { PlanFrontmatterSchema } from './schemas/plan-frontmatter.js';
+import { SECTION_ROLES } from './schemas/plan-frontmatter.js';
 import { parseFrontmatter } from './frontmatter.js';
 import { PAPER_TYPES } from './intake-brief.js';
 import { normalizePaperType } from './intake-overrides.js';
+import { parsePlanBody } from './plan-render.js';
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -82,48 +87,82 @@ export const IntakeClarifierSchema = z.object({
   ).describe('at most three assignment-specific follow-up questions; [] when none are needed'),
 });
 
-export const OUTLINE_ROLES = ['intro', 'body', 'counterargument', 'rebuttal', 'conclusion'] as const;
+/**
+ * An outline section's role (GRND-07 / GRND-10): the one list, owned by the
+ * PLAN.md frontmatter schema (SECTION_ROLES). The counterargument rule (PRD
+ * §7.4) is met by a `counterargument` plus a `rebuttal` section, or by one
+ * `counterargument-rebuttal` section (outline-validate.ts).
+ */
+export const OUTLINE_ROLES = SECTION_ROLES;
 
-/** GRND-07 outline contract: sections plus a paper-level thesis. */
+/** `01-introduction` / `1a-background` → the bare slug (D-18-14). */
+export function bareOutlineSlug(slug: string): string {
+  const bare = slug.replace(/^\d{1,2}[a-z]?-(?=[a-z0-9])/, '');
+  return bare.length > 0 ? bare : slug;
+}
+
+/**
+ * GRND-07 outline contract: sections plus a paper-level thesis (D-18-14).
+ *
+ * The schema checks SHAPE only. The relational rules — unique slugs,
+ * depends_on names another section, no self-reference, no cycle, citekeys in
+ * LIBRARY.json, the word budget, zero-source sections and the counterargument
+ * rule — belong to outline-validate.ts, which reports every violation at once
+ * for the one corrective turn (GRND-08). A slug (or depends_on entry) arriving
+ * with an `NN-` prefix is normalised to the bare slug here, so
+ * `01-introduction` never becomes the folder `01-01-introduction/` (GRND-09).
+ * The model's `n` is only its reading order: outline.ts numbers a fresh outline
+ * 1..N in the order the sections are listed, and a re-outline per D-18-18.
+ */
 export const OutlineSchema = z.object({
   thesis: z.string().default('').describe('the paper-level thesis in one sentence'),
   sections: z.array(z.object({
     n: z.number().int().min(1).describe('1-based section number in reading order'),
-    slug: z.string().regex(SLUG_RE, 'slug must be lowercase kebab-case').describe('bare kebab-case slug, unique in the outline'),
+    slug: z.string().regex(SLUG_RE, 'slug must be lowercase kebab-case').describe('bare kebab-case slug without a number prefix, unique in the outline'),
     title: z.string().min(1),
     purpose: z.string().default('').describe('one sentence on what the section must establish'),
     depends_on: z.array(z.string().regex(SLUG_RE)).default([]).describe('slugs of OTHER sections this one must read first'),
     estimated_word_count: z.number().int().min(1),
-    assigned_sources: z.array(z.string().min(1)).default([]).describe('citekeys from the candidate library'),
+    assigned_sources: z.array(z.string().min(1)).default([]).describe('citekeys from the sources block'),
     role: z.enum(OUTLINE_ROLES).default('body'),
     voice: z.string().optional().describe('optional voice hint (PRD §7.18)'),
   })).min(1),
-}).superRefine((o, ctx) => {
-  const slugs = new Set<string>();
-  for (const [i, s] of o.sections.entries()) {
-    if (slugs.has(s.slug)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['sections', i, 'slug'], message: `duplicate slug "${s.slug}"` });
-    slugs.add(s.slug);
-    if (s.depends_on.includes(s.slug)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['sections', i, 'depends_on'], message: 'a section cannot depend on itself' });
-  }
-  for (const [i, s] of o.sections.entries()) {
-    for (const d of s.depends_on) {
-      if (!slugs.has(d)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['sections', i, 'depends_on'], message: `depends_on names unknown slug "${d}"` });
-    }
-  }
-});
-
-const PlanFrontmatterObject = PlanFrontmatterSchema.innerType();
-
-/** section-planner: the PLAN.md frontmatter subset the model authors, plus the brief body. */
-export const SectionPlannerSchema = z.object({
-  frontmatter: PlanFrontmatterObject.pick({
-    section: true,
-    slug: true,
-    title: true,
-    depends_on: true,
-    assigned_sources: true,
+}).transform((o) => ({
+  thesis: o.thesis,
+  sections: o.sections.map((s) => {
+    const out = { ...s, slug: bareOutlineSlug(s.slug), depends_on: s.depends_on.map(bareOutlineSlug) };
+    if (out.voice !== undefined && out.voice.trim().length === 0) delete out.voice;
+    return out;
   }),
-  body: z.string().min(1).describe('the Markdown body, starting with "## Brief"'),
+}));
+
+/**
+ * section-planner contract (GRND-13, D-18-23): the frontmatter the model echoes
+ * (the section's identity and its source subset), the claim map, the
+ * paragraph structure and the voice. plan-validate.ts checks the echoed
+ * identity against the OUTLINE row and every source against the section's
+ * allowed set; plan-render.ts renders PLAN.md from the validated object.
+ */
+export const SectionPlannerSchema = z.object({
+  frontmatter: z.object({
+    section: z.number().int().min(1).describe('the section number n from the section block'),
+    slug: z.string().regex(SLUG_RE).describe('the slug from the section block, copied exactly'),
+    title: z.string().min(1),
+    depends_on: z.array(z.string().regex(SLUG_RE)).default([]).describe('the depends_on list from the section block, copied exactly'),
+    assigned_sources: z.array(z.string().min(1)).default([]).describe('the citekeys, from the sources block only, this section will use'),
+  }),
+  claims: z.array(z.object({
+    claim: z.string().min(1).describe('one claim the section makes, in one sentence'),
+    sources: z.array(z.string().min(1)).default([]).describe('citekeys from assigned_sources that support it ([] for an uncited claim)'),
+    evidence: z.string().default('').describe('what the sources must show for the claim to hold'),
+    counterexamples: z.string().default('').describe('counterexamples or limits the draft should acknowledge ("" when none)'),
+  })).min(1),
+  structure: z.array(z.object({
+    paragraph: z.number().int().min(1).describe('1-based paragraph number'),
+    purpose: z.string().min(1).describe('what the paragraph does'),
+    claims: z.array(z.number().int().min(1)).default([]).describe('the 1-based numbers of the claims it develops'),
+  })).min(1),
+  voice: z.string().default('').describe('one line of voice direction for the drafter'),
 });
 
 export const ClaimSupportSchema = z.object({
@@ -168,27 +207,41 @@ function coerceOutline(v: unknown): unknown {
   if (!Array.isArray(o['sections'])) return o;
   return {
     ...o,
-    sections: (o['sections'] as unknown[]).map((s) => {
+    sections: (o['sections'] as unknown[]).map((s, i) => {
       if (typeof s !== 'object' || s === null) return s;
       const r = { ...(s as Record<string, unknown>) };
       if (r['n'] === undefined && typeof r['number'] === 'number') r['n'] = r['number'];
+      if (r['n'] === undefined) r['n'] = i + 1; // only the reading order counts (D-18-14)
       delete r['number'];
+      if (r['estimated_word_count'] === undefined && typeof r['word_target'] === 'number') r['estimated_word_count'] = r['word_target'];
+      delete r['word_target'];
       return r;
     }),
   };
 }
 
+/**
+ * A planner reply written as a PLAN.md document (frontmatter plus `## Claims`,
+ * `## Structure` and `## Voice`) instead of JSON — the tolerant text path for a
+ * provider without native structured output. undefined when it is not one.
+ */
 function plannerFromText(text: string): unknown {
   const doc = /^\s*```(?:markdown|md|yaml)?\s*\n([\s\S]*?)\n```\s*$/.exec(text)?.[1] ?? text;
   const trimmed = doc.replace(/^\s+/, '');
   if (!trimmed.startsWith('---')) return undefined;
-  const { frontmatter, body } = parseFrontmatter(trimmed);
-  if (Object.keys(frontmatter).length === 0) return undefined;
-  const fm: Record<string, unknown> = { ...frontmatter };
+  let parsed: { frontmatter: Record<string, unknown>; body: string };
+  try {
+    parsed = parseFrontmatter(trimmed);
+  } catch {
+    return undefined;
+  }
+  if (Object.keys(parsed.frontmatter).length === 0) return undefined;
+  const fm: Record<string, unknown> = { ...parsed.frontmatter };
   if (fm['section'] === undefined && typeof fm['number'] === 'number') fm['section'] = fm['number'];
   const picked: Record<string, unknown> = {};
   for (const k of ['section', 'slug', 'title', 'depends_on', 'assigned_sources']) if (fm[k] !== undefined) picked[k] = fm[k];
-  return { frontmatter: picked, body: body.trim() };
+  const body = parsePlanBody(parsed.body);
+  return { frontmatter: picked, claims: body.claims, structure: body.structure, voice: body.voice };
 }
 
 /**

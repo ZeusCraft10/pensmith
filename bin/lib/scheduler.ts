@@ -22,7 +22,7 @@
 //     (Research §P pitfall 5).
 
 import type { Semaphore } from './budget.js';
-import type { ParsedOutline } from './outline-parse.js';
+import { orderedOutlineSections, type ParsedOutline } from './outline-parse.js';
 import type { PlanFrontmatter } from './schemas/plan-frontmatter.js';
 import {
   SectionNodeSchema,
@@ -49,7 +49,9 @@ export function buildWaveGraph(
   //    not-yet-planned sections silently). depends_on comes from the outline
   //    (the canonical dependency graph); the plan supplies the wave override.
   const nodes = new Map<string, SectionNode>();
-  for (const s of outline.sections) {
+  // GRND-09: sections are taken in (n, suffix) order (§1 < §1a < §2), so a
+  // wave lists its sections in reading order whatever order the caller used.
+  for (const s of orderedOutlineSections(outline)) {
     const plan = plans.get(s.slug);
     if (!plan) continue; // not yet planned — skip this run (INFO)
     const node: SectionNode = SectionNodeSchema.parse({

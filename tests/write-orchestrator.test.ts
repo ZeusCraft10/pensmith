@@ -7,8 +7,9 @@
 //   - D-03 within-wave failure policy: a sibling failure does NOT cancel
 //     in-flight siblings; a transitive-dep failure marks the dependent subtree
 //     `blocked` and skips it, while orthogonal subtrees still complete.
-//   - D-02 Tier-2 forced-serial: maxParallel: 1 produces a deterministic serial
-//     order and emits exactly one WARN containing "max-parallel ignored".
+//   - maxParallel: 1 runs one section at a time and prints NO warning: the
+//     Phase 4 "--max-parallel ignored" WARN was untrue (both tiers honor the
+//     cap) and GRND-16 (Phase 18) removed it.
 //
 // The per-section writer is STUBBED with synthetic resolved-promise ticks (NO
 // real sleeps). The stub records which slugs it was asked to write.
@@ -183,15 +184,17 @@ test('runAllSections: a failed sibling does NOT cancel its in-flight wave-peers 
   assert.deepEqual([...written].sort(), ['b', 'e']);
 });
 
-test('runAllSections: Tier-2 (maxParallel 1) runs serially and emits exactly one "max-parallel ignored" WARN (D-02)', async () => {
+test('runAllSections: maxParallel 1 runs one section at a time and prints no "max-parallel ignored" WARN (GRND-16)', async () => {
   const root = seedPaper([
     { n: 1, slug: 'a', title: 'A', depends_on: [] },
     { n: 2, slug: 'b', title: 'B', depends_on: ['a'] },
     { n: 3, slug: 'c', title: 'C', depends_on: ['a'] },
   ]);
 
-  // Capture stderr to count the WARN (D-02: WARN goes to stderr, not stdout).
+  // Capture stderr: a serial run must not claim the cap is ignored.
   const warnings: string[] = [];
+  let inFlight = 0;
+  let maxInFlight = 0;
   const originalStderrWrite = process.stderr.write.bind(process.stderr);
   const patched = (chunk: string | Uint8Array, ...rest: unknown[]): boolean => {
     warnings.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'));
@@ -204,7 +207,11 @@ test('runAllSections: Tier-2 (maxParallel 1) runs serially and emits exactly one
     results = await runAllSections(root, {
       maxParallel: 1,
       writeSection: async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
         await Promise.resolve();
+        await Promise.resolve();
+        inFlight -= 1;
       },
     });
   } finally {
@@ -216,10 +223,7 @@ test('runAllSections: Tier-2 (maxParallel 1) runs serially and emits exactly one
   assert.equal(status.get('b'), 'done');
   assert.equal(status.get('c'), 'done');
 
+  assert.equal(maxInFlight, 1, 'the cap of 1 is honored: never two sections at once');
   const ignoredWarns = warnings.filter((w) => /max-parallel ignored/i.test(w));
-  assert.equal(
-    ignoredWarns.length,
-    1,
-    `expected exactly one "max-parallel ignored" WARN; got ${ignoredWarns.length}: ${JSON.stringify(warnings)}`,
-  );
+  assert.equal(ignoredWarns.length, 0, `no "max-parallel ignored" WARN: ${JSON.stringify(warnings)}`);
 });

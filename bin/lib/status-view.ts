@@ -19,8 +19,9 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { loadState } from './state.js';
-import { readSectionState, resolveNextAction, type RouterDecision } from './router.js';
+import { readSectionInfo, resolveNextAction, type RouterDecision } from './router.js';
 import { paperDir, sectionPlan } from './paths.js';
+import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
 import { CURRENT_CONFIG_VERSION, effectiveConfigRows, paperConfigPath, tryReadPaperConfigSync } from './config.js';
 import { parseIntakeMd } from './intake-parse.js';
 import { parseOutline } from './outline-parse.js';
@@ -53,6 +54,10 @@ export function glyphSetFor(env: NodeJS.ProcessEnv = process.env, platform: Node
 
 export interface StatusSectionRow {
   n: number;
+  /** The section's letter (§1a, GRND-09), absent for §1. */
+  suffix?: string;
+  /** The section id as printed: `1`, `1a`. */
+  id: string;
   slug: string;
   title: string;
   status: string;
@@ -69,7 +74,7 @@ export interface StatusView {
   name: string;
   class: string;
   /** The section and step in progress, when the next action is per-section. */
-  current: { n: number; slug: string; step: 'plan' | 'write' | 'verify' } | null;
+  current: { n: number; suffix?: string; id: string; slug: string; step: 'plan' | 'write' | 'verify' } | null;
   currentLine: string;
   sections: StatusSectionRow[];
   cost: {
@@ -84,6 +89,8 @@ export interface StatusView {
   };
   next: string;
   nextLine: string;
+  /** What needs attention and the command that fixes it (router detail, GRND-08/13, FEED-04), or null. */
+  attention: string | null;
   /** Present when STATE.json is absent or unreadable. */
   problem: 'no-paper' | 'corrupt-state' | null;
 }
@@ -107,7 +114,7 @@ function readText(file: string): string {
 
 function describeNext(d: RouterDecision, section: string): string {
   if (d.verb === 'status') return `status (${d.reason})`;
-  if ('n' in d) return `${d.verb} ${section}${d.n}`;
+  if ('n' in d) return `${d.verb} ${section}${formatSectionId(sectionIdOf(d.n, d.suffix))}`;
   return d.verb;
 }
 
@@ -149,27 +156,37 @@ export async function buildStatusView(
 
   let paperId: string | null = null;
   let problem: StatusView['problem'] = null;
-  let registered: Array<{ n: number; slug: string }> = [];
+  let registered: Array<{ n: number; suffix?: string | undefined; slug: string }> = [];
   try {
     const state = await loadState(root);
     paperId = state.paperId;
-    registered = [...(state.sections ?? [])].sort((a, b) => a.n - b.n);
+    registered = sortBySectionId(state.sections ?? []);
   } catch (e) {
     problem = (e as Error).name === 'StateNotFoundError' ? 'no-paper' : 'corrupt-state';
   }
 
-  const titles = new Map<number, string>();
+  const titles = new Map<string, string>();
   try {
-    for (const s of parseOutline(readText(path.join(pDir, 'OUTLINE.md'))).sections) titles.set(s.n, s.title);
+    for (const s of parseOutline(readText(path.join(pDir, 'OUTLINE.md'))).sections) titles.set(s.slug, s.title);
   } catch {
     /* no outline table yet */
   }
 
-  const sections: StatusSectionRow[] = registered.map(({ n, slug }) => {
-    const r = readSectionState(sectionPlan(n, slug, root));
-    const status = r.absent ? 'not planned' : r.corrupt ? `corrupt/unreadable PLAN.md ${marks.dash} needs attention` : r.status;
-    const phase = phaseOf(r.status, r.absent, r.corrupt);
-    return { n, slug, title: titles.get(n) ?? slug, status, phase, glyph: glyphs[phase] };
+  const sections: StatusSectionRow[] = registered.map(({ n, suffix, slug }) => {
+    const r = readSectionInfo(sectionPlan(n, slug, root));
+    const status = r.absent
+      ? 'not planned'
+      : r.corrupt
+        ? `corrupt/unreadable PLAN.md ${marks.dash} needs attention`
+        : r.status === 'planned' && r.stub
+          ? 'outlined (not planned)'
+          : r.status === 'failed' && r.failureReason
+            ? `failed ${marks.dash} ${r.failureReason}`
+            : r.status;
+    const phase = phaseOf(r.status, r.absent || r.stub, r.corrupt);
+    const row: StatusSectionRow = { n, id: formatSectionId(sectionIdOf(n, suffix)), slug, title: titles.get(slug) ?? slug, status, phase, glyph: glyphs[phase] };
+    if (suffix !== undefined) row.suffix = suffix;
+    return row;
   });
 
   let decision: RouterDecision;
@@ -178,11 +195,17 @@ export async function buildStatusView(
   } catch {
     decision = { verb: 'status', reason: 'attention' };
   }
-  const current = decision.verb === 'plan' || decision.verb === 'write' || decision.verb === 'verify'
-    ? { n: decision.n, slug: decision.slug, step: decision.verb }
+  const current: StatusView['current'] = decision.verb === 'plan' || decision.verb === 'write' || decision.verb === 'verify'
+    ? {
+        n: decision.n,
+        ...(decision.suffix !== undefined ? { suffix: decision.suffix } : {}),
+        id: formatSectionId(sectionIdOf(decision.n, decision.suffix)),
+        slug: decision.slug,
+        step: decision.verb,
+      }
     : null;
   const currentLine = current
-    ? `current: ${marks.section}${current.n} (${current.step})`
+    ? `current: ${marks.section}${current.id} (${current.step})`
     : `current: ${decision.verb === 'status' ? (decision.reason === 'done' ? 'complete' : 'needs attention') : decision.verb}`;
 
   const next = describeNext(decision, marks.section);
@@ -221,6 +244,7 @@ export async function buildStatusView(
     cost: { tier: opts.tier, sessionUsd, sessionLabel, totalUsd, capUsd, line: costLine },
     next,
     nextLine: `next: ${next}`,
+    attention: decision.verb === 'status' && decision.reason === 'attention' && decision.detail ? decision.detail : null,
     problem,
   };
 }
@@ -241,9 +265,10 @@ export function renderStatusView(view: StatusView): string {
   lines.push(`  ${view.currentLine}`);
   lines.push('  sections:');
   if (view.sections.length === 0) lines.push('    (none yet)');
-  for (const s of view.sections) lines.push(`    ${s.glyph} ${section}${s.n} ${s.slug}: ${s.status}`);
+  for (const s of view.sections) lines.push(`    ${s.glyph} ${section}${s.id} ${s.slug}: ${s.status}`);
   lines.push(`  ${view.cost.line}`);
   lines.push(`  ${view.nextLine}`);
+  if (view.attention !== null) lines.push(`  attention: ${view.attention}`);
   return lines.join('\n');
 }
 

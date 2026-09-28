@@ -76,7 +76,18 @@ test('outline (audit #1/#4): a valid existing OUTLINE.md is preserved and its se
     [{ n: 1, slug: '01-introduction' }, { n: 2, slug: '02-literature' }],
   );
 
-  // Router now advances PAST outline to the per-section pipeline.
+  // GRND-09 (Phase 18): every registered section gets the outline's stub
+  // PLAN.md (its outline entry, `stub: true`, `status: planned`).
+  const rs = res as { stubs?: number };
+  assert.equal(rs.stubs, 2);
+  for (const [n, slug] of [[1, '01-introduction'], [2, '02-literature']] as const) {
+    const plan = readFileSync(join(root, '.paper', 'sections', `0${n}-${slug}`, 'PLAN.md'), 'utf8');
+    assert.match(plan, /^stub: true$/m, `${slug} has a stub PLAN.md`);
+    assert.match(plan, /^status: planned$/m);
+    assert.match(plan, new RegExp(`^slug: ${slug}$`, 'm'));
+  }
+
+  // Router now advances PAST outline to the per-section pipeline: the stub → plan.
   const decision = await resolveNextAction(root);
   assert.equal(decision.verb, 'plan', `router must advance to plan; got ${JSON.stringify(decision)}`);
 });

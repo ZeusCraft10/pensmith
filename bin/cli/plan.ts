@@ -1,14 +1,28 @@
-// bin/cli/plan.ts — `pensmith plan <n>` verb entrypoint (PLAN-01).
+// bin/cli/plan.ts — `pensmith plan <n>` verb entrypoint (PLAN-01, GRND-12,
+// GRND-13, FEED-01).
 //
-// Phase 11 (GEN-02 / GEN-06) + Phase 17 (RUN-07, RUN-25):
 //   - assertLlmConfigured('plan') runs at the top of run(): with no usable
 //     provider it throws the one-line MissingApiKeyError. Never ok:true on a
 //     missing key; PENSMITH_NO_LLM=1 skips it.
 //   - The normal plan path calls complete() with the STRUCTURED
-//     'section-planner' slug (D-12 LOCKED) and renders PLAN.md from the
-//     validated {frontmatter, body} object (renderPlanMd): section identity
-//     and depends_on come from OUTLINE.md, assigned_sources is limited to
-//     citekeys in the library (PRD §7.6).
+//     'section-planner' slug (D-12 LOCKED). The request (prompt-request.ts) is
+//     the fixed template plus data blocks (GRND-12, D-18-22): the paper brief
+//     (intake topic, the effective thesis, the discipline and its tone, the
+//     paper type), the section (from its OUTLINE row, the stub's values where
+//     the row lacks them), summaries of the claims of its planned depends_on
+//     sections, and — fenced (FEED-05) — the source records of the section's
+//     allowed set ONLY (FEED-01: source-context.ts; its current PLAN.md
+//     `assigned_sources`, else the outline allocation). A source assigned only
+//     to another section never appears.
+//   - The reply is validated (plan-validate.ts): the echoed section, slug and
+//     depends_on equal the OUTLINE row; assigned_sources ⊆ the allowed set ⊆
+//     LIBRARY.json; every claim's sources ⊆ assigned_sources. One corrective
+//     turn names the problems; still invalid → EXIT_ERROR "planner output
+//     invalid: …", nothing written, the previous PLAN.md (the stub) intact.
+//   - PLAN.md is rendered from the validated object (plan-render.ts): the v2
+//     frontmatter with the outline entry, `stub` dropped, `status: planned`,
+//     and the body ## Claims / ## Structure / ## Word target / ## Voice. The
+//     router sends a planned section to write; only write sets `writing`.
 //   - The --revise path imports the shared proposeSwap from bin/lib/revise-swap.ts
 //     (ONE implementation; no duplication with revise.ts — GEN-02).
 //
@@ -18,127 +32,55 @@
 // T-11-12: key value never logged here — complete() owns the no-leak header path.
 
 import { defineCommand } from 'citty';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { atomicWriteFile } from '../lib/atomic-write.js';
-import { paperDir, sectionPlan, projectRoot } from '../lib/paths.js';
-import { updatePlanFrontmatter } from '../lib/plan-status.js';
+import { sectionPlan, projectRoot } from '../lib/paths.js';
 import { runRevise } from '../lib/revise.js';
 import { proposeSwap } from '../lib/revise-swap.js';
-import { complete, assertLlmConfigured } from '../lib/anthropic.js';
-import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
+import { complete, assertLlmConfigured, correctiveMessages, type ChatMessage } from '../lib/anthropic.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
-import { parseOutline, parseOutlineAssignedSources, type ParsedOutlineSection } from '../lib/outline-parse.js';
-import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
-import { parseFrontmatter, serializeFrontmatter } from '../lib/frontmatter.js';
-import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
+import { readOutlineSync } from '../lib/outline.js';
+import { readPaperBrief } from '../lib/paper-brief.js';
+import { tryLoadLibrary } from '../lib/library.js';
+import { buildSourceContext, libraryCitekeys, type SourceContextInput } from '../lib/source-context.js';
+import { buildPromptRequest, requestHints } from '../lib/prompt-request.js';
+import { formatPlanIssues, planCorrection, validatePlan } from '../lib/plan-validate.js';
+import { renderPlannedPlanMd, summarizePlanClaims } from '../lib/plan-render.js';
+import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
+import { withLock } from '../lib/lock.js';
+import { networkMode, offlineMarkerLine } from '../lib/http-mock.js';
+import { EXIT_ERROR, PensmithError } from '../lib/exit-codes.js';
 import type { SectionPlan } from '../lib/llm-contracts.js';
 
-/** Section context from OUTLINE.md, the library and upstream plans (all best-effort reads). */
-interface PlanContext {
-  section: ParsedOutlineSection | null;
-  outlineSources: string[];
-  library: Array<{ citekey: string; title?: string; authors?: string[]; year?: number; doi?: string; abstract?: string }>;
-  upstream: Array<{ slug: string; brief: string }>;
-  topic: string;
-  discipline: string;
+/** The planner's output failed validation after the one corrective turn (GRND-13): one line, EXIT_ERROR. */
+export class PlannerInvalidError extends PensmithError {
+  constructor(problems: string, planPath: string) {
+    super(`planner output invalid: ${problems} — nothing was written; ${planPath} is unchanged`, EXIT_ERROR);
+    this.name = 'PlannerInvalidError';
+  }
 }
 
-function readText(file: string): string | null {
+/** A readable PLAN.md's frontmatter, or null (absent or unreadable). */
+function readPlanFrontmatter(planPath: string): Record<string, unknown> | null {
+  if (!existsSync(planPath)) return null;
   try {
-    return readFileSync(file, 'utf8');
-  } catch {
+    return loadFrontmatterDocSync('plan', planPath).frontmatter;
+  } catch (e) {
+    process.stderr.write(`pensmith plan: WARN — ${planPath} is unreadable (${(e as Error).message}); planning from OUTLINE.md\n`);
     return null;
   }
 }
 
-function loadPlanContext(paperRoot: string, n: number): PlanContext {
-  const pDir = paperDir(paperRoot);
-  const outlineRaw = readText(path.join(pDir, 'OUTLINE.md')) ?? '';
-  let sections: ParsedOutlineSection[] = [];
-  try {
-    sections = parseOutline(outlineRaw).sections;
-  } catch {
-    sections = [];
-  }
-  const section = sections.find((s) => s.n === n) ?? null;
-  const outlineSources = parseOutlineAssignedSources(outlineRaw).get(n) ?? [];
-
-  const library: PlanContext['library'] = [];
-  const libRaw = readText(path.join(pDir, 'LIBRARY.json'));
-  if (libRaw !== null) {
-    try {
-      const raw = JSON.parse(libRaw) as unknown;
-      const list = Array.isArray(raw)
-        ? raw
-        : raw && typeof raw === 'object' && Array.isArray((raw as { entries?: unknown }).entries)
-          ? (raw as { entries: unknown[] }).entries
-          : [];
-      for (const e of list) {
-        if (!e || typeof e !== 'object') continue;
-        const r = e as Record<string, unknown>;
-        if (typeof r['citekey'] !== 'string' || !r['citekey']) continue;
-        const c: PlanContext['library'][number] = { citekey: r['citekey'] as string };
-        if (typeof r['title'] === 'string') c.title = r['title'];
-        if (Array.isArray(r['authors'])) c.authors = (r['authors'] as unknown[]).filter((a): a is string => typeof a === 'string').slice(0, 3);
-        if (typeof r['year'] === 'number') c.year = r['year'];
-        if (typeof r['doi'] === 'string') c.doi = r['doi'];
-        // WR-03 precedent: cap abstracts so the prompt stays bounded.
-        if (typeof r['abstract'] === 'string') c.abstract = (r['abstract'] as string).slice(0, 500);
-        library.push(c);
-      }
-    } catch {
-      /* malformed LIBRARY.json → no candidates */
-    }
-  }
-
-  const upstream: PlanContext['upstream'] = [];
-  for (const dep of section?.depends_on ?? []) {
-    const depSection = sections.find((s) => s.slug === dep);
-    if (!depSection) continue;
-    const text = readText(sectionPlan(depSection.n, dep, paperRoot));
-    if (text === null) continue;
-    upstream.push({ slug: dep, brief: parseFrontmatter(text).body.trim().slice(0, 2000) });
-  }
-
-  const intake = parseIntakeMd(readText(path.join(pDir, 'INTAKE.md')) ?? '');
-  return { section, outlineSources, library, upstream, topic: intake.topic, discipline: intake.discipline };
+function strings(v: unknown): string[] | undefined {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined;
 }
 
-/**
- * Render PLAN.md from the validated section-planner object (RUN-25). The
- * section identity (number, slug) and depends_on come from OUTLINE.md — the
- * roadmap is authoritative — and assigned_sources is filtered to citekeys that
- * exist in the library (PRD §7.6: the drafter may only see real sources).
- */
-function renderPlanMd(data: SectionPlan, n: number, slug: string, ctx: PlanContext): string {
-  const known = new Set(ctx.library.map((c) => c.citekey));
-  const assigned = known.size > 0
-    ? data.frontmatter.assigned_sources.filter((c) => known.has(c))
-    : data.frontmatter.assigned_sources;
-  const fm = PlanFrontmatterSchema.parse({
-    section: n,
-    slug,
-    title: (ctx.section?.title ?? data.frontmatter.title ?? slug).trim() || slug,
-    depends_on: ctx.section ? ctx.section.depends_on : data.frontmatter.depends_on.filter((d) => d !== slug),
-    assigned_sources: [...new Set(assigned)],
-    status: 'planned',
-    verified_against_draft_hash: null,
-  });
-  // CONF-04: every PLAN.md the CLI writes carries the current frontmatter
-  // version first, exactly where the v0 → v1 migration inserts it.
-  const ordered: Record<string, unknown> = {
-    schema_version: fm.schema_version,
-    section: fm.section,
-    slug: fm.slug,
-    title: fm.title,
-    depends_on: fm.depends_on,
-    assigned_sources: fm.assigned_sources,
-    status: fm.status,
-    verified_against_draft_hash: fm.verified_against_draft_hash,
-  };
-  const body = data.body.trim().startsWith('#') ? data.body.trim() : `## Brief\n\n${data.body.trim()}`;
-  return `${serializeFrontmatter(ordered)}\n${body}\n`;
+function str(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined;
+}
+
+function num(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : undefined;
 }
 
 export const planCommand = defineCommand({
@@ -149,7 +91,7 @@ export const planCommand = defineCommand({
   args: {
     n: {
       type: 'positional',
-      description: 'Section number (1-based).',
+      description: 'Section number (1-based; a letter for an inserted section, e.g. 1a).',
       required: true,
       valueHint: '3',
     },
@@ -177,7 +119,7 @@ export const planCommand = defineCommand({
     // bare slug — EXIT_USAGE otherwise, before any model call or write. The
     // slug comes from OUTLINE.md (audit #23); 'placeholder' only when there is
     // no outline yet.
-    const { n, slug } = resolveSectionArg('plan', projectRoot(), args.n, args.slug);
+    const { n, slug, suffix, id } = resolveSectionArg('plan', projectRoot(), args.n, args.slug);
 
     // GEN-06 / RUN-07 fail-loud probe: assert an LLM is configured before any LLM work.
     await assertLlmConfigured('plan');
@@ -203,60 +145,115 @@ export const planCommand = defineCommand({
       return { ok: !result.retryExhausted, mode: 'revise', ...result };
     }
 
-    // Normal plan path: the 'section-planner' prompt (D-12 LOCKED slug) with the
-    // section's outline row, the library candidates (the outline's assigned
-    // subset when present), the INTAKE topic/discipline and the upstream briefs.
-    // section-planner is STRUCTURED (RUN-25): complete() returns
-    // {frontmatter, body} and PLAN.md is rendered from it.
+    // ── Normal plan path (GRND-12, GRND-13, FEED-01) ──
     const paperRoot = projectRoot();
-    const ctx = loadPlanContext(paperRoot, n);
-    const title = ctx.section?.title ?? slug;
-    const candidateList = ctx.outlineSources.length > 0
-      ? ctx.library.filter((c) => ctx.outlineSources.includes(c.citekey))
-      : ctx.library;
-    const planPrompt = loadPrompt('section-planner');
-    const interpolatedPlan = interpolate(planPrompt, {
-      section: JSON.stringify({
-        number: n,
-        slug,
-        title,
-        depends_on: ctx.section?.depends_on ?? [],
-        estimated_word_count: ctx.section?.estimated_word_count ?? 400,
-      }),
-      candidateSources: JSON.stringify(candidateList.length > 0 ? candidateList : ctx.library, null, 2),
-      topic: escapeTemplateTokens(ctx.topic || 'the assigned topic'),
-      discipline: escapeTemplateTokens(ctx.discipline),
-      upstreamPlans: JSON.stringify(ctx.upstream),
-    });
-    const targetPath = sectionPlan(n, slug, paperRoot);
-    const result = await complete<SectionPlan>({
-      slug: 'section-planner',
-      section: n,
-      system:
-        'You are an academic section planner. Produce the section plan exactly as the prompt ' +
-        'specifies: the frontmatter fields and the ## Brief body.',
-      messages: [{ role: 'user', content: interpolatedPlan }],
-      stubHint: {
-        section: n,
-        slug,
-        title,
-        depends_on: ctx.section?.depends_on ?? [],
-        sources: (candidateList.length > 0 ? candidateList : ctx.library).map((c) => c.citekey),
-      },
-    });
-    await atomicWriteFile(targetPath, renderPlanMd(result.data as SectionPlan, n, slug, ctx));
+    const planPath = sectionPlan(n, slug, paperRoot);
+    const outline = readOutlineSync(paperRoot);
+    const row = outline?.sections.find((s) => s.slug === slug) ?? null;
+    const fm = readPlanFrontmatter(planPath);
+    const brief = readPaperBrief(paperRoot);
+    const entries: SourceContextInput[] = (await tryLoadLibrary(paperRoot))?.entries ?? [];
 
-    // Second-loop finding (Theme A): authoritatively mark the section 'writing'
-    // so the router (router.ts:201) advances plan -> write instead of looping on
-    // plan forever. The CLI owns this transition — it must NOT depend on the
-    // model emitting `status:` in the PLAN.md frontmatter (the offline placeholder
-    // has none, and the section-planner prompt does not mandate it). Mirrors how
-    // write sets 'written' (#9) and verify sets 'verified' (#8).
-    await updatePlanFrontmatter(targetPath, (fm) => {
-      fm.status = 'writing';
+    // The section: its OUTLINE row, the stub's values where the row lacks them.
+    const title = row?.title ?? str(fm?.['title']) ?? slug;
+    const purpose = row?.purpose ?? str(fm?.['purpose']) ?? '';
+    const role = row?.role ?? str(fm?.['role']);
+    const dependsOn = row?.depends_on ?? strings(fm?.['depends_on']) ?? [];
+    const wordTarget = row?.estimated_word_count ?? num(fm?.['word_target']);
+    const voice = row?.voice ?? str(fm?.['voice']);
+    // FEED-04: the section's allowed set is its current PLAN.md assigned_sources
+    // (the outline allocation plus research/remap additions); a section with no
+    // PLAN.md yet takes the outline allocation.
+    const allowed = strings(fm?.['assigned_sources']) ?? row?.assigned_sources ?? [];
+    const sources = buildSourceContext(entries, allowed);
+    if (sources.length === 0) {
+      process.stderr.write(
+        `pensmith plan: WARN — section ${id} has no assigned sources, so its plan and draft will cite nothing; ` +
+          `add some with \`pensmith plan ${id} --research "<query>"\` or \`pensmith add <doi> --section ${n} --slug ${slug}\`\n`,
+      );
+    }
+
+    // GRND-12: brief summaries of the depends_on sections' planned claims.
+    const upstream: Array<{ slug: string; title: string; claims_summary: string }> = [];
+    for (const dep of dependsOn) {
+      const depRow = outline?.sections.find((s) => s.slug === dep);
+      if (!depRow) continue;
+      const depPath = sectionPlan(depRow.n, dep, paperRoot);
+      if (!existsSync(depPath)) continue;
+      try {
+        const doc = loadFrontmatterDocSync('plan', depPath);
+        if (doc.frontmatter['stub'] === true) continue;
+        const summary = summarizePlanClaims(doc.body);
+        if (summary.length > 0) upstream.push({ slug: dep, title: depRow.title, claims_summary: summary });
+      } catch {
+        /* an unreadable upstream plan is simply not summarised */
+      }
+    }
+
+    const req = buildPromptRequest('section-planner', {
+      brief: {
+        topic: brief.topic,
+        thesis: brief.thesis,
+        discipline: brief.discipline.slug.value,
+        tone: brief.discipline.tone,
+        paper_type: brief.paperType,
+      },
+      section: {
+        n,
+        suffix: suffix ?? null,
+        slug,
+        title,
+        purpose,
+        role: role ?? null,
+        depends_on: dependsOn,
+        word_target: wordTarget ?? null,
+        voice: voice ?? null,
+      },
+      ...(upstream.length > 0 ? { upstream } : {}),
+      sources,
     });
-    process.stdout.write(`pensmith plan: wrote PLAN.md to ${targetPath}\n`);
-    return { ok: true, path: targetPath };
+
+    const known = libraryCitekeys(entries);
+    const call = async (messages: ChatMessage[]): Promise<{ data: SectionPlan; text: string }> => {
+      const r = await complete<SectionPlan>({ slug: 'section-planner', section: n, system: req.system, messages, stubHint: requestHints(req) });
+      return { data: r.data as SectionPlan, text: r.text };
+    };
+    const check = (data: SectionPlan) =>
+      validatePlan({ plan: data, section: { n, slug, depends_on: dependsOn }, allowed, libraryCitekeys: known });
+
+    let attempt = await call(req.messages);
+    let issues = check(attempt.data);
+    if (issues.length > 0) {
+      attempt = await call(correctiveMessages(req.messages, attempt.text, planCorrection(issues)));
+      issues = check(attempt.data);
+      if (issues.length > 0) throw new PlannerInvalidError(formatPlanIssues(issues), planPath);
+    }
+
+    const plan = attempt.data;
+    const wave = num(fm?.['wave']);
+    const md = renderPlannedPlanMd(
+      {
+        section: n,
+        suffix,
+        slug,
+        title,
+        purpose,
+        role,
+        depends_on: dependsOn,
+        word_target: wordTarget,
+        voice,
+        assigned_sources: plan.frontmatter.assigned_sources,
+        wave,
+      },
+      plan,
+      { marker: networkMode().dryRun ? offlineMarkerLine() : null },
+    );
+    await withLock(planPath, () => atomicWriteFile(planPath, md));
+    process.stdout.write(
+      `pensmith plan: wrote PLAN.md to ${planPath} (${plan.claims.length} claim(s), ` +
+        `${new Set(plan.frontmatter.assigned_sources).size} source(s))\n`,
+    );
+    return { ok: true, path: planPath };
   },
 });
 

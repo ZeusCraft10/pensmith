@@ -30,7 +30,10 @@ interface RouterDecision {
   n?: number;
   slug?: string;
   reason?: string;
-  section?: { n: number; slug: string };
+  section?: { n: number; slug: string; suffix?: string };
+  suffix?: string;
+  /** Phase 18: what needs attention and the command that fixes it. */
+  detail?: string;
 }
 type ResolveNextAction = (paperRoot: string) => Promise<RouterDecision>;
 
@@ -71,10 +74,19 @@ function writePaperFile(root: string, name: string, body = '# ' + name + '\n'): 
   writeFileSync(join(pDir, name), body);
 }
 
-function writeSectionPlan(root: string, n: number, slug: string, status: string): void {
+function writeSectionPlan(root: string, n: number, slug: string, status: string, extra = ''): void {
   const dir = join(root, '.paper', 'sections', `${pad(n)}-${slug}`);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'PLAN.md'), `---\nstatus: ${status}\n---\n# Section ${n}\n`);
+  writeFileSync(join(dir, 'PLAN.md'), `---\nstatus: ${status}\n${extra}---\n# Section ${n}\n`);
+}
+
+/** The stub PLAN.md outline approval writes (GRND-09): `stub: true`, status planned. */
+function writeStubPlan(root: string, n: number, slug: string): void {
+  writeSectionPlan(root, n, slug, 'planned', 'stub: true\n');
+}
+
+function writeDraft(root: string, n: number, slug: string): void {
+  writeFileSync(join(root, '.paper', 'sections', `${pad(n)}-${slug}`, 'DRAFT.md'), 'Draft text.\n');
 }
 
 // Write a per-section PLAN.md whose YAML frontmatter THROWS in
@@ -125,8 +137,22 @@ test('UX-01 (c): RESEARCH.md present, no OUTLINE.md → { verb: "outline" }', { 
   assert.equal(decision.verb, 'outline', 'UX-01: OUTLINE.md missing routes to outline');
 });
 
-// === (d) section with a 'planned' PLAN.md → plan ===
-test('UX-01 (d): planned section → { verb: "plan", n, slug }', { skip: !built }, async () => {
+// === (d) the outline's stub PLAN.md → plan (GRND-13, Phase 18) ===
+test('UX-01 (d): an outlined (stub) section → { verb: "plan", n, slug }', { skip: !built }, async () => {
+  const resolveNextAction = await loadResolve();
+  const root = freshRoot();
+  writeState(root, [{ n: 1, slug: 'intro' }]);
+  writePaperFile(root, 'RESEARCH.md');
+  writePaperFile(root, 'OUTLINE.md');
+  writeStubPlan(root, 1, 'intro');
+  const decision = await resolveNextAction(root);
+  assert.equal(decision.verb, 'plan', 'UX-01: a stub routes to plan');
+  assert.equal(decision.n, 1, 'UX-01: plan decision carries n');
+  assert.equal(decision.slug, 'intro', 'UX-01: plan decision carries slug');
+});
+
+// === (d2) a planner-written PLAN.md (status planned, no stub) → write ===
+test('GRND-13: a planned section (no stub) → { verb: "write", n, slug }', { skip: !built }, async () => {
   const resolveNextAction = await loadResolve();
   const root = freshRoot();
   writeState(root, [{ n: 1, slug: 'intro' }]);
@@ -134,9 +160,9 @@ test('UX-01 (d): planned section → { verb: "plan", n, slug }', { skip: !built 
   writePaperFile(root, 'OUTLINE.md');
   writeSectionPlan(root, 1, 'intro', 'planned');
   const decision = await resolveNextAction(root);
-  assert.equal(decision.verb, 'plan', 'UX-01: planned section routes to plan');
-  assert.equal(decision.n, 1, 'UX-01: plan decision carries n');
-  assert.equal(decision.slug, 'intro', 'UX-01: plan decision carries slug');
+  assert.equal(decision.verb, 'write', 'GRND-13: only write sets writing; planned means ready to draft');
+  assert.equal(decision.n, 1);
+  assert.equal(decision.slug, 'intro');
 });
 
 // === (e) all sections verified, no DRAFT.md → compile ===
@@ -216,12 +242,13 @@ test('UX-01 / C3-HIGH-1 (i): first section "verifying" → { verb: "verify", n, 
     assert.equal(decision.verb, 'verify', 'C3-HIGH-1: "verifying" routes to verify');
   });
 
-// === (j) failed → verify (NOT continue/compile) — KEY totality assertion ===
-test('UX-01 / C3-HIGH-1 (j): first section "failed" → { verb: "verify" } NOT continue/compile (non-undefined)',
+// === (j) failed WITH a draft → verify (NOT continue/compile) — KEY totality assertion ===
+test('UX-01 / C3-HIGH-1 (j): first section "failed" (with a draft) → { verb: "verify" } NOT continue/compile (non-undefined)',
   { skip: !built }, async () => {
     const resolveNextAction = await loadResolve();
     const root = totalityRoot([{ n: 1, slug: 'intro' }]);
     writeSectionPlan(root, 1, 'intro', 'failed');
+    writeDraft(root, 1, 'intro');
     const decision = await resolveNextAction(root);
     assert.notEqual(decision, undefined, 'C3-HIGH-1: resolver must not return undefined for "failed"');
     assert.equal(typeof decision.verb, 'string', 'C3-HIGH-1: decision.verb must be a string');
@@ -239,8 +266,36 @@ test('UX-01 / C3-HIGH-1 (k): first section "unverifiable" → { verb: "verify" }
     assert.equal(decision.verb, 'verify', 'C3-HIGH-1: "unverifiable" re-attempts verify (must NOT continue to compile)');
   });
 
-// === (l) MIXED STUCK CASE: [verified, failed, verified] + no DRAFT.md ===
-test('UX-01 / C3-HIGH-1 (l): mixed [verified,failed,verified] + no DRAFT.md → valid non-undefined verify at the failed section',
+// === (j2) failed WITHOUT a draft → status/attention naming write (FEED-04, Phase 18) ===
+test('FEED-04: a section write failed (no DRAFT.md kept) → status/attention naming `pensmith write N`, never a paid loop',
+  { skip: !built }, async () => {
+    const resolveNextAction = await loadResolve();
+    const root = totalityRoot([{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }]);
+    writeSectionPlan(root, 1, 'intro', 'verified');
+    writeSectionPlan(root, 2, 'methods', 'failed', 'failure_reason: citekey evil9999 not assigned to section 2\n');
+    const decision = await resolveNextAction(root);
+    assert.equal(decision.verb, 'status');
+    assert.equal(decision.reason, 'attention');
+    assert.deepEqual(decision.section, { n: 2, slug: 'methods' });
+    assert.match(decision.detail ?? '', /section 2 failed: citekey evil9999 not assigned to section 2 — .*`pensmith write 2`/);
+  });
+
+// === (j3) a re-write failed while an OLDER DRAFT.md is still there → still attention ===
+test('FEED-04: a failed re-write (failure_reason) with an older DRAFT.md still routes to attention, never to verifying the old draft',
+  { skip: !built }, async () => {
+    const resolveNextAction = await loadResolve();
+    const root = totalityRoot([{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }]);
+    writeSectionPlan(root, 1, 'intro', 'verified');
+    writeSectionPlan(root, 2, 'methods', 'failed', 'failure_reason: citekey evil9999 not assigned to section 2\n');
+    writeDraft(root, 2, 'methods');
+    const decision = await resolveNextAction(root);
+    assert.equal(decision.verb, 'status');
+    assert.equal(decision.reason, 'attention');
+    assert.match(decision.detail ?? '', /section 2 failed: citekey evil9999 not assigned to section 2 — .*`pensmith write 2`/);
+  });
+
+// === (l) MIXED STUCK CASE: [verified, failed, verified] + a draft for the failed one ===
+test('UX-01 / C3-HIGH-1 (l): mixed [verified,failed,verified] + no compiled DRAFT.md → valid non-undefined verify at the failed section',
   { skip: !built }, async () => {
     const resolveNextAction = await loadResolve();
     const root = totalityRoot([
@@ -250,9 +305,10 @@ test('UX-01 / C3-HIGH-1 (l): mixed [verified,failed,verified] + no DRAFT.md → 
     ]);
     writeSectionPlan(root, 1, 'intro', 'verified');
     writeSectionPlan(root, 2, 'methods', 'failed');
+    writeDraft(root, 2, 'methods');
     writeSectionPlan(root, 3, 'results', 'verified');
-    // Intentionally NO DRAFT.md — the stuck middle section must NOT let the
-    // walk fall through to undefined and must NOT prematurely compile.
+    // Intentionally NO compiled .paper/DRAFT.md — the stuck middle section must
+    // NOT let the walk fall through to undefined and must NOT prematurely compile.
     const decision = await resolveNextAction(root);
     assert.notEqual(decision, undefined,
       'C3-HIGH-1: the mixed stuck state must NOT return undefined (the reachable cycle-3 HIGH)');
@@ -375,7 +431,7 @@ test('UX-01 / H4: a valid non-done HANDOFF resolves to the next WORK verb, NEVER
   { skip: !built }, async () => {
     const resolveNextAction = await loadResolve();
     const root = totalityRoot([{ n: 1, slug: 'intro' }]);
-    writeSectionPlan(root, 1, 'intro', 'planned');
+    writeStubPlan(root, 1, 'intro');
     // A VALID non-done HANDOFF.json — the original design returned { verb:'resume' }
     // here, looping forever. The resolver must ignore it.
     writeFileSync(

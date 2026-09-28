@@ -24,8 +24,9 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { loadState } from './state.js';
-import { readSectionState } from './router.js';
+import { readSectionInfo } from './router.js';
 import { paperDir, sectionPlan } from './paths.js';
+import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
 import { slugSpec } from './llm-models.js';
 import { costOf, resolvePrice, type ResolvedPrice } from './pricing.js';
 import { resolveRuntime, resolveSlug, type ResolvedRuntime } from './runtime.js';
@@ -262,7 +263,8 @@ function row(rt: ResolvedRuntime, root: string, step: string, slugs: Array<[stri
  */
 export interface EstimateScope {
   verb: string;
-  section?: number;
+  /** The section id: a number, or its text with a letter (`1a`, GRND-09). */
+  section?: number | string;
 }
 
 /** The model calls one run of each cost-incurring verb makes (other verbs make none). */
@@ -286,7 +288,7 @@ const STEP_SLUGS: Readonly<Record<string, ReadonlyArray<readonly [string, number
 function scopeRows(
   all: readonly EstimateRow[],
   scope: EstimateScope,
-  wave: readonly number[],
+  wave: ReadonlyArray<number | string>,
   price: (step: string, slugs: Array<[string, number]>) => EstimateRow,
 ): EstimateRow[] {
   const slugs = STEP_SLUGS[scope.verb];
@@ -295,7 +297,7 @@ function scopeRows(
     return [{ step: scope.verb, calls: [], inputTokens: 0, outputTokens: 0, usd: 0, fallbackPrice: false, note: 'no model calls' }];
   }
   const calls = slugs.map(([s, c]) => [s, c] as [string, number]);
-  const sectionRow = (n: number): EstimateRow => {
+  const sectionRow = (n: number | string): EstimateRow => {
     const step = `${scope.verb} §${n}`;
     return all.find((r) => r.step === step) ?? price(step, calls);
   };
@@ -325,11 +327,12 @@ export async function projectEstimate(args: {
   const rt = await resolveRuntime({ paperRoot: root });
   const pDir = paperDir(root);
 
-  let sections: Array<{ n: number; slug: string }> = [];
+  let sections: Array<{ n: number; suffix?: string | undefined; slug: string }> = [];
   let stateOk = false;
   try {
     const state = await loadState(root);
-    sections = [...(state.sections ?? [])].sort((a, b) => a.n - b.n);
+    // GRND-09: (n, suffix) order — §1 < §1a < §2.
+    sections = sortBySectionId(state.sections ?? []);
     stateOk = true;
   } catch {
     stateOk = false;
@@ -355,15 +358,18 @@ export async function projectEstimate(args: {
       rows.push(row(rt, root, `verify §${n}`, verifyCalls, stubbed));
     }
   } else {
-    for (const { n, slug } of sections) {
-      const st = readSectionState(sectionPlan(n, slug, root));
+    for (const { n, suffix, slug } of sections) {
+      const id = formatSectionId(sectionIdOf(n, suffix));
+      const st = readSectionInfo(sectionPlan(n, slug, root));
       const status = st.absent ? 'unplanned' : st.status;
       if (status === 'verified') continue;
-      const planDone = ['writing', 'written', 'verifying', 'failed', 'unverifiable'].includes(status);
+      // GRND-13: the outline's stub (`stub: true`) still needs its plan; a
+      // planner-written PLAN.md is `planned` without `stub`.
+      const planDone = (status === 'planned' && !st.stub) || ['writing', 'written', 'verifying', 'failed', 'unverifiable'].includes(status);
       const writeDone = ['written', 'verifying', 'failed', 'unverifiable'].includes(status);
-      if (!planDone) rows.push(row(rt, root, `plan §${n}`, [['section-planner', 1]], stubbed));
-      if (!writeDone) rows.push(row(rt, root, `write §${n}`, [['section-drafter', 1]], stubbed));
-      rows.push(row(rt, root, `verify §${n}`, verifyCalls, stubbed));
+      if (!planDone) rows.push(row(rt, root, `plan §${id}`, [['section-planner', 1]], stubbed));
+      if (!writeDone) rows.push(row(rt, root, `write §${id}`, [['section-drafter', 1]], stubbed));
+      rows.push(row(rt, root, `verify §${id}`, verifyCalls, stubbed));
     }
   }
 
@@ -375,7 +381,13 @@ export async function projectEstimate(args: {
   }
 
   if (args.scope !== undefined) {
-    const wave = sections.filter(({ n, slug }) => !readSectionState(sectionPlan(n, slug, root)).absent).map((s) => s.n);
+    const wave = sections
+      .filter(({ n, slug }) => {
+        // A wave write drafts every planned section; the outline's stubs are skipped (GRND-16).
+        const r = readSectionInfo(sectionPlan(n, slug, root));
+        return !r.absent && !r.stub;
+      })
+      .map((s) => formatSectionId(sectionIdOf(s.n, s.suffix)));
     rows = scopeRows(rows, args.scope, wave, (step, slugs) => row(rt, root, step, slugs, stubbed));
   }
 

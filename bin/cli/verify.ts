@@ -38,7 +38,7 @@ import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
 import { offlineMarkerLine } from '../lib/http-mock.js';
-import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
+import { EXIT_ERROR } from '../lib/exit-codes.js';
 
 // Force-bind the deterministic primitives so the acceptance grep
 // (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
@@ -52,6 +52,209 @@ function stopReason(err: unknown): string {
   return msg.replace(/\s*\r?\n\s*/g, ' ').replace(/\|/g, '/').trim().slice(0, 160) || 'stopped';
 }
 
+/**
+ * Verify ONE section (VRFY-01, VRFY-07, VRFY-08): Pass 1 + Pass 3 (blocking,
+ * deterministic), the freshness probe and the advisory Passes 2 and 4, then
+ * VERIFICATION.md and the PLAN.md status + verified_against_draft_hash. The
+ * `verify` command and `write` (which chains verify after each successful
+ * draft, GRND-15 / D-18-26) both call it. Its result maps to the exit code the
+ * command has always had (exitCodeForResult): a failed or blocking-UNVERIFIABLE
+ * section is EXIT_BLOCKED. A fatal advisory failure (the cost cap) is thrown
+ * after the deterministic verdict is written.
+ */
+export async function verifySection(n: number, slug: string) {
+  // RUN-02: every VERIFICATION.md written in an offline / --dry-run session
+  // opens with the disclosure marker — the short-circuit bodies below too.
+  const markerPrefix = (): string => {
+    const m = offlineMarkerLine();
+    return m !== null ? `${m}\n\n` : '';
+  };
+  const draftPath = sectionDraft(n, slug);
+  const verifPath = sectionVerification(n, slug);
+  const bibPath = path.join(paperDir(), 'CITATIONS.bib');
+
+  if (!existsSync(draftPath)) {
+    const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: DRAFT.md missing at ${draftPath} — run \`pensmith write ${n}\` first.\n`;
+    await atomicWriteFile(verifPath, body);
+    // A section whose draft is gone is back to "needs writing": the router
+    // re-drafts it instead of re-dispatching verify forever.
+    const planPath = sectionPlan(n, slug);
+    if (existsSync(planPath)) {
+      await updatePlanFrontmatter(planPath, (fm) => {
+        if (fm.status !== 'planned') fm.status = 'writing';
+        delete fm.failure_reason;
+      });
+    }
+    process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${n}\` first\n`);
+    return { ok: false, status: 'unverifiable', path: verifPath };
+  }
+
+  // The ONE citation grammar (citation-token.ts): every cited key, whatever
+  // its shape ([@k, p. 3], [@a; @b], [@Key:2099]) — the same extraction
+  // runPass1 uses, so "cites nothing" means Pass 1 has nothing to check.
+  const draftMd = readFileSync(draftPath, 'utf8');
+  const citedKeys = extractCitedKeysForVerification(draftMd);
+  const bibExists = existsSync(bibPath);
+  if (!bibExists && citedKeys.length > 0) {
+    // Fail closed: a draft that cites sources with no CITATIONS.bib to check
+    // them against is never a passable verdict (compile refuses Status: failed).
+    const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: failed\nReason: .paper/CITATIONS.bib is missing, so the ${citedKeys.length} source(s) DRAFT.md cites cannot be checked — run \`pensmith research\` to rebuild it, then \`pensmith verify ${n}\`.\n`;
+    await atomicWriteFile(verifPath, body);
+    process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote failed VERIFICATION.md to ${verifPath}\n`);
+    return { ok: false, status: 'failed', path: verifPath, exitCode: EXIT_ERROR };
+  }
+
+  // An empty CITATIONS.bib is zero entries (the library writer renders an
+  // empty library as an empty bib, BRDTH-01), and a draft that cites nothing
+  // needs no bib at all: both take the normal path below. With no citation,
+  // Pass 1 and Pass 3 have nothing to check and the section is verified —
+  // exactly as it is against a non-empty bib; a cited key absent from the bib
+  // is FABRICATED (fail closed).
+  const pass1 = bibExists ? await runPass1(draftMd, bibPath) : [];
+  const bibEntries = bibExists ? await parseBibFileAt(readFileSync(bibPath, 'utf8'), bibPath) : [];
+  // Widened value type (additive): carries title/author/abstract so Pass 2
+  // (claim support) has source metadata. runPass3 reads only DOI, so the
+  // widening is backward-compatible with the runPass3 call below.
+  type BibValue = {
+    DOI?: string;
+    title?: string | string[];
+    author?: Array<{ family?: string; given?: string }> | string[];
+    abstract?: string;
+  };
+  const bibByCitekey = new Map<string, BibValue>(
+    bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as BibValue]),
+  );
+  const pass3 = await runPass3(draftMd, bibByCitekey);
+
+  // RSCH-10 freshness probe (D-10, WARN-only). Runs AFTER the blocking
+  // verdict computation and NEVER influences `status` — a stale DOI or a
+  // retraction-watch hit surfaces as an advisory table row, not a block.
+  const freshness = bibExists ? await runFreshnessForDraft(draftMd, bibPath) : [];
+
+  // Aggregate: any FABRICATED → status: failed; any MIS-CITED → status: failed;
+  // any Pass-1 UNVERIFIABLE (the re-fetch was unavailable offline / under
+  // --dry-run, D-17-07) → status: unverifiable AND blocked (exit 4; compile and
+  // done refuse the row with "re-run online"); any PDF_UNAVAILABLE /
+  // TEXT_UNAVAILABLE → status: unverifiable (advisory); else verified.
+  const hasFail = pass1.some((r) => r.verdict === 'FABRICATED' || r.verdict === 'MIS-CITED')
+    || pass3.some((r) => r.verdict === 'NOT_FOUND');
+  const blockingUnverifiable = pass1.some((r) => r.verdict === 'UNVERIFIABLE');
+  const hasUnverifiable = blockingUnverifiable
+    || pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
+  const status: 'verified' | 'failed' | 'unverifiable' = hasFail
+    ? 'failed'
+    : (hasUnverifiable ? 'unverifiable' : 'verified');
+  // Blocking UNVERIFIABLE maps to EXIT_BLOCKED through the result (ok:false,
+  // blocked:true); verifySection never sets process.exitCode itself, so write
+  // can chain it once per section (GRND-15).
+
+  // Pass-2 (claim support) + Pass-4 (orphan-claim audit), advisory. Both run
+  // AFTER hasFail / hasUnverifiable / status are frozen above and NEVER feed
+  // back into them (VRFY-07) — mirroring the freshness advisory call site.
+  // Pass 2/4 load their own prompts inside their modules (the prompt-loader
+  // path lives there, not here), so verify.ts stays a 100%-deterministic
+  // orchestrator at the prompt-loader chokepoint. The results are returned for
+  // Phase 6 DONE-09 consumption and rendered as advisory VERIFICATION.md
+  // sections below.
+  //
+  // No provider key is not an error here: the passes record "skipped (no LLM
+  // configured)" rows (D-V1-04). A failure that must stop verify — the session
+  // cost cap, an invalid runtime config — is caught so the frozen Pass-1/Pass-3
+  // verdict is still written and persisted, then rethrown (its exit code).
+  let advisoryStop: unknown = undefined;
+  let pass2: Pass2Result[];
+  let pass4: Pass4Result[] | null = null;
+  try {
+    pass2 = await runPass2(draftMd, bibByCitekey, { n });
+  } catch (err) {
+    if (!isFatalLlmError(err)) throw err;
+    advisoryStop = err;
+    pass2 = pass2NotRun(draftMd, stopReason(err));
+  }
+  if (advisoryStop === undefined) {
+    try {
+      pass4 = await runPass4(draftMd, { n });
+    } catch (err) {
+      if (!isFatalLlmError(err)) throw err;
+      advisoryStop = err;
+    }
+  }
+  if (advisoryStop === undefined && pass2.some((r) => r.rationale.startsWith(NO_LLM_SKIP_REASON))) {
+    process.stderr.write(`pensmith verify: advisory claim-support and orphan checks ${NO_LLM_SKIP_REASON} — the blocking Pass 1 and Pass 3 verdicts are unaffected.\n`);
+  }
+
+  const offlineMarker = offlineMarkerLine();
+  const lines = [
+    ...(offlineMarker !== null ? [offlineMarker, ''] : []),
+    `# VERIFICATION (Section ${n}, ${slug})`,
+    '',
+    `Status: ${status}`,
+    '',
+    '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
+    '',
+    ...pass1.map((r) => renderPass1VerdictRow(r.citekey, r.verdict, r.titleJW, r.authorJW, r.reason)),
+    '',
+    '## Pass-3 (quote integrity, deterministic — levenshtein-substring)',
+    '',
+    ...pass3.map((r) => renderPass3VerdictRow(r.citekey, r.quoteSnippet, r.verdict, r.levRatio, r.reason)),
+    '',
+    ...(citedKeys.length === 0 ? ['Note: DRAFT.md cites no sources ([@citekey]) — Pass 1 and Pass 3 had nothing to check.', ''] : []),
+    renderFreshnessTable(freshness),
+    '',
+    renderPass2Section(pass2),
+    '',
+    pass4 !== null
+      ? renderPass4Section(pass4)
+      : `## Pass-4 (orphan claims, advisory)\n\n_(not run: ${stopReason(advisoryStop)})_\n`,
+    '',
+  ];
+  await atomicWriteFile(verifPath, lines.join('\n'));
+
+  // Audit #8: persist the verdict to the section PLAN.md frontmatter so the
+  // router (router.ts:188-211) advances the pipeline instead of looping on
+  // verify. verified_against_draft_hash is the D-07 per-section hash computed
+  // EXACTLY as compile.ts recomputes it (DRAFT.md bytes + sorted
+  // assigned_sources), so a verified section is recognized as fresh by the
+  // compile staleness check — and a later re-write changes the bytes, leaving
+  // the stored hash stale and forcing re-verification (the write<->verify
+  // cycle-break). Best-effort: an absent/unwritable PLAN.md WARNs, never throws.
+  const planPath = sectionPlan(n, slug);
+  let assignedSources: string[] = [];
+  try {
+    if (existsSync(planPath)) {
+      // CONF-04: the versioned PLAN.md reader (v0 migrated + written back).
+      const { frontmatter } = await loadFrontmatterDoc('plan', planPath, { writeBack: true });
+      assignedSources = Array.isArray(frontmatter['assigned_sources'])
+        ? (frontmatter['assigned_sources'] as unknown[]).map(String)
+        : [];
+    }
+  } catch {
+    assignedSources = [];
+  }
+  const draftHash = computeDraftHash(readFileSync(draftPath), assignedSources);
+  const persisted = await updatePlanFrontmatter(planPath, (fm) => {
+    fm.status = status;
+    fm.verified_against_draft_hash = draftHash;
+    // FEED-04: a write failure's reason no longer describes the section once
+    // verify has judged its draft.
+    delete fm.failure_reason;
+  });
+  if (!persisted) {
+    process.stderr.write(
+      `pensmith verify: WARN — could not persist status:'${status}' to ${planPath} ` +
+      `(PLAN.md absent/unwritable); the router may not advance this section.\n`,
+    );
+  }
+
+  process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
+  // The deterministic verdict is on disk; now stop with the advisory failure
+  // (e.g. EXIT_COST_CAP, one line through the dispatcher).
+  if (advisoryStop !== undefined) throw advisoryStop;
+  // RUN-09: a failed or blocking-UNVERIFIABLE section is a verifier refusal —
+  // `blocked` maps to EXIT_BLOCKED.
+  return { ok: status !== 'failed' && !blockingUnverifiable, status, blocked: hasFail || blockingUnverifiable, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
+}
+
 export const verifyCommand = defineCommand({
   meta: {
     name: 'verify',
@@ -60,7 +263,7 @@ export const verifyCommand = defineCommand({
   args: {
     n: {
       type: 'positional',
-      description: 'Section number (1-based).',
+      description: 'Section number (1-based; a letter for an inserted section, e.g. 1a).',
       required: true,
       valueHint: '3',
     },
@@ -80,190 +283,7 @@ export const verifyCommand = defineCommand({
     // slug comes from OUTLINE.md (audit #23); 'placeholder' only when there is
     // no outline yet.
     const { n, slug } = resolveSectionArg('verify', projectRoot(), args.n, args.slug);
-    // RUN-02: every VERIFICATION.md written in an offline / --dry-run session
-    // opens with the disclosure marker — the short-circuit bodies below too.
-    const markerPrefix = (): string => {
-      const m = offlineMarkerLine();
-      return m !== null ? `${m}\n\n` : '';
-    };
-    const draftPath = sectionDraft(n, slug);
-    const verifPath = sectionVerification(n, slug);
-    const bibPath = path.join(paperDir(), 'CITATIONS.bib');
-
-    if (!existsSync(draftPath)) {
-      const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: DRAFT.md missing at ${draftPath} — run \`pensmith write ${n}\` first.\n`;
-      await atomicWriteFile(verifPath, body);
-      // A section whose draft is gone is back to "needs writing": the router
-      // re-drafts it instead of re-dispatching verify forever.
-      const planPath = sectionPlan(n, slug);
-      if (existsSync(planPath)) {
-        await updatePlanFrontmatter(planPath, (fm) => {
-          if (fm.status !== 'planned') fm.status = 'writing';
-        });
-      }
-      process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${n}\` first\n`);
-      return { ok: false, status: 'unverifiable', path: verifPath };
-    }
-
-    // The ONE citation grammar (citation-token.ts): every cited key, whatever
-    // its shape ([@k, p. 3], [@a; @b], [@Key:2099]) — the same extraction
-    // runPass1 uses, so "cites nothing" means Pass 1 has nothing to check.
-    const draftMd = readFileSync(draftPath, 'utf8');
-    const citedKeys = extractCitedKeysForVerification(draftMd);
-    const bibExists = existsSync(bibPath);
-    if (!bibExists && citedKeys.length > 0) {
-      // Fail closed: a draft that cites sources with no CITATIONS.bib to check
-      // them against is never a passable verdict (compile refuses Status: failed).
-      const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: failed\nReason: .paper/CITATIONS.bib is missing, so the ${citedKeys.length} source(s) DRAFT.md cites cannot be checked — run \`pensmith research\` to rebuild it, then \`pensmith verify ${n}\`.\n`;
-      await atomicWriteFile(verifPath, body);
-      process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote failed VERIFICATION.md to ${verifPath}\n`);
-      return { ok: false, status: 'failed', path: verifPath, exitCode: EXIT_ERROR };
-    }
-
-    // An empty CITATIONS.bib is zero entries (the library writer renders an
-    // empty library as an empty bib, BRDTH-01), and a draft that cites nothing
-    // needs no bib at all: both take the normal path below. With no citation,
-    // Pass 1 and Pass 3 have nothing to check and the section is verified —
-    // exactly as it is against a non-empty bib; a cited key absent from the bib
-    // is FABRICATED (fail closed).
-    const pass1 = bibExists ? await runPass1(draftMd, bibPath) : [];
-    const bibEntries = bibExists ? await parseBibFileAt(readFileSync(bibPath, 'utf8'), bibPath) : [];
-    // Widened value type (additive): carries title/author/abstract so Pass 2
-    // (claim support) has source metadata. runPass3 reads only DOI, so the
-    // widening is backward-compatible with the runPass3 call below.
-    type BibValue = {
-      DOI?: string;
-      title?: string | string[];
-      author?: Array<{ family?: string; given?: string }> | string[];
-      abstract?: string;
-    };
-    const bibByCitekey = new Map<string, BibValue>(
-      bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as BibValue]),
-    );
-    const pass3 = await runPass3(draftMd, bibByCitekey);
-
-    // RSCH-10 freshness probe (D-10, WARN-only). Runs AFTER the blocking
-    // verdict computation and NEVER influences `status` — a stale DOI or a
-    // retraction-watch hit surfaces as an advisory table row, not a block.
-    const freshness = bibExists ? await runFreshnessForDraft(draftMd, bibPath) : [];
-
-    // Aggregate: any FABRICATED → status: failed; any MIS-CITED → status: failed;
-    // any Pass-1 UNVERIFIABLE (the re-fetch was unavailable offline / under
-    // --dry-run, D-17-07) → status: unverifiable AND blocked (exit 4; compile and
-    // done refuse the row with "re-run online"); any PDF_UNAVAILABLE /
-    // TEXT_UNAVAILABLE → status: unverifiable (advisory); else verified.
-    const hasFail = pass1.some((r) => r.verdict === 'FABRICATED' || r.verdict === 'MIS-CITED')
-      || pass3.some((r) => r.verdict === 'NOT_FOUND');
-    const blockingUnverifiable = pass1.some((r) => r.verdict === 'UNVERIFIABLE');
-    const hasUnverifiable = blockingUnverifiable
-      || pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
-    const status: 'verified' | 'failed' | 'unverifiable' = hasFail
-      ? 'failed'
-      : (hasUnverifiable ? 'unverifiable' : 'verified');
-    if (blockingUnverifiable && !hasFail) process.exitCode = EXIT_BLOCKED;
-
-    // Pass-2 (claim support) + Pass-4 (orphan-claim audit), advisory. Both run
-    // AFTER hasFail / hasUnverifiable / status are frozen above and NEVER feed
-    // back into them (VRFY-07) — mirroring the freshness advisory call site.
-    // Pass 2/4 load their own prompts inside their modules (the prompt-loader
-    // path lives there, not here), so verify.ts stays a 100%-deterministic
-    // orchestrator at the prompt-loader chokepoint. The results are returned for
-    // Phase 6 DONE-09 consumption and rendered as advisory VERIFICATION.md
-    // sections below.
-    //
-    // No provider key is not an error here: the passes record "skipped (no LLM
-    // configured)" rows (D-V1-04). A failure that must stop verify — the session
-    // cost cap, an invalid runtime config — is caught so the frozen Pass-1/Pass-3
-    // verdict is still written and persisted, then rethrown (its exit code).
-    let advisoryStop: unknown = undefined;
-    let pass2: Pass2Result[];
-    let pass4: Pass4Result[] | null = null;
-    try {
-      pass2 = await runPass2(draftMd, bibByCitekey, { n });
-    } catch (err) {
-      if (!isFatalLlmError(err)) throw err;
-      advisoryStop = err;
-      pass2 = pass2NotRun(draftMd, stopReason(err));
-    }
-    if (advisoryStop === undefined) {
-      try {
-        pass4 = await runPass4(draftMd, { n });
-      } catch (err) {
-        if (!isFatalLlmError(err)) throw err;
-        advisoryStop = err;
-      }
-    }
-    if (advisoryStop === undefined && pass2.some((r) => r.rationale.startsWith(NO_LLM_SKIP_REASON))) {
-      process.stderr.write(`pensmith verify: advisory claim-support and orphan checks ${NO_LLM_SKIP_REASON} — the blocking Pass 1 and Pass 3 verdicts are unaffected.\n`);
-    }
-
-    const offlineMarker = offlineMarkerLine();
-    const lines = [
-      ...(offlineMarker !== null ? [offlineMarker, ''] : []),
-      `# VERIFICATION (Section ${n}, ${slug})`,
-      '',
-      `Status: ${status}`,
-      '',
-      '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
-      '',
-      ...pass1.map((r) => renderPass1VerdictRow(r.citekey, r.verdict, r.titleJW, r.authorJW, r.reason)),
-      '',
-      '## Pass-3 (quote integrity, deterministic — levenshtein-substring)',
-      '',
-      ...pass3.map((r) => renderPass3VerdictRow(r.citekey, r.quoteSnippet, r.verdict, r.levRatio, r.reason)),
-      '',
-      ...(citedKeys.length === 0 ? ['Note: DRAFT.md cites no sources ([@citekey]) — Pass 1 and Pass 3 had nothing to check.', ''] : []),
-      renderFreshnessTable(freshness),
-      '',
-      renderPass2Section(pass2),
-      '',
-      pass4 !== null
-        ? renderPass4Section(pass4)
-        : `## Pass-4 (orphan claims, advisory)\n\n_(not run: ${stopReason(advisoryStop)})_\n`,
-      '',
-    ];
-    await atomicWriteFile(verifPath, lines.join('\n'));
-
-    // Audit #8: persist the verdict to the section PLAN.md frontmatter so the
-    // router (router.ts:188-211) advances the pipeline instead of looping on
-    // verify. verified_against_draft_hash is the D-07 per-section hash computed
-    // EXACTLY as compile.ts recomputes it (DRAFT.md bytes + sorted
-    // assigned_sources), so a verified section is recognized as fresh by the
-    // compile staleness check — and a later re-write changes the bytes, leaving
-    // the stored hash stale and forcing re-verification (the write<->verify
-    // cycle-break). Best-effort: an absent/unwritable PLAN.md WARNs, never throws.
-    const planPath = sectionPlan(n, slug);
-    let assignedSources: string[] = [];
-    try {
-      if (existsSync(planPath)) {
-        // CONF-04: the versioned PLAN.md reader (v0 migrated + written back).
-        const { frontmatter } = await loadFrontmatterDoc('plan', planPath, { writeBack: true });
-        assignedSources = Array.isArray(frontmatter['assigned_sources'])
-          ? (frontmatter['assigned_sources'] as unknown[]).map(String)
-          : [];
-      }
-    } catch {
-      assignedSources = [];
-    }
-    const draftHash = computeDraftHash(readFileSync(draftPath), assignedSources);
-    const persisted = await updatePlanFrontmatter(planPath, (fm) => {
-      fm.status = status;
-      fm.verified_against_draft_hash = draftHash;
-    });
-    if (!persisted) {
-      process.stderr.write(
-        `pensmith verify: WARN — could not persist status:'${status}' to ${planPath} ` +
-        `(PLAN.md absent/unwritable); the router may not advance this section.\n`,
-      );
-    }
-
-    process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
-    // The deterministic verdict is on disk; now stop with the advisory failure
-    // (e.g. EXIT_COST_CAP, one line through the dispatcher).
-    if (advisoryStop !== undefined) throw advisoryStop;
-    // RUN-09: a failed or blocking-UNVERIFIABLE section is a verifier refusal —
-    // `blocked` maps to EXIT_BLOCKED.
-    return { ok: status !== 'failed' && !blockingUnverifiable, status, blocked: hasFail || blockingUnverifiable, path: verifPath, pass1, pass3, freshness, pass2, pass4 };
+    return verifySection(n, slug);
   },
 });
 

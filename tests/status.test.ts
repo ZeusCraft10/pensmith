@@ -29,7 +29,8 @@ test('RUN-19: the view — title/name/class, current §2 (write), ✓ ⌛ ⌽, c
     assert.equal(view.title, 'Tidal Power and Coastal Ecology');
     assert.equal(view.name, 'paper');
     assert.equal(view.class, 'ENGR 210');
-    assert.deepEqual(view.current, { n: 2, slug: 'methods', step: 'write' });
+    assert.deepEqual(view.current, { n: 2, id: '2', slug: 'methods', step: 'write' });
+    assert.equal(view.attention, null);
     assert.equal(view.currentLine, 'current: §2 (write)');
     assert.deepEqual(view.sections.map((s) => [s.glyph, s.n, s.status]), [['✓', 1, 'verified'], ['⌛', 2, 'writing'], ['⌽', 3, 'planned']]);
     // The fixture's $1.23 was spent by an EARLIER session: that is what a

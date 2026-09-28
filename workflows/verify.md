@@ -29,7 +29,10 @@ produced by `jaroWinkler` (Pass-1 title/author AND-gate) and `levenshteinSubstri
 (Plan 05 hash-pins them) are calibrated for Phase 8 ambiguous-case tie-break only;
 they MUST NOT be referenced, loaded, or executed from this body in Phase 3.
 
-The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
+The implementation lives in `bin/cli/verify.ts` (`verifySection`). `pensmith write <N>` runs the
+same `verifySection` right after it keeps a draft (GRND-15), so a normal run reaches this verb
+without a separate command; `pensmith verify <N>` re-runs it on its own (after `write --no-verify`,
+or after editing DRAFT.md by hand).
 
 ## Steps
 
@@ -52,7 +55,7 @@ The implementation lives in `bin/cli/verify.ts` (created by Plan 07).
 > from any model call.
 > Audit gate (BL-2): a CI-side regex grep on this file matches zero LLM-invocation patterns inside the `## Body` section. The exact regex lives in `.planning/phases/03-vertical-slice-one-section/03-06-PLAN.md` (verification block) and is enforced by the merge gate, not duplicated here (to keep this file inert under its own grep).
 
-1. **Parse args**: `pensmith verify <N>` — `N` is the 1-based section number. Read `.paper/OUTLINE.md` to resolve the slug. A `N` that is not a number from 1 to 99, a section the outline does not have, or a `--slug` that is not the outline's slug for `N` is a usage error (exit 2) before anything is read or written — never a `NN-placeholder` folder for a paper with an outline (RUN-09).
+1. **Parse args**: `pensmith verify <N>` — `N` is the section id (`3`, or `1a` for a section a re-outline inserted). Read `.paper/OUTLINE.md` to resolve the slug; the section's folder is found by slug. An `N` that is not a section id from 1 to 99 (optionally with one letter), a section the outline does not have, or a `--slug` that is not the outline's slug for `N` is a usage error (exit 2) before anything is read or written — never a `NN-placeholder` folder for a paper with an outline (RUN-09).
 
 2. **Set status to `'verifying'`** (D-08-AMENDED LOCKED enum value): update the section's PlanFrontmatter `status: 'verifying'` via `bin/lib/frontmatter.ts updateFrontmatter()` (round-trip-safe per D-08).
 

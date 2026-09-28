@@ -17,6 +17,14 @@
 //   - SectionStateSchema gains the 'unverifiable' literal (D-08-AMENDED — see
 //     plan-frontmatter.ts and handoff.ts which mirror this enum).
 //
+// Phase 18 amendment (GRND-09, D-18-16): CURRENT_STATE_VERSION 2 → 3. A section
+// entry may carry an optional `suffix` (one lowercase letter) — a section a
+// re-outline inserted after §N while a kept section followed is §Na, with the
+// folder `sections/NNa-<slug>/` (bin/lib/section-id.ts). The v2 → v3 migration
+// (bin/lib/migrations/state/v2_to_v3.ts) only bumps the version: every v2
+// entry is a valid v3 entry. The bump makes an older build refuse a v3 file
+// ("upgrade pensmith") instead of failing on the unknown `suffix` key.
+//
 // Per D-37 every persisted JSON file carries a top-level `$schemaVersion: number`.
 // Per D-38 zod is the runtime-validation engine.
 //
@@ -26,7 +34,7 @@
 
 import { z } from 'zod';
 
-export const CURRENT_STATE_VERSION = 2;
+export const CURRENT_STATE_VERSION = 3;
 
 // === Section state enum (D-08-AMENDED) ===
 // Single source of truth for the section-state literal set. The
@@ -56,12 +64,15 @@ export const VerificationVerdictSchema = z.enum([
 ]);
 export type VerificationVerdict = z.infer<typeof VerificationVerdictSchema>;
 
-// === SectionEntrySchema (v2 slim shape, D-08) ===
+// === SectionEntrySchema (v2 slim shape, D-08; v3 optional suffix, D-18-16) ===
 // Strict (no extra fields). Section state machinery (status / lastVerification)
-// lives in the per-section PLAN.md frontmatter, NOT in STATE.json.
+// lives in the per-section PLAN.md frontmatter, NOT in STATE.json. The pair
+// (n, suffix) is unique within a paper, and so is the slug (state.ts
+// initSection enforces both).
 const SECTION_SLUG_RE = /^[a-z0-9-]+$/;
 export const SectionEntrySchema = z.object({
   n: z.number().int().min(1),
+  suffix: z.string().regex(/^[a-z]$/).optional(),
   slug: z.string().regex(SECTION_SLUG_RE).min(1),
 }).strict();
 export type SectionEntry = z.infer<typeof SectionEntrySchema>;
@@ -69,7 +80,7 @@ export type SectionEntry = z.infer<typeof SectionEntrySchema>;
 // === Core state schema ===
 //
 // We keep paperId / createdAt as REQUIRED (the Phase 1 contract). The
-// $schemaVersion literal is bumped to CURRENT_STATE_VERSION (= 2).
+// $schemaVersion literal is CURRENT_STATE_VERSION (= 3 since Phase 18).
 //
 // .passthrough() is intentional at the top level: the migration preserves
 // extra top-level fields (per D-09 / property-test contract), and downstream
@@ -77,8 +88,8 @@ export type SectionEntry = z.infer<typeof SectionEntrySchema>;
 //
 // Refuse-forward (ARCH-07): the loader (bin/lib/migrations/loader.ts) already
 // throws ForwardIncompatError when diskVersion > currentVersion. We add a
-// belt-and-suspenders schema-level guard via the literal($schemaVersion = 2)
-// — any value other than 2 fails parse, and the loader's "missing migration"
+// belt-and-suspenders schema-level guard via the literal($schemaVersion =
+// CURRENT_STATE_VERSION) — any other value fails parse, and the loader's "missing migration"
 // branch covers older-than-current versions before parse runs.
 export const Schema = z.object({
   $schemaVersion: z.literal(CURRENT_STATE_VERSION),

@@ -109,11 +109,11 @@ test(
       createdAt?: unknown;
     };
 
-    // v2 schema assertions.
+    // Current-schema assertions (v3 since Phase 18, GRND-09 / D-18-16).
     assert.equal(
       state.$schemaVersion,
-      2,
-      `STATE.json must have $schemaVersion: 2 (got ${String(state.$schemaVersion)})`,
+      3,
+      `STATE.json must have $schemaVersion: 3 (got ${String(state.$schemaVersion)})`,
     );
     assert.ok(
       typeof state.paperId === 'string' && state.paperId.length >= 1,
