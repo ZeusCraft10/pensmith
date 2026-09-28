@@ -46,7 +46,7 @@ const outline = (sb: LlmSandbox, args: string[], extra: { env?: Record<string, s
 test('RUN-28: the reoutline gate is registered: --yolo skips it (only with --force), a run without a terminal refuses with 3', () => {
   const def = gateDef('reoutline');
   assert.equal(def.yolo, 'skip');
-  assert.match(def.yoloChoice, /only with --force/);
+  assert.match(def.yoloChoice, /a model re-outline also needs --force/);
   assert.equal(def.nonInteractive, 'refuse');
   assert.equal(def.nonTtyExit, EXIT_APPROVAL);
   assert.equal(def.declineExit, EXIT_APPROVAL);
@@ -58,7 +58,7 @@ test('GRND-09 / RUN-28: outline --force with no terminal and no --yolo exits 3 b
     const before = paperFiles(sb);
     const r = await outline(sb, ['--force']);
     assert.equal(r.status, EXIT_APPROVAL, `${r.stdout}\n${r.stderr}`);
-    assert.match(r.stderr, /^pensmith: Re-outline a paper that already has drafts\? \(no outline was requested and no section was changed\) needs an answer: re-run in a terminal, or pass --yolo to re-outline \(only with --force\)\.$/m);
+    assert.match(r.stderr, /^pensmith: Re-outline a paper that already has drafts\? \(no outline was requested and no section was changed\) needs an answer: re-run in a terminal, or pass --yolo to re-outline \(a model re-outline also needs --force\)\.$/m);
     assert.equal(sb.mock!.callCount('outline-author'), 0, 'nothing sent or billed');
     assert.deepEqual(paperFiles(sb), before, 'every paper file byte- and mtime-identical');
   });

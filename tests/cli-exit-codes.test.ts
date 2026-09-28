@@ -341,19 +341,21 @@ test('RUN-09: an invalid section argument is EXIT_USAGE before any model call �
 test('RUN-12: an unexpected error prints one line plus the PENSMITH_DEBUG hint — no stack', () => {
   const sb = sandbox('exit-unexpected');
   const root = sb.project('p');
-  writeState(root, [{ n: 1, slug: 'alpha' }, { n: 2, slug: 'beta' }]);
-  // A dependency cycle hand-written into OUTLINE.md: the wave scheduler throws a
-  // plain Error (an unexpected failure). Phase 18 (GRND-16) turned the former
-  // trigger — a malformed PLAN.md — into an expected, named one-line refusal
-  // (tests/wave-write-plan-errors.test.ts).
-  writeOutline(root, [{ n: 1, slug: 'alpha', deps: ['beta'] }, { n: 2, slug: 'beta', deps: ['alpha'] }]);
-  writePlan(root, 1, 'alpha', { depends_on: '[beta]' });
-  writePlan(root, 2, 'beta', { depends_on: '[alpha]' });
-  const r = runCli(sb, root, ['write', '--yolo']);
+  writeState(root, [{ n: 1, slug: 'alpha' }]);
+  // A section's DRAFT.md that is a DIRECTORY: reading it fails with EISDIR, a
+  // failure no code path expects (an unexpected error). The former triggers are
+  // expected, named one-line refusals now: a malformed PLAN.md (GRND-16,
+  // tests/wave-write-plan-errors.test.ts) and a depends_on cycle (review round
+  // 2, tests/section-registry.test.ts).
+  writeOutline(root, [{ n: 1, slug: 'alpha' }]);
+  writePlan(root, 1, 'alpha', { status: 'written' });
+  mkdirSync(join(sectionDirOf(root, 1, 'alpha'), 'DRAFT.md'), { recursive: true });
+  const r = runCli(sb, root, ['verify', '1']);
   assert.equal(r.status, EXIT_ERROR, `${r.stdout}\n${r.stderr}`);
+  assert.match(r.stderr, /^pensmith: EISDIR/m);
   assert.match(r.stderr, /^pensmith: set PENSMITH_DEBUG=1 for a stack trace$/m);
   assert.doesNotMatch(r.stderr, STACK_LINE);
-  const dbg = runCli(sb, root, ['write', '--yolo'], { env: { PENSMITH_DEBUG: '1' } });
+  const dbg = runCli(sb, root, ['verify', '1'], { env: { PENSMITH_DEBUG: '1' } });
   assert.equal(dbg.status, EXIT_ERROR);
   assert.match(dbg.stderr, STACK_LINE, 'PENSMITH_DEBUG=1 prints the stack');
 });

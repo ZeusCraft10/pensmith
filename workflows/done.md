@@ -120,7 +120,12 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
    the offline md→tex writer (no generator comment); md → the trace-free body.
    Bundle the cited-only `.paper/export/CITATIONS.bib` / `.ris` (library.ts
    `exportCitedCitations`, written before any Pandoc run). Then write the source
-   `.paper/VERIFICATION.md` (honesty + plagiarism + Pass-4 sections).
+   `.paper/VERIFICATION.md` (honesty + plagiarism + Pass-4 sections), and — when
+   no humanizer wrote FINAL.md — write `.paper/FINAL.md` from the exported
+   `DRAFT.md` whenever FINAL.md is absent or older than it (a humanized FINAL.md
+   of this compile is kept). The router's terminus is a FINAL.md not older than
+   the compiled draft, so after a recompile the next `done` refreshes it and the
+   bare loop settles at `status (done)` instead of re-running `done`.
 
 8. **Shell fallback** (TIER-06 equivalence path): `pensmith done [--yolo]
    [--format docx|pdf|latex|md] [--raw]`.

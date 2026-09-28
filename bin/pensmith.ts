@@ -83,7 +83,7 @@ import { migrateLegacyLayout } from './lib/state.js';
 import { migratePaperConfigFile, parseCostCapEnv } from './lib/config.js';
 import { enforceDryRunBoundary } from './lib/dry-run-paper.js';
 import { acquireSessionLock, releaseSessionLock } from './lib/session-lock.js';
-import { runGate, declineGate, canPrompt } from './lib/gates.js';
+import { runGate, declineGate, canPrompt, yoloFlagDescription } from './lib/gates.js';
 import { EXIT_CODES, EXIT_OK, EXIT_USAGE, EXIT_ERROR, PensmithError, type ExitCode } from './lib/exit-codes.js';
 import { classifyFailure, finalExitCode, failureLine, stripAnsi } from './lib/verb-outcome.js';
 import { setMirrorPromptsToStderr, setSessionArgv } from './lib/session-log.js';
@@ -244,7 +244,8 @@ export const command = defineCommand({
     paper: { type: 'string', description: 'Work on this paper: a name from `pensmith list`, or a folder containing .paper/.', valueHint: 'name|path' },
     'dry-run': { type: 'boolean', description: 'Trial run in ./.paper-dry-run/ (a copy of .paper/, which is never written): no network or model call (sources and model replies are labelled stand-ins); bare/next/resume loop to the end of the paper.', default: false },
     estimate: { type: 'boolean', description: 'Project the remaining token + USD cost, then offer to proceed.', default: false },
-    yolo: { type: 'boolean', description: 'Skip the approval gates --yolo may skip (outline approval, export confirmation, research scope/prune, add remap, revise swap, sketch confirm). Never skips the cost cap, detector consent or the active-paper choice.', default: false },
+    // Generated from the gate registry (gates.ts), so it cannot drift from it.
+    yolo: { type: 'boolean', description: yoloFlagDescription(), default: false },
     'show-prompts': { type: 'boolean', description: 'Mirror every outbound request (and full LLM prompts) to stderr before it is sent.', default: false },
     runtime: { type: 'string', description: 'LLM provider for this run: anthropic | openai | ollama | vllm | openai-compatible (overrides the config).', valueHint: 'provider' },
     model: { type: 'string', description: 'Generation model for this run (outline, plan, write); judgment steps keep their own model.', valueHint: 'id' },

@@ -95,6 +95,11 @@ test('GRND-19: a dry run over a real paper seeds .paper-dry-run/ from it, keeps 
   assert.ok(banner >= 0 && banner < first.stderr.indexOf('seeded the dry-run workspace'), 'the RUN-02 banners come first');
   assert.equal(readFileSync(join(ws, 'INTAKE.md'), 'utf8'), readFileSync(join(real, 'INTAKE.md'), 'utf8'), 'INTAKE.md was copied');
   assert.equal(readFileSync(join(ws, 'config.toml'), 'utf8'), readFileSync(join(real, 'config.toml'), 'utf8'), 'config.toml was copied');
+  // Review round 2: a copy keeps its source's mtime, so anything that reads file
+  // times sees the paper's order, not the copy order.
+  for (const f of ['INTAKE.md', 'config.toml']) {
+    assert.ok(Math.abs(statSync(join(ws, f)).mtimeMs - statSync(join(real, f)).mtimeMs) < 2, `${f} keeps its mtime`);
+  }
   for (const skipped of ['COSTS.jsonl', 'INTAKE.raw.local', join('export', 'DRAFT.md')]) {
     assert.ok(!existsSync(join(ws, skipped)), `${skipped} is not seeded`);
   }

@@ -121,7 +121,7 @@ async function libraryEntries(paperRoot: string): Promise<SourceContextInput[]> 
  */
 async function writeOneSection(
   paperRoot: string,
-  section: { n: number; slug: string },
+  section: { n: number; slug: string; suffix?: string | undefined },
   entries: readonly SourceContextInput[],
 ): Promise<WrittenSection> {
   // Throws SectionNotPlannedError (EXIT_USAGE) for the outline's stub and
@@ -379,7 +379,7 @@ export const writeCommand = defineCommand({
     // RUN-09: <n> must name one of the paper's sections (EXIT_USAGE otherwise —
     // before any model call, and no placeholder folder for a registered paper).
     const paperRoot = projectRoot();
-    const { n, slug } = resolveSectionArg('write', paperRoot, args.n, args.slug);
+    const { n, slug, suffix } = resolveSectionArg('write', paperRoot, args.n, args.slug);
     // GEN-06 / RUN-07 fail-loud probe: an LLM must be configured before the
     // section is touched (writeOneSection marks it 'writing' first).
     await assertLlmConfigured('write');
@@ -390,7 +390,7 @@ export const writeCommand = defineCommand({
     // byte-unchanged for every goal (the writer never sees the subscriber).
     const subscriber = makeSubscriberNonFatal(paperRoot);
 
-    const written = await writeOneSection(paperRoot, { n, slug }, entries);
+    const written = await writeOneSection(paperRoot, { n, slug, suffix }, entries);
 
     if (subscriber) {
       subscriber.emit({

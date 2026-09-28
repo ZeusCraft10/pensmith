@@ -519,3 +519,46 @@ test('GRND-18: a section newer than the compiled DRAFT.md → compile; FINAL.md 
     utimesSync(join(root, '.paper', 'sections', '02-methods', 'DRAFT.md'), t(1), t(1));
     assert.equal((await resolveNextAction(root)).verb, 'compile', 'sections_count 1 ≠ 2 registered');
   });
+
+test('GRND-18 / D-18-39 (review round 2): with COMPILE-INPUTS.json the compiled draft\'s currency follows CONTENT — reordered mtimes do not recompile; changed bytes, a changed section set or a re-verification do',
+  { skip: !built }, async () => {
+    const resolveNextAction = await loadResolve();
+    const { utimesSync } = await import('node:fs');
+    const { writeCompileInputs } = await import('../bin/lib/compile-inputs.js');
+    const root = totalityRoot([{ n: 1, slug: 'intro' }]);
+    writeSectionPlan(root, 1, 'intro', 'verified');
+    writeDraft(root, 1, 'intro');
+    const verif = join(root, '.paper', 'sections', '01-intro', 'VERIFICATION.md');
+    writeFileSync(verif, '# VERIFICATION\n\nStatus: verified\n');
+    writePaperFile(root, 'DRAFT.md');
+    // First resolve moves the legacy root STATE.json into .paper/ (as a real run would).
+    await resolveNextAction(root);
+    await writeCompileInputs(root, [{ n: 1, slug: 'intro' }], new Date().toISOString());
+    writePaperFile(root, 'FINAL.md');
+    const t = (s: number): Date => new Date(Date.UTC(2026, 0, 1, 0, 0, s));
+    const sec = join(root, '.paper', 'sections', '01-intro', 'DRAFT.md');
+    utimesSync(join(root, '.paper', 'DRAFT.md'), t(2), t(2));
+    utimesSync(join(root, '.paper', 'FINAL.md'), t(3), t(3));
+    assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' });
+    // A checkout / sync client / dry-run seed that makes the section files NEWER changes nothing.
+    utimesSync(sec, t(9), t(9));
+    utimesSync(verif, t(9), t(9));
+    assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' }, 'mtimes alone never recompile');
+    // §1 re-drafted (new bytes) → compile.
+    writeFileSync(sec, 'Draft text, revised.\n');
+    utimesSync(sec, t(1), t(1)); // even with an OLDER mtime
+    assert.equal((await resolveNextAction(root)).verb, 'compile');
+    writeFileSync(sec, 'Draft text.\n');
+    assert.deepEqual(await resolveNextAction(root), { verb: 'status', reason: 'done' }, 'the bytes compile used');
+    // §1 re-verified (new VERIFICATION.md bytes) → compile.
+    writeFileSync(verif, '# VERIFICATION\n\nStatus: verified\n\n(re-run)\n');
+    assert.equal((await resolveNextAction(root)).verb, 'compile');
+    writeFileSync(verif, '# VERIFICATION\n\nStatus: verified\n');
+    // A second registered (verified) section the compiled draft does not hold → compile.
+    const statePath = join(root, '.paper', 'STATE.json');
+    const state = JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, unknown>;
+    writeFileSync(statePath, JSON.stringify({ ...state, sections: [{ n: 1, slug: 'intro' }, { n: 2, slug: 'methods' }] }));
+    writeSectionPlan(root, 2, 'methods', 'verified');
+    writeDraft(root, 2, 'methods');
+    assert.equal((await resolveNextAction(root)).verb, 'compile');
+  });

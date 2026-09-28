@@ -232,3 +232,41 @@ test('GRND-18: `plan` typed without a number stays one verb (the chain is only f
   assert.ok(!existsSync(sectionFile(sb.root, 1, 'introduction', 'DRAFT.md')));
   assert.doesNotMatch(r.stderr, /^pensmith: ran /m);
 });
+
+test('GRND-18 (review round 2): after a finished paper is re-drafted, bare runs recompile, re-export ONCE and settle at status (done); a dry run of the finished paper routes like the paper', async () => {
+  const sb = await sandbox('bare-chain-redo');
+  await seedPaper(sb.root, TWO_SECTIONS);
+  for (const expected of [/next: plan §2$/m, /next: compile$/m, /^pensmith: ran compile; next: done$/m, /^pensmith: ran done; next: status \(done\)$/m]) {
+    const r = await sb.run(['--yolo']);
+    assert.equal(r.status, EXIT_OK, `${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, expected);
+  }
+  const finalMd = join(sb.root, '.paper', 'FINAL.md');
+  const firstFinal = readFileSync(finalMd, 'utf8');
+
+  // A dry run of the finished paper: the seeded workspace keeps the paper's
+  // content and mtimes, so it routes to done too (never "done ran without advancing").
+  const dry = await sb.run(['--dry-run', '--yolo']);
+  assert.notEqual(dry.status, 1, `${dry.stdout}\n${dry.stderr}`);
+  assert.doesNotMatch(dry.stderr, /without advancing the paper/);
+  assert.match(dry.stderr, /status \(done\)/);
+
+  // Re-draft §2 (verified again), then: compile once, done once, then done.
+  sb.mock.script('section-drafter', { text: `# Discussion\n\nA second look at measurement [@${RECORDED.citekey}].\n` });
+  const redo = await sb.run(['write', '2', '--yolo']);
+  assert.equal(redo.status, EXIT_OK, `${redo.stdout}\n${redo.stderr}`);
+  assert.equal(statusOf(sb.root, 2, 'discussion'), 'verified');
+  const compile = await sb.run(['--yolo']);
+  assert.match(compile.stderr, /^pensmith: ran compile; next: done$/m, compile.stderr);
+  const done = await sb.run(['--yolo']);
+  assert.match(done.stderr, /^pensmith: ran done; next: status \(done\)$/m, `${done.stdout}\n${done.stderr}`);
+  assert.notEqual(readFileSync(finalMd, 'utf8'), firstFinal, 'FINAL.md was refreshed from the new compile (no humanizer)');
+  assert.equal(readFileSync(finalMd, 'utf8'), readFileSync(join(sb.root, '.paper', 'DRAFT.md'), 'utf8'));
+  const calls = sb.mock.requests.length;
+  for (let i = 0; i < 2; i += 1) {
+    const settled = await sb.run(['--yolo']);
+    assert.equal(settled.status, EXIT_OK, `${settled.stdout}\n${settled.stderr}`);
+    assert.match(settled.stderr, /^pensmith: ran status \(done\); next: status \(done\)$/m, settled.stderr);
+  }
+  assert.equal(sb.mock.requests.length, calls, 'a finished paper makes no further model calls');
+});

@@ -44,6 +44,10 @@ smoothing operates only on placeholder-masked text — the model never sees raw
 - `.paper/COMPILE-REPORT.md` — schema v1 (D-14): Transitions Changed,
   Cross-Section Consistency Flags, Citation Density, Compile-Staleness Resolved,
   Advisory Findings (empty marker reserved for Phase 5).
+- `.paper/COMPILE-INPUTS.json` — v1 (D-18-39): the compiled sections (ids and
+  slugs, in order) and the sha256 of each section's DRAFT.md and VERIFICATION.md
+  as compile read them. The router recompiles only when the paper's sections or
+  those bytes change — never because a checkout or sync client reordered mtimes.
 - `.paper/CITATIONS.bib` is read (staleness re-verify), never written (BRDTH-01).
 
 ## Body
@@ -57,7 +61,10 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    (proper-lockfile) so two concurrent compiles never corrupt the outputs.
 
 2. **Load sections in OUTLINE order** (COMP-02 / D-11): parse `.paper/OUTLINE.md`,
-   sort by section number ascending. For each section read its `PLAN.md`
+   sort by section number ascending. OUTLINE.md's rows must list exactly the
+   sections STATE.json registers (the identity authority, D-18-38); when they
+   disagree (a hand-edited row), refuse naming the divergence and
+   `pensmith outline`, which applies the edited outline. For each section read its `PLAN.md`
    frontmatter (`assigned_sources`, `verified_against_draft_hash`), its
    `DRAFT.md` bytes, and its `VERIFICATION.md`.
 
@@ -92,16 +99,19 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    boundaries, mask `[@key]` → `{{cite_K_M}}` placeholders, hand only the
    `[tail, head]` window to the smoother (Task-parallel in Tier 1; sequential in
    Tier 2; skipped when no model transport), then require the output placeholder
-   set to equal the input set. Any drift REJECTS that boundary (keep the original
-   prose) and records a Transitions-Changed rejection. Then run the deterministic
+   set to equal the input set, and the restored text to cite exactly the sources
+   the original boundary cited (read with the one citation grammar, so a new
+   `[-@k]`, `@{k}`, narrative `@k` or a rewritten cluster counts, D-18-40). Any
+   drift REJECTS that boundary (keep the original prose) and records a
+   Transitions-Changed rejection. Then run the deterministic
    cross-section consistency scan (COMP-04, flags only) and the citation-density
    computation vs. the discipline preset's per-paragraph band (COMP-05,
    warn-only). The discipline is the paper's own (config.toml
    `discipline_preset`, else the INTAKE.md brief; GRND-06); `--discipline`
    overrides it.
 
-8. **Emit the outputs**: `atomicWriteFile` `.paper/DRAFT.md` and
-   `.paper/COMPILE-REPORT.md` (schema v1, D-14). EVERY write routes through the
+8. **Emit the outputs**: `atomicWriteFile` `.paper/DRAFT.md`,
+   `.paper/COMPILE-REPORT.md` (schema v1, D-14) and `.paper/COMPILE-INPUTS.json`. EVERY write routes through the
    D-07 atomic-write chokepoint; section files are never written (ARCH-20), and
    `.paper/CITATIONS.bib` is left exactly as the library writer rendered it
    (BRDTH-01 — compile once pruned it to the cited keys and even emptied it).

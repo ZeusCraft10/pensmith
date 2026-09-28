@@ -995,7 +995,28 @@ function strictSectionDir(
   pad2(n);
   const found = findSectionFolder(slug, root, n);
   if (found !== null) return found;
-  return path.join(sectionsDir(root), `${pad2(n)}-${slug}`);
+  // A registered lettered section (§1a) whose folder does not exist yet (a
+  // Tier-1 paper_init_section, a user-deleted folder) is created with its
+  // letter — never as §1's `01-<slug>` (D-18-16).
+  return path.join(sectionsDir(root), `${pad2(n)}${registeredSuffix(n, slug, root) ?? ''}-${slug}`);
+}
+
+/**
+ * The letter STATE.json registers for section (n, slug), or null (no letter,
+ * no STATE.json, an unreadable one, or no such section). A tolerant read —
+ * never throws; the schema-checked reader is state.ts.
+ */
+function registeredSuffix(n: number, slug: string, root: string): string | null {
+  try {
+    const value = JSON.parse(fs.readFileSync(paperStateFile(root), 'utf8')) as { sections?: unknown };
+    if (!Array.isArray(value.sections)) return null;
+    for (const s of value.sections as Array<Record<string, unknown>>) {
+      if (s['n'] === n && s['slug'] === slug && typeof s['suffix'] === 'string' && /^[a-z]$/.test(s['suffix'])) return s['suffix'];
+    }
+  } catch {
+    /* absent or unreadable: no letter */
+  }
+  return null;
 }
 
 export function sectionPlan(

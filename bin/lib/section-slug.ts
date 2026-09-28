@@ -1,5 +1,12 @@
 // bin/lib/section-slug.ts — resolve a section's slug for the Tier-2 per-section
-// verbs (plan / write / verify).
+// verbs (plan / write / verify / revise / add).
+//
+// Review round 2 (section-registry.ts): a section's identity is its STATE.json
+// registration — the same source the router and status walk. OUTLINE.md rows
+// are consulted only when nothing is registered yet, and a registered section
+// whose OUTLINE row disagrees (a user-renamed slug, a renumbered or deleted
+// row) is refused naming `pensmith outline`, so a verb never creates a second
+// folder for a registered section number.
 //
 // Audit #23: those verbs defaulted the slug to the literal 'placeholder' when no
 // --slug was passed, so they operated on `.paper/sections/0N-placeholder/` —
@@ -11,18 +18,20 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { paperDir } from './paths.js';
+import { paperDir, projectRoot } from './paths.js';
 import { parseOutline } from './outline-parse.js';
-import { EXIT_USAGE, PensmithError } from './exit-codes.js';
+import { EXIT_ERROR, EXIT_USAGE, PensmithError } from './exit-codes.js';
 import { formatSectionId, parseSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
+import { identityLabel, outlineIdentitiesSync, RECONCILE_HINT, registeredSectionsSync, type SectionIdentity } from './section-registry.js';
 
 /**
  * Resolve the slug for section `n`. Precedence:
  *   1. an explicit, non-empty string slug (caller's --slug),
- *   2. the slug registered for section `n` in OUTLINE.md,
- *   3. 'placeholder' (OUTLINE.md absent/malformed, or no row for `n`).
+ *   2. the slug STATE.json registers for section `n` (and letter),
+ *   3. the slug OUTLINE.md lists for it (nothing registered yet),
+ *   4. 'placeholder' (neither has the section).
  *
- * Never throws — a missing or malformed OUTLINE.md falls through to (3).
+ * Never throws — a missing or malformed STATE.json / OUTLINE.md falls through.
  */
 export function resolveSectionSlug(
   paperRoot: string | undefined,
@@ -31,22 +40,20 @@ export function resolveSectionSlug(
   suffix?: string,
 ): string {
   if (typeof explicitSlug === 'string' && explicitSlug.length > 0) return explicitSlug;
-  try {
-    const outlinePath = join(paperDir(paperRoot), 'OUTLINE.md');
-    const parsed = parseOutline(readFileSync(outlinePath, 'utf8'));
-    // GRND-09: §1a is its own row (n 1, suffix a); §1 is the row without a letter.
-    const section = parsed.sections.find((s) => s.n === n && s.suffix === suffix);
-    if (section?.slug) return section.slug;
-  } catch {
-    // OUTLINE.md absent or malformed — fall through to the placeholder default.
-  }
+  const root = paperRoot ?? projectRoot();
+  // GRND-09: §1a is its own section (n 1, suffix a); §1 is the one without a letter.
+  const match = (s: SectionIdentity): boolean => s.n === n && (s.suffix ?? '') === (suffix ?? '');
+  const registered = registeredSectionsSync(root)?.find(match);
+  if (registered) return registered.slug;
+  const row = outlineIdentitiesSync(root)?.find(match);
+  if (row?.slug) return row.slug;
   return 'placeholder';
 }
 
 /** The slug shape every section path accepts (paths.ts validateSlug, T-3-12). */
 const SLUG_RE = /^[a-z0-9-]+$/;
 
-/** The sections OUTLINE.md registers (id → slug); empty when there is no usable outline. */
+/** The sections OUTLINE.md lists (id → slug); empty when there is no usable outline. */
 function outlineSections(paperRoot: string | undefined): Array<{ n: number; suffix?: string; slug: string }> {
   try {
     const parsed = parseOutline(readFileSync(join(paperDir(paperRoot), 'OUTLINE.md'), 'utf8'));
@@ -56,7 +63,19 @@ function outlineSections(paperRoot: string | undefined): Array<{ n: number; suff
   }
 }
 
-function describeSections(sections: ReadonlyArray<{ n: number; suffix?: string }>): string {
+/** Why a registered section's OUTLINE row disagrees with its registration, or null. */
+function outlineDisagreement(reg: SectionIdentity, rows: readonly SectionIdentity[]): string | null {
+  if (rows.length === 0) return null; // no readable outline: STATE.json alone decides
+  const id = identityLabel(reg);
+  const bySlug = rows.find((r) => r.slug === reg.slug);
+  if (bySlug !== undefined) {
+    return identityLabel(bySlug) === id ? null : `OUTLINE.md numbers it §${identityLabel(bySlug)}`;
+  }
+  const other = rows.find((r) => identityLabel(r) === id);
+  return other !== undefined ? `OUTLINE.md lists §${id} as "${other.slug}"` : 'OUTLINE.md does not list it';
+}
+
+function describeSections(sections: ReadonlyArray<{ n: number; suffix?: string | undefined }>): string {
   const ids = sortBySectionId(sections.map((s) => sectionIdOf(s.n, s.suffix)));
   const ns = ids.map((id) => id.n);
   const plain = ids.every((id) => id.suffix === undefined);
@@ -110,7 +129,11 @@ export function resolveSectionArg(
     );
   }
   const idText = formatSectionId(id);
-  const registered = outlineSections(paperRoot);
+  // One authority for identity (section-registry.ts): STATE.json's
+  // registrations; OUTLINE.md's rows only while nothing is registered.
+  const fromState = paperRoot !== undefined ? registeredSectionsSync(paperRoot) ?? [] : [];
+  const rows = outlineSections(paperRoot);
+  const registered = fromState.length > 0 ? fromState : rows;
   if (registered.length > 0) {
     // A bare number plus --slug may name that number's lettered section.
     const bySlug = slugArg !== undefined && id.suffix === undefined
@@ -129,6 +152,15 @@ export function resolveSectionArg(
         `pensmith ${verb}: section ${rowId} is "${row.slug}" in the outline, not "${slugArg}" — drop --slug or pass --slug ${row.slug}`,
         EXIT_USAGE,
       );
+    }
+    if (fromState.length > 0) {
+      const why = outlineDisagreement(row, rows);
+      if (why !== null) {
+        throw new PensmithError(
+          `pensmith ${verb}: section ${rowId} is "${row.slug}" in STATE.json, but ${why} — ${RECONCILE_HINT}`,
+          EXIT_ERROR,
+        );
+      }
     }
     return row.suffix !== undefined
       ? { n: row.n, suffix: row.suffix, slug: row.slug, id: rowId }

@@ -1,7 +1,8 @@
 // bin/lib/untrusted-fence.ts — the ONE untrusted-data fence (FEED-05, D-18-04).
 //
-// SEAM FILE (Phase 18 plan, S-A). Every stream copies it byte-identically from
-// .planning/phases/18-ground/seams/; no stream edits it during Phase 18.
+// SEAM FILE (Phase 18 plan, S-A). Every stream copied it byte-identically from
+// .planning/phases/18-ground/seams/; after the streams merged, review round 2
+// made the marker scan linear-time (stripFenceMarkers).
 //
 // Text that comes from outside pensmith and the user — source titles, author
 // lists and abstracts from the registrars, draft sentences under verification,
@@ -26,21 +27,49 @@ export const FENCE_CLOSE = `<<<END_PENSMITH_UNTRUSTED_DATA_${FENCE_UUID}>>>`;
 export const FENCE_MARKER_REPLACEMENT = '[REDACTED-FENCE-MARKER]';
 
 /**
- * Any spelling of an open or close marker: the exact markers, other UUIDs,
- * missing or extra angle brackets, lower case, spaces or a slash after the
- * brackets. The text between the brackets is limited to one line.
+ * The name at the heart of every marker spelling: the exact markers, other
+ * UUIDs, lower case, `_`, `-` or whitespace between the words, an `END`
+ * prefix. Quantifiers are BOUNDED (T-01-REDOS, pii.ts): the old
+ * `<{1,}\s*\/?\s*(?:END…)?PENSMITH…` pattern backtracked quadratically on a long
+ * run of `<` or of whitespace (a crafted abstract stalled verify for minutes;
+ * review round 2). The brackets around a name are found by scanning outward
+ * from each match instead, which is linear.
  */
-const MARKER_RE = /<{1,}\s*\/?\s*(?:END[_\s-]*)?PENSMITH[_\s-]*UNTRUSTED[_\s-]*DATA[^\r\n<>]*>*/gi;
+const NAME_RE = /(?:END[_\s-]{0,32})?PENSMITH[_\s-]{0,32}UNTRUSTED[_\s-]{0,32}DATA/gi;
 
-/** A bare marker name without brackets (a model could still read it as a delimiter). */
-const BARE_NAME_RE = /(?:END[_\s-]*)?PENSMITH[_\s-]*UNTRUSTED[_\s-]*DATA(?:_[0-9a-f-]{8,36})?/gi;
+/** A UUID-ish suffix after a bare marker name (`…_DATA_7f3a…`). */
+const BARE_SUFFIX_RE = /^_[0-9a-f-]{8,36}/i;
 
 /**
  * Neutralise every fence marker (and bare marker name) in `text`, so it can be
- * fenced without being able to end the fence early or open a second one.
+ * fenced without being able to end the fence early or open a second one. A
+ * name with `<` before it (whitespace and `/` may sit between) is a bracketed
+ * marker: from its first `<` to the end of its line's text and its closing
+ * `>`s. A name without one is a bare name (with any UUID suffix). Linear time.
  */
 export function stripFenceMarkers(text: string): string {
-  return text.replace(MARKER_RE, FENCE_MARKER_REPLACEMENT).replace(BARE_NAME_RE, FENCE_MARKER_REPLACEMENT);
+  let out = '';
+  let at = 0;
+  for (const m of text.matchAll(NAME_RE)) {
+    let start = m.index;
+    if (start < at) continue; // inside the previous marker
+    let end = start + m[0].length;
+    let i = start;
+    while (i > at && /[\s/]/.test(text[i - 1] as string)) i -= 1;
+    let j = i;
+    while (j > at && text[j - 1] === '<') j -= 1;
+    if (j < i) {
+      // Bracketed: `<…< [/] NAME …>…>` up to the end of the line's text.
+      start = j;
+      while (end < text.length && !/[\r\n<>]/.test(text[end] as string)) end += 1;
+      while (end < text.length && text[end] === '>') end += 1;
+    } else {
+      end += BARE_SUFFIX_RE.exec(text.slice(end, end + 37))?.[0].length ?? 0;
+    }
+    out += text.slice(at, start) + FENCE_MARKER_REPLACEMENT;
+    at = end;
+  }
+  return out + text.slice(at);
 }
 
 /**

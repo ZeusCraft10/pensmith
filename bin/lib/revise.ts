@@ -39,7 +39,7 @@ import { atomicWriteFile } from './atomic-write.js';
 import { updateFrontmatter, migrateFrontmatterText, loadFrontmatterDoc } from './frontmatter.js';
 import { runGate, declineGate, canPrompt } from './gates.js';
 import { withLock } from './lock.js';
-import { findCitationClusters, removeCitekey, renameCitekey } from './citation-token.js';
+import { findCitations, removeCitekey, renameCitekey } from './citation-token.js';
 import { upsertSources } from './library.js';
 import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
@@ -161,9 +161,9 @@ export function firstFailingCitation(verificationMd: string): FailingCitation | 
 // ---------------------------------------------------------------------------
 
 function claimContext(draftMd: string, citekey: string): string {
-  // Bare `[@k]` or inside a cluster (`[@a; @k]`) — the one citation grammar.
+  // Bare `[@k]`, inside a cluster (`[@a; @k]`) or narrative (`@k argues`) — the one citation grammar.
   for (const line of draftMd.split(/\r?\n/)) {
-    if (findCitationClusters(line).some((c) => c.keys.includes(citekey))) return line.trim();
+    if (findCitations(line).some((c) => c.keys.includes(citekey))) return line.trim();
   }
   return '(token not found in DRAFT.md)';
 }

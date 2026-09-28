@@ -19,6 +19,8 @@ onto the existing `verify` verb; adds no workflow logic.
 The verifier blocks compile and export: no FABRICATED, MIS-CITED, or
 quote-NOT_FOUND citation escapes a section (CLAUDE.md non-negotiable). This
 plumbing skill only routes — the blocking semantics live in the `verify` verb.
+A section whose last `write` failed is not verified: `verify N` refuses (exit 4)
+and names `pensmith write N`, the step that fixes it.
 
 ## No 17th verb
 

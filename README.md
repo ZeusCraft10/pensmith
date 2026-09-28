@@ -173,7 +173,7 @@ In normal use, bare `/pensmith` handles dispatch. The 16 verbs below let power u
 | `next` | Take the next step of the current paper — what bare `/pensmith` does: one verb, or for a section its plan → write → verify. |
 | `status` | The paper's position, per-section progress, cost so far and the next action. `--config` prints every effective setting and where it came from. |
 | `research` | Discover sources across OpenAlex, Crossref, arXiv, PubMed, Semantic Scholar and Unpaywall, cross-check retractions, and merge the kept sources into `.paper/LIBRARY.json` (which renders `CITATIONS.bib` / `CITATIONS.ris`). |
-| `outline` | Propose the section outline from the research and your brief. Approval gate (skippable with `--yolo`). `--no-counter` drops the counterargument requirement; `--force` re-outlines a paper that has drafts — sections that keep their slug stay untouched. |
+| `outline` | Propose the section outline from the research and your brief. Approval gate (skippable with `--yolo`). `--no-counter` drops the counterargument requirement; `--force` re-outlines a paper that has drafts — sections that keep their slug stay untouched. Sources the citation verifier cannot check yet (no DOI, or an arXiv/DataCite DOI) are not offered to the outline or the planner; `outline` names them so you can `add` the published version's DOI. After you edit `.paper/OUTLINE.md` by hand, `pensmith outline` applies it without a model call (a section you removed moves to `sections/_archive/`). |
 | `plan` | Write one section's `PLAN.md` (`plan <n>`); `--revise` repairs a verifier-flagged citation. |
 | `write` | Draft one section from only its assigned sources and verify it (`write <n>`), or every section in dependency waves (`write`, up to `--max-parallel` at a time, default 5). `--no-verify` leaves the drafts unverified. |
 | `verify` | Run the blocking verifier on one section: DOI/arXiv/PMID re-fetch with author/title match, and quote exact-match. |
@@ -222,7 +222,7 @@ Every model call is recorded in `.paper/SESSION.log` (JSONL): the step, provider
 
 ### Flags
 
-`--dry-run` (a trial run in `./.paper-dry-run/`; bare / `next` / `resume` keep stepping to the end of the paper), `--estimate`, `--yolo` (skip the gates `--yolo` may skip: outline approval, export confirmation, research scope and pruning, the `add` remap, the revise swap and the `sketch` confirmation — never the cost cap, the estimate confirmation, detector consent or the active-paper choice), `--show-prompts`, `--runtime <provider>`, `--model <id>`, `--paper <name|path>`. `pensmith --help` lists them with the exit codes.
+`--dry-run` (a trial run in `./.paper-dry-run/`; bare / `next` / `resume` keep stepping to the end of the paper), `--estimate`, `--yolo` (answer the gates `--yolo` may answer: outline approval, export confirmation, research scope, research pruning, the `add` remap, the revise swap, the `sketch` confirmation, the assignment-file pickup, the intake defaults and the re-outline confirmation (a model re-outline also needs `--force`) — never the cost cap, the estimate confirmation, detector consent or the active-paper choice), `--show-prompts`, `--runtime <provider>`, `--model <id>`, `--paper <name|path>`. `pensmith --help` lists them with the exit codes.
 
 ### Exit codes
 

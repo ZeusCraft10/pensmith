@@ -1,8 +1,12 @@
 // bin/lib/router.ts — Phase 7 Plan 07-02. The bare `/pensmith` state-aware
 // next-WORK-verb resolver (UX-01).
 //
-// resolveNextAction is a PURE FUNCTION over STATE.json + per-section PLAN.md
-// frontmatter. It IGNORES HANDOFF.json entirely (H4 — see the PINNED ORDERING
+// resolveNextAction is a READ-ONLY function of the paper's files: STATE.json,
+// per-section PLAN.md frontmatter, each section's DRAFT.md hash (against
+// verified_against_draft_hash), OUTLINE.md's rows (section-registry.ts: they must
+// list the sections STATE.json registers), OUTLINE.rejected.md,
+// COMPILE-INPUTS.json (compile-inputs.ts: the content the compiled draft was made
+// from) and the compiled DRAFT.md / FINAL.md mtimes. It IGNORES HANDOFF.json entirely (H4 — see the PINNED ORDERING
 // in 07-RESEARCH): a non-done HANDOFF must NOT trap bare /pensmith in a resume
 // loop, so the resolver always returns a concrete next WORK verb (plan / write /
 // verify / compile / done) or a status terminus, NEVER { verb:'resume' }. The
@@ -42,7 +46,9 @@
 //                                           `pensmith write N` (never a paid loop)
 //   corrupt PLAN.md / unknown status      → status/attention + detail
 // Before the walk: OUTLINE.rejected.md with no registered section → status/
-// attention naming `pensmith outline` (a failed outline is never re-billed).
+// attention naming `pensmith outline` (a failed outline is never re-billed);
+// OUTLINE.md rows that disagree with STATE.json's registrations → status/
+// attention naming the divergence and `pensmith outline` (D-18-38).
 //
 // Imports: loadState/StateNotFoundError (state.ts), existsSync (node:fs), join
 // (node:path), paperDir/sectionPlan (paths.ts), loadFrontmatterDocSync
@@ -57,6 +63,8 @@ import { paperDir, sectionDraft, sectionPlan, sectionVerification } from './path
 import { loadFrontmatterDocSync } from './frontmatter.js';
 import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
 import { computeDraftHash } from './draft-hash.js';
+import { compiledInputsCurrent } from './compile-inputs.js';
+import { sectionRegistryProblem } from './section-registry.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
@@ -201,17 +209,23 @@ function compiledSectionCount(pDir: string): number | null {
 }
 
 /**
- * True when `.paper/DRAFT.md` is absent, older than any registered section's
- * DRAFT.md or VERIFICATION.md, or compiled from a different number of sections
- * than are registered now (COMPILE-REPORT.md `sections_count`). Never throws.
+ * True when `.paper/DRAFT.md` must be compiled (again): it is absent, or
+ * COMPILE-INPUTS.json (compile-inputs.ts) says it was compiled from other
+ * sections or other section DRAFT.md / VERIFICATION.md bytes than the paper has
+ * now. Decided from CONTENT, so a git checkout, a sync client or the --dry-run
+ * seed that reorders mtimes never re-sends a finished paper to compile. A paper
+ * compiled before that record existed falls back to the mtimes and COMPILE-
+ * REPORT.md `sections_count`. Never throws.
  */
 function compiledDraftStale(
   pDir: string,
-  sections: ReadonlyArray<{ n: number; slug: string }>,
+  sections: ReadonlyArray<{ n: number; suffix?: string | undefined; slug: string }>,
   paperRoot: string,
 ): boolean {
   const compiledAt = mtimeOf(join(pDir, 'DRAFT.md'));
   if (compiledAt === null) return true;
+  const current = compiledInputsCurrent(paperRoot, sections);
+  if (current !== null) return !current;
   for (const { n, slug } of sections) {
     for (const file of [sectionDraft(n, slug, paperRoot), sectionVerification(n, slug, paperRoot)]) {
       const at = mtimeOf(file);
@@ -318,6 +332,14 @@ export async function resolveNextAction(
     if (!existsSync(join(pDir, 'OUTLINE.md'))) return { verb: 'outline' };
     if (sections.length === 0) return { verb: 'outline' };
 
+    // One authority for section identity (section-registry.ts): when the
+    // user's OUTLINE.md and STATE.json list different sections (a renamed,
+    // renumbered, deleted or added row), no step can succeed as dispatched —
+    // plan would refuse, compile would compile a different set — so report it
+    // and name `pensmith outline`, which applies the edited outline.
+    const registry = sectionRegistryProblem(paperRoot);
+    if (registry !== null) return { verb: 'status', reason: 'attention', detail: registry };
+
     // Walk sections in (n, suffix) order (GRND-09: 1 < 1a < 2); the FIRST
     // non-'verified' section decides the verb (C3-HIGH-1: TOTAL over
     // SectionStateSchema; 'verified' is the ONLY continue case).
@@ -405,7 +427,9 @@ export async function resolveNextAction(
     // section redone, re-verified or added by a re-outline (GRND-09/10) since
     // the last compile is compiled again, never reported as done.
     if (compiledDraftStale(pDir, sections, paperRoot)) return { verb: 'compile' };
-    // FINAL.md is current only when it is not older than the compiled draft.
+    // FINAL.md is current only when it is not older than the compiled draft
+    // (done writes it after reading DRAFT.md, on every run that finds it absent
+    // or older — so this never loops).
     const finalAt = mtimeOf(join(pDir, 'FINAL.md'));
     if (finalAt === null || finalAt < (mtimeOf(join(pDir, 'DRAFT.md')) ?? 0)) return { verb: 'done' };
     return { verb: 'status', reason: 'done' };

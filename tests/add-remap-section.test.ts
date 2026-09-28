@@ -3,8 +3,8 @@
 // `add <doi> --remap --section N` without --slug used to build no `only` target
 // (it required BOTH --section and --slug), so it fell through to "remap every
 // section" — silently editing sections the user never named. Now the slug is
-// resolved from OUTLINE.md for section N; if it can't be resolved, the remap is
-// skipped rather than applied to all.
+// resolved for section N (its STATE.json registration, else its OUTLINE.md row —
+// D-18-38); if it can't be resolved, the remap is skipped rather than applied to all.
 //
 // Offline: PENSMITH_NETWORK_TESTS unset → crossref serves the committed
 // add-doi.json cassette (DOI 10.1038/nphys1170).
@@ -92,11 +92,21 @@ test('audit #25: `add --remap --section 2` (no --slug) remaps ONLY section 2', {
   );
 });
 
-test('audit #25: `add --remap --section 2` with no resolvable slug skips the remap (does NOT remap all)', { skip: !READY }, async () => {
-  // No OUTLINE.md → section 2's slug cannot be resolved → remap is skipped.
+test('audit #25: `add --remap --section 3` with no resolvable slug skips the remap (does NOT remap all)', { skip: !READY }, async () => {
+  // No OUTLINE.md and no section 3 in STATE.json → its slug cannot be resolved → remap is skipped.
+  const { root, intro, methods } = await mkTwoSectionProject(false);
+  await runAdd(root, { source: CASSETTE_DOI, remap: true, section: '3', yolo: true });
+
+  assert.ok(fs.readFileSync(intro, 'utf8').includes('assigned_sources: []'), 'section 1 must be untouched');
+  assert.ok(fs.readFileSync(methods, 'utf8').includes('assigned_sources: []'), 'section 2 must be untouched (skip, not remap-all)');
+});
+
+test('D-18-38: with no OUTLINE.md, `add --remap --section 2` resolves §2 from its STATE.json registration and remaps ONLY it', { skip: !READY }, async () => {
+  // (Superseded: the slug used to come from OUTLINE.md alone, so a registered
+  // §2 without an outline row was skipped. STATE.json is the identity authority.)
   const { root, intro, methods } = await mkTwoSectionProject(false);
   await runAdd(root, { source: CASSETTE_DOI, remap: true, section: '2', yolo: true });
 
   assert.ok(fs.readFileSync(intro, 'utf8').includes('assigned_sources: []'), 'section 1 must be untouched');
-  assert.ok(fs.readFileSync(methods, 'utf8').includes('assigned_sources: []'), 'section 2 must be untouched (skip, not remap-all)');
+  assert.ok(!fs.readFileSync(methods, 'utf8').includes('assigned_sources: []'), 'section 2 (registered as "methods") receives the source');
 });

@@ -22,6 +22,7 @@
 //     (Research §P pitfall 5).
 
 import type { Semaphore } from './budget.js';
+import { EXIT_ERROR, PensmithError } from './exit-codes.js';
 import { orderedOutlineSections, type ParsedOutline } from './outline-parse.js';
 import type { PlanFrontmatter } from './schemas/plan-frontmatter.js';
 import {
@@ -113,8 +114,12 @@ export function buildWaveGraph(
   //    is part of (or downstream of) a cycle.
   if (processed !== nodes.size) {
     const residual = [...nodes.keys()].filter((s) => (indegree.get(s) ?? 0) > 0);
-    throw new Error(
-      `scheduler: dependency cycle detected — unresolved sections: ${residual.join(', ')}`,
+    // An expected, named refusal (RUN-12): the cycle is in the user's
+    // OUTLINE.md / PLAN.md `depends_on`, not an internal failure.
+    throw new PensmithError(
+      `scheduler: dependency cycle detected — unresolved sections: ${residual.join(', ')} ` +
+        '(fix their depends_on in .paper/OUTLINE.md and the sections\' PLAN.md)',
+      EXIT_ERROR,
     );
   }
 
@@ -137,10 +142,11 @@ export function buildWaveGraph(
         : Math.max(...realDeps.map((d) => nodes.get(d)!.computed_wave)) + 1;
     if (node.wave_override !== undefined) {
       if (node.wave_override < depFloor) {
-        throw new Error(
+        throw new PensmithError(
           `scheduler: invalid wave override for section "${node.slug}": ` +
             `declared wave ${node.wave_override} is below the minimum legal wave ${depFloor} ` +
             `(must be >= max(deps.computed_wave) + 1) (PLAN-03 / D-01)`,
+          EXIT_ERROR,
         );
       }
       node.computed_wave = node.wave_override;

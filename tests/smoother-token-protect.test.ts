@@ -103,3 +103,19 @@ test('D-13: a clean smoother (placeholders intact) is accepted and stitched in',
   assert.match(draft, /\[@jones2019\]/);
   assert.ok(!/\{\{cite_/.test(draft), 'placeholders must be restored to real tokens, none leaking');
 });
+
+test('D-18-40 (review round 2): a smoother that ADDS a citation in any form (bare, [-@k], narrative @k) or rewrites a cluster is rejected — original prose kept', async () => {
+  for (const extra of ['[@evil9999]', '[-@evil9999]', 'as @evil9999 notes', '[@{evil9999}]']) {
+    const root = seedTwoSection();
+    const result = await runCompile({
+      paperRoot: root,
+      yolo: true,
+      // The placeholder set is intact (so D-13's check alone would accept it), but a new citation appears.
+      smoothBoundary: async (input: SmoothBoundaryInput) => `${input.tail} Moreover, ${extra}.\n\n${input.head}`,
+    });
+    assert.equal(result.refused, false, 'a rejected boundary never refuses compile');
+    const draft = readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8');
+    assert.doesNotMatch(draft, /evil9999/, `${extra}: the unverified citation never reaches DRAFT.md`);
+    assert.match(readFileSync(join(root, '.paper', 'COMPILE-REPORT.md'), 'utf8'), /reject/i);
+  }
+});

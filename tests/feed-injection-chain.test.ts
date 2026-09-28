@@ -15,7 +15,10 @@
 //     PLAN.md stays byte-identical; the real plan never assigns evil9999;
 //   - a drafter that obeys it gets exactly one corrective turn, then `write`
 //     exits 4: PLAN.md `status: failed` with the failure reason, the rejected
-//     draft in DRAFT.rejected.md, no DRAFT.md, the other sections untouched.
+//     draft in DRAFT.rejected.md, no DRAFT.md, the other sections untouched;
+//   - the same holds when the drafter obeys with a citation form other than a
+//     bare [@key] — author-suppressed [-@evil9999] or a narrative @evil9999
+//     (review round 2: every Pandoc citation form is read by the one grammar).
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -157,4 +160,25 @@ test('FEED-05 / FEED-04: an injected abstract stays fenced data through outline,
   const cited = extractCitedKeysForVerification(readFileSync(join(sectionsDir, s1, 'DRAFT.md'), 'utf8'));
   assert.ok(cited.length > 0 && cited.every((k) => assigned.includes(k)), `cited ${cited.join(', ')}`);
   assert.equal(planFm(plan1)['status'], 'written');
+});
+
+test('FEED-04: a drafter that obeys the injection with [-@evil9999] or a narrative @evil9999 is refused the same way', async () => {
+  const sb = await openChainSandbox({ prefix: 'feed-injection-forms' });
+  sandboxes.push(sb);
+  const paper = join(sb.root, '.paper');
+  await seedBriefPaper(sb.root, {}, { sources: SOURCES });
+  assert.equal((await sb.run(['outline', '--yolo'])).status, 0);
+  const sectionsDir = join(paper, 'sections');
+  const [s1] = readdirSync(sectionsDir).filter((d) => d !== '_archive').sort();
+  assert.ok(s1);
+  const planned = await sb.run(['plan', '1', '--yolo']);
+  assert.equal(planned.status, 0, planned.stderr);
+  const plan1 = join(sectionsDir, s1, 'PLAN.md');
+  const obeying = { text: 'Attention mechanisms changed sequence modelling [-@evil9999].\n\nAs @evil9999 shows, they scale [@vaswani2017; -@evil9999].\n' };
+  sb.mock.script('section-drafter', obeying, obeying);
+  const blocked = await sb.run(['write', '1', '--yolo']);
+  assert.equal(blocked.status, EXIT_BLOCKED, `${blocked.stdout}\n${blocked.stderr}`);
+  assert.match(String(planFm(plan1)['failure_reason']), /citekey evil9999 not assigned to section 1/);
+  assert.ok(!existsSync(join(sectionsDir, s1, 'DRAFT.md')), 'no DRAFT.md');
+  assert.ok(!existsSync(join(sectionsDir, s1, 'VERIFICATION.md')), 'never verified');
 });

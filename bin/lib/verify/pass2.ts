@@ -160,6 +160,19 @@ function normalizeAuthors(author: Pass2BibEntry['author']): string[] {
 }
 
 /**
+ * The longest abstract a claim-support request carries. A registrar abstract
+ * has no length limit of its own, and an unbounded payload is both cost and a
+ * denial-of-service surface (review round 2; source-context.ts clips its
+ * abstracts the same way). Evidence must quote the text actually sent.
+ */
+export const PASS2_MAX_ABSTRACT_CHARS = 4000;
+
+/** The abstract of a bib entry as Pass 2 sends it (clipped). */
+function claimAbstract(bibEntry: Pass2BibEntry | undefined): string {
+  return (bibEntry?.abstract ?? '').slice(0, PASS2_MAX_ABSTRACT_CHARS);
+}
+
+/**
  * The claim-support request for one (citation, claim sentence) pair: the fixed
  * template as the system prompt — byte-identical for every pair, so from the
  * second call on it is read from the prompt cache where the model's minimum
@@ -170,7 +183,7 @@ export function claimSupportRequest(citekey: string, claimSentence: string, bibE
   return buildPromptRequest('claim-support', {
     citation: { citekey, title: normalizeTitle(bibEntry?.title), authors: normalizeAuthors(bibEntry?.author) },
     claim: claimSentence,
-    abstract: bibEntry?.abstract ?? '',
+    abstract: claimAbstract(bibEntry),
   });
 }
 
@@ -236,7 +249,7 @@ export async function runPass2(
       continue;
     }
     const bibEntry = bibByCitekey.get(pair.citekey);
-    const abstract = bibEntry?.abstract ?? '';
+    const abstract = claimAbstract(bibEntry);
     try {
       // WR-04 / FEED-05: the renderer fences the untrusted blocks and strips
       // fence markers from every payload (claimSupportRequest above).

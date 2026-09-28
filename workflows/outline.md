@@ -45,23 +45,28 @@ below is the prompt that drives the verb under both Tier 1 (Task/MCP) and Tier 2
 
 ## Body
 
-1. **An outline already exists**: when `.paper/OUTLINE.md` is valid and `--force` is not set, register its sections, write a stub PLAN.md for any section without a PLAN.md, and stop — no model call: `OUTLINE.md already present (N section(s)); registered N section(s) in STATE.json. Not regenerating — pass --force to re-outline.`
+1. **An outline already exists** (it may be hand-edited): when `.paper/OUTLINE.md` has a readable section table and `--force` is not set, apply it as written — no model call (D-18-38):
+   - check the table's structure (`validateOutlineStructure`): unique section numbers and slugs, `depends_on` naming sections of the table with no self-dependency and no cycle, every `assigned_sources` citekey in LIBRARY.json. A problem is a one-line refusal naming OUTLINE.md and the problem (exit 1); nothing changes;
+   - match its rows to STATE.json **by slug**. A registered section keeps its number and folder for good, so a row that renumbers one is refused (exit 1). A registered section the table no longer lists (a deleted or renamed row) moves to `sections/_archive/` — in a paper with drafts only after the `reoutline` gate (a terminal confirms; `--yolo` answers it for this, the user's own edit; otherwise exit 3, nothing changes);
+   - register every row and write a stub PLAN.md for any section without one, then stop: `OUTLINE.md already present (N section(s)); registered N section(s) in STATE.json[, wrote K stub PLAN.md][; archived §3 conclusion → .paper/sections/_archive/03-conclusion]. Not regenerating — pass --force to re-outline.`
 
-2. **Re-outlining a paper with drafts** (D-18-18): without `--force` this is a usage error (exit 2). With `--force` the `reoutline` gate asks first (RUN-28); `--yolo` answers it only together with `--force`, and a run that cannot ask refuses with exit 3 — no outline is requested and no section changes.
+   STATE.json is the one authority on section identity: until an edited OUTLINE.md is applied this way, the router reports the divergence (`status`, attention) naming `pensmith outline`, and `plan`/`write`/`verify`/`compile` refuse the disagreeing section.
+
+2. **Re-outlining a paper with drafts** (D-18-18) — a new outline from the model: without `--force` this is a usage error (exit 2). With `--force` the `reoutline` gate asks first (RUN-28); `--yolo` answers it only together with `--force`, and a run that cannot ask refuses with exit 3 — no outline is requested and no section changes.
 
 3. **Approval precheck** (RUN-28): a Tier-2 run that cannot ask (no terminal, no scripted `PENSMITH_PROMPT_MODE=numbered` answers) and has no `--yolo` refuses with exit 3 BEFORE the outline-author call — nothing is sent, billed or written.
 
 4. **Build the request** (FEED-03, D-18-14): the fixed `templates/prompts/outline-author.md` instructions (D-12 LOCKED slug) plus data blocks:
    - `brief` — from `.paper/INTAKE.md`: topic, thesis, discipline and its sectioning convention, paper type, length target in words (config, else the brief, else the assignment, else 1500), sectioning notes, whether a counterargument section is required, and the 3–7 section bounds;
    - `existing_sections` — on a re-outline, the current sections (slug, title, role, whether each has a draft) so the model reuses the slugs it means to keep;
-   - `sources` — every LIBRARY.json source as a short record (citekey, title, first author, year, tier, abstract excerpt), fenced as untrusted data (FEED-05).
+   - `sources` — every LIBRARY.json source **the citation verifier can check** as a short record (citekey, title, first author, year, tier, abstract excerpt), fenced as untrusted data (FEED-05). Until Pass 1 resolves arXiv and DataCite identifiers (VRFY-11), `source-context.ts` `verifierBlindSpot` withholds an entry with no DOI, with a DataCite DOI (`10.48550` arXiv, `10.5281` Zenodo, `10.6084` figshare, `10.5061` Dryad), or a synthetic dry-run DOI outside a dry run: citing one would always come back FABRICATED and strand the section (D-18-37). Name the withheld citekeys once, with the reason (`pensmith outline: WARN — K of N source(s) in LIBRARY.json are not offered to the outline because the citation verifier cannot check them: …`), and again at the approval gate, so the user can `pensmith add` a version-of-record DOI instead.
 
    **Counterargument rule** (§7.4, D-18-19): required when `--no-counter` is absent and the paper's config says so, else the intake answer, else the paper type (argumentative types require it), else the discipline preset. It is enforced on the reply, before the approval gate.
 
 5. **Validate the reply** (GRND-08): the structured contract (roles are the section roles; `NN-` slug prefixes are normalised), then `outline-validate.ts`: unique slugs, known and acyclic `depends_on`, no self-dependency, every `assigned_sources` citekey in LIBRARY.json, word targets summing to the length target ±20%, at most two body sections without sources (when the library has sources), and a counterargument + rebuttal section when required. Any error gets ONE corrective turn that quotes every error. Still invalid → the replies go to `.paper/OUTLINE.rejected.md`, the command exits 1 with `outline rejected: <errors> — OUTLINE.md and the sections are unchanged; …`, and OUTLINE.md, STATE.json and every section stay byte-identical — even under `--yolo`. `pensmith status` / the router then report the rejection as needing attention instead of calling the model again.
 
 6. **APPROVAL GATE** (OUTL-03 — PRD non-negotiable, `outline-approval` in the gate registry):
-   - Print the proposed outline in the canonical table.
+   - Print the proposed outline in the canonical table, followed by the withheld sources (step 4) when there are any.
    - **Retraction annotation**: for any section whose `assigned_sources` contains a citekey marked `retracted: true` in LIBRARY.json, show a `RETRACTED` annotation line of the literal form:
 
      ```text

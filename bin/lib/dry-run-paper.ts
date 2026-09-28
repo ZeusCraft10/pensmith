@@ -8,7 +8,7 @@
 // session lock as a real run on that folder, so the two never interleave):
 //
 //   - a folder with a real `.paper/`: the workspace is SEEDED from it — every
-//     paper file copied through atomicWriteFile — and `SEED.json` records the
+//     paper file copied through atomicWriteFile, keeping its mtime — and `SEED.json` records the
 //     fingerprint of `.paper/` (relative paths, sizes, sha256). The workspace is
 //     KEPT across dry runs while the fingerprint matches, and RE-SEEDED (wiped
 //     and copied again) when `.paper/` changed (a real run since, or the real
@@ -33,7 +33,7 @@
 // Markers are internal state: exports never contain them (zero trace).
 
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import { atomicWriteFile } from './atomic-write.js';
@@ -95,6 +95,7 @@ const PAPER_ARTIFACTS: ReadonlySet<string> = new Set([
   'TUTORIAL.md',
   'DRAFT.md',
   'COMPILE-REPORT.md',
+  'COMPILE-INPUTS.json',
   'VERIFICATION.md',
   'FINAL.md',
   'HANDOFF.json',
@@ -248,7 +249,17 @@ export async function prepareDryRunWorkspace(root: string): Promise<WorkspaceOut
   const src = realPaperDir(root);
   for (const f of fp.files) {
     const parts = f.path.split('/');
-    await atomicWriteFile(path.join(ws, ...parts), readFileSync(path.join(src, ...parts)));
+    const from = path.join(src, ...parts);
+    const to = path.join(ws, ...parts);
+    await atomicWriteFile(to, readFileSync(from));
+    // Keep the source's mtime, so the copy is a faithful rehearsal: whatever
+    // still reads file times sees the paper's order, not the copy order.
+    try {
+      const st = statSync(from);
+      utimesSync(to, st.atimeMs / 1000, st.mtimeMs / 1000);
+    } catch {
+      /* the source vanished mid-seed: the copy keeps its own time */
+    }
   }
   await atomicWriteFile(dryRunMarkerPath(root), WORKSPACE_MARKER_TEXT);
   const record: SeedRecord = {

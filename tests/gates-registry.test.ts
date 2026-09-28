@@ -21,6 +21,8 @@ import {
   declineGate,
   canPrompt,
   GateRefusedError,
+  yoloFlagDescription,
+  yoloGateSummary,
   type GateId,
 } from '../bin/lib/gates.js';
 import { EXIT_OK, EXIT_USAGE, EXIT_APPROVAL, EXIT_COST_CAP } from '../bin/lib/exit-codes.js';
@@ -336,6 +338,23 @@ test('RUN-28: PRD §7.20 carries the gate table and it matches GATES (drift test
   for (const req of ['GRND-17', 'VRFY-22', 'VRFY-20']) {
     assert.ok(rows.some((r) => r.owner === `${req} (planned)`), `future gate from ${req} is listed`);
   }
+});
+
+test('RUN-28: the --yolo lists in `pensmith --help` and the README name exactly the registry\'s gates (drift test)', () => {
+  const { skips, never } = yoloGateSummary();
+  assert.deepEqual(skips.length + never.length, GATES.length, 'every gate has a summary');
+  // --help: the flag description is generated from the registry.
+  const sb = sandbox('yolo-help');
+  const help = runCli(sb, sb.project('p'), ['--help']);
+  const flat = `${help.stdout}${help.stderr}`.replace(/\s+/g, ' ');
+  assert.ok(flat.includes(yoloFlagDescription()), `--help carries the generated --yolo text:\n${flat}`);
+  for (const g of GATES) assert.ok(yoloFlagDescription().includes(g.summary.replace(/`/g, '')), `--help names ${g.id}`);
+  // README: the global-flags paragraph names every gate on the right side.
+  const readme = readFileSync(join(REPO, 'README.md'), 'utf8');
+  const m = /`--yolo` \(answer the gates `--yolo` may answer: (.*?) — never (.*?)\)/.exec(readme);
+  assert.ok(m, 'README states what --yolo answers');
+  for (const s of skips) assert.ok((m[1] as string).includes(s), `README --yolo list names ${s}`);
+  for (const s of never) assert.ok((m[2] as string).includes(s), `README never-list names ${s}`);
 });
 
 // ---------------------------------------------------------------------------

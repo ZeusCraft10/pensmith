@@ -12,8 +12,13 @@ the existing `plan` verb; it adds no workflow logic.
 and a letter for a section a re-outline inserted (`1a`). Outline approval leaves
 every section a stub PLAN.md ("outlined (not planned)" in status); `plan N`
 replaces the stub with the section's claims, structure and sources. The planner
-sees only that section's own sources, and a reply that names any other citekey
-is refused — nothing is written and the stub stays as it was.
+sees only that section's own sources — its outline allocation, its PLAN.md
+`assigned_sources` and its `plan N --research` additions, minus any source the
+citation verifier cannot check yet (no DOI, or an arXiv/DataCite DOI; `plan`
+names them in a WARN) — and a reply that names any other citekey is refused:
+nothing is written and the stub stays as it was. If the user edited OUTLINE.md
+so that section N no longer matches its registration, `plan` refuses and names
+`pensmith outline`, which applies the edited outline.
 
 ## Routing
 

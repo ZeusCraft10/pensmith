@@ -24,7 +24,7 @@
 // (GRND-19); done prints that path and says it is a dry-run export.
 
 import { defineCommand } from 'citty';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { runPass3 } from '../lib/verify/pass3.js';
@@ -587,6 +587,16 @@ function buildVerificationReport(
   ].join('\n');
 }
 
+/** True when FINAL.md is absent or older than the compiled DRAFT.md. Never throws. */
+function finalMdStale(finalMdPath: string, draftPath: string): boolean {
+  try {
+    if (!existsSync(finalMdPath)) return true;
+    return statSync(finalMdPath).mtimeMs < statSync(draftPath).mtimeMs;
+  } catch {
+    return true;
+  }
+}
+
 export const doneCommand = defineCommand({
   meta: {
     name: 'done',
@@ -764,17 +774,21 @@ export const doneCommand = defineCommand({
       buildVerificationReport(honestyReport, plagiarismResults, pass4Results),
     );
 
-    // Audit #15: the router's terminal sentinel is "DRAFT.md present AND FINAL.md
-    // present" (router.ts:216-218). In Tier 2 there is no humanizer, so
-    // runHumanizer returns null and FINAL.md is never written — bare `pensmith`/
-    // next/resume then re-run the WHOLE export pipeline (and re-prompt the gate)
-    // on every invocation, never reaching the {verb:'status',reason:'done'}
-    // terminus. Mark completion by writing FINAL.md from the exported source when
-    // it is absent: the humanized FINAL.md when a humanizer ran (already on disk),
-    // otherwise the compiled draft (the manuscript is final, just not humanized).
+    // Audit #15 / review round 2: the router's terminus is "FINAL.md present and
+    // not older than DRAFT.md" (router.ts). In Tier 2 there is usually no
+    // humanizer, so runHumanizer returns null and writes no FINAL.md — mark
+    // completion by writing FINAL.md from what was exported: the humanized
+    // FINAL.md when a humanizer ran (already on disk), otherwise the compiled
+    // draft (the manuscript is final, just not humanized). Written whenever it
+    // is ABSENT OR OLDER than the DRAFT.md just exported: after a recompile (a
+    // section re-drafted or re-verified, a re-outline) the old FINAL.md is
+    // stale, and keeping it would send every later bare `pensmith` back to
+    // `done` — re-running the paid advisory passes, the plagiarism queries and
+    // the export gate — forever. A FINAL.md newer than DRAFT.md (a humanized
+    // manuscript of THIS compile) is kept.
     const finalMdPath = join(paperDir(paperRoot), 'FINAL.md');
-    if (!existsSync(finalMdPath)) {
-      await atomicWriteFile(finalMdPath, finalPath !== null ? readFileSync(finalPath, 'utf8') : draftMd);
+    if (finalPath === null && finalMdStale(finalMdPath, draftPath)) {
+      await atomicWriteFile(finalMdPath, draftMd);
     }
 
     process.stdout.write(`pensmith done: exported ${result.outputPath}\n`);

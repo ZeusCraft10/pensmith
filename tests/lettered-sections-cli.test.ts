@@ -60,3 +60,48 @@ test('GRND-09: compile names a lettered section as §1a in its refusals', () => 
   assert.match(`${r.stdout}${r.stderr}`, /section 1a \(background\): missing PLAN\.md or DRAFT\.md/);
   assert.doesNotMatch(`${r.stdout}${r.stderr}`, /section 1 \(background\)/);
 });
+
+test('GRND-09 / D-18-16 (review round 2): a registered §1a with no folder is planned into `01a-<slug>/` and named §1a by write', async () => {
+  const { withLlmSandbox } = await import('./helpers/llm-sandbox.js');
+  const { seedBriefPaper } = await import('./helpers/section-fixture.js');
+  const { registerSections } = await import('../bin/lib/section-stubs.js');
+  const { readdirSync, rmSync } = await import('node:fs');
+  const KEY = 'sk-test-lettered-0001';
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await seedBriefPaper(sb.root);
+    const row = (n: number, suffix: string | undefined, slug: string) => ({
+      n, ...(suffix !== undefined ? { suffix } : {}), slug, title: slug, purpose: `Cover ${slug}.`, depends_on: [], estimated_word_count: 500,
+      assigned_sources: ['vaswani2017'], role: 'body',
+    });
+    await registerSections(sb.root, [row(1, undefined, 'introduction')]);
+    // §1a is registered (a Tier-1 paper_init_section, or a folder the user deleted) but has no folder.
+    const { initSection } = await import('../bin/lib/state.js');
+    await initSection(sb.root, 1, 'extra', 'a');
+    writeFileSync(join(sb.paper, 'OUTLINE.md'), [
+      '# Outline', '',
+      '| # | slug | title | depends_on | word target | assigned_sources |',
+      '| --- | --- | --- | --- | --- | --- |',
+      '| 1 | introduction | Introduction |  | 500 | vaswani2017 |',
+      '| 1a | extra | Extra |  | 500 | vaswani2017 |', '',
+    ].join('\n'));
+    const env = { env: { ANTHROPIC_API_KEY: KEY } };
+
+    // write §1a before it is planned: the refusal names §1a, never §1 (which would re-plan a different section).
+    const early = await sb.runTsx(null, ['write', '1a'], env);
+    assert.equal(early.status, 2, `${early.stdout}\n${early.stderr}`);
+    assert.match(early.stderr, /section 1a is not planned yet — run `pensmith plan 1a` first/);
+    assert.doesNotMatch(early.stderr, /pensmith plan 1`/);
+
+    const planned = await sb.runTsx(null, ['plan', '1a'], env);
+    assert.equal(planned.status, 0, `${planned.stdout}\n${planned.stderr}`);
+    const dirs = readdirSync(join(sb.paper, 'sections')).sort();
+    assert.deepEqual(dirs, ['01-introduction', '01a-extra'], 'the folder carries its letter; no second §1 folder');
+    assert.match(planned.stdout, /01a-extra[\\/]PLAN\.md/);
+
+    // The same after the user deletes the folder: re-planning recreates it with its letter.
+    rmSync(join(sb.paper, 'sections', '01a-extra'), { recursive: true });
+    const again = await sb.runTsx(null, ['plan', '1a'], env);
+    assert.equal(again.status, 0, `${again.stdout}\n${again.stderr}`);
+    assert.deepEqual(readdirSync(join(sb.paper, 'sections')).sort(), ['01-introduction', '01a-extra']);
+  });
+});

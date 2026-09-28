@@ -148,5 +148,12 @@ test('GRND-18: outline offers only the sources the citation verifier can check; 
     assert.equal(sb.mock!.callCount('outline-author'), 2, 'the unofferable key got the corrective turn');
     const rows = parseOutline(fs.readFileSync(path.join(sb.paper, 'OUTLINE.md'), 'utf8')).sections;
     assert.ok(rows.every((row) => !row.assigned_sources.includes('raffel2019') && !row.assigned_sources.includes('huang2018')));
+
+    // D-18-37: where the user decides — the approval gate — the withheld sources are named too.
+    sb.mock!.script('outline-author', { data: threeSectionOutline() });
+    const asked = await sb.runTsx(null, ['outline', '--force'], { env: { ANTHROPIC_API_KEY: KEY, PENSMITH_PROMPT_MODE: 'numbered' }, input: 'y\n' });
+    assert.equal(asked.status, 0, `${asked.stdout}\n${asked.stderr}`);
+    const gate = asked.stderr.slice(asked.stderr.indexOf('Proposed outline:'));
+    assert.match(gate, /Not offered to the outline \(2 of 6 LIBRARY\.json source\(s\)\) because the citation verifier cannot check them yet: raffel2019 \(a DataCite DOI \(10\.48550\) Crossref does not resolve\), huang2018 \(no DOI\)\. To use one, `pensmith add` the DOI of its published/);
   });
 });

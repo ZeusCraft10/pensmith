@@ -86,25 +86,29 @@ export function replaceCitekeys(md: string, fn: (key: string) => string): string
  * (FABRICATED) instead of silently vanishing. A citation the verifier cannot
  * parse must be treated as "unverifiable", never as "absent / nothing to do".
  *
- * This detector therefore also catches the forms the narrow regex drops:
- *   - uppercase / mixed-case keys:   [@Vaswani2017]
- *   - Pandoc locator forms:          [@smith2020, p. 5]
- *   - multi-citation clusters:       [@a; @b]   ·   [see @a; also @b]
+ * This detector therefore also catches the forms the narrow regex drops — every
+ * form Pandoc's citeproc renders as a citation:
+ *   - uppercase / mixed-case / Unicode keys:  [@Vaswani2017]   [@müller2020]
+ *   - Pandoc locator forms:                   [@smith2020, p. 5]
+ *   - multi-citation clusters:                [@a; @b]   ·   [see @a; also @b]
+ *   - author-suppressed citations:            [-@a]   ·   [@a; -@b]
+ *   - braced keys:                            [@{a}]   ·   @{a}
+ *   - narrative (in-text) citations:          @a says …   ·   -@a
  *
- * It returns the citekey body of every `@key` token inside a bracketed citation
- * cluster, deduped in first-appearance order. Keys are returned VERBATIM (case
- * preserved) so the downstream bib lookup is exact — a case-mismatch against the
- * lowercase-generated bib then fails closed (FABRICATED), which is the point.
+ * It returns the citekey body of every citation, deduped in first-appearance
+ * order. Keys are returned VERBATIM (case preserved) so the downstream bib
+ * lookup is exact — a case-mismatch against the lowercase-generated bib then
+ * fails closed (FABRICATED), which is the point.
  *
  * NOT for substitution/rendering — it is intentionally permissive and is for
- * detection/verification only. The `@` is anchored to start-of-cluster /
- * whitespace / ';' (Pandoc grammar) so an email-style `name@host` never matches.
+ * detection/verification only. The `@` must not follow a letter, a digit or a
+ * backslash (Pandoc's rule), so an email-style `name@host` never matches.
  */
 export function extractCitedKeysForVerification(md: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const cluster of findCitationClusters(md)) {
-    for (const key of cluster.keys) {
+  for (const cite of findCitations(md)) {
+    for (const key of cite.keys) {
       if (!seen.has(key)) {
         seen.add(key);
         out.push(key);
@@ -115,57 +119,68 @@ export function extractCitedKeysForVerification(md: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Citation CLUSTERS — the broad Pandoc grammar the fail-closed consumers share.
+// Citation CLUSTERS and NARRATIVE citations — the broad Pandoc grammar the
+// fail-closed consumers share.
 //
 // The drafter is told to write one bare `[@key]` per source, but a model (or the
-// humanizer) can still write `[@a; @b]`, `[@a, p. 5]` or `[see @a]`. Every
-// consumer that GATES or REPAIRS a draft (the GATE-04 humanizer re-check, the
-// Pass-3 quote extractor, revise remove/swap, the GRND-06 density count) must
-// see those forms too — an unparseable citation must never look "absent"
-// (AUDIT-FINDINGS #2/#3). They all read clusters through these helpers.
+// humanizer, or an instruction injected through a source abstract) can still
+// write `[@a; @b]`, `[@a, p. 5]`, `[see @a]`, `[-@a]`, `[@{a}]` or a narrative
+// `@a says`. Pandoc renders every one of them as a citation, so every consumer
+// that GATES or REPAIRS a draft (FEED-04 containment, Pass 1, the GATE-04
+// humanizer re-check, the Pass-3 quote extractor, revise remove/swap, the GRND-06
+// density count, the export bibliography) must see them too — an unparseable
+// citation must never look "absent" (AUDIT-FINDINGS #2/#3). They all read
+// citations through these helpers.
 // ---------------------------------------------------------------------------
 
+/** A bracketed run with NO nested brackets that contains an `@` (group 1: the inner text). */
+const CLUSTER_RE_SOURCE = String.raw`\[([^[\]]*@[^[\]]*)\]`;
 /**
- * A bracketed run with NO nested brackets that contains an `@` (group 1: the
- * inner text). Exported only so a caller can anchor a cluster after other text
- * (the Pass-3 quote extractor); keys are always read with findCitationClusters.
+ * One citation key, Pandoc's grammar: `@` (optionally `-@`, author suppressed)
+ * NOT preceded by a letter, a digit or a backslash (so `name@host` and an
+ * escaped `\@` never match), then either a braced key `{…}` (no whitespace) or a
+ * key that starts with a letter/digit/underscore and may hold the internal
+ * punctuation `:.#$%&-+?<>~/` only when a letter/digit/underscore follows it
+ * (so trailing sentence punctuation is never part of the key). Group 1: a
+ * braced key; group 2: a plain key. Flags `gu`.
  */
-export const CITATION_CLUSTER_RE_SOURCE = String.raw`\[([^[\]]*@[^[\]]*)\]`;
-const CLUSTER_RE_SOURCE = CITATION_CLUSTER_RE_SOURCE;
-/**
- * Within a cluster, a key is `@` preceded by start / whitespace / ';'. Pandoc
- * citekeys begin with a letter/digit/underscore and may contain internal
- * punctuation; trailing locator punctuation is stripped after capture. The
- * anchor keeps an email-style `name@host` from matching.
- */
-const CLUSTER_KEY_RE_SOURCE = String.raw`(?:^|[\s;])@([A-Za-z0-9_][A-Za-z0-9_:.#$%&+?<>~/-]*)`;
+const KEY_RE_SOURCE = String.raw`(?<![\p{L}\p{N}\\])-?@(?:\{([^{}\s]+)\}|([\p{L}\p{N}_](?:[\p{L}\p{N}_]|[:.#$%&\-+?<>~/](?=[\p{L}\p{N}_]))*))`;
 
-/** One citation cluster in a text: its span, its bracketed text and its keys in order. */
+/** One citation in a text: its span, its text and its keys in order. */
 export interface CitationCluster {
-  /** Offset of the opening `[`. */
+  /** Offset of the opening `[` (a narrative citation: of its `@` or `-@`). */
   readonly start: number;
-  /** Offset just past the closing `]`. */
+  /** Offset just past the closing `]` (a narrative citation: past its key). */
   readonly end: number;
-  /** The whole bracketed cluster, brackets included. */
+  /** The whole bracketed cluster, brackets included (a narrative citation: `@key`). */
   readonly text: string;
   /** Every `@key` in the cluster, verbatim (case preserved), in order (duplicates kept). */
   readonly keys: readonly string[];
+  /** True for a narrative (in-text) `@key` outside brackets. */
+  readonly narrative?: boolean;
 }
 
-/** The citekeys of one cluster's inner text (between the brackets), in order. */
-function clusterKeys(inner: string): string[] {
-  const out: string[] = [];
-  for (const km of inner.matchAll(new RegExp(CLUSTER_KEY_RE_SOURCE, 'g'))) {
-    const key = (km[1] ?? '').replace(/[.,;:]+$/, '');
-    if (key) out.push(key);
+/** Every key match (index, length, key) in `text`. */
+function keyMatches(text: string): Array<{ index: number; length: number; key: string }> {
+  const out: Array<{ index: number; length: number; key: string }> = [];
+  for (const km of text.matchAll(new RegExp(KEY_RE_SOURCE, 'gu'))) {
+    const key = km[1] ?? km[2] ?? '';
+    if (key) out.push({ index: km.index, length: km[0].length, key });
   }
   return out;
 }
 
+/** The citekeys of one cluster's inner text (between the brackets), in order. */
+function clusterKeys(inner: string): string[] {
+  return keyMatches(inner).map((m) => m.key);
+}
+
 /**
  * Every citation cluster in `md` — `[@a]`, `[@a, p. 5]`, `[@a; @b]`,
- * `[see @a; also @b]`, `[@Vaswani2017]` — in document order. A bracketed run
- * whose `@` is not a citation (`[mail a@b.org]`) is not a cluster.
+ * `[see @a; also @b]`, `[-@a]`, `[@{a}]`, `[@Vaswani2017]` — in document order.
+ * A bracketed run whose `@` is not a citation (`[mail a@b.org]`) is not a
+ * cluster. Narrative citations are not clusters: read every citation with
+ * findCitations.
  */
 export function findCitationClusters(md: string): CitationCluster[] {
   const out: CitationCluster[] = [];
@@ -178,10 +193,77 @@ export function findCitationClusters(md: string): CitationCluster[] {
   return out;
 }
 
-/** How many citations `md` carries: every key of every cluster (`[@a; @b]` counts 2). */
+/**
+ * Spans Pandoc never reads a citation in: fenced code blocks, inline code
+ * spans, HTML comments, link destinations `](…)` and autolinks `<scheme:…>`.
+ * Only a narrative `@key` is looked for outside them (a Python `@decorator` in a
+ * code block is not a citation); a bracketed cluster is detected everywhere
+ * (fail closed).
+ */
+function nonCitationSpans(md: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  // Fenced code blocks: a ``` or ~~~ fence line to the matching fence line.
+  // Only CLOSED blocks count: Pandoc reads an unclosed fence as text, citations
+  // included — treating it as code to the end would hide them (fail closed).
+  const fence = /^[ \t]{0,3}(`{3,}|~{3,})[^\n]*$/gm;
+  let open: { at: number; marker: string } | null = null;
+  for (const m of md.matchAll(fence)) {
+    const marker = m[1] ?? '';
+    if (open === null) open = { at: m.index, marker };
+    else if (marker[0] === open.marker[0] && marker.length >= open.marker.length) {
+      spans.push([open.at, m.index + m[0].length]);
+      open = null;
+    }
+  }
+  // HTML comments, scanned with indexOf (a lazy `<!--[\s\S]*?-->` regex is
+  // quadratic on many unclosed `<!--`). Only CLOSED comments count: Pandoc
+  // reads an unclosed `<!--` as text, citations included.
+  for (let at = md.indexOf('<!--'); at !== -1; ) {
+    const close = md.indexOf('-->', at + 4);
+    if (close === -1) break;
+    spans.push([at, close + 3]);
+    at = md.indexOf('<!--', close + 3);
+  }
+  for (const re of [/(`+)[^`]*?\1/g, /\]\([^()\s]*(?:\([^()\s]*\)[^()\s]*)*(?:\s+"[^"]*")?\)/g, /<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>/g]) {
+    for (const m of md.matchAll(re)) {
+      // A code span never crosses a blank line (a paragraph break): Pandoc reads
+      // an unmatched backtick as text, so such a "span" hides nothing.
+      if (/\n[ \t]*\r?\n/.test(m[0])) continue;
+      spans.push([m.index, m.index + m[0].length]);
+    }
+  }
+  return spans;
+}
+
+function inSpans(at: number, spans: ReadonlyArray<readonly [number, number]>): boolean {
+  return spans.some(([s, e]) => at >= s && at < e);
+}
+
+/**
+ * Every narrative (in-text) citation in `md`: an `@key` / `-@key` / `@{key}`
+ * outside every bracketed cluster and outside code, comments and link
+ * destinations (Pandoc renders `@smith2020 argues` as "Smith (2020) argues").
+ */
+export function findNarrativeCitations(md: string): CitationCluster[] {
+  const clusters = findCitationClusters(md).map((c) => [c.start, c.end] as const);
+  const skip = nonCitationSpans(md);
+  const out: CitationCluster[] = [];
+  for (const m of keyMatches(md)) {
+    if (inSpans(m.index, clusters) || inSpans(m.index, skip)) continue;
+    out.push({ start: m.index, end: m.index + m.length, text: md.slice(m.index, m.index + m.length), keys: [m.key], narrative: true });
+  }
+  return out;
+}
+
+/** Every citation in `md` — bracketed clusters and narrative citations — in document order. */
+export function findCitations(md: string): CitationCluster[] {
+  return [...findCitationClusters(md), ...findNarrativeCitations(md)].sort((a, b) => a.start - b.start);
+}
+
+/** How many citations `md` carries: every key of every citation (`[@a; @b]` counts 2, a narrative `@a` 1). */
 export function countCitations(md: string): number {
   let n = 0;
-  for (const c of findCitationClusters(md)) n += c.keys.length;
+  for (const c of findCitations(md)) n += c.keys.length;
   return n;
 }
 
@@ -196,9 +278,9 @@ export function stripCitationClusters(md: string): string {
   return out + md.slice(at);
 }
 
-/** The first citation cluster in `md`, or null. */
-export function firstCitationCluster(md: string): CitationCluster | null {
-  return findCitationClusters(md)[0] ?? null;
+/** The first citation in `md` — a cluster or a narrative citation — or null. */
+export function firstCitation(md: string): CitationCluster | null {
+  return findCitations(md)[0] ?? null;
 }
 
 /**
@@ -241,18 +323,42 @@ function segmentCites(segment: string, key: string): boolean {
 /**
  * Remove citekey `key` from `md` wherever it is cited: a bare `[@key]` (with the
  * space before it) disappears; inside a cluster only its `;` segment goes
- * (`[@a; @key]` -> `[@a]`). Every other citation is left untouched.
+ * (`[@a; @key]` -> `[@a]`). Every other citation is left untouched. A narrative
+ * `@key` is part of the sentence's grammar, so it is NOT removed mechanically:
+ * it stays, and the verifier keeps reporting it (fail closed).
  */
 export function removeCitekey(md: string, key: string): string {
   return editClustersCiting(md, key, (segments) => segments.filter((s) => !segmentCites(s, key)));
 }
 
+/** `text` with every citation key equal to `from` rewritten to `to` (keeping `-@` and braces). */
+function renameKeysIn(text: string, from: string, to: string): string {
+  let out = '';
+  let at = 0;
+  for (const m of keyMatches(text)) {
+    if (m.key !== from) continue;
+    const token = text.slice(m.index, m.index + m.length);
+    const lead = token.startsWith('-') ? '-@' : '@';
+    const braced = token.slice(lead.length).startsWith('{');
+    out += text.slice(at, m.index) + lead + (braced ? `{${to}}` : to);
+    at = m.index + m.length;
+  }
+  return out + text.slice(at);
+}
+
 /**
- * Replace citekey `from` with `to` wherever it is cited, bare or inside a
- * cluster, keeping any prefix or locator (`[see @from, p. 5]` -> `[see @to, p. 5]`).
+ * Replace citekey `from` with `to` wherever it is cited — bare, inside a
+ * cluster or as a narrative `@from` — keeping any prefix, locator, `-`
+ * (author suppression) or braces (`[see @from, p. 5]` -> `[see @to, p. 5]`).
  */
 export function renameCitekey(md: string, from: string, to: string): string {
-  const esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const keyRe = new RegExp(`((?:^|[\\s;])@)${esc}(?![A-Za-z0-9_:#$%&+?<>~/-]|[.][A-Za-z0-9_])`, 'g');
-  return editClustersCiting(md, from, (segments) => segments.map((s) => s.replace(keyRe, `$1${to}`)));
+  const clustered = editClustersCiting(md, from, (segments) => segments.map((s) => renameKeysIn(s, from, to)));
+  let out = '';
+  let at = 0;
+  for (const c of findNarrativeCitations(clustered)) {
+    if (c.keys[0] !== from) continue;
+    out += clustered.slice(at, c.start) + renameKeysIn(c.text, from, to);
+    at = c.end;
+  }
+  return out + clustered.slice(at);
 }

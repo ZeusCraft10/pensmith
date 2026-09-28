@@ -20,9 +20,13 @@ paper or start a new one here; without a terminal (or with `--yolo`) it refuses 
 exit 2, naming `--paper <name>` and `pensmith new` (RUN-14). It holds the paper's
 session lock while it runs (RUN-23).
 
-It calls `resolveNextAction()` (`bin/lib/router.ts`) — a pure function over `.paper/STATE.json`
-+ per-section PLAN.md frontmatter (read through the versioned loader without write-back). The resolver IGNORES HANDOFF.json (H4) and NEVER
-returns `{ verb:'resume' }`.
+It calls `resolveNextAction()` (`bin/lib/router.ts`) — a total, never-throwing, read-only function of the
+paper's files: `.paper/STATE.json`, each section's PLAN.md frontmatter (read through the versioned
+loader without write-back), each section's DRAFT.md hash (against `verified_against_draft_hash`),
+OUTLINE.md's rows (which must list the sections STATE.json registers), `OUTLINE.rejected.md`,
+`COMPILE-INPUTS.json` (what the compiled draft was made from) and the mtimes of the compiled
+`DRAFT.md` and `FINAL.md`. The resolver IGNORES HANDOFF.json (H4) and NEVER returns
+`{ verb:'resume' }`.
 
 **One invocation completes one step (GRND-18, D-18-28).** A step is one verb — intake,
 research, outline, compile, done — except for a section, whose step is its whole
@@ -34,7 +38,7 @@ It ends with one stderr line naming what ran and what comes next:
 
 ```text
 pensmith: ran plan §2, write §2; next: plan §3
-pensmith: ran verify §1 (exit 4); next: verify §1
+pensmith: ran write §1 (exit 4); next: status (attention: section 1 failed verification (see its VERIFICATION.md) and its draft has not changed since — …)
 pensmith: ran done; next: status (done)
 ```
 
@@ -45,9 +49,13 @@ attention decision carries a detail naming the command that fixes it (a rejected
 `pensmith outline`; a section whose draft was refused: `pensmith write N`; a section that
 failed verification and whose draft has not changed since: `pensmith plan N --revise` or
 `pensmith write N`), so a failed paid step is never re-run by the next bare invocation.
-Once every section is verified, compile runs whenever the compiled `DRAFT.md` is missing
-or older than a section's draft or verification (a redone or added section), and done runs
-whenever `FINAL.md` is missing or older than the compiled draft.
+Once every section is verified, compile runs whenever the compiled `DRAFT.md` is missing or
+`COMPILE-INPUTS.json` says it was made from other sections or other section draft/verification
+bytes (a redone, re-verified, added or dropped section — decided from content, so a git checkout
+or a sync client that reorders mtimes does not recompile), and done runs whenever `FINAL.md` is
+missing or older than the compiled draft (done refreshes it every time it exports). When the
+user's OUTLINE.md and STATE.json list different sections, the router reports attention naming
+`pensmith outline`, which applies the edited outline.
 
 **`--dry-run` loops (GRND-19, D-18-30).** Under `--dry-run` the paper lives in
 `./.paper-dry-run/` (seeded from `.paper/`, which is never written) and `next` repeats

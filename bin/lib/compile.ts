@@ -28,7 +28,8 @@
 //      any drift REJECTS that boundary (keep original prose) and records a
 //      Transitions-Changed rejection. Then run the consistency scan (COMP-04,
 //      flags only) and citation density (COMP-05, warn-only vs discipline target).
-//   4. atomicWriteFile DRAFT.md + COMPILE-REPORT.md (schema v1, D-14).
+//   4. atomicWriteFile DRAFT.md + COMPILE-REPORT.md (schema v1, D-14) +
+//      COMPILE-INPUTS.json (the compiled sections' content hashes, for the router).
 //      .paper/CITATIONS.bib stays the full library rendered from LIBRARY.json by
 //      bin/lib/library.ts (BRDTH-01 / D-17-43); citeproc renders cited keys only.
 //
@@ -45,7 +46,7 @@ import { loadFrontmatterDoc } from './frontmatter.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { computeDraftHash } from './draft-hash.js';
-import { replaceCitekeys } from './citation-token.js';
+import { extractCitedKeysForVerification, replaceCitekeys } from './citation-token.js';
 import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
 import {
@@ -58,6 +59,8 @@ import {
 import { sectionVerificationReasons } from './verify/verdict-rows.js';
 import { sectionWriteBlockReason } from './plan-status.js';
 import { networkMode } from './http-mock.js';
+import { writeCompileInputs } from './compile-inputs.js';
+import { sectionRegistryProblem } from './section-registry.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
@@ -268,6 +271,13 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         staleResolvedCount: 0,
       };
     }
+    // Review round 2 (section-registry.ts): STATE.json is the authority on the
+    // paper's sections. When the user's OUTLINE.md lists other sections, compile
+    // would compile a different set than is registered — refuse, naming the fix.
+    const registry = sectionRegistryProblem(opts.paperRoot);
+    if (registry !== null) {
+      return { refused: true, refuseReasons: [registry], sectionsCount: 0, staleResolvedCount: 0 };
+    }
     // D-11 / GRND-09: OUTLINE order is (n, suffix) — §1 < §1a < §2.
     const ordered = orderedOutlineSections(outline);
 
@@ -422,6 +432,19 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       const parts = smoothed.split(/\n\s*\n/);
       const newTail = restorePlaceholders((parts[0] ?? smoothed), restore);
       const newHead = restorePlaceholders(parts.length > 1 ? parts.slice(1).join('\n\n') : '', restore);
+
+      // D-18-40: the placeholders cover only bare [@key] tokens. Any other
+      // citation form (a cluster, [-@k], @{k}, a narrative @k) reaches the model
+      // raw, and the model could also write a new one — a citation no section
+      // verified. The smoothed boundary must cite exactly the keys the original
+      // did (the one fail-closed grammar), else it is rejected like a drift.
+      const citedBefore = new Set(extractCitedKeysForVerification(`${tailRaw}\n\n${headRaw}`));
+      const citedAfter = new Set(extractCitedKeysForVerification(`${newTail}\n\n${newHead}`));
+      if (!setsEqual(citedBefore, citedAfter)) {
+        warn(`WARN: boundary ${k + 1}→${k + 2} smoothing rejected — the smoothed text cites different sources; keeping original prose`);
+        transitions.push({ boundary, status: 'rejected', before_chars: beforeChars, after_chars: beforeChars });
+        continue;
+      }
       left[li] = newTail;
       if (newHead.trim().length > 0) right[ri] = newHead;
       drafts[k] = left.join('\n\n');
@@ -467,8 +490,9 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     await atomicWriteFile(draftPath, compiled);
 
     const reportPath = join(paperDir(opts.paperRoot), 'COMPILE-REPORT.md');
+    const compiledAt = new Date().toISOString();
     const report = renderCompileReport({
-      compiled_at: new Date().toISOString(),
+      compiled_at: compiledAt,
       sections_count: loaded.length,
       stale_resolved_count: stalenessResolved.length,
       refuse_reasons: [],
@@ -479,6 +503,13 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       staleness_resolved: stalenessResolved,
     });
     await atomicWriteFile(reportPath, report);
+    // What this compile was made from (compile-inputs.ts): the router decides
+    // whether DRAFT.md is current from these content hashes, never from mtimes.
+    await writeCompileInputs(
+      opts.paperRoot,
+      loaded.map((s) => ({ n: s.outline.n, suffix: s.outline.suffix, slug: s.slug })),
+      compiledAt,
+    );
 
     return {
       refused: false,

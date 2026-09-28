@@ -20,6 +20,8 @@ import { COUNTERARGUMENT_REQUIRED_MESSAGE, coversCounterargument } from './count
 
 /** One outline section as the validator sees it (OutlineSchema's section shape). */
 export interface ValidatedOutlineSection {
+  /** `1`, `1a` — checked for uniqueness when given (an OUTLINE.md table row). */
+  readonly id?: string | undefined;
   readonly slug: string;
   readonly title?: string;
   readonly depends_on: readonly string[];
@@ -40,6 +42,7 @@ export interface OutlineValidationInput {
 
 export type OutlineIssueCode =
   | 'no-sections'
+  | 'duplicate-id'
   | 'duplicate-slug'
   | 'self-dependency'
   | 'unknown-dependency'
@@ -87,13 +90,35 @@ function findCycle(sections: readonly ValidatedOutlineSection[]): string[] | nul
   return [...indegree.entries()].filter(([, n]) => n > 0).map(([s]) => s);
 }
 
-/** Every rule the outline breaks (empty when it is valid). */
-export function validateOutline(input: OutlineValidationInput): OutlineIssue[] {
-  const issues: OutlineIssue[] = [];
-  const { sections } = input;
+/**
+ * The STRUCTURAL rules alone — unique slugs (and ids, when given), depends_on
+ * naming sections of the outline with no self-reference and no cycle, every
+ * assigned citekey in LIBRARY.json. `pensmith outline` checks an existing (for
+ * example hand-edited) OUTLINE.md with these before registering it, so a cycle
+ * or an unknown source is a named refusal there, never an internal error in a
+ * later step (review round 2). The model's own reply is held to all the rules
+ * (validateOutline).
+ */
+export function validateOutlineStructure(
+  sections: readonly ValidatedOutlineSection[],
+  libraryCitekeys: ReadonlySet<string>,
+): OutlineIssue[] {
   if (sections.length === 0) {
     return [{ code: 'no-sections', message: 'the outline has no sections' }];
   }
+  return structuralIssues(sections, libraryCitekeys);
+}
+
+function structuralIssues(sections: readonly ValidatedOutlineSection[], libraryCitekeys: ReadonlySet<string>): OutlineIssue[] {
+  const issues: OutlineIssue[] = [];
+  const ids = new Set<string>();
+  const dupeIds = new Set<string>();
+  for (const s of sections) {
+    if (s.id === undefined) continue;
+    if (ids.has(s.id)) dupeIds.add(s.id);
+    ids.add(s.id);
+  }
+  for (const d of dupeIds) issues.push({ code: 'duplicate-id', message: `section number §${d} is used by more than one row` });
 
   const seen = new Set<string>();
   const dupes = new Set<string>();
@@ -121,12 +146,22 @@ export function validateOutline(input: OutlineValidationInput): OutlineIssue[] {
   const unknown = new Map<string, string[]>();
   for (const s of sections) {
     for (const key of s.assigned_sources) {
-      if (!input.libraryCitekeys.has(key)) unknown.set(key, [...(unknown.get(key) ?? []), s.slug]);
+      if (!libraryCitekeys.has(key)) unknown.set(key, [...(unknown.get(key) ?? []), s.slug]);
     }
   }
   for (const [key, where] of unknown) {
     issues.push({ code: 'unknown-citekey', message: `citekey "${key}" (assigned to ${where.map((w) => `"${w}"`).join(', ')}) is not in the sources block / LIBRARY.json` });
   }
+  return issues;
+}
+
+/** Every rule the outline breaks (empty when it is valid). */
+export function validateOutline(input: OutlineValidationInput): OutlineIssue[] {
+  const { sections } = input;
+  if (sections.length === 0) {
+    return [{ code: 'no-sections', message: 'the outline has no sections' }];
+  }
+  const issues = structuralIssues(sections, input.libraryCitekeys);
 
   const total = sections.reduce((acc, s) => acc + s.estimated_word_count, 0);
   const target = input.lengthTarget;

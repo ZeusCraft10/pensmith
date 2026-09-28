@@ -58,24 +58,49 @@ export interface GateDef {
   readonly declineExit: ExitCode;
   /** The requirement that owns this decision point. */
   readonly requirement: string;
+  /** Short name in the `--yolo` lists of `pensmith --help` and the README (yoloGateSummary). */
+  readonly summary: string;
 }
 
 export const GATES: readonly GateDef[] = Object.freeze([
-  { id: 'outline-approval', label: 'Approve this outline and register its sections?', yolo: 'skip', yoloChoice: 'approve the outline', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'PRD §7.20' },
-  { id: 'export-confirm', label: 'Export the paper now?', yolo: 'skip', yoloChoice: 'export', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'PRD §7.20' },
-  { id: 'research-scope', label: 'Which research scope should I use?', yolo: 'skip', yoloChoice: 'use the first proposed scope', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'SRC-08' },
-  { id: 'research-prune', label: 'Select the candidate sources to keep', yolo: 'skip', yoloChoice: 'keep every candidate', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'SRC-09' },
-  { id: 'add-remap', label: 'Map this source to a section now?', yolo: 'skip', yoloChoice: 'skip the remap', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'SRC-14' },
-  { id: 'revise-swap', label: 'Apply this citation swap to the section?', yolo: 'skip', yoloChoice: 'apply the proposed swap', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'PRD §7.5' },
-  { id: 'cost-cap', label: 'This call would exceed your cost cap. Continue?', yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_COST_CAP, declineExit: EXIT_COST_CAP, requirement: 'RUN-18' },
-  { id: 'estimate-proceed', label: 'Proceed?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'RUN-20' },
-  { id: 'detector-consent', label: 'Send the full paper text to GPTZero for an AI-detection score?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'EXP-17' },
-  { id: 'paper-pointer', label: 'Continue the active paper, or start a new paper here?', yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_USAGE, declineExit: EXIT_USAGE, requirement: 'RUN-14' },
-  { id: 'sketch-confirm', label: 'Proceed to intake with this thesis?', yolo: 'skip', yoloChoice: 'proceed to intake', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'ERGO-05' },
-  { id: 'assignment-pickup', label: 'Use the assignment file in this folder?', yolo: 'skip', yoloChoice: 'use the file', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'GRND-01' },
-  { id: 'intake-defaults', label: 'Accept the intake defaults?', yolo: 'skip', yoloChoice: 'accept the defaults', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-02' },
-  { id: 'reoutline', label: 'Re-outline a paper that already has drafts?', yolo: 'skip', yoloChoice: 're-outline (only with --force)', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-09' },
+  { id: 'outline-approval', label: 'Approve this outline and register its sections?', yolo: 'skip', yoloChoice: 'approve the outline', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'PRD §7.20', summary: 'outline approval' },
+  { id: 'export-confirm', label: 'Export the paper now?', yolo: 'skip', yoloChoice: 'export', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'PRD §7.20', summary: 'export confirmation' },
+  { id: 'research-scope', label: 'Which research scope should I use?', yolo: 'skip', yoloChoice: 'use the first proposed scope', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'SRC-08', summary: 'research scope' },
+  { id: 'research-prune', label: 'Select the candidate sources to keep', yolo: 'skip', yoloChoice: 'keep every candidate', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'SRC-09', summary: 'research pruning' },
+  { id: 'add-remap', label: 'Map this source to a section now?', yolo: 'skip', yoloChoice: 'skip the remap', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'SRC-14', summary: 'the `add` remap' },
+  { id: 'revise-swap', label: 'Apply this citation swap to the section?', yolo: 'skip', yoloChoice: 'apply the proposed swap', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'PRD §7.5', summary: 'the revise swap' },
+  { id: 'cost-cap', label: 'This call would exceed your cost cap. Continue?', yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_COST_CAP, declineExit: EXIT_COST_CAP, requirement: 'RUN-18', summary: 'the cost cap' },
+  { id: 'estimate-proceed', label: 'Proceed?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'RUN-20', summary: 'the estimate confirmation' },
+  { id: 'detector-consent', label: 'Send the full paper text to GPTZero for an AI-detection score?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'EXP-17', summary: 'detector consent' },
+  { id: 'paper-pointer', label: 'Continue the active paper, or start a new paper here?', yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_USAGE, declineExit: EXIT_USAGE, requirement: 'RUN-14', summary: 'the active-paper choice' },
+  { id: 'sketch-confirm', label: 'Proceed to intake with this thesis?', yolo: 'skip', yoloChoice: 'proceed to intake', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'ERGO-05', summary: 'the `sketch` confirmation' },
+  { id: 'assignment-pickup', label: 'Use the assignment file in this folder?', yolo: 'skip', yoloChoice: 'use the file', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'GRND-01', summary: 'the assignment-file pickup' },
+  { id: 'intake-defaults', label: 'Accept the intake defaults?', yolo: 'skip', yoloChoice: 'accept the defaults', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-02', summary: 'the intake defaults' },
+  { id: 'reoutline', label: 'Re-outline a paper that already has drafts?', yolo: 'skip', yoloChoice: 're-outline (a model re-outline also needs --force)', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-09', summary: 'the re-outline confirmation (a model re-outline also needs `--force`)' },
 ] satisfies GateDef[]);
+
+/**
+ * The `--yolo` flag's description, generated from GATES so `pensmith --help`
+ * can never drift from the registry (review round 2): what --yolo answers and
+ * what it never answers. tests/gates-registry.test.ts checks the README list
+ * against the same summaries.
+ */
+export function yoloGateSummary(): { skips: string[]; never: string[] } {
+  return {
+    skips: GATES.filter((g) => g.yolo === 'skip').map((g) => g.summary),
+    never: GATES.filter((g) => g.yolo === 'never').map((g) => g.summary),
+  };
+}
+
+/** The `--yolo` description for `pensmith --help` (plain text: backticks dropped). */
+export function yoloFlagDescription(): string {
+  const { skips, never } = yoloGateSummary();
+  const plain = (xs: string[], last: string): string => {
+    const ys = xs.map((x) => x.replace(/`/g, ''));
+    return ys.length < 2 ? ys.join('') : `${ys.slice(0, -1).join(', ')} ${last} ${ys[ys.length - 1] as string}`;
+  };
+  return `Answer the approval gates --yolo may answer (${plain(skips, 'and')}). Never answers ${plain(never, 'or')}.`;
+}
 
 export function gateDef(id: GateId): GateDef {
   const def = GATES.find((g) => g.id === id);

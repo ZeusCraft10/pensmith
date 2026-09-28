@@ -229,11 +229,12 @@ Each subsection below describes a workflow stage. Most are invoked transparently
 This is the equivalent of GSD's `roadmap` step — it produces the section structure that the rest of the workflow iterates over.
 
 - Produces section structure with thesis, target word count per section, and a `sections/` plan: each section gets an entry naming it, declaring its purpose and role, listing its mapped sources from the source pool, and declaring its dependencies on other sections (e.g., "Discussion depends on Results").
-- The request is fed by the intake brief (topic, thesis, discipline and its sectioning convention, paper type, length target, sectioning notes) and every LIBRARY.json source, fenced as untrusted data.
+- The request is fed by the intake brief (topic, thesis, discipline and its sectioning convention, paper type, length target, sectioning notes) and every LIBRARY.json source the citation verifier can check, fenced as untrusted data. Until Pass 1 resolves arXiv and DataCite identifiers (VRFY-11), a source with no DOI or a DataCite DOI (arXiv `10.48550`, Zenodo, figshare, Dryad) is withheld from the outline and the planner — a citation of it would always fail verification and strand its section. `outline` names every withheld source (a WARN, and again at the approval gate), so the user can `add` the version-of-record DOI instead (D-18-37).
 - The reply is one validated contract: unique slugs, known and acyclic dependencies, every mapped source in the library, word targets within ±20% of the length target, at most two body sections without sources, and the §7.4 rule. An invalid reply gets one corrective turn; if it is still invalid, the replies are kept in `.paper/OUTLINE.rejected.md`, nothing else changes, and the router reports the problem instead of calling the model again (no silent re-billing).
 - **If counterargument enabled** (§7.4): refuses to proceed unless the outline contains a counterargument + rebuttal section.
 - **Approval gate** before any section gets written.
 - Writes `.paper/OUTLINE.md` AND creates `.paper/sections/<N>/` folders, each pre-populated with a stub `PLAN.md` containing that section's outline entry (`stub: true`, `status: planned`); every section is registered in STATE.json. Section folders are numbered (`01-introduction/`, `02-background/`, etc.) so they sort cleanly, and a section's folder is found by its slug.
+- STATE.json is the one authority on a section's identity (number, letter, slug — hence its folder); OUTLINE.md's rows must list the same sections. A hand-edited OUTLINE.md is applied by `pensmith outline` without `--force` and without a model call: the table is checked (unique numbers and slugs, known and acyclic dependencies, every mapped source in the library), sections are matched by slug, a registered section the table no longer lists moves to `sections/_archive/` (in a paper with drafts, after the `reoutline` gate), a renumbered section is refused, and new rows get stub PLAN.md files. Until then the router reports the divergence and names that command, and plan, write, verify and compile refuse the disagreeing section (D-18-38).
 - `OUTLINE.md` is rendered by pensmith, never copied from model text: a `Thesis:` line, the table `| # | slug | title | role | depends_on | word target | assigned_sources | voice |` and a `## Sections` list with each purpose. The older six-column table is still read.
 - **Re-outline** (`outline --force`; a paper with drafts also asks the `reoutline` gate): sections are matched by slug. A kept section keeps its number, folder and files byte-identical; a dropped section moves to `sections/_archive/`; an inserted section gets a lettered id after the section it follows (`1a`, folder `01a-<slug>/`) or the next free number at the end. Nothing is renumbered, so the order of kept sections cannot change. Section ids (`3`, `1a`) are accepted wherever a section number is (`plan 1a`, `paper://section/1a`).
 
@@ -248,7 +249,7 @@ This is the equivalent of GSD's `roadmap` step — it produces the section struc
 
 - Reads the section's stub PLAN.md from outline.
 - For each claim the section will make: identifies which sources support it, what evidence is required, what counterexamples should be addressed.
-- The planner is fed the intake brief, the section's OUTLINE row (title, purpose, role, dependencies, word target, voice), short summaries of the claims its dependencies already planned, and only the section's own sources. Its reply is validated — the section it names, its dependencies, and every citekey within the section's sources — with one corrective turn; a reply that is still invalid writes nothing and leaves the stub as it was.
+- The planner is fed the intake brief, the section's OUTLINE row (title, purpose, role, dependencies, word target, voice), short summaries of the claims its dependencies already planned, and only the section's own sources: its allowed set is the OUTLINE row's sources, its PLAN.md `assigned_sources` and its `plan --research` additions, minus the sources the citation verifier cannot check yet (§7.3, D-18-37), which `plan` names in a WARN. Its reply is validated — the section it names, its dependencies, and every citekey within the section's sources — with one corrective turn; a reply that is still invalid writes nothing and leaves the stub as it was.
 - Optional `--revise` flag: re-plans an existing section based on new feedback (e.g., from a verification gap).
 - Optional `--research <query>` flag: triggers a section-scoped research pass for additional sources if the outline allocation is insufficient.
 - Writes `.paper/sections/<N>/PLAN.md` (claim-source mapping, paragraph-level structure, target word count, voice hints) with `status: planned` and no `stub` flag. A stub routes to `plan`; a planned section routes to `write`. (Before v1.0 a planned PLAN.md without `stub` routed to `plan`; only hand-made files had that shape.)
@@ -301,7 +302,7 @@ This is the equivalent of GSD's milestone completion. It assembles the verified 
 - **Cross-section smoothing pass**: reads the assembled draft and edits *only* the last paragraph of each section + first paragraph of the next, integrating transitions. Does not touch citations or claims.
 - **Cross-section claim consistency check**: flags contradictions between sections (e.g., section 2 claims X, section 4 claims not-X).
 - **Citation density check**: per-discipline density target (§8); flags out-of-range paragraphs.
-- Writes `.paper/DRAFT.md` (the compiled paper) and `.paper/COMPILE-REPORT.md` (transitions changed, contradictions flagged, density stats).
+- Writes `.paper/DRAFT.md` (the compiled paper), `.paper/COMPILE-REPORT.md` (transitions changed, contradictions flagged, density stats) and `.paper/COMPILE-INPUTS.json` (the sections it compiled and the sha256 of each section's draft and verification, so the next step decides from content whether the compiled paper is current — D-18-39).
 
 ### 7.9 Done (`/pensmith done` or `/pensmith export`)
 
@@ -443,7 +444,7 @@ For power users / batch processing / CI testing:
 | `plan-research` | Run this section-scoped research? | skip: run it | refuse: 3 | 3 | GRND-17 (planned) |
 | `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |
 | `quote-accept` | Accept this quote match? | never | refuse: 3 | 3 | VRFY-20 (planned) |
-| `reoutline` | Re-outline a paper that already has drafts? | skip: re-outline (only with --force) | refuse: 3 | 3 | GRND-09 |
+| `reoutline` | Re-outline a paper that already has drafts? | skip: re-outline (a model re-outline also needs --force) | refuse: 3 | 3 | GRND-09 |
 
 Automatic revision of a failed section is not a gate `--yolo` can open: it is its own opt-in, `--auto-revise` or `[project] auto_revise = true` (REV-01). Detector consent persisted in `config.toml` (EXP-17) is the only way that gate is answered without asking.
 
@@ -757,6 +758,7 @@ The `.paper/` directory layout per project. The project folder that contains `.p
 ├── DRAFT.md                 # written by compile
 ├── FINAL.md                 # written by humanize
 ├── COMPILE-REPORT.md
+├── COMPILE-INPUTS.json      # what the compile was made from (content hashes; D-18-39)
 ├── VERIFICATION.md          # whole-paper verify report from `done`
 └── sections/
     ├── 01-introduction/

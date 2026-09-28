@@ -5,8 +5,14 @@
 // the `outline-author` prompt (D-12 LOCKED slug); here the verb calls complete()
 // through the Phase 11 transport (GEN-02).
 //
-//   1. A valid OUTLINE.md and no --force: register its sections and give every
-//      section without one a stub PLAN.md — no model call (audit #1/#4).
+//   1. An existing OUTLINE.md and no --force: apply it as written — no model
+//      call (audit #1/#4; review round 2). The table is checked structurally
+//      (unique ids and slugs, depends_on known and acyclic, citekeys in
+//      LIBRARY.json); sections match STATE.json by slug; a registered section
+//      the table no longer lists is archived (through the `reoutline` gate in a
+//      paper with drafts); a renumbered section is refused; every section
+//      without a PLAN.md gets its stub. This is how a hand-edited OUTLINE.md is
+//      registered (the router reports the divergence and names this command).
 //   2. A paper with drafts needs --force plus the `reoutline` gate to be
 //      re-outlined (D-18-18; --yolo answers it only together with --force).
 //      No terminal and no --yolo: the outline-approval gate refuses BEFORE the
@@ -46,7 +52,7 @@ import { readPaperBrief, type PaperBrief } from '../lib/paper-brief.js';
 import { tryLoadLibrary } from '../lib/library.js';
 import { buildOutlineSources, describeExcluded, libraryCitekeys, partitionCheckable, type SourceContextInput } from '../lib/source-context.js';
 import { resolveCounterargument, type CounterargumentDecision } from '../lib/counterargument.js';
-import { formatOutlineIssues, outlineCorrection, validateOutline, type OutlineIssue } from '../lib/outline-validate.js';
+import { formatOutlineIssues, outlineCorrection, validateOutline, validateOutlineStructure, type OutlineIssue } from '../lib/outline-validate.js';
 import {
   archiveSection,
   numberFreshOutline,
@@ -105,6 +111,86 @@ async function registeredSections(root: string): Promise<Array<{ n: number; suff
     if (e instanceof StateNotFoundError) return [];
     throw e;
   }
+}
+
+/** `§1a slug`. */
+function sectionLabel(s: { n: number; suffix?: string | undefined; slug: string }): string {
+  return `§${formatSectionId(sectionIdOf(s.n, s.suffix))} ${s.slug}`;
+}
+
+/**
+ * Apply an existing OUTLINE.md — hand-edited or legacy — without a model call
+ * (review round 2; D-18-16, D-18-18, GRND-08):
+ *   - the table must be structurally sound (validateOutlineStructure: unique
+ *     ids and slugs, depends_on known and acyclic, every assigned citekey in
+ *     LIBRARY.json) — else a named refusal, EXIT_ERROR, nothing changed;
+ *   - sections match STATE.json BY SLUG. A kept section keeps its number (its
+ *     folder is never renamed): a row that renumbers one is refused;
+ *   - a registered section the table no longer lists (a deleted or renamed
+ *     row) is archived to `sections/_archive/` — in a paper with drafts only
+ *     through the `reoutline` gate (a terminal confirms; --yolo answers it for
+ *     the user's own edit; without either: EXIT_APPROVAL, nothing changed);
+ *   - every row is registered, and a section with no PLAN.md gets its stub.
+ */
+async function applyExistingOutline(
+  paperRoot: string,
+  entries: OutlineSectionEntry[],
+  opts: { yolo: boolean; marker: string | null },
+): Promise<{ registered: number; stubsWritten: number; archived: string[] }> {
+  const library: SourceContextInput[] = (await tryLoadLibrary(paperRoot))?.entries ?? [];
+  const issues = validateOutlineStructure(
+    entries.map((e) => ({ id: formatSectionId(sectionIdOf(e.n, e.suffix)), slug: e.slug, depends_on: e.depends_on, assigned_sources: e.assigned_sources, estimated_word_count: e.estimated_word_count, role: e.role })),
+    libraryCitekeys(library),
+  );
+  if (issues.length > 0) {
+    throw new PensmithError(
+      `pensmith outline: .paper/OUTLINE.md cannot be registered: ${formatOutlineIssues(issues)} — ` +
+        'fix the table, or re-outline with `pensmith outline --force`; nothing was changed',
+      EXIT_ERROR,
+    );
+  }
+  const registered = await registeredSections(paperRoot);
+  const bySlug = new Map(registered.map((s) => [s.slug, s]));
+  const renumbered = entries.filter((e) => {
+    const reg = bySlug.get(e.slug);
+    return reg !== undefined && formatSectionId(sectionIdOf(reg.n, reg.suffix)) !== formatSectionId(sectionIdOf(e.n, e.suffix));
+  });
+  if (renumbered.length > 0) {
+    const what = renumbered.map((e) => {
+      const reg = bySlug.get(e.slug) as { n: number; suffix?: string | undefined };
+      return `"${e.slug}" as §${formatSectionId(sectionIdOf(e.n, e.suffix))} (it is §${formatSectionId(sectionIdOf(reg.n, reg.suffix))})`;
+    });
+    throw new PensmithError(
+      `pensmith outline: .paper/OUTLINE.md renumbers ${what.join(', ')} — a section keeps its number and folder for good ` +
+        '(D-18-18); restore the number in OUTLINE.md (to move a section, re-outline with `pensmith outline --force`); nothing was changed',
+      EXIT_ERROR,
+    );
+  }
+  const rowSlugs = new Set(entries.map((e) => e.slug));
+  const dropped = registered.filter((s) => !rowSlugs.has(s.slug));
+  if (dropped.length > 0 && paperHasDrafts(paperRoot)) {
+    const names = dropped.map(sectionLabel).join(', ');
+    const outcome = await runGate('reoutline', {
+      yolo: opts.yolo,
+      detail: `applying the edited OUTLINE.md moves ${names} to sections/_archive/; nothing was changed`,
+      question: {
+        id: 'reoutline',
+        kind: 'confirm',
+        label: `Apply the edited OUTLINE.md? It no longer lists ${names}; ${dropped.length === 1 ? 'its folder moves' : 'their folders move'} to sections/_archive/.`,
+        default: false,
+      },
+    });
+    if (outcome.kind === 'answered' && !(outcome.answer.kind === 'confirm' && outcome.answer.value === true)) {
+      declineGate('reoutline', 'the edited OUTLINE.md was not applied — nothing changed');
+    }
+  }
+  const archived: string[] = [];
+  for (const d of dropped) {
+    const where = await archiveSection(paperRoot, d.slug);
+    archived.push(`${sectionLabel(d)}${where ? ` → ${path.relative(paperRoot, where).split(path.sep).join('/')}` : ''}`);
+  }
+  const r = await registerSections(paperRoot, entries, { marker: opts.marker });
+  return { registered: r.registered, stubsWritten: r.stubsWritten, archived };
 }
 
 /** Does any section folder hold a DRAFT.md? (`sections/_archive/` is not a section.) */
@@ -184,10 +270,13 @@ function clearRejection(root: string): void {
  * Run the outline approval gate — `outline-approval` in the gate registry
  * (RUN-28, bin/lib/gates.ts; CLAUDE.md non-negotiable: default-ON).
  */
-async function runApprovalGate(outlineText: string, yolo: boolean): Promise<void> {
+async function runApprovalGate(outlineText: string, yolo: boolean, withheld: string | null): Promise<void> {
   if (!yolo && canPrompt()) {
     const preview = outlineText.slice(0, 3000) + (outlineText.length > 3000 ? '\n…(truncated)' : '');
     process.stderr.write(`Proposed outline:\n${preview}\n`);
+    // D-18-37: say, where the user decides, which library sources the outline
+    // was not offered (the citation verifier cannot check them yet).
+    if (withheld !== null) process.stderr.write(`${withheld}\n`);
   }
   const outcome = await runGate('outline-approval', {
     yolo,
@@ -236,7 +325,7 @@ export const outlineCommand = defineCommand({
   args: {
     yolo: {
       type: 'boolean',
-      description: 'Skip the approval gate (and, with --force, the re-outline confirmation).',
+      description: 'Skip the approval gate and the re-outline confirmation (re-outlining a paper with drafts through the model also needs --force).',
       default: false,
     },
     force: {
@@ -257,17 +346,17 @@ export const outlineCommand = defineCommand({
     const force = args.force === true;
     const marker = dryRunMarker();
 
-    // ── 1. A valid OUTLINE.md and no --force: register, create missing stubs, no model call ──
+    // ── 1. An existing OUTLINE.md and no --force: apply it as written — no model call ──
     const existingOutline = readOutlineSync(paperRoot);
     if (!force && existingOutline !== null && existingOutline.sections.length > 0) {
-      const entries = existingOutline.sections.map(entryFromRow);
-      const r = await registerSections(paperRoot, entries, { marker });
+      const r = await applyExistingOutline(paperRoot, existingOutline.sections.map(entryFromRow), { yolo, marker });
       clearRejection(paperRoot);
       process.stdout.write(
         `pensmith outline: OUTLINE.md already present (${r.registered} section(s)); registered ${r.registered} section(s) in STATE.json` +
-          `${r.stubsWritten > 0 ? `, wrote ${r.stubsWritten} stub PLAN.md` : ''}. Not regenerating — pass --force to re-outline.\n`,
+          `${r.stubsWritten > 0 ? `, wrote ${r.stubsWritten} stub PLAN.md` : ''}` +
+          `${r.archived.length > 0 ? `; archived ${r.archived.join(', ')}` : ''}. Not regenerating — pass --force to re-outline.\n`,
       );
-      return { ok: true, path: outlineFile, mode: 'existing', sections: r.registered, stubs: r.stubsWritten };
+      return { ok: true, path: outlineFile, mode: 'existing', sections: r.registered, stubs: r.stubsWritten, archived: r.archived };
     }
 
     // ── 2. Re-outlining a paper with drafts: --force plus the reoutline gate (D-18-18) ──
@@ -313,7 +402,11 @@ export const outlineCommand = defineCommand({
     // fails verify and strands the section. The others are named once.
     const library: SourceContextInput[] = (await tryLoadLibrary(paperRoot))?.entries ?? [];
     const { checkable: entries, excluded } = partitionCheckable(library, networkMode().dryRun);
-    if (excluded.length > 0) {
+    const withheld = excluded.length > 0
+      ? `Not offered to the outline (${excluded.length} of ${library.length} LIBRARY.json source(s)) because the citation verifier cannot check them yet: ` +
+        `${describeExcluded(excluded, excluded.length)}. To use one, \`pensmith add\` the DOI of its published (Crossref-registered) version.`
+      : null;
+    if (withheld !== null) {
       process.stderr.write(
         `pensmith outline: WARN — ${excluded.length} of ${library.length} source(s) in LIBRARY.json are not offered to the outline ` +
           `because the citation verifier cannot check them: ${describeExcluded(excluded)}\n`,
@@ -397,7 +490,7 @@ export const outlineCommand = defineCommand({
     const title = brief.title || 'Outline';
     const thesis = accepted.thesis.trim() || brief.thesis;
     const outlineMd = renderOutlineMd({ thesis, sections: accepted.numbered }, title, { marker });
-    await runApprovalGate(outlineMd, yolo);
+    await runApprovalGate(outlineMd, yolo, withheld);
 
     // ── 6. Apply: archive dropped sections, register (stubs for new ones), write OUTLINE.md ──
     const archived: string[] = [];

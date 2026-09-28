@@ -218,6 +218,22 @@ test('FEED-04: an unassigned key in a citation group is caught too; a corrected 
   });
 });
 
+test('FEED-04: an unassigned key cited author-suppressed ([-@k]) or narratively (@k) is caught like [@k] (review round 2)', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await plannedPaper(sb);
+    const evil = { text: 'Attention predates transformers [-@evil9999].\r\nAs @ghost2020 argues, it scales [@bahdanau2015].\n' };
+    sb.mock!.script('section-drafter', evil, evil);
+    const r = await write(sb, '2');
+    assert.equal(r.status, 4, `${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, /section 2 failed: citekeys evil9999, ghost2020 not assigned to section 2/);
+    assert.equal(sb.mock!.callCount('section-drafter'), 2, 'one corrective turn');
+    const retry = JSON.stringify((sb.mock!.bodiesFor('section-drafter')[1]!['messages'] as unknown[]).at(-1));
+    assert.match(retry, /\[@evil9999\], \[@ghost2020\]/);
+    assert.equal(fs.existsSync(path.join(sb.paper, 'sections', '02-background', 'DRAFT.md')), false);
+    assert.equal(loadFrontmatterDocSync('plan', path.join(sb.paper, 'sections', '02-background', 'PLAN.md')).frontmatter['status'], 'failed');
+  });
+});
+
 test('GRND-15: write N chains verify — DRAFT.md and VERIFICATION.md in one invocation, the verify status reported', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     await plannedPaper(sb);

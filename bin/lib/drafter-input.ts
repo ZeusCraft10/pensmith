@@ -284,11 +284,12 @@ export interface AssembledDrafterInput {
  */
 export function assembleDrafterInput(
   paperRoot: string,
-  section: { n: number; slug: string },
+  section: { n: number; slug: string; suffix?: string | undefined },
   libraryEntries: readonly SourceContextInput[],
 ): AssembledDrafterInput {
   const planPath = sectionPlan(section.n, section.slug, paperRoot);
-  if (!existsSync(planPath)) throw new SectionNotPlannedError(formatSectionId(sectionIdOf(section.n)));
+  // GRND-09: a lettered section is named as itself (`plan 1a`), never as §1.
+  if (!existsSync(planPath)) throw new SectionNotPlannedError(formatSectionId(sectionIdOf(section.n, section.suffix)));
   const plan = readSectionPlan(paperRoot, planPath);
   const fm = plan.frontmatter;
   const id = formatSectionId(sectionIdOf(fm.section, fm.suffix));
