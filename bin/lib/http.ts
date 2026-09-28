@@ -99,6 +99,7 @@ import {
   canonicalFixtureKey,
   scrubbedPathAndQuery,
   SENSITIVE_HEADERS,
+  recordedErrorBody,
   type NetworkMode,
 } from './http-mock.js';
 import { openSessionLog, isMirrorPromptsEnabled, type SessionLogger } from './session-log.js';
@@ -150,6 +151,81 @@ export class ResponseTooLargeError extends PensmithError {
     this.name = 'ResponseTooLargeError';
     this.maxBytes = maxBytes;
     this.request = request;
+  }
+}
+
+// ------------------------------------------------------------
+//   Host-availability and redirect errors (Phase 19 seam S-B, SRC-01, SRC-17)
+// ------------------------------------------------------------
+// Declared by the seam so adapters and verbs can report them; thrown by the
+// transport once stream `net` lands the redirect loop, the exhausted-host
+// marker and the per-host circuit breaker.
+
+/** A rough, human wait: `~35 s`, `~12 min`, `~6 h`, `~2 d`. */
+export function formatRetryAfter(ms: number): string {
+  const s = Math.max(1, Math.round(ms / 1000));
+  if (s < 90) return `~${s} s`;
+  const min = Math.round(s / 60);
+  if (min < 90) return `~${min} min`;
+  const h = Math.round(s / 3600);
+  if (h < 48) return `~${h} h`;
+  return `~${Math.round(s / 86_400)} d`;
+}
+
+/**
+ * A host whose server asked callers to wait longer than RETRY_AFTER_CAP_MS
+ * (e.g. keyless OpenAlex's `Retry-After: 22400`): the request is not retried,
+ * and no further request goes to that host in this process until the wait has
+ * passed (SRC-17). Adapters report it as a failed lookup / search.
+ */
+export class RateLimitExhaustedError extends PensmithError {
+  readonly host: string;
+  readonly retryAfterMs: number;
+  readonly status: number;
+  constructor(host: string, retryAfterMs: number, status: number = 429) {
+    super(`${host}: rate limit exhausted (retry after ${formatRetryAfter(retryAfterMs)})`, EXIT_ERROR);
+    this.name = 'RateLimitExhaustedError';
+    this.host = host;
+    this.retryAfterMs = retryAfterMs;
+    this.status = status;
+  }
+}
+
+/**
+ * A host whose per-host circuit breaker is open: it answered 429/5xx too many
+ * times in a row, so it is skipped for the rest of the run (SRC-17).
+ */
+export class CircuitOpenError extends PensmithError {
+  readonly host: string;
+  readonly lastStatus: number;
+  readonly failures: number;
+  constructor(host: string, lastStatus: number, failures: number) {
+    super(`${host}: skipped for the rest of this run after ${failures} consecutive HTTP ${lastStatus} responses`, EXIT_ERROR);
+    this.name = 'CircuitOpenError';
+    this.host = host;
+    this.lastStatus = lastStatus;
+    this.failures = failures;
+  }
+}
+
+/** True for either host-availability error (the host is not being asked right now). */
+export function isHostUnavailableError(e: unknown): e is RateLimitExhaustedError | CircuitOpenError {
+  return e instanceof RateLimitExhaustedError || e instanceof CircuitOpenError;
+}
+
+/** Why a redirect chain was not followed to the end (SRC-01). */
+export type RedirectErrorKind = 'too-many' | 'loop' | 'downgrade' | 'no-location' | 'not-followed';
+
+/** A redirect chain http.ts refused to follow (every hop is SSRF-checked and pinned separately). */
+export class RedirectError extends PensmithError {
+  readonly kind: RedirectErrorKind;
+  /** The URL whose redirect was refused (secret params redacted). */
+  readonly url: string;
+  constructor(kind: RedirectErrorKind, url: string, detail: string) {
+    super(`${kind === 'too-many' ? 'too many redirects' : 'redirect refused'}: ${detail}`, EXIT_ERROR);
+    this.name = 'RedirectError';
+    this.kind = kind;
+    this.url = url;
   }
 }
 
@@ -585,6 +661,10 @@ export type HttpSource =
   | 'pubmed'
   | 'semanticscholar'
   | 'retraction-watch'
+  // Phase 19 seam S-B: the books adapter (Open Library, Google Books; SRC-11)
+  // and the Zotero Web / local API client (SRC-16).
+  | 'books'
+  | 'zotero'
   | 'generic';
 
 export interface HttpResponse {
@@ -636,6 +716,15 @@ export interface FetchOptions {
   llm?: { endpoint: string };
   /** Phase 17 seam (verbatim V3): abort once the response body exceeds this many bytes (SEC-03). */
   maxBytes?: number;
+  /**
+   * Phase 19 seam S-B (SRC-17): the caller's schema check. Called with a live
+   * response before it is cached or recorded; a non-null return (the reason
+   * the body is not the service's answer) keeps it out of the HTTP cache and
+   * out of any recording. The response is still returned: the caller reports
+   * it as a failed lookup. Independently, a 200 whose body is an API error
+   * document (http-mock.ts recordedErrorBody) is never cached.
+   */
+  validate?: (res: HttpResponse) => string | null;
 }
 
 // ============================================================
@@ -651,6 +740,10 @@ const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
   unpaywall: 1 * ONE_DAY_MS,
   semanticscholar: 7 * ONE_DAY_MS,
   'retraction-watch': 1 * ONE_DAY_MS,
+  // Phase 19 seam S-B: book metadata changes rarely; a Zotero library changes
+  // under the user's hands (its client passes noCache).
+  books: 7 * ONE_DAY_MS,
+  zotero: ONE_HOUR_MS,
   generic: 1 * ONE_DAY_MS,
 };
 // WR-07 (cross-AI review): 404 responses are cached so the verifier doesn't
@@ -678,6 +771,9 @@ const RPS_BY_SOURCE: Record<HttpSource, number> = {
   // Retraction Watch (Crossref Labs) — used only as a side-channel filter,
   // call volume is minimal; mirror unpaywall budget.
   'retraction-watch': 10,
+  // Phase 19 seam S-B: Open Library asks clients not to exceed ~1 request/s.
+  books: 1,
+  zotero: 5,
   generic: 5,
 };
 
@@ -1472,13 +1568,18 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
 
   recordHttp({ ...base, status: response.status, cache: 'miss', bytes: response.bodyBytes?.length ?? 0, ms: Date.now() - started });
 
+  // --- Phase 19 seam S-B (SRC-17): a body that is not the service's answer is
+  // never cached and never recorded — the caller's schema check (validate), or
+  // an API error document served with HTTP 200 ---
+  const invalid = llm === undefined ? (opts.validate?.(response) ?? recordedErrorBody(response.status, response.body)) : null;
+
   // --- Recorder hook (http-mock.ts isRecordingEnabled: live, outside a test context) ---
-  if (llm === undefined && isRecordingEnabled()) {
+  if (llm === undefined && invalid === null && isRecordingEnabled()) {
     recordFixture(method, url, opts.body, source, response);
   }
 
   // --- Cache write (live GET, success or definite 404) ---
-  if (cacheAllowed && (response.status === 200 || response.status === 404)) {
+  if (cacheAllowed && invalid === null && (response.status === 200 || response.status === 404)) {
     await writeCache(key, response).catch(() => {
       // Cache write failures are non-fatal — the response is still returned
       // to the caller. Disk full / read-only FS would otherwise break every

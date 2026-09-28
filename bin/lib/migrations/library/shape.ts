@@ -1,5 +1,5 @@
 // bin/lib/migrations/library/shape.ts — pure shaping of source records into
-// LIBRARY.json v2 entries (BRDTH-01 / D-17-43).
+// LIBRARY.json entries (BRDTH-01 / D-17-43; the v3 fields by Phase 19 seam S-B).
 //
 // Shared by the v1→v2 migration (v1_to_v2.ts, which must turn research-written
 // SourceCandidate[] entries into v2 entries) and the one library writer
@@ -17,7 +17,17 @@
 
 import { normalizeDoi, normalizeArxiv, normalizePmid, normalizePmcid } from '../../doi.js';
 import { generateCitekey } from '../../citekey.js';
-import { CITEKEY_GRAMMAR, type LibraryEntry } from '../../schemas/library.js';
+import { CITEKEY_GRAMMAR, ByoRecordSchema, type ByoRecord, type LibraryEntry } from '../../schemas/library.js';
+import {
+  SourceTypeSchema,
+  SourceTierSchema,
+  RetractionStatusSchema,
+  ZoteroRefSchema,
+  type SourceType,
+  type SourceTier,
+  type RetractionStatus,
+  type ZoteroRef,
+} from '../../schemas/source-types.js';
 
 /**
  * A source handed to the library writer. SourceCandidate (research adapters)
@@ -51,6 +61,23 @@ export interface LibraryCandidate {
   synthetic?: boolean | undefined;
   last_verified?: string | null | undefined;
   raw?: unknown;
+  // v3 (Phase 19 seam S-B) — every field optional; unknown values are dropped
+  // by candidateToEntry (an invalid enum value or a non-string becomes null).
+  type?: SourceType | string | null | undefined;
+  publisher?: string | null | undefined;
+  volume?: string | number | null | undefined;
+  issue?: string | number | null | undefined;
+  pages?: string | null | undefined;
+  editors?: string[] | undefined;
+  tier?: SourceTier | string | null | undefined;
+  relevance?: number | null | undefined;
+  why_relevant?: string | null | undefined;
+  /** false = a bring-your-own PDF kept with local metadata only (SRC-15). */
+  hydrated?: boolean | undefined;
+  retraction_status?: RetractionStatus | string | null | undefined;
+  zotero?: ZoteroRef | null | undefined;
+  /** The bring-your-own PDF record (file under .paper/, sha256s) — SRC-15. */
+  byo?: ByoRecord | null | undefined;
 }
 
 export function normDoi(v: unknown): string | null {
@@ -156,6 +183,22 @@ function validIso(v: unknown): string | null {
   return s && !Number.isNaN(Date.parse(s)) && /^\d{4}-\d{2}-\d{2}T/.test(s) ? new Date(s).toISOString() : null;
 }
 
+/** A short bibliographic string (volume / issue): numbers become their decimal text. */
+function shortField(v: unknown): string | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return nonEmpty(v);
+}
+
+function enumOrNull<T>(schema: { safeParse(v: unknown): { success: true; data: T } | { success: false } }, v: unknown): T | null {
+  const r = schema.safeParse(v);
+  return r.success ? r.data : null;
+}
+
+/** Relevance in [0, 1] (the evaluator's score), else null. */
+function relevanceOrNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : null;
+}
+
 /** Best-effort venue from an adapter's native payload (Crossref, OpenAlex). */
 function venueFromRaw(raw: unknown): string | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -190,8 +233,8 @@ export function sanitizeCitekey(raw: unknown, c: Pick<LibraryCandidate, 'authors
 }
 
 /**
- * Shape one candidate into a v2 entry (identifiers normalized, SourceCandidate
- * spellings mapped). `citekey` is the candidate's (sanitized) key — the writer
+ * Shape one candidate into a current-version entry (identifiers normalized,
+ * SourceCandidate spellings mapped, the v3 fields validated or nulled). `citekey` is the candidate's (sanitized) key — the writer
  * resolves collisions against the library afterwards.
  */
 export function candidateToEntry(c: LibraryCandidate, provenance: string[], now: string): LibraryEntry {
@@ -214,6 +257,11 @@ export function candidateToEntry(c: LibraryCandidate, provenance: string[], now:
   if (doi) alternates.delete(doi);
   const authors = (c.authors ?? []).map((a) => (typeof a === 'string' ? a.trim() : '')).filter((a) => a.length > 0);
   const year = typeof c.year === 'number' && Number.isInteger(c.year) && c.year >= 1000 && c.year <= 2200 ? c.year : null;
+  const editors = (c.editors ?? []).map((a) => (typeof a === 'string' ? a.trim() : '')).filter((a) => a.length > 0);
+  // Fail closed (SRC-04): a retraction recorded either way is recorded both ways.
+  const statusIn = enumOrNull(RetractionStatusSchema, c.retraction_status);
+  const retracted = c.retracted === true || statusIn === 'retracted';
+  const retraction_status: RetractionStatus = retracted ? 'retracted' : statusIn ?? 'unchecked';
   return {
     citekey: sanitizeCitekey(c.citekey, { authors, year }),
     doi,
@@ -229,11 +277,23 @@ export function candidateToEntry(c: LibraryCandidate, provenance: string[], now:
     oa_url: validUrl(c.oa_url) ?? validUrl(c.oa_pdf_url),
     alternate_dois: [...alternates],
     provenance: [...new Set(provenance.filter((p) => p.length > 0))],
-    retracted: c.retracted === true,
+    retracted,
     retraction_details: nonEmpty(c.retraction_details),
     synthetic: c.synthetic === true,
     last_verified: validIso(c.last_verified),
-    byo: null,
+    byo: enumOrNull(ByoRecordSchema, c.byo),
+    type: enumOrNull(SourceTypeSchema, c.type),
+    publisher: nonEmpty(c.publisher),
+    volume: shortField(c.volume),
+    issue: shortField(c.issue),
+    pages: nonEmpty(c.pages),
+    editors,
+    tier: enumOrNull(SourceTierSchema, c.tier),
+    relevance: relevanceOrNull(c.relevance),
+    why_relevant: nonEmpty(c.why_relevant),
+    hydrated: c.hydrated !== false,
+    retraction_status,
+    zotero: enumOrNull(ZoteroRefSchema, c.zotero),
     addedAt: now,
     updatedAt: now,
   };
