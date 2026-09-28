@@ -11,6 +11,9 @@
 //   6. lock files live in pensmithLockDir(), NOT inside .paper/ (D-40)
 //   7. [HARD-01 SCAFFOLD] lock canonicalize: two path conventions for one
 //      file → identical stub (skip-guarded on stubFor export)
+//   8. BRDTH-01: a lock taken before its file exists keeps ONE identity when
+//      the file appears, through a symlinked / short-named parent (in this
+//      process and from another one)
 //
 // All tests use unique resource strings (test name + Date.now()) so
 // concurrent test runs (e.g. `node --test --test-concurrency=4`) don't
@@ -18,15 +21,14 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import * as path from 'node:path';
-import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { withLock, tryAcquire, isLocked } from '../bin/lib/lock.js';
-import { pensmithLockDir } from '../bin/lib/paths.js';
+import { withLock, tryAcquire, isLocked, stubFor, LockTimeoutError } from '../bin/lib/lock.js';
+import { pensmithLockDir, realpathNearest } from '../bin/lib/paths.js';
 
 /**
  * Replicate the HARD-01 canonicalization from stubFor so tests can compute
@@ -34,12 +36,9 @@ import { pensmithLockDir } from '../bin/lib/paths.js';
  * Must stay in sync with bin/lib/lock.ts stubFor().
  */
 function canonicalHash(resource: string): string {
-  let canonical = path.resolve(resource);
-  try {
-    canonical = fs.realpathSync.native(canonical);
-  } catch {
-    // not-yet-created file — use the resolved path
-  }
+  // realpathNearest: a not-yet-created file resolves through its nearest
+  // existing ancestor (the same key before and after it is created).
+  let canonical = realpathNearest(resource);
   if (process.platform === 'win32') canonical = canonical.toLowerCase();
   return createHash('sha256').update(canonical).digest('hex').slice(0, 12);
 }
@@ -322,3 +321,58 @@ test('lock canonicalize: two path conventions for one file → identical stub (H
     }
   },
 );
+
+// ---- 8. BRDTH-01: one lock identity before and after the file exists ----
+//
+// A lock is often taken on a file that does not exist yet (LIBRARY.json on the
+// first upsert, STATE.json before initState). A Windows temp dir is spelled
+// with an 8.3 short name (C:\Users\RUNNER~1\…, expanded to runneradmin by
+// realpath) and a macOS one through /var → /private/var, so falling back to the
+// unresolved path while the file was missing keyed a DIFFERENT lock than the
+// realpath used once it existed: a process arriving after the first upsert
+// created LIBRARY.json never waited for the holder, and an update was lost
+// (CI run 62, windows-latest: 5 !== 6). A symlink (a junction on Windows)
+// gives every OS the same two spellings.
+
+test('BRDTH-01: a lock taken before its file exists still excludes callers after the file appears (symlinked parent)', async () => {
+  const base = await fsp.mkdtemp(path.join(os.tmpdir(), 'pensmith-lock-nearest-'));
+  const real = path.join(base, 'real');
+  const link = path.join(base, 'link');
+  await fsp.mkdir(real);
+  await fsp.symlink(real, link, 'junction');
+  const viaLink = path.join(link, 'LIBRARY.json');
+  const viaReal = path.join(real, 'LIBRARY.json');
+  const helper = path.resolve('tests/lock-conflict.cjs');
+  void pensmithLockDir(); // export a single-file run's per-process data dir to the child (CI-09)
+  const child = (holdMs: string): { status: number | null; out: string } => {
+    const r = spawnSync(process.execPath, ['--import', 'tsx', helper], {
+      env: { ...process.env, RESOURCE: viaReal, HOLD_MS: holdMs, TIMEOUT_MS: '300' },
+      encoding: 'utf8',
+      timeout: 30_000,
+    });
+    return { status: r.status, out: `${r.stdout}${r.stderr}` };
+  };
+  try {
+    assert.equal(await stubFor(viaLink), await stubFor(viaReal), 'both spellings key one lock while the file is missing');
+    const release = await tryAcquire(viaLink);
+    try {
+      const fh = await fsp.open(viaReal, 'a'); // the holder creates the file
+      await fh.close();
+      assert.equal(await stubFor(viaLink), await stubFor(viaReal), 'and the same lock once it exists');
+      // A caller in this process waits in the FIFO queue…
+      await assert.rejects(tryAcquire(viaLink, { timeoutMs: 200 }), (e: unknown) => e instanceof LockTimeoutError);
+      await assert.rejects(tryAcquire(viaReal, { timeoutMs: 200 }), (e: unknown) => e instanceof LockTimeoutError);
+      // …and one in another process waits on the lock directory.
+      const blocked = child('0');
+      assert.equal(blocked.status, 3, `the other process must wait for the holder, not take a second lock:\n${blocked.out}`);
+      assert.match(blocked.out, new RegExp(`CHILD-ERROR timed out after 300 ms waiting for the lock on .+ \\(held by pid ${process.pid}\\b`));
+    } finally {
+      await release();
+    }
+    const free = child('0');
+    assert.equal(free.status, 0, `after release the other process takes the lock:\n${free.out}`);
+    assert.match(free.out, /^ACQUIRED \d+/m);
+  } finally {
+    await fsp.rm(base, { recursive: true, force: true });
+  }
+});

@@ -125,23 +125,10 @@ export function localDataDir(
     })();
     const fold = (p: string): string => (platform === 'win32' ? p.toLowerCase() : p);
     const insideTmp = (candidate: string): boolean => {
-      const forms = new Set<string>([path.resolve(candidate)]);
       // Resolve the nearest existing ancestor too (macOS /var → /private/var,
       // Windows 8.3 short names such as RUNNER~1), so a temp dir given in
       // either spelling is recognised.
-      let probe = path.resolve(candidate);
-      let rest = '';
-      for (;;) {
-        try {
-          forms.add(path.join(fs.realpathSync.native(probe), rest));
-          break;
-        } catch {
-          const parent = path.dirname(probe);
-          if (parent === probe) break;
-          rest = path.join(path.basename(probe), rest);
-          probe = parent;
-        }
-      }
+      const forms = new Set<string>([path.resolve(candidate), realpathNearest(candidate)]);
       return [...forms].some((f) =>
         tmpRoots.some((root) => {
           const rel = path.relative(fold(root), fold(f));
@@ -552,6 +539,34 @@ export function resolvePaperFlag(value: string, cwd: string = process.cwd()): st
     `--paper ${value}: no paper by that name (run pensmith list) and no .paper/ folder at ${asPath}`,
     EXIT_USAGE,
   );
+}
+
+/**
+ * The canonical spelling of `p` whether or not it exists yet: its realpath
+ * (symlinks resolved — macOS /var → /private/var; Windows 8.3 short names such
+ * as RUNNER~1 expanded), or, for a path not created yet, the realpath of its
+ * nearest existing ancestor with the missing tail re-appended. A path therefore
+ * canonicalizes the SAME before and after it is created — a lock keyed on
+ * LIBRARY.json or STATE.json keeps one identity when the file first appears
+ * (BRDTH-01: the old "ENOENT → the resolved path" fallback gave a Windows temp
+ * paper two lock keys, RUNNER~1 before and runneradmin after, and two
+ * processes upserted at once). Falls back to path.resolve(p) when not even the
+ * filesystem root resolves.
+ */
+export function realpathNearest(p: string): string {
+  const resolved = path.resolve(p);
+  const tail: string[] = [];
+  let probe = resolved;
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync.native(probe), ...tail);
+    } catch {
+      const parent = path.dirname(probe);
+      if (parent === probe) return resolved;
+      tail.unshift(path.basename(probe));
+      probe = parent;
+    }
+  }
 }
 
 /**

@@ -66,7 +66,7 @@ import os from 'node:os';
 import path from 'node:path';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
-import { pensmithLockDir } from './paths.js';
+import { pensmithLockDir, realpathNearest } from './paths.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 
@@ -137,20 +137,21 @@ const PROCESS_STARTED_AT = new Date(Date.now() - Math.round(process.uptime() * 1
 /**
  * Canonicalize a resource so two spellings of one file share one lock and one
  * FIFO queue. HARD-01 / BLOCKER-01/02 (macOS /var→/private/var hazard +
- * cross-convention race): path.resolve (absolute) → best-effort
- * fs.realpathSync.native (symlinks, /var→/private/var) → toLowerCase on win32
- * (case-insensitive filesystem). ENOENT from realpath falls back to the
- * resolved path — STATE.json is locked BEFORE initState creates it (Pitfall 2).
+ * cross-convention race): realpathNearest (absolute; symlinks and Windows 8.3
+ * short names resolved) → toLowerCase on win32 (case-insensitive filesystem).
+ *
+ * A file that does not exist yet is canonicalized through its nearest existing
+ * ancestor, so it keys the SAME lock before and after it is created —
+ * STATE.json is locked BEFORE initState creates it (Pitfall 2), LIBRARY.json
+ * before the first upsert writes it. (BRDTH-01: falling back to the unresolved
+ * path on ENOENT gave one file two locks wherever the path runs through a
+ * symlink or a short name — a Windows temp dir under RUNNER~1, macOS /var — so
+ * a process that arrived after the file appeared did not wait for the holder
+ * that created it, and an upsert was lost.)
  */
 function canonicalResource(resource: string): string {
-  let canonical = path.resolve(resource);
-  try {
-    canonical = fs.realpathSync.native(canonical);
-  } catch {
-    // Not-yet-created file (ENOENT) or other FS error — resolved path is canonical.
-  }
-  if (process.platform === 'win32') canonical = canonical.toLowerCase();
-  return canonical;
+  const canonical = realpathNearest(resource);
+  return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
 }
 
 function stubPathFor(canonical: string): string {
@@ -166,7 +167,12 @@ function stubPathFor(canonical: string): string {
  * holds no content.
  */
 export async function stubFor(resource: string): Promise<string> {
-  const stub = stubPathFor(canonicalResource(resource));
+  return ensureStub(canonicalResource(resource));
+}
+
+/** Create (if missing) and return the stub for an already-canonical resource. */
+async function ensureStub(canonical: string): Promise<string> {
+  const stub = stubPathFor(canonical);
   await fsp.mkdir(path.dirname(stub), { recursive: true });
   // 'a' = O_WRONLY|O_CREAT|O_APPEND — create-if-missing without truncating.
   const fh = await fsp.open(stub, 'a');
@@ -248,8 +254,8 @@ function pidAlive(pid: number): boolean {
  * Clear a lock whose recorded holder is a dead process on THIS host, without
  * waiting for staleMs (a `kill -9`ed CLI otherwise blocks everyone for 45 s).
  * Conservative: an unreadable record, another host, a live PID (including a
- * reused one) or a lock directory whose mtime moved while we looked (a fresh
- * holder) is left alone.
+ * reused one) or a lock directory whose mtime, inode or holder record changed
+ * while we looked (a fresh holder) is left alone.
  */
 async function clearDeadHolder(stub: string): Promise<boolean> {
   const lockDir = `${stub}.lock`;
@@ -266,6 +272,14 @@ async function clearDeadHolder(stub: string): Promise<boolean> {
   try {
     const after = await fsp.stat(lockDir);
     if (after.mtimeMs !== before.mtimeMs || after.ino !== before.ino) return false;
+    // mtime + ino alone do not prove it is the same lock directory:
+    // proper-lockfile stamps each process's FIRST lock with the next whole
+    // second + 5 ms (its mtime-precision probe), so two holders within one
+    // second share an mtime, and a filesystem may give a re-created directory
+    // the freed inode. A new holder always writes its own record, so the
+    // record must be unchanged too before the directory is removed.
+    const again = await readOwner(stub);
+    if (!again || again.pid !== owner.pid || again.acquiredAt !== owner.acquiredAt) return false;
     await fsp.rm(lockDir, { recursive: true, force: true });
     return true;
   } catch {
@@ -362,12 +376,14 @@ async function acquire(resource: string, opts: LockOptions): Promise<() => Promi
   if (!leave) {
     // The in-process head of the queue held (or waited for) the lock past our
     // deadline. Report the on-disk holder when one is recorded, else us.
-    const owner = await readOwner(await stubFor(resource)).catch(() => null);
+    const owner = await readOwner(await ensureStub(canonical)).catch(() => null);
     throw new LockTimeoutError(resource, owner?.pid ?? process.pid, o.timeoutMs, owner);
   }
 
   try {
-    const stub = await stubFor(resource);
+    // The stub derives from the SAME canonical key as the queue (computed once),
+    // so the in-process queue and the on-disk lock can never disagree.
+    const stub = await ensureStub(canonical);
     const lockDir = `${stub}.lock`;
     const plfOpts = buildPlfOpts(o);
     // Layers 2 + 3: one attempt, then jittered backoff until the deadline.

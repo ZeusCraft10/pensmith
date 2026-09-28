@@ -33,7 +33,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { pensmithLockDir, projectHash, paperDir, asProjectRoot } from './paths.js';
+import { pensmithLockDir, projectHash, paperDir, asProjectRoot, realpathNearest } from './paths.js';
 import { currentSessionId } from './session-log.js';
 import { migratePaperConfigFile } from './config.js';
 import { enforceDryRunBoundary } from './dry-run-paper.js';
@@ -80,12 +80,9 @@ export function claudeSessionIdFromEnv(): string | null {
  * case-folded on Windows.
  */
 function canonicalRoot(root: string): string {
-  let r = asProjectRoot(root);
-  try {
-    r = fs.realpathSync.native(r);
-  } catch {
-    // not created yet — the resolved path is canonical
-  }
+  // realpathNearest: a root not created yet canonicalizes through its nearest
+  // existing ancestor, so it keys the same record before and after it exists.
+  const r = realpathNearest(asProjectRoot(root));
   return process.platform === 'win32' ? r.toLowerCase() : r;
 }
 

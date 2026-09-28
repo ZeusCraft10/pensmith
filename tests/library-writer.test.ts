@@ -32,6 +32,8 @@ import {
   libraryPaths,
   type LibraryCandidate,
 } from '../bin/lib/library.js';
+import { tryAcquire } from '../bin/lib/lock.js';
+import { pensmithLockDir } from '../bin/lib/paths.js';
 import { Schema as LibrarySchema } from '../bin/lib/schemas/library.js';
 import { migrate } from '../bin/lib/migrations/library/v1_to_v2.js';
 import { isPreprintDoi } from '../bin/lib/migrations/library/shape.js';
@@ -480,6 +482,10 @@ test('BRDTH-01: 5 concurrent upserts in one process lose no update (disjoint add
 
 test('BRDTH-01: 5 concurrent upserts from 5 processes lose no update', async () => {
   const root = project();
+  // Resolve the data dir BEFORE spawning, so a single-test run's per-process
+  // test data dir (CI-09) is exported to the workers and all five share ONE
+  // lock directory — without it each worker locks in a private dir of its own.
+  void pensmithLockDir();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-libwriter-worker-'));
   const worker = path.join(dir, 'worker.mts');
   fs.writeFileSync(
@@ -518,6 +524,73 @@ test('BRDTH-01: 5 concurrent upserts from 5 processes lose no update', async () 
   const shared = lib.entries.find((e) => e.doi === '10.1038/nature05678')!;
   assert.deepEqual([...shared.provenance].sort(), ['proc0:crossref', 'proc1:crossref', 'proc2:crossref', 'proc3:crossref', 'proc4:crossref']);
   LibrarySchema.parse(JSON.parse(fs.readFileSync(libraryPaths(root).library, 'utf8')));
+});
+
+test('BRDTH-01: an upsert from another process waits for the holder that created LIBRARY.json (paper folder reached through a symlink)', async () => {
+  // CI run 62 (windows-latest) lost one of the five cross-process upserts
+  // above: the temp dir is spelled C:\Users\RUNNER~1\… (an 8.3 short name,
+  // macOS has /var → /private/var), and the lock on a LIBRARY.json that did
+  // not exist yet was keyed on that spelling while a process arriving after
+  // the file appeared keyed its realpath — two locks for one file. Here the
+  // first upsert's critical section is played by this process on a symlinked
+  // (junction on Windows) spelling, deterministically: it takes the lock
+  // before LIBRARY.json exists, creates it, lets another process start its
+  // upsert, and writes its own result last. The other process must wait.
+  const real = project();
+  const link = `${real}-link`;
+  fs.symlinkSync(real, link, 'junction');
+  // The two library states the holder writes, rendered by the one writer in a scratch paper.
+  const scratch = project();
+  await upsertSources(scratch, [ENGEL], { provenance: 'research' });
+  const created = fs.readFileSync(libraryPaths(scratch).library, 'utf8');
+  await upsertSources(scratch, [cand({ doi: '10.5555/holder.1', title: 'Holder work', authors: ['Holder, A.'], year: 2001 })], { provenance: 'holder' });
+  const holderResult = fs.readFileSync(libraryPaths(scratch).library, 'utf8');
+  const expected = (JSON.parse(holderResult) as { entries: Array<{ citekey: string }> }).entries.map((e) => e.citekey);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-libwriter-worker-'));
+  const worker = path.join(dir, 'worker.mts');
+  fs.writeFileSync(
+    worker,
+    [
+      `import { upsertSources } from ${JSON.stringify(pathToFileURL(path.join(REPO, 'bin', 'lib', 'library.ts')).href)};`,
+      `console.log('READY');`,
+      `const r = await upsertSources(process.argv[2], [`,
+      `  { source: 'crossref', doi: '10.5555/other.1', title: 'Other process work', authors: ['Other, B.'], year: 2002 },`,
+      `], { provenance: 'other' });`,
+      `console.log('ADDED ' + r.outcomes.map((o) => o.citekey).join(','));`,
+    ].join('\n'),
+  );
+
+  const release = await tryAcquire(libraryPaths(link).library); // held before LIBRARY.json exists
+  let done!: Promise<{ code: number | null; out: string }>;
+  try {
+    fs.writeFileSync(libraryPaths(link).library, created);
+    const child = spawn(process.execPath, ['--import', 'tsx', worker, link], { cwd: REPO, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    let ready!: () => void;
+    const readySeen = new Promise<void>((resolve) => (ready = resolve));
+    child.stdout.on('data', (d: Buffer) => {
+      out += d.toString();
+      if (out.includes('READY')) ready();
+    });
+    child.stderr.on('data', (d: Buffer) => (out += d.toString()));
+    done = new Promise((resolve) => child.on('close', (code) => resolve({ code, out })));
+    // Give the other process time to finish an upsert it should NOT be able to start.
+    await Promise.race([done, readySeen.then(() => new Promise((r) => setTimeout(r, 1500)))]);
+    fs.writeFileSync(libraryPaths(link).library, holderResult);
+  } finally {
+    await release();
+  }
+  const r = await done;
+  assert.equal(r.code, 0, r.out);
+  const added = /ADDED (\S+)/.exec(r.out)?.[1];
+  assert.ok(added, r.out);
+  const lib = await loadLibrary(real);
+  assert.deepEqual(
+    lib.entries.map((e) => e.citekey).sort(),
+    [...expected, added].sort(),
+    "the other process's upsert ran after the holder's write, not beside it",
+  );
 });
 
 // ---------------------------------------------------------------------------
