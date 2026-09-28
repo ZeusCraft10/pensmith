@@ -18,6 +18,7 @@ import { loadState } from '../bin/lib/state.js';
 import { loadLibrary } from '../bin/lib/library.js';
 import { loadOutline } from '../bin/lib/outline.js';
 import { loadSection } from '../bin/lib/section.js';
+import { parseSectionId } from '../bin/lib/section-id.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
 import { paperDir } from '../bin/lib/paths.js';
 import { buildStatusView } from '../bin/lib/status-view.js';
@@ -63,13 +64,14 @@ export function registerPaperResources(server: McpServer, paperRoot: string): vo
   server.registerResource(
     'section',
     new ResourceTemplate('paper://section/{n}', { list: undefined }),
-    { title: 'Paper section', description: 'Per-section state + plan/draft/verification markdown.', mimeType: 'application/json' },
+    { title: 'Paper section', description: 'Per-section state, assigned_sources + plan/draft/verification markdown (n may carry a letter: 1a).', mimeType: 'application/json' },
     async (uri, vars) => {
-      const n = Number(vars.n);
-      if (!Number.isInteger(n) || n < 1) {
+      // GRND-09: a section id is a number with an optional letter (`2`, `1a`).
+      const id = parseSectionId(String(vars.n));
+      if (id === null) {
         throw new Error(`paper://section/{n}: invalid section number "${String(vars.n)}"`);
       }
-      const payload = await loadSection(paperRoot, n);
+      const payload = await loadSection(paperRoot, id);
       return { contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(payload, null, 2) }] };
     },
   );

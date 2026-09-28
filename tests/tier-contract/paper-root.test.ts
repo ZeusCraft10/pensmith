@@ -64,8 +64,15 @@ test('RUN-13 parity: paper://state and paper://section/3 read the paper the CLI 
     assert.equal(payload.verification, readFileSync(join(dir, 'VERIFICATION.md'), 'utf8'), 'verification');
     assert.equal(payload.state, 'verified', 'the PLAN.md frontmatter status verify wrote');
 
-    const other = JSON.parse(((await client.readResource({ uri: 'paper://section/4' })).contents[0] as { text: string }).text) as { plan?: string };
-    assert.equal(other.plan, undefined, 'section 4 was never planned (section isolation)');
+    // GRND-09 (Phase 18): outline approval gives every section its stub PLAN.md;
+    // planning, writing and verifying §3 never touched §4 (section isolation).
+    const other = JSON.parse(((await client.readResource({ uri: 'paper://section/4' })).contents[0] as { text: string }).text) as {
+      plan?: string; draft?: string; verification?: string; state: string;
+    };
+    assert.match(other.plan ?? '', /^stub: true$/m, 'section 4 still holds only the outline\'s stub (section isolation)');
+    assert.equal(other.state, 'planned');
+    assert.equal(other.draft, undefined, 'section 4 was never drafted');
+    assert.equal(other.verification, undefined, 'section 4 was never verified');
   } finally {
     await client.close();
   }

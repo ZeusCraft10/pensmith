@@ -29,6 +29,21 @@
 // the section walk uses it AND bin/cli/status.ts imports + reuses it, so NO
 // component does a raw unguarded parseFrontmatter(readFileSync(planPath)).
 //
+// SECTION-STATE → VERB MAP (Phase 18: GRND-08, GRND-13, FEED-04). Sections are
+// walked in (n, suffix) order (§1 < §1a < §2); the first one not `verified`
+// decides:
+//   PLAN.md absent                        → plan
+//   planned + `stub: true` (the outline's) → plan
+//   planned (a planner-written PLAN.md)   → write
+//   writing                               → write
+//   written / verifying / unverifiable    → verify
+//   failed WITH a DRAFT.md                → verify (re-attempt verification)
+//   failed WITHOUT a DRAFT.md             → status/attention, detail naming
+//                                           `pensmith write N` (never a paid loop)
+//   corrupt PLAN.md / unknown status      → status/attention + detail
+// Before the walk: OUTLINE.rejected.md with no registered section → status/
+// attention naming `pensmith outline` (a failed outline is never re-billed).
+//
 // Imports: loadState/StateNotFoundError (state.ts), existsSync (node:fs), join
 // (node:path), paperDir/sectionPlan (paths.ts), loadFrontmatterDocSync
 // (frontmatter.ts — the CONF-04 versioned reader, used without write-back), and
@@ -38,25 +53,33 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadState, StateNotFoundError } from './state.js';
-import { paperDir, sectionPlan } from './paths.js';
+import { paperDir, sectionDraft, sectionPlan } from './paths.js';
 import { loadFrontmatterDocSync } from './frontmatter.js';
+import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
   | { verb: 'new' }
   | { verb: 'research' }
   | { verb: 'outline' }
-  | { verb: 'plan'; n: number; slug: string }
-  | { verb: 'write'; n: number; slug: string }
-  | { verb: 'verify'; n: number; slug: string }
+  // GRND-09 (D-18-16): `suffix` is the section's letter (§1a), absent for §1.
+  // `n` + `slug` stay the dispatch arguments: the section verbs find a
+  // lettered section by its slug.
+  | { verb: 'plan'; n: number; slug: string; suffix?: string }
+  | { verb: 'write'; n: number; slug: string; suffix?: string }
+  | { verb: 'verify'; n: number; slug: string; suffix?: string }
   | { verb: 'compile' }
   | { verb: 'done' }
   // C3-HIGH-1 / C4-HIGH: status.reason is widened so the resolver is TOTAL.
   //   reason:'done'      → DRAFT.md + FINAL.md both present (nothing left to do)
   //   reason:'attention' → a section is in an unrecognized state, a corrupt
-  //                        STATE.json / PLAN.md was reclassified here, or the
-  //                        guaranteed terminal fallback fired (proves totality)
-  | { verb: 'status'; reason: 'done' | 'attention'; section?: { n: number; slug: string } }
+  //                        STATE.json / PLAN.md was reclassified here, the last
+  //                        outline was rejected (GRND-08), a section failed
+  //                        without a draft (FEED-04), or the guaranteed
+  //                        terminal fallback fired (proves totality)
+  // `detail` (GRND-08, GRND-13, FEED-04) says what needs attention and names
+  // the command that fixes it; `status` prints it.
+  | { verb: 'status'; reason: 'done' | 'attention'; section?: { n: number; slug: string; suffix?: string }; detail?: string }
   // NOTE (H4): resolveNextAction NEVER emits this member. It exists ONLY for the
   // explicit `resume` verb's own return typing (bin/cli/resume.ts).
   | { verb: 'resume'; handoff: Handoff };
@@ -71,6 +94,17 @@ export interface SectionStateRead {
   corrupt: boolean;
   /** true if the file does not exist on disk (existsSync === false). */
   absent: boolean;
+}
+
+/**
+ * readSectionState plus the two Phase 18 fields the router and the status view
+ * need (readSectionInfo). readSectionState keeps its three-field shape.
+ */
+export interface SectionInfoRead extends SectionStateRead {
+  /** true for the stub outline approval wrote (`stub: true`, GRND-09): not planned yet. */
+  stub: boolean;
+  /** `failure_reason` (FEED-04: why write failed the section), or null. */
+  failureReason: string | null;
 }
 
 /**
@@ -92,24 +126,35 @@ export interface SectionStateRead {
  * component permitted to emit the per-section corrupt-PLAN.md stderr diagnostic.
  */
 export function readSectionState(planPath: string): SectionStateRead {
+  const { status, corrupt, absent } = readSectionInfo(planPath);
+  return { status, corrupt, absent };
+}
+
+/**
+ * The same guarded read (never throws, one stderr diagnostic for a corrupt
+ * file), also returning `stub` and `failure_reason` (GRND-13, FEED-04).
+ */
+export function readSectionInfo(planPath: string): SectionInfoRead {
   if (!existsSync(planPath)) {
-    return { status: 'planned', corrupt: false, absent: true };
+    return { status: 'planned', corrupt: false, absent: true, stub: false, failureReason: null };
   }
   try {
     // CONF-04: the versioned loader, WITHOUT write-back (the router stays pure).
     // A PLAN.md newer than this build throws "upgrade pensmith" → corrupt below.
     const { frontmatter } = loadFrontmatterDocSync('plan', planPath);
-    const status = (frontmatter as { status?: unknown }).status;
+    const fm = frontmatter as { status?: unknown; stub?: unknown; failure_reason?: unknown };
     return {
-      status: typeof status === 'string' ? status : 'planned',
+      status: typeof fm.status === 'string' ? fm.status : 'planned',
       corrupt: false,
       absent: false,
+      stub: fm.stub === true,
+      failureReason: typeof fm.failure_reason === 'string' && fm.failure_reason.trim() ? fm.failure_reason.trim() : null,
     };
   } catch (e) {
     process.stderr.write(
       `[pensmith] PLAN.md at ${planPath} is unreadable/corrupt: ${(e as Error).message}\n`,
     );
-    return { status: 'planned', corrupt: true, absent: false };
+    return { status: 'planned', corrupt: true, absent: false, stub: false, failureReason: null };
   }
 }
 
@@ -189,38 +234,82 @@ export async function resolveNextAction(
       return { verb: 'status', reason: 'done' };
     }
 
-    if (!existsSync(join(pDir, 'OUTLINE.md'))) return { verb: 'outline' };
-
     // C4-HIGH SECTIONS-NULL GUARD: schema makes sections .optional().
     const sections = state.sections ?? [];
+
+    // GRND-08 (D-18-15): the last `outline` was rejected and no section is
+    // registered — report attention naming the command instead of
+    // re-dispatching (and re-billing) a failed outline on every bare run.
+    // A successful `pensmith outline` deletes the rejection file.
+    if (sections.length === 0 && existsSync(join(pDir, 'OUTLINE.rejected.md'))) {
+      return {
+        verb: 'status',
+        reason: 'attention',
+        detail:
+          'the last outline was rejected (the replies are in .paper/OUTLINE.rejected.md) — ' +
+          'fix the problem it names, then run `pensmith outline`',
+      };
+    }
+
+    if (!existsSync(join(pDir, 'OUTLINE.md'))) return { verb: 'outline' };
     if (sections.length === 0) return { verb: 'outline' };
 
-    // Walk sections ascending by n; the FIRST non-'verified' section decides
-    // the verb (C3-HIGH-1: TOTAL over SectionStateSchema; 'verified' is the ONLY
-    // continue case; 'failed'/'unverifiable' route BACK to verify).
-    for (const { n, slug } of [...sections].sort((a, b) => a.n - b.n)) {
-      const r = readSectionState(sectionPlan(n, slug, paperRoot));
+    // Walk sections in (n, suffix) order (GRND-09: 1 < 1a < 2); the FIRST
+    // non-'verified' section decides the verb (C3-HIGH-1: TOTAL over
+    // SectionStateSchema; 'verified' is the ONLY continue case).
+    for (const { n, slug, suffix } of sortBySectionId(sections)) {
+      const id = suffix !== undefined ? { n, slug, suffix } : { n, slug };
+      const label = formatSectionId(sectionIdOf(n, suffix));
+      const r = readSectionInfo(sectionPlan(n, slug, paperRoot));
       // C5-HIGH: distinguish a GENUINELY-ABSENT PLAN.md (→ plan) from a
       // PRESENT-but-corrupt/unreadable one (→ status/attention+section).
-      if (r.absent) return { verb: 'plan', n, slug };
-      if (r.corrupt) return { verb: 'status', reason: 'attention', section: { n, slug } };
+      if (r.absent) return { verb: 'plan', ...id };
+      if (r.corrupt) {
+        return {
+          verb: 'status',
+          reason: 'attention',
+          section: id,
+          detail: `section ${label}'s PLAN.md is unreadable — fix it, or re-plan with \`pensmith plan ${label}\``,
+        };
+      }
 
       switch (r.status) {
         case 'verified':
           continue; // the ONLY continue case
         case 'planned':
-          return { verb: 'plan', n, slug };
+          // GRND-13: the outline's stub still needs its plan; a planned
+          // section (no `stub`) is ready to draft. Only write sets 'writing'.
+          return r.stub ? { verb: 'plan', ...id } : { verb: 'write', ...id };
         case 'writing':
-          return { verb: 'write', n, slug };
+          return { verb: 'write', ...id };
+        case 'failed':
+          // FEED-04 (D-18-25): write failed the section and kept no draft
+          // (e.g. the drafter cited a source outside its assignment twice).
+          // Never a paid loop: report it and name the retry.
+          if (!existsSync(sectionDraft(n, slug, paperRoot))) {
+            return {
+              verb: 'status',
+              reason: 'attention',
+              section: id,
+              detail:
+                `section ${label} failed${r.failureReason ? `: ${r.failureReason}` : ''} — ` +
+                `adjust its plan or sources if needed, then run \`pensmith write ${label}\``,
+            };
+          }
+          return { verb: 'verify', ...id }; // re-attempt verification — NOT continue
         case 'written':
         case 'verifying':
-        case 'failed': // re-attempt verification — NOT continue
         case 'unverifiable': // re-attempt verification — NOT continue
-          return { verb: 'verify', n, slug };
+          return { verb: 'verify', ...id };
         default:
           // Unrecognized status (hand-edited PLAN.md): surface a stuck-section
           // status instead of falling through to undefined.
-          return { verb: 'status', reason: 'attention', section: { n, slug } };
+          return {
+            verb: 'status',
+            reason: 'attention',
+            section: id,
+            detail: `section ${label}'s PLAN.md has an unknown status "${r.status}"`,
+          };
       }
     }
 

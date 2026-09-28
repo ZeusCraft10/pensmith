@@ -4,8 +4,15 @@
 // 04-01 read-only wave scheduler and the EXISTING per-section writer: when
 // `pensmith write` is invoked WITHOUT a section number, it loads the outline,
 // builds the wave graph, and drains the waves one at a time — running each
-// wave's sections in bounded parallel (Tier 1) or serially (Tier 2) by calling
-// `opts.writeSection` for each node.
+// wave's sections in bounded parallel, at most `maxParallel` at a time, by
+// calling `opts.writeSection` for each node.
+//
+// Phase 18 (GRND-16, D-18-27): each section's PLAN.md is read and validated
+// here. A malformed PLAN.md never aborts the wave with a raw ZodError: it is
+// reported through `onInvalidPlan` as one line naming the file and the field,
+// and the section stays out of the graph while independent sections still
+// draft. A stub PLAN.md (the outline's, `stub: true`) is not planned yet and
+// is reported through `onUnplanned`. Sections are taken in (n, suffix) order.
 //
 // HARD INVARIANTS:
 //   - READ-ONLY orchestrator (ARCH-20 / D-04): this module persists NOTHING of
@@ -20,9 +27,9 @@
 //   - After a wave settles, any downstream node whose `depends_on` (transitively)
 //     includes a failed/blocked slug is marked `blocked` and SKIPPED in later
 //     waves (D-03). Orthogonal subtrees proceed normally.
-//   - A serial run (maxParallel === 1) emits EXACTLY ONE WARN to stderr
-//     (workflows/write.md, D-02) — stderr, never stdout, to keep the MCP stdio
-//     frame clean (T-04-13). Both tiers otherwise honor maxParallel.
+//   - Both tiers honor maxParallel (a fresh Semaphore per wave); a serial run
+//     (maxParallel === 1) is simply that — no warning (GRND-16 superseded the
+//     Phase 4 "--max-parallel ignored" WARN, which was never true).
 //   - A thrown non-Error from writeSection is normalized to an Error by runWave
 //     (Research §P-5); we never nest Semaphore.withLock (§P-4).
 //   - A failure the caller marks FATAL (opts.stopOn — e.g. the session cost cap
@@ -30,10 +37,12 @@
 //     run: sections not yet started — queued in this wave or in later waves —
 //     are `skipped`, never attempted (RUN-09: one failure, one exit code).
 
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { Semaphore } from './budget.js';
 import { loadOutline } from './outline.js';
-import { parseOutline } from './outline-parse.js';
-import { loadFrontmatterDoc } from './frontmatter.js';
+import { orderedOutlineSections, outlineSectionId, parseOutline } from './outline-parse.js';
+import { loadFrontmatterDocSync } from './frontmatter.js';
 import { sectionPlan } from './paths.js';
 import { PlanFrontmatterSchema, type PlanFrontmatter } from './schemas/plan-frontmatter.js';
 import { buildWaveGraph, runWave } from './scheduler.js';
@@ -74,8 +83,20 @@ export type SectionWrittenCallback = (opts: {
   assignedSources: string[];
 }) => void;
 
+/** A section left out of the wave, and why (GRND-16). */
+export interface SectionSkip {
+  n: number;
+  slug: string;
+  /** The section id as printed (`1`, `1a`). */
+  id: string;
+  /** The PLAN.md path relative to the project root (forward slashes). */
+  planPath: string;
+  /** One line: the file and the field for an invalid PLAN.md. */
+  reason: string;
+}
+
 export interface RunAllSectionsOpts {
-  /** Per-wave concurrency cap (1 = serial, with a single WARN). */
+  /** Per-wave concurrency cap (1 = one section at a time). */
   maxParallel: number;
   /** The existing per-section writer, invoked once per non-blocked node. */
   writeSection: (node: SectionNode) => Promise<void>;
@@ -97,6 +118,10 @@ export interface RunAllSectionsOpts {
    * section would fail the same way). Sections not yet started are `skipped`.
    */
   stopOn?: (reason: unknown) => boolean;
+  /** A section whose PLAN.md is malformed (named by file and field); it is left out. */
+  onInvalidPlan?: (skip: SectionSkip) => void;
+  /** A section whose PLAN.md is still the outline's stub; it is left out until planned. */
+  onUnplanned?: (skip: SectionSkip) => void;
 }
 
 /** Thrown for a section that was never started because the run stopped. */
@@ -107,27 +132,34 @@ class SkippedAfterFatalError extends Error {
   }
 }
 
+/** A single section's PLAN.md, read and validated (GRND-16). */
+type PlanRead =
+  | { kind: 'absent' }
+  | { kind: 'invalid'; reason: string }
+  | { kind: 'ok'; plan: PlanFrontmatter };
+
 /**
  * Read a single section's PLAN.md frontmatter and validate it against
- * PlanFrontmatterSchema. Returns `null` when the PLAN.md is absent — the
- * scheduler treats a not-yet-planned section as "skip this run" (D-04).
+ * PlanFrontmatterSchema. `absent` — the scheduler treats a not-yet-planned
+ * section as "skip this run" (D-04); `invalid` — one line naming the field.
  */
-async function loadPlanFrontmatter(
-  paperRoot: string,
-  n: number,
-  slug: string,
-): Promise<PlanFrontmatter | null> {
+function loadPlanFrontmatter(planPath: string): PlanRead {
+  if (!existsSync(planPath)) return { kind: 'absent' };
   let frontmatter: Record<string, unknown>;
   try {
     // CONF-04: the versioned reader (a v0 PLAN.md is migrated in memory; the
     // per-section writer persists it when it updates the section's status). The
     // scheduler itself stays stateless — it writes nothing.
-    ({ frontmatter } = await loadFrontmatterDoc('plan', sectionPlan(n, slug, paperRoot)));
+    ({ frontmatter } = loadFrontmatterDocSync('plan', planPath));
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    throw err;
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'absent' };
+    return { kind: 'invalid', reason: ((err as Error).message.split('\n')[0] ?? 'unreadable').trim() };
   }
-  return PlanFrontmatterSchema.parse(frontmatter);
+  const r = PlanFrontmatterSchema.safeParse(frontmatter);
+  if (r.success) return { kind: 'ok', plan: r.data };
+  const issue = r.error.issues[0];
+  const where = issue && issue.path.length > 0 ? issue.path.join('.') : 'frontmatter';
+  return { kind: 'invalid', reason: `invalid field "${where}": ${issue?.message ?? 'invalid'}` };
 }
 
 /**
@@ -141,32 +173,44 @@ export async function runAllSections(
   paperRoot: string,
   opts: RunAllSectionsOpts,
 ): Promise<WaveResult[]> {
-  // D-02: a serial run emits EXACTLY ONE WARN to stderr (never stdout — keeps
-  // the MCP stdio frame clean, T-04-13).
-  if (opts.maxParallel === 1) {
-    process.stderr.write(
-      'WARN: Tier 2 runs sections serially; --max-parallel ignored\n',
-    );
-  }
-
   // 1. Load + parse the outline (reader-order section list + dependency graph).
   const raw = await loadOutline(paperRoot);
   const outline = parseOutline(raw);
 
-  // 2. Build the slug→PlanFrontmatter map. A section with NO PLAN.md is skipped
-  //    (buildWaveGraph omits it). Honor an `only` allow-list by skipping any
+  // 2. Build the slug→PlanFrontmatter map, in (n, suffix) order. A section with
+  //    NO PLAN.md is skipped (buildWaveGraph omits it); a malformed one is
+  //    reported (onInvalidPlan) and skipped; the outline's stub is reported
+  //    (onUnplanned) and skipped. Honor an `only` allow-list by skipping any
   //    section not named — those sections never enter the graph, so their
   //    artifacts are never touched (section-as-phase isolation).
   const allow = opts.only ? new Set(opts.only) : null;
   const plans = new Map<string, PlanFrontmatter>();
-  for (const s of outline.sections) {
+  const ordered = orderedOutlineSections(outline);
+  for (const s of ordered) {
     if (allow && !allow.has(s.slug)) continue;
-    const plan = await loadPlanFrontmatter(paperRoot, s.n, s.slug);
-    if (plan) plans.set(s.slug, plan);
+    const planPath = sectionPlan(s.n, s.slug, paperRoot);
+    const skip = (reason: string): SectionSkip => ({
+      n: s.n,
+      slug: s.slug,
+      id: outlineSectionId(s),
+      planPath: path.relative(paperRoot, planPath).split(path.sep).join('/'),
+      reason,
+    });
+    const read = loadPlanFrontmatter(planPath);
+    if (read.kind === 'absent') continue;
+    if (read.kind === 'invalid') {
+      opts.onInvalidPlan?.(skip(read.reason));
+      continue;
+    }
+    if (read.plan.stub === true) {
+      opts.onUnplanned?.(skip('not planned yet'));
+      continue;
+    }
+    plans.set(s.slug, read.plan);
   }
 
   // 3. Build the wave graph (Kahn topo-sort + override validation + cycles).
-  const graph = buildWaveGraph(outline, plans);
+  const graph = buildWaveGraph({ ...outline, sections: ordered }, plans);
 
   // 4. Drain waves serially. Track slugs that ended `failed` or `blocked` so a
   //    downstream node whose deps include one is pruned from later waves (D-03).

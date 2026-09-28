@@ -344,6 +344,16 @@ for (const verb of VERBS_FOR_INTEGRATION) {
     assert.ok(fs.existsSync(CLI_BIN), `${CLI_BIN} missing — run \`npm run build\``);
     const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), `pensmith-t1106-${verb}-`));
     fs.mkdirSync(path.join(tmpRoot, '.paper'), { recursive: true });
+    if (verb === 'write') {
+      // GRND-16 (Phase 18): write drafts a PLANNED section only (an absent or
+      // stub PLAN.md is refused, naming `pensmith plan N`), so give it one.
+      const dir = path.join(tmpRoot, '.paper', 'sections', '01-placeholder');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'PLAN.md'),
+        '---\nschema_version: 2\nsection: 1\nslug: placeholder\ntitle: Section one\ndepends_on: []\nassigned_sources: []\nstatus: planned\nverified_against_draft_hash: null\n---\n\n## Claims\n\n1. A claim.\n   - Sources: (none)\n',
+      );
+    }
     try {
       const result = spawnSync(process.execPath, [CLI_BIN, VERB_CLI_NAME[verb], ...VERB_REQUIRED_ARGS[verb]], {
         cwd: tmpRoot, env: spawnEnv(tmpRoot, { PENSMITH_NO_LLM: '1' }), encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'],

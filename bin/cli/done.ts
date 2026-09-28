@@ -30,7 +30,7 @@ import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
 import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
 import { exportDraft, runHumanizer, type ExportFormat } from '../lib/exporter.js';
-import { paperDir, projectRoot } from '../lib/paths.js';
+import { paperDir, projectRoot, SECTION_ARCHIVE_DIRNAME } from '../lib/paths.js';
 import { parseIntakeMd } from '../lib/intake-parse.js';
 import { resolveStyleName, parseBibFileAt } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
@@ -229,7 +229,9 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
   let dirNames: string[] = [];
   try {
     dirNames = readdirSync(sectionsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
+      // GRND-09: `sections/_archive/` holds sections a re-outline dropped —
+      // they are not part of the paper, so the gate does not read them.
+      .filter((d) => d.isDirectory() && d.name !== SECTION_ARCHIVE_DIRNAME)
       .map((d) => d.name)
       .sort();
   } catch {

@@ -39,8 +39,8 @@ import { migrate as runtimeV1ToV2 } from '../bin/lib/migrations/runtime-config/v
 
 const ISO = '2026-05-08T00:00:00.000Z';
 
-test('CURRENT_*_VERSION constants (state=2, library=2, session-log=2, runtime-config=2, others=1)', () => {
-  assert.equal(CURRENT_STATE_VERSION, 2);
+test('CURRENT_*_VERSION constants (state=3, library=2, session-log=2, runtime-config=2, others=1)', () => {
+  assert.equal(CURRENT_STATE_VERSION, 3); // Phase 18 GRND-09: optional section `suffix` (§1a)
   assert.equal(CURRENT_LIBRARY_VERSION, 2); // BRDTH-01: LIBRARY.json v2 (one writer)
   assert.equal(CURRENT_CHECKPOINT_VERSION, 1);
   assert.equal(CURRENT_SESSION_LOG_VERSION, 2); // Phase 17: the llm + http record kinds
@@ -52,7 +52,7 @@ test('CURRENT_*_VERSION constants (state=2, library=2, session-log=2, runtime-co
 test('state: valid example parses', () => {
   assert.ok(
     StateSchema.safeParse({
-      $schemaVersion: 2,
+      $schemaVersion: 3,
       paperId: 'demo',
       createdAt: ISO,
     }).success,
@@ -62,7 +62,7 @@ test('state: valid example parses', () => {
 test('state: rejects empty paperId / wrong $schemaVersion / bad createdAt', () => {
   assert.ok(
     !StateSchema.safeParse({
-      $schemaVersion: 2,
+      $schemaVersion: 3,
       paperId: '',
       createdAt: ISO,
     }).success,
@@ -74,11 +74,11 @@ test('state: rejects empty paperId / wrong $schemaVersion / bad createdAt', () =
       paperId: 'demo',
       createdAt: ISO,
     }).success,
-    'wrong $schemaVersion must be rejected (literal-2 guard)',
+    'wrong $schemaVersion must be rejected (literal-3 guard)',
   );
   assert.ok(
     !StateSchema.safeParse({
-      $schemaVersion: 2,
+      $schemaVersion: 3,
       paperId: 'demo',
       createdAt: 'not-iso',
     }).success,

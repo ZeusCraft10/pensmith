@@ -361,13 +361,14 @@ test('schema validation failure throws SchemaValidationError with rich issues', 
   await withTmp(async (dir) => {
     const file = path.join(dir, 's.json');
     // Bad: empty paperId AND non-iso createdAt — both fail StateSchema.
-    // $schemaVersion must equal CURRENT_STATE_VERSION (2) so the loader reaches
-    // the validation path; a stale v1 here would instead trip the (registry-less)
-    // migration-lookup branch and throw "missing migration" before validating.
+    // $schemaVersion must equal CURRENT_STATE_VERSION (3 since Phase 18) so the
+    // loader reaches the validation path; a stale version here would instead trip
+    // the (registry-less) migration-lookup branch and throw "missing migration"
+    // before validating.
     await seed(
       file,
       JSON.stringify({
-        $schemaVersion: 2,
+        $schemaVersion: CURRENT_STATE_VERSION,
         paperId: '',
         createdAt: 'not-a-date',
       }),

@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { computeDraftHash } from '../../bin/lib/draft-hash.js';
+import { CURRENT_STATE_VERSION } from '../../bin/lib/schemas/state.js';
 
 export const REPO = fileURLToPath(new URL('../../', import.meta.url));
 export const CLI_BIN = join(REPO, 'dist', 'bin', 'pensmith.js');
@@ -134,11 +135,15 @@ export const STACK_LINE = /^\s+at .*\.[cm]?[jt]s:\d+/m;
 // Paper fixtures
 // ---------------------------------------------------------------------------
 
-export function writeState(root: string, sections: Array<{ n: number; slug: string }>, paperId = 'paper-cli-test'): void {
+/**
+ * A current-version STATE.json (v3 since Phase 18), so reading the fixture never
+ * runs a migration write-back — a test's "nothing changed" snapshot stays exact.
+ */
+export function writeState(root: string, sections: Array<{ n: number; slug: string; suffix?: string }>, paperId = 'paper-cli-test'): void {
   mkdirSync(join(root, '.paper'), { recursive: true });
   writeFileSync(
     join(root, '.paper', 'STATE.json'),
-    JSON.stringify({ $schemaVersion: 2, paperId, createdAt: '2026-01-01T00:00:00.000Z', sections }, null, 2) + '\n',
+    JSON.stringify({ $schemaVersion: CURRENT_STATE_VERSION, paperId, createdAt: '2026-01-01T00:00:00.000Z', sections }, null, 2) + '\n',
   );
 }
 

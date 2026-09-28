@@ -516,7 +516,7 @@ export async function validateArgv(argv: readonly string[]): Promise<ValidatedAr
   // RUN-09: a per-section verb's positional is a section number. `plan abc`
   // is a usage error — never routed as if no number were given.
   const sectionArg = positionalValues[0];
-  if (verb !== null && SECTION_NUMBER_VERBS.includes(verb) && sectionArg !== undefined && !/^\d+$/.test(sectionArg)) {
+  if (verb !== null && SECTION_NUMBER_VERBS.includes(verb) && sectionArg !== undefined && !/^\d+[a-z]?$/.test(sectionArg)) {
     throw usage(`pensmith ${verb}: <n> must be a section number from 1 to 99; got '${sectionArg}'`);
   }
   return { verb, paperFlag, help, version, positionals: positionalValues, argv: normalizeGlobalBooleans(argv, booleans) };
@@ -644,8 +644,9 @@ function isSectionVerbWithoutNumber(argv: string[], verb: Ux02Verb): boolean {
   for (let i = verbIdx + 1; i < argv.length; i++) {
     const tok = argv[i];
     if (tok === undefined) continue;
-    // A bare numeric token after the verb is the section positional.
-    if (!tok.startsWith('-') && /^\d+$/.test(tok)) return false;
+    // A bare section id after the verb is the section positional (`2`, or `1a`
+    // for an inserted section — GRND-09).
+    if (!tok.startsWith('-') && /^\d+[a-z]?$/.test(tok)) return false;
   }
   return true;
 }
@@ -658,12 +659,13 @@ function isSectionVerbWithoutNumber(argv: string[], verb: Ux02Verb): boolean {
 async function invocationScope(argv: string[], checked: ValidatedArgv): Promise<EstimateScope> {
   const verb = checked.verb;
   if (verb !== null && verb !== 'next' && verb !== 'resume' && !isSectionVerbWithoutNumber(argv, verb)) {
-    const n = checked.positionals.find((p) => /^\d+$/.test(p));
-    return n !== undefined ? { verb, section: Number(n) } : { verb };
+    const n = checked.positionals.find((p) => /^\d+[a-z]?$/.test(p));
+    return n !== undefined ? { verb, section: /^\d+$/.test(n) ? Number(n) : n } : { verb };
   }
   const root = projectRoot();
   const decision = await resolveNextAction(root, { stopAfterResearch: stopAfterResearchFor(readGoalFromConfig(root)) });
-  return 'n' in decision ? { verb: decision.verb, section: decision.n } : { verb: decision.verb };
+  if (!('n' in decision)) return { verb: decision.verb };
+  return { verb: decision.verb, section: decision.suffix !== undefined ? `${decision.n}${decision.suffix}` : decision.n };
 }
 
 /** `outline`, or `write §1, write §2, write §3`, or `write §1 … write §9 (9 steps)`. */

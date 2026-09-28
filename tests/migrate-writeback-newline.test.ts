@@ -12,8 +12,9 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadAndMigrate } from '../bin/lib/migrations/loader.js';
-import { Schema as StateSchema } from '../bin/lib/schemas/state.js';
+import { CURRENT_STATE_VERSION, Schema as StateSchema } from '../bin/lib/schemas/state.js';
 import v1_to_v2_migration from '../bin/lib/migrations/state/v1_to_v2.js';
+import v2_to_v3_migration from '../bin/lib/migrations/state/v2_to_v3.js';
 
 test('audit #35: a migrated write-back ends with exactly one trailing newline', async () => {
   const file = join(mkdtempSync(join(tmpdir(), 'pensmith-mig-nl-')), 'STATE.json');
@@ -31,8 +32,8 @@ test('audit #35: a migrated write-back ends with exactly one trailing newline', 
     file,
     schema: StateSchema,
     schemaName: 'state',
-    currentVersion: 2, // v2 is the current state schema; the 1→2 migration runs
-    migrations: { 1: v1_to_v2_migration },
+    currentVersion: CURRENT_STATE_VERSION, // the 1→2 and 2→3 migrations run
+    migrations: { 1: v1_to_v2_migration, 2: v2_to_v3_migration },
     writeBack: true,
   });
 

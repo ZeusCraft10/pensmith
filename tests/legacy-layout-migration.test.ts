@@ -25,9 +25,12 @@ import {
   type Sandbox,
 } from './helpers/paper-cli-harness.js';
 import { loadChokepointRow, rowPattern, scopedFiles, violations } from './helpers/chokepoint-row.js';
+import { CURRENT_STATE_VERSION } from '../bin/lib/schemas/state.js';
 
+// The layout under test is the file LOCATION; the envelope is the current
+// STATE.json version, so no schema migration rewrites the moved file.
 const LEGACY_STATE = JSON.stringify({
-  $schemaVersion: 2,
+  $schemaVersion: CURRENT_STATE_VERSION,
   paperId: 'legacy-paper',
   createdAt: '2026-01-01T00:00:00.000Z',
   sections: [{ n: 1, slug: 'intro' }],
@@ -53,7 +56,7 @@ test('RUN-13: `pensmith new --yolo --from a.txt` writes .paper/STATE.json and no
   assert.ok(existsSync(join(root, '.paper', 'INTAKE.md')), '.paper/INTAKE.md');
   assert.ok(!existsSync(join(root, 'STATE.json')), 'no root-level STATE.json');
   const st = JSON.parse(readFileSync(join(root, '.paper', 'STATE.json'), 'utf8')) as { $schemaVersion: number; paperId: string };
-  assert.equal(st.$schemaVersion, 2);
+  assert.equal(st.$schemaVersion, CURRENT_STATE_VERSION);
   assert.ok(st.paperId.length > 0);
 });
 

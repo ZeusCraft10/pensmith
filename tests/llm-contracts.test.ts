@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
 import { withLlmSandbox, type LlmSandbox } from './helpers/llm-sandbox.js';
-import { complete, StructuredOutputError } from '../bin/lib/anthropic.js';
+import { complete } from '../bin/lib/anthropic.js';
 import {
   CONTRACTS,
   OutlineSchema,
@@ -27,7 +27,7 @@ import {
 import { setRuntimeOverride } from '../bin/lib/runtime.js';
 import { parseOutline, renderOutlineMd } from '../bin/lib/outline-parse.js';
 import { parseFrontmatter } from '../bin/lib/frontmatter.js';
-import { outlineCommand } from '../bin/cli/outline.js';
+import { outlineCommand, OutlineRejectedError } from '../bin/cli/outline.js';
 import { planCommand } from '../bin/cli/plan.js';
 
 const KEY = 'sk-test-contracts-0001';
@@ -199,21 +199,27 @@ test('RUN-21: `shape` limits the mock to one API (the other answers 404)', async
   }
 });
 
-test('RUN-25: invalid twice → StructuredOutputError after exactly 2 requests; OUTLINE.md is not written', async () => {
+test('RUN-25: invalid twice → one-line refusal after exactly 2 requests; OUTLINE.md is not written', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     fs.writeFileSync(path.join(sb.paper, 'INTAKE.md'), 'Topic: tidal energy\nDiscipline: engineering\n');
     sb.mock!.script('outline-author', { text: 'Sections: intro, body, end.' }, { text: '{"sections": "three"}' });
+    // GRND-08 (Phase 18): the outline verb turns the transport's
+    // StructuredOutputError into its own refusal and saves the replies in
+    // .paper/OUTLINE.rejected.md — the only file a failed outline writes.
     await assert.rejects(
       (outlineCommand.run as Run)({ args: { yolo: true, force: true } }),
       (e: unknown) =>
-        e instanceof StructuredOutputError &&
+        e instanceof OutlineRejectedError &&
         e.exitCode === 1 &&
         !e.message.includes('\n') &&
-        /outline-author: the reply from claude-opus-5 did not match the required schema after one corrective retry/.test(e.message) &&
-        /nothing was written/.test(e.message),
+        /^outline rejected: the reply from claude-opus-5 did not match the required schema after one corrective retry/.test(e.message) &&
+        /OUTLINE\.md and the sections are unchanged; the replies are in \.paper\/OUTLINE\.rejected\.md$/.test(e.message),
     );
     assert.equal(sb.mock!.callCount('outline-author'), 2, 'one initial + one corrective, never a third');
     assert.equal(fs.existsSync(path.join(sb.paper, 'OUTLINE.md')), false);
+    const rejected = fs.readFileSync(path.join(sb.paper, 'OUTLINE.rejected.md'), 'utf8');
+    assert.match(rejected, /Sections: intro, body, end\./, 'the first reply is saved');
+    assert.match(rejected, /\{"sections": "three"\}/, 'the corrective reply is saved');
   });
 });
 
@@ -256,26 +262,43 @@ test('RUN-25: OUTLINE.md is rendered from the validated object (not model text) 
   });
 });
 
-test('RUN-25: PLAN.md is rendered from the validated object; identity/deps from OUTLINE.md; sources limited to the library', async () => {
+test('RUN-25: PLAN.md is rendered from the validated object; identity/deps from OUTLINE.md; sources checked, never silently dropped', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     await seedLibrary(sb);
     fs.writeFileSync(path.join(sb.paper, 'OUTLINE.md'), renderOutlineMd(OutlineSchema.parse(OUTLINE_OBJECT), 'Tidal energy'));
-    sb.mock!.script('section-planner', {
-      data: {
-        frontmatter: { section: 9, slug: 'wrong-slug', title: 'Model title', depends_on: ['nowhere'], assigned_sources: ['jones2021', 'ghost2099', 'jones2021'] },
-        body: '## Brief\n\nCompare levelized costs across two arrays.',
-      },
-    });
+    // GRND-13 (Phase 18): a planner reply with a wrong identity or a citekey
+    // outside the section's sources is REFUSED (one corrective turn, then
+    // "planner output invalid") instead of being silently repaired.
+    const bad = {
+      frontmatter: { section: 9, slug: 'wrong-slug', title: 'Model title', depends_on: ['nowhere'], assigned_sources: ['jones2021', 'ghost2099'] },
+      claims: [{ claim: 'Costs fall.', sources: ['jones2021'], evidence: 'e', counterexamples: '' }],
+      structure: [{ paragraph: 1, purpose: 'p', claims: [1] }],
+      voice: 'measured',
+    };
+    const good = {
+      frontmatter: { section: 2, slug: 'costs', title: 'Model title', depends_on: ['introduction'], assigned_sources: ['jones2021'] },
+      claims: [{ claim: 'Levelized costs fall as arrays grow.', sources: ['jones2021'], evidence: 'The source reports falling costs.', counterexamples: 'Small sites.' }],
+      structure: [{ paragraph: 1, purpose: 'Compare levelized costs across two arrays.', claims: [1] }],
+      voice: 'Measured and quantitative.',
+    };
+    sb.mock!.script('section-planner', { data: bad }, { data: good });
     await (planCommand.run as Run)({ args: { n: '2', revise: false, yolo: true } });
+    assert.equal(sb.mock!.callCount('section-planner'), 2, 'invalid once, then valid: one corrective turn');
     const planPath = path.join(sb.paper, 'sections', '02-costs', 'PLAN.md');
     const { frontmatter, body } = parseFrontmatter(fs.readFileSync(planPath, 'utf8'));
     assert.equal(frontmatter['section'], 2);
     assert.equal(frontmatter['slug'], 'costs');
-    assert.equal(frontmatter['title'], 'Costs / and risks');
+    assert.equal(frontmatter['title'], 'Costs / and risks', 'the title comes from OUTLINE.md, not the model');
     assert.deepEqual(frontmatter['depends_on'], ['introduction']);
-    assert.deepEqual(frontmatter['assigned_sources'], ['jones2021'], 'fabricated and duplicate citekeys are dropped');
-    assert.equal(frontmatter['status'], 'writing');
-    assert.match(body.trim(), /^## Brief\n\nCompare levelized costs across two arrays\.$/);
+    assert.deepEqual(frontmatter['assigned_sources'], ['jones2021']);
+    assert.equal(frontmatter['status'], 'planned', 'only write sets writing');
+    assert.equal(frontmatter['stub'], undefined);
+    assert.match(body, /^## Claims\n\n1\. Levelized costs fall as arrays grow\.\n {3}- Sources: jones2021$/m);
+    // The corrective turn named the problems.
+    const retry = sb.mock!.bodiesFor('section-planner')[1]!;
+    const lastUser = JSON.stringify((retry['messages'] as unknown[]).at(-1));
+    assert.match(lastUser, /ghost2099/);
+    assert.match(lastUser, /wrong-slug/);
     // Section isolation: nothing else under sections/ was created.
     assert.deepEqual(fs.readdirSync(path.join(sb.paper, 'sections')), ['02-costs']);
   });

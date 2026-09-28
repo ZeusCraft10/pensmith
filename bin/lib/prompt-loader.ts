@@ -97,9 +97,9 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   'intake-clarifier':    'e2fa74ba6add0cac5f2fae1cb285d1023ed3e7057fa46f69320b38e207be9a39',  // D-12 LOCKED (re-pinned Plan 10-04 Task 1 — Q3 now offers all 8 citation styles; WN-3 lockstep with repo-files pin)
   'topic-disambiguator': '165e533fa1119ffca44a4876212679207d65501d7b71d0b9ed9de123df84b96e',  // D-12 LOCKED (research split #1)
   'source-evaluator':    '45488935a0bd44f08b4077978c66767f369b7fb4e72696ef5d17b5c6c453c762',  // D-12 LOCKED (research split #2)
-  'outline-author':      'f5124245f29c71de31ed2c330097d2141bba80c04d8a2d2cef955e0669068f42',  // D-12 LOCKED
-  'section-planner':     'e2991033be0f7e0b28a20ffc0bfa03355e999daf445070b709077c310d5ee5b5',  // D-12 LOCKED
-  'section-drafter':     'baf0172b4e2e96a2d2a1a6c35b5cf548faafd9436f1405e863060c619caa1d34',  // D-12 LOCKED
+  'outline-author':      '914bdd23f6182ac47b5679b45144a10ada702ab8e6eb3415db879063f7419c2a',  // D-12 LOCKED (re-pinned Phase 18 GRND-07/RUN-26: fixed instructions, data blocks brief/existing_sections/sources)
+  'section-planner':     'd10b4513bec7bbce182e6fb8fe31b64bc5f5f1352dda498ee0b2414ad3f5f28c',  // D-12 LOCKED (re-pinned Phase 18 GRND-13/RUN-26: fixed instructions, data blocks brief/section/upstream/sources)
+  'section-drafter':     '6e956d409a0236778913cbbbe424785e4d71012d4a27e946e135884d5709ead8',  // D-12 LOCKED (re-pinned Phase 18 FEED-02/RUN-26: fixed instructions, data blocks brief/section/voice/style_profile/plan/sources)
   'pass1-fuzzy-judge':   'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e',  // D-12 LOCKED + D-13 DORMANT in Phase 3
   'pass3-quote-checker': '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9',  // D-12 LOCKED + D-13 DORMANT in Phase 3
   // Phase 4 04-CONTEXT.md D-05 — hash-pinned revise-swap prompt. Re-pinned to

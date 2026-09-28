@@ -44,7 +44,7 @@ import { join } from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { loadAndMigrate } from './migrations/loader.js';
-import { loadState, StateNotFoundError, readStateTextSync } from './state.js';
+import { loadState, StateNotFoundError, readStateTextSync, migrateStateValue } from './state.js';
 import { Schema as StateSchema, type State } from './schemas/state.js';
 import { readSectionState } from './router.js';
 import { paperDir, sectionPlan, pensmithGlobalLibraryIndexPath } from './paths.js';
@@ -468,8 +468,11 @@ function loadStateSync(folderPath: string): SyncStateRead {
 
   try {
     // Validate against the AUTHORITATIVE StateSchema (same shape the async
-    // loadState validates). Invalid JSON or a schema-invalid envelope → corrupt.
-    const parsed = StateSchema.parse(JSON.parse(raw));
+    // loadState validates), after the same forward migrations run IN MEMORY
+    // (an older paper — e.g. a v2 STATE.json before Phase 18's v3 — is not
+    // corrupt; `list` never rewrites it). Invalid JSON or a schema-invalid
+    // envelope → corrupt.
+    const parsed = StateSchema.parse(migrateStateValue(JSON.parse(raw)));
     return { absent: false, corrupt: false, state: parsed };
   } catch {
     return { absent: false, corrupt: true };

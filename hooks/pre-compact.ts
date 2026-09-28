@@ -20,7 +20,7 @@ import {
 import { dirname, join, resolve } from 'node:path';
 import { assembleHandoff, writeHandoff } from '../bin/lib/handoff.js';
 import { loadFrontmatterDocSync } from '../bin/lib/frontmatter.js';
-import { paperDir as paperDirOf, paperStateFile, servicePaperRoot } from '../bin/lib/paths.js';
+import { paperDir as paperDirOf, paperStateFile, servicePaperRoot, SECTION_ARCHIVE_DIRNAME } from '../bin/lib/paths.js';
 import { migrateLegacyLayout } from '../bin/lib/state.js';
 import type { Handoff } from '../bin/lib/schemas/handoff.js';
 
@@ -188,6 +188,8 @@ function collectSectionPointers(
   // Source A: filesystem dirs under .paper/sections/<NN-slug>/
   const dirEntries = existsSync(sectionsDir)
     ? readdirSync(sectionsDir)
+        // GRND-09: `_archive/` holds dropped sections — not a section.
+        .filter((d) => d !== SECTION_ARCHIVE_DIRNAME)
         .map((d) => join(sectionsDir, d))
         .filter((d) => safeIsDir(d))
     : [];
@@ -197,7 +199,7 @@ function collectSectionPointers(
 
   for (const dir of dirEntries) {
     const basename = dir.split(/[/\\]/).pop()!;
-    const slug = basename.replace(/^\d+-/, '');
+    const slug = basename.replace(/^\d+[a-z]?-/, ''); // `01-intro`, `01a-background` (GRND-09)
     const planPath = join(dir, 'PLAN.md');
     const draftPath = existsSync(join(dir, 'DRAFT.md'))
       ? join(dir, 'DRAFT.md')

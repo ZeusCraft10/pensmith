@@ -62,6 +62,7 @@ import { loadAndMigrate } from './migrations/loader.js';
 import v1_to_v2_migration, {
   migrate as migrate_v1_to_v2,
 } from './migrations/state/v1_to_v2.js';
+import v2_to_v3_migration from './migrations/state/v2_to_v3.js';
 import {
   Schema as StateSchema,
   CURRENT_STATE_VERSION,
@@ -80,6 +81,7 @@ import {
   isLegacyPensmithState,
 } from './paths.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
+import { compareSectionIds, formatSectionId, sectionIdOf, type SectionId } from './section-id.js';
 
 // Registry of state forward migrations consumed by loadAndMigrate. Keyed by
 // SOURCE disk version: migrations[N] migrates v(N) → v(N+1). Added in Phase 3
@@ -87,7 +89,30 @@ import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 // (registry empty) — Wave 2 lights it up.
 const STATE_MIGRATIONS: Record<number, (input: unknown) => unknown> = {
   1: v1_to_v2_migration,
+  // Phase 18 (GRND-09, D-18-16): v3 admits an optional section `suffix`.
+  2: v2_to_v3_migration,
 };
+
+/**
+ * A parsed STATE.json value brought to CURRENT_STATE_VERSION in memory — the
+ * same forward migrations loadState runs, with NO write-back (the synchronous,
+ * read-only readers use it: `list` derives another paper's status without ever
+ * rewriting its files). A newer version is returned unchanged, so the schema
+ * parse that follows refuses it. Throws only if a migration step is missing.
+ */
+export function migrateStateValue(value: unknown): unknown {
+  const versionOf = (v: unknown): number => {
+    const n = typeof v === 'object' && v !== null ? (v as Record<string, unknown>)['$schemaVersion'] : undefined;
+    return typeof n === 'number' && Number.isInteger(n) && n >= 1 ? n : 1;
+  };
+  let out = value;
+  for (let version = versionOf(out); version < CURRENT_STATE_VERSION; version = versionOf(out)) {
+    const step = STATE_MIGRATIONS[version];
+    if (!step) throw new Error(`pensmith: missing migration state v${version} -> v${version + 1}`);
+    out = step(out);
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // Errors (per <interfaces> in 01-10-PLAN.md).
@@ -448,22 +473,56 @@ export async function updateState(
 //   isError !== true on valid input) while honoring the D-08 pivot.
 // ---------------------------------------------------------------------------
 
+/** A section id already taken by a different slug (GRND-09): one line, EXIT_ERROR. */
+export class SectionIdTakenError extends PensmithError {
+  constructor(id: SectionId, takenBy: string, wanted: string) {
+    super(
+      `section §${formatSectionId(id)} is already "${takenBy}" in STATE.json; it cannot also be "${wanted}"`,
+      EXIT_ERROR,
+    );
+    this.name = 'SectionIdTakenError';
+  }
+}
+
 /**
- * Initialise a new section row in state.sections. Idempotent per D-08:
- * re-init on an existing section number returns the prior state unchanged.
+ * Initialise a section row in state.sections (GRND-09, D-18-16).
  *
- * v2 shape: writes ONLY `{n, slug}` — no embedded state/status fields.
- * Per-section state lives in PLAN.md frontmatter from v2 onward (D-08).
+ * Idempotent BY SLUG (D-08): a slug that is already registered leaves
+ * STATE.json unchanged — whatever number it has (its folder is never
+ * renumbered). A different slug at an (n, suffix) that is already taken is
+ * refused (SectionIdTakenError), so two sections can never share a folder
+ * prefix. New rows are kept sorted by (n, suffix).
+ *
+ * v2+ shape: writes ONLY `{n, suffix?, slug}` — no embedded state/status
+ * fields. Per-section state lives in PLAN.md frontmatter (D-08).
  */
 export async function initSection(
   paperRoot: string,
   n: number,
   slug: string,
+  suffix?: string,
 ): Promise<State> {
+  const id = sectionIdOf(n, suffix);
   return updateState(paperRoot, (prev) => {
     const sections = prev.sections ?? [];
-    if (sections.some((s) => s.n === n)) return prev; // idempotent (D-08)
-    return { ...prev, sections: [...sections, { n, slug }] };
+    if (sections.some((s) => s.slug === slug)) return prev; // idempotent by slug (D-08)
+    const taken = sections.find((s) => s.n === id.n && (s.suffix ?? '') === (id.suffix ?? ''));
+    if (taken) throw new SectionIdTakenError(id, taken.slug, slug);
+    const entry = id.suffix !== undefined ? { n: id.n, suffix: id.suffix, slug } : { n: id.n, slug };
+    return { ...prev, sections: [...sections, entry].sort(compareSectionIds) };
+  });
+}
+
+/**
+ * Remove the section whose slug is `slug` from state.sections (a re-outline
+ * that dropped it, GRND-09). Its folder is moved to `sections/_archive/` by
+ * the caller (section-stubs.ts). A slug that is not registered is a no-op.
+ */
+export async function removeSection(paperRoot: string, slug: string): Promise<State> {
+  return updateState(paperRoot, (prev) => {
+    const sections = prev.sections ?? [];
+    if (!sections.some((s) => s.slug === slug)) return prev;
+    return { ...prev, sections: sections.filter((s) => s.slug !== slug) };
   });
 }
 

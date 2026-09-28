@@ -56,7 +56,9 @@ function writeState(root: string, sections: Array<{ n: number; slug: string }>):
 function writePaperFile(root: string, name: string): void {
   const pDir = join(root, '.paper');
   mkdirSync(pDir, { recursive: true });
-  writeFileSync(join(pDir, name), `# ${name}\n`);
+  // LIBRARY.json must be a valid (empty) library: plan reads it through the
+  // library loader, which refuses a corrupt file with one line (BRDTH-01).
+  writeFileSync(join(pDir, name), name === 'LIBRARY.json' ? '{"$schemaVersion":2,"entries":[]}\n' : `# ${name}\n`);
 }
 
 test('audit #10: `verify` (no N) does NOT silently run a different verb when none is ready', () => {

@@ -13,6 +13,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { migrateState } from '../bin/lib/state.js';
 import { Schema as StateSchema } from '../bin/lib/schemas/state.js';
+// Phase 18 (GRND-09): the current envelope is v3; the v2 → v3 step (identity +
+// version) follows the v1 → v2 transform these audit fixes live in.
+import v2ToV3 from '../bin/lib/migrations/state/v2_to_v3.js';
 
 test('audit #27/#28: a snake v1 with an invalid slug migrates to a SCHEMA-VALID v2', async () => {
   const v1 = {
@@ -39,7 +42,7 @@ test('audit #27/#28: a snake v1 with an invalid slug migrates to a SCHEMA-VALID 
 
   // The crux of #27: the migrated state now PASSES StateSchema (it was rejected
   // before — missing $schemaVersion and/or an invalid slug).
-  assert.doesNotThrow(() => StateSchema.parse(migrated), 'migrated v2 must validate against StateSchema');
+  assert.doesNotThrow(() => StateSchema.parse(v2ToV3(migrated)), 'migrated v2 (then v3) must validate against StateSchema');
 });
 
 test('audit #28: a conforming slug is left unchanged; a missing slug falls back to section-<n>', async () => {
@@ -57,5 +60,5 @@ test('audit #28: a conforming slug is left unchanged; a missing slug falls back 
   };
   assert.equal(migrated.sections[0]!.slug, '01-introduction', 'a valid slug is unchanged');
   assert.equal(migrated.sections[1]!.slug, 'section-2', 'a missing slug falls back to section-<n>');
-  assert.doesNotThrow(() => StateSchema.parse(migrated));
+  assert.doesNotThrow(() => StateSchema.parse(v2ToV3(migrated)));
 });

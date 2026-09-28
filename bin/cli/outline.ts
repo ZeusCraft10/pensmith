@@ -1,105 +1,192 @@
-// bin/cli/outline.ts — `pensmith outline` verb entrypoint (OUTL-01).
+// bin/cli/outline.ts — `pensmith outline` verb entrypoint (OUTL-01, GRND-07..10,
+// FEED-03).
 //
-// Plan 03-07 Task 7.2 — Tier-2 thin orchestrator. In Tier 1 the workflow
-// body delegates to the model with the `outline-author` prompt
-// (D-12 LOCKED slug). In Tier 2 (portable CLI) the verb calls complete()
-// via the Phase 11 transport (GEN-02).
+// Tier-2 orchestrator. In Tier 1 the workflow body delegates to the model with
+// the `outline-author` prompt (D-12 LOCKED slug); here the verb calls complete()
+// through the Phase 11 transport (GEN-02).
 //
-// Phase 17 wiring (RUN-07, RUN-25): assertLlmConfigured('outline') runs
-// before any model work (one-line MissingApiKeyError when no provider is
-// usable; skipped under PENSMITH_NO_LLM=1). outline-author is a STRUCTURED
-// slug: complete() returns the validated OutlineSchema object and OUTLINE.md
-// is rendered from it (outline-parse.ts renderOutlineMd) — model prose never
-// reaches the file.
-//
-// CLAUDE.md non-negotiable: outline approval is default-ON (only skips with
-// --yolo). It is the `outline-approval` gate of the one registry
-// (bin/lib/gates.ts, RUN-28): a terminal asks; no terminal and no --yolo exits
-// EXIT_APPROVAL (3) BEFORE the outline-author call (nothing sent or billed);
-// an explicit "no" exits 3 with nothing written.
+//   1. A valid OUTLINE.md and no --force: register its sections and give every
+//      section without one a stub PLAN.md — no model call (audit #1/#4).
+//   2. A paper with drafts needs --force plus the `reoutline` gate to be
+//      re-outlined (D-18-18; --yolo answers it only together with --force).
+//      No terminal and no --yolo: the outline-approval gate refuses BEFORE the
+//      model call (EXIT_APPROVAL; nothing sent, billed or written).
+//   3. The request (FEED-03, D-18-14) is fixed instructions plus data blocks
+//      (prompt-request.ts): the paper brief (intake topic, thesis, discipline
+//      and its sectioning convention, paper type, length target, sectioning
+//      notes, whether a counterargument is required), the existing sections on
+//      a re-outline, and every LIBRARY.json source, fenced (FEED-05).
+//   4. The reply is validated (GRND-08): the structured contract, then
+//      outline-validate.ts (slugs, depends_on, cycles, citekeys in the library,
+//      the ±20% word budget, zero-source sections, the counterargument rule —
+//      D-18-19). One corrective turn quotes every error; still invalid →
+//      `.paper/OUTLINE.rejected.md` holds the replies, the command exits
+//      EXIT_ERROR naming the errors, and OUTLINE.md, STATE.json and every
+//      section stay byte-identical — even under --yolo. The router then reports
+//      attention instead of re-billing (router.ts).
+//   5. The approval gate (`outline-approval`, default-ON; --yolo skips it).
+//   6. OUTLINE.md is rendered from the validated object (the canonical
+//      8-column table), sections are registered with stub PLAN.md files
+//      (GRND-09), a re-outline archives dropped sections to
+//      `sections/_archive/` and never touches a kept one, and
+//      OUTLINE.rejected.md is deleted.
 
 import { defineCommand } from 'citty';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { atomicWriteFile } from '../lib/atomic-write.js';
-import { paperDir, projectRoot } from '../lib/paths.js';
+import { parseSectionDirName, projectRoot, sectionDraft, sectionPlan, sectionsDir } from '../lib/paths.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
-import { EXIT_ERROR } from '../lib/exit-codes.js';
-import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { complete, assertLlmConfigured } from '../lib/anthropic.js';
-import { parseOutline, renderOutlineMd } from '../lib/outline-parse.js';
-import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
-import { tryReadPaperConfigSync } from '../lib/config.js';
-import { parseLengthWords } from '../lib/estimator.js';
-import type { OutlineContract } from '../lib/llm-contracts.js';
+import { EXIT_ERROR, EXIT_USAGE, PensmithError } from '../lib/exit-codes.js';
+import { complete, assertLlmConfigured, correctiveMessages, StructuredOutputError, type ChatMessage } from '../lib/anthropic.js';
+import { buildPromptRequest, requestHints, type PromptRequest } from '../lib/prompt-request.js';
+import { renderOutlineMd, type OutlineRow } from '../lib/outline-parse.js';
+import { outlinePath, outlineRejectedPath, readOutlineSync } from '../lib/outline.js';
+import { readPaperBrief, type PaperBrief } from '../lib/paper-brief.js';
+import { tryLoadLibrary } from '../lib/library.js';
+import { buildOutlineSources, libraryCitekeys, type SourceContextInput } from '../lib/source-context.js';
+import { resolveCounterargument, type CounterargumentDecision } from '../lib/counterargument.js';
+import { formatOutlineIssues, outlineCorrection, validateOutline, type OutlineIssue } from '../lib/outline-validate.js';
 import {
-  initSection,
-  initState,
-  loadState,
-  StateAlreadyExistsError,
-  StateNotFoundError,
-} from '../lib/state.js';
+  archiveSection,
+  numberFreshOutline,
+  planReoutline,
+  registerSections,
+  type ExistingSection,
+  type OutlineSectionEntry,
+  type ReoutlinePlan,
+} from '../lib/section-stubs.js';
+import { loadState, StateNotFoundError } from '../lib/state.js';
+import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
+import { networkMode, offlineMarkerLine } from '../lib/http-mock.js';
+import { readLlmRecords } from '../lib/replay.js';
+import { closeSessionLog, currentSessionId } from '../lib/session-log.js';
+import { formatSectionId, sectionIdOf, sortBySectionId } from '../lib/section-id.js';
+import type { OutlineContract } from '../lib/llm-contracts.js';
 
-// outline-author is a STRUCTURED slug (RUN-25): complete() returns the
-// schema-validated OutlineSchema object (GRND-07 fields), and OUTLINE.md is
-// rendered from it by outline-parse.ts renderOutlineMd — the canonical table
-// parseOutline reads back. With no key configured: fail-loud (GEN-06 / RUN-07).
-// With PENSMITH_NO_LLM=1: complete() returns a deterministic 3-section stub.
-
-/** One library candidate as the outline prompt sees it (T-12-02: JSON-encoded). */
-interface OutlineCandidate {
-  citekey: string;
-  title?: string;
-  authors?: string[];
-  year?: number;
-  doi?: string;
+/** The outline could not be used after the one corrective turn (GRND-08): one line, EXIT_ERROR. */
+export class OutlineRejectedError extends PensmithError {
+  constructor(problems: string) {
+    super(
+      `outline rejected: ${problems} — OUTLINE.md and the sections are unchanged; ` +
+        'the replies are in .paper/OUTLINE.rejected.md',
+      EXIT_ERROR,
+    );
+    this.name = 'OutlineRejectedError';
+  }
 }
 
-/**
- * Read the research library (LIBRARY.json: `{entries: [...]}` or a bare array)
- * as the outline prompt's candidate list. Best-effort: absent or malformed → [].
- */
-function readLibraryCandidates(paperRoot: string): OutlineCandidate[] {
-  const libPath = path.join(paperDir(paperRoot), 'LIBRARY.json');
-  if (!existsSync(libPath)) return [];
+/** The --dry-run marker line for OUTLINE.md and the stub PLAN.md bodies (D-18-29). */
+function dryRunMarker(): string | null {
+  return networkMode().dryRun ? offlineMarkerLine() : null;
+}
+
+/** A parsed OUTLINE row as a renderable/registrable entry. */
+function entryFromRow(s: OutlineRow): OutlineSectionEntry {
+  return {
+    n: s.n,
+    ...(s.suffix !== undefined ? { suffix: s.suffix } : {}),
+    slug: s.slug,
+    title: s.title,
+    purpose: s.purpose ?? '',
+    depends_on: [...s.depends_on],
+    estimated_word_count: s.estimated_word_count ?? 0,
+    assigned_sources: [...s.assigned_sources],
+    role: s.role ?? 'body',
+    ...(s.voice !== undefined ? { voice: s.voice } : {}),
+  };
+}
+
+/** The registered sections of the paper (empty when STATE.json is absent). */
+async function registeredSections(root: string): Promise<Array<{ n: number; suffix?: string | undefined; slug: string }>> {
   try {
-    const raw = JSON.parse(readFileSync(libPath, 'utf8')) as unknown;
-    const list = Array.isArray(raw)
-      ? raw
-      : raw && typeof raw === 'object' && Array.isArray((raw as { entries?: unknown }).entries)
-        ? (raw as { entries: unknown[] }).entries
-        : [];
-    const out: OutlineCandidate[] = [];
-    for (const e of list) {
-      if (!e || typeof e !== 'object') continue;
-      const r = e as Record<string, unknown>;
-      if (typeof r['citekey'] !== 'string' || !r['citekey']) continue;
-      const c: OutlineCandidate = { citekey: r['citekey'] as string };
-      if (typeof r['title'] === 'string') c.title = r['title'];
-      if (Array.isArray(r['authors'])) c.authors = (r['authors'] as unknown[]).filter((a): a is string => typeof a === 'string').slice(0, 3);
-      if (typeof r['year'] === 'number') c.year = r['year'];
-      if (typeof r['doi'] === 'string') c.doi = r['doi'];
-      out.push(c);
-    }
-    return out;
+    return sortBySectionId((await loadState(root)).sections ?? []);
+  } catch (e) {
+    if (e instanceof StateNotFoundError) return [];
+    throw e;
+  }
+}
+
+/** Does any section folder hold a DRAFT.md? (`sections/_archive/` is not a section.) */
+function paperHasDrafts(root: string): boolean {
+  let names: string[];
+  try {
+    names = readdirSync(sectionsDir(root));
+  } catch {
+    return false;
+  }
+  return names.some((name) => parseSectionDirName(name) !== null && existsSync(path.join(sectionsDir(root), name, 'DRAFT.md')));
+}
+
+/** A kept section's PLAN.md allocation (the authoritative map, FEED-04), when readable. */
+function planAssignedSources(root: string, n: number, slug: string): string[] | undefined {
+  const file = sectionPlan(n, slug, root);
+  if (!existsSync(file)) return undefined;
+  try {
+    const fm = loadFrontmatterDocSync('plan', file).frontmatter;
+    return Array.isArray(fm['assigned_sources']) ? (fm['assigned_sources'] as unknown[]).map(String) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The replies of this session's last `count` outline-author calls, from SESSION.log. */
+async function loggedReplies(root: string, count: number): Promise<string[]> {
+  try {
+    await closeSessionLog(); // drain the async log queue (nothing is closed)
+    const session = currentSessionId();
+    return readLlmRecords(root)
+      .filter((r) => r.slug === 'outline-author' && r.run_id === session)
+      .slice(-count)
+      .map((r) => (typeof r.response?.text === 'string' ? r.response.text : ''));
   } catch {
     return [];
+  }
+}
+
+/** Save the rejected replies (GRND-08) — the only file a failed outline writes. */
+async function writeRejection(root: string, problems: readonly string[], replies: readonly string[]): Promise<void> {
+  const fence = (text: string): string => {
+    const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((m) => m[0].length));
+    const ticks = '`'.repeat(longest + 1);
+    return `${ticks}text\n${text.replace(/\r\n/g, '\n').trimEnd()}\n${ticks}`;
+  };
+  const lines = [
+    '# Rejected outline',
+    '',
+    `\`pensmith outline\` could not use the model's outline after one corrective turn (${new Date().toISOString()}).`,
+    'OUTLINE.md, STATE.json and the section folders were not changed. Fix the problem below',
+    '(for example the length target, the sources, or `--no-counter`), then run `pensmith outline`;',
+    'a successful run deletes this file.',
+    '',
+    '## Problems',
+    '',
+    ...problems.map((p) => `- ${p}`),
+    '',
+  ];
+  replies.forEach((r, i) => {
+    lines.push(`## Reply ${i + 1}${i === 1 ? ' (after the corrective turn)' : ''}`, '', r.trim() ? fence(r) : '(empty reply)', '');
+  });
+  if (replies.length === 0) lines.push('The replies are in .paper/SESSION.log (kind "llm", slug "outline-author").', '');
+  await atomicWriteFile(outlineRejectedPath(root), lines.join('\n'));
+}
+
+/** Remove OUTLINE.rejected.md after a successful outline. */
+function clearRejection(root: string): void {
+  try {
+    rmSync(outlineRejectedPath(root), { force: true });
+  } catch {
+    /* best-effort: a stale file only makes the router report attention while no section is registered */
   }
 }
 
 /**
  * Run the outline approval gate — `outline-approval` in the gate registry
  * (RUN-28, bin/lib/gates.ts; CLAUDE.md non-negotiable: default-ON).
- *
- * - --yolo: approve (the registry's yolo choice) without asking.
- * - A run that can prompt: show a preview on stderr, then ask.
- * - A run that cannot prompt and no --yolo: GateRefusedError, EXIT_APPROVAL.
- * - An explicit "no": the registry's decline — EXIT_APPROVAL, nothing written.
  */
-async function runApprovalGate(outlineText: string, yolo: boolean): Promise<boolean> {
+async function runApprovalGate(outlineText: string, yolo: boolean): Promise<void> {
   if (!yolo && canPrompt()) {
-    // Show a preview of the proposed outline (first 500 chars).
-    const preview = outlineText.slice(0, 500) + (outlineText.length > 500 ? '\n…(truncated)' : '');
+    const preview = outlineText.slice(0, 3000) + (outlineText.length > 3000 ? '\n…(truncated)' : '');
     process.stderr.write(`Proposed outline:\n${preview}\n`);
   }
   const outcome = await runGate('outline-approval', {
@@ -107,170 +194,226 @@ async function runApprovalGate(outlineText: string, yolo: boolean): Promise<bool
     detail: 'no OUTLINE.md was written',
     question: { id: 'outline-approval', kind: 'confirm', label: 'Accept this outline and write OUTLINE.md?', default: false },
   });
-  if (outcome.kind === 'yolo') return true;
-  if (outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true) return true;
-  return declineGate('outline-approval', 'outline rejected — no OUTLINE.md written');
+  if (outcome.kind === 'yolo') return;
+  if (outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true) return;
+  declineGate('outline-approval', 'outline rejected — no OUTLINE.md written');
 }
 
-/**
- * Register every section in `outlineMd` into STATE.json (audit #1). The router
- * gates pipeline advancement on state.sections (router.ts:182-183); without this
- * a valid OUTLINE.md leaves state.sections empty and bare `pensmith`/next/resume
- * loop on `outline` forever. initSection is idempotent (D-08), so re-running is
- * safe. Best-effort: an outline with no parseable section table (the offline
- * placeholder, or a malformed model response) WARNs and registers nothing rather
- * than crashing — the per-section pipeline simply cannot advance until the
- * outline carries the locked section table. Returns the count registered.
- */
-async function registerOutlineSections(paperRoot: string, outlineMd: string): Promise<number> {
-  let parsed;
-  try {
-    parsed = parseOutline(outlineMd);
-  } catch (e) {
-    process.stderr.write(
-      `pensmith outline: WARN — OUTLINE.md has no parseable section table, so no sections were ` +
-      `registered in STATE.json; the per-section pipeline (plan/write/verify) cannot advance until the ` +
-      `outline carries a "| # | slug | title | depends_on | word target | assigned_sources |" table. ` +
-      `(${(e as Error).message})\n`,
-    );
-    return 0;
-  }
-  if (parsed.sections.length === 0) return 0;
+/** The `brief` data block (18-PLAN.md §3.3), built field by field. */
+function briefBlock(brief: PaperBrief, counter: CounterargumentDecision): Record<string, string | number | boolean | string[]> {
+  return {
+    topic: brief.topic,
+    thesis: brief.thesis,
+    discipline: brief.discipline.slug.value,
+    paper_type: brief.paperType,
+    length_target_words: brief.lengthTarget,
+    sectioning_convention: [...brief.discipline.sectioningConvention],
+    sectioning_notes: [...brief.sectioningNotes],
+    counterargument_required: counter.required,
+    min_sections: 3,
+    max_sections: 7,
+  };
+}
 
-  // Ensure STATE.json exists (intake normally seeds it via initState; be
-  // defensive for a hand-assembled workspace). initState is idempotent through
-  // StateAlreadyExistsError.
-  try {
-    await loadState(paperRoot);
-  } catch (e) {
-    if (e instanceof StateNotFoundError) {
-      try {
-        await initState(paperRoot);
-      } catch (e2) {
-        if (!(e2 instanceof StateAlreadyExistsError)) throw e2;
-      }
-    } else {
-      throw e;
-    }
-  }
+interface Attempt {
+  data: OutlineContract;
+  text: string;
+}
 
-  for (const s of parsed.sections) {
-    await initSection(paperRoot, s.n, s.slug);
-  }
-  return parsed.sections.length;
+/** A validated reply: its issues, thesis and numbered sections (and the re-outline plan). */
+interface Checked {
+  issues: OutlineIssue[];
+  thesis: string;
+  numbered: OutlineSectionEntry[];
+  plan: ReoutlinePlan | null;
 }
 
 export const outlineCommand = defineCommand({
   meta: {
     name: 'outline',
-    description: 'Propose a section outline (approval-gated unless --yolo).',
+    description: 'Propose a section outline (approval-gated unless --yolo); approval creates each section\'s stub PLAN.md.',
   },
   args: {
     yolo: {
       type: 'boolean',
-      description: 'Skip the approval gate.',
+      description: 'Skip the approval gate (and, with --force, the re-outline confirmation).',
       default: false,
     },
     force: {
       type: 'boolean',
-      description: 'Regenerate OUTLINE.md even if a valid one already exists (audit #4).',
+      description: 'Re-outline even when OUTLINE.md exists; kept sections are untouched, dropped ones archived.',
       default: false,
+    },
+    counter: {
+      type: 'boolean',
+      description: 'Enforce the counterargument + rebuttal rule when the paper needs one (--no-counter disables it, PRD §7.4).',
+      default: true,
     },
   },
   async run({ args }) {
     const paperRoot = projectRoot();
-    const outlinePath = path.join(paperDir(), 'OUTLINE.md');
+    const outlineFile = outlinePath(paperRoot);
+    const yolo = args.yolo === true;
+    const force = args.force === true;
+    const marker = dryRunMarker();
 
-    // Audit #4: NEVER clobber a valid, parseable OUTLINE.md. bare /pensmith,
-    // `next`, and `resume` re-dispatch `outline` whenever state.sections is empty
-    // (router.ts:182-183); without this guard a re-dispatch overwrites a user- or
-    // model-authored outline with the regenerated (often table-less, in offline
-    // mode) text and destroys it. When a valid outline already exists, register
-    // its sections idempotently (audit #1) and return — pass --force to redo.
-    if (args.force !== true && existsSync(outlinePath)) {
-      try {
-        const existing = readFileSync(outlinePath, 'utf8');
-        if (parseOutline(existing).sections.length > 0) {
-          const count = await registerOutlineSections(paperRoot, existing);
-          process.stdout.write(
-            `pensmith outline: OUTLINE.md already present (${count} section(s)); ` +
-            `registered in STATE.json. Not regenerating — pass --force to redo.\n`,
-          );
-          return { ok: true, path: outlinePath, mode: 'existing', sections: count };
-        }
-      } catch {
-        // Existing OUTLINE.md is not a parseable section table (e.g. an offline
-        // placeholder from a prior dry-run) — fall through and regenerate.
+    // ── 1. A valid OUTLINE.md and no --force: register, create missing stubs, no model call ──
+    const existingOutline = readOutlineSync(paperRoot);
+    if (!force && existingOutline !== null && existingOutline.sections.length > 0) {
+      const entries = existingOutline.sections.map(entryFromRow);
+      const r = await registerSections(paperRoot, entries, { marker });
+      clearRejection(paperRoot);
+      process.stdout.write(
+        `pensmith outline: OUTLINE.md already present (${r.registered} section(s)); registered ${r.registered} section(s) in STATE.json` +
+          `${r.stubsWritten > 0 ? `, wrote ${r.stubsWritten} stub PLAN.md` : ''}. Not regenerating — pass --force to re-outline.\n`,
+      );
+      return { ok: true, path: outlineFile, mode: 'existing', sections: r.registered, stubs: r.stubsWritten };
+    }
+
+    // ── 2. Re-outlining a paper with drafts: --force plus the reoutline gate (D-18-18) ──
+    // Decided from the section folders alone, so a refusal reads (and
+    // migrates) nothing.
+    const hasDrafts = paperHasDrafts(paperRoot);
+    if (hasDrafts && !force) {
+      throw new PensmithError(
+        'pensmith outline: this paper already has section drafts — re-outlining it needs --force (kept sections stay untouched; dropped ones move to sections/_archive/)',
+        EXIT_USAGE,
+      );
+    }
+    if (hasDrafts) {
+      const outcome = await runGate('reoutline', {
+        yolo,
+        detail: 'no outline was requested and no section was changed',
+        question: {
+          id: 'reoutline',
+          kind: 'confirm',
+          label: 'Re-outline this paper? Kept sections stay untouched; dropped sections move to sections/_archive/.',
+          default: false,
+        },
+      });
+      if (outcome.kind === 'answered' && !(outcome.answer.kind === 'confirm' && outcome.answer.value === true)) {
+        declineGate('reoutline', 're-outline cancelled — nothing changed');
       }
     }
 
     // ── RUN-28: the approval gate cannot be answered without a terminal ──
-    // Known before the paid outline-author call, so refuse NOW (EXIT_APPROVAL):
-    // nothing is sent, billed or written. --yolo approves; a terminal (or
-    // scripted numbered answers) is asked after the outline is generated.
-    if (args.yolo !== true && !canPrompt()) {
+    // Known before the paid outline-author call, so refuse NOW (EXIT_APPROVAL).
+    if (!yolo && !canPrompt()) {
       await runGate('outline-approval', { yolo: false, detail: 'no outline was requested and no OUTLINE.md was written' });
     }
 
     // ── GEN-06 / RUN-07 fail-loud probe (BEFORE any prompt/complete() work) ──
     await assertLlmConfigured('outline');
 
-    // ── Load and interpolate the outline-author prompt (D-12 LOCKED) ──
-    // The outline-author template requires: {{topic}}, {{length}},
-    // {{candidateSources}}, {{discipline}}. In Tier 2 they come from INTAKE.md
-    // (topic, discipline), [project] length_target_words or the assignment's
-    // stated length, and the research library (the citekeys the outline may
-    // assign). User-derived strings are escaped against template injection.
-    const intakePath = path.join(paperDir(), 'INTAKE.md');
-    const intakeContent = existsSync(intakePath)
-      ? readFileSync(intakePath, 'utf8').trim()
-      : '(no intake content available — run `pensmith new` first)';
-    const intake = parseIntakeMd(intakeContent);
-    const config = tryReadPaperConfigSync(paperRoot);
-    const lengthWords = config?.project?.length_target_words ?? parseLengthWords(intakeContent) ?? 1500;
-    const candidates = readLibraryCandidates(paperRoot);
-    const topic = intake.topic || 'the assigned topic';
-
-    const prompt = loadPrompt('outline-author');
-    const interpolatedPrompt = interpolate(prompt, {
-      topic: escapeTemplateTokens(topic),
-      length: String(lengthWords),
-      candidateSources: JSON.stringify(candidates, null, 2),
-      discipline: escapeTemplateTokens(intake.discipline),
+    // ── 3. The request: the brief, the existing sections, every library source (FEED-03) ──
+    const registered = await registeredSections(paperRoot);
+    const brief = readPaperBrief(paperRoot);
+    const entries: SourceContextInput[] = (await tryLoadLibrary(paperRoot))?.entries ?? [];
+    const counter = resolveCounterargument({
+      noCounter: args.counter === false,
+      configRequired: brief.configCounterargument,
+      intakeAnswer: brief.counterargument,
+      paperType: brief.paperType,
+      discipline: brief.discipline.slug.value,
     });
-
-    // ── Call the transport (GEN-02) — structured outline-author (RUN-25) ──
-    const result = await complete<OutlineContract>({
-      slug: 'outline-author',
-      system: interpolatedPrompt,
-      messages: [{ role: 'user', content: intakeContent }],
-      stubHint: { topic, length: lengthWords, sources: candidates.map((c) => c.citekey) },
+    const rowsBySlug = new Map((existingOutline?.sections ?? []).map((s) => [s.slug, s]));
+    const existing: ExistingSection[] = registered.map((s) => ({
+      n: s.n,
+      ...(s.suffix !== undefined ? { suffix: s.suffix } : {}),
+      slug: s.slug,
+      assignedSources: planAssignedSources(paperRoot, s.n, s.slug) ?? rowsBySlug.get(s.slug)?.assigned_sources,
+    }));
+    const req: PromptRequest = buildPromptRequest('outline-author', {
+      brief: briefBlock(brief, counter),
+      ...(existing.length > 0
+        ? {
+            existing_sections: existing.map((e) => ({
+              slug: e.slug,
+              title: rowsBySlug.get(e.slug)?.title ?? e.slug,
+              role: rowsBySlug.get(e.slug)?.role ?? null,
+              has_draft: existsSync(sectionDraft(e.n, e.slug, paperRoot)),
+            })),
+          }
+        : {}),
+      sources: buildOutlineSources(entries),
     });
-    const outlineMd = renderOutlineMd(
-      result.data as OutlineContract,
-      config?.project?.title?.trim() || topic,
-    );
+    const known = libraryCitekeys(entries);
 
-    // ── Approval gate (CLAUDE.md non-negotiable: default-ON, skip with --yolo) ──
-    // A refusal or a decline throws a GateRefusedError (EXIT_APPROVAL); the
-    // dispatcher prints it as one line (RUN-12).
-    await runApprovalGate(outlineMd, args.yolo === true);
+    const call = async (messages: ChatMessage[]): Promise<Attempt> => {
+      const r = await complete<OutlineContract>({ slug: 'outline-author', system: req.system, messages, stubHint: requestHints(req) });
+      return { data: r.data as OutlineContract, text: r.text };
+    };
+    const check = (data: OutlineContract): Checked => {
+      const issues = validateOutline({
+        sections: data.sections,
+        libraryCitekeys: known,
+        lengthTarget: brief.lengthTarget,
+        counterargumentRequired: counter.required,
+      });
+      if (existing.length === 0) return { issues, thesis: data.thesis, numbered: numberFreshOutline(data.sections), plan: null };
+      const r = planReoutline(existing, data.sections);
+      return { issues: [...issues, ...r.issues], thesis: data.thesis, numbered: r.plan?.sections ?? [], plan: r.plan };
+    };
 
-    await atomicWriteFile(outlinePath, outlineMd);
-    process.stdout.write(`pensmith outline: wrote OUTLINE.md to ${outlinePath}\n`);
-
-    // Audit #1: register the outline's sections into STATE.json so the router can
-    // advance to the per-section plan/write/verify pipeline (best-effort).
-    const sectionCount = await registerOutlineSections(paperRoot, outlineMd);
-    if (sectionCount > 0) {
-      process.stdout.write(
-        `pensmith outline: registered ${sectionCount} section(s) in STATE.json.\n`,
-      );
+    // ── 4. One reply, one corrective turn, then reject (GRND-08) ──
+    const replies: string[] = [];
+    let accepted: Checked | null = null;
+    try {
+      const first = await call(req.messages);
+      replies.push(first.text);
+      let result = check(first.data);
+      if (result.issues.length > 0) {
+        const retryMessages = correctiveMessages(req.messages, first.text, outlineCorrection(result.issues));
+        const second = await call(retryMessages);
+        replies.push(second.text);
+        result = check(second.data);
+        if (result.issues.length > 0) {
+          await writeRejection(paperRoot, result.issues.map((i) => i.message), replies);
+          throw new OutlineRejectedError(formatOutlineIssues(result.issues));
+        }
+      }
+      accepted = result;
+    } catch (e) {
+      if (!(e instanceof StructuredOutputError)) throw e;
+      // Both attempts of one call failed the schema: complete() already sent
+      // its one corrective retry. Save what the model said and stop.
+      const detail = e.message.replace(/^outline-author: /, '').replace(/; nothing was written$/, '');
+      const logged = await loggedReplies(paperRoot, 2);
+      await writeRejection(paperRoot, [detail], replies.length > 0 ? [...replies, ...logged.slice(-1)] : logged);
+      throw new OutlineRejectedError(detail);
     }
-    // RUN-09: an outline that registered no section cannot advance the
-    // pipeline — EXIT_ERROR (the WARN above says why).
-    if (sectionCount === 0) return { ok: false, path: outlinePath, mode: 'real', sections: 0, exitCode: EXIT_ERROR };
-    return { ok: true, path: outlinePath, mode: 'real', sections: sectionCount };
+
+    // ── 5. Approval gate (CLAUDE.md non-negotiable: default-ON, skip with --yolo) ──
+    const title = brief.title || 'Outline';
+    const thesis = accepted.thesis.trim() || brief.thesis;
+    const outlineMd = renderOutlineMd({ thesis, sections: accepted.numbered }, title, { marker });
+    await runApprovalGate(outlineMd, yolo);
+
+    // ── 6. Apply: archive dropped sections, register (stubs for new ones), write OUTLINE.md ──
+    const archived: string[] = [];
+    for (const d of accepted.plan?.dropped ?? []) {
+      const where = await archiveSection(paperRoot, d.slug);
+      archived.push(`§${formatSectionId(sectionIdOf(d.n, d.suffix))} ${d.slug}${where ? ` → ${path.relative(paperRoot, where).split(path.sep).join('/')}` : ''}`);
+    }
+    const reg = await registerSections(paperRoot, accepted.numbered, { marker });
+    await atomicWriteFile(outlineFile, outlineMd);
+    clearRejection(paperRoot);
+
+    process.stdout.write(`pensmith outline: wrote OUTLINE.md to ${outlineFile}\n`);
+    process.stdout.write(`pensmith outline: registered ${reg.registered} section(s) in STATE.json.\n`);
+    if (accepted.plan !== null) {
+      const added = accepted.numbered.filter((s) => accepted.plan?.added.includes(s.slug)).map((s) => `§${formatSectionId(sectionIdOf(s.n, s.suffix))} ${s.slug}`);
+      process.stdout.write(
+        `pensmith outline: kept ${accepted.plan.kept.length} section(s) untouched` +
+          `${added.length > 0 ? `; added ${added.join(', ')}` : ''}` +
+          `${archived.length > 0 ? `; archived ${archived.join(', ')}` : ''}.\n`,
+      );
+      if (accepted.plan.reordered) {
+        process.stderr.write('pensmith outline: WARN — kept sections keep their numbers, so they stay in their original order.\n');
+      }
+    }
+    if (counter.required) process.stdout.write(`pensmith outline: counterargument rule applied (${counter.source}).\n`);
+    return { ok: true, path: outlineFile, mode: 'real', sections: reg.registered, stubs: reg.stubsWritten };
   },
 });
 

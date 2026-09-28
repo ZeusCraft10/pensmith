@@ -595,6 +595,37 @@ function seedVerifySectionDraft(root: string): void {
   );
 }
 
+/**
+ * write-section-scoped PLAN.md seed (Phase 18, GRND-16): write drafts a PLANNED
+ * section only — an absent or stub PLAN.md is refused, naming `pensmith plan N`
+ * — so the write case gets the planner-shaped PLAN.md of the middle section.
+ */
+function seedPlannedMiddleSection(root: string): void {
+  const dir = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'PLAN.md'),
+    [
+      '---',
+      'schema_version: 2',
+      `section: ${MIDDLE_SECTION}`,
+      'slug: placeholder',
+      'title: Middle section',
+      'depends_on: []',
+      'assigned_sources: []',
+      'status: planned',
+      'verified_against_draft_hash: null',
+      '---',
+      '',
+      '## Claims',
+      '',
+      '1. The middle section states one claim.',
+      '   - Sources: (none)',
+      '',
+    ].join('\n'),
+  );
+}
+
 for (const tc of PHASE_3_CASES) {
   const verbExists = existsSync(new URL(`../${tc.verbFile}`, import.meta.url));
 
@@ -643,6 +674,9 @@ for (const tc of PHASE_3_CASES) {
     // (vaswani2017attention) so Pass 1 does not flag it FABRICATED.
     if (tc.name === 'verify-section') {
       seedVerifySectionDraft(root);
+    }
+    if (tc.name === 'write-section') {
+      seedPlannedMiddleSection(root);
     }
 
     // --- Tier 2 (CLI) ---
@@ -710,6 +744,9 @@ for (const tc of PHASE_3_CASES) {
     // operates on its own fresh paper dir, so it needs the [@citekey] draft too.
     if (tc.name === 'verify-section') {
       seedVerifySectionDraft(mcpRoot);
+    }
+    if (tc.name === 'write-section') {
+      seedPlannedMiddleSection(mcpRoot);
     }
     const toolArgs = tc.name.endsWith('-section')
       ? { n: Number(MIDDLE_SECTION), slug: 'placeholder', yolo: true }
@@ -864,11 +901,12 @@ test('tier-contract: write-wave parity — both tiers schedule all sections to t
       `write-wave Tier 2: ${slug}/DRAFT.md must exist`,
     );
   }
-  // D-02: Tier-2 forced-serial WARN to stderr.
-  assert.match(
+  // GRND-16 (Phase 18) superseded the D-02 Tier-2 "--max-parallel ignored" WARN:
+  // both tiers honor --max-parallel, so a serial run prints no warning.
+  assert.doesNotMatch(
     t2.stderr,
     /max-parallel ignored/i,
-    `write-wave Tier 2: expected "max-parallel ignored" WARN on stderr; got: ${t2.stderr.slice(0, 400)}`,
+    `write-wave Tier 2: --max-parallel 1 is honored, not ignored; got: ${t2.stderr.slice(0, 400)}`,
   );
 
   // --- Tier 1 (default --max-parallel, bounded parallel): same final state ---
@@ -1017,10 +1055,10 @@ test('tier-contract: revise parity — both tiers reach the same patched termina
 // The Plan 03 write-wave parity test used a 2-section NO-DEP fixture. Plan 04-05
 // Task 4 extends it to the full 3-section dependency fixture (deps b→a, c→a): a
 // (n=1) is wave 1; b (n=2) and c (n=3) are wave-2 siblings. Tier 1 (default
-// --max-parallel 5, b/c may run in parallel) vs Tier 2 (forced --max-parallel 1,
-// serial + WARN) must end with IDENTICAL final per-section state (assert on
-// settled state, not event order — 04-RESEARCH §O), and the Tier-2 serial WARN
-// must be emitted.
+// --max-parallel 5, b/c may run in parallel) vs Tier 2 (--max-parallel 1,
+// serial) must end with IDENTICAL final per-section state (assert on settled
+// state, not event order — 04-RESEARCH §O). Since Phase 18 (GRND-16) a serial
+// run prints no "--max-parallel ignored" WARN: --max-parallel is honored.
 
 /**
  * Seed a 3-section dependency fixture: a (n=1, root), b (n=2, depends_on a),
@@ -1066,12 +1104,12 @@ function seedWaveDepsFixture(): string {
   return root;
 }
 
-test('tier-contract: write-wave 3-section deps parity — identical settled state + Tier-2 serial WARN (D-02, D-24)', { skip: !writeWaveVerbExists }, () => {
+test('tier-contract: write-wave 3-section deps parity — identical settled state, no serial WARN (D-02, D-24, GRND-16)', { skip: !writeWaveVerbExists }, () => {
   // --- Tier 2 (forced serial --max-parallel 1) ---
   const t2Root = seedWaveDepsFixture();
   const t2 = runCliCaptureBoth(['write', '--max-parallel', '1', '--yolo'], t2Root);
   assert.equal(t2.exitCode, 0, `write-wave deps Tier 2: exit 0 expected; got ${t2.exitCode}. stderr: ${t2.stderr.slice(0, 400)}`);
-  assert.match(t2.stderr, /max-parallel ignored/i, 'write-wave deps Tier 2: serial WARN must be on stderr');
+  assert.doesNotMatch(t2.stderr, /max-parallel ignored/i, 'write-wave deps Tier 2: --max-parallel 1 is honored — no "ignored" WARN (GRND-16)');
 
   // --- Tier 1 (default --max-parallel 5, b/c parallel) ---
   const t1Root = seedWaveDepsFixture();
