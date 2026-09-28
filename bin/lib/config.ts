@@ -32,7 +32,7 @@ import { z } from 'zod';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { paperDir, pensmithDataDir, projectRoot } from './paths.js';
-import { EXIT_ERROR, PensmithError } from './exit-codes.js';
+import { EXIT_ERROR, EXIT_USAGE, PensmithError, type ExitCode } from './exit-codes.js';
 import { SLUGS } from './llm-models.js';
 import {
   CONFIG_TABLES,
@@ -43,14 +43,15 @@ import {
 } from './schemas/config.js';
 import { PROJECT_CONFIG_FRAGMENT, PROJECT_CONFIG_FRAGMENT_DEFAULTS } from './tutorial.js';
 import { migrate as v0ToV1 } from './migrations/config/v0_to_v1.js';
+import { editTomlText } from './config-text.js';
 
 export type { PaperConfig } from './schemas/config.js';
 export { CURRENT_CONFIG_VERSION } from './schemas/config.js';
 
 /** A config.toml problem: printed as one line by the dispatcher, exit EXIT_ERROR. */
 export class ConfigError extends PensmithError {
-  constructor(message: string) {
-    super(message, EXIT_ERROR);
+  constructor(message: string, exitCode: ExitCode = EXIT_ERROR) {
+    super(message, exitCode);
     this.name = 'ConfigError';
   }
 }
@@ -316,12 +317,54 @@ export async function loadPaperConfig(
     const parsed = parseAndValidate(text, label);
     emitWarnings(label, parsed.warnings);
     if (parsed.migratedFrom !== null && writeBack) {
-      await atomicWriteFile(file, serialize(parsed.raw));
+      await writeConfigText(file, text, parsed.raw);
       warnOnce(`pensmith: ${label}: migrated from schema v${parsed.migratedFrom} to v${CURRENT_CONFIG_VERSION}`);
     }
     return parsed.config;
   };
   return writeBack ? withLock(file, run) : run();
+}
+
+/**
+ * Write an older config.toml back at the current schema version (CONF-01's
+ * write-back). Called by a MUTATING session once it holds the paper's session
+ * lock (the CLI dispatcher, the MCP mutating tools) — never by a read-only verb
+ * (`status --config`, the router, doctor): those migrate in memory only.
+ * A no-op for a current, absent or invalid file (the verb's own read reports
+ * an invalid one).
+ */
+export async function migratePaperConfigFile(root: string = projectRoot()): Promise<void> {
+  const file = paperConfigPath(root);
+  if (!existsSync(file)) return;
+  try {
+    await loadPaperConfig(root, { writeBack: true });
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+  }
+}
+
+/**
+ * Persist `next` (a raw config object) over `original` (the file's current
+ * text), preserving the user's comments and formatting: only the keys that
+ * changed are edited, added or removed (config-text.ts). When a change cannot
+ * be applied textually (a nested table, an array of tables), the file is
+ * re-serialized — and the original is kept as config.toml.bak so no comment
+ * is lost for good.
+ */
+async function writeConfigText(file: string, original: string | null, next: Record<string, unknown>): Promise<void> {
+  if (original !== null) {
+    const edited = editTomlText(original, normalizeTomlValues(parseToml(original)) as Record<string, unknown>, next, {
+      reparse: (text) => normalizeTomlValues(parseToml(text)) as Record<string, unknown>,
+      render: (key, value) => stringifyToml({ [key]: value }).trim(),
+      leadingKey: 'schema_version',
+    });
+    if (edited !== null) {
+      await atomicWriteFile(file, edited);
+      return;
+    }
+    await atomicWriteFile(`${file}.bak`, original);
+  }
+  await atomicWriteFile(file, serialize(next));
 }
 
 function serialize(raw: Record<string, unknown>): string {
@@ -335,8 +378,9 @@ function serialize(raw: Record<string, unknown>): string {
 /**
  * The single config writer. Reads the current file (migrating it), lets the
  * caller mutate the raw object, re-validates, and writes atomically with
- * `schema_version = 1`. A malformed existing file is refused (never silently
- * replaced).
+ * `schema_version = 1` — editing only the changed keys, so the user's comments
+ * and formatting survive (writeConfigText). A malformed existing file is
+ * refused (never silently replaced).
  */
 export async function updatePaperConfig(
   root: string,
@@ -346,17 +390,18 @@ export async function updatePaperConfig(
   const label = relName(root, file);
   return withLock(file, async () => {
     let raw: Record<string, unknown> = { schema_version: CURRENT_CONFIG_VERSION };
+    let original: string | null = null;
     if (existsSync(file)) {
-      const parsed = parseAndValidate(await fsp.readFile(file, 'utf8'), label);
+      original = await fsp.readFile(file, 'utf8');
+      const parsed = parseAndValidate(original, label);
       emitWarnings(label, parsed.warnings);
       raw = parsed.raw;
     }
     mutate(raw);
     raw['schema_version'] = CURRENT_CONFIG_VERSION;
-    const text = serialize(raw);
-    const validated = parseAndValidate(text, label);
+    const validated = parseAndValidate(serialize(raw), label);
     await fsp.mkdir(path.dirname(file), { recursive: true });
-    await atomicWriteFile(file, text);
+    await writeConfigText(file, original, raw);
     return validated.config;
   });
 }
@@ -368,6 +413,28 @@ export function rawTable(raw: Record<string, unknown>, table: string): Record<st
   const fresh: Record<string, unknown> = {};
   raw[table] = fresh;
   return fresh;
+}
+
+/**
+ * `PENSMITH_COST_CAP_USD`, validated like `[budget] cost_cap_usd` (a positive,
+ * finite number of US dollars): null when unset or empty; a set-but-invalid
+ * value ("0", "-1", "$1", "1 USD", "abc") is a one-line EXIT_USAGE ConfigError —
+ * never a silent fall back to the $5 default for the one hard money guard.
+ */
+export function parseCostCapEnv(raw: string | undefined): number | null {
+  if (raw === undefined || raw.trim() === '') return null;
+  const t = raw.trim();
+  const n = /^\+?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/.test(t) ? Number(t) : NaN;
+  if (!Number.isFinite(n) || n <= 0) {
+    // A ConfigError, so an advisory step (Pass 2/4, the source evaluator)
+    // never swallows it (anthropic.ts isFatalLlmError).
+    throw new ConfigError(
+      `PENSMITH_COST_CAP_USD must be a positive number of US dollars, e.g. PENSMITH_COST_CAP_USD=2.50 (got ${JSON.stringify(raw)}); ` +
+        'unset it to use [budget] cost_cap_usd or the $5.00 default',
+      EXIT_USAGE,
+    );
+  }
+  return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -473,9 +540,8 @@ export function effectiveConfigRows(
     if (key.startsWith('runtime.')) continue; // runtime rows come from runtime resolution
     rows.set(key, { key, value, source: INTAKE_KEYS.has(key) ? 'intake' : 'config' });
   }
-  const capEnv = env['PENSMITH_COST_CAP_USD'];
-  const capNum = capEnv !== undefined ? Number(capEnv) : NaN;
-  if (Number.isFinite(capNum) && capNum > 0) {
+  const capNum = parseCostCapEnv(env['PENSMITH_COST_CAP_USD']);
+  if (capNum !== null) {
     rows.set('budget.cost_cap_usd', { key: 'budget.cost_cap_usd', value: capNum, source: 'env' });
   }
   return [...rows.values()].sort((a, b) => (a.key === 'schema_version' ? -1 : b.key === 'schema_version' ? 1 : a.key.localeCompare(b.key)));

@@ -56,7 +56,7 @@
 //   (CI path). orphan-label is a judgment slug with a structured contract
 //   (RUN-25, RUN-26): complete() returns the validated {label} object.
 
-import { complete, isFatalLlmError } from '../anthropic.js';
+import { complete, isFatalLlmError, MissingApiKeyError } from '../anthropic.js';
 import type { OrphanLabel as OrphanLabelData } from '../llm-contracts.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
 
@@ -401,10 +401,15 @@ export async function runPass4(
   // Never reached in CI: the noLlm short-circuit above is the test path.
   const promptTemplate = loadPrompt('orphan-label');
 
+  // Set once no provider key is configured: the remaining AMBIGUOUS claims keep
+  // the conservative UNCLEAR label with no further call (advisory; verify still
+  // writes its deterministic verdict — D-V1-04).
+  let noKey = false;
   for (const audit of audits) {
     const paraText = (paragraphs[audit.result.paragraphIndex] ?? '').trim();
     for (const { index, claim } of audit.ambiguous) {
       let label: OrphanLabel = orphanLabelPlaceholder();
+      if (noKey) continue;
       try {
         // WR-04: sanitize untrusted variables (sentence comes from draft text;
         // paragraph_context is a slice of the same draft) before interpolation
@@ -426,9 +431,14 @@ export async function runPass4(
         });
         label = (res.data as OrphanLabelData).label;
       } catch (err) {
-        // The session cost cap, a missing key and invalid configuration stop
-        // verify (RUN-18). Any other failure -> conservative UNCLEAR (advisory
-        // must not crash verify).
+        // No provider key: skip the rest (never fatal, see noKey above).
+        if (err instanceof MissingApiKeyError) {
+          noKey = true;
+          continue;
+        }
+        // The session cost cap and invalid configuration stop verify (RUN-18;
+        // verify writes its deterministic verdict first). Any other failure ->
+        // conservative UNCLEAR (advisory must not crash verify).
         if (isFatalLlmError(err)) throw err;
         label = 'UNCLEAR';
       }

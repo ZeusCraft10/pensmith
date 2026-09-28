@@ -137,7 +137,7 @@ export function sectionVerificationReasons(verificationMd: string, dryRunNow: bo
 export function blockingRowReason(row: BlockingVerdictRow): string {
   const cite = row.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row.citekey}]`;
   return row.verdict === 'UNVERIFIABLE'
-    ? `${cite} is UNVERIFIABLE (checked offline or under --dry-run) — re-run online`
+    ? `${cite} is UNVERIFIABLE (its source could not be checked: offline, --dry-run or a failed lookup) — re-run online`
     : `${cite} has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND)`;
 }
 

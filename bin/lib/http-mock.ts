@@ -136,6 +136,42 @@ export const SCRUBBED_QUERY_PARAMS: ReadonlySet<string> = new Set([
   '_',
 ]);
 
+/** `message-type` values public APIs use for an error document. */
+const ERROR_MESSAGE_TYPES: ReadonlySet<string> = new Set(['error', 'exception', 'validation-failure', 'not-polite']);
+
+/**
+ * Why a response body is an API error document, or null when it is not (CI-07).
+ * Some services answer HTTP 200 with an error inside (Crossref Labs'
+ * `{"statusCode":"403","message-type":"not-polite"}`): such a body is never a
+ * recording — the recorder refuses it and tests/cassette-provenance.test.ts
+ * fails on a committed one. `status` is the HTTP status it came with; a
+ * deliberate non-200 recording (a real 404) is judged by its status, not here.
+ */
+export function recordedErrorBody(status: number, response: unknown): string | null {
+  if (status !== 200) return null;
+  let body: unknown = response;
+  if (typeof body === 'string') {
+    const t = body.trim();
+    if (!t.startsWith('{')) return null; // XML / HTML / plain text answers
+    try {
+      body = JSON.parse(t) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
+  const o = body as Record<string, unknown>;
+  const code = Number(o['statusCode'] ?? o['status_code']);
+  if (Number.isFinite(code) && code >= 400) return `an inner statusCode ${code}`;
+  const mt = o['message-type'];
+  if (typeof mt === 'string' && ERROR_MESSAGE_TYPES.has(mt.toLowerCase())) return `message-type "${mt}"`;
+  const st = o['status'];
+  if (typeof st === 'string' && /^(failed|error)$/i.test(st)) return `status "${st}"`;
+  const err = o['error'];
+  if ((typeof err === 'string' && err.length > 0) || (typeof err === 'object' && err !== null)) return 'an "error" member';
+  return null;
+}
+
 // ---------------------------------------------------------------------
 //   Network mode (D-17-04)
 // ---------------------------------------------------------------------

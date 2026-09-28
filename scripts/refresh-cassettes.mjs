@@ -53,6 +53,8 @@ export const RECORDED_QUERY = 'attention mechanisms in neural networks';
 export const RECORDED_DOI = '10.1038/nphys1170';
 /** A DataCite DOI Crossref answers 404 for (a real "did not resolve" fixture). */
 export const RECORDED_CROSSREF_404_DOI = '10.48550/arXiv.1706.03762';
+/** A retracted work with a Retraction Watch record in Crossref (retraction-watch hit). */
+export const RECORDED_RETRACTED_DOI = '10.1016/S0140-6736(97)11096-0';
 /** An arXiv id recorded for fetchById. */
 export const RECORDED_ARXIV_ID = '1706.03762';
 /** The title add.ts extracts from tests/fixtures/pdf/byo-text.pdf. */
@@ -90,7 +92,10 @@ const QUERY_SETS = {
     { file: 'doi-nphys1170', calls: [{ fn: 'fetchById', arg: RECORDED_DOI }] },
   ],
   'retraction-watch': [
-    { file: 'record-nphys1170', calls: [{ fn: 'fetchById', arg: RECORDED_DOI }] },
+    // No retraction notice: a live "not retracted" answer.
+    { file: 'updates-nphys1170', calls: [{ fn: 'fetchById', arg: RECORDED_DOI }] },
+    // A real retracted work (Wakefield et al. 1998, retracted 2010).
+    { file: 'updates-wakefield-1998', calls: [{ fn: 'fetchById', arg: RECORDED_RETRACTED_DOI }] },
   ],
 };
 
@@ -161,6 +166,14 @@ async function runChild(adapter) {
         const bad = recorded.find((r) => RETRY_STATUSES.has(r.status));
         if (bad) {
           throw new Error(`${adapter}.${call.fn}: live endpoint answered HTTP ${bad.status} — not recorded`);
+        }
+        // An error document inside an HTTP 200 (e.g. Crossref Labs' "not-polite")
+        // is not a recording of the API's answer — refuse it.
+        for (const r of recorded) {
+          const why = mock.recordedErrorBody(r.status, r.response);
+          if (why !== null) {
+            throw new Error(`${adapter}.${call.fn}: live endpoint answered HTTP ${r.status} with an error body (${why}) — not recorded`);
+          }
         }
         const candidate = recorded.map(entryFor);
         const size = Buffer.byteLength(JSON.stringify([...entries, ...candidate], null, 2) + '\n', 'utf8');

@@ -200,7 +200,7 @@ npm run cassettes:refresh -- --only crossref     # one adapter
 node --import tsx --test tests/cassette-no-leak.test.ts tests/cassette-size.test.ts tests/cassette-provenance.test.ts
 ```
 
-The recorder (`scripts/refresh-cassettes.mjs`) drives each adapter's recorded query set through the real adapter code, live and outside any test context, so each stored request is exactly what the adapter sends. It keeps only the `content-type` response header, strips `mailto` / `email` / `api_key` / `key` / `tool` query parameters, redacts the contact email everywhere else, and never records a response the adapter rejected (a 429 or 5xx leaves that adapter's committed cassettes untouched — record it on a later run). Never hand-write a response the real API does not return.
+The recorder (`scripts/refresh-cassettes.mjs`) drives each adapter's recorded query set through the real adapter code, live and outside any test context, so each stored request is exactly what the adapter sends. It keeps only the `content-type` response header, strips `mailto` / `email` / `api_key` / `key` / `tool` query parameters, redacts the contact email everywhere else, and never records a response the adapter rejected (a 429 or 5xx leaves that adapter's committed cassettes untouched — record it on a later run) or an error document inside an HTTP 200 (e.g. `{"statusCode":"403","message-type":"not-polite"}`: fix the adapter's request instead; `tests/cassette-provenance.test.ts` fails on a committed one). Never hand-write a response the real API does not return.
 
 ### Permissions reminder
 

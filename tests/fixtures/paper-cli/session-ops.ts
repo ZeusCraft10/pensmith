@@ -5,6 +5,7 @@
 //   session-ops.ts reentrant <root>
 //   session-ops.ts parallel <root> <n,n,...> <holdMs>   (MCP-style withPaperSession calls)
 //   session-ops.ts acquire <root>                        (one CLI-kind acquire + release)
+//   session-ops.ts parallel-acquire <root>               (two acquires started together, released in order)
 
 import { existsSync } from 'node:fs';
 import {
@@ -39,6 +40,21 @@ async function main(): Promise<unknown> {
       ),
     );
     return { pid: process.pid, spans, lockAfter: existsSync(sessionLockFile(root)) };
+  }
+  if (op === 'parallel-acquire') {
+    // Two same-process acquisitions started in the SAME tick (Claude's parallel
+    // MCP tool calls): both must join ONE hold, so releasing the first leaves
+    // the record in place until the second is released.
+    const [a, b] = await Promise.all([
+      acquireSessionLock(root, { kind: 'mcp', verb: 'a' }),
+      acquireSessionLock(root, { kind: 'mcp', verb: 'b' }),
+    ]);
+    const bothAcquired = existsSync(sessionLockFile(root));
+    await a.release();
+    const afterFirstRelease = { file: existsSync(sessionLockFile(root)), owner: readSessionLock(root) !== null };
+    await b.release();
+    const afterSecondRelease = { file: existsSync(sessionLockFile(root)), owner: readSessionLock(root) !== null };
+    return { bothAcquired, afterFirstRelease, afterSecondRelease };
   }
   if (op === 'acquire') {
     const h = await acquireSessionLock(root, { kind: 'cli', verb: 'test' });

@@ -25,8 +25,10 @@ import path from 'node:path';
 import { jaroWinkler, levenshteinSubstring } from '../lib/fuzzy.js';
 import { runPass1, runFreshnessForDraft, renderFreshnessTable } from '../lib/verify/pass1.js';
 import { runPass3 } from '../lib/verify/pass3.js';
-import { runPass2, renderPass2Section } from '../lib/verify/pass2.js';
-import { runPass4, renderPass4Section } from '../lib/verify/pass4.js';
+import { runPass2, renderPass2Section, pass2NotRun, NO_LLM_SKIP_REASON, type Pass2Result } from '../lib/verify/pass2.js';
+import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
+import { isFatalLlmError } from '../lib/anthropic.js';
+import { extractCitedKeysForVerification } from '../lib/citation-token.js';
 import { parseBibFile } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, sectionPlan, paperDir, projectRoot } from '../lib/paths.js';
@@ -34,15 +36,21 @@ import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verd
 import { loadFrontmatterDoc } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
-import { resolveSectionSlug } from '../lib/section-slug.js';
+import { resolveSectionArg } from '../lib/section-slug.js';
 import { offlineMarkerLine } from '../lib/http-mock.js';
-import { EXIT_BLOCKED } from '../lib/exit-codes.js';
+import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
 
 // Force-bind the deterministic primitives so the acceptance grep
 // (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
 // stays GREEN even if a refactor later inlines runPass1/runPass3.
 void jaroWinkler;
 void levenshteinSubstring;
+
+/** One line naming why the advisory passes stopped (for the "not run" rows). */
+function stopReason(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.replace(/\s*\r?\n\s*/g, ' ').replace(/\|/g, '/').trim().slice(0, 160) || 'stopped';
+}
 
 export const verifyCommand = defineCommand({
   meta: {
@@ -58,7 +66,7 @@ export const verifyCommand = defineCommand({
     },
     slug: {
       type: 'string',
-      description: 'Section slug (lowercase-kebab; defaults to "placeholder").',
+      description: 'Section slug (lowercase-kebab; defaults to the outline\'s slug for <n>).',
     },
     yolo: {
       type: 'boolean',
@@ -67,58 +75,59 @@ export const verifyCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const n = Number(args.n);
-    if (!Number.isInteger(n) || n < 1) {
-      throw new Error(`pensmith verify: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
-    }
+    // RUN-09: <n> must name one of the paper's sections and --slug must be a
+    // bare slug — EXIT_USAGE otherwise, before anything is read or written. The
+    // slug comes from OUTLINE.md (audit #23); 'placeholder' only when there is
+    // no outline yet.
+    const { n, slug } = resolveSectionArg('verify', projectRoot(), args.n, args.slug);
     // RUN-02: every VERIFICATION.md written in an offline / --dry-run session
     // opens with the disclosure marker — the short-circuit bodies below too.
     const markerPrefix = (): string => {
       const m = offlineMarkerLine();
       return m !== null ? `${m}\n\n` : '';
     };
-    // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
-    // wins; 'placeholder' only if no outline row exists).
-    const slug = resolveSectionSlug(projectRoot(), n, args.slug);
     const draftPath = sectionDraft(n, slug);
     const verifPath = sectionVerification(n, slug);
     const bibPath = path.join(paperDir(), 'CITATIONS.bib');
 
     if (!existsSync(draftPath)) {
-      const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: DRAFT.md missing at ${draftPath}\n`;
+      const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: DRAFT.md missing at ${draftPath} — run \`pensmith write ${n}\` first.\n`;
       await atomicWriteFile(verifPath, body);
-      process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
-      return { ok: false, status: 'unverifiable', path: verifPath };
-    }
-    if (!existsSync(bibPath)) {
-      const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: .paper/CITATIONS.bib missing — run \`pensmith research\` first.\n`;
-      await atomicWriteFile(verifPath, body);
-      process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
+      // A section whose draft is gone is back to "needs writing": the router
+      // re-drafts it instead of re-dispatching verify forever.
+      const planPath = sectionPlan(n, slug);
+      if (existsSync(planPath)) {
+        await updatePlanFrontmatter(planPath, (fm) => {
+          if (fm.status !== 'planned') fm.status = 'writing';
+        });
+      }
+      process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${n}\` first\n`);
       return { ok: false, status: 'unverifiable', path: verifPath };
     }
 
-    // Empty / no-entry CITATIONS.bib is a valid state (the library writer
-    // renders an empty library as an empty bib, BRDTH-01). With no draft
-    // citations there is nothing to verify, so we short-circuit here to
-    // "unverifiable: no citations to verify". parseBibFile reads an empty bib
-    // as zero entries (strict parseBib still throws on malformed text, T-3-04).
-    // The DRAFT.md is read BEFORE the short-circuit so a draft with [@citekey]
-    // tokens against an empty bib still falls through to runPass1 (which flags
-    // each as FABRICATED) — only the bib-empty + draft-citation-free
-    // intersection gets the short-circuit.
+    // The ONE citation grammar (citation-token.ts): every cited key, whatever
+    // its shape ([@k, p. 3], [@a; @b], [@Key:2099]) — the same extraction
+    // runPass1 uses, so "cites nothing" means Pass 1 has nothing to check.
     const draftMd = readFileSync(draftPath, 'utf8');
-    const bibText = readFileSync(bibPath, 'utf8');
-    const draftHasCitekeys = /\[@[a-z][a-z0-9_-]*\]/i.test(draftMd);
-    const bibIsEmpty = bibText.trim().length === 0;
-    if (bibIsEmpty && !draftHasCitekeys) {
-      const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: CITATIONS.bib is empty and DRAFT.md has no [@citekey] references — nothing to verify.\n`;
+    const citedKeys = extractCitedKeysForVerification(draftMd);
+    const bibExists = existsSync(bibPath);
+    if (!bibExists && citedKeys.length > 0) {
+      // Fail closed: a draft that cites sources with no CITATIONS.bib to check
+      // them against is never a passable verdict (compile refuses Status: failed).
+      const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: failed\nReason: .paper/CITATIONS.bib is missing, so the ${citedKeys.length} source(s) DRAFT.md cites cannot be checked — run \`pensmith research\` to rebuild it, then \`pensmith verify ${n}\`.\n`;
       await atomicWriteFile(verifPath, body);
-      process.stdout.write(`pensmith verify: empty bib + no draft citekeys — wrote unverifiable VERIFICATION.md to ${verifPath}\n`);
-      return { ok: false, status: 'unverifiable', path: verifPath };
+      process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote failed VERIFICATION.md to ${verifPath}\n`);
+      return { ok: false, status: 'failed', path: verifPath, exitCode: EXIT_ERROR };
     }
 
-    const pass1 = await runPass1(draftMd, bibPath);
-    const bibEntries = await parseBibFile(readFileSync(bibPath, 'utf8'));
+    // An empty CITATIONS.bib is zero entries (the library writer renders an
+    // empty library as an empty bib, BRDTH-01), and a draft that cites nothing
+    // needs no bib at all: both take the normal path below. With no citation,
+    // Pass 1 and Pass 3 have nothing to check and the section is verified —
+    // exactly as it is against a non-empty bib; a cited key absent from the bib
+    // is FABRICATED (fail closed).
+    const pass1 = bibExists ? await runPass1(draftMd, bibPath) : [];
+    const bibEntries = bibExists ? await parseBibFile(readFileSync(bibPath, 'utf8')) : [];
     // Widened value type (additive): carries title/author/abstract so Pass 2
     // (claim support) has source metadata. runPass3 reads only DOI, so the
     // widening is backward-compatible with the runPass3 call below.
@@ -136,7 +145,7 @@ export const verifyCommand = defineCommand({
     // RSCH-10 freshness probe (D-10, WARN-only). Runs AFTER the blocking
     // verdict computation and NEVER influences `status` — a stale DOI or a
     // retraction-watch hit surfaces as an advisory table row, not a block.
-    const freshness = await runFreshnessForDraft(draftMd, bibPath);
+    const freshness = bibExists ? await runFreshnessForDraft(draftMd, bibPath) : [];
 
     // Aggregate: any FABRICATED → status: failed; any MIS-CITED → status: failed;
     // any Pass-1 UNVERIFIABLE (the re-fetch was unavailable offline / under
@@ -161,8 +170,32 @@ export const verifyCommand = defineCommand({
     // orchestrator at the prompt-loader chokepoint. The results are returned for
     // Phase 6 DONE-09 consumption and rendered as advisory VERIFICATION.md
     // sections below.
-    const pass2 = await runPass2(draftMd, bibByCitekey, { n });
-    const pass4 = await runPass4(draftMd, { n });
+    //
+    // No provider key is not an error here: the passes record "skipped (no LLM
+    // configured)" rows (D-V1-04). A failure that must stop verify — the session
+    // cost cap, an invalid runtime config — is caught so the frozen Pass-1/Pass-3
+    // verdict is still written and persisted, then rethrown (its exit code).
+    let advisoryStop: unknown = undefined;
+    let pass2: Pass2Result[];
+    let pass4: Pass4Result[] | null = null;
+    try {
+      pass2 = await runPass2(draftMd, bibByCitekey, { n });
+    } catch (err) {
+      if (!isFatalLlmError(err)) throw err;
+      advisoryStop = err;
+      pass2 = pass2NotRun(draftMd, stopReason(err));
+    }
+    if (advisoryStop === undefined) {
+      try {
+        pass4 = await runPass4(draftMd, { n });
+      } catch (err) {
+        if (!isFatalLlmError(err)) throw err;
+        advisoryStop = err;
+      }
+    }
+    if (advisoryStop === undefined && pass2.some((r) => r.rationale.startsWith(NO_LLM_SKIP_REASON))) {
+      process.stderr.write(`pensmith verify: advisory claim-support and orphan checks ${NO_LLM_SKIP_REASON} — the blocking Pass 1 and Pass 3 verdicts are unaffected.\n`);
+    }
 
     const offlineMarker = offlineMarkerLine();
     const lines = [
@@ -179,11 +212,14 @@ export const verifyCommand = defineCommand({
       '',
       ...pass3.map((r) => renderPass3VerdictRow(r.citekey, r.quoteSnippet, r.verdict, r.levRatio, r.reason)),
       '',
+      ...(citedKeys.length === 0 ? ['Note: DRAFT.md cites no sources ([@citekey]) — Pass 1 and Pass 3 had nothing to check.', ''] : []),
       renderFreshnessTable(freshness),
       '',
       renderPass2Section(pass2),
       '',
-      renderPass4Section(pass4),
+      pass4 !== null
+        ? renderPass4Section(pass4)
+        : `## Pass-4 (orphan claims, advisory)\n\n_(not run: ${stopReason(advisoryStop)})_\n`,
       '',
     ];
     await atomicWriteFile(verifPath, lines.join('\n'));
@@ -222,6 +258,9 @@ export const verifyCommand = defineCommand({
     }
 
     process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
+    // The deterministic verdict is on disk; now stop with the advisory failure
+    // (e.g. EXIT_COST_CAP, one line through the dispatcher).
+    if (advisoryStop !== undefined) throw advisoryStop;
     // RUN-09: a failed or blocking-UNVERIFIABLE section is a verifier refusal —
     // `blocked` maps to EXIT_BLOCKED.
     return { ok: status !== 'failed' && !blockingUnverifiable, status, blocked: hasFail || blockingUnverifiable, path: verifPath, pass1, pass3, freshness, pass2, pass4 };

@@ -32,7 +32,7 @@ import { paperDir, projectRoot } from './paths.js';
 import { atomicAppendFile } from './atomic-write.js';
 import { currentSessionId } from './session-log.js';
 import { declineGate, runGate } from './gates.js';
-import { tryReadPaperConfigSync } from './config.js';
+import { parseCostCapEnv, tryReadPaperConfigSync } from './config.js';
 
 export interface BudgetSpec {
   scope: 'paper' | 'section' | 'task';
@@ -127,6 +127,22 @@ export async function sessionSpend(root?: string): Promise<number> {
 }
 
 /**
+ * The session that recorded the LAST cost in COSTS.jsonl (append order) and
+ * its total spend — what a standalone `pensmith status` meters, since its own
+ * process never spends (a session is one process, D-17-26). Null when the
+ * ledger holds no session-stamped record.
+ */
+export async function lastSessionSpend(root?: string): Promise<{ session: string; usd: number } | null> {
+  const records = await readRecords(root);
+  let last: string | null = null;
+  for (const rec of records) if (typeof rec.session === 'string' && rec.session) last = rec.session;
+  if (last === null) return null;
+  let usd = 0;
+  for (const rec of records) if (rec.session === last) usd += Number(rec.costUsd) || 0;
+  return { session: last, usd };
+}
+
+/**
  * Legacy per-scope pre-call check (the GPTZero advisory). Throws
  * BudgetExceededError when totalCost(scope) + estimate > spec.cap.
  */
@@ -147,13 +163,17 @@ export interface CostCapSettings {
   warnAtUsd: number | null;
 }
 
-/** `PENSMITH_COST_CAP_USD` (finite, > 0) > `[budget] cost_cap_usd` > $5.00; warn from `[budget] warn_at_usd`. */
+/**
+ * `PENSMITH_COST_CAP_USD` > `[budget] cost_cap_usd` > $5.00; warn from
+ * `[budget] warn_at_usd`. A set-but-invalid PENSMITH_COST_CAP_USD throws a
+ * one-line EXIT_USAGE PensmithError (config.ts parseCostCapEnv) — before any
+ * model call, since every call checks the cap first.
+ */
 export function resolveCostCap(root: string = projectRoot(), env: NodeJS.ProcessEnv = process.env): CostCapSettings {
   const cfg = tryReadPaperConfigSync(root);
   const warnAtUsd = cfg?.budget?.warn_at_usd ?? null;
-  const raw = env['PENSMITH_COST_CAP_USD'];
-  const fromEnv = raw !== undefined && raw !== '' ? Number(raw) : NaN;
-  if (Number.isFinite(fromEnv) && fromEnv > 0) return { capUsd: fromEnv, capSource: 'env', warnAtUsd };
+  const fromEnv = parseCostCapEnv(env['PENSMITH_COST_CAP_USD']);
+  if (fromEnv !== null) return { capUsd: fromEnv, capSource: 'env', warnAtUsd };
   const fromCfg = cfg?.budget?.cost_cap_usd;
   if (typeof fromCfg === 'number' && fromCfg > 0) return { capUsd: fromCfg, capSource: 'config', warnAtUsd };
   return { capUsd: DEFAULT_SESSION_CAP_USD, capSource: 'default', warnAtUsd };

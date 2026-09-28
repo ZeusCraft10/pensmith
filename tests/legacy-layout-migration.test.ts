@@ -206,6 +206,33 @@ test('RUN-13: the MCP server boot never moves a non-pensmith root-level STATE.js
   assertUntouched(root, 'mcp boot');
 });
 
+test('RUN-12 / RUN-13: differing legacy and .paper STATE.json copies — the MCP server still boots, says so in one line, and each state read reports the conflict', async () => {
+  const sb = sandbox('layout-conflict-mcp');
+  const root = seedLegacy(sb, 'diff');
+  const newer = LEGACY_STATE.replace('legacy-paper', 'a-different-paper');
+  writeFileSync(join(root, '.paper', 'STATE.json'), newer);
+  const transport = new StdioClientTransport({ command: process.execPath, args: [MCP_BIN], env: sb.env({ PENSMITH_PAPER_ROOT: root }), cwd: root, stderr: 'pipe' });
+  let stderr = '';
+  transport.stderr?.on('data', (c: Buffer) => { stderr += c.toString(); });
+  const client = new Client({ name: 'legacy-layout-test', version: '0.0.0' }, { capabilities: {} });
+  await client.connect(transport);
+  try {
+    const tools = await client.listTools();
+    assert.ok(tools.tools.length > 0, 'the server booted with its tools');
+    await assert.rejects(
+      () => client.readResource({ uri: 'paper://state' }),
+      /exist and differ/,
+      'paper://state reports the conflict instead of serving either copy',
+    );
+  } finally {
+    await client.close();
+  }
+  assert.match(stderr, /^pensmith \(mcp\): both .+ exist and differ — keep the one you want, delete the other, and re-run$/m);
+  assert.doesNotMatch(stderr, /^\s+at .*\.js:\d+/m, 'no stack trace');
+  assert.equal(readFileSync(join(root, 'STATE.json'), 'utf8'), LEGACY_STATE, 'root copy kept');
+  assert.equal(readFileSync(join(root, '.paper', 'STATE.json'), 'utf8'), newer, '.paper copy kept');
+});
+
 test('RUN-13: a `.paper` path handed to the state layer names its parent — STATE.json never moves into .paper/.paper/', async () => {
   const sb = sandbox('layout-dotpaper');
   const root = sb.project('p');

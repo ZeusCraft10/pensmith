@@ -40,7 +40,7 @@ import { sources } from '../sources/index.js';
 import { parseBibFile } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult } from './freshness.js';
-import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
+import { fetchById as retractionWatchFetchById, isRetractionLookupError } from '../sources/retraction-watch.js';
 import { fetchById as dryRunFetchById } from '../sources/dry-run.js';
 import { extractCitedKeysForVerification } from '../citation-token.js';
 import { isReservedDryRunId } from '../doi.js';
@@ -198,10 +198,11 @@ async function verdictForCitekey(
 
   // GATE-03: live retraction re-query at verify time (Phase 14, Plan 03).
   // Re-query Retraction Watch on the Crossref-confirmed DOI. A confirmed hit
-  // (non-null) escalates to MIS-CITED (blocking). A transport error or no-hit
-  // (fetchById returns null — never throws) is a silent skip; the verdict falls
-  // through to the normal JW path. No try/catch needed: the adapter already
-  // catches all transport errors and returns null (retraction-watch.ts:122-126).
+  // (non-null) escalates to MIS-CITED (blocking); a live "no retraction" (null)
+  // falls through to the normal JW path. A status that cannot be determined —
+  // offline with no fixture, or a live lookup failure (RetractionLookupError:
+  // a non-200, an error body, a transport failure) — is never "not retracted":
+  // it is UNVERIFIABLE (blocking) unless the other DOI confirms a retraction.
   // Placed AFTER the Crossref null-guard so FABRICATED citations (unresolved DOI)
   // never reach this check (Pitfall 1 — avoids cassette-fallback false positives).
   // Audit #16: a work can be listed in Retraction Watch under EITHER the claimed
@@ -214,17 +215,24 @@ async function verdictForCitekey(
   )];
   let liveRetraction: Awaited<ReturnType<typeof retractionWatchFetchById>> = null;
   let retractionUnavailable: { err: OfflineEgressError; doi: string } | null = null;
+  let retractionUnknown: string | null = null;
   for (const d of retractionDois) {
     let hit: Awaited<ReturnType<typeof retractionWatchFetchById>>;
     try {
       hit = await retractionWatchFetchById(d);
     } catch (err) {
-      // An unavailable re-query is never "not retracted" (RUN-03): remember it,
-      // keep checking the other DOI (a confirmed hit there still blocks), and
-      // report UNVERIFIABLE below if nothing confirmed a retraction.
-      if (!isOfflineEgressError(err)) throw err;
-      retractionUnavailable ??= { err, doi: d };
-      continue;
+      // An unavailable re-query is never "not retracted" (RUN-03, SRC-04):
+      // remember it, keep checking the other DOI (a confirmed hit there still
+      // blocks), and report UNVERIFIABLE below if nothing confirmed a retraction.
+      if (isOfflineEgressError(err)) {
+        retractionUnavailable ??= { err, doi: d };
+        continue;
+      }
+      if (isRetractionLookupError(err)) {
+        retractionUnknown ??= err.message;
+        continue;
+      }
+      throw err;
     }
     if (hit !== null) {
       liveRetraction = hit;
@@ -242,6 +250,12 @@ async function verdictForCitekey(
   }
   if (retractionUnavailable !== null) {
     return unverifiable(ck, retractionUnavailable.err, `Retraction Watch re-query of ${retractionUnavailable.doi}`);
+  }
+  if (retractionUnknown !== null) {
+    return {
+      citekey: ck, verdict: 'UNVERIFIABLE', titleJW: 0, authorJW: 0,
+      reason: `${retractionUnknown} (Retraction Watch re-query) — re-run verify once the lookup answers`,
+    };
   }
 
   const titleJW = jaroWinkler(actual.title, claimedTitle);

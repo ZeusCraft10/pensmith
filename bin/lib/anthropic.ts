@@ -100,6 +100,26 @@ export interface ChatMessage {
   content: string;
 }
 
+/**
+ * The conversation for the RUN-25 corrective retry: the original turns, the
+ * model's reply as an assistant turn, then the correction. A reply with no text
+ * (only thinking blocks, or empty text blocks) cannot be an assistant turn —
+ * the Messages API rejects empty content in any message but a final assistant
+ * one (HTTP 400) — so the correction then joins the last user turn instead.
+ */
+export function correctiveMessages(messages: readonly ChatMessage[], replyText: string, correction: string): ChatMessage[] {
+  if (replyText.trim().length > 0) {
+    return [...messages, { role: 'assistant', content: replyText }, { role: 'user', content: correction }];
+  }
+  const out = [...messages];
+  const last = out[out.length - 1];
+  if (last !== undefined && last.role === 'user') {
+    out[out.length - 1] = { role: 'user', content: `${last.content}\n\n${correction}` };
+    return out;
+  }
+  return [...out, { role: 'user', content: correction }];
+}
+
 export interface CompleteOptions {
   /** The prompt slug (llm-models.ts SLUGS): drives model, effort, max_tokens and structured output. */
   slug: string;
@@ -1071,11 +1091,7 @@ export async function complete<T = unknown>(opts: CompleteOptions): Promise<Comp
     let parsed = first.parsed ?? { ok: false as const, error: 'no reply to parse' };
     if (!parsed.ok) {
       // One corrective retry after a structural failure (RUN-25).
-      const retryMessages: ChatMessage[] = [
-        ...opts.messages,
-        { role: 'assistant', content: first.result.text },
-        { role: 'user', content: correctiveInstruction(plan.spec.slug, parsed.error) },
-      ];
+      const retryMessages = correctiveMessages(opts.messages, first.result.text, correctiveInstruction(plan.spec.slug, parsed.error));
       const second = await runWithRetry(plan, opts, key, retryMessages, 'corrective-retry');
       totalCost += second.spentUsd;
       final = second;

@@ -36,7 +36,7 @@ The implementation lives in `bin/cli/plan.ts` (created by Plan 07).
 
 ## Body
 
-1. **Parse args**: `pensmith plan <N>` — `N` is the 1-based section number. Read `.paper/OUTLINE.md` to resolve the slug for `N`.
+1. **Parse args**: `pensmith plan <N>` — `N` is the 1-based section number. Read `.paper/OUTLINE.md` to resolve the slug for `N`. A `N` that is not a number from 1 to 99, a section the outline does not have, or a `--slug` that is not the outline's slug for `N` is a usage error (exit 2) before any model call or write — a paper with an outline never gets a `NN-placeholder` section folder (RUN-09).
 
 2. **Read inputs** (read-only file accesses, no mutation):
    - `.paper/OUTLINE.md` → resolve section `{n, slug, title, depends_on, estimated_word_count, assigned_sources}` for the target N.

@@ -95,6 +95,8 @@ export interface MockFixtureFile {
 
 export interface MockLlmOptions {
   port?: number;
+  /** Which API the server speaks: 'both' (default), or one — the other answers 404. */
+  shape?: MockShape | 'both';
   /** Delay every response by this many ms (a "slow" provider; used for session-lock tests). */
   delayMs?: number;
   /** Status for GET /v1/models (default 200; e.g. 401 simulates a rejected key for the doctor probe). */
@@ -298,9 +300,10 @@ export class MockLlm {
       : req.method === 'POST' && (p === '/v1/chat/completions' || p === '/chat/completions')
         ? 'openai'
         : null;
-    if (!shape) {
+    const only = this.opts.shape ?? 'both';
+    if (!shape || (only !== 'both' && shape !== only)) {
       res.writeHead(404, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: { message: `mock-llm: no route ${req.method} ${p}` } }));
+      res.end(JSON.stringify({ error: { message: `mock-llm: no route ${req.method} ${p}${shape ? ` (this mock speaks ${only} only)` : ''}` } }));
       return;
     }
 
@@ -312,6 +315,14 @@ export class MockLlm {
     }
     const slug = headers['x-pensmith-slug'] || null;
     const captured = this.capture({ method: 'POST', path: p, shape, slug, headers, rawBody, body });
+    // The real Messages API rejects empty content in any message except an
+    // optional final assistant turn (HTTP 400 invalid_request_error).
+    const emptyAt = shape === 'anthropic' ? emptyNonFinalMessage(body) : -1;
+    if (emptyAt >= 0) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: `messages.${emptyAt}: all messages must have non-empty content except for the optional final assistant message` } }));
+      return;
+    }
     const reply = this.nextScripted(slug) ?? this.fromFixture(slug, captured.bodySha256) ?? this.defaultReply(slug, body);
     if (this.delayMs > 0) await sleep(this.delayMs);
     await this.respond(res, shape, body ?? {}, reply);
@@ -446,6 +457,20 @@ export class MockLlm {
     res.write('data: [DONE]\n\n');
     res.end();
   }
+}
+
+/** Index of the first message with empty content that is not the final assistant turn, else -1. */
+function emptyNonFinalMessage(body: Record<string, unknown> | null): number {
+  const msgs = body?.['messages'];
+  if (!Array.isArray(msgs)) return -1;
+  for (let i = 0; i < msgs.length; i += 1) {
+    const m = msgs[i] as { role?: unknown; content?: unknown };
+    const c = m?.content;
+    const empty = (typeof c === 'string' && c.trim().length === 0) || (Array.isArray(c) && c.length === 0);
+    const finalAssistant = i === msgs.length - 1 && m?.role === 'assistant';
+    if (empty && !finalAssistant) return i;
+  }
+  return -1;
 }
 
 function redactHeaders(h: Record<string, string>): Record<string, string> {

@@ -32,7 +32,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { extractPdfText, MAX_PDF_BYTES } from '../lib/pdf-text.js';
 import { search as crossrefSearch, fetchById as crossrefFetchById } from '../lib/sources/crossref.js';
-import { upsertSources, tryLoadLibrary } from '../lib/library.js';
+import { upsertSources, tryLoadLibrary, assertLibraryReadable } from '../lib/library.js';
 import { normalizeDoi, isDoi, verifyDoi, isReservedDryRunId } from '../lib/doi.js';
 import { updateFrontmatter } from '../lib/frontmatter.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
@@ -171,6 +171,9 @@ export const addCommand = defineCommand({
   async run({ args }) {
     const paperRoot = projectRoot();
     const source = String(args.source);
+    // RUN-12: a corrupt LIBRARY.json is one actionable line before any lookup,
+    // download or write — the same check research runs.
+    await assertLibraryReadable(paperRoot);
 
     // (0) `pensmith add --remap <citekey> [--section N]` — remap a source that is
     //     already in the library (the command a non-interactive add prints,

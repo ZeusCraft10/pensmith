@@ -176,10 +176,6 @@ export function setSessionArgv(argv: readonly string[]): void {
   sessionArgv = Object.freeze([...argv]);
 }
 
-export function getSessionArgv(): readonly string[] | null {
-  return sessionArgv;
-}
-
 /** Test-only: start a fresh session (new id, seq 0, argv unlogged). */
 export function _resetSessionForTest(): void {
   sessionIdValue = null;

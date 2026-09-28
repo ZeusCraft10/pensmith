@@ -186,7 +186,7 @@ test('D-17-07: an UNVERIFIABLE Pass-1 row is blocking with a "re-run online" ref
   assert.deepEqual(rows, [{ citekey: 'jumper2021', verdict: 'UNVERIFIABLE' }]);
   assert.match(
     mod.blockingRowReason(rows[0]!),
-    /^citation \[@jumper2021\] is UNVERIFIABLE \(checked offline or under --dry-run\) — re-run online$/,
+    /^citation \[@jumper2021\] is UNVERIFIABLE \(its source could not be checked: offline, --dry-run or a failed lookup\) — re-run online$/,
   );
   assert.match(
     mod.blockingRowReason({ citekey: 'x', verdict: 'FABRICATED' }),

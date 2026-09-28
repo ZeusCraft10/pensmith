@@ -40,7 +40,12 @@ test('RUN-18: cap precedence — PENSMITH_COST_CAP_USD > [budget] cost_cap_usd >
     sb.writePaperConfig('schema_version = 1\n[budget]\ncost_cap_usd = 12.5\nwarn_at_usd = 2\n');
     assert.deepEqual(resolveCostCap(sb.root, {}), { capUsd: 12.5, capSource: 'config', warnAtUsd: 2 });
     assert.deepEqual(resolveCostCap(sb.root, { PENSMITH_COST_CAP_USD: '0.75' }), { capUsd: 0.75, capSource: 'env', warnAtUsd: 2 });
-    assert.equal(resolveCostCap(sb.root, { PENSMITH_COST_CAP_USD: 'abc' }).capSource, 'config', 'an invalid env value is ignored');
+    // Review round 2: an invalid value is refused (one EXIT_USAGE line), never
+    // silently replaced by [budget] cost_cap_usd or the $5 default.
+    for (const bad of ['abc', '0', '$1']) {
+      assert.throws(() => resolveCostCap(sb.root, { PENSMITH_COST_CAP_USD: bad }), (e: unknown) =>
+        (e as { exitCode?: number }).exitCode === 2 && /^PENSMITH_COST_CAP_USD must be a positive number/.test((e as Error).message));
+    }
   });
 });
 

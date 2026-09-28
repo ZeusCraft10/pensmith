@@ -148,6 +148,57 @@ test('RUN-25: exactly one corrective retry — invalid then valid succeeds with 
   });
 });
 
+test('RUN-25: a first reply with no text (thinking only) — the correction joins the user turn; no empty assistant turn is ever sent', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    sb.mock!.script('orphan-label', { text: '' }, { text: '{"label":"claim"}' });
+    const r = await call<{ label: string }>('orphan-label');
+    assert.equal(r.data?.label, 'claim', 'the corrective retry repaired the output (the mock 400s an empty non-final turn, like the API)');
+    const bodies = sb.mock!.bodiesFor('orphan-label');
+    assert.equal(bodies.length, 2);
+    const first = bodies[0]!['messages'] as Array<{ role: string; content: string }>;
+    const msgs = bodies[1]!['messages'] as Array<{ role: string; content: string }>;
+    assert.equal(msgs.length, first.length, 'no assistant turn was added');
+    assert.ok(msgs.every((m) => m.content.trim().length > 0), 'every message has content');
+    assert.equal(msgs[msgs.length - 1]!.role, 'user');
+    assert.ok(msgs[msgs.length - 1]!.content.startsWith(first[first.length - 1]!.content), 'the original user turn is kept');
+    assert.match(msgs[msgs.length - 1]!.content, /did not match the required output schema/);
+  });
+});
+
+test('RUN-21: the mock rejects an empty non-final message with the API\'s 400 (so a test catches it)', async () => {
+  const { startMockLlm } = await import('./helpers/local-servers/mock-llm.js');
+  const mock = await startMockLlm();
+  try {
+    const res = await fetch(`${mock.url}/v1/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-pensmith-slug': 'orphan-label' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 10, messages: [{ role: 'user', content: 'q' }, { role: 'assistant', content: '' }, { role: 'user', content: 'fix it' }] }),
+    });
+    assert.equal(res.status, 400);
+    assert.match(await res.text(), /messages\.1: all messages must have non-empty content/);
+  } finally {
+    await mock.close();
+  }
+});
+
+test('RUN-21: `shape` limits the mock to one API (the other answers 404)', async () => {
+  const { startMockLlm } = await import('./helpers/local-servers/mock-llm.js');
+  const mock = await startMockLlm({ shape: 'openai' });
+  try {
+    const a = await fetch(`${mock.url}/v1/messages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    assert.equal(a.status, 404);
+    assert.match(await a.text(), /speaks openai only/);
+    const o = await fetch(`${mock.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-6-luna', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    assert.equal(o.status, 200);
+  } finally {
+    await mock.close();
+  }
+});
+
 test('RUN-25: invalid twice → StructuredOutputError after exactly 2 requests; OUTLINE.md is not written', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     fs.writeFileSync(path.join(sb.paper, 'INTAKE.md'), 'Topic: tidal energy\nDiscipline: engineering\n');

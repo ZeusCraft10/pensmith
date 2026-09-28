@@ -97,7 +97,7 @@ test('RUN-12 / RUN-28: `printf "…5 answers…" | PENSMITH_PROMPT_MODE=numbered
   // Without them it refuses BEFORE asking anything (nothing consumed or created).
   const unscripted = runCli(sb, cwd, ['sketch'], { input: answers });
   assert.equal(unscripted.status, EXIT_APPROVAL, `${unscripted.stdout}\n${unscripted.stderr}`);
-  assert.match(unscripted.stderr, /^pensmith: Proceed to intake with this thesis\? \(nothing was asked or created\) needs an answer: re-run in a terminal, or pass --yolo to proceed to intake\.$/m);
+  assert.match(unscripted.stderr, /^pensmith: Proceed to intake with this thesis\? \(nothing was asked or created; to pipe answers, set PENSMITH_PROMPT_MODE=numbered\) needs an answer: re-run in a terminal, or pass --yolo to proceed to intake\.$/m);
   assert.doesNotMatch(unscripted.stderr, /What interests or questions motivate this paper\?/, 'no question was asked');
   assert.ok(!existsSync(join(cwd, '.paper')), 'nothing created');
   const r = runCli(sb, cwd, ['sketch'], { input: answers, env: { PENSMITH_PROMPT_MODE: 'numbered' } });
@@ -140,7 +140,7 @@ test('RUN-12: the interactive verbs with a non-terminal stdin — documented cod
     { name: 'outline approval', cwd: outlined, args: ['outline'], code: EXIT_APPROVAL, line: /^pensmith: Approve this outline/ },
     { name: 'done confirmation', cwd: compiled, args: ['done', '--format', 'md'], code: EXIT_APPROVAL, line: /^pensmith: Export the paper now\?/ },
     { name: 'add remap', cwd: addTo, args: ['add', '10.1038/nphys1170'], code: EXIT_OK, line: /remap skipped \(non-interactive\)/ },
-    { name: 'sketch (no terminal)', cwd: sketchDir, args: ['sketch'], code: EXIT_APPROVAL, line: /^pensmith: Proceed to intake with this thesis\? \(nothing was asked or created\) needs an answer/ },
+    { name: 'sketch (no terminal)', cwd: sketchDir, args: ['sketch'], code: EXIT_APPROVAL, line: /^pensmith: Proceed to intake with this thesis\? \(nothing was asked or created; to pipe answers, set PENSMITH_PROMPT_MODE=numbered\) needs an answer/ },
   ];
   for (const c of cases) {
     const r = runCli(sb, c.cwd, c.args);

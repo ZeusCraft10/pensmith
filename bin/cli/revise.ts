@@ -28,8 +28,7 @@ import { runRevise } from '../lib/revise.js';
 import { projectRoot } from '../lib/paths.js';
 import { proposeSwap } from '../lib/revise-swap.js';
 import { assertLlmConfigured } from '../lib/anthropic.js';
-
-const DEFAULT_SLUG = 'placeholder';
+import { resolveSectionArg } from '../lib/section-slug.js';
 
 export const reviseCommand = defineCommand({
   meta: {
@@ -49,7 +48,7 @@ export const reviseCommand = defineCommand({
     },
     slug: {
       type: 'string',
-      description: 'Section slug (lowercase-kebab; defaults to "placeholder").',
+      description: 'Section slug (lowercase-kebab; defaults to the outline\'s slug for <n>).',
     },
     research: {
       type: 'string',
@@ -63,11 +62,9 @@ export const reviseCommand = defineCommand({
   },
   async run({ args }) {
     const rawN = (args.n ?? args.section) as string | number | undefined;
-    const n = Number(rawN);
-    if (!Number.isInteger(n) || n < 1) {
-      throw new Error(`pensmith revise: <n> (or --section) must be a positive integer; got ${JSON.stringify(rawN)}`);
-    }
-    const slug = args.slug && typeof args.slug === 'string' ? args.slug : DEFAULT_SLUG;
+    // RUN-09: the same <n>/--slug validation as plan/write/verify (EXIT_USAGE),
+    // and the slug comes from OUTLINE.md — 'placeholder' only with no outline.
+    const { n, slug } = resolveSectionArg('revise', projectRoot(), rawN, args.slug);
     const research = typeof args.research === 'string' && args.research.length > 0 ? args.research : undefined;
 
     // GEN-06 / RUN-07 fail-loud probe: assert an LLM is configured BEFORE calling runRevise.

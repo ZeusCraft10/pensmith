@@ -151,6 +151,27 @@ test('D-03(d) http-crossref-ping loads the exact-match fixture store in a source
   assert.match(r.summary, /fixture file\(s\) load \(\d+ Crossref entr(y|ies)\); offline replay is exact-match only/);
 });
 
+test('RUN-05: http-crossref-ping is SKIP in live mode and under --dry-run — a live run never reads tests/', async () => {
+  const saved = { net: process.env['PENSMITH_NETWORK_TESTS'], dry: process.env['PENSMITH_DRY_RUN'] };
+  try {
+    process.env['PENSMITH_NETWORK_TESTS'] = '1'; // the test lane's live mode
+    delete process.env['PENSMITH_DRY_RUN'];
+    const live = await httpCrossrefPingProbe.run();
+    assert.equal(live.severity, 'SKIP');
+    assert.match(live.summary, /not used \(network: live\)/);
+    delete process.env['PENSMITH_NETWORK_TESTS'];
+    process.env['PENSMITH_DRY_RUN'] = '1';
+    const dry = await httpCrossrefPingProbe.run();
+    assert.equal(dry.severity, 'SKIP');
+    assert.match(dry.summary, /not used under --dry-run/);
+  } finally {
+    for (const [k, v] of [['PENSMITH_NETWORK_TESTS', saved.net], ['PENSMITH_DRY_RUN', saved.dry]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
+
 test('RUN-02 network-mode probe: OFFLINE under the test runner, live without it, never leaks values', async () => {
   // This process runs under node --test → sources offline (reason: test runner).
   const saved = { net: process.env['PENSMITH_NETWORK_TESTS'], off: process.env['PENSMITH_OFFLINE'], dry: process.env['PENSMITH_DRY_RUN'] };

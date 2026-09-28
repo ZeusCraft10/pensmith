@@ -533,23 +533,15 @@ async function runMcpToolResultInDir(
 }
 
 /**
- * RUN-09: the exit code a Phase-3 case's CLI run must end with, derived from
- * what the run actually produced. Every case succeeds (0) except:
- *   - outline: EXIT_ERROR (1) when the reply registered no section in
- *     STATE.json (a reply without the section table cannot advance the
- *     pipeline); 0 once sections are registered;
- *   - verify-section: EXIT_BLOCKED (4) when VERIFICATION.md says
- *     `Status: failed`, or carries a blocking Pass-1 UNVERIFIABLE row; else 0.
+ * RUN-09: the exit code a Phase-3 case's CLI run must end with. Every case
+ * succeeds (0) — outline included: the NO_LLM contract stub is deterministic
+ * and registers its sections (asserted separately below), so a regression that
+ * registers none is a failure, never an "expected" exit 1. verify-section is
+ * the one case whose code follows its verdict (it is compared across BOTH
+ * tiers): EXIT_BLOCKED (4) when VERIFICATION.md says `Status: failed` or
+ * carries a blocking Pass-1 UNVERIFIABLE row; else 0.
  */
 function expectedPhase3Exit(caseName: string, root: string): number {
-  if (caseName === 'outline') {
-    try {
-      const st = JSON.parse(readFileSync(join(root, '.paper', 'STATE.json'), 'utf8')) as { sections?: unknown[] };
-      return Array.isArray(st.sections) && st.sections.length > 0 ? 0 : 1;
-    } catch {
-      return 1;
-    }
-  }
   if (caseName === 'verify-section') {
     const vpath = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`, 'VERIFICATION.md');
     const md = existsSync(vpath) ? readFileSync(vpath, 'utf8') : '';
@@ -665,6 +657,12 @@ for (const tc of PHASE_3_CASES) {
     // CLI MUST produce its declared artifact (D-02 / SC-1 invariant — the
     // section-level artifacts are the load-bearing outputs every downstream
     // consumer reads). Plan 06 .planning/ROADMAP §3 SC-1.
+    // RUN-09: outline registers the sections of its (deterministic) outline —
+    // 0 sections would be EXIT_ERROR, and the stub always has some.
+    if (tc.name === 'outline') {
+      const st = JSON.parse(readFileSync(join(root, '.paper', 'STATE.json'), 'utf8')) as { sections?: unknown[] };
+      assert.ok(Array.isArray(st.sections) && st.sections.length >= 1, `tier-contract outline: sections registered in STATE.json: ${JSON.stringify(st.sections)}`);
+    }
     const artifactPath = join(root, tc.expectedArtifact);
     assert.ok(
       existsSync(artifactPath),

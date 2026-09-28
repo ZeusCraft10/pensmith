@@ -56,7 +56,9 @@ export const sketchCommand = defineCommand({
     //     before the Socratic questions consume any input (EXIT_APPROVAL,
     //     nothing asked, nothing created).
     if (typeof args.confirm !== 'boolean' && args.yolo !== true && !canPrompt()) {
-      await runGate('sketch-confirm', { yolo: false, detail: 'nothing was asked or created' });
+      // RUN-12 / D-17-36: piped answers are read only as scripted numbered
+      // answers — the refusal names the variable that enables them.
+      await runGate('sketch-confirm', { yolo: false, detail: 'nothing was asked or created; to pipe answers, set PENSMITH_PROMPT_MODE=numbered' });
     }
 
     // (1) Synthesize a candidate thesis. If a thesis was pre-supplied (test

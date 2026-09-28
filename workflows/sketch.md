@@ -62,7 +62,8 @@ verbs bijective with the 16 workflow bodies).
    `printf '…\n…\n' | PENSMITH_PROMPT_MODE=numbered pensmith sketch` (RUN-12).
    Without a terminal, scripted answers or `--yolo`, the confirm below can never be
    answered, so sketch refuses BEFORE the first question (exit 3, nothing asked or
-   created). Synthesize
+   created; the refusal names `PENSMITH_PROMPT_MODE=numbered`). Piped stdin is read
+   only in that mode (D-17-36), never guessed from a pipe. Synthesize
    the answers into a single candidate thesis sentence and print it. (A
    pre-supplied `--thesis` skips the loop — the one-shot / test-seam path.)
    CRITICAL: nothing in this step creates `.paper/` / STATE.json / LIBRARY.json.

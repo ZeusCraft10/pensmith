@@ -196,8 +196,10 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   // model-runtime copy of runtime-config-presence (RUN-07/08), the Node 22.12
   // floor (CI-06), and the header/footer the renderer actually prints; then in
   // the Phase 17 integration: a rejected key (HTTP 401/403) is reported as such
-  // and a hosted endpoint is not probed without its key (RUN-07).
-  const PINNED = 'ddaac78ad2195409885512ec022058a5c1ddb65a88add58b1dbe6af6eb31052d';
+  // and a hosted endpoint is not probed without its key (RUN-07); then in review
+  // round 2: http-crossref-ping is SKIP unless offline replay is active (RUN-05)
+  // and OPENALEX_API_KEY is reported as "not used yet".
+  const PINNED = 'baa0b930e24d87765d80d204c4f2d445536698936d77093640135fd066e4c913';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

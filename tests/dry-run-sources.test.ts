@@ -224,18 +224,27 @@ function runCli(args: string[], cwd: string): { status: number | null; stdout: s
 }
 
 test('RUN-27: `add <reserved DOI>` is refused outside --dry-run (non-zero) and reports unavailable (dry-run) under it', () => {
-  const root = tmp('pensmith-dryrun-add-');
-  mkdirSync(join(root, '.paper'), { recursive: true });
-  writeFileSync(join(root, 'STATE.json'), JSON.stringify({ $schemaVersion: 2, paperId: 'dryrun', createdAt: new Date().toISOString(), sections: [] }));
   const doi = dryRun.syntheticSource('00c0ffee').doi ?? '';
-  const outside = runCli(['add', doi, '--yolo'], root);
+  const seed = (prefix: string, madeByDryRun: boolean): string => {
+    const root = tmp(prefix);
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    writeFileSync(join(root, '.paper', 'STATE.json'), JSON.stringify({ $schemaVersion: 2, paperId: 'dryrun', createdAt: new Date().toISOString(), sections: [] }));
+    if (madeByDryRun) writeFileSync(join(root, '.paper', 'DRY-RUN.md'), '# made by pensmith --dry-run\n');
+    return root;
+  };
+  const real = seed('pensmith-dryrun-add-real-', false);
+  const outside = runCli(['add', doi, '--yolo'], real);
   assert.notEqual(outside.status, 0, `refused: ${outside.stderr}`);
   assert.match(outside.stderr, /is a reserved dry-run identifier .*Source NOT added/);
-  const inside = runCli(['--dry-run', 'add', doi, '--yolo'], root);
+  // A --dry-run works only on a paper a dry run made (never over a real one).
+  const preview = seed('pensmith-dryrun-add-preview-', true);
+  const inside = runCli(['--dry-run', 'add', doi, '--yolo'], preview);
   assert.equal(inside.status, 0, `a dry-run preview is not an error: ${inside.stderr}`);
   assert.match(inside.stderr, /DOI verification unavailable \(dry-run\) — .* NOT added\./);
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-  assert.ok(!existsSync(bibPath) || !readFileSync(bibPath, 'utf8').includes('pensmith-dryrun'), 'nothing is added in either mode');
+  for (const root of [real, preview]) {
+    const bibPath = join(root, '.paper', 'CITATIONS.bib');
+    assert.ok(!existsSync(bibPath) || !readFileSync(bibPath, 'utf8').includes('pensmith-dryrun'), 'nothing is added in either mode');
+  }
 });
 
 // ---------------------------------------------------------------------------

@@ -195,3 +195,98 @@ test('CONF-01 / RUN-26: `pensmith status --config` prints values, runtime and pe
     assert.match(out, /orphan-label\s+judgment\s+claude-haiku-4-5\s+effort n\/a\s+\(model: default; effort: not sent for this model\)/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Review round 2: write-back keeps the user's comments and formatting, and a
+// read-only verb never writes.
+// ---------------------------------------------------------------------------
+
+const COMMENTED_V0 = [
+  "# My paper settings — keep the cap low, I'm a student!",
+  '[project]',
+  'due_date = 2026-05-20          # submit via Canvas',
+  'title = "Tides # and currents"   # the working title',
+  '',
+  '[budget]',
+  'cost_cap_usd = 2               # hard limit',
+  '',
+  '[verification]',
+  'verify_quotes = true # retired',
+  'plagiarism_check = false',
+  '',
+].join('\n');
+
+test('CONF-01: the v0 → v1 write-back keeps every comment, the layout and TOML dates (only schema_version is added)', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    sb.writePaperConfig(COMMENTED_V0);
+    const file = path.join(sb.paper, 'config.toml');
+    await captureStderr(() => loadPaperConfig(sb.root));
+    const written = fs.readFileSync(file, 'utf8');
+    const expected = COMMENTED_V0
+      .replace('[project]', 'schema_version = 1\n[project]')
+      .replace('verify_quotes = true # retired\n', '');
+    assert.equal(written, expected, 'a line edit, not a re-serialization');
+    assert.match(written, /^due_date = 2026-05-20 {10}# submit via Canvas$/m, 'the date stays a TOML date');
+    assert.ok(!fs.existsSync(`${file}.bak`), 'no backup needed when the edit is textual');
+    const cfg = readPaperConfigSync(sb.root).config;
+    assert.equal(cfg.project?.due_date, '2026-05-20');
+    assert.equal(cfg.project?.title, 'Tides # and currents');
+  });
+});
+
+test('CONF-01: updatePaperConfig edits only the changed keys — comments, dates and untouched lines survive', async () => {
+  await withLlmSandbox({}, async (sb) => {
+    sb.writePaperConfig(COMMENTED_V0.replace('[project]', 'schema_version = 1\n[project]').replace('verify_quotes = true # retired\n', ''));
+    const file = path.join(sb.paper, 'config.toml');
+    await captureStderr(() => updatePaperConfig(sb.root, (raw) => {
+      rawTable(raw, 'budget')['cost_cap_usd'] = 3;
+      rawTable(raw, 'project')['goal'] = 'learning';
+      rawTable(raw, 'logging')['session_bodies'] = 'redacted';
+    }));
+    const text = fs.readFileSync(file, 'utf8');
+    assert.match(text, /^# My paper settings — keep the cap low, I'm a student!$/m);
+    assert.match(text, /^cost_cap_usd = 3 {15}# hard limit$/m, 'the changed value keeps its trailing comment');
+    assert.match(text, /^due_date = 2026-05-20 {10}# submit via Canvas$/m);
+    assert.match(text, /^title = "Tides # and currents" {3}# the working title\ngoal = "learning"$/m, 'a new key joins its table');
+    assert.match(text, /\n\[logging\]\nsession_bodies = "redacted"\n$/, 'a new table is appended');
+    const cfg = readPaperConfigSync(sb.root).config;
+    assert.equal(cfg.budget?.cost_cap_usd, 3);
+    assert.equal(cfg.logging?.session_bodies, 'redacted');
+  });
+});
+
+test('CONF-01: `pensmith status --config` on a v0 file migrates in memory only — the file is untouched', async () => {
+  await withLlmSandbox({ runtime: { provider: 'anthropic' } }, async (sb) => {
+    sb.writePaperConfig(COMMENTED_V0.replace('verify_quotes = true # retired\n', ''));
+    const file = path.join(sb.paper, 'config.toml');
+    const before = fs.readFileSync(file, 'utf8');
+    const r = sb.runCli(['status', '--config']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /budget\.cost_cap_usd\s+= 2\s+\(config\)/);
+    assert.equal(fs.readFileSync(file, 'utf8'), before, 'a read-only verb never writes config.toml');
+  });
+});
+
+test('RUN-18: PENSMITH_COST_CAP_USD is validated like [budget] cost_cap_usd — an invalid value is one EXIT_USAGE line, never the $5 default', async () => {
+  const { parseCostCapEnv } = await import('../bin/lib/config.js');
+  assert.equal(parseCostCapEnv(undefined), null);
+  assert.equal(parseCostCapEnv(''), null);
+  assert.equal(parseCostCapEnv('0.5'), 0.5);
+  assert.equal(parseCostCapEnv(' 2 '), 2);
+  assert.equal(parseCostCapEnv('.25'), 0.25);
+  for (const bad of ['0', '-1', '$1', '1 USD', 'abc', '0x10', 'Infinity', 'NaN']) {
+    assert.throws(() => parseCostCapEnv(bad), (e: unknown) =>
+      e instanceof ConfigError && e.exitCode === 2 && /^PENSMITH_COST_CAP_USD must be a positive number of US dollars/.test(e.message), bad);
+  }
+  assert.throws(() => effectiveConfigRows(process.cwd(), { PENSMITH_COST_CAP_USD: '0' }), ConfigError, 'status --config refuses it too');
+
+  await withLlmSandbox({}, async (sb) => {
+    fs.writeFileSync(path.join(sb.root, 'assignment.txt'), 'Write a 1500-word essay on tidal power.\n');
+    for (const v of ['0', '$1']) {
+      const r = sb.runCli(['--estimate'], { env: { PENSMITH_COST_CAP_USD: v, PENSMITH_NO_LLM: '1' } });
+      assert.equal(r.status, 2, `${v}: ${r.stdout}\n${r.stderr}`);
+      assert.match(r.stderr, /^pensmith: PENSMITH_COST_CAP_USD must be a positive number of US dollars/m);
+      assert.doesNotMatch(r.stdout, /cap \$5\.00/, 'never the silent default');
+    }
+  });
+});

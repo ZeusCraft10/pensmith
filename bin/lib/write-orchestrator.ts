@@ -25,6 +25,10 @@
 //     the MCP stdio frame clean (T-04-13).
 //   - A thrown non-Error from writeSection is normalized to an Error by runWave
 //     (Research §P-5); we never nest Semaphore.withLock (§P-4).
+//   - A failure the caller marks FATAL (opts.stopOn — e.g. the session cost cap
+//     or a missing key: every later call would fail the same way) stops the
+//     run: sections not yet started — queued in this wave or in later waves —
+//     are `skipped`, never attempted (RUN-09: one failure, one exit code).
 
 import { Semaphore } from './budget.js';
 import { loadOutline } from './outline.js';
@@ -39,11 +43,14 @@ import type { SectionNode } from './schemas/wave-graph.js';
 export interface SectionResult {
   slug: string;
   n: number;
-  /** Terminal status: 'done' (write succeeded), 'failed' (write threw), or
-   *  'blocked' (a transitive dependency failed, so the write was skipped). */
-  status: 'done' | 'failed' | 'blocked';
+  /** Terminal status: 'done' (write succeeded), 'failed' (write threw),
+   *  'blocked' (a transitive dependency failed, so the write was skipped), or
+   *  'skipped' (not attempted: an earlier section failed fatally, opts.stopOn). */
+  status: 'done' | 'failed' | 'blocked' | 'skipped';
   /** Error message when status === 'failed'. */
   error?: string;
+  /** The thrown value when status === 'failed' (the caller classifies it). */
+  cause?: unknown;
 }
 
 /** The settled outcome of a single wave. */
@@ -85,6 +92,19 @@ export interface RunAllSectionsOpts {
    * callback's behavior; a goal-aware CLI caller decides whether to supply one.
    */
   onSectionWritten?: SectionWrittenCallback;
+  /**
+   * Optional: true for a failure that must stop the whole run (every later
+   * section would fail the same way). Sections not yet started are `skipped`.
+   */
+  stopOn?: (reason: unknown) => boolean;
+}
+
+/** Thrown for a section that was never started because the run stopped. */
+class SkippedAfterFatalError extends Error {
+  constructor() {
+    super('not attempted: an earlier section failed fatally');
+    this.name = 'SkippedAfterFatalError';
+  }
 }
 
 /**
@@ -152,6 +172,17 @@ export async function runAllSections(
   //    downstream node whose deps include one is pruned from later waves (D-03).
   const failedOrBlocked = new Set<string>();
   const results: WaveResult[] = [];
+  // Set by the first failure opts.stopOn marks fatal: no later section starts.
+  let fatal = false;
+  const writeOrSkip = async (node: SectionNode): Promise<void> => {
+    if (fatal) throw new SkippedAfterFatalError();
+    try {
+      await opts.writeSection(node);
+    } catch (err) {
+      if (opts.stopOn?.(err) === true) fatal = true;
+      throw err;
+    }
+  };
 
   for (const waveNodes of graph.waves) {
     if (waveNodes.length === 0) continue;
@@ -160,9 +191,15 @@ export async function runAllSections(
     // Partition this wave into runnable vs. blocked (transitive dep failed).
     const runnable: SectionNode[] = [];
     const blocked: SectionNode[] = [];
+    const skipped: SectionNode[] = [];
     for (const node of waveNodes) {
       const depFailed = node.depends_on.some((d) => failedOrBlocked.has(d));
-      if (depFailed) {
+      if (fatal) {
+        // The run stopped on a fatal failure: this section is never attempted.
+        node.status = 'blocked';
+        failedOrBlocked.add(node.slug);
+        skipped.push(node);
+      } else if (depFailed) {
         node.status = 'blocked';
         failedOrBlocked.add(node.slug); // cascade to this node's own dependents
         blocked.push(node);
@@ -175,7 +212,7 @@ export async function runAllSections(
     // enforces "each wave drains fully before the next" (D-02). One rejection
     // never cancels siblings (D-03) — runWave uses Promise.allSettled.
     const sem = new Semaphore(opts.maxParallel);
-    const settled = await runWave(runnable, sem, opts.writeSection);
+    const settled = await runWave(runnable, sem, writeOrSkip);
 
     const sections: SectionResult[] = [];
     for (let i = 0; i < runnable.length; i += 1) {
@@ -196,15 +233,22 @@ export async function runAllSections(
             assignedSources: plans.get(node.slug)?.assigned_sources ?? [],
           });
         }
+      } else if (r.reason instanceof SkippedAfterFatalError) {
+        node.status = 'blocked';
+        failedOrBlocked.add(node.slug);
+        sections.push({ slug: node.slug, n: node.n, status: 'skipped' });
       } else {
         node.status = 'failed';
         failedOrBlocked.add(node.slug);
         const reason = r.reason instanceof Error ? r.reason.message : String(r.reason);
-        sections.push({ slug: node.slug, n: node.n, status: 'failed', error: reason });
+        sections.push({ slug: node.slug, n: node.n, status: 'failed', error: reason, cause: r.reason });
       }
     }
     for (const node of blocked) {
       sections.push({ slug: node.slug, n: node.n, status: 'blocked' });
+    }
+    for (const node of skipped) {
+      sections.push({ slug: node.slug, n: node.n, status: 'skipped' });
     }
 
     results.push({ wave, sections });

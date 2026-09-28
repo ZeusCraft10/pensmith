@@ -269,7 +269,10 @@ export async function resolveRuntime(
   const root = opts.paperRoot ?? projectRoot();
   const env = opts.env ?? process.env;
   const global = await loadRuntimeConfig({ paperRoot: root });
-  const paper = (await loadPaperConfig(root)).runtime ?? {};
+  // Read-only: an older config.toml is migrated in memory here; the file is
+  // written back only by a mutating session under its lock
+  // (config.ts migratePaperConfigFile) — never by `status --config`.
+  const paper = (await loadPaperConfig(root, { writeBack: false })).runtime ?? {};
 
   // provider
   let provider: string;

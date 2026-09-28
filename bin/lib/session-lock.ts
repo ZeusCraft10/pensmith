@@ -33,8 +33,11 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
 import { pensmithLockDir, projectHash, paperDir, asProjectRoot } from './paths.js';
+import { currentSessionId } from './session-log.js';
+import { migratePaperConfigFile } from './config.js';
+import { enforceDryRunBoundary } from './dry-run-paper.js';
+import { networkMode } from './http-mock.js';
 import { withLock } from './lock.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 
@@ -60,12 +63,10 @@ export interface SessionOwner {
   readonly root: string;
 }
 
-/** One id per process: a CLI invocation or an MCP server is one session (D-17-26). */
-const SESSION_ID = randomUUID();
-
-export function currentSessionId(): string {
-  return SESSION_ID;
-}
+// One id per process (D-17-26): the owner record carries the SAME session id
+// COSTS.jsonl and SESSION.log records carry (session-log.ts currentSessionId),
+// so `pensmith status` in another terminal can meter the running session.
+export { currentSessionId };
 
 /** The Claude Code session id Claude Code exports to the MCP server it spawns. */
 export function claudeSessionIdFromEnv(): string | null {
@@ -235,23 +236,63 @@ export interface AcquireSessionOptions {
 }
 
 /**
+ * Acquisitions in flight in THIS process, per lock file. Same-process callers
+ * are single-flight: while one call is between its first check of HELD and
+ * setting it (the mkdir / open('wx') / read awaits), a concurrent call (the MCP
+ * server runs Claude's parallel tool calls) waits for it and then joins its
+ * hold, instead of racing to the own-PID branch and replacing the hold — which
+ * let the first release delete the record while the second call still ran.
+ */
+const PENDING = new Map<string, Promise<Held>>();
+
+/**
  * Take the session lock for the paper at `root` (see the module header).
  * Re-entrant within this process; clears a stale record with a one-line
  * notice; otherwise throws SessionLockedError.
  */
 export async function acquireSessionLock(root: string, opts: AcquireSessionOptions): Promise<SessionLockHandle> {
   const file = sessionLockFile(root);
-  const mine = HELD.get(file);
-  if (mine) {
-    mine.depth += 1;
-    return handleFor(file, mine);
+  for (;;) {
+    const mine = HELD.get(file);
+    if (mine) {
+      mine.depth += 1;
+      return handleFor(file, mine);
+    }
+    const pending = PENDING.get(file);
+    if (!pending) break;
+    // Join the acquisition in flight: once it settles, HELD answers (or, if it
+    // failed or was already released, this call acquires on its own).
+    await pending.catch(() => undefined);
   }
+  const attempt = acquireFresh(file, root, opts);
+  PENDING.set(file, attempt);
+  try {
+    return handleFor(file, await attempt);
+  } finally {
+    if (PENDING.get(file) === attempt) PENDING.delete(file);
+  }
+}
+
+/** Hold `file` for this process (never replacing an existing hold). */
+function hold(file: string, owner: SessionOwner): Held {
+  const existing = HELD.get(file);
+  if (existing) {
+    existing.depth += 1;
+    return existing;
+  }
+  const held: Held = { depth: 1, owner };
+  HELD.set(file, held);
+  installExitHooks();
+  return held;
+}
+
+async function acquireFresh(file: string, root: string, opts: AcquireSessionOptions): Promise<Held> {
   await fsp.mkdir(path.dirname(file), { recursive: true });
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const owner: SessionOwner = {
       hostname: os.hostname(),
       pid: process.pid,
-      sessionId: SESSION_ID,
+      sessionId: currentSessionId(),
       kind: opts.kind,
       verb: opts.verb,
       startedAt: new Date().toISOString(),
@@ -265,10 +306,7 @@ export async function acquireSessionLock(root: string, opts: AcquireSessionOptio
       } finally {
         await fh.close();
       }
-      const held: Held = { depth: 1, owner };
-      HELD.set(file, held);
-      installExitHooks();
-      return handleFor(file, held);
+      return hold(file, owner);
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
     }
@@ -284,11 +322,9 @@ export async function acquireSessionLock(root: string, opts: AcquireSessionOptio
     }
     const holder = cur.owner;
     if (holder.pid === process.pid && holder.hostname === os.hostname()) {
-      // Our own PID's record (e.g. written before this module was re-imported): re-enter.
-      const held: Held = { depth: 1, owner: holder };
-      HELD.set(file, held);
-      installExitHooks();
-      return handleFor(file, held);
+      // Our own PID's record (e.g. written before this module was re-imported):
+      // re-enter — joining, never replacing, a hold this process already has.
+      return hold(file, holder);
     }
     const why = staleReason(holder);
     if (why !== null) {
@@ -363,6 +399,12 @@ export async function withPaperSession<T>(root: string, opts: PaperSessionOption
     claudeSessionId: claudeSessionIdFromEnv(),
   });
   try {
+    // RUN-27: a mutating tool never continues a paper made by --dry-run (Tier
+    // parity with the CLI pre-flight).
+    const dryRun = networkMode().dryRun;
+    await enforceDryRunBoundary(root, dryRun);
+    // CONF-01: the mutating call writes an older config.toml back (comments kept).
+    if (!dryRun) await migratePaperConfigFile(root);
     if (opts.section === undefined) return await fn();
     // A same-section call waits for the one in flight (a model call can take
     // minutes), bounded by SECTION_WAIT_MS rather than the 60 s file-lock default.

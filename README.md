@@ -169,9 +169,9 @@ Pensmith is **live by default**: research, `add`, the Pass 1 / Pass 3 re-fetch, 
 | Mode | How | What happens |
 |------|-----|--------------|
 | **Offline** | `PENSMITH_OFFLINE=1` | Sources, verification, detector and plagiarism requests replay **exactly recorded** fixtures from a source checkout, or fail closed as "unavailable (offline)". A citation that cannot be re-checked is `UNVERIFIABLE` and **blocks** compile and done until you re-run online. The banner reads `OFFLINE MODE (reason: PENSMITH_OFFLINE=1): …`, and RESEARCH.md, VERIFICATION.md and COMPILE-REPORT.md carry an offline marker line (never an export). The installed npm package ships no fixtures, so there it refuses instead — except `pensmith resume --replay <id>`, which replays a logged model response and needs no fixture. Only a model endpoint you configured on this machine (loopback) is still reachable. |
-| **Dry run** | `--dry-run` | Nothing leaves the machine — zero sockets. Sources come from a clearly labelled synthetic provider (`10.0000/pensmith-dryrun.*`), and every model call returns a deterministic stub. Synthetic identifiers are refused everywhere outside `--dry-run`. |
+| **Dry run** | `--dry-run` | Nothing leaves the machine — zero sockets. Sources come from a clearly labelled synthetic provider (`10.0000/pensmith-dryrun.*`), and every model call returns a deterministic stub. Run it in a folder with no paper (`pensmith --dry-run --yolo` next to an `assignment.txt`): it marks the paper it makes (`.paper/DRY-RUN.md`), refuses to run over an existing paper (exit 2, nothing touched), and a normal command refuses to continue a dry-run paper — delete its `.paper/` to start a real one. Synthetic identifiers are refused everywhere outside `--dry-run`, and the library drops any a dry run left behind. |
 
-`PENSMITH_NO_LLM=1` is independent of the network mode: it replaces every LLM call with a deterministic stub (testing and dry-run) and prints `LLM STUBBED …`. `pensmith doctor` shows `network: live` or `network: OFFLINE (<reason>)`. The test suite (`npm test`) always runs sources offline unless a maintainer sets `PENSMITH_NETWORK_TESTS=1`.
+`PENSMITH_NO_LLM=1` is independent of the network mode: it replaces every LLM call with a deterministic stub (testing and dry-run) and prints `LLM STUBBED …`. Without any model configured, `pensmith verify` still records the blocking Pass 1 / Pass 3 verdicts; the advisory claim-support and orphan checks are reported as `skipped (no LLM configured)`. `pensmith doctor` shows `network: live` or `network: OFFLINE (<reason>)`. The test suite (`npm test`) always runs sources offline unless a maintainer sets `PENSMITH_NETWORK_TESTS=1`.
 
 ### Model runtimes
 
@@ -218,14 +218,14 @@ Expected failures print one line (`pensmith: …`); `PENSMITH_DEBUG=1` adds a st
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Provider key for the **Tier 2 CLI**. With only `OPENAI_API_KEY` set, OpenAI is selected automatically. Local runtimes need neither. |
 | `PENSMITH_OFFLINE=1` | Sources offline: exact recorded fixtures or fail closed (see [Network modes](#network-modes)). |
 | `PENSMITH_NO_LLM=1` | Replaces every LLM call with a deterministic stub (testing and dry-run). |
-| `PENSMITH_COST_CAP_USD` | Per-session cost cap in USD (overrides `[budget] cost_cap_usd`, default 5.00). |
-| `PENSMITH_CONTACT_EMAIL` | Polite-pool contact sent to Crossref / OpenAlex / Unpaywall so your queries are well-behaved. |
-| `OPENALEX_API_KEY` | *Optional.* OpenAlex API key (higher rate limits). |
+| `PENSMITH_COST_CAP_USD` | Per-session cost cap in USD (overrides `[budget] cost_cap_usd`, default 5.00). Must be a positive number such as `2.50`; any other value (`0`, `$1`) is refused with exit 2, never replaced by the default. |
+| `PENSMITH_CONTACT_EMAIL` | Polite-pool contact sent to Crossref (including its retraction lookup), OpenAlex and Unpaywall only, so your queries are well-behaved. No other service receives it (see [PRIVACY.md](PRIVACY.md)). |
+| `OPENALEX_API_KEY` | *Reserved.* Not sent yet: OpenAlex requests are keyless for now, so setting it changes nothing (`pensmith doctor` says "not used yet"). |
 | `PENSMITH_S2_API_KEY` | *Optional.* Semantic Scholar API key. |
 | `GPTZERO_API_KEY` | *Optional.* Enables the AI-likelihood transparency check; it still asks for your consent before sending text (`--yolo` never grants it). |
 | `ZOTERO_API_KEY` | *Optional.* Enables the Zotero library adapter. |
 | `PENSMITH_PAPER_ROOT` | The project folder (the one containing `.paper/`) for the CLI, the MCP server and the hooks. |
-| `PENSMITH_PROMPT_MODE=numbered` | Answer prompts from piped stdin, one line per question (scripts and CI). |
+| `PENSMITH_PROMPT_MODE=numbered` | Answer prompts from piped stdin, one line per question (scripts and CI). Piped answers are read only in this mode: without it a run that has no terminal refuses a question it cannot ask (exit 3) instead of consuming stdin. |
 | `PENSMITH_DEBUG=1` | Print a stack trace for unexpected errors. |
 | `PENSMITH_NETWORK_TESTS=1` | *Maintainers.* Lets the test suite reach the live services (the live test lane). |
 

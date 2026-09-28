@@ -192,6 +192,12 @@ export async function runWholePaperPass4(paperRoot: string): Promise<Pass4Result
 export interface ExportBlock {
   blocked: boolean;
   reasons: string[];
+  /**
+   * The subset of `reasons` that are verifier refusals of a section that WAS
+   * verified (a Status: failed, a blocking verdict row, a --dry-run
+   * verification) — as opposed to a section never verified or no sections.
+   */
+  verdictReasons?: string[];
 }
 
 /**
@@ -241,6 +247,7 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
     };
   }
 
+  const verdictReasons: string[] = [];
   for (const name of dirNames) {
     const vpath = join(sectionsDir, name, 'VERIFICATION.md');
     // A section directory with NO VERIFICATION.md was never verified. It must
@@ -263,10 +270,11 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
     // (UNVERIFIABLE rows say "re-run online", D-17-07).
     for (const reason of sectionVerificationReasons(md, networkMode().dryRun)) {
       reasons.push(`section ${name}: ${reason}`);
+      verdictReasons.push(`section ${name}: ${reason}`);
     }
   }
 
-  return { blocked: reasons.length > 0, reasons };
+  return { blocked: reasons.length > 0, reasons, verdictReasons };
 }
 
 // ---------------------------------------------------------------------------
@@ -582,6 +590,22 @@ export const doneCommand = defineCommand({
     try {
       draftMd = readFileSync(draftPath, 'utf8');
     } catch {
+      // RUN-09: no compiled draft because compile REFUSED (a section the
+      // verifier blocked) is a refusal — EXIT_BLOCKED with the blocking
+      // reasons, the same gate compile ran — not "run compile first", which
+      // would only refuse again. A paper that genuinely has not reached compile
+      // yet stays EXIT_ERROR.
+      const gate = runExportBlockingGate(paperRoot);
+      if ((gate.verdictReasons ?? []).length > 0) {
+        process.stdout.write(
+          'pensmith done: BLOCKED — there is no compiled draft because compile refuses these sections:\n',
+        );
+        for (const r of gate.verdictReasons ?? []) process.stdout.write(`  - ${r}\n`);
+        process.stdout.write(
+          "Fix the cited section(s) — re-run 'pensmith verify <N>' then 'pensmith compile' — and try again.\n",
+        );
+        return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
+      }
       process.stdout.write(
         `pensmith done: no compiled draft at ${draftPath} — run 'pensmith compile' first.\n`,
       );

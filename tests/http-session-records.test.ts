@@ -201,3 +201,60 @@ test('RUN-15: an http record keeps the DOI and host it requested — secrets are
     assert.ok(!raw.includes(SENTINEL) && !raw.includes('someone') && !raw.includes('pw@'));
   });
 });
+
+test('PRIVACY: an offline miss with PENSMITH_CONTACT_EMAIL set never logs the address — raw or percent-encoded', async () => {
+  await isolated({ paper: true }, async (logFile) => {
+    await withEnv({ PENSMITH_CONTACT_EMAIL: 'jane.student@example.edu' }, async () => {
+      await assert.rejects(
+        httpFetch('https://api.openalex.org/works?search=sagas&mailto=jane.student%40example.edu', { source: 'openalex' }),
+        (e: unknown) => {
+          assert.ok(isOfflineEgressError(e));
+          assert.ok(!(e as Error).message.includes('jane.student'), 'the user-facing message drops it too');
+          return true;
+        },
+      );
+    });
+    const [r] = await records(logFile); // flushes the log
+    assert.equal(r?.cache, 'refused', 'the refusal was recorded');
+    const raw = readFileSync(logFile, 'utf8');
+    assert.ok(!raw.includes('jane.student') && !raw.includes('jane.student%40example.edu'), `no contact email in SESSION.log: ${raw}`);
+  });
+});
+
+test('PRIVACY: PENSMITH_CONTACT_EMAIL rides only in polite-pool User-Agents — never DuckDuckGo, GPTZero, a user URL or a PDF host', async () => {
+  await isolated({ paper: false }, async () => {
+    const seen = new Map<string, string>();
+    await withEnv({ PENSMITH_NETWORK_TESTS: '1', PENSMITH_CONTACT_EMAIL: 'jane.student@example.edu' }, async () => {
+      const { agent, restore } = installMockAgent();
+      const hosts = ['https://api.crossref.org', 'https://api.openalex.org', 'https://api.unpaywall.org', 'https://html.duckduckgo.com', 'https://api.gptzero.me', 'https://some-publisher.example', 'https://export.arxiv.org'];
+      for (const origin of hosts) {
+        agent.get(origin).intercept({ path: /.*/, method: 'GET' }).reply((opts) => {
+          const h = opts.headers as Record<string, string>;
+          const ua = Object.entries(h).find(([k]) => k.toLowerCase() === 'user-agent')?.[1] ?? '';
+          seen.set(origin, ua);
+          return { statusCode: 200, data: '{}', responseOptions: { headers: { 'content-type': 'application/json' } } };
+        });
+      }
+      try {
+        const calls: Array<[string, Parameters<typeof httpFetch>[1]]> = [
+          ['https://api.crossref.org/works/10.1%2Fx', { source: 'crossref', noCache: true }],
+          ['https://api.openalex.org/works/W1', { source: 'openalex', noCache: true }],
+          ['https://api.unpaywall.org/v2/10.1/x', { source: 'unpaywall', noCache: true }],
+          ['https://html.duckduckgo.com/html/?q=x', { source: 'generic', noCache: true }],
+          ['https://api.gptzero.me/v2/predict/text', { source: 'generic', noCache: true }],
+          ['https://some-publisher.example/paper.pdf', { source: 'generic', noCache: true }],
+          ['https://export.arxiv.org/api/query?id_list=1', { source: 'arxiv', noCache: true }],
+        ];
+        for (const [url, opts] of calls) await httpFetch(url, opts);
+      } finally {
+        await restore();
+      }
+    });
+    for (const polite of ['https://api.crossref.org', 'https://api.openalex.org', 'https://api.unpaywall.org']) {
+      assert.match(seen.get(polite) ?? '', /^pensmith\/\S+ \(jane\.student@example\.edu\)$/, polite);
+    }
+    for (const other of ['https://html.duckduckgo.com', 'https://api.gptzero.me', 'https://some-publisher.example', 'https://export.arxiv.org']) {
+      assert.match(seen.get(other) ?? '(not called)', /^pensmith\/\S+$/, `${other} gets the plain User-Agent: ${seen.get(other)}`);
+    }
+  });
+});

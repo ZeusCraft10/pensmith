@@ -501,21 +501,43 @@ function pkgVersion(): string {
 }
 
 /**
- * The User-Agent for one request. Source hosts get the polite-pool form with
- * PENSMITH_CONTACT_EMAIL (Crossref / OpenAlex ask for it), and its missing-email
- * WARN. A model-provider request (opts.llm) gets the plain `pensmith/<version>`:
- * the contact email is personal data meant for the polite pools, never for
- * Anthropic, OpenAI or a third-party OpenAI-compatible endpoint, and a run that
- * only called the model has no reason to warn about Crossref rate limits.
+ * Sources whose APIs ask callers to identify themselves with a contact email
+ * (the "polite pool"): Crossref (api.crossref.org, which also serves the
+ * Retraction Watch data the retraction-watch adapter reads), OpenAlex and
+ * Unpaywall. Only these get PENSMITH_CONTACT_EMAIL in the User-Agent.
  */
-function userAgent(llm: boolean): string {
-  if (llm) return `pensmith/${pkgVersion()}`;
+const POLITE_POOL_SOURCES: ReadonlySet<HttpSource> = new Set<HttpSource>(['crossref', 'openalex', 'unpaywall', 'retraction-watch']);
+
+/**
+ * The User-Agent for one request. A polite-pool source gets
+ * `pensmith/<version> (<PENSMITH_CONTACT_EMAIL>)` — and the missing-email WARN
+ * when it is unset. Every other request — a model provider (opts.llm), the
+ * DuckDuckGo phrase search, GPTZero, a URL the user passed to `add`, an
+ * open-access PDF host — gets the plain `pensmith/<version>`: the contact email
+ * is personal data meant for the polite pools only (PRIVACY.md), and a run that
+ * never called them has no reason to warn about their rate limits.
+ */
+function userAgent(source: HttpSource, llm: boolean): string {
+  if (llm || !POLITE_POOL_SOURCES.has(source)) return `pensmith/${pkgVersion()}`;
   const email = process.env.PENSMITH_CONTACT_EMAIL?.trim();
   if (!email) {
     warnNoEmailOnce();
     return `pensmith/${pkgVersion()} (no-contact)`;
   }
   return `pensmith/${pkgVersion()} (${email})`;
+}
+
+/**
+ * Remove the contact email (raw or percent-encoded, e.g. in a URL embedded in
+ * an error message) from text bound for a SESSION.log record (PRIVACY.md: the
+ * contact email is dropped from every log record).
+ */
+function scrubContactEmail(text: string): string {
+  const email = process.env.PENSMITH_CONTACT_EMAIL?.trim();
+  if (!email) return text;
+  let out = text;
+  for (const form of new Set([email, encodeURIComponent(email)])) out = out.split(form).join('REDACTED_CONTACT_EMAIL');
+  return out;
 }
 
 // ============================================================
@@ -1107,6 +1129,7 @@ function recordHttp(r: HttpRecord): void {
     httpLogger().http({
       ...r,
       url: redactUrl(r.url, { dropContact: true }),
+      ...(r.error !== undefined ? { error: scrubContactEmail(r.error) } : {}),
     } as unknown as Record<string, unknown>);
   } catch {
     /* the session log never breaks a request */
@@ -1223,7 +1246,9 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const llm = opts.llm;
   const maxBytes = opts.maxBytes ?? (llm !== undefined ? MAX_LLM_RESPONSE_BYTES : MAX_JSON_RESPONSE_BYTES);
-  const label = `${method} ${redactUrl(url)}`;
+  // Error messages carry this label, and SESSION.log stores them: the contact
+  // email is dropped here as it is from the logged url (PRIVACY.md).
+  const label = `${method} ${redactUrl(url, { dropContact: true })}`;
   const started = Date.now();
   const mode: NetworkMode = networkMode();
   const base = { source, method, url, offline: mode.sourcesOffline, ...(llm !== undefined ? { llm: true } : {}) };
@@ -1313,7 +1338,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     try {
       const reqInit = {
         method,
-        headers: { 'user-agent': userAgent(llm !== undefined), ...headers },
+        headers: { 'user-agent': userAgent(source, llm !== undefined), ...headers },
         headersTimeout: timeoutMs,
         bodyTimeout: timeoutMs,
         dispatcher,

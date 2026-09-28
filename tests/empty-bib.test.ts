@@ -16,7 +16,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseBibFile } from '../bin/lib/citations.js';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
-import { EXIT_BLOCKED, EXIT_ERROR } from '../bin/lib/exit-codes.js';
+import { EXIT_BLOCKED, EXIT_OK } from '../bin/lib/exit-codes.js';
 import { OFFLINE_MARKER_PREFIX } from '../bin/lib/http-mock.js';
 import {
   CLI_BIN,
@@ -52,17 +52,22 @@ function seedWrittenSections(root: string, draft: string): void {
   writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
 }
 
-test('RUN-02 / RUN-09: verify over an empty bib — no citations: marked unverifiable; citations: FABRICATED, exit 4', () => {
+test('RUN-02 / RUN-09: verify over an empty bib — no citations: verified (nothing to check, exit 0, status persisted); citations: FABRICATED, exit 4', () => {
   assert.ok(existsSync(CLI_BIN), `expected ${CLI_BIN} — run npm run build first`);
   const sb = sandbox('empty-bib-verify');
 
+  // Review round 2: a citation-free draft takes the normal path — Pass 1 and
+  // Pass 3 have nothing to check, so it is verified (as against a non-empty
+  // bib) and PLAN.md is updated, so the router moves on instead of looping.
   const quiet = sb.project('quiet');
   seedWrittenSections(quiet, '# Intro\n\nNo citations in this section.\n');
   const a = runCli(sb, quiet, ['verify', '1']);
-  assert.equal(a.status, EXIT_ERROR, a.stderr);
+  assert.equal(a.status, EXIT_OK, a.stderr);
   const quietVerif = readFileSync(join(sectionDirOf(quiet, 1, 'intro'), 'VERIFICATION.md'), 'utf8');
-  assert.ok(quietVerif.startsWith(OFFLINE_MARKER_PREFIX), `the short-circuit body carries the offline marker:\n${quietVerif}`);
-  assert.match(quietVerif, /^Status: unverifiable$/m);
+  assert.ok(quietVerif.startsWith(OFFLINE_MARKER_PREFIX), `the body carries the offline marker:\n${quietVerif}`);
+  assert.match(quietVerif, /^Status: verified$/m);
+  assert.match(quietVerif, /cites no sources/);
+  assert.match(readFileSync(join(sectionDirOf(quiet, 1, 'intro'), 'PLAN.md'), 'utf8'), /^status: verified$/m);
 
   const cited = sb.project('cited');
   seedWrittenSections(cited, '# Intro\n\nA claim [@ghost2020].\n');
@@ -84,6 +89,9 @@ test('compile over an empty bib: refuses an unverified section; after verify, re
   assert.ok(!existsSync(join(root, '.paper', 'DRAFT.md')));
 
   runCli(sb, root, ['verify', '1']);
+  // An edit after verification makes the section stale: compile re-verifies it
+  // (Pass 1 over the empty bib — the crash this file was written for).
+  writeFileSync(join(sectionDirOf(root, 1, 'intro'), 'DRAFT.md'), '# Intro\n\nNo citations in this section, edited.\n');
   const after = runCli(sb, root, ['compile', '--yolo']);
   assert.doesNotMatch(after.stderr, /parseBib|stack trace/, after.stderr);
   assert.match(after.stderr, /stale — re-verifying/, 'the section is re-verified (Pass 1 over the empty bib)');

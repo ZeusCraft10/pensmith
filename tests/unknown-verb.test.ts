@@ -129,6 +129,8 @@ test('RUN-11: global booleans are normalized — `--x=true|1` is on, `--x=false|
 test('RUN-11: `--dry-run=true` is a dry run and `--estimate=true` only estimates — neither reaches the model', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: 'sk-test-inline-bool-0001', PENSMITH_NO_LLM: undefined } }, async (sb) => {
     fs.writeFileSync(join(sb.paper, 'INTAKE.md'), '---\ntopic: medieval Icelandic sagas\ndiscipline: history\n---\n# Intake\n\nWrite a 1500-word essay on medieval Icelandic sagas.\n');
+    // A paper a dry run made (RUN-27: --dry-run never runs over a real paper).
+    fs.writeFileSync(join(sb.paper, 'DRY-RUN.md'), '# made by pensmith --dry-run\n');
     const dry = await sb.runTsx(null, ['research', '--dry-run=true', '--yolo']);
     assert.equal(dry.status, 0, `${dry.stdout}\n${dry.stderr}`);
     assert.match(dry.stderr, /OFFLINE MODE \(reason: --dry-run\)/);
@@ -204,8 +206,18 @@ test('RUN-11: bare `pensmith --yolo` still routes through resolveNextAction (a f
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
   assert.ok(existsSync(join(cwd, '.paper', 'STATE.json')), 'the router dispatched `new`');
   assert.ok(existsSync(join(cwd, '.paper', 'INTAKE.md')));
-  // The next step is research: bare `--dry-run --yolo` routes there too.
-  const dry = runCli(sb, cwd, ['--dry-run', '--yolo']);
+  // RUN-27: a --dry-run never runs over this (real) paper — refused, nothing written.
+  const refused = runCli(sb, cwd, ['--dry-run', '--yolo']);
+  assert.equal(refused.status, EXIT_USAGE, `${refused.stdout}\n${refused.stderr}`);
+  assert.match(refused.stderr, /--dry-run would overwrite the paper at .* this paper was not touched/);
+  assert.ok(!existsSync(join(cwd, '.paper', 'LIBRARY.json')), 'nothing was researched');
+  // In a fresh folder, bare `--dry-run --yolo` routes the same way: new, then research.
+  const fresh = sb.project('dry');
+  writeFileSync(join(fresh, 'assignment.txt'), 'Write a 1500-word essay on tidal power.\n');
+  const dryNew = runCli(sb, fresh, ['--dry-run', '--yolo']);
+  assert.equal(dryNew.status, 0, `${dryNew.stdout}\n${dryNew.stderr}`);
+  assert.ok(existsSync(join(fresh, '.paper', 'STATE.json')), 'the router dispatched `new`');
+  const dry = runCli(sb, fresh, ['--dry-run', '--yolo']);
   assert.equal(dry.status, 0, `${dry.stdout}\n${dry.stderr}`);
-  assert.ok(existsSync(join(cwd, '.paper', 'LIBRARY.json')), 'the router dispatched `research`');
+  assert.ok(existsSync(join(fresh, '.paper', 'LIBRARY.json')), 'the router dispatched `research`');
 });

@@ -69,7 +69,10 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
    verdict (FABRICATED / MIS-CITED / NOT_FOUND, or UNVERIFIABLE — "re-run
    online"), or, outside `--dry-run`, a verification written under `--dry-run`
    (synthetic sources, RUN-27) refuses the export with EXIT_BLOCKED (4) and
-   writes nothing.
+   writes nothing. With no `.paper/DRAFT.md` at all, the same check runs
+   first: when a section's verification blocks (compile refused, so there is no
+   draft), done prints those reasons and exits EXIT_BLOCKED (4); only a paper
+   that has not reached compile yet is "run `pensmith compile` first" (exit 1).
 
 1. **Whole-paper Pass 4** (DONE-01): run `runPass4` over `.paper/DRAFT.md`. The
    per-paragraph orphan counts (HIGH-confidence, R8) feed the DONE-09 gate. A

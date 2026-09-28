@@ -126,6 +126,14 @@ test('RUN-09: a fabricated citation — verify 1, compile --yolo and done --yolo
   assert.match(c.stdout, /REFUSED/);
   assert.ok(!existsSync(join(root, '.paper', 'DRAFT.md')), 'a refused compile writes no DRAFT.md');
 
+  // The real path: compile refused, so there is no DRAFT.md — done refuses
+  // with the blocking citation (EXIT_BLOCKED), never "run compile first".
+  const noDraft = runCli(sb, root, ['done', '--yolo', '--format', 'md']);
+  assert.equal(noDraft.status, EXIT_BLOCKED, `done (no DRAFT.md): ${noDraft.stdout}\n${noDraft.stderr}`);
+  assert.match(noDraft.stdout, /BLOCKED — there is no compiled draft because compile refuses these sections/);
+  assert.match(noDraft.stdout, /section 01-intro: .*ghost2099|section 01-intro: VERIFICATION\.md Status is 'failed'/);
+  assert.ok(!existsSync(join(root, '.paper', 'export')), 'a blocked done writes no export/');
+
   // done's own gate: a DRAFT.md placed by hand still cannot be exported.
   writeFileSync(join(root, '.paper', 'DRAFT.md'), '# Paper\n\nA claim [@ghost2099].\n');
   const d = runCli(sb, root, ['done', '--yolo', '--format', 'md']);
@@ -247,7 +255,42 @@ test('RUN-09: a wave write with a failed section exits 1', () => {
   const r = runCli(sb, root, ['write', '--max-parallel', '1', '--yolo']);
   assert.equal(r.status, EXIT_ERROR, `${r.stdout}\n${r.stderr}`);
   assert.match(r.stdout, /"wave_complete"/);
+  // RUN-12: the failure is named on stderr (one line), never a silent exit 1.
+  assert.match(r.stderr, /^pensmith write: section 2 \(beta\) failed: /m);
+  assert.doesNotMatch(r.stderr, STACK_LINE);
   assert.ok(existsSync(join(sectionDirOf(root, 1, 'alpha'), 'DRAFT.md')), 'the healthy section is still written');
+});
+
+test('RUN-09: an invalid section argument is EXIT_USAGE before any model call — no placeholder folder, no debug hint', () => {
+  const sb = sandbox('exit-section-arg');
+  const root = sb.project('p');
+  const three = [{ n: 1, slug: 'introduction' }, { n: 2, slug: 'discussion' }, { n: 3, slug: 'conclusion' }];
+  writeState(root, three);
+  writeFileSync(join(root, '.paper', 'LIBRARY.json'), JSON.stringify({ $schemaVersion: 1, entries: [] }));
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+  writeOutline(root, three);
+  for (const t of three) writePlan(root, t.n, t.slug, { status: 'written' });
+  writeFileSync(join(sectionDirOf(root, 3, 'conclusion'), 'DRAFT.md'), '# Conclusion\n\nNo citations.\n');
+  const before = snapshot(root);
+  const cases: Array<[string[], RegExp]> = [
+    [['plan', '0'], /^pensmith plan: <n> must be a section number from 1 to 99; got "0"$/m],
+    [['plan', '100'], /^pensmith plan: <n> must be a section number from 1 to 99; got "100"$/m],
+    [['plan', '99'], /^pensmith plan: this paper has no section 99 — its outline has section\(s\) 1-3$/m],
+    [['write', '7'], /^pensmith write: this paper has no section 7 — its outline has section\(s\) 1-3$/m],
+    [['verify', '99'], /^pensmith verify: this paper has no section 99 — its outline has section\(s\) 1-3$/m],
+    [['plan', 'abc'], /^pensmith plan: <n> must be a section number from 1 to 99; got 'abc'$/m],
+    [['verify', 'abc'], /^pensmith verify: <n> must be a section number from 1 to 99; got 'abc'$/m],
+    [['write', '1', '--slug', '../../etc'], /^pensmith write: --slug must be lowercase letters, digits and hyphens; got "\.\.\/\.\.\/etc"$/m],
+    [['write', '1', '--slug', 'conclusion'], /^pensmith write: section 1 is "introduction" in the outline, not "conclusion"/m],
+  ];
+  for (const [args, message] of cases) {
+    const r = runCli(sb, root, args);
+    assert.equal(r.status, EXIT_USAGE, `${args.join(' ')}: ${r.stdout}\n${r.stderr}`);
+    assert.match(r.stderr, message, args.join(' '));
+    assert.doesNotMatch(r.stderr, /PENSMITH_DEBUG/, `${args.join(' ')}: an invalid argument is not an internal error`);
+    assert.doesNotMatch(r.stderr, STACK_LINE);
+  }
+  assert.deepEqual(changedPaths(before, snapshot(root), IGNORE_LOGS), [], 'no placeholder section folder, no file written');
 });
 
 test('RUN-12: an unexpected error prints one line plus the PENSMITH_DEBUG hint — no stack', () => {

@@ -20,6 +20,7 @@ import {
   listCassetteFiles,
   cassetteKey,
   lookupFixture,
+  recordedErrorBody,
   SCRUBBED_QUERY_PARAMS,
   type Cassette,
 } from '../bin/lib/http-mock.js';
@@ -40,17 +41,12 @@ const recorded = files.filter((f) => !rel(f).startsWith('synthetic/'));
  * moment a recording lands, the test below fails until the adapter moves from
  * this list into the required one.
  */
-const OPEN_RECORDINGS: Readonly<Record<string, string>> = Object.freeze({
-  openalex:
-    'OpenAlex now bills per request (x-ratelimit-remaining-usd: 0 for a keyless caller), so ' +
-    '`npm run cassettes:refresh -- --only openalex` needs OPENALEX_API_KEY; until it is re-recorded, ' +
-    'tests/sources/openalex.test.ts parses the hand-written synthetic fixture',
-});
+const OPEN_RECORDINGS: Readonly<Record<string, string>> = Object.freeze({});
 
 test('CI-07: the store has real recordings (recorded cassettes exist outside synthetic/)', () => {
   assert.ok(files.length > 0, 'cassettes exist');
   assert.ok(recorded.length >= 7, `real recordings for the source adapters, got ${recorded.map(rel).join(', ')}`);
-  for (const adapter of ['crossref', 'arxiv', 'pubmed', 'unpaywall', 'retraction-watch', 'semanticscholar']) {
+  for (const adapter of ['crossref', 'openalex', 'arxiv', 'pubmed', 'unpaywall', 'retraction-watch', 'semanticscholar']) {
     assert.ok(recorded.some((f) => rel(f).startsWith(`${adapter}/`)), `a recorded ${adapter} cassette`);
   }
 });
@@ -79,6 +75,24 @@ test('CI-07: every entry outside synthetic/ carries recorder provenance for its 
       assert.ok(!Number.isNaN(Date.parse(p.recordedAt)) && /^\d{4}-\d{2}-\d{2}T/.test(p.recordedAt), `${rel(file)}: ISO recordedAt`);
     }
   }
+});
+
+test('CI-07: no recording is an API error document (an error inside an HTTP 200 is not a recording)', () => {
+  for (const file of recorded) {
+    for (const e of JSON.parse(readFileSync(file, 'utf8')) as Cassette[]) {
+      const why = recordedErrorBody(e.status, e.response);
+      assert.equal(why, null, `${rel(file)}: ${e.scope}${e.path} recorded an error body (${why}) — fix the adapter's request and re-record`);
+    }
+  }
+});
+
+test('CI-07: recordedErrorBody recognizes the error documents public APIs send inside a 200', () => {
+  assert.match(recordedErrorBody(200, { statusCode: '403', 'message-type': 'not-polite', body: 'x' }) ?? '', /statusCode 403/);
+  assert.match(recordedErrorBody(200, { status: 'failed', 'message-type': 'validation-failure' }) ?? '', /validation-failure|failed/);
+  assert.match(recordedErrorBody(200, '{"error":"Invalid query"}') ?? '', /error/);
+  assert.equal(recordedErrorBody(200, { status: 'ok', 'message-type': 'work-list', message: { items: [] } }), null);
+  assert.equal(recordedErrorBody(200, '<?xml version="1.0"?><feed/>'), null);
+  assert.equal(recordedErrorBody(404, 'Resource not found.'), null, 'a deliberate non-200 recording is judged by its status');
 });
 
 test('CI-07: synthetic identifiers (10.0000/…, 10.1234/example) appear only under synthetic/', () => {

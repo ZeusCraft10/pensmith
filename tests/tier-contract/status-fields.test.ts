@@ -66,8 +66,9 @@ test('RUN-19: CLI `status` and paper://state expose the same status fields', asy
     assert.deepEqual(status.sections.map((s) => s.glyph), ['✓', '⌛', '⌽']);
     assert.ok(cliLines.includes(status.nextLine), status.nextLine);
     assert.equal(status.nextLine, 'next: write §2');
-    // The cost meter: Tier 2 meters this session + paper total; Tier 1 says n/a.
-    assert.ok(cliLines.includes('cost: $0.00 this session / $1.23 total (cap $5.00)'), cli.stdout);
+    // The cost meter: Tier 2 meters the last (or running) session + paper
+    // total — the fixture's $1.23 was spent by an earlier session; Tier 1 says n/a.
+    assert.ok(cliLines.includes('cost: $1.23 last session / $1.23 total (cap $5.00)'), cli.stdout);
     assert.equal(status.cost.line, 'cost: n/a (Claude session)');
   });
 });

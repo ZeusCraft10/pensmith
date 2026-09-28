@@ -7,7 +7,11 @@
 // [!] when the locale is not UTF-8), the cost meter
 // `cost: $X.XX this session / $Y.YY total (cap $Z.ZZ)` (`cost: n/a (Claude
 // session)` in Tier 1, where the user's Claude session does the generation),
-// and `next: …` from the router.
+// and `next: …` from the router. A session is one process (D-17-26), so a
+// standalone `status` meters the session that is RUNNING on the paper (the
+// live session-lock holder, `$X running session`) or else the LAST one that
+// recorded a cost (`$X last session`); `this session` is used only when this
+// very process spent (the status a bare chain prints at its end).
 //
 // Read-only and NEVER throws: every input (STATE.json, PLAN.md frontmatter,
 // config.toml, INTAKE.md, COSTS.jsonl) is read best-effort, like the router.
@@ -20,7 +24,8 @@ import { paperDir, sectionPlan } from './paths.js';
 import { CURRENT_CONFIG_VERSION, effectiveConfigRows, paperConfigPath, tryReadPaperConfigSync } from './config.js';
 import { parseIntakeMd } from './intake-parse.js';
 import { parseOutline } from './outline-parse.js';
-import { resolveCostCap, sessionSpend, totalCost } from './budget.js';
+import { lastSessionSpend, resolveCostCap, sessionSpend, totalCost } from './budget.js';
+import { currentSessionId, readSessionLock, staleReason } from './session-lock.js';
 import { isApiKeyPresent, resolveRuntime, resolveSlug } from './runtime.js';
 import { SLUG_NAMES, slugSpec, LOCAL_PROVIDERS, effectiveEffort, modelCapabilities } from './llm-models.js';
 
@@ -30,6 +35,12 @@ export type SectionPhase = 'verified' | 'in-progress' | 'pending' | 'attention';
 const GLYPHS: Readonly<Record<GlyphSet, Readonly<Record<SectionPhase, string>>>> = Object.freeze({
   unicode: Object.freeze({ verified: '✓', 'in-progress': '⌛', pending: '⌽', attention: '!' }),
   ascii: Object.freeze({ verified: '[x]', 'in-progress': '[~]', pending: '[ ]', attention: '[!]' }),
+});
+
+/** The section mark and dash each glyph set prints: pure ASCII when the locale is not UTF-8. */
+const MARKS: Readonly<Record<GlyphSet, { readonly section: string; readonly dash: string }>> = Object.freeze({
+  unicode: Object.freeze({ section: '§', dash: '—' }),
+  ascii: Object.freeze({ section: '#', dash: '-' }),
 });
 
 /** UTF-8 glyphs only when the effective locale is UTF-8 (LC_ALL > LC_CTYPE > LANG). */
@@ -50,6 +61,8 @@ export interface StatusSectionRow {
 }
 
 export interface StatusView {
+  /** The glyph set the lines were built with (ASCII-only when 'ascii'). */
+  glyphSet: GlyphSet;
   exists: boolean;
   paperId: string | null;
   title: string;
@@ -62,8 +75,11 @@ export interface StatusView {
   cost: {
     tier: 'cli' | 'mcp';
     sessionUsd: number | null;
+    /** Which session sessionUsd meters (null in Tier 1). */
+    sessionLabel: 'this session' | 'running session' | 'last session' | null;
     totalUsd: number;
-    capUsd: number;
+    /** Null when PENSMITH_COST_CAP_USD is set but invalid. */
+    capUsd: number | null;
     line: string;
   };
   next: string;
@@ -89,14 +105,27 @@ function readText(file: string): string {
   }
 }
 
-function describeNext(d: RouterDecision): string {
+function describeNext(d: RouterDecision, section: string): string {
   if (d.verb === 'status') return `status (${d.reason})`;
-  if ('n' in d) return `${d.verb} §${d.n}`;
+  if ('n' in d) return `${d.verb} ${section}${d.n}`;
   return d.verb;
 }
 
 function money(n: number): string {
   return `$${n.toFixed(2)}`;
+}
+
+/** The session the CLI cost meter shows (see the module header). */
+async function meteredSession(root: string): Promise<{ sessionUsd: number; sessionLabel: 'this session' | 'running session' | 'last session' }> {
+  const own = await sessionSpend(root);
+  if (own > 0) return { sessionUsd: own, sessionLabel: 'this session' };
+  const holder = readSessionLock(root);
+  if (holder !== null && holder.sessionId !== currentSessionId() && staleReason(holder) === null) {
+    return { sessionUsd: await totalCost({ root, session: holder.sessionId }), sessionLabel: 'running session' };
+  }
+  const last = await lastSessionSpend(root);
+  if (last !== null) return { sessionUsd: last.usd, sessionLabel: 'last session' };
+  return { sessionUsd: 0, sessionLabel: 'this session' };
 }
 
 /**
@@ -108,7 +137,9 @@ export async function buildStatusView(
   root: string,
   opts: { tier: 'cli' | 'mcp'; glyphs?: GlyphSet; stopAfterResearch?: boolean } = { tier: 'cli' },
 ): Promise<StatusView> {
-  const glyphs = GLYPHS[opts.glyphs ?? glyphSetFor()];
+  const glyphSet = opts.glyphs ?? glyphSetFor();
+  const glyphs = GLYPHS[glyphSet];
+  const marks = MARKS[glyphSet];
   const pDir = paperDir(root);
   const config = tryReadPaperConfigSync(root);
   const intake = parseIntakeMd(readText(path.join(pDir, 'INTAKE.md')));
@@ -136,7 +167,7 @@ export async function buildStatusView(
 
   const sections: StatusSectionRow[] = registered.map(({ n, slug }) => {
     const r = readSectionState(sectionPlan(n, slug, root));
-    const status = r.absent ? 'not planned' : r.corrupt ? 'corrupt/unreadable PLAN.md — needs attention' : r.status;
+    const status = r.absent ? 'not planned' : r.corrupt ? `corrupt/unreadable PLAN.md ${marks.dash} needs attention` : r.status;
     const phase = phaseOf(r.status, r.absent, r.corrupt);
     return { n, slug, title: titles.get(n) ?? slug, status, phase, glyph: glyphs[phase] };
   });
@@ -151,24 +182,34 @@ export async function buildStatusView(
     ? { n: decision.n, slug: decision.slug, step: decision.verb }
     : null;
   const currentLine = current
-    ? `current: §${current.n} (${current.step})`
+    ? `current: ${marks.section}${current.n} (${current.step})`
     : `current: ${decision.verb === 'status' ? (decision.reason === 'done' ? 'complete' : 'needs attention') : decision.verb}`;
 
-  const next = describeNext(decision);
+  const next = describeNext(decision, marks.section);
   let totalUsd = 0;
   let sessionUsd: number | null = null;
+  let sessionLabel: StatusView['cost']['sessionLabel'] = null;
   try {
     totalUsd = await totalCost({ root });
-    if (opts.tier === 'cli') sessionUsd = await sessionSpend(root);
+    if (opts.tier === 'cli') ({ sessionUsd, sessionLabel } = await meteredSession(root));
   } catch {
     totalUsd = 0;
   }
-  const capUsd = resolveCostCap(root).capUsd;
+  // Read-only and never throws: an invalid PENSMITH_COST_CAP_USD is shown, not
+  // raised (every model call refuses it with the one-line error).
+  let capUsd: number | null;
+  try {
+    capUsd = resolveCostCap(root).capUsd;
+  } catch {
+    capUsd = null;
+  }
+  const capText = capUsd === null ? 'cap invalid: fix PENSMITH_COST_CAP_USD' : `cap ${money(capUsd)}`;
   const costLine = opts.tier === 'mcp'
     ? 'cost: n/a (Claude session)'
-    : `cost: ${money(sessionUsd ?? 0)} this session / ${money(totalUsd)} total (cap ${money(capUsd)})`;
+    : `cost: ${money(sessionUsd ?? 0)} ${sessionLabel ?? 'this session'} / ${money(totalUsd)} total (${capText})`;
 
   return {
+    glyphSet,
     exists: paperId !== null,
     paperId,
     title,
@@ -177,7 +218,7 @@ export async function buildStatusView(
     current,
     currentLine,
     sections,
-    cost: { tier: opts.tier, sessionUsd, totalUsd, capUsd, line: costLine },
+    cost: { tier: opts.tier, sessionUsd, sessionLabel, totalUsd, capUsd, line: costLine },
     next,
     nextLine: `next: ${next}`,
     problem,
@@ -186,20 +227,21 @@ export async function buildStatusView(
 
 /** The CLI rendering (stdout lines). */
 export function renderStatusView(view: StatusView): string {
+  const { section, dash } = MARKS[view.glyphSet];
   if (view.problem === 'no-paper') {
-    return 'pensmith status: no active paper — run `pensmith new` to start.';
+    return `pensmith status: no active paper ${dash} run \`pensmith new\` to start.`;
   }
   const lines: string[] = ['pensmith status:'];
-  lines.push(`  paper: ${view.title}${view.title !== view.name ? ` (${view.name})` : ''} — class ${view.class}`);
+  lines.push(`  paper: ${view.title}${view.title !== view.name ? ` (${view.name})` : ''} ${dash} class ${view.class}`);
   if (view.problem === 'corrupt-state') {
-    lines.push('  STATE.json is unreadable/corrupt — inspect or restore it.');
+    lines.push(`  STATE.json is unreadable/corrupt ${dash} inspect or restore it.`);
   } else if (view.paperId) {
     lines.push(`  id: ${view.paperId}`);
   }
   lines.push(`  ${view.currentLine}`);
   lines.push('  sections:');
   if (view.sections.length === 0) lines.push('    (none yet)');
-  for (const s of view.sections) lines.push(`    ${s.glyph} §${s.n} ${s.slug}: ${s.status}`);
+  for (const s of view.sections) lines.push(`    ${s.glyph} ${section}${s.n} ${s.slug}: ${s.status}`);
   lines.push(`  ${view.cost.line}`);
   lines.push(`  ${view.nextLine}`);
   return lines.join('\n');

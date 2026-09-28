@@ -44,6 +44,13 @@ export const OPTIONAL_KEY_VARS = [
   'ZOTERO_API_KEY',
 ] as const;
 
+/**
+ * Variables reported for completeness that no request sends yet: the OpenAlex
+ * adapter does not attach OPENALEX_API_KEY until SRC-06, so doctor must not
+ * suggest setting it changes anything.
+ */
+const NOT_USED_YET: ReadonlySet<string> = new Set(['OPENALEX_API_KEY']);
+
 export const NO_LLM_DESCRIPTION =
   'PENSMITH_NO_LLM replaces every LLM call with a deterministic stub (testing and dry-run)';
 
@@ -58,7 +65,8 @@ export const runtimeConfigPresenceProbe: Probe = {
     const facts = await loadCapabilityFacts();
     const providers = facts.providers.map((p) => ({ name: p.name, apiKeyEnv: p.api_key_env, present: p.present }));
     const detail = JSON.stringify(providers); // only {name, apiKeyEnv, present}
-    const optional = OPTIONAL_KEY_VARS.map((name) => `${name} ${isSet(name) ? 'present' : 'absent'}`).join(', ');
+    const optional = OPTIONAL_KEY_VARS.map((name) =>
+      `${name} ${isSet(name) ? 'present' : 'absent'}${NOT_USED_YET.has(name) ? ' (not used yet)' : ''}`).join(', ');
     const noLlm = `${NO_LLM_DESCRIPTION} — ${isNoLlmMode() ? 'SET' : 'not set'}`;
 
     let rt;

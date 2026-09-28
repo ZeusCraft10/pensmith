@@ -4,11 +4,13 @@
 //
 // Offline replay (PENSMITH_OFFLINE=1 and the test runner) answers a request
 // ONLY from the exact-match fixture store in bin/lib/http-mock.ts (D-17-06).
-// This probe checks that the store is usable: in a source checkout every
-// committed fixture must parse and the Crossref fixtures must be present
-// (PASS, with the count); outside a checkout — an installed package, which does
-// not ship tests/ — the honest answer is SKIP (offline replay is refused there
-// before any work, D-17-15). A corrupt cassette is FAIL.
+// This probe checks that the store is usable when offline replay is ACTIVE: in
+// a source checkout every committed fixture must parse and the Crossref
+// fixtures must be present (PASS, with the count); outside a checkout — an
+// installed package, which does not ship tests/ — the honest answer is SKIP
+// (offline replay is refused there before any work, D-17-15). A corrupt
+// cassette is FAIL. In live mode (and under --dry-run) the store is not used,
+// so the probe is SKIP and never reads tests/ (RUN-05).
 //
 // The probe interface (id + run signature) is stable — the tier contract
 // extracts `probes['http-crossref-ping']?.severity` and treats SKIP as a
@@ -22,7 +24,19 @@ import { networkMode, listCassetteFiles, loadCassetteDir } from '../../http-mock
 export const httpCrossrefPingProbe: Probe = {
   id: 'http-crossref-ping',
   async run(): Promise<ProbeResult> {
-    if (!networkMode().fixturesAvailable) {
+    const mode = networkMode();
+    // RUN-05: a live run never reads tests/ — the fixture store is not in use,
+    // so the probe does not load it (and --dry-run uses the synthetic provider).
+    if (!mode.sourcesOffline || mode.dryRun) {
+      return {
+        id: 'http-crossref-ping',
+        severity: 'SKIP',
+        summary: mode.dryRun
+          ? 'Offline-replay wiring probe — SKIP: not used under --dry-run (sources come from the synthetic dry-run provider).'
+          : 'Offline-replay wiring probe — SKIP: not used (network: live); recorded fixtures are read only with PENSMITH_OFFLINE=1 or under the test runner.',
+      };
+    }
+    if (!mode.fixturesAvailable) {
       return {
         id: 'http-crossref-ping',
         severity: 'SKIP',

@@ -100,6 +100,8 @@ test('RUN-05 / RUN-27: the installed package runs `--dry-run research --yolo` fr
     join(project, '.paper', 'INTAKE.md'),
     '---\ntopic: medieval Icelandic sagas\ndiscipline: history\n---\n# Intake\n\nWrite a 1500-word essay on medieval Icelandic sagas.\n',
   );
+  // A paper a dry run made (RUN-27: --dry-run never runs over a real paper).
+  writeFileSync(join(project, '.paper', 'DRY-RUN.md'), '# made by pensmith --dry-run\n');
   const r = runInstalled(['--dry-run', 'research', '--yolo'], project);
   const out = `${r.stdout}\n${r.stderr}`;
   assert.equal(r.status, 0, `dry-run research exits 0: ${out.slice(0, 2000)}`);

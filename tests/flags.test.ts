@@ -517,7 +517,10 @@ interface ChainFixture {
  * (inline and under a block quote Pass 3 extracts) for add → verify → compile
  * → done.
  */
-function seedChain(entry: { citekey: string; doi: string; title: string; author: string; year: number }): ChainFixture {
+function seedChain(
+  entry: { citekey: string; doi: string; title: string; author: string; year: number },
+  opts: { dryRunPaper?: boolean } = {},
+): ChainFixture {
   const researchRoot = freshRoot();
   mkdirSync(join(researchRoot, '.paper'), { recursive: true });
   writeFileSync(
@@ -565,6 +568,11 @@ function seedChain(entry: { citekey: string; doi: string; title: string; author:
       '',
     ].join('\n'),
   );
+  if (opts.dryRunPaper === true) {
+    // RUN-27: --dry-run never runs over a real paper — these are papers a dry
+    // run made (dry-run-paper.ts marker), which is where a dry run works.
+    for (const root of [researchRoot, paperRoot]) writeFileSync(join(root, '.paper', 'DRY-RUN.md'), '# made by pensmith --dry-run\n');
+  }
   return { researchRoot, paperRoot };
 }
 
@@ -608,7 +616,7 @@ test('H3 / RUN-04: --dry-run research, add, verify (incl. Pass 3), compile and d
       title: synthetic.title,
       author: synthetic.authors[0] ?? '',
       year: synthetic.year ?? 2020,
-    });
+    }, { dryRunPaper: true });
     const runs = runChain(fx, ['--dry-run'], {}, '10.1038/nphys1170');
     assertZeroEgress(runs, '--dry-run');
 

@@ -31,7 +31,7 @@ Model requests carry a plain `pensmith/<version>` User-Agent — never your cont
 
 ## `PENSMITH_CONTACT_EMAIL` (recommended)
 
-Crossref, OpenAlex and Unpaywall ask callers to identify themselves (their "polite pool", with better rate limits). When `PENSMITH_CONTACT_EMAIL` is set, requests to scholarly services carry it in the `User-Agent`, and OpenAlex and Unpaywall requests also as their `mailto` / `email` query parameter. It is sent to those scholarly services only — never to a model provider — and it is dropped from every log record. When it is unset, pensmith still works (with a one-time warning), and `pensmith doctor` reports a WARN.
+Crossref, OpenAlex and Unpaywall ask callers to identify themselves (their "polite pool", with better rate limits). When `PENSMITH_CONTACT_EMAIL` is set, requests to those three services (including the Crossref retraction lookup) carry it in the `User-Agent`, and OpenAlex, Unpaywall and Crossref retraction requests also as their `mailto` / `email` query parameter. It is sent to those scholarly services only — never to a model provider, arXiv, PubMed, Semantic Scholar, DuckDuckGo, GPTZero, a URL you pass to `pensmith add`, or an open-access PDF host — and it is dropped from every log record, including the error text of a failed or refused request. When it is unset, pensmith still works (with a one-time warning), and `pensmith doctor` reports a WARN.
 
 ## What pensmith stores, and where
 

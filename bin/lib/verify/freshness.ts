@@ -29,7 +29,7 @@
 import { normalizeDoi } from '../doi.js';
 import { fetch as httpFetch, isOfflineEgressError, offlineLabel } from '../http.js';
 import { networkMode } from '../http-mock.js';
-import { fetchById as retractionWatchFetchById } from '../sources/retraction-watch.js';
+import { fetchById as retractionWatchFetchById, isRetractionLookupError } from '../sources/retraction-watch.js';
 import { Semaphore } from '../budget.js';
 
 export type FreshnessProbe = 'DOI HEAD' | 'retraction-watch';
@@ -50,8 +50,12 @@ export interface FreshnessResult {
   doi: string | null;
   /** Zero or more advisory warnings. Empty array == no staleness signal. */
   warnings: FreshnessWarning[];
-  /** Probes NOT run because the run is offline, e.g. 'skipped (offline)' (RUN-03). */
-  skipped?: Array<{ probe: FreshnessProbe; detail: string }>;
+  /**
+   * Probes that gave no answer: NOT run because the run is offline, e.g.
+   * 'skipped (offline)' (RUN-03), or 'unavailable' when the live lookup failed
+   * (`note` says why — the status is unknown, never "ok").
+   */
+  skipped?: Array<{ probe: FreshnessProbe; detail: string; note?: string }>;
 }
 
 function debug(msg: string): void {
@@ -70,7 +74,7 @@ export async function probeFreshness(
   doi: string | null,
 ): Promise<FreshnessResult> {
   const warnings: FreshnessWarning[] = [];
-  const skipped: Array<{ probe: FreshnessProbe; detail: string }> = [];
+  const skipped: Array<{ probe: FreshnessProbe; detail: string; note?: string }> = [];
 
   // SSRF mitigation: validate DOI format before issuing ANY request.
   const normalized = doi ? normalizeDoi(doi) : null;
@@ -121,8 +125,11 @@ export async function probeFreshness(
       if (isOfflineEgressError(err)) {
         skipped.push({ probe: 'retraction-watch', detail: `skipped (${offlineLabel(err)})` });
       } else {
-        // Same noise policy as the HEAD probe — never block on a probe failure.
-        debug(`citekey=${citekey} doi=${normalized} retraction-watch error: ${String(err)} — silent`);
+        // Never block on the advisory probe, but never hide a failed lookup
+        // either: an unknown retraction status is an "unavailable" row, not a
+        // silent "ok" (SRC-04). Pass 1 records the blocking verdict.
+        const why = isRetractionLookupError(err) ? err.message : `retraction status unknown: ${String(err)}`;
+        skipped.push({ probe: 'retraction-watch', detail: 'unavailable', note: `${why.replace(/\|/g, '/')} — re-run verify` });
       }
     }
   }
@@ -165,7 +172,7 @@ export function renderFreshnessTable(results: ReadonlyArray<FreshnessResult>): s
   for (const r of results) {
     const skips = r.skipped ?? [];
     for (const sk of skips) {
-      lines.push(`| ${r.citekey} | ${sk.probe} | ${sk.detail} | not probed — re-run online |`);
+      lines.push(`| ${r.citekey} | ${sk.probe} | ${sk.detail} | ${sk.note ?? 'not probed — re-run online'} |`);
     }
     if (r.warnings.length === 0) {
       if (!skips.some((sk) => sk.probe === 'DOI HEAD')) lines.push(`| ${r.citekey} | DOI HEAD | ok | |`);

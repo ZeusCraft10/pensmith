@@ -39,9 +39,10 @@ import { TutorialSubscriber } from '../lib/tutorial.js';
 import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
 import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { complete, assertLlmConfigured } from '../lib/anthropic.js';
-import { resolveSectionSlug } from '../lib/section-slug.js';
-import { EXIT_ERROR } from '../lib/exit-codes.js';
+import { complete, assertLlmConfigured, isFatalLlmError } from '../lib/anthropic.js';
+import { resolveSectionArg } from '../lib/section-slug.js';
+import { EXIT_COST_CAP, EXIT_ERROR, type ExitCode } from '../lib/exit-codes.js';
+import { classifyFailure, failureLine } from '../lib/verb-outcome.js';
 
 // Phase 11 — the section-draft placeholder constant has been removed. write now
 // calls complete() for real generation (GEN-02). With no key configured, run()
@@ -252,6 +253,18 @@ async function writeOneSection(n: number, slug: string): Promise<string> {
   return targetPath;
 }
 
+/**
+ * The wave's exit code from its failures' classified codes: EXIT_COST_CAP when
+ * the session cap refused a call; else the code every failure shares (e.g. a
+ * session-lock refusal); else EXIT_ERROR.
+ */
+function waveExitCode(codes: readonly ExitCode[]): ExitCode {
+  if (codes.includes(EXIT_COST_CAP)) return EXIT_COST_CAP;
+  const first = codes[0];
+  if (first !== undefined && codes.every((c) => c === first)) return first;
+  return EXIT_ERROR;
+}
+
 export const writeCommand = defineCommand({
   meta: {
     name: 'write',
@@ -267,7 +280,7 @@ export const writeCommand = defineCommand({
     },
     slug: {
       type: 'string',
-      description: 'Section slug (lowercase-kebab; defaults to "placeholder" in Tier-2 mode).',
+      description: 'Section slug (lowercase-kebab; defaults to the outline\'s slug for <n>).',
     },
     'max-parallel': {
       type: 'string',
@@ -337,6 +350,10 @@ export const writeCommand = defineCommand({
         // constructed (goal ∈ {learning, both}). goal=draft omits it entirely →
         // the Foundation guard is a no-op (zero-branch). The conditional spread
         // satisfies exactOptionalPropertyTypes (never pass an explicit undefined).
+        // RUN-09: a failure every later section would repeat (the session cost
+        // cap, a missing key, an invalid runtime config, a replay miss) stops
+        // the run — sections not yet started are reported `skipped`.
+        stopOn: isFatalLlmError,
         ...(subscriber
           ? {
               onSectionWritten: (evt: {
@@ -363,24 +380,33 @@ export const writeCommand = defineCommand({
         );
       }
 
-      const anyFailed = results.some((w) => w.sections.some((s) => s.status === 'failed'));
-      // CR-02 / RUN-09: a wave with a failed section exits EXIT_ERROR (the
-      // dispatcher maps the result; MCP callers get isError the same way).
-      return { ok: !anyFailed, mode: 'wave', waves: results, ...(anyFailed ? { exitCode: EXIT_ERROR } : {}) };
+      // RUN-09 / RUN-12: every failed section gets ONE stderr line naming it and
+      // the failure (classified exactly as the dispatcher would classify a
+      // single-section run), and the run exits with the failures' documented
+      // code — EXIT_COST_CAP when the session cap stopped it.
+      const failures = results.flatMap((w) => w.sections.filter((s) => s.status === 'failed'));
+      const codes: ExitCode[] = [];
+      for (const f of failures) {
+        const c = classifyFailure(f.cause ?? new Error(f.error ?? 'unknown error'));
+        codes.push(c.code);
+        process.stderr.write(`${failureLine(`pensmith write: section ${f.n} (${f.slug}) failed: ${c.message}`)}\n`);
+      }
+      const skipped = results.reduce((acc, w) => acc + w.sections.filter((s) => s.status === 'skipped').length, 0);
+      if (skipped > 0) {
+        process.stderr.write(`pensmith write: stopped — ${skipped} section(s) not attempted; fix the failure above and re-run \`pensmith write\`.\n`);
+      }
+      if (failures.length === 0) return { ok: true, mode: 'wave', waves: results };
+      return { ok: false, mode: 'wave', waves: results, exitCode: waveExitCode(codes) };
     }
 
     // ---- Single-section mode: positional <n> present (UNCHANGED) ----
-    const n = Number(args.n);
-    if (!Number.isInteger(n) || n < 1) {
-      throw new Error(`pensmith write: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
-    }
+    // RUN-09: <n> must name one of the paper's sections (EXIT_USAGE otherwise —
+    // before any model call, and no placeholder folder for a registered paper).
+    const paperRoot = projectRoot();
+    const { n, slug } = resolveSectionArg('write', paperRoot, args.n, args.slug);
     // GEN-06 / RUN-07 fail-loud probe: an LLM must be configured before the
     // section is touched (writeOneSection marks it 'writing' first).
     await assertLlmConfigured('write');
-    // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
-    // wins; 'placeholder' only if no outline row exists).
-    const paperRoot = projectRoot();
-    const slug = resolveSectionSlug(paperRoot, n, args.slug);
     // Construct the goal-aware subscriber for a single-section re-do too, so a
     // re-write in learning/both mode still re-annotates TUTORIAL.md. goal=draft
     // yields undefined → the emit/flush below are no-ops and DRAFT.md is

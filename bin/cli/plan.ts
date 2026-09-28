@@ -27,7 +27,7 @@ import { runRevise } from '../lib/revise.js';
 import { proposeSwap } from '../lib/revise-swap.js';
 import { complete, assertLlmConfigured } from '../lib/anthropic.js';
 import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
-import { resolveSectionSlug } from '../lib/section-slug.js';
+import { resolveSectionArg } from '../lib/section-slug.js';
 import { parseOutline, parseOutlineAssignedSources, type ParsedOutlineSection } from '../lib/outline-parse.js';
 import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
 import { parseFrontmatter, serializeFrontmatter } from '../lib/frontmatter.js';
@@ -155,7 +155,7 @@ export const planCommand = defineCommand({
     },
     slug: {
       type: 'string',
-      description: 'Section slug (lowercase-kebab; defaults to "placeholder" in Tier-2 mode).',
+      description: 'Section slug (lowercase-kebab; defaults to the outline\'s slug for <n>).',
     },
     revise: {
       type: 'boolean',
@@ -173,13 +173,11 @@ export const planCommand = defineCommand({
     },
   },
   async run({ args }) {
-    const n = Number(args.n);
-    if (!Number.isInteger(n) || n < 1) {
-      throw new Error(`pensmith plan: <n> must be a positive integer; got ${JSON.stringify(args.n)}`);
-    }
-    // Audit #23: resolve the slug from OUTLINE.md for section n (explicit --slug
-    // wins; 'placeholder' only if no outline row exists).
-    const slug = resolveSectionSlug(projectRoot(), n, args.slug);
+    // RUN-09: <n> must name one of the paper's sections and --slug must be a
+    // bare slug — EXIT_USAGE otherwise, before any model call or write. The
+    // slug comes from OUTLINE.md (audit #23); 'placeholder' only when there is
+    // no outline yet.
+    const { n, slug } = resolveSectionArg('plan', projectRoot(), args.n, args.slug);
 
     // GEN-06 / RUN-07 fail-loud probe: assert an LLM is configured before any LLM work.
     await assertLlmConfigured('plan');

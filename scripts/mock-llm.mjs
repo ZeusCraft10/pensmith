@@ -6,7 +6,8 @@
 //                       [--fail <kind>[:<times>]] [--capture requests.jsonl]
 //
 // The server speaks the Anthropic Messages and OpenAI chat-completions shapes
-// (both, on one port) plus GET /v1/models, and exposes the captured requests at
+// (both on one port by default; --shape anthropic|openai answers only that one
+// and 404s the other) plus GET /v1/models, and exposes the captured requests at
 // GET /__mock/requests (key headers shown only as "[present]"). Point a paper
 // at it through the GLOBAL runtime.json in an isolated data dir, e.g.
 //   {"$schemaVersion":2,"provider":"anthropic","endpoint":"http://127.0.0.1:18080",
@@ -47,6 +48,7 @@ const port = Number(arg('port', '0'));
 const capture = arg('capture', undefined);
 const mock = await startMockLlm({
   port,
+  shape,
   delayMs: Number(arg('delay-ms', '0')),
   streamChunkDelayMs: Number(arg('stream-delay-ms', '0')),
   ...(arg('fixture', undefined) ? { fixture: arg('fixture', undefined) } : {}),

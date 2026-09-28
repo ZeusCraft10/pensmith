@@ -74,6 +74,8 @@ import { firstAuthorSurname } from './author-normalize.js';
 import { generateCitekey } from './citekey.js';
 import { paperDir } from './paths.js';
 import { openSessionLog, type SessionLogger } from './session-log.js';
+import { isReservedDryRunId } from './doi.js';
+import { networkMode } from './http-mock.js';
 
 export type { LibraryCandidate } from './migrations/library/shape.js';
 export type { Library, LibraryEntry } from './schemas/library.js';
@@ -172,7 +174,13 @@ async function readUnlocked(file: string, writeBack: boolean): Promise<Library |
     })) as Library;
   } catch (e) {
     if (isEnoent(e)) return null;
-    throw e;
+    // A newer file keeps its "upgrade pensmith" error; anything else that stops
+    // the file from loading (bad JSON, a schema mismatch) is the one-line,
+    // user-fixable LibraryInvalidError for EVERY reader (research, add, plan,
+    // outline, MCP) — never a raw parse error (RUN-12).
+    if (e instanceof ForwardIncompatError || e instanceof PensmithError) throw e;
+    const detail = (e instanceof Error ? e.message : String(e)).replace(/^pensmith: /, '').split('\n')[0] ?? '';
+    throw new LibraryInvalidError(file, detail.length > 200 ? `${detail.slice(0, 200)}…` : detail);
   }
 }
 
@@ -247,7 +255,7 @@ export async function assertLibraryReadable(root: string): Promise<void> {
   try {
     await withLock(paths.library, () => readUnlocked(paths.library, false));
   } catch (e) {
-    if (e instanceof ForwardIncompatError) throw e;
+    if (e instanceof ForwardIncompatError || e instanceof LibraryInvalidError) throw e;
     const detail = (e instanceof Error ? e.message : String(e)).replace(/^pensmith: /, '').split('\n')[0] ?? '';
     throw new LibraryInvalidError(paths.library, detail.length > 200 ? `${detail.slice(0, 200)}…` : detail);
   }
@@ -542,16 +550,33 @@ export async function upsertSources(
   const paths = libraryPaths(root);
   const now = (opts.now?.() ?? new Date()).toISOString();
 
+  const dryRun = networkMode().dryRun;
   const result = await withLock(paths.library, async () => {
     const current = (await readUnlocked(paths.library, false)) ?? { $schemaVersion: CURRENT_LIBRARY_VERSION, entries: [] };
-    const entries: LibraryEntry[] = current.entries.map((e) => structuredClone(e));
+    let entries: LibraryEntry[] = current.entries.map((e) => structuredClone(e));
     const imported = await importOrphanBibEntries(paths, entries, now);
+    // RUN-27: outside --dry-run the library never (re)writes a synthetic
+    // dry-run source — one a dry run left behind is dropped here, so it can
+    // never reach LIBRARY.json, CITATIONS.bib or an outline again.
+    const purged = dryRun ? [] : entries.filter(isSyntheticEntry).map((e) => e.citekey);
+    if (purged.length > 0) {
+      entries = entries.filter((e) => !isSyntheticEntry(e));
+      process.stderr.write(
+        `pensmith: dropped ${purged.length} synthetic --dry-run source(s) from LIBRARY.json (${purged.join(', ')}) — they are never real citations.\n`,
+      );
+    }
     const taken = new Set(entries.map((e) => e.citekey));
 
     const outcomes: UpsertOutcome[] = [];
     candidates.forEach((c, index) => {
       const tag = typeof c.source === 'string' && c.source ? `${opts.provenance}:${c.source}` : opts.provenance;
       const draft = candidateToEntry(c, [tag], now);
+      if (!dryRun && isSyntheticEntry(draft)) {
+        throw new PensmithError(
+          `refusing to add ${draft.doi ?? draft.citekey}: a synthetic --dry-run source is never a real citation (RUN-27)`,
+          EXIT_ERROR,
+        );
+      }
       const match = findMatch(entries, draft);
       if (match) {
         const changed = mergeInto(match.entry, draft, now);
@@ -580,6 +605,11 @@ export async function upsertSources(
     entryCount: result.library.entries.length,
   });
   return result;
+}
+
+/** A synthetic --dry-run source (flagged, or carrying a reserved-namespace id). */
+export function isSyntheticEntry(e: Pick<LibraryEntry, 'synthetic' | 'doi' | 'arxiv' | 'isbn'>): boolean {
+  return e.synthetic === true || isReservedDryRunId(e.doi) || isReservedDryRunId(e.arxiv) || isReservedDryRunId(e.isbn);
 }
 
 /**
@@ -617,12 +647,3 @@ export async function recordLastVerified(
   });
 }
 
-/**
- * Re-render CITATIONS.bib and CITATIONS.ris from LIBRARY.json (e.g. after a
- * user edited the rendered files). Imports bib-only keys first, like
- * upsertSources, so nothing a draft cites is lost.
- */
-export async function renderCitationFiles(root: string): Promise<LibraryPaths> {
-  const r = await upsertSources(root, [], { provenance: 'render' });
-  return r.paths;
-}

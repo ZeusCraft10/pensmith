@@ -173,6 +173,23 @@ test('RUN-23: our own PID re-enters; the record goes when the last hold is relea
   assert.deepEqual(r.result, { sameFile: true, afterFirstRelease: true, afterSecondRelease: false });
 });
 
+test('RUN-23: two same-process acquisitions started together share one hold — releasing the first keeps the lock', () => {
+  const sb = sandbox('lock-parallel-acquire');
+  const root = paperWithSection(sb, 'p');
+  const r = lastJson<{
+    ok: boolean;
+    result: {
+      bothAcquired: boolean;
+      afterFirstRelease: { file: boolean; owner: boolean };
+      afterSecondRelease: { file: boolean; owner: boolean };
+    };
+  }>(runLibScript(sb, 'session-ops.ts', ['parallel-acquire', root]));
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.equal(r.result.bothAcquired, true);
+  assert.deepEqual(r.result.afterFirstRelease, { file: true, owner: true }, 'the second call still holds the paper');
+  assert.deepEqual(r.result.afterSecondRelease, { file: false, owner: false }, 'released with the last hold');
+});
+
 test('RUN-23: MCP-style calls — 3 different sections run in parallel, 2 writes to one section serialize', () => {
   const sb = sandbox('lock-mcp-parallel');
   const root = paperWithSection(sb, 'p');

@@ -65,12 +65,14 @@ import {
   type PaperPointer,
 } from './lib/paths.js';
 import { migrateLegacyLayout } from './lib/state.js';
+import { migratePaperConfigFile, parseCostCapEnv } from './lib/config.js';
+import { enforceDryRunBoundary } from './lib/dry-run-paper.js';
 import { acquireSessionLock, releaseSessionLock } from './lib/session-lock.js';
 import { runGate, declineGate, canPrompt } from './lib/gates.js';
 import { EXIT_CODES, EXIT_USAGE, EXIT_ERROR, PensmithError } from './lib/exit-codes.js';
 import { classifyFailure, finalExitCode, failureLine, stripAnsi } from './lib/verb-outcome.js';
 import { setMirrorPromptsToStderr, setSessionArgv } from './lib/session-log.js';
-import { announceModes } from './lib/http-mock.js';
+import { announceModes, networkMode } from './lib/http-mock.js';
 import { projectEstimate, renderEstimate, type EstimateScope } from './lib/estimator.js';
 import { assertInvocationBudget } from './lib/budget.js';
 import { argvFlagValue, runtimeFlagsFromArgv, setRuntimeOverride } from './lib/runtime.js';
@@ -223,7 +225,7 @@ export const command = defineCommand({
   // application is the argv pre-parse below (NOT a root run() — H2).
   args: {
     paper: { type: 'string', description: 'Work on this paper: a name from `pensmith list`, or a folder containing .paper/.', valueHint: 'name|path' },
-    'dry-run': { type: 'boolean', description: 'Preview run: makes no network or model call (sources and model replies are labelled stand-ins).', default: false },
+    'dry-run': { type: 'boolean', description: 'Trial run in a folder with no paper: no network or model call (sources and model replies are labelled stand-ins); refused on an existing paper.', default: false },
     estimate: { type: 'boolean', description: 'Project the remaining token + USD cost, then offer to proceed.', default: false },
     yolo: { type: 'boolean', description: 'Skip the approval gates --yolo may skip (outline approval, export confirmation, research scope/prune, add remap, revise swap, sketch confirm). Never skips the cost cap, detector consent or the active-paper choice.', default: false },
     'show-prompts': { type: 'boolean', description: 'Mirror every outbound request (and full LLM prompts) to stderr before it is sent.', default: false },
@@ -504,8 +506,22 @@ export async function validateArgv(argv: readonly string[]): Promise<ValidatedAr
     }
     if (name === 'paper') paperFlag = value;
   }
+  // RUN-09: a per-section verb's positional is a section number. `plan abc`
+  // is a usage error — never routed as if no number were given.
+  const sectionArg = positionalValues[0];
+  if (verb !== null && SECTION_NUMBER_VERBS.includes(verb) && sectionArg !== undefined && !/^\d+$/.test(sectionArg)) {
+    throw usage(`pensmith ${verb}: <n> must be a section number from 1 to 99; got '${sectionArg}'`);
+  }
   return { verb, paperFlag, help, version, positionals: positionalValues, argv: normalizeGlobalBooleans(argv, booleans) };
 }
+
+/** This invocation is a --dry-run (the flag, or PENSMITH_DRY_RUN=1 inherited from a parent run). */
+function isDryRunInvocation(argv: readonly string[]): boolean {
+  return hasFlag([...argv], 'dry-run') || networkMode().dryRun;
+}
+
+/** Verbs whose (optional) positional is a section number. */
+const SECTION_NUMBER_VERBS: readonly Ux02Verb[] = ['plan', 'write', 'verify'];
 
 /**
  * The argv handed to citty for an explicit verb: every token except the verb
@@ -581,8 +597,13 @@ async function choosePointerOrNew(pointer: PaperPointer, cwd: string, yolo: bool
   return declineGate('paper-pointer', refusal);
 }
 
-/** Take the session lock for a mutating run (idempotent; re-entrant by PID). */
-async function enterMutatingSession(session: InvocationSession, verb: Ux02Verb | null, yolo: boolean): Promise<void> {
+/**
+ * Take the session lock for a mutating run (idempotent; re-entrant by PID),
+ * then keep --dry-run and real papers apart (RUN-27, dry-run-paper.ts) and
+ * write an older config.toml back (CONF-01) — both under the lock, before the
+ * verb touches anything.
+ */
+async function enterMutatingSession(session: InvocationSession, verb: Ux02Verb | null, yolo: boolean, dryRun: boolean): Promise<void> {
   if (session.pointer !== null && !session.pointerConfirmed) {
     session.root = await choosePointerOrNew(session.pointer, session.cwd, yolo);
     session.pointerConfirmed = true;
@@ -593,6 +614,12 @@ async function enterMutatingSession(session: InvocationSession, verb: Ux02Verb |
   if (session.locked) return;
   await acquireSessionLock(session.root, { kind: 'cli', verb: verb ?? 'pensmith' });
   session.locked = true;
+  // RUN-27: a --dry-run never writes into a real paper, and a normal run never
+  // continues a dry-run one — refused before any file is touched.
+  await enforceDryRunBoundary(session.root, dryRun);
+  // CONF-01: an older config.toml is written back at the current schema only
+  // here, under the session lock (comments kept) — read-only runs never write.
+  if (!dryRun) await migratePaperConfigFile(session.root);
 }
 
 // Section-scoped verbs with a REQUIRED positional section number. When invoked
@@ -680,7 +707,11 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
     if (resolved.kind === 'pointer' && checked.verb !== 'open') {
       process.stderr.write(`${activePaperBanner(resolved.pointer)}\n`);
     }
-    if (!readOnly) await enterMutatingSession(session, checked.verb, hasFlag(argv, 'yolo'));
+    // RUN-18: an invalid PENSMITH_COST_CAP_USD is one EXIT_USAGE line before
+    // any verb runs (never a silent $5 default) — for every run that can spend
+    // or projects spend (--estimate); `status` shows it instead of failing.
+    if (!readOnly || hasFlag(argv, 'estimate')) parseCostCapEnv(process.env['PENSMITH_COST_CAP_USD']);
+    if (!readOnly) await enterMutatingSession(session, checked.verb, hasFlag(argv, 'yolo'), isDryRunInvocation(argv));
   }
 
   // (a) --show-prompts → the http.ts egress gate mirrors every outbound request
@@ -784,7 +815,7 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
     if (s.cwdFallback && !hasPaper(s.root) && mutatingVerbNeedsPaper(firstVerb(argv))) {
       throw new PensmithError(noPaperHereMessage(s.cwd), EXIT_USAGE);
     }
-    await enterMutatingSession(s, firstVerb(argv), hasFlag(argv, 'yolo'));
+    await enterMutatingSession(s, firstVerb(argv), hasFlag(argv, 'yolo'), isDryRunInvocation(argv));
   }
 
   const verb = firstVerb(argv);
@@ -878,7 +909,7 @@ export const ENVIRONMENT_DOCS: ReadonlyArray<readonly [string, string]> = Object
 const GLOBAL_FLAG_DOCS: ReadonlyArray<readonly [string, string]> = Object.freeze([
   ['--paper <name|path>', 'work on this paper (a name from `pensmith list`, or a folder containing .paper/)'],
   ['--yolo', 'skip the gates --yolo may skip; never the cost cap, detector consent or the active-paper choice'],
-  ['--dry-run', 'preview: no network or model call'],
+  ['--dry-run', 'trial run in a folder with no paper: no network or model call (refused on an existing paper)'],
   ['--estimate', 'project the remaining cost, then offer to proceed'],
   ['--show-prompts', 'mirror outbound requests and LLM prompts to stderr before they are sent'],
   ['--runtime <provider>', 'LLM provider for this run: anthropic | openai | ollama | vllm | openai-compatible'],

@@ -23,6 +23,13 @@ const RETRACTED_DOI = '10.0000/retracted';
 // A DOI with no fixture of any kind.
 const NO_FIXTURE_DOI = '10.0000/no-fixture-at-all';
 
+/** A live Crossref answer listing no retraction notice for the DOI. */
+const NO_RETRACTION = {
+  status: 'ok',
+  'message-type': 'work-list',
+  message: { facets: {}, 'total-results': 0, items: [], 'items-per-page': 20, query: { 'start-index': 0, 'search-terms': null } },
+};
+
 async function liveLane<T>(fn: (agent: ReturnType<typeof installMockAgent>['agent']) => Promise<T>): Promise<T> {
   const saved = process.env['PENSMITH_NETWORK_TESTS'];
   process.env['PENSMITH_NETWORK_TESTS'] = '1';
@@ -103,9 +110,9 @@ test('freshness (live): DOI HEAD 200 produces NO warning', async () => {
   await liveLane(async (agent) => {
     agent.get('https://doi.org').intercept({ path: '/10.1038/s41586-021-03819-2', method: 'HEAD' }).reply(200, '');
     agent
-      .get('https://api.labs.crossref.org')
-      .intercept({ path: /\/data\/retractions/, method: 'GET' })
-      .reply(200, { items: [] }, { headers: { 'content-type': 'application/json' } });
+      .get('https://api.crossref.org')
+      .intercept({ path: /^\/works\?filter=updates/, method: 'GET' })
+      .reply(200, NO_RETRACTION, { headers: { 'content-type': 'application/json' } });
     const r = await probeFreshness('jumper2021', '10.1038/s41586-021-03819-2');
     assert.deepEqual(r.warnings, []);
     assert.equal(r.skipped, undefined, 'live probes are never skipped');
@@ -117,9 +124,9 @@ test('freshness (live): DOI HEAD 404 produces a WARN row (advisory, not blocking
   await liveLane(async (agent) => {
     agent.get('https://doi.org').intercept({ path: '/10.5555/does-not-resolve', method: 'HEAD' }).reply(404, '');
     agent
-      .get('https://api.labs.crossref.org')
-      .intercept({ path: /\/data\/retractions/, method: 'GET' })
-      .reply(200, { items: [] }, { headers: { 'content-type': 'application/json' } });
+      .get('https://api.crossref.org')
+      .intercept({ path: /^\/works\?filter=updates/, method: 'GET' })
+      .reply(200, NO_RETRACTION, { headers: { 'content-type': 'application/json' } });
     const r = await probeFreshness('jones2019', '10.5555/does-not-resolve');
     const doiWarn = r.warnings.find((w) => w.probe === 'DOI HEAD');
     assert.ok(doiWarn, 'a 404 DOI HEAD must emit a WARN');
@@ -128,11 +135,28 @@ test('freshness (live): DOI HEAD 404 produces a WARN row (advisory, not blocking
   });
 });
 
-test('freshness (live): a transport error is SILENT — no WARN, not skipped', async () => {
+test('freshness (live): a DOI HEAD transport error is silent; a failed retraction lookup is an "unavailable" row, never silence', async () => {
   await liveLane(async () => {
     // No interceptor: the V5 MockAgent refuses the connection (net connect disabled).
     const r = await probeFreshness('ghost2099', '10.5555/transport-error');
     assert.deepEqual(r.warnings, [], 'transport noise must NOT produce a WARN');
-    assert.equal(r.skipped, undefined, 'a live transport error is noise, not an offline skip');
+    assert.equal(r.skipped?.find((s) => s.probe === 'DOI HEAD'), undefined, 'the DOI HEAD transport error stays noise (D-10)');
+    // SRC-04 (pulled into Phase 17): an unknown retraction status is surfaced.
+    const rw = r.skipped?.find((s) => s.probe === 'retraction-watch');
+    assert.equal(rw?.detail, 'unavailable');
+    assert.match(rw?.note ?? '', /retraction status unknown for 10\.5555\/transport-error/);
+    assert.match(renderFreshnessTable([r]), /\| ghost2099 \| retraction-watch \| unavailable \| retraction status unknown/);
+  });
+});
+
+test('freshness (live): a 200 carrying an error body is an unknown retraction status, never "not retracted"', async () => {
+  await liveLane(async (agent) => {
+    agent.get('https://doi.org').intercept({ path: '/10.1038/nphys1170', method: 'HEAD' }).reply(200, '');
+    agent
+      .get('https://api.crossref.org')
+      .intercept({ path: /^\/works\?filter=updates/, method: 'GET' })
+      .reply(200, { statusCode: '403', 'message-type': 'not-polite', body: 'Please add a mailto' }, { headers: { 'content-type': 'application/json' } });
+    const r = await probeFreshness('aspelmeyer2009', '10.1038/nphys1170');
+    assert.equal(r.skipped?.find((s) => s.probe === 'retraction-watch')?.detail, 'unavailable');
   });
 });

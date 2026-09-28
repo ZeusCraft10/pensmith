@@ -28,7 +28,7 @@
 // {verdict, rationale, evidence} object. The api key is resolved ONLY inside the
 // transport; the value never reaches a log or the cost ledger (T-05-02-02).
 
-import { complete, isFatalLlmError } from '../anthropic.js';
+import { complete, isFatalLlmError, MissingApiKeyError } from '../anthropic.js';
 import type { ClaimSupport } from '../llm-contracts.js';
 import { loadPrompt, interpolate } from '../prompt-loader.js';
 
@@ -115,6 +115,23 @@ function pass2Placeholder(claimSentence: string, citekey: string): Pass2Result {
     rationale: 'LLM stubbed (PENSMITH_NO_LLM): no claim-support judgment was made.',
     evidence: '',
   };
+}
+
+/** Why an advisory pass made no model call when no provider key is configured. */
+export const NO_LLM_SKIP_REASON = 'skipped (no LLM configured)';
+
+/** A conservative UNCLEAR row for a pair that was not judged (`why` says why). */
+function pass2Skipped(claimSentence: string, citekey: string, why: string): Pass2Result {
+  return { citekey, claimSentence, verdict: 'UNCLEAR', rationale: `${why}: no claim-support judgment was made.`, evidence: '' };
+}
+
+/**
+ * The Pass-2 rows for a verify whose advisory passes were stopped (the session
+ * cost cap, an invalid runtime config): one UNCLEAR row per cited source with
+ * `not run: <reason>`, in the pinned table shape `done` parses.
+ */
+export function pass2NotRun(draftMd: string, reason: string): Pass2Result[] {
+  return collectClaimPairs(draftMd).map((p) => pass2Skipped(p.claimSentence, p.citekey, `not run (${reason})`));
 }
 
 /**
@@ -206,7 +223,16 @@ export async function runPass2(
   const promptTemplate = loadPrompt('claim-support');
 
   const results: Pass2Result[] = [];
+  // Set once no provider key is configured: the remaining pairs are skipped
+  // (every call would fail the same way). Verify still writes its frozen
+  // Pass-1/Pass-3 verdict — the advisory passes never need a key (D-V1-04:
+  // Tier 1 has none; a user checking a hand-written draft may have none).
+  let noKey: string | null = null;
   for (const pair of pairs) {
+    if (noKey !== null) {
+      results.push(pass2Skipped(pair.claimSentence, pair.citekey, noKey));
+      continue;
+    }
     const bibEntry = bibByCitekey.get(pair.citekey);
     const abstract = bibEntry?.abstract ?? '';
     try {
@@ -234,10 +260,17 @@ export async function runPass2(
       });
       results.push(toPass2Result(res.data as ClaimSupport, pair.citekey, pair.claimSentence, abstract));
     } catch (err) {
-      // The session cost cap, a missing key and invalid configuration are never
-      // advisory — they stop verify (RUN-18). Any other failure (provider error,
-      // refusal, truncation, a reply that never matched the schema) surfaces as
-      // a conservative UNCLEAR — advisory must not crash verify.
+      // No provider key: skipped, never fatal (see noKey above).
+      if (err instanceof MissingApiKeyError) {
+        noKey = NO_LLM_SKIP_REASON;
+        results.push(pass2Skipped(pair.claimSentence, pair.citekey, noKey));
+        continue;
+      }
+      // The session cost cap and invalid configuration are never advisory —
+      // they stop verify (RUN-18; verify writes its deterministic verdict
+      // first). Any other failure (provider error, refusal, truncation, a reply
+      // that never matched the schema) surfaces as a conservative UNCLEAR —
+      // advisory must not crash verify.
       if (isFatalLlmError(err)) throw err;
       results.push({
         citekey: pair.citekey,

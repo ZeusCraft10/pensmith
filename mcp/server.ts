@@ -65,6 +65,11 @@ export function buildServer(paperRoot: string): McpServer {
   return server;
 }
 
+function oneLine(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  return msg.replace(/\s*\r?\n\s*/g, ' ').trim() || 'unexpected error';
+}
+
 export async function main(): Promise<void> {
   // Boot-time paperRoot resolution (RUN-13 / D-17-33): PENSMITH_PAPER_ROOT,
   // else the working directory — the project root, never `.paper/` itself, and
@@ -72,7 +77,15 @@ export async function main(): Promise<void> {
   // Resolving ONCE here means no handler re-derives it (HIGH #4). A pre-v1
   // root-level STATE.json/config.toml is moved into .paper/ first.
   const paperRoot = servicePaperRoot();
-  await migrateLegacyLayout(paperRoot);
+  try {
+    await migrateLegacyLayout(paperRoot);
+  } catch (e) {
+    // RUN-12: an expected failure (two differing STATE.json copies) is one
+    // stderr line, and the server still boots — every paper_* tool and
+    // resource that reads STATE.json re-runs the move and reports the same
+    // conflict as its own error, instead of the plugin losing every tool.
+    process.stderr.write(`pensmith (mcp): ${oneLine(e)}\n`);
+  }
   const server = buildServer(paperRoot);
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -85,5 +98,9 @@ export async function main(): Promise<void> {
 // instead of exiting silently before `initialize` (T1-12).
 import { isMainModule } from '../bin/lib/main-guard.js';
 if (isMainModule(import.meta.url)) {
-  void main();
+  main().catch((e: unknown) => {
+    // Never an unhandled-rejection stack trace (RUN-12): one line, exit 1.
+    process.stderr.write(`pensmith (mcp): could not start — ${oneLine(e)}\n`);
+    process.exit(1);
+  });
 }

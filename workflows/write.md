@@ -43,7 +43,7 @@ below is the prompt that drives the verb under both Tier 1 and Tier 2.
 
 ## Body
 
-1. **Parse args**: `pensmith write <N>` — `N` is the 1-based section number. Read `.paper/OUTLINE.md` to resolve the slug.
+1. **Parse args**: `pensmith write <N>` — `N` is the 1-based section number. Read `.paper/OUTLINE.md` to resolve the slug. A `N` that is not a number from 1 to 99, a section the outline does not have, or a `--slug` that is not the outline's slug for `N` is a usage error (exit 2) before any model call or write — a paper with an outline never gets a `NN-placeholder` section folder (RUN-09).
 
 2. **Read inputs**:
    - `<sectionPlan(n, slug)>` → resolves to `.paper/sections/<NN>-<slug>/PLAN.md`. Extract `assigned_sources` citekeys + the `## Brief` body. Returns the section frontmatter for in-place mutation.
@@ -69,11 +69,19 @@ below is the prompt that drives the verb under both Tier 1 and Tier 2.
    `--max-parallel` (default 5). The orchestrator persists NO wave state (ARCH-20 / D-04);
    it only invokes the per-section writer, which performs the existing atomic writes.
    - **Tier 1**: honors `--max-parallel` as given.
-   - **Tier 2** (portable CLI): forces `--max-parallel 1` and emits exactly ONE WARN to
-     stderr ("Tier 2 runs sections serially; --max-parallel ignored", D-02). The flag is
-     parsed, never error'd, so the same invocation works in both tiers.
+   - **Tier 2** (portable CLI): takes `--max-parallel` the same way (default 5); a serial run
+     (`--max-parallel 1`) emits exactly ONE WARN to stderr ("Tier 2 runs sections serially;
+     --max-parallel ignored", D-02). The flag is parsed, never error'd, so the same invocation
+     works in both tiers. Parallel sections contend only on per-file locks, which queue with
+     backoff (RUN-22) — 10 sections at `--max-parallel 10` never surface ELOCKED.
    - Within-wave failures do NOT cancel siblings; a section whose dependency failed is marked
      `blocked` and skipped, while orthogonal subtrees still complete (D-03).
+   - Every failed section is ONE stderr line, `pensmith write: section N (slug) failed: <reason>`
+     (classified like a single-section run), and the run exits with the failures' documented
+     code: 5 when the session cost cap refused a call, the shared code when every failure has
+     the same one, else 1 (RUN-09, RUN-12). A failure every later section would repeat — the
+     cost cap, a missing key, an invalid runtime config — stops the run: sections not yet
+     started are reported `skipped` (never attempted), with one line saying how many.
    - Progress streams as structured JSON lines to stdout (`section_start` / `section_done` /
      `wave_complete`); the WARN and diagnostics go to stderr to keep the MCP stdio frame clean.
    - Approval gates are NOT prompted per section here — wave runs are batched; section-level
