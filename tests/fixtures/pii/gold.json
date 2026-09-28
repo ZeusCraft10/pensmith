@@ -1,0 +1,66 @@
+{
+  "$comment": "GRND-05 gold set (D-18-12). Every `pii` string must be gone from redactPii(text, {keep}) (recall 1.0); every `keep` string must survive verbatim. `keep_terms` are the labelled topic lines intake passes as the keep list. All people, IDs, emails and numbers are invented; example.edu / example.org / example.test are reserved domains.",
+  "items": [
+    {
+      "id": "cover-block",
+      "text": "Name: Jane Q. Doe\nStudent ID: 2024-00173\nEmail: jane.q.doe@example.edu\nPhone: (555) 201-7788\nDate of birth: March 3, 2004\n\nDue March. Write a 2000-word argumentative essay on the causes of the French Revolution and how the Treaty of Versailles was remembered afterwards.",
+      "pii": ["Jane Q. Doe", "2024-00173", "jane.q.doe@example.edu", "(555) 201-7788", "March 3, 2004"],
+      "keep": ["French Revolution", "Treaty of Versailles", "Due March", "Student ID:", "Date of birth:"]
+    },
+    {
+      "id": "instructors-particles-hyphens",
+      "text": "Instructor: Prof. Karl-Heinz van der Berg (office hours with TA María de la Cruz or Dr. Okafor).\nSubmit to Mary-Anne Smith-Jones by 3 March 2026.",
+      "pii": ["Karl-Heinz van der Berg", "María de la Cruz", "Okafor", "Mary-Anne Smith-Jones", "3 March 2026"],
+      "keep": ["Instructor:", "Prof."]
+    },
+    {
+      "id": "labelled-ids",
+      "text": "ID no. 44-1234 · SSN: 123456789 · Matriculation number: A7730921 · Passport No 5X8812345 · social security number 078-05-1120",
+      "pii": ["44-1234", "123456789", "A7730921", "5X8812345", "078-05-1120"],
+      "keep": ["ID no.", "SSN:", "Matriculation number:"]
+    },
+    {
+      "id": "textual-dates",
+      "text": "Draft due Mar. 3; final due April 21st, 2026. I was born on 12 of June 2003. Meeting Oct 7.",
+      "pii": ["Mar. 3", "April 21st, 2026", "12 of June 2003", "Oct 7"],
+      "keep": ["Draft due", "final due"]
+    },
+    {
+      "id": "contact-mix",
+      "text": "Reach me at j.o'brien+pensmith@example.org or +44 20 7946 0958, or my advisor Seán O'Brien on 555.222.3333.",
+      "pii": ["o'brien+pensmith@example.org", "+44 20 7946 0958", "Seán O'Brien", "555.222.3333"],
+      "keep": ["Reach me at", "my advisor"]
+    },
+    {
+      "id": "middle-initials-and-initials-first",
+      "text": "Group members: John F. Kennedy-Moore, J. R. Tolkien-Hughes and Ada B. C. Lovelace.",
+      "pii": ["John F. Kennedy-Moore", "J. R. Tolkien-Hughes", "Ada B. C. Lovelace"],
+      "keep": ["Group members:"]
+    },
+    {
+      "id": "entities-untouched",
+      "text": "Compare the Roman Empire with the Weimar Republic, the Great Depression, World War II, the Cold War and the Civil Rights Act; cite Stanford University Press editions. Lake Erie and Mount Everest are examples too. Due March.",
+      "pii": [],
+      "keep": ["Roman Empire", "Weimar Republic", "Great Depression", "World War II", "Cold War", "Civil Rights Act", "Stanford University Press", "Lake Erie", "Mount Everest", "Due March"]
+    },
+    {
+      "id": "topic-line-person",
+      "text": "Topic: Abraham Lincoln and the Gettysburg Address\nStudent: Jane Sentinel\nWrite a 1200-word analytical essay on how Abraham Lincoln framed the war.",
+      "keep_terms": ["Abraham Lincoln and the Gettysburg Address"],
+      "pii": ["Jane Sentinel"],
+      "keep": ["Abraham Lincoln", "Gettysburg Address"]
+    },
+    {
+      "id": "identifiers-pass-through",
+      "text": "paperId 1f0e3c4a-9b2d-4333-8e1f-0a1b2c3d4e5f; doi:10.1038/nphys1170 and https://doi.org/10.1145/3292500.3330701; ISBN 978-0-306-40615-7; arXiv:2305.12345v2 and hep-th/9901001; logged 2026-09-28T04:00:45.123Z; sha 3f2a9c0d1e4b5a6978e1f2a3b4c5d6e7f8091a2b3c4d5e6f. Contact jane@example.org.",
+      "pii": ["jane@example.org"],
+      "keep": ["1f0e3c4a-9b2d-4333-8e1f-0a1b2c3d4e5f", "10.1038/nphys1170", "10.1145/3292500.3330701", "978-0-306-40615-7", "2305.12345v2", "hep-th/9901001", "2026-09-28T04:00:45.123Z", "3f2a9c0d1e4b5a6978e1f2a3b4c5d6e7f8091a2b3c4d5e6f"]
+    },
+    {
+      "id": "crlf-block",
+      "text": "Name: Tomás Ruiz-Delgado\r\nStudent ID: S-2201-887\r\nEmail: truizd@example.edu\r\nDue March 14.\r\nWrite about the Industrial Revolution.\r\n",
+      "pii": ["Tomás Ruiz-Delgado", "S-2201-887", "truizd@example.edu", "March 14"],
+      "keep": ["Industrial Revolution", "Due", "Student ID:"]
+    }
+  ]
+}
