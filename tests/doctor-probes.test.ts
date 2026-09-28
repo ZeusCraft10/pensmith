@@ -112,9 +112,48 @@ test('DOCT-03 contact-email-presence PASS when env set', async () => {
   try {
     const r = await contactEmailPresenceProbe.run();
     assert.equal(r.severity, 'PASS');
+    assert.match(r.summary, /mailto/);
+    assert.ok(!JSON.stringify(r).includes('test@example.com'), 'the address itself never appears');
   } finally {
     if (prev !== undefined) process.env.PENSMITH_CONTACT_EMAIL = prev;
     else delete process.env.PENSMITH_CONTACT_EMAIL;
+  }
+});
+
+test('DOCT-03 / D-19-09: contact-email-presence asks contactEmail() — a paper naming MY_WORK_EMAIL, and a value that is not an address', async () => {
+  const { atomicWriteFile } = await import('../bin/lib/atomic-write.js');
+  const { CURRENT_CONFIG_VERSION } = await import('../bin/lib/config.js');
+  const { _resetContactEmailForTest } = await import('../bin/lib/contact-email.js');
+  const { loadCapabilityFacts } = await import('../bin/lib/capabilities.js');
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-contact-probe-'));
+  await atomicWriteFile(join(root, '.paper', 'config.toml'), `schema_version = ${CURRENT_CONFIG_VERSION}\n[network]\ncontact_email_env = "MY_WORK_EMAIL"\n`);
+  const saved = { cwd: process.cwd(), mine: process.env['MY_WORK_EMAIL'], def: process.env['PENSMITH_CONTACT_EMAIL'], root: process.env['PENSMITH_PAPER_ROOT'] };
+  process.chdir(root);
+  delete process.env['PENSMITH_PAPER_ROOT'];
+  process.env['PENSMITH_CONTACT_EMAIL'] = 'default@example.org';
+  const stderr = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    _resetContactEmailForTest();
+    process.env['MY_WORK_EMAIL'] = 'lab@example.org';
+    const ok = await contactEmailPresenceProbe.run();
+    assert.equal(ok.severity, 'PASS');
+    assert.match(ok.summary, /^MY_WORK_EMAIL set \(named by \[network\] contact_email_env\)/);
+    assert.equal((await loadCapabilityFacts()).contact_email_set, true, 'paper://capabilities agrees');
+    process.env['MY_WORK_EMAIL'] = 'not an address';
+    _resetContactEmailForTest();
+    const bad = await contactEmailPresenceProbe.run();
+    assert.equal(bad.severity, 'WARN', 'a value that is not an address is not sent — even though PENSMITH_CONTACT_EMAIL is set');
+    assert.match(bad.summary, /^MY_WORK_EMAIL is not set \(or is not an email address\)/);
+    assert.equal((await loadCapabilityFacts()).contact_email_set, false, 'paper://capabilities agrees');
+  } finally {
+    process.stderr.write = stderr;
+    process.chdir(saved.cwd);
+    for (const [k, v] of [['MY_WORK_EMAIL', saved.mine], ['PENSMITH_CONTACT_EMAIL', saved.def], ['PENSMITH_PAPER_ROOT', saved.root]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    _resetContactEmailForTest();
   }
 });
 

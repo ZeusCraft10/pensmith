@@ -113,7 +113,7 @@ test('SRC-16: nothing configured → `Zotero: not detected` with real fix links 
     const r = await zoteroMcpPresenceProbe.run();
     assert.equal(r.severity, 'WARN');
     assert.match(r.summary, /^Zotero: not detected/);
-    assert.match(r.detail ?? '', /^MCP server: not detected$/m);
+    assert.match(r.detail ?? '', /^MCP server: not detected; Checked: /);
     assert.ok((r.detail ?? '').includes(join(e.config, '.claude.json')), 'the Claude config file checked is named');
     assert.ok((r.fix ?? '').includes('https://www.zotero.org/settings/keys'));
     assert.ok((r.fix ?? '').includes(ZOTERO_MCP_SERVER_REPO));

@@ -57,3 +57,25 @@ test('D-17-06: loadCassetteFile finds a fixture in <adapter>/ or synthetic/<adap
   assert.ok(mod.loadCassetteFile('crossref', 'works-nphys1170'), 'a recorded cassette');
   assert.ok(mod.loadCassetteFile('revise-swap', 'revise-swap-suggest'), 'a synthetic cassette (LLM fixture)');
 });
+
+test('SRC-16 / SRC-06: the Zotero key header is a sensitive header, and secret query parameters never decide or enter a fixture key', async () => {
+  const mod = await import('../bin/lib/http-mock.js');
+  assert.ok(mod.SENSITIVE_HEADERS.has('zotero-api-key'), 'Zotero-API-Key is never recorded, cached or sent cross-origin');
+  for (const p of ['api_key', 'apikey', 'key', 'token', 'access_token', 'mailto', 'email']) {
+    assert.ok(mod.SCRUBBED_QUERY_PARAMS.has(p), `${p} is scrubbed from fixture keys and recorded paths`);
+  }
+  assert.equal(
+    mod.canonicalFixtureKey('GET', 'https://api.openalex.org/works?search=x&api_key=SECRET&token=T0K'),
+    mod.canonicalFixtureKey('GET', 'https://api.openalex.org/works?search=x'),
+  );
+  assert.equal(mod.scrubbedPathAndQuery('https://www.googleapis.com/books/v1/volumes?q=isbn%3A1&key=SECRET'), '/books/v1/volumes?q=isbn%3A1');
+});
+
+test('D-19-07: fixtureBodyBytes decodes a base64 body to exact bytes and encodes text / JSON as UTF-8', async () => {
+  const mod = await import('../bin/lib/http-mock.js');
+  const bytes = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0xff, 0x00, 0x80]);
+  assert.ok(mod.fixtureBodyBytes({ response: bytes.toString('base64'), bodyEncoding: 'base64' }).equals(bytes));
+  assert.equal(mod.fixtureBodyBytes({ response: 'plain' }).toString('utf8'), 'plain');
+  assert.equal(mod.fixtureBodyBytes({ response: { a: 1 } }).toString('utf8'), '{"a":1}');
+  assert.equal(mod.fixtureBodyBytes({ response: null }).length, 0);
+});

@@ -19,15 +19,15 @@
 //                         is configured for Claude Code, else
 //                         "Zotero: not detected".
 // "authenticated" is never inferred from a key's presence. The detail always
-// has a `MCP server: detected …` / `MCP server: not detected` line (the fact
-// paper://capabilities reports as zotero_mcp — tier-contract Case A) and the
-// config files checked.
+// starts with `MCP server: detected …` / `MCP server: not detected` (the fact
+// paper://capabilities reports as zotero_mcp — tier-contract Case A), then
+// the config files checked.
 //
 // T-01-07 no-leak: the key VALUE never reaches any output — only the variable
 // name. D-19 read-only: no writes (one GET at most).
 
 import type { Probe, ProbeResult, Severity } from '../probes.js';
-import { detectZoteroMcpServers } from '../../ecosystem-presence.js';
+import { detectZoteroMcpServers, describeZoteroMcpSearch } from '../../ecosystem-presence.js';
 import { isZoteroLocalEnabled, ZOTERO_LOCAL_ORIGIN } from '../../http.js';
 import {
   checkZoteroKey,
@@ -47,8 +47,9 @@ const SETUP_FIX =
   'or enable the Zotero 7 local API (Settings → Advanced → "Allow other applications on this computer to communicate with Zotero") ' +
   `and set PENSMITH_ZOTERO_LOCAL=1. In Claude Code you can also add a Zotero MCP server, e.g. ${ZOTERO_MCP_SERVER_REPO}.`;
 
+/** The detail is one line (the doctor renders it on one indented line), parts joined by "; ". */
 function result(severity: Severity, summary: string, detail: string[], fix?: string): ProbeResult {
-  return { id: ID, severity, summary, detail: detail.join('\n'), ...(fix !== undefined ? { fix } : {}) };
+  return { id: ID, severity, summary, detail: detail.join('; '), ...(fix !== undefined ? { fix } : {}) };
 }
 
 async function keylessCheck(conn: ZoteroConnection, lines: string[], mcpDetected: boolean): Promise<ProbeResult> {
@@ -77,7 +78,7 @@ export const zoteroMcpPresenceProbe: Probe = {
       mcpDetected
         ? `MCP server: detected — ${detection.servers.map((s) => `"${s.name}" (${s.scope} scope, ${s.file})`).join('; ')}`
         : 'MCP server: not detected',
-      `Checked: ${detection.checked.join(', ')}`,
+      describeZoteroMcpSearch(detection),
     ];
 
     let conn: ZoteroConnection | null;

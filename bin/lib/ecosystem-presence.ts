@@ -68,8 +68,23 @@ export interface ZoteroMcpServer {
 
 export interface ZoteroMcpDetection {
   readonly servers: readonly ZoteroMcpServer[];
-  /** Every config file that was looked at (present or not), for the doctor's detail. */
+  /** Every config file that was looked at (present or not). */
   readonly checked: readonly string[];
+  /** The Claude Code `.claude.json` read (user and local scopes). */
+  readonly claudeJson: string;
+  /** The folders whose `.mcp.json` was read (the project and its parents up to the repository root). */
+  readonly projectDirs: readonly string[];
+  /** The legacy `mcp_servers.json` files read. */
+  readonly legacyFiles: readonly string[];
+}
+
+/** A one-line summary of where detectZoteroMcpServers looked (the doctor's `Checked:`). */
+export function describeZoteroMcpSearch(d: ZoteroMcpDetection): string {
+  const first = d.projectDirs[0];
+  const last = d.projectDirs[d.projectDirs.length - 1];
+  const project =
+    first === undefined ? '' : first === last ? `, ${join(first, '.mcp.json')}` : `, .mcp.json in ${first} and its parent folders up to ${last}`;
+  return `Checked: ${d.claudeJson}${project}, ${d.legacyFiles.join(', ')}`;
 }
 
 /** The Claude Code config folder: $CLAUDE_CONFIG_DIR, else the home folder. */
@@ -152,11 +167,12 @@ export function detectZoteroMcpServers(root?: string, env: NodeJS.ProcessEnv = p
   }
 
   const home = homedir();
-  for (const file of [join(home, '.claude', 'mcp_servers.json'), join(home, '.config', 'claude', 'mcp_servers.json')]) {
+  const legacyFiles = [join(home, '.claude', 'mcp_servers.json'), join(home, '.config', 'claude', 'mcp_servers.json')];
+  for (const file of legacyFiles) {
     checked.push(file);
     servers.push(...zoteroServersIn((readJson(file) as { mcpServers?: unknown } | null)?.mcpServers, 'legacy', file));
   }
-  return { servers, checked };
+  return { servers, checked, claudeJson, projectDirs: dirs, legacyFiles };
 }
 
 /**
