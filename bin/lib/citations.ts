@@ -217,18 +217,113 @@ export function parseBibSync(bibtex: string): Array<Record<string, unknown>> {
     throw new TypeError('parseBib: input must be a string (BibTeX source text)');
   }
   try {
-    const cite = new Cite(bibtex, { forceType: '@bibtex/text' });
+    // Two steps of the same citation-js chain `new Cite(text, {forceType:
+    // '@bibtex/text'})` runs: the text → raw entries (field values still in
+    // their BibTeX spelling), then raw entries → CSL-JSON. Keeping the raw
+    // entries lets the fields the BibTeX → CSL mapping drops be carried over
+    // (SRC-12, D-19-19): see carryDroppedFields.
+    const raw = inputChain().chainLink(bibtex, { forceType: '@bibtex/text' });
+    if (!Array.isArray(raw) || raw.length === 0) {
+      throw new Error('parseBib: no entries parsed from input (malformed BibTeX or empty document)');
+    }
+    const cite = new Cite(raw, { forceType: '@bibtex/entries+list' });
     const data = cite.data as Array<Record<string, unknown>>;
     if (!Array.isArray(data) || data.length === 0) {
       throw new Error('parseBib: no entries parsed from input (malformed BibTeX or empty document)');
     }
+    carryDroppedFields(raw as RawBibEntry[], data);
     return data;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // Re-throw with a clearer prefix so the caller can distinguish
     // "your BibTeX is bad" from other failures further upstream.
-    throw new Error(`parseBib: invalid BibTeX — ${msg}`);
+    throw new Error(`parseBib: invalid BibTeX — ${msg.replace(/^parseBib: /, '')}`);
   }
+}
+
+/**
+ * citation-js's input-chain registry (`Cite.plugins.input`), narrowed to the
+ * one call parseBibSync makes. Kept local to this chokepoint module instead of
+ * widening the ambient citation-js typings.
+ */
+function inputChain(): { chainLink(input: string, opts: { forceType: string }): unknown } {
+  return (plugins as unknown as { input: { chainLink(input: string, opts: { forceType: string }): unknown } }).input;
+}
+
+/** One entry as citation-js's BibTeX text parser returns it (values unparsed). */
+interface RawBibEntry {
+  type?: unknown;
+  label?: unknown;
+  properties?: Record<string, unknown>;
+}
+
+/** A raw field value with its outer protective braces removed, trimmed; null when empty. */
+function rawField(e: RawBibEntry, name: string): string | null {
+  const v = e.properties?.[name];
+  if (typeof v !== 'string') return null;
+  let s = v.trim();
+  while (s.startsWith('{') && s.endsWith('}') && balancedInside(s)) s = s.slice(1, -1).trim();
+  return s.length > 0 ? s : null;
+}
+
+/** True when `s` = `{…}` and the outer braces pair with each other. */
+function balancedInside(s: string): boolean {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '{') depth++;
+    else if (s[i] === '}') {
+      depth--;
+      if (depth === 0 && i < s.length - 1) return false;
+    }
+  }
+  return depth === 0;
+}
+
+/**
+ * Carry over what citation-js's BibTeX → CSL mapping drops, so a
+ * CITATIONS.bib written by the library writer reads back whole (SRC-12,
+ * D-19-19):
+ *   - `abstract` → CSL `abstract` (Pass 2 reads it), decoded by citation-js's
+ *     own BibLaTeX mapping (the same LaTeX decoder as every other field);
+ *   - `eprint`, `archivePrefix` (or BibLaTeX `eprinttype`) and `primaryClass`
+ *     (or `eprintclass`) → the same-named keys, verbatim — the arXiv identity
+ *     of a preprint — plus CSL `URL` = its arXiv abstract page (what pandoc
+ *     citeproc prints for such an entry) when the entry has no URL.
+ * Entries are matched to CSL items by position (citation-js maps entries 1:1)
+ * and checked by citekey.
+ */
+function carryDroppedFields(raw: RawBibEntry[], data: Array<Record<string, unknown>>): void {
+  const aligned = raw.length === data.length && raw.every((e, i) => e.label === data[i]?.['id']);
+  if (!aligned) return;
+  const withAbstract: Array<{ index: number; abstract: string }> = [];
+  raw.forEach((e, index) => {
+    const out = data[index]!;
+    const abs = e.properties?.['abstract'];
+    if (typeof abs === 'string' && abs.trim().length > 0) withAbstract.push({ index, abstract: abs });
+    const eprint = rawField(e, 'eprint');
+    if (eprint) {
+      out['eprint'] = eprint;
+      const prefix = rawField(e, 'archiveprefix') ?? rawField(e, 'eprinttype');
+      if (prefix) out['archivePrefix'] = prefix;
+      const cls = rawField(e, 'primaryclass') ?? rawField(e, 'eprintclass');
+      if (cls) out['primaryClass'] = cls;
+      // Pandoc citeproc links an arXiv eprint to its abstract page; the offline
+      // renderer gets the same link through CSL `URL`.
+      if (prefix !== null && /^arxiv$/i.test(prefix) && typeof out['URL'] !== 'string') {
+        out['URL'] = `https://arxiv.org/abs/${eprint}`;
+      }
+    }
+  });
+  if (withAbstract.length === 0) return;
+  const decoded = new Cite(
+    withAbstract.map((a) => ({ type: 'misc', label: `abstract-${a.index}`, properties: { abstract: a.abstract } })),
+    { forceType: '@biblatex/entries+list' },
+  ).data as Array<Record<string, unknown>>;
+  if (decoded.length !== withAbstract.length) return;
+  withAbstract.forEach((a, j) => {
+    const text = decoded[j]?.['abstract'];
+    if (typeof text === 'string' && text.length > 0) data[a.index]!['abstract'] = text;
+  });
 }
 
 /**

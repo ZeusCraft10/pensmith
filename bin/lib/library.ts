@@ -62,8 +62,10 @@ import {
 } from './migrations/library/shape.js';
 import {
   Schema as LibrarySchema,
+  ByoRecordSchema,
   CURRENT_LIBRARY_VERSION,
   CITEKEY_GRAMMAR,
+  type ByoRecord,
   type Library,
   type LibraryEntry,
 } from './schemas/library.js';
@@ -490,43 +492,80 @@ function uniqueCitekey(d: LibraryEntry, taken: Set<string>): string {
 
 const BIB_KEY_RE = /^@\w+\s*\{\s*([^,\s]+)\s*,/gm;
 
+type CslName = { family?: unknown; given?: unknown; suffix?: unknown; literal?: unknown; 'non-dropping-particle'?: unknown; 'dropping-particle'?: unknown };
+
+/** A parsed CSL name as a LIBRARY author string ("Family, Given[, Suffix]" or "{Corporate}"). */
+function cslNameToString(a: CslName | undefined): string {
+  const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+  const family = [str(a?.['dropping-particle']), str(a?.['non-dropping-particle']), str(a?.family)].filter(Boolean).join(' ');
+  if (!family) {
+    const literal = str(a?.literal);
+    return literal ? `{${literal}}` : '';
+  }
+  const given = str(a?.given);
+  const suffix = str(a?.suffix);
+  if (suffix) return `${family}, ${given}, ${suffix}`;
+  return given ? `${family}, ${given}` : family;
+}
+
 function cslToCandidate(csl: Record<string, unknown>): LibraryCandidate {
   const x = csl as {
     id?: unknown;
+    type?: unknown;
     title?: unknown;
-    author?: Array<{ family?: unknown; given?: unknown; literal?: unknown }>;
+    author?: CslName[];
+    editor?: CslName[];
     DOI?: unknown;
     ISBN?: unknown;
+    PMID?: unknown;
+    PMCID?: unknown;
     number?: unknown;
+    eprint?: unknown;
+    archivePrefix?: unknown;
     note?: unknown;
     abstract?: unknown;
     URL?: unknown;
     issued?: { 'date-parts'?: unknown[][] };
     'container-title'?: unknown;
+    volume?: unknown;
+    issue?: unknown;
+    page?: unknown;
+    publisher?: unknown;
   };
   const title = Array.isArray(x.title) ? x.title[0] : x.title;
-  const authors = (Array.isArray(x.author) ? x.author : [])
-    .map((a) => {
-      const fam = typeof a?.family === 'string' ? a.family.trim() : '';
-      const giv = typeof a?.given === 'string' ? a.given.trim() : '';
-      if (fam) return giv ? `${fam}, ${giv}` : fam;
-      return typeof a?.literal === 'string' ? a.literal.trim() : '';
-    })
-    .filter((a) => a.length > 0);
+  const names = (list: CslName[] | undefined): string[] =>
+    (Array.isArray(list) ? list : []).map(cslNameToString).filter((a) => a.length > 0);
   const yearRaw = x.issued?.['date-parts']?.[0]?.[0];
   const year = typeof yearRaw === 'number' ? yearRaw : typeof yearRaw === 'string' && /^\d{4}$/.test(yearRaw) ? Number(yearRaw) : null;
-  // CSL `number` is also a journal issue number: only an arXiv-SHAPED value is an id.
-  const arxiv = typeof x.number === 'string' ? normArxiv(x.number) : null;
+  // SRC-12: an arXiv eprint (archivePrefix = {arXiv}, preserved by parseBib);
+  // else CSL `number`, which is also a report / issue number — only an
+  // arXiv-SHAPED value is an id.
+  const eprintArxiv =
+    typeof x.eprint === 'string' && (typeof x.archivePrefix !== 'string' || /^arxiv$/i.test(x.archivePrefix))
+      ? normArxiv(x.eprint)
+      : null;
+  const arxiv = eprintArxiv ?? (typeof x.number === 'string' ? normArxiv(x.number) : null);
+  const str = (v: unknown): string | null => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : null);
   return {
     citekey: typeof x.id === 'string' ? x.id : undefined,
     doi: typeof x.DOI === 'string' ? x.DOI : null,
     isbn: typeof x.ISBN === 'string' ? x.ISBN : null,
+    pmid: str(x.PMID),
+    pmcid: typeof x.PMCID === 'string' ? x.PMCID : null,
     arxiv,
     title: typeof title === 'string' ? title : null,
-    authors,
+    authors: names(x.author),
+    editors: names(x.editor),
     year,
     venue: typeof x['container-title'] === 'string' ? x['container-title'] : null,
     abstract: typeof x.abstract === 'string' ? x.abstract : null,
+    // A CSL type the library does not know (citation-js reads @misc as
+    // `document`) is dropped by candidateToEntry.
+    type: typeof x.type === 'string' ? x.type : null,
+    volume: str(x.volume),
+    issue: str(x.issue),
+    pages: typeof x.page === 'string' ? x.page : null,
+    publisher: typeof x.publisher === 'string' ? x.publisher : null,
     retracted: x.note === 'RETRACTED',
   };
 }
@@ -720,6 +759,130 @@ export async function recordLastVerified(
     }
     if (updated.length > 0) await persist(paths, current);
     return { updated, unknown };
+  });
+}
+
+export interface RerenderResult {
+  readonly paths: LibraryPaths;
+  /** Where the previous CITATIONS.bib was kept, when it did not parse; else null. */
+  readonly backup: string | null;
+  /** The parse error of the previous CITATIONS.bib (one line), when it did not parse. */
+  readonly previousProblem: string | null;
+}
+
+/**
+ * Re-render CITATIONS.bib and CITATIONS.ris from LIBRARY.json (SRC-12,
+ * D-19-19). verify calls it when the paper's CITATIONS.bib does not parse —
+ * e.g. one an older pensmith wrote with `{\u …}` name escapes (E2E-12) — so
+ * the paper is repaired from its source of truth instead of stopping every
+ * section. A bib that does not parse is kept next to the new one as
+ * `CITATIONS.bib.unparsed-<time>.bak` (never silently clobbered). Same lock
+ * and render path as upsertSources. LibraryNotFoundError when the paper has
+ * no LIBRARY.json.
+ */
+export async function rerenderCitations(root: string, opts: { now?: () => Date } = {}): Promise<RerenderResult> {
+  const paths = libraryPaths(root);
+  const now = (opts.now?.() ?? new Date()).toISOString();
+  return withLock(paths.library, async () => {
+    const current = await readUnlocked(paths.library, false);
+    if (!current) throw new LibraryNotFoundError(`LIBRARY.json not found at ${paths.library}`);
+    let backup: string | null = null;
+    let previousProblem: string | null = null;
+    let existing: string | null = null;
+    try {
+      existing = await fsp.readFile(paths.bib, 'utf8');
+    } catch {
+      existing = null;
+    }
+    if (existing !== null && existing.trim().length > 0) {
+      try {
+        parseBibSync(existing);
+      } catch (e) {
+        previousProblem = ((e as Error).message.split('\n')[0] ?? '').replace(/^parseBib: invalid BibTeX — /, '');
+        backup = `${paths.bib}.unparsed-${now.replace(/[:.]/g, '-')}.bak`;
+        await atomicWriteFile(backup, existing);
+      }
+    }
+    await persist(paths, current);
+    log().event({ event: 'library.rerender', entryCount: current.entries.length, backup: backup !== null });
+    return { paths, backup, previousProblem };
+  });
+}
+
+export type HydrateStatus = 'merged' | 'unchanged' | 'conflict';
+
+/**
+ * Merge a registrar record into the entry `citekey` names (SRC-15): a
+ * bring-your-own PDF first kept unhydrated (no confident match, or no network)
+ * is identified later — by re-ingesting its folder, or by `add <id> --pdf
+ * <file>` naming the same PDF. The entry keeps its citekey (drafts may cite
+ * it) and takes the record's bibliographic fields through the library's own
+ * merge rules (a hydrated record replaces an unhydrated entry's local
+ * metadata). When the record's identifiers already belong to ANOTHER entry
+ * the library is left unchanged and the result is `conflict` with that
+ * entry's key — two entries never claim one work.
+ */
+export async function hydrateEntry(
+  root: string,
+  citekey: string,
+  candidate: LibraryCandidate,
+  opts: UpsertOptions,
+): Promise<{ status: HydrateStatus; citekey: string }> {
+  const paths = libraryPaths(root);
+  const now = (opts.now?.() ?? new Date()).toISOString();
+  return withLock(paths.library, async () => {
+    const current = await readUnlocked(paths.library, false);
+    if (!current) throw new LibraryNotFoundError(`LIBRARY.json not found at ${paths.library}`);
+    const entry = current.entries.find((e) => e.citekey === citekey);
+    if (!entry) throw new PensmithError(`cannot update ${citekey}: it is not in ${paths.library}`, EXIT_ERROR);
+    const tag = typeof candidate.source === 'string' && candidate.source ? `${opts.provenance}:${candidate.source}` : opts.provenance;
+    const draft = candidateToEntry(candidate, [tag], now);
+    const other = findMatch(
+      current.entries.filter((e) => e !== entry),
+      draft,
+    );
+    if (other !== null && other.by !== 'version') return { status: 'conflict', citekey: other.entry.citekey };
+    const changed = mergeInto(entry, draft, now);
+    if (changed) await persist(paths, current);
+    log().event({ event: 'library.hydrate', citekey, changed });
+    return { status: changed ? 'merged' : 'unchanged', citekey };
+  });
+}
+
+export type AttachByoStatus = 'attached' | 'unchanged' | 'kept-existing';
+
+/**
+ * Record a bring-your-own PDF on an existing entry (SRC-15, D-19-21): the
+ * `.paper/`-relative file and the PDF and text sha256s. The ingest path first
+ * upserts the work (which fixes its citekey), copies the PDF to
+ * `.paper/sources/<citekey>.pdf`, then attaches it here — under the same lock
+ * and render path as upsertSources. An entry that already carries a
+ * DIFFERENT PDF keeps it unless `replace` is set (`add <id> --pdf <file>`
+ * names the PDF explicitly); the result says which.
+ */
+export async function attachByoRecord(
+  root: string,
+  citekey: string,
+  byo: ByoRecord,
+  opts: { replace?: boolean; now?: () => Date } = {},
+): Promise<{ status: AttachByoStatus; entry: LibraryEntry }> {
+  const paths = libraryPaths(root);
+  const now = (opts.now?.() ?? new Date()).toISOString();
+  const record = ByoRecordSchema.parse(byo);
+  return withLock(paths.library, async () => {
+    const current = await readUnlocked(paths.library, false);
+    if (!current) throw new LibraryNotFoundError(`LIBRARY.json not found at ${paths.library}`);
+    const entry = current.entries.find((e) => e.citekey === citekey);
+    if (!entry) throw new PensmithError(`cannot attach a PDF to ${citekey}: it is not in ${paths.library}`, EXIT_ERROR);
+    if (entry.byo !== null && JSON.stringify(entry.byo) === JSON.stringify(record)) return { status: 'unchanged', entry };
+    if (entry.byo !== null && entry.byo.sha256 !== record.sha256 && opts.replace !== true) {
+      return { status: 'kept-existing', entry };
+    }
+    entry.byo = record;
+    entry.updatedAt = now;
+    await persist(paths, current);
+    log().event({ event: 'library.attach-byo', citekey });
+    return { status: 'attached', entry };
   });
 }
 

@@ -17,13 +17,14 @@
 //   2. atomic-write — writeRis calls atomicWriteFile from './atomic-write.js'
 //      for the final write; we NEVER call raw fs write/append directly.
 //
-// The CSL intermediate (toCsl) and the citekey uniqueness authority
-// (assignUniqueCitekeys) are imported from bibtex-write.ts, so a source renders
-// identically in both files and the .ris order matches the .bib order. THE ONLY
-// DIVERGENCE is the final format call: we ask citation-js for 'ris' with
-// spec:'new' (REQUIRED for Mendeley/EndNote interop — RESEARCH Pitfall 4)
-// instead of 'bibtex'. RIS records carry no citekey header, so there is no
-// header rewrite.
+// The CSL intermediate (toCsl: names parsed by person-name.ts, the CSL type,
+// container title, volume, issue, pages, publisher, editors and identifiers —
+// SRC-12) and the citekey uniqueness authority (assignUniqueCitekeys) are
+// imported from bibtex-write.ts, so a source describes the same work in both
+// files and the .ris order matches the .bib order. The RIS text itself comes
+// from citation-js's 'ris' formatter with spec:'new' (REQUIRED for
+// Mendeley/EndNote interop — RESEARCH Pitfall 4). RIS records carry no citekey
+// header; the citekey is the ID tag.
 //
 // Empty array:
 //   - renderRis([]) is '' and writeRis([], target) writes a zero-length file
