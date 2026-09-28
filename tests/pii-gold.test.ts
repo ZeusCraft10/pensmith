@@ -90,6 +90,19 @@ test('GRND-05: classes — middle initials, hyphens, particles, labelled IDs and
   assert.equal(redactPii('Student ID: 2024-00173'), 'Student ID: [REDACTED:ID]');
 });
 
+test('GRND-05 × GRND-04: a citation-style instruction is not a name ("Use Chicago style"); a person with a style-city surname still is', () => {
+  for (const text of [
+    'Due March. Use Chicago style.',
+    'Follow Harvard referencing throughout.',
+    'Use APA format for the references.',
+    'Please Follow Vancouver style.\r\n',
+  ]) {
+    assert.equal(redactPii(text), text, `${JSON.stringify(text)} stays as written`);
+  }
+  assert.equal(redactPii('Talk to Jane Chicago tomorrow.'), 'Talk to [REDACTED:NAME] tomorrow.');
+  assert.equal(redactPii('Write to Mary Harvard about the Chicago style.'), 'Write to [REDACTED:NAME] about the Chicago style.');
+});
+
 test('GRND-05: the keep list (a labelled topic line) protects names the paper is about, and only those', () => {
   const text = 'Topic: Abraham Lincoln\nStudent: Jane Sentinel\nWrite about Abraham Lincoln.';
   const keep = labelledTopicLines(text);

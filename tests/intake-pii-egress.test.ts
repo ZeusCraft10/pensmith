@@ -72,11 +72,18 @@ test('GRND-05: new → research with --pii-redact: no captured model request car
 test('GRND-05: INTAKE.md keeps entities and "Due March" but not the student’s details; INTAKE.raw.local keeps the raw text and is gitignored', async () => {
   await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1' }, paper: false }, async (sb) => {
     fs.writeFileSync(path.join(sb.root, 'assignment.txt'), ASSIGNMENT);
-    const r = await sb.runTsx(null, ['new', '--from', 'assignment.txt', '--yolo', '--pii-redact']);
+    const r = await sb.runTsx(null, ['new', '--from', 'assignment.txt', '--yolo', '--pii-redact', '--discipline', 'computer-science', '--class', 'HIST 210 with Dr. Okafor']);
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
     const intake = fs.readFileSync(path.join(sb.paper, 'INTAKE.md'), 'utf8');
     for (const [kind, raw] of Object.entries(PII)) assert.ok(!intake.includes(raw), `INTAKE.md must not hold the raw ${kind}`);
     for (const keep of ['French Revolution', 'Treaty of Versailles', 'Due March']) assert.ok(intake.includes(keep), `INTAKE.md keeps "${keep}"`);
+    // Only free-text answers are redacted: a choice is shown by its fixed label
+    // (a preset name is not a person's name), a typed class is redacted.
+    assert.match(intake, /^- \*\*discipline\*\*: .+\n {2}- Computer Science \(computer-science\) — /m, 'the discipline answer keeps its two-word preset name');
+    assert.match(intake, /^- \*\*citation_style\*\*: .+\n {2}- Chicago [^\n]*— /m, 'the citation-style answer keeps its name');
+    assert.doesNotMatch(intake, /REDACTED:NAME\] \(computer-science\)/);
+    assert.ok(!intake.includes('Okafor'), 'the name typed into the class answer is redacted');
+    assert.match(intake, /^- \*\*class\*\*: .+\n {2}- HIST 210 with Dr\. \[REDACTED:NAME\] — /m);
     assert.match(intake, /^pii_redaction: true$/m);
     const raw = fs.readFileSync(path.join(sb.paper, 'INTAKE.raw.local'), 'utf8');
     for (const v of Object.values(PII)) assert.ok(raw.includes(v), `INTAKE.raw.local keeps "${v}"`);
@@ -85,6 +92,22 @@ test('GRND-05: INTAKE.md keeps entities and "Due March" but not the student’s 
     assert.match(r.stdout, /\[EMAIL\] "leak\.sentinel@example\.test" → \[REDACTED:EMAIL\]/);
     // config.toml mirrors the opt-in.
     assert.match(fs.readFileSync(path.join(sb.paper, 'config.toml'), 'utf8'), /^pii_redaction = true$/m);
+  });
+});
+
+test('GRND-05 × GRND-04: with --pii-redact a style instruction still sets the citation style ("Use Chicago style." → chicago-notes-bib)', async () => {
+  await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1' }, paper: false }, async (sb) => {
+    fs.writeFileSync(
+      path.join(sb.root, 'assignment.txt'),
+      `Name: ${PII.name}\nStudent ID: ${PII.studentId}\n\nWrite a 1500-word argumentative essay on the causes of the French Revolution. Use Chicago style.\n`,
+    );
+    const r = await sb.runTsx(null, ['new', '--from', 'assignment.txt', '--yolo', '--pii-redact']);
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    const intake = fs.readFileSync(path.join(sb.paper, 'INTAKE.md'), 'utf8');
+    assert.match(intake, /^citation_style: chicago-notes-bib$/m, 'the deterministic override survives redaction');
+    assert.match(intake, /Use Chicago style\./, 'the instruction is not redacted as a name');
+    assert.ok(!intake.includes(PII.name) && !intake.includes(PII.studentId));
+    assert.match(fs.readFileSync(path.join(sb.paper, 'config.toml'), 'utf8'), /^citation_style = "chicago-notes-bib"$/m);
   });
 });
 

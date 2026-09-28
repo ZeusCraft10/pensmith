@@ -28,6 +28,7 @@ import { runPass1 } from '../lib/verify/pass1.js';
 import { runPass3 } from '../lib/verify/pass3.js';
 import { parseBibFileAt } from '../lib/citations.js';
 import { sectionDraft, paperDir, projectRoot } from '../lib/paths.js';
+import { readPaperBrief } from '../lib/paper-brief.js';
 
 /**
  * Production staleness re-verify seam (D-08 — Pass 1 + Pass 3 ONLY). Runs the
@@ -61,6 +62,19 @@ async function productionReVerify(paperRoot: string, input: ReVerifyInput): Prom
   return { passed: failing.length === 0, failingCitekeys: [...new Set(failing)] };
 }
 
+/**
+ * The paper's discipline for the density band (GRND-06, D-18-13: preset <
+ * INTAKE.md < config.toml; `--discipline` wins over all). Undefined when the
+ * brief cannot be read — compile never fails over the density advisory.
+ */
+function paperDiscipline(paperRoot: string): string | undefined {
+  try {
+    return readPaperBrief(paperRoot).discipline.slug.value;
+  } catch {
+    return undefined;
+  }
+}
+
 export const compileCommand = defineCommand({
   meta: {
     name: 'compile',
@@ -79,12 +93,12 @@ export const compileCommand = defineCommand({
     },
     discipline: {
       type: 'string',
-      description: 'Discipline preset for the citation-density target (COMP-05; defaults to a documented fallback).',
+      description: "Discipline preset for the citation-density band (COMP-05; defaults to the paper's discipline: config.toml, else INTAKE.md).",
     },
   },
   async run({ args }) {
     const paperRoot = projectRoot();
-    const discipline = typeof args.discipline === 'string' && args.discipline.length > 0 ? args.discipline : undefined;
+    const discipline = typeof args.discipline === 'string' && args.discipline.length > 0 ? args.discipline : paperDiscipline(paperRoot);
 
     const result = await runCompile({
       paperRoot,

@@ -116,7 +116,26 @@ function payloadText(value: PromptValue): string {
   return JSON.stringify(value, null, 2);
 }
 
-/** Neutralise `</tag>` for every declared tag, so a payload cannot close a block early. */
+/**
+ * Neutralise every fence marker in every string of a JSON payload BEFORE it is
+ * serialised (FEED-05, D-18-04). Done on the rendered JSON text instead, a
+ * marker with no closing `>` — an abstract cut mid-marker — would take the rest
+ * of its line with it, the string's closing quote included, and the payload
+ * would stop being JSON. Keys are neutralised too (callers build them, but a
+ * payload's shape is never trusted to be marker-free).
+ */
+function neutraliseJson(value: PromptJson): PromptJson {
+  if (typeof value === 'string') return stripFenceMarkers(value);
+  if (Array.isArray(value)) return value.map((v: PromptJson) => neutraliseJson(v));
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, PromptJson | undefined> = {};
+    for (const [k, v] of Object.entries(value)) out[stripFenceMarkers(k)] = v === undefined ? undefined : neutraliseJson(v);
+    return out;
+  }
+  return value;
+}
+
+/** Neutralise `</tag>` for every declared tag, so a payload cannot close a block early (JSON-safe: `<\/` is a valid JSON escape). */
 function neutraliseClosingTags(text: string, tags: readonly string[]): string {
   let out = text;
   for (const tag of tags) out = out.split(`</${tag}>`).join(`<\\/${tag}>`);
@@ -145,9 +164,9 @@ export function renderPromptBlocks(slug: string, values: PromptValues): string {
       if (s.required) throw new PromptInputError(`prompt-request: "${slug}" needs input "${s.tag}"`);
       continue;
     }
-    let text = payloadText(value);
+    let text = typeof value === 'string' ? stripFenceMarkers(value) : payloadText(neutraliseJson(value));
     if (text.trim().length === 0) text = '(none)';
-    text = neutraliseClosingTags(stripFenceMarkers(text), tags);
+    text = neutraliseClosingTags(text, tags);
     const body = s.untrusted ? fenceUntrusted(text) : text;
     blocks.push(`<${s.tag}>\n${body}\n</${s.tag}>`);
   }

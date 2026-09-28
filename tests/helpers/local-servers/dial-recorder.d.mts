@@ -31,5 +31,5 @@ export interface DialRecorderOptions {
 
 export function installDialRecorder(opts?: DialRecorderOptions): DialRecorder;
 
-/** Read a dial log written in preload mode (PENSMITH_DIAL_LOG). */
+/** Read a dial log written in preload mode (PENSMITH_DIAL_LOG; the preload creates it, empty, when it loads). */
 export function readDialLog(file: string): DialEvent[];

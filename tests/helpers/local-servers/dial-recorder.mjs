@@ -5,7 +5,7 @@
 //
 //   1. As a PRELOAD for a spawned CLI:
 //        node --import <this file URL> dist/bin/pensmith.js …
-//      with PENSMITH_DIAL_LOG=<file>. Every dns.lookup, net.connect /
+//      with PENSMITH_DIAL_LOG=<file> (created, empty, when the preload loads). Every dns.lookup, net.connect /
 //      net.createConnection / tls.connect and every read of a path under
 //      tests/fixtures/cassettes is appended to that file as one JSON line. DNS
 //      answers a TEST-NET-1 placeholder (192.0.2.1 — never a real query) and
@@ -193,6 +193,13 @@ export function installDialRecorder(opts = {}) {
 const LOG = process.env.PENSMITH_DIAL_LOG;
 if (typeof LOG === 'string' && LOG.length > 0) {
   const append = orig_appendFileSync();
+  // Create the log as soon as the preload runs: an existing, empty log proves
+  // the recorder was loaded and saw no event (a missing log means it never ran).
+  try {
+    append(LOG, '');
+  } catch {
+    /* recording must never break the run */
+  }
   installDialRecorder({
     allowLoopback: process.env.PENSMITH_DIAL_ALLOW_LOOPBACK === '1',
     onEvent: (e) => {

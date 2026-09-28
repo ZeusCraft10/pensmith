@@ -113,6 +113,8 @@ export interface ChainRunOptions {
   /** stdin text (default: an empty, closed stdin — never a terminal). */
   readonly input?: string;
   readonly timeoutMs?: number;
+  /** The run's cwd (default: the sandbox's project folder). */
+  readonly cwd?: string;
 }
 
 export interface ChainSandbox {
@@ -206,7 +208,7 @@ export async function openChainSandbox(opts: ChainSandboxOptions = {}): Promise<
   const run = (args: readonly string[], o: ChainRunOptions = {}): Promise<ChainRun> =>
     new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [CLI_BIN, ...args], {
-        cwd: root,
+        cwd: o.cwd ?? root,
         env: env(o.env),
         stdio: ['pipe', 'pipe', 'pipe'],
       });

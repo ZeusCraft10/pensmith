@@ -36,7 +36,9 @@
 //     first token opens an entity name ("Treaty …", "Lake …", "Mount …");
 //   - its last token is a month or weekday — a date fragment ("Due March");
 //   - every token belongs to a caller-supplied keep list (intake passes the
-//     assignment's labelled Topic/Title line: a paper may be ABOUT a person).
+//     assignment's labelled Topic/Title line: a paper may be ABOUT a person);
+//   - it ends in a citation-style name followed by a style word ("Use Chicago
+//     style", "Follow Harvard referencing"): an instruction, not a person.
 //
 // Identifiers are never rewritten (GRND-05): UUIDs (paperIds), DOIs, ISBNs,
 // arXiv ids, ISO-8601 timestamps and long hex digests are found first, and a
@@ -165,6 +167,14 @@ const ENTITY_OPENERS: ReadonlySet<string> = new Set([
   'House', 'Ministry', 'Department', 'Museum', 'Lake', 'Mount', 'Fort', 'Cape', 'Port', 'Gulf', 'Isle',
 ]);
 
+// Citation-style names (GRND-05 × GRND-04): a candidate ending in one of these
+// and followed by a style word names a citation style ("Use Chicago style"),
+// not a person — the redactor must not eat the style instruction.
+const CITATION_STYLE_NAMES: ReadonlySet<string> = new Set([
+  'Chicago', 'Harvard', 'Vancouver', 'Turabian', 'Oxford', 'Bluebook', 'APA', 'MLA', 'IEEE', 'AMA',
+]);
+const STYLE_WORD_AFTER = /^[ ]+(?:style|styles|format|formatting|citations?|referencing|references|reference[ ]style|notes|author-date|manual)\b/i;
+
 // Month and weekday names and abbreviations: a candidate ending in one is a
 // date fragment ("Due March"), never a person.
 const DATE_WORDS: ReadonlySet<string> = new Set([
@@ -256,17 +266,20 @@ function keepTokens(keep: readonly string[] | undefined): ReadonlySet<string> {
  *   3. the last token an entity head, or the first an entity opener → drop
  *      ("French Revolution", "Roman Empire", "Lake Erie");
  *   4. every token in the keep list → drop (the paper's own topic);
+ *   4b. the last token a citation-style name and `after` (the text right after
+ *      the candidate) opens with a style word → drop ("Use Chicago style");
  *   5. otherwise strip leading suppressed tokens while ≥ 2 name tokens remain
  *      ("Author Jane Smith" → "Jane Smith"; "In Smith" keeps both).
  * Returns the kept text and its offset in `raw`.
  */
-function resolveName(raw: string, keep: ReadonlySet<string>): { raw: string; startDelta: number } | null {
+function resolveName(raw: string, keep: ReadonlySet<string>, after = ''): { raw: string; startDelta: number } | null {
   const tokens = nameTokens(raw);
   if (tokens.length === 0) return null;
   const last = tokens[tokens.length - 1] as string;
   const first = tokens[0] as string;
   const lastBase = last.split('-').pop() as string;
   if (tokens.every((t) => NAME_SUPPRESSION.has(t))) return null;
+  if (CITATION_STYLE_NAMES.has(last) && STYLE_WORD_AFTER.test(after)) return null;
   if (DATE_WORDS.has(last) || DATE_WORDS.has(lastBase)) return null;
   if (ENTITY_HEADS.has(last) || ENTITY_HEADS.has(lastBase) || ENTITY_OPENERS.has(first)) return null;
   if (keep.size > 0 && tokens.every((t) => keep.has(t))) return null;
@@ -339,7 +352,7 @@ export function classifyPii(text: string, opts: PiiOptions = {}): PiiMatch[] {
         if (re === RE_NAME_HONORIFIC) {
           if (!resolveSurname(raw, keep)) continue;
         } else {
-          const resolved = resolveName(raw, keep);
+          const resolved = resolveName(raw, keep, text.slice(start + raw.length, start + raw.length + 40));
           if (resolved === null) continue;
           raw = resolved.raw;
           start += resolved.startDelta;

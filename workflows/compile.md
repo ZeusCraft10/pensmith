@@ -95,7 +95,10 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    set to equal the input set. Any drift REJECTS that boundary (keep the original
    prose) and records a Transitions-Changed rejection. Then run the deterministic
    cross-section consistency scan (COMP-04, flags only) and the citation-density
-   computation vs. the discipline preset target (COMP-05, warn-only).
+   computation vs. the discipline preset's per-paragraph band (COMP-05,
+   warn-only). The discipline is the paper's own (config.toml
+   `discipline_preset`, else the INTAKE.md brief; GRND-06); `--discipline`
+   overrides it.
 
 8. **Emit the outputs**: `atomicWriteFile` `.paper/DRAFT.md` and
    `.paper/COMPILE-REPORT.md` (schema v1, D-14). EVERY write routes through the

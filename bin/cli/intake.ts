@@ -454,9 +454,16 @@ export const intakeCommand = defineCommand({
     }
     const suggestion: IntakeClarification = parroted ? NO_SUGGESTIONS : (result.data as IntakeClarification);
 
-    // Deterministic facts and overrides from the (model-bound) assignment and the thesis seed (GRND-04).
-    const overrides = parseIntakeOverrides(modelText, []);
-    const stated = statedLengthWords(modelText);
+    // Deterministic facts and overrides from the assignment and the thesis seed
+    // (GRND-04). The citation style, the stated length and a discipline mention
+    // are closed values (a CSL key, a number, a preset slug), so they are read
+    // from the RAW text: no user text travels through them, and a style name
+    // the PII redactor took for a person ("Use Chicago style") still counts.
+    // Sectioning notes and the topic are text, so they come only from the
+    // model-bound (redacted) text (GRND-05).
+    const rawOverrides = parseIntakeOverrides(rawModelText, []);
+    const overrides = { ...parseIntakeOverrides(modelText, []), citationStyle: rawOverrides.citationStyle };
+    const stated = statedLengthWords(rawModelText);
     const deterministicTopic = topicFromAssignment(modelText);
     const clarifierTopic = oneLine(suggestion.topic);
     // The topic is the clarifier's phrase when it is grounded in the
@@ -466,7 +473,7 @@ export const intakeCommand = defineCommand({
       : deterministicTopic || clarifierTopic || thesisSeed.split(/\s+/).slice(0, 12).join(' ');
     const suggestedDiscipline = suggestion.discipline
       ? normalizeDisciplineSlug(suggestion.discipline)
-      : (disciplineMentionFrom(modelText) ?? FALLBACK_DISCIPLINE);
+      : (disciplineMentionFrom(rawModelText) ?? FALLBACK_DISCIPLINE);
 
     // 7. The battery.
     const answers = await resolveBattery({
@@ -508,9 +515,11 @@ export const intakeCommand = defineCommand({
     // sectioning note is kept.
     const answerTexts = followUps.filter((f) => f.how !== 'suggested').map((f) => f.answer);
     const fromAnswers = parseIntakeOverrides('', answerTexts.map(redact));
+    // As above: the style (a CSL key) from the raw answers, the notes redacted.
+    const styleFromAnswers = parseIntakeOverrides('', answerTexts).citationStyle;
     const styleAnswer = answers.get(Q.citationStyle) as ResolvedAnswer;
-    const citationStyle = styleAnswer.source === 'default' && fromAnswers.citationStyle
-      ? fromAnswers.citationStyle.style
+    const citationStyle = styleAnswer.source === 'default' && styleFromAnswers
+      ? styleFromAnswers.style
       : String(styleAnswer.value);
     const notes = [...overrides.sectioningNotes];
     for (const n of [...fromAnswers.sectioningNotes, ...suggestion.sectioning_notes.map(oneLine).map(redact)]) {
@@ -547,7 +556,11 @@ export const intakeCommand = defineCommand({
     const qa: IntakeQa[] = [
       ...questions.map((q) => {
         const r = answers.get(q.id) as ResolvedAnswer;
-        return { id: q.id, question: q.label, answer: `${redact(q.display(r.value))} — ${sourceNote(r.source)}` };
+        // Only a free-text answer can carry user PII; a choice or yes/no answer
+        // is shown by its fixed option label ("Computer Science"), which the
+        // redactor would otherwise mistake for a name (GRND-05 precision).
+        const shown = q.kind === 'text' ? redact(q.display(r.value)) : q.display(r.value);
+        return { id: q.id, question: q.label, answer: `${shown} — ${sourceNote(r.source)}` };
       }),
       ...followUps.map((f) => ({ id: `follow-up/${f.id}`, question: f.question, answer: redact(followUpNote(f, yolo)) })),
     ];
