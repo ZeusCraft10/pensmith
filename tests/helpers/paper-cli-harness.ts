@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { computeDraftHash } from '../../bin/lib/draft-hash.js';
+import { pensmithDataDir } from '../../bin/lib/paths.js';
 
 export const REPO = fileURLToPath(new URL('../../', import.meta.url));
 export const CLI_BIN = join(REPO, 'dist', 'bin', 'pensmith.js');
@@ -66,6 +67,17 @@ export function sandbox(prefix: string): Sandbox {
       return env;
     },
   };
+}
+
+/**
+ * A path inside the pensmith app-data dir that a child spawned with this
+ * sandbox's env resolves: `<data>/pensmith` on Linux (XDG_DATA_HOME) and
+ * Windows (LOCALAPPDATA), `<data>/Library/Application Support/pensmith` on
+ * macOS (derived from HOME). Never spell `join(sb.data, 'pensmith', …)`: that
+ * is the wrong folder on macOS, where a test then fails (or passes vacuously).
+ */
+export function sandboxDataPath(sb: Sandbox, ...parts: string[]): string {
+  return join(pensmithDataDir(process.platform, sb.env()), ...parts);
 }
 
 export interface CliRun {

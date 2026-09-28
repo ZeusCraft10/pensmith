@@ -22,6 +22,7 @@ import {
   seedCompiledPaper,
   snapshot,
   changedPaths,
+  sandboxDataPath,
 } from './helpers/paper-cli-harness.js';
 
 test('RUN-11: `pensmith stauts` exits 2 with the suggestion and creates nothing', () => {
@@ -37,7 +38,7 @@ test('RUN-11: `pensmith stauts` exits 2 with the suggestion and creates nothing'
   assert.ok(!existsSync(join(cwd, '.paper')), 'no .paper/');
   assert.ok(!existsSync(join(cwd, 'STATE.json')), 'no STATE.json');
   assert.ok(!existsSync(join(cwd, 'SESSION.log')), 'no SESSION.log');
-  assert.ok(!existsSync(join(sb.data, 'pensmith')), 'no data dir (no registry entry, no lock, no log)');
+  assert.ok(!existsSync(sandboxDataPath(sb)), 'no data dir (no registry entry, no lock, no log)');
 });
 
 test('RUN-11: a typo is rejected even where the bare router WOULD start a paper (assignment.txt present)', () => {

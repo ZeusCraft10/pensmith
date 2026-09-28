@@ -14,11 +14,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { pensmithDataDir } from '../../bin/lib/paths.js';
 
 const HOOK = fileURLToPath(new URL('../../hooks/stop.ts', import.meta.url));
 // Resolve tsx's loader to an ABSOLUTE file URL so the hook subprocess can load
@@ -50,15 +51,11 @@ function runHook(cwd: string): RunResult {
 }
 
 function freshCwd(): string {
-  // Canonicalize via realpathSync: on macOS tmpdir() is /var/folders/... which
-  // is a symlink to /private/var/folders/.... The Stop subprocess derives its
-  // .paper lock resource from process.cwd(), which Node canonicalizes to the
-  // realpath — but lock.ts keys the lock on the RAW resource string
-  // (sha256(resource), by design). If this test acquired the lock via the
-  // /var symlink path while the subprocess released via the /private/var
-  // realpath, the hashes (hence lock stubs) would differ and the release-check
-  // would spuriously fail on macOS. Acquiring under the realpath matches what
-  // the subprocess actually uses. No-op on Linux/Windows (no symlinked tmpdir).
+  // The realpath (macOS tmpdir() is /var/folders/…, a symlink to
+  // /private/var/folders/…), so a folder compares equal to the process.cwd()
+  // the hook subprocess sees. The session lock itself is keyed on the
+  // canonical root whichever spelling a caller passes — the symlinked-spelling
+  // test below covers that.
   return realpathSync(mkdtempSync(join(tmpdir(), 'pensmith-stop-')));
 }
 
@@ -85,14 +82,19 @@ test('HOOK-04: stop release + flush wiring is consistent with Wave-0 RED state',
 // session's lock, or another Claude session's, is never removed. (Supersedes
 // the unconditional release of a `.paper` resource lock, which could delete a
 // live CLI session's lock.)
-function runHookWithInput(cwd: string, dataDir: string, input: string): RunResult {
+/** The hook's env: every platform's data-dir variable points into `dataDir`. */
+function hookEnv(dataDir: string, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  return { ...process.env, XDG_DATA_HOME: dataDir, LOCALAPPDATA: dataDir, HOME: dataDir, PENSMITH_PAPER_ROOT: '', ...extra };
+}
+
+function runHookWithInput(cwd: string, dataDir: string, input: string, extraEnv: Record<string, string> = {}): RunResult {
   try {
     const stdout = execFileSync(process.execPath, ['--import', TSX_LOADER, HOOK], {
       cwd,
       input,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, XDG_DATA_HOME: dataDir, LOCALAPPDATA: dataDir, HOME: dataDir, PENSMITH_PAPER_ROOT: '' },
+      env: hookEnv(dataDir, extraEnv),
     });
     return { status: 0, stdout, stderr: '' };
   } catch (e) {
@@ -106,11 +108,15 @@ function runHookWithInput(cwd: string, dataDir: string, input: string): RunResul
 }
 
 function seedSessionLock(dataDir: string, root: string, owner: Record<string, unknown>): string {
-  // Mirror bin/lib/session-lock.ts sessionLockFile(): <data>/pensmith/locks/session-<projectHash>.json.
+  // Mirror bin/lib/session-lock.ts sessionLockFile():
+  // <pensmithLockDir>/session-<sha256(canonical root)[0,12]>.json, where the
+  // lock dir is the one the hook resolves from hookEnv(dataDir) — <data>/pensmith/locks
+  // on Linux and Windows, <data>/Library/Application Support/pensmith/locks on
+  // macOS (its data dir derives from HOME).
   const real = realpathSync.native(root);
   const canonical = process.platform === 'win32' ? real.toLowerCase() : real;
   const hash = createHash('sha256').update(canonical).digest('hex').slice(0, 12);
-  const dir = join(dataDir, 'pensmith', 'locks');
+  const dir = join(pensmithDataDir(process.platform, hookEnv(dataDir)), 'locks');
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `session-${hash}.json`);
   writeFileSync(file, JSON.stringify({
@@ -128,6 +134,22 @@ test('RUN-23: Stop releases an MCP session lock owned by ITS Claude session', ()
   assert.equal(res.status, 0, res.stderr);
   assert.equal(res.stdout, '', 'Stop stdout MUST stay empty');
   assert.equal(existsSync(file), false, 'the matching mcp-owned session lock is released');
+});
+
+test('RUN-23: Stop finds its session lock whichever spelling of the paper folder it is given (symlinked temp dir, macOS /var → /private/var)', () => {
+  const real = freshCwd();
+  const link = `${real}-link`;
+  symlinkSync(real, link, 'junction');
+  const dataDir = freshCwd();
+  const elsewhere = freshCwd();
+  const input = JSON.stringify({ session_id: 'claude-abc', hook_event_name: 'Stop' });
+  // The hook runs in the symlinked folder, then elsewhere with PENSMITH_PAPER_ROOT naming it.
+  for (const [cwd, env] of [[link, {}], [elsewhere, { PENSMITH_PAPER_ROOT: link }]] as const) {
+    const file = seedSessionLock(dataDir, link, { kind: 'mcp', claudeSessionId: 'claude-abc' });
+    const res = runHookWithInput(cwd, dataDir, input, env);
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(existsSync(file), false, `released via ${cwd === link ? 'the symlinked cwd' : 'PENSMITH_PAPER_ROOT'}`);
+  }
 });
 
 test("RUN-23: Stop never removes a CLI session lock or another Claude session's lock", () => {

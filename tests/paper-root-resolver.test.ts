@@ -25,6 +25,7 @@ import {
   snapshot,
   changedPaths,
   REPO,
+  sandboxDataPath,
   type Sandbox,
 } from './helpers/paper-cli-harness.js';
 import { loadChokepointRow, rowPattern, scopedFiles, violations } from './helpers/chokepoint-row.js';
@@ -253,7 +254,7 @@ test('RUN-14: a cwd with its own .paper/ wins over the pointer (no banner)', () 
 
 test('RUN-14: a pointer to a deleted folder is cleared with a warning', () => {
   const { sb, p2 } = openedP2('resolver-stale');
-  const pointer = join(sb.data, 'pensmith', 'active.json');
+  const pointer = sandboxDataPath(sb, 'active.json'); // <data>/Library/Application Support/pensmith on macOS
   assert.ok(existsSync(pointer));
   rmSync(p2, { recursive: true, force: true });
   const empty = sb.project('empty');
