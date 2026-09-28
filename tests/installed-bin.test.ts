@@ -25,56 +25,14 @@ import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { startLockfileRegistry, type LocalNpmRegistry } from './helpers/local-servers/npm-registry.js';
+import { packAndInstall, type InstalledPackage } from './helpers/installed-package.js';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
 const IS_WIN = process.platform === 'win32';
 const PKG = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8')) as { name: string; version: string };
-
-/** How to launch npm: its JS entry (npm_execpath under `npm test`), else the platform shim. */
-function npmCommand(args: string[]): { cmd: string; args: string[]; shell: boolean } {
-  const execPath = process.env['npm_execpath'];
-  if (typeof execPath === 'string' && /npm-cli\.[cm]?js$/.test(execPath)) {
-    return { cmd: process.execPath, args: [execPath, ...args], shell: false };
-  }
-  return IS_WIN
-    ? { cmd: 'npm.cmd', args: args.map((a) => (/[\s&]/.test(a) ? `"${a}"` : a)), shell: true }
-    : { cmd: 'npm', args, shell: false };
-}
-
-/** Run npm synchronously (only for commands that need no local server). */
-function npm(args: string[], opts: { cwd: string; env?: NodeJS.ProcessEnv }): SpawnSyncReturns<string> {
-  const c = npmCommand(args);
-  return spawnSync(c.cmd, c.args, { cwd: opts.cwd, env: opts.env ?? process.env, encoding: 'utf8', timeout: 600_000, shell: c.shell });
-}
-
-/**
- * Run npm ASYNCHRONOUSLY — required while the loopback registry (which lives
- * in this process) must keep answering; spawnSync would block its event loop.
- */
-function npmAsync(args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv }): Promise<{ status: number | null; stdout: string; stderr: string }> {
-  const c = npmCommand(args);
-  return new Promise((resolve) => {
-    const child = spawn(c.cmd, c.args, { cwd: opts.cwd, env: opts.env, shell: c.shell, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d: Buffer) => {
-      stdout += d.toString();
-    });
-    child.stderr.on('data', (d: Buffer) => {
-      stderr += d.toString();
-    });
-    const timer = setTimeout(() => child.kill(), 600_000);
-    child.on('close', (status) => {
-      clearTimeout(timer);
-      resolve({ status, stdout, stderr });
-    });
-  });
-}
 
 interface Installed {
   scratch: string;
@@ -85,63 +43,13 @@ interface Installed {
   runEnv: NodeJS.ProcessEnv;
 }
 
-let registry: LocalNpmRegistry | null = null;
+let pkg: InstalledPackage | null = null;
 let installed: Installed | null = null;
 
 before(async () => {
-  assert.ok(
-    fs.existsSync(path.join(REPO, 'dist', 'bin', 'pensmith.js')) && fs.existsSync(path.join(REPO, 'dist', 'mcp', 'server.js')),
-    'dist/ is missing — run `npm run build` first',
-  );
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-installed-bin-'));
-  const packDir = path.join(scratch, 'pack');
-  const prefix = path.join(scratch, 'prefix');
-  fs.mkdirSync(packDir, { recursive: true });
-  fs.mkdirSync(prefix, { recursive: true });
-
-  // 1. npm pack the built package.
-  const pack = npm(['pack', '--silent', '--pack-destination', packDir], { cwd: REPO });
-  assert.equal(pack.status, 0, `npm pack failed: ${pack.stderr}`);
-  const tgz = fs.readdirSync(packDir).find((f) => f.endsWith('.tgz'));
-  assert.ok(tgz, `npm pack produced a tarball in ${packDir}`);
-
-  // 2. npm install -g from the loopback registry (never the internet).
-  const cacheQuery = npm(['config', 'get', 'cache'], { cwd: REPO });
-  assert.equal(cacheQuery.status, 0, `npm config get cache failed: ${cacheQuery.stderr}`);
-  const npmCache = cacheQuery.stdout.trim();
-  registry = await startLockfileRegistry({ lockfile: path.join(REPO, 'package-lock.json'), cacheDir: npmCache });
-  const npmEnv: NodeJS.ProcessEnv = { ...process.env, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' };
-  for (const k of Object.keys(npmEnv)) {
-    // npm exports its own config to scripts (npm_config_*); a user .npmrc may
-    // point at a mirror or a proxy. The flags below are the whole config.
-    if (/^npm_config_/i.test(k)) delete npmEnv[k];
-  }
-  const inst = await npmAsync(
-    [
-      'install', '-g',
-      '--prefix', prefix,
-      '--registry', registry.url,
-      '--cache', path.join(scratch, 'npm-cache'),
-      '--noproxy', '127.0.0.1,localhost',
-      '--no-audit', '--no-fund', '--no-update-notifier', '--loglevel', 'error',
-      path.join(packDir, tgz),
-    ],
-    { cwd: scratch, env: npmEnv },
-  );
-  assert.equal(
-    inst.status,
-    0,
-    `npm install -g failed: ${inst.stderr}\n` +
-      (registry.missing.length > 0
-        ? `tarballs missing from the npm cache (${npmCache}) — run \`npm ci\` first: ${registry.missing.join(', ')}`
-        : ''),
-  );
-  assert.deepEqual(registry.missing, [], 'every dependency tarball came from the npm cache');
-
-  const pkgDir = IS_WIN ? path.join(prefix, 'node_modules', PKG.name) : path.join(prefix, 'lib', 'node_modules', PKG.name);
-  const shim = IS_WIN ? path.join(prefix, `${PKG.name}.cmd`) : path.join(prefix, 'bin', PKG.name);
-  assert.ok(fs.existsSync(path.join(pkgDir, 'dist', 'bin', 'pensmith.js')), `installed package at ${pkgDir}`);
-  assert.ok(fs.existsSync(shim), `bin shim at ${shim}`);
+  // 1-2. npm pack + npm install -g from the loopback registry (never the internet).
+  pkg = await packAndInstall('installed-bin');
+  const { scratch, prefix, pkgDir, shim } = pkg;
 
   // A symlinked (POSIX) or junctioned (Windows) package root — `npm link` and
   // symlinked plugin roots look exactly like this.
@@ -154,8 +62,7 @@ before(async () => {
 });
 
 after(async () => {
-  await registry?.close();
-  if (installed) fs.rmSync(installed.scratch, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+  await pkg?.close();
 });
 
 function runShim(args: string[], cwd: string): SpawnSyncReturns<string> {

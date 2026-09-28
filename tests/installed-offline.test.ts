@@ -2,8 +2,9 @@
 // never reads tests/ at runtime.
 //
 // Packs the BUILT package (`npm pack`; run `npm run build` first) and installs
-// it with `npm install -g --offline --prefix <tmp>` from the npm cache, then
-// runs the installed CLI from a temp project:
+// it with `npm install -g --prefix <tmp>` from a loopback registry
+// (tests/helpers/installed-package.ts), then runs the installed CLI from a temp
+// project:
 //   - `--dry-run research --yolo` finds >= 5 synthetic dry-run sources from the
 //     packaged corpus (templates/dry-run/corpus.json) — no ENOENT on
 //     tests/fixtures, which the package does not ship;
@@ -15,29 +16,16 @@
 // The static half (no tests/ path is resolved at runtime outside http-mock.ts)
 // is the `tests-path-at-runtime` chokepoint row.
 
-import { test } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, cpSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, cpSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { withLlmSandbox, readJsonl } from './helpers/llm-sandbox.js';
+import { packAndInstall, type InstalledPackage } from './helpers/installed-package.js';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
-const IS_WIN = process.platform === 'win32';
-
-/** Run npm: through its JS entry when npm launched us, else the platform shim. */
-function npm(args: string[], cwd: string): SpawnSyncReturns<string> {
-  const execPath = process.env['npm_execpath'];
-  const opts = { cwd, encoding: 'utf8' as const, stdio: ['ignore', 'pipe', 'pipe'] as ['ignore', 'pipe', 'pipe'], timeout: 300_000 };
-  if (typeof execPath === 'string' && execPath.endsWith('.js')) {
-    return spawnSync(process.execPath, [execPath, ...args], opts);
-  }
-  return IS_WIN
-    ? spawnSync('npm.cmd', args.map((a) => (/\s/.test(a) ? `"${a}"` : a)), { ...opts, shell: true })
-    : spawnSync('npm', args, opts);
-}
 
 /** A user's environment: no test context, no PENSMITH_* unless given, isolated data dir. */
 function userEnv(scratch: string, extra: Record<string, string> = {}): Record<string, string> {
@@ -51,37 +39,27 @@ function userEnv(scratch: string, extra: Record<string, string> = {}): Record<st
   return { ...env, XDG_DATA_HOME: join(scratch, 'data'), LOCALAPPDATA: join(scratch, 'data'), ...extra };
 }
 
+let pkg: InstalledPackage | null = null;
 let installed: { cli: string; pkgDir: string; scratch: string } | null = null;
 
-/** Pack + install once per file. */
-function install(): { cli: string; pkgDir: string; scratch: string } {
-  if (installed) return installed;
-  assert.ok(existsSync(join(REPO, 'dist', 'bin', 'pensmith.js')), 'dist/ missing — run `npm run build` first');
-  const scratch = mkdtempSync(join(tmpdir(), 'pensmith-installed-'));
-  const packDir = join(scratch, 'pack');
-  const prefix = join(scratch, 'prefix');
-  mkdirSync(packDir, { recursive: true });
-  mkdirSync(prefix, { recursive: true });
-
-  const pack = npm(['pack', '--ignore-scripts', '--silent', '--pack-destination', packDir], REPO);
-  assert.equal(pack.status, 0, `npm pack failed: ${pack.stderr}`);
-  const tgz = readdirSync(packDir).find((f) => f.endsWith('.tgz'));
-  assert.ok(tgz, `npm pack produced a tarball in ${packDir}`);
-
-  const inst = npm(
-    ['install', '-g', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', '--prefix', prefix, join(packDir, tgz)],
-    scratch,
-  );
-  assert.equal(inst.status, 0, `npm install -g --offline failed (is the npm cache populated by npm ci?): ${inst.stderr}`);
-
-  const pkgName = (JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')) as { name: string }).name;
-  const pkgDir = IS_WIN ? join(prefix, 'node_modules', pkgName) : join(prefix, 'lib', 'node_modules', pkgName);
-  assert.ok(existsSync(pkgDir), `installed package at ${pkgDir}`);
+before(async () => {
+  pkg = await packAndInstall('installed-offline');
+  const { pkgDir, scratch } = pkg;
   assert.ok(!existsSync(join(pkgDir, 'tests')), 'the package ships no tests/ directory');
   assert.ok(existsSync(join(pkgDir, 'templates', 'dry-run', 'corpus.json')), 'the dry-run corpus ships under templates/');
+  const pkgName = (JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')) as { name: string }).name;
   const binRel = (JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8')) as { bin: Record<string, string> }).bin[pkgName];
   assert.ok(binRel, 'package.json bin entry');
   installed = { cli: join(pkgDir, binRel), pkgDir, scratch };
+});
+
+after(async () => {
+  await pkg?.close();
+});
+
+/** The installed package, packed + installed once per file in before(). */
+function install(): { cli: string; pkgDir: string; scratch: string } {
+  assert.ok(installed, 'the package was installed in before()');
   return installed;
 }
 
