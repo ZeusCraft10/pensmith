@@ -80,11 +80,11 @@ export default [
           { name: 'node:https', message: 'Import HTTP only via bin/lib/http.ts' },
           {
             name: 'pdf-parse',
-            message: 'pdf-parse must only be imported from bin/lib/pdf-text.ts (D-06, T-3-11 chokepoint). All PDF text extraction routes through that single wrapper.',
+            message: 'pdf-parse must only be imported from bin/lib/pdf-text.ts and its worker bin/lib/pdf-worker.ts (D-06, T-3-11, SEC-02 chokepoint). All PDF text extraction routes through pdf-text.ts.',
           },
           {
             name: 'pdf-parse/lib/pdf-parse.js',
-            message: 'Direct sub-path import is exempt only inside bin/lib/pdf-text.ts (D-06 ENOENT workaround). Other code MUST go through bin/lib/pdf-text.ts.',
+            message: 'Direct sub-path import is exempt only inside bin/lib/pdf-text.ts and bin/lib/pdf-worker.ts (D-06 ENOENT workaround, SEC-02 worker). Other code MUST go through bin/lib/pdf-text.ts.',
           },
           {
             name: 'citation-js',
@@ -113,12 +113,14 @@ export default [
     rules: { 'no-restricted-imports': 'off' },
   },
 
-  // === pdf-parse chokepoint EXEMPTION for bin/lib/pdf-text.ts (Phase 3, D-06/T-3-11) ===
-  // bin/lib/pdf-text.ts is the ONLY file allowed to import pdf-parse.
-  // It is still subject to: HTTP imports (undici/http/https/node:http/node:https),
-  // citation-js chokepoint, and all other project-wide restrictions.
+  // === pdf-parse chokepoint EXEMPTION for bin/lib/pdf-text.ts and its worker (Phase 3, D-06/T-3-11; SEC-02) ===
+  // bin/lib/pdf-text.ts and bin/lib/pdf-worker.ts (the worker_threads entry that
+  // runs pdf-parse so a timeout can terminate it, D-19-22) are the ONLY files
+  // allowed to import pdf-parse. They are still subject to: HTTP imports
+  // (undici/http/https/node:http/node:https), the citation-js chokepoint, and
+  // all other project-wide restrictions.
   {
-    files: ['bin/lib/pdf-text.ts'],
+    files: ['bin/lib/pdf-text.ts', 'bin/lib/pdf-worker.ts'],
     rules: {
       'no-restricted-imports': ['error', {
         paths: [
@@ -131,7 +133,7 @@ export default [
             name: 'citation-js',
             message: 'citation-js must only be imported from bin/lib/citations.ts (D-19 chokepoint). All BibTeX parsing and APA rendering routes through that single wrapper.',
           },
-          // pdf-parse is ALLOWED in this file only (exempted by omission from the list).
+          // pdf-parse is ALLOWED in these two files only (exempted by omission from the list).
         ],
       }],
     },
@@ -153,11 +155,11 @@ export default [
           { name: 'node:https', message: 'Import HTTP only via bin/lib/http.ts' },
           {
             name: 'pdf-parse',
-            message: 'pdf-parse must only be imported from bin/lib/pdf-text.ts (D-06, T-3-11 chokepoint). All PDF text extraction routes through that single wrapper.',
+            message: 'pdf-parse must only be imported from bin/lib/pdf-text.ts and its worker bin/lib/pdf-worker.ts (D-06, T-3-11, SEC-02 chokepoint). All PDF text extraction routes through pdf-text.ts.',
           },
           {
             name: 'pdf-parse/lib/pdf-parse.js',
-            message: 'Direct sub-path import is exempt only inside bin/lib/pdf-text.ts (D-06 ENOENT workaround). Other code MUST go through bin/lib/pdf-text.ts.',
+            message: 'Direct sub-path import is exempt only inside bin/lib/pdf-text.ts and bin/lib/pdf-worker.ts (D-06 ENOENT workaround, SEC-02 worker). Other code MUST go through bin/lib/pdf-text.ts.',
           },
           // citation-js is ALLOWED in this file only (exempted by omission from the list).
         ],
