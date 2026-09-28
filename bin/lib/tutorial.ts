@@ -406,7 +406,7 @@ export class TutorialSubscriber {
   #enqueueRender(key: string, block: string): void {
     // Strip any accidental section-path leak before storing (defense in depth —
     // confinement contract: TUTORIAL.md never names a .paper/sections/ path).
-    const safe = block.replace(/\.paper[\\/]sections[\\/]\S*/g, '[section]');
+    const safe = block.replace(/\.paper(?:-dry-run)?[\\/]sections[\\/]\S*/g, '[section]');
     this.#blocks.set(key, safe);
     this.#chain = this.#chain.then(
       () => this.#writeDocument(),

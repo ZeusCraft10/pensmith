@@ -265,6 +265,11 @@ export interface EstimateScope {
   verb: string;
   /** The section id: a number, or its text with a letter (`1a`, GRND-09). */
   section?: number | string;
+  /**
+   * `verify` over the sections a wave `write` drafts (GRND-15: a wave write
+   * verifies every section it drafts), instead of the sections still to verify.
+   */
+  wave?: boolean;
 }
 
 /** The model calls one run of each cost-incurring verb makes (other verbs make none). */
@@ -303,7 +308,7 @@ function scopeRows(
   };
   if (scope.verb === 'plan' || scope.verb === 'write' || scope.verb === 'verify') {
     if (scope.section !== undefined) return [sectionRow(scope.section)];
-    if (scope.verb === 'write') return wave.map(sectionRow);
+    if (scope.verb === 'write' || (scope.verb === 'verify' && scope.wave === true)) return wave.map(sectionRow);
     return all.filter((r) => r.step.startsWith(`${scope.verb} §`));
   }
   return [all.find((r) => r.step === scope.verb) ?? price(scope.verb, calls)];

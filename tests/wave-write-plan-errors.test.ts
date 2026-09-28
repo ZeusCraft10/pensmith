@@ -46,9 +46,22 @@ function events(stdout: string): Array<Record<string, unknown>> {
 
 const write = (sb: LlmSandbox, ...args: string[]) => sb.runTsx(null, ['write', ...args], { env: { ANTHROPIC_API_KEY: KEY } });
 
+/**
+ * These tests are about scheduling, not citation verification: the fixture's
+ * sources carry no DOI and the paper has no CITATIONS.bib, so a draft citing
+ * them fails Pass 1 closed (the drafter stub cites every assigned key, D-18-06).
+ * The drafter is scripted to a citation-free section so verify's verdict is
+ * `verified` and each exit code comes from the scheduling under test.
+ */
+function citationFreeDrafts(sb: LlmSandbox, count: number): void {
+  const text = 'Attention lets a model weigh every position of its input when it builds each output.\n\nThe section explains the idea in plain terms.\n';
+  sb.mock!.script('section-drafter', ...Array.from({ length: count }, () => ({ text })));
+}
+
 test('GRND-16: waves {1,3} then {2}; every section drafted and verified', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     await paper(sb);
+    citationFreeDrafts(sb, 3);
     const r = await write(sb, '--yolo');
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
     const starts = events(r.stdout).filter((e) => e['event'] === 'section_start');
@@ -68,6 +81,7 @@ test('GRND-16: a malformed PLAN.md is one line naming the file and the field; in
     await paper(sb);
     const bad = path.join(sb.paper, 'sections', '01-introduction', 'PLAN.md');
     fs.writeFileSync(bad, fs.readFileSync(bad, 'utf8').replace(/^section: 1$/m, 'number: 1'));
+    citationFreeDrafts(sb, 2);
     const r = await write(sb, '--yolo', '--max-parallel', '1');
     assert.equal(r.status, 1, `${r.stdout}\n${r.stderr}`);
     assert.match(r.stderr, /^pensmith write: section 1 \(introduction\) skipped — \.paper\/sections\/01-introduction\/PLAN\.md: invalid field "section": Required$/m);
@@ -75,6 +89,7 @@ test('GRND-16: a malformed PLAN.md is one line naming the file and the field; in
     assert.doesNotMatch(r.stderr, /max-parallel ignored/, '--max-parallel 1 prints no warning');
     for (const d of ['02-background', '03-conclusion']) {
       assert.ok(fs.existsSync(path.join(sb.paper, 'sections', d, 'DRAFT.md')), `${d} drafted`);
+      assert.match(fs.readFileSync(path.join(sb.paper, 'sections', d, 'PLAN.md'), 'utf8'), /^status: verified$/m, `${d} verified — the non-zero exit is the malformed PLAN.md's`);
     }
     assert.equal(fs.existsSync(path.join(sb.paper, 'sections', '01-introduction', 'DRAFT.md')), false);
   });
@@ -83,6 +98,7 @@ test('GRND-16: a malformed PLAN.md is one line naming the file and the field; in
 test('GRND-16: the outline\'s stubs are skipped with a note; a single write on a stub refuses (exit 2) naming plan N', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     await paper(sb, ['background']);
+    citationFreeDrafts(sb, 2);
     const r = await write(sb, '--yolo');
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
     assert.match(r.stderr, /^pensmith write: section 2 \(background\) is not planned yet — skipped; run `pensmith plan 2`$/m);

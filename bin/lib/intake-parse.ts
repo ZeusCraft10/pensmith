@@ -40,17 +40,6 @@ export interface ParsedIntake {
   brief: IntakeBrief | null;
 }
 
-/**
- * Escape `{{` and `}}` sequences in a user-controlled string so they cannot
- * act as template placeholders when the string is passed to interpolate().
- * Kept until the Phase 18 integration pass removes interpolate() (D-18-03):
- * the remaining interpolate() call sites (research.ts, research-orchestrator.ts,
- * outline.ts, plan.ts) share this ONE implementation (CR-01).
- */
-export function escapeTemplateTokens(s: string): string {
-  return s.replace(/\{\{/g, '{ {').replace(/\}\}/g, '} }');
-}
-
 const FRONTMATTER_START = /^﻿?---\r?\n/;
 
 /** A document with frontmatter → the brief's view, or null when it is not a valid brief. */

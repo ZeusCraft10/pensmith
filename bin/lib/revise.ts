@@ -197,14 +197,14 @@ function mechanicalRemove(draftMd: string, citekey: string): string {
 // ---------------------------------------------------------------------------
 
 async function defaultProposeSwap(vars: ReviseSwapVars): Promise<string> {
-  // The prompt body is loaded + interpolated by the CLI/MCP caller which owns
-  // the actual model transport (no model client exists in bin/lib yet). When a
-  // caller does not inject proposeSwap, there is nothing to call.
+  // The caller injects proposeSwap (bin/lib/revise-swap.ts builds the request
+  // with buildPromptRequest and calls the model). When a caller does not inject
+  // one, there is nothing to call.
   void vars;
   await Promise.resolve();
   throw new Error(
     'runRevise: no proposeSwap transport injected. The CLI/MCP caller must ' +
-    'supply an LLM seam (loadPrompt(\'revise-swap\') + interpolate + model call).',
+    'supply an LLM seam (buildPromptRequest(\'revise-swap\', …) + model call).',
   );
 }
 

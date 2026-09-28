@@ -535,10 +535,6 @@ const E2E_PHASE_RUNNERS = {
           citation_style: 'APA',
           sectioning_notes: [],
           follow_ups: [],
-          // The pre-Phase-18 contract field (intake-clarifier v1); the Phase 18
-          // contract ignores it. Kept so the corpus also drives a checkout from
-          // before the intake stream merged.
-          questions: [{ id: 'length', question: 'How long should the paper be?', suggested_answer: '1500 words' }],
         },
       }],
       'topic-disambiguator': [{ data: { scopes: [{ label: 'transformer-attention', queries: [...E2E_QUERIES] }] } }],

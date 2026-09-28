@@ -9,14 +9,7 @@
         "length_target_words": 1500,
         "citation_style": "APA",
         "sectioning_notes": [],
-        "follow_ups": [],
-        "questions": [
-          {
-            "id": "length",
-            "question": "How long should the paper be?",
-            "suggested_answer": "1500 words"
-          }
-        ]
+        "follow_ups": []
       }
     }
   ],

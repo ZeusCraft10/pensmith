@@ -135,6 +135,30 @@ test('TUTORIAL.md never references .paper/sections/ paths', { skip: !RENDER_READ
   assert.ok(!/\.paper[\\/]sections[\\/]/.test(md), `TUTORIAL.md must not reference .paper/sections/ paths; got:\n${md}`);
 });
 
+test('TUTORIAL.md never references a section path of the paper or of the --dry-run workspace (D-18-29)', { skip: !RENDER_READY }, async () => {
+  const root = mkPaperRoot();
+  const tutorialPath = path.join(root, '.paper-dry-run', 'TUTORIAL.md');
+  fs.mkdirSync(path.dirname(tutorialPath), { recursive: true });
+
+  const { TutorialSubscriber } = (await import(TUTORIAL_MOD.href)) as TutorialMod;
+  const sub = new TutorialSubscriber({ tutorialPath, goal: 'both' });
+  // A payload that (wrongly) carries section paths: the renderer strips them.
+  sub.emit({
+    kind: 'section.written',
+    payload: {
+      n: 1,
+      slug: 'background',
+      assignedSources: ['smith2021', '.paper-dry-run/sections/01-background/DRAFT.md', '.paper\\sections\\01-background\\PLAN.md'],
+    },
+  });
+  await sub.flush();
+
+  const md = fs.readFileSync(tutorialPath, 'utf8');
+  assert.match(md, /smith2021/);
+  assert.ok(!/\.paper(?:-dry-run)?[\\/]sections[\\/]/.test(md), `no section path leaks; got:\n${md}`);
+  assert.match(md, /\[section\]/, 'the leaked paths were replaced');
+});
+
 test('idempotence: re-emitting the same events produces byte-stable TUTORIAL.md (overwrite, not grow)', { skip: !RENDER_READY }, async () => {
   const root = mkPaperRoot();
   const tutorialPath = path.join(root, '.paper', 'TUTORIAL.md');

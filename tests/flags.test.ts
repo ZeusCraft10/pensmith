@@ -281,17 +281,20 @@ test('H1 (D-17-27): a --yolo projection between 50% and 100% of the cap is NOT r
       writePaperFile(sb.root, 'OUTLINE.md');
       // The pre-flight projects the steps THIS run makes: `write --yolo` (wave
       // mode) drafts every section with a PLAN.md — a verified one included —
-      // and nothing else of the paper.
+      // and verifies each draft (GRND-15), and nothing else of the paper.
       for (const s of manySections(4)) writeSectionPlan(sb.root, s.n, s.slug, s.n === 2 ? 'verified' : 'planned');
-      const est = await projectEstimate({ paperRoot: sb.root, scope: { verb: 'write' } });
-      assert.ok(est.totalUsd > 0);
-      assert.deepEqual(est.rows.map((r) => r.step), ['write §1', 'write §2', 'write §3', 'write §4']);
+      const drafts = await projectEstimate({ paperRoot: sb.root, scope: { verb: 'write' } });
+      const checks = await projectEstimate({ paperRoot: sb.root, scope: { verb: 'verify', wave: true } });
+      const est = { totalUsd: drafts.totalUsd + checks.totalUsd };
+      assert.ok(drafts.totalUsd > 0 && checks.totalUsd > 0);
+      assert.deepEqual(drafts.rows.map((r) => r.step), ['write §1', 'write §2', 'write §3', 'write §4']);
+      assert.deepEqual(checks.rows.map((r) => r.step), ['verify §1', 'verify §2', 'verify §3', 'verify §4']);
       const between = sb.runCli(['write', '--yolo'], { env: { PENSMITH_COST_CAP_USD: String(est.totalUsd / 0.67) } });
       assert.ok(!/would exceed your cost cap/.test(between.stderr),
         `H1: a projection at 67% of the cap must NOT be refused by the pre-flight; stderr=${between.stderr}`);
       const over = sb.runCli(['write', '--yolo'], { env: { PENSMITH_COST_CAP_USD: String(est.totalUsd / 1.1) } });
       assert.equal(over.status, 5, `H1: above the cap → EXIT_COST_CAP; stderr=${over.stderr}`);
-      assert.match(over.stderr, /^pensmith: This call would exceed your cost cap\. Continue\? \(write §1 … write §4 \(4 steps\): projected \$\d+\.\d\d \+ \$0\.00 spent this session > cap \$\d+\.\d\d; raise \[budget\] cost_cap_usd or PENSMITH_COST_CAP_USD\)/m);
+      assert.match(over.stderr, /^pensmith: This call would exceed your cost cap\. Continue\? \(write §1 … verify §4 \(8 steps\): projected \$\d+\.\d\d \+ \$0\.00 spent this session > cap \$\d+\.\d\d; raise \[budget\] cost_cap_usd or PENSMITH_COST_CAP_USD\)/m);
     });
   });
 

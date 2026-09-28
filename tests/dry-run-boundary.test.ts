@@ -145,7 +145,7 @@ test('RUN-27: outside --dry-run the library writer drops synthetic sources a dry
   assert.match(r.bib, /10\.1038\/nphys1170/);
 });
 
-test('RUN-27 / BRDTH-01 / GRND-19: one --dry-run --yolo reaches the export, which carries only the cited sources — never the synthetic library', () => {
+test('RUN-27 / BRDTH-01 / GRND-19: one --dry-run --yolo reaches a .dry-run export that carries only the cited (synthetic) sources and no dry-run marker', () => {
   const sb = sandbox('dryrun-export');
   const root = sb.project('p');
   writeFileSync(join(root, 'assignment.txt'), readFileSync(ASSIGNMENT_FIXTURE, 'utf8'));
@@ -156,15 +156,30 @@ test('RUN-27 / BRDTH-01 / GRND-19: one --dry-run --yolo reaches the export, whic
   assert.ok(existsSync(join(exportDir, 'DRAFT.dry-run.md')), 'the dry run reached done in one invocation');
   assert.match(r.stdout, new RegExp(`pensmith done: exported .*${'DRAFT\\.dry-run\\.md'}`));
   const library = readFileSync(join(ws, 'CITATIONS.bib'), 'utf8');
-  assert.ok((library.match(/^@/gm) ?? []).length > 0, 'research left synthetic sources in the library');
+  const libraryKeys = [...library.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
+  assert.ok(libraryKeys.length > 0, 'research left synthetic sources in the library');
+  // GRND-19 (D-18-06): a dry-run draft cites its sections' synthetic sources.
   const cited = new Set(extractCitedKeysForVerification(readFileSync(join(ws, 'DRAFT.md'), 'utf8')));
+  assert.ok(cited.size > 0, 'the dry-run draft cites synthetic sources');
   const exportedBib = join(exportDir, 'CITATIONS.bib');
-  const exportedKeys = existsSync(exportedBib)
-    ? [...readFileSync(exportedBib, 'utf8').matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!)
-    : [];
+  assert.ok(existsSync(exportedBib), 'the export carries its references');
+  const exportedText = readFileSync(exportedBib, 'utf8');
+  const exportedKeys = [...exportedText.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
   assert.deepEqual(exportedKeys.sort(), [...cited].sort(), 'the exported key set is exactly the cited key set');
+  // Only what the draft cites leaves the workspace: an uncited library record never
+  // reaches the export, and every exported record is one of the library's own.
+  for (const key of libraryKeys.filter((k) => !cited.has(k))) {
+    assert.ok(!exportedText.includes(`{${key},`), `${key} is not cited, so it is not exported`);
+  }
+  for (const key of exportedKeys) assert.ok(libraryKeys.includes(key), `${key} comes from the dry-run library`);
+  // The synthetic sources are labelled as such by their DOIs (10.0000/pensmith-dryrun.*):
+  // each exported record is one, and the draft export itself is named `.dry-run`
+  // (D-18-29). Exports stay zero-trace otherwise — no offline/dry-run marker line.
+  assert.equal((exportedText.match(/10\.0000\/pensmith-dryrun\./g) ?? []).length, exportedKeys.length, 'each exported record is a labelled synthetic source');
   for (const f of readdirSync(exportDir)) {
-    assert.doesNotMatch(readFileSync(join(exportDir, f), 'utf8'), /pensmith-dryrun/, `${f} carries no synthetic record`);
+    const text = readFileSync(join(exportDir, f), 'utf8');
+    assert.doesNotMatch(text, /OFFLINE MODE|DRY RUN|made by pensmith/i, `${f} carries no dry-run marker`);
+    if (f.startsWith('DRAFT')) assert.match(f, /^DRAFT\.dry-run\./, `${f} is named as a dry-run export`);
   }
   assert.ok(!existsSync(join(root, '.paper')), 'the dry run never created .paper/');
 });

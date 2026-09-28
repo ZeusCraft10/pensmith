@@ -5,9 +5,9 @@
 // `buildPromptRequest(slug, values)` (D-18-03): `loadPrompt(slug)` — the fixed
 // template, byte-identical for every call and so the cacheable prefix (RUN-26)
 // — is the system prompt, and the per-call data follows as tagged blocks in the
-// user message. Templates interpolate nothing; `interpolate()` below remains
-// only for callers not yet moved to that layout (the Phase 18 integration pass
-// removes it once none is left).
+// user message. Templates interpolate nothing: no data is ever substituted
+// into the instruction text, so user or source text can never become a
+// template placeholder (the Phase 17 `interpolate()` helper is gone).
 //
 // Defense-in-depth:
 //   - PR-time: tests/repo-files.test.ts asserts each prompt SHA-256 matches
@@ -219,24 +219,4 @@ export function loadPrompt(name: string): string {
   }
 
   return stripFrontmatter(text);
-}
-
-/**
- * Interpolate `{{varname}}` placeholders in a template.
- *
- * THROWS if any `{{ }}` placeholder lacks a corresponding key in `vars` —
- * catches typos at runtime (a missed substitution would otherwise reach the
- * model verbatim and confuse it).
- *
- * @example
- * interpolate("Hello {{name}}!", { name: "world" }) // → "Hello world!"
- * interpolate("Hello {{name}}!", {})                 // → throws
- */
-export function interpolate(template: string, vars: Record<string, string>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => {
-    if (!(key in vars)) {
-      throw new Error(`interpolate: missing var "${key}" — template references {{${key}}} but vars has keys [${Object.keys(vars).join(', ')}]`);
-    }
-    return vars[key] ?? '';
-  });
 }

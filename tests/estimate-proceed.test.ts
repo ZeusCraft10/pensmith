@@ -99,7 +99,7 @@ test('RUN-20: completed steps are excluded; a finished paper has nothing left to
   });
 });
 
-test('RUN-20: --estimate on an explicit verb projects that verb (and section) — a wave `write` prices every planned section', async () => {
+test('RUN-20: --estimate on an explicit verb projects that verb (and section) — `write` includes the verify it chains (GRND-15), a wave `write` prices every planned section', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     await researchedPaper(sb);
     await initSection(sb.root, 1, 'intro');
@@ -115,18 +115,31 @@ test('RUN-20: --estimate on an explicit verb projects that verb (and section) �
     const bare = await sb.runTsx(null, ['--estimate']);
     assert.equal(bare.status, 0, bare.stderr);
     assert.match(bare.stdout, /nothing left to run \(\$0\.00\)/);
-    // … but `write 1` still makes a paid drafter call, and says so.
+    // … but `write 1` still makes a paid drafter call — and verifies the
+    // draft it writes (GRND-15, D-18-26) — and says so.
     const one = await sb.runTsx(null, ['write', '1', '--estimate']);
     assert.equal(one.status, 0, one.stderr);
     assert.match(one.stdout, /^  write §1\s/m);
-    assert.doesNotMatch(one.stdout, /^  (write §2|verify|compile|done)\s/m, 'only the named step');
+    assert.match(one.stdout, /^  verify §1\s/m, 'write chains verify');
+    assert.doesNotMatch(one.stdout, /^  (write §2|verify §2|compile|done)\s/m, 'only the named section');
     assert.ok(totalOf(one.stdout) > 0, 'a re-draft is priced');
-    // A wave `write` re-drafts every planned section, verified ones included.
+    // `write 1 --no-verify` drafts only.
+    const draftOnly = await sb.runTsx(null, ['write', '1', '--no-verify', '--estimate']);
+    assert.equal(draftOnly.status, 0, draftOnly.stderr);
+    assert.match(draftOnly.stdout, /^  write §1\s/m);
+    assert.doesNotMatch(draftOnly.stdout, /^  (verify|write §2|compile|done)/m, 'no verify with --no-verify');
+    assert.ok(totalOf(draftOnly.stdout) > 0 && totalOf(draftOnly.stdout) <= totalOf(one.stdout));
+    // A wave `write` re-drafts and re-verifies every planned section, verified ones included.
     const wave = await sb.runTsx(null, ['write', '--estimate']);
     assert.equal(wave.status, 0, wave.stderr);
-    assert.match(wave.stdout, /^  write §1\s/m);
-    assert.match(wave.stdout, /^  write §2\s/m);
-    assert.ok(Math.abs(totalOf(wave.stdout) - 2 * totalOf(one.stdout)) < 0.011, 'two drafter calls');
+    for (const step of ['write §1', 'write §2', 'verify §1', 'verify §2']) {
+      assert.match(wave.stdout, new RegExp(`^  ${step}\\s`, 'm'), step);
+    }
+    assert.ok(Math.abs(totalOf(wave.stdout) - 2 * totalOf(one.stdout)) < 0.011, 'two drafter calls and two verifications');
+    const waveDraftOnly = await sb.runTsx(null, ['write', '--no-verify', '--estimate']);
+    assert.equal(waveDraftOnly.status, 0, waveDraftOnly.stderr);
+    assert.doesNotMatch(waveDraftOnly.stdout, /^  verify/m);
+    assert.ok(Math.abs(totalOf(waveDraftOnly.stdout) - 2 * totalOf(draftOnly.stdout)) < 0.011, 'two drafter calls');
     // A verb with no model call says so.
     const compile = await sb.runTsx(null, ['compile', '--estimate']);
     assert.equal(compile.status, 0, compile.stderr);

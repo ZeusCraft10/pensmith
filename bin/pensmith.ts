@@ -699,6 +699,12 @@ async function invocationScopes(argv: string[], checked: ValidatedArgv): Promise
   const routed = checked.verb === null || checked.verb === 'next' || checked.verb === 'resume';
   if (routed && isDryRunInvocation(argv)) return [undefined];
   const scope = await invocationScope(argv, checked);
+  // An explicit `write` verifies what it drafts (GRND-15, D-18-26) unless
+  // --no-verify: `write N` also runs verify §N, a wave `write` verifies every
+  // section it drafts.
+  if (!routed && scope.verb === 'write' && !hasFlag(argv, 'no-verify') && !argv.includes('--verify=false')) {
+    return [scope, scope.section !== undefined ? { verb: 'verify', section: scope.section } : { verb: 'verify', wave: true }];
+  }
   if (!routed || scope.section === undefined) return [scope];
   const at = SECTION_CHAIN.indexOf(scope.verb as SectionChainVerb);
   if (at < 0) return [scope];
@@ -991,8 +997,9 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   // (c) --yolo COST PRE-FLIGHT (D-17-27) — runs whenever --yolo is present for a
   //     COST-INCURRING execution (an explicit verb, next/resume, or a bare run).
   //     It projects the steps THIS invocation runs — the named verb (and
-  //     section; `write` with no section is every section with a PLAN.md), or
-  //     for bare/next/resume the step the router picks — never the rest of the
+  //     section; `write` with no section is every section with a PLAN.md, and
+  //     `write` also verifies what it drafts unless --no-verify), or for
+  //     bare/next/resume the step the router picks — never the rest of the
   //     paper, which this run will not touch. Over the session cap it goes
   //     through the same never-skippable cost-cap gate, with the same one-line
   //     message, as the per-call check in complete() (RUN-18), which remains
@@ -1027,12 +1034,9 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
     try {
       const from = argvFlagValue(argv, 'from');
       const explicit = checked.verb !== null && checked.verb !== 'next' && checked.verb !== 'resume';
-      const scope = explicit ? await invocationScope(argv, checked) : undefined;
-      est = await projectEstimate({
-        paperRoot: projectRoot(),
-        ...(from !== undefined ? { from } : {}),
-        ...(scope !== undefined ? { scope } : {}),
-      });
+      est = explicit
+        ? await projectScopes(projectRoot(), await invocationScopes(argv, checked), from)
+        : await projectEstimate({ paperRoot: projectRoot(), ...(from !== undefined ? { from } : {}) });
     } catch (e) {
       // An invalid runtime config (or any projection failure) is one line
       // through dispatch() — which also releases the session lock.

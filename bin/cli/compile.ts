@@ -15,7 +15,7 @@
 // LLM seam: bin/lib has no model-transport client yet (Tier-2 placeholder era).
 // In Tier 2 the boundary smoother is OMITTED (raw concat) — smoothing is
 // best-effort prose and never blocks compile; a later phase wires
-// loadPrompt('smoother') + interpolate + the model call. The deterministic
+// buildPromptRequest('smoother', …) + the model call. The deterministic
 // refuse-gate, staleness re-verify, consistency scan, citation density, bib
 // regen, and report emission all run in Tier 2.
 

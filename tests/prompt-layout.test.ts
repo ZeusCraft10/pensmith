@@ -12,9 +12,9 @@
 //   - a generation template reaches claude-opus-5's 512-token minimum
 //     cacheable prefix (estimated), so it caches on the default model.
 //
-// Phase 18 llm stream: the ten slugs below. The integration pass extends
-// LAYOUT_SLUGS to all fourteen once the intake and sections streams' templates
-// (intake-clarifier, outline-author, section-planner, section-drafter) merge.
+// Every hash-pinned prompt slug is covered: LAYOUT_SLUGS must equal the key
+// set of EXPECTED_PROMPT_HASHES and of PROMPT_INPUTS (a new slug cannot skip
+// the layout).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -30,10 +30,14 @@ import { estimateTokens } from '../bin/lib/estimator.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/** The templates this stream owns (18-PLAN.md §5.3). */
+/** Every prompt template (18-PLAN.md §3.3). */
 const LAYOUT_SLUGS = [
+  'intake-clarifier',
   'topic-disambiguator',
   'source-evaluator',
+  'outline-author',
+  'section-planner',
+  'section-drafter',
   'claim-support',
   'orphan-label',
   'smoother',
@@ -61,11 +65,14 @@ function inputsSection(body: string): string {
   return m[1] as string;
 }
 
-test('D-18-03: the layout covers real prompt slugs', () => {
+test('D-18-03: the layout covers every prompt slug', () => {
   for (const slug of LAYOUT_SLUGS) {
     assert.ok(slug in EXPECTED_PROMPT_HASHES, `${slug} is hash-pinned`);
     assert.ok(PROMPT_INPUTS[slug], `${slug} has a PROMPT_INPUTS entry`);
   }
+  assert.equal(LAYOUT_SLUGS.length, 14);
+  assert.deepEqual([...LAYOUT_SLUGS].sort(), Object.keys(EXPECTED_PROMPT_HASHES).sort(), 'every hash-pinned template is checked');
+  assert.deepEqual([...LAYOUT_SLUGS].sort(), Object.keys(PROMPT_INPUTS).sort(), 'every PROMPT_INPUTS slug is checked');
 });
 
 for (const slug of LAYOUT_SLUGS) {
