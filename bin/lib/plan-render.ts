@@ -245,12 +245,13 @@ export function parsePlanBody(body: string): PlanBody {
 
 /**
  * A short summary of a planned section's claims for a downstream planner
- * (GRND-12): `1. claim [a2020, b2019]; 2. …`, at most `max` characters.
+ * (GRND-12): `1. claim 2. claim …`, at most `max` characters. The claims' citekeys
+ * are left out — a planner sees only its own section's sources (FEED-01).
  * '' when the body has no claims (a stub, or a legacy PLAN.md).
  */
 export function summarizePlanClaims(body: string, max = 600): string {
-  const parts = parsePlanClaims(body).map((c, i) => `${i + 1}. ${c.claim}${c.sources.length > 0 ? ` [${c.sources.join(', ')}]` : ''}`);
-  const text = parts.join('; ');
+  const parts = parsePlanClaims(body).map((c, i) => `${i + 1}. ${c.claim}`);
+  const text = parts.join(' ');
   if (text.length <= max) return text;
   let end = max - 1;
   const code = text.charCodeAt(end - 1);

@@ -1,18 +1,17 @@
-// tests/write-style-integration.test.ts — Phase 8 Wave 0 RED-by-skip scaffold
-// for STYL-03 (the drafter voice-hint blend) + Pitfall 7 (resolution priority).
+// tests/write-style-integration.test.ts — STYL-03 (the drafter voice-hint
+// blend) + Pitfall 7 (resolution priority), extended by Phase 18 FEED-02 /
+// D-18-24.
 //
-// RED-by-skip via SOURCE-GREP (mirrors [07-01]): READY = bin/cli/write.ts
-// references `styleProfilePath` (the field 08-02/08-06 add to DrafterInput and
-// wire into the writer). A bare existsSync is insufficient — write.ts already
-// exists. Until 08-06 wires STYLE.json into the drafter, every test SKIPS so
-// `npm test` stays GREEN.
-//
-// Contract pinned (Pitfall 7): the drafter's effective voice hint follows the
-// priority PLAN.md `voice_hint` > style-match render (styleMatchToVoiceHint over
-// STYLE.json) > default. A non-empty PLAN.md voice_hint MUST WIN over a present
-// STYLE.json — the user's explicit per-section direction is never overridden by
-// the inferred style profile. 08-06 exposes a `resolveVoiceHint` chokepoint that
-// implements this precedence; this test pins its behavior.
+// Contract pinned (Pitfall 7, D-18-24): the drafter's effective voice follows
+// the priority: the section's own hint — its PLAN.md `voice` (the outline's),
+// else its OUTLINE row `voice`, else a legacy explicit direction
+// (`voice_hint:` / a `Voice:` line) — then the style-match render
+// (styleMatchToVoiceHint over STYLE.json), then the discipline preset's tone,
+// then a non-empty default. A section hint MUST WIN over a present STYLE.json —
+// the user's explicit per-section direction is never overridden by the inferred
+// style profile. `resolveVoiceHint` (drafter-input.ts, re-exported by write.ts)
+// implements it; this test pins its behavior. The Phase 8 source-grep skip
+// guard is gone: the wiring is permanent.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,15 +23,6 @@ import { fileURLToPath } from 'node:url';
 function repoPath(rel: string): string {
   return fileURLToPath(new URL('../' + rel, import.meta.url));
 }
-
-// SOURCE-GREP skip-predicate: write.ts must reference the STYLE.json wiring.
-function writeStyleWired(): boolean {
-  const writePath = repoPath('bin/cli/write.ts');
-  if (!fs.existsSync(writePath)) return false;
-  return /styleProfilePath/.test(fs.readFileSync(writePath, 'utf8'));
-}
-
-const READY = writeStyleWired();
 
 const PAPER_A = repoPath('tests/fixtures/style-samples/paperA');
 
@@ -50,7 +40,7 @@ interface StyleMatchMod {
   styleMatchToVoiceHint: (profile: StyleProfile) => string;
 }
 interface WriteMod {
-  resolveVoiceHint: (input: { planMd: string; styleProfile?: StyleProfile }) => string;
+  resolveVoiceHint: (input: { planMd: string; styleProfile?: StyleProfile; outlineVoice?: string; presetHint?: string }) => string;
 }
 
 function mkTmp(): string {
@@ -61,7 +51,7 @@ function mkTmp(): string {
   return tmp;
 }
 
-test('STYL-03 / Pitfall 7: a non-empty PLAN.md voice_hint WINS over a present STYLE.json', { skip: !READY }, async () => {
+test('STYL-03 / Pitfall 7: a non-empty PLAN.md voice_hint WINS over a present STYLE.json', async () => {
   mkTmp();
 
   // Build a real STYLE.json from the committed paperA samples.
@@ -84,7 +74,7 @@ test('STYL-03 / Pitfall 7: a non-empty PLAN.md voice_hint WINS over a present ST
   );
 });
 
-test('STYL-03 / Pitfall 7: absent PLAN.md voice_hint falls back to the style-match render (then default)', { skip: !READY }, async () => {
+test('STYL-03 / Pitfall 7: absent PLAN.md voice_hint falls back to the style-match render (then default)', async () => {
   mkTmp();
   const { buildStyleProfile, styleMatchToVoiceHint } = (await import(SM_MOD.href)) as StyleMatchMod;
   const profile = await buildStyleProfile(PAPER_A);
@@ -102,4 +92,18 @@ test('STYL-03 / Pitfall 7: absent PLAN.md voice_hint falls back to the style-mat
   // No PLAN.md voice AND no style profile → a non-empty default (never empty).
   const fallback = resolveVoiceHint({ planMd: planMdNoVoice });
   assert.ok(fallback.trim().length > 0, 'with neither source, a non-empty default voice hint is used');
+});
+
+test('FEED-02 / D-18-24: the outline voice (PLAN.md `voice`, else the OUTLINE row) wins over STYLE.json; the preset tone is the fallback', async () => {
+  mkTmp();
+  const { buildStyleProfile, styleMatchToVoiceHint } = (await import(SM_MOD.href)) as StyleMatchMod;
+  const profile = await buildStyleProfile(PAPER_A);
+  const { resolveVoiceHint } = (await import(WRITE_MOD.href)) as WriteMod;
+  const withVoice = `---\nsection: 1\nslug: intro\ntitle: Intro\nvoice: plain, expository\nstatus: planned\n---\n## Claims\n\n1. A claim.\n`;
+  assert.equal(resolveVoiceHint({ planMd: withVoice, styleProfile: profile }), 'plain, expository', 'PLAN.md voice beats STYLE.json');
+  const noVoice = `---\nsection: 1\nslug: intro\ntitle: Intro\nstatus: planned\n---\n## Claims\n\n1. A claim.\n\n## Voice\n\nMeasured.\n`;
+  assert.equal(resolveVoiceHint({ planMd: noVoice, outlineVoice: 'wry and brisk', styleProfile: profile }), 'wry and brisk', 'the OUTLINE row voice beats STYLE.json');
+  assert.equal(resolveVoiceHint({ planMd: noVoice, styleProfile: profile, presetHint: 'Write in a technical register.' }), styleMatchToVoiceHint(profile), 'STYLE.json beats the preset tone');
+  assert.equal(resolveVoiceHint({ planMd: noVoice, presetHint: 'Write in a technical register.' }), 'Write in a technical register.', 'the preset tone is the fallback');
+  assert.ok(resolveVoiceHint({ planMd: noVoice }).trim().length > 0, 'never empty');
 });
