@@ -24,6 +24,8 @@ See: .planning/PROJECT.md (updated 2026-09-27 for the v1.0.0 Open Source Release
 
 ## Current Position
 
+Phase 19 — Sources and Library (SOURCES), on branch `v1/p19` (worktree `/home/user/pensmith-p19`), built concurrently with Phase 18 and merged into the main branch after Phase 18 closes. Four streams (net, adapters, library, research) and an integration pass: 19 of 20 requirements Complete (`.planning/phases/19-sources/19-VERIFICATION.md`); GRND-14 is implemented and its drafter-side acceptance runs at the Phase 18/19 merge (merge notes in `19-SUMMARY.md`). Gate at integration: 1973 tests, 1972 pass (the root-only atomic-write case), tier contract 55/55, e2e smoke 10/10, `npm run live:sources` 17 pass / 2 skipped (no OpenAlex or Semantic Scholar key). Hand-off to Phase 20: Pass 1 must resolve arXiv ids, PMIDs and ISBNs at their own registrars (VRFY-11) — DOI-less sources this phase adds are FABRICATED until then.
+
 Phase: 17 — Tier-2 Runtime Foundations (RUNTIME). Executed and verified, but **not complete**: 2 of its 37 in-scope requirements are open. Next up: Phase 18, Grounded Generation (GROUND).
 Plan: 17-PLAN.md (1/1 executed as four parallel streams, then an integration pass and three review rounds)
 Status: 35/37 in-scope Phase 17 requirements are Complete (`.planning/phases/17-runtime/17-VERIFICATION.md`). Two are open:

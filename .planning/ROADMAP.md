@@ -104,7 +104,8 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
   6. `new --pdfs <dir>` ingests BYO PDFs tagged bring-your-own, kept with their hashes and extracted in a worker thread that is hard-aborted on timeout; editing local text never changes a verdict; only titles or identifiers leave the machine
   7. A History paper can cite a book with an ISBN, Zotero items flow into the library in both tiers with an authenticated doctor check, the drafter quotes directly only from sources with real full text, and `plan N --research` adds real hits to that section only
   8. `http.ts` sends each service's polite contact form (Crossref `mailto:` User-Agent), honours `X-Rate-Limit` headers, stops retrying a host whose `Retry-After` exceeds the cap, trips a per-host circuit breaker on 429/5xx storms, and never caches an error body as a success (SRC-17)
-**Plans**: TBD
+**Plans**: [19-PLAN.md](phases/19-sources/19-PLAN.md) (1/1: four parallel streams — net, adapters, library, research — then an integration pass)
+**Status**: executed and integrated on `v1/p19` (merges after Phase 18 closes). 19 of 20 requirements met; GRND-14 is implemented and its drafter-side acceptance runs at the Phase 18/19 merge ([19-VERIFICATION.md](phases/19-sources/19-VERIFICATION.md), [19-SUMMARY.md](phases/19-sources/19-SUMMARY.md)).
 
 ### Phase 20: Verifier Completeness (VERIFY)
 **Goal**: Every citation and quote form is seen, every legitimate source can pass, a lookup failure is never called fabrication, and compile and done recompute the gate from the text itself, trusting no local file, so forged or edited artifacts cannot get through (D-V1-03, S-17). Absorbs v0.3.0 HARDEN-03.
@@ -220,7 +221,7 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
 |-------|-----------------|--------|-----------|
 | 17. Tier-2 Runtime Foundations (RUNTIME) | 1/1 | In progress: 35/37 requirements Complete; RUN-26, CI-06 open | - |
 | 18. Grounded Generation (GROUND) | 0/TBD | Not started | - |
-| 19. Sources and Library (SOURCES) | 0/TBD | Not started | - |
+| 19. Sources and Library (SOURCES) | 1/1 | Integrated on v1/p19: 19/20 requirements Complete; GRND-14 acceptance at the Phase 18/19 merge | - |
 | 20. Verifier Completeness (VERIFY) | 0/TBD | Not started | - |
 | 21. Compile, Done and Export (EXPORT) | 0/TBD | Not started | - |
 | 22. Revision Loop and Inline Corrections (REVISE) | 0/TBD | Not started | - |

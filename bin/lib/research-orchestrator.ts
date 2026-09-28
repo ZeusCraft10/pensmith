@@ -540,6 +540,63 @@ export interface ResearchItem {
   readonly exclusion?: PolicyExclusion;
 }
 
+/**
+ * The evaluator's judgement of one of the user's own library entries
+ * (bring-your-own, Zotero): it annotates the entry — tier, relevance, the
+ * why-relevant note — and never removes it (19-PLAN §7.2, SRC-15).
+ */
+export interface OwnEvaluation {
+  readonly entry: LibraryEntry;
+  readonly decision: EvaluationDecision;
+  readonly tier: SourceTier | null;
+  readonly relevance: number | null;
+  readonly reason: string | null;
+}
+
+/** The provenance prefixes of the user's own sources. */
+const OWN_PREFIXES = new Set(['byo', 'zotero']);
+
+/** An entry's first own-source provenance (`byo:arxiv` → {prefix: byo, source: arxiv}), or null. */
+export function ownProvenance(entry: Pick<LibraryEntry, 'provenance'>): { prefix: string; source: string | null } | null {
+  for (const p of entry.provenance) {
+    const [prefix = p, source] = p.split(':');
+    if (OWN_PREFIXES.has(prefix)) return { prefix, source: source ?? null };
+  }
+  return null;
+}
+
+/**
+ * The user's own library entries research asks the evaluator about: tagged
+ * bring-your-own or zotero, not evaluated yet, and carrying a registrar
+ * identifier — so the library writer merges the annotation into that very
+ * entry. A local-only (unhydrated) PDF has no identifier and stays as it is.
+ */
+export function ownSourcesToEvaluate(entries: readonly LibraryEntry[]): LibraryEntry[] {
+  return entries.filter(
+    (e) => ownProvenance(e) !== null && e.relevance === null && !e.synthetic && [e.doi, e.arxiv, e.pmid, e.pmcid, e.isbn].some((x) => x !== null),
+  );
+}
+
+/** A library entry as the evaluator's candidate (its payload fields and its citekey). */
+function entryAsCandidate(e: LibraryEntry): SourceCandidate {
+  const own = ownProvenance(e);
+  return {
+    source: own?.prefix === 'zotero' ? 'zotero' : 'byo',
+    id: e.doi ?? e.arxiv ?? e.pmid ?? e.isbn ?? e.citekey,
+    ...(e.doi !== null ? { doi: e.doi } : {}),
+    ...(e.arxiv !== null ? { arxiv: e.arxiv } : {}),
+    ...(e.isbn !== null ? { isbn: e.isbn } : {}),
+    title: e.title ?? '',
+    authors: [...e.authors],
+    ...(e.year !== null ? { year: e.year } : {}),
+    ...(e.abstract !== null ? { abstract: e.abstract } : {}),
+    retracted: e.retracted,
+    last_verified: e.last_verified,
+    citekey: e.citekey,
+    raw: {},
+  } as SourceCandidate;
+}
+
 export interface ResearchPassResult {
   readonly adapters: AdapterOutcome[];
   readonly perQuery: QueryOutcome[];
@@ -553,6 +610,8 @@ export interface ResearchPassResult {
   readonly excluded: ResearchItem[];
   readonly notEvaluated: number;
   readonly evaluator: { readonly calls: number; readonly failures: string[]; readonly unknownVerdicts: string[] };
+  /** The evaluator's annotations of the user's own entries (never kept / rejected / excluded here). */
+  readonly own: OwnEvaluation[];
 }
 
 /** Relevance (highest first; unscored after scored), then preference rank, then discovery order. */
@@ -597,6 +656,12 @@ export async function runResearchPass(args: {
   /** The evaluator's `<scope>` block: the chosen scope (or the section query). */
   scope: string;
   warn?: (line: string) => void;
+  /**
+   * The user's own library entries to annotate (ownSourcesToEvaluate): they
+   * join the evaluator's batch after the discovered candidates, and their
+   * verdicts come back in `own` — the policy and the prune never touch them.
+   */
+  own?: readonly LibraryEntry[];
 }): Promise<ResearchPassResult> {
   const discovery = await discoverCandidates({
     queries: args.queries,
@@ -625,9 +690,34 @@ export async function runResearchPass(args: {
 
   // The most preferred adapters' candidates go first (the first batch, when there are several).
   pre.sort((a, b) => a.rank - b.rank);
-  const run = pre.length > 0 ? await runSourceEvaluator(pre, { topic: args.topic, discipline: args.discipline, scope: args.scope }) : { verdicts: [], calls: 0, failures: [] };
+
+  // The user's own entries join the batch — except one a discovered candidate
+  // already is (same citekey or identifier): that candidate's evaluation merges
+  // into the entry through the library writer anyway.
+  const taken = new Set(base.map((b) => b.candidate.citekey));
+  const ids = new Set(base.flatMap((b) => [b.view.doi, b.view.arxiv, b.view.pmid, b.view.isbn].filter((x): x is string => x !== null)));
+  const ownItems = (args.own ?? [])
+    .filter((e) => !taken.has(e.citekey) && ![e.doi, e.arxiv, e.pmid, e.isbn].some((x) => x !== null && ids.has(x)))
+    .map((e) => {
+      const candidate = entryAsCandidate(e);
+      const tierHint = deterministicTier({ ...candidate, venue: e.venue, type: e.type, doi: e.doi, arxiv: e.arxiv, isbn: e.isbn });
+      return { entry: e, candidate, view: e, tierHint };
+    });
+
+  const toEvaluate = [...pre, ...ownItems];
+  const run = toEvaluate.length > 0 ? await runSourceEvaluator(toEvaluate, { topic: args.topic, discipline: args.discipline, scope: args.scope }) : { verdicts: [], calls: 0, failures: [] };
   const hints = new Map(pre.map((b) => [b.candidate.citekey, b.tierHint] as const));
-  const applied = applySourceEvaluations(pre.map((b) => b.candidate), run.verdicts, hints);
+  const ownHints = new Map(ownItems.map((o) => [o.candidate.citekey, o.tierHint] as const));
+  const ownApplied = applySourceEvaluations(ownItems.map((o) => o.candidate), run.verdicts, ownHints);
+  const ownByKey = new Map(ownItems.map((o) => [o.candidate.citekey, o.entry] as const));
+  const own: OwnEvaluation[] = [...ownApplied.kept, ...ownApplied.rejected].map((e) => ({
+    entry: ownByKey.get(e.candidate.citekey) as LibraryEntry,
+    decision: e.decision,
+    tier: e.tier,
+    relevance: e.relevance,
+    reason: e.reason,
+  }));
+  const applied = applySourceEvaluations(pre.map((b) => b.candidate), run.verdicts.filter((v) => !ownByKey.has(v.citekey)), hints);
   const byKey = new Map(pre.map((b) => [b.candidate.citekey, b] as const));
   const toItem = (e: EvaluatedSource<SourceCandidate>): ResearchItem => {
     const b = byKey.get(e.candidate.citekey) as (typeof base)[number];
@@ -653,6 +743,7 @@ export async function runResearchPass(args: {
     excluded,
     notEvaluated: kept.filter((k) => k.decision === 'not-evaluated').length,
     evaluator: { calls: run.calls, failures: run.failures, unknownVerdicts: applied.unknownVerdicts },
+    own,
   };
 }
 

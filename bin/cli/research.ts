@@ -94,6 +94,9 @@ import {
   type ResearchPassResult,
   type AdapterRegistry,
   type AdapterOutcome,
+  type OwnEvaluation,
+  ownProvenance,
+  ownSourcesToEvaluate,
   type LogExclusion,
   type LogRetraction,
 } from '../lib/research-orchestrator.js';
@@ -561,7 +564,11 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
   });
   const scopeText = `${chosen.label} — ${chosen.description}`;
   const own = await ingestOwnSources(root, config, plan, { out, err });
+  // The user's own entries the evaluator has not judged yet join its batch:
+  // they get a tier, a relevance and a why-relevant note, never a removal.
+  const ownToEvaluate = networkMode().dryRun ? [] : ownSourcesToEvaluate((await tryLoadLibrary(root))?.entries ?? []);
   const pass0 = await runResearchPass({
+    own: ownToEvaluate,
     queries: chosen.queries,
     plan: own.plan,
     registry,
@@ -656,6 +663,11 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
       why_relevant: rescued ? `Kept at your choice; the evaluator said: ${i.reason ?? 'no reason given'}` : i.reason,
     };
   };
+  // The evaluator's notes on the user's own entries (bring-your-own, Zotero),
+  // merged into those entries under their own provenance (the library writer
+  // matches them by identifier; the latest evaluation wins).
+  await annotateOwnSources(root, pass.own);
+
   // The user's additions first (provenance `add`, tagged "added"), then the
   // kept search results — so a work the user named that the search also found
   // keeps the user's tag too.
@@ -689,7 +701,8 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     `${tierSummary(final)}; ${pass.excluded.length} excluded by [sources] policy; ${rejectedStill.length} rejected by the evaluator` +
     `${deselected.length > 0 ? `; ${deselected.length} deselected at the approval gate` : ''}` +
     `${rescuedCount > 0 ? `; ${rescuedCount} kept at your choice despite the evaluator` : ''}` +
-    `${userAdded.length > 0 ? `; ${userAdded.length} added at the approval gate` : ''}`;
+    `${userAdded.length > 0 ? `; ${userAdded.length} added at the approval gate` : ''}` +
+    `${pass.own.length > 0 ? `; ${pass.own.length} of your own source(s) evaluated` : ''}`;
   const researchPath = await writeLog({
     summary,
     excluded: excludedLog,
@@ -721,6 +734,38 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     scope: chosen.label,
     queries: chosen.queries,
   };
+}
+
+/** Merge the evaluator's notes on the user's own entries into them (grouped by their own provenance). */
+async function annotateOwnSources(root: string, evaluations: readonly OwnEvaluation[]): Promise<void> {
+  const groups = new Map<string, LibraryCandidate[]>();
+  for (const ev of evaluations) {
+    const prov = ownProvenance(ev.entry);
+    if (prov === null) continue;
+    const e = ev.entry;
+    const why = ev.decision === 'rejected'
+      ? `Your own source; the evaluator judged it off-scope: ${ev.reason ?? 'no reason given'}`
+      : ev.reason;
+    const candidate: LibraryCandidate = {
+      citekey: e.citekey,
+      ...(prov.source !== null ? { source: prov.source } : {}),
+      doi: e.doi,
+      arxiv: e.arxiv,
+      pmid: e.pmid,
+      pmcid: e.pmcid,
+      isbn: e.isbn,
+      title: e.title,
+      authors: [...e.authors],
+      year: e.year,
+      tier: ev.tier,
+      relevance: ev.relevance,
+      why_relevant: why,
+    };
+    const list = groups.get(prov.prefix) ?? [];
+    list.push(candidate);
+    groups.set(prov.prefix, list);
+  }
+  for (const [prefix, candidates] of groups) await upsertSources(root, candidates, { provenance: prefix });
 }
 
 export const researchCommand = defineCommand({

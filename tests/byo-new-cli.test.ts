@@ -29,6 +29,7 @@ import { discoverCandidates, researchAdapterPlan, type AdapterRegistry } from '.
 import { sources } from '../bin/lib/sources/index.js';
 import { provenanceTags } from '../bin/lib/research-md.js';
 import { Schema as LibrarySchema } from '../bin/lib/schemas/library.js';
+import { parsePromptBlocks } from '../bin/lib/prompt-request.js';
 
 const KEY = 'sk-test-byo-new-cli-0001';
 const BYO = path.join(REPO, 'tests', 'fixtures', 'byo');
@@ -62,7 +63,13 @@ test('SRC-15 (built CLI): new --pdfs → research merges a search hit into the b
     assert.ok(same, 'the recording carries the same work as a search hit');
     sb.mock!.script('topic-disambiguator', { data: { ambiguous: false, scopes: [{ label: 'optomechanics', description: 'Measurement in quantum optomechanics.', queries: QUERIES }] } });
     sb.mock!.script('source-evaluator', {
-      data: { verdicts: found.candidates.map((c, i) => ({ citekey: c.candidate.citekey, keep: true, reason: `Relevant to measurement (${i}).`, relevance: 0.9 - i * 0.01, tier: 'other' })) },
+      data: {
+        verdicts: [
+          ...found.candidates.map((c, i) => ({ citekey: c.candidate.citekey, keep: true, reason: `Relevant to measurement (${i}).`, relevance: 0.9 - i * 0.01, tier: 'other' })),
+          // The bring-your-own attention paper is not among the hits: research asks the evaluator about it too.
+          { citekey: 'vaswani2017', keep: false, reason: 'About attention models, not measurement.', relevance: 0.12, tier: 'other' },
+        ],
+      },
     });
     const r = await runBuilt(sb, ['research', '--yolo']);
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
@@ -73,6 +80,20 @@ test('SRC-15 (built CLI): new --pdfs → research merges a search hit into the b
     assert.equal(asp[0]!.citekey, 'aspelmeyer2009', 'the bring-your-own citekey is kept');
     assert.deepEqual(provenanceTags(asp[0]!), ['bring-your-own', 'search'], 'both tags');
     assert.ok(asp[0]!.byo, 'the hashed PDF record survives the merge');
+    // The other bring-your-own entry was evaluated as well: annotated, never dropped.
+    const vas = after2.entries.find((e) => e.citekey === 'vaswani2017')!;
+    assert.ok(vas, 'a rejected bring-your-own source stays in the library');
+    assert.deepEqual(provenanceTags(vas), ['bring-your-own'], 'no new tag');
+    assert.equal(vas.tier, 'preprint', 'the metadata tier (arXiv) wins over the model\'s');
+    assert.equal(vas.relevance, 0.12);
+    assert.equal(vas.why_relevant, 'Your own source; the evaluator judged it off-scope: About attention models, not measurement.');
+    const sent = sb.mock!.bodiesFor('source-evaluator').flatMap((b) => {
+      const msgs = b['messages'] as Array<{ content: string }>;
+      return JSON.parse(parsePromptBlocks(msgs[msgs.length - 1]!.content).get('candidates') ?? '[]') as Array<{ citekey: string }>;
+    });
+    assert.equal(sent.filter((c) => c.citekey === 'vaswani2017').length, 1, 'the evaluator saw the bring-your-own entry once');
+    assert.equal(sent.filter((c) => c.citekey === 'aspelmeyer2009').length, 1, 'the merged one once (as the search hit)');
+    assert.match(r.stdout, /; 1 of your own source\(s\) evaluated$/m);
 
     // 3. outline → plan → write → verify with the bring-your-own source.
     sb.mock!.script('outline-author', {
