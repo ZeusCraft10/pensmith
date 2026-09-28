@@ -108,7 +108,7 @@ test('tier-contract (SRC-16): Zotero items give identical LIBRARY entries and RE
     pool.intercept({ path: '/keys/current', method: 'GET' }).reply(200, { userID: 4242, access: { user: { library: true } } }, json);
     pool.intercept({ path: '/users/4242/items/top?format=json&limit=100&start=0', method: 'GET' }).reply(200, API_ITEMS, { headers: { 'content-type': 'application/json', 'total-results': '3' } });
     const pulled = await pullZoteroIntoLibrary(tier2, { collection: null });
-    assert.deepEqual(pulled.added, ['vaswani2017', 'consortium2012']);
+    assert.deepEqual(pulled.added, ['vaswani2017', 'encode2012']);
     assert.equal(pulled.skipped.length, 1, 'the note is skipped');
   } finally {
     await restore();
@@ -126,7 +126,7 @@ test('tier-contract (SRC-16): Zotero items give identical LIBRARY entries and RE
     const res = await client.callTool({ name: 'paper_ingest_zotero_items', arguments: { paperRoot: tier1, items: API_ITEMS } });
     assert.notEqual(res.isError, true, JSON.stringify(res.content));
     const body = JSON.parse((res.content as Array<{ text: string }>)[0]?.text ?? '{}') as { added: string[]; skipped: unknown[] };
-    assert.deepEqual(body.added, ['vaswani2017', 'consortium2012']);
+    assert.deepEqual(body.added, ['vaswani2017', 'encode2012']);
     assert.equal(body.skipped.length, 1);
   } finally {
     await client.close();
@@ -137,7 +137,7 @@ test('tier-contract (SRC-16): Zotero items give identical LIBRARY entries and RE
   const t1 = libraryEntries(tier1);
   assert.equal(t2.length, 2);
   assert.deepEqual(t1, t2, 'identical LIBRARY.json entries from both tiers');
-  const encode = t2.find((e) => e['citekey'] === 'consortium2012');
+  const encode = t2.find((e) => e['citekey'] === 'encode2012');
   assert.deepEqual(encode?.['authors'], ['{ENCODE Project Consortium}']);
   assert.deepEqual(encode?.['zotero'], { library: 'users/4242', key: 'ENCODE12' });
   assert.equal(sourcesBlock(tier1), sourcesBlock(tier2), 'identical RESEARCH.md sources blocks');

@@ -100,6 +100,8 @@ function queryKey(query: string): string {
  */
 export function topicPhrase(text: string): string {
   let t = clean(text);
+  // A leading course code ("History 210:", "PSYC 101 -", "CS 4820A –").
+  t = t.replace(/^[\p{L}][\p{L}&.]*(?:\s[\p{L}][\p{L}&.]*){0,3}\s\d{2,4}[A-Za-z]?\s*[:\-–—]\s+/u, '');
   t = t.replace(/^(?:please\s+)?(?:write|draft|compose|prepare|produce|discuss|analy[sz]e|examine|explore|describe|explain|review|argue|evaluate|assess|compare)\s+(?!(?:of|on|about|for|in|into|regarding)\b)/i, '');
   t = t.replace(/\b(?:a|an|the)\s+(?=\d)/gi, '');
   t = clean(t.replace(/\b\d+(?:[.,]\d+)?\s*[- ]?\s*(?:words?|pages?)\b/gi, ' '));
@@ -159,11 +161,20 @@ export function disciplineTerm(discipline: string): string {
   return words(clean(name.toLowerCase().replace(/[^\p{L}\p{N}\s-]+/gu, ' '))).join(' ');
 }
 
-/** `keywords` cut so that `keywords + suffix` fits MAX_QUERY_WORDS (the suffix is kept whole). */
+/**
+ * `keywords` cut so that `keywords + suffix` fits MAX_QUERY_WORDS (the suffix is
+ * kept whole). A keyword the suffix already says is dropped ("intellectual
+ * history" + "history" → "intellectual history", never "… history history"),
+ * and nothing is returned when no keyword is left (the suffix alone is not a
+ * query about the topic).
+ */
 function withSuffix(keywords: readonly string[], suffix: string): string {
   const tail = words(suffix);
+  const inTail = new Set(tail.map((w) => w.toLowerCase()));
+  const own = keywords.filter((k) => !inTail.has(k.toLowerCase()));
+  if (own.length === 0) return '';
   const room = Math.max(1, MAX_QUERY_WORDS - tail.length);
-  return [...keywords.slice(0, room), ...tail].slice(0, MAX_QUERY_WORDS).join(' ');
+  return [...own.slice(0, room), ...tail].slice(0, MAX_QUERY_WORDS).join(' ');
 }
 
 /** Append `q` to `out` unless it is empty or already there. */

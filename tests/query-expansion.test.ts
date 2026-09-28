@@ -49,6 +49,20 @@ test('expandTopicQueries: assignment boilerplate is stripped before the keywords
   assert.equal(topicLabel(''), 'research-topic');
 });
 
+test('expandTopicQueries: a leading course code is boilerplate; the discipline name is never doubled ("history history")', () => {
+  const t = 'History 210: Write a 2500-word research paper on the causes of the French Revolution (1789), drawing on economic, social and intellectual history';
+  assert.equal(topicPhrase(t), 'the causes of the French Revolution (1789), drawing on economic, social and intellectual history');
+  assert.equal(topicPhrase('PSYC 101 - Write an essay on adolescent sleep'), 'adolescent sleep');
+  assert.equal(topicPhrase('CS 4820A – attention mechanisms in transformers'), 'attention mechanisms in transformers');
+  assert.equal(topicPhrase('World War 2: causes and consequences'), 'World War 2: causes and consequences', 'a topic that merely contains a number is kept');
+  const q = expandTopicQueries(t, 'history');
+  assert.ok(q.every((x) => !/\bhistory history\b/.test(x)), q.join(' | '));
+  assert.ok(q.includes('intellectual history'), q.join(' | '));
+  assert.ok(q.includes('french revolution history'), q.join(' | '));
+  assert.ok(!q.includes('history'), 'the discipline name alone is not a query');
+  assert.ok(q.every((x) => !/\b210\b/.test(x)), 'the course number never reaches a query');
+});
+
 test('expandTopicQueries: a one-word topic still yields MIN_QUERIES..MAX_QUERIES; no keyword → []', () => {
   const q = expandTopicQueries('Keynes', 'history');
   assert.ok(q.length >= MIN_QUERIES && q.length <= MAX_QUERIES, q.join(' | '));
