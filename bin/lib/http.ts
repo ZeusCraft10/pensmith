@@ -1676,7 +1676,7 @@ export interface RecordedFixture {
 }
 
 /** One request/response of a fetch() call, as the recorder sees it (a redirect chain has several). */
-interface RecordedHop {
+export interface RecordedHop {
   readonly method: 'GET' | 'POST' | 'HEAD';
   readonly url: string;
   readonly body: string | Buffer | undefined;
@@ -1732,7 +1732,15 @@ function scrubSecrets(text: string, secrets: readonly string[]): string {
   return out;
 }
 
-function pushFixture(hop: RecordedHop, source: HttpSource): void {
+/**
+ * The recorded-fixture entry for one hop (pure; the recorder hook pushes it):
+ * only allowlisted response headers (content-type, location); a non-text body
+ * base64-encoded with `bodyEncoding` (D-19-07); JSON bodies parsed; every
+ * secret the request carried (sensitive header values, secret query values)
+ * removed from the stored body and Location; the path without the scrubbed
+ * query parameters (contact and secret ones).
+ */
+export function fixtureEntryFor(hop: RecordedHop, source: HttpSource): RecordedFixture {
   const { method, url, body, res } = hop;
   const u = new URL(url);
   const headers: Record<string, string> = {};
@@ -1776,7 +1784,11 @@ function pushFixture(hop: RecordedHop, source: HttpSource): void {
   if (body !== undefined && method === 'POST') {
     entry.bodySha256 = createHash('sha256').update(body).digest('hex');
   }
-  recordedFixtures.push(entry);
+  return entry;
+}
+
+function pushFixture(hop: RecordedHop, source: HttpSource): void {
+  recordedFixtures.push(fixtureEntryFor(hop, source));
 }
 
 /**

@@ -81,3 +81,36 @@ test('cassette-no-leak: no committed cassette carries SENSITIVE_HEADERS (T-3-02 
     }
   }
 });
+
+// SRC-06 (D-19-10): a key sent as a query parameter (OpenAlex `api_key`,
+// Google Books `key`, a `token`) is never committed in a recorded path or in a
+// recorded redirect Location.
+const SECRET_QUERY_PARAMS = ['api_key', 'apikey', 'key', 'token', 'access_token'];
+
+function secretParamsIn(url: string): string[] {
+  const u = new URL(url);
+  return [...u.searchParams.keys()].filter((k) => SECRET_QUERY_PARAMS.includes(k.toLowerCase()));
+}
+
+test('cassette-no-leak: no committed cassette path or Location carries a secret query parameter (api_key, key, token …)', () => {
+  if (!existsSync(CASSETTE_ROOT) || !statSync(CASSETTE_ROOT).isDirectory()) return;
+  for (const file of walkDir(CASSETTE_ROOT)) {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as Array<Record<string, unknown>>;
+    for (const entry of parsed) {
+      if (typeof entry['scope'] !== 'string' || typeof entry['path'] !== 'string') continue;
+      const url = `${entry['scope']}${entry['path']}`;
+      assert.deepEqual(secretParamsIn(url), [], `Cassette ${file}: ${url} carries a secret query parameter`);
+      const headers = entry['responseHeaders'] as Record<string, string> | undefined;
+      const location = headers?.['location'];
+      if (typeof location === 'string') {
+        assert.deepEqual(secretParamsIn(new URL(location, url).href), [], `Cassette ${file}: Location ${location} carries a secret query parameter`);
+      }
+    }
+  }
+});
+
+test('cassette-no-leak: the path scan catches a key in a path (self-check)', () => {
+  assert.deepEqual(secretParamsIn('https://api.openalex.org/works?search=x&api_key=abc'), ['api_key']);
+  assert.deepEqual(secretParamsIn('https://www.googleapis.com/books/v1/volumes?q=isbn:1&key=abc'), ['key']);
+  assert.deepEqual(secretParamsIn('https://api.crossref.org/works?query=x'), []);
+});
