@@ -146,7 +146,7 @@ threeWayContract({
     assert.deepEqual(c.authors, ['Fay Found']);
     assert.equal(c.oa_pdf_url, 'https://repo.example/x.pdf');
   },
-  invalid: { body: { HTTP_status_code: 500, error: true, message: 'internal error' } },
+  invalid: (m) => ({ body: { HTTP_status_code: 500, error: true, message: `internal error ${m}` } }),
   offlineMissId: '10.9999/three-way-offline-miss',
   contactEmail: EMAIL,
 });

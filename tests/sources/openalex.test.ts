@@ -165,7 +165,7 @@ threeWayContract({
     assert.equal(c.venue, 'Journal of Tests');
     assert.equal(c.pages, '10-20');
   },
-  invalid: { body: { error: 'Internal error', message: 'something went wrong' } },
+  invalid: (m) => ({ body: { error: 'Internal error', message: `something went wrong ${m}` } }),
   rateLimitReason: /^keyless daily budget exhausted — set OPENALEX_API_KEY \(free\)$/,
   offlineMissId: '10.9999/three-way-offline-miss',
 });

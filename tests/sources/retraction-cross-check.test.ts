@@ -22,7 +22,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { crossCheckRetractions, retractionCheckReason } from '../../bin/lib/sources/retraction-cross-check.js';
-import { liveLane, cacheFiles } from './three-way.js';
+import { liveLane, cacheMentions } from './three-way.js';
 import { writeBibtex } from '../../bin/lib/bibtex-write.js';
 import type { SourceCandidate } from '../../bin/lib/schemas/source-candidate.js';
 
@@ -207,16 +207,16 @@ test('SRC-04: a 200 carrying an inner 403 (recorded shape, synthetic) → "unkno
 
 test('SRC-04 (MockAgent): a 200 with an inner 400 body is a failure, not cached, and reads "unknown"', async () => {
   await liveLane(async (agent) => {
-    const before = cacheFiles();
+    const marker = `marker-cc-${process.pid}-${Date.now()}`;
     agent
       .get('https://api.crossref.org')
       .intercept({ path: /^\/works\?filter=updates%3A10\.5555%2Finner-400/, method: 'GET' })
-      .reply(200, JSON.stringify({ statusCode: 400, 'message-type': 'exception', message: 'bad filter' }), { headers: { 'content-type': 'application/json' } });
+      .reply(200, JSON.stringify({ statusCode: 400, 'message-type': 'exception', message: `bad filter ${marker}` }), { headers: { 'content-type': 'application/json' } });
     const candidates = [makeCandidate({ doi: '10.5555/inner-400', id: '10.5555/inner-400' })];
     await crossCheckRetractions(candidates);
     assert.equal(candidates[0]!.retraction_status, 'unknown');
     assert.equal(candidates[0]!.retracted, false);
     assert.match(retractionCheckReason(candidates[0]!) ?? '', /an inner statusCode 400/);
-    assert.deepEqual(cacheFiles(), before, 'the error body was not cached');
+    assert.deepEqual(cacheMentions(marker), [], 'the error body was not cached');
   });
 });

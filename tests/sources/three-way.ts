@@ -21,7 +21,8 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { installMockAgent } from '../helpers/local-servers/mock-agent.js';
 import {
   _resetBucketsForTest,
@@ -69,10 +70,22 @@ export async function withContactEmail<T>(email: string | undefined, fn: () => P
   }
 }
 
-/** The HTTP cache directory's files (the transport's on-disk cache). */
-export function cacheFiles(): string[] {
+/**
+ * The HTTP cache files whose content mentions `marker` (a token the test put in
+ * the body it served). The cache directory is shared by every test file of a
+ * run, so a test proves "this body was not cached" by looking for its own
+ * marker — never by comparing the directory, which other files write to.
+ */
+export function cacheMentions(marker: string): string[] {
   const dir = pensmithHttpCacheDir();
-  return existsSync(dir) ? readdirSync(dir).sort() : [];
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((f) => {
+    try {
+      return readFileSync(join(dir, f), 'utf8').includes(marker);
+    } catch {
+      return false;
+    }
+  });
 }
 
 let counter = 0;
@@ -99,8 +112,8 @@ export interface ThreeWayCase {
   readonly found: (token: string) => { body: unknown; contentType?: string };
   /** Checks on the found candidate. */
   readonly checkFound: (c: SourceCandidate, token: string) => void;
-  /** A 200 that is not the service's answer. */
-  readonly invalid: { body: unknown; contentType?: string };
+  /** A 200 that is not the service's answer, carrying `marker` (so the cache can be searched for it). */
+  readonly invalid: (marker: string) => { body: unknown; contentType?: string };
   /** The reason a rate-limit refusal reads with (keyless, where it matters). */
   readonly rateLimitReason?: RegExp;
   /** An identifier with no recorded fixture (offline). */
@@ -156,12 +169,12 @@ export function threeWayContract(c: ThreeWayCase): void {
   test(`${c.adapter}: a 200 that is not the service's answer → failed, never cached`, async () => {
     await lane(async (agent) => {
       const token = uniq('invalid');
-      const before = cacheFiles();
-      reply(agent, c.origin, c.pathPrefixFor(token), 200, c.invalid.body, c.invalid.contentType);
+      const bad = c.invalid(`marker-${token}`);
+      reply(agent, c.origin, c.pathPrefixFor(token), 200, bad.body, bad.contentType);
       const r = await c.lookupById(c.idFor(token));
       assert.equal(r.kind, 'failed', JSON.stringify(r));
       assert.match(r.kind === 'failed' ? r.reason : '', /^response is not an? .+ answer \(/);
-      assert.deepEqual(cacheFiles(), before, 'the error body was not cached');
+      assert.deepEqual(cacheMentions(`marker-${token}`), [], 'the error body was not cached');
       // The same request again reaches the network (nothing was cached): a real answer now.
       const f = c.found(token);
       reply(agent, c.origin, c.pathPrefixFor(token), 200, f.body, f.contentType);

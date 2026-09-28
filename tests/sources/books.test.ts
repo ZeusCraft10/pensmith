@@ -14,7 +14,7 @@ import { __setRegistrarSendForTest } from '../../bin/lib/sources/registrar-respo
 import { isSourceLookupError } from '../../bin/lib/sources/lookup.js';
 import { isbn13CheckDigit } from '../../bin/lib/doi.js';
 import { recorded, assertOfflineMiss } from './recorded.js';
-import { liveLane, cacheFiles } from './three-way.js';
+import { liveLane, cacheMentions } from './three-way.js';
 
 const OL = 'https://openlibrary.org';
 const GB = 'https://www.googleapis.com';
@@ -221,15 +221,13 @@ test('three-way: a registrar that could not answer makes the lookup failed (fail
 test('three-way: a 200 that is not the service\'s answer is failed and never cached', async () => {
   await liveLane(async (agent) => {
     const isbn = freshIsbn();
-    const before = cacheFiles();
-    olIsbn(agent, isbn, 200, { error: 'search backend unavailable' });
+    const marker = `marker-${isbn}-${process.pid}`;
+    olIsbn(agent, isbn, 200, { error: `search backend unavailable ${marker}` });
     gbIsbn(agent, isbn, 200, EMPTY_GB);
     const r = await books.lookupById(`isbn:${isbn}`);
     assert.equal(r.kind, 'failed', JSON.stringify(r));
     assert.match(r.kind === 'failed' ? r.reason : '', /^Open Library: response is not an Open Library answer \(an error document: an "error" member\)/);
-    const after = cacheFiles();
-    // Only the valid Google Books answer may have been cached.
-    assert.equal(after.length - before.length <= 1, true);
+    assert.deepEqual(cacheMentions(marker), [], 'the error body was not cached');
     // The same Open Library request reaches the network again: now a real answer.
     olIsbn(agent, isbn, 200, olDoc(isbn));
     const again = await books.lookupById(`isbn:${isbn}`);

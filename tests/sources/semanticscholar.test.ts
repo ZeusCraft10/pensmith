@@ -185,7 +185,7 @@ threeWayContract({
     assert.equal(c.pmid, '123456');
     assert.equal(c.type, 'article-journal');
   },
-  invalid: { body: { message: 'Internal Server Error' } },
+  invalid: (m) => ({ body: { message: `Internal Server Error ${m}` } }),
   rateLimitReason: /^HTTP 429 — rate limited; set PENSMITH_S2_API_KEY$/,
   offlineMissId: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
 });

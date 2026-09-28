@@ -18,7 +18,7 @@ import { _resetBucketsForTest, RateLimitExhaustedError, CircuitOpenError, type H
 import { installMockAgent } from '../helpers/local-servers/mock-agent.js';
 import { __setRegistrarSendForTest } from '../../bin/lib/sources/registrar-response.js';
 import { RECORDED_DOI, recorded, assertOfflineMiss } from './recorded.js';
-import { cacheFiles } from './three-way.js';
+import { cacheMentions } from './three-way.js';
 
 /** A retracted work with a Retraction Watch record (scripts/refresh-cassettes.mjs RECORDED_RETRACTED_DOI). */
 const RECORDED_RETRACTED_DOI = '10.1016/S0140-6736(97)11096-0';
@@ -96,13 +96,13 @@ test('SRC-04: a 200 carrying an error document is "retraction status unknown", n
 
 test('SRC-04/SRC-17: an error document inside a 200 is never cached — the next lookup asks Crossref again', async () => {
   await liveLane(async (agent) => {
-    const before = cacheFiles();
+    const marker = `marker-rw-${process.pid}-${Date.now()}`;
     agent
       .get('https://api.crossref.org')
       .intercept({ path: /^\/works\?filter=updates%3A10\.5555%2Fnot-cached/, method: 'GET' })
-      .reply(200, { statusCode: '400', 'message-type': 'validation-failure' }, { headers: { 'content-type': 'application/json' } });
+      .reply(200, { statusCode: '400', 'message-type': 'validation-failure', message: marker }, { headers: { 'content-type': 'application/json' } });
     await assert.rejects(() => rw.fetchById('10.5555/not-cached'), (e: unknown) => rw.isRetractionLookupError(e));
-    assert.deepEqual(cacheFiles(), before, 'nothing was cached');
+    assert.deepEqual(cacheMentions(marker), [], 'nothing was cached');
     agent
       .get('https://api.crossref.org')
       .intercept({ path: /^\/works\?filter=updates%3A10\.5555%2Fnot-cached/, method: 'GET' })

@@ -228,6 +228,6 @@ threeWayContract({
     assert.equal(c.venue, 'Journal of Tests');
     assert.equal(c.retraction_status, 'clear');
   },
-  invalid: { body: { statusCode: '403', 'message-type': 'not-polite', message: 'add a mailto' } },
+  invalid: (m) => ({ body: { statusCode: '403', 'message-type': 'not-polite', message: `add a mailto ${m}` } }),
   offlineMissId: '10.9999/three-way-offline-miss',
 });

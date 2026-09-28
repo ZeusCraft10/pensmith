@@ -136,6 +136,6 @@ threeWayContract({
     assert.equal(c.venue, 'J. Tests 1 (2021) 1-2');
     assert.equal(c.type, 'preprint');
   },
-  invalid: { body: '<!doctype html><html><body>Rate exceeded.</body></html>', contentType: 'text/html' },
+  invalid: (m) => ({ body: `<!doctype html><html><body>Rate exceeded. ${m}</body></html>`, contentType: 'text/html' }),
   offlineMissId: '2101.00002',
 });

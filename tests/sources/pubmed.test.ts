@@ -128,6 +128,6 @@ threeWayContract({
     assert.equal(c.doi, `10.5555/${t}`);
     assert.equal(c.venue, 'Journal of Tests');
   },
-  invalid: { body: { error: 'API rate limit exceeded', count: '4' } },
+  invalid: (m) => ({ body: { error: `API rate limit exceeded ${m}`, count: '4' } }),
   offlineMissId: '12345679',
 });
