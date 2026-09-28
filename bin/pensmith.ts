@@ -928,8 +928,10 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   //     at `<root>/.paper-dry-run`; PENSMITH_NO_LLM=1 stubs every model call.
   //     Both are env vars so child processes inherit the mode. Set BEFORE the
   //     paper root is resolved: the resolver, the legacy-layout move and the
-  //     session all see the workspace, never the real `.paper/`.
-  if (hasFlag(argv, 'dry-run')) {
+  //     session all see the workspace, never the real `.paper/`. An inherited
+  //     PENSMITH_DRY_RUN=1 is the same dry run (the cost pre-flight then prices
+  //     the stubbed calls at $0, as they are).
+  if (isDryRunInvocation(argv)) {
     process.env['PENSMITH_DRY_RUN'] = '1';
     process.env['PENSMITH_NO_LLM'] = '1';
     setDryRunWorkspace(true);
