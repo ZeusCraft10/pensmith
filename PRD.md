@@ -460,7 +460,7 @@ Run before the user's first paper or any time something feels off:
 
 ### 7.22 Replayable session log
 
-Every workflow step writes its inputs and outputs to `.paper/SESSION.log` (jsonl format). Each entry: timestamp, step name, section number (if applicable), inputs (prompt, context files), outputs (response, tool calls), token counts, cost.
+Every workflow step writes its inputs and outputs to `.paper/SESSION.log` (jsonl format). Each entry: timestamp, step name, section (if applicable: its number, or `1a` for a section inserted by a re-outline), inputs (prompt, context files), outputs (response, tool calls), token counts, cost.
 
 - Used for debugging, reproducibility, and replay-from-checkpoint when something goes wrong.
 - `--show-prompts` flag lets the user see what's about to be sent to any external service (LLM, source API, detector) before it leaves the box. Trust + debugging.

@@ -206,7 +206,7 @@ function toPass2Result(
 export async function runPass2(
   draftMd: string,
   bibByCitekey: Map<string, Pass2BibEntry>,
-  opts: { n: number },
+  opts: { n: number | string },
 ): Promise<Pass2Result[]> {
   // Provider-agnostic offline gate: only PENSMITH_NO_LLM short-circuits to the
   // placeholder. complete() owns provider + key resolution; if no provider key

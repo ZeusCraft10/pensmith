@@ -21,7 +21,8 @@ export interface LoggedLlmRecord {
   id: string;
   run_id: string;
   verb?: string;
-  section?: number;
+  /** The section the call was for: its number, or `1a` for a lettered section. */
+  section?: number | string;
   slug: string;
   provider?: string;
   model?: string;

@@ -132,8 +132,8 @@ export interface CompleteOptions {
   system: string;
   /** Conversation turns; non-empty, and the last turn must be 'user' (no assistant prefill). */
   messages: ChatMessage[];
-  /** Section number, for the COSTS/SESSION records and replay. */
-  section?: number;
+  /** The section (its number, or `1a` for a lettered section: section-id.ts loggedSectionId), for the COSTS/SESSION records and replay. */
+  section?: number | string;
   /** Explicit model id (bypasses per-slug resolution; used by tools and tests). */
   model?: string;
   /** Lower the slug's max_tokens ceiling for this call. */

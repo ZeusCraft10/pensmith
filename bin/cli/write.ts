@@ -52,7 +52,7 @@ import { requestHints } from '../lib/prompt-request.js';
 import { tryLoadLibrary } from '../lib/library.js';
 import type { SourceContextInput } from '../lib/source-context.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
-import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
+import { formatSectionId, loggedSectionId, parseSectionId, sectionIdOf } from '../lib/section-id.js';
 import { EXIT_BLOCKED, EXIT_COST_CAP, EXIT_ERROR, EXIT_OK, PensmithError, type ExitCode } from '../lib/exit-codes.js';
 import { classifyFailure, exitCodeForResult, failureLine } from '../lib/verb-outcome.js';
 import { verifySection } from './verify.js';
@@ -155,7 +155,7 @@ async function writeOneSection(
   }
 
   const call = async (messages: ChatMessage[]): Promise<string> =>
-    (await complete({ slug: 'section-drafter', section: section.n, system: req.system, messages, stubHint: requestHints(req) })).text;
+    (await complete({ slug: 'section-drafter', section: loggedSectionId(input.section.n, input.section.suffix), system: req.system, messages, stubHint: requestHints(req) })).text;
 
   // FEED-04 containment: one corrective turn, then fail the section.
   let draft = await call(req.messages);
@@ -197,7 +197,7 @@ async function writeOneSection(
 
 /** Verify a freshly drafted section (GRND-15) and report its status. */
 async function verifyWritten(section: { n: number; slug: string }, id: string): Promise<{ status: string; code: ExitCode }> {
-  const v = await verifySection(section.n, section.slug);
+  const v = await verifySection(section.n, section.slug, parseSectionId(id)?.suffix);
   const code = exitCodeForResult(v);
   process.stdout.write(`pensmith write: section ${id} verify: ${String(v.status)}\n`);
   return { status: String(v.status), code };

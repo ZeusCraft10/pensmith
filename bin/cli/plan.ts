@@ -39,6 +39,7 @@ import { runRevise } from '../lib/revise.js';
 import { proposeSwap } from '../lib/revise-swap.js';
 import { complete, assertLlmConfigured, correctiveMessages, type ChatMessage } from '../lib/anthropic.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
+import { loggedSectionId } from '../lib/section-id.js';
 import { readOutlineSync } from '../lib/outline.js';
 import { readPaperBrief } from '../lib/paper-brief.js';
 import { tryLoadLibrary } from '../lib/library.js';
@@ -215,7 +216,7 @@ export const planCommand = defineCommand({
 
     const known = libraryCitekeys(entries);
     const call = async (messages: ChatMessage[]): Promise<{ data: SectionPlan; text: string }> => {
-      const r = await complete<SectionPlan>({ slug: 'section-planner', section: n, system: req.system, messages, stubHint: requestHints(req) });
+      const r = await complete<SectionPlan>({ slug: 'section-planner', section: loggedSectionId(n, suffix), system: req.system, messages, stubHint: requestHints(req) });
       return { data: r.data as SectionPlan, text: r.text };
     };
     const check = (data: SectionPlan) =>

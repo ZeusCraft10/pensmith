@@ -88,3 +88,13 @@ export function sectionFolderName(id: SectionId, slug: string): string {
 export function sectionIdOf(n: number, suffix?: string | null): SectionId {
   return suffix !== undefined && suffix !== null && suffix !== '' ? { n, suffix } : { n };
 }
+
+/**
+ * The section as a model-call record names it (SESSION.log `section`, the COSTS
+ * scope id): the number for §1, the text `1a` for a lettered section — so
+ * `resume --replay <id>` re-dispatches the section the call was made for.
+ */
+export function loggedSectionId(n: number, suffix?: string | null): number | string {
+  const id = sectionIdOf(n, suffix);
+  return id.suffix !== undefined ? formatSectionId(id) : n;
+}

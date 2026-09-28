@@ -360,7 +360,7 @@ function orphanLabelPlaceholder(): OrphanLabel {
  */
 export async function runPass4(
   draftMd: string,
-  opts: { n: number },
+  opts: { n: number | string },
 ): Promise<Pass4Result[]> {
   // Presence check ONLY — never reads the key VALUE (the resolved key, when the
   // live branch is reached, comes from getProviderApiKey('anthropic')).

@@ -32,6 +32,7 @@ import { paperDir, projectRoot } from '../lib/paths.js';
 import { HandoffSchema, type Handoff } from '../lib/schemas/handoff.js';
 import { runRouted, REAL_VERB_LOADERS } from '../pensmith.js';
 import { UX02_VERBS, type Ux02Verb } from '../lib/verbs.js';
+import { parseSectionId } from '../lib/section-id.js';
 import { isOfflineMode } from '../lib/http-mock.js';
 import { getRuntimeOverride, runtimeFlagsFromArgv, setRuntimeOverride } from '../lib/runtime.js';
 import {
@@ -122,14 +123,14 @@ function optionTokens(tokens: readonly string[], shape: ReadonlyMap<string, bool
  */
 function replayArgs(
   verb: string,
-  section: number | undefined,
+  section: number | string | undefined,
   logged: string[] | null,
   shape: ReadonlyMap<string, boolean>,
   yolo: boolean,
 ): string[] {
   const argv = verbTokens(logged ?? []);
   const idx = argv.indexOf(verb);
-  const hasSection = section !== undefined && section > 0;
+  const hasSection = section !== undefined && parseSectionId(section) !== null;
   let out: string[];
   if (idx < 0) out = hasSection ? [String(section)] : [];
   else if (SECTION_VERBS.has(verb) && hasSection) out = [String(section), ...optionTokens(argv.slice(idx + 1), shape)];

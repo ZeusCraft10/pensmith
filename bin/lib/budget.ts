@@ -57,7 +57,8 @@ export interface CostRecord {
   /** D-17-26: the session (one top-level invocation) that spent this. */
   session?: string;
   slug?: string;
-  section?: number;
+  /** The section: its number, or `1a` for a lettered section (section-id.ts loggedSectionId). */
+  section?: number | string;
   /** The model that actually served the response (differs after a refusal fallback). */
   served_model?: string;
 }

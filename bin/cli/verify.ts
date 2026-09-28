@@ -37,6 +37,7 @@ import { loadFrontmatterDoc } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
+import { formatSectionId, loggedSectionId, sectionIdOf } from '../lib/section-id.js';
 import { offlineMarkerLine } from '../lib/http-mock.js';
 import { EXIT_ERROR } from '../lib/exit-codes.js';
 
@@ -62,7 +63,10 @@ function stopReason(err: unknown): string {
  * section is EXIT_BLOCKED. A fatal advisory failure (the cost cap) is thrown
  * after the deterministic verdict is written.
  */
-export async function verifySection(n: number, slug: string) {
+export async function verifySection(n: number, slug: string, suffix?: string | null) {
+  // The section as the user types it (`1`, `1a`) — messages, the header and the model-call records.
+  const id = formatSectionId(sectionIdOf(n, suffix));
+  const logged = loggedSectionId(n, suffix);
   // RUN-02: every VERIFICATION.md written in an offline / --dry-run session
   // opens with the disclosure marker — the short-circuit bodies below too.
   const markerPrefix = (): string => {
@@ -74,7 +78,7 @@ export async function verifySection(n: number, slug: string) {
   const bibPath = path.join(paperDir(), 'CITATIONS.bib');
 
   if (!existsSync(draftPath)) {
-    const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: unverifiable\nReason: DRAFT.md missing at ${draftPath} — run \`pensmith write ${n}\` first.\n`;
+    const body = `${markerPrefix()}# VERIFICATION (Section ${id}, ${slug})\n\nStatus: unverifiable\nReason: DRAFT.md missing at ${draftPath} — run \`pensmith write ${id}\` first.\n`;
     await atomicWriteFile(verifPath, body);
     // A section whose draft is gone is back to "needs writing": the router
     // re-drafts it instead of re-dispatching verify forever.
@@ -85,7 +89,7 @@ export async function verifySection(n: number, slug: string) {
         delete fm.failure_reason;
       });
     }
-    process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${n}\` first\n`);
+    process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${id}\` first\n`);
     return { ok: false, status: 'unverifiable', path: verifPath };
   }
 
@@ -98,7 +102,7 @@ export async function verifySection(n: number, slug: string) {
   if (!bibExists && citedKeys.length > 0) {
     // Fail closed: a draft that cites sources with no CITATIONS.bib to check
     // them against is never a passable verdict (compile refuses Status: failed).
-    const body = `${markerPrefix()}# VERIFICATION (Section ${n}, ${slug})\n\nStatus: failed\nReason: .paper/CITATIONS.bib is missing, so the ${citedKeys.length} source(s) DRAFT.md cites cannot be checked — run \`pensmith research\` to rebuild it, then \`pensmith verify ${n}\`.\n`;
+    const body = `${markerPrefix()}# VERIFICATION (Section ${id}, ${slug})\n\nStatus: failed\nReason: .paper/CITATIONS.bib is missing, so the ${citedKeys.length} source(s) DRAFT.md cites cannot be checked — run \`pensmith research\` to rebuild it, then \`pensmith verify ${id}\`.\n`;
     await atomicWriteFile(verifPath, body);
     process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote failed VERIFICATION.md to ${verifPath}\n`);
     return { ok: false, status: 'failed', path: verifPath, exitCode: EXIT_ERROR };
@@ -165,7 +169,7 @@ export async function verifySection(n: number, slug: string) {
   let pass2: Pass2Result[];
   let pass4: Pass4Result[] | null = null;
   try {
-    pass2 = await runPass2(draftMd, bibByCitekey, { n });
+    pass2 = await runPass2(draftMd, bibByCitekey, { n: logged });
   } catch (err) {
     if (!isFatalLlmError(err)) throw err;
     advisoryStop = err;
@@ -173,7 +177,7 @@ export async function verifySection(n: number, slug: string) {
   }
   if (advisoryStop === undefined) {
     try {
-      pass4 = await runPass4(draftMd, { n });
+      pass4 = await runPass4(draftMd, { n: logged });
     } catch (err) {
       if (!isFatalLlmError(err)) throw err;
       advisoryStop = err;
@@ -186,7 +190,7 @@ export async function verifySection(n: number, slug: string) {
   const offlineMarker = offlineMarkerLine();
   const lines = [
     ...(offlineMarker !== null ? [offlineMarker, ''] : []),
-    `# VERIFICATION (Section ${n}, ${slug})`,
+    `# VERIFICATION (Section ${id}, ${slug})`,
     '',
     `Status: ${status}`,
     '',
@@ -282,8 +286,8 @@ export const verifyCommand = defineCommand({
     // bare slug — EXIT_USAGE otherwise, before anything is read or written. The
     // slug comes from OUTLINE.md (audit #23); 'placeholder' only when there is
     // no outline yet.
-    const { n, slug } = resolveSectionArg('verify', projectRoot(), args.n, args.slug);
-    return verifySection(n, slug);
+    const { n, slug, suffix } = resolveSectionArg('verify', projectRoot(), args.n, args.slug);
+    return verifySection(n, slug, suffix);
   },
 });
 

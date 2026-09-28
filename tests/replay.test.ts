@@ -18,6 +18,7 @@ import { buildFixture, readLlmRecords, isReplayable } from '../bin/lib/replay.js
 import { complete } from '../bin/lib/anthropic.js';
 import { EXIT_APPROVAL } from '../bin/lib/exit-codes.js';
 import { writeState, writeOutline, writePlan, sectionDirOf } from './helpers/paper-cli-harness.js';
+import { outlineSection, seedBriefPaper, threeSectionOutline } from './helpers/section-fixture.js';
 
 const KEY = 'sk-test-replay-0001';
 const EXTRACT = path.resolve('scripts', 'extract-fixture.mjs');
@@ -243,5 +244,45 @@ test('RUN-17 / RUN-28: a replay never inherits the logged --yolo — the outline
     const approved = await sb.runTsx(null, ['resume', '--replay', String(rec['id']), '--yolo'], { env: { PENSMITH_OFFLINE: '1' } });
     assert.equal(approved.status, 0, approved.stderr);
     assert.equal(fs.readFileSync(outlinePath, 'utf8'), original, 'with the replay\'s own --yolo the outline is reproduced');
+  });
+});
+
+test('RUN-17 / GRND-09: a lettered section (§1a) is logged as "1a", and `resume --replay` re-drafts §1a — never §1', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await seedBriefPaper(sb.root);
+    sb.mock!.script('outline-author', { data: threeSectionOutline() });
+    assert.equal((await sb.runTsx(null, ['outline', '--yolo'])).status, 0);
+    const sections = path.join(sb.paper, 'sections');
+    fs.writeFileSync(path.join(sections, '01-introduction', 'DRAFT.md'), 'My introduction.\n');
+    // Re-outline: keep §1 and §3, insert `methods` after §1 → §1a (D-18-18).
+    const next = threeSectionOutline();
+    next.sections = [
+      next.sections[0]!,
+      outlineSection(2, 'methods', { depends_on: ['introduction'], assigned_sources: ['luong2015'], estimated_word_count: 500 }),
+      { ...next.sections[2]!, depends_on: ['methods'] },
+    ];
+    sb.mock!.script('outline-author', { data: next });
+    assert.equal((await sb.runTsx(null, ['outline', '--force', '--yolo'])).status, 0);
+    assert.equal((await sb.runTsx(null, ['plan', '1a'])).status, 0);
+    // --no-verify: the fixture sources carry no DOI, so a verification would fail closed.
+    const w = await sb.runTsx(null, ['write', '1a', '--no-verify', '--yolo']);
+    assert.equal(w.status, 0, w.stderr);
+
+    const rec = llmRecords(sb).find((r) => r['slug'] === 'section-drafter')!;
+    assert.equal(rec['section'], '1a', 'SESSION.log names the lettered section');
+    assert.equal(llmRecords(sb).find((r) => r['slug'] === 'section-planner')!['section'], '1a');
+    const costs = readJsonl(path.join(sb.paper, 'COSTS.jsonl')).filter((c) => c['slug'] === 'section-drafter');
+    assert.equal(costs[0]!['scopeId'], 'section-drafter-1a');
+
+    const draft1a = path.join(sections, '01a-methods', 'DRAFT.md');
+    const original = fs.readFileSync(draft1a, 'utf8');
+    fs.writeFileSync(draft1a, 'edited since\n');
+    const calls = sb.mock!.callCount();
+    const replay = await sb.runTsx(null, ['resume', '--replay', String(rec['id'])], { env: { PENSMITH_OFFLINE: '1' } });
+    assert.equal(replay.status, 0, replay.stderr);
+    assert.match(replay.stderr, new RegExp(`replaying ${String(rec['id'])} → write 1a --no-verify \\(sources offline`));
+    assert.equal(fs.readFileSync(draft1a, 'utf8'), original, '§1a reproduced byte-for-byte');
+    assert.equal(fs.readFileSync(path.join(sections, '01-introduction', 'DRAFT.md'), 'utf8'), 'My introduction.\n', '§1 untouched');
+    assert.equal(sb.mock!.callCount(), calls, 'no model call');
   });
 });
