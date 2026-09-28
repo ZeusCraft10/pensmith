@@ -30,6 +30,7 @@ import {
   CircuitOpenError,
   type HttpResponse,
 } from '../../bin/lib/http.js';
+import * as httpModule from '../../bin/lib/http.js';
 import { pensmithHttpCacheDir } from '../../bin/lib/paths.js';
 import { __setRegistrarSendForTest } from '../../bin/lib/sources/registrar-response.js';
 import { isSourceLookupError, type LookupResult } from '../../bin/lib/sources/lookup.js';
@@ -38,13 +39,25 @@ import { assertOfflineMiss } from './recorded.js';
 
 type MockAgentT = ReturnType<typeof installMockAgent>['agent'];
 
+/**
+ * Forget the transport's per-host state between cases: its rate buckets, and —
+ * where the transport keeps them (the SRC-17 exhausted-host marker and circuit
+ * breaker) — the host-availability records, so one case's 503s never make the
+ * next case's host look unavailable.
+ */
+function resetTransportState(): void {
+  _resetBucketsForTest();
+  const hostReset = (httpModule as Record<string, unknown>)['_resetHostStateForTest'];
+  if (typeof hostReset === 'function') (hostReset as () => void)();
+}
+
 /** Run `fn` in the test-lane live seam with a fresh MockAgent (and the contact email, when given). */
 export async function liveLane<T>(fn: (agent: MockAgentT) => Promise<T>, opts: { contactEmail?: string } = {}): Promise<T> {
   const savedLane = process.env['PENSMITH_NETWORK_TESTS'];
   const savedEmail = process.env['PENSMITH_CONTACT_EMAIL'];
   process.env['PENSMITH_NETWORK_TESTS'] = '1';
   if (opts.contactEmail !== undefined) process.env['PENSMITH_CONTACT_EMAIL'] = opts.contactEmail;
-  _resetBucketsForTest();
+  resetTransportState();
   const { agent, restore } = installMockAgent();
   try {
     return await fn(agent);
