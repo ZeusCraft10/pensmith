@@ -272,6 +272,9 @@ const REQUIREMENT_PARTS: readonly RegExp[] = [
   /^(?:due|deadline|submit|submitted)\b/i,
 ];
 
+/** A trailing "for my History class" / "for the PHIL 101 seminar" — who the paper is for, not what it is about. */
+const COURSE_TAIL = /\s+(?:for\s+(?:my|our|the|this|your)|in\s+(?:my|our|your))\s+(?:[\p{L}\p{N}&.'’-]+\s+){0,4}(?:class|course|seminar|module|unit|lecture|tutorial|section)\s*$/iu;
+
 function isRequirementPart(part: string): boolean {
   const p = part.trim().replace(/[.)]+$/, '');
   return p.length === 0 || citationStyleKey(p) !== null || REQUIREMENT_PARTS.some((re) => re.test(p));
@@ -319,6 +322,7 @@ export function topicFromAssignment(text: string): string {
     .replace(/^\s*(?:literature\s+review|lit(?:erature)?\s+survey|review|paper|essay|report|study|analysis|article|proposal|memo|primer|summary|brief|piece|assignment|lab\s+report|research\s+paper)s?\s*/i, '')
     .replace(/^\s*in\s+(?:english|plain\s+language|the\s+(?:first|third)\s+person)\s+/i, '')
     .replace(/^\s*(?:on|about|of|regarding|concerning|examining|exploring|discussing|covering|addressing|investigating|into|that\s+(?:examines|explores|discusses|analy[sz]es|argues))\s+/i, '')
+    .replace(COURSE_TAIL, '')
     .replace(/[,;:]+$/, '')
     .trim();
   return s.length >= 3 ? s.slice(0, 200) : '';

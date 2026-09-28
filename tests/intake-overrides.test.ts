@@ -133,6 +133,10 @@ test('GRND-02: paper type, topic phrase and discipline mention (LF and CRLF)', (
   assert.equal(topicFromAssignment('Essay, 5 pages, in MLA format, on the French Revolution.'), 'the French Revolution');
   assert.equal(topicFromAssignment('Write a 1,500–2,000 word argumentative essay on whether social media harms adolescents.'), 'whether social media harms adolescents');
   assert.equal(topicFromAssignment('Use MLA for this paper.'), '', 'an instruction is never a topic');
+  for (const t of both('Write a 6 page essay on the causes of the French Revolution for my History class. Use MLA for this paper.')) {
+    assert.equal(topicFromAssignment(t), 'the causes of the French Revolution', 'who the paper is for is not its topic');
+  }
+  assert.equal(topicFromAssignment('Write an essay on grading practices in the course'), 'grading practices in the course', 'a topic that is about a course keeps it');
   for (const t of both('For my Biology class: write a lab report on enzyme kinetics.')) assert.equal(disciplineMentionFrom(t), 'biology');
   assert.equal(disciplineMentionFrom('Discipline: Psychology\nWrite an essay on memory.'), 'psychology');
   assert.equal(disciplineMentionFrom(A1), null, '"literature review" is a paper type, not the Literature discipline');
