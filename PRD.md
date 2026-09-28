@@ -207,15 +207,19 @@ Each subsection below describes a workflow stage. Most are invoked transparently
 
 ### 7.2 Research (`/pensmith research`)
 
-- Reads PROJECT.md + config.toml.
-- **Topic disambiguation gate**: spawns a tiny disambiguation subagent that scans the assignment for ambiguous terms (e.g., "transformer" could be ML or EE). If ambiguous, asks the user before searching. Saves wasted research passes.
-- Generates 5–10 focused search queries from the assignment.
-- Spawns one `pensmith-source-researcher` subagent per query (Tier 1) or loops sequentially (Tier 2). Each returns 3–5 candidates.
+- Reads the paper's brief (`.paper/INTAKE.md`: topic, discipline, assignment) + config.toml (`[sources]`, `[project] discipline_preset`).
+- **Topic disambiguation gate**: the `topic-disambiguator` step reads the topic and the assignment for ambiguous terms (e.g., "transformer" could be ML or EE) and proposes 1–3 scopes, each with a label, a one-line description and its queries. If the topic is ambiguous (or more than one scope came back), the user picks one before anything is searched (registry gate `research-scope`): a select in a terminal, `--scope <n|text>` non-interactively (a scope number, or words from its label or description; a value that names no scope is a usage error listing them), and `--yolo` takes scope 1 and says so. Saves wasted research passes.
+- Generates 5–10 focused search queries (at most 8 words each): a scope's queries are clamped to 10 (`--queries <n>` lowers the cap) and a short scope is padded from a deterministic expansion of the topic's keywords. Without a model (`PENSMITH_NO_LLM`, `--dry-run`) that deterministic expansion is the query list, and the run says so on stdout and in RESEARCH.md.
+- Queries go to the discipline preset's preferred adapters first (§8 source preference, mapped to adapters: `nber` is Crossref restricted to NBER's DOI prefix 10.3386; JSTOR, APA PsycNET and PhilPapers are reached through OpenAlex / Crossref / PubMed coverage), then the rest of the default five (OpenAlex, Semantic Scholar, Crossref, arXiv, PubMed); `[sources] allowed_databases` restricts the plan to exactly the listed databases. Spawns one `pensmith-source-researcher` subagent per query (Tier 1) or loops sequentially (Tier 2).
+- **Every adapter's outcome is reported**, on stdout and in RESEARCH.md, per adapter and per query: a result count, or the reason it returned nothing — `failed (<reason with its hint>)` (e.g. `HTTP 429 — rate limited; set PENSMITH_S2_API_KEY`), `offline: no recorded fixture`, `skipped (not in allowed_databases)`, `skipped (not configured)`. A failed adapter never reads as "no results".
 - **If user provided BYO PDFs** (§9): also ingests, parses, and merges them into the candidate pool, tagged `bring-your-own`.
 - **If Zotero MCP is detected** (§11): also pulls relevant items from the user's Zotero library, tagged `zotero`.
-- `pensmith-source-evaluator` scores candidates for relevance, recency, policy compliance; dedupes; tiers (peer-reviewed / preprint / book / gov-report / other).
-- **Approval gate**: shows the curated list, lets the user prune/approve/add.
-- Writes `.paper/RESEARCH.md` (curated source list with abstracts + why-relevant notes) and `.paper/CITATIONS.bib` (BibTeX seed).
+- Candidates are deduped (DOI, then title) and tiered (peer-reviewed / preprint / book / gov-report / other): deterministically from the registrar's metadata wherever it decides the tier (a journal or conference article, a preprint server or an arXiv-only record, a book or an ISBN, a report from a government publisher or domain, news and web pages), by the source evaluator otherwise. The `[sources]` policy (§10) is then enforced deterministically; an excluded candidate is listed with the rule that excluded it.
+- `pensmith-source-evaluator` judges each remaining candidate — keep or reject, a short reason, a relevance score (0–1) and a tier — with the candidates sent once, at most 150 per call. Its rejections are respected: when it rejects every candidate, research reports `no relevant sources` with guidance and keeps none. A candidate the evaluator could not judge (a failed call, a missing verdict) is kept as "not evaluated", with a disclosure. Kept sources rank by relevance, ties by source preference.
+- **Approval gate** (`research-prune`): shows the kept candidates (preselected) and the evaluator's rejections (unselected, with the reason), each with its tier, year and an abstract excerpt, and lets the user prune/approve/add. `--yolo` keeps the evaluator's picks.
+- Zero usable sources (none found, all excluded by the policy, all rejected, none kept) exits non-zero naming why; LIBRARY.json is left unchanged and the research log is still written.
+- Cross-checks retractions before the library write: a retracted source is flagged (and warned about), one whose lookup failed is listed as "retraction status unknown".
+- Merges the kept sources into `.paper/LIBRARY.json` with their type, tier, relevance and why-relevant note (the evaluator's reason), rendering `.paper/CITATIONS.bib` (BibTeX seed) and `.paper/CITATIONS.ris` from it. Writes `.paper/RESEARCH.md`: the research log (scope, queries, per-adapter and per-query outcomes, exclusions, retractions) and the curated source list rendered from LIBRARY.json — per source the formatted reference, tier, relevance, provenance tags (search, bring-your-own, zotero, added, plan-research), why-relevant note and abstract. The user's notes below the log are never touched.
 - Each citation gets a `last_verified` ISO timestamp (§7.12).
 
 ### 7.3 Outline (`/pensmith outline`)
@@ -238,7 +242,7 @@ This is the equivalent of GSD's `roadmap` step — it produces the section struc
 - Reads the section's stub PLAN.md from outline.
 - For each claim the section will make: identifies which sources support it, what evidence is required, what counterexamples should be addressed.
 - Optional `--revise` flag: re-plans an existing section based on new feedback (e.g., from a verification gap).
-- Optional `--research <query>` flag: triggers a section-scoped research pass for additional sources if the outline allocation is insufficient.
+- Optional `--research <query>` flag: triggers a section-scoped research pass for additional sources if the outline allocation is insufficient — the query and the query joined to the section title, through the same adapters, tiers, policy and evaluator as §7.2; the approved hits (registry gate `plan-research`, `--yolo` adds every kept hit) join LIBRARY.json and ONLY that section's `assigned_sources`, a section-scoped `RESEARCH-LOG.md` entry records the pass, and the curated RESEARCH.md keeps its content (only its source list is refreshed). Zero hits are reported with each adapter's reason (non-zero exit).
 - Writes `.paper/sections/<N>/PLAN.md` (claim-source mapping, paragraph-level structure, target word count, voice hints).
 
 ### 7.6 Write section (`/pensmith write <N>` — equivalent to `/gsd:execute-phase`)
@@ -499,7 +503,7 @@ Edge cases documented in PRIVACY.md: PDF contents stay local; only Crossref/Open
 
 ## 10. Per-project config (`.paper/config.toml`)
 
-`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 1`. An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
+`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 1`. An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent, except where a comment marks the value as an example. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
 
 ```toml
 schema_version = 1                   # MANDATORY — see §14 NFRs
@@ -518,16 +522,16 @@ counterargument_required = true
 pii_redaction = false                # if true, intake redacts PII before any LLM call
 
 [sources]
-require_doi = true
+require_doi = true                   # require a registrar identifier: a DOI, an ISBN (books), an arXiv id (preprints) or a PMID — Pass 1 can re-check each; the History, Literature and Philosophy presets prefer books, which carry ISBNs, not DOIs
 allow_preprints = true
 allow_books = true
 allow_gov_reports = true
-allow_news = false
-allowed_databases = ["openalex", "semanticscholar", "crossref", "arxiv", "pubmed"]
+allow_news = false                   # newspaper and magazine articles
+allowed_databases = ["openalex", "semanticscholar", "crossref", "arxiv", "pubmed"]  # example — unset: the preset's source preference (§8), then these five; values: openalex | semanticscholar | crossref | arxiv | pubmed | books | nber (Crossref, DOI prefix 10.3386) | zotero
 byo_pdf_dir = ""                     # path to user-provided PDFs, optional
 zotero_collection = ""               # optional Zotero collection name, if Zotero MCP connected
-min_year = 2010
-peer_reviewed_only = false
+min_year = 2010                      # example — unset: no year filter (passed to the adapters as a search filter where they have one)
+peer_reviewed_only = false           # true: only sources whose tier is peer-reviewed (an unknown tier is excluded)
 
 [verification]
 fetch_full_text = true

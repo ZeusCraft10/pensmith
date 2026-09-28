@@ -101,13 +101,16 @@ export type ScopeSource = 'model' | 'stub' | 'fallback';
 
 const GUIDANCE = 'refine the topic (pensmith new), choose another scope (--scope), or add sources you know (pensmith add <doi>)';
 
-function out(line: string): void {
-  process.stdout.write(`${line}\n`);
+/** Where a run's progress lines go (stdout / stderr unless a caller injects them). */
+export interface ResearchIo {
+  readonly out: (line: string) => void;
+  readonly err: (line: string) => void;
 }
 
-function err(line: string): void {
-  process.stderr.write(`${line}\n`);
-}
+const STD_IO: ResearchIo = {
+  out: (line) => void process.stdout.write(`${line}\n`),
+  err: (line) => void process.stderr.write(`${line}\n`),
+};
 
 function oneLine(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
@@ -221,7 +224,7 @@ function queryNote(scope: ResearchScope, source: ScopeSource): string | null {
 }
 
 /** Pick the scope: --scope, the only one, --yolo's scope 1, or the research-scope question. */
-async function chooseScope(d: Disambiguation, scopeArg: string | undefined, yolo: boolean): Promise<number> {
+async function chooseScope(d: Disambiguation, scopeArg: string | undefined, yolo: boolean, io: ResearchIo): Promise<number> {
   if (scopeArg !== undefined) return resolveScopeArg(scopeArg, d.scopes);
   if (!d.ambiguous && d.scopes.length === 1) return 0;
   const outcome = await runGate('research-scope', {
@@ -241,7 +244,7 @@ async function chooseScope(d: Disambiguation, scopeArg: string | undefined, yolo
   });
   if (outcome.kind === 'yolo') {
     const s = d.scopes[0] as ResearchScope;
-    out(`pensmith research: --yolo: using scope 1 of ${d.scopes.length} — "${s.label}": ${s.description}`);
+    io.out(`pensmith research: --yolo: using scope 1 of ${d.scopes.length} — "${s.label}": ${s.description}`);
     return 0;
   }
   if (outcome.kind === 'answered' && outcome.answer.kind === 'select') {
@@ -317,6 +320,8 @@ export interface ResearchRunOptions {
   readonly scope?: string | undefined;
   /** `--queries <n>` (raw). */
   readonly queries?: string | undefined;
+  /** Progress sink (default stdout / stderr). */
+  readonly io?: ResearchIo;
 }
 
 export interface ResearchRunResult {
@@ -334,6 +339,7 @@ export interface ResearchRunResult {
 /** `pensmith research` (see the module header). */
 export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRunResult> {
   const root = opts.root;
+  const { out, err } = opts.io ?? STD_IO;
   const cap = parseQueriesCap(opts.queries);
   const scopeArg = parseScopeArg(opts.scope);
 
@@ -370,7 +376,7 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
   if (d.source === 'fallback') {
     err(`pensmith research: WARN — ${d.fallbackReason ?? 'the topic disambiguator failed'}; using the deterministic expansion of the intake topic instead`);
   }
-  const chosen = d.scopes[await chooseScope(d, scopeArg, opts.yolo)] as ResearchScope;
+  const chosen = d.scopes[await chooseScope(d, scopeArg, opts.yolo, { out, err })] as ResearchScope;
   const note = queryNote(chosen, d.source);
   out(`pensmith research: scope "${chosen.label}" — ${chosen.queries.length} quer${chosen.queries.length === 1 ? 'y' : 'ies'}${note ? ` (${note})` : ''}`);
   chosen.queries.forEach((q, i) => out(`  ${i + 1}. ${q}`));
@@ -393,6 +399,7 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     topic,
     discipline,
     scope: scopeText,
+    warn: err,
   });
   out('pensmith research: sources by adapter');
   for (const line of renderAdapterTable(pass.adapters)) out(line);
