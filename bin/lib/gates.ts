@@ -40,7 +40,9 @@ export type GateId =
   // Phase 18 (GRND-01, GRND-02, GRND-09): seam S-A, applied byte-identically by every stream.
   | 'assignment-pickup'
   | 'intake-defaults'
-  | 'reoutline';
+  | 'reoutline'
+  // Phase 19 (GRND-17): seam S-B, applied byte-identically by every Phase 19 stream.
+  | 'plan-research';
 
 export interface GateDef {
   readonly id: GateId;
@@ -75,6 +77,7 @@ export const GATES: readonly GateDef[] = Object.freeze([
   { id: 'assignment-pickup', label: 'Use the assignment file in this folder?', yolo: 'skip', yoloChoice: 'use the file', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'GRND-01' },
   { id: 'intake-defaults', label: 'Accept the intake defaults?', yolo: 'skip', yoloChoice: 'accept the defaults', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-02' },
   { id: 'reoutline', label: 'Re-outline a paper that already has drafts?', yolo: 'skip', yoloChoice: 're-outline (only with --force)', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-09' },
+  { id: 'plan-research', label: 'Add these research hits to the section?', yolo: 'skip', yoloChoice: 'add every hit to the section', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-17' },
 ] satisfies GateDef[]);
 
 export function gateDef(id: GateId): GateDef {
