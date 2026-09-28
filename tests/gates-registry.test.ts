@@ -332,8 +332,9 @@ test('RUN-28: PRD §7.20 carries the gate table and it matches GATES (drift test
   for (const row of rows.filter((r) => !ids.has(r.id))) {
     assert.match(row.owner, /^[A-Z]+-\d+ \(planned\)$/, `${row.id} is not in GATES, so it must be marked (planned) with its landing requirement`);
   }
-  // GRND-01, GRND-02 and GRND-09 landed their gates in Phase 18 (seam S-A).
-  for (const req of ['GRND-17', 'VRFY-22', 'VRFY-20']) {
+  // GRND-01, GRND-02 and GRND-09 landed their gates in Phase 18 (seam S-A);
+  // GRND-17 landed plan-research in Phase 19 (seam S-B).
+  for (const req of ['VRFY-22', 'VRFY-20']) {
     assert.ok(rows.some((r) => r.owner === `${req} (planned)`), `future gate from ${req} is listed`);
   }
 });

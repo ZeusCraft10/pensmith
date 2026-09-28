@@ -424,7 +424,7 @@ For power users / batch processing / CI testing:
 | `sketch-confirm` | Proceed to intake with this thesis? | skip: proceed to intake | refuse: 3 | 3 | ERGO-05 |
 | `assignment-pickup` | Use the assignment file in this folder? | skip: use the file | skip: 0 | 0 | GRND-01 |
 | `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 |
-| `plan-research` | Run this section-scoped research? | skip: run it | refuse: 3 | 3 | GRND-17 (planned) |
+| `plan-research` | Add these research hits to the section? | skip: add every hit to the section | refuse: 3 | 3 | GRND-17 |
 | `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |
 | `quote-accept` | Accept this quote match? | never | refuse: 3 | 3 | VRFY-20 (planned) |
 | `reoutline` | Re-outline a paper that already has drafts? | skip: re-outline (only with --force) | refuse: 3 | 3 | GRND-09 |
