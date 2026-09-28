@@ -30,7 +30,6 @@ import { renderIntakeDocument } from '../bin/lib/intake-brief.js';
 import { _resetHostStateForTest } from '../bin/lib/http.js';
 import { provenanceTags } from '../bin/lib/research-md.js';
 import type { SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
-import type { SearchOptions } from '../bin/lib/sources/search-failure.js';
 
 const WOOD = {
   key: 'XMT4Q4FT',
@@ -108,7 +107,7 @@ function fakes(zoteroCalls: string[]): AdapterRegistry {
     reg[name] = { search: async () => (name === 'crossref' ? [hit(1)] : []) };
   }
   reg['zotero'] = {
-    async search(query: string, _opts?: SearchOptions): Promise<SourceCandidate[]> {
+    async search(query: string): Promise<SourceCandidate[]> {
       zoteroCalls.push(query);
       return [{ ...hit(9), source: 'zotero', title: `A Zotero item about ${query}`, citekey: 'zot92018', doi: '10.5555/zotero.9', id: 'zotero:users/777/ZOT00009' } as SourceCandidate];
     },
