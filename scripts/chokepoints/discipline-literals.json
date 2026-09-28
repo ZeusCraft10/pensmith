@@ -1,0 +1,13 @@
+{
+  "id": "discipline-literals",
+  "requirement": "GRND-06",
+  "module": "bin/lib/disciplines.ts",
+  "description": "Discipline presets have ONE loader and resolver, bin/lib/disciplines.ts, over templates/presets/disciplines.json (the PRD §8 table): it alone maps a discipline to its citation style, source preference, sectioning convention, counterargument default, per-paragraph citation density and tone, and it alone normalises free text to a preset slug. No other shipped module holds a discipline-slug string literal ('history', 'computer-science', …): a private map is how citations.ts, citation-density.ts and intake-parse.ts drifted from PRD §8 and from each other. Call presetFor / resolveDiscipline / defaultCitationStyleFor / densityBandFor / normalizeDisciplineSlug instead; data that names disciplines (aliases, stub prose) lives in JSON.",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs"],
+  "allow": ["bin/lib/disciplines.ts"],
+  "match": {
+    "kind": "string-literal",
+    "pattern": "^(?:computer-science|biology|history|literature|psychology|economics|philosophy|sociology)$"
+  },
+  "fixture": "tests/fixtures/chokepoints/discipline-literals.violation.ts.txt"
+}

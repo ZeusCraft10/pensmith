@@ -25,6 +25,7 @@ import * as fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PensmithError, EXIT_USAGE } from './exit-codes.js';
+import { stdinMayCarryAssignment } from './stdin-source.js';
 
 // ---------------------------------------------------------------------------
 // Bare-slug validation (Phase 3 Plan 03-03 Task 3.3 / T-3-12 mitigation).
@@ -433,6 +434,11 @@ export interface ResolvePaperRootOptions {
   readonly readOnly?: boolean;
   readonly cwd?: string;
   readonly env?: NodeJS.ProcessEnv;
+  /**
+   * Whether stdin may carry a piped assignment (GRND-01, D-18-08). Defaults to
+   * the fstat test of stdin-source.ts (no read); tests pass it explicitly.
+   */
+  readonly stdinAssignment?: boolean;
 }
 
 /** Verbs that start a paper in the cwd and never follow the pointer. */
@@ -621,9 +627,12 @@ export function resolvePaperRoot(opts: ResolvePaperRootOptions): PaperRootResolu
   }
   if (envRoot) return { kind: 'root', root: asProjectRoot(envRoot), source: 'env' };
   if (hasPaper(cwd)) return { kind: 'root', root: cwd, source: 'cwd' };
+  // A bare run starts a new paper here when the folder holds an assignment
+  // file OR an assignment is piped on stdin (GRND-01, D-18-08: the fstat test
+  // only — stdin is read later, by `new`).
   if (
     (opts.verb !== null && NEW_PAPER_VERBS.has(opts.verb))
-    || (opts.verb === null && findAssignmentFile(cwd) !== null)
+    || (opts.verb === null && (findAssignmentFile(cwd) !== null || (opts.stdinAssignment ?? stdinMayCarryAssignment(env))))
   ) {
     return { kind: 'root', root: cwd, source: 'new' };
   }

@@ -1,39 +1,55 @@
-// bin/lib/pii.ts — PII redaction primitives (ARCH-17 / D-49).
+// bin/lib/pii.ts — PII redaction primitives (ARCH-17 / D-49; GRND-05, D-18-12).
 //
-// This module is the redaction chokepoint that W9 session-log calls before
-// every disk write. No log line escapes without going through redactPii
-// (string body) and redactKeys (context object).
+// This module is the redaction chokepoint that the session log calls before
+// every disk write (redactKeys, then deepRedactPii), and that intake calls on
+// every piece of user text before a model sees it when the user opted in to
+// PII redaction (GRND-05: the assignment, the answers, the thesis seed and the
+// follow-up answers; the raw text stays only in .paper/INTAKE.raw.local).
 //
-// Per D-49 the implementation is HAND-ROLLED regex over 5 classes; we do
-// not pull in a regex/PII library. The regex source must remain reviewable
-// in diff form — see the inline comment block above each pattern.
+// Per D-49 the implementation is HAND-ROLLED regex; we do not pull in a
+// regex/PII library or an NLP model. Every pattern is reviewable in diff form —
+// see the comment above each one.
 //
-// Threat model coverage (see 01-08-PLAN.md threat_model section):
-//   T-01-06 (PII to disk)       — mitigated via redactPii on every msg
-//   T-01-07 (secrets in headers) — mitigated via redactKeys SENSITIVE set
-//   T-01-08 (proto pollution)    — mitigated via Object.create(null) clone
-//                                   container + isPlainObject proto guard
-//   T-01-REDOS-01 (regex DoS)    — bounded character classes, NAME token
-//                                   length cap [A-Z][a-z]{1,20}, no nested
-//                                   quantifiers
+// Threat model coverage:
+//   T-01-06 (PII to disk)        — redactPii on every string the log writes
+//   T-01-07 (secrets in headers)  — redactKeys SENSITIVE set
+//   T-01-08 (proto pollution)     — Object.create(null) clone containers +
+//                                   isPlainObject proto guard
+//   T-01-REDOS-01 (regex DoS)     — bounded quantifiers only (name tokens ≤ 21
+//                                   letters, ≤ 3 initials / particles, ids ≤ 25
+//                                   chars); no nested unbounded repetition
+//
+// Classes (GRND-05):
+//   EMAIL, PHONE (US and +international), SSN, ID (a labelled identifier:
+//   "Student ID: 2024-00173", "ID no. 44-1234", "SSN: 123456789"), IP, IBAN,
+//   NAME (two or three capitalised tokens, with middle initials — "Jane Q.
+//   Doe" —, hyphens — "Mary-Anne Smith" —, apostrophes — "O'Brien" —, and
+//   particles — "Karl-Heinz van der Berg", "María de la Cruz"; an honorific
+//   plus a surname — "Prof. Smith"), DATE (ISO, US, EU and textual: "March 3,
+//   2026", "3 March 2026", "Mar. 3").
+//
+// Precision (GRND-05): a NAME candidate is NOT redacted when
+//   - every token is a curated non-name word (name-suppression.json: months,
+//     section headings, sentence-leading function words, academic terms);
+//   - its last token is an entity head noun (Revolution, War, Treaty, Republic,
+//     Empire, University, Act, …: "French Revolution", "Roman Empire") or its
+//     first token opens an entity name ("Treaty …", "Lake …", "Mount …");
+//   - its last token is a month or weekday — a date fragment ("Due March");
+//   - every token belongs to a caller-supplied keep list (intake passes the
+//     assignment's labelled Topic/Title line: a paper may be ABOUT a person).
+//
+// Identifiers are never rewritten (GRND-05): UUIDs (paperIds), DOIs, ISBNs,
+// arXiv ids, ISO-8601 timestamps and long hex digests are found first, and a
+// PII candidate that overlaps one is dropped — so SESSION.log keeps every
+// paperId and DOI intact (the PHONE rule used to log `1[REDACTED:PHONE]-4333-…`).
 //
 // Pure module: NO I/O, NO fs, NO fetch, NO logging. The only import is a
 // statically-bundled JSON data file (name-suppression.json) resolved at
-// module load — this is NOT runtime I/O (no fs.readFile / fetch / Date.now /
-// Math.random anywhere). diffPii is the new pure, deterministic export added
-// in Phase 9.
-//
-// Phase 9 additions (09-01 / ERGO-07):
-//   - IP   (dotted-quad IPv4) and IBAN-like classes, added BEFORE NAME in the
-//     scan order so they win overlap resolution against the looser NAME regex.
-//   - NAME_SUPPRESSION dictionary (~500 curated capitalized non-name tokens)
-//     drops academic/section/month NAME false positives WITHOUT any NLP
-//     dependency (Presidio/NLP deferred to v2 per PII-V2-01).
-//   - diffPii(): pure positional reviewable diff derived from classifyPii.
+// module load — not runtime I/O. diffPii is pure and deterministic.
 
 import nameSuppression from './name-suppression.json' with { type: 'json' };
 
-export type PiiKind = 'EMAIL' | 'PHONE' | 'SSN' | 'NAME' | 'DATE' | 'IP' | 'IBAN';
+export type PiiKind = 'EMAIL' | 'PHONE' | 'SSN' | 'ID' | 'NAME' | 'DATE' | 'IP' | 'IBAN';
 
 export interface PiiMatch {
   kind: PiiKind;
@@ -41,224 +57,341 @@ export interface PiiMatch {
   raw: string;
 }
 
+/** Caller options for one redaction. */
+export interface PiiOptions {
+  /**
+   * Phrases whose capitalised words are never redacted as a NAME (e.g. the
+   * assignment's labelled topic line — "Topic: Abraham Lincoln's speeches").
+   * Every other class is unaffected.
+   */
+  readonly keep?: readonly string[];
+}
+
 // ---------------------------------------------------------------------------
-// Regex specifications (D-49 — VERBATIM from 01-08-PLAN.md <action>).
-// Any change to these patterns is a spec deviation and requires a SUMMARY note.
+// Regex specifications. A change to a pattern is a spec change: note it in the
+// phase SUMMARY and extend tests/fixtures/pii/ (the gold set).
 // ---------------------------------------------------------------------------
 
-// EMAIL — standard local-part + dotted domain. Intentionally not RFC-strict.
-// "Good enough for redaction; false positives acceptable, false negatives
-// are the failure mode." (D-49)
-const RE_EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+/** No letter or digit before (a Unicode-aware \b for the u-flag patterns). */
+const L_EDGE = String.raw`(?<![\p{L}\p{N}])`;
+/** No letter or digit after. */
+const R_EDGE = String.raw`(?![\p{L}\p{N}])`;
 
-// PHONE_US (kind: PHONE) — optional country code, optional parens around
-// area code, optional separators (dash/dot/space).
+// EMAIL — standard local-part (apostrophes included: o'brien@…) + dotted
+// domain. Intentionally not RFC-strict: "false positives acceptable, false
+// negatives are the failure mode" (D-49).
+const RE_EMAIL = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+// PHONE (US) — optional country code, optional parens around the area code,
+// optional separators (dash / dot / space).
 const RE_PHONE = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
 
-// SSN — word-boundary anchored canonical dashed form ONLY. Per D-49 the
-// spaceless 9-digit form has too high a false-positive rate to redact.
+// PHONE (international) — a leading "+", a 1-3 digit country code, then 2-5
+// digit groups; kept only when it has 8 to 15 digits (E.164) — see classify.
+const RE_PHONE_INTL = /\+\d{1,3}(?:[ .-]?\(?\d{1,4}\)?){2,5}(?!\d)/g;
+
+// SSN — word-boundary anchored canonical dashed form ONLY (the spaceless form
+// is caught only after an "SSN" label, by the ID class).
 const RE_SSN = /\b\d{3}-\d{2}-\d{4}\b/g;
 
-// IP (kind: IP) — Phase 9. Dotted-quad IPv4 literal. Fixed-shape: exactly
-// four 1-3 digit groups separated by dots. Intentionally not range-validated
-// (e.g. 999.999.999.999 still matches) — "false positives acceptable, false
-// negatives are the failure mode" (D-49). No nested quantifiers, so the
-// T-01-REDOS-01 bounded-backtracking guarantee holds.
+// ID — a labelled identifier. Only the VALUE (group 1) is redacted, so the
+// label stays readable ("Student ID: [REDACTED:ID]"). The value must hold a
+// digit and be 3-25 characters; the label is one of the common ID labels.
+const ID_LABEL = String.raw`(?:(?:student|employee|staff|matriculation|matric|registration|enrol(?:l)?ment|passport|licen[cs]e|patient|member(?:ship)?|account|candidate|exam(?:ination)?|library|badge|university|school|campus|roll|admission|application|tax|insurance)\s*(?:id|identification|no\.?|number|num\.?|#|code)|(?:id|identification)(?:\s*(?:no\.?|number|num\.?|#|code))?|ssn|sin|social\s+security(?:\s+(?:no\.?|number))?|nhs\s+(?:no\.?|number))`;
+const RE_ID = new RegExp(
+  String.raw`${L_EDGE}${ID_LABEL}\s*[:#=]?\s*(?:is\s+)?([A-Za-z]{0,4}[-\s]?\d[\dA-Za-z-]{2,24})${R_EDGE}`,
+  'giud',
+);
+
+// IP — dotted-quad IPv4 literal, not range-validated (D-49).
 const RE_IP = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
 
-// IBAN-like (kind: IBAN) — Phase 9. Country code (2 letters) + 2 check digits
-// + BBAN (4-30 alphanumerics). The {4,30} upper cap preserves the
-// T-01-REDOS-01 bounded-quantifier guarantee (real IBANs are ≤34 chars; the
-// 4-char floor avoids matching bare 2-letter+2-digit codes). Check-digit/MOD-97
-// validation is NOT performed — this is a redaction heuristic, not a validator.
+// IBAN-like — country code + 2 check digits + 4-30 alphanumerics (bounded).
 const RE_IBAN_LIKE = /\b[A-Z]{2}\d{2}[A-Z0-9]{4,30}\b/g;
 
-// NAME — two-or-three capitalized tokens (handles middle name and
-// hyphenated surnames). Token length cap of 20 lowercase chars after the
-// initial capital prevents pathological backtracking (T-01-REDOS-01).
-const RE_NAME = /\b[A-Z][a-z]{1,20}(?:[ -][A-Z][a-z]{1,20}){1,2}\b/g;
+// NAME — Unicode-aware. A name token: an optional "O'"-style prefix, a
+// capital and 1-20 lower-case letters, an optional "Mc"/"Mac"-style inner
+// capital part, an optional hyphenated second part ("Mary-Anne"). Between the
+// first token and each next one: up to three middle initials ("Q.") and up to
+// three lower-case particles ("van der", "de la"). Two or three tokens.
+const NAME_TOKEN = String.raw`(?:\p{Lu}['’])?\p{Lu}\p{Ll}{1,20}(?:\p{Lu}\p{Ll}{1,20})?(?:-\p{Lu}\p{Ll}{1,20})?`;
+const NAME_INITIAL = String.raw`\p{Lu}\.`;
+const NAME_PARTICLE = String.raw`(?:van|von|der|den|de|del|della|degli|di|da|du|dos|das|la|le|ter|ten|bin|ibn|al|el|zu|y)`;
+const RE_NAME = new RegExp(
+  String.raw`${L_EDGE}${NAME_TOKEN}(?:(?:[ ]${NAME_INITIAL}){0,3}(?:[ ]${NAME_PARTICLE}){0,3}[ ]${NAME_TOKEN}){1,2}${R_EDGE}`,
+  'gu',
+);
+// NAME with leading initials: "J. R. Smith", "A. Vaswani".
+const RE_NAME_INITIALS_FIRST = new RegExp(
+  String.raw`${L_EDGE}${NAME_INITIAL}(?:[ ]?${NAME_INITIAL}){0,2}(?:[ ]${NAME_PARTICLE}){0,3}[ ]${NAME_TOKEN}${R_EDGE}`,
+  'gu',
+);
+// NAME after an honorific: "Prof. Smith", "Dr Okafor" — only the surname
+// (group 1) is redacted. A full name after the honorific is caught by RE_NAME.
+const RE_NAME_HONORIFIC = new RegExp(
+  String.raw`${L_EDGE}(?:Dr|Prof|Professor|Mr|Mrs|Ms|Mx|Miss|Sir|Dame|Rev|Hon)\.?[ ]+((?:${NAME_PARTICLE}[ ]){0,3}${NAME_TOKEN})${R_EDGE}`,
+  'gud',
+);
 
-// NAME suppression dictionary (Phase 9 / ERGO-07). ~500 curated capitalized
-// tokens that the loose two-cap-token NAME regex over-matches (months,
-// weekdays, section headings, sentence-leading function words, common
-// academic terms). Bundled JSON, NOT a runtime dependency — read once at
-// module load via a static import, which keeps this module pure. A NAME
-// candidate is suppressed ONLY when EVERY token in the match is a member of
-// this set (RESEARCH Pitfall 6: a multi-token name whose last token is a real
-// surname — "In Smith" — survives because "Smith" is not in the set).
+// NAME suppression dictionary (Phase 9): ~600 curated capitalised tokens the
+// loose NAME regex over-matches (months, weekdays, section headings,
+// sentence-leading function words, academic terms). Bundled JSON, read once.
 const NAME_SUPPRESSION: ReadonlySet<string> = new Set<string>(nameSuppression);
 
-// DATE — union of three sub-patterns: ISO, US, EU.
+// Entity head nouns (GRND-05): a capitalised phrase ENDING in one of these is
+// an event, institution, place or document, not a person.
+const ENTITY_HEADS: ReadonlySet<string> = new Set([
+  'Revolution', 'Revolutions', 'War', 'Wars', 'Treaty', 'Treaties', 'Republic', 'Empire', 'Kingdom', 'Dynasty',
+  'University', 'College', 'Institute', 'Academy', 'School', 'Act', 'Acts', 'Bill', 'Amendment', 'Constitution',
+  'Declaration', 'Charter', 'Accord', 'Accords', 'Agreement', 'Pact', 'Convention', 'Doctrine', 'Plan', 'Deal',
+  'Union', 'League', 'Alliance', 'Coalition', 'Party', 'Parliament', 'Congress', 'Senate', 'Assembly', 'Council',
+  'Court', 'Tribunal', 'Church', 'Cathedral', 'Temple', 'Mosque', 'Movement', 'Era', 'Age', 'Period', 'Crisis',
+  'Depression', 'Recession', 'Renaissance', 'Reformation', 'Enlightenment', 'Rebellion', 'Uprising', 'Revolt',
+  'Riots', 'Massacre', 'Battle', 'Siege', 'Campaign', 'Expedition', 'Crusade', 'Crusades', 'Army', 'Navy',
+  'Force', 'Forces', 'Guard', 'Corps', 'Bank', 'Company', 'Corporation', 'Foundation', 'Society', 'Association',
+  'Organization', 'Organisation', 'Agency', 'Commission', 'Ministry', 'Office', 'Bureau', 'Service', 'Hospital',
+  'Museum', 'Library', 'Press', 'Times', 'Journal', 'Review', 'Prize', 'Award', 'Ocean', 'Sea', 'River', 'Lake',
+  'Mountains', 'Mountain', 'Valley', 'Desert', 'Island', 'Islands', 'Peninsula', 'Coast', 'Bay', 'Canal', 'Bridge',
+  'Street', 'Avenue', 'Road', 'Square', 'Park', 'State', 'States', 'City', 'County', 'Province', 'Region',
+  'Territory', 'Colony', 'Colonies', 'Nations', 'Commonwealth', 'Federation', 'Confederacy', 'Summit',
+  'Conference', 'Festival', 'Games', 'Olympics', 'Cup', 'Syndrome', 'Disease', 'Effect', 'Theory', 'Theorem',
+  'Law', 'Laws', 'Principle', 'Paradox', 'Hypothesis', 'Model', 'Test', 'Scale', 'Index', 'Program', 'Programme',
+  'Project', 'Mission', 'Initiative', 'Policy', 'Report', 'Survey', 'Census', 'Study', 'Trial', 'Trials',
+]);
+
+// Words that OPEN an entity name ("Treaty …", "Lake …", "Mount …", "Fort …").
+const ENTITY_OPENERS: ReadonlySet<string> = new Set([
+  'Treaty', 'Battle', 'Siege', 'Act', 'Bank', 'University', 'Kingdom', 'Republic', 'Empire', 'Church', 'Council',
+  'House', 'Ministry', 'Department', 'Museum', 'Lake', 'Mount', 'Fort', 'Cape', 'Port', 'Gulf', 'Isle',
+]);
+
+// Month and weekday names and abbreviations: a candidate ending in one is a
+// date fragment ("Due March"), never a person.
+const DATE_WORDS: ReadonlySet<string> = new Set([
+  'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November',
+  'December', 'Jan', 'Feb', 'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sep', 'Sept', 'Oct', 'Nov', 'Dec', 'Monday',
+  'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Mon', 'Tue', 'Tues', 'Wed', 'Thu', 'Thur',
+  'Thurs', 'Fri', 'Sat', 'Sun',
+]);
+
+// DATE — numeric: ISO, US, EU.
 const RE_DATE_ISO = /\b\d{4}-\d{2}-\d{2}\b/g;
 const RE_DATE_US = /\b(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])\/(?:19|20)\d{2}\b/g;
 const RE_DATE_EU = /\b(?:0?[1-9]|[12]\d|3[01])\.(?:0?[1-9]|1[0-2])\.(?:19|20)\d{2}\b/g;
+// DATE — textual (GRND-05): "March 3, 2026", "Mar. 3", "March 3rd", "3 March
+// 2026", "3rd of March". A month with a year only ("June 2017") is not a
+// date of anyone's — it is left alone.
+const MONTH = String.raw`(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sept?(?:ember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)`;
+const DAY = String.raw`(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?`;
+const RE_DATE_TEXT_MDY = new RegExp(String.raw`${L_EDGE}${MONTH}\.?[ ]${DAY}(?:,?[ ](?:1[89]|20)\d{2})?${R_EDGE}`, 'gu');
+const RE_DATE_TEXT_DMY = new RegExp(String.raw`${L_EDGE}${DAY}[ ](?:of[ ])?${MONTH}\.?(?:,?[ ](?:1[89]|20)\d{2})?${R_EDGE}`, 'gu');
 
-// Patterns × kind, in the order classifyPii will scan them. Order matters
-// only for the rare exact-tie overlap case where we keep "earlier-starting";
-// after sort, ties are decided by insertion order.
-const PATTERNS: ReadonlyArray<{ kind: PiiKind; re: RegExp }> = [
+// Identifiers that are never PII and must pass through unchanged (GRND-05).
+const PROTECTED: readonly RegExp[] = [
+  // UUID (paperIds, session ids).
+  /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g,
+  // DOI anywhere in text (a URL path included); ends at whitespace or a quote.
+  new RegExp(String.raw`${L_EDGE}10\.\d{4,9}\/[^\s"'<>]+`, 'gu'),
+  // ISBN: labelled (10 or 13 digits, hyphens / spaces allowed) or a bare 978/979 ISBN-13.
+  /ISBN(?:-1[03])?:?\s*(?:[\dX][-\s]?){9,16}[\dX]/gi,
+  new RegExp(String.raw`${L_EDGE}97[89](?:[-\s]?\d){10}${R_EDGE}`, 'gu'),
+  // arXiv: new style (2305.12345v2) and old style (hep-th/9901001).
+  new RegExp(String.raw`${L_EDGE}(?:arXiv:\s*)?\d{4}\.\d{4,5}(?:v\d{1,3})?${R_EDGE}`, 'giu'),
+  new RegExp(String.raw`${L_EDGE}(?:arXiv:\s*)?[a-z]{2,8}(?:-[a-z]{2,8})?(?:\.[A-Z]{2})?\/\d{7}(?:v\d{1,3})?${R_EDGE}`, 'gu'),
+  // ISO-8601 timestamps (a date with a time) — log timestamps, createdAt.
+  /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})?/g,
+  // Hex digests / ids of 16+ characters holding a letter and a digit (sha256, request hashes).
+  new RegExp(String.raw`${L_EDGE}(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{16,128}${R_EDGE}`, 'gu'),
+];
+
+interface Pattern {
+  readonly kind: PiiKind;
+  readonly re: RegExp;
+  /** Redact only this capture group (label patterns). */
+  readonly group?: number;
+}
+
+// Scan order matters only for exact-tie overlaps (earlier = higher priority):
+// the structured classes (EMAIL, PHONE, SSN, ID, IP, IBAN) come before NAME.
+const PATTERNS: readonly Pattern[] = [
   { kind: 'EMAIL', re: RE_EMAIL },
   { kind: 'PHONE', re: RE_PHONE },
+  { kind: 'PHONE', re: RE_PHONE_INTL },
   { kind: 'SSN', re: RE_SSN },
-  // IP + IBAN inserted BEFORE NAME so they win the exact-tie overlap pass
-  // against the looser NAME regex (earlier insertion = higher priority).
+  { kind: 'ID', re: RE_ID, group: 1 },
   { kind: 'IP', re: RE_IP },
   { kind: 'IBAN', re: RE_IBAN_LIKE },
+  { kind: 'DATE', re: RE_DATE_TEXT_MDY },
+  { kind: 'DATE', re: RE_DATE_TEXT_DMY },
   { kind: 'NAME', re: RE_NAME },
+  { kind: 'NAME', re: RE_NAME_INITIALS_FIRST },
+  { kind: 'NAME', re: RE_NAME_HONORIFIC, group: 1 },
   { kind: 'DATE', re: RE_DATE_ISO },
   { kind: 'DATE', re: RE_DATE_US },
   { kind: 'DATE', re: RE_DATE_EU },
 ];
 
 // ---------------------------------------------------------------------------
-// NAME suppression helper (Phase 9 / RESEARCH Pitfall 6). The loose NAME regex
-// greedily matches 2-3 capitalized tokens, so it over-grabs sentence-leading
-// function words ("Author Jane Smith", "Results Section"). This helper applies
-// the curated NAME_SUPPRESSION dictionary in two stages and returns the
-// trimmed match — or null if the whole thing should be dropped:
-//
-//   1. DROP entirely if EVERY token is suppressed ("Results Section",
-//      "January March").
-//   2. Otherwise strip leading suppressed tokens, but ONLY while the remainder
-//      still forms a valid NAME (≥2 tokens — the NAME regex never matches a
-//      single token). So "Author Jane Smith" → "Jane Smith", while "In Smith"
-//      keeps both tokens because stripping "In" would leave a lone "Smith".
-//
-// Returns { raw, startDelta } where startDelta is the byte offset to add to the
-// original span start (0 when nothing was trimmed). Pure — no I/O, no mutable
-// closure state.
+// NAME precision (Phase 9 suppression + GRND-05 exclusions).
 // ---------------------------------------------------------------------------
-function resolveSuppressedName(raw: string): { raw: string; startDelta: number } | null {
-  const tokens = raw.split(/[ -]/);
-  if (tokens.length === 0) return { raw, startDelta: 0 };
 
-  // Stage 1: all tokens suppressed → drop.
+/** Name tokens of a candidate: the capitalised words (initials and particles dropped). */
+function nameTokens(raw: string): string[] {
+  return raw.split(/\s+/).filter((t) => /^(?:\p{Lu}['’])?\p{Lu}\p{Ll}/u.test(t));
+}
+
+/** Capitalised words of the caller's keep phrases. */
+function keepTokens(keep: readonly string[] | undefined): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (const phrase of keep ?? []) {
+    for (const w of phrase.split(/[^\p{L}'’-]+/u)) if (/^\p{Lu}/u.test(w)) out.add(w.replace(/['’]s$/u, ''));
+  }
+  return out;
+}
+
+/**
+ * Trim or drop a NAME candidate (null = not a person's name):
+ *   1. every token suppressed → drop ("Results Section", "January March");
+ *   2. the last token a month/weekday → drop ("Due March");
+ *   3. the last token an entity head, or the first an entity opener → drop
+ *      ("French Revolution", "Roman Empire", "Lake Erie");
+ *   4. every token in the keep list → drop (the paper's own topic);
+ *   5. otherwise strip leading suppressed tokens while ≥ 2 name tokens remain
+ *      ("Author Jane Smith" → "Jane Smith"; "In Smith" keeps both).
+ * Returns the kept text and its offset in `raw`.
+ */
+function resolveName(raw: string, keep: ReadonlySet<string>): { raw: string; startDelta: number } | null {
+  const tokens = nameTokens(raw);
+  if (tokens.length === 0) return null;
+  const last = tokens[tokens.length - 1] as string;
+  const first = tokens[0] as string;
+  const lastBase = last.split('-').pop() as string;
   if (tokens.every((t) => NAME_SUPPRESSION.has(t))) return null;
-
-  // Stage 2: strip leading suppressed tokens while ≥2 tokens remain valid.
+  if (DATE_WORDS.has(last) || DATE_WORDS.has(lastBase)) return null;
+  if (ENTITY_HEADS.has(last) || ENTITY_HEADS.has(lastBase) || ENTITY_OPENERS.has(first)) return null;
+  if (keep.size > 0 && tokens.every((t) => keep.has(t))) return null;
+  // Strip leading suppressed words while at least two name tokens remain.
+  const words = raw.split(' ');
   let start = 0;
-  while (
-    start < tokens.length &&
-    NAME_SUPPRESSION.has(tokens[start] as string) &&
-    tokens.length - start - 1 >= 2
-  ) {
-    start++;
+  let remaining = tokens.length;
+  while (start < words.length - 1 && remaining > 2 && NAME_SUPPRESSION.has(words[start] as string)) {
+    start += 1;
+    remaining -= 1;
   }
-
   if (start === 0) return { raw, startDelta: 0 };
-
-  // Compute the byte offset of the kept span: skip `start` leading tokens plus
-  // their following single separator char each. Slicing the ORIGINAL raw (vs.
-  // a re-join) preserves the exact separators inside the kept span.
-  let offset = 0;
-  for (let i = 0; i < start; i++) {
-    offset += (tokens[i] as string).length + 1; // token + one separator char
-  }
+  const offset = words.slice(0, start).join(' ').length + 1;
   return { raw: raw.slice(offset), startDelta: offset };
+}
+
+/** A single surname after an honorific: drop suppressed words, dates, entities and kept words. */
+function resolveSurname(raw: string, keep: ReadonlySet<string>): boolean {
+  const tokens = nameTokens(raw);
+  const last = tokens[tokens.length - 1];
+  if (last === undefined) return false;
+  return !NAME_SUPPRESSION.has(last) && !DATE_WORDS.has(last) && !ENTITY_HEADS.has(last) && !keep.has(last);
 }
 
 // ---------------------------------------------------------------------------
 // classifyPii — returns spans in source order, no overlaps.
-// Overlap rule: longer raw wins; on tie, earlier start wins.
+// Overlap rule: longer raw wins; on tie, the earlier pattern wins.
 // ---------------------------------------------------------------------------
 
-export function classifyPii(text: string): PiiMatch[] {
-  if (typeof text !== 'string' || text.length === 0) return [];
-
-  const candidates: PiiMatch[] = [];
-  for (const { kind, re } of PATTERNS) {
-    // matchAll with /g returns iterator of RegExpMatchArray; m.index is set.
+/** Spans of identifiers that must never be rewritten (UUIDs, DOIs, ISBNs, arXiv ids, ISO timestamps, digests). */
+export function protectedSpans(text: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const re of PROTECTED) {
     for (const m of text.matchAll(re)) {
-      const start = m.index ?? -1;
-      if (start < 0) continue;
-      let raw = m[0];
-      let matchStart = start;
-      // NAME suppression (Phase 9): drop / trim NAME candidates against the
-      // curated non-name dictionary. Only NAME is filtered — IP/IBAN/EMAIL/
-      // PHONE/SSN/DATE are never suppressed. resolveSuppressedName returns
-      // null (drop entirely) or a possibly-trimmed match with a span delta.
-      if (kind === 'NAME') {
-        const resolved = resolveSuppressedName(raw);
-        if (resolved === null) continue;
-        raw = resolved.raw;
-        matchStart += resolved.startDelta;
-      }
-      candidates.push({ kind, span: [matchStart, matchStart + raw.length], raw });
+      const at = m.index ?? 0;
+      out.push([at, at + m[0].length]);
     }
   }
+  return out;
+}
 
-  // Sort by start ascending; on tie, longer first (so the longer wins the
-  // overlap pass below).
-  candidates.sort((a, b) => {
-    if (a.span[0] !== b.span[0]) return a.span[0] - b.span[0];
-    return b.raw.length - a.raw.length;
+function overlapsAny(span: [number, number], spans: ReadonlyArray<[number, number]>): boolean {
+  return spans.some(([a, b]) => span[0] < b && span[1] > a);
+}
+
+export function classifyPii(text: string, opts: PiiOptions = {}): PiiMatch[] {
+  if (typeof text !== 'string' || text.length === 0) return [];
+  const keep = keepTokens(opts.keep);
+  const shielded = protectedSpans(text);
+
+  const candidates: Array<PiiMatch & { order: number }> = [];
+  PATTERNS.forEach(({ kind, re, group }, order) => {
+    for (const m of text.matchAll(re)) {
+      const at = m.index ?? -1;
+      if (at < 0) continue;
+      let raw = m[0];
+      let start = at;
+      if (group !== undefined) {
+        const idx = (m as RegExpMatchArray & { indices?: Array<[number, number] | undefined> }).indices?.[group];
+        const g = m[group];
+        if (!idx || g === undefined) continue;
+        raw = g;
+        start = idx[0];
+      }
+      if (kind === 'PHONE' && re === RE_PHONE_INTL) {
+        const digits = raw.replace(/\D/g, '').length;
+        if (digits < 8 || digits > 15) continue;
+      }
+      if (kind === 'NAME') {
+        if (re === RE_NAME_HONORIFIC) {
+          if (!resolveSurname(raw, keep)) continue;
+        } else {
+          const resolved = resolveName(raw, keep);
+          if (resolved === null) continue;
+          raw = resolved.raw;
+          start += resolved.startDelta;
+        }
+      }
+      const span: [number, number] = [start, start + raw.length];
+      if (overlapsAny(span, shielded)) continue;
+      candidates.push({ kind, span, raw, order });
+    }
   });
 
-  // Resolve overlaps: walk left-to-right, drop any candidate whose span
-  // overlaps an already-accepted span. Because we sorted longer-first on
-  // tied starts, the longer candidate is accepted first and the shorter
-  // tied candidate is dropped. For non-tied starts, an earlier-starting
-  // candidate that is shorter than a later-starting longer one is replaced
-  // only when the later candidate extends further — handled by a swap.
-  const accepted: PiiMatch[] = [];
-  for (const cand of candidates) {
-    const last = accepted.length > 0 ? accepted[accepted.length - 1] : undefined;
-    if (!last) {
-      accepted.push(cand);
-      continue;
-    }
-    const overlaps = cand.span[0] < last.span[1];
-    if (!overlaps) {
-      accepted.push(cand);
-      continue;
-    }
-    // Overlap. Keep the longer raw; on tie, keep the earlier-starting one
-    // (which is `last`, since sort placed earlier starts first).
-    if (cand.raw.length > last.raw.length) {
-      accepted[accepted.length - 1] = cand;
-    }
-    // else: drop cand
-  }
+  // Start ascending; on a tie, longer first, then pattern order.
+  candidates.sort((a, b) => a.span[0] - b.span[0] || b.raw.length - a.raw.length || a.order - b.order);
 
-  return accepted;
+  const accepted: Array<PiiMatch & { order: number }> = [];
+  for (const cand of candidates) {
+    const last = accepted[accepted.length - 1];
+    if (!last || cand.span[0] >= last.span[1]) {
+      accepted.push(cand);
+      continue;
+    }
+    // Overlap: keep the longer; on a tie keep `last` (earlier start / pattern).
+    if (cand.raw.length > last.raw.length) accepted[accepted.length - 1] = cand;
+  }
+  return accepted.map(({ kind, span, raw }) => ({ kind, span, raw }));
 }
 
 // ---------------------------------------------------------------------------
 // redactPii — splice spans right-to-left so offsets remain valid.
 // ---------------------------------------------------------------------------
 
-export function redactPii(text: string): string {
+export function redactPii(text: string, opts: PiiOptions = {}): string {
   if (typeof text !== 'string' || text.length === 0) return text;
-  const spans = classifyPii(text);
+  const spans = classifyPii(text, opts);
   if (spans.length === 0) return text;
-
   let out = text;
-  // Walk REVERSE — splicing the rightmost span first keeps every leftward
-  // span's [start,end] indices valid relative to `out`.
   for (let i = spans.length - 1; i >= 0; i--) {
     const s = spans[i];
     if (!s) continue;
-    const tag = `[REDACTED:${s.kind}]`;
-    out = out.slice(0, s.span[0]) + tag + out.slice(s.span[1]);
+    out = out.slice(0, s.span[0]) + `[REDACTED:${s.kind}]` + out.slice(s.span[1]);
   }
   return out;
 }
 
 // ---------------------------------------------------------------------------
-// diffPii — pure, deterministic, reviewable diff (Phase 9 / ERGO-07, SC-3).
+// diffPii — pure, deterministic, reviewable diff (Phase 9 / ERGO-07).
 //
-// Derives one PiiDiff per classified span from classifyPii(original) — which is
-// already deterministic and overlap-resolved — and tags each with the SAME
-// `[REDACTED:${kind}]` literal redactPii would splice in. The optional
-// `redacted` arg is accepted only for API symmetry with redactPii callers; the
-// diff is computed from `original` alone. We deliberately do NOT diff the two
-// strings character-by-character: under tied spans that would be ambiguous and
-// thus non-deterministic. Spans inherit classifyPii's start-ascending order.
-//
-// Idempotence: feeding already-redacted text yields an empty diff, because the
-// `[REDACTED:KIND]` tags contain no classifiable PII (the redaction tag is not
-// itself an EMAIL/PHONE/SSN/NAME/DATE/IP/IBAN). Pure — purely positional math,
-// no Date.now / Math.random / randomUUID / I/O.
+// One entry per classified span of `original`, tagged with the same
+// `[REDACTED:${kind}]` literal redactPii splices in. The optional `redacted`
+// argument is accepted only for API symmetry; the diff is computed from
+// `original` alone (a character diff would be ambiguous under tied spans).
+// Feeding already-redacted text yields an empty diff (the tags hold no PII).
 // ---------------------------------------------------------------------------
 
 export interface PiiDiff {
@@ -268,9 +401,9 @@ export interface PiiDiff {
   tag: string;
 }
 
-export function diffPii(original: string, _redacted?: string): PiiDiff[] {
-  void _redacted; // accepted for API symmetry; diff is derived from `original`.
-  return classifyPii(original).map((m) => ({
+export function diffPii(original: string, _redacted?: string, opts: PiiOptions = {}): PiiDiff[] {
+  void _redacted;
+  return classifyPii(original, opts).map((m) => ({
     span: m.span,
     kind: m.kind,
     raw: m.raw,
@@ -391,27 +524,32 @@ export function redactKeys<T>(obj: T): T {
 //               their internals are never traversed (matches deepClone sentinel)
 //
 // Output: always a NEW structure — the input is never mutated (same invariant
-// as deepClone). Circular plain objects are not expected in log payloads;
-// isPlainObject rejects class instances/Maps/Sets so the blast radius is
-// bounded without needing a WeakSet visited-guard (Pitfall 4 in PLAN.md).
+// as deepClone). `opts` passes a keep list through to every redactPii call.
+// A WeakSet guard turns a circular array or object into '[CIRCULAR]' (IN-01).
+// Identifiers (UUIDs, DOIs, ISBNs, arXiv ids, ISO timestamps, digests) pass
+// through unchanged, like in redactPii (GRND-05).
 //
 // Called by session-log.ts buildRecord AFTER redactKeys so the two stages
 // compose without overlap: redactKeys (sensitive keys at depth) then
 // deepRedactPii (PII in remaining non-sensitive string leaves).
 // ---------------------------------------------------------------------------
 
-export function deepRedactPii(node: unknown, _seen = new WeakSet()): unknown {
-  if (typeof node === 'string') return redactPii(node);
+export function deepRedactPii(node: unknown, opts: PiiOptions = {}): unknown {
+  return deepRedactWalk(node, opts, new WeakSet());
+}
+
+function deepRedactWalk(node: unknown, opts: PiiOptions, seen: WeakSet<object>): unknown {
+  if (typeof node === 'string') return redactPii(node, opts);
   if (Array.isArray(node)) {
     // IN-01: guard against circular arrays to prevent stack overflow.
-    if (_seen.has(node)) return '[CIRCULAR]';
-    _seen.add(node);
-    return node.map((el) => deepRedactPii(el, _seen));
+    if (seen.has(node)) return '[CIRCULAR]';
+    seen.add(node);
+    return node.map((el) => deepRedactWalk(el, opts, seen));
   }
   if (isPlainObject(node)) {
     // IN-01: guard against circular plain objects to prevent stack overflow.
-    if (_seen.has(node)) return '[CIRCULAR]';
-    _seen.add(node);
+    if (seen.has(node)) return '[CIRCULAR]';
+    seen.add(node);
     const out: Record<string, unknown> = Object.create(null);
     for (const k of Object.keys(node)) {
       const lower = k.toLowerCase();
@@ -422,14 +560,14 @@ export function deepRedactPii(node: unknown, _seen = new WeakSet()): unknown {
         // secret — matching the walkAndRedact contract exactly.
         const val = node[k];
         if (typeof val === 'string') {
-          const redacted = redactPii(val);
+          const redacted = redactPii(val, opts);
           out[k] = redacted !== val ? redacted : '[REDACTED]';
         } else {
           out[k] = '[REDACTED]';
         }
         // Do NOT recurse into a redacted subtree (mirrors walkAndRedact).
       } else {
-        out[k] = deepRedactPii(node[k], _seen);
+        out[k] = deepRedactWalk(node[k], opts, seen);
       }
     }
     return out;

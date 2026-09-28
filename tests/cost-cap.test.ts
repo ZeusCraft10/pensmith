@@ -175,7 +175,13 @@ test('RUN-18: --yolo never skips the cap — spawned CLI runs refuse before any 
     // verb with no approval question of its own — `outline` would stop first,
     // at its outline-approval gate, before any model call: RUN-28.)
     fs.writeFileSync(path.join(sb.root, 'assignment.txt'), 'Write a 1500-word essay on glacier retreat.\n');
-    const plain = await sb.runTsx(null, ['new', '--from', 'assignment.txt'], { env });
+    // GRND-02: `new` has its own question battery; an --answers file answers all
+    // of it, so the first gate this non-TTY run meets is the per-call cost cap.
+    fs.writeFileSync(
+      path.join(sb.root, 'answers.toml'),
+      'discipline = "other"\nmode = "draft"\ngoal = "draft"\nclass = "GEOG 101"\ncounterargument = "auto"\nstyle_samples = "no"\npii_redaction = false\nlength = 1500\ncitation_style = "APA"\n',
+    );
+    const plain = await sb.runTsx(null, ['new', '--from', 'assignment.txt', '--answers', 'answers.toml'], { env });
     // The dispatcher prints the GateRefusedError as one line and exits with its code.
     assert.equal(plain.status, EXIT_COST_CAP, plain.stderr);
     assert.match(plain.stderr, /This call would exceed your cost cap\. Continue\? \(intake-clarifier on \S+: projected \$0\.\d+ \+ \$0\.00 spent this session > cap \$0\.0001/);

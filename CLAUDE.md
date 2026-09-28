@@ -102,7 +102,7 @@ Each concern below may live only in the named module. Rows marked `row:` are enf
 | `citation-js` | `bin/lib/citations.ts` | `no-restricted-imports` |
 | `mcp/**`: no fs imports, no `*.createServer`/`new Server`, no computed `process.env[…]`, no secret helpers; `paper://capabilities` emits presence booleans only | — | `no-restricted-imports` / `no-restricted-syntax`; `tests/lint-thin-shim.test.ts`, `tests/lint-mcp-no-network.test.ts`, `tests/lint-capabilities-noleak.test.ts` |
 | Citation regexes (`\[@`, `@\{`) — one Pandoc citation grammar | `bin/lib/citation-token.ts` | enforced from VRFY-09 |
-| Discipline literals | `bin/lib/disciplines.ts` | enforced from GRND-06 |
+| Discipline-slug literals (`'history'`, `'computer-science'`, …) — every discipline → style, density, sections, tone or source-preference mapping, and free-text normalisation | `bin/lib/disciplines.ts` (over `templates/presets/disciplines.json`) | row: `discipline-literals` (GRND-06) |
 | `process.stdout.write` / `console.log` in `bin/lib` and in `bin/cli` code reachable from `mcp/` (the output sink) | the injected output sink | enforced from PLUG-13 (lint rule + import-graph row) |
 | `mcp/` reaching `bin/lib/anthropic.ts` through its import graph | nowhere | enforced from PLUG-06 (import-graph row) |
 | The committed plugin bundles (`plugin/`) | ESLint `ignores` + every grep test's exclusions; lint runs on the bundles' sources | enforced from PLUG-02 |

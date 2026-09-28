@@ -1,24 +1,18 @@
-// tests/intake-style-producer.test.ts — Phase 8 Wave 0 RED-by-skip scaffold for
-// the intake style-match opt-in PRODUCER (STYL-01/02 wiring — the wiring the
-// cross-AI review found MISSING).
+// tests/intake-style-producer.test.ts — STYL-01/02 producer inside `pensmith new`
+// (08-05), with the Phase 18 intake battery (GRND-02): style-match is the
+// §7.1 question `style_samples` (`--style-samples <dir>` / the answers-file
+// key), opt-in, default off.
 //
-// This is the PRODUCER-path test: it asserts that the `intake` verb, when run
-// with the style-match opt-in, actually BUILDS .paper/STYLE.json AND surfaces
-// the cross-paper-reuse notice. A passing style-match library (08-02) is not
-// enough — the opt-in must be WIRED into intake (08-05) for the feature to ship.
+//   (1) the opt-in writes .paper/STYLE.json (flag, and the answers-file key);
+//   (2) the cross-paper-reuse notice is UNCONDITIONAL — it prints in a fully
+//       answered run WITHOUT --yolo (it is transparency, not a gate);
+//   (3) without the opt-in no STYLE.json is produced, and config.toml [style]
+//       says match_past_writing = false;
+//   (4) a samples folder that does not exist is a one-line usage error before
+//       anything is sent or written.
 //
-// RED-by-skip via SOURCE-GREP (mirrors the [07-01] flagsWired/emissionWired
-// precedent — a bare existsSync can't detect "module exists but the opt-in is
-// not yet wired"): READY = bin/cli/intake.ts references BOTH buildStyleProfile
-// AND styleSamples/style-samples. Until 08-05 wires the flag, every test SKIPS
-// so `npm test` stays GREEN.
-//
-// Contracts pinned (so 08-05 satisfies them):
-//   (1) `intake --style-samples <dir>` WRITES .paper/STYLE.json.
-//   (2) when a PRIOR paper already registered the SAME fingerprint under a
-//       different paperId, the run SURFACES a cross-paper-reuse notice on stdout
-//       UNCONDITIONALLY — fires even WITHOUT --yolo and is not suppressible.
-//   (3) WITHOUT the opt-in flag, NO .paper/STYLE.json is produced (opt-in only).
+// The verb runs in-process (PENSMITH_NO_LLM stubs the clarifier); the skip
+// guards of the Wave-0 scaffold are gone — the producer is wired.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,63 +20,42 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildStyleProfile, checkAndRegisterFingerprint } from '../bin/lib/style-match.js';
+import { TUTORIAL_INTAKE_QUESTION } from '../bin/lib/tutorial.js';
+import { PensmithError, EXIT_USAGE } from '../bin/lib/exit-codes.js';
 
-function repoPath(rel: string): string {
-  return fileURLToPath(new URL('../' + rel, import.meta.url));
-}
+const PAPER_A = fileURLToPath(new URL('./fixtures/style-samples/paperA', import.meta.url));
 
-// SOURCE-GREP skip-predicate: intake.ts must import/reference the style-match
-// producer AND name the style-samples opt-in. existsSync alone is insufficient —
-// intake.ts already exists as a stub.
-function intakeStyleWired(): boolean {
-  const intakePath = repoPath('bin/cli/intake.ts');
-  if (!fs.existsSync(intakePath)) return false;
-  const src = fs.readFileSync(intakePath, 'utf8');
-  return /buildStyleProfile/.test(src) && /style[-_]?[sS]amples/.test(src);
-}
-
-const READY = intakeStyleWired();
-
-const PAPER_A = repoPath('tests/fixtures/style-samples/paperA');
-
-// Runtime URL.href specifier for the not-yet-built style-match module so
-// `tsc --noEmit` stays clean while 08-02 is pending.
-const SM_MOD = new URL('../bin/lib/style-match.js', import.meta.url);
-interface StyleMatchProducerMod {
-  buildStyleProfile: (samplesDir: string) => Promise<{ fingerprint: string }>;
-  checkAndRegisterFingerprint: (
-    fingerprint: string,
-    paperId: string,
-    paperName: string,
-  ) => Promise<{ priorPapers: Array<{ paperId: string; paperName: string; addedAt: string }> }>;
-}
+/** Every battery question answered by flag, so a non-TTY run needs no --yolo. */
+const ALL_ANSWERED: Record<string, unknown> = {
+  discipline: 'other',
+  mode: 'draft',
+  [TUTORIAL_INTAKE_QUESTION.flag]: TUTORIAL_INTAKE_QUESTION.defaultValue,
+  class: 'ENGL 110',
+  counterargument: 'auto',
+  'pii-redact': false,
+  length: '1500',
+  'citation-style': 'APA',
+};
 
 function mkProjectRoot(): string {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-intake-style-'));
-  // Env-override isolation: pensmithDataDir() (where the fingerprint registry
-  // lives) AND the project cwd both resolve into tmp.
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-intake-style-')));
   process.env.LOCALAPPDATA = tmp;
   process.env.XDG_DATA_HOME = tmp;
   process.env.HOME = tmp;
-  // Tier-2 deterministic mode (no LLM) so intake runs offline.
   process.env.PENSMITH_NO_LLM = '1';
-  // RUN-09: `new` needs an assignment in a non-interactive run (EXIT_USAGE
-  // otherwise); the paper folder's assignment.txt is picked up automatically.
   fs.writeFileSync(path.join(tmp, 'assignment.txt'), 'Write a 1500-word essay on tidal power.\n');
   return tmp;
 }
 
-/** Capture process.stdout.write for the duration of `fn`. */
+/** Capture (tee) process.stdout.write for the duration of `fn`. */
 async function captureStdout(fn: () => Promise<void>): Promise<string> {
   const chunks: string[] = [];
   const orig = process.stdout.write.bind(process.stdout);
-  // Tee, never swallow: the node:test reporter writes its TAP lines to this
-  // same stdout, and a swallowed line silently drops a test from the count.
-  const patched = ((chunk: string | Uint8Array): boolean => {
+  process.stdout.write = ((chunk: string | Uint8Array): boolean => {
     chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'));
     return orig(chunk);
   }) as typeof process.stdout.write;
-  process.stdout.write = patched;
   try {
     await fn();
   } finally {
@@ -106,41 +79,47 @@ async function runIntake(cwd: string, args: Record<string, unknown>): Promise<st
   }
 }
 
-test('PRODUCER (1): `intake --style-samples <dir>` writes .paper/STYLE.json', { skip: !READY }, async () => {
+test('PRODUCER (1): `new --style-samples <dir>` writes .paper/STYLE.json and records the opt-in', async () => {
   const root = mkProjectRoot();
   await runIntake(root, { styleSamples: PAPER_A, yolo: true });
-
-  const stylePath = path.join(root, '.paper', 'STYLE.json');
-  assert.ok(fs.existsSync(stylePath), 'opt-in run must produce .paper/STYLE.json');
-  const parsed = JSON.parse(fs.readFileSync(stylePath, 'utf8'));
-  assert.match(parsed.fingerprint, /^[0-9a-f]{64}$/, 'STYLE.json must carry a 64-hex fingerprint');
+  const parsed = JSON.parse(fs.readFileSync(path.join(root, '.paper', 'STYLE.json'), 'utf8')) as { fingerprint: string };
+  assert.match(parsed.fingerprint, /^[0-9a-f]{64}$/, 'STYLE.json carries a 64-hex fingerprint');
+  const intake = fs.readFileSync(path.join(root, '.paper', 'INTAKE.md'), 'utf8');
+  assert.match(intake, /^style_match: true$/m);
+  const config = fs.readFileSync(path.join(root, '.paper', 'config.toml'), 'utf8');
+  assert.match(config, /^match_past_writing = true$/m);
+  assert.ok(config.includes(`samples_dir = ${JSON.stringify(PAPER_A)}`), config);
 });
 
-test('PRODUCER (2): cross-paper-reuse notice fires UNCONDITIONALLY when a prior paper shares the fingerprint (even without --yolo)', { skip: !READY }, async () => {
+test('PRODUCER (1b): the answers-file key `style_samples` opts in too', async () => {
   const root = mkProjectRoot();
+  const answers = path.join(root, 'answers.toml');
+  fs.writeFileSync(answers, `style_samples = ${JSON.stringify(PAPER_A)}\n`);
+  await runIntake(root, { answers, yolo: true });
+  assert.ok(fs.existsSync(path.join(root, '.paper', 'STYLE.json')));
+});
 
-  // Seed a PRIOR paper that registered the SAME paperA fingerprint under a
-  // different paperId.
-  const { buildStyleProfile, checkAndRegisterFingerprint } =
-    (await import(SM_MOD.href)) as StyleMatchProducerMod;
+test('PRODUCER (2): the cross-paper-reuse notice fires UNCONDITIONALLY — in a fully answered run without --yolo', async () => {
+  const root = mkProjectRoot();
   const prior = await buildStyleProfile(PAPER_A);
   await checkAndRegisterFingerprint(prior.fingerprint, 'prior-paper', 'A Prior Paper');
-
-  // Now run intake with the opt-in but WITHOUT --yolo. The reuse notice must
-  // still surface (it is a transparency signal, NOT a gate that --yolo skips).
-  const out = await runIntake(root, { styleSamples: PAPER_A, yolo: false });
-
-  assert.match(
-    out,
-    /reuse|already used|prior paper|A Prior Paper/i,
-    `reuse notice must surface on stdout (unconditional), got:\n${out}`,
-  );
+  const out = await runIntake(root, { ...ALL_ANSWERED, styleSamples: PAPER_A, yolo: false });
+  assert.match(out, /NOTICE — these writing samples were already used to style a prior paper: A Prior Paper/);
+  assert.doesNotMatch(out, /--yolo accepted/, 'every question was answered; nothing was defaulted');
 });
 
-test('PRODUCER (3): WITHOUT the opt-in flag, NO .paper/STYLE.json is produced (opt-in is explicit)', { skip: !READY }, async () => {
+test('PRODUCER (3): without the opt-in there is no STYLE.json and config.toml says match_past_writing = false', async () => {
   const root = mkProjectRoot();
   await runIntake(root, { yolo: true });
+  assert.ok(!fs.existsSync(path.join(root, '.paper', 'STYLE.json')), 'style-match is opt-in only');
+  assert.match(fs.readFileSync(path.join(root, '.paper', 'config.toml'), 'utf8'), /^match_past_writing = false$/m);
+});
 
-  const stylePath = path.join(root, '.paper', 'STYLE.json');
-  assert.ok(!fs.existsSync(stylePath), 'no opt-in flag → no STYLE.json (style-match is opt-in only)');
+test('PRODUCER (4): a samples folder that does not exist is EXIT_USAGE before anything is written', async () => {
+  const root = mkProjectRoot();
+  await assert.rejects(
+    runIntake(root, { styleSamples: path.join(root, 'no-such-folder'), yolo: true }),
+    (e: unknown) => e instanceof PensmithError && e.exitCode === EXIT_USAGE && /--style-samples: .*no-such-folder: no such folder/.test(e.message),
+  );
+  assert.ok(!fs.existsSync(path.join(root, '.paper')), 'nothing was written');
 });

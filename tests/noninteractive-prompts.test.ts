@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { askNumbered } from '../bin/lib/prompts/numbered.js';
 import { resolveMode, PromptAbortedError } from '../bin/lib/prompts.js';
 import { EXIT_OK, EXIT_USAGE, EXIT_APPROVAL } from '../bin/lib/exit-codes.js';
+import { parseIntakeMd } from '../bin/lib/intake-parse.js';
 import {
   STACK_LINE,
   sandbox,
@@ -88,19 +89,24 @@ test('RUN-12: resolveMode uses clack only when stdin, stdout and stderr are all 
   }
 });
 
-test('RUN-12 / RUN-28: `printf "…5 answers…" | PENSMITH_PROMPT_MODE=numbered pensmith sketch` answers every question and starts the paper', () => {
+test('RUN-12 / RUN-28 / GRND-02: `printf "…" | PENSMITH_PROMPT_MODE=numbered pensmith sketch` answers the Socratic questions, then new asks the intake battery and its follow-ups', () => {
   const sb = sandbox('sketch-pipe');
   const cwd = sb.project('p');
-  const answers = 'LLMs in education\nThat they replace teachers\nUndergrad instructors\nTutors help most with feedback\ny\n';
+  const sketchAnswers = 'LLMs in education\nThat they replace teachers\nUndergrad instructors\nTutors help most with feedback\ny\n';
+  // GRND-02: after the confirm, `new` asks the §7.1 battery — PII redaction
+  // first (before any model call), then discipline, mode, the paper's purpose,
+  // class, counterargument, style-match, length, citation style — and then
+  // the clarifier's follow-up (the contract stub asks one).
+  const battery = 'n\n\n\n\nEDUC 200\n\n\n2000\n\nstudents and tutors\n';
   // The confirm is the registry's `sketch-confirm` gate (PRD §7.20): a run
   // without a terminal answers gates only with scripted numbered answers.
   // Without them it refuses BEFORE asking anything (nothing consumed or created).
-  const unscripted = runCli(sb, cwd, ['sketch'], { input: answers });
+  const unscripted = runCli(sb, cwd, ['sketch'], { input: sketchAnswers + battery });
   assert.equal(unscripted.status, EXIT_APPROVAL, `${unscripted.stdout}\n${unscripted.stderr}`);
   assert.match(unscripted.stderr, /^pensmith: Proceed to intake with this thesis\? \(nothing was asked or created; to pipe answers, set PENSMITH_PROMPT_MODE=numbered\) needs an answer: re-run in a terminal, or pass --yolo to proceed to intake\.$/m);
   assert.doesNotMatch(unscripted.stderr, /What interests or questions motivate this paper\?/, 'no question was asked');
   assert.ok(!existsSync(join(cwd, '.paper')), 'nothing created');
-  const r = runCli(sb, cwd, ['sketch'], { input: answers, env: { PENSMITH_PROMPT_MODE: 'numbered' } });
+  const r = runCli(sb, cwd, ['sketch'], { input: sketchAnswers + battery, env: { PENSMITH_PROMPT_MODE: 'numbered' } });
   assert.equal(r.status, EXIT_OK, `${r.stdout}\n${r.stderr}`);
   const labels = [
     'What interests or questions motivate this paper?',
@@ -108,6 +114,16 @@ test('RUN-12 / RUN-28: `printf "…5 answers…" | PENSMITH_PROMPT_MODE=numbered
     'Who is your target audience?',
     'In one sentence, what is your candidate thesis claim?',
     'Proceed to intake with this thesis?',
+    'Redact personal information',
+    'Which discipline preset fits this paper?',
+    'Draft the whole paper, or stop after the approved outline?',
+    'What is this paper for?',
+    'Which class is this paper for?',
+    'Include a counterargument and rebuttal section?',
+    'Match your past writing?',
+    'Target length in words?',
+    'Which citation style?',
+    'Who is the intended audience for this paper?',
   ];
   let at = -1;
   for (const l of labels) {
@@ -117,13 +133,31 @@ test('RUN-12 / RUN-28: `printf "…5 answers…" | PENSMITH_PROMPT_MODE=numbered
   }
   assert.match(r.stdout, /Tutors help most with feedback — That they replace teachers — Undergrad instructors/);
   assert.ok(existsSync(join(cwd, '.paper', 'STATE.json')), 'confirmed → new created the paper');
-  assert.ok(readFileSync(join(cwd, '.paper', 'INTAKE.md'), 'utf8').length > 0, 'INTAKE.md written from the thesis seed');
+  const brief = parseIntakeMd(readFileSync(join(cwd, '.paper', 'INTAKE.md'), 'utf8')).brief;
+  assert.ok(brief, 'INTAKE.md is a valid brief');
+  assert.equal(brief.thesis, 'Tutors help most with feedback — That they replace teachers — Undergrad instructors', 'the thesis seed is the brief\'s thesis');
+  assert.equal(brief.class, 'EDUC 200');
+  assert.equal(brief.length_target_words, 2000);
+  assert.deepEqual(brief.follow_ups.map((f) => f.answer), ['students and tutors'], 'the follow-up answer is recorded');
+  assert.equal(brief.assignment_source.kind, 'thesis-seed');
+  assert.match(readFileSync(join(cwd, '.paper', 'config.toml'), 'utf8'), /^class = "EDUC 200"$/m);
   assert.doesNotMatch(r.stderr, STACK_LINE);
+
+  // Scripted answers that run out part-way through the battery end in the
+  // intake-defaults refusal (EXIT_APPROVAL) — and nothing is created.
+  const short = sb.project('short');
+  const ranOut = runCli(sb, short, ['sketch'], { input: sketchAnswers + 'n\n\n', env: { PENSMITH_PROMPT_MODE: 'numbered' } });
+  assert.equal(ranOut.status, EXIT_APPROVAL, `${ranOut.stdout}\n${ranOut.stderr}`);
+  assert.match(ranOut.stderr, /^pensmith: Accept the intake defaults\? \(unanswered: .*the piped answers ran out\) needs an answer: re-run in a terminal, or pass --yolo to accept the defaults\.$/m);
+  assert.ok(!existsSync(join(short, '.paper')), 'a refused intake writes nothing');
+  assert.doesNotMatch(ranOut.stderr, STACK_LINE);
 });
 
 test('RUN-12: the interactive verbs with a non-terminal stdin — documented codes, no stack-trace lines', () => {
   const sb = sandbox('noninteractive-matrix');
   const fresh = sb.project('fresh');
+  const withAssignment = sb.project('with-assignment');
+  writeFileSync(join(withAssignment, 'assignment.txt'), 'Write a 1500-word essay on tidal power.\n');
   const outlined = sb.project('outline');
   writeState(outlined, []);
   writeFileSync(join(outlined, '.paper', 'INTAKE.md'), '# Intake\n\nTopic: tidal power\n');
@@ -136,7 +170,8 @@ test('RUN-12: the interactive verbs with a non-terminal stdin — documented cod
   const sketchDir = sb.project('sketch');
 
   const cases: Array<{ name: string; cwd: string; args: string[]; code: number; line: RegExp }> = [
-    { name: 'new (no assignment)', cwd: fresh, args: ['new'], code: EXIT_USAGE, line: /^pensmith: no assignment: / },
+    { name: 'new (no assignment)', cwd: fresh, args: ['new'], code: EXIT_USAGE, line: /^pensmith: no assignment found: / },
+    { name: 'new (unanswered battery)', cwd: withAssignment, args: ['new'], code: EXIT_APPROVAL, line: /^pensmith: Accept the intake defaults\? \(unanswered: pii_redaction/ },
     { name: 'outline approval', cwd: outlined, args: ['outline'], code: EXIT_APPROVAL, line: /^pensmith: Approve this outline/ },
     { name: 'done confirmation', cwd: compiled, args: ['done', '--format', 'md'], code: EXIT_APPROVAL, line: /^pensmith: Export the paper now\?/ },
     { name: 'add remap', cwd: addTo, args: ['add', '10.1038/nphys1170'], code: EXIT_OK, line: /remap skipped \(non-interactive\)/ },

@@ -210,7 +210,9 @@ test('citation-render: resolveStyleName maps disciplines to styles (CITE-02/03)'
     const resolve = resolveStyleName as (d: string) => string;
     assert.equal(resolve('computer-science'), 'ieee', 'computer-science → ieee');
     assert.equal(resolve('literature'), 'mla', 'literature → mla');
-    assert.equal(resolve('history'), 'chicago-author-date', 'history → chicago-author-date');
+    assert.equal(resolve('history'), 'chicago-notes-bib', 'history → chicago-notes-bib (PRD §8; the preset table, GRND-06)');
+    assert.equal(resolve('philosophy'), 'chicago-author-date', 'philosophy → chicago-author-date');
+    assert.equal(resolve('biology'), 'ama', 'biology → ama (PRD §8)');
     assert.equal(resolve('unknown'), 'apa', 'unknown → apa fallback');
   },
 );

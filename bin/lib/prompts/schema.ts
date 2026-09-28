@@ -19,6 +19,8 @@
 //   For multiselect:  user types "1,3\n"  → returns { value: ['cs', 'history'] }
 //   For text:         user types raw string (blank line keeps default)
 //   For confirm:      user types y/Y/yes/n/N/no (blank line keeps default)
+//   For multiline:    user types (or pastes) any number of lines, then a line
+//                     holding only "." (or EOF) ends the text (GRND-01 paste)
 //
 // Field names match gsd-plugin's --text JSON question schema (id, label,
 // options, default) so an upstream CI fixture can feed identical JSON to
@@ -62,6 +64,21 @@ export const ConfirmQuestionSchema = z.object({
   default: z.boolean().optional(),  // true → [Y/n]; false or absent → [y/N]
 });
 
+/**
+ * A multi-line text (GRND-01: the pasted assignment). Lines are read until a
+ * line holding only "." or the end of input; the lines are kept verbatim
+ * (inner indentation included) and joined with "\n".
+ */
+export const MultilineQuestionSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('multiline'),
+  label: z.string().min(1),
+  placeholder: z.string().optional(),
+});
+
+/** The line that ends a multiline answer. */
+export const MULTILINE_TERMINATOR = '.';
+
 // ── Discriminated union ───────────────────────────────────────────────────────
 
 export const PromptQuestionSchema = z.discriminatedUnion('kind', [
@@ -69,6 +86,7 @@ export const PromptQuestionSchema = z.discriminatedUnion('kind', [
   MultiSelectQuestionSchema,
   TextQuestionSchema,
   ConfirmQuestionSchema,
+  MultilineQuestionSchema,
 ]);
 
 export type PromptQuestion = z.infer<typeof PromptQuestionSchema>;
@@ -85,4 +103,5 @@ export type PromptAnswer =
   | { id: string; kind: 'select';      value: string   }
   | { id: string; kind: 'multiselect'; value: string[] }
   | { id: string; kind: 'text';        value: string   }
-  | { id: string; kind: 'confirm';     value: boolean  };
+  | { id: string; kind: 'confirm';     value: boolean  }
+  | { id: string; kind: 'multiline';   value: string   };

@@ -138,3 +138,9 @@ test('schema: confirm with default as string "yes" is rejected', () => {
     assert.ok(paths.some((p) => p.includes('default')), `expected error on default, got: ${paths.join(', ')}`);
   }
 });
+
+test('schema (GRND-01): a multiline question parses; its label is required', () => {
+  const q = PromptQuestionSchema.parse({ id: 'assignment', kind: 'multiline', label: 'Paste the assignment', placeholder: 'the prompt' });
+  assert.equal(q.kind, 'multiline');
+  assert.throws(() => PromptQuestionSchema.parse({ id: 'assignment', kind: 'multiline' }));
+});

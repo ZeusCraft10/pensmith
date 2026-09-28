@@ -16,6 +16,8 @@
 // adds contract-valid prose stubs and moves stub text into a data file.
 
 import { contractFor } from './llm-contracts.js';
+import { FALLBACK_DISCIPLINE } from './disciplines.js';
+import { disciplineMentionFrom, paperTypeFrom, parseIntakeOverrides, thesisSeedFrom, topicFromAssignment } from './intake-overrides.js';
 
 /** Optional per-call hint: a topic string, or a small object of call context. */
 export type StubHint = string | Readonly<Record<string, unknown>> | undefined;
@@ -59,6 +61,46 @@ function outlineStub(hint: StubHint): unknown {
   };
 }
 
+/**
+ * intake-clarifier (GRND-02 contract v2, D-18-06/10): suggestions read from the
+ * request the way a model would — the fenced `assignment` block (its topic
+ * phrase, stated length and style, sectioning notes, paper type, an explicit
+ * discipline mention, a `Thesis seed:` line) and the `answers` block (a
+ * discipline the user already fixed). Never "the assigned topic" when an
+ * assignment exists. One generic follow-up, so a stubbed intake exercises the
+ * follow-up path. A plain `topic` hint (older callers) is used as the topic.
+ */
+function intakeClarifierStub(hint: StubHint): unknown {
+  const assignment = hintString(hint, 'assignment') ?? '';
+  const answers = typeof hint === 'object' && hint !== null && typeof hint['answers'] === 'object' && hint['answers'] !== null
+    ? (hint['answers'] as Record<string, unknown>)
+    : {};
+  const fixedDiscipline = typeof answers['discipline'] === 'string' ? answers['discipline'] : '';
+  const overrides = parseIntakeOverrides(assignment);
+  const seed = thesisSeedFrom(assignment);
+  const topic =
+    topicFromAssignment(assignment) ||
+    (seed ? seed.split(/\s+/).slice(0, 12).join(' ') : '') ||
+    hintString(hint, 'topic') ||
+    (assignment ? queryFrom(assignment) : 'the assigned topic');
+  return {
+    topic,
+    discipline: fixedDiscipline || disciplineMentionFrom(assignment) || hintString(hint, 'discipline') || FALLBACK_DISCIPLINE,
+    paper_type: paperTypeFrom(assignment),
+    thesis: seed,
+    length_target_words: overrides.lengthWords ?? 0,
+    citation_style: overrides.citationStyle?.style ?? '',
+    sectioning_notes: [...overrides.sectioningNotes],
+    follow_ups: [
+      {
+        id: 'audience',
+        question: 'Who is the intended audience for this paper?',
+        suggested_answer: 'the course instructor and classmates',
+      },
+    ],
+  };
+}
+
 const STUBS: Readonly<Record<string, (hint: StubHint) => unknown>> = Object.freeze({
   'topic-disambiguator': (hint) => {
     const topic = hintString(hint, 'topic') ?? 'research topic';
@@ -71,17 +113,7 @@ const STUBS: Readonly<Record<string, (hint: StubHint) => unknown>> = Object.free
       reason: 'stub verdict (LLM stubbed): kept for review',
     })),
   }),
-  'intake-clarifier': (hint) => ({
-    topic: hintString(hint, 'topic') ?? 'the assigned topic',
-    discipline: hintString(hint, 'discipline') ?? 'other',
-    questions: [
-      { id: 'discipline', question: 'Which discipline best fits this assignment? Suggested: CS, Bio, History, Lit, Psych, Econ, Philosophy, Other.', suggested_answer: 'Other' },
-      { id: 'length', question: 'What length target should I plan for? (word count or page count)', suggested_answer: '1500 words' },
-      { id: 'citation-style', question: 'Which citation style? (APA, MLA, Chicago NB, Chicago AD, IEEE, AMA, Vancouver, Harvard)', suggested_answer: 'APA' },
-      { id: 'audience', question: 'Who is the audience? (undergraduate course, graduate seminar, journal, conference)', suggested_answer: 'undergraduate course' },
-      { id: 'counterargument', question: 'Should the paper include a counterargument section?', suggested_answer: 'optional' },
-    ],
-  }),
+  'intake-clarifier': intakeClarifierStub,
   'outline-author': outlineStub,
   'section-planner': (hint) => {
     const n = hintNumber(hint, 'section') ?? 1;

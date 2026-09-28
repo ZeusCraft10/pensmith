@@ -26,7 +26,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { z } from 'zod';
 import { atomicWriteFile } from './atomic-write.js';
@@ -44,6 +43,7 @@ import {
 import { PROJECT_CONFIG_FRAGMENT, PROJECT_CONFIG_FRAGMENT_DEFAULTS } from './tutorial.js';
 import { migrate as v0ToV1 } from './migrations/config/v0_to_v1.js';
 import { editTomlText } from './config-text.js';
+import { isDisciplineSlug, presetFor } from './disciplines.js';
 
 export type { PaperConfig } from './schemas/config.js';
 export { CURRENT_CONFIG_VERSION } from './schemas/config.js';
@@ -414,6 +414,77 @@ export async function updatePaperConfig(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Intake (GRND-02, GRND-03): the `--answers <file.toml>` reader and the
+// [project] / [style] mirror of the brief. smol-toml stays in this module
+// (chokepoint row `config-toml`); intake-answers.ts validates the keys.
+// ---------------------------------------------------------------------------
+
+/**
+ * Read an `pensmith new --answers <file.toml>` file: the parsed TOML object
+ * (TOML dates as strings). A missing file or invalid TOML is a one-line
+ * EXIT_USAGE ConfigError; key validation is the caller's (intake-answers.ts).
+ */
+export function readIntakeAnswersFile(file: string): Record<string, unknown> {
+  let text: string;
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    throw new ConfigError(`--answers ${file}: no such file`, EXIT_USAGE);
+  }
+  try {
+    return normalizeTomlValues(parseToml(text)) as Record<string, unknown>;
+  } catch (e) {
+    const msg = (e as Error).message.split('\n')[0] ?? String(e);
+    throw new ConfigError(`--answers ${file} is not valid TOML: ${msg}`, EXIT_USAGE);
+  }
+}
+
+/** The intake answers config.toml mirrors (PRD §10 [project] and [style]). */
+export interface IntakeConfigMirror {
+  readonly mode: string;
+  /** The tutorial.ts fragment's keys and values, spread in unnamed. */
+  readonly fragment: Readonly<Record<string, unknown>>;
+  readonly class: string;
+  readonly disciplinePreset: string;
+  /** A CSL key; '' removes the key (the preset default applies). */
+  readonly citationStyle: string;
+  readonly lengthTargetWords: number | null;
+  /** yes / no set the key; auto removes it (the counterargument resolver decides). */
+  readonly counterargument: 'yes' | 'no' | 'auto';
+  readonly piiRedaction: boolean;
+  /** '' = style-match off. */
+  readonly styleSamplesDir: string;
+}
+
+/**
+ * Mirror the intake answers into `.paper/config.toml` (GRND-03, D-18-07) with
+ * updatePaperConfig: [project] mode, the fragment, class, discipline_preset,
+ * citation_style, length_target_words, counterargument_required (only for a
+ * yes/no answer), pii_redaction; [style] match_past_writing and samples_dir.
+ * Every other key the file holds is left as it is.
+ */
+export async function writeIntakeConfig(root: string, m: IntakeConfigMirror): Promise<PaperConfig> {
+  return updatePaperConfig(root, (raw) => {
+    const project = rawTable(raw, 'project');
+    project['mode'] = m.mode;
+    for (const [k, v] of Object.entries(m.fragment)) project[k] = v;
+    project['class'] = m.class;
+    project['discipline_preset'] = m.disciplinePreset;
+    if (m.citationStyle) project['citation_style'] = m.citationStyle;
+    else delete project['citation_style'];
+    if (m.lengthTargetWords !== null) project['length_target_words'] = m.lengthTargetWords;
+    else delete project['length_target_words'];
+    if (m.counterargument === 'auto') delete project['counterargument_required'];
+    else project['counterargument_required'] = m.counterargument === 'yes';
+    project['pii_redaction'] = m.piiRedaction;
+    const style = rawTable(raw, 'style');
+    style['match_past_writing'] = m.styleSamplesDir !== '';
+    if (m.styleSamplesDir) style['samples_dir'] = m.styleSamplesDir;
+    else delete style['samples_dir'];
+  });
+}
+
 /** Get or create a [table] object on a raw config (for updatePaperConfig mutators). */
 export function rawTable(raw: Record<string, unknown>, table: string): Record<string, unknown> {
   const cur = raw[table];
@@ -492,29 +563,19 @@ const PRESET_STYLE_NAMES: Readonly<Record<string, string>> = Object.freeze({
   'chicago-notes-bib': 'Chicago (Notes-Bibliography)',
 });
 
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i += 1) {
-    if (existsSync(path.join(cur, 'package.json'))) return cur;
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
+/**
+ * The preset-backed [project] defaults of a discipline preset, for
+ * `status --config` (source "preset"). The preset table has ONE reader,
+ * bin/lib/disciplines.ts (GRND-06); an unknown preset contributes nothing.
+ */
 function presetDefaults(preset: string | undefined): Record<string, unknown> {
-  if (!preset) return {};
+  if (!preset || !isDisciplineSlug(preset)) return {};
   try {
-    const root = findPkgRoot(path.dirname(fileURLToPath(import.meta.url)));
-    const all = JSON.parse(readFileSync(path.join(root, 'templates', 'presets', 'disciplines.json'), 'utf8')) as
-      Record<string, { defaultCitationStyle?: string; counterargDefault?: string }>;
-    const p = all[preset];
-    if (!p) return {};
-    const out: Record<string, unknown> = {};
-    if (p.defaultCitationStyle) out['project.citation_style'] = PRESET_STYLE_NAMES[p.defaultCitationStyle] ?? p.defaultCitationStyle;
-    if (p.counterargDefault) out['project.counterargument_required'] = p.counterargDefault === 'required';
-    return out;
+    const p = presetFor(preset);
+    return {
+      'project.citation_style': PRESET_STYLE_NAMES[p.defaultCitationStyle] ?? p.defaultCitationStyle,
+      'project.counterargument_required': p.counterargDefault === 'on',
+    };
   } catch {
     return {};
   }

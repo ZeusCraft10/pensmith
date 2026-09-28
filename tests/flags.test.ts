@@ -323,7 +323,7 @@ test('C2-H1: `pensmith --yolo` and `write --yolo` in a paper-less dir do NOT cra
     const a = runCli(['--yolo'], root, { PENSMITH_NO_LLM: '1' });
     assert.equal(a.status, 2,
       `C2-H1: bare \`--yolo\` in a fresh dir without an assignment must exit 2 (EXIT_USAGE); stderr=${a.stderr}`);
-    assert.match(a.stderr, /^pensmith: no assignment: pass --from <file>/m, 'C2-H1: one actionable line');
+    assert.match(a.stderr, /^pensmith: no assignment found: pass --from <file>/m, 'C2-H1: one actionable line');
     assert.ok(!/StateNotFoundError/.test(a.stderr), 'C2-H1: must not surface StateNotFoundError');
     assert.ok(!/^\s+at .*\.[jt]s:\d+/m.test(a.stderr), 'C2-H1: no stack trace (RUN-12)');
     const b = runCli(['write', '--yolo'], root, { PENSMITH_NO_LLM: '1' });
