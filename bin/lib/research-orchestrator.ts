@@ -35,7 +35,8 @@
 //
 // Threat mitigations:
 //   T-12-01: defensive Zod safeParse on all LLM JSON outputs.
-//   T-12-02: candidateSources serialized as JSON (structured) for evaluator prompt.
+//   T-12-02: candidates serialized as JSON (structured) in ONE fenced data block
+//            of the evaluator request, sent once (FEED-05, SWP-61).
 //   T-12-03: per-query limit cap = 10; dedup BEFORE evaluator.
 //   T-12-04: 'search' in adapter guard (retraction-watch excluded).
 //   T-12-05: no new fetch surface — all network via existing adapter modules.
@@ -56,8 +57,7 @@ import { jaroWinkler, TITLE_JW_THRESHOLD } from './fuzzy.js';
 import { assignUniqueCitekeys } from './bibtex-write.js';
 import { complete, isFatalLlmError } from './anthropic.js';
 import type { SourceEvaluation } from './llm-contracts.js';
-import { loadPrompt, interpolate } from './prompt-loader.js';
-import { escapeTemplateTokens } from './intake-parse.js';
+import { buildPromptRequest, requestHints, type PromptJson } from './prompt-request.js';
 
 // ---------------------------------------------------------------------------
 // Injectable adapter registry seam (mirrors zotero-mcp.ts setZoteroClientForTest).
@@ -148,16 +148,48 @@ function dedupCandidates(raw: SourceCandidate[]): SourceCandidate[] {
 // Source-evaluator LLM step
 // ---------------------------------------------------------------------------
 
+/** At most `max` UTF-16 units of `text`, never ending inside a surrogate pair. */
+function truncateText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const last = cut.charCodeAt(cut.length - 1);
+  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+}
+
+/**
+ * One candidate as the evaluator's `candidates` block carries it (18-PLAN.md
+ * §3.3): built field by field in a fixed order so identical candidates give
+ * identical request bytes (replay hashes, prompt-cache keys); `null` where the
+ * adapter reported nothing. The adapter's `raw` payload never reaches a model.
+ */
+function evaluatorCandidate(c: SourceCandidate): PromptJson {
+  return {
+    citekey: c.citekey,
+    title: c.title,
+    authors: c.authors.slice(0, 5),
+    year: c.year ?? null,
+    // The candidate schema carries no venue; an arXiv search result is an arXiv
+    // preprint by construction (the template's preprint rule reads this).
+    venue: c.source === 'arxiv' ? 'arXiv' : null,
+    doi: c.doi ?? null,
+    // WR-03: abstracts capped at 500 characters to bound the request.
+    abstract: c.abstract ? truncateText(c.abstract, 500) : null,
+  };
+}
+
 /**
  * Run the source-evaluator LLM step to tier the deduplicated candidates.
  *
  * source-evaluator is a STRUCTURED slug (RUN-25): complete() returns
  * {verdicts:[{citekey, keep, reason?}]} validated against the llm-contracts.ts
- * schema (the old bare-array reply is accepted by the tolerant parser). Under
- * PENSMITH_NO_LLM the stub keeps every candidate. An advisory failure (provider
- * error, refusal, truncation, a reply that never matched the schema) keeps ALL
- * deduped candidates with a WARN (T-11-10); the session cost cap, a missing key
- * and invalid configuration propagate (isFatalLlmError).
+ * schema (the old bare-array reply is accepted by the tolerant parser). The
+ * request is the fixed template as the system prompt (the cacheable prefix,
+ * RUN-26) and one data message whose `candidates` block — fenced, sent once
+ * (D-18-03/04, SWP-61) — follows the topic, discipline and scope. Under
+ * PENSMITH_NO_LLM the stub keeps every candidate. An advisory failure
+ * (provider error, refusal, truncation, a reply that never matched the
+ * schema) keeps ALL deduped candidates with a WARN (T-11-10); the session cost
+ * cap, a missing key and invalid configuration propagate (isFatalLlmError).
  */
 async function evaluateCandidates(
   candidates: SourceCandidate[],
@@ -167,40 +199,17 @@ async function evaluateCandidates(
 
   let verdicts: SourceEvaluation['verdicts'];
   try {
-    const evaluatorPrompt = loadPrompt('source-evaluator');
-    const interpolatedEvaluator = interpolate(evaluatorPrompt, {
-      // T-12-02: structured JSON encoding prevents direct prompt injection from
-      // abstract/title content. candidateSources is safe in the JSON context.
-      candidateSources: JSON.stringify(
-        candidates.map((c) => ({
-          source: c.source,
-          id: c.id,
-          title: c.title,
-          authors: c.authors,
-          year: c.year,
-          doi: c.doi,
-          // WR-03: cap abstracts at 500 chars to prevent arbitrarily large prompts.
-          abstract: c.abstract ? c.abstract.slice(0, 500) : undefined,
-          retracted: c.retracted,
-          citekey: c.citekey,
-        })),
-        null,
-        2,
-      ),
-      // CR-01: escape user-controlled strings before interpolation so {{...}} tokens
-      // in topic/discipline/scope cannot cause secondary template expansion.
-      topic: escapeTemplateTokens(opts.topic),
-      scope: escapeTemplateTokens(opts.scope),
-      discipline: escapeTemplateTokens(opts.discipline),
+    const request = buildPromptRequest('source-evaluator', {
+      topic: opts.topic,
+      discipline: opts.discipline,
+      scope: opts.scope,
+      candidates: candidates.map(evaluatorCandidate),
     });
-
     const result = await complete<SourceEvaluation>({
       slug: 'source-evaluator',
-      system:
-        'You are an academic research assistant. Evaluate every candidate source and ' +
-        'return one verdict per candidate in the exact format specified.',
-      messages: [{ role: 'user', content: interpolatedEvaluator }],
-      stubHint: { citekeys: candidates.map((c) => c.citekey) },
+      system: request.system,
+      messages: request.messages,
+      stubHint: requestHints(request),
     });
     verdicts = (result.data as SourceEvaluation).verdicts;
   } catch (err) {

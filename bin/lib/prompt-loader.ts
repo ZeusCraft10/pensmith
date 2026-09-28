@@ -1,8 +1,13 @@
 // bin/lib/prompt-loader.ts — hash-validated prompt loader (T-3-09).
 //
 // SOLE call site for `readFileSync('templates/prompts/<slug>.md')` in the
-// runtime path. Every verb that invokes an LLM prompt (intake, research,
-// outline, plan, write) calls `loadPrompt(slug)` then `interpolate(body, vars)`.
+// runtime path. A model request is built by bin/lib/prompt-request.ts
+// `buildPromptRequest(slug, values)` (D-18-03): `loadPrompt(slug)` — the fixed
+// template, byte-identical for every call and so the cacheable prefix (RUN-26)
+// — is the system prompt, and the per-call data follows as tagged blocks in the
+// user message. Templates interpolate nothing; `interpolate()` below remains
+// only for callers not yet moved to that layout (the Phase 18 integration pass
+// removes it once none is left).
 //
 // Defense-in-depth:
 //   - PR-time: tests/repo-files.test.ts asserts each prompt SHA-256 matches
@@ -95,25 +100,25 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   // pins in tests/repo-files.test.ts PENDING_HASH_PINS — drift between the two
   // surfaces is structurally impossible because both files re-pin together.
   'intake-clarifier':    '7700947abfc9a94d2785996fd7b26e8f812a5b01c77ab24ee1563314b7eb9a53',  // D-12 LOCKED (re-pinned Phase 18 GRND-02/RUN-26 — suggestions-only contract v2, fixed instructions first, data last in fenced blocks; WN-3 lockstep with repo-files pin)
-  'topic-disambiguator': '165e533fa1119ffca44a4876212679207d65501d7b71d0b9ed9de123df84b96e',  // D-12 LOCKED (research split #1)
-  'source-evaluator':    '45488935a0bd44f08b4077978c66767f369b7fb4e72696ef5d17b5c6c453c762',  // D-12 LOCKED (research split #2)
+  'topic-disambiguator': 'c5a480cff0215f481b3c0f15e489bb6691f64821e61d2fe8b4d203a275977e5d',  // D-12 LOCKED (research split #1)
+  'source-evaluator':    '98e79aae30e90e173330e3f36f84edb06bb0aa4f39ac56daac05f01ae951ccb6',  // D-12 LOCKED (research split #2)
   'outline-author':      '914bdd23f6182ac47b5679b45144a10ada702ab8e6eb3415db879063f7419c2a',  // D-12 LOCKED (re-pinned Phase 18 GRND-07/RUN-26: fixed instructions, data blocks brief/existing_sections/sources)
   'section-planner':     'd10b4513bec7bbce182e6fb8fe31b64bc5f5f1352dda498ee0b2414ad3f5f28c',  // D-12 LOCKED (re-pinned Phase 18 GRND-13/RUN-26: fixed instructions, data blocks brief/section/upstream/sources)
   'section-drafter':     '6e956d409a0236778913cbbbe424785e4d71012d4a27e946e135884d5709ead8',  // D-12 LOCKED (re-pinned Phase 18 FEED-02/RUN-26: fixed instructions, data blocks brief/section/voice/style_profile/plan/sources)
-  'pass1-fuzzy-judge':   'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e',  // D-12 LOCKED + D-13 DORMANT in Phase 3
-  'pass3-quote-checker': '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9',  // D-12 LOCKED + D-13 DORMANT in Phase 3
+  'pass1-fuzzy-judge':   '80011728b81766a6bad092a6fae2868cd7e75515344c5e8ecb38b3cfac14498d',  // D-12 LOCKED + D-13 DORMANT in Phase 3
+  'pass3-quote-checker': '19ef3929f85b0f20c4b0f12cea535cbb7c2e28a342c883f9af6737fd7e896421',  // D-12 LOCKED + D-13 DORMANT in Phase 3
   // Phase 4 04-CONTEXT.md D-05 — hash-pinned revise-swap prompt. Re-pinned to
   // the real SHA-256 in Plan 04-04 Task 3 (the prompt body is byte-stable). The
   // matching pin in tests/repo-files.test.ts PENDING_HASH_PINS carries the same
   // value (WN-3 lockstep — both surfaces agree). loadPrompt('revise-swap') now
   // succeeds WITHOUT PENSMITH_ALLOW_PENDING_PROMPT_HASHES.
-  'revise-swap':         '835876ccd55b713b5ebb41dde741fce88fccdc67f208fe2fe20720dc9dc2c3ef',  // Phase 4 D-05
+  'revise-swap':         '2c604b215eaafcb49f4bd138ad64772b0e2f74e7255a5e2ea22e65719e54ff8d',  // Phase 4 D-05
   // Phase 4 04-CONTEXT.md D-12 — hash-pinned smoother prompt (Plan 04-05). Lands
   // here as a __PENDING_HASH_smoother__ sentinel at Task 1a (WN-3); Plan 04-05
   // Task 4 re-pins it to the SAME real SHA-256 the tests/repo-files.test.ts pin
   // already carries (the prompt body is byte-stable on creation — both surfaces
   // then agree and loadPrompt('smoother') succeeds WITHOUT the pending bypass).
-  'smoother':            'ee934f8eee89bf239a95bd8b3eebf04f7802eeb39b0cadb8510c5cddc49097f5',  // Phase 4 D-12 (re-pinned real at Plan 04-05 Task 4 — WN-3 lockstep with repo-files pin)
+  'smoother':            '37aa691f174c5fa75f9569c3c08bdc1a33eb64f503d04834e94d27d5938d9330',  // Phase 4 D-12 (re-pinned real at Plan 04-05 Task 4 — WN-3 lockstep with repo-files pin)
   // Phase 5 05-CONTEXT.md D-12 — hash-pinned claim-support + orphan-label prompts
   // (Plans 05-02/05-03). These are the ACTIVE Phase-5 advisory prompts: claim-support
   // is invoked from bin/lib/verify/pass2.ts (Pass 2 claim-support) and orphan-label
@@ -128,8 +133,8 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   // loadPrompt('claim-support') / loadPrompt('orphan-label') succeed WITHOUT
   // PENSMITH_ALLOW_PENDING_PROMPT_HASHES; runtime drift detection is restored).
   // Mirrors the Phase-4 smoother re-pin precedent exactly (Plan 04-05 Task 4).
-  'claim-support':       '38a28b6b8c997e56951799705b2337f2cdb24fe6c97fae4c631fd30f0fedaa26',   // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 2 via pass2.ts; HARD-04c fence added Plan 15-06)
-  'orphan-label':        '68330195e2cf4109d40ffbaf366e8d800d395153cb6add2cadbb0f244aefe974',   // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 4 Step 3 via pass4.ts; HARD-04c fence added Plan 15-06)
+  'claim-support':       'f6d673bdef91ed677609678bda9f07b422ef3b5a3ac1766eadbd2bc189070a7a',   // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 2 via pass2.ts; HARD-04c fence added Plan 15-06)
+  'orphan-label':        '76f3b8527b03115480d4cd99a631fd746abb0ce28906c0d486a5e1baaa3ac82d',   // Phase 5 D-12 (re-pinned real at Plan 05-05 Task 1 — WN-3 lockstep with repo-files pin; ACTIVE Pass 4 Step 3 via pass4.ts; HARD-04c fence added Plan 15-06)
   // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts (Plan 09-02 wires the
   // TutorialSubscriber render seam). RE-PINNED to the real SHA-256 in Plan 09-03 Task 3
   // (the prompt bodies are byte-stable since 09-00 — see the byte-identical guard in
@@ -139,8 +144,8 @@ export const EXPECTED_PROMPT_HASHES: Record<string, string> = {
   // loadPrompt('tutorial-research-rationale') resolve WITHOUT
   // PENSMITH_ALLOW_PENDING_PROMPT_HASHES — runtime drift detection is restored.
   // Mirrors the Phase-4 smoother + Phase-5 claim-support/orphan-label re-pin precedent.
-  'tutorial-section-provenance': 'de2ef68930504c74381c8f2fcec7b10ca911fd2b617ebb58fa9d5f4bb267168f', // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
-  'tutorial-research-rationale': 'c39d74a3a1c5a848045345e04ac572c11efd54fe06bf3bb4967a344872e4968e', // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
+  'tutorial-section-provenance': 'ce1d8c4876e1096d02239e55283e55decd2df8b0358b0d697d14d5005baab380', // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
+  'tutorial-research-rationale': 'd4d305f2a1e8bebe87849b358f9e4fb9199b78a493bc867a306a63b6e51523e7', // Phase 9 D-12 (re-pinned real at Plan 09-03 Task 3 — WN-3 lockstep)
 };
 
 /**

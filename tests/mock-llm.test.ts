@@ -4,7 +4,10 @@
 // Covers: both wire shapes (captured body, text parsed with the thinking block
 // ignored, call counts), GET /v1/models, SSE streaming (and slow streaming),
 // scripted replies, fixture files, every failure injection mapped to its
-// RUN-12 / RUN-24 outcome, and that close() leaves no listening socket.
+// RUN-12 / RUN-24 outcome, that close() leaves no listening socket, and that
+// the default replies read the request's data blocks exactly as the
+// PENSMITH_NO_LLM stubs do (D-18-06). The prompt-cache simulation is covered by
+// tests/prompt-cache.test.ts.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,6 +23,8 @@ import {
   ProviderTruncatedError,
 } from '../bin/lib/anthropic.js';
 import { resolveRuntime } from '../bin/lib/runtime.js';
+import { textStub } from '../bin/lib/llm-text-stubs.js';
+import { buildPromptRequest, requestHints } from '../bin/lib/prompt-request.js';
 
 const KEY = 'sk-test-mock-llm-key-0001';
 
@@ -31,7 +36,9 @@ test('RUN-21: anthropic shape — captured body, thinking block ignored, thinkin
     assert.equal(mock.callCount('section-drafter'), 1);
     const body = mock.bodiesFor('section-drafter')[0]!;
     assert.equal(body['model'], 'claude-opus-5', 'default generation model');
-    assert.match(res.text, /^mock-llm reply \(section-drafter\)/);
+    // D-18-06: the default reply of a text slug is its contract stub, built from
+    // the request exactly as PENSMITH_NO_LLM builds it.
+    assert.equal(res.text, textStub('section-drafter', [{ role: 'user', content: 'Write section 1 (intro).' }]));
     assert.ok(!res.text.includes('mock-signature'), 'thinking content never leaks into the text');
     // The mock counts 64 thinking tokens as output on claude-opus-5.
     assert.ok(res.outputTokens >= 64 + Math.ceil(res.text.length / 4) - 1, `thinking billed as output: ${res.outputTokens}`);
@@ -214,5 +221,46 @@ test('RUN-12: verify whose advisory Pass 2 hits a model the provider does not se
     assert.equal(warns.length, 1, `one WARN line:\n${r.stderr}`);
     assert.match(warns[0]!, /could not judge 1 claim\(s\): anthropic does not serve model "claude-haiku-4-5" .*\[runtime\.slugs\.claim-support\] model \(recorded as UNCLEAR in VERIFICATION\.md\)$/);
     assert.match(fs.readFileSync(path.join(sec, 'VERIFICATION.md'), 'utf8'), /\*\*UNCLEAR\*\* \| LLM error: /);
+  });
+});
+
+// ---- D-18-06: the mock reads the request's data blocks like a model ------------
+
+test('D-18-06: default structured replies read the request blocks — the same object complete() stubs under PENSMITH_NO_LLM', async () => {
+  const candidates = [
+    { citekey: 'vaswani2017', title: 'Attention is all you need', authors: ['A. Vaswani'], year: 2017, venue: 'arXiv', doi: null, abstract: null },
+    { citekey: 'bahdanau2015', title: 'Neural machine translation', authors: ['D. Bahdanau'], year: 2015, venue: null, doi: null, abstract: null },
+  ];
+  const evaluator = buildPromptRequest('source-evaluator', { topic: 'attention', discipline: 'computer-science', scope: 'transformer-attention', candidates });
+  const disambiguator = buildPromptRequest('topic-disambiguator', { topic: 'attention mechanisms in neural translation', discipline: 'computer-science', assignment: 'Write about attention.' });
+  let mocked: unknown[] = [];
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async () => {
+    const e = await complete({ slug: 'source-evaluator', system: evaluator.system, messages: evaluator.messages });
+    const d = await complete({ slug: 'topic-disambiguator', system: disambiguator.system, messages: disambiguator.messages });
+    mocked = [e.data, d.data];
+  });
+  let stubbed: unknown[] = [];
+  await withLlmSandbox({ env: { PENSMITH_NO_LLM: '1' } }, async () => {
+    const e = await complete({ slug: 'source-evaluator', system: evaluator.system, messages: evaluator.messages, stubHint: requestHints(evaluator) });
+    const d = await complete({ slug: 'topic-disambiguator', system: disambiguator.system, messages: disambiguator.messages, stubHint: requestHints(disambiguator) });
+    stubbed = [e.data, d.data];
+  });
+  assert.deepEqual(mocked, stubbed, 'mock and stub agree');
+  const verdicts = (mocked[0] as { verdicts: Array<{ citekey: string; keep: boolean }> }).verdicts;
+  assert.deepEqual(verdicts.map((v) => [v.citekey, v.keep]), [['vaswani2017', true], ['bahdanau2015', true]], 'every candidate kept');
+  const scopes = (mocked[1] as { scopes: Array<{ queries: string[] }> }).scopes;
+  assert.deepEqual(scopes[0]!.queries, ['attention mechanisms in neural translation'], 'queries come from the topic block');
+});
+
+test('D-18-06: a corrective retry still reads the blocks of the first user turn', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    const req = buildPromptRequest('source-evaluator', {
+      topic: 't', discipline: 'other', scope: 's',
+      candidates: [{ citekey: 'only2020', title: 'x', authors: [], year: null, venue: null, doi: null, abstract: null }],
+    });
+    sb.mock!.script('source-evaluator', { text: 'not json at all' });
+    const r = await complete<{ verdicts: Array<{ citekey: string }> }>({ slug: 'source-evaluator', system: req.system, messages: req.messages });
+    assert.equal(sb.mock!.callCount('source-evaluator'), 2, 'one corrective retry');
+    assert.deepEqual(r.data!.verdicts.map((v) => v.citekey), ['only2020']);
   });
 });

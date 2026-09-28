@@ -33,7 +33,8 @@
 import { defineCommand } from 'citty';
 import path from 'node:path';
 import { readFileSync, existsSync } from 'node:fs';
-import { loadPrompt, interpolate } from '../lib/prompt-loader.js';
+import { loadPrompt } from '../lib/prompt-loader.js';
+import { buildPromptRequest, requestHints } from '../lib/prompt-request.js';
 import { upsertSources, assertLibraryReadable } from '../lib/library.js';
 import { paperDir, projectRoot } from '../lib/paths.js';
 import { crossCheckRetractions } from '../lib/sources/retraction-cross-check.js';
@@ -41,7 +42,7 @@ import { type SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, assertLlmConfigured, StructuredOutputError } from '../lib/anthropic.js';
 import type { TopicDisambiguation } from '../lib/llm-contracts.js';
 import { runGate, canPrompt } from '../lib/gates.js';
-import { parseIntakeMd, escapeTemplateTokens } from '../lib/intake-parse.js';
+import { parseIntakeMd } from '../lib/intake-parse.js';
 import { discoverSources } from '../lib/research-orchestrator.js';
 
 // ---------------------------------------------------------------------------
@@ -112,14 +113,11 @@ export const researchCommand = defineCommand({
     const { topic, discipline, assignment } = parseIntakeMd(intakeText);
 
     // ── Step 2: topic-disambiguator complete() (D-12 LOCKED slug) ──
-    // CR-01: sanitize user-controlled strings before interpolation so that
-    // {{...}} tokens in INTAKE.md cannot cause secondary template expansion.
-    const topicDisambiguatorPrompt = loadPrompt('topic-disambiguator');
-    const interpolatedPrompt = interpolate(topicDisambiguatorPrompt, {
-      topic: escapeTemplateTokens(topic || '(unknown topic — run pensmith new first)'),
-      discipline: escapeTemplateTokens(discipline),
-      assignment: escapeTemplateTokens(assignment || '(no assignment text — run pensmith new first)'),
-    });
+    // The template is the fixed system prompt (the cacheable prefix, RUN-26);
+    // the brief's topic and discipline and the fenced assignment go once, last,
+    // as data blocks (D-18-03/04) — never interpolated into the instructions,
+    // so a `{{…}}` or a fence marker in INTAKE.md is inert data.
+    const disambiguatorRequest = buildPromptRequest('topic-disambiguator', { topic, discipline, assignment });
     // topic-disambiguator is a STRUCTURED slug (RUN-25, T-12-01 trust boundary):
     // complete() returns {scopes:[{label, queries}]} validated against the
     // llm-contracts.ts schema (native structured output where the model has it,
@@ -128,11 +126,9 @@ export const researchCommand = defineCommand({
     try {
       const llmResult = await complete<TopicDisambiguation>({
         slug: 'topic-disambiguator',
-        system:
-          'You are an academic research assistant. Your task is to disambiguate a ' +
-          'research topic and propose search scopes, in the exact format specified in the prompt.',
-        messages: [{ role: 'user', content: interpolatedPrompt }],
-        stubHint: topic || 'research topic',
+        system: disambiguatorRequest.system,
+        messages: disambiguatorRequest.messages,
+        stubHint: requestHints(disambiguatorRequest),
       });
       scopes = (llmResult.data as TopicDisambiguation).scopes;
     } catch (e) {

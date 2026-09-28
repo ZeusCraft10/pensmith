@@ -82,7 +82,13 @@ test('isNoLlmMode: returns true iff PENSMITH_NO_LLM===1', async () => {
 test('T-11-01: complete() returns the offline stub under PENSMITH_NO_LLM=1 with no request', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { PENSMITH_NO_LLM: '1' } }, async (sb) => {
     const text = await complete({ slug: 'section-drafter', system: 'You are a helpful assistant.', messages: [{ role: 'user', content: 'Write a short intro.' }] });
-    assert.match(text.text, /^\[PENSMITH_NO_LLM placeholder — /);
+    // GRND-19 (D-18-06): a text slug gets contract-valid prose, never the old
+    // placeholder string: a request with no data blocks drafts to the default
+    // word target and, with no assigned source, cites nothing.
+    assert.ok(!text.text.includes('PENSMITH_NO_LLM placeholder'), text.text);
+    assert.ok(!text.text.includes('[@'), 'no assigned source → no citation');
+    const words = text.text.split(/\s+/).filter(Boolean).length;
+    assert.ok(words >= 240 && words <= 360, `default 300-word target ±20%: ${words}`);
     assert.equal(text.inputTokens, 0);
     assert.equal(text.outputTokens, 0);
     assert.equal(text.costUsd, 0);
@@ -233,7 +239,8 @@ test('T-11-07: Anthropic provider sends the current body and both headers to api
       const body = JSON.parse(capturedBody) as Record<string, unknown>;
       assert.equal(body['model'], 'claude-opus-5');
       assert.equal(body['max_tokens'], 16_000);
-      assert.equal(body['system'], 'You are an academic writing assistant.');
+      // RUN-26 (D-18-05): the system prompt is always one cache_control-marked text block.
+      assert.deepEqual(body['system'], [{ type: 'text', text: 'You are an academic writing assistant.', cache_control: { type: 'ephemeral' } }]);
       assert.ok(Array.isArray(body['messages']));
       assert.deepEqual(body['thinking'], { type: 'adaptive' });
       assert.equal('temperature' in body, false);

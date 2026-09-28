@@ -30,28 +30,15 @@
 
 import { complete, isFatalLlmError, MissingApiKeyError } from '../anthropic.js';
 import type { ClaimSupport } from '../llm-contracts.js';
-import { loadPrompt, interpolate } from '../prompt-loader.js';
+import { buildPromptRequest, requestHints, type PromptRequest } from '../prompt-request.js';
 
-// WR-04 (HARD-04c fence-marker breakout mitigation).
-//
-// The fence delimiter is in public source, so untrusted text that contains the
-// exact CLOSE marker could break out of the data block and inject instructions.
-// Strip/neutralize any occurrence of the fence open/close substrings from
-// user-supplied variables BEFORE interpolation. The prompt template bodies are
-// NOT changed by this fix, so no WN-3 re-pin is needed.
-const FENCE_UUID = '7f3a9c2e-4b8d-4f1a-a0e2-1c5d7b9f3e6a';
-const FENCE_OPEN  = `<<<PENSMITH_UNTRUSTED_DATA_${FENCE_UUID}>>>`;
-const FENCE_CLOSE = `<<<END_PENSMITH_UNTRUSTED_DATA_${FENCE_UUID}>>>`;
-
-/**
- * Remove any occurrence of the fence open/close markers from a string that
- * is about to be interpolated into an LLM prompt. This prevents a crafted
- * source abstract or draft sentence from breaking out of the data fence.
- */
-function stripFenceMarkers(s: string): string {
-  return s.replaceAll(FENCE_OPEN, '[REDACTED-FENCE-MARKER]')
-          .replaceAll(FENCE_CLOSE, '[REDACTED-FENCE-MARKER]');
-}
+// FEED-05 (D-18-04): the claim sentence (draft text), the source abstract and
+// the source metadata (both from the registrars) are untrusted. They reach the
+// model only as data blocks the ONE renderer fences (prompt-request.ts →
+// untrusted-fence.ts), after every spelling of a fence marker and every
+// closing block tag in them has been neutralised — a crafted abstract can
+// neither end its fence nor its block. The fence constants live in
+// bin/lib/untrusted-fence.ts alone (tests/pass2-injection.test.ts greps).
 
 export type Pass2Verdict = 'SUPPORTED' | 'PARTIAL' | 'UNSUPPORTED' | 'UNCLEAR';
 
@@ -158,9 +145,9 @@ function normalizeTitle(title: Pass2BibEntry['title']): string {
   return title ?? '';
 }
 
-/** Normalize a CSL-style author list to a comma-joined display string. */
-function normalizeAuthors(author: Pass2BibEntry['author']): string {
-  if (!author) return '';
+/** Normalize a CSL-style author list to display names ("Given Family"), at most five. */
+function normalizeAuthors(author: Pass2BibEntry['author']): string[] {
+  if (!author) return [];
   return author
     .map((a) => {
       if (typeof a === 'string') return a;
@@ -169,7 +156,22 @@ function normalizeAuthors(author: Pass2BibEntry['author']): string {
       return [given, family].filter(Boolean).join(' ').trim();
     })
     .filter(Boolean)
-    .join(', ');
+    .slice(0, 5);
+}
+
+/**
+ * The claim-support request for one (citation, claim sentence) pair: the fixed
+ * template as the system prompt — byte-identical for every pair, so from the
+ * second call on it is read from the prompt cache where the model's minimum
+ * allows (RUN-26) — and one data message with the `citation`, `claim` and
+ * `abstract` blocks, each fenced (18-PLAN.md §3.3).
+ */
+export function claimSupportRequest(citekey: string, claimSentence: string, bibEntry: Pass2BibEntry | undefined): PromptRequest {
+  return buildPromptRequest('claim-support', {
+    citation: { citekey, title: normalizeTitle(bibEntry?.title), authors: normalizeAuthors(bibEntry?.author) },
+    claim: claimSentence,
+    abstract: bibEntry?.abstract ?? '',
+  });
 }
 
 /** Clamp a free-text field to a table-cell-safe single line of <=max chars. */
@@ -218,10 +220,8 @@ export async function runPass2(
     return pairs.map((p) => pass2Placeholder(p.claimSentence, p.citekey));
   }
 
-  // ---- Live claim-support branch (only reached with a real key + LLM enabled).
-  // Never reached in CI: the noLlm short-circuit above is the test path.
-  const promptTemplate = loadPrompt('claim-support');
-
+  // ---- Live claim-support branch (a configured model: a provider, a local
+  // server or the RUN-21 mock LLM).
   const results: Pass2Result[] = [];
   // Set once no provider key is configured: the remaining pairs are skipped
   // (every call would fail the same way). Verify still writes its frozen
@@ -238,27 +238,19 @@ export async function runPass2(
     const bibEntry = bibByCitekey.get(pair.citekey);
     const abstract = bibEntry?.abstract ?? '';
     try {
-      // WR-04: sanitize untrusted variables (claim_sentence comes from draft
-      // text; source_abstract comes from CrossRef API) before interpolation
-      // so neither can embed the fence close marker and break out of the
-      // data block. Trusted metadata fields (citekey, title, authors) are
-      // sanitized as well for defense-in-depth.
-      const prompt = interpolate(promptTemplate, {
-        citekey: stripFenceMarkers(pair.citekey),
-        claim_sentence: stripFenceMarkers(pair.claimSentence),
-        source_abstract: stripFenceMarkers(abstract),
-        source_title: stripFenceMarkers(normalizeTitle(bibEntry?.title)),
-        source_authors: stripFenceMarkers(normalizeAuthors(bibEntry?.author)),
-      });
+      // WR-04 / FEED-05: the renderer fences the untrusted blocks and strips
+      // fence markers from every payload (claimSupportRequest above).
+      const request = claimSupportRequest(pair.citekey, pair.claimSentence, bibEntry);
 
       // Route through the transport chokepoint (complete() → http.ts, D-06):
       // the session cost-cap check before sending, retry/backoff, and the
-      // actual-usage cost record after. The prompt is the user message (no system).
+      // actual-usage cost record after.
       const res = await complete<ClaimSupport>({
         slug: 'claim-support',
         section: opts.n,
-        system: '',
-        messages: [{ role: 'user', content: prompt }],
+        system: request.system,
+        messages: request.messages,
+        stubHint: requestHints(request),
       });
       results.push(toPass2Result(res.data as ClaimSupport, pair.citekey, pair.claimSentence, abstract));
     } catch (err) {

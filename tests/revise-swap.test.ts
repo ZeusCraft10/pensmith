@@ -26,6 +26,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadCassetteFile } from '../bin/lib/http-mock.js';
 import { runRevise } from '../bin/lib/revise.js';
+import { proposeSwap } from '../bin/lib/revise-swap.js';
+import { loadPrompt } from '../bin/lib/prompt-loader.js';
+import { promptHints } from '../bin/lib/prompt-request.js';
+import { FENCE_OPEN } from '../bin/lib/untrusted-fence.js';
+import { withLlmSandbox } from './helpers/llm-sandbox.js';
 
 // ---------------------------------------------------------------------------
 // Cassette → strict-JSON content helper.
@@ -297,4 +302,65 @@ test('revise --research: section-scoped append, sibling untouched (PLAN-03 / D-0
   // Sibling section untouched (content AND mtime).
   assert.equal(readFileSync(siblingDraft, 'utf8'), siblingBefore, 'sibling DRAFT.md content must be unchanged');
   assert.equal(statSync(siblingDraft).mtimeMs, siblingMtimeBefore, 'sibling DRAFT.md mtime must be unchanged');
+});
+
+// ===========================================================================
+// 6. The real proposeSwap (bin/lib/revise-swap.ts) — request shape (D-18-03/04,
+//    RUN-26, FEED-05) and its PENSMITH_NO_LLM stub (GRND-19, D-18-06).
+// ===========================================================================
+
+const SWAP_VARS = {
+  flagged_citekey: 'jones2019',
+  verifier_reason: 'FABRICATED — DOI did not resolve via Crossref',
+  claim_context: 'The mechanism is robust and the effect is well established [@jones2019].',
+  available_sources: '- smith2020\n- jones2019\n- brown2018',
+  voice_hint: 'Voice: declarative, comparative, avoid hedging.',
+};
+
+test('revise-swap: the request is the fixed template + data blocks (library metadata, claim and sources fenced)', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: 'sk-ant-test-revise-swap-0001' } }, async (sb) => {
+    writeFileSync(join(sb.paper, 'LIBRARY.json'), JSON.stringify({
+      $schemaVersion: 2,
+      entries: [
+        { citekey: 'smith2020', title: 'Baseline mechanisms', authors: ['Smith, Ann'], year: 2020, addedAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+      ],
+    }));
+    sb.mock!.script('revise-swap', { text: JSON.stringify({ action: 'remove', flagged_citekey: 'jones2019', replacement_citekey: null, rationale: 'r', patch: { before_excerpt: '[@jones2019]', after_excerpt: '' } }) });
+    const raw = await proposeSwap(SWAP_VARS);
+    assert.equal((JSON.parse(raw) as { action: string }).action, 'remove');
+    const body = sb.mock!.bodiesFor('revise-swap')[0]!;
+    assert.deepEqual(body['system'], [{ type: 'text', text: loadPrompt('revise-swap'), cache_control: { type: 'ephemeral' } }]);
+    const content = (body['messages'] as Array<{ content: string }>)[0]!.content;
+    const hints = promptHints(content);
+    assert.deepEqual(hints['flag'], { flagged_citekey: 'jones2019', verifier_reason: SWAP_VARS.verifier_reason });
+    assert.equal(hints['voice'], SWAP_VARS.voice_hint);
+    assert.deepEqual(hints['available_sources'], [
+      { citekey: 'smith2020', title: 'Baseline mechanisms', authors: ['Smith, Ann'], year: 2020 },
+      { citekey: 'jones2019', title: null, authors: [], year: null },
+      { citekey: 'brown2018', title: null, authors: [], year: null },
+    ]);
+    assert.equal(hints['claim'], SWAP_VARS.claim_context);
+    // The claim and the source list are fenced; the flag and voice are not.
+    assert.equal(content.split(FENCE_OPEN).length - 1, 2);
+    assert.ok(content.indexOf('<flag>') < content.indexOf('<voice>'));
+    assert.ok(content.indexOf('<available_sources>') < content.indexOf('<claim>'));
+  });
+});
+
+test('revise-swap: under PENSMITH_NO_LLM the stub removes the flagged citation through runRevise (no request)', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { PENSMITH_NO_LLM: '1' } }, async (sb) => {
+    const parsed = JSON.parse(await proposeSwap(SWAP_VARS)) as Record<string, unknown>;
+    assert.equal(parsed['action'], 'remove');
+    assert.equal(parsed['flagged_citekey'], 'jones2019');
+    assert.equal(parsed['replacement_citekey'], null);
+    assert.equal(sb.mock!.callCount(), 0);
+
+    const { root } = seedFixture();
+    const res = await runRevise({ paperRoot: root, n: 2, slug: 'target', yolo: true, proposeSwap });
+    assert.equal(res.action, 'remove');
+    assert.equal(res.accepted, true);
+    const draft = readFileSync(targetDraftPath(root), 'utf8');
+    assert.ok(!draft.includes('[@jones2019]'));
+    assert.match(draft, /\[@smith2020\]/);
+  });
 });

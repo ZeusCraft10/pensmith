@@ -10,12 +10,16 @@
 // OpenAI()` would bypass the http.ts chokepoint.
 //
 // complete({slug, …}) — order is load-bearing:
-//   1. PENSMITH_NO_LLM → deterministic stub (schema-valid object for structured
-//      slugs via llm-stubs.ts, the placeholder string for text slugs); no key,
-//      no network, no log.
+//   1. PENSMITH_NO_LLM → deterministic stub built from the request's data
+//      blocks (D-18-06): a schema-valid object for structured slugs
+//      (llm-stubs.ts), contract-valid prose for text slugs
+//      (llm-text-stubs.ts); no key, no network, no log.
 //   2. Resolve the runtime + the slug's model/effort (runtime.ts, RUN-26).
 //   3. Build the provider request (thinking / effort / structured output /
-//      cache_control / refusal fallbacks per the model capabilities, RUN-24).
+//      refusal fallbacks per the model capabilities, RUN-24). The system prompt
+//      — the slug's fixed template (prompt-request.ts) — is always the cache
+//      prefix (RUN-26, D-18-05): one text block marked cache_control ephemeral
+//      on the Anthropic shape, the first message on the chat shape.
 //   4. Replay (RUN-17): under sources-offline with `resume --replay` active,
 //      serve the logged response for (slug, sha256(request body)) and never dial.
 //   5. Key resolution (runtime.ts; the value is registered for log scrubbing
@@ -73,7 +77,8 @@ import {
   jsonSchemaForSlug,
   parseStructured,
 } from './llm-contracts.js';
-import { hasStructuredStub, structuredStub, textPlaceholder, type StubHint } from './llm-stubs.js';
+import { hasStructuredStub, structuredStub, stubHintsFor, type StubHint } from './llm-stubs.js';
+import { textStub } from './llm-text-stubs.js';
 import {
   currentSessionId,
   logSessionArgvOnce,
@@ -133,7 +138,11 @@ export interface CompleteOptions {
   model?: string;
   /** Lower the slug's max_tokens ceiling for this call. */
   maxTokens?: number;
-  /** Deterministic-stub hint (e.g. the topic) used only under PENSMITH_NO_LLM. */
+  /**
+   * Deterministic-stub hint used only under PENSMITH_NO_LLM: call sites pass
+   * requestHints(req) (prompt-request.ts), which overlays the hints the stub
+   * reads from the request's data blocks anyway.
+   */
   stubHint?: StubHint;
   /** Request timeout (headers + body gaps). Default 600 000 ms. */
   timeoutMs?: number;
@@ -413,9 +422,13 @@ export function chatUrl(endpoint: string, p: string): string {
 function buildAnthropicBody(plan: CallPlan, system: string, messages: ChatMessage[], maxTokens: number, stream: boolean): Record<string, unknown> {
   const body: Record<string, unknown> = { model: plan.model, max_tokens: maxTokens };
   if (system.length > 0) {
-    body['system'] = plan.spec.cacheSystem
-      ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }]
-      : system;
+    // RUN-26 / D-18-05: the system prompt is the slug's fixed template, so it
+    // is one text block carrying the cache breakpoint (5-minute TTL). Below the
+    // model's minimum cacheable prefix (llm-models.ts) the marker is silently
+    // ignored and costs nothing; above it every repeat call reads the prefix.
+    const block: Record<string, unknown> = { type: 'text', text: system };
+    if (plan.spec.cacheSystem) block['cache_control'] = { type: 'ephemeral' };
+    body['system'] = [block];
   }
   body['messages'] = messages.map((m) => ({ role: m.role, content: m.content }));
   if (plan.caps.thinking === 'adaptive') body['thinking'] = { type: 'adaptive' };
@@ -430,6 +443,8 @@ function buildAnthropicBody(plan: CallPlan, system: string, messages: ChatMessag
 
 function buildChatBody(plan: CallPlan, system: string, messages: ChatMessage[], maxTokens: number, stream: boolean): Record<string, unknown> {
   const all: Array<{ role: string; content: string }> = [];
+  // The fixed template first: chat-completions providers cache the longest
+  // repeated prompt prefix automatically (OpenAI: >= 1024 tokens, RUN-26).
   if (system.length > 0) all.push({ role: 'system', content: system });
   for (const m of messages) all.push({ role: m.role, content: m.content });
   const body: Record<string, unknown> = { model: plan.model, messages: all };
@@ -1064,11 +1079,14 @@ export async function complete<T = unknown>(opts: CompleteOptions): Promise<Comp
   validateMessages(opts);
   const spec = slugSpec(opts.slug);
 
-  // 1. LLM-stubbed mode (PENSMITH_NO_LLM / --dry-run): no key, no network, no log.
+  // 1. LLM-stubbed mode (PENSMITH_NO_LLM / --dry-run): no key, no network, no
+  //    log. The stub reads the request's data blocks like a model would
+  //    (D-18-06), overlaid with the caller's stubHint.
   if (isNoLlmMode()) {
+    const hints = stubHintsFor(opts.messages, opts.stubHint);
     const structured = spec.structured && hasStructuredStub(spec.slug);
-    const data = structured ? structuredStub(spec.slug, opts.stubHint) : undefined;
-    const text = structured ? JSON.stringify(data) : textPlaceholder(opts.messages.at(-1)?.content ?? '');
+    const data = structured ? structuredStub(spec.slug, hints) : undefined;
+    const text = structured ? JSON.stringify(data) : textStub(spec.slug, opts.messages, hints);
     return {
       text,
       ...(data !== undefined ? { data: data as T } : {}),

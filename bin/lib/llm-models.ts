@@ -4,8 +4,9 @@
 //   1. Providers: the valid provider names, their default endpoints and the key
 //      variable each hosted provider reads.
 //   2. Models: per-model capabilities (thinking mode, effort levels, native
-//      structured output, max output tokens, refusal-fallback support) and the
-//      retired-id aliases (with a one-time warning).
+//      structured output, max output tokens, refusal-fallback support), the
+//      retired-id aliases (with a one-time warning) and the minimum cacheable
+//      prompt prefix per model (D-18-05).
 //   3. Prompt slugs: the per-slug request policy (generation vs judgment tier,
 //      effort, max_tokens ceiling, retry ceiling, shipped p90 output, input
 //      estimate, system-prompt caching, structured or text output, owning verb).
@@ -231,6 +232,109 @@ export function effectiveEffort(caps: ModelCapabilities, wanted: Effort): Effort
 }
 
 // ---------------------------------------------------------------------------
+// Prompt caching (RUN-26, D-18-05)
+// ---------------------------------------------------------------------------
+//
+// Every request sends its slug's template, byte-identical for every call, as
+// the system prompt and the per-call data after it (bin/lib/prompt-request.ts),
+// so the system prompt is a reusable prefix. On the Anthropic shape it is one
+// text block marked `cache_control: {type: "ephemeral"}` (5-minute TTL); on the
+// chat-completions shape it is the first message, which OpenAI caches
+// automatically. A prefix shorter than its model's minimum is silently not
+// cached — no error, `cache_creation_input_tokens: 0` — so the marker is always
+// sent (it costs nothing) and `status --config` reports, per slug, whether the
+// system prompt reaches the minimum of the model that slug runs on. No template
+// is padded to reach a minimum.
+
+/**
+ * Minimum cacheable prefix per Anthropic model, in tokens: the claude-api skill
+ * prompt-caching table (cached 2026-06-24). The minimum is model-specific and
+ * not monotonic across generations (Opus 5 512, Opus 4.8 1024, Haiku 4.5 4096).
+ */
+export const ANTHROPIC_MIN_CACHEABLE_TOKENS: Readonly<Record<string, number>> = Object.freeze({
+  'claude-fable-5-1': 512,
+  'claude-fable-5': 512,
+  'claude-opus-5': 512,
+  'claude-opus-4-8': 1024,
+  'claude-sonnet-5': 1024,
+  'claude-sonnet-4-6': 1024,
+  'claude-opus-4-7': 2048,
+  'claude-opus-4-6': 4096,
+  'claude-haiku-4-5': 4096,
+});
+
+/** A model the caching table does not list is reported against this minimum. */
+export const UNLISTED_MIN_CACHEABLE_TOKENS = 4096;
+
+/** OpenAI caches a prompt prefix automatically once the prompt reaches 1024 tokens… */
+export const OPENAI_MIN_CACHEABLE_TOKENS = 1024;
+/** …in 128-token increments of the longest previously seen prefix. */
+export const OPENAI_CACHE_INCREMENT_TOKENS = 128;
+
+/** The `cache_control: {type: "ephemeral"}` lifetime (refreshed by every read). */
+export const PROMPT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+export interface CachePrefixRule {
+  /**
+   * `marker`: a cache_control breakpoint is sent (Anthropic); `automatic`: the
+   * provider caches long prefixes itself (OpenAI); `none`: a local server —
+   * nothing is billed, so there is nothing to report.
+   */
+  readonly mode: 'marker' | 'automatic' | 'none';
+  /** The minimum cacheable prefix in tokens (null for `none`). */
+  readonly minTokens: number | null;
+  /** False when the model is not in the table (the minimum is then assumed). */
+  readonly listed: boolean;
+}
+
+/** The prompt-caching rule for (provider, model). */
+export function cachePrefixRule(provider: ProviderName, model: string): CachePrefixRule {
+  if (LOCAL_PROVIDERS.has(provider)) return Object.freeze({ mode: 'none', minTokens: null, listed: true });
+  if (provider === 'openai') {
+    return Object.freeze({ mode: 'automatic', minTokens: OPENAI_MIN_CACHEABLE_TOKENS, listed: MODELS[model]?.provider === 'openai' });
+  }
+  const min = ANTHROPIC_MIN_CACHEABLE_TOKENS[model];
+  return Object.freeze({ mode: 'marker', minTokens: min ?? UNLISTED_MIN_CACHEABLE_TOKENS, listed: min !== undefined });
+}
+
+/** Whether a system prompt of `systemTokens` reaches its model's cache minimum. */
+export interface SystemCacheReach {
+  readonly rule: CachePrefixRule;
+  readonly model: string;
+  readonly systemTokens: number;
+  /** null for a local provider (not applicable). */
+  readonly reaches: boolean | null;
+}
+
+export function systemCacheReach(provider: ProviderName, model: string, systemTokens: number): SystemCacheReach {
+  const rule = cachePrefixRule(provider, model);
+  const reaches = rule.minTokens === null ? null : systemTokens >= rule.minTokens;
+  return Object.freeze({ rule, model, systemTokens, reaches });
+}
+
+/**
+ * The `status --config` cache column (`yes` / `no` / `n/a`) and its one-line
+ * explanation, e.g. `system prompt ~870 tokens is below the 4096-token minimum
+ * for claude-haiku-4-5 (marked, not cached)`.
+ */
+export function describeCacheReach(r: SystemCacheReach): { column: 'yes' | 'no' | 'n/a'; detail: string } {
+  const tokens = `system prompt ~${r.systemTokens} tokens`;
+  if (r.rule.mode === 'none' || r.rule.minTokens === null) {
+    return { column: 'n/a', detail: 'local provider: no billed prompt caching' };
+  }
+  const min = `${r.rule.minTokens}-token minimum`;
+  const whose = r.rule.listed ? `for ${r.model}` : `assumed for ${r.model} (not in the caching table)`;
+  if (r.rule.mode === 'automatic') {
+    return r.reaches === true
+      ? { column: 'yes', detail: `${tokens} reaches the ${min} ${whose} (automatic prefix caching)` }
+      : { column: 'no', detail: `${tokens} is below the ${min} ${whose} (automatic prefix caching)` };
+  }
+  return r.reaches === true
+    ? { column: 'yes', detail: `${tokens} reaches the ${min} ${whose} (cache_control marked)` }
+    : { column: 'no', detail: `${tokens} is below the ${min} ${whose} (marked, not cached)` };
+}
+
+// ---------------------------------------------------------------------------
 // Prompt slugs (RUN-26, D-17-24)
 // ---------------------------------------------------------------------------
 
@@ -250,7 +354,11 @@ export interface SlugSpec {
   readonly p90Output: number;
   /** Typical input tokens for one call (used by --estimate before any prompt exists). */
   readonly inputEstimate: number;
-  /** Send cache_control:{type:'ephemeral'} on the stable system block. */
+  /**
+   * Send cache_control:{type:'ephemeral'} on the system block. True for every
+   * slug (D-18-05): every template is fixed instruction text, so the system
+   * prompt is always a reusable prefix.
+   */
   readonly cacheSystem: boolean;
   /** Structured slugs return schema-validated data (llm-contracts.ts). */
   readonly structured: boolean;
@@ -274,19 +382,19 @@ function s(
 
 const SLUG_LIST: readonly SlugSpec[] = [
   // Generation slugs: the configured model (default claude-opus-5), effort medium; the drafter runs at high.
-  s('intake-clarifier', 'new', 'generation', 'medium', 8_000, 2_500, 2_000, false, true),
-  s('outline-author', 'outline', 'generation', 'medium', 16_000, 6_000, 6_000, false, true),
+  s('intake-clarifier', 'new', 'generation', 'medium', 8_000, 2_500, 2_000, true, true),
+  s('outline-author', 'outline', 'generation', 'medium', 16_000, 6_000, 6_000, true, true),
   s('section-planner', 'plan', 'generation', 'medium', 16_000, 4_500, 7_000, true, true),
-  s('section-drafter', 'write', 'generation', 'high', 16_000, 9_000, 5_000, false, false),
+  s('section-drafter', 'write', 'generation', 'high', 16_000, 9_000, 5_000, true, false),
   s('smoother', 'compile', 'generation', 'medium', 16_000, 8_000, 10_000, true, false),
   s('revise-swap', 'plan', 'generation', 'medium', 4_000, 1_500, 3_000, true, false),
-  s('tutorial-research-rationale', 'research', 'generation', 'medium', 8_000, 2_500, 4_000, false, false),
-  s('tutorial-section-provenance', 'write', 'generation', 'medium', 8_000, 2_500, 4_000, false, false),
+  s('tutorial-research-rationale', 'research', 'generation', 'medium', 8_000, 2_500, 4_000, true, false),
+  s('tutorial-section-provenance', 'write', 'generation', 'medium', 8_000, 2_500, 4_000, true, false),
   // Judgment slugs: claude-haiku-4-5 / the small OpenAI model / the configured local model.
-  s('topic-disambiguator', 'research', 'judgment', 'low', 4_000, 900, 1_500, false, true),
-  s('source-evaluator', 'research', 'judgment', 'low', 16_000, 3_500, 15_000, false, true),
-  s('claim-support', 'verify', 'judgment', 'low', 2_000, 350, 1_200, false, true),
-  s('orphan-label', 'verify', 'judgment', 'low', 1_000, 120, 700, false, true),
+  s('topic-disambiguator', 'research', 'judgment', 'low', 4_000, 900, 1_500, true, true),
+  s('source-evaluator', 'research', 'judgment', 'low', 16_000, 3_500, 15_000, true, true),
+  s('claim-support', 'verify', 'judgment', 'low', 2_000, 350, 1_200, true, true),
+  s('orphan-label', 'verify', 'judgment', 'low', 1_000, 120, 700, true, true),
 ];
 
 export const SLUGS: Readonly<Record<string, SlugSpec>> = Object.freeze(

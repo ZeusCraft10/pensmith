@@ -331,31 +331,31 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // CYCLE-4 M-1 REVIEWS CONVERGENCE — `export` keyword present so Plan 09 Task 9.3.5
   // dynamic-imports this array (not undefined); single source of truth for the 9 hash-pin slugs.
   { slug: 'intake-clarifier',    path: 'templates/prompts/intake-clarifier.md',    decision: 'D-12', hash: '7700947abfc9a94d2785996fd7b26e8f812a5b01c77ab24ee1563314b7eb9a53' },  // re-pinned Phase 18 GRND-02/RUN-26 — suggestions-only contract v2, data-last layout; WN-3 lockstep with prompt-loader pin
-  { slug: 'topic-disambiguator', path: 'templates/prompts/topic-disambiguator.md', decision: 'D-12', hash: '165e533fa1119ffca44a4876212679207d65501d7b71d0b9ed9de123df84b96e' },
-  { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12', hash: '45488935a0bd44f08b4077978c66767f369b7fb4e72696ef5d17b5c6c453c762' },
+  { slug: 'topic-disambiguator', path: 'templates/prompts/topic-disambiguator.md', decision: 'D-12', hash: 'c5a480cff0215f481b3c0f15e489bb6691f64821e61d2fe8b4d203a275977e5d' },
+  { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12', hash: '98e79aae30e90e173330e3f36f84edb06bb0aa4f39ac56daac05f01ae951ccb6' },
   { slug: 'outline-author',      path: 'templates/prompts/outline-author.md',      decision: 'D-12', hash: '914bdd23f6182ac47b5679b45144a10ada702ab8e6eb3415db879063f7419c2a' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin
   { slug: 'section-planner',     path: 'templates/prompts/section-planner.md',     decision: 'D-12', hash: 'd10b4513bec7bbce182e6fb8fe31b64bc5f5f1352dda498ee0b2414ad3f5f28c' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin
   { slug: 'section-drafter',     path: 'templates/prompts/section-drafter.md',     decision: 'D-12', hash: '6e956d409a0236778913cbbbe424785e4d71012d4a27e946e135884d5709ead8' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin
-  { slug: 'pass1-fuzzy-judge',   path: 'templates/prompts/pass1-fuzzy-judge.md',   decision: 'D-12 + D-13 DORMANT in Phase 3', hash: 'da4956f0bbc24197739f8bfa75dcf4c29c6dac905dd33ba7c5ea94c48902149e' },
-  { slug: 'pass3-quote-checker', path: 'templates/prompts/pass3-quote-checker.md', decision: 'D-12 + D-13 DORMANT in Phase 3', hash: '8eb5d17d27add7afebeab77f960656229411710baf8ef243a0f9952282e5bfd9' },
+  { slug: 'pass1-fuzzy-judge',   path: 'templates/prompts/pass1-fuzzy-judge.md',   decision: 'D-12 + D-13 DORMANT in Phase 3', hash: '80011728b81766a6bad092a6fae2868cd7e75515344c5e8ecb38b3cfac14498d' },
+  { slug: 'pass3-quote-checker', path: 'templates/prompts/pass3-quote-checker.md', decision: 'D-12 + D-13 DORMANT in Phase 3', hash: '19ef3929f85b0f20c4b0f12cea535cbb7c2e28a342c883f9af6737fd7e896421' },
   { slug: 'apa-csl',             path: 'templates/citation-styles/apa.csl',        decision: 'D-22 (different chokepoint)',    hash: '249341f13df5cff992efdc71e12b9888678f8e4ad69e17fe12bd2c5245681094' },
   // Phase 4 04-CONTEXT.md D-05 — new revise-swap prompt. The byte-pin below is
   // GREEN from Task 1 (the file is byte-stable). bin/lib/prompt-loader.ts holds
   // a __PENDING_HASH_revise-swap__ sentinel until Plan 04-04 Task 3 re-pins the
   // SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
-  { slug: 'revise-swap',         path: 'templates/prompts/revise-swap.md',         decision: 'Phase 4 D-05',                   hash: '835876ccd55b713b5ebb41dde741fce88fccdc67f208fe2fe20720dc9dc2c3ef' },
+  { slug: 'revise-swap',         path: 'templates/prompts/revise-swap.md',         decision: 'Phase 4 D-05',                   hash: '2c604b215eaafcb49f4bd138ad64772b0e2f74e7255a5e2ea22e65719e54ff8d' },
   // Phase 4 04-CONTEXT.md D-12 — new smoother prompt (Plan 04-05). The byte-pin
   // below is GREEN from Task 1a (the file is byte-stable). bin/lib/prompt-loader.ts
   // holds a __PENDING_HASH_smoother__ sentinel until Plan 04-05 Task 4 re-pins the
   // SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
-  { slug: 'smoother',            path: 'templates/prompts/smoother.md',            decision: 'Phase 4 D-12',                   hash: 'ee934f8eee89bf239a95bd8b3eebf04f7802eeb39b0cadb8510c5cddc49097f5' },
+  { slug: 'smoother',            path: 'templates/prompts/smoother.md',            decision: 'Phase 4 D-12',                   hash: '37aa691f174c5fa75f9569c3c08bdc1a33eb64f503d04834e94d27d5938d9330' },
   // Phase 5 05-CONTEXT.md D-12 — new claim-support + orphan-label prompts (Plans
   // 05-02/05-03 advisory Pass 2/4). The byte-pins below are the REAL SHA-256 and are
   // GREEN from Wave 0 (Plan 05-01) the moment the prompt files are byte-stable.
   // bin/lib/prompt-loader.ts holds __PENDING_HASH_<slug>__ sentinels until Plan 05-05
   // re-pins the SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
-  { slug: 'claim-support',       path: 'templates/prompts/claim-support.md',       decision: 'Phase 5 D-12 / Phase 15 HARD-04c', hash: '38a28b6b8c997e56951799705b2337f2cdb24fe6c97fae4c631fd30f0fedaa26' },
-  { slug: 'orphan-label',        path: 'templates/prompts/orphan-label.md',        decision: 'Phase 5 D-12 / Phase 15 HARD-04c', hash: '68330195e2cf4109d40ffbaf366e8d800d395153cb6add2cadbb0f244aefe974' },
+  { slug: 'claim-support',       path: 'templates/prompts/claim-support.md',       decision: 'Phase 5 D-12 / Phase 15 HARD-04c', hash: 'f6d673bdef91ed677609678bda9f07b422ef3b5a3ac1766eadbd2bc189070a7a' },
+  { slug: 'orphan-label',        path: 'templates/prompts/orphan-label.md',        decision: 'Phase 5 D-12 / Phase 15 HARD-04c', hash: '76f3b8527b03115480d4cd99a631fd746abb0ce28906c0d486a5e1baaa3ac82d' },
   // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts. RE-PINNED to the real
   // SHA-256 in Plan 09-03 Task 3 (WN-3 lockstep — the SAME commit re-pins bin/lib/
   // prompt-loader.ts EXPECTED_PROMPT_HASHES, so drift between the two surfaces is
@@ -364,8 +364,8 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // content. Any intentional edit to the prompt bodies requires recomputing BOTH hashes
   // here AND in prompt-loader.ts in one commit (D-12 single-source rule). The byte-pin
   // loop now runs (no longer skipped) and the file-exists loop still guards presence.
-  { slug: 'tutorial-section-provenance', path: 'templates/prompts/tutorial-section-provenance.md', decision: 'Phase 9 D-12', hash: 'de2ef68930504c74381c8f2fcec7b10ca911fd2b617ebb58fa9d5f4bb267168f' },
-  { slug: 'tutorial-research-rationale', path: 'templates/prompts/tutorial-research-rationale.md', decision: 'Phase 9 D-12', hash: 'c39d74a3a1c5a848045345e04ac572c11efd54fe06bf3bb4967a344872e4968e' },
+  { slug: 'tutorial-section-provenance', path: 'templates/prompts/tutorial-section-provenance.md', decision: 'Phase 9 D-12', hash: 'ce1d8c4876e1096d02239e55283e55decd2df8b0358b0d697d14d5005baab380' },
+  { slug: 'tutorial-research-rationale', path: 'templates/prompts/tutorial-research-rationale.md', decision: 'Phase 9 D-12', hash: 'd4d305f2a1e8bebe87849b358f9e4fb9199b78a493bc867a306a63b6e51523e7' },
 ];
 for (const pin of PENDING_HASH_PINS) {
   // WN-3 sentinel entries (hash === `__PENDING_HASH_<slug>__`) are NOT yet
