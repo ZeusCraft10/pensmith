@@ -227,7 +227,7 @@ test('RUN-09: `new` with no assignment in a non-interactive run exits 2 before w
   const root = sb.project('p');
   const r = runCli(sb, root, ['new', '--yolo']);
   assert.equal(r.status, EXIT_USAGE, `${r.stdout}\n${r.stderr}`);
-  assert.match(r.stderr, /^pensmith: no assignment: pass --from <file>, or put assignment\.txt \/ assignment\.md \/ assignment\.pdf in /m);
+  assert.match(r.stderr, /^pensmith: no assignment found: pass --from <file> or @<file> \(\.txt, \.md, \.pdf\), pipe it on stdin, put assignment\.txt \/ assignment\.md \/ assignment\.pdf in /m);
   assert.ok(!existsSync(join(root, '.paper')), 'no .paper/ was created');
   const missing = runCli(sb, root, ['new', '--from', 'nope.txt', '--yolo']);
   assert.equal(missing.status, EXIT_USAGE);

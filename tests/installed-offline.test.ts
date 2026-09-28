@@ -144,7 +144,9 @@ test('RUN-17 / RUN-05: `PENSMITH_OFFLINE=1 resume --replay <id>` works in the in
     cpSync(sb.paper, join(project, '.paper'), { recursive: true });
     writeFileSync(join(project, 'assignment.txt'), readFileSync(join(sb.root, 'assignment.txt')));
     rmSync(join(project, '.paper', 'INTAKE.md'));
-    const r = runInstalled(['resume', '--replay', String(rec['id'])], project, { PENSMITH_OFFLINE: '1' });
+    // GRND-02: `new` asks the intake battery; the replaying invocation's own --yolo
+    // accepts the defaults (a replay never inherits the logged --yolo, RUN-28).
+    const r = runInstalled(['resume', '--replay', String(rec['id']), '--yolo'], project, { PENSMITH_OFFLINE: '1' });
     assert.equal(r.status, 0, `installed replay: ${r.stdout}\n${r.stderr}`);
     assert.doesNotMatch(r.stderr, /offline fixtures are not shipped/);
     assert.match(r.stderr, /\(sources offline: serving the logged model responses\)/);

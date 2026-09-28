@@ -1,0 +1,11 @@
+// Chokepoint fixture (discipline-literals, GRND-06): a private discipline →
+// citation-style map outside bin/lib/disciplines.ts. It drifts from the PRD §8
+// preset table (History is Chicago notes-bibliography there, not author-date)
+// — the rule must flag it.
+const STYLE_BY_DISCIPLINE: Readonly<Record<string, string>> = {
+  'history': 'chicago-author-date',
+};
+
+export function styleFor(discipline: string): string {
+  return STYLE_BY_DISCIPLINE[discipline] ?? 'apa';
+}

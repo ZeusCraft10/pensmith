@@ -4,9 +4,17 @@
 // CR-01: escapeTemplateTokens() must neutralise {{...}} tokens so they cannot
 //        cause secondary expansion when passed to interpolate().
 //
-// CR-02: normalizeDiscipline fallback must use word-boundary matching so short
+// CR-02: discipline normalisation must use word-boundary matching so short
 //        abbreviations like 'ai', 'ml', 'cs', 'lit', 'soc' only match whole words,
-//        not arbitrary substrings of unrelated words.
+//        not arbitrary substrings of unrelated words. Since GRND-06 the one
+//        normaliser is disciplines.ts normalizeDisciplineSlug (intake-parse.ts
+//        holds no discipline map), reached here through a v0 `Discipline:` line.
+//
+// GRND-03: parseIntakeMd is a thin wrapper over the INTAKE.md brief — a
+//        document with frontmatter yields the brief's topic and discipline and
+//        the assignment block (round-trip with renderIntakeDocument, LF and
+//        CRLF); a pre-Phase-18 document or a bare assignment goes through the
+//        v0→v1 migration's legacy heuristics.
 //
 // These tests always run (no skip-guard) — both fixes are in production code.
 
@@ -27,8 +35,9 @@ assert.ok(
 
 const mod = await import(intakeParseModUrl.href) as {
   escapeTemplateTokens: (s: string) => string;
-  parseIntakeMd: (text: string) => { topic: string; discipline: string; assignment: string };
+  parseIntakeMd: (text: string) => { topic: string; discipline: string; assignment: string; brief: unknown };
 };
+const { renderIntakeDocument } = await import('../bin/lib/intake-brief.js');
 
 // ================================================================================
 // CR-01: escapeTemplateTokens
@@ -181,4 +190,67 @@ test('intake-parse CR-02: unknown discipline falls through to "other"', () => {
     'other',
     'unknown discipline must fall back to "other"',
   );
+});
+
+// ================================================================================
+// GRND-03: parseIntakeMd reads the brief (frontmatter first; raw text via the
+// migration's legacy heuristics)
+// ================================================================================
+
+const BRIEF = {
+  topic: 'attention mechanisms in transformers',
+  thesis: '',
+  discipline: 'computer-science',
+  paper_type: 'literature-review' as const,
+  citation_style: 'apa' as const,
+  length_target_words: 1500,
+};
+const ASSIGNMENT = 'Write a 1500-word literature review on attention mechanisms in transformers, APA style.';
+
+test('GRND-03: parseIntakeMd round-trips a rendered brief (LF and CRLF)', () => {
+  const doc = renderIntakeDocument(BRIEF, ASSIGNMENT, [{ id: 'discipline', question: 'Which discipline?', answer: 'Computer Science' }]);
+  for (const text of [doc, doc.replace(/\n/g, '\r\n')]) {
+    const r = mod.parseIntakeMd(text);
+    assert.equal(r.topic, BRIEF.topic);
+    assert.equal(r.discipline, 'computer-science');
+    assert.equal(r.assignment, ASSIGNMENT);
+    assert.ok(r.brief, 'the validated brief is returned');
+    assert.equal((r.brief as { citation_style: string }).citation_style, 'apa');
+    assert.equal((r.brief as { length_target_words: number }).length_target_words, 1500);
+  }
+});
+
+test('GRND-03: the topic is the structured topic — never clarifier questions or Q/A text', () => {
+  const doc = renderIntakeDocument({ ...BRIEF, topic: 'tidal power in estuaries' }, 'Discuss tidal power.', [
+    { id: 'follow-up/audience', question: 'Who is the intended audience for this paper?', answer: 'engineers' },
+  ]);
+  const r = mod.parseIntakeMd(doc);
+  assert.equal(r.topic, 'tidal power in estuaries');
+  assert.equal(r.assignment, 'Discuss tidal power.');
+  assert.ok(!r.assignment.includes('intended audience'), 'the Q/A section is not part of the assignment');
+});
+
+test('GRND-03: a pre-Phase-18 INTAKE.md (Topic:/Discipline: lines, ## Assignment) is read through the v0→v1 heuristics', () => {
+  const v0 = '# Intake\n\nTopic: glacier retreat in the Alps\nDiscipline: Bio\n\n## Assignment\n\nWrite about glaciers.\n\n## Clarifying questions\n\n1. Which discipline?\n';
+  for (const text of [v0, v0.replace(/\n/g, '\r\n')]) {
+    const r = mod.parseIntakeMd(text);
+    assert.equal(r.topic, 'glacier retreat in the Alps');
+    assert.equal(r.discipline, 'biology');
+    assert.equal(r.assignment, 'Write about glaciers.');
+  }
+  // A bare assignment (no brief at all): the deterministic topic phrase.
+  const bare = mod.parseIntakeMd(ASSIGNMENT);
+  assert.equal(bare.topic, 'attention mechanisms in transformers');
+  assert.equal(bare.assignment, ASSIGNMENT);
+  assert.equal(bare.brief, null);
+});
+
+test('GRND-03: a document whose frontmatter is not a valid brief falls back to the raw heuristics (never throws)', () => {
+  const bad = '---\nschema_version: 1\ncitation_style: klingon\n---\n\nTopic: fallback topic\n';
+  const r = mod.parseIntakeMd(bad);
+  assert.equal(r.brief, null);
+  assert.equal(r.topic, 'fallback topic');
+  const newer = '---\nschema_version: 99\ntopic: x\n---\n';
+  assert.doesNotThrow(() => mod.parseIntakeMd(newer));
+  assert.equal(mod.parseIntakeMd('').discipline, 'other');
 });

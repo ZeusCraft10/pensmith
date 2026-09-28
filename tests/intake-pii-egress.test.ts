@@ -1,153 +1,101 @@
-// tests/intake-pii-egress.test.ts — Phase 9 Wave 0 RED-by-skip PII-EGRESS gate
-// (threat T-09-00-04 / H3, the SUFFICIENT half — egress BY CONTENT).
+// tests/intake-pii-egress.test.ts — GRND-05 / H3: with PII redaction on, no
+// model request carries the raw PII (egress BY CONTENT).
 //
-// The ordering gate (tests/intake-pii-ordering.test.ts) proves redaction is
-// SOURCE-ORDERED before the prompt-load. That is NECESSARY but NOT SUFFICIENT: a
-// verbatim implementer could redact early then still pass the RAW answers to
-// interpolate(), and the ordering grep would still pass. THIS gate closes the
-// gap: it captures the LIVE model-bound payload at the egress seam and asserts
-// NO raw PII sentinel survives — proving the REDACTED text is what crosses the
-// model boundary, not merely that redaction code runs first.
+// The request bodies are captured by the RUN-21 mock LLM — the real transport
+// (bin/lib/anthropic.ts → bin/lib/http.ts) sends them there — so this checks
+// what actually leaves the machine, not an internal seam (the old
+// __setInterpolateForTest seam is gone with interpolate() at the intake call
+// site, D-18-03). The chain covered here is new → research; the integration
+// pass extends it through outline, plan and write (tests/pii-chain-egress.test.ts).
 //
-// MECHANISM (offline, no network — mirrors cassette-no-leak's committed-string
-// scan philosophy, but against the LIVE interpolated payload): intake's only
-// LLM-bound payload is interpolate(prompt, { seed }) (bin/lib/prompt-loader.ts).
-// We SPY on `interpolate` via the ESM module namespace and record every return
-// value it produces during an intake run, then scan those captured payloads.
-//
-// RED-by-skip via SOURCE-GREP: READY = intake.ts references `redactPii` (the
-// redaction must be wired) AND feeds interpolate a REDACTED variable (we detect
-// the 09-03 wiring by requiring BOTH `redactPii` and `interpolate(` in source,
-// with redactPii appearing before the interpolate call). Until 09-03 wires
-// redaction INTO the egress, every test SKIPS so the suite stays GREEN.
+// Also pinned: INTAKE.md keeps entity phrases ("French Revolution", "Treaty
+// of Versailles") and the month fragment "Due March" while redacting the
+// student's details; the raw text lives only in the gitignored
+// .paper/INTAKE.raw.local.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { withLlmSandbox } from './helpers/llm-sandbox.js';
 import { PII_EGRESS_SENTINELS } from './fixtures/pii-polish-corpus.js';
 
-function repoPath(rel: string): string {
-  return fileURLToPath(new URL('../' + rel, import.meta.url));
-}
+const KEY = 'sk-test-pii-egress-0001';
 
-function intakeSource(): string {
-  return fs.readFileSync(repoPath('bin/cli/intake.ts'), 'utf8');
-}
+/** The GRND-05 chain assignment: a middle-initial name, a student ID, an email, a phone, a date of birth. */
+const PII = {
+  name: 'Jane Q. Doe',
+  studentId: '2024-00173',
+  email: PII_EGRESS_SENTINELS.email,
+  phone: '(555) 201-7788',
+  dob: 'March 3, 2004',
+  ssn: PII_EGRESS_SENTINELS.ssn,
+  sentinelName: PII_EGRESS_SENTINELS.name,
+} as const;
 
-// READY: redaction wired AND it precedes the interpolate egress call. This is
-// stronger than the ordering grep (which only checks loadPrompt) — it requires
-// the REDACTION primitive specifically, ahead of the payload builder.
-function piiEgressWired(): boolean {
-  const src = intakeSource();
-  const redactIdx = src.indexOf('redactPii');
-  const interpIdx = src.indexOf('interpolate(');
-  return redactIdx !== -1 && interpIdx !== -1 && redactIdx < interpIdx;
-}
+const ASSIGNMENT = [
+  `Name: ${PII.name}`,
+  `Student ID: ${PII.studentId}`,
+  `Email: ${PII.email}`,
+  `Phone: ${PII.phone}`,
+  `Date of birth: ${PII.dob}`,
+  `SSN: ${PII.ssn}`,
+  `Tutor: ${PII.sentinelName}`,
+  '',
+  'Due March. Write a 1500-word argumentative essay on the causes of the French Revolution',
+  'and how the Treaty of Versailles was later remembered. Use Chicago style.',
+  '',
+].join('\n');
 
-const READY = piiEgressWired();
+test('GRND-05: new → research with --pii-redact: no captured model request carries the raw PII; the redacted tags do', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY }, paper: false }, async (sb) => {
+    fs.writeFileSync(path.join(sb.root, 'assignment.txt'), ASSIGNMENT);
+    const made = await sb.runTsx(null, ['new', '--from', 'assignment.txt', '--yolo', '--pii-redact']);
+    assert.equal(made.status, 0, `${made.stdout}\n${made.stderr}`);
+    const research = await sb.runTsx(null, ['research', '--yolo']);
+    assert.ok(research.status !== null, `${research.stdout}\n${research.stderr}`);
 
-function mkProjectRoot(): string {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-pii-egress-'));
-  process.env.LOCALAPPDATA = tmp;
-  process.env.XDG_DATA_HOME = tmp;
-  process.env.HOME = tmp;
-  return tmp;
-}
+    const bodies = sb.mock!.requests.filter((r) => r.shape !== 'models').map((r) => r.rawBody);
+    assert.ok(sb.mock!.callCount('intake-clarifier') === 1, 'one clarifier call');
+    assert.ok(sb.mock!.callCount('topic-disambiguator') >= 1, 'research sent its disambiguator request');
+    const all = bodies.join('\n---\n');
+    for (const [kind, raw] of Object.entries(PII)) {
+      assert.ok(!all.includes(raw), `PII LEAK: raw ${kind} "${raw}" reached a model request`);
+    }
+    for (const tag of ['[REDACTED:NAME]', '[REDACTED:ID]', '[REDACTED:EMAIL]', '[REDACTED:PHONE]', '[REDACTED:DATE]']) {
+      assert.ok(all.includes(tag), `the redacted ${tag} crossed instead (redaction by content, not an empty payload)`);
+    }
+    assert.ok(all.includes('French Revolution'), 'the topic survives redaction');
+  });
+});
 
-/**
- * Run intake with the model-bound `interpolate` spied. Returns every payload
- * string interpolate produced during the run. The spy wraps the REAL
- * interpolate so the verb's behavior is unchanged — we only RECORD what crossed
- * the egress seam.
- *
- * INTERCEPTION (runtime-portable): native ESM module namespaces are SEALED
- * under Node 20.18+/24 — `Object.defineProperty(promptLoader, 'interpolate', …)`
- * throws "Cannot redefine property" and an assignment is a spec no-op, so the
- * prompt-loader export cannot be monkeypatched from outside. intake therefore
- * routes its model-bound interpolate through an in-module seam
- * (`__setInterpolateForTest`) that wraps the REAL prompt-loader interpolate —
- * the only interception point that observes the EXACT payload intake hands the
- * model. This still captures the LIVE egress by content (H3), not merely the
- * source ordering (which intake-pii-ordering.test.ts covers).
- */
-async function runIntakeCapturingEgress(
-  cwd: string,
-  args: Record<string, unknown>,
-): Promise<string[]> {
-  const captured: string[] = [];
-  const promptLoader = await import('../bin/lib/prompt-loader.js');
-  const realInterpolate = promptLoader.interpolate;
-  const intake = await import('../bin/cli/intake.js');
+test('GRND-05: INTAKE.md keeps entities and "Due March" but not the student’s details; INTAKE.raw.local keeps the raw text and is gitignored', async () => {
+  await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1' }, paper: false }, async (sb) => {
+    fs.writeFileSync(path.join(sb.root, 'assignment.txt'), ASSIGNMENT);
+    const r = await sb.runTsx(null, ['new', '--from', 'assignment.txt', '--yolo', '--pii-redact']);
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    const intake = fs.readFileSync(path.join(sb.paper, 'INTAKE.md'), 'utf8');
+    for (const [kind, raw] of Object.entries(PII)) assert.ok(!intake.includes(raw), `INTAKE.md must not hold the raw ${kind}`);
+    for (const keep of ['French Revolution', 'Treaty of Versailles', 'Due March']) assert.ok(intake.includes(keep), `INTAKE.md keeps "${keep}"`);
+    assert.match(intake, /^pii_redaction: true$/m);
+    const raw = fs.readFileSync(path.join(sb.paper, 'INTAKE.raw.local'), 'utf8');
+    for (const v of Object.values(PII)) assert.ok(raw.includes(v), `INTAKE.raw.local keeps "${v}"`);
+    assert.match(fs.readFileSync(path.join(sb.paper, '.gitignore'), 'utf8'), /^INTAKE\.raw\.local$/m);
+    // The reviewable diff names each redaction (stdout, the user's own terminal).
+    assert.match(r.stdout, /\[EMAIL\] "leak\.sentinel@example\.test" → \[REDACTED:EMAIL\]/);
+    // config.toml mirrors the opt-in.
+    assert.match(fs.readFileSync(path.join(sb.paper, 'config.toml'), 'utf8'), /^pii_redaction = true$/m);
+  });
+});
 
-  // Spy: record the interpolated payload AND the raw vars values (both are
-  // candidate egress strings). Then delegate to the real implementation.
-  const spy = (template: string, vars: Record<string, string>): string => {
-    for (const v of Object.values(vars)) captured.push(v);
-    const out = realInterpolate(template, vars);
-    captured.push(out);
-    return out;
-  };
-  const restore = intake.__setInterpolateForTest(spy);
-
-  const prevCwd = process.cwd();
-  process.chdir(cwd);
-  try {
-    const run = (intake.intakeCommand as { run: (ctx: { args: Record<string, unknown> }) => Promise<unknown> }).run;
-    await run({ args });
-  } finally {
-    process.chdir(prevCwd);
-    restore();
-  }
-  return captured;
-}
-
-test('EGRESS-BY-CONTENT: no raw PII sentinel survives in the model-bound interpolate payload', { skip: !READY }, async () => {
-  const root = mkProjectRoot();
-  // Phase 11: intake now calls complete() via the real transport. Set
-  // PENSMITH_NO_LLM=1 so complete() short-circuits to the offline mock BEFORE
-  // any HTTP call (key is not needed for the offline path). The spy still
-  // captures the _interpolate egress because _interpolate(prompt, {assignment:
-  // egressSeed}) is called BEFORE complete() in intake.ts — offline mode does
-  // NOT prevent the egress capture (the spy observes the REDACTED content).
-  process.env.ANTHROPIC_API_KEY = 'sk-test-offline-egress';
-  process.env.PENSMITH_NO_LLM = '1';
-  process.env.PENSMITH_PII_REDACT = '1';
-
-  const fromPath = path.join(root, 'assignment.txt');
-  const seedBody = [
-    `Contact: ${PII_EGRESS_SENTINELS.email}`,
-    `SSN: ${PII_EGRESS_SENTINELS.ssn}`,
-    `Name: ${PII_EGRESS_SENTINELS.name}`,
-  ].join('\n');
-  fs.writeFileSync(fromPath, seedBody);
-
-  let captured: string[];
-  try {
-    captured = await runIntakeCapturingEgress(root, { from: fromPath, redactPii: true, yolo: true });
-  } finally {
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.PENSMITH_NO_LLM;
-    delete process.env.PENSMITH_PII_REDACT;
-  }
-
-  const allPayloads = captured.join('\n---\n');
-
-  // 1. NO raw sentinel value crossed the model boundary.
-  for (const [kind, raw] of Object.entries(PII_EGRESS_SENTINELS)) {
-    assert.ok(
-      !allPayloads.includes(raw),
-      `PII LEAK: raw ${kind} sentinel "${raw}" reached the model-bound payload — redaction is ordering-only, not by-content (H3). Captured:\n${allPayloads}`,
-    );
-  }
-
-  // 2. The REDACTED tag IS present — proves it was the redacted text that flowed,
-  //    not an empty/stripped payload that would vacuously pass check 1.
-  assert.match(
-    allPayloads,
-    /\[REDACTED:(EMAIL|SSN|NAME)\]/,
-    `expected a [REDACTED:KIND] tag in the model-bound payload (redacted content flowed, not empty); captured:\n${allPayloads}`,
-  );
+test('GRND-05: with PII redaction off (the default) nothing is redacted and no INTAKE.raw.local is written', async () => {
+  await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1' }, paper: false }, async (sb) => {
+    fs.writeFileSync(path.join(sb.root, 'assignment.txt'), ASSIGNMENT);
+    const r = await sb.runTsx(null, ['new', '--from', 'assignment.txt', '--yolo']);
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    const intake = fs.readFileSync(path.join(sb.paper, 'INTAKE.md'), 'utf8');
+    assert.ok(intake.includes(PII.email), 'opt-out keeps the assignment verbatim');
+    assert.ok(!fs.existsSync(path.join(sb.paper, 'INTAKE.raw.local')), 'no raw copy without the opt-in');
+    assert.match(intake, /^pii_redaction: false$/m);
+  });
 });

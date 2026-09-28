@@ -1,25 +1,15 @@
-// tests/intake-pii-ordering.test.ts — Phase 9 Wave 0 RED-by-skip PII-ORDERING
-// gate (threat T-09-PII-EGRESS, the NECESSARY-but-not-sufficient half).
+// tests/intake-pii-ordering.test.ts — T-09-PII-EGRESS, the NECESSARY half:
+// in bin/cli/intake.ts the PII redaction runs before the clarifier request is
+// built, and before INTAKE.md is written (GRND-05, D-18-12).
 //
-// This gate proves the SOURCE ORDERING mitigation: in bin/cli/intake.ts the PII
-// diff/redaction step precedes the prompt-load that builds the model-bound
-// payload — so redaction cannot be wired AFTER the egress by accident. It is
-// NECESSARY but NOT SUFFICIENT: ordering alone does not prove the REDACTED text
-// is what flows to the model (a verbatim implementer could redact early then
-// still interpolate the raw answers). tests/intake-pii-egress.test.ts closes
-// that gap by-content.
-//
-// RED-by-skip via SOURCE-GREP (mirrors intake-style-producer's intakeStyleWired
-// precedent): READY = intake.ts references BOTH `diffPii` AND the
-// `loadPrompt('intake-clarifier')` call, with diffPii appearing FIRST. Until
-// 09-03 wires PII redaction into intake, every test SKIPS so the suite stays
-// GREEN.
-//
-// Contracts (so 09-03 satisfies them):
-//   (a) STRUCTURAL ORDERING — diffPiiIdx < loadPromptIdx in intake.ts source.
-//   (b) INTAKE.raw.local write — with PII opt-in ON, INTAKE.md is redacted AND
-//       .paper/INTAKE.raw.local holds the raw (unredacted) answers.
-//   (c) opt-out — with PII opt-in OFF, INTAKE.md keeps raw answers and NO
+// tests/intake-pii-egress.test.ts is the SUFFICIENT half (it captures what the
+// mock LLM receives). This file pins the source order and the on-disk result:
+//   (a) the redaction (`redact(` / `diffPii(`) precedes buildPromptRequest(
+//       'intake-clarifier', …) and complete(), and every write comes after the
+//       clarifier call (a refused intake writes nothing);
+//   (b) with the opt-in, INTAKE.md holds the redacted text (assignment, thesis
+//       seed, class, follow-up answers) and INTAKE.raw.local the raw text;
+//   (c) with the opt-in off, INTAKE.md keeps the raw text and no
 //       INTAKE.raw.local is written.
 
 import test from 'node:test';
@@ -28,24 +18,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readIntakeBrief } from '../bin/lib/intake-brief.js';
 
-function repoPath(rel: string): string {
-  return fileURLToPath(new URL('../' + rel, import.meta.url));
-}
-
-// SOURCE-GREP ordering predicate. The model-bound payload in intake is built by
-// loadPrompt('intake-clarifier') → interpolate; redaction must precede it.
 function intakeSource(): string {
-  return fs.readFileSync(repoPath('bin/cli/intake.ts'), 'utf8');
+  return fs.readFileSync(fileURLToPath(new URL('../bin/cli/intake.ts', import.meta.url)), 'utf8');
 }
-function piiOrderingWired(): boolean {
-  const src = intakeSource();
-  const diffPiiIdx = src.indexOf('diffPii');
-  const loadPromptIdx = src.indexOf("loadPrompt('intake-clarifier')");
-  return diffPiiIdx !== -1 && loadPromptIdx !== -1 && diffPiiIdx < loadPromptIdx;
-}
-
-const READY = piiOrderingWired();
 
 function mkProjectRoot(): string {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-pii-ordering-'));
@@ -56,7 +33,6 @@ function mkProjectRoot(): string {
   return tmp;
 }
 
-/** Run the intake verb inside `cwd` with the given args. */
 async function runIntake(cwd: string, args: Record<string, unknown>): Promise<void> {
   const prevCwd = process.cwd();
   process.chdir(cwd);
@@ -69,48 +45,55 @@ async function runIntake(cwd: string, args: Record<string, unknown>): Promise<vo
   }
 }
 
-/** Write a --from seed file containing an email PII sentinel. */
-function seedFrom(root: string, body: string): string {
-  const p = path.join(root, 'assignment.txt');
-  fs.writeFileSync(p, body);
-  return p;
-}
-
 const RAW_EMAIL = 'student.contact@example.test';
+const RAW_NAME = 'Jane Q. Doe';
 
-test('STRUCTURAL ORDERING: diffPii precedes loadPrompt(intake-clarifier) in intake.ts', { skip: !READY }, () => {
+test('STRUCTURAL ORDERING: redaction precedes the clarifier request; every write follows the model call', () => {
   const src = intakeSource();
-  const diffPiiIdx = src.indexOf('diffPii');
-  const loadPromptIdx = src.indexOf("loadPrompt('intake-clarifier')");
-  assert.ok(diffPiiIdx !== -1, 'intake.ts must reference diffPii');
-  assert.ok(loadPromptIdx !== -1, "intake.ts must call loadPrompt('intake-clarifier')");
-  assert.ok(diffPiiIdx < loadPromptIdx, 'PII diff/redaction must precede the prompt-load (T-09-PII-EGRESS ordering)');
+  const runAt = src.indexOf('async run(');
+  const body = src.slice(runAt);
+  const redactAt = body.indexOf('const modelText = redact(');
+  const diffAt = body.indexOf('diffPii(');
+  const requestAt = body.indexOf("buildPromptRequest('intake-clarifier'");
+  const completeAt = body.indexOf('await complete<IntakeClarification>(');
+  const firstWrite = Math.min(
+    ...['atomicWriteFile(', 'initState(', 'writeIntakeConfig(', 'registerPaperNonFatal(', 'ensurePaperGitignore(']
+      .map((w) => body.indexOf(w))
+      .filter((i) => i >= 0),
+  );
+  for (const [name, at] of [['redact', redactAt], ['diffPii', diffAt], ['request', requestAt], ['complete', completeAt]] as const) {
+    assert.ok(at > 0, `${name} found in run()`);
+  }
+  assert.ok(redactAt < requestAt && diffAt < requestAt, 'PII redaction precedes the model-bound request');
+  assert.ok(requestAt < completeAt, 'the request is built, then sent');
+  assert.ok(completeAt < firstWrite, 'nothing is written before the clarifier call (a refused intake leaves no trace)');
+  assert.ok(!/\binterpolate\(/.test(src), 'no template interpolation at the intake call site (D-18-03)');
 });
 
-test('INTAKE.raw.local: PII opt-in ON redacts INTAKE.md and writes the raw answers to INTAKE.raw.local', { skip: !READY }, async () => {
+test('INTAKE.raw.local: PII opt-in ON redacts INTAKE.md (assignment, thesis seed, class) and keeps the raw text locally', async () => {
   const root = mkProjectRoot();
-  const from = seedFrom(root, `Email me at ${RAW_EMAIL} about the assignment.`);
-  // The exact opt-in arg/env name is the 09-03 wiring's to define; this test
-  // pins the BEHAVIOR. We pass both a plausible flag and env so 09-03 can read
-  // either.
-  process.env.PENSMITH_PII_REDACT = '1';
-  await runIntake(root, { from, redactPii: true, yolo: true });
-  delete process.env.PENSMITH_PII_REDACT;
+  const from = path.join(root, 'assignment.txt');
+  fs.writeFileSync(from, `Email ${RAW_EMAIL} about the essay on the Weimar Republic.\n`);
+  await runIntake(root, { from, 'pii-redact': true, yolo: true, thesis: `As ${RAW_NAME} argued, the Weimar Republic failed.`, class: `HIST 200 with ${RAW_NAME}` });
 
   const intakeMd = fs.readFileSync(path.join(root, '.paper', 'INTAKE.md'), 'utf8');
   assert.ok(!intakeMd.includes(RAW_EMAIL), 'INTAKE.md must be redacted (raw email absent)');
+  assert.ok(!intakeMd.includes(RAW_NAME), 'INTAKE.md must be redacted (raw name absent from thesis and class)');
+  assert.ok(intakeMd.includes('Weimar Republic'), 'entities survive');
+  const brief = readIntakeBrief(root)?.brief;
+  assert.equal(brief?.pii_redaction, true);
+  assert.match(brief?.class ?? '', /^HIST 200 with \[REDACTED:NAME\]$/);
 
-  const rawLocalPath = path.join(root, '.paper', 'INTAKE.raw.local');
-  assert.ok(fs.existsSync(rawLocalPath), 'PII opt-in must write .paper/INTAKE.raw.local');
-  const rawLocal = fs.readFileSync(rawLocalPath, 'utf8');
-  assert.ok(rawLocal.includes(RAW_EMAIL), 'INTAKE.raw.local must hold the raw (unredacted) answers');
+  const rawLocal = fs.readFileSync(path.join(root, '.paper', 'INTAKE.raw.local'), 'utf8');
+  assert.ok(rawLocal.includes(RAW_EMAIL), 'INTAKE.raw.local holds the raw assignment');
+  assert.ok(rawLocal.includes(RAW_NAME), 'INTAKE.raw.local holds the raw thesis seed and class');
 });
 
-test('opt-out: PII opt-in OFF keeps raw answers in INTAKE.md and writes NO INTAKE.raw.local', { skip: !READY }, async () => {
+test('opt-out: PII opt-in OFF keeps raw text in INTAKE.md and writes NO INTAKE.raw.local', async () => {
   const root = mkProjectRoot();
-  const from = seedFrom(root, `Email me at ${RAW_EMAIL} about the assignment.`);
+  const from = path.join(root, 'assignment.txt');
+  fs.writeFileSync(from, `Email me at ${RAW_EMAIL} about the assignment.`);
   await runIntake(root, { from, yolo: true });
-
-  const rawLocalPath = path.join(root, '.paper', 'INTAKE.raw.local');
-  assert.ok(!fs.existsSync(rawLocalPath), 'opt-out must NOT write INTAKE.raw.local');
+  assert.ok(!fs.existsSync(path.join(root, '.paper', 'INTAKE.raw.local')), 'opt-out must NOT write INTAKE.raw.local');
+  assert.ok(fs.readFileSync(path.join(root, '.paper', 'INTAKE.md'), 'utf8').includes(RAW_EMAIL));
 });

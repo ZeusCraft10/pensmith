@@ -25,6 +25,7 @@
 
 import { CompileReportSchema, COMPILE_REPORT_SCHEMA_VERSION } from './schemas/compile-report.js';
 import { offlineMarkerLine } from './http-mock.js';
+import { bandLabel, type CitationDensityReport, type DensityStatus } from './citation-density.js';
 
 /** The Phase-4 empty marker for the Advisory Findings slot (D-14). */
 export const ADVISORY_EMPTY_MARKER = '_No advisory passes ran — Phase 5 will populate._';
@@ -42,10 +43,57 @@ export interface ConsistencyEntry {
   detail: string;
 }
 
+/** One paragraph outside the discipline's citation band (GRND-06). */
+export interface CitationDensityParagraphEntry {
+  index: number;
+  citations: number;
+  first_words: string;
+}
+
 /** One per-section citation-density measurement. */
 export interface CitationDensityEntry {
   section: string;
   citations_per_1000_words: number;
+  /** GRND-06: mean citations per prose paragraph (PRD §8 bands are per paragraph). */
+  citations_per_paragraph?: number;
+  paragraphs?: number;
+  /** The band, e.g. "1–3". */
+  band?: string;
+  status?: DensityStatus;
+  out_of_band?: CitationDensityParagraphEntry[];
+}
+
+/** The paper-wide line of the Citation Density section (GRND-06). */
+export interface CitationDensitySummary {
+  discipline: string;
+  band: string;
+  mean_per_paragraph: number;
+  comparison: DensityStatus;
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
+/**
+ * The COMPILE-REPORT.md density entries and summary of a density report: per
+ * section, citations per paragraph against the band, the paragraphs outside
+ * it, and the D-14 citations per 1000 words.
+ */
+export function citationDensityForReport(r: CitationDensityReport): { entries: CitationDensityEntry[]; summary: CitationDensitySummary } {
+  const band = bandLabel(r.band);
+  return {
+    entries: r.sections.map((d) => ({
+      section: `${d.n} (${d.slug})`,
+      citations_per_1000_words: round1(d.citations_per_1000_words),
+      citations_per_paragraph: round1(d.citations_per_paragraph),
+      paragraphs: d.paragraphs,
+      band,
+      status: d.status,
+      out_of_band: d.out_of_band.map((p) => ({ index: p.index, citations: p.citations, first_words: p.firstWords })),
+    })),
+    summary: { discipline: r.discipline, band, mean_per_paragraph: round1(r.mean_per_paragraph), comparison: r.comparison },
+  };
 }
 
 /** One compile-staleness resolution entry. */
@@ -69,6 +117,8 @@ export interface CompileReportInput {
   transitions?: TransitionEntry[];
   consistency_flags?: ConsistencyEntry[];
   citation_density?: CitationDensityEntry[];
+  /** The paper-wide density line (discipline, band, mean per paragraph). */
+  citation_density_summary?: CitationDensitySummary;
   staleness_resolved?: StalenessEntry[];
   /**
    * The offline marker line for the body (D-17-08). undefined → derived from the
@@ -116,6 +166,37 @@ function renderFrontmatter(input: CompileReportInput): string {
   ].join('\n');
 }
 
+const STATUS_WORD: Readonly<Record<DensityStatus, string>> = Object.freeze({ below: 'BELOW', within: 'within', above: 'ABOVE' });
+
+/**
+ * The Citation Density body (GRND-06): the paper-wide line, then per section
+ * citations per paragraph against the band (with the paragraphs outside it)
+ * and the D-14 citations per 1000 words. Entries without paragraph data keep
+ * the D-14 one-liner.
+ */
+function renderDensity(density: readonly CitationDensityEntry[], summary: CitationDensitySummary | undefined): string[] {
+  const out: string[] = [];
+  if (summary) {
+    out.push(
+      `Discipline: ${summary.discipline} · band ${summary.band} citations per paragraph · paper-wide ${summary.mean_per_paragraph} per paragraph (${STATUS_WORD[summary.comparison]})`,
+      '',
+    );
+  }
+  for (const d of density) {
+    if (d.citations_per_paragraph === undefined || d.status === undefined) {
+      out.push(`- ${d.section}: ${d.citations_per_1000_words} citations/1000 words`);
+      continue;
+    }
+    out.push(
+      `- ${d.section}: ${d.citations_per_paragraph} citations/paragraph over ${d.paragraphs ?? 0} paragraph(s) (${STATUS_WORD[d.status]} ${d.band ?? ''}); ${d.citations_per_1000_words} citations/1000 words`,
+    );
+    for (const p of d.out_of_band ?? []) {
+      out.push(`  - paragraph ${p.index} (${p.citations} citation${p.citations === 1 ? '' : 's'}): "${p.first_words.replace(/"/g, "'")}"`);
+    }
+  }
+  return out;
+}
+
 function section(header: string, body: string[]): string {
   return [header, '', ...body].join('\n');
 }
@@ -141,9 +222,7 @@ export function renderCompileReport(input: CompileReportInput): string {
     ? consistency.map((c) => `- ${c.detail}`)
     : ['_No cross-section consistency flags._'];
 
-  const densityBody = density.length
-    ? density.map((d) => `- ${d.section}: ${d.citations_per_1000_words} citations/1000 words`)
-    : ['_No citation-density data._'];
+  const densityBody = density.length ? renderDensity(density, input.citation_density_summary) : ['_No citation-density data._'];
 
   const stalenessBody = staleness.length
     ? staleness.map(

@@ -76,9 +76,12 @@ test('RUN-14: resolver order — flag/env, the cwd paper, a new paper; MCP/hooks
   // Step 5 (no paper, no pointer): read-only and bare/next/resume fall back to
   // the cwd; any other verb is EXIT_USAGE (it would build a partial paper).
   assert.deepEqual(resolvePaperRoot({ verb: 'status', mode: 'cli', readOnly: true, cwd: empty, env: {} }), { kind: 'root', root: empty, source: 'fallback' });
+  // (GRND-01: a bare run with an assignment piped on stdin starts a new paper
+  // here instead — the stdin condition is stated, never read from the runner.)
   for (const verb of [null, 'next', 'resume']) {
-    assert.deepEqual(resolvePaperRoot({ verb, mode: 'cli', cwd: empty, env: {} }), { kind: 'root', root: empty, source: 'fallback' });
+    assert.deepEqual(resolvePaperRoot({ verb, mode: 'cli', cwd: empty, env: {}, stdinAssignment: false }), { kind: 'root', root: empty, source: 'fallback' });
   }
+  assert.deepEqual(resolvePaperRoot({ verb: null, mode: 'cli', cwd: empty, env: {}, stdinAssignment: true }), { kind: 'root', root: empty, source: 'new' });
   assert.throws(() => resolvePaperRoot({ verb: 'write', mode: 'cli', cwd: empty, env: {} }),
     (e: unknown) => (e as { exitCode?: number }).exitCode === EXIT_USAGE && /no paper in /.test((e as Error).message));
   assert.equal(activePaperBanner({ name: 'p2', root: '/x/p2' }), '(active paper "p2" at /x/p2)');

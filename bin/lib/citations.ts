@@ -74,6 +74,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
+import { defaultCitationStyleFor } from './disciplines.js';
 
 // `citation-js@0.7` ships a single default-export class; the `plugins`
 // registry hangs off the class (`Cite.plugins`). A `import { plugins }`
@@ -386,24 +387,14 @@ export async function renderInText(
 //   Public: resolveStyleName (discipline → CSL style name)
 // =====================================================================
 /**
- * Map a discipline key (from disciplines.json / PROJECT.md) to its default
- * citation style name (the key `renderStyle` expects). Callers that already
- * know the style can pass it directly; this is a lookup convenience for
- * workflow bodies. Unknown disciplines fall back to 'apa'.
+ * Map a discipline (a preset slug, name or alias from INTAKE.md) to its
+ * default citation style name (the key `renderStyle` expects). The mapping is
+ * the discipline preset's `defaultCitationStyle` — bin/lib/disciplines.ts is
+ * the one place a discipline maps to a style (GRND-06, PRD §8); an unknown
+ * discipline gets the fallback preset's style.
  */
 export function resolveStyleName(discipline: string): string {
-  const map: Readonly<Record<string, string>> = {
-    'computer-science': 'ieee',
-    'biology': 'apa',
-    'psychology': 'apa',
-    'sociology': 'apa',
-    'economics': 'apa',
-    'history': 'chicago-author-date',
-    'philosophy': 'chicago-author-date',
-    'literature': 'mla',
-    'other': 'apa',
-  };
-  return map[discipline.toLowerCase()] ?? 'apa';
+  return defaultCitationStyleFor(discipline);
 }
 
 // =====================================================================

@@ -1,69 +1,28 @@
-// tests/intake-bootstrap.test.ts — Phase 12 Wave 0 RED-by-skip scaffold for GEN-04.
+// tests/intake-bootstrap.test.ts — GEN-04: the intake STATE.json bootstrap,
+// now with the Phase 18 brief (GRND-03).
 //
-// Behavioral contract for the intake STATE.json bootstrap:
-//   (1) Running intake writes .paper/STATE.json conforming to the v2 schema with a
-//       non-null paperId ($schemaVersion === 2, paperId.length >= 1, createdAt is
-//       parseable as ISO-8601).
-//   (2) Idempotency — running intake twice on the same paper does NOT regenerate
-//       paperId (load STATE.json after run 1, run intake again, assert paperId
-//       unchanged and StateAlreadyExistsError was caught, not thrown out of run()).
-//   (3) WARN-skip-guard FLIP — after intake writes STATE.json, resolvePaperId
-//       returns non-null so the global-library registration proceeds (assert the
-//       registry entry exists / no `skipping global-library registration` WARN on
-//       the second observable path).
+//   (1) intake writes .paper/STATE.json (v2, non-null paperId, ISO createdAt)
+//       and INTAKE.md as the versioned brief;
+//   (2) running intake twice keeps the paperId (StateAlreadyExistsError is
+//       absorbed) and rewrites the brief;
+//   (3) the global-library registration proceeds (no WARN-skip) and carries
+//       the answered class.
 //
-// RED-by-skip stance: every behavioral test SKIPS until intakeBootstrapWired()
-// returns true (a source-grep of bin/cli/intake.ts confirms `initState(` is
-// present). existsSync alone is insufficient — intake.ts already exists; only the
-// initState() wiring (Plan 03 / Wave 1) activates these tests.
-//
-// CRITICAL path resolution (T-12-W0-01 / Phase-11 local-vs-CI bug): ALL paths
-// resolved via fileURLToPath(new URL(..., import.meta.url)) — NEVER via
-// import.meta.url.pathname or a file:// regex strip. The repo path contains spaces
-// ("OneDrive - Roanoke College") which cause %20-encoded readFileSync paths to
-// throw.
-//
-// Offline mode (T-12-W0-02): PENSMITH_NO_LLM=1 set at module top BEFORE any
-// dynamic import. HOME/LOCALAPPDATA/XDG_DATA_HOME are overridden per test
-// (T-12-W0-03) so all writes land in tmpdir, not the real home dir.
+// The Wave-0 skip guards (a source grep for `initState(`) are gone: the
+// bootstrap is wired, so every case runs. PENSMITH_NO_LLM=1 stubs the
+// clarifier; --yolo accepts the intake defaults (GRND-02).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readIntakeBrief } from '../bin/lib/intake-brief.js';
 
 // ---- Offline gate (T-12-W0-02) -------------------------------------------------
 // Set BEFORE any dynamic import. PENSMITH_NETWORK_TESTS is deliberately NOT set
 // → isOfflineMode() returns true → adapter cassettes fire; zero live calls.
 process.env['PENSMITH_NO_LLM'] = '1';
-
-// ---- Path helpers (T-12-W0-01) -------------------------------------------------
-// Use fileURLToPath everywhere — the repo path contains spaces that URL-encode as
-// %20, breaking readFileSync if .pathname is used instead.
-
-function repoPath(rel: string): string {
-  return fileURLToPath(new URL('../' + rel, import.meta.url));
-}
-
-const intakeSrcPath = repoPath('bin/cli/intake.ts');
-
-// ---- Skip-guard predicate -------------------------------------------------------
-// intakeBootstrapWired() returns true ONLY when bin/cli/intake.ts contains the
-// token `initState(` — the exact wiring that GEN-04 (Plan 03) adds.
-// existsSync alone is NOT sufficient because intake.ts already exists before Plan 03.
-
-function intakeBootstrapWired(): boolean {
-  try {
-    const src = fs.readFileSync(intakeSrcPath, 'utf8');
-    return src.includes('initState(');
-  } catch {
-    return false;
-  }
-}
-
-const BOOTSTRAP_WIRED = intakeBootstrapWired();
 
 // ---- Sandbox helpers (T-12-W0-03) -----------------------------------------------
 // Each test writes into a fresh tmpdir with HOME/LOCALAPPDATA/XDG_DATA_HOME
@@ -120,16 +79,14 @@ async function runIntake(
 }
 
 // ================================================================================
-// Tests (all RED-by-skip until BOOTSTRAP_WIRED === true)
+// Tests
 // ================================================================================
 
 test(
   'intake-bootstrap: intake writes .paper/STATE.json with v2 schema + non-null paperId (GEN-04)',
-  { skip: !BOOTSTRAP_WIRED },
   async () => {
-    // This test activates only when intake.ts has been wired with initState() (Plan 03).
-    // Expected: running intake creates a .paper/STATE.json that conforms to the v2
-    // schema: { $schemaVersion: 2, paperId: string (min 1), createdAt: ISO-8601 }.
+    // Running intake creates a .paper/STATE.json that conforms to the v2 schema:
+    // { $schemaVersion: 2, paperId: string (min 1), createdAt: ISO-8601 }.
     const root = mkPaperRoot();
     const assignPath = writeFixtureAssignment(root);
 
@@ -166,12 +123,20 @@ test(
       typeof state.createdAt === 'string' && !Number.isNaN(Date.parse(state.createdAt)),
       `STATE.json createdAt must be a parseable ISO-8601 string (got ${JSON.stringify(state.createdAt)})`,
     );
+
+    // GRND-03: INTAKE.md is the versioned brief, read back through the CONF-04 loader.
+    const doc = readIntakeBrief(root);
+    assert.ok(doc, 'INTAKE.md written');
+    assert.equal(doc.diskVersion, 1);
+    assert.equal(doc.brief.assignment_source.kind, 'file');
+    assert.equal(doc.brief.assignment_source.name, 'assignment.txt');
+    assert.match(doc.brief.topic, /attention mechanisms in transformer/);
+    assert.equal(doc.assignment, 'Write a paper on attention mechanisms in transformer neural networks.');
   },
 );
 
 test(
   'intake-bootstrap: running intake twice does NOT regenerate paperId (idempotency, GEN-04)',
-  { skip: !BOOTSTRAP_WIRED },
   async () => {
     // GEN-04 idempotency contract: if intake is run twice on the same paper,
     //   a) The second run must NOT overwrite STATE.json with a new paperId.
@@ -223,7 +188,6 @@ test(
 
 test(
   'intake-bootstrap: WARN-skip-guard flip — after intake writes STATE.json, global-library registration proceeds (GEN-04)',
-  { skip: !BOOTSTRAP_WIRED },
   async () => {
     // GEN-04 WARN-skip-guard flip: before initState() was wired, resolvePaperId()
     // returned null and registerPaperNonFatal emitted a WARN and skipped. After the
@@ -288,40 +252,3 @@ test(
     // primary guard (the observable fact that registration was NOT skipped).
   },
 );
-
-// ---- Consistency check: verify predicate resolves to a meaningful value ---------
-// This test ALWAYS runs (no skip-guard) to confirm path resolution works on this
-// machine. Documents whether BOOTSTRAP_WIRED is true or false (expected: false in
-// Wave 0 since intake.ts does not yet contain initState()).
-
-test('intake-bootstrap: intakeBootstrapWired() resolves correctly (path sanity — T-12-W0-01)', () => {
-  // intakeSrcPath must resolve to a real absolute path (no %20 — fileURLToPath decodes).
-  assert.ok(
-    !intakeSrcPath.includes('%20'),
-    `intakeSrcPath must not contain %20 (fileURLToPath decodes spaces): ${intakeSrcPath}`,
-  );
-
-  // intake.ts must exist (it pre-exists before Phase 12).
-  assert.ok(
-    fs.existsSync(intakeSrcPath),
-    `intake.ts must exist at: ${intakeSrcPath}`,
-  );
-
-  // Log the predicate state for skip-message clarity.
-  const reason = (() => {
-    try {
-      const src = fs.readFileSync(intakeSrcPath, 'utf8');
-      return src.includes('initState(')
-        ? 'wired — initState( present in intake.ts'
-        : 'not yet wired — initState( absent from intake.ts (Wave 0 RED-by-skip)';
-    } catch {
-      return 'not yet wired — could not read intake.ts';
-    }
-  })();
-
-  // Always-pass — we're just documenting the state.
-  assert.ok(
-    typeof BOOTSTRAP_WIRED === 'boolean',
-    `intakeBootstrapWired() returns a boolean (${String(BOOTSTRAP_WIRED)}): ${reason}`,
-  );
-});

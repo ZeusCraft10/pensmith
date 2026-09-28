@@ -13,11 +13,43 @@
 // fixture needs to pipe different streams. The numbered path handles all
 // headless/CI/piped scenarios.
 
-import { select, multiselect, text, confirm, isCancel } from '@clack/prompts';
-import type { PromptQuestion, PromptAnswer } from './schema.js';
+import * as readline from 'node:readline';
+import { select, multiselect, text, confirm, isCancel, log } from '@clack/prompts';
+import { MULTILINE_TERMINATOR, type PromptQuestion, type PromptAnswer } from './schema.js';
 import { PromptAbortedError } from '../prompts.js';
 
 type CancelOr<T> = T | symbol;
+
+/**
+ * GRND-01 paste: clack 0.7 has no multi-line input, so the label is shown in
+ * clack's style and the lines are read from the terminal (cooked mode — the
+ * terminal echoes them) until a line holding only "." — never until EOF, which
+ * would end stdin for every later prompt. A temporary line reader is closed
+ * afterwards, which pauses stdin for the next clack prompt to resume.
+ */
+function readMultiline(id: string, label: string, placeholder: string | undefined): Promise<string> {
+  log.step(label);
+  log.message(`${placeholder ? `(e.g. ${placeholder})\n` : ''}Paste the text, then a line holding only "${MULTILINE_TERMINATOR}" to finish:`);
+  return new Promise<string>((resolve, reject) => {
+    const rl = readline.createInterface({ input: process.stdin, terminal: false, crlfDelay: Infinity });
+    const lines: string[] = [];
+    let done = false;
+    const finish = (ok: boolean): void => {
+      if (done) return;
+      done = true;
+      rl.close();
+      const value = lines.join('\n').replace(/^\n+|\s+$/g, '');
+      if (ok || value.length > 0) resolve(value);
+      else reject(new PromptAbortedError(id));
+    };
+    rl.on('line', (line: string) => {
+      if (line.trim() === MULTILINE_TERMINATOR) finish(true);
+      else lines.push(line.replace(/\r$/, ''));
+    });
+    rl.on('close', () => finish(false));
+    rl.on('SIGINT', () => finish(false));
+  });
+}
 
 function unwrap<T>(value: CancelOr<T>, id: string): T {
   if (isCancel(value)) throw new PromptAbortedError(id);
@@ -69,6 +101,11 @@ export async function askClack(
       if (question.default !== undefined) textOpts.initialValue = question.default;
       const value = unwrap(await text(textOpts), question.id);
       return { id: question.id, kind: 'text', value: String(value) };
+    }
+
+    case 'multiline': {
+      const value = await readMultiline(question.id, question.label, question.placeholder);
+      return { id: question.id, kind: 'multiline', value };
     }
 
     case 'confirm': {

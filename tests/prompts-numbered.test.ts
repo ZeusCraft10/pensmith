@@ -269,3 +269,32 @@ test('numbered: no process.stdout writes (stdout reserved for JSON downstream)',
     (process.stdout as any).write = origWrite;
   }
 });
+
+// ── GRND-01: the multiline kind (the pasted assignment) ─────────────────────
+
+const PASTE_QUESTION = { id: 'assignment', kind: 'multiline' as const, label: 'Paste the assignment' };
+
+test('multiline (GRND-01): lines until a lone "." keep their inner indentation; the next question reads the line after (LF and CRLF)', async () => {
+  for (const eol of ['\n', '\r\n']) {
+    const stdin = new PassThrough({ allowHalfOpen: true });
+    queueMicrotask(() => stdin.write(['Write an essay on tides.', '  - cite three sources', '', 'Due Friday.', '.', 'next answer', ''].join(eol)));
+    const stderr = makeStderrCollector();
+    const a = await askNumbered(PASTE_QUESTION, { stdin, stderr: stderr.stream });
+    assert.deepEqual(a, { id: 'assignment', kind: 'multiline', value: 'Write an essay on tides.\n  - cite three sources\n\nDue Friday.' });
+    assert.match(stderr.get(), /\[pensmith\] Paste the assignment \(multiline\)\nPaste the text, then a line holding only "\." to finish:\n/);
+    const b = await askNumbered({ id: 'q', kind: 'text', label: 'Next?' }, { stdin, stderr: stderr.stream });
+    assert.equal(b.value, 'next answer');
+    stdin.end();
+  }
+});
+
+test('multiline (GRND-01): EOF ends the text; EOF before any line is an aborted prompt', async () => {
+  const stdin = new PassThrough({ allowHalfOpen: true });
+  queueMicrotask(() => {
+    stdin.write('only line\nsecond line');
+    stdin.end();
+  });
+  const a = await askNumbered(PASTE_QUESTION, { stdin, stderr: makeStderrCollector().stream });
+  assert.equal(a.value, 'only line\nsecond line');
+  await assert.rejects(askNumbered(PASTE_QUESTION, { stdin: makeEofStdin(), stderr: makeStderrCollector().stream }), PromptAbortedError);
+});

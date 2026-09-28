@@ -1,252 +1,100 @@
-// bin/lib/intake-parse.ts — Parse INTAKE.md into structured research inputs.
+// bin/lib/intake-parse.ts — the research-facing view of INTAKE.md (GRND-03).
 //
-// INTAKE.md is the clarifier output (intake-clarifier.md prompt): a numbered
-// list of questions and answers. It is NOT a structured markdown document with
-// ## Topic / ## Discipline headings. This module applies a heuristic fallback
-// path by default; structured headings are supported defensively for future
-// intake formats.
+// INTAKE.md is the paper's structured brief (bin/lib/intake-brief.ts, D-18-07):
+// versioned frontmatter (topic, thesis, discipline, paper type, …) plus the
+// assignment between markers and a Q/A section. parseIntakeMd is a thin
+// wrapper over that brief for the callers that only need topic, discipline and
+// assignment (research seeds its queries from the STRUCTURED topic — never
+// from clarifier text — status, plan, outline, done):
 //
-// Exported: parseIntakeMd(text: string): { topic, discipline, assignment }
-//   - topic:      first non-empty line/heading extracted from the text, or
-//                 a reasonable phrase from the first question/answer pair.
-//   - discipline: extracted from a "Discipline" answer if present; defaults
-//                 to 'other' (the INTK-03 fallback slug).
-//   - assignment: the full INTAKE.md text (the entire clarifier output serves
-//                 as assignment context for the topic-disambiguator prompt).
-//   - Never throws — all parse errors → silent fallback to safe defaults.
+//   - a document with frontmatter → migrated through the CONF-04 loader
+//     (frontmatter.ts, kind `intake`) and validated as the brief; the topic
+//     and discipline are the brief's, the assignment is the body's assignment
+//     block. It round-trips: parseIntakeMd(renderIntakeDocument(b, a, qa))
+//     returns b.topic, b.discipline and a.
+//   - raw text (a pre-Phase-18 INTAKE.md, or a bare assignment) → the intake
+//     v0→v1 migration's legacy heuristics (`Topic:` / `Discipline:` lines,
+//     the `## Assignment` section), then the deterministic topic phrase and
+//     discipline mention of intake-overrides.ts.
+//
+// Never throws: a document the brief schema rejects falls back to the raw-text
+// heuristics (the readers that must refuse such a file use readIntakeBrief).
+// Discipline normalisation is disciplines.ts normalizeDisciplineSlug — this
+// module holds no discipline map (GRND-06).
 
-/**
- * Structured output of parseIntakeMd. Feeds directly into the
- * topic-disambiguator interpolate call in research.ts.
- */
+import { migrateFrontmatterText } from './frontmatter.js';
+import { assignmentFromBody, parseIntakeFrontmatter, type IntakeBrief } from './intake-brief.js';
+import { legacyDiscipline, legacyTopic } from './migrations/intake/v0_to_v1.js';
+import { FALLBACK_DISCIPLINE } from './disciplines.js';
+import { disciplineMentionFrom, topicFromAssignment } from './intake-overrides.js';
+
+/** The research inputs of an INTAKE.md. */
 export interface ParsedIntake {
-  /** Short topic phrase (1-15 words) suitable for the {{topic}} slot. */
+  /** Short topic phrase (the brief's `topic`). */
   topic: string;
-  /** INTK-03 discipline slug (e.g. 'computer-science', 'other'). */
+  /** Discipline preset slug (disciplines.ts; the fallback preset when unknown). */
   discipline: string;
-  /** Full assignment context text for the {{assignment}} slot. */
+  /** The assignment text (the body's assignment block; the whole text for a bare assignment). */
   assignment: string;
+  /** The validated brief when the document has frontmatter, else null. */
+  brief: IntakeBrief | null;
 }
-
-// Canonical discipline slug map. Keys are patterns that appear in common
-// user answers; values are the INTK-03 canonical slugs from disciplines.json.
-const DISCIPLINE_MAP: ReadonlyMap<string, string> = new Map([
-  ['cs', 'computer-science'],
-  ['computer science', 'computer-science'],
-  ['computer-science', 'computer-science'],
-  ['bio', 'biology'],
-  ['biology', 'biology'],
-  ['hist', 'history'],
-  ['history', 'history'],
-  ['lit', 'literature'],
-  ['literature', 'literature'],
-  ['psych', 'psychology'],
-  ['psychology', 'psychology'],
-  ['econ', 'economics'],
-  ['economics', 'economics'],
-  ['phil', 'philosophy'],
-  ['philosophy', 'philosophy'],
-  ['soc', 'sociology'],
-  ['sociology', 'sociology'],
-  ['other', 'other'],
-  // AI / ML abbreviations → CS
-  ['ai', 'computer-science'],
-  ['ml', 'computer-science'],
-]);
 
 /**
  * Escape `{{` and `}}` sequences in a user-controlled string so they cannot
  * act as template placeholders when the string is passed to interpolate().
- *
- * This is the shared sanitizer for the topic-disambiguator and source-evaluator
- * interpolate() call sites (research.ts and research-orchestrator.ts).
- * Exported so both call sites share ONE implementation (CR-01 fix).
- *
- * @param s  Any user-derived string (topic, discipline, assignment, abstract …)
+ * Kept until the Phase 18 integration pass removes interpolate() (D-18-03):
+ * the remaining interpolate() call sites (research.ts, research-orchestrator.ts,
+ * outline.ts, plan.ts) share this ONE implementation (CR-01).
  */
 export function escapeTemplateTokens(s: string): string {
-  // Replace {{ and }} with visually similar but non-functional sequences.
   return s.replace(/\{\{/g, '{ {').replace(/\}\}/g, '} }');
 }
 
-/**
- * Normalize a raw discipline answer string to an INTK-03 canonical slug.
- * Returns 'other' if no known mapping exists.
- */
-function normalizeDiscipline(raw: string): string {
-  const key = raw.trim().toLowerCase();
-  // Direct map lookup (longest match wins via iteration order).
-  for (const [pattern, slug] of DISCIPLINE_MAP) {
-    if (key === pattern || key.startsWith(pattern + ' ') || key.startsWith(pattern + ',')) {
-      return slug;
-    }
+const FRONTMATTER_START = /^﻿?---\r?\n/;
+
+/** A document with frontmatter → the brief's view, or null when it is not a valid brief. */
+function fromBrief(text: string): ParsedIntake | null {
+  try {
+    const doc = migrateFrontmatterText('intake', text.replace(/^﻿/, ''), 'INTAKE.md');
+    const parsed = parseIntakeFrontmatter(doc.frontmatter, doc.body, 'INTAKE.md', doc.diskVersion);
+    return {
+      topic: parsed.brief.topic,
+      discipline: parsed.brief.discipline,
+      assignment: parsed.assignment,
+      brief: parsed.brief,
+    };
+  } catch {
+    return null;
   }
-  // Substring match as a fallback — MUST use word boundaries for short patterns
-  // like 'ai', 'ml', 'cs', 'lit', 'soc' to avoid false positives on substrings.
-  // e.g. 'ai' must NOT match 'email', 'rain'; 'lit' must NOT match 'political'.
-  for (const [pattern, slug] of DISCIPLINE_MAP) {
-    // Build a word-boundary regex. Escape regex metacharacters in the pattern
-    // and treat hyphens in compound patterns (e.g. 'computer-science') as
-    // matching either a hyphen or whitespace.
-    const escapedPattern = pattern
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      .replace(/-/g, '[-\\s]');
-    const wordRe = new RegExp(`\\b${escapedPattern}\\b`, 'i');
-    if (wordRe.test(key)) return slug;
-  }
-  return 'other';
+}
+
+/** Raw text → the legacy heuristics (never throws). */
+function fromRawText(text: string): ParsedIntake {
+  const section = assignmentFromBody(text);
+  const assignment = section || text.trim();
+  const topic = legacyTopic(text) || topicFromAssignment(assignment) || assignment.replace(/\s+/g, ' ').trim().slice(0, 80);
+  const discipline = /^\s*discipline\s*:/im.test(text)
+    ? legacyDiscipline(text)
+    : (disciplineMentionFrom(text) ?? FALLBACK_DISCIPLINE);
+  return { topic, discipline, assignment, brief: null };
 }
 
 /**
- * Extract the topic phrase from INTAKE.md text.
- *
- * Strategy (in priority order):
- *   1. A line containing "Topic:" or matching "## Topic" → extract the value.
- *   2. A numbered answer that follows a "topic" question → use the answer text.
- *   3. The first non-empty, non-question-number line of meaningful text.
- *   4. Fallback: first 80 chars of the trimmed text, clipped at a word boundary.
- *
- * Never throws.
- */
-function extractTopic(text: string): string {
-  const lines = text.split('\n');
-
-  // 1. Explicit ## Topic heading (structured format — rare but defensive).
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!.trim();
-    if (/^##\s+topic/i.test(line)) {
-      // Value is on the next non-empty line.
-      for (let j = i + 1; j < lines.length; j++) {
-        const val = lines[j]!.trim();
-        if (val && !val.startsWith('#')) return val.slice(0, 200);
-      }
-    }
-    if (/^topic\s*:/i.test(line)) {
-      const val = line.replace(/^topic\s*:\s*/i, '').trim();
-      if (val) return val.slice(0, 200);
-    }
-  }
-
-  // 2. The assignment text often starts with a statement like
-  //    "Write a literature review on X" or "This paper is about X".
-  //    Extract the topic phrase from the first descriptive sentence.
-  const firstSentence = text.trim().split(/[.!?]/)[0]?.trim() ?? '';
-  if (firstSentence.length > 5 && firstSentence.length <= 200) {
-    // Strip leading imperative verbs for brevity.
-    const stripped = firstSentence
-      .replace(/^(write|analyze|discuss|examine|explore|describe|explain|review)\s+(a\s+)?/i, '')
-      .replace(/^(literature review|paper|essay|report|study|analysis)\s+(on|about|regarding)\s+/i, '')
-      .trim();
-    if (stripped.length >= 3) return stripped.slice(0, 200);
-    return firstSentence.slice(0, 200);
-  }
-
-  // 3. First non-empty, non-numbered line.
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    // Skip numbered list markers (Q&A pairs from clarifier output).
-    if (/^\d+\./.test(trimmed)) continue;
-    return trimmed.slice(0, 200);
-  }
-
-  // 4. Fallback: clip the full text.
-  return text.trim().slice(0, 80).split(' ').slice(0, -1).join(' ') || text.trim().slice(0, 80);
-}
-
-/**
- * Extract the discipline from INTAKE.md text.
- *
- * Strategy (in priority order):
- *   1. Explicit "## Discipline" heading → extract value.
- *   2. "Discipline:" label line → extract value.
- *   3. A numbered answer that follows question text mentioning "discipline"
- *      or "subject area" → extract the answer text.
- *   4. Fallback: 'other'.
- *
- * Never throws.
- */
-function extractDiscipline(text: string): string {
-  const lines = text.split('\n');
-
-  // 1. Explicit ## Discipline heading.
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!.trim();
-    if (/^##\s+discipline/i.test(line)) {
-      for (let j = i + 1; j < lines.length; j++) {
-        const val = lines[j]!.trim();
-        if (val && !val.startsWith('#')) return normalizeDiscipline(val);
-      }
-    }
-    if (/^discipline\s*:/i.test(line)) {
-      const val = line.replace(/^discipline\s*:\s*/i, '').trim();
-      if (val) return normalizeDiscipline(val);
-    }
-  }
-
-  // 2. Scan numbered Q&A pairs from clarifier output.
-  // Pattern: "1. Which discipline..." followed by answer text on the next line.
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!.trim();
-    if (/discipline|subject\s*area|field/i.test(line) && /^\d+\./.test(line)) {
-      // Answer is on the next non-empty line.
-      for (let j = i + 1; j < lines.length; j++) {
-        const answerLine = lines[j]!.trim();
-        if (!answerLine) continue;
-        // Skip lines that look like another question.
-        if (/^\d+\./.test(answerLine)) break;
-        return normalizeDiscipline(answerLine);
-      }
-    }
-  }
-
-  // 3. Inline discipline mention in the assignment text itself.
-  // e.g. "Target discipline: computer science / machine learning"
-  const disciplineMatch = text.match(/(?:discipline|subject|field)\s*[:/–-]\s*([^.\n]{2,60})/i);
-  if (disciplineMatch?.[1]) {
-    return normalizeDiscipline(disciplineMatch[1]);
-  }
-
-  return 'other';
-}
-
-/**
- * Parse the text content of INTAKE.md into structured research inputs.
- *
- * This is a HEURISTIC parser — INTAKE.md is the output of the intake-clarifier
- * prompt (a numbered Q&A list), NOT a structured document with ## headings.
- * The structured-heading branch is implemented defensively for future intake
- * formats, but the heuristic fallback path is the expected production path.
- *
- * Contract:
- *   - Never throws for any input.
- *   - Empty string → all fields are safe empty/default values.
- *   - Returns { topic, discipline, assignment } always.
- *   - assignment is ALWAYS the full input text (the complete INTAKE.md content
- *     serves as the assignment context for topic-disambiguator).
- *
- * @param text  Raw string content of INTAKE.md (readFileSync result).
+ * Parse INTAKE.md text into its research inputs (see the module comment).
+ * Never throws; empty text yields empty values and the fallback discipline.
  */
 export function parseIntakeMd(text: string): ParsedIntake {
-  if (!text || !text.trim()) {
-    return { topic: '', discipline: 'other', assignment: '' };
+  if (typeof text !== 'string' || text.trim().length === 0) {
+    return { topic: '', discipline: FALLBACK_DISCIPLINE, assignment: '', brief: null };
   }
-
   try {
-    const topic = extractTopic(text);
-    const discipline = extractDiscipline(text);
-    // assignment = full text — topic-disambiguator needs full context.
-    const assignment = text.trim();
-
-    return { topic, discipline, assignment };
+    if (FRONTMATTER_START.test(text)) {
+      const brief = fromBrief(text);
+      if (brief !== null) return brief;
+    }
+    return fromRawText(text);
   } catch {
-    // Absolute safety net — should never be reached given the extractors
-    // are themselves fully defensive, but belt-and-suspenders matters here
-    // because parse failure would break the research pipeline.
-    return {
-      topic: text.trim().slice(0, 80),
-      discipline: 'other',
-      assignment: text.trim(),
-    };
+    return { topic: text.trim().slice(0, 80), discipline: FALLBACK_DISCIPLINE, assignment: text.trim(), brief: null };
   }
 }

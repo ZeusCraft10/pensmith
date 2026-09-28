@@ -34,24 +34,86 @@ export const CITATION_STYLE_NAMES = [
   'Harvard',
 ] as const;
 
+/**
+ * The citation-style alias table (GRND-04, D-18-11): every accepted spelling,
+ * as normalizeStyleName() leaves it, → its CSL key (templates/citation-styles/).
+ * Brackets, dashes and a trailing "style" / "format" / "citation(s)" /
+ * "referencing" / "edition" collapse first, so "APA 7th edition", "Chicago
+ * (Author-Date)", "chicago-notes-bib" and "MLA style" all resolve. A bare
+ * "Chicago" is notes-bibliography (the Chicago Manual's default system).
+ */
 export const CITATION_STYLE_KEYS: Readonly<Record<string, string>> = Object.freeze({
   apa: 'apa',
+  'apa 7': 'apa',
+  apa7: 'apa',
+  'apa 7th': 'apa',
+  'apa 6': 'apa',
+  'apa 6th': 'apa',
   mla: 'mla',
-  'chicago (notes-bibliography)': 'chicago-notes-bib',
-  'chicago-notes-bib': 'chicago-notes-bib',
+  'mla 9': 'mla',
+  mla9: 'mla',
+  'mla 9th': 'mla',
+  'mla 8': 'mla',
+  'mla 8th': 'mla',
+  chicago: 'chicago-notes-bib',
+  'chicago 17': 'chicago-notes-bib',
+  'chicago 17th': 'chicago-notes-bib',
+  'chicago notes bibliography': 'chicago-notes-bib',
+  'chicago notes and bibliography': 'chicago-notes-bib',
+  'chicago notes bib': 'chicago-notes-bib',
+  'chicago notes': 'chicago-notes-bib',
   'chicago nb': 'chicago-notes-bib',
-  'chicago (author-date)': 'chicago-author-date',
-  'chicago-author-date': 'chicago-author-date',
+  'notes bibliography': 'chicago-notes-bib',
+  turabian: 'chicago-notes-bib',
+  'chicago author date': 'chicago-author-date',
   'chicago ad': 'chicago-author-date',
+  'author date': 'chicago-author-date',
   ieee: 'ieee',
   ama: 'ama',
+  'ama 11': 'ama',
+  'ama 11th': 'ama',
   vancouver: 'vancouver',
   harvard: 'harvard',
 });
 
+/**
+ * Normalise a style name for the alias table: NFKC, lowercase, brackets,
+ * quotes and dashes to spaces, a trailing "style" / "format" / "citation(s)" /
+ * "referencing" / "reference(s)" / "edition" / "ed" / "manual" dropped,
+ * whitespace collapsed.
+ */
+export function normalizeStyleName(name: string): string {
+  let t = name
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[()[\]{}"'`’]/g, ' ')
+    .replace(/[-–—_/,:;.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  for (let i = 0; i < 3; i += 1) {
+    const next = t.replace(/\s*\b(?:style|format|formatting|citations?|referencing|references?|edition|ed|manual)$/, '').trim();
+    if (next === t) break;
+    t = next;
+  }
+  return t;
+}
+
 /** Canonical CSL key for a configured style name, or null when unknown. */
 export function citationStyleKey(name: string): string | null {
-  return CITATION_STYLE_KEYS[name.trim().toLowerCase()] ?? null;
+  const t = normalizeStyleName(name);
+  if (t.length === 0) return null;
+  return Object.prototype.hasOwnProperty.call(CITATION_STYLE_KEYS, t) ? (CITATION_STYLE_KEYS[t] as string) : null;
+}
+
+/** Every accepted style spelling, longest first (intake-overrides.ts scans free text with them). */
+export function citationStyleAliases(): string[] {
+  return Object.keys(CITATION_STYLE_KEYS).sort((a, b) => b.length - a.length || a.localeCompare(b));
+}
+
+/** The eight styles, for the one-line refusal of an unknown style name (GRND-04). */
+export function citationStyleChoices(): string {
+  const keys = [...new Set(Object.values(CITATION_STYLE_KEYS))];
+  return `${CITATION_STYLE_NAMES.join(', ')} (or their CSL keys: ${keys.join(', ')})`;
 }
 
 const CitationStyleSchema = z.string().refine((v) => citationStyleKey(v) !== null, {

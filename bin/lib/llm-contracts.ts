@@ -24,6 +24,8 @@ import { z, type ZodTypeAny } from 'zod';
 import { parse as parseYaml } from 'yaml';
 import { PlanFrontmatterSchema } from './schemas/plan-frontmatter.js';
 import { parseFrontmatter } from './frontmatter.js';
+import { PAPER_TYPES } from './intake-brief.js';
+import { normalizePaperType } from './intake-overrides.js';
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -46,14 +48,38 @@ export const SourceEvaluatorSchema = z.object({
   })).describe('one verdict per candidate, in candidate order'),
 });
 
+/**
+ * intake-clarifier v2 (GRND-02, D-18-10): the clarifier only SUGGESTS — a
+ * topic phrase, a discipline preset, the paper type, a working thesis, the
+ * stated length and citation style, sectioning notes and at most three
+ * assignment-specific follow-up questions. Intake builds INTAKE.md from the
+ * user's answers; this reply is never persisted as INTAKE.md. Tolerant where a
+ * model is sloppy but the meaning is clear: a free-text paper type is mapped
+ * onto PAPER_TYPES, a null or numeric-string length becomes a number, and more
+ * than three follow-ups are cut to three.
+ */
 export const IntakeClarifierSchema = z.object({
-  topic: z.string().describe('the paper topic in one short phrase'),
-  discipline: z.string().describe('computer-science, biology, history, literature, psychology, economics, philosophy, sociology or other'),
-  questions: z.array(z.object({
-    id: z.string().min(1).describe('short kebab-case id, e.g. discipline, length, citation-style, audience, counterargument'),
-    question: z.string().min(1),
-    suggested_answer: z.string().describe('the suggested default answer ("" when none)'),
-  })).min(1).max(5),
+  topic: z.string().describe('the paper topic as one short noun phrase (not an instruction or a question)'),
+  discipline: z.string().describe('the best-fitting discipline preset slug from the <disciplines> input'),
+  paper_type: z.preprocess(
+    (v) => (typeof v === 'string' ? normalizePaperType(v) : v),
+    z.enum(PAPER_TYPES),
+  ).describe('the kind of paper the assignment asks for'),
+  thesis: z.string().describe('a working thesis the assignment states or clearly implies, else ""'),
+  length_target_words: z.preprocess(
+    (v) => (v === null || v === undefined ? 0 : typeof v === 'string' && /^\s*\d+\s*$/.test(v) ? Number(v) : v),
+    z.number().int().min(0),
+  ).describe('the length the assignment states, in words (pages × 300); 0 when it states none'),
+  citation_style: z.string().describe('the citation style the assignment asks for (e.g. "APA", "Chicago"), else ""'),
+  sectioning_notes: z.array(z.string()).describe('explicit sectioning instructions from the assignment, verbatim and short; [] when none'),
+  follow_ups: z.preprocess(
+    (v) => (Array.isArray(v) ? v.slice(0, 3) : v),
+    z.array(z.object({
+      id: z.string().min(1).describe('short kebab-case id, e.g. audience, scope, case-study'),
+      question: z.string().min(1).describe('one assignment-specific question the fixed intake questions do not cover'),
+      suggested_answer: z.string().describe('the answer you would suggest ("" when none)'),
+    })).max(3),
+  ).describe('at most three assignment-specific follow-up questions; [] when none are needed'),
 });
 
 export const OUTLINE_ROLES = ['intro', 'body', 'counterargument', 'rebuttal', 'conclusion'] as const;
@@ -165,17 +191,47 @@ function plannerFromText(text: string): unknown {
   return { frontmatter: picked, body: body.trim() };
 }
 
+/**
+ * The tolerant fallback for a clarifier that answered in labelled Markdown
+ * instead of JSON: `Topic:`, `Discipline:`, `Paper type:`, `Thesis:`,
+ * `Length:`, `Citation style:` lines, `- ` bullets under a sectioning heading,
+ * and numbered questions (with an optional `Suggested:` answer) as the ≤ 3
+ * follow-ups. undefined when the reply holds neither a topic line nor a
+ * numbered question.
+ */
 function intakeFromText(text: string): unknown {
-  const questions: Array<{ id: string; question: string; suggested_answer: string }> = [];
-  for (const line of text.split(/\r?\n/)) {
+  const lines = text.split(/\r?\n/);
+  const label = (name: RegExp): string => {
+    for (const line of lines) {
+      const m = new RegExp(`^\\s*(?:[-*]\\s*)?(?:\\*\\*)?(?:${name.source})(?:\\*\\*)?\\s*:\\s*(.*?)\\s*$`, 'i').exec(line);
+      if (m) return (m[1] ?? '').replace(/^\*+|\*+$/g, '').trim();
+    }
+    return '';
+  };
+  const followUps: Array<{ id: string; question: string; suggested_answer: string }> = [];
+  for (const line of lines) {
     const m = /^\s*(\d+)[.)]\s+(.+)$/.exec(line);
     if (!m) continue;
     const q = (m[2] ?? '').trim();
-    const suggested = /Suggested:\s*(.+)$/i.exec(q)?.[1]?.trim() ?? '';
-    questions.push({ id: `q${m[1]}`, question: q, suggested_answer: suggested });
+    const suggested = /Suggested(?:\s+answer)?:\s*(.+)$/i.exec(q)?.[1]?.trim() ?? '';
+    followUps.push({ id: `q${m[1]}`, question: q.replace(/\s*Suggested(?:\s+answer)?:.*$/i, '').trim() || q, suggested_answer: suggested });
   }
-  if (questions.length === 0) return undefined;
-  return { topic: '', discipline: 'other', questions: questions.slice(0, 5) };
+  const topic = label(/topic/);
+  if (topic === '' && followUps.length === 0) return undefined;
+  const notes: string[] = [];
+  const notesLine = label(/sectioning(?:\s+notes)?/);
+  if (notesLine && !/^(?:none|n\/a|-)$/i.test(notesLine)) notes.push(notesLine);
+  const length = /(\d[\d,]*)/.exec(label(/length(?:\s+target)?(?:\s+words)?/))?.[1];
+  return {
+    topic,
+    discipline: label(/discipline/),
+    paper_type: label(/paper\s+type|type/) || 'other',
+    thesis: label(/(?:working\s+)?thesis/),
+    length_target_words: length ? Number(length.replace(/,/g, '')) : 0,
+    citation_style: label(/citation\s+style|style/),
+    sectioning_notes: notes,
+    follow_ups: followUps.slice(0, 3),
+  };
 }
 
 export const CONTRACTS: Readonly<Record<string, Contract>> = Object.freeze({

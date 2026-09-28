@@ -24,7 +24,7 @@
 
 import * as readline from 'node:readline';
 import { PromptAbortedError, PromptTimeoutError } from '../prompts.js';
-import type { PromptQuestion, PromptAnswer } from './schema.js';
+import { MULTILINE_TERMINATOR, type PromptQuestion, type PromptAnswer } from './schema.js';
 
 // ── Options ───────────────────────────────────────────────────────────────────
 
@@ -96,6 +96,11 @@ function renderQuestion(question: PromptQuestion, stderr: NodeJS.WritableStream)
   } else if (question.kind === 'confirm') {
     const hint = question.default === true ? '[Y/n]' : '[y/N]';
     writeStderr(stderr, `${hint}  Enter y or n: `);
+  } else if (question.kind === 'multiline') {
+    if (question.placeholder) {
+      writeStderr(stderr, `  (e.g. ${question.placeholder})\n`);
+    }
+    writeStderr(stderr, `Paste the text, then a line holding only "${MULTILINE_TERMINATOR}" to finish:\n`);
   }
 }
 
@@ -156,16 +161,18 @@ async function readOneLine(
   id: string,
   stdin: NodeJS.ReadableStream,
   timeoutMs: number,
+  trim = true,
 ): Promise<string> {
+  const clean = (line: string): string => (trim ? line.trim() : line.replace(/\r$/, ''));
   const reader = lineReaderFor(stdin);
   const queued = reader.queue.shift();
-  if (queued !== undefined) return queued.trim();
+  if (queued !== undefined) return clean(queued);
   if (reader.closed) throw new PromptAbortedError(id);
 
   return new Promise<string>((resolve, reject) => {
     let settled = false;
     const waiter: Waiter = {
-      resolve: (line) => settle(() => resolve(line.trim())),
+      resolve: (line) => settle(() => resolve(clean(line))),
       reject: () => settle(() => reject(new PromptAbortedError(id))),
     };
 
@@ -283,6 +290,27 @@ export async function askNumbered(
         return { id: question.id, kind: 'text', value: question.default ?? '' };
       }
       return { id: question.id, kind: 'text', value: line };
+    }
+
+    case 'multiline': {
+      // GRND-01: lines until a lone "." or the end of input. Lines keep their
+      // inner whitespace (only a trailing CR is dropped); an input that ends
+      // before any line is an aborted prompt, like every other kind.
+      const lines: string[] = [];
+      try {
+        for (;;) {
+          const line = await readOneLine(question.id, stdin, timeoutMs, false);
+          if (line.trim() === MULTILINE_TERMINATOR) break;
+          lines.push(line);
+        }
+      } catch (e) {
+        if (!(e instanceof PromptAbortedError) || lines.length === 0) {
+          if (!echoes) writeStderr(stderr, '\n');
+          throw e;
+        }
+      }
+      if (!echoes) writeStderr(stderr, '\n');
+      return { id: question.id, kind: 'multiline', value: lines.join('\n').replace(/^\n+|\s+$/g, '') };
     }
 
     case 'confirm': {

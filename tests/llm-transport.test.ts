@@ -289,8 +289,10 @@ type GenerativeVerb = typeof VERBS_FOR_INTEGRATION[number];
 // default-on approval gates exit 3 in a non-TTY spawn, and PENSMITH_NO_LLM
 // stubs the model, not the gates.
 const VERB_REQUIRED_ARGS: Record<GenerativeVerb, string[]> = {
-  // RUN-09: `new` needs an assignment in a non-interactive run (EXIT_USAGE otherwise).
-  intake: ['--from', fileURLToPath(new URL('./fixtures/assignment.txt', import.meta.url))],
+  // RUN-09: `new` needs an assignment in a non-interactive run (EXIT_USAGE otherwise);
+  // GRND-02: --yolo accepts the intake defaults (a non-TTY spawn otherwise exits 3
+  // at the intake-defaults gate, before the LLM check).
+  intake: ['--from', fileURLToPath(new URL('./fixtures/assignment.txt', import.meta.url)), '--yolo'],
   research: ['--yolo'],
   outline: ['--yolo'],
   plan: ['1'],

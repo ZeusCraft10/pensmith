@@ -414,6 +414,77 @@ export async function updatePaperConfig(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Intake (GRND-02, GRND-03): the `--answers <file.toml>` reader and the
+// [project] / [style] mirror of the brief. smol-toml stays in this module
+// (chokepoint row `config-toml`); intake-answers.ts validates the keys.
+// ---------------------------------------------------------------------------
+
+/**
+ * Read an `pensmith new --answers <file.toml>` file: the parsed TOML object
+ * (TOML dates as strings). A missing file or invalid TOML is a one-line
+ * EXIT_USAGE ConfigError; key validation is the caller's (intake-answers.ts).
+ */
+export function readIntakeAnswersFile(file: string): Record<string, unknown> {
+  let text: string;
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    throw new ConfigError(`--answers ${file}: no such file`, EXIT_USAGE);
+  }
+  try {
+    return normalizeTomlValues(parseToml(text)) as Record<string, unknown>;
+  } catch (e) {
+    const msg = (e as Error).message.split('\n')[0] ?? String(e);
+    throw new ConfigError(`--answers ${file} is not valid TOML: ${msg}`, EXIT_USAGE);
+  }
+}
+
+/** The intake answers config.toml mirrors (PRD §10 [project] and [style]). */
+export interface IntakeConfigMirror {
+  readonly mode: string;
+  /** The tutorial.ts fragment's keys and values, spread in unnamed. */
+  readonly fragment: Readonly<Record<string, unknown>>;
+  readonly class: string;
+  readonly disciplinePreset: string;
+  /** A CSL key; '' removes the key (the preset default applies). */
+  readonly citationStyle: string;
+  readonly lengthTargetWords: number | null;
+  /** yes / no set the key; auto removes it (the counterargument resolver decides). */
+  readonly counterargument: 'yes' | 'no' | 'auto';
+  readonly piiRedaction: boolean;
+  /** '' = style-match off. */
+  readonly styleSamplesDir: string;
+}
+
+/**
+ * Mirror the intake answers into `.paper/config.toml` (GRND-03, D-18-07) with
+ * updatePaperConfig: [project] mode, the fragment, class, discipline_preset,
+ * citation_style, length_target_words, counterargument_required (only for a
+ * yes/no answer), pii_redaction; [style] match_past_writing and samples_dir.
+ * Every other key the file holds is left as it is.
+ */
+export async function writeIntakeConfig(root: string, m: IntakeConfigMirror): Promise<PaperConfig> {
+  return updatePaperConfig(root, (raw) => {
+    const project = rawTable(raw, 'project');
+    project['mode'] = m.mode;
+    for (const [k, v] of Object.entries(m.fragment)) project[k] = v;
+    project['class'] = m.class;
+    project['discipline_preset'] = m.disciplinePreset;
+    if (m.citationStyle) project['citation_style'] = m.citationStyle;
+    else delete project['citation_style'];
+    if (m.lengthTargetWords !== null) project['length_target_words'] = m.lengthTargetWords;
+    else delete project['length_target_words'];
+    if (m.counterargument === 'auto') delete project['counterargument_required'];
+    else project['counterargument_required'] = m.counterargument === 'yes';
+    project['pii_redaction'] = m.piiRedaction;
+    const style = rawTable(raw, 'style');
+    style['match_past_writing'] = m.styleSamplesDir !== '';
+    if (m.styleSamplesDir) style['samples_dir'] = m.styleSamplesDir;
+    else delete style['samples_dir'];
+  });
+}
+
 /** Get or create a [table] object on a raw config (for updatePaperConfig mutators). */
 export function rawTable(raw: Record<string, unknown>, table: string): Record<string, unknown> {
   const cur = raw[table];

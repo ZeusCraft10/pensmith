@@ -65,6 +65,64 @@ export const PROJECT_CONFIG_FRAGMENT_DEFAULTS: Readonly<Record<string, unknown>>
   goal: 'draft',
 });
 
+// ---------------------------------------------------------------------------
+// The intake question for the fragment (GRND-02, D-18-09, PRD §7.1 question 3).
+//
+// bin/lib/intake-questions.ts composes this into the §7.1 battery WITHOUT
+// naming it (the zero-branch invariant, tests/lint-tutorial-no-branch.test.ts):
+// it reads `id`, `key`, `flag`, `label`, `options`, `defaultValue` and
+// `parse` opaquely. bin/cli/intake.ts declares the CLI flag from `flag`; the
+// INTAKE.md brief and config.toml [project] store the answer under `key`.
+// ---------------------------------------------------------------------------
+
+/** One fragment-owned intake question, read opaquely by the intake battery. */
+export interface FragmentIntakeQuestion {
+  /** Question id (the Q/A record, the numbered prompt id). */
+  readonly id: string;
+  /** The brief / config.toml [project] / answers-file key the answer is stored under. */
+  readonly key: string;
+  /** The `pensmith new --<flag>` option. */
+  readonly flag: string;
+  readonly flagDescription: string;
+  readonly label: string;
+  readonly options: ReadonlyArray<{ readonly value: string; readonly label: string; readonly hint: string }>;
+  readonly defaultValue: string;
+  /** The canonical value of an answer (flag, answers file, prompt), or null when it is not one of the options. */
+  parse(raw: unknown): string | null;
+}
+
+const GOAL_SYNONYMS: Readonly<Record<string, (typeof GOAL_VALUES)[number]>> = Object.freeze({
+  draft: 'draft',
+  'a draft': 'draft',
+  'produce a draft': 'draft',
+  'producing a draft': 'draft',
+  learning: 'learning',
+  learn: 'learning',
+  'learn the topic': 'learning',
+  'learning the topic': 'learning',
+  tutorial: 'learning',
+  both: 'both',
+});
+
+export const TUTORIAL_INTAKE_QUESTION: FragmentIntakeQuestion = Object.freeze({
+  id: 'goal',
+  key: 'goal',
+  flag: 'goal',
+  flagDescription: 'What the paper is for: draft (default), learning (tutorial notes; stops after research) or both.',
+  label: 'What is this paper for?',
+  options: Object.freeze([
+    Object.freeze({ value: 'draft', label: 'Producing a draft', hint: 'the full paper, through export' }),
+    Object.freeze({ value: 'learning', label: 'Learning the topic', hint: 'tutorial notes on why each source was chosen; stops after research' }),
+    Object.freeze({ value: 'both', label: 'Both', hint: 'the draft plus tutorial notes' }),
+  ]),
+  defaultValue: 'draft',
+  parse(raw: unknown): string | null {
+    if (typeof raw !== 'string') return null;
+    const v = raw.trim().toLowerCase().replace(/\s+/g, ' ');
+    return Object.prototype.hasOwnProperty.call(GOAL_SYNONYMS, v) ? (GOAL_SYNONYMS[v] as string) : null;
+  },
+});
+
 /**
  * The educator-mode goal. Only `learning` and `both` activate a subscriber;
  * `draft` (the default) never constructs one — that asymmetry is what keeps the

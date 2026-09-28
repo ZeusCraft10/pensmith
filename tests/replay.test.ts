@@ -68,10 +68,17 @@ test('RUN-17: a step run with --model / --runtime replays exactly (the logged ru
     assert.equal(rec['model'], 'claude-sonnet-5', 'the logged call used the --model override');
 
     fs.rmSync(intakePath);
-    const replay = await sb.runTsx(null, ['resume', '--replay', String(rec['id'])], { env: { PENSMITH_OFFLINE: '1' } });
+    // The logged --yolo is never inherited (RUN-28): replayed without one, `new`
+    // stops at its own intake-defaults gate (GRND-02) before any request.
+    const plain = await sb.runTsx(null, ['resume', '--replay', String(rec['id'])], { env: { PENSMITH_OFFLINE: '1' } });
+    assert.equal(plain.status, 3, plain.stderr);
+    assert.match(plain.stderr, new RegExp(`replaying ${String(rec['id'])} → new --from assignment\\.txt \\(sources offline`));
+    assert.match(plain.stderr, /^pensmith: Accept the intake defaults\? \(unanswered: /m);
+    assert.ok(!fs.existsSync(intakePath), 'the refused replay wrote nothing');
+    // The replaying invocation's own --yolo reaches the verb; the logged --runtime/--model are re-applied.
+    const replay = await sb.runTsx(null, ['resume', '--replay', String(rec['id']), '--yolo'], { env: { PENSMITH_OFFLINE: '1' } });
     assert.equal(replay.status, 0, replay.stderr);
-    // The logged --yolo is never inherited (RUN-28): the replay ran without it.
-    assert.match(replay.stderr, new RegExp(`replaying ${String(rec['id'])} → new --from assignment\\.txt \\(sources offline`));
+    assert.match(replay.stderr, new RegExp(`replaying ${String(rec['id'])} → new --from assignment\\.txt --yolo \\(sources offline`));
     assert.doesNotMatch(replay.stderr, /inputs changed/);
     assert.equal(fs.readFileSync(intakePath, 'utf8'), original, 'byte-for-byte');
     assert.equal(sb.mock!.callCount(), calls, 'the mock was not called again');

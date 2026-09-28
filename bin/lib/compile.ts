@@ -50,9 +50,9 @@ import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
 import {
   renderCompileReport,
+  citationDensityForReport,
   type TransitionEntry,
   type ConsistencyEntry,
-  type CitationDensityEntry,
   type StalenessEntry,
 } from './compile-report.js';
 import { sectionVerificationReasons } from './verify/verdict-rows.js';
@@ -434,10 +434,8 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       loaded.map((s) => ({ n: s.outline.n, slug: s.slug, text: s.draft })),
       opts.discipline ?? 'default',
     );
-    const densityEntries: CitationDensityEntry[] = densityReport.sections.map((d) => ({
-      section: `${d.n} (${d.slug})`,
-      citations_per_1000_words: Math.round(d.citations_per_1000_words * 10) / 10,
-    }));
+    // GRND-06: citations per paragraph against the preset's band (PRD §8).
+    const density = citationDensityForReport(densityReport);
     for (const w of densityReport.warnings) warn(`WARN: citation density — ${w.detail}`);
 
     // ---- Step 4: emit DRAFT + REPORT (COMP-07) -------------------------------
@@ -458,7 +456,8 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       refuse_reasons: [],
       transitions,
       consistency_flags: consistencyEntries,
-      citation_density: densityEntries,
+      citation_density: density.entries,
+      citation_density_summary: density.summary,
       staleness_resolved: stalenessResolved,
     });
     await atomicWriteFile(reportPath, report);
