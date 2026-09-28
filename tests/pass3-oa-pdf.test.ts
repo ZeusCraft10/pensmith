@@ -22,6 +22,7 @@ import { runPass3 } from '../bin/lib/verify/pass3.js';
 import { _resetContactEmailForTest } from '../bin/lib/contact-email.js';
 import { _resetUnpaywallNoticeForTest } from '../bin/lib/sources/unpaywall.js';
 import { liveLane, uniq } from './sources/three-way.js';
+import { startHttpServer } from './helpers/local-servers/transport.js';
 
 const PDF = readFileSync(fileURLToPath(new URL('./fixtures/pdf/byo-text.pdf', import.meta.url)));
 const EMAIL = 'pensmith-dev@example.org';
@@ -177,4 +178,27 @@ test('an OA PDF location on a private address is refused by the SSRF guard and r
     assert.equal(r?.verdict, 'PDF_UNAVAILABLE');
     assert.match(r?.reason ?? '', /^OA PDF fetch failed: SSRF guard: /);
   }, { contactEmail: EMAIL });
+});
+
+test('SRC-01: an OA PDF location on a loopback listener that WOULD answer is refused before any socket — the listener receives 0 requests', async () => {
+  let hits = 0;
+  const server = await startHttpServer((_req, res) => {
+    hits += 1;
+    res.writeHead(200, { 'content-type': 'application/pdf' });
+    res.end(PDF);
+  });
+  try {
+    await liveLane(async (agent) => {
+      // Let a request through to the listener if the SSRF guard ever let one go.
+      agent.enableNetConnect(`127.0.0.1:${server.port}`);
+      const doi = `10.5555/${uniq('ssrf-listener')}`;
+      unpaywallAnswer(agent, doi, `http://127.0.0.1:${server.port}/x.pdf`);
+      const [r] = await runPass3(QUOTED('k'), new Map([['k', { DOI: doi }]]));
+      assert.equal(r?.verdict, 'PDF_UNAVAILABLE');
+      assert.match(r?.reason ?? '', /^OA PDF fetch failed: SSRF guard: .*127\.0\.0\.1/);
+    }, { contactEmail: EMAIL });
+    assert.equal(hits, 0, 'the loopback listener was never asked');
+  } finally {
+    await server.close();
+  }
 });

@@ -212,3 +212,22 @@ test('SRC-09 (built CLI, numbered prompts): the prune question shows tiers, exce
     assert.match(fs.readFileSync(path.join(sb.paper, 'RESEARCH.md'), 'utf8'), /; 1 added at the approval gate$/m);
   });
 });
+
+test('SRC-06 (built CLI): OpenAlex\'s keyless 429 "Insufficient budget" is reported with the key hint, and research completes from the other adapters', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: env() }, async (sb) => {
+    seedBrief(sb);
+    // tests/fixtures/cassettes/synthetic/openalex/keyless-429-insufficient-budget.json answers this query.
+    const queries = ['insufficient budget probe', ...QUERIES.slice(0, 4)];
+    const registry = sources as unknown as AdapterRegistry;
+    const plan = researchAdapterPlan({ registry, byPreference: true, discipline: 'computer-science', env: {} });
+    const found = await discoverCandidates({ queries, plan, registry, warn: () => undefined });
+    sb.mock!.script('topic-disambiguator', { data: { ambiguous: false, scopes: [{ label: 'attention-mechanisms', description: 'Attention mechanisms.', queries }] } });
+    sb.mock!.script('source-evaluator', { data: { verdicts: verdictsFor(found.candidates, 0) } });
+    const r = await runBuilt(sb, ['research', '--yolo']);
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout, /^ {2}openalex +0 {2}.*failed \(keyless daily budget exhausted — set OPENALEX_API_KEY \(free\)\)/m);
+    assert.match(r.stderr, /openalex failed \(keyless daily budget exhausted — set OPENALEX_API_KEY \(free\)\)/);
+    assert.match(fs.readFileSync(path.join(sb.paper, 'RESEARCH.md'), 'utf8'), /^\| insufficient budget probe \| openalex \| 0 \| failed \(keyless daily budget exhausted — set OPENALEX_API_KEY \(free\)\) \|$/m);
+    assert.ok(library(sb).entries.length > 0, 'the other adapters built the library');
+  });
+});
