@@ -19,7 +19,7 @@ import * as path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { startMockLlm, type MockLlm, type MockLlmOptions } from './local-servers/mock-llm.js';
-import { _resetSessionForTest } from '../../bin/lib/session-log.js';
+import { _resetSessionForTest, closeSessionLog } from '../../bin/lib/session-log.js';
 import { _resetCostCapForTest } from '../../bin/lib/budget.js';
 import { setRuntimeOverride } from '../../bin/lib/runtime.js';
 import { _resetConfigWarningsForTest } from '../../bin/lib/config.js';
@@ -197,12 +197,17 @@ export async function openLlmSandbox(opts: SandboxOptions = {}): Promise<LlmSand
     async restore(): Promise<void> {
       process.chdir(prevCwd);
       if (mock) await mock.close();
+      // Session-log records are written fire-and-forget (the CLI drains the
+      // queue before it exits). Drain it here too: a write still in flight —
+      // its mkdir/open already on the libuv pool — recreated a file inside the
+      // sandbox while it was being removed (ENOTEMPTY on macOS / Node 24).
+      await closeSessionLog();
       for (const k of ENV_KEYS) {
         if (saved[k] === undefined) delete process.env[k];
         else process.env[k] = saved[k];
       }
       resetLlmModuleState();
-      fs.rmSync(base, { recursive: true, force: true });
+      await fs.promises.rm(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     },
   };
 }
