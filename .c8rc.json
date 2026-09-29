@@ -3,6 +3,7 @@
   "include": ["bin/**", "hooks/**", "mcp/**"],
   "exclude": ["tests/**", "scripts/**", "**/*.d.ts", "dist/**"],
   "all": true,
+  "merge-async": true,
   "check-coverage": true,
   "lines": 80,
   "functions": 66,
