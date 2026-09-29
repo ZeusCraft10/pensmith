@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: Open Source Release
 status: executing
-last_updated: "2026-09-28T00:00:00.000Z"
-last_activity: 2026-09-28
+last_updated: "2026-09-29T00:00:00.000Z"
+last_activity: 2026-09-29
 progress:
   total_phases: 11
-  completed_phases: 0
-  total_plans: 1
-  completed_plans: 1
-  percent: 0
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
+  percent: 9
 ---
 
 # Project State
@@ -20,18 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-27 for the v1.0.0 Open Source Release milestone)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** v1.0.0 Open Source Release roadmapped (Phases 17–27, 168 requirements covering all 200 items of the 2026-09-25 gap register). Goal: every completeness category at 100% and the product ready for open source. v0.3.0 Truly End-to-End never started and is absorbed (FEED → Phase 18, SEC → Phase 24, HARDEN → Phase 26, HARDEN-03 → Phase 20). Phase 17 RUNTIME has shipped its runtime foundations: live network by default (D-V1-01), valid models and runtimes (D-V1-02), documented exit codes, one paper root, the session log, the cost cap, and the deterministic mock LLM that every later phase tests against. 35/37 of its requirements are Complete; RUN-26 and CI-06 are open. Next is Phase 18 GROUND. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
+**Current focus:** v1.0.0 Open Source Release roadmapped (Phases 17–27, 168 requirements covering all 200 items of the 2026-09-25 gap register). Goal: every completeness category at 100% and the product ready for open source. v0.3.0 Truly End-to-End never started and is absorbed (FEED → Phase 18, SEC → Phase 24, HARDEN → Phase 26, HARDEN-03 → Phase 20). Phase 17 RUNTIME has shipped its runtime foundations: live network by default (D-V1-01), valid models and runtimes (D-V1-02), documented exit codes, one paper root, the session log, the cost cap, and the deterministic mock LLM that every later phase tests against. 36/37 of its requirements are Complete; CI-06 is open. Phase 18 GROUND is complete: intake collects the assignment and the §7.1 answers into a versioned brief, outline, plan and write run on validated contracts fed by each section's own fenced sources, bare `pensmith --yolo` goes from assignment.txt to an export, `--dry-run` runs in `.paper-dry-run/`, and prompt caching works (RUN-26). Phase 19 SOURCES is being built concurrently on `v1/p19` and merges next. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
 
 ## Current Position
 
-Phase: 17 — Tier-2 Runtime Foundations (RUNTIME). Executed and verified, but **not complete**: 2 of its 37 in-scope requirements are open. Next up: Phase 18, Grounded Generation (GROUND).
-Plan: 17-PLAN.md (1/1 executed as four parallel streams, then an integration pass and three review rounds)
-Status: 35/37 in-scope Phase 17 requirements are Complete (`.planning/phases/17-runtime/17-VERIFICATION.md`). Two are open:
-- RUN-26: stable system prompts are not actually cached, because the templates interpolate per-call data, so `cache_control` never hits. Fold the fix into Phase 18's GRND-07 / GRND-13 prompt re-pins.
-- CI-06: the Node 22/24 × ubuntu/macOS/Windows CI run has not been observed. The branch has not been pushed, and the first green run is also the cross-OS evidence for RUN-10, RUN-22, RUN-23 and CI-09.
-
-SWEEP-01 is Complete, done by its own workflow (1d38094), so Phase 18 can be planned.
-Last activity: 2026-09-28. Phase 17 closed as in-progress. Full gate green except the documented root-only atomic-write case (1502/1503). 31 user-path checks were run on the built CLI and on the installed tarball, with live sources and the mock LLM.
+Phase: 18 — Grounded Generation (GROUND). **Complete** (2026-09-29): all 21 of its requirements and the Phase 17 carry-over RUN-26 are Complete (`.planning/phases/18-ground/18-VERIFICATION.md`). Next up: merge Phase 19 SOURCES (built concurrently on `v1/p19` from the Phase 18 plan commit; it rebases onto Phase 18 and consumes the interfaces in 18-PLAN.md §9), then Phase 20 VERIFY.
+Plan: 18-PLAN.md (1/1, executed as four parallel streams from seam S-A, then an integration pass and three review rounds)
+Status: 22/22 in-scope requirements Complete and all 7 success criteria met. The full gate is green apart from the documented root-only atomic-write case: 1828 tests at the re-run, 1827 passing, plus one GRND-06 test added at close; tier-contract 55/55; e2e-smoke PASS=16. 18 user-path checks were run on the built CLI with the mock LLM and live sources. Caveats, owned elsewhere:
+- On live sources, the PRD §15 run stops at attention on Pass-1 MIS-CITED false positives (PubMed "Family Initials" and compound-surname authors). It reaches done after `plan 2 --revise` ×3. Owner: VRFY-13 (Phase 20), with adapter normalisation in Phase 19.
+- Phase 17's CI-06 is still open. No CI run has exercised Phase 17 or Phase 18 code on macOS or Windows, because the branch has not been pushed.
+Last activity: 2026-09-29. Phase 18 closed.
 
 ## Performance Metrics
 
@@ -292,10 +290,29 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
   - D-17-46: `--dry-run` only in a folder with no paper, until GRND-19.
   - D-17-47: retraction lookup via Crossref REST.
 - [Phase 17] Ollama structured output goes through its OpenAI-compatible endpoint (`response_format` json_schema, non-strict), generated from the same zod schema.
+- [Phase 18] Decisions D-18-01..47 are in `.planning/phases/18-ground/18-CONTEXT.md`. Later phases rely on:
+  - D-18-03..05: templates are fixed instructions, data goes last in tagged blocks, the system prompt is always `cache_control`-marked, and minimums are per model.
+  - D-18-04: one FEED-05 fence, applied by the renderer.
+  - D-18-07: INTAKE.md is the versioned brief.
+  - D-18-13: one preset loader.
+  - D-18-16/38: section ids `N[a]`; STATE.json is the authority on section identity.
+  - D-18-21: `source-context.ts`, with `fullTextAvailable` as the one full-text derivation.
+  - D-18-25: `checkDraft` containment.
+  - D-18-28/30: one bare step, and the dry-run loop.
+  - D-18-29: the `.paper-dry-run/` workspace.
+  - D-18-31: the e2e corpus.
+  - D-18-37/46: `verifierBlindSpot`, which VRFY-11 widens.
+  - D-18-39: `COMPILE-INPUTS.json`.
+  - D-18-40/42: the fail-closed Pandoc citation reader (VRFY-09 replaces it).
+  - D-18-45: `stopAfterOutline` (GRND-11 attaches there).
 
 ### Pending Todos
 
-- RUN-26: restructure the prompt templates so stable text comes first and per-call data last. Mark the stable prefix with `cache_control`, re-pin the hashes, and prove `cache_read_input_tokens > 0` against the mock. Planned with Phase 18's prompt re-pins.
+- Phase 20 (VRFY-13): Pass-1 author matching for PubMed "Family Initials" names and compound surnames. It blocks an unattended live `--yolo` run of the PRD §15 assignment (18-VERIFICATION.md U1). Include a live-lane check that the §15 assignment reaches done unaided.
+- Phase 19: re-record the e2e corpus after the adapter URL changes (`npm run cassettes:refresh -- --corpus e2e`) and keep `tests/e2e-chain.test.ts` green (18-PLAN.md §9).
+- Phase 21 (EXP-04): without pandoc, the md export of a note style renders the full note inline and leaves a doubled period after the DOI.
+- Phase 22 (REV-03): `plan N --revise` removes one flagged citation per run.
+- Intake (minor): `disciplineMentionFrom` does not read a bare course-code line (`Biology 210: …`), so the offline stub falls back to `other`.
 - CI-06: after the maintainer pushes, record the first green 6-leg `ci.yml` run, then mark CI-06 Complete and tick Phase 17 in ROADMAP.md.
 - Phase 20 (VRFY): the freshness table prints `DOI HEAD | ok` for a citekey with no DOI. It is advisory, but misleading.
 - Phase 23 (PLUG-01 / CI-05): `claude plugin validate .` fails on the `plugin.json` `skills` shape. This predates Phase 17.
@@ -312,7 +329,7 @@ Items acknowledged and carried forward at the v0.2.0 milestone close (2026-06-24
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| tech-debt (v0.3.0 headline) | Wire discovered LIBRARY.json sources into the plan/outline/write prompts (research discovers sources but the section planner/writer get placeholder context) | now Phase 18 (FEED-01..05) in v1.0.0 | v0.2.0 close |
+| tech-debt (v0.3.0 headline) | Wire discovered LIBRARY.json sources into the plan/outline/write prompts (research discovers sources but the section planner/writer get placeholder context) | closed in Phase 18 (FEED-01..05 Complete, 2026-09-29) | v0.2.0 close |
 | manual-verify | Live LLM-key generation (GEN-02) + live adapter network round-trip (GEN-03) — Phase 12 | now HARDEN-02 live lane (Phase 26) in v1.0.0 | v0.2.0 close |
 | manual-verify | Live Retraction Watch re-query (GATE-03) — Phase 14 | now SRC-04 + HARDEN-02 (Phases 19, 26) in v1.0.0 | v0.2.0 close |
 | manual-verify | Live-DNS SSRF block (HARD-02) + live GPTZero consent/cap (HARD-05) — Phase 15 | now HARDEN-02 live lane (Phase 26) in v1.0.0 | v0.2.0 close |
@@ -320,12 +337,12 @@ Items acknowledged and carried forward at the v0.2.0 milestone close (2026-06-24
 
 ## Session Continuity
 
-Last session: 2026-09-28T00:00:00.000Z
-Stopped at: Phase 17 closed as in-progress. 35/37 requirements are Complete; RUN-26 and CI-06 are open (17-VERIFICATION.md §5). Ready for /gsd:plan-phase 18.
+Last session: 2026-09-29T00:00:00.000Z
+Stopped at: Phase 18 closed as complete (22/22 including RUN-26; 18-VERIFICATION.md). Phase 17 remains open on CI-06 only. Next: merge Phase 19 (v1/p19), then /gsd:plan-phase 20.
 Resume file: None
 
 ## Operator Next Steps
 
-- Push the branch and confirm that the `ci.yml` matrix (Node 22 and 24 × ubuntu/macOS/Windows) is green. That closes CI-06 and provides the cross-OS evidence for RUN-10, RUN-22, RUN-23 and CI-09; then tick Phase 17 once RUN-26 is also closed.
-- Run /gsd:plan-phase 18 (Grounded Generation). Include the RUN-26 prompt-caching restructure with the GRND-07 / GRND-13 prompt re-pins.
-- Phase 19 (Sources) can be planned alongside Phase 18. It depends only on Phase 17.
+- Push the branch and confirm that the `ci.yml` matrix (Node 22 and 24 × ubuntu/macOS/Windows) is green. That closes CI-06, and with it Phase 17. It is also the cross-OS evidence for RUN-10, RUN-22, RUN-23 and CI-09, and for Phase 18's new parsers, workspace copies, archive moves and fake-TTY preload.
+- Merge Phase 19 (`v1/p19`) after it rebases onto Phase 18: consume 18-PLAN.md §9, re-record the e2e corpus, and keep `tests/e2e-chain.test.ts` green.
+- Run /gsd:plan-phase 20 (Verifier Completeness). Include VRFY-13's author normalisation, with a live-lane check that the PRD §15 assignment reaches done unaided, and VRFY-11's widening of `verifierBlindSpot`.
