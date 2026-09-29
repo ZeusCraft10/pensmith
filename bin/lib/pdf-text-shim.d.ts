@@ -17,6 +17,6 @@ declare module 'pdf-parse/lib/pdf-parse.js' {
     text: string;
     numpages: number;
   }
-  const pdfParse: (buf: Buffer) => Promise<PdfParseResult>;
+  const pdfParse: (buf: Uint8Array) => Promise<PdfParseResult>;
   export default pdfParse;
 }

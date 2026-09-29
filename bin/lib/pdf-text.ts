@@ -82,40 +82,27 @@ interface PdfParseResult {
 }
 
 /**
- * pdf-parse@1.1.1 wraps a 2018 fork of PDF.js whose content-stream lexer keeps
- * MUTABLE state in module-level globals (e.g. `PDFJS`) and parses in event-loop-
- * scheduled chunks. When the loop has prior async activity (the common case —
- * e.g. STATE.json was just loaded), the chunk boundaries shift and the lexer
- * intermittently mis-reads a token boundary, rejecting with a transient
- * `FormatError` ("Command token too long", "Invalid number", "bad XRef entry").
- * The SAME bytes parse cleanly on the very next tick.
+ * Hand pdf-parse a Uint8Array that OWNS its whole ArrayBuffer (byteOffset 0,
+ * byteLength === buffer.byteLength).
  *
- * We therefore retry the parse a bounded number of times, yielding a fresh tick
- * (`setImmediate`) between attempts so PDF.js re-runs from a clean scheduling
- * state. The retry is transparent — the byte input is unchanged — and the
- * debug-shim ENOENT (Pitfall #1) is NEVER retried (it is a deterministic import-
- * path defect, not transient): it surfaces immediately to the caller's rethrow.
- * If every attempt fails the LAST error propagates (fail-loud for a genuinely
- * broken PDF), and the extractPdfText catch routes it onward per RSCH-05b.
+ * pdf-parse@1.1.1 bundles PDF.js v1.10.100, whose `Stream.makeSubStream` builds
+ * every sub-stream from `this.bytes.buffer` — the view's byteOffset is dropped.
+ * A small Node Buffer (< poolSize / 2: `fs.readFile` of a short PDF, any
+ * `Buffer.from` copy, and PDF.js's own fake-worker clone, which re-creates a
+ * Buffer through `new value.constructor(value)`) is a view into the shared
+ * Buffer pool at a non-zero offset, so each object fetched through a
+ * sub-stream was read from the wrong bytes and the parse failed with a
+ * FormatError ("bad XRef entry", "Command token too long", "Invalid number").
+ * Whether a parse survived depended on where the pool cursor happened to sit
+ * — and Node 24's 64 KiB pool (8 KiB before) made a non-zero offset the rule
+ * (`add <pdf>` and @assignment.pdf failed on Node 24 only). A plain
+ * Uint8Array copy has its own exactly-sized ArrayBuffer, and
+ * PDF.js's clone of it (`new Uint8Array(view)`) is one too, so the parse is
+ * deterministic on every Node version. A genuinely broken PDF still fails,
+ * once and loudly; the extractPdfText catch routes it onward per RSCH-05b.
  */
-async function parseWithRetry(input: Buffer): Promise<PdfParseResult> {
-  const MAX_ATTEMPTS = 3;
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    try {
-      // A fresh Buffer view per attempt avoids any internal cursor reuse.
-      return (await pdfParse(Buffer.from(input))) as PdfParseResult;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      // The deterministic debug-shim ENOENT must NOT be retried — rethrow now.
-      if (msg.includes('ENOENT') && msg.includes('05-versions-space.pdf')) throw err;
-      lastErr = err;
-      if (attempt < MAX_ATTEMPTS - 1) {
-        await new Promise<void>((resolve) => setImmediate(resolve));
-      }
-    }
-  }
-  throw lastErr;
+async function parsePdf(input: Buffer): Promise<PdfParseResult> {
+  return (await pdfParse(new Uint8Array(input))) as PdfParseResult;
 }
 
 /**
@@ -164,7 +151,7 @@ export async function extractPdfText(buf: Buffer | Uint8Array): Promise<string> 
     });
     let result: PdfParseResult;
     try {
-      result = await Promise.race([parseWithRetry(input), timeoutPromise]);
+      result = await Promise.race([parsePdf(input), timeoutPromise]);
     } finally {
       // Clear the timer so the timeout promise does not keep the event loop alive on success.
       clearTimeout(timeoutHandle);
