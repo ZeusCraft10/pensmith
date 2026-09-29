@@ -38,12 +38,22 @@
 //     PENSMITH_NETWORK_TESTS=1 (the maintainer's live lane) — D-V1-01.
 //   - The per-run dir is deleted when the run ends. Set
 //     PENSMITH_KEEP_TEST_DATA=1 to keep it for debugging (its path is printed).
+//   - The runner also fingerprints the REAL data dir (scripts/
+//     data-dir-fingerprint.mjs, the same guard CI runs around the whole job)
+//     before and after the run, and fails the run if it changed. A test that
+//     drops the test context (to run like a user) must redirect every
+//     platform's data-dir variable itself — HOME included, since macOS derives
+//     its data dir from HOME — and this is where a missed one shows up
+//     locally. Skipped when the real data dir already lies inside os.tmpdir()
+//     (a runner started by a test, inside another run's sandbox) or when
+//     dist/ is not built (the fingerprint resolves the dir through the built
+//     bin/lib/paths.js).
 //
 // CI assertion: the workflow greps the stdout of `npm test` for the
 // "discovered N test files" line and asserts N >= 1.
 
 import { readdir, stat } from 'node:fs/promises';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -140,6 +150,58 @@ function cleanup() {
   }
 }
 
+// CI-09: fingerprint of the REAL data dir (this runner's own env, not the
+// redirected one), or null when the guard does not apply (see the header).
+function realDataDirFingerprint() {
+  if (!existsSync(path.join(repoRoot, 'dist', 'bin', 'lib', 'paths.js'))) return null;
+  const r = spawnSync(process.execPath, [path.join(repoRoot, 'scripts', 'data-dir-fingerprint.mjs')], {
+    cwd: repoRoot,
+    env: process.env,
+    encoding: 'utf8',
+  });
+  if (r.status !== 0) return null;
+  const dir = /^pensmith data dir: (.*)$/m.exec(r.stdout)?.[1];
+  if (!dir || insideTmp(dir)) return null;
+  return r.stdout;
+}
+
+/** Whether `p` lies inside os.tmpdir(), in either spelling (macOS /var → /private/var, Windows 8.3 names and case). */
+function insideTmp(p) {
+  const real = (q) => {
+    // realpath of the nearest existing ancestor, re-joined with the missing tail.
+    let head = path.resolve(q);
+    const tail = [];
+    for (;;) {
+      try {
+        return path.join(realpathSync.native(head), ...tail);
+      } catch {
+        const parent = path.dirname(head);
+        if (parent === head) return path.resolve(q);
+        tail.unshift(path.basename(head));
+        head = parent;
+      }
+    }
+  };
+  const fold = (q) => (process.platform === 'win32' ? q.toLowerCase() : q);
+  const roots = [path.resolve(os.tmpdir()), real(os.tmpdir())].map(fold);
+  const forms = [path.resolve(p), real(p)].map(fold);
+  return forms.some((f) =>
+    roots.some((root) => {
+      const rel = path.relative(root, f);
+      return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+    }),
+  );
+}
+
+/** Lines only in `before` (-) or only in `after` (+). */
+function fingerprintDiff(before, after) {
+  const a = new Set(before.split(/\r?\n/));
+  const b = new Set(after.split(/\r?\n/));
+  return [...[...a].filter((l) => !b.has(l)).map((l) => `- ${l}`), ...[...b].filter((l) => !a.has(l)).map((l) => `+ ${l}`)];
+}
+
+const dataDirBefore = realDataDirFingerprint();
+
 // Spawn `node --import tsx --test <files>` and inherit stdio.
 const args = ['--import', 'tsx', '--test', ...nodeTestFlags, ...files];
 const child = spawn(process.execPath, args, { stdio: 'inherit', cwd: repoRoot, env });
@@ -149,5 +211,16 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 child.on('exit', (code, signal) => {
   cleanup();
   if (signal) { console.error(`test runner killed by signal ${signal}`); process.exit(1); }
+  if (dataDirBefore !== null) {
+    const dataDirAfter = realDataDirFingerprint();
+    if (dataDirAfter !== null && dataDirAfter !== dataDirBefore) {
+      console.error(
+        'FAIL (CI-09): the test run changed the REAL pensmith data dir. A test (or a CLI it spawned without a ' +
+          'test context) resolved the user data dir — redirect XDG_DATA_HOME, LOCALAPPDATA and HOME (macOS) ' +
+          'for it:\n' + fingerprintDiff(dataDirBefore, dataDirAfter).join('\n'),
+      );
+      process.exit(1);
+    }
+  }
   process.exit(code ?? 1);
 });

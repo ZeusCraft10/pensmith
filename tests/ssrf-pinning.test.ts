@@ -5,7 +5,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   fetch as httpFetch,
@@ -14,6 +16,7 @@ import {
   _resetBucketsForTest,
   type ResolvedAddress,
 } from '../bin/lib/http.js';
+import { closeSessionLog } from '../bin/lib/session-log.js';
 import { installDialRecorder } from './helpers/local-servers/dial-recorder.mjs';
 import { startSniServer, startHttpServer, withLocalHosts, testCa, SNI_HOST, json } from './helpers/local-servers/transport.js';
 
@@ -31,6 +34,36 @@ async function liveLane<T>(fn: () => Promise<T>): Promise<T> {
     if (saved === undefined) delete process.env['PENSMITH_NETWORK_TESTS'];
     else process.env['PENSMITH_NETWORK_TESTS'] = saved;
     if (savedOffline !== undefined) process.env['PENSMITH_OFFLINE'] = savedOffline;
+  }
+}
+
+/**
+ * Run `fn` as a user process would: no test context (NODE_TEST_CONTEXT /
+ * PENSMITH_TEST removed). Without a test context bin/lib/paths.ts resolves the
+ * PLATFORM data dir — on macOS ~/Library/Application Support, derived from
+ * HOME, which the test runner never redirects — and anything `fn` logs (the
+ * global session.log of an httpFetch) or locks would land in the user's real
+ * data dir (CI-09 / D-17-40). So the data-dir variables of every platform
+ * point at a private temp dir for exactly as long as the context is gone.
+ */
+async function withoutTestContext<T>(fn: () => Promise<T> | T): Promise<T> {
+  const keys = ['NODE_TEST_CONTEXT', 'PENSMITH_TEST', 'HOME', 'USERPROFILE', 'XDG_DATA_HOME', 'LOCALAPPDATA'] as const;
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  const dataHome = mkdtempSync(join(tmpdir(), 'pensmith-ssrf-no-ctx-'));
+  delete process.env['NODE_TEST_CONTEXT'];
+  delete process.env['PENSMITH_TEST'];
+  for (const k of ['HOME', 'USERPROFILE', 'XDG_DATA_HOME', 'LOCALAPPDATA'] as const) process.env[k] = dataHome;
+  try {
+    return await fn();
+  } finally {
+    // Session-log records are written fire-and-forget: land them in the temp
+    // dir before it goes.
+    await closeSessionLog();
+    for (const k of keys) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+    rmSync(dataHome, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 
@@ -139,32 +172,27 @@ test('SEC-01: http.ts sets maxRedirections: 0 exactly once and has no dead `void
 });
 
 test('SEC-01: the test seams exist only under a test context', async () => {
-  const saved = { ctx: process.env['NODE_TEST_CONTEXT'], t: process.env['PENSMITH_TEST'] };
-  delete process.env['NODE_TEST_CONTEXT'];
-  delete process.env['PENSMITH_TEST'];
-  try {
+  await withoutTestContext(() => {
     assert.throws(() => __setHttpTestSeams({ localHosts: ['evil.example'] }), /only under the test runner/);
-  } finally {
-    if (saved.ctx !== undefined) process.env['NODE_TEST_CONTEXT'] = saved.ctx;
-    if (saved.t !== undefined) process.env['PENSMITH_TEST'] = saved.t;
-  }
+  });
   // A seam installed in a test context is ignored the moment the context is gone.
   __setHttpTestSeams({ resolve: async () => [{ address: '127.0.0.1', family: 4 }], localHosts: ['local.pensmith.test'] });
-  delete process.env['NODE_TEST_CONTEXT'];
-  delete process.env['PENSMITH_TEST'];
-  const rec = installDialRecorder();
   try {
-    await assert.rejects(() =>
-      httpFetch('http://local.pensmith.test/', { source: 'generic', noCache: true, noRetry: true }),
-    );
-    assert.ok(
-      rec.events.some((e) => e.kind === 'dns' && e.host === 'local.pensmith.test'),
-      'outside a test context the real resolver (here the recorder) is used, not the seam',
-    );
+    await withoutTestContext(async () => {
+      const rec = installDialRecorder();
+      try {
+        await assert.rejects(() =>
+          httpFetch('http://local.pensmith.test/', { source: 'generic', noCache: true, noRetry: true }),
+        );
+        assert.ok(
+          rec.events.some((e) => e.kind === 'dns' && e.host === 'local.pensmith.test'),
+          'outside a test context the real resolver (here the recorder) is used, not the seam',
+        );
+      } finally {
+        rec.restore();
+      }
+    });
   } finally {
-    rec.restore();
-    if (saved.ctx !== undefined) process.env['NODE_TEST_CONTEXT'] = saved.ctx;
-    if (saved.t !== undefined) process.env['PENSMITH_TEST'] = saved.t;
     __setHttpTestSeams(null);
   }
 });
