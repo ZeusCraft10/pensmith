@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: Open Source Release
 status: executing
-last_updated: "2026-09-29T00:00:00.000Z"
+last_updated: "2026-09-29T23:59:00.000Z"
 last_activity: 2026-09-29
 progress:
   total_phases: 11
   completed_phases: 0
-  total_plans: 1
-  completed_plans: 1
+  total_plans: 2
+  completed_plans: 2
   percent: 0
 ---
 
@@ -20,11 +20,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-27 for the v1.0.0 Open Source Release milestone)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** v1.0.0 Open Source Release roadmapped (Phases 17–27, 168 requirements covering all 200 items of the 2026-09-25 gap register). Goal: every completeness category at 100% and the product ready for open source. v0.3.0 Truly End-to-End never started and is absorbed (FEED → Phase 18, SEC → Phase 24, HARDEN → Phase 26, HARDEN-03 → Phase 20). Phase 17 RUNTIME has shipped its runtime foundations: live network by default (D-V1-01), valid models and runtimes (D-V1-02), documented exit codes, one paper root, the session log, the cost cap, and the deterministic mock LLM that every later phase tests against. 35/37 of its requirements are Complete; RUN-26 and CI-06 are open. Next is Phase 18 GROUND. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
+**Current focus:** v1.0.0 Open Source Release roadmapped (Phases 17–27, 168 requirements covering all 200 items of the 2026-09-25 gap register). Goal: every completeness category at 100% and the product ready for open source. v0.3.0 Truly End-to-End never started and is absorbed (FEED → Phase 18, SEC → Phase 24, HARDEN → Phase 26, HARDEN-03 → Phase 20). Phase 17 RUNTIME has shipped its runtime foundations: live network by default (D-V1-01), valid models and runtimes (D-V1-02), documented exit codes, one paper root, the session log, the cost cap, and the deterministic mock LLM that every later phase tests against. 35/37 of its requirements are Complete; RUN-26 and CI-06 are open. Phase 18 GROUND is executing on the main checkout. Phase 19 SOURCES is closed as in-progress on `v1/p19` with 18/20 requirements Complete (SRC-06 keyed live round trip, GRND-14 drafter half at the merge) and merges after Phase 18. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
 
 ## Current Position
 
-Phase 19 — Sources and Library (SOURCES), on branch `v1/p19` (worktree `/home/user/pensmith-p19`), built concurrently with Phase 18 and merged into the main branch after Phase 18 closes. Four streams (net, adapters, library, research) and an integration pass: 19 of 20 requirements Complete (`.planning/phases/19-sources/19-VERIFICATION.md`); GRND-14 is not met on this branch — its library half is built, its drafter half and acceptance run at the Phase 18/19 merge (merge notes in `19-SUMMARY.md`). Review rounds 1, 2 and 3 fixed every finding they confirmed (19-SUMMARY "Review round 1/2/3"; round 3: no-burst buckets and a 429 host hold with per-request throttle strikes, the full-text flag only for Unpaywall links that served a PDF, the Tier 1 Zotero gate without a bypass, config.toml schema v2, OJS / PLOS / DataCite identification). Gate after round 3: `npm run build`, `lint`, `typecheck` exit 0 and the build leaves the tree clean; `npm test` 2067 tests: 2066 pass, 1 fail (the root-only `tests/atomic-write.test.ts` case, which passes in CI; no skips, no todos); `npm run test:tier-contract` 56/56; `npm run validate:manifests` exit 0; `node scripts/e2e-smoke.mjs` PASS=10 FAIL=0; `npm run live:sources` 19 pass, 0 fail, 2 skipped (no OpenAlex / Semantic Scholar key). SRC-06's keyed OpenAlex / Semantic Scholar round trips are a maintainer item (no key here). Hand-off to Phase 20: rounds 1–2 landed Pass 1's own-registrar lookup for DOI-less entries (arXiv id, PMID, ISBN), the DataCite arXiv DOI re-fetch, and Pass 3's bring-your-own step and arXiv-PDF fallback; other DataCite DOIs in Pass 1 (`add` reports them since round 3), the identifier-less metadata search, PMC open-access text and UNVERIFIABLE-QUOTE remain (VRFY-11, -12, -19, -20).
+Phase 19 — Sources and Library (SOURCES) — **closed as in-progress** on 2026-09-29, on branch `v1/p19` (worktree `/home/user/pensmith-p19`). It was built alongside Phase 18 and merges into the main branch after Phase 18 closes. The work: four streams (net, adapters, library, research), an integration pass, and review rounds 1–3. At the close, 18 of 20 requirements are Complete and 6 of 8 ROADMAP success criteria are met (`.planning/phases/19-sources/19-VERIFICATION.md` §8). Two requirements are open:
+- **SRC-06.** Built and tested, and the keyless budget report was observed live. The keyed OpenAlex / Semantic Scholar live round trip is unobserved because there is no key here. The closer moved it from Complete to Pending, the same rule the Phase 17 closer applied to CI-06.
+- **GRND-14.** The library half is built. The drafter half and its acceptance run at the Phase 18/19 merge. The exact wiring against Phase 18's `source-context.ts` / `draft-containment.ts` (its branch at 5d99322) is in the "Closer" row of `19-SUMMARY.md` merge notes.
+
+Closer gate at HEAD 4f47eff:
+- `npm run build`, `lint` and `typecheck` exit 0, and the build leaves the tree clean.
+- `npm test`: 2067 tests, 2066 pass and 1 fails. The failure is the root-only `tests/atomic-write.test.ts` case, which passes in CI. No skips, no todos.
+- `npm run test:tier-contract`: 56/56.
+- `npm run validate:manifests`: exit 0.
+- `node scripts/e2e-smoke.mjs`: PASS=10, FAIL=0.
+- `npm run live:sources`: 19 pass, 0 fail, 2 skipped (no key).
+
+The live user-path checks on the built CLI all behaved as expected:
+- `add` of a PMID, an ISBN, an arXiv id and a DOI, then verify, compile and done, exits 0 and exports an APA DOCX with zero trace. A fabricated quote makes verify, compile and done exit 4.
+- Live `research` prints per-adapter reasons.
+- `plan N --research` touches only that section.
+- `new --pdfs` routes to research.
+
+Hand-off to Phase 20. Rounds 1–2 landed three pieces: Pass 1 looks up DOI-less entries at their own registrars (arXiv id, PMID, ISBN), the DataCite arXiv DOI is re-fetched, and Pass 3 gained its bring-your-own step and an arXiv-PDF fallback. Still to do (VRFY-11, -12, -19, -20):
+- Pass 1 for other DataCite DOIs (`add` reports them since round 3).
+- The metadata search for identifier-less entries.
+- PMC open-access text.
+- UNVERIFIABLE-QUOTE.
 
 Phase: 17 — Tier-2 Runtime Foundations (RUNTIME). Executed and verified, but **not complete**: 2 of its 37 in-scope requirements are open. Next up: Phase 18, Grounded Generation (GROUND).
 Plan: 17-PLAN.md (1/1 executed as four parallel streams, then an integration pass and three review rounds)
@@ -301,6 +323,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - CI-06: after the maintainer pushes, record the first green 6-leg `ci.yml` run, then mark CI-06 Complete and tick Phase 17 in ROADMAP.md.
 - Phase 20 (VRFY): the freshness table prints `DOI HEAD | ok` for a citekey with no DOI. It is advisory, but misleading.
 - Phase 23 (PLUG-01 / CI-05): `claude plugin validate .` fails on the `plugin.json` `skills` shape. This predates Phase 17.
+- Phase 18/19 merge (GRND-14): delegate Phase 18's `source-context.ts fullTextAvailable` to `full-text.ts` (adding the `arxiv` field). Add the `quote-without-full-text` violation to `draft-containment.ts checkDraft` (`quotesWithoutFullText` + `describeQuotesWithoutFullText`). Add and run the two GRND-14 acceptance tests, then tick GRND-14 (19-SUMMARY merge notes, "Closer" row).
+- SRC-06: the maintainer runs `OPENALEX_API_KEY=… PENSMITH_S2_API_KEY=… PENSMITH_CONTACT_EMAIL=… npm run live:sources` and one keyed `pensmith research --yolo`, records the output in 19-VERIFICATION §8.4, then marks SRC-06 Complete.
+- Follow-ups from the Phase 19 closer: PubMed entries have no abstract (esummary), so Pass 2 has no text and APA lowercases the proper nouns of a Title Case title ("china") — VRFY-21 / EXP-03. `done` reads the citation style only from INTAKE.md, so a paper without one exports raw `[@key]` tokens — EXP-03.
 
 ### Blockers/Concerns
 
@@ -322,12 +347,14 @@ Items acknowledged and carried forward at the v0.2.0 milestone close (2026-06-24
 
 ## Session Continuity
 
-Last session: 2026-09-28T00:00:00.000Z
-Stopped at: Phase 17 closed as in-progress. 35/37 requirements are Complete; RUN-26 and CI-06 are open (17-VERIFICATION.md §5). Ready for /gsd:plan-phase 18.
+Last session: 2026-09-29T23:59:00.000Z
+Stopped at: Phase 19 closed as in-progress on `v1/p19`: 18/20 requirements Complete; SRC-06 (keyed live round trip) and GRND-14 (drafter half at the Phase 18/19 merge) open (19-VERIFICATION.md §8). Phase 17 remains in progress (RUN-26, CI-06). Phase 18 is executing on the main checkout; merge `v1/p19` after it closes.
 Resume file: None
 
 ## Operator Next Steps
 
 - Push the branch and confirm that the `ci.yml` matrix (Node 22 and 24 × ubuntu/macOS/Windows) is green. That closes CI-06 and provides the cross-OS evidence for RUN-10, RUN-22, RUN-23 and CI-09; then tick Phase 17 once RUN-26 is also closed.
 - Run /gsd:plan-phase 18 (Grounded Generation). Include the RUN-26 prompt-caching restructure with the GRND-07 / GRND-13 prompt re-pins.
-- Phase 19 (Sources) can be planned alongside Phase 18. It depends only on Phase 17.
+- When Phase 18 closes, merge `v1/p19` into the main branch, following the merge notes in `.planning/phases/19-sources/19-SUMMARY.md` (the stream summaries' lists plus the integration, round 1–3 and "Closer" rows). Then wire GRND-14 and run its two acceptance tests. Then re-run the full gate and the e2e corpus (`npm run cassettes:refresh -- --corpus e2e` if needed).
+- With keys: run the keyed `live:sources` and one keyed `research` to close SRC-06.
+- Next phase after the merge: Phase 20 (VERIFY). It depends on Phase 18 and Phase 19. See the 19-SUMMARY "Hand-offs" section.

@@ -1,9 +1,9 @@
 ---
 phase: 19-sources
-status: integrated on v1/p19 (merges into the main branch after Phase 18 closes)
+status: closed as in-progress on v1/p19 (merges into the main branch after Phase 18 closes)
 requirements: [SRC-01, SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, SRC-07, SRC-08, SRC-09, SRC-10, SRC-11, SRC-12, SRC-13, SRC-14, SRC-15, SRC-16, SRC-17, GRND-14, GRND-17, SEC-02]
-met: 19 of 20 (GRND-14 is NOT met on this branch: its library half is built; the drafter half and its acceptance need Phase 18's drafter and run at the Phase 18/19 merge)
-review: rounds 1, 2 and 3 fixed (see "Review round 1", "Review round 2", "Review round 3")
+met: 18 of 20 (Pending: GRND-14 — its library half is built, the drafter half and its acceptance need Phase 18's drafter and run at the Phase 18/19 merge; SRC-06 — built and tested, but its keyed live OpenAlex round trip is unobserved: no key here, maintainer item)
+review: rounds 1, 2 and 3 fixed (see "Review round 1", "Review round 2", "Review round 3"); closer 2026-09-29 (see "Closer")
 streams: [net (v1/p19-net 83bb6d6), adapters (v1/p19-adapters 97a2c08), library (v1/p19-library c721207), research (v1/p19-research 2936816)]
 verification: 19-VERIFICATION.md
 ---
@@ -89,6 +89,7 @@ Every stream's list stands (19-net, 19-adapters, 19-library, 19-research SUMMARY
 | `bin/lib/source-input.ts`, `bin/lib/sources/doi-ra.ts` (new), `bin/cli/add.ts` (round 3) | `<meta>` identifiers by name priority (OJS); unlabelled gzip HTML inflated; a Crossref 404 asks doi.org for the prefix's agency (DataCite → a failure that says so) | Phase 18 does not touch these |
 | `bin/lib/query-expansion.ts` (round 3) | every expanded query keeps the topic's anchor keyword group (no lone keyword; a phrase over 8 words becomes its keywords) | with Phase 18's structured `topic` the anchor is the subject; `tests/query-expansion.test.ts` asserts the property |
 | `bin/lib/lookup-table.ts` (new, round 3) | null-prototype tables for lookups by an outside key (markup entities / TeX, Crossref and Zotero types, `TIER_SYNONYMS`, `CITATION_STYLE_KEYS`, …) | a table Phase 18 adds that is keyed by model output or user text should use `lookupTable` too |
+| `bin/lib/source-context.ts`, `bin/lib/draft-containment.ts`, `bin/cli/write.ts` (Phase 18, read by the closer at Phase 18's branch HEAD 5d99322) — **GRND-14 exact wiring** | Phase 18's `fullTextAvailable(entry: Pick<SourceContextInput, 'byo' \| 'oa_url'>)` is true for any truthy `byo` (typed `unknown`) or any `oa_url`. That is broader than Pass 3: it also counts an `asserted` BYO copy, a BYO entry with no `text_sha256`, and an `oa_url` on a DataCite arXiv DOI. It also misses arXiv ids, because `SourceContextInput` has no `arxiv` field. `DraftViolationKind` is only `'unassigned-citekey'`, and `checkDraft(draft, { assigned, section })` takes no full-text input | Replace the body of Phase 18's `fullTextAvailable` with a call to `full-text.ts fullTextAvailable`. Add `arxiv` to `SourceContextInput`, narrow `byo` to `LibraryEntry['byo']` and widen the `Pick` to `byo`, `oa_url`, `doi` and `arxiv`. Add `'quote-without-full-text'` to `DraftViolationKind`. Give `checkDraft` a `fullText: ReadonlyMap<string, boolean>` option: `write` builds it with `fullTextByCitekey` over the section's assigned LIBRARY entries, and each BYO entry counts only if `byoText(root, entry)` still verifies. For each `quotesWithoutFullText(draft, fullText)` result, `checkDraft` pushes one violation whose message is `describeQuotesWithoutFullText`. `write`'s existing corrective turn and failure path then apply unchanged. Add the two GRND-14 acceptance tests above; GRND-14 is ticked only when both pass |
 
 ## Review round 1 (fixer)
 
@@ -181,6 +182,37 @@ Every finding was reproduced first (unit repro or the built CLI in `scratchpad/p
 - **GRND-14 not met (blocker).** Confirmed: nothing on this branch's drafter path reads the flag. Not fixable here without duplicating Phase 18: the Phase 17 drafter this branch has sends NO source records at all (`bin/cli/write.ts`: `assignedSources: '[]'`, `sources: []`) and has no containment check or corrective turn — the drafter request (FEED-02), `section-drafter.md`'s rewrite with the quote policy and `draft-containment.ts` with write's one corrective turn (FEED-04) are Phase 18 modules (D-18-24, D-18-25: "Phase 19 adds `quote-without-full-text`"), and editing the Phase 17 drafter here would be overwritten at the merge. The finding's first remedy is the merge-time wiring, which the merge notes spell out with both acceptance tests; this round narrowed that interface further (`describeQuotesWithoutFullText`, and a flag that now matches what Pass 3 can fetch). GRND-14 stays unchecked in REQUIREMENTS.md and "not met" in 19-VERIFICATION.
 - **SRC-06 keyed live round trips (minor).** Needs the maintainer's OpenAlex and Semantic Scholar keys (none here). The keyed bullet is now marked open in REQUIREMENTS.md (the requirement and the traceability row say so) and in 19-VERIFICATION with the command to run.
 
+## Closer (2026-09-29)
+
+The closer made no code changes. It re-ran the gate at HEAD 4f47eff, repeated the user-path checks on the built CLI, and set the final status of each requirement (19-VERIFICATION §8).
+
+**Gate** (Node 22.22.2, Linux, as root; pandoc 3.9 on PATH):
+- `prebuild`, `lint`, `typecheck` and `build` exit 0, and the build leaves the tree clean.
+- `npm test`: 2067 tests, 2066 pass, 1 fails. The failure is the root-only `tests/atomic-write.test.ts` case, which passes in CI. No skips, no todos.
+- `test:tier-contract`: 56/56.
+- `validate:manifests`: exit 0.
+- `e2e-smoke`: PASS=10, FINDING=0, FAIL=0.
+- `live:sources`: 19 pass, 0 fail, 2 skipped (no OpenAlex / Semantic Scholar key).
+- `claude plugin validate .`: still reports the pre-Phase-17 `skills: Invalid input` (PLUG-01).
+
+**User path, live** (19-VERIFICATION §8.2):
+- **C1, the full `add` → export path.** On a paper made by `new`, `add` of a PMID, an ISBN, an arXiv id and a DOI, then `verify`, `compile` and `done`, all exit 0. Pass 1 is OK four times, and the quote is checked against the arXiv PDF. The DOCX has APA in-text citations and references and zero trace.
+- **C2, a fabricated quote.** `verify`, `compile` and `done` each exit 4.
+- **C3, live `research`.** 8 anchored queries; a per-adapter table with the reasons for OpenAlex and Semantic Scholar; 125 tiered entries.
+- **C4, OpenAlex's keyless exhaustion.** Now observed live through `research`.
+- **C5, `plan 2 --research`.** Exit 3 with no terminal; with `--yolo`, 47 hits go to §2 only.
+- **C6, `new --pdfs`.** Identifies one PDF, keeps the image-only one with a WARN, and routes to research.
+
+**Status decisions.**
+- **SRC-06 moved from Complete to Pending.** Its first acceptance bullet, and ROADMAP criterion 1, ask for a *keyed* OpenAlex live round trip that returns results. That has never been observed: there is no key here, and a fake key only shows that the key reaches the service. The Phase 17 closer left CI-06 open for the same kind of unobserved item, and this closer applies that rule instead of claiming the requirement. The implementation is complete and tested, and the keyless half is now observed live (C4). The item closes when the maintainer runs `OPENALEX_API_KEY=… PENSMITH_S2_API_KEY=… PENSMITH_CONTACT_EMAIL=… npm run live:sources` plus one keyed `pensmith research --yolo` and records the output in 19-VERIFICATION §8.4.
+- **GRND-14 stays Pending.** Phase 18's modules now exist on its branch (HEAD 5d99322). The closer read them and added the exact wiring to the merge notes (the "Closer" row).
+- **Result:** 18 of 20 requirements Complete, 6 of 8 ROADMAP criteria met (1 and 7 open). The Phase 19 ROADMAP checkbox stays unticked.
+
+**Follow-ups seen on the user path** (none of them is a Phase 19 acceptance item):
+- **PubMed entries have no abstract.** esummary does not return one. As a result, Pass 2 has no abstract for a PubMed-only source, and `titleBibValue` has no evidence for the proper nouns in a Title Case title. Pandoc's APA prints "pneumonia in china, 2019" for `zhu2020`. The fix is to fetch the abstract with `efetch`, or to add a small proper-noun lexicon. Suggested owner: VRFY-21 (Pass 2 on real source text) in Phase 20, or EXP-03 for the rendering.
+- **The freshness table prints `DOI HEAD | ok` for entries with no DOI** (`kuhn1996`, `vaswani2017`). This is the known Phase 20 todo in STATE.md.
+- **`done` reads the citation style only from INTAKE.md.** A paper without INTAKE.md exports raw `[@key]` tokens with no warning. Owner: EXP-03, Phase 21.
+
 ## Hand-offs
 
 - **Phase 20.** VRFY-11: review round 1 landed the DOI-less part (`pass1.ts verdictWithoutDoi`: arXiv id, PMID, ISBN at their own registrars) and round 2 the DataCite arXiv DOI (`10.48550/arXiv.<id>` → arXiv); other DataCite DOIs (Zenodo, Figshare) in Pass 1 and the registrar order for DOI entries remain (round 3's `sources/doi-ra.ts` — doi.org's agency of a prefix — is reusable there: Crossref's 404 of a DataCite DOI must be UNVERIFIABLE until DataCite is asked, never FABRICATED). VRFY-12: the metadata search for identifier-less entries. VRFY-19: Pass 3's BYO step landed (`byoText` first, then Unpaywall, then — round 2 — the arXiv PDF of an arXiv id; an altered BYO copy blocks); PMC OA, the extraction caches and UNVERIFIABLE-QUOTE remain — when they land, `full-text.ts` adds the matching sources (its basis must stay equal to Pass 3's; `tests/pass3-oa-pdf.test.ts` checks that). VRFY-14: OK-BYO for identifier-less entries — until then an unidentified BYO PDF cited is UNVERIFIABLE (blocking) with the command that identifies it (round 2; `byo.asserted` says which copies are the user's word only). VRFY-15: the RETRACTED label (the Pass-1 results already carry `retraction: true`, and the rows name the notice). VRFY-25/26: done without a humanizer does not yet recompute Pass 3 (GATE-04 runs only on a humanized FINAL.md): a quote verified against a BYO PDF that is deleted after compile is caught at the next verify, and by done's recomputation once VRFY-26 lands. Also `retraction_status` and the RETRACTED label (VRFY-15). Pass 3 treats an unlooked-up OA copy as `PDF_UNAVAILABLE` (not blocking) — Phase 20's call.
@@ -191,7 +223,7 @@ Every finding was reproduced first (unit repro or the built CLI in `scratchpad/p
 
 - **GRND-14** is not met on this branch: the drafter request must mark `full_text` from `full-text.ts` and `draft-containment.ts` must correct a quote from a source without it — Phase 18's modules, wired and accepted at the Phase 18/19 merge (merge notes: the exact wiring and both acceptance tests). The library half (`full-text.ts`, `open-access.ts`) is tested, and since review round 2 its basis equals Pass 3's by construction.
 - **Recording**: OpenAlex's title search for `tests/fixtures/byo/cites-in-footnote.pdf` (`openalex/search-title-cites-in-footnote`) — keyless OpenAlex answered 503 / 429 at recording time; the recorder reports it as not recorded until it can.
-- **Keyed live round trips** (OpenAlex with `OPENALEX_API_KEY`, Semantic Scholar with `PENSMITH_S2_API_KEY`): no key here; `live:sources` prints visible SKIP lines (D-19-10 maintainer item). Keyless Semantic Scholar answers 429 almost always; its research-lane recording is open.
-- **OpenAlex keyless budget**: exhausted from curl's egress for most of the session (Retry-After ≈ 16 h); node's egress still had budget. The exhausted-host path is proven with MockAgent and was observed live once (`rate limit exhausted (retry after ~37 s)` during a title search).
+- **SRC-06 — keyed live round trips** (OpenAlex with `OPENALEX_API_KEY`, Semantic Scholar with `PENSMITH_S2_API_KEY`). There is no key here, and `live:sources` prints visible SKIP lines (a D-19-10 maintainer item). SRC-06 stays **Pending** until the maintainer records the keyed run (closer). Keyless Semantic Scholar almost always answers 429, so its research-lane recording is still open. In the closer's live `research` run it returned 40 results before throttling.
+- **OpenAlex keyless budget.** It was exhausted from curl's egress for most of the session (Retry-After ≈ 16 h). The exhausted-host path is proven with MockAgent. Live, it was observed during a title search (`rate limit exhausted (retry after ~37 s)`) and, at the closer, through `research` and `plan --research` (`keyless daily budget exhausted — set OPENALEX_API_KEY (free)`, one host line, and the run completes).
 - **CI-06** (from Phase 17): the cross-OS run (Windows worker threads, CRLF parsers) is not observed; the branch is not pushed.
 - **Upstream data**: OpenAlex dates W2626778328 ("Attention Is All You Need") 2025 under a re-post DOI; since review round 2 identification refuses such a later re-post and resolves the title-only PDF at arXiv (vaswani2017). (Open Library's second author for Kuhn's book and PubMed's initials-as-surname keys such as `dm2023`, listed here before review round 1, are fixed: the edition record's authors and `fromPubmedCompactName`.)

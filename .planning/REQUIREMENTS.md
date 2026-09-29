@@ -417,8 +417,8 @@ Every source adapter works against today's live APIs, failures reach the user, a
   - MockAgent: a Crossref 503 after retries yields lookup-failed, not not-found; a 404 yields not-found
   - The same three-way contract is unit-tested for OpenAlex, PubMed, arXiv, Semantic Scholar, Unpaywall and the books adapter
   - (covers: NFR-18, NFR-34, SWP-57, SWP-105, SWP-121; PRD §7.7, §12, §14 (All citation IDs are real))
-- [x] **SRC-06**: **OpenAlex and Semantic Scholar keys are used; exhausted keyless budgets are reported.** `getOpenAlexApiKey()` (`runtime.ts:437`) has no consumers and `openalex.ts:11` carries an overdue TODO. `OPENALEX_API_KEY` (env or config) is sent as `api_key` through `http.ts`; `PENSMITH_S2_API_KEY` is sent to Semantic Scholar. Keys never appear in HTTP cache keys, SESSION.log or cassettes. A keyless 429 ("Insufficient budget", rate limit) shows in the research output and RESEARCH.md with the free-key hint, and research continues with the other adapters. The Semantic Scholar keyless notice describes the real behaviour.
-  - A keyed OpenAlex round trip in the live lane returns ≥ 1 result; the `openalex.ts` TODO is gone — *the keyed round trip is OPEN (Phase 19 review round 3): no OpenAlex or Semantic Scholar key exists in the Phase 19 environment, so only "the key reaches the service" is shown (a fake key → OpenAlex `HTTP 401: API key not found`, Semantic Scholar `HTTP 403`; no key under the paper or data dir). The maintainer runs `OPENALEX_API_KEY=… PENSMITH_S2_API_KEY=… PENSMITH_CONTACT_EMAIL=… npm run live:sources` and one keyed `pensmith research --yolo` and records the output in 19-VERIFICATION.md; the TODO is gone*
+- [ ] **SRC-06**: **OpenAlex and Semantic Scholar keys are used; exhausted keyless budgets are reported.** `getOpenAlexApiKey()` (`runtime.ts:437`) has no consumers and `openalex.ts:11` carries an overdue TODO. `OPENALEX_API_KEY` (env or config) is sent as `api_key` through `http.ts`; `PENSMITH_S2_API_KEY` is sent to Semantic Scholar. Keys never appear in HTTP cache keys, SESSION.log or cassettes. A keyless 429 ("Insufficient budget", rate limit) shows in the research output and RESEARCH.md with the free-key hint, and research continues with the other adapters. The Semantic Scholar keyless notice describes the real behaviour.
+  - A keyed OpenAlex round trip in the live lane returns ≥ 1 result; the `openalex.ts` TODO is gone — *the keyed round trip is OPEN (Phase 19 review round 3; at the Phase 19 closer SRC-06 was moved back to Pending for this bullet alone, since every other bullet is met and the keyless budget report was observed live through `research`, 19-VERIFICATION §8): no OpenAlex or Semantic Scholar key exists in the Phase 19 environment, so only "the key reaches the service" is shown (a fake key → OpenAlex `HTTP 401: API key not found`, Semantic Scholar `HTTP 403`; no key under the paper or data dir). The maintainer runs `OPENALEX_API_KEY=… PENSMITH_S2_API_KEY=… PENSMITH_CONTACT_EMAIL=… npm run live:sources` and one keyed `pensmith research --yolo` and records the output in 19-VERIFICATION.md; the TODO is gone*
   - A 429 `Insufficient budget` cassette shows `OpenAlex: keyless daily budget exhausted — set OPENALEX_API_KEY (free)` and research still completes from other adapters
   - tests/cassette-no-leak scans `api_key` query params and passes
   - (covers: RM-23, SWP-14, SWP-15, SWP-57; PRD §7.2, §7.21, §12)
@@ -1184,7 +1184,7 @@ Which phases cover which requirements.
 | SRC-03 | Phase 19 | Complete |
 | SRC-04 | Phase 19 | Complete |
 | SRC-05 | Phase 19 | Complete |
-| SRC-06 | Phase 19 | Complete (the keyed live round trip is open: no key in the Phase 19 environment — maintainer item) |
+| SRC-06 | Phase 19 | Pending (built and tested; only the keyed OpenAlex / Semantic Scholar live round trip is unobserved — no key in the Phase 19 environment, maintainer item; 19-VERIFICATION §8.4) |
 | SRC-07 | Phase 19 | Complete |
 | SRC-08 | Phase 19 | Complete |
 | SRC-09 | Phase 19 | Complete |
@@ -1196,7 +1196,7 @@ Which phases cover which requirements.
 | SRC-15 | Phase 19 | Complete |
 | SRC-16 | Phase 19 | Complete |
 | SRC-17 | Phase 19 | Complete |
-| GRND-14 | Phase 19 | Pending (library half built; drafter half and acceptance at the Phase 18/19 merge) |
+| GRND-14 | Phase 19 | Pending (library half built; drafter half and acceptance at the Phase 18/19 merge — exact wiring in 19-SUMMARY merge notes, "Closer" row) |
 | GRND-17 | Phase 19 | Complete |
 | SEC-02 | Phase 19 | Complete |
 | VRFY-09 | Phase 20 | Pending |
@@ -1309,7 +1309,7 @@ Which phases cover which requirements.
 - v1 requirements: 184 total
 - Mapped to phases: 184 (Phase 17: 38, Phase 18: 21, Phase 19: 20, Phase 20: 22, Phase 21: 22, Phase 22: 10, Phase 23: 16, Phase 24: 1, Phase 25: 11, Phase 26: 11, Phase 27: 12)
 - Unmapped: 0
-- Complete: 36 (Phase 17: 35 of its 37 in-scope requirements + SWEEP-01); Phase 17 open: RUN-26 (prompt caching), CI-06 (CI run not yet observed); see `.planning/phases/17-runtime/17-VERIFICATION.md`
+- Complete: 54 (Phase 17: 35 of its 37 in-scope requirements + SWEEP-01; Phase 19: 18 of 20, on branch `v1/p19`, merged after Phase 18 closes); Phase 17 open: RUN-26 (prompt caching), CI-06 (CI run not yet observed), see `.planning/phases/17-runtime/17-VERIFICATION.md`; Phase 19 open: SRC-06 (keyed live round trip, maintainer item), GRND-14 (drafter half at the Phase 18/19 merge), see `.planning/phases/19-sources/19-VERIFICATION.md` §8
 - Gap register items: 333 total (200 from the 2026-09-25 audit plus SWP-1..SWP-133 from SWEEP-01), 333 covered by at least one requirement, 0 descoped
 
 ## Appendix A: Gap coverage
@@ -1670,3 +1670,4 @@ No gap item is descoped entirely: none is out of scope under PRD §16 and none w
 *Requirements defined: 2026-09-27 (v1.0.0 Open Source Release; supersedes the unshipped v0.3.0 Truly End-to-End requirements of 2026-07-06)*
 *Last updated: 2026-09-27 — SWEEP-01 complete: 184 requirements across Phases 17–27, 333/333 gap items mapped (200 audit items plus SWP-1..SWP-133)*
 *Last updated: 2026-09-28 — Phase 17 closed as in-progress: 35/37 in-scope requirements Complete; RUN-26 and CI-06 Pending (17-VERIFICATION.md)*
+*Last updated: 2026-09-29 — Phase 19 closed as in-progress on `v1/p19`: 18/20 requirements Complete; SRC-06 (keyed live round trip) and GRND-14 (drafter half at the Phase 18/19 merge) Pending (19-VERIFICATION.md §8)*

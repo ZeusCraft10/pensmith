@@ -1,19 +1,20 @@
 ---
 phase: 19-sources
-verified: 2026-09-28
-verified_at_branch: v1/p19 (after the integration pass; see 19-SUMMARY.md)
+verified: 2026-09-29
+verified_at_branch: v1/p19 (HEAD 4f47eff, after review round 3; the closer re-ran the gate and the user-path checks in §8)
 status: gaps_found
-score: 19/20 requirements met; GRND-14 NOT met on this branch (its library half is built; the drafter half and the acceptance need Phase 18's drafter and run at the Phase 18/19 merge)
-gaps: [GRND-14 (drafter wiring + acceptance at the Phase 18/19 merge; the flag's basis now equals Pass 3's — round 2)]
-review_rounds: [round 1 (fixer, 2026-09-28): see §5, round 2 (fixer, 2026-09-29): see §6, round 3 (fixer, 2026-09-29): see §7]
-open_items: [OpenAlex keyed live round trip (no key), Semantic Scholar keyed round trip (no key), CI-06 cross-OS run (inherited from Phase 17)]
+score: 18/20 requirements fully met; SRC-06 NOT fully met (built and tested; its acceptance's keyed live OpenAlex round trip is unobserved — no key here); GRND-14 NOT met on this branch (library half built; drafter half and acceptance at the Phase 18/19 merge)
+gaps: [SRC-06 (keyed OpenAlex / Semantic Scholar live round trip — maintainer runs it with keys), GRND-14 (drafter wiring + acceptance at the Phase 18/19 merge; the flag's basis equals Pass 3's)]
+success_criteria: 6/8 met; criterion 1 (OpenAlex keyed live) and criterion 7 (the drafter's quote policy) open — §8.3
+review_rounds: [round 1 (fixer, 2026-09-28): see §5, round 2 (fixer, 2026-09-29): see §6, round 3 (fixer, 2026-09-29): see §7, closer (2026-09-29): see §8]
+open_items: [OpenAlex keyed live round trip (no key), Semantic Scholar keyed round trip (no key), GRND-14 drafter half (Phase 18/19 merge), CI-06 cross-OS run (inherited from Phase 17)]
 ---
 
 # Phase 19: Sources and Library (SOURCES): Verification
 
 **Goal (ROADMAP):** every source adapter works against today's live APIs and reports failures to the user; every ingest goes through the Phase 17 library writer; books, hashed bring-your-own PDFs and Zotero items are first-class sources; the drafter and `plan --research` can use this phase's full-text flags and evaluator.
 
-**Result:** met on the real user path for 19 of 20 requirements. GRND-14 is **not met** on this branch: nothing in this branch's drafter path reads the full-text flag, and no draft check enforces it — that half needs Phase 18's `source-context.ts` / `draft-containment.ts` and runs at the merge (19-PLAN §2, §9). Its library half (`full-text.ts`, now based on the text Pass 3 can actually check, and `oa_url` populated at ingest) is built and tested. Since review round 1, Pass 1 resolves a DOI-less entry at its own registrar (arXiv id, PMID, ISBN), so ROADMAP criterion 7's "a History paper can cite a book with an ISBN" holds end to end (verify, compile, done — §5).
+**Result:** 18 of 20 requirements are fully met on the real user path. Two are not: **GRND-14** — nothing in this branch's drafter path reads the full-text flag and no draft check enforces it; that half needs Phase 18's `source-context.ts` / `draft-containment.ts` and runs at the merge (19-PLAN §2, §9). Its library half (`full-text.ts`, based on the text Pass 3 can actually check, and `oa_url` populated at ingest only for an Unpaywall link that served a PDF) is built and tested. **SRC-06** — every part is built and tested (MockAgent, the synthetic budget-exhausted 429 through the built CLI, a fake key reaching both services, and — at the closer — OpenAlex's real keyless exhaustion reported through `research`), but its first acceptance bullet, a keyed OpenAlex live round trip returning results, needs a key this environment does not have; the closer moved it from Complete to Pending (§8.4). Since review round 1, Pass 1 resolves a DOI-less entry at its own registrar (arXiv id, PMID, ISBN), so ROADMAP criterion 7's "a History paper can cite a book with an ISBN" holds end to end (verify, compile, done — §5, re-run at the closer in §8.2).
 
 ## 1. Gate (integration HEAD, 2026-09-28, Node 22, Linux, as root)
 
@@ -59,7 +60,7 @@ The stream write-ups record further live checks: doctor's Zotero states and the 
 | SRC-03 | met | U15; offline tests for the `raw_author_name` recording and the legacy `family`/`given` synthetic fixture (`tests/sources/unpaywall.test.ts`); U6 and `tests/pass3-oa-pdf.test.ts` (`Unpaywall skipped: set PENSMITH_CONTACT_EMAIL`, not "No OA PDF available"). |
 | SRC-04 | met | Recorded and live Wakefield `retracted: true`; MockAgent inner-403 body → failure, not cached (`tests/sources/retraction-watch.test.ts`, `tests/sources/three-way.ts`); `retraction status unknown` with the lookup's reason on stderr and in RESEARCH.md (`tests/research-verb.test.ts`) and through Pass 1; `tests/verify-retraction-cli.test.ts`: `verify 1` blocking verdict naming the notice, `compile --yolo` / `done --yolo` exit 4. |
 | SRC-05 | met | U15 (ENCODE, nature14539 Nature 521(7553) 436-444), U14 (APA with journal and volume); MockAgent 503 → failed, 404 → not-found; the three-way contract harness for OpenAlex, PubMed, arXiv, Semantic Scholar, Unpaywall and books. |
-| SRC-06 | met (keyed live round trip OPEN — maintainer item: no key; REQUIREMENTS.md marks the bullet open) | MockAgent: `api_key` sent, `REDACTED` in SESSION.log, one cache key for keyed and keyless, no key in any cache file (`tests/http-cache-keys.test.ts`, `tests/sources/openalex.test.ts`); `tests/cassette-no-leak.test.ts` scans paths and Locations; the synthetic `Insufficient budget` 429 through the built CLI: `openalex … failed (keyless daily budget exhausted — set OPENALEX_API_KEY (free))` and research completes (`tests/research-cli-lane.test.ts`); the TODO is gone. `live:sources` prints the visible SKIP. |
+| SRC-06 | **not fully met** (closer, §8.4): everything is built and tested, but the acceptance's keyed live round trip is unobserved — no key here; maintainer item | MockAgent: `api_key` sent, `REDACTED` in SESSION.log, one cache key for keyed and keyless, no key in any cache file (`tests/http-cache-keys.test.ts`, `tests/sources/openalex.test.ts`); `tests/cassette-no-leak.test.ts` scans paths and Locations; the synthetic `Insufficient budget` 429 through the built CLI: `openalex … failed (keyless daily budget exhausted — set OPENALEX_API_KEY (free))` and research completes (`tests/research-cli-lane.test.ts`); the TODO is gone. `live:sources` prints the visible SKIP. |
 | SRC-07 | met | Fixture lane (`tests/research-cli-lane.test.ts`): the per-adapter table on stdout and in RESEARCH.md for crossref, openalex, pubmed, arxiv and semanticscholar; a reject-all evaluator → `no relevant sources`, exit 1, no LIBRARY.json; the paper stays at the research stage (`research-sentinel.ts`). Live U7. |
 | SRC-08 | met | `tests/research-scope-cli.test.ts`, `tests/research-verb.test.ts` (non-TTY without `--yolo`/`--scope` exits 3 before any request; `--scope 2 --yolo` issues scope 2's queries; 7 queries → 7 per adapter; 3 → 5; 12 → 10; `PENSMITH_NO_LLM` disclosed expansion); live runs U7 and the research stream's "social media use and adolescent depression" run (211 entries, 168 with a topic term, no fixture papers). |
 | SRC-09 | met | Fixture lane: every kept source in RESEARCH.md with tier, abstract and why-relevant = the evaluator's reason; LIBRARY entries with tier / relevance / why_relevant at schema v3; v2 → v3 migration (`tests/library-v3.test.ts`); `peer_reviewed_only` / `min_year` (unit and CLI); the numbered prune question shows tiers and excerpts, lists rejections with reasons, and accepts a DOI to add before the list is written (`tests/research-cli-lane.test.ts`, `tests/research-prune-gate.test.ts`); each candidate sent once. |
@@ -78,7 +79,7 @@ The stream write-ups record further live checks: doctor's Zotero states and the 
 ## 4. Not verified here
 
 - The OpenAlex keyed and Semantic Scholar keyed live round trips (no keys in this environment; `live:sources` SKIP lines).
-- A live keyless OpenAlex 429 through research: node's egress still had keyless budget; the path is proven with MockAgent and the synthetic recording, and an OpenAlex `Retry-After` of 37 s was handled live (U11).
+- ~~A live keyless OpenAlex 429 through research~~ — observed at the closer (§8.2 C4): `openalex 0 failed (keyless daily budget exhausted — set OPENALEX_API_KEY (free))`, one `rate limit exhausted (retry after ~45 min)` line, research completed from the other adapters.
 - Windows / macOS (CI-06).
 
 ## 5. Review round 1 (fixer, 2026-09-28)
@@ -134,3 +135,63 @@ The fixes, their tests, the superseded tests and the two rejected items (GRND-14
 Gate after round 3 (Node 22, Linux, as root; pandoc 3.9 on PATH): `npm run build`, `lint`, `typecheck` exit 0 and the build leaves the tree clean; `npm test` 2067 tests: 2066 pass, 1 fail (the root-only `tests/atomic-write.test.ts` case, which passes in CI; no skips, no todos); `npm run test:tier-contract` 56/56; `npm run validate:manifests` exit 0; `node scripts/e2e-smoke.mjs` PASS=10 FAIL=0; `npm run live:sources` 19 pass, 0 fail, 2 skipped (no OpenAlex / Semantic Scholar key).
 
 Still open (not verifiable here): the keyed OpenAlex / Semantic Scholar round trips (maintainer: `OPENALEX_API_KEY=… PENSMITH_S2_API_KEY=… PENSMITH_CONTACT_EMAIL=… npm run live:sources` and one keyed `pensmith research --yolo`, recorded here); GRND-14's drafter half (at the Phase 18/19 merge); CI-06 (cross-OS).
+
+## 8. Closer (2026-09-29, HEAD 4f47eff)
+
+The closer changed no code. It re-ran the whole gate, repeated the user-path checks that are cheap to repeat on the built CLI, assessed every ROADMAP success criterion, and set the final status of each requirement.
+
+### 8.1 Gate (Node 22.22.2, Linux, as root; pandoc 3.9 on PATH)
+
+| Step | Result |
+|---|---|
+| `npm run prebuild`, `npm run lint`, `npm run typecheck`, `npm run build` | exit 0 each |
+| `git status --porcelain` after the build and after the tests | clean (only the worktree's untracked `node_modules` link) |
+| `npm test` | 2067 tests: 2066 pass, 1 fail, 0 skipped, 0 todo, 0 cancelled (308 s). The one failure is `tests/atomic-write.test.ts` "preserves OLD content on rename/write failure". It is root-only: `chmod 0o500` does not stop root. CLAUDE.md documents it, and it passes in CI. |
+| `npm run test:tier-contract` | exit 0: 56/56 pass |
+| `npm run validate:manifests` | exit 0 (plugin.json, marketplace.json and .mcp.json valid) |
+| `node scripts/e2e-smoke.mjs` | exit 0: PASS=10, FINDING=0, FAIL=0 |
+| `npm run live:sources` (`PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org`, isolated `XDG_DATA_HOME`) | exit 0: 19 passed, 0 failed, 2 skipped (OpenAlex keyed and Semantic Scholar keyed: no keys) |
+| `claude plugin validate .` (informational; isolated `CLAUDE_CONFIG_DIR`) | `plugins[0] plugin.json → skills: Invalid input`. This error predates Phase 17 and belongs to PLUG-01 (Phase 23). |
+
+### 8.2 User-path checks (built `dist/bin/pensmith.js`)
+
+Each check ran in its own scratch folder under `scratchpad/p19/closer/`, with `XDG_DATA_HOME` / `HOME` / `LOCALAPPDATA` inside it, no test context, `PENSMITH_NO_LLM=1` and `PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org`. Sources were live.
+
+| # | Check | Observed |
+|---|---|---|
+| C1 | Created a paper with `new --from assignment.txt --yolo` (APA, from INTAKE.md). Ran `add PMID:31978945`, `add isbn:9780226458083`, `add arXiv:1706.03762` and `add 10.1371/journal.pone.0000001`. Wrote a one-section draft citing all four, including a 14-word quote from Vaswani's abstract. Then ran `verify 1 --yolo`, `compile --yolo` and `done --yolo`. | `add` created `zhu2020`, `kuhn1996`, `vaswani2017` and `almeida2006`. `verify` exited 0 with `Status: verified`. All four Pass 1 rows were **OK** (`kuhn1996 … ISBN 9780226458083 re-fetched from the books registries`, `vaswani2017 … arXiv:1706.03762 re-fetched from arXiv`), and the Pass 3 row was **OK** (`lev=1.000 … (arXiv PDF of 1706.03762)`). `compile` exited 0. `done` exited 0 and exported `DRAFT.docx`. `pandoc -t plain` of that file shows `(Zhu et al., 2020)`, `(Kuhn, 1996)`, `(Vaswani et al., 2017)` and `(Almeida et al., 2006)`, plus four APA references, including `Kuhn, T. S. (1996). The structure of scientific revolutions. University of Chicago Press.` The zero-trace checks hold: in `docProps/core.xml` the creator and title are empty and the dates are 1970, and `word/document.xml` contains 0 occurrences of `pensmith`. This is ROADMAP criterion 7's book citation and SRC-11/12/13, end to end. |
+| C2 | Same paper: replaced the quote with a fabricated one attributed to `vaswani2017`. | `verify 1` exit 4 with `NOT_FOUND — lev=0.354 — quote not found in the arXiv PDF of 1706.03762`. `compile --yolo` exit 4 with `REFUSED — … [@vaswani2017] has a blocking verdict (NOT_FOUND)`. `done --yolo` exit 4 with `BLOCKED — export refused`. |
+| C3 | A fresh paper (attention mechanisms in transformers) running `research --yolo` | Exit 0 after 2 min 42 s, with 8 queries, all anchored on "attention mechanisms transformers". The per-adapter table: openalex `0 failed (keyless daily budget exhausted — set OPENALEX_API_KEY (free))`, crossref 72, arxiv 80, semanticscholar `40 ok; failed (HTTP 429 — rate limited; set PENSMITH_S2_API_KEY) for 4 of 8 queries`, pubmed 71, zotero `skipped (not configured)`. Summary lines: `open access: 29 of 97 … (Unpaywall, checked); 18 link(s) … did not answer with a PDF (papers.ssrn.com: HTTP 403)` and `127 kept (peer-reviewed 79, preprint 41, book 3, other 4); 1 excluded by [sources] policy`. LIBRARY.json v3 holds 125 entries (2 duplicates merged), every one with a tier and a why-relevant note; 92 of them mention attention or transformer in the title or abstract. (SRC-07, SRC-08, SRC-09, SRC-10, SRC-17) |
+| C4 | The same run: OpenAlex without a key | OpenAlex's real keyless budget was exhausted. Research printed one `api.openalex.org: rate limit exhausted (retry after ~45 min) — no further requests go to it in this run`, reported the row as the keyless-budget failure with the free-key hint, and completed from the other adapters. This is SRC-06's keyless acceptance observed live for the first time; §4 previously listed it as not verified. |
+| C5 | A two-section paper: `plan 2 --research "efficient transformer sparse attention linear complexity"` with no terminal, then the same command with `--yolo` | Without a terminal it exits 3 with `Add these research hits to the section? (section 2: nothing was searched, sent or written) needs an answer`. With `--yolo` it exits 0: `added 47 source(s) to section 2's assigned_sources (47 new …)` and logs the run in `02-…/RESEARCH-LOG.md`. The `sha256sum -c` of every section file taken before the run fails only for `02-efficient-transformers/PLAN.md`, so §1 is untouched. (GRND-17) |
+| C6 | `new --from … --pdfs pdfs --yolo` with `doi-footer.pdf` and `image-only.pdf`, then `status` | `doi-footer.pdf added as aspelmeyer2009 (identified by 10.1038/nphys1170)`, and `image-only.pdf added as byoimageonly: not identified (no extractable text …) — … check it before citing`. Both PDFs are stored under `.paper/sources/`. `status` shows `next: research`, so the router does not skip research after `new --pdfs` (round 1 fix). (SRC-15, SEC-02 worker path) |
+
+Side observations, none of which is a Phase 19 acceptance item (listed as follow-ups in 19-SUMMARY "Closer"):
+- **Lowercased place name in APA.** The APA reference for `zhu2020` prints "pneumonia in china, 2019". PubMed's esummary gives a Title Case title and no abstract, so `titleBibValue` has no evidence that "China" is a proper noun.
+- **Wrong freshness probe for sources with no DOI.** The freshness table prints `DOI HEAD | ok` for `kuhn1996` and `vaswani2017`, which have no DOI. This is the known Phase 20 todo in STATE.md.
+- **Raw citation tokens when INTAKE.md is missing.** A paper seeded without INTAKE.md exported raw `[@key]` tokens, because `done` reads the citation style only from INTAKE.md. That belongs to EXP-03 (Phase 21). The C1 paper, made with `new`, renders correctly.
+
+### 8.3 ROADMAP success criteria (Phase 19)
+
+| # | Criterion | Status | Evidence |
+|---|---|---|---|
+| 1 | Live lane: arXiv, Unpaywall, Crossref (including consortium works), OpenAlex (keyed) and Semantic Scholar return real results; `http.ts` follows redirects with a fresh SSRF check and IP pin on every hop | **not met (keyed OpenAlex unobserved)** | `live:sources` §8.1: arXiv, Unpaywall, Crossref ENCODE consortium and the OpenAlex keyless single-work lookup all PASS. Semantic Scholar returned 40 live results in C3. The redirect tests pass (`tests/http-redirect.test.ts`, `tests/ssrf-pinning.test.ts`, U1–U3, U13). The **keyed** OpenAlex round trip has not been run: there is no key here. A fake key does reach OpenAlex (`HTTP 401: API key not found`), which shows the key is sent, but not that results come back. |
+| 2 | Research prints per-adapter counts or reasons, disambiguates, runs 5–10 focused queries in the preset's order, applies `[sources]`, tiers every source, writes RESEARCH.md; zero relevant exits non-zero | met | C3, U7 and R1 (live). The fixture lanes cover the rest: `tests/research-cli-lane.test.ts` (reject-all → exit 1), `tests/research-scope-cli.test.ts`, `tests/adapter-plan.test.ts`. |
+| 3 | Wakefield flagged retracted; a 200 carrying an error body is "retraction status unknown", never "not retracted" | met | `live:sources` (Wakefield `retracted: true`, Retraction Watch notice), M4, `tests/sources/retraction-watch.test.ts` (inner-403 body is a failure and is not cached), `tests/verify-retraction-cli.test.ts` (verify, compile and done exit 4). |
+| 4 | CITATIONS.bib round-trips Cyrillic, Greek, CJK, particle and "Given Family" names and carries abstracts; LIBRARY.json holds one entry per work across research, `add`, BYO and Zotero | met | `tests/bibtex-roundtrip.test.ts` (the five names, fast-check with ≥ 1000 runs, pandoc APA), `tests/verify-bib-regen.test.ts`, `tests/byo-new-cli.test.ts` (a research hit merges into the BYO entry, key kept), `tests/zotero-research.test.ts` (an existing DOI merges), C3 (`2 duplicate(s) merged`). |
+| 5 | `add` accepts DOIs, arXiv ids, ISBNs, PDFs and URLs and identifies the correct work or refuses; updates LIBRARY.json and RESEARCH.md; remaps only relevant sections | met | C1, U1–U4, U10, U11, L3, L4, R3–R5; `tests/add-identifiers-cli.test.ts`, `tests/pdf-identify.test.ts`, `tests/add-pdf-attach-cli.test.ts`, `tests/add-remap-*.test.ts`. |
+| 6 | `new --pdfs` ingests BYO PDFs tagged bring-your-own, hashed, extracted in a hard-abortable worker; editing local text never changes a verdict; only titles or identifiers leave the machine | met | C6, M6, `tests/byo-new-cli.test.ts`, `tests/byo-ingest.test.ts` (a forged `.txt` or an edited PDF is never used), `tests/pdf-worker.test.ts`, `tests/pass3-byo-cli.test.ts`. Pass 2 sends BYO passages only with `[verification] send_byo_passages = true`, which is off by default (round 2). |
+| 7 | A History paper can cite a book with an ISBN; Zotero items flow into the library in both tiers with an authenticated doctor check; the drafter quotes directly only from sources with real full text; `plan N --research` adds real hits to that section only | **not met (drafter quote policy)** | ISBN book: C1 and L1 end to end. Zotero in both tiers: `tests/zotero-research.test.ts`, `tests/mcp-zotero-ingest.test.ts`, `tests/tier-contract/zotero-ingest.test.ts`, `tests/doctor-zotero.test.ts`. `plan N --research`: C5, U8, U9, `tests/plan-research-cli.test.ts`. The **drafter quote policy (GRND-14) is not implemented on this branch.** This branch's drafter sends no source records at all, and the check needs Phase 18's `source-context.ts` / `draft-containment.ts`. It is wired and accepted at the merge (19-SUMMARY merge notes, including the "Closer" row). |
+| 8 | `http.ts` sends each service's polite contact form, honours `X-Rate-Limit`, stops retrying a host whose `Retry-After` exceeds the cap, trips a per-host breaker on 429/5xx storms, never caches an error body as a success | met | `tests/http-politeness.test.ts`, `tests/http-rate-limit.test.ts`, `tests/http-circuit.test.ts`, `tests/sources/three-way.ts`; U12 (live Crossref `polite-single`); R1 (48 Crossref requests, all 200, no breaker); C3 and C4 (the OpenAlex exhausted-host line, sent once). |
+
+**6 of 8 criteria met**; criteria 1 and 7 are open, for the reasons in the table.
+
+### 8.4 Final requirement status
+
+| Req | Final | Reason |
+|---|---|---|
+| SRC-01..05, SRC-07..17, GRND-17, SEC-02 (18) | **Complete** | §3 evidence, confirmed at HEAD 4f47eff by the §8.1 gate and the §8.2 checks |
+| SRC-06 | **Pending**, moved from Complete by the closer | The implementation is complete and tested: `api_key` / `x-api-key` are sent and redacted, with no key in cache keys, SESSION.log or cassettes. The keyless budget report works through the built CLI and, since C4, live. The requirement's first acceptance bullet asks for a *keyed* OpenAlex live round trip returning ≥ 1 result, and ROADMAP criterion 1 asks for the same. Neither can be observed without the maintainer's key. Like CI-06 in Phase 17, an unobserved acceptance item is left open rather than claimed. To close it: `OPENALEX_API_KEY=… PENSMITH_S2_API_KEY=… PENSMITH_CONTACT_EMAIL=… npm run live:sources` (the two SKIP lines become PASS) plus one keyed `pensmith research --yolo`, recorded here. |
+| GRND-14 | **Pending** | The drafter half and the acceptance tests run at the Phase 18/19 merge. The library half is built: `full-text.ts`, `open-access.ts`, and `describeQuotesWithoutFullText` for the corrective text. The exact wiring against Phase 18's current `source-context.ts` / `draft-containment.ts` is in 19-SUMMARY "Closer". |
+
+Phase 19 is **not complete**: 18 of 20 requirements are Complete, and the ROADMAP checkbox stays unticked.
