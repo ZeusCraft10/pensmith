@@ -101,3 +101,38 @@ test('arXiv (live-lane shape): a TeX title, an accented author and math in the a
     assert.match(bib, /Hervé/);
   });
 });
+
+test('review round 3: an entity or TeX command named like an Object.prototype member stays text — never a JavaScript function\'s source', async () => {
+  assert.equal(plainText('Rates &constructor; &toString; &valueOf; of change'), 'Rates &constructor; &toString; &valueOf; of change');
+  assert.equal(decodeEntities('&hasOwnProperty; &amp;'), '&hasOwnProperty; &');
+  assert.equal(texToText('On $\\constructor$ and \\toString spaces'), 'On constructor and toString spaces');
+  assert.doesNotMatch(texToText('\\valueOf{x} $\\isPrototypeOf$'), /native code|function/);
+  const { citationStyleKey } = await import('../bin/lib/schemas/config.js');
+  assert.equal(citationStyleKey('constructor'), null);
+  assert.equal(citationStyleKey('toString'), null);
+  assert.equal(citationStyleKey('APA'), 'apa');
+  const { crossrefCslType } = await import('../bin/lib/sources/crossref.js');
+  assert.equal(crossrefCslType('constructor'), 'other');
+  assert.equal(crossrefCslType('journal-article'), 'article-journal');
+  const { lookupTable } = await import('../bin/lib/lookup-table.js');
+  const t = lookupTable({ a: 1 });
+  assert.equal(t['constructor'], undefined);
+  assert.equal(t['__proto__'], undefined);
+  assert.equal(t['a'], 1);
+  assert.ok(Object.isFrozen(t));
+});
+
+test('review round 3: a double-encoded Crossref abstract (`&amp;#8217;`, `&lt;p dir="ltr"&gt;&lt;b&gt;`) becomes plain text; a real `<` survives', async () => {
+  const { stripJats } = await import('../bin/lib/sources/crossref.js');
+  // As Crossref serves 10.5194/epsc2020-257 (`Mercury&amp;#8217;s`) and the other shapes seen in a live research run.
+  assert.equal(
+    stripJats('<jats:p>Effects on Mercury&amp;#8217;s system and simulations&amp;#160;of the interaction; &amp;#8220;quoted&amp;#8221;.</jats:p>'),
+    'Effects on Mercury’s system and simulations of the interaction; “quoted”.',
+  );
+  assert.equal(
+    stripJats('<jats:p>&lt;p dir="ltr"&gt;&lt;b&gt;Introduction&lt;/b&gt;: Depression and anxiety are common.&lt;/p&gt;&lt;p dir="ltr"&gt;&lt;b&gt;Methods&lt;/b&gt;: We surveyed.&lt;/p&gt;</jats:p>'),
+    'Introduction: Depression and anxiety are common. Methods: We surveyed.',
+  );
+  assert.equal(stripJats('<jats:p>We find |S 0 /C 3 | &amp;lt; 1 for x &lt; y and z &gt; w.</jats:p>'), 'We find |S 0 /C 3 | < 1 for x < y and z > w.');
+  assert.equal(stripJats('<jats:title>Abstract</jats:title><jats:p>Plain <jats:italic>E. coli</jats:italic> text.</jats:p>'), 'Plain E. coli text.');
+});

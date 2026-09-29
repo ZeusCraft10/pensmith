@@ -30,6 +30,7 @@ import {
   _resetWarnedForTest,
 } from '../bin/lib/http.js';
 import { errorFailureReason } from '../bin/lib/sources/search-failure.js';
+import { closeSessionLog } from '../bin/lib/session-log.js';
 
 async function lane<T>(fn: (m: InstalledMockAgent) => Promise<T>): Promise<T> {
   const data = mkdtempSync(join(tmpdir(), 'pensmith-ratelimit-'));
@@ -59,7 +60,9 @@ async function lane<T>(fn: (m: InstalledMockAgent) => Promise<T>): Promise<T> {
       else process.env[k] = v;
     }
     // A request that gave up waiting for its token may still be writing its
-    // log record into the data dir as the lane closes: retry the removal.
+    // log record into the data dir as the lane closes: drain the session-log
+    // write queue first, then remove (retrying on a slow file system).
+    await closeSessionLog();
     rmSync(data, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 }
@@ -108,6 +111,71 @@ test('SRC-17: `x-rate-limit-limit: 1` / `x-rate-limit-interval: 1s` holds the ho
     assert.equal(at.length, 3);
     const gaps = [at[1]! - at[0]!, at[2]! - at[1]!];
     for (const g of gaps) assert.ok(g >= 950, `requests after the header are ≥ 1 s apart, got ${gaps.join(', ')} ms`);
+  });
+});
+
+/** The most requests any window of `windowMs` holds (timestamps in ms, any order). */
+function maxInWindow(at: readonly number[], windowMs: number): number {
+  const sorted = [...at].sort((a, b) => a - b);
+  let best = 0;
+  for (let i = 0; i < sorted.length; i += 1) {
+    let j = i;
+    while (j < sorted.length && sorted[j]! - sorted[i]! < windowMs) j += 1;
+    best = Math.max(best, j - i);
+  }
+  return best;
+}
+
+test('SRC-17 (review round 3): Crossref declaring 3 / 1s — no 1-second window ever holds more than 3 requests, from the first request of the run (sequential and concurrent), and none is throttled', async () => {
+  await lane(async (m) => {
+    const served: number[] = [];
+    let throttled = 0;
+    // A service that allows 3 requests per rolling second and throttles the
+    // rest without a Retry-After (Crossref's polite list pool).
+    m.agent
+      .get('https://api.crossref.org')
+      .intercept({ path: /^\/works\?query=q\d+/, method: 'GET' })
+      .reply(() => {
+        const now = Date.now();
+        if (served.filter((t) => now - t < 1000).length >= 3) {
+          throttled += 1;
+          return { statusCode: 429, data: '{"status":"rate-limited"}', responseOptions: { headers: { ...JSON_HEADERS, 'x-rate-limit-limit': '3', 'x-rate-limit-interval': '1s' } } };
+        }
+        served.push(now);
+        return { statusCode: 200, data: '{"status":"ok"}', responseOptions: { headers: { ...JSON_HEADERS, 'x-rate-limit-limit': '3', 'x-rate-limit-interval': '1s' } } };
+      })
+      .persist();
+    // Six at once (the research fan-out), then four in sequence.
+    const first = await Promise.all(Array.from({ length: 6 }, (_, i) => httpFetch(`https://api.crossref.org/works?query=q${i}`, { source: 'crossref', noCache: true })));
+    for (let i = 6; i < 10; i += 1) first.push(await httpFetch(`https://api.crossref.org/works?query=q${i}`, { source: 'crossref', noCache: true }));
+    assert.deepEqual(first.map((r) => r.status), Array(10).fill(200));
+    assert.equal(throttled, 0, 'the bucket never lets a fourth request into a second');
+    assert.ok(maxInWindow(served, 1000) <= 3, `at most 3 requests in any 1 s window: ${served.map((t) => t - served[0]!).join(', ')}`);
+  });
+});
+
+test('SRC-17 (review round 3): a 429 without Retry-After holds the WHOLE host ≥ 1 s — the retry and a concurrent request both wait — and the request then succeeds', async () => {
+  await lane(async (m) => {
+    const at: Array<{ path: string; t: number; status: number }> = [];
+    const pool = m.agent.get('https://api.crossref.org');
+    const reply = (path: string, status: number) => (): { statusCode: number; data: string; responseOptions: { headers: Record<string, string> } } => {
+      at.push({ path, t: Date.now(), status });
+      return { statusCode: status, data: '{}', responseOptions: { headers: JSON_HEADERS } };
+    };
+    pool.intercept({ path: '/works/10.5555%2Fheld', method: 'GET' }).reply(reply('held', 429));
+    pool.intercept({ path: '/works/10.5555%2Fheld', method: 'GET' }).reply(reply('held', 200));
+    pool.intercept({ path: '/works/10.5555%2Fother', method: 'GET' }).reply(reply('other', 200));
+    const held = httpFetch('https://api.crossref.org/works/10.5555%2Fheld', { source: 'crossref', noCache: true });
+    // Let the 429 land, then ask the same host for something else.
+    while (at.length === 0) await new Promise((r) => setTimeout(r, 5));
+    const other = httpFetch('https://api.crossref.org/works/10.5555%2Fother', { source: 'crossref', noCache: true });
+    assert.equal((await held).status, 200);
+    assert.equal((await other).status, 200);
+    const throttledAt = at[0]!;
+    assert.equal(throttledAt.status, 429);
+    for (const later of at.slice(1)) {
+      assert.ok(later.t - throttledAt.t >= 950, `${later.path} waited out the hold (${later.t - throttledAt.t} ms after the 429)`);
+    }
   });
 });
 

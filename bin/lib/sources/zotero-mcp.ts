@@ -45,6 +45,7 @@ import { normIsbn } from '../migrations/library/shape.js';
 import type { LibraryCandidate } from '../migrations/library/shape.js';
 import { SourceCandidateSchema, type SourceCandidate } from '../schemas/source-candidate.js';
 import type { SourceType, ZoteroRef } from '../schemas/source-types.js';
+import { lookupTable } from '../lookup-table.js';
 
 // ---------------------------------------------------------------------------
 // The item schema (the fields pensmith reads; everything else passes through).
@@ -158,7 +159,7 @@ export function validateZoteroItem(raw: unknown, label = 'item'): ZoteroValidati
 const NON_WORK_TYPES: ReadonlySet<string> = new Set(['attachment', 'note', 'annotation']);
 
 /** Zotero itemType → CSL type (the SOURCE_TYPES vocabulary). */
-const TYPE_MAP: Readonly<Record<string, SourceType>> = {
+const TYPE_MAP: Readonly<Record<string, SourceType>> = lookupTable({
   journalArticle: 'article-journal',
   conferencePaper: 'paper-conference',
   bookSection: 'chapter',
@@ -174,7 +175,7 @@ const TYPE_MAP: Readonly<Record<string, SourceType>> = {
   webpage: 'webpage',
   blogPost: 'webpage',
   forumPost: 'webpage',
-};
+});
 
 const EDITOR_TYPES: ReadonlySet<string> = new Set(['editor', 'seriesEditor']);
 /** Secondary roles that are neither the work's authors nor its editors. */

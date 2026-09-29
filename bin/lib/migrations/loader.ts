@@ -49,7 +49,8 @@ export interface LoadOptions<TSchema extends z.ZodTypeAny> {
     | 'global-library'
     | 'checkpoint'
     | 'session-log'
-    | 'runtime-config';
+    | 'runtime-config'
+    | 'own-source-approvals';
   currentVersion: number;
   migrations?: Record<number, Migration>;
   writeBack?: boolean; // default false

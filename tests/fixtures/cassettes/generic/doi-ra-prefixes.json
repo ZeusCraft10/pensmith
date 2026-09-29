@@ -1,0 +1,62 @@
+[
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/ra/10.1038",
+    "status": 200,
+    "response": [
+      {
+        "DOI": "10.1038",
+        "RA": "Crossref"
+      }
+    ],
+    "responseHeaders": {
+      "content-type": "application/json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T22:26:14.507Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/ra/10.5281",
+    "status": 200,
+    "response": [
+      {
+        "DOI": "10.5281",
+        "RA": "DataCite"
+      }
+    ],
+    "responseHeaders": {
+      "content-type": "application/json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T22:26:14.507Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/ra/10.99999",
+    "status": 200,
+    "response": [
+      {
+        "DOI": "10.99999",
+        "status": "DOI does not exist"
+      }
+    ],
+    "responseHeaders": {
+      "content-type": "application/json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T22:26:14.507Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  }
+]

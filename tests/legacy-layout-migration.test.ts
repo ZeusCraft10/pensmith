@@ -25,6 +25,7 @@ import {
   type Sandbox,
 } from './helpers/paper-cli-harness.js';
 import { loadChokepointRow, rowPattern, scopedFiles, violations } from './helpers/chokepoint-row.js';
+import { CURRENT_CONFIG_VERSION } from '../bin/lib/schemas/config.js';
 
 const LEGACY_STATE = JSON.stringify({
   $schemaVersion: 2,
@@ -238,7 +239,8 @@ test('RUN-13: a `.paper` path handed to the state layer names its parent — STA
   const root = sb.project('p');
   mkdirSync(join(root, '.paper'), { recursive: true });
   writeFileSync(join(root, '.paper', 'STATE.json'), LEGACY_STATE);
-  writeFileSync(join(root, '.paper', 'config.toml'), 'schema_version = 1\n');
+  // A current-version config (an older one would be migrated and written back — a change this test does not look for).
+  writeFileSync(join(root, '.paper', 'config.toml'), `schema_version = ${CURRENT_CONFIG_VERSION}\n`);
   const moved = lastJson<{ ok: boolean; moved: string[] }>(runLibScript(sb, 'legacy-move.ts', [join(root, '.paper')]));
   assert.deepEqual(moved, { ok: true, moved: [] });
   const routed = lastJson<{ ok: boolean; decision: unknown }>(runLibScript(sb, 'legacy-move.ts', [join(root, '.paper'), '--router']));

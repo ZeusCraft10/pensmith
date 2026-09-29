@@ -105,7 +105,7 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
   7. A History paper can cite a book with an ISBN, Zotero items flow into the library in both tiers with an authenticated doctor check, the drafter quotes directly only from sources with real full text, and `plan N --research` adds real hits to that section only
   8. `http.ts` sends each service's polite contact form (Crossref `mailto:` User-Agent), honours `X-Rate-Limit` headers, stops retrying a host whose `Retry-After` exceeds the cap, trips a per-host circuit breaker on 429/5xx storms, and never caches an error body as a success (SRC-17)
 **Plans**: [19-PLAN.md](phases/19-sources/19-PLAN.md) (1/1: four parallel streams — net, adapters, library, research — then an integration pass)
-**Status**: executed and integrated on `v1/p19` (merges after Phase 18 closes); review round 1 fixed. 19 of 20 requirements met; GRND-14 is not met on this branch — its library half is built, its drafter half and acceptance run at the Phase 18/19 merge ([19-VERIFICATION.md](phases/19-sources/19-VERIFICATION.md), [19-SUMMARY.md](phases/19-sources/19-SUMMARY.md)). Criterion 7's book citation holds end to end since round 1 (Pass 1 resolves ISBNs, arXiv ids and PMIDs).
+**Status**: executed and integrated on `v1/p19` (merges after Phase 18 closes); review rounds 1, 2 and 3 fixed. 19 of 20 requirements met (SRC-06's keyed live round trip is a maintainer item: no key here); GRND-14 is not met on this branch — its library half is built (since round 3 the full-text flag counts an Unpaywall link only once it served a PDF, and `describeQuotesWithoutFullText` is the corrective text), its drafter half and acceptance run at the Phase 18/19 merge ([19-VERIFICATION.md](phases/19-sources/19-VERIFICATION.md), [19-SUMMARY.md](phases/19-sources/19-SUMMARY.md)). Criterion 7's book citation holds end to end since round 1 (Pass 1 resolves ISBNs, arXiv ids and PMIDs); criterion 8's breaker catches real storms without taking a throttled host down for the run since round 3.
 
 ### Phase 20: Verifier Completeness (VERIFY)
 **Goal**: Every citation and quote form is seen, every legitimate source can pass, a lookup failure is never called fabrication, and compile and done recompute the gate from the text itself, trusting no local file, so forged or edited artifacts cannot get through (D-V1-03, S-17). Absorbs v0.3.0 HARDEN-03.
@@ -221,7 +221,7 @@ v0.3.0 Truly End-to-End (Phases 17–19) was never started and is absorbed here:
 |-------|-----------------|--------|-----------|
 | 17. Tier-2 Runtime Foundations (RUNTIME) | 1/1 | In progress: 35/37 requirements Complete; RUN-26, CI-06 open | - |
 | 18. Grounded Generation (GROUND) | 0/TBD | Not started | - |
-| 19. Sources and Library (SOURCES) | 1/1 | Integrated on v1/p19, review round 1 fixed: 19/20 requirements Complete; GRND-14 (drafter half) at the Phase 18/19 merge | - |
+| 19. Sources and Library (SOURCES) | 1/1 | Integrated on v1/p19, review rounds 1–3 fixed: 19/20 requirements Complete; GRND-14 (drafter half) at the Phase 18/19 merge | - |
 | 20. Verifier Completeness (VERIFY) | 0/TBD | Not started | - |
 | 21. Compile, Done and Export (EXPORT) | 0/TBD | Not started | - |
 | 22. Revision Loop and Inline Corrections (REVISE) | 0/TBD | Not started | - |

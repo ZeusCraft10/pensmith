@@ -27,7 +27,7 @@ import { type SearchOptions } from './search-failure.js';
 import { exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
-import { getS2ApiKey, s2ApiKeyValue } from '../runtime.js';
+import { s2ApiKeyValue } from '../runtime.js';
 import { normalizeDoi, normalizePmid, normalizePmcid } from '../doi.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import type { SourceType } from '../schemas/source-types.js';
@@ -87,11 +87,6 @@ function buildHeaders(): Record<string, string> | undefined {
     return undefined;
   }
   return { 'x-api-key': key };
-}
-
-/** Presence of the key (never its value), for callers that report it. */
-export function s2KeyStatus(): { present: boolean; name: string } {
-  return getS2ApiKey();
 }
 
 /** S2 publication types → a CSL type (the most specific one wins). */

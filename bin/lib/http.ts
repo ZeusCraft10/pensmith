@@ -54,6 +54,10 @@
 // per-host floor table (the lower wins):
 //   arXiv 1 request per 3 s, Crossref 3/s, PubMed 3/s, Semantic Scholar 1/s,
 //   OpenAlex 10/s, Unpaywall 10/s, Open Library 1/s, Zotero 5/s, generic 5/s.
+// A bucket holds ONE token (no burst): consecutive requests to a host are at
+// least 1 / rate apart, so no window of X-Rate-Limit-Interval ever holds more
+// than X-Rate-Limit-Limit requests (review round 3 — a 3-token bucket at 3/s
+// let ~6 through in the first second and drew Crossref's 429).
 // A scholarly API's own `X-Rate-Limit-Limit` / `X-Rate-Limit-Interval` (e.g.
 // 3 / 1s; RATE_HEADER_HOSTS only — any other host cannot lower pensmith's
 // rate) lowers that host's rate and never raises it; a declared rate slower
@@ -66,11 +70,20 @@
 //     exhausted until then: the request is not retried, RateLimitExhaustedError
 //     is thrown, one stderr line is printed, and later requests to that host
 //     fail fast with zero sockets;
-//   - a per-host circuit breaker opens after BREAKER_THRESHOLD consecutive
-//     429/5xx RESPONSES (retries count): CircuitOpenError, one stderr line per
-//     host, the host skipped for the rest of the run; any other answer resets
-//     the count; after BREAKER_HALF_OPEN_MS an open breaker lets one probe
-//     through (so the long-lived MCP server recovers).
+//   - a 429 is "slow down", not "down": it holds the WHOLE host (every request
+//     to it, not just the retry) for its Retry-After, or — without one — for
+//     at least the declared interval (X-Rate-Limit-Interval), one bucket
+//     interval and MIN_THROTTLE_HOLD_MS, whichever is longest, and empties the
+//     bucket. A request's own 429 retries are ONE breaker strike, counted only
+//     when the request still ends throttled; BREAKER_THRESHOLD requests in a
+//     row that end throttled open the breaker (a transient throttle that the
+//     hold absorbs never takes the host down for the run);
+//   - 5xx is "down": the breaker opens after BREAKER_THRESHOLD consecutive 5xx
+//     RESPONSES (retries count, D-19-08), so a failing host costs ≤ 3 requests;
+//   - an open breaker: CircuitOpenError, one stderr line per host, the host
+//     skipped for the rest of the run; any other answer resets both counts;
+//     after BREAKER_HALF_OPEN_MS an open breaker lets one probe through (so the
+//     long-lived MCP server recovers), and a probe answered 429/5xx re-opens it.
 // Bucket acquire happens AFTER the cache short-circuit and INSIDE the
 // retry's `fn` so 429-retry re-pays the rate cost.
 //
@@ -145,6 +158,7 @@ import {
 import { openSessionLog, isMirrorPromptsEnabled, type SessionLogger } from './session-log.js';
 import { contactEmail, DEFAULT_CONTACT_EMAIL_ENV } from './contact-email.js';
 import { enabledLocalServiceOrigin, type LocalService } from './local-services.js';
+import { lookupTable } from './lookup-table.js';
 
 // ============================================================
 //   Typed egress errors (D-17-05)
@@ -253,12 +267,23 @@ export class CircuitOpenError extends PensmithError {
   readonly host: string;
   readonly lastStatus: number;
   readonly failures: number;
+  /**
+   * What opened the breaker, without the host: `3 consecutive HTTP 503
+   * responses` (5xx: responses count, retries included) or `3 requests in a
+   * row throttled (HTTP 429)` (429: a request counts once, when it still ends
+   * throttled after its retries).
+   */
+  readonly summary: string;
   constructor(host: string, lastStatus: number, failures: number) {
-    super(`${host}: skipped for the rest of this run after ${failures} consecutive HTTP ${lastStatus} responses`, EXIT_ERROR);
+    const summary = lastStatus === 429
+      ? `${failures} requests in a row throttled (HTTP 429)`
+      : `${failures} consecutive HTTP ${lastStatus} responses`;
+    super(`${host}: skipped for the rest of this run after ${summary}`, EXIT_ERROR);
     this.name = 'CircuitOpenError';
     this.host = host;
     this.lastStatus = lastStatus;
     this.failures = failures;
+    this.summary = summary;
   }
 }
 
@@ -809,6 +834,11 @@ export interface HttpResponse {
    * stores the final answer under the requested URL).
    */
   finalUrl?: string;
+  /**
+   * True when the request asked for only a prefix of the body (`prefixBytes`)
+   * and the server had more: `body` / `bodyBytes` hold the first bytes only.
+   */
+  truncated?: boolean;
 }
 
 export interface FetchOptions {
@@ -867,6 +897,15 @@ export interface FetchOptions {
    * document (http-mock.ts recordedErrorBody) is never cached.
    */
   validate?: (res: HttpResponse) => string | null;
+  /**
+   * Read only the first `prefixBytes` bytes of the final answer's body, then
+   * close the connection (review round 3: open-access.ts asks whether a URL
+   * serves a PDF — its `%PDF-` header — without downloading the whole file).
+   * The response is marked `truncated` when more followed, and it is never
+   * cached. A prefix read never reads past the prefix, so `maxBytes` (and a
+   * larger declared Content-Length) does not refuse it.
+   */
+  prefixBytes?: number;
 }
 
 // ============================================================
@@ -962,20 +1001,27 @@ class TokenBucket {
   }
 
   /**
-   * Lower the rate (never raises it). The capacity becomes max(1, rate) — a
-   * bucket below one request per second still grants a whole token, just less
-   * often. `drain` empties the bucket: used when a server's own rate-limit
-   * headers arrive on a response, so the NEXT request waits a full interval
-   * (1 / rate) after the one that was just answered (SRC-17).
+   * Lower the rate (never raises it). The capacity never grows: a per-host
+   * bucket holds one token (hostStateFor), so it never bursts above the rate.
+   * `drain` empties the bucket: used when a server's own rate-limit headers
+   * arrive on a response, so the NEXT request waits a full interval (1 / rate)
+   * after the one that was just answered (SRC-17).
    */
   lower(refillPerSec: number, drain: boolean): boolean {
     if (!(refillPerSec > 0) || refillPerSec >= this.refillPerSec) return false;
     this.refill();
     this.refillPerSec = refillPerSec;
-    this.capacity = Math.max(1, refillPerSec);
+    this.capacity = Math.min(this.capacity, Math.max(1, refillPerSec));
     this.tokens = drain ? Math.min(this.tokens, 0) : Math.min(this.tokens, this.capacity);
     this.lastRefillMs = Date.now();
     return true;
+  }
+
+  /** Empty the bucket: the next token is a full interval (1 / rate) away (a 429, SRC-17). */
+  drain(): void {
+    this.refill();
+    this.tokens = Math.min(this.tokens, 0);
+    this.lastRefillMs = Date.now();
   }
 
   private refill(): void {
@@ -1054,7 +1100,7 @@ export { TokenBucket as __TokenBucketForTest };
  * gets arXiv's one-request-per-3-seconds rule. The lower of this and the
  * source seed wins.
  */
-const HOST_RPS_FLOOR: Readonly<Record<string, number>> = {
+const HOST_RPS_FLOOR: Readonly<Record<string, number>> = lookupTable({
   'export.arxiv.org': 1 / 3,
   'arxiv.org': 1 / 3,
   'api.crossref.org': 3,
@@ -1062,7 +1108,7 @@ const HOST_RPS_FLOOR: Readonly<Record<string, number>> = {
   'api.semanticscholar.org': 1,
   'openlibrary.org': 1,
   'api.zotero.org': 5,
-};
+});
 
 /**
  * The hosts whose `X-Rate-Limit-Limit` / `X-Rate-Limit-Interval` headers are
@@ -1094,8 +1140,17 @@ export function minHonouredRate(): number {
   return 1000 / RETRY_AFTER_CAP_MS;
 }
 
-/** Consecutive 429/5xx responses from one host that open its circuit breaker. */
+/**
+ * What opens a host's circuit breaker: this many consecutive 5xx responses, or
+ * this many requests in a row that still end throttled (429) after their
+ * retries.
+ */
 export const BREAKER_THRESHOLD = 3;
+/**
+ * The least a 429 without a Retry-After holds its host (SRC-17, review round
+ * 3): a throttled service is not asked again within the same second.
+ */
+export const MIN_THROTTLE_HOLD_MS = 1000;
 /** How long an open breaker waits before it lets one probe request through. */
 export const BREAKER_HALF_OPEN_MS = 10 * 60_000;
 
@@ -1112,8 +1167,10 @@ interface HostState {
   exhaustedStatus: number;
   /** What the response that exhausted the host said (RateLimitExhaustedError.detail). */
   exhaustedDetail: { body?: string; headers?: Record<string, string> } | undefined;
-  /** Consecutive 429/5xx responses. */
+  /** Consecutive 5xx responses (a request's retries count). */
   failures: number;
+  /** Consecutive requests that ended throttled (429) after their retries. */
+  throttled: number;
   lastStatus: number;
   /** When the breaker opened (epoch ms), or null when closed. */
   openedAt: number | null;
@@ -1133,12 +1190,14 @@ function hostStateFor(host: string, hostname: string, source: HttpSource): HostS
     st = {
       host,
       hostname,
-      bucket: new TokenBucket(Math.max(1, seed), seed),
+      // One token: no burst above the seed (or the declared) rate.
+      bucket: new TokenBucket(1, seed),
       notBefore: 0,
       exhaustedUntil: 0,
       exhaustedStatus: 0,
       exhaustedDetail: undefined,
       failures: 0,
+      throttled: 0,
       lastStatus: 0,
       openedAt: null,
       probing: false,
@@ -1168,7 +1227,7 @@ async function enterHost(st: HostState, llm: boolean, timeoutMs: number): Promis
     if (st.exhaustedUntil !== 0) st.exhaustedUntil = 0;
     if (st.openedAt !== null) {
       if (st.probing || now - st.openedAt < BREAKER_HALF_OPEN_MS) {
-        throw new CircuitOpenError(st.host, st.lastStatus, st.failures);
+        throw new CircuitOpenError(st.host, st.lastStatus, st.lastStatus === 429 ? st.throttled : st.failures);
       }
       st.probing = true; // half-open: this request is the one probe
     }
@@ -1186,15 +1245,67 @@ function hostNoAnswer(st: HostState): void {
   }
 }
 
-/** Requests per second a server declares (`X-Rate-Limit-Limit` / `X-Rate-Limit-Interval`), or null. */
-export function declaredRate(headers: Record<string, string>): number | null {
-  const limit = Number((headers['x-rate-limit-limit'] ?? '').trim());
+/** The `X-Rate-Limit-Interval` a server declares, in seconds (`1s`, `500ms`, `1m`, `1h`; bare = seconds), or null. */
+function declaredIntervalSec(headers: Record<string, string>): number | null {
   const m = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/i.exec((headers['x-rate-limit-interval'] ?? '').trim());
-  if (!Number.isFinite(limit) || limit <= 0 || !m) return null;
+  if (!m) return null;
   const n = Number(m[1]);
   const unit = (m[2] ?? 's').toLowerCase();
   const seconds = unit === 'ms' ? n / 1000 : unit === 'm' ? n * 60 : unit === 'h' ? n * 3600 : n;
-  return seconds > 0 ? limit / seconds : null;
+  return seconds > 0 ? seconds : null;
+}
+
+/** Requests per second a server declares (`X-Rate-Limit-Limit` / `X-Rate-Limit-Interval`), or null. */
+export function declaredRate(headers: Record<string, string>): number | null {
+  const limit = Number((headers['x-rate-limit-limit'] ?? '').trim());
+  const seconds = declaredIntervalSec(headers);
+  if (!Number.isFinite(limit) || limit <= 0 || seconds === null) return null;
+  return limit / seconds;
+}
+
+/** True when a Retry-After header is present and parses (delta-seconds or an HTTP-date) — `0` included. */
+function hasRetryAfter(raw: string | undefined): boolean {
+  const v = (raw ?? '').trim();
+  return /^\d+$/.test(v) || (v !== '' && !Number.isNaN(Date.parse(v)));
+}
+
+/**
+ * How long a 429 holds its host (SRC-17, review round 3): the Retry-After when
+ * the server sent one (already known to be within the cap); otherwise at least
+ * the declared interval (only a RATE_HEADER_HOSTS host may declare one), one
+ * interval of the host's bucket, and MIN_THROTTLE_HOLD_MS — never capped
+ * below, never above RETRY_AFTER_CAP_MS.
+ */
+function throttleHoldMs(st: HostState, headers: Record<string, string>, retryAfterMs: number): number {
+  if (hasRetryAfter(headers['retry-after'])) return retryAfterMs;
+  const intervalSec = RATE_HEADER_HOSTS.has(st.hostname) ? declaredIntervalSec(headers) : null;
+  return Math.min(
+    RETRY_AFTER_CAP_MS,
+    Math.max(MIN_THROTTLE_HOLD_MS, Math.ceil(1000 / st.bucket.rate), intervalSec !== null ? Math.ceil(intervalSec * 1000) : 0),
+  );
+}
+
+/** Open `st`'s breaker (announced once per host) and return the error to throw. */
+function openBreaker(st: HostState, status: number, count: number, now: number): CircuitOpenError {
+  st.openedAt = now;
+  st.probing = false;
+  const err = new CircuitOpenError(st.host, status, count);
+  if (!st.announcedOpen) {
+    st.announcedOpen = true;
+    process.stderr.write(`pensmith: ${err.message}\n`);
+  }
+  return err;
+}
+
+/**
+ * A request to `st`'s host ended throttled — its last answer was a 429 after
+ * every retry it was allowed (or it asked for no retries): one breaker strike.
+ * Returns the CircuitOpenError to throw when this strike opens the breaker.
+ */
+function noteRequestThrottled(st: HostState): CircuitOpenError | null {
+  st.throttled += 1;
+  st.lastStatus = 429;
+  return st.throttled >= BREAKER_THRESHOLD ? openBreaker(st, 429, st.throttled, Date.now()) : null;
 }
 
 function markExhausted(
@@ -1217,11 +1328,12 @@ function markExhausted(
 
 /**
  * Account one live response from `st`'s host (never a fixture, never a model
- * response): lower the rate to what the server declares, honour Backoff, and
- * count 429/5xx toward the exhausted marker and the breaker. Throws
+ * response): lower the rate to what the server declares, honour Backoff, hold
+ * the host after a 429, and count 5xx toward the breaker. Throws
  * RateLimitExhaustedError (a Retry-After beyond the cap) or CircuitOpenError
- * (the BREAKER_THRESHOLD-th consecutive failure, or a failed half-open probe);
- * any other answer resets the count and closes the breaker.
+ * (the BREAKER_THRESHOLD-th consecutive 5xx, or a failed half-open probe); any
+ * other answer resets both counts and closes the breaker. A 429 is counted per
+ * request, when the request ends (noteRequestThrottled).
  */
 function noteHostResponse(st: HostState, status: number, headers: Record<string, string>, body = ''): void {
   const now = Date.now();
@@ -1238,24 +1350,24 @@ function noteHostResponse(st: HostState, status: number, headers: Record<string,
   else if (backoffMs > 0) st.notBefore = Math.max(st.notBefore, now + backoffMs);
   if (!RETRYABLE_STATUSES.has(status)) {
     st.failures = 0;
+    st.throttled = 0;
     st.openedAt = null;
     st.probing = false;
     return;
   }
-  st.failures += 1;
   st.lastStatus = status;
   const retryAfterMs = parseRetryAfter(headers['retry-after'], now);
   if (retryAfterMs > RETRY_AFTER_CAP_MS) throw markExhausted(st, retryAfterMs, status, detail);
-  if (st.probing || st.failures >= BREAKER_THRESHOLD) {
-    st.openedAt = now;
-    st.probing = false;
-    const err = new CircuitOpenError(st.host, status, st.failures);
-    if (!st.announcedOpen) {
-      st.announcedOpen = true;
-      process.stderr.write(`pensmith: ${err.message}\n`);
-    }
-    throw err;
+  if (status === 429) {
+    // Slow down: nothing goes to this host until the hold ends, and the next
+    // token is a full interval after that (review round 3).
+    st.notBefore = Math.max(st.notBefore, now + throttleHoldMs(st, headers, retryAfterMs));
+    st.bucket.drain();
+    if (st.probing) throw openBreaker(st, status, Math.max(st.throttled, 1), now);
+    return;
   }
+  st.failures += 1;
+  if (st.probing || st.failures >= BREAKER_THRESHOLD) throw openBreaker(st, status, st.failures, now);
 }
 
 /**
@@ -1605,8 +1717,10 @@ async function readCapped(
   maxBytes: number,
   requestLabel: string,
   declaredLength: number | null,
-): Promise<Buffer> {
-  if (declaredLength !== null && declaredLength > maxBytes) {
+  prefixBytes?: number,
+): Promise<{ bytes: Buffer; truncated: boolean }> {
+  const prefix = prefixBytes !== undefined && Number.isFinite(prefixBytes) && prefixBytes > 0 ? Math.floor(prefixBytes) : null;
+  if (prefix === null && declaredLength !== null && declaredLength > maxBytes) {
     body.destroy?.();
     throw new ResponseTooLargeError(maxBytes, requestLabel);
   }
@@ -1614,6 +1728,14 @@ async function readCapped(
   let total = 0;
   for await (const chunk of body) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    if (prefix !== null && total + buf.length >= prefix) {
+      // Enough: keep the prefix and close the connection (FetchOptions.prefixBytes).
+      chunks.push(buf.subarray(0, prefix - total));
+      const more = total + buf.length > prefix;
+      total = prefix;
+      body.destroy?.();
+      return { bytes: Buffer.concat(chunks, total), truncated: more || declaredLength === null || declaredLength > prefix };
+    }
     total += buf.length;
     if (total > maxBytes) {
       body.destroy?.();
@@ -1621,7 +1743,7 @@ async function readCapped(
     }
     chunks.push(buf);
   }
-  return Buffer.concat(chunks, total);
+  return { bytes: Buffer.concat(chunks, total), truncated: false };
 }
 
 // ============================================================
@@ -2074,15 +2196,18 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
       }
       const bytes = fx.bodyBytes;
       if (next === null) {
-        if (bytes.length > maxBytes) refuse(new ResponseTooLargeError(maxBytes, hopLabel), hopUrl, hopMethod);
-        recordHttp({ ...base, url: hopUrl, method: hopMethod, status: fx.status, cache: 'fixture', bytes: bytes.length, ms: Date.now() - hopStarted });
+        const prefix = opts.prefixBytes !== undefined && opts.prefixBytes > 0 ? Math.floor(opts.prefixBytes) : null;
+        if (prefix === null && bytes.length > maxBytes) refuse(new ResponseTooLargeError(maxBytes, hopLabel), hopUrl, hopMethod);
+        const cut = prefix !== null && bytes.length > prefix ? bytes.subarray(0, prefix) : bytes;
+        recordHttp({ ...base, url: hopUrl, method: hopMethod, status: fx.status, cache: 'fixture', bytes: cut.length, ms: Date.now() - hopStarted });
         return {
           status: fx.status,
           headers: fx.headers,
-          body: fx.body,
-          bodyBytes: bytes,
+          body: cut === bytes ? fx.body : cut.toString('utf8'),
+          bodyBytes: cut,
           cached: false,
           fixture: true,
+          ...(cut !== bytes ? { truncated: true } : {}),
           ...(hopUrl !== url ? { finalUrl: hopUrl } : {}),
         };
       }
@@ -2097,7 +2222,7 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   }
 
   // --- Cache short-circuit (live mode, GET only, opt-in) ---
-  const cacheAllowed = !mode.sourcesOffline && method === 'GET' && !opts.noCache && llm === undefined;
+  const cacheAllowed = !mode.sourcesOffline && method === 'GET' && !opts.noCache && llm === undefined && opts.prefixBytes === undefined;
   if (cacheAllowed) {
     const cached = await readCache(key, ttlMs);
     if (cached) {
@@ -2112,6 +2237,9 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   const mirroredHops = new Set<string>();
   const localService = opts.localService;
   let hops: RecordedHop[] = [];
+  // The host that gave the latest live (non-model) answer: a request that
+  // ends throttled is one breaker strike against it (noteRequestThrottled).
+  let lastHost: HostState | null = null;
 
   const hopOnce = async (
     hopUrl: string,
@@ -2192,19 +2320,34 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
         }
         const declared = Number(flatHeaders['content-length']);
         // --- 5. Stream under the cap; read the raw bytes ONCE (audit #29) ---
-        const bodyBytes = await readCapped(
+        // A redirect hop's body is never the answer: only the final hop is
+        // cut to the prefix (it is the one the caller reads).
+        const isRedirect = statusCode >= 300 && statusCode < 400;
+        const read = await readCapped(
           body as unknown as AsyncIterable<Buffer> & { destroy?: (err?: Error) => void },
           maxBytes,
           hopLabel,
           Number.isFinite(declared) && flatHeaders['content-length'] !== '' ? declared : null,
+          isRedirect ? undefined : opts.prefixBytes,
         );
-        res = { status: statusCode, headers: flatHeaders, body: bodyBytes.toString('utf8'), bodyBytes, cached: false };
+        const bodyBytes = read.bytes;
+        res = {
+          status: statusCode,
+          headers: flatHeaders,
+          body: bodyBytes.toString('utf8'),
+          bodyBytes,
+          cached: false,
+          ...(read.truncated ? { truncated: true } : {}),
+        };
       } finally {
         if (pinned !== null) await pinned.destroy().catch(() => undefined);
       }
       answered = true;
-      // SRC-17: rate headers, Backoff, the exhausted marker and the breaker.
-      if (llm === undefined) noteHostResponse(st, res.status, res.headers, RETRYABLE_STATUSES.has(res.status) ? res.body : '');
+      // SRC-17: rate headers, Backoff, the 429 hold, the exhausted marker and the breaker.
+      if (llm === undefined) {
+        lastHost = st;
+        noteHostResponse(st, res.status, res.headers, RETRYABLE_STATUSES.has(res.status) ? res.body : '');
+      }
       return res;
     } finally {
       if (!answered) hostNoAnswer(st);
@@ -2282,6 +2425,12 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     return r;
   };
 
+  // A request whose last answer is still a 429 — after its retries, or with
+  // noRetry — is one strike against that host (SRC-17, review round 3); the
+  // strike that opens the breaker surfaces as the CircuitOpenError.
+  const endedThrottled = (status: number | undefined): CircuitOpenError | null =>
+    status === 429 && lastHost !== null ? noteRequestThrottled(lastHost) : null;
+
   let response: HttpResponse;
   try {
     response = opts.noRetry
@@ -2301,7 +2450,11 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
             return false;
           },
         });
-  } catch (err) {
+    const opened = endedThrottled(response.status);
+    if (opened !== null) throw opened;
+  } catch (caught) {
+    const opened = caught instanceof CircuitOpenError ? null : endedThrottled((caught as { status?: number } | null)?.status);
+    const err: unknown = opened ?? caught;
     const e = err as Error & { status?: number };
     const refused =
       err instanceof OfflineEgressError ||

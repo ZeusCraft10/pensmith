@@ -25,8 +25,12 @@
 // items until the user approved that collection for this paper (review round
 // 2). Tier 2 asks at research's `zotero-collection` gate; Tier 1 asks with
 // AskUserQuestion and submits `collection` + `approveCollection: true`, which
-// records the approval (never inferred from --yolo). Items submitted without
-// `collection` are the results of a per-query search of the user's own Zotero.
+// records the approval (never inferred from --yolo). While the configured
+// collection is unapproved, Tier 1 refuses EVERY submission — with or without
+// `collection` — except that approving one, exactly as Tier 2's search reads
+// nothing in that state (review round 3): the gate never depends on the caller
+// naming the collection. Items submitted without `collection` are the results
+// of a per-query search of the user's own Zotero.
 
 import { existsSync } from 'node:fs';
 import { paperDir } from './paths.js';
@@ -138,10 +142,21 @@ export interface ZoteroIngestOptions {
 export async function ingestZoteroItems(root: string, rawItems: readonly unknown[], opts: ZoteroIngestOptions = {}): Promise<ZoteroIngestResult> {
   assertPaper(root);
   const collection = opts.collection?.trim();
-  if (collection && !isZoteroCollectionApproved(root, collection) && opts.approveCollection !== true) {
+  const approvingNow = opts.approveCollection === true;
+  if (collection && !isZoteroCollectionApproved(root, collection) && !approvingNow) {
     throw new ZoteroCollectionNotApprovedError(
       collection,
       'ask the user whether to add that collection of their Zotero library to this paper, and on yes submit the items again with approveCollection: true',
+    );
+  }
+  // The paper's own configured collection, not yet approved: nothing from the
+  // user's Zotero is added — not even items submitted without `collection` —
+  // until the user approves it (the header; Tier 2's search reads nothing).
+  const configured = configuredZoteroCollection(root);
+  if (configured !== null && !isZoteroCollectionApproved(root, configured) && !(collection === configured && approvingNow)) {
+    throw new ZoteroCollectionNotApprovedError(
+      configured,
+      `ask the user whether to add that collection of their Zotero library to this paper, and on yes submit its items with collection: ${JSON.stringify(configured)} and approveCollection: true`,
     );
   }
   if (!Array.isArray(rawItems) || rawItems.length === 0) throw new ZoteroItemsInvalidError(['items: expected at least one Zotero item']);

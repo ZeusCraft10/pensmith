@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 import { fetch as httpFetch, isPolitePoolSource, _resetHostStateForTest, _resetWarnedForTest } from '../bin/lib/http.js';
+import { closeSessionLog } from '../bin/lib/session-log.js';
 import { _resetContactEmailForTest } from '../bin/lib/contact-email.js';
 import { CURRENT_CONFIG_VERSION } from '../bin/lib/config.js';
 import { atomicWriteFile } from '../bin/lib/atomic-write.js';
@@ -75,8 +76,10 @@ async function withPaper<T>(config: string | null, env: Record<string, string | 
       else process.env[k] = v;
     }
     _resetContactEmailForTest();
-    rmSync(cwd, { recursive: true, force: true });
-    rmSync(data, { recursive: true, force: true });
+    // Drain the session log's write queue before removing the data dir.
+    await closeSessionLog();
+    rmSync(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+    rmSync(data, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 }
 

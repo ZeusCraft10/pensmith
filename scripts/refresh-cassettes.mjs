@@ -222,6 +222,24 @@ const QUERY_SETS = {
     // A `.pdf` URL that answers an HTML page with HTTP 200 (`add <url>` must say
     // "not a PDF (got text/html)" and never hand it to the PDF parser).
     { file: 'html-at-pdf-url', calls: [{ fn: 'fetch', arg: HTML_AT_PDF_URL }] },
+    // open-access.ts confirms the PDF Unpaywall lists for a DOI by reading its
+    // first 1029 bytes (review round 3): PLOS ONE 10.1371/journal.pone.0000001
+    // (tests/open-access.test.ts, the built-CLI `add`).
+    {
+      file: 'oa-pdf-prefix-plos-one',
+      calls: [{ fn: 'confirmOpenAccessPdf', arg: 'https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0000001&type=printable' }],
+    },
+    // doi.org's registration-agency lookup (bin/lib/sources/doi-ra.ts): asked
+    // when Crossref answers 404 for a DOI `add` resolves — a Crossref prefix
+    // (Nature), a DataCite prefix (Zenodo) and a prefix no agency holds.
+    {
+      file: 'doi-ra-prefixes',
+      calls: [
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.1038' },
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.5281' },
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.99999' },
+      ],
+    },
   ],
 };
 
@@ -266,7 +284,16 @@ async function runChild(adapter, files = []) {
   const http = await import(bin('http.js'));
   // `generic`: plain URL fetches through the one transport (no adapter module).
   const mod = adapter === 'generic'
-    ? { fetch: (url) => http.fetch(url, { source: 'generic', noCache: true, maxBytes: 16 * 1024 * 1024 }) }
+    ? {
+        fetch: (url) => http.fetch(url, { source: 'generic', noCache: true, maxBytes: 16 * 1024 * 1024 }),
+        // open-access.ts's PDF check: only the first bytes of the listed PDF
+        // are read (FetchOptions.prefixBytes), so the recording is that prefix.
+        confirmOpenAccessPdf: async (url) => {
+          const oa = await import(bin('open-access.js'));
+          const c = await oa.confirmOpenAccessPdf(url);
+          if (!c.ok) throw new Error(`the open-access link did not answer with a PDF: ${c.reason}`);
+        },
+      }
     : await import(bin(path.join('sources', `${adapter}.js`)));
   const mock = await import(bin('http-mock.js'));
   const { atomicWriteFile } = await import(bin('atomic-write.js'));

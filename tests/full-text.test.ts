@@ -3,7 +3,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fullTextAvailable, fullTextSource, fullTextByCitekey, quotesWithoutFullText, arxivIdOfEntry, arxivPdfUrl, isDataCiteArxivDoi } from '../bin/lib/full-text.js';
+import { fullTextAvailable, fullTextSource, fullTextByCitekey, quotesWithoutFullText, describeQuotesWithoutFullText, arxivIdOfEntry, arxivPdfUrl, isDataCiteArxivDoi } from '../bin/lib/full-text.js';
 
 const NONE = { byo: null, oa_url: null, doi: null };
 const SHA = 'a'.repeat(64);
@@ -74,4 +74,18 @@ test('GRND-14: quotesWithoutFullText lists the direct quotes attributed to sourc
   assert.match(got.find((q) => q.citekey === 'lecun2015')!.quote, /^deep learning allows computational models/);
   assert.deepEqual(quotesWithoutFullText(DRAFT, { vaswani2017: true, lecun2015: true, aspelmeyer2009: true }), []);
   assert.deepEqual(quotesWithoutFullText(DRAFT.replace(/\n/g, '\r\n'), flags).map((q) => q.citekey).sort(), ['aspelmeyer2009', 'lecun2015'], 'CRLF drafts too');
+});
+
+test('GRND-14 (review round 3): describeQuotesWithoutFullText is the corrective instruction the merge wires into write\'s one corrective turn', () => {
+  const flags = new Map([
+    ['vaswani2017', true],
+    ['lecun2015', false],
+  ]);
+  const msg = describeQuotesWithoutFullText(quotesWithoutFullText(DRAFT, flags));
+  assert.match(msg, /^direct quote\(s\) from source\(s\) whose full text pensmith cannot check \(full_text: false\): /);
+  assert.match(msg, /\[@lecun2015\] "deep learning allows computational models /);
+  assert.match(msg, /\[@aspelmeyer2009\] "/);
+  assert.match(msg, / — paraphrase them, or quote only a source marked full_text: true$/);
+  assert.doesNotMatch(msg, /vaswani2017/);
+  assert.equal(describeQuotesWithoutFullText([]), '');
 });

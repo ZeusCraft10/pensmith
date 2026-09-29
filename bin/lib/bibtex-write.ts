@@ -60,6 +60,7 @@ import { atomicWriteFile } from './atomic-write.js';
 import { generateCitekey } from './citekey.js';
 import { parsePersonName, type PersonName } from './person-name.js';
 import { normArxiv, normDoi, normIsbn, normPmcid, normPmid } from './migrations/library/shape.js';
+import { lookupTable } from './lookup-table.js';
 
 /**
  * The fields the BibTeX/RIS renderers read. A LIBRARY.json v3 entry and a
@@ -146,7 +147,7 @@ export function cslTypeOf(c: BibSource): string {
   return 'article-journal';
 }
 
-const BIBTEX_TYPE: Readonly<Record<string, string>> = {
+const BIBTEX_TYPE: Readonly<Record<string, string>> = lookupTable({
   'article-journal': 'article',
   'article-newspaper': 'article',
   'article-magazine': 'article',
@@ -159,7 +160,7 @@ const BIBTEX_TYPE: Readonly<Record<string, string>> = {
   dataset: 'misc',
   webpage: 'misc',
   other: 'misc',
-};
+});
 
 // ---------------------------------------------------------------------------
 // Value encoding.
@@ -223,7 +224,9 @@ const TITLE_STOPWORDS: ReadonlySet<string> = new Set([
  * unprotected proper noun (China, Instagram, Drosophila) prints in lower case
  * in the exported reference list. A word is wrapped in braces when its
  * capitals are not just title casing:
- *   - a capital after its first letter (DNA, mRNA, COVID-19, iPhone, McDonald);
+ *   - a capital after the first letter of a word or of one of its hyphenated
+ *     parts (DNA, mRNA, COVID-19, iPhone, McDonald) — `Long-Term` and
+ *     `Self-Attention` are title casing, not inner capitals;
  *   - in a sentence-case title (most longer words after the first are lower
  *     case — PubMed's style), every capitalised word after the first: those
  *     capitals are the source's proper nouns;
@@ -247,7 +250,12 @@ export function titleBibValue(title: string, abstract: string | null = null): st
   return words
     .map((word, i) => {
       const letters = lettersOf(word);
-      const innerCapital = /\p{Lu}/u.test(letters.slice(1));
+      // Per hyphen- or slash-separated part: `Long-Term`, `Self-Attention` are
+      // two title-cased parts, not an inner capital; `mRNA-based`, `COVID-19`
+      // are (review round 3).
+      const parts = word.split(/([-\u2010\u2011\u2013\u2014/])/);
+      const hasInner = (part: string): boolean => /\p{Lu}/u.test(lettersOf(part).slice(1));
+      const innerCapital = parts.some((part, j) => j % 2 === 0 && hasInner(part));
       const next = words[i + 1];
       const nextLetters = next !== undefined ? lettersOf(next) : '';
       const beforeLowerContent =
@@ -258,8 +266,17 @@ export function titleBibValue(title: string, abstract: string | null = null): st
         (!titleCase || midSentence.has(letters) || midSentence.has(word.replace(/[^\p{L}'’-]/gu, '')) || beforeLowerContent);
       if (letters.length === 0 || !(innerCapital || properNoun)) return escapeBibtexUtf8(word);
       // Brace the word itself, not the punctuation around it (`{China},`).
-      const m = /^(\P{L}*)(.*?)(\P{L}*)$/u.exec(word)!;
-      return `${escapeBibtexUtf8(m[1]!)}{${escapeBibtexUtf8(m[2]!)}}${escapeBibtexUtf8(m[3]!)}`;
+      const brace = (w: string): string => {
+        const m = /^(\P{L}*)(.*?)(\P{L}*)$/u.exec(w)!;
+        return m[2] === '' ? escapeBibtexUtf8(w) : `${escapeBibtexUtf8(m[1]!)}{${escapeBibtexUtf8(m[2]!)}}${escapeBibtexUtf8(m[3]!)}`;
+      };
+      // Only an inner capital to protect in a compound: brace just the parts
+      // that carry one (`{mRNA}-based`), so the rest still follows the style's
+      // case (`mRNA-Based` prints `mRNA-based` in APA).
+      if (!properNoun && parts.length > 1 && !parts.includes('')) {
+        return parts.map((part, j) => (j % 2 === 1 ? escapeBibtexUtf8(part) : hasInner(part) ? brace(part) : escapeBibtexUtf8(part))).join('');
+      }
+      return brace(word);
     })
     .join(' ');
 }

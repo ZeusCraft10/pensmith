@@ -1,8 +1,11 @@
 // tests/http-circuit.test.ts — SRC-17 (D-19-08): the per-host circuit breaker.
 //
-//   - 3 consecutive 429/5xx RESPONSES (retries count) open the breaker:
+//   - 3 consecutive 5xx RESPONSES (retries count) open the breaker:
 //     CircuitOpenError, one stderr line for the host, and the host is skipped
 //     for the rest of the run — a 3-query loop makes ≤ 3 requests to it;
+//   - a 429 counts once per REQUEST, when the request is still throttled after
+//     its retries (review round 3): one throttled request never opens the
+//     breaker; three in a row do;
 //   - any other answer resets the count;
 //   - after 10 minutes an open breaker lets ONE probe through: success closes
 //     it, failure re-opens it;
@@ -23,6 +26,7 @@ import {
   _resetHostStateForTest,
 } from '../bin/lib/http.js';
 import { errorFailureReason } from '../bin/lib/sources/search-failure.js';
+import { closeSessionLog } from '../bin/lib/session-log.js';
 
 async function lane<T>(fn: (m: InstalledMockAgent) => Promise<T>, live = true): Promise<T> {
   const data = mkdtempSync(join(tmpdir(), 'pensmith-circuit-'));
@@ -49,7 +53,8 @@ async function lane<T>(fn: (m: InstalledMockAgent) => Promise<T>, live = true): 
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
-    rmSync(data, { recursive: true, force: true });
+    await closeSessionLog();
+    rmSync(data, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 }
 
@@ -97,19 +102,82 @@ test('SRC-17: 3 consecutive 503s open the breaker; a 3-query loop makes ≤ 3 re
   });
 });
 
-test('SRC-17: 429s count toward the breaker the same way (retries count)', async () => {
+test('SRC-17 (review round 3): a request\'s own 429 retries are ONE strike; three requests in a row still throttled open the breaker, the fourth sends nothing', async () => {
   await lane(async (m) => {
     let requests = 0;
     m.agent.get('https://api.example-429.org').intercept({ path: /.*/, method: 'GET' }).reply(() => {
       requests += 1;
+      // An explicit `Retry-After: 0` is honoured as "now" (no one-second hold).
       return { statusCode: 429, data: 'slow down', responseOptions: { headers: { 'retry-after': '0' } } };
     }).persist();
-    await quiet(() => assert.rejects(() => httpFetch('https://api.example-429.org/x', { source: 'generic', noCache: true }), (e: unknown) => {
-      assert.ok(e instanceof CircuitOpenError);
-      assert.equal(e.lastStatus, 429);
-      return true;
-    }));
+    const get = (i: number): Promise<unknown> => httpFetch(`https://api.example-429.org/x${i}`, { source: 'generic', noCache: true });
+    const { err } = await quiet(async () => {
+      for (let i = 0; i < 2; i += 1) {
+        await assert.rejects(() => get(i), (e: unknown) => {
+          assert.ok(!(e instanceof CircuitOpenError), `request ${i} ends as its own HTTP 429, not an open breaker (${String(e)})`);
+          assert.equal((e as { status?: number }).status, 429);
+          return true;
+        });
+      }
+      assert.equal(requests, 10, 'each of the first two requests used all 5 of its attempts');
+      await assert.rejects(() => get(2), (e: unknown) => {
+        assert.ok(e instanceof CircuitOpenError, `the third throttled request opens the breaker, got ${String(e)}`);
+        assert.equal(e.lastStatus, 429);
+        assert.equal(e.failures, BREAKER_THRESHOLD);
+        assert.equal(errorFailureReason(e), 'skipped after 3 requests in a row throttled (HTTP 429)');
+        return true;
+      });
+      assert.equal(requests, 15);
+      await assert.rejects(() => get(3), CircuitOpenError);
+      assert.equal(requests, 15, 'an open breaker sends nothing');
+      return undefined;
+    });
+    const lines = err.split('\n').filter((l) => l.includes('api.example-429.org'));
+    assert.deepEqual(lines, ['pensmith: api.example-429.org: skipped for the rest of this run after 3 requests in a row throttled (HTTP 429)']);
+  });
+});
+
+test('SRC-17 (review round 3): one throttled request whose retry succeeds never opens the breaker — the host keeps serving', async () => {
+  await lane(async (m) => {
+    const pool = m.agent.get('https://api.throttled-once.example.org');
+    let requests = 0;
+    const reply = (status: number) => (): { statusCode: number; data: string; responseOptions: { headers: Record<string, string> } } => {
+      requests += 1;
+      return { statusCode: status, data: status === 200 ? 'ok' : 'slow down', responseOptions: { headers: { 'retry-after': '0' } } };
+    };
+    for (let round = 0; round < 4; round += 1) {
+      // Twice throttled, then served: repeated for four requests in a row.
+      pool.intercept({ path: `/r${round}`, method: 'GET' }).reply(reply(429)).times(2);
+      pool.intercept({ path: `/r${round}`, method: 'GET' }).reply(reply(200));
+    }
+    for (let round = 0; round < 4; round += 1) {
+      const res = await httpFetch(`https://api.throttled-once.example.org/r${round}`, { source: 'generic', noCache: true });
+      assert.equal(res.status, 200, `round ${round} recovers after its own 429s`);
+    }
+    assert.equal(requests, 12);
+  });
+});
+
+test('SRC-17 (review round 3): a half-open probe answered 429 re-opens the breaker at once', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1_800_000_000_000 });
+  await lane(async (m) => {
+    const pool = m.agent.get('https://api.probe-429.example.org');
+    let requests = 0;
+    pool.intercept({ path: '/x', method: 'GET' }).reply(() => {
+      requests += 1;
+      return { statusCode: 429, data: 'slow down', responseOptions: { headers: { 'retry-after': '0' } } };
+    }).persist();
+    const once = (): Promise<unknown> => httpFetch('https://api.probe-429.example.org/x', { source: 'generic', noCache: true, noRetry: true });
+    // noRetry: each request is one answer and, throttled, one strike.
+    assert.equal(((await once()) as { status: number }).status, 429);
+    assert.equal(((await once()) as { status: number }).status, 429);
+    await quiet(() => assert.rejects(once, CircuitOpenError));
     assert.equal(requests, 3);
+    t.mock.timers.tick(BREAKER_HALF_OPEN_MS);
+    await quiet(() => assert.rejects(once, CircuitOpenError));
+    assert.equal(requests, 4, 'exactly one probe');
+    await assert.rejects(once, CircuitOpenError);
+    assert.equal(requests, 4, 'the throttled probe re-opened the breaker');
   });
 });
 

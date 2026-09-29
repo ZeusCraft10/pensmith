@@ -12,9 +12,11 @@
 //     a failed title / first-author check (`byo.asserted`);
 //   - the open-access PDF Unpaywall lists for its DOI (SRC-03): an entry with
 //     a DOI whose `oa_url` was recorded at ingest. `oa_url` is written only
-//     from Unpaywall's answer (open-access.ts enrichOpenAccess) — never from
-//     another adapter's open-access link (OpenAlex's primary location), which
-//     Pass 3 does not consult;
+//     from Unpaywall's answer, and only once that URL answered HTTP 200 with a
+//     PDF when asked the way Pass 3 asks it (open-access.ts enrichOpenAccess,
+//     review round 3: a landing page or an HTML bot wall is abstract-only) —
+//     never from another adapter's open-access link (OpenAlex's primary
+//     location), which Pass 3 does not consult;
 //   - the arXiv PDF of its arXiv id (the bib's `eprint`, or a DataCite arXiv
 //     DOI `10.48550/arXiv.<id>`, which Unpaywall does not index): Pass 3
 //     derives the URL from the id Pass 1 verified at arXiv, never from a URL
@@ -100,4 +102,25 @@ export function quotesWithoutFullText(
   return extractQuotes(draft)
     .filter((q) => !has(q.citekey))
     .map((q) => ({ citekey: q.citekey, quote: q.text, kind: q.kind }));
+}
+
+/**
+ * The corrective instruction for quotes from sources without full text — the
+ * text Phase 18's draft-containment.ts `quote-without-full-text` violation
+ * gives write's one corrective turn (and, when it persists, the section's
+ * `failure_reason`) at the Phase 18/19 merge (19-SUMMARY merge notes). Each
+ * quote is named by its citekey and first words; empty input → ''.
+ */
+export function describeQuotesWithoutFullText(quotes: readonly QuoteWithoutFullText[]): string {
+  if (quotes.length === 0) return '';
+  const shown = quotes.slice(0, 5).map((q) => {
+    const words = q.quote.split(/\s+/).filter(Boolean);
+    const head = words.slice(0, 8).join(' ');
+    return `[@${q.citekey}] "${head}${words.length > 8 ? ' …' : ''}"`;
+  });
+  const more = quotes.length > 5 ? `; … (${quotes.length - 5} more)` : '';
+  return (
+    `direct quote(s) from source(s) whose full text pensmith cannot check (full_text: false): ${shown.join('; ')}${more} — ` +
+    'paraphrase them, or quote only a source marked full_text: true'
+  );
 }

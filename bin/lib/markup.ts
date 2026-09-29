@@ -18,7 +18,9 @@
 // `jats:italic` and `mml:mi` included), so a title such as `x < y and z > w`
 // keeps its text. Pure: no I/O.
 
-const XML_ENTITIES: Readonly<Record<string, string>> = {
+import { lookupTable } from './lookup-table.js';
+
+const XML_ENTITIES: Readonly<Record<string, string>> = lookupTable({
   lt: '<',
   gt: '>',
   amp: '&',
@@ -32,7 +34,7 @@ const XML_ENTITIES: Readonly<Record<string, string>> = {
   rsquo: '’',
   ldquo: '“',
   rdquo: '”',
-};
+});
 
 /** `&amp;`, `&#38;`, `&#x26;` and the named entities above, decoded once; unknown entities are kept. */
 export function decodeEntities(s: string): string {
@@ -86,7 +88,7 @@ export function plainTextOpt(s: string | null | undefined): string | undefined {
 // the common forms into the characters they stand for.
 
 /** Accent commands → the Unicode combining mark. */
-const TEX_ACCENTS: Readonly<Record<string, string>> = {
+const TEX_ACCENTS: Readonly<Record<string, string>> = lookupTable({
   "'": '\u0301',
   '`': '\u0300',
   '^': '\u0302',
@@ -100,14 +102,14 @@ const TEX_ACCENTS: Readonly<Record<string, string>> = {
   H: '\u030B',
   k: '\u0328',
   r: '\u030A',
-};
+});
 
-const TEX_LETTERS: Readonly<Record<string, string>> = {
+const TEX_LETTERS: Readonly<Record<string, string>> = lookupTable({
   ss: 'ß', ae: 'æ', AE: 'Æ', oe: 'œ', OE: 'Œ', aa: 'å', AA: 'Å', o: 'ø', O: 'Ø', l: 'ł', L: 'Ł', i: 'ı', j: 'ȷ',
-};
+});
 
 /** Math-mode commands with a one-character plain rendering. */
-const TEX_SYMBOLS: Readonly<Record<string, string>> = {
+const TEX_SYMBOLS: Readonly<Record<string, string>> = lookupTable({
   alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε', zeta: 'ζ', eta: 'η', theta: 'θ',
   vartheta: 'ϑ', iota: 'ι', kappa: 'κ', lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', pi: 'π', rho: 'ρ', sigma: 'σ',
   tau: 'τ', upsilon: 'υ', phi: 'φ', varphi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω', Gamma: 'Γ', Delta: 'Δ',
@@ -115,7 +117,7 @@ const TEX_SYMBOLS: Readonly<Record<string, string>> = {
   sim: '~', times: '×', le: '≤', leq: '≤', ge: '≥', geq: '≥', pm: '±', infty: '∞', to: '→', rightarrow: '→',
   leftarrow: '←', cdot: '·', approx: '≈', ell: 'ℓ', neq: '≠', ne: '≠', partial: '∂', nabla: '∇', in: '∈',
   sqrt: '√', log: 'log', ln: 'ln', exp: 'exp', sin: 'sin', cos: 'cos', max: 'max', min: 'min',
-};
+});
 
 /** Commands whose argument is the text (`\emph{x}` → x). */
 const TEX_TEXT_COMMANDS = 'emph|textit|textbf|textsc|texttt|textrm|textsf|textup|mathrm|mathbf|mathit|mathcal|mathbb|mathsf|mathtt|text|mbox|operatorname|boldsymbol|bm';

@@ -66,6 +66,33 @@ test('own-source approvals: inside the project needs none; outside needs this us
   });
 });
 
+test('own-source approvals (review round 3): recording an approval never destroys a file this pensmith cannot read — a newer version or a damaged file is left as it is, with a one-line refusal', async () => {
+  await withLlmSandbox({ paper: false }, async (sb) => {
+    const p1 = path.join(sb.root, 'p1');
+    const p2 = path.join(sb.root, 'p2');
+    for (const d of [p1, p2]) fs.mkdirSync(d, { recursive: true });
+    const file = pensmithOwnSourceApprovalsPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    // Written by a newer pensmith: p1's approvals must survive p2's approval attempt.
+    const newer = `${JSON.stringify({ $schemaVersion: 2, papers: { [p1]: { byo_pdf_dirs: ['/x/pdfs'], zotero_collections: ['Thesis'] } } }, null, 2)}\n`;
+    fs.writeFileSync(file, newer);
+    await assert.rejects(
+      () => approveZoteroCollection(p2, 'Other'),
+      (e: Error & { exitCode?: number }) => e.exitCode === 1 && /written by a newer pensmith \(v2; this one writes v1\) — the approval was not recorded and the file was left as it is/.test(e.message),
+    );
+    assert.equal(fs.readFileSync(file, 'utf8'), newer, 'the newer file is byte-identical');
+    assert.equal(isZoteroCollectionApproved(p2, 'Other'), false, 'and nothing was approved (fail closed)');
+    // A damaged file: reads approve nothing, an update refuses and leaves it.
+    fs.writeFileSync(file, '{not json');
+    await assert.rejects(() => approveByoFolder(p2, path.join(sb.root, 'private')), /not valid JSON — the approval was not recorded/);
+    assert.equal(fs.readFileSync(file, 'utf8'), '{not json');
+    // A missing file is created as before.
+    fs.rmSync(file);
+    await approveZoteroCollection(p2, 'Other');
+    assert.equal(isZoteroCollectionApproved(p2, 'Other'), true);
+  });
+});
+
 test('SRC-15 (built CLI): a config.toml byo_pdf_dir outside the paper is not read by `research --yolo` without a terminal; approved at the gate it is', () => {
   const sb = sandbox('own-source-byo');
   const root = sb.project('paper');

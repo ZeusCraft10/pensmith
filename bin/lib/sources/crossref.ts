@@ -41,6 +41,7 @@ import { normalizeDoi } from '../doi.js';
 import { decodeEntities, plainText, plainTextOpt } from '../markup.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import type { SourceType } from '../schemas/source-types.js';
+import { lookupTable } from '../lookup-table.js';
 
 const BASE = 'https://api.crossref.org';
 const SERVICE = 'Crossref';
@@ -76,7 +77,7 @@ export interface CrossrefItem {
 }
 
 /** Crossref work types → CSL types (D-19-13). */
-const CSL_TYPE: Readonly<Record<string, SourceType>> = {
+const CSL_TYPE: Readonly<Record<string, SourceType>> = lookupTable({
   'journal-article': 'article-journal',
   'proceedings-article': 'paper-conference',
   book: 'book',
@@ -93,7 +94,7 @@ const CSL_TYPE: Readonly<Record<string, SourceType>> = {
   dissertation: 'thesis',
   'posted-content': 'preprint',
   dataset: 'dataset',
-};
+});
 
 /** The CSL type of a Crossref work type (`other` when Crossref names something else). */
 export function crossrefCslType(type: string | undefined): SourceType | undefined {
@@ -144,15 +145,18 @@ function people(list: CrossrefPerson[] | undefined): string[] {
  */
 export function stripJats(abstract: string | undefined): string | undefined {
   if (typeof abstract !== 'string') return undefined;
-  const text = decodeEntities(
-    abstract
+  const structure = (s: string): string =>
+    s
       .replace(/^\s*<(?:jats:)?title\b[^>]*>\s*(?:abstract|summary)\s*<\/(?:jats:)?title>/i, '')
       .replace(/<\/(?:jats:)?title>/gi, ': ')
-      .replace(/<\/(?:jats:)?(?:p|sec|list-item)>/gi, ' ')
-      .replace(/<[^>]+>/g, ''),
-  )
-    .replace(/\s+/g, ' ')
-    .trim();
+      .replace(/<\/(?:jats:)?(?:p|sec|list-item)>/gi, ' ');
+  const once = decodeEntities(structure(abstract).replace(/<[^>]+>/g, ''));
+  // Crossref often serves the abstract double-encoded (`Mercury&amp;#8217;s`,
+  // `&lt;p dir="ltr"&gt;&lt;b&gt;Introduction&lt;/b&gt;`): what the first pass
+  // decoded is markup and entities again. The second pass goes through
+  // markup.ts plainText — only known markup tags are removed, so a real
+  // `|S0/C3| < 1` keeps its `<` (review round 3).
+  const text = plainText(structure(once));
   return text.length > 0 ? text : undefined;
 }
 

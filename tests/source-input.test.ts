@@ -8,7 +8,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classifySourceInput, identifierFromHtml, lookupIdentifier } from '../bin/lib/source-input.js';
+import { classifySourceInput, identifierFromHtml, htmlBodyText, lookupIdentifier } from '../bin/lib/source-input.js';
+import * as zlib from 'node:zlib';
 
 const BYO_PDF = fileURLToPath(new URL('./fixtures/byo/attention-arxiv-layout.pdf', import.meta.url));
 
@@ -106,6 +107,39 @@ test('SRC-13: an HTML landing page is identified only by its own <meta> tags', (
   assert.deepEqual(identifierFromHtml(page('<meta name="citation_arxiv_id" content="1706.03762">')), { kind: 'arxiv', raw: '1706.03762', arxiv: '1706.03762' });
   assert.deepEqual(identifierFromHtml(page('<meta name="citation_pmid" content="31978945">')), { kind: 'pmid', raw: '31978945', pmid: '31978945' });
   assert.equal(identifierFromHtml(page('', '<p>We cite doi:10.1038/nature14539 here.</p>')), null, 'a DOI in the body is not the page\'s own');
+});
+
+test('SRC-13 (review round 3): an Open Journal Systems page — `DC.Identifier` = its internal id BEFORE `citation_doi` — is identified by its DOI', () => {
+  // The head of https://www.jstatsoft.org/article/view/v059i10 (OJS 3.3.0.20),
+  // trimmed to the identifier tags in their document order.
+  const ojs = [
+    '<meta name="generator" content="Open Journal Systems 3.3.0.20">',
+    '<meta name="DC.Identifier" content="v059i10"/>',
+    '<meta name="DC.Identifier.pageNumber" content="1 - 23"/>',
+    '<meta name="DC.Identifier.DOI" content="10.18637/jss.v059.i10"/>',
+    '<meta name="DC.Identifier.URI" content="https://www.jstatsoft.org/index.php/jss/article/view/v059i10"/>',
+    '<meta name="citation_journal_title" content="Journal of Statistical Software"/>',
+    '<meta name="citation_doi" content="10.18637/jss.v059.i10"/>',
+  ].join('\n');
+  const html = `<html><head>${ojs}</head><body></body></html>`;
+  assert.deepEqual(identifierFromHtml(html), { kind: 'doi', raw: '10.18637/jss.v059.i10', doi: '10.18637/jss.v059.i10' });
+  // Without citation_doi, OJS's DC.Identifier.DOI is read; with neither, a
+  // non-DOI DC.Identifier is skipped (no DOI), never taken as the page's id.
+  const noCitation = html.replace('<meta name="citation_doi" content="10.18637/jss.v059.i10"/>', '');
+  assert.deepEqual(identifierFromHtml(noCitation), { kind: 'doi', raw: '10.18637/jss.v059.i10', doi: '10.18637/jss.v059.i10' });
+  assert.equal(identifierFromHtml(noCitation.replace(/<meta name="DC\.Identifier\.DOI"[^>]*>/, '')), null);
+  // A later citation_doi beats an earlier generic dc.identifier that IS a DOI of something else (a handle-style URI first).
+  const both = '<meta name="dc.identifier" content="https://hdl.handle.net/1234/5678"><meta name="prism.doi" content="10.1038/nphys1170"><meta name="citation_doi" content="10.1038/nature14539">';
+  assert.deepEqual(identifierFromHtml(`<html><head>${both}</head></html>`), { kind: 'doi', raw: '10.1038/nature14539', doi: '10.1038/nature14539' });
+  // Live OJS servers (First Monday, AAAI) gzip the page for a client that asked
+  // for no encoding and send no Content-Encoding: the body is inflated first.
+  const gz = zlib.gzipSync(Buffer.from(html, 'utf8'));
+  const gzRes = { body: gz.toString('utf8'), bodyBytes: gz };
+  assert.equal(identifierFromHtml(gzRes.body), null, 'the raw gzip bytes hold no readable tag');
+  assert.deepEqual(identifierFromHtml(htmlBodyText(gzRes)), { kind: 'doi', raw: '10.18637/jss.v059.i10', doi: '10.18637/jss.v059.i10' });
+  assert.equal(htmlBodyText({ body: html, bodyBytes: Buffer.from(html) }), html, 'a plain body is its text');
+  const truncatedGz = gz.subarray(0, 12);
+  assert.equal(htmlBodyText({ body: 'x', bodyBytes: truncatedGz }), 'x', 'a broken gzip body falls back to the text');
 });
 
 test('SRC-13: an ISBN lookup goes to the registry\'s books adapter; without one the lookup FAILS (never "not found")', async () => {

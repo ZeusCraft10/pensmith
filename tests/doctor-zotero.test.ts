@@ -21,6 +21,7 @@ import { detectZoteroMcpServers } from '../bin/lib/ecosystem-presence.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
 import { _resetHostStateForTest, ZOTERO_LOCAL_ORIGIN } from '../bin/lib/http.js';
 import { atomicWriteFile } from '../bin/lib/atomic-write.js';
+import { closeSessionLog } from '../bin/lib/session-log.js';
 
 const KEY = 'zk-DOCTOR-SENTINEL-99a1b2';
 
@@ -67,7 +68,10 @@ async function isolated<T>(vars: Record<string, string | undefined>, fn: (e: Env
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
-    rmSync(base, { recursive: true, force: true });
+    // Drain the session log's write queue (an http record may still be
+    // appending into this data dir), then remove it.
+    await closeSessionLog();
+    rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 }
 

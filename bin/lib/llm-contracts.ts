@@ -25,6 +25,7 @@ import { parse as parseYaml } from 'yaml';
 import { PlanFrontmatterSchema } from './schemas/plan-frontmatter.js';
 import { SourceTierSchema } from './schemas/source-types.js';
 import { parseFrontmatter } from './frontmatter.js';
+import { lookupTable } from './lookup-table.js';
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -198,7 +199,7 @@ export function coerceDisambiguation(v: unknown): unknown {
   return { ...obj, ambiguous, scopes };
 }
 
-const TIER_SYNONYMS: Readonly<Record<string, string>> = Object.freeze({
+const TIER_SYNONYMS: Readonly<Record<string, string>> = lookupTable({
   'peer-reviewed': 'peer-reviewed',
   peerreviewed: 'peer-reviewed',
   'peer-review': 'peer-reviewed',

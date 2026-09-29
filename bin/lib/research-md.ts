@@ -28,6 +28,7 @@ import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { libraryPaths, tryLoadLibrary } from './library.js';
 import type { LibraryEntry } from './schemas/library.js';
+import { lookupTable } from './lookup-table.js';
 
 /**
  * The line that ends the generated research log. Identical to (and asserted
@@ -70,7 +71,7 @@ const ABSTRACT_CHARS = 600;
 const MAX_LISTED_AUTHORS = 3;
 
 /** Provenance-tag prefix → the tag RESEARCH.md shows. */
-const TAG_FOR_PREFIX: Readonly<Record<string, string>> = Object.freeze({
+const TAG_FOR_PREFIX: Readonly<Record<string, string>> = lookupTable({
   research: 'search',
   add: 'added',
   byo: 'bring-your-own',

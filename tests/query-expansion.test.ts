@@ -18,6 +18,7 @@ import {
   keywordGroups,
   topicPhrase,
   topicLabel,
+  topicAnchor,
   disciplineTerm,
   MIN_QUERIES,
   MAX_QUERIES,
@@ -31,8 +32,11 @@ test('expandTopicQueries: the topic phrase first, then keywords with the discipl
   const q = expandTopicQueries('attention mechanisms in neural networks', 'computer-science');
   assert.equal(q[0], 'attention mechanisms in neural networks', 'the brief\'s own words are the first query (the recorded cassette query)');
   assert.equal(q[1], 'attention mechanisms neural networks computer science');
-  assert.ok(q.includes('attention mechanisms computer science'));
-  assert.ok(q.includes('neural networks computer science'));
+  // Review round 3: every query keeps the topic's anchor (its first longest
+  // keyword group) — "neural networks computer science" alone is not about
+  // attention mechanisms.
+  assert.ok(q.every((x) => /\battention mechanisms\b/.test(x)), q.join(' | '));
+  assert.ok(q.includes('attention mechanisms neural networks review'));
   assert.equal(q.length, MAX_QUERIES);
   for (const x of q) assert.ok(words(x) <= MAX_QUERY_WORDS, x);
 });
@@ -57,10 +61,31 @@ test('expandTopicQueries: a leading course code is boilerplate; the discipline n
   assert.equal(topicPhrase('World War 2: causes and consequences'), 'World War 2: causes and consequences', 'a topic that merely contains a number is kept');
   const q = expandTopicQueries(t, 'history');
   assert.ok(q.every((x) => !/\bhistory history\b/.test(x)), q.join(' | '));
-  assert.ok(q.includes('intellectual history'), q.join(' | '));
-  assert.ok(q.includes('french revolution history'), q.join(' | '));
-  assert.ok(!q.includes('history'), 'the discipline name alone is not a query');
+  assert.ok(q.includes('french revolution intellectual history'), q.join(' | '));
+  assert.ok(q.includes('french revolution causes history'), q.join(' | '));
+  assert.ok(!q.includes('history') && !q.includes('intellectual history'), 'neither the discipline name nor a group without the subject is a query');
+  assert.ok(q.every((x) => /\bfrench revolution\b/i.test(x)), q.join(' | '));
   assert.ok(q.every((x) => !/\b210\b/.test(x)), 'the course number never reaches a query');
+});
+
+test('SRC-08 (review round 3): no expanded query is a lone keyword or a group without the topic\'s subject; a short scope is padded only with anchored queries', () => {
+  // The live runs that drew "Consistent Quantum Causes" from arXiv searched
+  // `causes` and `causes french`.
+  for (const discipline of ['history', 'other']) {
+    const q = expandTopicQueries('causes of the French Revolution', discipline);
+    assert.deepEqual(topicAnchor('causes of the French Revolution'), ['french', 'revolution']);
+    assert.ok(!q.includes('causes') && !q.includes('causes french') && !q.includes('causes history'), q.join(' | '));
+    assert.ok(q.every((x) => /\bfrench revolution\b/i.test(x)), q.join(' | '));
+  }
+  const ethics = expandTopicQueries('ethics of artificial intelligence in healthcare', 'other');
+  assert.ok(ethics.every((x) => /\bartificial intelligence\b/.test(x) && words(x) >= 3), ethics.join(' | '));
+  // A long phrase would be cut before its subject: its keywords go instead, anchor first.
+  const long = expandTopicQueries('a critical examination of the long-term economic and social consequences of the French Revolution', 'other');
+  assert.ok(long.every((x) => words(x) <= MAX_QUERY_WORDS && /\bfrench revolution\b/i.test(x)), long.join(' | '));
+  // The model proposed 3 queries: the 2 padded ones are anchored (never `social media` alone).
+  const padded = clampQueries(['instagram teen mood', 'screen time depression', 'social comparison adolescents'], 'social media use and adolescent depression', 'psychology');
+  assert.equal(padded.padded, 2);
+  for (const x of padded.queries.slice(3)) assert.ok(/\bsocial media\b/.test(x) && /\badolescent depression\b/.test(x), x);
 });
 
 test('expandTopicQueries: a one-word topic still yields MIN_QUERIES..MAX_QUERIES; no keyword → []', () => {
@@ -124,6 +149,12 @@ test('property: expandTopicQueries is deterministic, bounded, non-empty and dupl
       assert.equal(new Set(a.map((q) => q.toLowerCase())).size, a.length, 'no duplicate');
       if (topicKeywords(topicPhrase(topic)).length > 0) assert.ok(a.length >= MIN_QUERIES, `≥ ${MIN_QUERIES} for a topic with a keyword: ${JSON.stringify(topic)} → ${a.length}`);
       else assert.equal(a.length, 0);
+      // Anchored (review round 3): every query holds the anchor's first words.
+      const anchorWords = topicAnchor(topic).slice(0, 4);
+      for (const q of a) {
+        const qWords = keywordGroups(q).flat();
+        for (const w of anchorWords) assert.ok(qWords.includes(w), `"${q}" keeps the anchor word "${w}" (${JSON.stringify(topic)})`);
+      }
     }),
     { numRuns: 1000 },
   );

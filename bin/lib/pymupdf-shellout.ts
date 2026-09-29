@@ -50,6 +50,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
+import { lookupTable } from './lookup-table.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -107,7 +108,7 @@ export interface PymupdfResult {
   readonly info: Readonly<Record<string, string>>;
 }
 
-const META_TO_INFO: Readonly<Record<string, string>> = {
+const META_TO_INFO: Readonly<Record<string, string>> = lookupTable({
   title: 'Title',
   author: 'Author',
   subject: 'Subject',
@@ -116,7 +117,7 @@ const META_TO_INFO: Readonly<Record<string, string>> = {
   producer: 'Producer',
   creationDate: 'CreationDate',
   modDate: 'ModDate',
-};
+});
 
 /** The result file's JSON, validated; null when it is not the script's shape. */
 function readResult(raw: string): PymupdfResult | null {

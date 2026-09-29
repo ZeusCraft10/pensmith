@@ -209,17 +209,22 @@ test('SRC-01: an OA PDF location on a loopback listener that WOULD answer is ref
   }
 });
 
-test('GRND-14 (review round 2): the full-text flag is true exactly when Pass 3 can fetch the text — Unpaywall\'s PDF, the arXiv PDF of an arXiv id; never an adapter\'s own link', async () => {
+test('GRND-14 (review rounds 2 and 3): the full-text flag is true exactly when Pass 3 can fetch the text — Unpaywall\'s PDF, the arXiv PDF of an arXiv id; never an adapter\'s own link, nor a listed link that answers HTML', async () => {
   await liveLane(async (agent) => {
     const root = mkdtempSync(join(tmpdir(), 'pensmith-fulltext-agree-'));
     mkdirSync(join(root, '.paper'), { recursive: true });
     const open = `10.5555/${uniq('ft-open')}`;
     const adapterOnly = `10.5555/${uniq('ft-adapter')}`;
+    const walled = `10.5555/${uniq('ft-walled')}`;
     const arxivId = '2102.05095';
-    // Unpaywall: a PDF for `open`, none for `adapterOnly` (OpenAlex had reported one).
+    // Unpaywall: a PDF for `open`, none for `adapterOnly` (OpenAlex had reported one),
+    // and for `walled` a publisher link that answers an HTML bot wall (review round 3).
     unpaywallAnswer(agent, open, 'https://repo.example/open.pdf');
     unpaywallAnswer(agent, adapterOnly, null);
-    agent.get('https://repo.example').intercept({ path: '/open.pdf', method: 'GET' }).reply(200, PDF, { headers: { 'content-type': 'application/pdf' } });
+    unpaywallAnswer(agent, walled, 'https://publisher.example/doi/pdf/walled');
+    // Twice: the ingest check (its first bytes) and Pass 3's fetch.
+    agent.get('https://repo.example').intercept({ path: '/open.pdf', method: 'GET' }).reply(200, PDF, { headers: { 'content-type': 'application/pdf' } }).times(2);
+    agent.get('https://publisher.example').intercept({ path: '/doi/pdf/walled', method: 'GET' }).reply(403, '<html>Are you a robot?</html>', { headers: { 'content-type': 'text/html' } }).times(2);
     // The arXiv PDF, derived from the id (never a stored URL).
     agent.get('https://arxiv.org').intercept({ path: `/pdf/${arxivId}`, method: 'GET' }).reply(200, PDF, { headers: { 'content-type': 'application/pdf' } });
 
@@ -227,18 +232,20 @@ test('GRND-14 (review round 2): the full-text flag is true exactly when Pass 3 c
     const candidates: LibraryCandidate[] = [
       { ...base, citekey: 'open2021', source: 'crossref', doi: open, title: 'Open work', type: 'article-journal' },
       { ...base, citekey: 'adapter2021', source: 'openalex', doi: adapterOnly, title: 'Adapter-linked work', type: 'article-journal', oa_pdf_url: 'https://publisher.example/adapter.pdf' },
+      { ...base, citekey: 'walled2021', source: 'crossref', doi: walled, title: 'Walled work', type: 'article-journal' },
       { ...base, citekey: 'arxiv2021', source: 'openalex', doi: `10.48550/arXiv.${arxivId}`, title: 'Space-time attention', oa_pdf_url: `https://arxiv.org/pdf/${arxivId}` },
       { ...base, citekey: 'pmc2021', source: 'pubmed', pmid: '31978945', pmcid: 'PMC7092803', title: 'A PubMed-only work', type: 'article-journal' },
     ];
     const oa = await enrichOpenAccess(candidates);
-    assert.equal(oa.problem, null);
+    assert.equal(oa.unconfirmed, 1);
+    assert.match(oa.problem ?? '', /1 link\(s\) Unpaywall lists did not answer with a PDF \(publisher\.example: HTTP 403\), so they count as abstract-only/);
     await upsertSources(root, candidates, { provenance: 'research' });
     const lib = await loadLibrary(root);
     const bibPath = join(root, '.paper', 'CITATIONS.bib');
     const bib = new Map((await parseBibFileAt(readFileSync(bibPath, 'utf8'), bibPath)).map((e) => [String((e as { id?: string }).id), e as { DOI?: string }]));
 
     const flags = new Map(lib.entries.map((e) => [e.citekey, fullTextAvailable(e)]));
-    assert.deepEqual(Object.fromEntries(flags), { open2021: true, adapter2021: false, arxiv2021: true, pmc2021: false });
+    assert.deepEqual(Object.fromEntries(flags), { open2021: true, adapter2021: false, walled2021: false, arxiv2021: true, pmc2021: false });
     for (const e of lib.entries) {
       const [r] = await runPass3(QUOTED(e.citekey), bib);
       const fetched = r !== undefined && r.verdict !== 'PDF_UNAVAILABLE';

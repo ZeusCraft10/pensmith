@@ -325,3 +325,30 @@ test('SRC-12 (review round 2): title capitals are brace-protected where they are
   assert.match(r.stdout, /Attention is all you need\./);
   assert.match(r.stdout, /The genome sequence of Drosophila melanogaster\./);
 });
+
+test('SRC-12 (review round 3): hyphenated Title Case compounds are title casing, not inner capitals — sentence-case styles print them in lower case; COVID-19 / mRNA-based stay protected', (t) => {
+  const cold = { citekey: 'almeida2006', title: 'Neural Substrate of Cold-Seeking Behavior in Endotoxin Shock', authors: ['Almeida, M. C.'], year: 2006, doi: '10.1371/journal.pone.0000001', venue: 'PLoS ONE', type: 'article-journal' };
+  const rt = { citekey: 'ren2015', title: 'Real-Time Object Detection with Region Proposal Networks', authors: ['Ren, S.'], year: 2015, doi: '10.5555/rt', venue: 'Journal of Things', type: 'article-journal' };
+  const covid = { citekey: 'smith2021', title: 'Long-Term Outcomes of COVID-19 after mRNA-Based Vaccination', authors: ['Smith, J.'], year: 2021, doi: '10.5555/covid', venue: 'Journal of Things', type: 'article-journal' };
+  const bib = renderBibtex([cold, rt, covid]);
+  assert.match(bib, /title = \{Neural Substrate of Cold-Seeking Behavior in Endotoxin Shock\}/);
+  assert.match(bib, /title = \{Real-Time Object Detection with Region Proposal Networks\}/);
+  assert.match(bib, /title = \{Long-Term Outcomes of \{COVID\}-19 after \{mRNA\}-Based Vaccination\}/);
+  const pandoc = pandocBinary();
+  if (pandoc === null) {
+    t.diagnostic('pandoc is not on PATH: the citeproc half of this check needs it (the bib half ran above)');
+    return;
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-pandoc-apa-hyphen-'));
+  fs.writeFileSync(path.join(dir, 'refs.bib'), bib);
+  fs.writeFileSync(path.join(dir, 'doc.md'), 'Claims [@almeida2006; @ren2015; @smith2021].\n');
+  const r = spawnSync(
+    pandoc,
+    ['doc.md', '--citeproc', '--bibliography', 'refs.bib', '--csl', path.join(REPO, 'templates', 'citation-styles', 'apa.csl'), '-t', 'plain', '--wrap=none'],
+    { cwd: dir, encoding: 'utf8' },
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Neural substrate of cold-seeking behavior in endotoxin shock\./);
+  assert.match(r.stdout, /Real-time object detection with region proposal networks\./);
+  assert.match(r.stdout, /Long-term outcomes of COVID-19 after mRNA-based vaccination\./);
+});

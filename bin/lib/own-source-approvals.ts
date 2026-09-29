@@ -33,7 +33,12 @@
 // Approvals live in the pensmith data dir (paths.ts
 // pensmithOwnSourceApprovalsPath), keyed by the real path of the project
 // root, never in `.paper/`. A missing, unreadable or invalid approvals file
-// approves nothing (fail closed: the user is asked again).
+// approves nothing (fail closed: the user is asked again). Recording an
+// approval never destroys the file (review round 3): it is read through the
+// versioned loader, and a file written by a newer pensmith, or one that does
+// not parse, is left exactly as it is — the approval is refused with one line
+// saying why — instead of being replaced by this one approval (which would
+// drop every other paper's).
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -41,6 +46,8 @@ import { z } from 'zod';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { pensmithOwnSourceApprovalsPath } from './paths.js';
+import { loadAndMigrate, ForwardIncompatError, SchemaValidationError } from './migrations/loader.js';
+import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 
 export const CURRENT_OWN_SOURCE_APPROVALS_VERSION = 1;
 
@@ -97,11 +104,40 @@ function paperKey(root: string): string {
   return pathKey(realPath(root));
 }
 
+/** A approvals file this pensmith must not overwrite (newer, or damaged): nothing was changed. */
+export class OwnSourceApprovalsUnwritableError extends PensmithError {
+  constructor(file: string, why: string) {
+    super(
+      `${file}: ${why} — the approval was not recorded and the file was left as it is ` +
+        '(upgrade pensmith, or move the file aside to start the approvals over)',
+      EXIT_ERROR,
+    );
+    this.name = 'OwnSourceApprovalsUnwritableError';
+  }
+}
+
+/** The approvals file for an update: missing → empty; newer or damaged → OwnSourceApprovalsUnwritableError. */
+async function loadForUpdate(file: string): Promise<OwnSourceApprovals> {
+  if (!fs.existsSync(file)) return emptyApprovals();
+  try {
+    return await loadAndMigrate({
+      file,
+      schema: OwnSourceApprovalsSchema,
+      schemaName: 'own-source-approvals',
+      currentVersion: CURRENT_OWN_SOURCE_APPROVALS_VERSION,
+    });
+  } catch (e) {
+    if (e instanceof ForwardIncompatError) throw new OwnSourceApprovalsUnwritableError(file, `written by a newer pensmith (v${e.diskVersion}; this one writes v${e.codeVersion})`);
+    const why = e instanceof SchemaValidationError ? 'not a valid approvals file' : e instanceof SyntaxError ? 'not valid JSON' : `unreadable (${(e as Error).message.split(/\r?\n/)[0] ?? 'error'})`;
+    throw new OwnSourceApprovalsUnwritableError(file, why);
+  }
+}
+
 async function update(root: string, mutate: (paper: { byo_pdf_dirs: string[]; zotero_collections: string[] }) => void): Promise<void> {
   const file = pensmithOwnSourceApprovalsPath();
   await fs.promises.mkdir(path.dirname(file), { recursive: true });
   await withLock(file, async () => {
-    const all = readApprovals(file);
+    const all = await loadForUpdate(file);
     const key = paperKey(root);
     const paper = all.papers[key] ?? { byo_pdf_dirs: [], zotero_collections: [] };
     mutate(paper);

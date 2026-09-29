@@ -76,8 +76,12 @@ export type ByoOutcome =
     }
   | { readonly file: string; readonly status: 'refused' | 'skipped'; readonly reason: string; readonly code: ByoRefusal };
 
-/** Why a PDF was refused (strict) or skipped: unreadable file, no text, no confident match, no network. */
-export type ByoRefusal = 'unreadable' | 'image-only' | 'unidentified' | 'offline';
+/**
+ * Why a PDF was refused (strict) or skipped: unreadable file, no text, no
+ * confident match, no network, or an unexpected error while ingesting that one
+ * file (`failed`: ingestByoPdfs reports it and goes on with the next PDF).
+ */
+export type ByoRefusal = 'unreadable' | 'image-only' | 'unidentified' | 'offline' | 'failed';
 
 export interface ByoIngestOptions {
   /** The provenance tag of new entries: `byo` (folder ingest), `add` (a single `add <file.pdf>`). */
@@ -210,6 +214,13 @@ export interface Prepared {
   readonly sha256: string;
 }
 
+/** A file-system error's code (`EIO`, `EACCES`, `EBUSY` …), else the first line of its message. */
+function fsErrorLabel(e: unknown): string {
+  const code = (e as { code?: unknown } | null)?.code;
+  if (typeof code === 'string' && code !== '') return code;
+  return ((e instanceof Error ? e.message : String(e)).split(/\r?\n/)[0] ?? '').slice(0, 160);
+}
+
 async function prepare(file: string): Promise<Prepared | { skip: string }> {
   let st: fs.Stats;
   try {
@@ -219,7 +230,15 @@ async function prepare(file: string): Promise<Prepared | { skip: string }> {
   }
   if (!st.isFile()) return { skip: 'not a file' };
   if (st.size > MAX_PDF_BYTES) return { skip: `larger than the ${MAX_PDF_BYTES / (1024 * 1024)} MB limit` };
-  const bytes = await fsp.readFile(file);
+  let bytes: Buffer;
+  try {
+    bytes = await fsp.readFile(file);
+  } catch (e) {
+    // A file that stats but cannot be read: locked by another app (EBUSY on
+    // Windows), an online-only sync placeholder that cannot be hydrated, no
+    // permission, an I/O error. A bad PDF never aborts an ingest (review round 3).
+    return { skip: `could not be read (${fsErrorLabel(e)})` };
+  }
   if (!hasPdfMagic(bytes)) return { skip: 'not a PDF (no %PDF- header)' };
   return { bytes, sha256: sha256Hex(bytes) };
 }
@@ -343,10 +362,27 @@ export async function ingestByoPdf(root: string, file: string, opts: ByoIngestOp
   return { ...base, warning: warnStore ? `${why}; ${warnStore}` : why };
 }
 
-/** Ingest several PDFs in order, then refresh RESEARCH.md's sources block once. */
+/**
+ * Ingest several PDFs in order, then refresh RESEARCH.md's sources block once.
+ * One PDF never aborts the others: an unexpected error while ingesting a file
+ * is that file's `skipped` (`refused` in strict mode) outcome, code `failed` —
+ * except a strict ingest's OfflineEgressError, which is the caller's to report.
+ */
 export async function ingestByoPdfs(root: string, files: readonly string[], opts: ByoIngestOptions = {}): Promise<ByoOutcome[]> {
   const outcomes: ByoOutcome[] = [];
-  for (const f of files) outcomes.push(await ingestByoPdf(root, f, opts));
+  for (const f of files) {
+    try {
+      outcomes.push(await ingestByoPdf(root, f, opts));
+    } catch (e) {
+      if (opts.strict && isOfflineEgressError(e)) throw e;
+      outcomes.push({
+        file: path.resolve(f),
+        status: opts.strict ? 'refused' : 'skipped',
+        reason: `could not be ingested (${fsErrorLabel(e)})`,
+        code: 'failed',
+      });
+    }
+  }
   if (outcomes.some((o) => o.status === 'added' || o.status === 'merged')) await refreshResearchSources(root);
   return outcomes;
 }
@@ -368,8 +404,10 @@ export interface PdfForRecord {
  * that work (SRC-13: a wrong work is never attached silently). It is when its
  * embedded metadata or its arXiv margin stamp carries the record's DOI / arXiv
  * id, or when its own title and first author match the record's
- * (pdf-identify.ts isOwnWork: the Pass-1 thresholds, or the title printed as a
- * title with the author below). No network: only the record already fetched.
+ * (pdf-identify.ts isOwnWork: the Pass-1 thresholds, the title printed as a
+ * title with the author below, or the record's DOI on a labelled line of its
+ * own with the title and byline anywhere on page 1). No network: only the
+ * record already fetched.
  */
 export async function checkPdfForRecord(
   file: string,
@@ -399,7 +437,7 @@ export async function checkPdfForRecord(
     (doi !== null && meta.doi !== null && normalizeDoi(meta.doi) === doi) ||
     (arxiv !== null && ((meta.arxiv !== null && normArxiv(meta.arxiv) === arxiv) || stamped.includes(arxiv)));
   const firstPage = ex.pages[0] ?? ex.text.slice(0, 6000);
-  if (selfIdentified || (title !== '' && isOwnWork({ title, authors: [...(record.authors ?? [])] }, firstPage, localPdfMetadata(ex)))) {
+  if (selfIdentified || (title !== '' && isOwnWork({ title, authors: [...(record.authors ?? [])], doi }, firstPage, localPdfMetadata(ex)))) {
     return { ...base, matches: true, why: null };
   }
   const first = record.authors?.[0];

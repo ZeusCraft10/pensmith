@@ -8,6 +8,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -150,6 +152,76 @@ test('SRC-15: a non-PDF, a missing file and an unusable folder argument are repo
   assert.equal(strict.status, 'refused');
   assert.throws(() => resolveByoDirArg(path.join(dir, 'nope')), /--pdfs .*: no such folder/);
   assert.equal(resolveByoDirArg(dir), dir);
+});
+
+test('SRC-13 (review round 3): `add <doi> --pdf` accepts a PLOS-style PDF whose title block follows the body text and which prints its own DOI on a labelled line', async () => {
+  const doc = await PDFDocument.create();
+  doc.setCreationDate(new Date(0));
+  doc.setModificationDate(new Date(0));
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.addPage([612, 792]);
+  const lines = [
+    'PLoS Medicine  |  www.plosmedicine.org 0696',
+    'Essay',
+    'August 2005  |  Volume 2  |  Issue 8  |  e124',
+    ...Array.from({ length: 24 }, (_, i) => `findings of study ${i} are sometimes refuted by later evidence and`),
+    'Why Most Published Research Findings',
+    'Are False',
+    'John P. A. Ioannidis',
+    'Citation: Ioannidis JPA (2005) Why most published',
+    'research findings are false. PLoS Med 2(8): e124.',
+    'DOI: 10.1371/journal.pmed.0020124',
+  ];
+  lines.forEach((l, i) => page.drawText(l, { x: 56, y: 760 - i * 20, size: 9, font }));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-byo-plos-'));
+  const file = path.join(dir, 'plosmed.pdf');
+  fs.writeFileSync(file, Buffer.from(await doc.save({ useObjectStreams: false })));
+  const record = { title: 'Why Most Published Research Findings Are False', authors: ['Ioannidis, John P. A.'], doi: '10.1371/journal.pmed.0020124', arxiv: null };
+  const checked = await checkPdfForRecord(file, record);
+  assert.equal(checked.matches, true, String(checked.why));
+  // Another work's DOI request against the same PDF is still refused.
+  const other = await checkPdfForRecord(file, { title: 'Deep learning', authors: ['LeCun, Yann'], doi: '10.1038/nature14539', arxiv: null });
+  assert.equal(other.matches, false);
+});
+
+test('SRC-15 (review round 3): a PDF that stats but cannot be read (EIO / EBUSY / EACCES) is skipped with its reason; an unexpected per-file error never aborts the folder', async (t) => {
+  const root = paper();
+  const dir = folderWith('attention-arxiv-layout.pdf', 'doi-footer.pdf');
+  fs.writeFileSync(path.join(dir, 'locked.pdf'), '%PDF-1.4 locked by another app');
+  fs.writeFileSync(path.join(dir, 'weird.pdf'), '%PDF-1.4 a file whose stat misbehaves');
+  const realRead = fsPromises.readFile;
+  const realStat = fsPromises.stat;
+  t.mock.method(fsPromises, 'readFile', (async (file: fs.PathLike | fsPromises.FileHandle, ...rest: unknown[]) => {
+    if (typeof file === 'string' && path.basename(file) === 'locked.pdf') {
+      throw Object.assign(new Error('EBUSY: resource busy or locked, open'), { code: 'EBUSY' });
+    }
+    return (realRead as (...a: unknown[]) => Promise<unknown>)(file, ...rest);
+  }) as typeof fsPromises.readFile);
+  t.mock.method(fsPromises, 'stat', (async (file: fs.PathLike, ...rest: unknown[]) => {
+    if (typeof file === 'string' && path.basename(file) === 'weird.pdf') {
+      return { isFile: (): boolean => { throw new Error('EIO: i/o error, read'); } } as unknown as fs.Stats;
+    }
+    return (realStat as (...a: unknown[]) => Promise<unknown>)(file, ...rest);
+  }) as typeof fsPromises.stat);
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const files = (await listPdfsInDir(dir)).sort();
+  assert.deepEqual(files.map((f) => path.basename(f)), ['attention-arxiv-layout.pdf', 'doi-footer.pdf', 'locked.pdf', 'weird.pdf']);
+  const outcomes = await ingestByoPdfs(root, files);
+  assert.deepEqual(outcomes.map((o) => [path.basename(o.file), o.status, 'code' in o ? o.code : null, 'reason' in o ? o.reason : null]), [
+    ['attention-arxiv-layout.pdf', 'added', null, null],
+    ['doi-footer.pdf', 'added', null, null],
+    ['locked.pdf', 'skipped', 'unreadable', 'could not be read (EBUSY)'],
+    ['weird.pdf', 'skipped', 'failed', 'could not be ingested (EIO: i/o error, read)'],
+  ]);
+  assert.deepEqual((await loadLibrary(root)).entries.map((e) => e.citekey).sort(), ['aspelmeyer2009', 'vaswani2017']);
+  // `add <file.pdf>` (strict) refuses the unreadable file with the same reason.
+  const strict = await ingestByoPdf(root, files[2]!, { strict: true, provenance: 'add' });
+  assert.deepEqual({ status: strict.status, reason: 'reason' in strict ? strict.reason : '' }, { status: 'refused', reason: 'could not be read (EBUSY)' });
+  assert.match(describeByoOutcome(outcomes[2]!, 'pensmith add').line, /locked\.pdf skipped — could not be read \(EBUSY\)/);
 });
 
 test('SRC-15: new --pdfs records [sources] byo_pdf_dir relative to the project when inside it', async () => {

@@ -414,3 +414,79 @@ test('SRC-13 (review round 2): when the OpenAlex title search fails (keyless bud
   assert.deepEqual(asked, ['Attention Is All You Need']);
   assert.equal(r.kind === 'identified' && r.candidate, VASWANI);
 });
+
+/** A one-page extraction whose page 1 is `lines` (no metadata). */
+function pageOf(lines: readonly string[]): PdfExtraction {
+  const page = lines.join('\n');
+  return { text: `\n${page}`, pages: [page], numpages: 1, info: {}, xmp: null, imageOnly: false, engine: 'pdf-parse' };
+}
+
+test('SRC-13 (review round 3): a year in the TITLE is not the PDF\'s year — the 2018 record of "Lessons from the 2008 Financial Crisis" is identified', async () => {
+  const lines = [
+    'Lessons from the 2008 Financial Crisis for Central Banking',
+    'Jane Q. Economist',
+    'Department of Economics, Example University',
+    'Abstract',
+    'Ten years after the crisis of 2008, central banks still disagree about what it taught them.',
+  ];
+  const record = cand({ doi: '10.5555/lessons.2018', title: 'Lessons from the 2008 Financial Crisis for Central Banking', authors: ['Economist, Jane Q.'], year: 2018 });
+  const undated = localPdfMetadata(pageOf(lines));
+  assert.equal(undated.year, null, 'no dated line on page 1: no year (never the first number on the page)');
+  const r = await identifyPdf(pageOf(lines), deps({ title: () => [record] }).deps);
+  assert.equal(r.kind === 'identified' && r.candidate, record, r.kind === 'unidentified' ? r.reason : '');
+  // A dated line (the journal's running head) is the PDF's year; the title's 2008 still is not.
+  const dated = localPdfMetadata(pageOf(['Journal of Monetary Examples 12 (2018) 1-20', ...lines]));
+  assert.equal(dated.year, 2018);
+  assert.equal(localPdfMetadata(pageOf([...lines, '© 2019 The Author. Published by Example Press.'])).year, 2019);
+  // …so a genuine later re-post is still refused.
+  const repost = cand({ doi: '10.5555/lessons.repost', title: record.title, authors: record.authors, year: 2025 });
+  const refused = await identifyPdf(pageOf(['Journal of Monetary Examples 12 (2018) 1-20', ...lines]), deps({ title: () => [repost] }).deps);
+  assert.equal(refused.kind, 'unidentified');
+  assert.match(refused.kind === 'unidentified' ? refused.reason : '', /dated 2025 .*after the year the PDF shows \(2018\) — a later re-post/);
+});
+
+// Laid out like the PLOS Medicine printable PDF of 10.1371/journal.pmed.0020124:
+// a pipe-separated running head, then the two-column body text, and only then
+// (in extraction order) the title block, byline, citation box and the labelled
+// DOI line.
+const PLOS_HEAD = [
+  'PLoS Medicine  |  www.plosmedicine.org0696',
+  'Essay',
+  'Open access, freely available online',
+  'August 2005  |  Volume 2  |  Issue 8  |  e124',
+];
+const PLOS_BODY = Array.from({ length: 30 }, (_, i) => `findings of study ${i} are sometimes refuted by later evidence and`);
+const PLOS_TITLE_BLOCK = [
+  'Why Most Published Research Findings ',
+  'Are False ',
+  'John P. A. Ioannidis',
+  'Citation: Ioannidis JPA (2005) Why most published ',
+  'research findings are false. PLoS Med 2(8): e124.',
+  'Copyright: © 2005 John P. A. Ioannidis. This is an ',
+  'open-access article distributed under the terms ',
+];
+const IOANNIDIS = cand({ doi: '10.1371/journal.pmed.0020124', title: 'Why Most Published Research Findings Are False', authors: ['Ioannidis, John P. A.'], year: 2005 });
+
+test('SRC-13 (review round 3): a PLOS-style PDF whose title block follows the body text is identified by its own labelled DOI — not refused as "a work the PDF cites"', async () => {
+  const { labelledDoiLines, isOwnWork } = await import('../bin/lib/pdf-identify.js');
+  const plos = [...PLOS_HEAD, ...PLOS_BODY, ...PLOS_TITLE_BLOCK, 'DOI: 10.1371/journal.pmed.0020124', 'Summary'];
+  const local = localPdfMetadata(pageOf(plos));
+  assert.notEqual(local.title, 'August 2005 | Volume 2 | Issue 8 | e124', 'the running head is never the title');
+  assert.equal(local.year, 2005);
+  assert.deepEqual(labelledDoiLines(plos.join('\n')), ['10.1371/journal.pmed.0020124']);
+  const { deps: d, calls } = deps({ doi: (x) => (x === IOANNIDIS.doi ? lookupFound(IOANNIDIS) : lookupNotFound('404')) });
+  const r = await identifyPdf(pageOf(plos), d);
+  assert.equal(r.kind === 'identified' && r.candidate, IOANNIDIS, r.kind === 'unidentified' ? r.reason : '');
+  assert.equal(r.kind === 'identified' && r.via, 'text-doi');
+  assert.deepEqual(calls.doi, [IOANNIDIS.doi]);
+  // The DOI alone is not enough: without the title block it is a cited work…
+  const noTitle = [...PLOS_HEAD, ...PLOS_BODY, 'DOI: 10.1371/journal.pmed.0020124'];
+  assert.equal(isOwnWork(IOANNIDIS, noTitle.join('\n'), localPdfMetadata(pageOf(noTitle))), false);
+  // …and a reference wrapped onto its own labelled line, below the cited
+  // title's author line, is not the PDF's own DOI either.
+  const reference = [...PLOS_HEAD, ...PLOS_BODY, '12. Ioannidis JPA (2005) Why most published research', 'findings are false.', 'doi:10.1371/journal.pmed.0020124'];
+  assert.equal(isOwnWork(IOANNIDIS, reference.join('\n'), localPdfMetadata(pageOf(reference))), false);
+  // A line that says more than the DOI is not a labelled DOI line.
+  assert.deepEqual(labelledDoiLines('See doi:10.1371/journal.pmed.0020124 for the data.'), []);
+  assert.deepEqual(labelledDoiLines('https://doi.org/10.1038/nature14539'), ['10.1038/nature14539']);
+});

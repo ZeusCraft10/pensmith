@@ -173,6 +173,25 @@ test('SRC-13: a failed lookup reports `lookup failed (<reason>)`, exit 1, nothin
   assert.equal(fs.existsSync(path.join(root, '.paper', 'LIBRARY.json')), false);
 });
 
+test('SRC-13 (review round 3): Crossref\'s 404 is "not found" only for a Crossref DOI — a DataCite DOI (Zenodo) says which agency registered it; an unknown prefix is not found (doi.org RA lookup, recorded)', async () => {
+  const root = paper();
+  const notFound = { lookupById: async () => lookupNotFound('HTTP 404 (Crossref has no record of this DOI)') };
+  const zenodo = await withCrossref(notFound, () => runAdd(root, { source: 'https://doi.org/10.5281/zenodo.3242074' }));
+  assert.equal(zenodo.result['exitCode'], 1);
+  assert.match(zenodo.stderr, /pensmith add: DOI 10\.5281\/zenodo\.3242074: registered with DataCite, not Crossref — this version adds DOIs registered with Crossref only \(an arXiv DataCite DOI is read as its arXiv id\); Crossref has no record of it — nothing added\./);
+  assert.doesNotMatch(zenodo.stderr, /check the identifier/);
+  const bogus = await withCrossref(notFound, () => runAdd(root, { source: '10.99999/not-a-real-work' }));
+  assert.equal(bogus.result['exitCode'], 1);
+  assert.match(bogus.stderr, /DOI 10\.99999\/not-a-real-work: not found \(no registration agency holds the DOI prefix 10\.99999\) — nothing added; check the identifier\./);
+  const crossref = await withCrossref(notFound, () => runAdd(root, { source: '10.1038/not-a-real-work' }));
+  assert.match(crossref.stderr, /DOI 10\.1038\/not-a-real-work: not found \(HTTP 404 \(Crossref has no record of this DOI\)\) — nothing added; check the identifier\./);
+  // Only the prefix left for doi.org.
+  const ra = httpRecords(root).filter((u) => u.startsWith('https://doi.org/'));
+  assert.ok(ra.includes('https://doi.org/ra/10.5281') && ra.includes('https://doi.org/ra/10.99999'), JSON.stringify(ra));
+  for (const u of ra) assert.match(u, /^https:\/\/doi\.org\/ra\/10\.\d+$/, 'a prefix, never the DOI');
+  assert.equal(fs.existsSync(path.join(root, '.paper', 'LIBRARY.json')), false);
+});
+
 test('SRC-11/SRC-13: `add isbn:<ISBN>` goes to the books adapter by registry name', async () => {
   const root = paper();
   const hasBooks = 'books' in (sources as unknown as Record<string, unknown>);

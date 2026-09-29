@@ -522,19 +522,6 @@ export function s2ApiKeyValue(): string | undefined {
   return raw !== undefined && raw.trim().length > 0 ? raw.trim() : undefined;
 }
 
-let _s2WarnedOnce = false;
-
-/** Presence-only accessor for PENSMITH_S2_API_KEY (D-16): the value never leaves here. */
-export function getS2ApiKey(): { present: boolean; name: 'PENSMITH_S2_API_KEY' } {
-  const raw = process.env['PENSMITH_S2_API_KEY'];
-  const present = !!(raw && raw.length > 0);
-  if (!present && !_s2WarnedOnce) {
-    _s2WarnedOnce = true;
-    log().warn({ event: 'runtime.s2.keyless', envName: 'PENSMITH_S2_API_KEY' });
-  }
-  return { present, name: 'PENSMITH_S2_API_KEY' };
-}
-
 /** The provider key variables worth reporting (names only) for capability facts and doctor. */
 export async function providerKeyVariables(): Promise<Array<{ name: string; api_key_env: string }>> {
   const out: Array<{ name: string; api_key_env: string }> = [

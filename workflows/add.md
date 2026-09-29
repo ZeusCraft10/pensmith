@@ -84,7 +84,12 @@ with an identifier and attaches that PDF as the work's bring-your-own copy
    two (D-19-05): found → the record is added; not found → `not found (<why>) —
    nothing added`, exit 1; the lookup failed (HTTP 503, rate limit, network) →
    `lookup failed (<reason>) — nothing added`, exit 1. A failed lookup is never
-   read as "no such work". Offline with no recorded answer it is `DOI
+   read as "no such work". Crossref's 404 is "not found" only for a DOI Crossref
+   registers: pensmith asks doi.org which agency holds the DOI's prefix (only
+   the prefix is sent), and a DataCite DOI (Zenodo, Figshare, Dryad) is
+   `registered with DataCite, not Crossref — this version adds DOIs registered
+   with Crossref only … — nothing added` (a failure, never "check the
+   identifier"); a prefix no agency holds is `not found`. Offline with no recorded answer it is `DOI
    verification unavailable (offline) — <id> NOT added; re-run online to verify
    and add it` (arXiv / PMID / ISBN likewise), exit 1; under `--dry-run` the
    line reads `(dry-run)` and exits 0. A reserved `--dry-run` identifier is
@@ -97,7 +102,11 @@ with an identifier and attaches that PDF as the work's bring-your-own copy
    `text/html` is `not a PDF (got text/html)`, exit 1 — the page never reaches
    the PDF parser) and then identified like a local PDF; an HTML page must
    declare its own DOI / arXiv id / PMID in its `<meta>` tags (a DOI merely
-   mentioned in the page is never taken). Offline, only an exact recorded answer
+   mentioned in the page is never taken). The tags are read by name priority —
+   `citation_doi`, `DC.Identifier.DOI`, `prism.doi`, then a `DC.Identifier`
+   whose value IS a DOI — so an Open Journal Systems page whose first
+   `DC.Identifier` is its internal article id is still identified by its DOI;
+   a page a server gzips without saying so (some OJS sites) is inflated first. Offline, only an exact recorded answer
    is used; otherwise the named offline refusal.
 
 4. **A PDF** is read in the SEC-02 worker (pdf-parse, PyMuPDF fallback) and

@@ -22,6 +22,8 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { installMockAgent } from '../helpers/local-servers/mock-agent.js';
 import { MCP_BIN, sandbox } from '../helpers/paper-cli-harness.js';
 import { pullZoteroIntoLibrary } from '../../bin/lib/zotero-ingest.js';
+import { search as zoteroSearch } from '../../bin/lib/sources/zotero.js';
+import { setActivePaperRoot } from '../../bin/lib/paths.js';
 import { _resetHostStateForTest } from '../../bin/lib/http.js';
 import { SOURCES_START, SOURCES_END } from '../../bin/lib/research-md.js';
 import { EXIT_APPROVAL } from '../../bin/lib/exit-codes.js';
@@ -191,6 +193,30 @@ test('tier-contract (SRC-16, review round 2): items of a `[sources] zotero_colle
   }
   assert.match(tier2Message, /\[sources\] zotero_collection "Therapy notes" has not been approved for this paper; nothing was added/);
   assert.equal(existsSync(join(tier2, '.paper', 'LIBRARY.json')), false);
+  // Tier 2's per-query search in the same state reads nothing (no request) and says why.
+  {
+    const restoreEnv = new Map(Object.keys(vars).map((k) => [k, process.env[k]]));
+    for (const [k, v] of Object.entries(vars)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    setActivePaperRoot(tier2);
+    const m = installMockAgent();
+    try {
+      const reasons: string[] = [];
+      const hits = await zoteroSearch('attention', { onFailure: (r) => reasons.push(r) });
+      assert.deepEqual(hits, []);
+      assert.deepEqual(m.agent.pendingInterceptors(), []);
+      assert.match(reasons[0] ?? '', /zotero_collection "Therapy notes" has not been approved for this paper, so Zotero was not searched/);
+    } finally {
+      await m.restore();
+      setActivePaperRoot(null);
+      for (const [k, v] of restoreEnv) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  }
 
   // ---- Tier 1: the same refusal from the built MCP server's tool ----
   const transport = new StdioClientTransport({ command: process.execPath, args: [MCP_BIN], env: sb.env({ PENSMITH_PAPER_ROOT: tier1 }), cwd: tier1, stderr: 'ignore' });
@@ -203,6 +229,18 @@ test('tier-contract (SRC-16, review round 2): items of a `[sources] zotero_colle
     assert.equal(body.exit_code, EXIT_APPROVAL);
     assert.match(body.message, /\[sources\] zotero_collection "Therapy notes" has not been approved for this paper; nothing was added/);
     assert.equal(existsSync(join(tier1, '.paper', 'LIBRARY.json')), false, 'Tier 1 wrote nothing either');
+
+    // Review round 3: the gate does not depend on the caller naming the
+    // collection — the same items submitted WITHOUT `collection` (or naming
+    // another collection, even "approved" now) are refused too.
+    for (const args of [{}, { collection: 'Something else', approveCollection: true }, { approveCollection: true }]) {
+      const bypass = await client.callTool({ name: 'paper_ingest_zotero_items', arguments: { paperRoot: tier1, items: API_ITEMS, ...args } });
+      assert.equal(bypass.isError, true, JSON.stringify(args));
+      const b = JSON.parse((bypass.content as Array<{ text: string }>)[0]?.text ?? '{}') as { exit_code: number; message: string };
+      assert.equal(b.exit_code, EXIT_APPROVAL, JSON.stringify(args));
+      assert.match(b.message, /\[sources\] zotero_collection "Therapy notes" has not been approved for this paper; nothing was added/);
+    }
+    assert.equal(existsSync(join(tier1, '.paper', 'LIBRARY.json')), false, 'no submission slipped past the gate');
 
     // The user said yes (AskUserQuestion): the approval is recorded, and the items are added.
     const approved = await client.callTool({

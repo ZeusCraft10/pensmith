@@ -153,9 +153,12 @@ test('D-19-13: Crossref types map to CSL; JATS abstracts are stripped', () => {
   assert.equal(crossref.crossrefCslType('posted-content'), 'preprint');
   assert.equal(crossref.crossrefCslType('peer-review'), 'other');
   assert.equal(crossref.crossrefCslType(undefined), undefined);
+  // Review round 3: HTML markup a publisher put inside the JATS as escaped text
+  // (`&lt;b&gt;`) is markup, not prose — stripped like the JATS tags; a bare
+  // `<` or `>` in the text survives.
   assert.equal(
-    crossref.stripJats('<jats:title>Abstract</jats:title><jats:p>Deep learning allows &lt;b&gt; models &amp; more.</jats:p>'),
-    'Deep learning allows <b> models & more.',
+    crossref.stripJats('<jats:title>Abstract</jats:title><jats:p>Deep learning allows &lt;b&gt; models &amp; more, for x &lt; y.</jats:p>'),
+    'Deep learning allows models & more, for x < y.',
   );
   assert.equal(
     crossref.stripJats('<jats:sec><jats:title>Background</jats:title><jats:p>One.</jats:p></jats:sec>\r\n<jats:sec><jats:title>Methods</jats:title><jats:p>Two.</jats:p></jats:sec>'),

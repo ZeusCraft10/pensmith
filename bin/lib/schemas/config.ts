@@ -19,8 +19,13 @@
 import { z } from 'zod';
 import { PROJECT_CONFIG_FRAGMENT } from '../tutorial.js';
 import { EffortSchema, ProviderNameSchema, RefusalFallbacksSchema } from './runtime-config.js';
+import { lookupTable } from '../lookup-table.js';
 
-export const CURRENT_CONFIG_VERSION = 1;
+/**
+ * v2 (Phase 19, review round 3): `[verification] send_byo_passages` and the
+ * `[sources] allowed_databases` values `books` / `nber` (migrations/config/v1_to_v2.ts).
+ */
+export const CURRENT_CONFIG_VERSION = 2;
 
 /** The 8 citation styles (display names from PRD §10 / the intake clarifier, plus their CSL keys). */
 export const CITATION_STYLE_NAMES = [
@@ -34,7 +39,7 @@ export const CITATION_STYLE_NAMES = [
   'Harvard',
 ] as const;
 
-export const CITATION_STYLE_KEYS: Readonly<Record<string, string>> = Object.freeze({
+export const CITATION_STYLE_KEYS: Readonly<Record<string, string>> = lookupTable({
   apa: 'apa',
   mla: 'mla',
   'chicago (notes-bibliography)': 'chicago-notes-bib',

@@ -13,13 +13,22 @@
 //
 // Pure: no fs, no network, no clock. Same input → same output, always.
 //
-// The expansion starts with the topic phrase itself (the brief's own words are
-// the most faithful query), then the topic's keywords with the discipline's
-// name, each keyword group (the runs of keywords between stop words) with the
-// discipline's name, the keywords with a few neutral research framings, and
-// finally adjacent keyword pairs — until MAX_QUERIES distinct queries exist.
-// The discipline's name comes from bin/lib/disciplines.ts (the only module that
-// knows the presets); the fallback preset contributes no term.
+// Every query stays about the topic (review round 3): each one holds the
+// topic's ANCHOR — the keyword group (a run of keywords between stop words)
+// that names its subject (topicAnchor: the most non-framing words, then proper
+// nouns, then length), e.g. "french revolution" in "the causes of the French
+// Revolution" — so no query is a lone generic word ("causes", "ethics") that
+// pulls in unrelated work. The expansion starts with the topic
+// phrase itself (the brief's own words are the most faithful query; a phrase
+// longer than MAX_QUERY_WORDS is replaced by its keywords), then all
+// the keywords with the discipline's name, the anchor with each other keyword
+// group (with the discipline's name), and all the keywords with a few neutral
+// research framings (then with the discipline's name too) — until MAX_QUERIES
+// distinct queries exist (the same words in another order are the same
+// query). Nothing narrower than the anchor plus another part of the topic is
+// ever sent: never a lone keyword, never the anchor alone. The discipline's
+// name comes from bin/lib/disciplines.ts (the only module that knows the
+// presets); the fallback preset contributes no term.
 
 import { FALLBACK_DISCIPLINE, isDisciplineSlug, normalizeDisciplineSlug, presetFor } from './disciplines.js';
 
@@ -84,11 +93,6 @@ function keywordToken(raw: string): string {
  */
 export function normalizeQuery(query: string): string {
   return clean(words(clean(query)).slice(0, MAX_QUERY_WORDS).join(' '));
-}
-
-/** The case-insensitive identity two queries share when they are the same query. */
-function queryKey(query: string): string {
-  return query.toLowerCase();
 }
 
 /**
@@ -177,47 +181,111 @@ function withSuffix(keywords: readonly string[], suffix: string): string {
   return [...own.slice(0, room), ...tail].slice(0, MAX_QUERY_WORDS).join(' ');
 }
 
-/** Append `q` to `out` unless it is empty or already there. */
+/** The words of a query as a set (lower case, sorted): the same words in another order are the same query. */
+function bagKey(query: string): string {
+  return words(query.toLowerCase()).sort().join(' ');
+}
+
+/** Append `q` to `out` unless it is empty or the same words are already there. */
 function pushQuery(out: string[], seen: Set<string>, q: string): void {
   const n = normalizeQuery(q);
   if (!n) return;
-  const key = queryKey(n);
+  const key = bagKey(n);
   if (seen.has(key)) return;
   seen.add(key);
   out.push(n);
 }
 
 /**
+ * Framing words that say what KIND of question a topic asks, not what it is
+ * about ("the causes of …", "a critical examination of …"). They never make a
+ * keyword group the topic's anchor on their own.
+ */
+const FRAMING_WORDS: ReadonlySet<string> = new Set([
+  'analysis', 'analyses', 'approach', 'approaches', 'aspect', 'aspects', 'assessing', 'benefits', 'cause', 'causes',
+  'challenges', 'comparative', 'comparing', 'comparison', 'consequence', 'consequences', 'critical', 'current',
+  'development', 'different', 'drawing', 'effect', 'effects', 'evaluating', 'evolution', 'examination', 'examining',
+  'exploring', 'factor', 'factors', 'implications', 'importance', 'impact', 'impacts', 'influence', 'influences',
+  'investigating', 'issues', 'key', 'major', 'modern', 'nature', 'new', 'origins', 'overview', 'perspective',
+  'perspectives', 'recent', 'relationship', 'relationships', 'risks', 'role', 'roles', 'significance', 'studies',
+  'study', 'understanding', 'various',
+]);
+
+/**
+ * The topic's anchor — the keyword group that names its subject, which every
+ * expanded query keeps (see the header): the group with the most words that
+ * are not FRAMING_WORDS, then the most words written with a capital inside the
+ * phrase (a proper noun: "French Revolution"), then the longest; the first of
+ * equals.
+ */
+export function topicAnchor(text: string): string[] {
+  const phrase = topicPhrase(text);
+  return anchorOf(keywordGroups(phrase), phrase);
+}
+
+/** The anchor of `groups` (topicAnchor) — the same array, not a copy — or []. */
+function anchorOf(groups: readonly string[][], phrase: string): string[] {
+  const capitalised = new Set<string>();
+  words(clean(phrase)).forEach((raw, i) => {
+    if (i > 0 && /^[^\p{L}]*\p{Lu}/u.test(raw)) capitalised.add(keywordToken(raw));
+  });
+  const score = (g: readonly string[]): [number, number, number] => [
+    g.filter((w) => !FRAMING_WORDS.has(w)).length,
+    g.filter((w) => capitalised.has(w)).length,
+    g.length,
+  ];
+  let anchor: string[] = [];
+  let best: [number, number, number] = [-1, -1, -1];
+  for (const g of groups) {
+    const sc = score(g);
+    if (sc[0] > best[0] || (sc[0] === best[0] && (sc[1] > best[1] || (sc[1] === best[1] && sc[2] > best[2])))) {
+      anchor = g;
+      best = sc;
+    }
+  }
+  return anchor;
+}
+
+/**
  * The deterministic expansion of a topic: up to MAX_QUERIES distinct queries of
- * at most MAX_QUERY_WORDS words. A topic with at least one keyword always
- * yields at least MIN_QUERIES. Returns [] for a topic with no keyword at all.
+ * at most MAX_QUERY_WORDS words, each holding the topic's anchor (the header).
+ * A topic with at least one keyword always yields at least MIN_QUERIES.
+ * Returns [] for a topic with no keyword at all.
  */
 export function expandTopicQueries(topic: string, discipline: string): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   const phrase = topicPhrase(topic);
+  const groups = keywordGroups(phrase);
   const kw = topicKeywords(phrase);
   if (kw.length === 0) return out;
+  const anchor = anchorOf(groups, phrase);
   const term = disciplineTerm(discipline);
   const full = (): boolean => out.length >= MAX_QUERIES;
+  // Keywords + suffix with the anchor kept whole: when the word cap would cut
+  // an anchor word, the anchor's words go first.
+  const fit = (keywords: readonly string[], suffix: string): string => {
+    const build = (ks: readonly string[]): string => (suffix ? withSuffix(ks, suffix) : ks.slice(0, MAX_QUERY_WORDS).join(' '));
+    const q = build(keywords);
+    return anchor.every((a) => words(q).includes(a)) ? q : build([...anchor, ...keywords.filter((k) => !anchor.includes(k))]);
+  };
 
-  pushQuery(out, seen, phrase);
-  if (term) pushQuery(out, seen, withSuffix(kw, term));
-  for (const g of keywordGroups(phrase)) {
+  // The phrase as written, unless the word cap would cut it (a long phrase cut
+  // at MAX_QUERY_WORDS can lose its subject): then its keywords, anchor first.
+  pushQuery(out, seen, words(clean(phrase)).length <= MAX_QUERY_WORDS ? phrase : fit(kw, ''));
+  pushQuery(out, seen, fit(kw, term));
+  for (const g of groups) {
     if (full()) break;
-    pushQuery(out, seen, term ? withSuffix(g, term) : g.join(' '));
+    if (g === anchor) continue;
+    pushQuery(out, seen, fit([...anchor, ...g.filter((k) => !anchor.includes(k))], term));
   }
   for (const framing of FRAMINGS) {
     if (full()) break;
-    pushQuery(out, seen, withSuffix(kw, framing));
-  }
-  for (let i = 0; i + 1 < kw.length && !full(); i += 1) {
-    const pair = [kw[i] as string, kw[i + 1] as string];
-    pushQuery(out, seen, term ? withSuffix(pair, term) : pair.join(' '));
+    pushQuery(out, seen, fit(kw, framing));
   }
   for (const framing of FRAMINGS) {
     if (full()) break;
-    if (term) pushQuery(out, seen, withSuffix(kw, `${framing} ${term}`));
+    if (term) pushQuery(out, seen, fit(kw, `${framing} ${term}`));
   }
   return out.slice(0, MAX_QUERIES);
 }
@@ -246,12 +314,13 @@ export function clampQueries(proposed: readonly string[], topic: string, discipl
   for (const q of proposed) pushQuery(out, seen, q);
   const distinct = out.length;
   const kept = out.slice(0, limit);
-  const keptSeen = new Set(kept.map(queryKey));
+  const keptSeen = new Set(kept.map(bagKey));
   let padded = 0;
   if (kept.length < MIN_QUERIES) {
+    // Padding comes only from the anchored expansion: never a lone keyword.
     for (const q of expandTopicQueries(topic, discipline)) {
       if (kept.length >= MIN_QUERIES) break;
-      const key = queryKey(q);
+      const key = bagKey(q);
       if (keptSeen.has(key)) continue;
       keptSeen.add(key);
       kept.push(q);

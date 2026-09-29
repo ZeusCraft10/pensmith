@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: Open Source Release
 status: executing
-last_updated: "2026-09-28T00:00:00.000Z"
-last_activity: 2026-09-28
+last_updated: "2026-09-29T00:00:00.000Z"
+last_activity: 2026-09-29
 progress:
   total_phases: 11
   completed_phases: 0
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-09-27 for the v1.0.0 Open Source Release
 
 ## Current Position
 
-Phase 19 — Sources and Library (SOURCES), on branch `v1/p19` (worktree `/home/user/pensmith-p19`), built concurrently with Phase 18 and merged into the main branch after Phase 18 closes. Four streams (net, adapters, library, research) and an integration pass: 19 of 20 requirements Complete (`.planning/phases/19-sources/19-VERIFICATION.md`); GRND-14 is not met on this branch — its library half is built, its drafter half and acceptance run at the Phase 18/19 merge (merge notes in `19-SUMMARY.md`). Review round 1 fixed every finding (19-SUMMARY "Review round 1"). Gate at integration: 1973 tests, 1972 pass (the root-only atomic-write case), tier contract 55/55, e2e smoke 10/10, `npm run live:sources` 17 pass / 2 skipped (no OpenAlex or Semantic Scholar key). Hand-off to Phase 20: round 1 landed Pass 1's own-registrar lookup for DOI-less entries (arXiv id, PMID, ISBN) and Pass 3's bring-your-own step; DataCite DOIs, the identifier-less metadata search, PMC / arXiv PDF text and UNVERIFIABLE-QUOTE remain (VRFY-11, -12, -19, -20).
+Phase 19 — Sources and Library (SOURCES), on branch `v1/p19` (worktree `/home/user/pensmith-p19`), built concurrently with Phase 18 and merged into the main branch after Phase 18 closes. Four streams (net, adapters, library, research) and an integration pass: 19 of 20 requirements Complete (`.planning/phases/19-sources/19-VERIFICATION.md`); GRND-14 is not met on this branch — its library half is built, its drafter half and acceptance run at the Phase 18/19 merge (merge notes in `19-SUMMARY.md`). Review rounds 1, 2 and 3 fixed every finding they confirmed (19-SUMMARY "Review round 1/2/3"; round 3: no-burst buckets and a 429 host hold with per-request throttle strikes, the full-text flag only for Unpaywall links that served a PDF, the Tier 1 Zotero gate without a bypass, config.toml schema v2, OJS / PLOS / DataCite identification). Gate after round 3: `npm run build`, `lint`, `typecheck` exit 0 and the build leaves the tree clean; `npm test` 2067 tests: 2066 pass, 1 fail (the root-only `tests/atomic-write.test.ts` case, which passes in CI; no skips, no todos); `npm run test:tier-contract` 56/56; `npm run validate:manifests` exit 0; `node scripts/e2e-smoke.mjs` PASS=10 FAIL=0; `npm run live:sources` 19 pass, 0 fail, 2 skipped (no OpenAlex / Semantic Scholar key). SRC-06's keyed OpenAlex / Semantic Scholar round trips are a maintainer item (no key here). Hand-off to Phase 20: rounds 1–2 landed Pass 1's own-registrar lookup for DOI-less entries (arXiv id, PMID, ISBN), the DataCite arXiv DOI re-fetch, and Pass 3's bring-your-own step and arXiv-PDF fallback; other DataCite DOIs in Pass 1 (`add` reports them since round 3), the identifier-less metadata search, PMC open-access text and UNVERIFIABLE-QUOTE remain (VRFY-11, -12, -19, -20).
 
 Phase: 17 — Tier-2 Runtime Foundations (RUNTIME). Executed and verified, but **not complete**: 2 of its 37 in-scope requirements are open. Next up: Phase 18, Grounded Generation (GROUND).
 Plan: 17-PLAN.md (1/1 executed as four parallel streams, then an integration pass and three review rounds)

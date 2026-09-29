@@ -53,7 +53,7 @@ export function errorFailureReason(err: unknown): string {
   // Phase 19 seam S-B (SRC-17, SRC-01): the transport's own refusals read as
   // what happened, not as a raw error name.
   if (err instanceof RateLimitExhaustedError) return `rate limit exhausted (retry after ${formatRetryAfter(err.retryAfterMs)})`;
-  if (err instanceof CircuitOpenError) return `skipped after ${err.failures} consecutive HTTP ${err.lastStatus} responses`;
+  if (err instanceof CircuitOpenError) return `skipped after ${err.summary}`;
   if (err instanceof RedirectError) return err.message;
   if (err instanceof SsrfBlockedError) return err.message;
   if (err instanceof ResponseTooLargeError) return 'response too large';

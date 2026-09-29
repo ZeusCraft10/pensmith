@@ -82,6 +82,7 @@ import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 // "does not provide an export named 'plugins'". We bind via the class
 // to stay portable across both runtimes.
 import Cite from 'citation-js';
+import { lookupTable } from './lookup-table.js';
 const plugins = Cite.plugins;
 
 // CYCLE-3 NEW-H-1: re-export Cite so downstream Plan 04 / Plan 09
@@ -136,7 +137,7 @@ const registeredStyles = new Map<string, boolean>();
 
 // On-disk filename per style key (value === key for all 8 — Plan 10-00 Task 1
 // saved the files under these exact names; apa shipped in Phase 3).
-const STYLE_FILENAMES: Readonly<Record<string, string>> = {
+const STYLE_FILENAMES: Readonly<Record<string, string>> = lookupTable({
   'apa': 'apa',
   'mla': 'mla',
   'chicago-notes-bib': 'chicago-notes-bib',
@@ -145,7 +146,7 @@ const STYLE_FILENAMES: Readonly<Record<string, string>> = {
   'ama': 'ama',
   'vancouver': 'vancouver',
   'harvard': 'harvard',
-};
+});
 
 // Register the bundled CSL template for `style` under the citeproc name
 // `pensmith-${style}` exactly once per process. Reads the committed .csl via
@@ -378,29 +379,6 @@ export async function parseBibFileAt(text: string, file: string): Promise<Array<
     const raw = (e instanceof Error ? e.message : String(e)).replace(/^parseBib: invalid BibTeX — /, '');
     const first = raw.split('\n')[0] ?? '';
     throw new BibParseError(file, first.length > 160 ? `${first.slice(0, 160)}…` : first);
-  }
-}
-
-/**
- * Format CSL-JSON entries as BibTeX text (citation-js `bibtex` output).
- *
- * By default citation-js escapes every non-ASCII character as LaTeX — and it
- * silently DROPS what it has no LaTeX for (CJK, Arabic) and emits LaTeX its
- * own parser rejects for others (Cyrillic breves, runs of Greek). `utf8: true`
- * turns that escaping off for this one call so the values are written as raw
- * UTF-8, which BibTeX (biber), Pandoc citeproc and citation-js all read. The
- * caller must then have escaped the BibTeX-special ASCII characters itself
- * (bibtex-write.ts escapeBibtexUtf8). The switch is process-global citation-js
- * config, so it is set and restored around the synchronous format call.
- */
-export function formatBibtex(entries: object[], opts: { utf8?: boolean } = {}): string {
-  const cfg = plugins.config.get('@bibtex') as { format: { asciiOnly: boolean } };
-  const prev = cfg.format.asciiOnly;
-  if (opts.utf8 === true) cfg.format.asciiOnly = false;
-  try {
-    return new Cite(entries).format('bibtex', { format: 'text' });
-  } finally {
-    cfg.format.asciiOnly = prev;
   }
 }
 

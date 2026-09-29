@@ -25,8 +25,10 @@
 // rebuilt from `abstract_inverted_index`, the DOI (without its doi.org
 // prefix), PMID / PMCID from `ids`, `is_retracted` (a retracted record is
 // decided; anything else is left for the research cross-check), and the
-// primary location's PDF when that location is open access (`oa_pdf_url`,
-// the library's `oa_url` — full-text.ts, GRND-14).
+// primary location's PDF when that location is open access (`oa_pdf_url` —
+// informational only: it never becomes the library's `oa_url`, which only
+// open-access.ts sets from Unpaywall's answer once that link served a PDF;
+// full-text.ts, GRND-14).
 //
 // Three-way lookups (D-19-05): found | not-found (HTTP 404) | failed. The
 // typed OfflineEgressError is rethrown (RUN-03).

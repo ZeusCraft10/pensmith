@@ -72,6 +72,7 @@ import { enrichOpenAccess } from '../lib/open-access.js';
 import {
   classifySourceInput,
   identifierFromHtml,
+  htmlBodyText,
   identifierLabel,
   isIdentifierInput,
   lookupIdentifier,
@@ -380,7 +381,7 @@ async function hydrateUrl(url: string, io: AddIo = ADD_IO): Promise<Hydrated> {
     io.err(`${io.prefix}: ${url}: HTTP ${res.status} — nothing added.`);
     return { result: failed() };
   }
-  const declared = identifierFromHtml(res.body);
+  const declared = identifierFromHtml(htmlBodyText(res));
   if (declared === null) {
     io.err(`${io.prefix}: ${url}: the page declares no DOI, arXiv id or PMID in its metadata — pass the identifier: pensmith add <doi>`);
     return { result: failed() };

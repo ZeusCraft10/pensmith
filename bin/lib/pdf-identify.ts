@@ -45,7 +45,14 @@
 //   (b) its title is printed AS a title: it fills one to four whole lines
 //       among the first TITLE_BLOCK_LINES lines of page 1, and the record's
 //       first author's family name appears in the byline just below it — a
-//       title embedded in a citation line never qualifies.
+//       title embedded in a citation line never qualifies; or
+//   (c) page 1 prints the record's DOI on a labelled line of its own
+//       (`DOI: 10.1371/journal.pmed.0020124`, how a journal prints the
+//       article's own DOI) AND its title is printed as a title with its byline
+//       below ANYWHERE on page 1 — a two-column layout whose extracted text
+//       puts the body before the title block (PLOS) still counts as the PDF's
+//       own work, while a DOI wrapped onto its own line in a reference list
+//       does not (the cited title is not printed above its author there).
 // Anything short of that is `unidentified` — `add` refuses, BYO keeps the PDF
 // with its local metadata flagged unhydrated. A wrong work is never returned.
 //
@@ -230,7 +237,10 @@ const NOTICE_RE =
 const AFFILIATION_RE =
   /\b(?:university|universit(?:y|ät|é|à|at|ad|eit)|institute|institut|department|dept\.|laborator(?:y|ies)|college|school of|faculty|centre|center for|hospital|inc\.|ltd\.?|gmbh|corporation|google|microsoft|deepmind|meta ai|openai|brain team|research lab|academy of)\b/i;
 
-const RUNNING_HEAD_RE = /^(?:journal of|vol(?:ume)?\.?\s*\d|pp\.|page \d|issn|isbn|doi\b|https?:|www\.)|\bvol\.\s*\d+|\bno\.\s*\d+\b/i;
+// A journal running head: `Journal of …`, `Vol. 3`, `pp.`, and the
+// pipe-separated kind (`August 2005 | Volume 2 | Issue 8 | e124`, PLOS).
+const RUNNING_HEAD_RE =
+  /^(?:journal of|vol(?:ume)?\.?\s*\d|pp\.|page \d|issn|isbn|doi\b|https?:|www\.)|\bvol\.\s*\d+|\bno\.\s*\d+\b|\b(?:volume|issue)\s+\d+\b|\S\s+\|\s+\S/i;
 
 /** A journal's article-type label printed above the title ("NEWS & VIEWS", "REVIEW", …). */
 const ARTICLE_TYPE_RE =
@@ -255,6 +265,7 @@ function titleLike(line: string): boolean {
   if (words.length < 2 || words.length > 25) return false;
   if (/^\p{Ll}/u.test(line)) return false; // a continuation of the previous line
   if (BODY_START_RE.test(line)) return false;
+  if (/\[\d/.test(line)) return false; // a numbered citation marker: body prose, never a title
   if (words.length > 12 && /[.;]$/.test(line)) return false; // running prose
   return true;
 }
@@ -366,11 +377,51 @@ export function layoutTitleAndAuthors(firstPage: string): { title: string | null
   return { title: null, authors: [] };
 }
 
-/** The first plausible publication year on page 1 (a copyright or date line), else null. */
-function yearFromText(firstPage: string): number | null {
+/** A month followed (within a day number) by a year: `August 2005`, `12 March 2018`, `Mar. 3, 2019`. */
+const MONTH_YEAR_RE =
+  /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?\s+(?:\d{1,2}(?:st|nd|rd|th)?,?\s+)?(?:19[5-9]\d|20\d\d)\b/i;
+
+/**
+ * A line that dates the PDF itself: a copyright / licence line, a
+ * received / accepted / published line, a citation box, a journal running
+ * head (`Vol.`, `Issue`, `pp.`, `2020; 395:`), a conference or proceedings
+ * line, an ISO date or a month-and-year. A year anywhere else on page 1 — in
+ * the title above all ("Lessons from the 2008 Financial Crisis"), an
+ * affiliation, the abstract — says nothing about when this PDF appeared.
+ */
+const DATE_LINE_RE = new RegExp(
+  [
+    '©',
+    '\\(c\\)\\s*(?:19|20)\\d\\d',
+    '\\b(?:copyright|licen[cs]ed?|received|accepted|revised|published|available online|first published|issued|citation|cite this|how to cite|proceedings|conference|symposium|workshop|journal)\\b',
+    '\\b(?:vol(?:ume)?\\.?|no\\.|issue|pp\\.)\\s*\\d',
+    '\\b(?:19|20)\\d\\d-\\d\\d-\\d\\d\\b',
+    '\\b(?:19|20)\\d\\d\\s*[;,]\\s*\\d+\\s*[:(]',
+    MONTH_YEAR_RE.source,
+  ].join('|'),
+  'i',
+);
+
+/** Lower-case letters and digits only, single-spaced (to compare a line with the title). */
+function flat(s: string): string {
+  return s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+/**
+ * The PDF's own year: the first plausible year on a DATE_LINE_RE line of page
+ * 1 that is not part of the PDF's title (review round 3) — else null, never
+ * the first number on the page (a year in the title would otherwise read as
+ * the publication year and refuse the right record as "a later re-post").
+ */
+function yearFromText(firstPage: string, titles: ReadonlyArray<string | null>): number | null {
   const max = new Date().getUTCFullYear() + 1;
-  for (const line of firstPage.split(/\r?\n/)) {
-    if (/\barxiv:/i.test(line)) continue; // the stamp's date is the version date
+  const flatTitles = titles.filter((t): t is string => typeof t === 'string' && t.trim() !== '').map(flat);
+  for (const raw of firstPage.split(/\r?\n/)) {
+    const line = raw.replace(/\s+/g, ' ').trim();
+    if (!line || /\barxiv:/i.test(line)) continue; // the stamp's date is the version date
+    if (!DATE_LINE_RE.test(line)) continue;
+    const flatLine = flat(line);
+    if (flatLine.includes(' ') && flatTitles.some((t) => t.includes(flatLine))) continue; // a line of the title block
     for (const m of line.matchAll(/\b(19[5-9]\d|20\d\d)\b/g)) {
       const y = Number(m[1]);
       if (y <= max) return y;
@@ -397,7 +448,7 @@ export function localPdfMetadata(ex: Pick<PdfExtraction, 'info' | 'xmp' | 'pages
   return {
     title,
     authors: metaAuthors.length > 0 ? metaAuthors : layout.authors,
-    year: yearFromText(firstPage),
+    year: yearFromText(firstPage, [metaTitle, layout.title]),
     titleSource: metaTitle ? 'metadata' : layout.title ? 'layout' : null,
   };
 }
@@ -426,8 +477,34 @@ export const TITLE_BLOCK_LINES = 25;
 /** How many lines below a printed title the byline may sit. */
 const BYLINE_LINES = 6;
 
-/** Rule (b): the record's title fills whole lines of page 1's title block, with its first author in the byline below. */
-function printedAsTitle(record: Pick<SourceCandidate, 'title' | 'authors'>, firstPage: string): boolean {
+/**
+ * The DOIs page 1 prints on a labelled line of their own — `DOI: 10.1371/…`,
+ * `doi:10.…`, `https://doi.org/10.…`, and nothing else on the line (rule (c)).
+ */
+export function labelledDoiLines(firstPage: string): string[] {
+  const out: string[] = [];
+  for (const raw of firstPage.split(/\r?\n/)) {
+    const line = raw.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!/\bdoi\b|doi\.org\//.test(line)) continue;
+    const dois = findDoisInText(line);
+    const doi = dois[0];
+    if (dois.length !== 1 || doi === undefined) continue;
+    const rest = line
+      .replace(/https?:\/\/(?:dx\.)?doi\.org\//g, ' ')
+      .replace(/\bdoi\b\s*:?/g, ' ')
+      .replace(doi, ' ');
+    if (/[\p{L}\p{N}]/u.test(rest)) continue;
+    if (!out.includes(doi)) out.push(doi);
+  }
+  return out;
+}
+
+/**
+ * Rule (b): the record's title fills whole lines among the first `maxLines`
+ * lines of page 1 (its title block by default), with its first author in the
+ * byline below.
+ */
+function printedAsTitle(record: Pick<SourceCandidate, 'title' | 'authors'>, firstPage: string, maxLines = TITLE_BLOCK_LINES): boolean {
   const want = normTitle(record.title);
   const first = record.authors[0];
   if (!want || !first) return false;
@@ -437,8 +514,8 @@ function printedAsTitle(record: Pick<SourceCandidate, 'title' | 'authors'>, firs
     .split(/\r?\n/)
     .map((l) => l.replace(/\s+/g, ' ').trim())
     .filter((l) => l.length > 0)
-    .slice(0, TITLE_BLOCK_LINES + BYLINE_LINES);
-  for (let i = 0; i < Math.min(lines.length, TITLE_BLOCK_LINES); i++) {
+    .slice(0, maxLines + BYLINE_LINES);
+  for (let i = 0; i < Math.min(lines.length, maxLines); i++) {
     for (let n = 1; n <= 4 && i + n <= lines.length; n++) {
       const run = normTitle(lines.slice(i, i + n).join(' '));
       if (!run || jaroWinkler(run, want) < TITLE_JW_THRESHOLD) continue;
@@ -451,15 +528,22 @@ function printedAsTitle(record: Pick<SourceCandidate, 'title' | 'authors'>, firs
 
 /**
  * True when `record` is the PDF's own work, not a work it cites (see the
- * header: rule (a) against the PDF's own title and first author, or rule (b)
- * the title printed as a title with its byline).
+ * header: rule (a) against the PDF's own title and first author, rule (b) the
+ * title printed as a title with its byline, or rule (c) the record's DOI on a
+ * labelled line of its own plus its title and byline anywhere on page 1).
  */
-export function isOwnWork(record: Pick<SourceCandidate, 'title' | 'authors'>, firstPage: string, local: LocalPdfMetadata): boolean {
+export function isOwnWork(
+  record: Pick<SourceCandidate, 'title' | 'authors'> & { readonly doi?: string | null | undefined },
+  firstPage: string,
+  local: LocalPdfMetadata,
+): boolean {
   if (local.title !== null) {
     const s = matchScores(record, local);
     if (s.titleJW >= TITLE_JW_THRESHOLD && (local.authors.length === 0 || s.authorJW >= AUTHOR_JW_THRESHOLD)) return true;
   }
-  return printedAsTitle(record, firstPage);
+  if (printedAsTitle(record, firstPage)) return true;
+  const doi = typeof record.doi === 'string' ? normalizeDoi(record.doi) : null;
+  return doi !== null && labelledDoiLines(firstPage).includes(doi) && printedAsTitle(record, firstPage, Number.POSITIVE_INFINITY);
 }
 
 function failureLine(what: string, r: Extract<LookupResult, { kind: 'failed' }>): string {
