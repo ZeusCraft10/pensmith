@@ -18,6 +18,7 @@ import { parseOutline } from '../bin/lib/outline-parse.js';
 import { loadState } from '../bin/lib/state.js';
 import { loadFrontmatterDocSync } from '../bin/lib/frontmatter.js';
 import { buildStatusView } from '../bin/lib/status-view.js';
+import { normalizeDisciplineSlug, presetFor } from '../bin/lib/disciplines.js';
 
 const KEY = 'sk-test-outline-feed-0001';
 type Run = (ctx: { args: Record<string, unknown> }) => Promise<unknown>;
@@ -102,6 +103,27 @@ test('FEED-03: without a terminal and without --yolo the outline refuses (exit 3
     assert.equal(r.status, 3, `${r.stdout}\n${r.stderr}`);
     assert.equal(sb.mock!.callCount('outline-author'), 0, 'nothing was sent or billed');
     assert.equal(fs.existsSync(path.join(sb.paper, 'OUTLINE.md')), false);
+  });
+});
+
+test('GRND-06: a History paper\'s outline request carries the History sectioning convention (asserted through --show-prompts)', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    const history = normalizeDisciplineSlug('History');
+    await seedBriefPaper(sb.root, { discipline: history, counterargument: 'no' });
+    sb.mock!.script('outline-author', { data: threeSectionOutline() });
+    const r = await sb.runTsx(null, ['--show-prompts', 'outline', '--yolo'], { env: { ANTHROPIC_API_KEY: KEY } });
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    // The mirror prints each outbound model body in full, before it is sent.
+    const bodies = r.stderr
+      .split(/\r?\n/)
+      .filter((l) => l.startsWith('[show-prompts] body: {'))
+      .map((l) => JSON.parse(l.slice('[show-prompts] body: '.length)) as Record<string, unknown>);
+    const outline = bodies.filter((b) => requestParts(b).system === loadPrompt('outline-author'));
+    assert.equal(outline.length, 1, 'one outline-author request was mirrored');
+    const brief = JSON.parse(parsePromptBlocks(requestParts(outline[0]!).user).get('brief')!) as Record<string, unknown>;
+    assert.equal(brief['discipline'], history);
+    assert.deepEqual(brief['sectioning_convention'], [...presetFor(history).sectioningConvention], 'the History preset\'s sectioning convention (PRD §8)');
+    assert.notDeepEqual(brief['sectioning_convention'], [...presetFor(normalizeDisciplineSlug('Computer Science')).sectioningConvention], 'not another preset\'s');
   });
 });
 
