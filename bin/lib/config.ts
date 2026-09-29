@@ -309,6 +309,15 @@ export function tryReadPaperConfigSync(root: string = projectRoot()): PaperConfi
 }
 
 /**
+ * The paper's `[project] mode` (GRND-02): `outline` when the user asked to stop
+ * after the approved outline, else `draft` (the default, also for a missing or
+ * unreadable config.toml). Never throws.
+ */
+export function readPaperModeSync(root: string = projectRoot()): 'draft' | 'outline' {
+  return tryReadPaperConfigSync(root)?.project?.mode === 'outline' ? 'outline' : 'draft';
+}
+
+/**
  * Async read. An older file is migrated and, with writeBack (default true),
  * written back under the per-file lock with `schema_version = 1`.
  */

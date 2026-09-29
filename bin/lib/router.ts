@@ -40,15 +40,23 @@
 //   planned + `stub: true` (the outline's) → plan
 //   planned (a planner-written PLAN.md)   → write
 //   writing                               → write
-//   written / verifying / unverifiable    → verify
-//   failed WITH a DRAFT.md                → verify (re-attempt verification)
-//   failed WITHOUT a DRAFT.md             → status/attention, detail naming
-//                                           `pensmith write N` (never a paid loop)
+//   written / verifying                   → verify
+//   unverifiable, draft changed           → verify
+//   unverifiable, the draft verify judged → continue when its VERIFICATION.md
+//     has advisory rows only (compile accepts it); else status/attention
+//     naming `pensmith verify N` (never a paid verify loop)
+//   failed WITH a DRAFT.md, draft changed → verify (re-attempt verification)
+//   failed, the draft verify judged       → status/attention naming the repair
+//   failed WITHOUT a DRAFT.md or with a failure_reason → status/attention,
+//                                           detail naming `pensmith write N`
 //   corrupt PLAN.md / unknown status      → status/attention + detail
 // Before the walk: OUTLINE.rejected.md with no registered section → status/
 // attention naming `pensmith outline` (a failed outline is never re-billed);
-// OUTLINE.md rows that disagree with STATE.json's registrations → status/
-// attention naming the divergence and `pensmith outline` (D-18-38).
+// an OUTLINE.md that is present but unreadable, or missing while sections are
+// registered → status/attention naming the fix (section-registry.ts
+// outlineProblem); OUTLINE.md rows that disagree with STATE.json's
+// registrations → status/attention naming the divergence and `pensmith
+// outline` (D-18-38).
 //
 // Imports: loadState/StateNotFoundError (state.ts), existsSync (node:fs), join
 // (node:path), paperDir/sectionPlan (paths.ts), loadFrontmatterDocSync
@@ -59,12 +67,13 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadState, StateNotFoundError } from './state.js';
-import { paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
+import { dryRunWorkspaceActive, paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
 import { loadFrontmatterDocSync } from './frontmatter.js';
 import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
 import { computeDraftHash } from './draft-hash.js';
 import { compiledInputsCurrent } from './compile-inputs.js';
-import { sectionRegistryProblem } from './section-registry.js';
+import { outlineProblem, sectionRegistryProblem } from './section-registry.js';
+import { parseBlockingVerdictRows, sectionVerificationReasons } from './verify/verdict-rows.js';
 import type { Handoff } from './schemas/handoff.js';
 
 export type RouterDecision =
@@ -189,6 +198,29 @@ function draftHashOf(draftPath: string, assignedSources: readonly string[]): str
   }
 }
 
+/**
+ * Why a section's VERIFICATION.md may not compile (verdict-rows.ts
+ * sectionVerificationReasons, the gate compile and done share); a missing or
+ * unreadable file is one reason. Never throws.
+ */
+function verificationBlockers(verificationPath: string): string[] {
+  let md: string;
+  try {
+    md = readFileSync(verificationPath, 'utf8');
+  } catch {
+    return ['its VERIFICATION.md is missing or unreadable'];
+  }
+  const reasons = sectionVerificationReasons(md, dryRunWorkspaceActive());
+  // One line for the usual case — every blocker an UNVERIFIABLE row.
+  const unverifiable = parseBlockingVerdictRows(md).filter((r) => r.verdict === 'UNVERIFIABLE');
+  if (reasons.length > 1 && unverifiable.length === reasons.length) {
+    const keys = unverifiable.map((r) => `[@${r.citekey}]`);
+    const list = `${keys.slice(0, -1).join(', ')} and ${keys[keys.length - 1] as string}`;
+    return [`${list} are UNVERIFIABLE (their sources could not be checked: offline, --dry-run or a failed lookup)`];
+  }
+  return reasons;
+}
+
 /** A file's mtime (ms), or null when it is absent or unreadable. Never throws. */
 function mtimeOf(p: string): number | null {
   try {
@@ -251,7 +283,19 @@ export interface ResolveOptions {
    * outline. The CLI caller decides when to set this; the router stays agnostic.
    */
   stopAfterResearch?: boolean;
+  /**
+   * When true AND the outline is approved (OUTLINE.md lists the sections
+   * STATE.json registers), halt there with `{ verb:'status', reason:'done' }`
+   * instead of planning section 1 (GRND-02 outline-only mode, set by the CLI
+   * tier from `[project] mode`; review round 3). Explicit verbs still run.
+   */
+  stopAfterOutline?: boolean;
 }
+
+/** What a paper routed with `stopAfterOutline` reports once its outline is approved. */
+export const OUTLINE_ONLY_DONE =
+  'outline only: the approved outline is .paper/OUTLINE.md (its sources in .paper/LIBRARY.json and CITATIONS.bib) — ' +
+  'to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
 
 /**
  * Resolve the next WORK action for the active paper at `paperRoot`.
@@ -329,6 +373,12 @@ export async function resolveNextAction(
       };
     }
 
+    // Review round 3: an OUTLINE.md that is present but unreadable (a hand
+    // edit with one bad row), or missing while STATE.json registers sections,
+    // is attention naming the fix — never an `outline` dispatch, which would
+    // refuse (drafts, no --force) on every run or re-outline over the edit.
+    const outlineIssue = outlineProblem(paperRoot);
+    if (outlineIssue !== null) return { verb: 'status', reason: 'attention', detail: outlineIssue };
     if (!existsSync(join(pDir, 'OUTLINE.md'))) return { verb: 'outline' };
     if (sections.length === 0) return { verb: 'outline' };
 
@@ -339,6 +389,11 @@ export async function resolveNextAction(
     // and name `pensmith outline`, which applies the edited outline.
     const registry = sectionRegistryProblem(paperRoot);
     if (registry !== null) return { verb: 'status', reason: 'attention', detail: registry };
+
+    // DI HARD-STOP (GRND-02 outline-only mode): the outline is approved and
+    // registered — nothing more is routed, so no section is planned, drafted
+    // or verified (and billed) unless the user runs one explicitly.
+    if (opts.stopAfterOutline) return { verb: 'status', reason: 'done', detail: OUTLINE_ONLY_DONE };
 
     // Walk sections in (n, suffix) order (GRND-09: 1 < 1a < 2); the FIRST
     // non-'verified' section decides the verb (C3-HIGH-1: TOTAL over
@@ -404,9 +459,31 @@ export async function resolveNextAction(
             };
           }
           return { verb: 'verify', ...id }; // the draft changed: re-attempt verification — NOT continue
+        case 'unverifiable': {
+          // Review round 3: `unverifiable` is verify's verdict when a check
+          // could not run. When it judged THIS draft (unchanged since), the
+          // section's VERIFICATION.md decides — through the one gate compile
+          // and done share: only advisory rows (a quoted source's text was
+          // unavailable, PDF_UNAVAILABLE / TEXT_UNAVAILABLE, Pitfall 3) pass,
+          // so the walk goes on to compile; a blocking UNVERIFIABLE row (a
+          // lookup failed, or it ran offline) is attention naming the re-run.
+          // Never a paid verify loop on an unchanged draft.
+          if (r.verifiedHash === null || draftHashOf(sectionDraft(n, slug, paperRoot), r.assignedSources) !== r.verifiedHash) {
+            return { verb: 'verify', ...id }; // the draft changed (or was never judged): verify it
+          }
+          const blockers = verificationBlockers(sectionVerification(n, slug, paperRoot));
+          if (blockers.length === 0) continue;
+          return {
+            verb: 'status',
+            reason: 'attention',
+            section: id,
+            detail:
+              `section ${label} could not be verified: ${blockers.join('; ')} — ` +
+              `its draft has not changed since; re-run the check with \`pensmith verify ${label}\` once the sources can be reached`,
+          };
+        }
         case 'written':
-        case 'verifying':
-        case 'unverifiable': // re-attempt verification — NOT continue
+        case 'verifying': // re-attempt verification — NOT continue
           return { verb: 'verify', ...id };
         default:
           // Unrecognized status (hand-edited PLAN.md): surface a stuck-section
@@ -421,7 +498,8 @@ export async function resolveNextAction(
     }
 
     // All sections verified (the walk fell through ONLY because every section
-    // was 'verified' — 'failed'/'unverifiable' would have returned 'verify').
+    // was 'verified', or 'unverifiable' with advisory rows only on the draft
+    // verify judged — which compile accepts, Pitfall 3).
     // The compiled DRAFT.md is current only when no section's draft or
     // verification changed after it and it covers the registered sections: a
     // section redone, re-verified or added by a re-outline (GRND-09/10) since

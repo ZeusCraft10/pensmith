@@ -107,3 +107,29 @@ test('outline (audit #1): registration is idempotent across repeated runs', asyn
   const state = await loadState(root);
   assert.equal((state.sections ?? []).length, 2, 'sections must not duplicate on a second outline run');
 });
+
+// Review round 3 (GRND-08, D-18-38): a hand-edited OUTLINE.md with one bad row is
+// refused by name — never treated as absent, which would send `outline` to the
+// model and overwrite the user's edits (with --yolo, without asking).
+test('outline (review round 3): an OUTLINE.md table with a malformed row is refused naming its line, with no model call, and is left byte-identical', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-outline-bad-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  await initState(root);
+  writeFileSync(join(root, '.paper', 'LIBRARY.json'), '{"$schemaVersion":1,"entries":[]}\n');
+  const edited = VALID_OUTLINE.replace('| 2 | 02-literature | Literature Review | 01-introduction | 800 | |', '| 2 | 02-literature | Literature Review (my edit) | 01-introduction | 800 |');
+  writeFileSync(join(root, '.paper', 'OUTLINE.md'), edited);
+  const run = (force: boolean) =>
+    withCwd(root, async () =>
+      (outlineCommand.run as (ctx: { args: Record<string, unknown> }) => Promise<unknown>)({ args: { yolo: true, force } }),
+    );
+  await assert.rejects(run(false), (e: Error & { exitCode?: number }) => {
+    assert.match(e.message, /^pensmith outline: \.paper\/OUTLINE\.md cannot be read \(couldn't parse line 6: expected 6 columns, got 5: .*\) — fix that row .* `pensmith outline --force`/);
+    assert.equal(e.exitCode, 1);
+    return true;
+  });
+  assert.equal(readFileSync(join(root, '.paper', 'OUTLINE.md'), 'utf8'), edited, 'the user edit is untouched');
+  assert.deepEqual((await loadState(root)).sections ?? [], [], 'nothing registered');
+  const decision = await resolveNextAction(root);
+  assert.equal(decision.verb, 'status');
+  assert.match((decision as { detail?: string }).detail ?? '', /couldn't parse line 6/, 'the router names the same row instead of dispatching outline');
+});

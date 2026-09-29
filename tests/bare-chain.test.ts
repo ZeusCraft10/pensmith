@@ -215,11 +215,40 @@ test('GRND-18: the step exits with the last verb\'s code — a blocking verify e
   assert.equal(sb.calls('section-planner'), 1, '§2 was not planned');
   assert.ok(!existsSync(sectionFile(sb.root, 2, 'discussion', 'DRAFT.md')));
 
-  // next and resume propagate the same code.
+  // Review round 3 (D-18-43): the verdict judged THIS draft and a blocking
+  // UNVERIFIABLE row stays until the source can be reached — next and resume
+  // report attention naming the re-run instead of re-billing the verify on
+  // every bare run; an explicit `verify 1` still re-checks it (exit 4 offline).
+  const before = sb.mock.requests.length;
+  for (const verb of ['next', 'resume']) {
+    const r2 = await sb.run([verb, '--yolo']);
+    assert.equal(r2.status, EXIT_OK, `${r2.stdout}\n${r2.stderr}`);
+    assert.match(r2.stdout, /attention: section 1 could not be verified: citation \[@nofixture2020\] is UNVERIFIABLE .*`pensmith verify 1`/);
+  }
+  assert.equal(sb.mock.requests.length, before, 'no model call: the unchanged draft is not re-verified');
+  const verify = await sb.run(['verify', '1', '--yolo']);
+  assert.equal(verify.status, EXIT_BLOCKED, `${verify.stdout}\n${verify.stderr}`);
+});
+
+test('review round 3 (D-18-43): a section left `unverifiable` by advisory rows only (its quoted source has no full text) is verified ONCE; the chain moves on', async () => {
+  const sb = await sandbox('bare-chain-advisory');
+  await seedPaper(sb.root, TWO_SECTIONS);
+  // A direct quote: Pass 3 cannot fetch the source's text offline — PDF/TEXT_UNAVAILABLE, advisory (Pitfall 3).
+  sb.mock.script('section-drafter', {
+    text: `# Introduction\n\nAs the authors put it, "measurement always shapes what is observed in these systems, whatever the apparatus and whatever the observer happens to intend" [@${RECORDED.citekey}].\n`,
+  });
+  const r = await sb.run(['--yolo']);
+  assert.equal(r.status, EXIT_OK, `${r.stdout}\n${r.stderr}`);
+  const verification = readFileSync(sectionFile(sb.root, 1, 'introduction', 'VERIFICATION.md'), 'utf8');
+  assert.match(verification, /^Status: unverifiable$/m);
+  assert.match(verification, /\*\*(?:PDF|TEXT)_UNAVAILABLE\*\*/);
+  assert.doesNotMatch(verification, /\*\*UNVERIFIABLE\*\*/, 'no blocking row');
+  assert.match(r.stderr, /^pensmith: ran plan §1, write §1; next: plan §2$/m, 'write verified §1 once; the chain does not verify it again');
+  const calls = sb.mock.requests.length;
   const next = await sb.run(['next', '--yolo']);
-  assert.equal(next.status, EXIT_BLOCKED, `${next.stdout}\n${next.stderr}`);
-  const resume = await sb.run(['resume', '--yolo']);
-  assert.equal(resume.status, EXIT_BLOCKED, `${resume.stdout}\n${resume.stderr}`);
+  assert.equal(next.status, EXIT_OK, `${next.stdout}\n${next.stderr}`);
+  assert.match(next.stderr, /^pensmith next: → plan$/m, 'the router walks on to §2, never back to verify §1');
+  assert.ok(sb.mock.requests.length > calls);
 });
 
 test('GRND-18: `plan` typed without a number stays one verb (the chain is only for bare / next / resume)', async () => {

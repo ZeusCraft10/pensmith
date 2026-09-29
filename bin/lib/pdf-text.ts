@@ -82,6 +82,48 @@ interface PdfParseResult {
 }
 
 /**
+ * PDF.js prints its warnings ("Warning: Indexing all PDF objects" on a broken
+ * file, once per attempt) with console.log, before the one-line refusal a bad
+ * PDF gets (RUN-12, GRND-01). The display layer's verbosity lives on the
+ * global `PDFJS` object the bundled build reads at load (errors only: 0), but
+ * pdf-parse runs the core in an in-process "fake worker" — a separate bundle
+ * with its own level that nothing configures — so its log lines are dropped
+ * while a parse runs: only lines with PDF.js's own prefixes, every other
+ * console.log line passes through (pensmith itself never logs that way).
+ */
+function quietPdfJs(): void {
+  const g = globalThis as { PDFJS?: { verbosity?: number } };
+  if (g.PDFJS === undefined) g.PDFJS = { verbosity: 0 };
+  else g.PDFJS.verbosity = 0;
+}
+
+const PDFJS_LOG_RE = /^(?:Warning|Info|Deprecated API usage): /;
+let pdfJsLogMuted = 0;
+let consoleLogBeforeMute: typeof console.log | null = null;
+
+/** Run `fn` with PDF.js's own console.log lines dropped (nested and concurrent calls share one filter). */
+async function withPdfJsLogMuted<T>(fn: () => Promise<T>): Promise<T> {
+  if (pdfJsLogMuted === 0) {
+    const original = console.log;
+    consoleLogBeforeMute = original;
+    console.log = (...args: unknown[]): void => {
+      if (typeof args[0] === 'string' && PDFJS_LOG_RE.test(args[0])) return;
+      original(...args);
+    };
+  }
+  pdfJsLogMuted += 1;
+  try {
+    return await fn();
+  } finally {
+    pdfJsLogMuted -= 1;
+    if (pdfJsLogMuted === 0 && consoleLogBeforeMute !== null) {
+      console.log = consoleLogBeforeMute;
+      consoleLogBeforeMute = null;
+    }
+  }
+}
+
+/**
  * pdf-parse@1.1.1 wraps a 2018 fork of PDF.js whose content-stream lexer keeps
  * MUTABLE state in module-level globals (e.g. `PDFJS`) and parses in event-loop-
  * scheduled chunks. When the loop has prior async activity (the common case —
@@ -99,12 +141,13 @@ interface PdfParseResult {
  * broken PDF), and the extractPdfText catch routes it onward per RSCH-05b.
  */
 async function parseWithRetry(input: Buffer): Promise<PdfParseResult> {
+  quietPdfJs();
   const MAX_ATTEMPTS = 3;
   let lastErr: unknown;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
       // A fresh Buffer view per attempt avoids any internal cursor reuse.
-      return (await pdfParse(Buffer.from(input))) as PdfParseResult;
+      return (await withPdfJsLogMuted(() => pdfParse(Buffer.from(input)))) as PdfParseResult;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       // The deterministic debug-shim ENOENT must NOT be retried — rethrow now.

@@ -60,7 +60,7 @@ import { sectionVerificationReasons } from './verify/verdict-rows.js';
 import { sectionWriteBlockReason } from './plan-status.js';
 import { networkMode } from './http-mock.js';
 import { writeCompileInputs } from './compile-inputs.js';
-import { sectionRegistryProblem } from './section-registry.js';
+import { outlineProblem, sectionRegistryProblem } from './section-registry.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
@@ -251,11 +251,15 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     let outline: ReturnType<typeof parseOutline>;
     try {
       outline = parseOutline(raw);
-    } catch {
+    } catch (e) {
+      // Review round 3: a present but broken OUTLINE.md (a hand edit with one
+      // bad row) names parseOutline's line-numbered reason and the fix; only
+      // a missing or table-less one says "run pensmith outline".
+      const problem = outlineProblem(opts.paperRoot);
       return {
         refused: true,
         refuseReasons: [
-          "no usable outline: .paper/OUTLINE.md has no section table — run 'pensmith outline' first",
+          `no usable outline: ${problem ?? `.paper/OUTLINE.md has no section table (${(e as Error).message.replace(/^outline-parse:\s*/, '')}) — run 'pensmith outline' first`}`,
         ],
         sectionsCount: 0,
         staleResolvedCount: 0,

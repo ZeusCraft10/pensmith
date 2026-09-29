@@ -23,7 +23,9 @@
 
 import { readStateTextSync, migrateStateValue } from './state.js';
 import { Schema as StateSchema } from './schemas/state.js';
-import { readOutlineSync } from './outline.js';
+import { basename } from 'node:path';
+import { readOutlineChecked, readOutlineSync } from './outline.js';
+import { paperDir } from './paths.js';
 import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
 
 /** A section's identity: its number, its letter (§1a) when it has one, its slug. */
@@ -102,15 +104,49 @@ export const RECONCILE_HINT =
   'or restore the row(s) in OUTLINE.md';
 
 /**
- * The paper's section-registry problem, or null: OUTLINE.md's rows and
- * STATE.json's registrations disagree. Null when nothing is registered yet,
- * STATE.json is unreadable, or OUTLINE.md has no readable table (each has its
- * own report: the router's corrupt-STATE attention, compile's "no usable
- * outline" refusal). Never throws.
+ * What is wrong with the paper's OUTLINE.md itself, or null (review round 3 of
+ * Phase 18). A section table that cannot be read names parseOutline's line and
+ * the fix — whether or not sections are registered, since `pensmith outline`
+ * refuses to overwrite it without --force; a missing OUTLINE.md is a problem
+ * only when STATE.json registers sections (it is the authority, D-18-38: they
+ * exist, and nothing lists them). A file with no section table at all (notes,
+ * a legacy placeholder) is left to its own report, as before: compile's "no
+ * usable outline". Never throws.
+ */
+export function outlineProblem(paperRoot: string): string | null {
+  const read = readOutlineChecked(paperRoot);
+  const file = `${basename(paperDir(paperRoot))}/OUTLINE.md`;
+  if (read.kind === 'invalid') {
+    return (
+      `${file} cannot be read (${read.error}) — fix that row (\`pensmith outline\` then applies the edited outline), ` +
+      'or re-outline it with `pensmith outline --force`'
+    );
+  }
+  if (read.kind === 'absent') {
+    const registered = registeredSectionsSync(paperRoot);
+    if (registered !== null && registered.length > 0) {
+      const ids = registered.map((s) => `§${identityLabel(s)}`).join(', ');
+      return (
+        `${file} is missing, but STATE.json registers ${ids} — restore it (e.g. from your backup or version control), ` +
+        'or re-outline with `pensmith outline --force` (kept sections stay untouched)'
+      );
+    }
+  }
+  return null;
+}
+
+/**
+ * The paper's section-registry problem, or null: OUTLINE.md is missing while
+ * sections are registered, unreadable (outlineProblem), or its rows and
+ * STATE.json's registrations disagree. Null when nothing is registered yet or
+ * STATE.json is unreadable (the router's corrupt-STATE attention reports
+ * that). Never throws.
  */
 export function sectionRegistryProblem(paperRoot: string): string | null {
   const registered = registeredSectionsSync(paperRoot);
   if (registered === null || registered.length === 0) return null;
+  const outline = outlineProblem(paperRoot);
+  if (outline !== null) return outline;
   const rows = outlineIdentitiesSync(paperRoot);
   if (rows === null) return null;
   const problems = sectionRegistryDivergence(registered, rows);

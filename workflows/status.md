@@ -30,7 +30,7 @@ session lock, so it works while another session is running (RUN-23).
 
 ## Outputs
 
-- stdout: per-section status table + `  next: <verb>` line (+ an `  attention: …` line when the router stopped on a problem)
+- stdout: per-section status table + `  next: <verb>` line (+ an `  attention: …` line when the router stopped on a problem, or a `  note: …` line when it finished with a detail — an outline-only paper whose outline is approved)
 - exit code 0 when a paper was reported; 1 (EXIT_ERROR) when there is no paper
   here or `.paper/STATE.json` is unreadable (RUN-09)
 
@@ -45,6 +45,6 @@ session lock, so it works while another session is running (RUN-23).
    - `failed` with a `failure_reason` → "failed — <reason>" (e.g. `failed — citekey X not assigned to section 2`)
    - else → `r.status`
 
-3. **Resolve next action** via `resolveNextAction(paperRoot, { stopAfterResearch })` where `stopAfterResearch` is derived from the paper mode config via `readGoalFromConfig(paperRoot)`. Never throws. Print `  next: <verb>` (or `<verb> §<id>` for per-section verbs — a stub routes to `plan`, a planned section to `write`). When the router stops on something that needs the user, print `  attention: <detail>` naming the problem and the command that fixes it — e.g. a rejected outline (`the last outline was rejected (the replies are in .paper/OUTLINE.rejected.md) — fix the problem it names, then run \`pensmith outline\``) or a section whose draft containment failed (`section N failed: <reason> — adjust its plan or sources if needed, then run \`pensmith write N\``). The router never re-runs a rejected outline by itself.
+3. **Resolve next action** via `resolveNextAction(paperRoot, routeOptionsFor(paperRoot))` — `stopAfterResearch` derived via `readGoalFromConfig(paperRoot)`, `stopAfterOutline` from `[project] mode = "outline"`. Never throws. Print `  next: <verb>` (or `<verb> §<id>` for per-section verbs — a stub routes to `plan`, a planned section to `write`). When the router stops on something that needs the user, print `  attention: <detail>` naming the problem and the command that fixes it — e.g. a rejected outline (`the last outline was rejected (the replies are in .paper/OUTLINE.rejected.md) — fix the problem it names, then run \`pensmith outline\``) or a section whose draft containment failed (`section N failed: <reason> — adjust its plan or sources if needed, then run \`pensmith write N\``). The router never re-runs a rejected outline by itself.
 
 4. Shell fallback (TIER-06): `pensmith status`.

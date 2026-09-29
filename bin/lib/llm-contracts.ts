@@ -509,7 +509,10 @@ export function candidateValues(text: string): unknown[] {
   };
   const tryYaml = (s: string): void => {
     try {
-      const v = parseYaml(s) as unknown;
+      // logLevel 'error': a reply that is not YAML ("%%% garbage") must not print
+      // a multi-line YAMLWarning before the one-line refusal (RUN-12); a real
+      // parse error still throws and is ignored here.
+      const v = parseYaml(s, { logLevel: 'error' }) as unknown;
       if (v !== null && typeof v === 'object') out.push(v);
     } catch {
       /* not YAML */

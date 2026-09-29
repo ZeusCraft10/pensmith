@@ -562,3 +562,99 @@ test('GRND-18 / D-18-39 (review round 2): with COMPILE-INPUTS.json the compiled 
     writeDraft(root, 2, 'methods');
     assert.equal((await resolveNextAction(root)).verb, 'compile');
   });
+
+// === Phase 18 review round 3 ===
+
+/** A canonical OUTLINE.md table listing `rows` (id, slug, role). */
+function outlineTable(rows: Array<[number, string, string]>): string {
+  return [
+    '# Paper',
+    '',
+    '| # | slug | title | role | depends_on | word target | assigned_sources | voice |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...rows.map(([n, slug, role]) => `| ${n} | ${slug} | ${slug} | ${role} |  | 500 | a2020 |  |`),
+    '',
+  ].join('\n');
+}
+
+async function draftHash(text: string): Promise<string> {
+  const { computeDraftHash } = (await import(new URL('../bin/lib/draft-hash.js', import.meta.url).href)) as {
+    computeDraftHash: (b: Buffer, s: string[]) => string;
+  };
+  return computeDraftHash(Buffer.from(text), ['a2020']);
+}
+
+test('review round 3: "unverifiable" on the draft verify judged — advisory rows only (PDF_UNAVAILABLE) walk on to compile; a blocking UNVERIFIABLE row is attention naming `pensmith verify N`; a changed draft is verified',
+  { skip: !built }, async () => {
+    const resolveNextAction = await loadResolve();
+    const root = totalityRoot([{ n: 1, slug: 'intro' }]);
+    writePaperFile(root, 'OUTLINE.md', outlineTable([[1, 'intro', 'intro']]));
+    writeSectionPlan(root, 1, 'intro', 'unverifiable', `assigned_sources:\n  - a2020\nverified_against_draft_hash: ${await draftHash('Draft text.\n')}\n`);
+    writeDraft(root, 1, 'intro');
+    const verification = join(root, '.paper', 'sections', '01-intro', 'VERIFICATION.md');
+    writeFileSync(verification, '# VERIFICATION\n\nStatus: unverifiable\n\n- a2020: **OK** — titleJW=1.00\n- a2020 ("a twenty-word quote…"): **PDF_UNAVAILABLE** — no open-access full text\n');
+    assert.equal((await resolveNextAction(root)).verb, 'compile', 'advisory only: compile accepts it (Pitfall 3), so no paid verify loop');
+
+    writeFileSync(verification, '# VERIFICATION\n\nStatus: unverifiable\n\n- a2020: **UNVERIFIABLE** — Crossref lookup failed\n');
+    const blocked = await resolveNextAction(root);
+    assert.equal(blocked.verb, 'status');
+    assert.equal(blocked.reason, 'attention');
+    assert.deepEqual(blocked.section, { n: 1, slug: 'intro' });
+    assert.match(blocked.detail ?? '', /section 1 could not be verified: citation \[@a2020\] is UNVERIFIABLE .* `pensmith verify 1` once the sources can be reached$/);
+
+    writeFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'Draft text, revised.\n');
+    assert.equal((await resolveNextAction(root)).verb, 'verify', 'the draft changed since: verify it');
+  });
+
+test('review round 3 (D-18-38): OUTLINE.md missing while STATE.json registers sections → attention naming restore / `outline --force`, never an `outline` dispatch',
+  { skip: !built }, async () => {
+    const resolveNextAction = await loadResolve();
+    const root = freshRoot();
+    writeState(root, [{ n: 1, slug: 'intro' }, { n: 2, slug: 'body' }]);
+    writePaperFile(root, 'RESEARCH.md');
+    writeSectionPlan(root, 1, 'intro', 'verified');
+    const d = await resolveNextAction(root);
+    assert.equal(d.verb, 'status');
+    assert.equal(d.reason, 'attention');
+    assert.match(d.detail ?? '', /OUTLINE\.md is missing, but STATE\.json registers §1, §2 — restore it .* `pensmith outline --force`/);
+    const none = freshRoot();
+    writeState(none, []);
+    writePaperFile(none, 'RESEARCH.md');
+    assert.equal((await resolveNextAction(none)).verb, 'outline', 'nothing registered: outline it');
+  });
+
+test('review round 3 (GRND-08): an OUTLINE.md table with one malformed row is attention quoting its line — registered sections or not',
+  { skip: !built }, async () => {
+    const resolveNextAction = await loadResolve();
+    const root = totalityRoot([{ n: 1, slug: 'intro' }, { n: 2, slug: 'counter' }]);
+    writePaperFile(root, 'OUTLINE.md', outlineTable([[1, 'intro', 'intro'], [2, 'counter', 'counter']]));
+    writeSectionPlan(root, 1, 'intro', 'verified');
+    const d = await resolveNextAction(root);
+    assert.equal(d.verb, 'status');
+    assert.equal(d.reason, 'attention');
+    assert.match(d.detail ?? '', /OUTLINE\.md cannot be read \(couldn't parse line 6: .*role.*\) — fix that row .* `pensmith outline --force`/);
+    const fresh = freshRoot();
+    writeState(fresh, []);
+    writePaperFile(fresh, 'RESEARCH.md');
+    writePaperFile(fresh, 'OUTLINE.md', outlineTable([[1, 'intro', 'introduction']]));
+    assert.equal((await resolveNextAction(fresh)).reason, 'attention', 'no section registered yet: still never an `outline` that would overwrite it');
+  });
+
+test('review round 3 (GRND-02): stopAfterOutline halts at status (done) once the outline is approved — no section is planned',
+  { skip: !built }, async () => {
+    const mod = (await import(ROUTER_MOD)) as {
+      resolveNextAction: (root: string, opts?: { stopAfterOutline?: boolean }) => Promise<RouterDecision>;
+    };
+    const root = totalityRoot([{ n: 1, slug: 'intro' }]);
+    writePaperFile(root, 'OUTLINE.md', outlineTable([[1, 'intro', 'intro']]));
+    writeStubPlan(root, 1, 'intro');
+    assert.equal((await mod.resolveNextAction(root)).verb, 'plan');
+    const stop = await mod.resolveNextAction(root, { stopAfterOutline: true });
+    assert.equal(stop.verb, 'status');
+    assert.equal(stop.reason, 'done');
+    assert.match(stop.detail ?? '', /^outline only: the approved outline is \.paper\/OUTLINE\.md .* mode = "draft" .*`pensmith plan 1`/);
+    const early = freshRoot();
+    writeState(early, []);
+    writePaperFile(early, 'RESEARCH.md');
+    assert.equal((await mod.resolveNextAction(early, { stopAfterOutline: true })).verb, 'outline', 'the outline itself still runs');
+  });

@@ -108,7 +108,9 @@ as INTAKE.md.
    (or the preset's default) as its default:
    1. PII redaction (asked in step 5);
    2. discipline preset — the presets of `templates/presets/disciplines.json`;
-   3. mode — full draft, or outline only;
+   3. mode — full draft, or outline only (`[project] mode = "outline"`: bare
+      `pensmith` / `next` / `resume` stop once the outline is approved and plan,
+      draft and verify no section; an explicit `pensmith plan N` still runs);
    4. what the paper is for (the question, its options and its flag come from the
       question list);
    5. class (default Unfiled);

@@ -35,6 +35,8 @@ export interface SourceContextInput {
   readonly doi?: string | null | undefined;
   /** A synthetic --dry-run source (RUN-27). */
   readonly synthetic?: boolean | null | undefined;
+  /** Flagged retracted at research time (Retraction Watch); Pass 1 always blocks a citation of it. */
+  readonly retracted?: boolean | null | undefined;
 }
 
 /** One source as the planner and the drafter see it (18-PLAN.md §3.3). */
@@ -192,7 +194,8 @@ export function libraryCitekeys(entries: readonly SourceContextInput[]): Set<str
 // Crossref: a source with no DOI is FABRICATED ("no DOI in citation entry") and
 // one whose DOI Crossref does not register — arXiv's DataCite DOIs and the other
 // DataCite repositories — is FABRICATED ("did not resolve via Crossref"), on
-// every run. Offering such a source to the outline or the planner only strands
+// every run — as does a source flagged retracted (Pass 1 blocks it as
+// MIS-CITED). Offering such a source to the outline or the planner only strands
 // the section at verify, so outline and plan are fed the checkable ones and
 // name the others. When Pass 1 gains an arXiv / DataCite path (Phase 19/20),
 // THIS predicate is what widens.
@@ -201,12 +204,17 @@ export function libraryCitekeys(entries: readonly SourceContextInput[]): Set<str
 /** DOI prefixes registered with DataCite, which Crossref does not resolve: arXiv, Zenodo, figshare, Dryad. */
 export const DATACITE_DOI_PREFIXES: readonly string[] = Object.freeze(['10.48550', '10.5281', '10.6084', '10.5061']);
 
+/** The reason a retracted source is withheld (verifierBlindSpot); it never becomes citable. */
+export const RETRACTED_REASON = 'retracted (Retraction Watch)';
+
 /**
- * Why the citation verifier cannot check `entry` (null when it can): no DOI, a
- * DataCite DOI, or a synthetic --dry-run source outside a dry run. Pure: the
- * caller passes whether this is a dry run.
+ * Why the citation verifier would never pass a citation of `entry` (null when
+ * it can): retracted (Pass 1 always blocks it as MIS-CITED; review round 3),
+ * no DOI, a DataCite DOI, or a synthetic --dry-run source outside a dry run.
+ * Pure: the caller passes whether this is a dry run.
  */
-export function verifierBlindSpot(entry: Pick<SourceContextInput, 'doi' | 'synthetic'>, dryRun: boolean): string | null {
+export function verifierBlindSpot(entry: Pick<SourceContextInput, 'doi' | 'synthetic' | 'retracted'>, dryRun: boolean): string | null {
+  if (entry.retracted === true) return RETRACTED_REASON;
   const doi = typeof entry.doi === 'string' ? entry.doi.trim().toLowerCase() : '';
   if (doi.length === 0) return 'no DOI';
   const prefix = doi.split('/')[0] ?? '';
@@ -235,4 +243,18 @@ export function partitionCheckable<T extends SourceContextInput>(
 export function describeExcluded(excluded: ReadonlyArray<{ citekey: string; reason: string }>, max = 8): string {
   const named = excluded.slice(0, max).map((x) => `${x.citekey} (${x.reason})`).join(', ');
   return excluded.length > max ? `${named}, and ${excluded.length - max} more` : named;
+}
+
+/**
+ * What the user can do about the withheld sources: a source with no Crossref
+ * DOI becomes usable once its published version's DOI is added; a retracted
+ * one is never cited.
+ */
+export function excludedRemedy(excluded: ReadonlyArray<{ citekey: string; reason: string }>): string {
+  const retracted = excluded.some((x) => x.reason === RETRACTED_REASON);
+  const fixable = excluded.some((x) => x.reason !== RETRACTED_REASON);
+  const parts: string[] = [];
+  if (fixable) parts.push('to use one the verifier cannot check, `pensmith add` the DOI of its published (Crossref-registered) version');
+  if (retracted) parts.push('a retracted source is never cited');
+  return parts.join('; ');
 }

@@ -78,6 +78,20 @@ for (const [what, make, message] of BROKEN) {
   });
 }
 
+test('RUN-12: a reply that is neither JSON nor YAML is refused with ONE stderr line (no YAMLWarning block)', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await seeded(sb);
+    sb.mock!.script('outline-author', { text: 'I cannot produce that.' }, { text: '%%% garbage ###' });
+    const r = await outlineRun(sb);
+    assert.equal(r.status, 1, `${r.stdout}\n${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /YAMLWarning|BAD_DIRECTIVE|trace-warnings/, r.stderr);
+    const lines = r.stderr.split(/\r?\n/).filter((l) => l.trim() !== '' && !/^(?:OFFLINE MODE|LLM STUBBED)/.test(l));
+    assert.deepEqual(lines.filter((l) => !l.startsWith('pensmith outline: WARN')).length, 1, r.stderr);
+    assert.match(lines.at(-1) ?? '', /^pensmith: outline rejected: .*no JSON or YAML value/);
+    assertUntouched(sb);
+  });
+});
+
 test('GRND-08: invalid once, then valid → success; OUTLINE.rejected.md from an earlier failure is deleted', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     await seeded(sb);

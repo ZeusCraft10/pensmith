@@ -91,6 +91,32 @@
       "text": "Name: Priya Natarajan-Wells\nWrite about Abraham Lincoln and the Emancipation Proclamation, and on Martin Luther King.",
       "pii": ["Priya Natarajan-Wells"],
       "keep": ["Abraham Lincoln", "Emancipation Proclamation", "Martin Luther King"]
+    },
+    {
+      "id": "person-lines-entity-surnames",
+      "text": "Student: Jiwoo Park (student ID 20231187), jpark@example.edu\nInstructor: Grace Law\nTA: Anna Lake\nAuthor: Michael Bay\nName: Shirley Temple\nWrite a 1200-word essay on the causes of the Korean War. APA style.",
+      "pii": ["Jiwoo Park", "Jiwoo", "20231187", "jpark@example.edu", "Grace Law", "Anna Lake", "Michael Bay", "Shirley Temple"],
+      "keep": ["Korean War", "Student:", "Instructor:", "student ID"]
+    },
+    {
+      "id": "honorific-full-name-and-by-lists",
+      "text": "Office hours: Dr. Helen Park and Prof. Aaron Church. Prepared by Grace Law and Tom Church.\nDr. May reviews drafts.",
+      "pii": ["Helen Park", "Park", "Aaron Church", "Grace Law", "Tom Church", "May reviews"],
+      "keep": ["Dr.", "Prof.", "Prepared by"],
+      "keep_terms": []
+    },
+    {
+      "id": "spaced-ssn-and-hyphenated-given-names",
+      "text": "SSN 123 45 6789\nSIN 123 456 789\nName: Kim Min-jun\nPartner: Seo-yeon Choi",
+      "pii": ["123 45 6789", "45 6789", "123 456 789", "Kim Min-jun", "Min-jun", "jun", "Seo-yeon Choi", "yeon"],
+      "keep": ["SSN", "SIN"]
+    },
+    {
+      "id": "since-idea-places-negatives",
+      "text": "Write a 1500-word comparative essay on housing policy in New York and Los Angeles since 1990. Compare Great Britain and Canada as counterexamples. Discuss the idea 2024 brought, compute sin 90 for the Monte Carlo appendix, and cite the id 42 row. Since 2008, rents rose in San Francisco and Buenos Aires.",
+      "pii": [],
+      "keep": ["New York", "Los Angeles", "since 1990", "Compare Great Britain", "idea 2024", "sin 90", "Monte Carlo", "id 42", "Since 2008", "San Francisco", "Buenos Aires"],
+      "keep_terms": []
     }
   ]
 }

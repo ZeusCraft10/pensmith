@@ -43,7 +43,7 @@ import { loggedSectionId, sectionIdOf } from '../lib/section-id.js';
 import { readOutlineSync } from '../lib/outline.js';
 import { readPaperBrief } from '../lib/paper-brief.js';
 import { tryLoadLibrary } from '../lib/library.js';
-import { buildSourceContext, describeExcluded, libraryCitekeys, partitionCheckable, type SourceContextInput } from '../lib/source-context.js';
+import { buildSourceContext, describeExcluded, excludedRemedy, libraryCitekeys, partitionCheckable, type SourceContextInput } from '../lib/source-context.js';
 import { buildPromptRequest, requestHints } from '../lib/prompt-request.js';
 import { formatPlanIssues, planCorrection, validatePlan } from '../lib/plan-validate.js';
 import { renderPlannedPlanMd, summarizePlanClaims } from '../lib/plan-render.js';
@@ -181,7 +181,7 @@ export const planCommand = defineCommand({
     if (unusable.length > 0) {
       process.stderr.write(
         `pensmith plan: WARN — section ${id} leaves out ${describeExcluded(unusable.map((k) => ({ citekey: k, reason: blind.get(k) as string })))}: ` +
-          `the citation verifier cannot check them\n`,
+          `the citation verifier would not pass a citation of them (${excludedRemedy(unusable.map((k) => ({ citekey: k, reason: blind.get(k) as string })))})\n`,
       );
     }
     const allowed = candidates.filter((k) => !blind.has(k));

@@ -101,21 +101,131 @@ export function replaceCitekeys(md: string, fn: (key: string) => string): string
  * fails closed (FABRICATED), which is the point.
  *
  * NOT for substitution/rendering — it is intentionally permissive and is for
- * detection/verification only. The `@` must not follow a letter, a digit or a
- * backslash (Pandoc's rule), so an email-style `name@host` never matches.
+ * detection/verification only. It follows Pandoc's key grammar (keyMatches: an
+ * email-style `name@host` never matches), skips a narrative key only in code
+ * Pandoc provably reads as code (findNarrativeCitations), and adds the keys
+ * Pandoc reads after decoding a sub/superscript (subSuperscriptKeys) or after a
+ * table cuts a row inside a key (tableCutKeys) — every key Pandoc renders is
+ * reported; a few it does not are too (fail closed; D-18-42, checked against
+ * pandoc by tests/citation-grammar-pandoc.test.ts).
  */
 export function extractCitedKeysForVerification(md: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const cite of findCitations(md)) {
-    for (const key of cite.keys) {
-      if (!seen.has(key)) {
-        seen.add(key);
-        out.push(key);
+  const add = (key: string): void => {
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(key);
+    }
+  };
+  for (const cite of findCitations(md)) for (const key of cite.keys) add(key);
+  for (const key of subSuperscriptKeys(md)) add(key);
+  for (const key of tableCutKeys(md)) add(key);
+  return out;
+}
+
+/**
+ * A Pandoc table also cuts a row INSIDE a key: a simple or multiline table at
+ * the start of each dash group of its rule, a grid table at each `+` / `|`
+ * (`@smith2020a` cut after `smith2020` cites smith2020). For every rule line in
+ * `md`, the key each such column cuts a key to (review round 3; fail closed).
+ * A line holding a tab — whose columns this does not model — gets every
+ * prefix of its keys.
+ */
+function tableCutKeys(md: string): string[] {
+  if (!tableMayCut(md)) return [];
+  const cuts = new Set<number>();
+  for (const m of md.matchAll(new RegExp(TABLE_RULE_RE.source, 'gm'))) {
+    const rule = m[0].replace(/\r$/, '');
+    if (!/[-=]/.test(rule)) continue;
+    for (let i = 0; i < rule.length; i += 1) {
+      const c = rule[i] as string;
+      if ((c === '-' || c === '=') && !'-='.includes(rule[i - 1] ?? ' ')) cuts.add(i);
+      if (c === '+' || c === '|' || c === ':') {
+        cuts.add(i);
+        cuts.add(i + 1);
+      }
+    }
+  }
+  const out: string[] = [];
+  for (const line of sourceLines(md)) {
+    if (!line.text.includes('@')) continue;
+    const tabbed = line.text.includes('\t');
+    for (const m of keyMatches(line.text, true)) {
+      const at = line.text.indexOf('@', m.index);
+      for (let x = at + 2; x < m.index + m.length; x += 1) {
+        if (!tabbed && !cuts.has(x)) continue;
+        const k = readKey(line.text.slice(0, x), at);
+        if (k !== null) out.push(k.key);
       }
     }
   }
   return out;
+}
+
+/**
+ * Inside a sub- or superscript (`~…~`, `^…^`: no unescaped whitespace between
+ * the marks) Pandoc decodes entities and backslash escapes BEFORE it reads
+ * citations: `~&#64;smith~` cites smith, `~\\@k~` cites k, `~@a&#58;b~` cites
+ * a:b. The keys of every such candidate's decoded content count (review
+ * round 3; a candidate Pandoc does not read as one only adds keys: fail closed).
+ */
+function subSuperscriptKeys(md: string): string[] {
+  const out: string[] = [];
+  const loose = tableMayCut(md);
+  for (let i = 0; i < md.length; i += 1) {
+    const mark = md[i];
+    if (mark !== '~' && mark !== '^') continue;
+    let j = i + 1;
+    let close = -1;
+    while (j < md.length && j - i <= MAX_SCRIPT_CHARS) {
+      const c = md[j] as string;
+      if (c === '\\' && j + 1 < md.length) {
+        j += 2;
+        continue;
+      }
+      if (c === mark) {
+        if (j > i + 1) close = j;
+        break;
+      }
+      if (/\s/u.test(c)) break;
+      j += 1;
+    }
+    if (close === -1) continue;
+    const content = md.slice(i + 1, close);
+    if (!content.includes('@') && !content.includes('&')) continue;
+    for (const m of keyMatches(decodeForSubscripts(content), loose)) out.push(m.key);
+  }
+  return out;
+}
+
+/** The longest sub- or superscript content searched (Pandoc's cannot hold whitespace, so real ones are short). */
+const MAX_SCRIPT_CHARS = 512;
+
+/** Named entities that decode to ASCII (every other named entity is read as a letter below). */
+const ASCII_ENTITIES: Readonly<Record<string, string>> = {
+  excl: '!', quot: '"', QUOT: '"', num: '#', dollar: '$', percnt: '%', amp: '&', AMP: '&', apos: "'", lpar: '(',
+  rpar: ')', ast: '*', midast: '*', plus: '+', comma: ',', period: '.', sol: '/', colon: ':', semi: ';', lt: '<',
+  LT: '<', equals: '=', gt: '>', GT: '>', quest: '?', commat: '@', lsqb: '[', lbrack: '[', bsol: '\\', rsqb: ']',
+  rbrack: ']', Hat: '^', lowbar: '_', UnderBar: '_', grave: '`', DiacriticalGrave: '`', lcub: '{', lbrace: '{',
+  verbar: '|', vert: '|', VerticalLine: '|', rcub: '}', rbrace: '}', Tab: '\t', NewLine: '\n',
+};
+
+/**
+ * `md` as Pandoc reads it inside a sub- or superscript: numeric and ASCII
+ * named entities decoded, backslash escapes of ASCII punctuation dropped. Any
+ * other named entity (`&eacute;`, `&mdash;`) becomes the letter `ǂ`, which
+ * keeps a key going and matches no library citekey — a key that holds one is
+ * reported, and fails closed.
+ */
+function decodeForSubscripts(md: string): string {
+  return md
+    .replace(/&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z][A-Za-z0-9]{0,31}));/g, (m, dec?: string, hex?: string, name?: string) => {
+      if (name !== undefined) return ASCII_ENTITIES[name] ?? '\u01c2';
+      const cp = dec !== undefined ? Number.parseInt(dec, 10) : Number.parseInt(hex ?? '', 16);
+      return cp > 0 && cp <= 0x10ffff && !(cp >= 0xd800 && cp <= 0xdfff) ? String.fromCodePoint(cp) : m;
+    })
+    .replace(/\\([!-/:-@[-`{-~])/g, '$1');
 }
 
 // ---------------------------------------------------------------------------
@@ -135,16 +245,6 @@ export function extractCitedKeysForVerification(md: string): string[] {
 
 /** A bracketed run with NO nested brackets that contains an `@` (group 1: the inner text). */
 const CLUSTER_RE_SOURCE = String.raw`\[([^[\]]*@[^[\]]*)\]`;
-/**
- * One citation key, Pandoc's grammar: `@` (optionally `-@`, author suppressed)
- * NOT preceded by a letter, a digit or a backslash (so `name@host` and an
- * escaped `\@` never match), then either a braced key `{…}` (no whitespace) or a
- * key that starts with a letter/digit/underscore and may hold the internal
- * punctuation `:.#$%&-+?<>~/` only when a letter/digit/underscore follows it
- * (so trailing sentence punctuation is never part of the key). Group 1: a
- * braced key; group 2: a plain key. Flags `gu`.
- */
-const KEY_RE_SOURCE = String.raw`(?<![\p{L}\p{N}\\])-?@(?:\{([^{}\s]+)\}|([\p{L}\p{N}_](?:[\p{L}\p{N}_]|[:.#$%&\-+?<>~/](?=[\p{L}\p{N}_]))*))`;
 
 /** One citation in a text: its span, its text and its keys in order. */
 export interface CitationCluster {
@@ -160,19 +260,166 @@ export interface CitationCluster {
   readonly narrative?: boolean;
 }
 
-/** Every key match (index, length, key) in `text`. */
-function keyMatches(text: string): Array<{ index: number; length: number; key: string }> {
+// ---------------------------------------------------------------------------
+// Pandoc's citation-key grammar (pandoc 3.x `citeKey`, review round 3 of
+// Phase 18). A key is `@` — or `-@`, author suppressed — then either
+//   - a braced key `{…}`: any non-space characters with BALANCED braces
+//     (`@{ev{i}l}` is the key `ev{i}l`; `@{}` is an empty key, reported as
+//     `{}` so it can never match a library citekey), or
+//   - a simple key: a first letter, digit, `_` or `*`, then letters, digits
+//     and `_`, one of the internal punctuation marks `:.#$%&-+?<>~/` only when
+//     a letter, digit or `_` follows it, and `:` or `/` when a `/` follows it
+//     (`@a://b`), so trailing sentence punctuation is never part of the key.
+// The `@` must not come right after a word (Pandoc's "not after a Str": a
+// letter or digit before it, so `name@host` never matches) — except right
+// after another key (`@a@b` cites both) — and must not be escaped (an ODD run
+// of backslashes before it: `\@k` is literal, `\\@k` cites k; inside a
+// sub- or superscript Pandoc decodes escapes and entities first, which
+// extractCitedKeysForVerification reads separately). Where Pandoc is
+// stricter (`e.g.@k` is not a citation to Pandoc) this grammar reports the key
+// anyway: an extra key fails closed; a missing one would be a gate bypass.
+// ---------------------------------------------------------------------------
+
+/** Letters and digits (Pandoc's `alphaNum`). */
+const ALNUM_RE = /[\p{L}\p{N}]/u;
+const INTERNAL_PUNCT = ':.#$%&-+?<>~/';
+
+/** The code point at `i` (astral characters included). */
+function charAt(text: string, i: number): string | undefined {
+  const cp = text.codePointAt(i);
+  return cp === undefined ? undefined : String.fromCodePoint(cp);
+}
+
+/** The code point that ends just before `i`. */
+function charBefore(text: string, i: number): string | undefined {
+  if (i <= 0) return undefined;
+  const lo = text.charCodeAt(i - 1);
+  if (lo >= 0xdc00 && lo <= 0xdfff && i >= 2) {
+    const hi = text.charCodeAt(i - 2);
+    if (hi >= 0xd800 && hi <= 0xdbff) return text.slice(i - 2, i);
+  }
+  return text[i - 1];
+}
+
+function isRegChar(ch: string | undefined): boolean {
+  return ch !== undefined && (ch === '_' || ALNUM_RE.test(ch));
+}
+
+/** The key after the `@` at `at`: its text and the offset just past it, or null. */
+function readKey(text: string, at: number): { key: string; end: number } | null {
+  const i = at + 1;
+  if (text[i] === '{') {
+    let depth = 0;
+    for (let j = i; j < text.length; j += 1) {
+      const c = text[j] as string;
+      if (/\s/u.test(c)) return null;
+      if (c === '{') depth += 1;
+      else if (c === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          const key = text.slice(i + 1, j);
+          return { key: key === '' ? '{}' : key, end: j + 1 };
+        }
+      }
+    }
+    return null;
+  }
+  const first = charAt(text, i);
+  if (first === undefined || !(first === '*' || isRegChar(first))) return null;
+  let j = i + first.length;
+  for (;;) {
+    const c = charAt(text, j);
+    if (c === undefined) break;
+    if (isRegChar(c)) {
+      j += c.length;
+      continue;
+    }
+    if (INTERNAL_PUNCT.includes(c)) {
+      const next = charAt(text, j + 1);
+      if (isRegChar(next) || ((c === ':' || c === '/') && next === '/')) {
+        j += 1;
+        continue;
+      }
+    }
+    break;
+  }
+  return { key: text.slice(i, j), end: j };
+}
+
+/** True when an odd run of backslashes ends just before `i` (the character at `i` is escaped). */
+function escapedAt(text: string, i: number): boolean {
+  let n = 0;
+  for (let j = i - 1; j >= 0 && text[j] === '\\'; j -= 1) n += 1;
+  return n % 2 === 1;
+}
+
+/**
+ * Pandoc's example-list reference `@label` (label: runs of letters and digits,
+ * each optionally led by `_` or `-`). Pandoc reads one wherever a citation
+ * fails — `x@a` is not a citation, but its `@a` is consumed as a label — so the
+ * `@` right after it may open a citation again (`x@a@b` cites b).
+ */
+const EXAMPLE_LABEL_RE = /(?:[\p{L}\p{N}]+|[_-][\p{L}\p{N}]+)+/uy;
+
+/** True when a raw TeX command (`\\cmd`) ends just before `i`: Pandoc reads it as TeX, not as a word (`\\x@k` cites k). */
+function afterTexCommand(text: string, i: number): boolean {
+  let j = i;
+  while (j > 0 && /\p{L}/u.test(text[j - 1] as string)) j -= 1;
+  return j < i && j > 0 && text[j - 1] === '\\' && !escapedAt(text, j - 1);
+}
+
+/**
+ * A line that may rule a Pandoc table (`-  ---`, ` - `, `+---+`, `|:--|`, `===`)
+ * or a setext heading. A simple, multiline or grid table cuts its rows at the
+ * rule's column positions, so a cell may start right at an `@` that follows a
+ * word (`k@h` → the cell `@h`, a citation) or an escaping backslash.
+ */
+const TABLE_RULE_RE = /^[ \t]*[-+=:|][-+=:| \t]*\r?$/m;
+
+/** True when `md` may hold a table whose cells can start at any `@` (see TABLE_RULE_RE). */
+function tableMayCut(md: string): boolean {
+  for (const m of md.matchAll(new RegExp(TABLE_RULE_RE.source, 'gm'))) if (/[-=]/.test(m[0])) return true;
+  return false;
+}
+
+/**
+ * Every key match (index, length, key) in `text`, in order. `loose` (a text
+ * that may hold a table, tableMayCut) counts every `@` followed by a key,
+ * whatever comes before it.
+ */
+function keyMatches(text: string, loose = false): Array<{ index: number; length: number; key: string }> {
   const out: Array<{ index: number; length: number; key: string }> = [];
-  for (const km of text.matchAll(new RegExp(KEY_RE_SOURCE, 'gu'))) {
-    const key = km[1] ?? km[2] ?? '';
-    if (key) out.push({ index: km.index, length: km[0].length, key });
+  // Where the last `@` token (a key, or a label Pandoc read instead of a
+  // failed citation) ended: an `@` there is not "after a word".
+  let lastEnd = -1;
+  const startsAt = (s: number): boolean => {
+    if (loose || s === lastEnd) return true; // right after another key or label: `@a@b`, `@a-@b`, `x@a@b`
+    const before = charBefore(text, s);
+    if (before !== undefined && ALNUM_RE.test(before) && !afterTexCommand(text, s)) return false;
+    return !escapedAt(text, s);
+  };
+  for (let at = text.indexOf('@'); at !== -1; at = text.indexOf('@', at + 1)) {
+    let start = -1;
+    if (at > 0 && text[at - 1] === '-' && startsAt(at - 1)) start = at - 1;
+    else if (startsAt(at)) start = at;
+    const k = start === -1 ? null : readKey(text, at);
+    if (k !== null) {
+      out.push({ index: start, length: k.end - start, key: k.key });
+      lastEnd = k.end;
+      continue;
+    }
+    // Not a citation: Pandoc reads an unescaped `@label` as an example reference.
+    if (escapedAt(text, at)) continue;
+    EXAMPLE_LABEL_RE.lastIndex = at + 1;
+    const label = EXAMPLE_LABEL_RE.exec(text);
+    if (label !== null) lastEnd = at + 1 + label[0].length;
   }
   return out;
 }
 
 /** The citekeys of one cluster's inner text (between the brackets), in order. */
-function clusterKeys(inner: string): string[] {
-  return keyMatches(inner).map((m) => m.key);
+function clusterKeys(inner: string, loose = false): string[] {
+  return keyMatches(inner, loose).map((m) => m.key);
 }
 
 /**
@@ -180,12 +427,13 @@ function clusterKeys(inner: string): string[] {
  * `[see @a; also @b]`, `[-@a]`, `[@{a}]`, `[@Vaswani2017]` — in document order.
  * A bracketed run whose `@` is not a citation (`[mail a@b.org]`) is not a
  * cluster. Narrative citations are not clusters: read every citation with
- * findCitations.
+ * findCitations. A cluster is found everywhere, code included (fail closed).
  */
 export function findCitationClusters(md: string): CitationCluster[] {
   const out: CitationCluster[] = [];
+  const loose = tableMayCut(md);
   for (const cm of md.matchAll(new RegExp(CLUSTER_RE_SOURCE, 'g'))) {
-    const keys = clusterKeys(cm[1] ?? '');
+    const keys = clusterKeys(cm[1] ?? '', loose);
     if (keys.length === 0) continue;
     const start = cm.index;
     out.push({ start, end: start + cm[0].length, text: cm[0], keys });
@@ -193,46 +441,225 @@ export function findCitationClusters(md: string): CitationCluster[] {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Where a narrative `@key` is NOT a citation: code, and nothing else (review
+// round 3). Pandoc ignores an `@` in code, HTML comments, link destinations and
+// autolinks, but telling those apart from text needs Pandoc's whole parser — a
+// heuristic that marks a span Pandoc reads as text hides a citation from every
+// gate (a drafter reply, a humanizer rewrite or an injected instruction could
+// then carry a key that is never contained and never verified). So comments,
+// link destinations and autolinks are NOT skipped (an `@` in them fails closed),
+// and code is skipped only where this module can PROVE Pandoc reads code:
+//   - a fenced code block whose fences are unambiguous (fencedCodeBlocks);
+//   - an inline code span in a paragraph where no other construct can take a
+//     backtick (inlineCodeSpans).
+// Whenever the proof fails, the `@key` is a citation (fail closed). The rules
+// are checked against pandoc 3.9 by tests/citation-grammar-pandoc.test.ts.
+// ---------------------------------------------------------------------------
+
+interface SourceLine {
+  /** Offset of the line's first character. */
+  readonly start: number;
+  /** Offset of the line's end (its `\r\n` / `\n` excluded). */
+  readonly end: number;
+  /** The line without its line ending. */
+  readonly text: string;
+}
+
+function sourceLines(md: string): SourceLine[] {
+  const out: SourceLine[] = [];
+  let start = 0;
+  for (;;) {
+    const nl = md.indexOf('\n', start);
+    const rawEnd = nl === -1 ? md.length : nl;
+    const end = rawEnd > start && md[rawEnd - 1] === '\r' ? rawEnd - 1 : rawEnd;
+    out.push({ start, end, text: md.slice(start, end) });
+    if (nl === -1) return out;
+    start = nl + 1;
+  }
+}
+
+const BLANK_LINE_RE = /^[ \t]*$/;
 /**
- * Spans Pandoc never reads a citation in: fenced code blocks, inline code
- * spans, HTML comments, link destinations `](…)` and autolinks `<scheme:…>`.
- * Only a narrative `@key` is looked for outside them (a Python `@decorator` in a
- * code block is not a citation); a bracketed cluster is detected everywhere
- * (fail closed).
+ * Constructs that can make a fence line or a backtick mean something else and
+ * that this module does not model: raw HTML, comments and autolinks (`<` + a
+ * letter, `!`, `?` or `/`), raw TeX (a backslash and a letter: its argument
+ * may run across paragraphs; a plain escape only matters in its own paragraph,
+ * BACKTICK_TAKER_RE), the end of a
+ * YAML metadata block (`...`; its `---` start is a table rule, tableMayCut),
+ * a byte-order mark, and a bare carriage return. Their presence (or a table
+ * rule) turns the code proof off for the whole document.
  */
-function nonCitationSpans(md: string): Array<[number, number]> {
-  const spans: Array<[number, number]> = [];
-  // Fenced code blocks: a ``` or ~~~ fence line to the matching fence line.
-  // Only CLOSED blocks count: Pandoc reads an unclosed fence as text, citations
-  // included — treating it as code to the end would hide them (fail closed).
-  const fence = /^[ \t]{0,3}(`{3,}|~{3,})[^\n]*$/gm;
-  let open: { at: number; marker: string } | null = null;
-  for (const m of md.matchAll(fence)) {
-    const marker = m[1] ?? '';
-    if (open === null) open = { at: m.index, marker };
-    else if (marker[0] === open.marker[0] && marker.length >= open.marker.length) {
-      spans.push([open.at, m.index + m[0].length]);
-      open = null;
+const UNMODELLED_RE = /<[\p{L}!?/]|\\\p{L}|\uFEFF|\r(?!\n)|^\.\.\.[ \t]*\r?$/mu;
+/** A fence-like line: up to three spaces of indent, then 3+ backticks or tildes. */
+const FENCE_LINE_RE = /^( {0,3})(`{3,}|~{3,})(.*)$/;
+/** An attribute block Pandoc accepts after a fence: `{.lang #id key=value}` or a raw `{=format}`. */
+const FENCE_ATTRS_RE = /^\{(?:=[\p{L}\p{N}_-]+|[ \t]*(?:(?:[#.]\p{L}[\p{L}\p{N}_:.-]*|\p{L}[\p{L}\p{N}_:.-]*=(?:"[^"\\]*"|'[^'\\]*'|[^\s"'}\\]*))(?:[ \t]+|(?=\})))*)\}$/u;
+
+/**
+ * A paragraph line Pandoc may continue across the next line with a construct
+ * that swallows a fence line (a code span, math, link text or destination, a
+ * note or span, a table row, a definition or div marker): a backtick fence
+ * right after such a paragraph cannot be proved to open a code block.
+ */
+const SPANS_LINES_RE = /[`$[\]^|{}]|^[ \t]*[:~]/;
+
+/**
+ * The fenced code blocks of `md`, when every fence in it is unambiguous: an
+ * opening fence at column 0 — right after a blank line, the start of the
+ * document or a closed block, or (backticks only: Pandoc lets them interrupt
+ * a paragraph) right after paragraph lines that nothing can continue into it
+ * — whose info string is empty, one word without backticks or braces, or an
+ * attribute block; closed by the first line of 0-3 spaces and at least as
+ * many of the same fence character with nothing after. Any other fence-like
+ * line — indented (it may sit in a list item), right after text that may
+ * swallow it, with an odd info string, or never closed — means Pandoc's
+ * reading cannot be proved, and no block is returned (every `@key` then
+ * counts, fail closed).
+ */
+function fencedCodeBlocks(lines: readonly SourceLine[]): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  let afterBlank = true;
+  let paragraphSpansLines = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] as SourceLine;
+    const m = FENCE_LINE_RE.exec(line.text);
+    if (m === null) {
+      afterBlank = BLANK_LINE_RE.test(line.text);
+      paragraphSpansLines = afterBlank ? false : paragraphSpansLines || SPANS_LINES_RE.test(line.text);
+      continue;
+    }
+    const fence = m[2] as string;
+    const info = (m[3] as string).trim();
+    const infoOk = info === '' || /^[^\s`{}]+$/u.test(info) || FENCE_ATTRS_RE.test(info);
+    const opens = afterBlank || (fence[0] === '`' && !paragraphSpansLines);
+    if ((m[1] as string) !== '' || !opens || !infoOk) return [];
+    let close = -1;
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const c = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec((lines[j] as SourceLine).text);
+      if (c !== null && (c[1] as string)[0] === fence[0] && (c[1] as string).length >= fence.length) {
+        close = j;
+        break;
+      }
+    }
+    if (close === -1) return [];
+    out.push([line.start, (lines[close] as SourceLine).end]);
+    i = close;
+    afterBlank = true;
+    paragraphSpansLines = false;
+  }
+  return out;
+}
+
+/** A paragraph that holds a construct able to take a backtick (math, a table cell, attributes, a note, a link or span, an escape): no inline-code proof there. */
+const BACKTICK_TAKER_RE = /[$|{}^~\\]|\][ \t\r\n]*[([{:]/;
+/** Paragraphs longer than this are not searched for code spans (every `@key` in them counts). */
+const MAX_PARAGRAPH_LINES = 64;
+const MAX_PARAGRAPH_CHARS = 20_000;
+
+/**
+ * Pandoc's code spans in `text`, as Pandoc pairs them: a backtick run opens a
+ * span closed by the next run of exactly the same length; when there is none,
+ * ONE backtick is literal and the rest of the run opens again (`` ``a`@k` ``
+ * is a literal backtick, the code `a`, then the citation @k).
+ */
+function pairBackticks(text: string): Array<[number, number]> {
+  // The maximal backtick runs, and each length's run starts in order (a
+  // closer is looked up by binary search, so many unmatched runs stay linear).
+  const runs: Array<{ start: number; length: number }> = [];
+  for (let i = text.indexOf('`'); i !== -1; ) {
+    let n = 0;
+    while (text[i + n] === '`') n += 1;
+    runs.push({ start: i, length: n });
+    i = text.indexOf('`', i + n);
+  }
+  const byLength = new Map<number, number[]>();
+  for (const r of runs) {
+    const list = byLength.get(r.length) ?? [];
+    list.push(r.start);
+    byLength.set(r.length, list);
+  }
+  const closerAfter = (from: number, n: number): number => {
+    const list = byLength.get(n);
+    if (list === undefined) return -1;
+    let lo = 0;
+    let hi = list.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((list[mid] as number) < from) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo < list.length ? (list[lo] as number) : -1;
+  };
+  const out: Array<[number, number]> = [];
+  let cursor = 0;
+  for (const run of runs) {
+    if (run.start < cursor) continue;
+    cursor = run.start + run.length;
+    for (let off = 0; off < run.length; off += 1) {
+      const n = run.length - off;
+      const close = closerAfter(run.start + run.length, n);
+      if (close === -1) continue; // one backtick is literal; the rest of the run opens again
+      out.push([run.start + off, close + n]);
+      cursor = close + n;
+      break;
     }
   }
-  // HTML comments, scanned with indexOf (a lazy `<!--[\s\S]*?-->` regex is
-  // quadratic on many unclosed `<!--`). Only CLOSED comments count: Pandoc
-  // reads an unclosed `<!--` as text, citations included.
-  for (let at = md.indexOf('<!--'); at !== -1; ) {
-    const close = md.indexOf('-->', at + 4);
-    if (close === -1) break;
-    spans.push([at, close + 3]);
-    at = md.indexOf('<!--', close + 3);
-  }
-  for (const re of [/(`+)[^`]*?\1/g, /\]\([^()\s]*(?:\([^()\s]*\)[^()\s]*)*(?:\s+"[^"]*")?\)/g, /<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>/g]) {
-    for (const m of md.matchAll(re)) {
-      // A code span never crosses a blank line (a paragraph break): Pandoc reads
-      // an unmatched backtick as text, so such a "span" hides nothing.
-      if (/\n[ \t]*\r?\n/.test(m[0])) continue;
-      spans.push([m.index, m.index + m[0].length]);
+  return out;
+}
+
+/**
+ * The inline code spans of `md` that Pandoc provably reads as code: in a
+ * paragraph (a run of non-blank lines outside the fenced blocks) that holds no
+ * construct able to take a backtick, a span that lies on ONE line and that
+ * every possible start of the enclosing block (each earlier line of the
+ * paragraph, since a heading or list item may open a new block mid-paragraph)
+ * pairs the same way.
+ */
+function inlineCodeSpans(md: string, lines: readonly SourceLine[], fences: ReadonlyArray<readonly [number, number]>): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  const inFence = (l: SourceLine): boolean => fences.some(([s, e]) => l.start >= s && l.start < e);
+  let i = 0;
+  while (i < lines.length) {
+    const first = lines[i] as SourceLine;
+    if (BLANK_LINE_RE.test(first.text) || inFence(first)) {
+      i += 1;
+      continue;
     }
+    let k = i;
+    while (k + 1 < lines.length && !BLANK_LINE_RE.test((lines[k + 1] as SourceLine).text) && !inFence(lines[k + 1] as SourceLine)) k += 1;
+    const para = lines.slice(i, k + 1);
+    i = k + 1;
+    const last = para[para.length - 1] as SourceLine;
+    const text = md.slice(first.start, last.end);
+    if (!text.includes('`') || BACKTICK_TAKER_RE.test(text)) continue;
+    if (para.length > MAX_PARAGRAPH_LINES || text.length > MAX_PARAGRAPH_CHARS) continue;
+    // The one-line spans of each possible block start, keyed by absolute offsets.
+    const pairings = para.map((from) =>
+      new Set(
+        pairBackticks(md.slice(from.start, last.end))
+          .map(([s, e]) => [s + from.start, e + from.start] as const)
+          .filter(([s, e]) => !md.slice(s, e).includes('\n'))
+          .map(([s, e]) => `${s}:${e}`),
+      ),
+    );
+    para.forEach((line, li) => {
+      for (const span of pairings[0] as Set<string>) {
+        const [s, e] = span.split(':').map(Number) as [number, number];
+        if (s < line.start || e > line.end) continue;
+        if (pairings.slice(0, li + 1).every((p) => p.has(span))) out.push([s, e]);
+      }
+    });
   }
-  return spans;
+  return out;
+}
+
+/** The spans of `md` Pandoc provably reads as code (see above); empty when that cannot be proved. */
+function codeSpans(md: string): Array<[number, number]> {
+  if (UNMODELLED_RE.test(md) || tableMayCut(md)) return [];
+  const lines = sourceLines(md);
+  const fences = fencedCodeBlocks(lines);
+  return [...fences, ...inlineCodeSpans(md, lines, fences)];
 }
 
 function inSpans(at: number, spans: ReadonlyArray<readonly [number, number]>): boolean {
@@ -241,16 +668,19 @@ function inSpans(at: number, spans: ReadonlyArray<readonly [number, number]>): b
 
 /**
  * Every narrative (in-text) citation in `md`: an `@key` / `-@key` / `@{key}`
- * outside every bracketed cluster and outside code, comments and link
- * destinations (Pandoc renders `@smith2020 argues` as "Smith (2020) argues").
+ * outside every bracketed cluster and outside code (Pandoc renders
+ * `@smith2020 argues` as "Smith (2020) argues"). An `@key` in an HTML comment,
+ * a link destination or an autolink counts (fail closed, see above).
  */
 export function findNarrativeCitations(md: string): CitationCluster[] {
-  const clusters = findCitationClusters(md).map((c) => [c.start, c.end] as const);
-  const skip = nonCitationSpans(md);
+  const clusters = findCitationClusters(md);
+  const code = md.includes('`') || md.includes('~') ? codeSpans(md) : [];
   const out: CitationCluster[] = [];
-  for (const m of keyMatches(md)) {
-    if (inSpans(m.index, clusters) || inSpans(m.index, skip)) continue;
-    out.push({ start: m.index, end: m.index + m.length, text: md.slice(m.index, m.index + m.length), keys: [m.key], narrative: true });
+  for (const m of keyMatches(md, tableMayCut(md))) {
+    const end = m.index + m.length;
+    if (clusters.some((c) => m.index >= c.start && end <= c.end)) continue;
+    if (inSpans(m.index, code)) continue;
+    out.push({ start: m.index, end, text: md.slice(m.index, end), keys: [m.key], narrative: true });
   }
   return out;
 }
@@ -258,6 +688,45 @@ export function findNarrativeCitations(md: string): CitationCluster[] {
 /** Every citation in `md` — bracketed clusters and narrative citations — in document order. */
 export function findCitations(md: string): CitationCluster[] {
   return [...findCitationClusters(md), ...findNarrativeCitations(md)].sort((a, b) => a.start - b.start);
+}
+
+/**
+ * The citations Pandoc renders in `md`, for an offline renderer: every
+ * citation of findCitations that does not sit in code (a cluster inside code
+ * still counts for the gates, but is left as written in an export).
+ */
+export function findRenderedCitations(md: string): CitationCluster[] {
+  const code = md.includes('`') || md.includes('~') ? codeSpans(md) : [];
+  return findCitations(md).filter((c) => !inSpans(c.start, code));
+}
+
+/** One cited source of a cluster, as Pandoc splits it: `[see @a, p. 5; -@b]` → two items. */
+export interface CitationItem {
+  /** Text before the key (`see`), trimmed. */
+  readonly prefix: string;
+  readonly key: string;
+  /** True for `-@key` (author suppressed). */
+  readonly suppressAuthor: boolean;
+  /** Text after the key (`, p. 5`), trailing space trimmed. */
+  readonly suffix: string;
+}
+
+/** The items of one citation (a cluster's `;` segments, or a narrative citation's one key). */
+export function citationItems(c: CitationCluster): CitationItem[] {
+  const segments = c.narrative ? [c.text] : c.text.slice(1, -1).split(';');
+  const out: CitationItem[] = [];
+  for (const segment of segments) {
+    const m = keyMatches(segment)[0];
+    if (m === undefined) continue;
+    const token = segment.slice(m.index, m.index + m.length);
+    out.push({
+      prefix: segment.slice(0, m.index).trim(),
+      key: m.key,
+      suppressAuthor: token.startsWith('-'),
+      suffix: segment.slice(m.index + m.length).trimEnd(),
+    });
+  }
+  return out;
 }
 
 /** How many citations `md` carries: every key of every citation (`[@a; @b]` counts 2, a narrative `@a` 1). */

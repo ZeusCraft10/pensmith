@@ -174,3 +174,16 @@ test('GRND-01 / RUN-14: stdin may carry an assignment only as a FIFO or a non-em
   assert.deepEqual(resolvePaperRoot({ verb: null, mode: 'cli', cwd: empty, env: {}, stdinAssignment: true }), { kind: 'root', root: empty, source: 'new' });
   assert.notDeepEqual(resolvePaperRoot({ verb: null, mode: 'cli', cwd: empty, env: {}, stdinAssignment: false }), { kind: 'root', root: empty, source: 'new' });
 });
+
+test('RUN-12 / GRND-01: `new @bad.pdf` fails with ONE `pensmith: …` stderr line and no PDF.js warnings on stdout', async () => {
+  const { withLlmSandbox } = await import('./helpers/llm-sandbox.js');
+  await withLlmSandbox({ mock: false }, async (sb) => {
+    fs.writeFileSync(path.join(sb.root, 'bad.pdf'), '%PDF-1.4 garbage');
+    const r = await sb.runTsx(null, ['new', '@bad.pdf', '--yolo'], { env: { PENSMITH_NO_LLM: '1' } });
+    assert.equal(r.status, 2, `${r.stdout}\n${r.stderr}`);
+    assert.doesNotMatch(r.stdout + r.stderr, /Warning: Indexing all PDF objects/);
+    const lines = r.stderr.split(/\r?\n/).filter((l) => l.trim() !== '' && !/^(?:OFFLINE MODE|LLM STUBBED)/.test(l));
+    assert.deepEqual(lines.length, 1, r.stderr);
+    assert.match(lines[0] ?? '', /^pensmith: @bad\.pdf: cannot extract text from this PDF/);
+  });
+});

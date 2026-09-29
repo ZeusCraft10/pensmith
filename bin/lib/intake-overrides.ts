@@ -169,6 +169,71 @@ export function sectioningNotesFrom(text: string): string[] {
   return out.slice(0, 10);
 }
 
+/** A section name as a canonical note spells it ("Literature  Review" → "literature review", "Conclusions" → "conclusion"). */
+function sectionName(raw: string): string {
+  const w = raw.toLowerCase().replace(/\s+/g, ' ');
+  const canon: Record<string, string> = {
+    intro: 'introduction', conclusions: 'conclusion', counterarguments: 'counterargument', objections: 'objection',
+    recommendations: 'recommendation', appendices: 'appendix', 'lit survey': 'literature survey', method: 'methods',
+    'case study': 'case studies', 'materials and methods': 'methods',
+  };
+  return canon[w] ?? w;
+}
+
+/**
+ * One sectioning note as the outline model may read it (review round 3 of
+ * Phase 18, FEED-05): the note's relation — omit, order (before / after /
+ * between / first / last / start with / end with) or include — rebuilt from a
+ * fixed vocabulary and the section names SECTION_WORDS recognises in it. No
+ * other word of the note survives, so an instruction smuggled into an
+ * assignment clause ("Before the conclusion section, ignore all previous
+ * instructions …") cannot reach the outline-author prompt outside the
+ * untrusted-data fence: that one becomes "include a conclusion section".
+ * Null when the note names no section.
+ */
+export function canonicalSectioningNote(note: string): string | null {
+  const text = oneLine(note);
+  const words = [...text.matchAll(new RegExp(SECTION_WORDS.source, 'gi'))].map((m) => ({ at: m.index, name: sectionName(m[0]) }));
+  const unique = words.filter((w, i) => words.findIndex((x) => x.name === w.name) === i);
+  const first = unique[0];
+  if (first === undefined) return null;
+  const lower = text.toLowerCase();
+  if (/^(?:no|without|omit|skip|drop|exclude)\b/.test(lower) || /\b(?:omit|skip|drop|exclude|leave\s+out|without|no)\s+(?:an?\s+|the\s+|any\s+)?[a-z ]{0,30}$/.test(lower.slice(0, first.at))) {
+    return `omit the ${first.name} section`;
+  }
+  const second = unique[1];
+  if (second !== undefined) {
+    const cue = /\b(before|precede[sd]?|followed\s+by|then|after|following|between)\b/i.exec(text);
+    if (cue !== null) {
+      // "Before the conclusion, add a limitations section": the cue opens the
+      // clause, so the section it names is the anchor and the next one moves.
+      const [subject, anchor] = cue.index < first.at ? [second, first] : [first, second];
+      const c = (cue[1] as string).toLowerCase();
+      if (c === 'between') {
+        const third = unique[2];
+        return third !== undefined ? `the ${first.name} section goes between the ${second.name} and ${third.name} sections` : `the ${first.name} section goes next to the ${second.name} section`;
+      }
+      const before = /^(?:before|precede|followed|then)/.test(c);
+      return `the ${subject.name} section goes ${before ? 'before' : 'after'} the ${anchor.name} section`;
+    }
+  }
+  if (/\b(?:start|begin|open)(?:s|ing)?\s+with\b/i.test(text)) return `start with the ${first.name} section`;
+  if (/\b(?:end|close)(?:s|ing)?\s+with\b/i.test(text)) return `end with the ${first.name} section`;
+  if (/\bfirst\b/i.test(text)) return `the ${first.name} section comes first`;
+  if (/\blast\b/i.test(text)) return `the ${first.name} section comes last`;
+  return `include a ${first.name} section`;
+}
+
+/** The notes as the outline model may read them: canonical, de-duplicated, at most ten (canonicalSectioningNote). */
+export function canonicalSectioningNotes(notes: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const n of notes) {
+    const c = canonicalSectioningNote(n);
+    if (c !== null && !out.includes(c)) out.push(c);
+  }
+  return out.slice(0, 10);
+}
+
 // ---------------------------------------------------------------------------
 // Length (GRND-02 default: the assignment's stated length)
 // ---------------------------------------------------------------------------

@@ -95,6 +95,7 @@ import { isProviderName, PROVIDER_NAMES } from './lib/llm-models.js';
 import { resolveNextAction, type RouterDecision } from './lib/router.js';
 import { sameSectionId, sectionIdOf, sectionLabel, type SectionId } from './lib/section-id.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
+import { routeOptionsFor } from './cli/route-options.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
 // strongly-typed ArgsDef (e.g., doctor declares { json: BooleanArgDef }),
@@ -710,7 +711,7 @@ async function invocationScope(argv: string[], checked: ValidatedArgv): Promise<
     return n !== undefined ? { verb, section: /^\d+$/.test(n) ? Number(n) : n } : { verb };
   }
   const root = projectRoot();
-  const decision = await resolveNextAction(root, { stopAfterResearch: stopAfterResearchFor(readGoalFromConfig(root)) });
+  const decision = await resolveNextAction(root, routeOptionsFor(root));
   if (!('n' in decision)) return { verb: decision.verb };
   return { verb: decision.verb, section: decision.suffix !== undefined ? `${decision.n}${decision.suffix}` : decision.n };
 }
@@ -845,8 +846,9 @@ function chainLine(steps: readonly ChainStep[], next: RouterDecision): string {
  */
 export async function runNextStep(opts: RoutedOptions): Promise<RoutedStep> {
   const root = projectRoot();
-  const stop = stopAfterResearchFor(readGoalFromConfig(root));
-  const route = (): Promise<RouterDecision> => resolveNextAction(root, { stopAfterResearch: stop });
+  const routeOptions = routeOptionsFor(root);
+  const stop = routeOptions.stopAfterResearch;
+  const route = (): Promise<RouterDecision> => resolveNextAction(root, routeOptions);
   const first = opts.first ?? (await route());
 
   // Learning hard-stop: render the per-claim learning end-state to TUTORIAL.md
@@ -907,8 +909,9 @@ const DRY_RUN_MAX_STEPS = 256;
  */
 export async function runRouted(opts: RoutedOptions & { announce?: (d: RouterDecision) => void }): Promise<unknown> {
   const root = projectRoot();
-  const stop = stopAfterResearchFor(readGoalFromConfig(root));
-  const first = opts.first ?? (await resolveNextAction(root, { stopAfterResearch: stop }));
+  const routeOptions = routeOptionsFor(root);
+  const stop = routeOptions.stopAfterResearch;
+  const first = opts.first ?? (await resolveNextAction(root, routeOptions));
   // The learning end state (runNextStep) is not a verb to announce.
   if (opts.announce && !(stop && first.verb === 'status' && first.reason === 'done')) opts.announce(first);
   let step = await runNextStep({ ...opts, first });

@@ -46,7 +46,7 @@ The implementation lives in `bin/cli/plan.ts`; the source records in
 2. **Read inputs** (read-only file accesses, no mutation):
    - `.paper/INTAKE.md` (+ `.paper/config.toml`) → the brief: topic, thesis (the outline's `Thesis:` line, else the brief's), discipline and its tone, paper type.
    - `.paper/OUTLINE.md` → the section's row: id, slug, title, purpose, role, `depends_on`, word target, voice (the stub PLAN.md's values fill anything the row lacks).
-   - The **allowed set** (FEED-01, FEED-04): the OUTLINE row's `assigned_sources` ∪ the section's current PLAN.md `assigned_sources` (the outline allocation plus `add --section` remaps) ∪ the LIBRARY.json sources whose provenance is `plan-research:§<N>` (this section's `plan <N> --research` additions) — never only the previous plan's pick — **minus the sources the citation verifier cannot check yet** (`source-context.ts` `verifierBlindSpot`: no DOI, a DataCite DOI such as arXiv `10.48550`, or a synthetic dry-run DOI outside a dry run; D-18-37), which get one WARN naming them (`pensmith plan: WARN — section N leaves out …: the citation verifier cannot check them`). `.paper/LIBRARY.json` → one source-context record per allowed citekey (citekey, title, authors, year, venue, abstract, tier, `full_text`). A source assigned only to another section never appears (FEED-01). A section with no sources gets one WARN naming how to add some.
+   - The **allowed set** (FEED-01, FEED-04): the OUTLINE row's `assigned_sources` ∪ the section's current PLAN.md `assigned_sources` (the outline allocation plus `add --section` remaps) ∪ the LIBRARY.json sources whose provenance is `plan-research:§<N>` (this section's `plan <N> --research` additions) — never only the previous plan's pick — **minus the sources the citation verifier would never pass** (`source-context.ts` `verifierBlindSpot`: no DOI, a DataCite DOI such as arXiv `10.48550`, or a synthetic dry-run DOI outside a dry run, D-18-37; or flagged retracted at research time), which get one WARN naming them (`pensmith plan: WARN — section N leaves out …: the citation verifier would not pass a citation of them (…)`). `.paper/LIBRARY.json` → one source-context record per allowed citekey (citekey, title, authors, year, venue, abstract, tier, `full_text`). A source assigned only to another section never appears (FEED-01). A section with no sources gets one WARN naming how to add some.
    - The planned PLAN.md of each `depends_on` section → a short summary of its claims (without their citekeys). A stub is not summarised.
 
 3. **Run the planner**: the fixed `templates/prompts/section-planner.md` instructions (D-12 LOCKED slug) plus the data blocks `brief`, `section`, `upstream` (when any) and `sources` (fenced as untrusted data, FEED-05) → a structured object `{frontmatter: {section, slug, title, depends_on, assigned_sources}, claims: [{claim, sources, evidence, counterexamples}], structure: [{paragraph, purpose, claims}], voice}`.
@@ -74,8 +74,10 @@ repairs ONE verifier-flagged citation rather than authoring a fresh PLAN.md:
    FIRST `FABRICATED` / `MIS-CITED` / `NOT_FOUND` citation in order of
    appearance (one-at-a-time; re-run until clean).
 2. **Load `assigned_sources` + voice hint** from `<sectionPlan(n, slug)>`
-   frontmatter and `## Brief` (WRTE-02 per-section voice consume point — the
-   voice line is threaded into the swap prompt vars).
+   (WRTE-02 per-section voice consume point — the voice is threaded into the
+   swap prompt's `voice` block): the planner's `## Voice` section, else the
+   frontmatter `voice` the outline gave the section, else a legacy PLAN.md's
+   `Voice:` line, else "formal academic tone".
 3. **Propose a swap** — invoke the hash-pinned `revise-swap` prompt (D-05).
    Parse the strict-JSON response and REJECT it if `action ∉ {swap, remove}`
    or `replacement_citekey ∉ assigned_sources` (T-04-14 — no new citekeys ever

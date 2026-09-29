@@ -154,6 +154,9 @@ const STYLE_FILENAMES: Readonly<Record<string, string>> = {
 // templates/citation-styles/apa.csl and registers 'pensmith-apa', the same
 // name+bytes the old renderApa used → byte-identical output. Throws a clear Error naming the
 // path when the .csl is absent (no silent empty bibliography — T-10-01-01).
+/** Styles whose citations are notes (class="note"): a prior citation turns theirs into a short form or "Ibid.". */
+const noteStyles = new Set<string>();
+
 function ensureStyleTemplate(style: string): void {
   if (registeredStyles.get(style)) return;
   const filename = STYLE_FILENAMES[style] ?? style;
@@ -165,6 +168,7 @@ function ensureStyleTemplate(style: string): void {
   }
   const cslString = readFileSync(cslPath, 'utf8');
   plugins.config.get('@csl').templates.add(`pensmith-${style}`, cslString);
+  if (/<style\b[^>]*\bclass="note"/.test(cslString)) noteStyles.add(style);
   registeredStyles.set(style, true);
 }
 
@@ -381,6 +385,70 @@ export async function renderInText(
     template: `pensmith-${style}`,
     lang: 'en-US',
   });
+}
+
+/**
+ * One cited source of a citation, as CSL's citation items carry it (review
+ * round 3 of Phase 18: the offline renderer keeps what Pandoc keeps).
+ */
+export interface CitationItemInput {
+  /** The entry's citekey (its CSL `id`). */
+  readonly id: string;
+  /** Text before the reference (`see `), spacing included. */
+  readonly prefix?: string;
+  /** Text after it (`, emphasis added`), spacing included. */
+  readonly suffix?: string;
+  /** A locator and its CSL label (`5` / `page`). */
+  readonly locator?: string;
+  readonly label?: string;
+  /** Leave the author out (`-@key`, and the year part of a narrative citation). */
+  readonly suppressAuthor?: boolean;
+  /** Only the author (the name part of a narrative citation). */
+  readonly authorOnly?: boolean;
+}
+
+/**
+ * Render ONE citation — its items in order, with their prefixes, suffixes,
+ * locators and author suppression — in `style`, as renderInText does for a
+ * bare key. `entries` is the parsed bibliography (every item's id must be in
+ * it); `citedInOrder` the document's cited keys in first-citation order (so a
+ * numeric style numbers them as the bibliography does when it is rendered from
+ * entries in that order). A style that cannot print a part (an author-only
+ * item in a numeric style) yields the text citeproc gives; the caller decides.
+ */
+export async function renderCitationItems(
+  entries: Array<Record<string, unknown>>,
+  style: string,
+  items: readonly CitationItemInput[],
+  citedInOrder: readonly string[] = [],
+): Promise<string> {
+  if (!Array.isArray(entries)) {
+    throw new TypeError('renderCitationItems: input must be an array of parsed entries (from parseBib)');
+  }
+  ensureStyleTemplate(style);
+  // A numeric style numbers sources in the order the document first cites
+  // them: one prior citation of every cited key in that order gives each item
+  // its document number (not "[1]" for each citation). A note style is left
+  // alone — a prior citation would print "Ibid.".
+  const citationsPre = citedInOrder.length > 0 && !noteStyles.has(style)
+    ? [{ citationItems: citedInOrder.map((id) => ({ id })), properties: { noteIndex: 0 } }]
+    : [];
+  const cite = new Cite(entries, { forceType: '@csl/object' });
+  const entry = items.map((i) => ({
+    id: i.id,
+    ...(i.prefix ? { prefix: i.prefix } : {}),
+    ...(i.suffix ? { suffix: i.suffix } : {}),
+    ...(i.locator ? { locator: i.locator, label: i.label ?? 'page' } : {}),
+    ...(i.suppressAuthor ? { 'suppress-author': true } : {}),
+    ...(i.authorOnly ? { 'author-only': true } : {}),
+  }));
+  return cite.format('citation', {
+    format: 'text',
+    template: `pensmith-${style}`,
+    lang: 'en-US',
+    entry,
+    citationsPre,
+  } as Parameters<typeof cite.format>[1]);
 }
 
 // =====================================================================

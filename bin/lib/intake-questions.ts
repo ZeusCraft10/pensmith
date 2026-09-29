@@ -174,7 +174,7 @@ function modeQuestion(): IntakeQuestion {
     kind: 'select',
     options: [
       { value: 'draft', label: 'Full draft', hint: 'research, outline, every section, compile and export' },
-      { value: 'outline', label: 'Outline only', hint: 'stops after outline approval: a sourced outline and annotated bibliography' },
+      { value: 'outline', label: 'Outline only', hint: 'stops after outline approval: a sourced outline, no section is planned or drafted' },
     ],
     accepts: `${PAPER_MODES.join(' or ')}`,
     staticDefault: 'draft' satisfies PaperMode,

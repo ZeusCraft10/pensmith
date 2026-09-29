@@ -1,0 +1,1081 @@
+{
+ "$comment": "Pandoc 3.9 citation keys (Cite nodes of `pandoc --from markdown --to json`) for each markdown case. tests/citation-grammar-pandoc.test.ts asserts extractCitedKeysForVerification reports every one of them (fail closed) and, for cases marked expect: equal, no other. Re-record with `node scripts/record-pandoc-cites.mjs` (needs pandoc on PATH).",
+ "pandoc": "3.9",
+ "cases": [
+  {
+   "name": "fence opener with backticks in its info",
+   "md": "```x```\nText @evil here.\n```y```",
+   "pandoc": [
+    "evil"
+   ]
+  },
+  {
+   "name": "link destination with no opening bracket",
+   "md": "appendix a](@evil) shows [@good]",
+   "pandoc": [
+    "evil",
+    "good"
+   ]
+  },
+  {
+   "name": "autolink with an unknown scheme",
+   "md": "<ab:@evil> [@good]",
+   "pandoc": [
+    "evil",
+    "good"
+   ]
+  },
+  {
+   "name": "escaped backtick",
+   "md": "Escaped \\` here @evil and ` tick [@good]",
+   "pandoc": [
+    "evil",
+    "good"
+   ]
+  },
+  {
+   "name": "comment opener inside inline code",
+   "md": "`<!--` then @evil says it --> [@good]",
+   "pandoc": [
+    "evil",
+    "good"
+   ]
+  },
+  {
+   "name": "closing fence with an info string",
+   "md": "```\ncode\n```python\ntext\n```\nText @evil says.\n```js\n[@good]",
+   "pandoc": [
+    "evil",
+    "good"
+   ]
+  },
+  {
+   "name": "nested braces",
+   "md": "[@{ev{i}l}] [@good]",
+   "pandoc": [
+    "ev{i}l",
+    "good"
+   ]
+  },
+  {
+   "name": "key chained after a key",
+   "md": "@a@b and -@c@d",
+   "pandoc": [
+    "a",
+    "b",
+    "c",
+    "d"
+   ]
+  },
+  {
+   "name": "key chained after an example label",
+   "md": "x@a@b, x@a-b@c, x@-b@c, k@lk@l",
+   "pandoc": [
+    "b",
+    "c",
+    "l"
+   ]
+  },
+  {
+   "name": "an escaped escape",
+   "md": "a \\\\@evil b",
+   "pandoc": [
+    "evil"
+   ]
+  },
+  {
+   "name": "an escaped at",
+   "md": "a \\@literal b",
+   "pandoc": []
+  },
+  {
+   "name": "raw TeX command before the at",
+   "md": "\\x@{d} and \\foo@e",
+   "pandoc": [
+    "d",
+    "e"
+   ]
+  },
+  {
+   "name": "url-like key",
+   "md": "@a://b/c and @a//b",
+   "pandoc": [
+    "a://b/c",
+    "a//b"
+   ]
+  },
+  {
+   "name": "wildcard and underscore keys",
+   "md": "@*foo* and @_x and @a_@b",
+   "pandoc": [
+    "*foo",
+    "_x",
+    "a_",
+    "b"
+   ]
+  },
+  {
+   "name": "empty braced key",
+   "md": "[@{}] and @{}",
+   "pandoc": [
+    ""
+   ]
+  },
+  {
+   "name": "internal punctuation",
+   "md": "@a&b @a%b @a$b @a#b @a+b @a?b @a~b @a>b @a<b @a:b. @a.b,",
+   "pandoc": [
+    "a&b",
+    "a%b",
+    "a$b",
+    "a#b",
+    "a+b",
+    "a?b",
+    "a~b",
+    "a>b",
+    "a<b",
+    "a:b",
+    "a.b"
+   ]
+  },
+  {
+   "name": "unicode keys",
+   "md": "@müller2020 and [@Ünïcode]",
+   "pandoc": [
+    "müller2020",
+    "Ünïcode"
+   ]
+  },
+  {
+   "name": "after a word",
+   "md": "mail x@y.org, e.g.@o, é@b",
+   "pandoc": []
+  },
+  {
+   "name": "escape dropped in a subscript",
+   "md": "~\\@ux~ and ^\\@uy^ and ~\\-@uz~",
+   "pandoc": [
+    "ux",
+    "uy",
+    "uz"
+   ]
+  },
+  {
+   "name": "entity in a subscript",
+   "md": "~&#64;smith~ and ~@a&#58;b~ and ^@a&amp;b^",
+   "pandoc": [
+    "smith",
+    "a:b",
+    "a&b"
+   ]
+  },
+  {
+   "name": "simple table cuts a word off",
+   "md": "x\n - \nk@h y\n",
+   "pandoc": [
+    "h"
+   ]
+  },
+  {
+   "name": "simple table cuts an escape off",
+   "md": "  a\\@e   b\n----- -----\n",
+   "pandoc": []
+  },
+  {
+   "name": "fenced code after a blank line",
+   "md": "Text [@good].\n\n```python\n@dataclass\nclass X: pass\n```\n\nMore.",
+   "pandoc": [
+    "good"
+   ],
+   "expect": "equal"
+  },
+  {
+   "name": "fenced code after a paragraph",
+   "md": "Here is the code:\n```python\n@dataclass\n```\n",
+   "pandoc": [],
+   "expect": "equal"
+  },
+  {
+   "name": "tilde fence with attributes",
+   "md": "\n~~~ {.python #ex}\n@decorator\n~~~\n[@good]",
+   "pandoc": [
+    "good"
+   ],
+   "expect": "equal"
+  },
+  {
+   "name": "inline code",
+   "md": "The `@dataclass` decorator [@good] helps; ``@x`` too.",
+   "pandoc": [
+    "good"
+   ],
+   "expect": "equal"
+  },
+  {
+   "name": "backtick retreat",
+   "md": "``a`@evil`",
+   "pandoc": [
+    "evil"
+   ],
+   "expect": "equal"
+  },
+  {
+   "name": "email",
+   "md": "Write to editor@example.org [@good].",
+   "pandoc": [
+    "good"
+   ],
+   "expect": "equal"
+  },
+  {
+   "name": "comment, link destination, autolink",
+   "md": "<!-- @c1 --> [a](https://x.org/@l1) <https://x.org/@a1> [@good]",
+   "pandoc": [
+    "good"
+   ]
+  },
+  {
+   "name": "tilde fence right after a paragraph",
+   "md": "text\n~~~\n@evil\n~~~\n",
+   "pandoc": [
+    "evil"
+   ]
+  },
+  {
+   "name": "unclosed fence",
+   "md": "Intro.\n\n```\ncode\n\nAs @hidden1 says.\n",
+   "pandoc": [
+    "hidden1"
+   ]
+  },
+  {
+   "name": "code span across a paragraph",
+   "md": "A `tick\n\nAs @hidden3 says.\n\nB ` tick.\n",
+   "pandoc": [
+    "hidden3"
+   ]
+  },
+  {
+   "name": "subscript entity after a key",
+   "md": "~@a&amp;~ and @b&amp;",
+   "pandoc": [
+    "a",
+    "b&amp"
+   ]
+  },
+  {
+   "name": "tilde fence with a brace word",
+   "md": "\n~~~{x}\n@evil\n~~~\n",
+   "pandoc": [
+    "evil"
+   ]
+  },
+  {
+   "name": "an escape only affects its paragraph",
+   "md": "a \\` b\n\n`@q` [@good]",
+   "pandoc": [
+    "good"
+   ],
+   "expect": "equal"
+  },
+  {
+   "name": "TeX environment across blank lines",
+   "md": "\\begin{x}\n\n`\n\n\\end{x}@evil `y`",
+   "pandoc": [
+    "evil"
+   ]
+  },
+  {
+   "name": "TeX argument across a blank line",
+   "md": "\\foo{\n\n`}@evil `x`",
+   "pandoc": [
+    "evil"
+   ]
+  },
+  {
+   "name": "random fuzz #1",
+   "md": "-~@a&amp;b~`@q`[^1]``&#115;.!```py&#64;.@m@n\\\n\n=-~~~x\\^``@r``-^[n @v]k@l'&amp;<https://z/@s>;\n](u/@t)[^1][@h].(@m@n\t---- ^<https://z/@s>",
+   "pandoc": [
+    "a&b",
+    "n",
+    "v",
+    "t",
+    "h",
+    "m"
+   ]
+  },
+  {
+   "name": "random fuzz #2",
+   "md": "&amp;-->@a[^1].^[",
+   "pandoc": [
+    "a"
+   ]
+  },
+  {
+   "name": "random fuzz #3",
+   "md": "-@c> ``@r``@b    |@{e{f}g}](u/@t)#   ```\n|&amp;``@r``^[n @v]*&commat;x\\x[see @i, p. 5]#~@a \n@{e{f}g}",
+   "pandoc": [
+    "c",
+    "b",
+    "e{f}g",
+    "t",
+    "r",
+    "v",
+    "a"
+   ]
+  },
+  {
+   "name": "random fuzz #4",
+   "md": "*@p*^\\)\\@u{_:&eacute;\\`{ |[see @i, p. 5]e.g.@o- \n```&eacute;&eacute;*@p*[^1]```-   ```k@lx   ```|=[^1];<https://z/@s>(~@j.\"[   ```",
+   "pandoc": [
+    "p",
+    "i",
+    "j"
+   ]
+  },
+  {
+   "name": "random fuzz #5",
+   "md": "@b@b---\\@u`e.g.@o'\t^[n @v]:&eacute;^@j.@m@n",
+   "pandoc": [
+    "b",
+    "v",
+    "j",
+    "n"
+   ]
+  },
+  {
+   "name": "random fuzz #6",
+   "md": "{```py*@p*``@r``",
+   "pandoc": [
+    "r"
+   ]
+  },
+  {
+   "name": "random fuzz #7",
+   "md": "&amp;``!\\foo\n.})}e.g.@o)> @{d}\\`:``@r``\\x&eacute;;$\\@u~@a&amp;b~~&#64;y~@j.[@h][@h]='",
+   "pandoc": [
+    "r",
+    "a&b",
+    "y",
+    "j",
+    "h"
+   ]
+  },
+  {
+   "name": "random fuzz #8",
+   "md": ";\\@u[@h]`\"``e.g.@o\\\\``\t&eacute;;@{e{f}g}[^1]```@b<!--\\`   ```}&#64;```@{e{f}g}\t)x\\`e.g.@o\\foo",
+   "pandoc": [
+    "h",
+    "e{f}g"
+   ]
+  },
+  {
+   "name": "random fuzz #9",
+   "md": "}^[n @v]-->]    @a'",
+   "pandoc": [
+    "v",
+    "a"
+   ]
+  },
+  {
+   "name": "random fuzz #10",
+   "md": ".^[^-~~~_-\\`{@{e{f}g}-\\foo\\x^]~@b@m@n\\x$\"@w\"$((",
+   "pandoc": [
+    "e{f}g",
+    "b",
+    "m",
+    "n"
+   ]
+  },
+  {
+   "name": "random fuzz #11",
+   "md": "\\`x   ```&amp;{",
+   "pandoc": []
+  },
+  {
+   "name": "random fuzz #12",
+   "md": "(```py~```[[@h]",
+   "pandoc": [
+    "h"
+   ]
+  },
+  {
+   "name": "random fuzz #13",
+   "md": "'*1. ~&#64;y~- |@m@n@{e{f}g}'[see @i, p. 5]1. '^[n @v]\":<!--|*&commat;x\\&#64;",
+   "pandoc": [
+    "y",
+    "m",
+    "n",
+    "e{f}g",
+    "i",
+    "v"
+   ]
+  },
+  {
+   "name": "random fuzz #14",
+   "md": "   ```@{d}-@m@n@{e{f}g}![see @i, p. 5]~    @{e{f}g}- $=> \\@u",
+   "pandoc": [
+    "d",
+    "m",
+    "n",
+    "e{f}g",
+    "i"
+   ]
+  },
+  {
+   "name": "random fuzz #15",
+   "md": "```\\@u[@h]x_-@c> \"@w\"`1. ``@q````^@a- $&#64;---",
+   "pandoc": [
+    "q",
+    "a"
+   ]
+  },
+  {
+   "name": "random fuzz #16",
+   "md": "#-->\\\t> .```py---{",
+   "pandoc": []
+  },
+  {
+   "name": "random fuzz #17",
+   "md": "\\foo&#64;[@h]^-->~```~]@b&#64;```py",
+   "pandoc": [
+    "h",
+    "b"
+   ]
+  },
+  {
+   "name": "random fuzz #18",
+   "md": "> ```py{``@r``\"@w\"\"{\\\n1. [\"@w\"[~@a&amp;b~```\\@u\t*@p*- *\n\n~&#64;y~^^\\x-->-->_``> ]@b",
+   "pandoc": [
+    "p",
+    "y",
+    "b"
+   ]
+  },
+  {
+   "name": "random fuzz #19",
+   "md": "=~~~~$~&#64;y~```py~\"&eacute;x-{``",
+   "pandoc": [
+    "y"
+   ]
+  },
+  {
+   "name": "random fuzz #20",
+   "md": "-^[n @v])}\"@w\"&commat;x[see @i, p. 5]#{#~~~&commat;x<https://z/@s>\"@w\"```*`@q`\n\n=_@a@ak@l@{e{f}g}|\t^~~~<!--\":k@l}@m@n*@p*1. @j.!",
+   "pandoc": [
+    "v",
+    "w",
+    "i",
+    "q",
+    "a",
+    "ak",
+    "l",
+    "e{f}g",
+    "m",
+    "n",
+    "p",
+    "j"
+   ]
+  },
+  {
+   "name": "random fuzz #21",
+   "md": "[@h]~~~x```py\\foo<https://z/@s>~~~}@b- ]~](u/@t)#=.\\`&commat;x;$] -->---@b[@h]_$&#115;&amp;````@q` _;~&#64;y~[see @i, p. 5]@a_``",
+   "pandoc": [
+    "h",
+    "b",
+    "t"
+   ]
+  },
+  {
+   "name": "random fuzz #22",
+   "md": "``@r``&#115;:~\"@w\"|^``@r``_@b&commat;x[^1]'[see @i, p. 5]\\k@l\n-->\\`@q`@{e{f}g}*@p*&#64;`\n\n``@r``*@p*",
+   "pandoc": [
+    "w",
+    "b",
+    "x",
+    "i",
+    "q",
+    "p"
+   ]
+  },
+  {
+   "name": "random fuzz #23",
+   "md": "k@l\n``` [^1]- [@h]!   ```._^:{\\foo\\x```py\t]}`@q`@{d}#-->@j.```py> e.g.@o}-->\\x\\foo!](u/@t)```@{d}[see @i, p. 5]> :",
+   "pandoc": [
+    "t",
+    "d",
+    "i"
+   ]
+  },
+  {
+   "name": "random fuzz #24",
+   "md": "@m@n*\n\n[see @i, p. 5] [see @i, p. 5]^\t|*@p*-@c!'@{e{f}g}~@a```py&amp;",
+   "pandoc": [
+    "m",
+    "n",
+    "i",
+    "p",
+    "c",
+    "e{f}g",
+    "a"
+   ]
+  },
+  {
+   "name": "random fuzz #25",
+   "md": "\\@ue.g.@o[&amp;- 1. @m@n-->",
+   "pandoc": [
+    "m",
+    "n"
+   ]
+  },
+  {
+   "name": "random fuzz #26",
+   "md": "]    [see @i, p. 5]&eacute;^[n @v]\n\n-->",
+   "pandoc": [
+    "i",
+    "v"
+   ]
+  },
+  {
+   "name": "random fuzz #27",
+   "md": "|-@c!&#64;~~~( \\foo~~~~```py-- [^1]\n\n",
+   "pandoc": [
+    "c"
+   ]
+  },
+  {
+   "name": "random fuzz #28",
+   "md": "```py@m@n~~~x:   ````#*@p*```&amp;@{e{f}g}*",
+   "pandoc": [
+    "e{f}g"
+   ]
+  },
+  {
+   "name": "random fuzz #29",
+   "md": "~`~@a&amp;b~;$-\"@w\" 1. |<https://z/@s>_- ~@m@n&#115; [\\x@{d}<!--|^\\@u~~~=~&eacute;\\@u",
+   "pandoc": [
+    "a&amp",
+    "w",
+    "m",
+    "n",
+    "d"
+   ]
+  },
+  {
+   "name": "random fuzz #30",
+   "md": "#]\\`#:!```\\foo@a$",
+   "pandoc": [
+    "a"
+   ]
+  },
+  {
+   "name": "random fuzz2 #1",
+   "md": ":  -- --word\n\\`[x](y)1.  - -----@c\t\n# ~~~e.g.@i\n\n\n```\n    e.g.@i\t\t[@f]``` x y[x](y)> \n``` x\n\n\n",
+   "pandoc": [
+    "c"
+   ]
+  },
+  {
+   "name": "random fuzz2 #2",
+   "md": "  # \n    1.   -- --1. \n~~~\n----*@j*\n```\n\n\n## @l. @n@o~~~ {.r}@n@oCode:~~~@n@o\n- *@j*k@h  -- --\n\n\n\t`@d`- ```~~~ {.r}word\n``@e``\t# (@k)> \n\n\n",
+   "pandoc": [
+    "j",
+    "l",
+    "n",
+    "o",
+    "oCode",
+    "e",
+    "k"
+   ]
+  },
+  {
+   "name": "random fuzz2 #3",
+   "md": "```python\n\t> `` ` ``[@f]\n```p\n\n\n`x\n# @l.[@f]```\n\n",
+   "pandoc": [
+    "l",
+    "f"
+   ]
+  },
+  {
+   "name": "random fuzz2 #4",
+   "md": "````\n> *@j*1. Text'@m'Text@b```py\n```py - k@hx@p@q\n```\n\n\n```\n`` ` ``@a(@k)@l.> e.g.@iwordx@p@q\n*@j*[see @g, p. 2]``@e``@n@o```~~~ {.r}```\n@l.[see @g, p. 2]word\n```\n\n",
+   "pandoc": []
+  },
+  {
+   "name": "random fuzz2 #5",
+   "md": "~~~\n~~~ {.r}``@e``  Code:`` ` `````py```py\n`` ` ``@a(@k)----\n:[@f]~~~ {.r}Text``@e``\n~~~\n\n@b(@k)    ~~~ {.r}:----  -- --[see @g, p. 2]\n(@k)@l.x`word(@k):`xx`\n\n``@e``word- \n@n@o> `` ` ``  \n- *@j*k@h~~~ {.r}k@h- x`-@c  \n``` x yCode:`x  -- --`@d````py\n\n```python\n```\n~~~ {.r}\n\n\n",
+   "pandoc": [
+    "b",
+    "k",
+    "g",
+    "l.x",
+    "n",
+    "o",
+    "j",
+    "d"
+   ]
+  },
+  {
+   "name": "random fuzz2 #6",
+   "md": "~~~\n(@k) word@l.\n```@n@oText\\`\n```:\n~~~\n> k@h`x@bword\n*@j*  -- --@l.@a\n\n[x](y)*@j*  -- ------[see @g, p. 2]- ``` x y\nCode:\n1. \n    ``@e``\t*@j*  \n```python\n``` x\n",
+   "pandoc": [
+    "j",
+    "l",
+    "g"
+   ]
+  },
+  {
+   "name": "random fuzz2 #7",
+   "md": "```python\nx`\n@a ``` x y    @n@o\n```p\n\n\n~~~\n*@j*#   Code:[@f]    @a\n~~~\n\n``` x y\n; 1. -@c@b~~~ {.r}, [x](y)\n@l.\\`x@p@qx`*@j*@l.\n````\n# x@p@q\nword*@j*> ; [see @g, p. 2]\\`\nCode:- ```py  [@f]    \n````\n\n> word-@c```  -- --Text*@j*\n> \n\n\nx`[x](y)Code:\n----``` x y; \n",
+   "pandoc": [
+    "q",
+    "j",
+    "g",
+    "f",
+    "c"
+   ]
+  },
+  {
+   "name": "random fuzz2 #8",
+   "md": "[see @g, p. 2]> TextText\n```py  ; \n\n",
+   "pandoc": [
+    "g"
+   ]
+  },
+  {
+   "name": "random fuzz2 #9",
+   "md": "## :``@e``x`\n \n\n\nx`  -- --      [x](y)\n*@j*x@p@q  \ne.g.@i```py``` x y `` ` ``\n\\`[x](y)`x- \n>  - @l.``` x y*@j*\t\n-@c# x`@b>   ``` x y\n\n\n[x](y)k@h\n\n--------[see @g, p. 2]; ```~~~ {.r}----```py\n```-@c@l.> ```k@hx````py\n",
+   "pandoc": [
+    "b",
+    "g"
+   ]
+  },
+  {
+   "name": "random fuzz2 #10",
+   "md": "~~~ {.r}  ``@e``k@hText\n\n\n----~~~ {.r}\n'@m' - ``` x y  -- --\n    \nword*@j**@j*k@h@l.-@c``` x y\n\ne.g.@i\n----  word\t\n\\``x*@j*worde.g.@i@a    - \n\t----\t@b\n- ``` x y\n\n",
+   "pandoc": [
+    "m",
+    "j",
+    "l",
+    "c",
+    "a",
+    "b"
+   ]
+  },
+  {
+   "name": "random fuzz2 #11",
+   "md": "# x@p@qe.g.@i@n@o\n(@k)\n\n",
+   "pandoc": [
+    "qe.g",
+    "n",
+    "o"
+   ]
+  },
+  {
+   "name": "random fuzz2 #12",
+   "md": "## k@h\n[see @g, p. 2]e.g.@i1. ```-@c*@j*``@e``\n\n\n`` ` ``Text~~~(@k); , \ne.g.@i # Text[x](y)\n  Code:1. @b\t# ~~~\n\n\n*@j*'@m'\nx```` x y1.   -- --@n@oe.g.@iText\n\n\nCode:> k@h1. k@h  -- --~~~e.g.@i\n    ``@e``  Code:\t(@k)\n@b@l.# [see @g, p. 2]`` ` ``\n`x '@m'\\`e.g.@i\n\n\n - @n@o# -@c; @a``` - \ne.g.@i@n@o      -- --``` x y\\`[see @g, p. 2]\n- # \n    ``` x y\n- # :  *@j* - \n",
+   "pandoc": [
+    "g",
+    "e",
+    "k",
+    "b",
+    "j",
+    "m",
+    "n",
+    "oe.g",
+    "l",
+    "o",
+    "c",
+    "a"
+   ]
+  },
+  {
+   "name": "random fuzz2 #13",
+   "md": "[x](y)Text``` x yText`@d`Text\n@n@o, '@m', ```py`` ` ``\n`` ` ``x@p@q[x](y)e.g.@i# word@a\n\n\n, `@d``x, # @a\n\n'@m'\n\n\n# word\t@l.e.g.@i:    \n~~~  -- --@l.@b\n",
+   "pandoc": [
+    "q",
+    "d",
+    "a",
+    "m",
+    "l.e.g",
+    "l"
+   ]
+  },
+  {
+   "name": "random fuzz2 #14",
+   "md": "~~~ {.r}\n```\n\n# [see @g, p. 2]\n`` ` ``@b``` x y[see @g, p. 2]# - @n@ox@p@q\n\n",
+   "pandoc": [
+    "g",
+    "b",
+    "n",
+    "ox",
+    "p",
+    "q"
+   ]
+  },
+  {
+   "name": "random fuzz2 #15",
+   "md": "k@h\t - > ``@e``, ----1. \n@a'@m'\\`'@m'\n\n\n",
+   "pandoc": [
+    "a",
+    "m"
+   ]
+  },
+  {
+   "name": "random fuzz2 #16",
+   "md": "x@p@q  -- --[see @g, p. 2]Code:Text\nx@p@q@l. - \n\n\\`# x`[@f]\n1. \\`  :    ``@e``\t-@c\n`@d`(@k)  -- --`@d`# [x](y)'@m' \n\n\n",
+   "pandoc": [
+    "q",
+    "g",
+    "l",
+    "c",
+    "k",
+    "m"
+   ]
+  },
+  {
+   "name": "random fuzz2 #17",
+   "md": "``@e``\n- \ne.g.@i@b-@c`x\\```@e```` ` ````@e``\n@l.\n",
+   "pandoc": [
+    "b",
+    "c",
+    "l"
+   ]
+  },
+  {
+   "name": "random fuzz2 #18",
+   "md": "> `@d`\\`:x`~~~1. \n----x` - \nworde.g.@i\n~~~----\n\n\n~~~\n~~~ {.r}Code:1. \n@b```\n~~~ {.r}\tx`x@p@q# # \n\n1.  -   \n@l.Code:k@h:``@e``\n[see @g, p. 2][@f]~~~[x](y)@n@o----```\n\n\n[see @g, p. 2] # \n\n\n~~~\n'@m'[see @g, p. 2]> Code:- :``` x y\n-@ce.g.@i\t~~~ {.r} \n```\n'@m'    -- --  -- --[see @g, p. 2]----word\n; '@m'@a  -- --``` x y```\n1. \t(@k)\t:\n, @l.``` x y\t, ~~~ {.r}\n",
+   "pandoc": [
+    "m",
+    "g",
+    "a",
+    "k",
+    "l"
+   ]
+  },
+  {
+   "name": "random fuzz2 #19",
+   "md": "``` x y, @b\n'@m'\n`x\n@b  -- --@ax@p@q`` ` ``\n\n```{.a #b}\n``` x\n\n'@m'```py\n1. \n\n\n~~~\n-@cword~~~ {.r}--------\n````\n\n```\n*@j*[see @g, p. 2]  '@m'@a\tword\n  -- --[x](y)``@e``1. ~~~ {.r}# \n````\n\n-@c~~~``` x y# ~~~, \\`\n\n",
+   "pandoc": [
+    "c"
+   ]
+  },
+  {
+   "name": "random fuzz2 #20",
+   "md": "Text*@j*\n    @n@oe.g.@ix@p@q\n```'@m'    `x\n*@j*x`\n\n1. x@p@q'@m'Code:----wordText>  - \n(@k)    \n````\n```\n\n~~~[@f][see @g, p. 2]@l.@a\n````\nx`----\n```\n",
+   "pandoc": [
+    "j",
+    "n",
+    "oe.g",
+    "p",
+    "q",
+    "m"
+   ]
+  },
+  {
+   "name": "random fuzz2 #21",
+   "md": "  ~~~ {.r}   - ----\n@b`@d`#   -- --1. 1. -@c```py\n\n`x\n\n\n",
+   "pandoc": [
+    "b",
+    "c"
+   ]
+  },
+  {
+   "name": "random fuzz2 #22",
+   "md": "1. 1. [x](y)x`@l.\t; @n@o\n```py*@j*\n\n>  - \n; \n",
+   "pandoc": [
+    "l",
+    "n",
+    "o",
+    "j"
+   ]
+  },
+  {
+   "name": "random fuzz2 #23",
+   "md": "@a`x\n# `x`xx` \tx@p@q\n@b```1. \n  -- --\t- ```x@p@q\n> `x> -@c\n\n",
+   "pandoc": [
+    "a",
+    "q",
+    "b",
+    "c"
+   ]
+  },
+  {
+   "name": "random fuzz2 #24",
+   "md": "```py  -- --```py\n(@k)    Code:e.g.@i@ax```@e``@l.\n[see @g, p. 2]- (@k)wordword@a\n[see @g, p. 2]; \n\n\n@b\n``` x y```*@j*``` x y\n[x](y)```e.g.@i[x](y)# k@h`x, \n@a`` ` ``   ``@e``~~~\t\n;   e.g.@i\n\t'@m'``` x y    @b  @b# \n```python\n`@d`1. @b> \nText``` x y:- ``@e``(@k)> \n````\n\n",
+   "pandoc": [
+    "k",
+    "ax",
+    "l",
+    "g",
+    "b",
+    "j",
+    "e"
+   ]
+  },
+  {
+   "name": "random fuzz2 #25",
+   "md": "1.   -- ---@c> ```pyx`Code:\n1. word@a\n\n\n- *@j*word - \n> #   x`word - ----\n@n@o[see @g, p. 2]\n - > \n@a(@k)`` ` ``\n``@e``    [@f][x](y)\n\n\n",
+   "pandoc": [
+    "c",
+    "j",
+    "n",
+    "o",
+    "g",
+    "a",
+    "k",
+    "f"
+   ]
+  },
+  {
+   "name": "random fuzz2 #26",
+   "md": "``@e``# \n[see @g, p. 2] - ~~~ {.r}[@f][x](y)\n\n\n[see @g, p. 2]~~~ {.r}(@k)----\n```@l.```\n``` x y\n\n\n",
+   "pandoc": [
+    "g",
+    "f",
+    "k"
+   ]
+  },
+  {
+   "name": "random fuzz2 #27",
+   "md": "```\n``` x\n\n\n  :~~~ {.r}`` ` ```@d`\n\n\n, `` ` ``# ; \n```pye.g.@i'@m'(@k); \n    -- --`` ` ````` x y, , @a\n-@c; \t[@f]    \n1. [@f]```py(@k)`@d``x#   \n~~~\t - Textx@p@q\n\nx@p@q\n- x`\nx@p@q-@c  # word    \\``x\n\n\n",
+   "pandoc": [
+    "k",
+    "d",
+    "q",
+    "c"
+   ]
+  },
+  {
+   "name": "random fuzz2 #28",
+   "md": "##     e.g.@i@n@o@n@o> '@m'x`[see @g, p. 2]\n@ae.g.@i~~~ {.r}~~~x` x`\n\n\n",
+   "pandoc": [
+    "n",
+    "o",
+    "m"
+   ]
+  },
+  {
+   "name": "random fuzz2 #29",
+   "md": "> \\`:`` ` ``, Text:Text; \n~~~[x](y), @a\ne.g.@i\n@bk@h\nk@h```py - x`\n\n -   \n@b-@c`` ` ``@n@o``` x yTextk@h\n",
+   "pandoc": [
+    "a",
+    "bk",
+    "h",
+    "b",
+    "c",
+    "n",
+    "o"
+   ]
+  },
+  {
+   "name": "random fuzz2 #30",
+   "md": "- `@d``x\nx@p@qword(@k)\n(@k), @b  `xk@h - ```py\n\n1. ``@e``'@m'\\`\n - @b  ~~~ {.r}- \n\n\n-@c----e.g.@i`x``@e``, \n(@k)k@h; [x](y)1. ,  -     \n\n\n'@m'[see @g, p. 2]~~~\n\\`  -- --@l.``` x y# '@m'\n   ~~~[@f]`@d`\n    ~~~- x`[see @g, p. 2]\n```{.a #b}\n, ```py*@j*\n,     ``` x y:-@cText\n``` x\n",
+   "pandoc": [
+    "m",
+    "b",
+    "c",
+    "k",
+    "g",
+    "l",
+    "cText"
+   ]
+  },
+  {
+   "name": "random fuzz3 #1",
+   "md": "+----------+\n|e.g.@o^@t^|\n|`@q`      |\n+----------+\n\n`@q`\n -----\n~&#64\n\n  ------ ----------\n  wx\\@e `@q``@q`\n ----- ----  ------\nw\n\ne.g.@oe.g.@o^@t^wk@h \n -----  ---- ----------\n",
+   "pandoc": [
+    "t",
+    "q"
+   ]
+  },
+  {
+   "name": "random fuzz3 #2",
+   "md": "k@hm@n@pm\n------\n^@t^\n ww@zab@cd\nww@z\n",
+   "pandoc": [
+    "n",
+    "pm",
+    "t",
+    "cd"
+   ]
+  },
+  {
+   "name": "random fuzz3 #3",
+   "md": " --------\n[@f]~@s~\n-----  ------\n ~@s~`@q`ww@zab\n\n@a~&#64;u~~&#64;u\n  ---  ------\n\nx\\@e^@t^ ww@z~&#64\n --  ----  -----\nk@he.g.@o k@hww@z\n ^@t^\n[@f]\n\n+-------+\n|`@q`   |\n|[@f]   |\n+-------+\n",
+   "pandoc": [
+    "f",
+    "s",
+    "a",
+    "t",
+    "z",
+    "he",
+    "hww"
+   ]
+  },
+  {
+   "name": "random fuzz3 #4",
+   "md": "+------+\n| w-@b~|\n|   m@n|\n+------+\n",
+   "pandoc": [
+    "b"
+   ]
+  },
+  {
+   "name": "random fuzz3 #5",
+   "md": " ^@t^x\\@e[@f]\n-  --  - -- --- ------\ne.g.@oe.g.@o\nww@z [@f]`@q` ww@z\n\ne.g.@o^@t^e.g.@o\n\n ww@z  ww@z [\n----------\n[@f]\n~@s~~&#64;u~e.g.@o\n",
+   "pandoc": [
+    "e",
+    "f",
+    "q",
+    "z",
+    "t",
+    "s",
+    "u"
+   ]
+  },
+  {
+   "name": "random fuzz3 #6",
+   "md": "+-----+\n|-@b~@|\n|e.g.@|\n+-----+\n\n+---------------+\n| w             |\n|-@bw           |\n+---------------+\n",
+   "pandoc": [
+    "b",
+    "bw"
+   ]
+  },
+  {
+   "name": "random fuzz3 #7",
+   "md": " ww@zab@cd@aw~&#64;u~\n",
+   "pandoc": [
+    "cd",
+    "aw",
+    "u"
+   ]
+  },
+  {
+   "name": "random fuzz3 #8",
+   "md": "+------------------+\n|w[@f]@a[@f]m@n@pe.|\n| ww@zab@cd-@b     |\n+------------------+\n\nww@z\n",
+   "pandoc": [
+    "f",
+    "a",
+    "pe",
+    "cd",
+    "b"
+   ]
+  },
+  {
+   "name": "random fuzz3 #9",
+   "md": " k@h`@q`m@n@pab\n--  - -----\n `@q`k@h^@t^x\\@e\nab@cd ~&#64;u~~@s\n",
+   "pandoc": [
+    "pab",
+    "q",
+    "h",
+    "t",
+    "u",
+    "s"
+   ]
+  },
+  {
+   "name": "random fuzz3 #10",
+   "md": "m@n@pk@hw\n",
+   "pandoc": [
+    "pk",
+    "hw"
+   ]
+  },
+  {
+   "name": "random fuzz3 #11",
+   "md": "w-@bk@hab@cd \n\n~&#64;u~^@t^wk@hw\n -- ------  --\n@aab@cd-@b^@t^`@\n x\\@e \nw\n\n+-------+\n| ~&#64;|\n|^@t^~&#|\n+-------+\n",
+   "pandoc": [
+    "bk",
+    "hab",
+    "cd",
+    "t",
+    "b"
+   ]
+  },
+  {
+   "name": "random fuzz3 #12",
+   "md": "m@n@pww@zk@h \n\n  ---  ---- ------\n~@s~\n  ----- -  --  ---\n~@s~@a  @a  \n\n^@t^   \n---------  -\n\n--- ------ --\n~@s~\n  ------  --  -----\n-@b\n\n `@q` \n  -----------  -----\n",
+   "pandoc": [
+    "pww",
+    "zk",
+    "h",
+    "a",
+    "q"
+   ]
+  },
+  {
+   "name": "random fuzz3 #13",
+   "md": "~@s~ ab@cd~&#64;u~-@b\n ---  ----------\n  ^@t^@a`@q`\n e.g.@o \n",
+   "pandoc": [
+    "s",
+    "u",
+    "b",
+    "t",
+    "a"
+   ]
+  },
+  {
+   "name": "random fuzz3 #14",
+   "md": "`@q`  \n",
+   "pandoc": []
+  },
+  {
+   "name": "random fuzz3 #15",
+   "md": "----- ---------\n@a  @a    \n--  ---  ---  ---\n^@t^w  k@hx\\@e\n\n`@q`   \n  ------- -------\n\nw   [@f]\n",
+   "pandoc": [
+    "a",
+    "t",
+    "f"
+   ]
+  },
+  {
+   "name": "random fuzz3 #16",
+   "md": "e.g.@ow\n  ---------\n@ae.g.@o\n^@t^\n\n+-----------+\n|`@q`       |\n|[@f]  m@n@p|\n+-----------+\n",
+   "pandoc": [
+    "f",
+    "p"
+   ]
+  },
+  {
+   "name": "random fuzz3 #17",
+   "md": "x\\@ek@h\n  ---- - ------\nww@z\n -@bww@zx\\@e\n-@b^@t^\n",
+   "pandoc": [
+    "ek",
+    "h",
+    "z",
+    "bww",
+    "t"
+   ]
+  },
+  {
+   "name": "random fuzz3 #18",
+   "md": "~@s~  @a[@f]^@t^\n --\n[@f]ab@cdk@h\n\n ab@cd @\n---\nww@z^@t^\n\n`@q`x\\@ek@hww@z\n",
+   "pandoc": [
+    "s",
+    "a",
+    "f",
+    "t",
+    "h",
+    "z"
+   ]
+  },
+  {
+   "name": "random fuzz3 #19",
+   "md": "k@h -@b-@bm@n@p\n------  ------\ne.g.@o w[@f]m@n@p\nk@h~&#64;u~k@hab\nx\\@e[@f]ab@cd\n\n+-----+\n|ww@z^|\n|ww   |\n+-----+\n\nab@cd\n-\n@ae.\n",
+   "pandoc": [
+    "b",
+    "bm",
+    "n",
+    "p",
+    "f"
+   ]
+  },
+  {
+   "name": "random fuzz3 #20",
+   "md": "k@h\n  ------  --  ---------\n[@f]`@q`   [@f]\n-@b^@t^\n",
+   "pandoc": [
+    "f",
+    "t"
+   ]
+  }
+ ]
+}

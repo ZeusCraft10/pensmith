@@ -35,12 +35,12 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import JSZip from 'jszip';
 import { PDFDocument, PDFName } from 'pdf-lib';
-import { parseBib, renderStyle, renderInText } from './citations.js';
+import { parseBib, renderStyle, renderCitationItems, type CitationItemInput } from './citations.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
 import { paperDir, projectRoot, dryRunWorkspaceActive } from './paths.js';
 import { exportCitedCitations } from './library.js';
-import { extractCitedKeysForVerification } from './citation-token.js';
+import { citationItems, extractCitedKeysForVerification, findRenderedCitations, type CitationItem } from './citation-token.js';
 
 // =====================================================================
 //   PKG_ROOT — locate templates/citation-styles/ relative to this file
@@ -528,21 +528,94 @@ async function writeMarkdown(md: string, outputPath: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Replace `[@key]` / `[@key1; @key2]` Pandoc citation tokens in `md` with
- * CSL-formatted in-text citations and append a `## References` bibliography.
+ * Locator terms Pandoc recognises after a citekey (`[@k, p. 5]`, `[@k, chap. 3]`),
+ * with their CSL labels. A bare number (`[@k, 33]`) is a page, as in Pandoc.
+ */
+const LOCATOR_TERMS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^(?:pp?\.|pages?\b)/i, 'page'],
+  [/^(?:chaps?\.|chapters?\b)/i, 'chapter'],
+  [/^(?:secs?\.|sections?\b|§§?)/i, 'section'],
+  [/^(?:figs?\.|figures?\b)/i, 'figure'],
+  [/^(?:vols?\.|volumes?\b)/i, 'volume'],
+  [/^(?:paras?\.|paragraphs?\b|¶¶?)/i, 'paragraph'],
+  [/^(?:ll?\.|lines?\b)/i, 'line'],
+  [/^(?:nn?\.|notes?\b)/i, 'note'],
+  [/^(?:nos?\.|numbers?\b)/i, 'issue'],
+  [/^(?:cols?\.|columns?\b)/i, 'column'],
+  [/^(?:pts?\.|parts?\b)/i, 'part'],
+  [/^(?:vv?\.|verses?\b)/i, 'verse'],
+  [/^(?:bks?\.|books?\b)/i, 'book'],
+  [/^(?:fols?\.|folios?\b)/i, 'folio'],
+  [/^(?:s\.vv?\.|sub verbo\b)/i, 'sub-verbo'],
+];
+const LOCATOR_VALUE_RE = /^[\p{N}ivxlcdm]+(?:[-–—][\p{N}ivxlcdm]+)?(?:,\s*[\p{N}]+(?:[-–—][\p{N}]+)?)*/iu;
+
+/** One citation item for citeproc: a `[see @k, p. 5, emphasis added]` segment → prefix, key, locator, label, suffix. */
+function toCslItem(item: CitationItem): CitationItemInput {
+  const base: CitationItemInput = {
+    id: item.key,
+    ...(item.prefix ? { prefix: `${item.prefix} ` } : {}),
+    ...(item.suppressAuthor ? { suppressAuthor: true } : {}),
+  };
+  const rest = item.suffix.replace(/^\s*,?\s*/, '');
+  if (rest === '') return base;
+  for (const [term, label] of LOCATOR_TERMS) {
+    const t = term.exec(rest);
+    if (t === null) continue;
+    const after = rest.slice(t[0].length).trimStart();
+    const v = LOCATOR_VALUE_RE.exec(after);
+    if (v === null || !/\p{N}|^[ivxlcdm]+$/iu.test(v[0])) break;
+    const tail = after.slice(v[0].length);
+    return { ...base, locator: v[0], label, ...(tail.trim() ? { suffix: tail } : {}) };
+  }
+  const page = /^,\s*/.test(item.suffix) ? /^\p{N}+(?:[-–—]\p{N}+)?/u.exec(rest) : null;
+  if (page !== null) {
+    const tail = rest.slice(page[0].length);
+    return { ...base, locator: page[0], label: 'page', ...(tail.trim() ? { suffix: tail } : {}) };
+  }
+  return { ...base, suffix: item.suffix.startsWith(' ') || item.suffix.startsWith(',') ? item.suffix : ` ${item.suffix}` };
+}
+
+/** citeproc's text for a citation, or '' when the style cannot print it (`[NO_PRINTED_FORM]`, an empty `()`). */
+function printed(text: string): string {
+  if (text.includes('NO_PRINTED_FORM')) return '';
+  const t = text.replace(/\(\s*[,;]\s*/g, '(').replace(/\(\s*\)/g, '').trim();
+  return /[\p{L}\p{N}]/u.test(t) ? t : '';
+}
+
+/** A narrative citation's name part when the style has no author-only form (numeric styles): "Smith", "Smith and Lee", "Smith et al.". */
+function authorNames(entry: Record<string, unknown> | undefined): string {
+  const names = Array.isArray(entry?.['author']) ? (entry['author'] as Array<{ family?: unknown; literal?: unknown }>) : [];
+  const family = names.map((a) => String(a.family ?? a.literal ?? '')).filter((f) => f !== '');
+  if (family.length === 0) return '';
+  if (family.length === 1) return family[0] as string;
+  if (family.length === 2) return `${family[0]} and ${family[1]}`;
+  return `${family[0]} et al.`;
+}
+
+/**
+ * A narrative citation followed by a bracketed locator Pandoc reads as its
+ * locator (`@k [p. 5]` → "Smith (2020, p. 5)"): the bracket's text, or null.
+ */
+const BARE_LOCATOR_RE = /^[ \t]*\[([^[\]@^][^[\]@]*)\](?![({:])/;
+
+/**
+ * Replace every citation Pandoc would render in `md` — bracketed clusters
+ * (`[@a]`, `[@a; @b]`, `[see @a, p. 5]`, `[-@a]`, `[@{a}]`) and narrative
+ * ones (`@a says`, `-@a`, `@a [p. 5]`) — with its CSL in-text form in `style`,
+ * and append a `## References` bibliography. The citations are read by
+ * citation-token.ts, the grammar the gates use (review round 3 of Phase 18),
+ * so an export never ships a form every gate accepted as raw Pandoc syntax:
+ * prefixes and locators are kept (`(see Lindqvist & Berg, 2012, p. 5)`),
+ * `-@k` prints the year only, and a narrative citation prints "Author (Year)"
+ * ("Author [n]" in a numeric style). Citations in code are left as written; a
+ * key missing from the bib stays a visible `[@key]` sentinel (WR-01).
  *
- * D-19: all citation-js usage is delegated to `parseBib`, `renderStyle`, and
- * `renderInText` imported from `./citations.js`. No direct `citation-js` import.
- *
- * Pitfall-5 guards: missing/empty bib → return md unchanged (no throw).
- * Pitfall-1 guard: one `renderInText([entry], style)` call per entry so each
- *   citekey gets its own in-text string (not one combined string for all).
- * Pitfall-2 guard: `renderStyle(entries, style)` is called FIRST so
- *   `ensureStyleTemplate` registers `pensmith-${style}` before the in-text
- *   loop begins (ordering requirement — memoized via the registeredStyles Map
- *   in citations.ts; never throws "template already registered").
- * Pitfall-6 guard: multi-cite `[@a; @b]` regex splits on ';' and wraps in one
- *   paren pair.
+ * D-19: all citation-js usage is delegated to `parseBib`, `renderStyle` and
+ * `renderCitationItems` in `./citations.js`. No direct `citation-js` import.
+ * Pitfall-5: a missing or empty bib returns md unchanged (no throw).
+ * Pitfall-2: `renderStyle(entries, style)` runs FIRST so `ensureStyleTemplate`
+ * registers `pensmith-${style}` before the per-citation calls.
  * Zero-trace: the `## References` heading contains no 'pensmith' literal.
  */
 async function resolveAndRenderCitations(
@@ -555,41 +628,60 @@ async function resolveAndRenderCitations(
   const bibText = await fsp.readFile(bibPath, 'utf8');
   if (!bibText.trim()) return md;
 
-  const entries = await parseBib(bibText);
-
-  // Memoized Style Template Registration ordering (PATTERNS.md):
-  // Call renderStyle FIRST so ensureStyleTemplate(style) runs before the
-  // per-key in-text loop — guarantees pensmith-${style} is registered.
-  const bibliography = await renderStyle(entries, style);
-
-  // Build a per-citekey in-text citation map (Pitfall-1: one entry at a time).
-  const intextMap = new Map<string, string>();
-  for (const entry of entries) {
+  const parsed = await parseBib(bibText);
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const entry of parsed) {
     const id = String((entry as { id?: unknown }).id ?? '');
-    if (!id) continue;
-    const formatted = (await renderInText([entry], style)).trim();
-    intextMap.set(id, formatted);
+    if (id) byId.set(id, entry);
   }
+  const citations = findRenderedCitations(md);
+  // The cited keys in first-citation order: a numeric style's bibliography
+  // numbers its entries in the order it is given them, and each in-text
+  // citation gets the same numbers (renderCitationItems' citedInOrder).
+  const citedInOrder = [...new Set(citations.flatMap((c) => citationItems(c).map((i) => i.key)))].filter((k) => byId.has(k));
+  const entries = [
+    ...citedInOrder.map((k) => byId.get(k) as Record<string, unknown>),
+    ...parsed.filter((e) => !citedInOrder.includes(String((e as { id?: unknown }).id ?? ''))),
+  ];
+  // Pitfall-2: renderStyle FIRST registers the style template.
+  const bibliography = await renderStyle(entries, style);
+  const render = async (items: readonly CitationItemInput[]): Promise<string> =>
+    printed(await renderCitationItems(entries, style, items, citedInOrder));
 
-  // Replace [@key] and [@key1; @key2] tokens (Pitfall-6: multi-cite).
-  // Strip locator suffix (e.g. [@smith2020 p. 5] → key 'smith2020') per Pandoc
-  // citation syntax: citekey ends at the first whitespace after the sigil.
-  const resolved = md.replace(/\[(@[^\]]+)\]/g, (_match, inner: string) => {
-    const keys = inner.split(';').map((k) => k.trim().replace(/^@/, '').replace(/\s.*$/, ''));
-    if (keys.length === 1) {
-      const key = keys[0]!;
-      return intextMap.get(key) ?? `[@${key}]`; // unknown key: leave as-is
+  let out = '';
+  let at = 0;
+  for (const c of citations) {
+    if (c.start < at) continue;
+    let end = c.end;
+    let items = citationItems(c);
+    if (c.narrative && items[0] !== undefined) {
+      const loc = BARE_LOCATOR_RE.exec(md.slice(c.end));
+      if (loc !== null) {
+        items = [{ ...items[0], suffix: `, ${(loc[1] as string).trim()}` }];
+        end = c.end + loc[0].length;
+      }
     }
-    // Multi-key: strip outer parens from each formatted cite, wrap in one pair.
-    // Unknown key: preserve [@key] sentinel (not bare word) so unresolved citations
-    // are visibly wrong, not silently misrepresented as resolved surnames (WR-01).
-    const parts = keys.map((k) => {
-      const hit = intextMap.get(k);
-      if (!hit) return `[@${k}]`; // preserve the unresolved signal
-      return hit.replace(/^[(]|[)]$/g, '');
-    });
-    return '(' + parts.join('; ') + ')';
-  });
+    const known = items.filter((i) => byId.has(i.key)).map(toCslItem);
+    const unknown = items.filter((i) => !byId.has(i.key)).map((i) => `[@${i.key}]`);
+    let text = '';
+    if (known.length > 0) {
+      const first = known[0] as CitationItemInput;
+      if (c.narrative && !first.suppressAuthor) {
+        const names = (await render([{ id: first.id, authorOnly: true }])) || authorNames(byId.get(first.id));
+        const rest = await render([{ ...first, suppressAuthor: true }]);
+        text = [names, rest].filter((t) => t !== '').join(' ');
+      } else {
+        text = await render(known);
+      }
+    }
+    // WR-01: an unresolved key stays visibly wrong, never a silent surname: a
+    // citation of unknown keys only is left as written, an unknown key in a
+    // cluster with known ones follows it as `[@key]`.
+    const rendered = known.length > 0 ? [text, ...unknown].filter((t) => t !== '').join(' ') : '';
+    out += md.slice(at, c.start) + (rendered || md.slice(c.start, end));
+    at = end;
+  }
+  const resolved = out + md.slice(at);
 
   // Append bibliography under ## References only when non-empty (Pitfall-5).
   // ZERO-TRACE: heading is '## References' — never any 'pensmith' literal.

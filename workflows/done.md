@@ -17,7 +17,7 @@ required:
   - humanizer skill
 
 degrade_if_missing:
-  - if no Pandoc: markdown-only export (latex is still produced via the offline md→tex writer; docx/pdf fall back to a markdown deliverable in the export dir)
+  - if no Pandoc: markdown-only export (latex is still produced via the offline md→tex writer; docx/pdf fall back to a markdown deliverable in the export dir). The offline path renders every citation form the gates accept in the paper's style — locators and prefixes kept, `-@key` as the year only, a narrative `@key` as "Author (Year)" ("Author [n]" in a numeric style, numbered in first-citation order like the References list)
   - if no PDF engine: markdown-only fallback for the pdf format (never an ENOENT crash)
   - if no humanizer skill: skip the humanize step (banner + null) and skip the 'after' honesty score — the export proceeds on DRAFT.md, never fails
   - if no GPTZERO_API_KEY: skip the honesty score (the report emits the skip banner, never a fabricated percent)

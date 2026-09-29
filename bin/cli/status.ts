@@ -21,7 +21,7 @@
 import { defineCommand } from 'citty';
 import { projectRoot } from '../lib/paths.js';
 import { buildStatusView, renderConfigView, renderStatusView } from '../lib/status-view.js';
-import { readGoalFromConfig, stopAfterResearchFor } from './goal.js';
+import { routeOptionsFor } from './route-options.js';
 
 export const statusCommand = defineCommand({
   meta: {
@@ -46,8 +46,7 @@ export const statusCommand = defineCommand({
     // Goal-aware tier: pass the goal→stopAfterResearch mapping so the surfaced
     // "next" line reflects the learning hard-stop. status is READ-ONLY — it does
     // not render TUTORIAL.md (rendering belongs to next/resume/bare).
-    const stop = stopAfterResearchFor(readGoalFromConfig(paperRoot));
-    const view = await buildStatusView(paperRoot, { tier: 'cli', stopAfterResearch: stop });
+    const view = await buildStatusView(paperRoot, { tier: 'cli', ...routeOptionsFor(paperRoot) });
     process.stdout.write(renderStatusView(view) + '\n');
     if (view.problem === 'no-paper') return { ok: false, reason: 'no-paper' };
     if (view.problem === 'corrupt-state') return { ok: false, reason: 'corrupt-state' };

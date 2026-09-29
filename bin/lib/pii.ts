@@ -102,10 +102,21 @@ const RE_SSN = /\b\d{3}-\d{2}-\d{4}\b/g;
 
 // ID — a labelled identifier. Only the VALUE (group 1) is redacted, so the
 // label stays readable ("Student ID: [REDACTED:ID]"). The value must hold a
-// digit and be 3-25 characters; the label is one of the common ID labels.
-const ID_LABEL = String.raw`(?:(?:student|employee|staff|matriculation|matric|registration|enrol(?:l)?ment|passport|licen[cs]e|patient|member(?:ship)?|account|candidate|exam(?:ination)?|library|badge|university|school|campus|roll|admission|application|tax|insurance)\s*(?:id|identification|no\.?|number|num\.?|#|code)|(?:id|identification)(?:\s*(?:no\.?|number|num\.?|#|code))?|ssn|sin|social\s+security(?:\s+(?:no\.?|number))?|nhs\s+(?:no\.?|number))`;
+// digit and be 3-25 characters (or a spaced SSN, "123 45 6789"); the label is
+// one of the common ID labels, and no letter may follow it (review round 3 of
+// Phase 18: "since 1990" is not the label "sin" plus the value "ce 1990").
+const ID_LABEL = String.raw`(?:(?:student|employee|staff|matriculation|matric|registration|enrol(?:l)?ment|passport|licen[cs]e|patient|member(?:ship)?|account|candidate|exam(?:ination)?|library|badge|university|school|campus|roll|admission|application|tax|insurance)\s*(?:id|identification|no\.?|number|num\.?|#|code)|identification(?:\s*(?:no\.?|number|num\.?|#|code))?|id\s*(?:no\.?|number|num\.?|#|code)|ssn|social\s+security(?:\s+(?:no\.?|number))?|nhs\s+(?:no\.?|number))`;
+const ID_VALUE = String.raw`(\d{3}[ ]\d{2}[ ]\d{4}|[A-Za-z]{0,4}[-\s]?\d[\dA-Za-z-]{2,24})`;
 const RE_ID = new RegExp(
-  String.raw`${L_EDGE}${ID_LABEL}\s*[:#=]?\s*(?:is\s+)?([A-Za-z]{0,4}[-\s]?\d[\dA-Za-z-]{2,24})${R_EDGE}`,
+  String.raw`${L_EDGE}${ID_LABEL}(?![\p{L}])\s*[:#=]?\s*(?:is\s+)?${ID_VALUE}${R_EDGE}`,
+  'giud',
+);
+// The bare labels "ID" and "SIN" name an identifier only with a ":" / "#"
+// ("ID: A-2201"), or before a value of the expected shape: an "ID" of 5+
+// digits ("ID 20231187"), a 9-digit SIN ("SIN 123 456 789") — never "the id 42
+// row", "sin 90 degrees", "idea 2024" or "since 1990".
+const RE_ID_WEAK = new RegExp(
+  String.raw`${L_EDGE}(?:(?:id|sin)(?![\p{L}])\s*[:#]\s*(?:is\s+)?${ID_VALUE}|id(?![\p{L}])\s+(\d(?:[\d-]*\d){4,24})|sin(?![\p{L}])\s+(\d{3}[- ]?\d{3}[- ]?\d{3}))${R_EDGE}`,
   'giud',
 );
 
@@ -117,10 +128,11 @@ const RE_IBAN_LIKE = /\b[A-Z]{2}\d{2}[A-Z0-9]{4,30}\b/g;
 
 // NAME — Unicode-aware. A name token: an optional "O'"-style prefix, a
 // capital and 1-20 lower-case letters, an optional "Mc"/"Mac"-style inner
-// capital part, an optional hyphenated second part ("Mary-Anne"). Between the
+// capital part, an optional hyphenated second part ("Mary-Anne", or a short
+// lower-case syllable: "Min-jun", "Seo-yeon"). Between the
 // first token and each next one: up to three middle initials ("Q.") and up to
 // three lower-case particles ("van der", "de la"). Two or three tokens.
-const NAME_TOKEN = String.raw`(?:\p{Lu}['’])?\p{Lu}\p{Ll}{1,20}(?:\p{Lu}\p{Ll}{1,20})?(?:-\p{Lu}\p{Ll}{1,20})?`;
+const NAME_TOKEN = String.raw`(?:\p{Lu}['’])?\p{Lu}\p{Ll}{1,20}(?:\p{Lu}\p{Ll}{1,20})?(?:-(?:\p{Lu}\p{Ll}{1,20}|\p{Ll}{2,5}))?`;
 const NAME_INITIAL = String.raw`\p{Lu}\.`;
 const NAME_PARTICLE = String.raw`(?:van|von|der|den|de|del|della|degli|di|da|du|dos|das|la|le|ter|ten|bin|ibn|al|el|zu|y)`;
 const RE_NAME = new RegExp(
@@ -132,10 +144,10 @@ const RE_NAME_INITIALS_FIRST = new RegExp(
   String.raw`${L_EDGE}${NAME_INITIAL}(?:[ ]?${NAME_INITIAL}){0,2}(?:[ ]${NAME_PARTICLE}){0,3}[ ]${NAME_TOKEN}${R_EDGE}`,
   'gu',
 );
-// NAME after an honorific: "Prof. Smith", "Dr Okafor" — only the surname
-// (group 1) is redacted. A full name after the honorific is caught by RE_NAME.
+// NAME after an honorific: "Prof. Smith", "Dr Okafor", "Dr. Helen Park" —
+// the whole name (group 1, up to three tokens) is redacted, the honorific kept.
 const RE_NAME_HONORIFIC = new RegExp(
-  String.raw`${L_EDGE}(?:Dr|Prof|Professor|Mr|Mrs|Ms|Mx|Miss|Sir|Dame|Rev|Hon)\.?[ ]+((?:${NAME_PARTICLE}[ ]){0,3}${NAME_TOKEN})${R_EDGE}`,
+  String.raw`${L_EDGE}(?:Dr|Prof|Professor|Mr|Mrs|Ms|Mx|Miss|Sir|Dame|Rev|Hon)\.?[ ]+((?:${NAME_PARTICLE}[ ]){0,3}${NAME_TOKEN}(?:(?:[ ]${NAME_INITIAL}){0,3}(?:[ ]${NAME_PARTICLE}){0,3}[ ]${NAME_TOKEN}){0,2})${R_EDGE}`,
   'gud',
 );
 
@@ -174,6 +186,10 @@ const ENTITY_HEADS: ReadonlySet<string> = new Set([
   'Plague', 'Famine', 'Pandemic', 'Epidemic', 'Genocide', 'Holocaust',
   // Coursework documents ("Final Paper", "Term Essay").
   'Paper', 'Essay', 'Assignment', 'Exam', 'Thesis', 'Dissertation',
+  // The last word of a multiword place name no one bears as a surname ("Great Britain",
+  // "Los Angeles", "New Zealand", "Buenos Aires", "Sri Lanka"; review round 3).
+  'Britain', 'Zealand', 'Angeles', 'Aires', 'Janeiro', 'Lanka', 'Arabia', 'Korea', 'Guinea', 'Vegas', 'Francisco',
+  'Delhi', 'Orleans', 'Scotia', 'Herzegovina', 'Tobago', 'Emirates',
 ]);
 
 // Words that OPEN an entity name ("Treaty …", "Lake …", "Mount …", "Fort …").
@@ -185,6 +201,10 @@ const ENTITY_OPENERS: ReadonlySet<string> = new Set([
   'Southeast', 'Southwest', 'Northeast', 'Northwest', 'Sub-Saharan', 'Middle', 'Global', 'Latin', 'Central',
   'Northern', 'Southern', 'Eastern', 'Western', 'Greater', 'Upper', 'Lower', 'Ancient', 'Medieval', 'Imperial',
   'Colonial', 'Soviet', 'World',
+  // The first word of a multiword place name ("Great Britain", "New York", "Los Angeles",
+  // "San Francisco", "Monte Carlo", "Hong Kong", "South Korea"; review round 3).
+  'Great', 'New', 'Los', 'Las', 'San', 'Santa', 'Santo', 'Sao', 'São', 'Rio', 'Buenos', 'Costa', 'Puerto', 'Porto',
+  'Sri', 'Hong', 'Tel', 'Kuala', 'Abu', 'Addis', 'Baton', 'Palo', 'Saudi', 'Monte', 'North', 'South', 'East', 'West',
 ]);
 
 // Number words: a candidate that ends in one after an entity head is an event ("World War One").
@@ -250,8 +270,8 @@ const PROTECTED: readonly RegExp[] = [
 interface Pattern {
   readonly kind: PiiKind;
   readonly re: RegExp;
-  /** Redact only this capture group (label patterns). */
-  readonly group?: number;
+  /** Redact only this capture group (label patterns) — the first of several that matched. */
+  readonly group?: number | readonly number[];
 }
 
 // Scan order matters only for exact-tie overlaps (earlier = higher priority):
@@ -262,6 +282,7 @@ const PATTERNS: readonly Pattern[] = [
   { kind: 'PHONE', re: RE_PHONE_INTL },
   { kind: 'SSN', re: RE_SSN },
   { kind: 'ID', re: RE_ID, group: 1 },
+  { kind: 'ID', re: RE_ID_WEAK, group: [1, 2, 3] },
   { kind: 'IP', re: RE_IP },
   { kind: 'IBAN', re: RE_IBAN_LIKE },
   { kind: 'DATE', re: RE_DATE_TEXT_MDY },
@@ -293,49 +314,61 @@ function keepTokens(keep: readonly string[] | undefined): ReadonlySet<string> {
 }
 
 /**
- * Trim or drop a NAME candidate (null = not a person's name):
+ * Trim or drop a NAME candidate (null = not a person's name).
+ *
+ * In a PERSON CONTEXT (`person`: a person-labelled line, right after an
+ * honorific, or a "prepared by …" name list) every capitalised name token is
+ * a name: no entity, date, number, style or keep rule applies there (GRND-05,
+ * review round 3 — "Student: Jiwoo Park", "Instructor: Grace Law", "Dr. Helen
+ * Park"); only a candidate made entirely of curated non-name words (months
+ * excepted: "April May" is a person) is dropped.
+ *
+ * Elsewhere:
  *   1. every token suppressed → drop ("Results Section", "January March");
- *   2. the last token a month/weekday → drop ("Due March");
- *   3. the last token an entity head, or the first an entity opener → drop
- *      ("French Revolution", "Roman Empire", "Lake Erie");
- *   4. every token in the keep list → drop (the paper's own topic);
- *   4b. the last token a citation-style name and `after` (the text right after
+ *   2. strip leading suppressed words while ≥ 2 name tokens remain (a
+ *      sentence-initial verb or heading word: "Compare Great Britain" →
+ *      "Great Britain", "Author Jane Smith" → "Jane Smith"; "In Smith" keeps
+ *      both), then judge what is left:
+ *   3. the last token a citation-style name and `after` (the text right after
  *      the candidate) opens with a style word → drop ("Use Chicago style");
- *   5. otherwise strip leading suppressed tokens while ≥ 2 name tokens remain
- *      ("Author Jane Smith" → "Jane Smith"; "In Smith" keeps both).
+ *   4. the last token a month/weekday → drop ("Due March");
+ *   5. the last token an entity head, or the first an entity opener → drop
+ *      ("French Revolution", "Lake Erie", "Great Britain", "Los Angeles");
+ *   6. a number word after an entity head → drop ("World War One");
+ *   7. every token in the keep list → drop (the paper's own topic).
  * Returns the kept text and its offset in `raw`.
  */
-function resolveName(raw: string, keep: ReadonlySet<string>, after = ''): { raw: string; startDelta: number } | null {
-  const tokens = nameTokens(raw);
-  if (tokens.length === 0) return null;
+function resolveName(
+  raw: string,
+  keep: ReadonlySet<string>,
+  after = '',
+  person = false,
+): { raw: string; startDelta: number } | null {
+  const all = nameTokens(raw);
+  if (all.length === 0) return null;
+  if (person) {
+    return all.every((t) => NAME_SUPPRESSION.has(t) && !DATE_WORDS.has(t)) ? null : { raw, startDelta: 0 };
+  }
+  if (all.every((t) => NAME_SUPPRESSION.has(t))) return null;
+  const words = raw.split(' ');
+  let start = 0;
+  let remaining = all.length;
+  while (start < words.length - 1 && remaining > 2 && NAME_SUPPRESSION.has(words[start] as string)) {
+    start += 1;
+    remaining -= 1;
+  }
+  const startDelta = start === 0 ? 0 : words.slice(0, start).join(' ').length + 1;
+  const kept = raw.slice(startDelta);
+  const tokens = nameTokens(kept);
   const last = tokens[tokens.length - 1] as string;
   const first = tokens[0] as string;
   const lastBase = last.split('-').pop() as string;
-  if (tokens.every((t) => NAME_SUPPRESSION.has(t))) return null;
   if (CITATION_STYLE_NAMES.has(last) && STYLE_WORD_AFTER.test(after)) return null;
   if (DATE_WORDS.has(last) || DATE_WORDS.has(lastBase)) return null;
   if (ENTITY_HEADS.has(last) || ENTITY_HEADS.has(lastBase) || ENTITY_OPENERS.has(first)) return null;
   if (NUMBER_TOKENS.has(last) && tokens.slice(0, -1).some((t) => ENTITY_HEADS.has(t))) return null;
   if (keep.size > 0 && tokens.every((t) => keep.has(t))) return null;
-  // Strip leading suppressed words while at least two name tokens remain.
-  const words = raw.split(' ');
-  let start = 0;
-  let remaining = tokens.length;
-  while (start < words.length - 1 && remaining > 2 && NAME_SUPPRESSION.has(words[start] as string)) {
-    start += 1;
-    remaining -= 1;
-  }
-  if (start === 0) return { raw, startDelta: 0 };
-  const offset = words.slice(0, start).join(' ').length + 1;
-  return { raw: raw.slice(offset), startDelta: offset };
-}
-
-/** A single surname after an honorific: drop suppressed words, dates, entities and kept words. */
-function resolveSurname(raw: string, keep: ReadonlySet<string>): boolean {
-  const tokens = nameTokens(raw);
-  const last = tokens[tokens.length - 1];
-  if (last === undefined) return false;
-  return !NAME_SUPPRESSION.has(last) && !DATE_WORDS.has(last) && !ENTITY_HEADS.has(last) && !keep.has(last);
+  return { raw: kept, startDelta };
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +392,22 @@ function overlapsAny(span: [number, number], spans: ReadonlyArray<[number, numbe
   return spans.some(([a, b]) => span[0] < b && span[1] > a);
 }
 
+// A name list after "prepared by", "submitted by", "written by" … with no colon
+// ("Prepared by Grace Law and Tom Church."): its names are people (review round 3).
+const PERSON_PHRASE = /(?<![\p{L}])(?:prepared|submitted|written|authored|co-authored|compiled|edited|signed|graded|taught|supervised|presented|reviewed|assessed|marked)[ \t]+by[ \t]+/giu;
+const PERSON_LIST = /^(?:(?:\p{Lu}[\p{L}'’-]{0,30}\.?|van|von|der|den|de|del|della|di|da|du|la|le|and|&|,)[ \t]{0,4}){1,40}/u;
+
+/** Spans of the name lists after "prepared by" / "submitted by" … (see PERSON_PHRASE). */
+function personPhraseSpans(text: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const m of text.matchAll(PERSON_PHRASE)) {
+    const at = (m.index ?? 0) + m[0].length;
+    const list = PERSON_LIST.exec(text.slice(at, at + 400));
+    if (list !== null) out.push([at, at + list[0].length]);
+  }
+  return out;
+}
+
 /** Spans of the person-labelled lines ("Name: …", "Student: …", "Instructor: …"). */
 function personLineSpans(text: string): Array<[number, number]> {
   const out: Array<[number, number]> = [];
@@ -374,15 +423,12 @@ export function classifyPii(text: string, opts: PiiOptions = {}): PiiMatch[] {
   const keepAll = keepTokens(opts.keep);
   const noKeep: ReadonlySet<string> = new Set();
   const shielded = protectedSpans(text);
-  const personLines = keepAll.size > 0 ? personLineSpans(text) : [];
-  // The keep list protects a topic phrase, never a person in a person context:
-  // on a person-labelled line or right after an honorific it does not apply.
-  const keepAt = (start: number, end: number): ReadonlySet<string> =>
-    keepAll.size === 0 ||
-    overlapsAny([start, end], personLines) ||
-    HONORIFIC_BEFORE.test(text.slice(Math.max(0, start - 14), start))
-      ? noKeep
-      : keepAll;
+  const personSpans = [...personLineSpans(text), ...personPhraseSpans(text)];
+  // A person context — a person-labelled line, a "prepared by" name list, or
+  // right after an honorific — holds people: no keep list, entity or date rule
+  // un-redacts a name there (resolveName).
+  const personAt = (start: number, end: number): boolean =>
+    overlapsAny([start, end], personSpans) || HONORIFIC_BEFORE.test(text.slice(Math.max(0, start - 14), start));
 
   const candidates: Array<PiiMatch & { order: number }> = [];
   PATTERNS.forEach(({ kind, re, group }, order) => {
@@ -392,8 +438,9 @@ export function classifyPii(text: string, opts: PiiOptions = {}): PiiMatch[] {
       let raw = m[0];
       let start = at;
       if (group !== undefined) {
-        const idx = (m as RegExpMatchArray & { indices?: Array<[number, number] | undefined> }).indices?.[group];
-        const g = m[group];
+        const which = (typeof group === 'number' ? [group] : group).find((g) => m[g] !== undefined);
+        const idx = which === undefined ? undefined : (m as RegExpMatchArray & { indices?: Array<[number, number] | undefined> }).indices?.[which];
+        const g = which === undefined ? undefined : m[which];
         if (!idx || g === undefined) continue;
         raw = g;
         start = idx[0];
@@ -403,15 +450,11 @@ export function classifyPii(text: string, opts: PiiOptions = {}): PiiMatch[] {
         if (digits < 8 || digits > 15) continue;
       }
       if (kind === 'NAME') {
-        if (re === RE_NAME_HONORIFIC) {
-          if (!resolveSurname(raw, noKeep)) continue;
-        } else {
-          const keep = keepAt(start, start + raw.length);
-          const resolved = resolveName(raw, keep, text.slice(start + raw.length, start + raw.length + 40));
-          if (resolved === null) continue;
-          raw = resolved.raw;
-          start += resolved.startDelta;
-        }
+        const person = re === RE_NAME_HONORIFIC || personAt(start, start + raw.length);
+        const resolved = resolveName(raw, person ? noKeep : keepAll, text.slice(start + raw.length, start + raw.length + 40), person);
+        if (resolved === null) continue;
+        raw = resolved.raw;
+        start += resolved.startDelta;
       }
       const span: [number, number] = [start, start + raw.length];
       if (overlapsAny(span, shielded)) continue;

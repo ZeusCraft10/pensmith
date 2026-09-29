@@ -47,11 +47,13 @@ import { EXIT_ERROR, EXIT_USAGE, PensmithError } from '../lib/exit-codes.js';
 import { complete, assertLlmConfigured, correctiveMessages, StructuredOutputError, type ChatMessage } from '../lib/anthropic.js';
 import { buildPromptRequest, requestHints, type PromptRequest } from '../lib/prompt-request.js';
 import { renderOutlineMd, type OutlineRow } from '../lib/outline-parse.js';
-import { outlinePath, outlineRejectedPath, readOutlineSync } from '../lib/outline.js';
+import { outlinePath, outlineRejectedPath, readOutlineChecked } from '../lib/outline.js';
+import { outlineProblem } from '../lib/section-registry.js';
 import { readPaperBrief, type PaperBrief } from '../lib/paper-brief.js';
 import { tryLoadLibrary } from '../lib/library.js';
-import { buildOutlineSources, describeExcluded, libraryCitekeys, partitionCheckable, type SourceContextInput } from '../lib/source-context.js';
+import { buildOutlineSources, describeExcluded, excludedRemedy, libraryCitekeys, partitionCheckable, type SourceContextInput } from '../lib/source-context.js';
 import { resolveCounterargument, type CounterargumentDecision } from '../lib/counterargument.js';
+import { canonicalSectioningNotes } from '../lib/intake-overrides.js';
 import { formatOutlineIssues, outlineCorrection, validateOutline, validateOutlineStructure, type OutlineIssue } from '../lib/outline-validate.js';
 import {
   archiveSection,
@@ -266,6 +268,11 @@ function clearRejection(root: string): void {
   }
 }
 
+/** `text` with its first letter upper-cased. */
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 /**
  * Run the outline approval gate — `outline-approval` in the gate registry
  * (RUN-28, bin/lib/gates.ts; CLAUDE.md non-negotiable: default-ON).
@@ -275,7 +282,8 @@ async function runApprovalGate(outlineText: string, yolo: boolean, withheld: str
     const preview = outlineText.slice(0, 3000) + (outlineText.length > 3000 ? '\n…(truncated)' : '');
     process.stderr.write(`Proposed outline:\n${preview}\n`);
     // D-18-37: say, where the user decides, which library sources the outline
-    // was not offered (the citation verifier cannot check them yet).
+    // was not offered (the citation verifier cannot check them yet, or they
+    // are retracted).
     if (withheld !== null) process.stderr.write(`${withheld}\n`);
   }
   const outcome = await runGate('outline-approval', {
@@ -297,7 +305,10 @@ function briefBlock(brief: PaperBrief, counter: CounterargumentDecision): Record
     paper_type: brief.paperType,
     length_target_words: brief.lengthTarget,
     sectioning_convention: [...brief.discipline.sectioningConvention],
-    sectioning_notes: [...brief.sectioningNotes],
+    // FEED-05 (review round 3): the brief block is not fenced, so the notes —
+    // assignment clauses and the clarifier's reading of them — go in rebuilt
+    // from a fixed vocabulary and the section names, never verbatim.
+    sectioning_notes: canonicalSectioningNotes(brief.sectioningNotes),
     counterargument_required: counter.required,
     min_sections: 3,
     max_sections: 7,
@@ -347,7 +358,14 @@ export const outlineCommand = defineCommand({
     const marker = dryRunMarker();
 
     // ── 1. An existing OUTLINE.md and no --force: apply it as written — no model call ──
-    const existingOutline = readOutlineSync(paperRoot);
+    // Review round 3: an OUTLINE.md that is present but unreadable (a hand edit
+    // with one bad row) is refused by name — never treated as absent, which
+    // would re-outline through the model and overwrite the user's edits.
+    const read = readOutlineChecked(paperRoot);
+    if (!force && read.kind === 'invalid') {
+      throw new PensmithError(`pensmith outline: ${outlineProblem(paperRoot) ?? `.paper/OUTLINE.md cannot be read (${read.error})`}`, EXIT_ERROR);
+    }
+    const existingOutline = read.kind === 'ok' ? read.doc : null;
     if (!force && existingOutline !== null && existingOutline.sections.length > 0) {
       const r = await applyExistingOutline(paperRoot, existingOutline.sections.map(entryFromRow), { yolo, marker });
       clearRejection(paperRoot);
@@ -403,13 +421,13 @@ export const outlineCommand = defineCommand({
     const library: SourceContextInput[] = (await tryLoadLibrary(paperRoot))?.entries ?? [];
     const { checkable: entries, excluded } = partitionCheckable(library, networkMode().dryRun);
     const withheld = excluded.length > 0
-      ? `Not offered to the outline (${excluded.length} of ${library.length} LIBRARY.json source(s)) because the citation verifier cannot check them yet: ` +
-        `${describeExcluded(excluded, excluded.length)}. To use one, \`pensmith add\` the DOI of its published (Crossref-registered) version.`
+      ? `Not offered to the outline (${excluded.length} of ${library.length} LIBRARY.json source(s)) because the citation verifier would not pass a citation of them: ` +
+        `${describeExcluded(excluded, excluded.length)}. ${capitalise(excludedRemedy(excluded))}.`
       : null;
     if (withheld !== null) {
       process.stderr.write(
         `pensmith outline: WARN — ${excluded.length} of ${library.length} source(s) in LIBRARY.json are not offered to the outline ` +
-          `because the citation verifier cannot check them: ${describeExcluded(excluded)}\n`,
+          `because the citation verifier would not pass a citation of them: ${describeExcluded(excluded)}\n`,
       );
     }
     const counter = resolveCounterargument({

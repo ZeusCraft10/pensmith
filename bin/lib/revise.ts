@@ -36,7 +36,8 @@
 import { z } from 'zod';
 import { readFileSync, existsSync } from 'node:fs';
 import { atomicWriteFile } from './atomic-write.js';
-import { updateFrontmatter, migrateFrontmatterText, loadFrontmatterDoc } from './frontmatter.js';
+import { updateFrontmatter, migrateFrontmatterText, loadFrontmatterDoc, parseFrontmatter } from './frontmatter.js';
+import { parsePlanBody } from './plan-render.js';
 import { runGate, declineGate, canPrompt } from './gates.js';
 import { withLock } from './lock.js';
 import { findCitations, removeCitekey, renameCitekey } from './citation-token.js';
@@ -170,12 +171,21 @@ function claimContext(draftMd: string, citekey: string): string {
 
 // ---------------------------------------------------------------------------
 // Voice-hint extraction — WRTE-02 per-section consume point.
-// The section-planner prompt writes a one-line `Voice: ...` in the ## Brief.
+// The section's planned voice, in the order a Phase 18 PLAN.md carries it
+// (review round 3): the planner's `## Voice` section (plan-render.ts
+// parsePlanBody), else the frontmatter `voice` the outline gave the section,
+// else a pre-Phase-18 PLAN.md's one-line `Voice: …` in its ## Brief, else the
+// default.
 // ---------------------------------------------------------------------------
 
-function voiceHint(planMd: string): string {
-  const m = /(^|\n)\s*Voice:\s*([^\n]+)/i.exec(planMd);
-  return m && m[2] ? `Voice: ${m[2].trim()}` : 'Voice: formal academic tone.';
+export function voiceHint(planMd: string): string {
+  const { frontmatter, body } = parseFrontmatter(planMd);
+  const planned = parsePlanBody(body).voice.trim();
+  if (planned) return `Voice: ${planned}`;
+  const outlined = typeof frontmatter['voice'] === 'string' ? frontmatter['voice'].trim() : '';
+  if (outlined) return `Voice: ${outlined}`;
+  const legacy = /(^|\n)\s*Voice:\s*([^\n]+)/i.exec(body);
+  return legacy && legacy[2] ? `Voice: ${legacy[2].trim()}` : 'Voice: formal academic tone.';
 }
 
 // ---------------------------------------------------------------------------

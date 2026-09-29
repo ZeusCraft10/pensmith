@@ -22,7 +22,7 @@ import { loadState } from './state.js';
 import { readSectionInfo, resolveNextAction, type RouterDecision } from './router.js';
 import { paperDir, sectionPlan } from './paths.js';
 import { formatSectionId, sectionIdOf, sortBySectionId } from './section-id.js';
-import { CURRENT_CONFIG_VERSION, effectiveConfigRows, paperConfigPath, tryReadPaperConfigSync } from './config.js';
+import { CURRENT_CONFIG_VERSION, effectiveConfigRows, paperConfigPath, readPaperModeSync, tryReadPaperConfigSync } from './config.js';
 import { parseIntakeMd } from './intake-parse.js';
 import { parseOutline } from './outline-parse.js';
 import { lastSessionSpend, resolveCostCap, sessionSpend, totalCost } from './budget.js';
@@ -93,6 +93,8 @@ export interface StatusView {
   nextLine: string;
   /** What needs attention and the command that fixes it (router detail, GRND-08/13, FEED-04), or null. */
   attention: string | null;
+  /** What a finished routing says (`status (done)` with a detail — e.g. an outline-only paper), or null. */
+  note: string | null;
   /** Present when STATE.json is absent or unreadable. */
   problem: 'no-paper' | 'corrupt-state' | null;
 }
@@ -144,7 +146,7 @@ async function meteredSession(root: string): Promise<{ sessionUsd: number; sessi
  */
 export async function buildStatusView(
   root: string,
-  opts: { tier: 'cli' | 'mcp'; glyphs?: GlyphSet; stopAfterResearch?: boolean } = { tier: 'cli' },
+  opts: { tier: 'cli' | 'mcp'; glyphs?: GlyphSet; stopAfterResearch?: boolean; stopAfterOutline?: boolean } = { tier: 'cli' },
 ): Promise<StatusView> {
   const glyphSet = opts.glyphs ?? glyphSetFor();
   const glyphs = GLYPHS[glyphSet];
@@ -193,7 +195,12 @@ export async function buildStatusView(
 
   let decision: RouterDecision;
   try {
-    decision = await resolveNextAction(root, { stopAfterResearch: opts.stopAfterResearch === true });
+    decision = await resolveNextAction(root, {
+      stopAfterResearch: opts.stopAfterResearch === true,
+      // GRND-02 outline-only mode: read here when the caller did not pass it
+      // (the Tier-1 status resource), so both tiers route the same paper alike.
+      stopAfterOutline: opts.stopAfterOutline ?? readPaperModeSync(root) === 'outline',
+    });
   } catch {
     decision = { verb: 'status', reason: 'attention' };
   }
@@ -247,6 +254,7 @@ export async function buildStatusView(
     next,
     nextLine: `next: ${next}`,
     attention: decision.verb === 'status' && decision.reason === 'attention' && decision.detail ? decision.detail : null,
+    note: decision.verb === 'status' && decision.reason === 'done' && decision.detail ? decision.detail : null,
     problem,
   };
 }
@@ -271,6 +279,7 @@ export function renderStatusView(view: StatusView): string {
   lines.push(`  ${view.cost.line}`);
   lines.push(`  ${view.nextLine}`);
   if (view.attention !== null) lines.push(`  attention: ${view.attention}`);
+  if (view.note !== null) lines.push(`  note: ${view.note}`);
   return lines.join('\n');
 }
 

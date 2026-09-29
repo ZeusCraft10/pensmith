@@ -157,20 +157,28 @@ test('every Pandoc citation form is a key: [-@k], [@a; -@b], [@{k}], narrative @
     'Attention helps [-@supp1]. Two views [@vaswani2017; -@supp2]. Braced [@{brace1}].',
     '@narr1 argues this, and -@narr2 agrees; (@paren1) too; @{brace2} as well; @müller2020 in Unicode.',
     'Trailing punctuation: @dot1. @apos1\'s view. Mail x@y.org, escaped \\@esc1.',
-    'Inline `@code1` is code; so is [a link](https://example.org/@link1) and <https://example.org/@auto1>.',
+    '',
+    'Inline `@code1` is code.',
     '',
     '```python',
     '@decorator1',
     'def f(): pass',
     '```',
     '',
-    '<!-- @comment1 -->',
-    '',
   ].join('\n');
   const expected = ['supp1', 'vaswani2017', 'supp2', 'brace1', 'narr1', 'narr2', 'paren1', 'brace2', 'müller2020', 'dot1', 'apos1'];
   assert.deepEqual(extractCitedKeysForVerification(md), expected);
   assert.deepEqual(extractCitedKeysForVerification(md.replace(/\n/g, '\r\n')), expected, 'CRLF alike');
   assert.equal(countCitations('A [@a; -@b] and @c says [-@d].'), 4);
+  // Review round 3 (D-18-42): only code Pandoc PROVABLY reads as code hides a
+  // narrative key. An HTML comment, a link destination and an autolink are
+  // read by the gates (fail closed), and so is an `@` that follows another key
+  // (`@a@b` cites both) or an example label (`x@a@b` cites b).
+  assert.deepEqual(
+    extractCitedKeysForVerification('<!-- @comment1 --> [a link](https://example.org/@link1) and <https://example.org/@auto1>.'),
+    ['comment1', 'link1', 'auto1'],
+  );
+  assert.deepEqual(extractCitedKeysForVerification('@a@b and x@c@d'), ['a', 'b', 'd']);
   // Pandoc reads an UNCLOSED fence or comment as text, citations included: they hide nothing.
   assert.deepEqual(extractCitedKeysForVerification('Intro.\n\n```\ncode\n\nAs @hidden1 says.\n'), ['hidden1']);
   assert.deepEqual(extractCitedKeysForVerification('Intro <!-- open\n\nAs @hidden2 says.\n'), ['hidden2']);
@@ -178,7 +186,8 @@ test('every Pandoc citation form is a key: [-@k], [@a; -@b], [@{k}], narrative @
   // …and scanning many of them stays linear.
   const t0 = performance.now();
   extractCitedKeysForVerification('<!--'.repeat(250_000) + ' @k');
-  assert.ok(performance.now() - t0 < 1500, 'unclosed comment markers are scanned in linear time');
+  extractCitedKeysForVerification(Array.from({ length: 180 }, (_, i) => '`'.repeat(i + 1)).join(' ') + ' @k');
+  assert.ok(performance.now() - t0 < 1500, 'unclosed comment markers and unmatched backtick runs are scanned in linear time');
   // The narrow substitution regex is unchanged: it still reads only bare lowercase [@key].
   assert.deepEqual(findCitationClusters('[-@k] @n [@{b}]').map((c) => c.keys), [['k'], ['b']]);
 });

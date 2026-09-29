@@ -487,3 +487,48 @@ test(
     );
   },
 );
+
+// Review round 3 of Phase 18 (D-18-40, D-18-42): the offline renderer reads
+// citations with the gates' grammar, so every form a gate accepts is rendered —
+// never shipped as raw Pandoc syntax, never with its locator dropped.
+const FORMS_BIB =
+  '@article{lindqvist2012, author={Lindqvist, Anna and Berg, Olof}, title={Margin debt and crashes}, journal={Journal of Finance}, year={2012}, doi={10.1000/x1}}\n' +
+  '@article{smith2020, author={Smith, John}, title={Credit}, journal={Econ}, year={2020}, doi={10.1000/x2}}\n';
+const FORMS_MD =
+  '# Draft\n\nAs @lindqvist2012 argues, margin debt mattered [@lindqvist2012, p. 5]. Then [see @smith2020, chap. 3; -@lindqvist2012] ' +
+  'and @smith2020 [p. 7]. Braced [@{smith2020}] and bare [@smith2020, 33-35, emphasis added]. Year only: -@smith2020.\n';
+
+async function exportForms(format: 'md' | 'latex', style: string): Promise<string> {
+  const mod = await import(exporterModUrl.href) as { exportDraft: ExportDraft };
+  const root = mkdtempSync(join(tmpdir(), `pensmith-forms-${format}-${style}-`));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  const inputPath = join(root, '.paper', 'DRAFT.md');
+  writeFileSync(inputPath, FORMS_MD);
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), FORMS_BIB);
+  const res = await mod.exportDraft({ inputPath, format, paperRoot: root, pandocPresent: false, style });
+  return readFileSync(res.outputPath, 'utf8');
+}
+
+test('exporter (review round 3): offline md renders every citation form — locators, prefixes, -@k, @{k}, narrative @k and @k [p. n]', async () => {
+  const md = await exportForms('md', 'apa');
+  const body = md.split('## References')[0] as string;
+  assert.ok(!/@(?:lindqvist2012|smith2020)/.test(body), `no citation stays raw Pandoc syntax:\n${body}`);
+  assert.ok(body.includes('As Lindqvist & Berg (2012) argues'), `a narrative citation is "Author (Year)":\n${body}`);
+  assert.ok(body.includes('(Lindqvist & Berg, 2012, p. 5)'), `the locator is kept:\n${body}`);
+  assert.ok(/see Smith, 2020, Chapter 3/.test(body) && /\(2012;/.test(body), `prefix, locator label and -@k (year only) are kept:\n${body}`);
+  assert.ok(body.includes('Smith (2020, p. 7)'), `@k [p. 7] is a narrative citation with its locator:\n${body}`);
+  assert.ok(body.includes('Braced (Smith, 2020)'), `a braced key renders:\n${body}`);
+  assert.ok(body.includes('(Smith, 2020, pp. 33–35, emphasis added)'), `a bare-number locator is a page range, the rest a suffix:\n${body}`);
+  assert.ok(body.includes('Year only: (2020).'), `a narrative -@k prints the year only:\n${body}`);
+});
+
+test('exporter (review round 3): offline LaTeX renders the same forms, and a numeric style numbers sources in first-citation order like its bibliography', async () => {
+  const tex = await exportForms('latex', 'apa');
+  assert.ok(!/@(?:lindqvist2012|smith2020)/.test(tex), `no raw citation in the .tex:\n${tex}`);
+  assert.ok(tex.includes('Lindqvist \\& Berg, 2012, p. 5') || tex.includes('Lindqvist & Berg, 2012, p. 5'), `the locator is kept in the .tex:\n${tex}`);
+  const ieee = await exportForms('md', 'ieee');
+  const [body, refs] = ieee.split('## References') as [string, string];
+  assert.ok(body.includes('As Lindqvist and Berg [1] argues'), `a numeric narrative citation is "Author [n]":\n${body}`);
+  assert.ok(body.includes('[1, p. 5]') && body.includes('Smith [2, p. 7]') && body.includes('Braced [2]'), `each source keeps its first-citation number:\n${body}`);
+  assert.ok(/\[1\] A\. Lindqvist/.test(refs) && /\[2\] J\. Smith/.test(refs), `the bibliography numbers match:\n${refs}`);
+});

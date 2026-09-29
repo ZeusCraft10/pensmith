@@ -44,11 +44,18 @@ pensmith: ran done; next: status (done)
 
 State machine: `new → research → outline → (plan → write → verify per section) → compile → done`.
 The resolver reads the configured paper mode and may halt early for mode-specific termination
-states (`{ verb:'status', reason:'done' }` or `{ verb:'status', reason:'attention' }`). An
+states (`{ verb:'status', reason:'done' }` or `{ verb:'status', reason:'attention' }`): an
+outline-only paper (`[project] mode = "outline"`, GRND-02) stops at `status (done)` once its
+outline is approved, with a detail saying how to go on to a draft. An
 attention decision carries a detail naming the command that fixes it (a rejected outline:
-`pensmith outline`; a section whose draft was refused: `pensmith write N`; a section that
-failed verification and whose draft has not changed since: `pensmith plan N --revise` or
-`pensmith write N`), so a failed paid step is never re-run by the next bare invocation.
+`pensmith outline`; an OUTLINE.md that cannot be read, or is missing while sections are
+registered: fix or restore it, or `pensmith outline --force`; a section whose draft was
+refused: `pensmith write N`; a section that failed verification and whose draft has not
+changed since: `pensmith plan N --revise` or `pensmith write N`; a section verify could not
+check — a blocking UNVERIFIABLE row on an unchanged draft: `pensmith verify N` once the
+source can be reached), so a failed paid step is never re-run by the next bare invocation. A
+section left `unverifiable` with advisory rows only (a quoted source's full text was
+unavailable) passes on to compile, as compile accepts it.
 Once every section is verified, compile runs whenever the compiled `DRAFT.md` is missing or
 `COMPILE-INPUTS.json` says it was made from other sections or other section draft/verification
 bytes (a redone, re-verified, added or dropped section — decided from content, so a git checkout
@@ -72,9 +79,9 @@ without `--yolo` it stops at the first gate it cannot answer (no terminal: exit 
 
 ## Body
 
-1. **Read the paper mode** via `readGoalFromConfig(paperRoot)` + `stopAfterResearchFor(config)`.
+1. **Read the paper mode** via `routeOptionsFor(paperRoot)` (`bin/cli/route-options.ts`): `stopAfterResearch` via `readGoalFromConfig(paperRoot)` + `stopAfterResearchFor(config)`, `stopAfterOutline` from `[project] mode = "outline"`.
 
-2. **Call `resolveNextAction(paperRoot, { stopAfterResearch })`** (`bin/lib/router.ts`). NEVER throws (C3-HIGH-1 + C4-HIGH + C5-HIGH totality invariant — every fs/parse op is guarded with catch-all backstop).
+2. **Call `resolveNextAction(paperRoot, { stopAfterResearch, stopAfterOutline })`** (`bin/lib/router.ts`). NEVER throws (C3-HIGH-1 + C4-HIGH + C5-HIGH totality invariant — every fs/parse op is guarded with catch-all backstop).
 
 3. **Map the decision:**
    - `{ verb:'new' }` → run intake
@@ -85,8 +92,8 @@ without `--yolo` it stops at the first gate it cannot answer (no terminal: exit 
    - `{ verb:'verify', n, slug }` → verify section N
    - `{ verb:'compile' }` → run compile
    - `{ verb:'done' }` → run done (export; the export confirmation gate unless `--yolo`)
-   - `{ verb:'status', reason:'done' }` → mode-specific end-state termination
-   - `{ verb:'status', reason:'attention' }` → print the attention terminus and its detail (STATE.json or a section corrupt, a rejected outline, a refused draft, an unchanged draft that failed verification)
+   - `{ verb:'status', reason:'done' }` → mode-specific end-state termination (its detail, when present — e.g. the outline-only stop — is printed)
+   - `{ verb:'status', reason:'attention' }` → print the attention terminus and its detail (STATE.json or a section corrupt, a rejected, unreadable or missing outline, a refused draft, an unchanged draft that failed verification or could not be verified)
 
 4. **Dispatch** each verb via `dispatchVerb(verb, verbArgs)` forwarding `yolo` + other global flags (C3-HIGH-2); the chain is `runNextStep` in `bin/pensmith.ts`, shared by bare `pensmith`, `next` and `resume`.
 

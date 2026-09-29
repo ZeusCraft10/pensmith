@@ -364,3 +364,34 @@ test('revise-swap: under PENSMITH_NO_LLM the stub removes the flagged citation t
     assert.match(draft, /\[@smith2020\]/);
   });
 });
+
+// Review round 3 (WRTE-02): a Phase 18 planned PLAN.md carries the planner's
+// voice as a `## Voice` section (plan-render.ts), not a `Voice:` line — the
+// revise-swap request gets THAT voice, never the default.
+test('revise: the swap request carries the planned `## Voice`, then the outline frontmatter voice, then the default', async () => {
+  const { renderPlannedPlanMd } = await import('../bin/lib/plan-render.js');
+  const { voiceHint } = await import('../bin/lib/revise.js');
+  const { root } = seedFixture();
+  const fields = { section: 2, slug: 'target', title: 'Target Section', depends_on: [], assigned_sources: ['smith2020', 'jones2019', 'brown2018'] };
+  const planned = renderPlannedPlanMd(fields, {
+    claims: [{ claim: 'The mechanism is robust.', sources: ['jones2019'], evidence: 'e', counterexamples: '' }],
+    structure: [{ paragraph: 1, purpose: 'Establish it', claims: [1] }],
+    voice: 'academic-formal, comparative',
+  }).replace('status: planned', 'status: failed');
+  writeFileSync(targetPlanPath(root), planned);
+  let seen = '';
+  await runRevise({
+    paperRoot: root,
+    n: 2,
+    slug: 'target',
+    yolo: true,
+    proposeSwap: (vars) => {
+      seen = vars.voice_hint;
+      return Promise.resolve(cassetteContent('revise-swap-suggest'));
+    },
+  });
+  assert.equal(seen, 'Voice: academic-formal, comparative');
+  assert.equal(voiceHint('---\nvoice: plain and direct\n---\n\n## Outline entry\n\nx\n'), 'Voice: plain and direct', 'a stub: the outline row voice');
+  assert.equal(voiceHint('---\nsection: 1\n---\n\n## Brief\n\nVoice: terse\n'), 'Voice: terse', 'a legacy PLAN.md');
+  assert.equal(voiceHint('---\nsection: 1\n---\n\n## Voice\n\n(no voice direction)\n'), 'Voice: formal academic tone.');
+});

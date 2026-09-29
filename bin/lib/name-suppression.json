@@ -83,5 +83,9 @@
   "Variable", "Variables", "Parameter", "Parameters", "Value", "Values",
   "Input", "Inputs", "Output", "Outputs", "Type", "Types", "Class", "Classes",
   "Object", "Objects", "Method", "Property", "Field", "Fields", "Key", "Keys",
-  "Machine", "Learning"
+  "Machine", "Learning",
+  "Compare", "Contrast", "Discuss", "Analyze", "Analyse", "Explain", "Describe", "Evaluate", "Assess", "Examine",
+  "Explore", "Trace", "Argue", "Identify", "Summarize", "Summarise", "Write", "Use", "Include", "Cite",
+  "Submit", "Reflect", "Justify", "Critique", "Illustrate", "Define", "Investigate", "Propose", "Develop", "Apply",
+  "Choose", "Select", "Focus", "Address", "Answer", "Respond"
 ]

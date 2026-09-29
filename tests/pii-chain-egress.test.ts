@@ -7,8 +7,10 @@
 // later step reads the redacted brief. So over new → research → outline →
 // plan → write (the BUILT CLI, the RUN-21 mock LLM, the recorded e2e corpus),
 // no captured model request — and no SESSION.log line — carries the name with
-// a middle initial, the student ID, the email address, the phone number or the
-// date of birth, while the assignment's content ("French Revolution") survives.
+// a middle initial, the student ID, the email address, the phone number, the
+// date of birth, or the instructor, TA and co-authors (names ending in an
+// entity word, after an honorific, hyphenated), while the assignment's content
+// ("French Revolution") survives.
 // Every identity below is fictional.
 
 import { test, after } from 'node:test';
@@ -25,12 +27,25 @@ const PII = {
   dateOfBirth: 'July 14, 2003',
 } as const;
 
+/**
+ * Review round 3: names that end in an entity word ("Law", "Park"), follow an
+ * honorific, or sit in a "prepared by" list with a hyphenated given name.
+ */
+const COVER = {
+  instructor: 'Grace Law',
+  assistant: 'Helen Park',
+  coAuthors: ['Jiwoo Hale', 'Kim Min-jun'],
+} as const;
+
 const ASSIGNMENT = [
   `Name: ${PII.name}`,
   `Student ID: ${PII.studentId}`,
   `Email: ${PII.email}`,
   `Phone: ${PII.phone}`,
   `Date of birth: ${PII.dateOfBirth}`,
+  `Instructor: ${COVER.instructor}`,
+  `TA: Dr. ${COVER.assistant}`,
+  `Prepared by ${COVER.coAuthors[0]} and ${COVER.coAuthors[1]}.`,
   '',
   'Write a 1500-word literature review on attention mechanisms in transformers, APA style.',
   'Open with how pamphlets focused public attention during the French Revolution.',
@@ -38,7 +53,7 @@ const ASSIGNMENT = [
 ].join('\n');
 
 /** Every fragment that must never leave the machine (whole values and their distinctive parts). */
-const NEEDLES = [...Object.values(PII), 'Ellery', '319-4410', '555) 319', 'example.edu', 'July 14'];
+const NEEDLES = [...Object.values(PII), 'Ellery', '319-4410', '555) 319', 'example.edu', 'July 14', COVER.instructor, COVER.assistant, ...COVER.coAuthors, 'Jiwoo', 'Min-jun'];
 
 const sandboxes: ChainSandbox[] = [];
 after(async () => {
