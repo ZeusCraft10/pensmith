@@ -15,6 +15,11 @@
 //     for `stdio: 'pipe'`) — or a non-empty regular file (`pensmith new <
 //     assignment.txt`); never /dev/null or NUL (a character device, what
 //     `stdio: 'ignore'` and `< /dev/null` give) and never a terminal;
+//     (the file type is read from st_mode's type bits, not Stats.isFIFO():
+//     Node hard-wires isFIFO() / isSocket() to false on Windows, where libuv's
+//     fstat reports every pipe — `type a.txt | pensmith`, child_process
+//     `stdio: 'pipe'` — as _S_IFIFO, the POSIX S_IFIFO bits. With isFIFO() a
+//     piped assignment was never read on Windows);
 //   - PENSMITH_PROMPT_MODE is not `numbered` (then stdin carries scripted
 //     answers, one line per question, RUN-12).
 //
@@ -22,6 +27,19 @@
 // every module, the MCP server included — imports it.
 
 import * as fs from 'node:fs';
+
+/** st_mode's file-type field and the types it may name (POSIX values; libuv uses them on Windows too). */
+const S_IFMT = 0o170000;
+const S_IFIFO = 0o010000;
+const S_IFSOCK = 0o140000;
+const S_IFREG = 0o100000;
+
+/** Whether a descriptor with this fstat() result may carry a piped assignment: a pipe, a socket or a non-empty regular file. */
+export function statMayCarryAssignment(st: Pick<fs.Stats, 'mode' | 'size'>): boolean {
+  const type = st.mode & S_IFMT;
+  if (type === S_IFIFO || type === S_IFSOCK) return true;
+  return type === S_IFREG && st.size > 0;
+}
 
 /** True when stdin (fd 0) may carry a piped assignment. Never reads, never throws. */
 export function stdinMayCarryAssignment(env: NodeJS.ProcessEnv = process.env, fd = 0): boolean {
@@ -32,6 +50,5 @@ export function stdinMayCarryAssignment(env: NodeJS.ProcessEnv = process.env, fd
   } catch {
     return false; // a closed or invalid descriptor carries nothing
   }
-  if (st.isFIFO() || st.isSocket()) return true;
-  return st.isFile() && st.size > 0;
+  return statMayCarryAssignment(st);
 }
