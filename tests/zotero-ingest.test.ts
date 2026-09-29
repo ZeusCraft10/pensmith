@@ -17,13 +17,14 @@ import { mkdtempSync, mkdirSync, readFileSync, existsSync, rmSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
-import { ingestZoteroItems, pullZoteroIntoLibrary, ZoteroItemsInvalidError } from '../bin/lib/zotero-ingest.js';
+import { ingestZoteroItems, pullZoteroIntoLibrary, ZoteroItemsInvalidError, ZoteroCollectionNotApprovedError } from '../bin/lib/zotero-ingest.js';
+import { approveZoteroCollection } from '../bin/lib/own-source-approvals.js';
 import { upsertSources, loadLibrary } from '../bin/lib/library.js';
 import { _resetHostStateForTest } from '../bin/lib/http.js';
 import { CURRENT_CONFIG_VERSION } from '../bin/lib/config.js';
 import { atomicWriteFile } from '../bin/lib/atomic-write.js';
 import { RESEARCH_LOG_END } from '../bin/lib/research-md.js';
-import { EXIT_USAGE } from '../bin/lib/exit-codes.js';
+import { EXIT_USAGE, EXIT_APPROVAL } from '../bin/lib/exit-codes.js';
 
 function paper(): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-zotero-ingest-'));
@@ -172,6 +173,14 @@ test('SRC-16: Tier 2 — ZOTERO_API_KEY + zotero_collection = "Thesis" puts only
   _resetHostStateForTest();
   const { agent, restore } = installMockAgent();
   try {
+    // Review round 2: the collection the paper names is the reader's own
+    // material — refused (exit 3, no request, nothing written) until approved.
+    await assert.rejects(
+      () => pullZoteroIntoLibrary(root),
+      (e: unknown) => e instanceof ZoteroCollectionNotApprovedError && e.exitCode === EXIT_APPROVAL && /"Thesis" has not been approved for this paper/.test(e.message),
+    );
+    assert.equal(existsSync(join(root, '.paper', 'LIBRARY.json')), false);
+    await approveZoteroCollection(root, 'Thesis');
     const pool = agent.get('https://api.zotero.org');
     const json = { headers: { 'content-type': 'application/json' } };
     pool.intercept({ path: '/keys/current', method: 'GET' }).reply(200, { userID: 777, access: { user: { library: true } } }, json);

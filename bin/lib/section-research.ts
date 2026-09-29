@@ -34,7 +34,7 @@ import { runGate, declineGate, canPrompt } from './gates.js';
 import { PensmithError, EXIT_ERROR, EXIT_USAGE } from './exit-codes.js';
 import { loadPrompt } from './prompt-loader.js';
 import { assertLlmConfigured } from './anthropic.js';
-import { upsertSources, assertLibraryReadable, tryLoadLibrary, sameWorkVersion, type LibraryCandidate } from './library.js';
+import { upsertSources, assertLibraryReadable, tryLoadLibrary, sameWorkVersion, sameDoiVersionFamily, type LibraryCandidate } from './library.js';
 import type { LibraryEntry } from './schemas/library.js';
 import { sectionPlan } from './paths.js';
 import { withLock } from './lock.js';
@@ -82,7 +82,12 @@ export interface SectionResearchOptions {
   /** The verb for messages (`plan` or `revise`). */
   readonly verb?: 'plan' | 'revise';
   /** Where progress lines go (default: stdout / stderr). */
-  readonly io?: { readonly out: (line: string) => void; readonly err: (line: string) => void };
+  /**
+   * Where the pass's lines go (required: the CLI passes its stdout / stderr
+   * sink; this module never writes to the process streams itself — it is
+   * reachable from mcp/, PLUG-13).
+   */
+  readonly io: { readonly out: (line: string) => void; readonly err: (line: string) => void };
 }
 
 export interface SectionResearchResult {
@@ -135,7 +140,7 @@ export function knownEntryFor(entries: readonly LibraryEntry[], view: LibraryEnt
     const hit = entries.find((e) => e.zotero !== null && e.zotero.library === z.library && e.zotero.key === z.key);
     if (hit) return hit;
   }
-  return entries.find((e) => sameWorkVersion(e, view)) ?? null;
+  return entries.find((e) => sameDoiVersionFamily(e, view) || sameWorkVersion(e, view)) ?? null;
 }
 
 function excerpt(text: string | null | undefined, max: number): string {
@@ -203,8 +208,7 @@ async function appendSectionLog(logPath: string, header: string, entry: string):
 export async function runSectionResearch(opts: SectionResearchOptions): Promise<SectionResearchResult> {
   const verb = opts.verb ?? 'plan';
   const label = `pensmith ${verb} --research`;
-  const out = opts.io?.out ?? ((line: string): void => void process.stdout.write(`${line}\n`));
-  const err = opts.io?.err ?? ((line: string): void => void process.stderr.write(`${line}\n`));
+  const { out, err } = opts.io;
   const rawQuery = oneLine(opts.query);
   if (rawQuery.length === 0) throw new PensmithError(`${label}: the query is empty`, EXIT_USAGE);
 

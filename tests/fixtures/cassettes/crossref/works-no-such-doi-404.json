@@ -1,0 +1,17 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.5555%2Fpensmith-no-such-work-2017",
+    "status": 404,
+    "response": "Resource not found.",
+    "responseHeaders": {
+      "content-type": "text/plain"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T20:45:13.009Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

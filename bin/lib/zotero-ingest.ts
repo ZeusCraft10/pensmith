@@ -19,14 +19,23 @@
 //
 // No network happens here for Tier 1: the items arrive as data. The paper must
 // already exist (a .paper/ folder) — ingest never creates a paper.
+//
+// A collection named by the paper's `[sources] zotero_collection` is the
+// READER's material (own-source-approvals.ts): both tiers refuse to add its
+// items until the user approved that collection for this paper (review round
+// 2). Tier 2 asks at research's `zotero-collection` gate; Tier 1 asks with
+// AskUserQuestion and submits `collection` + `approveCollection: true`, which
+// records the approval (never inferred from --yolo). Items submitted without
+// `collection` are the results of a per-query search of the user's own Zotero.
 
 import { existsSync } from 'node:fs';
 import { paperDir } from './paths.js';
 import { upsertSources } from './library.js';
 import { refreshResearchSources } from './research-md.js';
-import { PensmithError, EXIT_USAGE } from './exit-codes.js';
+import { PensmithError, EXIT_USAGE, EXIT_APPROVAL } from './exit-codes.js';
+import { isZoteroCollectionApproved, approveZoteroCollection } from './own-source-approvals.js';
 import { validateZoteroItem, normalizeZoteroItem, type ZoteroItem, type ZoteroCandidate } from './sources/zotero-mcp.js';
-import { pullZoteroItems, itemLibrary, type PullOptions } from './sources/zotero.js';
+import { pullZoteroItems, itemLibrary, configuredZoteroCollection, type PullOptions } from './sources/zotero.js';
 
 /** The most items one ingest call accepts. */
 export const MAX_ZOTERO_INGEST_ITEMS = 1000;
@@ -42,6 +51,16 @@ export class ZoteroItemsInvalidError extends PensmithError {
     );
     this.name = 'ZoteroItemsInvalidError';
     this.problems = problems;
+  }
+}
+
+/** A collection the user has not approved for this paper (exit 3: nothing was read or written). */
+export class ZoteroCollectionNotApprovedError extends PensmithError {
+  readonly collection: string;
+  constructor(collection: string, how: string) {
+    super(`[sources] zotero_collection "${collection}" has not been approved for this paper; nothing was added — ${how}`, EXIT_APPROVAL);
+    this.name = 'ZoteroCollectionNotApprovedError';
+    this.collection = collection;
   }
 }
 
@@ -100,14 +119,31 @@ function assertPaper(root: string): void {
   }
 }
 
+export interface ZoteroIngestOptions {
+  /** The ref for items that do not name their library (default `local`). */
+  readonly library?: string;
+  /** The collection the items were read from (`[sources] zotero_collection`); absent for per-query search results. */
+  readonly collection?: string;
+  /** The user approved `collection` for this paper just now (AskUserQuestion): record it. */
+  readonly approveCollection?: boolean;
+}
+
 /**
  * Tier 1: ingest items a Zotero MCP server returned (full Zotero API items or
- * their `data` objects). `library` is the ref for items that do not name their
- * library (default `local`). Throws ZoteroItemsInvalidError (exit 2) naming each
- * malformed item's field — and writes nothing — when any item is malformed.
+ * their `data` objects). Throws ZoteroItemsInvalidError (exit 2) naming each
+ * malformed item's field — and writes nothing — when any item is malformed,
+ * and ZoteroCollectionNotApprovedError (exit 3) for items of a collection the
+ * user has not approved for this paper (see the header).
  */
-export async function ingestZoteroItems(root: string, rawItems: readonly unknown[], opts: { library?: string } = {}): Promise<ZoteroIngestResult> {
+export async function ingestZoteroItems(root: string, rawItems: readonly unknown[], opts: ZoteroIngestOptions = {}): Promise<ZoteroIngestResult> {
   assertPaper(root);
+  const collection = opts.collection?.trim();
+  if (collection && !isZoteroCollectionApproved(root, collection) && opts.approveCollection !== true) {
+    throw new ZoteroCollectionNotApprovedError(
+      collection,
+      'ask the user whether to add that collection of their Zotero library to this paper, and on yes submit the items again with approveCollection: true',
+    );
+  }
   if (!Array.isArray(rawItems) || rawItems.length === 0) throw new ZoteroItemsInvalidError(['items: expected at least one Zotero item']);
   if (rawItems.length > MAX_ZOTERO_INGEST_ITEMS) {
     throw new ZoteroItemsInvalidError([`items: at most ${MAX_ZOTERO_INGEST_ITEMS} items per call, got ${rawItems.length}`]);
@@ -120,6 +156,7 @@ export async function ingestZoteroItems(root: string, rawItems: readonly unknown
     else problems.push(v.error);
   });
   if (problems.length > 0) throw new ZoteroItemsInvalidError(problems);
+  if (collection && opts.approveCollection === true) await approveZoteroCollection(root, collection);
   const fallback = opts.library ?? 'local';
   return ingestValidated(root, items, () => fallback);
 }
@@ -136,11 +173,17 @@ export interface ZoteroPullResult extends ZoteroIngestResult {
 /**
  * Tier 2: pull the configured collection (`[sources] zotero_collection`, or
  * the whole library) through the Zotero Web / local API and ingest it. Throws
- * sources/zotero.ts ZoteroError (one line) or OfflineEgressError.
+ * sources/zotero.ts ZoteroError (one line) or OfflineEgressError, and
+ * ZoteroCollectionNotApprovedError — before any request — for a collection the
+ * user has not approved for this paper (research asks first).
  */
 export async function pullZoteroIntoLibrary(root: string, opts: Omit<PullOptions, 'root'> = {}): Promise<ZoteroPullResult> {
   assertPaper(root);
-  const pull = await pullZoteroItems({ ...opts, root });
+  const collection = opts.collection === undefined ? configuredZoteroCollection(root) : opts.collection;
+  if (collection !== null && !isZoteroCollectionApproved(root, collection)) {
+    throw new ZoteroCollectionNotApprovedError(collection, 'approve it by running pensmith research in a terminal');
+  }
+  const pull = await pullZoteroItems({ ...opts, collection, root });
   const result = await ingestValidated(root, pull.items, (item) => itemLibrary(item, pull.library));
   return { ...result, library: pull.library, collection: pull.collection, invalid: pull.invalid };
 }

@@ -59,12 +59,12 @@ import { assignUniqueCitekeys } from './bibtex-write.js';
 import { complete, isFatalLlmError } from './anthropic.js';
 import type { SourceEvaluation } from './llm-contracts.js';
 import { buildPromptRequest, requestHints, type PromptJson } from './prompt-request.js';
-import { candidateToEntry } from './migrations/library/shape.js';
+import { candidateToEntry, doiVersionBase } from './migrations/library/shape.js';
 import { deterministicTier } from './source-tier.js';
 import { applySourcePolicy, type PolicyExclusion, type PolicyInput, type SourcePolicy } from './source-policy.js';
 import { planAdapters, zoteroConfigured, RESEARCH_PER_QUERY_LIMIT, EVALUATOR_BATCH, evaluatorCallsFor, type AdapterPlan } from './adapter-plan.js';
 import { resolveDiscipline } from './disciplines.js';
-import { RESEARCH_LOG_END, formatReference } from './research-md.js';
+import { RESEARCH_LOG_END, formatReference, inertMarkup, markerLines } from './research-md.js';
 
 export { RESEARCH_LOG_END };
 
@@ -231,12 +231,17 @@ function mergeFound(a: Found, b: Found): Found {
   return { candidate, foundBy, rank };
 }
 
-/** DOI-first dedup (first wins, the record with an abstract preferred), then title Jaro-Winkler. */
+/**
+ * DOI-first dedup (first wins, the record with an abstract preferred) — the
+ * versioned DOIs of one posted work (`<base>.vN`) count as one DOI (review
+ * round 2) — then title Jaro-Winkler.
+ */
 function dedup(raw: Found[]): Found[] {
   const byDoi = new Map<string, Found>();
   const order: Array<{ doi: string } | { item: Found }> = [];
   for (const f of raw) {
-    const key = f.candidate.doi ? normalizeDoi(f.candidate.doi) : null;
+    const norm = f.candidate.doi ? normalizeDoi(f.candidate.doi) : null;
+    const key = norm ? doiVersionBase(norm) ?? norm : null;
     if (key) {
       const prev = byDoi.get(key);
       if (prev) byDoi.set(key, mergeFound(prev, f));
@@ -906,8 +911,9 @@ export function renderResearchLog(input: ResearchLogInput): string {
       lines.push(`- retraction status unknown: [@${r.citekey}]${r.detail ? ` — ${oneLine(r.detail)}` : ''} (re-checked at verify time)`);
     }
   }
-  lines.push('', input.sourcesBlock, '');
-  return lines.join('\n');
+  // Every value above comes from registrars, the model or the user's sources:
+  // a marker comment inside one must never read as a marker (research-md.ts).
+  return [...lines.map(inertMarkup), '', input.sourcesBlock, ''].join('\n');
 }
 
 /**
@@ -918,7 +924,7 @@ export function renderResearchLog(input: ResearchLogInput): string {
 export function mergeResearchLog(log: string, existing: string | null): string {
   let kept = '';
   if (existing !== null) {
-    const at = existing.indexOf(RESEARCH_LOG_END);
+    const at = markerLines(existing, RESEARCH_LOG_END)[0] ?? -1;
     kept = at >= 0 ? existing.slice(at + RESEARCH_LOG_END.length) : existing;
     kept = kept.replace(/^(?:\r?\n)+/, '');
   }

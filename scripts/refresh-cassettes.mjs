@@ -135,6 +135,8 @@ const QUERY_SETS = {
     { file: 'search-nber-minimum-wage', calls: [{ fn: 'search', arg: 'minimum wage employment', limit: 3, minLimit: 1, opts: { doiPrefix: '10.3386' } }] },
     { file: 'works-nphys1170', calls: [{ fn: 'lookupById', arg: RECORDED_DOI }] },
     { file: 'works-arxiv-doi-404', calls: [{ fn: 'lookupById', arg: RECORDED_CROSSREF_404_DOI }] },
+    // A DOI no registrar ever minted: Crossref's definitive 404 (Pass 1 FABRICATED).
+    { file: 'works-no-such-doi-404', calls: [{ fn: 'lookupById', arg: '10.5555/pensmith-no-such-work-2017' }] },
     // SRC-05: a complete journal record (Nature 521(7553), 436-444).
     { file: 'works-nature14539', calls: [{ fn: 'lookupById', arg: '10.1038/nature14539' }] },
     // SRC-05: a consortium author (name only).
@@ -147,6 +149,9 @@ const QUERY_SETS = {
     { file: 'works-nejmoa2001017', calls: [{ fn: 'lookupById', arg: '10.1056/NEJMoa2001017' }] },
     // GRND-14: an open-access PLOS ONE article (`add` records its Unpaywall OA PDF, unpaywall/doi-pone-0000001).
     { file: 'works-pone-0000001', calls: [{ fn: 'lookupById', arg: '10.1371/journal.pone.0000001' }] },
+    // SRC-05 / SRC-12 (review round 2): registrar markup — an <i> in the title, an &amp; in the journal.
+    { file: 'works-pnas-drosophila-coli', calls: [{ fn: 'lookupById', arg: '10.1073/pnas.74.11.5041' }] },
+    { file: 'works-jaac-2010', calls: [{ fn: 'lookupById', arg: '10.1016/j.jaac.2010.05.017' }] },
     researchFrom2015(),
     ...titleSearches(),
     ...planResearch(),
@@ -171,6 +176,9 @@ const QUERY_SETS = {
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3, pauseMs: 3500 }] },
     { file: 'id-1706.03762', calls: [{ fn: 'lookupById', arg: RECORDED_ARXIV_ID, pauseMs: 3500 }] },
     { file: 'id-hep-th-9901001', calls: [{ fn: 'lookupById', arg: RECORDED_OLD_ARXIV_ID, pauseMs: 3500 }] },
+    // PDF identification's arXiv title search (source-input.ts arxivTitleQuery),
+    // asked when OpenAlex's only match is a later re-post (review round 2).
+    { file: 'search-title-attention', calls: [{ fn: 'search', arg: `ti:"${BYO_PDF_TITLE}"`, limit: TITLE_LIMIT, minLimit: TITLE_LIMIT, pauseMs: 3500 }] },
     // (No from-2015 file: the arXiv API has no date filter, so research's
     // request with min_year set is search-attention-neural-networks — the
     // [sources] policy drops the older works afterwards.)
@@ -201,6 +209,7 @@ const QUERY_SETS = {
     { file: 'updates-nature11247-encode', calls: [{ fn: 'fetchById', arg: '10.1038/nature11247' }] },
     { file: 'updates-foreco-2013', calls: [{ fn: 'fetchById', arg: '10.1016/j.foreco.2013.06.030' }] },
     { file: 'updates-nejmoa2001017', calls: [{ fn: 'fetchById', arg: '10.1056/nejmoa2001017' }] },
+    { file: 'updates-pnas-drosophila-coli', calls: [{ fn: 'fetchById', arg: '10.1073/pnas.74.11.5041' }] },
   ],
   books: [
     // SRC-11: Kuhn, The Structure of Scientific Revolutions (3rd ed., 1996).

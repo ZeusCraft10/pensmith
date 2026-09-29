@@ -25,6 +25,7 @@ import { pensmithHttpCacheDir } from '../bin/lib/paths.js';
 import { closeSessionLog } from '../bin/lib/session-log.js';
 import { CURRENT_CONFIG_VERSION } from '../bin/lib/config.js';
 import { atomicWriteFile } from '../bin/lib/atomic-write.js';
+import { approveZoteroCollection } from '../bin/lib/own-source-approvals.js';
 
 const KEY = 'zk-SENTINEL-4f1c9a7e2b';
 const JSON_H = { 'content-type': 'application/json' };
@@ -160,13 +161,29 @@ test('SRC-16: `[sources] zotero_collection = "Thesis"` pulls only that collectio
   });
 });
 
-test('SRC-16: a missing collection is a one-line failure naming the collections that exist', async () => {
-  await lane({ ZOTERO_API_KEY: KEY }, '[sources]\nzotero_collection = "Thesis"\n', async (m, seen) => {
+test('SRC-16: a missing collection is a one-line failure; the search reason (written into shared files) names no other collection and no library id', async () => {
+  await lane({ ZOTERO_API_KEY: KEY }, '[sources]\nzotero_collection = "Thesis"\n', async (m, seen, cwd) => {
+    await approveZoteroCollection(cwd, 'Thesis');
     on(m, seen, 'https://api.zotero.org', '/keys/current', 200, KEYS_CURRENT);
     on(m, seen, 'https://api.zotero.org', '/users/12345/collections?format=json&limit=100&start=0', 200, [{ key: 'OTHER001', data: { name: 'Reading list' } }]);
     const failures: string[] = [];
     assert.deepEqual(await zotero.search('x', { onFailure: (r) => failures.push(r) }), []);
-    assert.deepEqual(failures, ['Zotero collection "Thesis" not found in users/12345 (collections: Reading list)']);
+    assert.deepEqual(failures, ['Zotero collection "Thesis" not found in the Zotero library']);
+    // The pull (research's own stderr line) still has the whole reason for the user.
+    on(m, seen, 'https://api.zotero.org', '/keys/current', 200, KEYS_CURRENT);
+    on(m, seen, 'https://api.zotero.org', '/users/12345/collections?format=json&limit=100&start=0', 200, [{ key: 'OTHER001', data: { name: 'Reading list' } }]);
+    await assert.rejects(zotero.pullZoteroItems({ root: cwd }), /Zotero collection "Thesis" not found in users\/12345 \(collections: Reading list\)/);
+  });
+});
+
+test('review round 2: a `[sources] zotero_collection` the user has not approved is never searched (plan / revise --research too) — no request, a public reason', async () => {
+  await lane({ ZOTERO_API_KEY: KEY }, '[sources]\nzotero_collection = "Therapy notes"\n', async (m) => {
+    const failures: string[] = [];
+    // No interceptor: any request would be refused by the MockAgent.
+    assert.deepEqual(await zotero.search('x', { onFailure: (r) => failures.push(r) }), []);
+    assert.deepEqual(failures, [zotero.unapprovedCollectionReason('Therapy notes')]);
+    assert.match(failures[0] ?? '', /has not been approved for this paper, so Zotero was not searched/);
+    assert.deepEqual(m.agent.pendingInterceptors(), []);
   });
 });
 

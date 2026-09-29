@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deterministicTier, finalTier, isGovernmentSource } from '../bin/lib/source-tier.js';
+import { deterministicTier, isGovernmentSource } from '../bin/lib/source-tier.js';
 
 test('preprints: a preprint-server DOI, the preprint type, an arXiv record without a version of record', () => {
   assert.equal(deterministicTier({ doi: '10.48550/arXiv.1706.03762' }), 'preprint', 'arXiv DataCite DOI');
@@ -50,8 +50,3 @@ test('peer-reviewed venues, other kinds, and the judgment calls', () => {
   assert.equal(deterministicTier({}), null);
 });
 
-test('finalTier: the metadata wins; otherwise the evaluator; otherwise unknown', () => {
-  assert.equal(finalTier({ type: 'article-journal' }, 'other'), 'peer-reviewed', 'the model never overrides the registrar');
-  assert.equal(finalTier({ source: 'openalex' }, 'gov-report'), 'gov-report');
-  assert.equal(finalTier({ source: 'openalex' }, null), null);
-});

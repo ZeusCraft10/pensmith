@@ -142,13 +142,13 @@ test('seam S-B: contact email — default variable, configured variable, refusal
   _resetContactEmailForTest();
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-contact-'));
   fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
-  await withEnv({ PENSMITH_CONTACT_EMAIL: 'pensmith-dev@example.org', MY_WORK_EMAIL: 'work@example.org', AWS_SECRET_ACCESS_KEY: 'secret-value' }, async () => {
+  await withEnv({ PENSMITH_CONTACT_EMAIL: 'pensmith-dev@example.org', PENSMITH_WORK_EMAIL: 'work@example.org', AWS_SECRET_ACCESS_KEY: 'secret-value' }, async () => {
     assert.deepEqual(contactEmail(root), { email: 'pensmith-dev@example.org', envName: DEFAULT_CONTACT_EMAIL_ENV, source: 'default' });
 
     await updatePaperConfig(root, (raw) => {
-      rawTable(raw, 'network')['contact_email_env'] = 'MY_WORK_EMAIL';
+      rawTable(raw, 'network')['contact_email_env'] = 'PENSMITH_WORK_EMAIL';
     });
-    assert.deepEqual(contactEmail(root), { email: 'work@example.org', envName: 'MY_WORK_EMAIL', source: 'config' });
+    assert.deepEqual(contactEmail(root), { email: 'work@example.org', envName: 'PENSMITH_WORK_EMAIL', source: 'config' });
 
     const err = captureStderr();
     try {
@@ -180,12 +180,22 @@ test('seam S-B: contact email — default variable, configured variable, refusal
     const other = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-contact3-'));
     assert.equal(contactEmail(other).email, null);
   });
-  assert.equal(isAllowedContactEnvName('LAB_MAILTO'), true);
+  assert.equal(isAllowedContactEnvName('PENSMITH_LAB_MAILTO'), true);
+  assert.equal(isAllowedContactEnvName('PENSMITH_WORK_EMAIL'), true);
   assert.equal(isAllowedContactEnvName('lower_email'), false);
   assert.equal(isAllowedContactEnvName('GITHUB_TOKEN'), false);
+  // Review round 2: a paper may name only pensmith's own namespace, never a secret-looking name.
+  for (const name of ['LAB_MAILTO', 'MY_WORK_EMAIL', 'GIT_AUTHOR_EMAIL', 'SMTP_EMAIL_URL', 'EMAIL_PASSWORD', 'SENDGRID_EMAIL_API_KEY', 'PENSMITH_EMAIL_PASSWORD', 'PENSMITH_EMAIL_TOKEN', 'PENSMITH_SMTP_EMAIL_URL']) {
+    assert.equal(isAllowedContactEnvName(name), false, name);
+  }
   assert.equal(isPlausibleEmail('a@b.co'), true);
+  assert.equal(isPlausibleEmail('first.last+tag@lab.example.org'), true);
   assert.equal(isPlausibleEmail('Name <a@b.co>'), false);
   assert.equal(isPlausibleEmail(`${'x'.repeat(250)}@b.co`), false);
+  // Credential URLs and other non-addresses are never sent.
+  for (const v of ['smtp://user:hunter2@mail.example.com', 'https://token:x-oauth-basic@github.com', 'user:pass@db.example.com', 'a@localhost', 'a@b', 'a@@b.co', 'a b@c.co']) {
+    assert.equal(isPlausibleEmail(v), false, v);
+  }
 });
 
 test('contact email: the user\'s global runtime.json contactEmailEnv is honoured (a paper\'s [network] setting still wins)', async () => {
@@ -194,13 +204,13 @@ test('contact email: the user\'s global runtime.json contactEmailEnv is honoured
     _resetContactEmailForTest();
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-contact-rt-'));
     fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
-    await withEnv({ PENSMITH_CONTACT_EMAIL: 'pensmith-dev@example.org', LAB_ADDRESS: 'lab@example.org', MY_WORK_EMAIL: 'work@example.org' }, async () => {
+    await withEnv({ PENSMITH_CONTACT_EMAIL: 'pensmith-dev@example.org', LAB_ADDRESS: 'lab@example.org', PENSMITH_WORK_EMAIL: 'work@example.org' }, async () => {
       sb.writeGlobalRuntime({ $schemaVersion: 2, contactEmailEnv: 'LAB_ADDRESS' });
       assert.deepEqual(contactEmail(root), { email: 'lab@example.org', envName: 'LAB_ADDRESS', source: 'runtime' });
       await updatePaperConfig(root, (raw) => {
-        rawTable(raw, 'network')['contact_email_env'] = 'MY_WORK_EMAIL';
+        rawTable(raw, 'network')['contact_email_env'] = 'PENSMITH_WORK_EMAIL';
       });
-      assert.deepEqual(contactEmail(root), { email: 'work@example.org', envName: 'MY_WORK_EMAIL', source: 'config' });
+      assert.deepEqual(contactEmail(root), { email: 'work@example.org', envName: 'PENSMITH_WORK_EMAIL', source: 'config' });
       const other = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-contact-rt2-'));
       const err = captureStderr();
       try {

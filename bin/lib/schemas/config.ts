@@ -99,6 +99,10 @@ export const SourcesSchema = z.object({
 
 export const VerificationSchema = z.object({
   fetch_full_text: z.boolean().optional(),
+  // Pass 2 (advisory claim support) may send the passages of the user's own
+  // PDFs nearest each claim to the configured model provider; off by default
+  // (PRD §9: a bring-your-own PDF's contents stay local). Phase 19 review round 2.
+  send_byo_passages: z.boolean().optional(),
   flag_threshold: z.enum(['low', 'medium', 'high']).optional(),
   recheck_after_days: NonNegInt.optional(),
   plagiarism_check: z.boolean().optional(),

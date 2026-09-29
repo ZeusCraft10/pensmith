@@ -15,6 +15,7 @@
 //   - PMID  → digits; PMCID → PMC<digits>; ISBN → ISBN-13 digits (an ISBN-10
 //             is converted, so both spellings of one book dedup).
 
+import { plainText } from '../../markup.js';
 import { normalizeDoi, normalizeArxiv, normalizePmid, normalizePmcid } from '../../doi.js';
 import { generateCitekey } from '../../citekey.js';
 import { CITEKEY_GRAMMAR, ByoRecordSchema, type ByoRecordInput, type LibraryEntry } from '../../schemas/library.js';
@@ -53,7 +54,7 @@ export interface LibraryCandidate {
   venue?: string | null | undefined;
   abstract?: string | null | undefined;
   oa_url?: string | null | undefined;
-  /** SourceCandidate spelling of oa_url. */
+  /** An adapter's open-access link (SourceCandidate): NOT stored as oa_url (see candidateToEntry). */
   oa_pdf_url?: string | null | undefined;
   alternate_dois?: string[] | undefined;
   retracted?: boolean | undefined;
@@ -154,6 +155,18 @@ export function isPreprintDoi(doi: string | null | undefined): boolean {
   return PREPRINT_REGISTRANTS.some((p) => p.registrant === registrant && p.suffix.test(suffix));
 }
 
+/**
+ * The DOI a versioned DOI is a version of (`10.6084/m9.figshare.123.v2` →
+ * `10.6084/m9.figshare.123`; Figshare and other posted-content registrars mint
+ * one DOI per version, `<base>.vN` or `<base>_vN`), or null when `doi` carries
+ * no version suffix. Review round 2 (ROADMAP Phase 19 criterion 4).
+ */
+export function doiVersionBase(doi: string | null | undefined): string | null {
+  if (!doi) return null;
+  const m = /^(10\.\d{4,9}\/.+?)[._]v\d+$/i.exec(doi.trim());
+  return m?.[1] ? m[1].toLowerCase() : null;
+}
+
 /** Normalized title for version matching: NFKC, lowercase, punctuation → space. */
 export function normTitle(t: string | null | undefined): string {
   return (t ?? '')
@@ -161,6 +174,11 @@ export function normTitle(t: string | null | undefined): string {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
+}
+
+/** A string's plain text (markup.ts), anything else unchanged. */
+function plainTextOf(v: unknown): unknown {
+  return typeof v === 'string' ? plainText(v) : v;
 }
 
 function nonEmpty(v: unknown): string | null {
@@ -269,12 +287,16 @@ export function candidateToEntry(c: LibraryCandidate, provenance: string[], now:
     pmid,
     pmcid: normPmcid(c.pmcid),
     isbn: normIsbn(c.isbn),
-    title: nonEmpty(c.title),
+    // Registrar / Zotero markup out (`<i>…</i>`, `&amp;`): markup.ts.
+    title: nonEmpty(plainTextOf(c.title)),
     authors,
     year,
-    venue: nonEmpty(c.venue) ?? venueFromRaw(c.raw),
+    venue: nonEmpty(plainTextOf(c.venue)) ?? nonEmpty(plainTextOf(venueFromRaw(c.raw))),
     abstract: nonEmpty(c.abstract),
-    oa_url: validUrl(c.oa_url) ?? validUrl(c.oa_pdf_url),
+    // Only an Unpaywall-confirmed PDF (open-access.ts sets `oa_url`): the copy
+    // Pass 3 checks and full-text.ts counts. An adapter's `oa_pdf_url`
+    // (OpenAlex's open location) is not that copy (GRND-14, review round 2).
+    oa_url: validUrl(c.oa_url),
     alternate_dois: [...alternates],
     provenance: [...new Set(provenance.filter((p) => p.length > 0))],
     retracted,
@@ -283,7 +305,7 @@ export function candidateToEntry(c: LibraryCandidate, provenance: string[], now:
     last_verified: validIso(c.last_verified),
     byo: enumOrNull(ByoRecordSchema, c.byo),
     type: enumOrNull(SourceTypeSchema, c.type),
-    publisher: nonEmpty(c.publisher),
+    publisher: nonEmpty(plainTextOf(c.publisher)),
     volume: shortField(c.volume),
     issue: shortField(c.issue),
     pages: nonEmpty(c.pages),

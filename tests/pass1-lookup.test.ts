@@ -4,7 +4,8 @@
 //   - a Crossref re-fetch that could not be answered (a 503 after retries, a
 //     200 carrying an error document, an exhausted host) is UNVERIFIABLE with
 //     the reason — blocking, never "did not resolve" (FABRICATED), never OK;
-//   - Crossref's definitive 404 is still FABRICATED;
+//   - Crossref's definitive 404 is still FABRICATED — but a DataCite arXiv DOI
+//     (10.48550/arXiv.<id>) is re-fetched at arXiv (review round 2);
 //   - the Crossref record's own retraction notice blocks (MIS-CITED, naming it);
 //   - a corporate author and a particle surname pass the AND-gate against the
 //     recorded records; DOI case never makes a work look redirected.
@@ -14,7 +15,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
@@ -95,13 +96,43 @@ test('SRC-04: the Crossref record of Wakefield 1998 carries its retraction → M
     year: 1998,
   });
   assert.equal(r.verdict, 'MIS-CITED');
-  assert.match(r.reason, /^cited work is retracted \(Crossref record, Retraction Watch notice at verify time\): 2010-02-06: Retraction \(notice 10\.1016\/s0140-6736\(10\)60175-4; Retraction Watch record 4036\)$/);
+  assert.match(
+    r.reason,
+    /^cited work is retracted \(Crossref's record of 10\.1016\/S0140-6736\(97\)11096-0 at verify time: 2010-02-06: Retraction \(notice 10\.1016\/s0140-6736\(10\)60175-4; Retraction Watch record 4036\)\)$/,
+  );
+  // Review round 2: the row carries the real similarity scores (the metadata matches), never a false 0.00.
+  const full = await runPass1(`A claim [@wakefield1998].\n`, bibFile([{
+    citekey: 'wakefield1998',
+    title: 'Ileal-lymphoid-nodular hyperplasia, non-specific colitis, and pervasive developmental disorder in children',
+    author: 'Wakefield, AJ',
+    doi: '10.1016/S0140-6736(97)11096-0',
+    year: 1998,
+  }]));
+  // (Crossref's record title is prefixed `RETRACTED:`, so the title score is its real value, below 1.)
+  assert.ok(full[0]!.titleJW > 0.5 && full[0]!.authorJW === 1, JSON.stringify(full[0]));
+  assert.equal(full[0]!.retraction, true);
 });
 
-test('Crossref\'s definitive 404 is still FABRICATED (did not resolve)', async () => {
-  const r = await verdict({ citekey: 'vaswani2017', title: 'Attention Is All You Need', author: 'Vaswani, Ashish', doi: '10.48550/arXiv.1706.03762', year: 2017 });
+test('Crossref\'s definitive 404 for a DOI no registrar minted is still FABRICATED (did not resolve)', async () => {
+  const r = await verdict({ citekey: 'nobody2017', title: 'A Work That Was Never Published', author: 'Nobody, Ann', doi: '10.5555/pensmith-no-such-work-2017', year: 2017 });
   assert.equal(r.verdict, 'FABRICATED');
   assert.match(r.reason, /did not resolve via Crossref/);
+});
+
+test('review round 2: a DataCite arXiv DOI (research writes it from Semantic Scholar / OpenAlex) is re-fetched at arXiv — OK, never FABRICATED by Crossref\'s 404', async () => {
+  const r = await verdict({ citekey: 'vaswani2017', title: 'Attention Is All You Need', author: 'Vaswani, Ashish', doi: '10.48550/arXiv.1706.03762', year: 2017 });
+  assert.equal(r.verdict, 'OK', r.reason);
+  assert.match(r.reason, /arXiv/);
+  // The same entry as the library writer renders it (doi + eprint): OK too.
+  const bib = bibFile([{ citekey: 'vaswani2017', title: 'Attention Is All You Need', author: 'Vaswani, Ashish', doi: '10.48550/arxiv.1706.03762', year: 2017 }]);
+  writeFileSync(bib, readFileSync(bib, 'utf8').replace('  year = {2017},', '  year = {2017},\n  eprint = {1706.03762},\n  archivePrefix = {arXiv},'));
+  const [withEprint] = await runPass1('A claim [@vaswani2017].\n', bib);
+  assert.equal(withEprint!.verdict, 'OK', withEprint!.reason);
+  // A DOI naming one arXiv id and an eprint naming another is MIS-CITED (never checked against the wrong work).
+  writeFileSync(bib, readFileSync(bib, 'utf8').replace('eprint = {1706.03762}', 'eprint = {2102.05095}'));
+  const [mismatch] = await runPass1('A claim [@vaswani2017].\n', bib);
+  assert.equal(mismatch!.verdict, 'MIS-CITED');
+  assert.match(mismatch!.reason, /names arXiv:1706\.03762, but the entry's eprint is 2102\.05095/);
 });
 
 test('D-19-05: a 200 carrying an error document (synthetic inner 403) is UNVERIFIABLE with the reason — not FABRICATED', async () => {

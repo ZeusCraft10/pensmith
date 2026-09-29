@@ -15,7 +15,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -24,6 +24,7 @@ import { MCP_BIN, sandbox } from '../helpers/paper-cli-harness.js';
 import { pullZoteroIntoLibrary } from '../../bin/lib/zotero-ingest.js';
 import { _resetHostStateForTest } from '../../bin/lib/http.js';
 import { SOURCES_START, SOURCES_END } from '../../bin/lib/research-md.js';
+import { EXIT_APPROVAL } from '../../bin/lib/exit-codes.js';
 
 /** What the Zotero Web API (and a Zotero MCP server's format="json") returns for the user's items. */
 const API_ITEMS = [
@@ -141,4 +142,77 @@ test('tier-contract (SRC-16): Zotero items give identical LIBRARY entries and RE
   assert.deepEqual(encode?.['authors'], ['{ENCODE Project Consortium}']);
   assert.deepEqual(encode?.['zotero'], { library: 'users/4242', key: 'ENCODE12' });
   assert.equal(sourcesBlock(tier1), sourcesBlock(tier2), 'identical RESEARCH.md sources blocks');
+});
+
+test('tier-contract (SRC-16, review round 2): items of a `[sources] zotero_collection` the user has not approved are refused by both tiers (exit 3, nothing written); Tier 1 records the approval only with approveCollection', async () => {
+  const sb = sandbox('tier-zotero-approval');
+  const tier2 = sb.project('tier2');
+  const tier1 = sb.project('tier1');
+  const config = 'schema_version = 1\n[sources]\nzotero_collection = "Therapy notes"\n';
+  for (const root of [tier2, tier1]) {
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    writeFileSync(join(root, '.paper', 'config.toml'), config);
+  }
+
+  // ---- Tier 2: refused before any request (no interceptor: a request would fail differently) ----
+  const vars: Record<string, string | undefined> = {
+    PENSMITH_NETWORK_TESTS: '1',
+    PENSMITH_OFFLINE: undefined,
+    ZOTERO_API_KEY: 'zk-tier-contract-key',
+    ZOTERO_GROUP_ID: undefined,
+    PENSMITH_ZOTERO_LOCAL: undefined,
+    XDG_DATA_HOME: sb.data,
+    LOCALAPPDATA: sb.data,
+    HOME: sb.data,
+  };
+  const saved = new Map(Object.keys(vars).map((k) => [k, process.env[k]]));
+  for (const [k, v] of Object.entries(vars)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+  _resetHostStateForTest();
+  const { agent, restore } = installMockAgent();
+  let tier2Message = '';
+  try {
+    await assert.rejects(
+      () => pullZoteroIntoLibrary(tier2),
+      (e: unknown) => {
+        tier2Message = (e as Error).message;
+        return (e as { exitCode?: number }).exitCode === EXIT_APPROVAL;
+      },
+    );
+    assert.deepEqual(agent.pendingInterceptors(), []);
+  } finally {
+    await restore();
+    for (const [k, v] of saved) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+  assert.match(tier2Message, /\[sources\] zotero_collection "Therapy notes" has not been approved for this paper; nothing was added/);
+  assert.equal(existsSync(join(tier2, '.paper', 'LIBRARY.json')), false);
+
+  // ---- Tier 1: the same refusal from the built MCP server's tool ----
+  const transport = new StdioClientTransport({ command: process.execPath, args: [MCP_BIN], env: sb.env({ PENSMITH_PAPER_ROOT: tier1 }), cwd: tier1, stderr: 'ignore' });
+  const client = new Client({ name: 'tier-contract-zotero-approval', version: '0.0.0' }, { capabilities: {} });
+  await client.connect(transport);
+  try {
+    const refused = await client.callTool({ name: 'paper_ingest_zotero_items', arguments: { paperRoot: tier1, items: API_ITEMS, collection: 'Therapy notes' } });
+    assert.equal(refused.isError, true);
+    const body = JSON.parse((refused.content as Array<{ text: string }>)[0]?.text ?? '{}') as { exit_code: number; message: string };
+    assert.equal(body.exit_code, EXIT_APPROVAL);
+    assert.match(body.message, /\[sources\] zotero_collection "Therapy notes" has not been approved for this paper; nothing was added/);
+    assert.equal(existsSync(join(tier1, '.paper', 'LIBRARY.json')), false, 'Tier 1 wrote nothing either');
+
+    // The user said yes (AskUserQuestion): the approval is recorded, and the items are added.
+    const approved = await client.callTool({
+      name: 'paper_ingest_zotero_items',
+      arguments: { paperRoot: tier1, items: API_ITEMS, collection: 'Therapy notes', approveCollection: true },
+    });
+    assert.notEqual(approved.isError, true, JSON.stringify(approved.content));
+    const again = await client.callTool({ name: 'paper_ingest_zotero_items', arguments: { paperRoot: tier1, items: API_ITEMS, collection: 'Therapy notes' } });
+    assert.notEqual(again.isError, true, 'approved once, the collection stays approved for this paper');
+  } finally {
+    await client.close();
+  }
 });

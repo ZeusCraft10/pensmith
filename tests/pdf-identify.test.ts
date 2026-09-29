@@ -19,6 +19,8 @@ import {
   namesFromAuthorLine,
   TITLE_JW_THRESHOLD,
   AUTHOR_JW_THRESHOLD,
+  plausibleYear,
+  YEAR_SLACK,
   type IdentifyDeps,
 } from '../bin/lib/pdf-identify.js';
 import { TITLE_JW_THRESHOLD as PASS1_TITLE, AUTHOR_JW_THRESHOLD as PASS1_AUTHOR } from '../bin/lib/fuzzy.js';
@@ -325,4 +327,90 @@ test('SRC-15 (MockAgent): a DOI-footer PDF sends one request — the DOI', async
     assert.equal(r.kind === 'identified' && r.via, 'text-doi');
     assert.deepEqual(seen, ['/works/10.1038%2Fnphys1170']);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Review round 2: a later re-post of the work is not this PDF.
+// ---------------------------------------------------------------------------
+
+// OpenAlex W2626778328 as it is served today: the attention paper dated 2025,
+// under a posted-content DOI of a preprint server that re-posted it.
+const REPOST = cand({
+  source: 'openalex',
+  id: 'https://openalex.org/W2626778328',
+  doi: '10.65215/2q58a426',
+  type: 'preprint',
+  title: 'Attention Is All You Need',
+  authors: ['Ashish Vaswani', 'Noam Shazeer'],
+  year: 2025,
+});
+
+test('SRC-13 (review round 2): a record dated after the PDF (a later re-post) is refused; arXiv is asked for the title, and only then', async () => {
+  const ex = await load('attention-title-only.pdf');
+  assert.equal(localPdfMetadata(ex).year, 2017, 'fixture: the PDF shows 2017');
+  assert.equal(plausibleYear(REPOST, { year: 2017 }), false, 'a preprint dated after the PDF');
+  assert.equal(plausibleYear({ year: 2019, type: 'article-journal' }, { year: 2017 }), true, 'a version of record up to YEAR_SLACK years later');
+  assert.equal(plausibleYear({ year: 2017 + YEAR_SLACK + 1, type: 'article-journal' }, { year: 2017 }), false);
+  assert.equal(plausibleYear({ year: 2030 }, { year: null }), true, 'no year on the PDF: nothing to compare');
+
+  const asked: string[] = [];
+  const base = deps({ title: () => [REPOST] }).deps;
+  const found = await identifyPdf(ex, {
+    ...base,
+    searchArxivTitle: async (t) => {
+      asked.push(t);
+      return { candidates: [VASWANI], failures: [] };
+    },
+  });
+  assert.deepEqual(asked, ['Attention Is All You Need']);
+  assert.equal(found.kind === 'identified' && found.candidate, VASWANI, 'the arXiv preprint of 2017, not the 2025 re-post');
+
+  const refused = await identifyPdf(ex, { ...base, searchArxivTitle: async () => ({ candidates: [], failures: [] }) });
+  assert.equal(refused.kind, 'unidentified');
+  assert.match(
+    refused.kind === 'unidentified' ? refused.reason : '',
+    /the only record matching the title "Attention Is All You Need" and its first author is dated 2025 \(DOI 10\.65215\/2q58a426\), after the year the PDF shows \(2017\) — a later re-post, not this PDF/,
+  );
+
+  // A good Crossref / OpenAlex match never triggers the arXiv search.
+  const direct: string[] = [];
+  const ok = await identifyPdf(ex, {
+    ...deps({ title: () => [VASWANI] }).deps,
+    searchArxivTitle: async (t) => {
+      direct.push(t);
+      return { candidates: [], failures: [] };
+    },
+  });
+  assert.equal(ok.kind, 'identified');
+  assert.deepEqual(direct, [], 'arXiv is asked only for a re-post');
+});
+
+test('SRC-13 (recorded lane): the title-only attention PDF resolves to Vaswani 2017 (arXiv 1706.03762) — not OpenAlex\'s 2025 re-post', async () => {
+  // Default dependencies: the recorded Crossref, OpenAlex (which serves the
+  // 2025 re-post) and arXiv title searches, replayed offline.
+  const ex = await load('attention-title-only.pdf');
+  const r = await identifyPdf(ex);
+  assert.equal(r.kind, 'identified', r.kind === 'unidentified' ? r.reason : '');
+  if (r.kind !== 'identified') return;
+  assert.equal(r.candidate.source, 'arxiv');
+  assert.equal(r.candidate.year, 2017);
+  assert.equal(r.candidate.title, 'Attention Is All You Need');
+  assert.match(String(r.candidate.arxiv ?? r.candidate.id), /1706\.03762/);
+  assert.notEqual(r.candidate.doi, '10.65215/2q58a426');
+});
+
+test('SRC-13 (review round 2): when the OpenAlex title search fails (keyless budget), arXiv is asked for the title', async () => {
+  const ex = await load('attention-title-only.pdf');
+  const asked: string[] = [];
+  const r = await identifyPdf(ex, {
+    lookupDoi: async () => lookupNotFound('404'),
+    lookupArxiv: async () => lookupNotFound('empty'),
+    searchTitle: async () => ({ candidates: WRONG_HITS, failures: ['openalex title search: keyless daily budget exhausted — set OPENALEX_API_KEY (free)'] }),
+    searchArxivTitle: async (t) => {
+      asked.push(t);
+      return { candidates: [VASWANI], failures: [] };
+    },
+  });
+  assert.deepEqual(asked, ['Attention Is All You Need']);
+  assert.equal(r.kind === 'identified' && r.candidate, VASWANI);
 });

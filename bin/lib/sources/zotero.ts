@@ -42,6 +42,7 @@ import {
 } from '../http.js';
 import { tryReadPaperConfigSync } from '../config.js';
 import { projectRoot } from '../paths.js';
+import { isZoteroCollectionApproved } from '../own-source-approvals.js';
 import { errorFailureReason, type SearchOptions } from './search-failure.js';
 import { lookupFound, lookupNotFound, lookupFailed, unwrapLookup, type LookupResult } from './lookup.js';
 import {
@@ -391,15 +392,37 @@ export function itemLibrary(item: ZoteroItem, pulled: string): string {
   return item.library;
 }
 
+/** The reason a search of an unapproved `[sources] zotero_collection` is refused (public: no library details). */
+export function unapprovedCollectionReason(name: string): string {
+  return (
+    `[sources] zotero_collection "${name}" has not been approved for this paper, so Zotero was not searched — ` +
+    'approve it by running pensmith research in a terminal'
+  );
+}
+
 /**
  * Research adapter: Zotero quick search (title, creator, year) within the
  * configured collection or library. Not configured → [] (no request). Any
  * failure → [] and opts.onFailure(reason); OfflineEgressError is thrown.
+ *
+ * A collection the paper's config.toml names is searched only when the user
+ * approved it for this paper (own-source-approvals.ts; review round 2): the
+ * approval is enforced here, for every verb that searches (research, `plan N
+ * --research`, `revise --research`), never per verb. An unapproved collection
+ * is neither searched nor replaced by the whole library. Failure reasons are
+ * the public ones (ZoteroError.publicReason): they are written into files
+ * that travel with the paper (RESEARCH.md, a section's RESEARCH-LOG.md).
  */
 export async function search(query: string, opts: SearchOptions = {}): Promise<SourceCandidate[]> {
   if (!isZoteroConfigured()) return [];
+  const root = projectRoot();
+  const collection = configuredZoteroCollection(root);
+  if (collection !== null && !isZoteroCollectionApproved(root, collection)) {
+    opts.onFailure?.(unapprovedCollectionReason(collection));
+    return [];
+  }
   try {
-    const pull = await pullZoteroItems({ query, limit: Math.max(1, Math.min(opts.limit ?? 10, PAGE)) });
+    const pull = await pullZoteroItems({ query, collection, limit: Math.max(1, Math.min(opts.limit ?? 10, PAGE)) });
     const out: SourceCandidate[] = [];
     for (const item of pull.items) {
       const c = normalizeZoteroItem(item, itemLibrary(item, pull.library));
@@ -409,7 +432,7 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     return out;
   } catch (e) {
     if (isOfflineEgressError(e)) throw e;
-    opts.onFailure?.(e instanceof ZoteroError ? e.message : errorFailureReason(e));
+    opts.onFailure?.(e instanceof ZoteroError ? e.publicReason : errorFailureReason(e));
     return [];
   }
 }

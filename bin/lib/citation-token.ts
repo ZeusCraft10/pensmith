@@ -103,24 +103,88 @@ export function replaceCitekeys(md: string, fn: (key: string) => string): string
 export function extractCitedKeysForVerification(md: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  // A citation cluster: a bracketed run with NO nested brackets that contains an
-  // @token. `[^[\]]` = "not '[' and not ']'", so we never cross bracket bounds.
-  const clusterRe = /\[([^[\]]*@[^[\]]*)\]/g;
-  // Within a cluster, a key is `@` preceded by start / whitespace / ';'. Pandoc
-  // citekeys begin with a letter/digit/underscore and may contain internal
-  // punctuation; trailing locator punctuation is stripped after capture.
-  const keyRe = /(?:^|[\s;])@([A-Za-z0-9_][A-Za-z0-9_:.#$%&+?<>~/-]*)/g;
-  for (const cm of md.matchAll(clusterRe)) {
-    const cluster = cm[1] ?? '';
-    for (const km of cluster.matchAll(keyRe)) {
-      let key = km[1];
-      if (key === undefined) continue;
-      key = key.replace(/[.,;:]+$/, '');
-      if (key && !seen.has(key)) {
+  for (const cluster of findCitationClusters(md)) {
+    for (const key of cluster.keys) {
+      if (!seen.has(key)) {
         seen.add(key);
         out.push(key);
       }
     }
   }
   return out;
+}
+
+/**
+ * One bracketed Pandoc citation cluster (`[@key]`, `[@Key2020, p. 5]`,
+ * `[see @a; also @b]`): where it starts in the text, its exact text (brackets
+ * included) and its keys, verbatim, in order.
+ */
+export interface CitationCluster {
+  readonly index: number;
+  readonly text: string;
+  readonly keys: readonly string[];
+}
+
+// A citation cluster: a bracketed run with NO nested brackets that contains an
+// @token. `[^[\]]` = "not '[' and not ']'", so we never cross bracket bounds.
+const CLUSTER_SOURCE = '\\[([^[\\]]*@[^[\\]]*)\\]';
+// Within a cluster, a key is `@` preceded by start / whitespace / ';'. Pandoc
+// citekeys begin with a letter/digit/underscore and may contain internal
+// punctuation; trailing locator punctuation is stripped after capture.
+const CLUSTER_KEY_SOURCE = '(?:^|[\\s;])@([A-Za-z0-9_][A-Za-z0-9_:.#$%&+?<>~/-]*)';
+
+function clusterKeys(inner: string): string[] {
+  const keys: string[] = [];
+  for (const km of inner.matchAll(new RegExp(CLUSTER_KEY_SOURCE, 'g'))) {
+    const key = (km[1] ?? '').replace(/[.,;:]+$/, '');
+    if (key) keys.push(key);
+  }
+  return keys;
+}
+
+/**
+ * Every bracketed citation cluster in `md` that holds at least one `@key`, in
+ * the BROAD Pandoc grammar of extractCitedKeysForVerification (any case,
+ * locators, several keys). For the fail-closed readers — Pass 3's quote
+ * extractor, done's citekey-set diff, compile's masking — which must see every
+ * citation a draft makes, not only the D-14 bare tokens CITATION_TOKEN_RE
+ * substitutes: a citation they cannot read must never make a quote or a key
+ * disappear from a gate.
+ */
+export function findCitationClusters(md: string): CitationCluster[] {
+  const out: CitationCluster[] = [];
+  for (const cm of md.matchAll(new RegExp(CLUSTER_SOURCE, 'g'))) {
+    const keys = clusterKeys(cm[1] ?? '');
+    if (keys.length > 0) out.push({ index: cm.index ?? 0, text: cm[0], keys });
+  }
+  return out;
+}
+
+/** The citation cluster `s` opens with (after optional whitespace), or null. */
+export function leadingCitationCluster(s: string): CitationCluster | null {
+  const m = new RegExp(`^\\s*${CLUSTER_SOURCE}`).exec(s);
+  if (m === null) return null;
+  const keys = clusterKeys(m[1] ?? '');
+  if (keys.length === 0) return null;
+  const text = m[0].trimStart();
+  return { index: m[0].length - text.length, text, keys };
+}
+
+/**
+ * Replace every citation cluster (broad grammar, see findCitationClusters) by
+ * `fn(cluster)`. Text outside clusters is left untouched.
+ */
+export function replaceCitationClusters(md: string, fn: (cluster: CitationCluster) => string): string {
+  let out = '';
+  let at = 0;
+  for (const c of findCitationClusters(md)) {
+    out += md.slice(at, c.index) + fn(c);
+    at = c.index + c.text.length;
+  }
+  return out + md.slice(at);
+}
+
+/** `md` without its citation clusters (broad grammar), whitespace collapsed. */
+export function stripCitationClusters(md: string): string {
+  return replaceCitationClusters(md, () => '').replace(/\s+/g, ' ').trim();
 }

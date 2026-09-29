@@ -19,6 +19,7 @@ required:
 
 degrade_if_missing:
   - if no AskUserQuestion: run the remap question through the gate registry (bin/lib/gates.ts `add-remap`) — @clack/prompts in a terminal, numbered prompts over stdin otherwise; `--remap` / `--section N` answer it up front, `--yolo` and a run without a terminal skip it and print the command
+  - the `pdf-attach-unmatched` question (`add <id> --pdf <file>` with a PDF whose first page does not show the work) is never answered by `--yolo` and, without a terminal, refuses (exit 3, nothing written): in Tier 1 ask the user with AskUserQuestion whether to attach the PDF anyway, and only on yes run the command in a terminal the user can answer (`pensmith add <id> --pdf <file>`); on no, add the work without the PDF, or pass the right PDF
 </capability_check>
 
 ## Overview
@@ -45,7 +46,8 @@ the 16 workflow bodies).
 | folder | `~/papers/` | every PDF in it, as bring-your-own sources |
 
 Anything else is a usage error (exit 2) before any request. `--pdf <file>` goes
-with an identifier and attaches that PDF as the work's bring-your-own copy.
+with an identifier and attaches that PDF as the work's bring-your-own copy
+(step 4b); `--replace-pdf` replaces a copy the work already has.
 
 ## Outputs
 
@@ -100,26 +102,54 @@ with an identifier and attaches that PDF as the work's bring-your-own copy.
 
 4. **A PDF** is read in the SEC-02 worker (pdf-parse, PyMuPDF fallback) and
    identified (`bin/lib/pdf-identify.ts`), in order: identifiers in its embedded
-   metadata; the arXiv stamp and DOIs on its first pages (accepted only when the
-   record's title is on the page); its title and first author — from real
-   metadata or a layout heuristic that skips licence / permission notices,
-   arXiv stamps, affiliations and e-mail lines — searched at Crossref, then
-   OpenAlex, and accepted only when the title AND the first author's family
-   name reach the Pass-1 thresholds. Only the identifier or the title leaves the
-   machine. Otherwise `add` refuses:
+   metadata; the arXiv stamp and DOIs on its first pages; its title and first
+   author — from real metadata or a layout heuristic that skips licence /
+   permission notices, arXiv stamps, affiliations and e-mail lines — searched
+   at Crossref, then OpenAlex, and accepted only when the title AND the first
+   author's family name reach the Pass-1 thresholds and the record's year is
+   plausible for the PDF (a record dated more than two years after the year
+   the PDF shows — or a preprint dated after it — is a later re-post; when only
+   such a re-post matched, or the OpenAlex search failed, the title is
+   searched at arXiv under the same rules). A record found by an identifier printed in the PDF must be the PDF's
+   OWN work: its title and first author match the PDF's own title and first
+   author, or its title is printed as a title (whole lines at the top of page
+   1) with its first author in the byline just below — a DOI in a footnote or
+   reference list names a work the PDF cites and is refused (the refusal names
+   it). Only the identifier or the title leaves the machine. Otherwise `add`
+   refuses:
    `could not confidently identify this PDF — pass its DOI: pensmith add <doi> --pdf <file>`
    (exit 1, nothing changed). An image-only PDF is refused with `no extractable
    text`. An identified PDF is kept as the work's bring-your-own copy.
+
+4b. **`add <identifier> --pdf <file>`** resolves the identifier (step 2) and
+   checks that the PDF IS that work (`checkPdfForRecord`): its metadata or arXiv
+   stamp carries the record's DOI / arXiv id, or its first page shows the
+   record's title and first author (the rule of step 4). A PDF that does not
+   show the work is attached only after the `pdf-attach-unmatched` gate: the
+   user confirms it in a terminal; `--yolo` never answers it, and without a
+   terminal the command exits 3 and writes nothing. A confirmed attachment is
+   recorded `byo.asserted` in LIBRARY.json: its text is never evidence — Pass 3
+   does not check quotes against it, Pass 2 never reads it, and it does not
+   make the source count as having full text (`bin/lib/full-text.ts`). A work
+   that already has a different PDF keeps it — the copy is not stored, with a
+   warning — unless `--replace-pdf` is given. A PDF file name is unique per
+   citekey, and a copy never overwrites the PDF another entry references.
 
 5. **A folder** is bring-your-own ingest (`bin/lib/byo-ingest.ts`, SRC-15): each
    PDF is hashed (re-ingest is idempotent), extracted, identified as in step 4,
    and added tagged bring-your-own; a PDF with no confident match is kept with
    its own metadata, flagged unhydrated, with a warning — never as a search hit.
-   Folder ingest does not remap; map a source later with `add --remap <key>`.
+   Citing such an unidentified PDF verifies as UNVERIFIABLE (blocking) with the
+   command that identifies it (`pensmith add <DOI or arXiv id> --pdf
+   .paper/sources/<file>`), never FABRICATED. Folder ingest does not remap;
+   map a source later with `add --remap <key>`.
 
 6. **Merge into the library** (BRDTH-01): `upsertSources(root, [record],
-   { provenance: 'add' })` under the library lock, then CITATIONS.bib / .ris are
-   re-rendered and RESEARCH.md's sources block refreshed.
+   { provenance: 'add' })` under the library lock — the entry gets the tier its
+   metadata decides (SRC-09: a journal article is peer-reviewed, a book a book)
+   and, for a DOI, the open-access PDF Unpaywall lists (`oa_url`, with a contact
+   email) — then CITATIONS.bib / .ris are re-rendered and RESEARCH.md's sources
+   block refreshed.
 
 7. **Remap** (SRC-14, gate `add-remap`): the paper's sections are scored against
    the source (`bin/lib/section-relevance.ts`: shared words with each section's
@@ -134,5 +164,8 @@ with an identifier and attaches that PDF as the work's bring-your-own copy.
    `add --remap <key> [--section N]` does the same for a source already in the
    library (nothing is fetched).
 
-8. **Shell fallback** (TIER-06 equivalence path): `pensmith add <source>
-   [--pdf <file>] [--section <n> [--slug <slug>]] [--remap] [--yolo]`.
+8. **A retracted work** (the registrar's record carries its retraction notice)
+   is added and a WARN names the notice: it fails Pass 1 (blocking) if cited.
+
+9. **Shell fallback** (TIER-06 equivalence path): `pensmith add <source>
+   [--pdf <file> [--replace-pdf]] [--section <n> [--slug <slug>]] [--remap] [--yolo]`.

@@ -28,6 +28,7 @@
 // Offline replay is the exact-match fixture store inside bin/lib/http.ts; the
 // typed OfflineEgressError is rethrown so callers report "unavailable (offline)".
 
+import { texToText } from '../markup.js';
 import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { type SearchOptions } from './search-failure.js';
 import { exchange, statusReason, validator, type ShapeCheck } from './registrar-response.js';
@@ -87,10 +88,16 @@ function decodeXmlEntities(s: string): string {
     .trim();
 }
 
+/**
+ * An element's text: XML entities decoded, then the submitter's TeX (accents,
+ * grouping braces, inline math, `\%`, `\cite{…}`) turned into the characters it
+ * stands for (markup.ts texToText) — the BibTeX writer would otherwise escape
+ * every brace and backslash into the exported reference.
+ */
 function text(xml: string, tag: string): string | undefined {
   const raw = extractOne(xml, tag);
   if (raw === undefined) return undefined;
-  const t = decodeXmlEntities(raw).replace(/\s+/g, ' ').trim();
+  const t = texToText(decodeXmlEntities(raw));
   return t.length > 0 ? t : undefined;
 }
 
@@ -104,7 +111,7 @@ function parseEntry(entryXml: string): ArxivEntry | null {
   const authors = extractAll(entryXml, 'author')
     .map((block) => {
       const name = extractOne(block, 'name');
-      return name ? decodeXmlEntities(name).replace(/\s+/g, ' ') : '';
+      return name ? texToText(decodeXmlEntities(name)) : '';
     })
     .filter(Boolean);
 

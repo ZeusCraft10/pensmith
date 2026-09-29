@@ -20,10 +20,12 @@ import {
   describeByoOutcome,
   recordByoPdfDir,
   resolveByoDirArg,
+  pdfFileName,
 } from '../bin/lib/byo-ingest.js';
-import { loadLibrary, upsertSources } from '../bin/lib/library.js';
+import { loadLibrary, upsertSources, attachByoRecord, type LibraryCandidate } from '../bin/lib/library.js';
 import { provenanceTags } from '../bin/lib/research-md.js';
 import { sha256Hex } from '../bin/lib/byo-text.js';
+import { runPass1 } from '../bin/lib/verify/pass1.js';
 import { readPaperConfigSync } from '../bin/lib/config.js';
 import { installMockAgent } from './helpers/local-servers/mock-agent.js';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
@@ -63,8 +65,9 @@ test('SRC-15: two PDFs → two entries tagged bring-your-own, copied under .pape
     assert.match(e.byo!.text_sha256 ?? '', /^[0-9a-f]{64}$/);
   }
   const research = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
-  assert.match(research, /\[@vaswani2017\][^\n]*\n {2}- Tier: not evaluated · Tags: bring-your-own/);
-  assert.match(research, /\[@aspelmeyer2009\][^\n]*\n {2}- Tier: not evaluated · Tags: bring-your-own/);
+  // SRC-09 (review round 2): the tier the metadata decides, for bring-your-own too.
+  assert.match(research, /\[@vaswani2017\][^\n]*\n {2}- Tier: preprint · Tags: bring-your-own/);
+  assert.match(research, /\[@aspelmeyer2009\][^\n]*\n {2}- Tier: peer-reviewed · Tags: bring-your-own/);
   const bib = fs.readFileSync(path.join(root, '.paper', 'CITATIONS.bib'), 'utf8');
   assert.match(bib, /@misc\{vaswani2017,[\s\S]*eprint = \{1706\.03762\}/);
   assert.match(bib, /@article\{aspelmeyer2009,[\s\S]*doi = \{10\.1038\/nphys1170\}/);
@@ -278,4 +281,56 @@ test('SRC-13: `add <id> --pdf <file>` never attaches a PDF that is not the work 
   const byo = (await loadLibrary(root)).entries[0]!.byo!;
   assert.notEqual(byo.sha256, sha);
   assert.equal(byo.asserted, true, 'attached at the user\'s word');
+});
+
+test('SRC-15 (review round 2): BYO file names are unique per citekey (case-insensitive filesystems too); another entry\'s PDF is never overwritten', async () => {
+  const keys = ['smith:2020', 'smith#2020', 'smith_2020', 'Smith_2020', 'smith2020', 'Smith2020'];
+  const names = keys.map(pdfFileName);
+  assert.equal(new Set(names.map((n) => n.toLowerCase())).size, keys.length, names.join(' '));
+  assert.equal(pdfFileName('smith2020'), 'smith2020.pdf', 'a D-14 key is its own name');
+  for (const n of names) assert.match(n, /^[a-z0-9_.-]+\.pdf$/);
+
+  const root = paper();
+  const record = (citekey: string): LibraryCandidate => ({ citekey, title: `A work keyed ${citekey}`, authors: ['Smith, Ann'], year: 2020, doi: `10.5555/${encodeURIComponent(citekey)}` });
+  const a = await checkPdfForRecord(path.join(BYO, 'no-match.pdf'), record('smith:2020'));
+  const b = await checkPdfForRecord(path.join(BYO, 'doi-footer.pdf'), record('smith_2020'));
+  const ra = await upsertWithPdf(root, record('smith:2020'), a, 'add', { asserted: true });
+  const rb = await upsertWithPdf(root, record('smith_2020'), b, 'add', { asserted: true });
+  assert.deepEqual([ra.citekey, ra.stored, rb.citekey, rb.stored], ['smith:2020', true, 'smith_2020', true]);
+  const lib = await loadLibrary(root);
+  for (const e of lib.entries) {
+    const onDisk = fs.readFileSync(path.join(root, '.paper', e.byo!.file));
+    assert.equal(sha256Hex(onDisk), e.byo!.sha256, `${e.citekey}: its own PDF, untouched`);
+  }
+  assert.notEqual(lib.entries[0]!.byo!.file, lib.entries[1]!.byo!.file);
+
+  // A file name another entry already references (a library written before this
+  // rule) is never overwritten: the copy is refused with a warning.
+  const legacy = paper();
+  const first = await upsertWithPdf(legacy, record('smith_2020'), b, 'add', { asserted: true });
+  assert.equal(first.stored, true);
+  const lib2 = await loadLibrary(legacy);
+  const byoFile = lib2.entries[0]!.byo!.file;
+  const other = await checkPdfForRecord(path.join(BYO, 'no-match.pdf'), record('smith:2020'));
+  await upsertSources(legacy, [record('smith:2020')], { provenance: 'add' });
+  await attachByoRecord(legacy, 'smith:2020', { file: byoFile, sha256: lib2.entries[0]!.byo!.sha256, text_sha256: null, asserted: true });
+  const clash = await upsertWithPdf(legacy, record('smith_2020'), other, 'add', { asserted: true, replace: true });
+  assert.equal(clash.stored, false);
+  assert.match(clash.warnings.join('\n'), /already holds the PDF of smith:2020, which this copy would overwrite; this copy was not stored/);
+  assert.equal(sha256Hex(fs.readFileSync(path.join(legacy, '.paper', byoFile))), lib2.entries[0]!.byo!.sha256, 'the file is intact');
+});
+
+test('S-03 (review round 2): citing the user\'s own PDF that no registrar identified is UNVERIFIABLE (blocking, with the way to identify it) — never FABRICATED', async () => {
+  const root = paper();
+  const o = await ingestByoPdf(root, path.join(BYO, 'no-match.pdf'));
+  assert.equal(o.status, 'added', JSON.stringify(o));
+  assert.equal(o.status === 'added' && o.hydrated, false, 'fixture: no registrar matches it (recorded title searches)');
+  const key = o.status === 'added' ? o.citekey : '';
+  const bib = path.join(root, '.paper', 'CITATIONS.bib');
+  const [r] = await runPass1(`A claim [@${key}].\n`, bib, { root });
+  assert.equal(r!.verdict, 'UNVERIFIABLE', r!.reason);
+  assert.match(r!.reason, new RegExp(`your own PDF sources/${key}\\.pdf was not identified by any registrar[^]*pensmith add <DOI or arXiv id> --pdf \\.paper/sources/${key}\\.pdf`));
+  // An identifier-less entry that is NOT the user's own PDF stays FABRICATED ("cannot verify upstream").
+  const [bare] = await runPass1(`A claim [@${key}].\n`, bib);
+  assert.equal(bare!.verdict, 'FABRICATED', 'without the library (no root) nothing says it is the user\'s own');
 });

@@ -25,6 +25,7 @@
 // (byoPassages); GRND-14's full-text flag reads the same record through
 // full-text.ts.
 
+import { replaceCitationClusters } from './citation-token.js';
 import { createHash } from 'node:crypto';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
@@ -48,8 +49,24 @@ export type ByoTextResult =
       readonly available: false;
       /** One line: why the text cannot be used. */
       readonly reason: string;
+      /**
+       * Why, as a code. `missing`, `changed` and `outside` mean the recorded
+       * copy of the user's own PDF is no longer what was ingested — Pass 3 then
+       * blocks the quote (it was checkable, and editing or moving a local file
+       * must never turn a verdict into a pass); the others mean the copy never
+       * had usable text (`none`, `asserted`, `no-text`) or it cannot be read
+       * the same way now (`unreadable`, `text-mismatch`).
+       */
+      readonly code: ByoUnavailableCode;
       readonly file: string | null;
     };
+
+export type ByoUnavailableCode = 'none' | 'asserted' | 'outside' | 'missing' | 'changed' | 'no-text' | 'unreadable' | 'text-mismatch';
+
+/** True when the unavailable code means the recorded copy was moved, deleted or edited since ingest. */
+export function byoCopyAltered(code: ByoUnavailableCode): boolean {
+  return code === 'missing' || code === 'changed' || code === 'outside';
+}
 
 export function sha256Hex(data: string | Uint8Array): string {
   return createHash('sha256').update(data).digest('hex');
@@ -97,29 +114,30 @@ export function resolveByoFile(root: string, file: string): string | null {
  */
 export async function byoText(root: string, entry: Pick<LibraryEntry, 'citekey' | 'byo'>): Promise<ByoTextResult> {
   const byo = entry.byo;
-  if (byo === null) return { available: false, reason: `${entry.citekey} has no bring-your-own PDF`, file: null };
+  if (byo === null) return { available: false, reason: `${entry.citekey} has no bring-your-own PDF`, code: 'none', file: null };
   if (byo.asserted === true) {
     return {
       available: false,
       reason: `${byo.file} was attached although its first page does not show this work, so its text is not used as evidence`,
+      code: 'asserted',
       file: null,
     };
   }
   const file = resolveByoFile(root, byo.file);
   if (file === null) {
-    return { available: false, reason: `the recorded PDF path ${byo.file} is outside .paper/sources/`, file: null };
+    return { available: false, reason: `the recorded PDF path ${byo.file} is outside .paper/sources/`, code: 'outside', file: null };
   }
   let bytes: Buffer;
   try {
     bytes = await fsp.readFile(file);
   } catch {
-    return { available: false, reason: `the PDF ${byo.file} is missing`, file };
+    return { available: false, reason: `the PDF ${byo.file} is missing`, code: 'missing', file };
   }
   if (sha256Hex(bytes) !== byo.sha256) {
-    return { available: false, reason: `PDF changed since ingest (${byo.file} no longer matches its recorded sha256)`, file };
+    return { available: false, reason: `PDF changed since ingest (${byo.file} no longer matches its recorded sha256)`, code: 'changed', file };
   }
   if (byo.text_sha256 === null) {
-    return { available: false, reason: `no extractable text in ${byo.file} (an image-only or scanned PDF)`, file };
+    return { available: false, reason: `no extractable text in ${byo.file} (an image-only or scanned PDF)`, code: 'no-text', file };
   }
   try {
     const cached = await fsp.readFile(cacheFile(byo.sha256), 'utf8');
@@ -132,13 +150,13 @@ export async function byoText(root: string, entry: Pick<LibraryEntry, 'citekey' 
   let text: string;
   try {
     const ex = await extractPdf(bytes);
-    if (ex.imageOnly) return { available: false, reason: `no extractable text in ${byo.file}`, file };
+    if (ex.imageOnly) return { available: false, reason: `no extractable text in ${byo.file}`, code: 'no-text', file };
     text = ex.text;
   } catch (e) {
-    return { available: false, reason: `the PDF ${byo.file} could not be read (${(e as Error).message.split('\n')[0]})`, file };
+    return { available: false, reason: `the PDF ${byo.file} could not be read (${(e as Error).message.split('\n')[0]})`, code: 'unreadable', file };
   }
   if (sha256Hex(text) !== byo.text_sha256) {
-    return { available: false, reason: `the text extracted from ${byo.file} does not match its recorded hash`, file };
+    return { available: false, reason: `the text extracted from ${byo.file} does not match its recorded hash`, code: 'text-mismatch', file };
   }
   await writeByoTextCache(byo.sha256, text);
   return { available: true, text, file, sha256: byo.sha256, fromCache: false };
@@ -171,7 +189,8 @@ function words(s: string): string[] {
  * judge sees what the source says about the claim, not the whole PDF).
  */
 export function byoPassages(text: string, claim: string, maxChars: number = BYO_PASSAGE_CHARS): string {
-  const want = new Set(words(claim.replace(/\[@[^\]]*\]/g, ' ')));
+  // The claim's own words: every citation cluster out (citation-token.ts, the one citation grammar).
+  const want = new Set(words(replaceCitationClusters(claim, () => ' ')));
   const flat = text.replace(/\s+/g, ' ').trim();
   if (flat.length <= maxChars) return flat;
   const windows: Array<{ start: number; text: string; score: number }> = [];

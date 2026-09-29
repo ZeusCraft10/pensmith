@@ -3,7 +3,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fullTextAvailable, fullTextSource, fullTextByCitekey, quotesWithoutFullText } from '../bin/lib/full-text.js';
+import { fullTextAvailable, fullTextSource, fullTextByCitekey, quotesWithoutFullText, arxivIdOfEntry, arxivPdfUrl, isDataCiteArxivDoi } from '../bin/lib/full-text.js';
 
 const NONE = { byo: null, oa_url: null, doi: null };
 const SHA = 'a'.repeat(64);
@@ -14,7 +14,7 @@ const byo = (over: { text_sha256?: string | null; asserted?: boolean } = {}) => 
   asserted: over.asserted ?? false,
 });
 
-test('GRND-14: full text = what Pass 3 can check — a hashed BYO PDF, or the open-access PDF of a DOI', () => {
+test('GRND-14: full text = what Pass 3 can check — a hashed BYO PDF, or the (Unpaywall) open-access PDF of a DOI', () => {
   assert.equal(fullTextAvailable(NONE), false);
   assert.equal(fullTextSource({ ...NONE, byo: byo() }), 'bring-your-own PDF');
   assert.equal(fullTextAvailable({ ...NONE, byo: byo({ text_sha256: null }) }), false, 'an image-only BYO PDF has no text');
@@ -27,9 +27,20 @@ test('GRND-14: full text = what Pass 3 can check — a hashed BYO PDF, or the op
   );
 });
 
-test('GRND-14: an arXiv id or a PMCID alone is not checkable full text (Pass 3 cannot fetch it)', () => {
-  const arxivOnly = { ...NONE, arxiv: '1706.03762', pmcid: 'PMC123' };
-  assert.equal(fullTextAvailable(arxivOnly), false);
+test('GRND-14 (review round 2): an arXiv id is checkable full text (Pass 3 fetches its arXiv PDF); a PMCID alone is not', () => {
+  assert.equal(fullTextSource({ ...NONE, arxiv: '1706.03762' }), 'arXiv PDF');
+  assert.equal(fullTextSource({ ...NONE, doi: '10.48550/arXiv.1706.03762' }), 'arXiv PDF', 'a DataCite arXiv DOI names the id');
+  assert.equal(
+    fullTextSource({ ...NONE, doi: '10.48550/arxiv.1706.03762', oa_url: 'https://arxiv.org/pdf/1706.03762' }),
+    'arXiv PDF',
+    'Unpaywall does not index DataCite arXiv DOIs: the basis is the arXiv PDF, not oa_url',
+  );
+  assert.equal(fullTextAvailable({ ...NONE, pmcid: 'PMC123' } as typeof NONE), false);
+  assert.equal(arxivIdOfEntry({ doi: '10.48550/arXiv.2102.05095v2' }), '2102.05095');
+  assert.equal(arxivIdOfEntry({ doi: '10.1038/nature14539', arxiv: null }), null);
+  assert.equal(arxivPdfUrl('hep-th/9901001'), 'https://arxiv.org/pdf/hep-th/9901001');
+  assert.equal(isDataCiteArxivDoi('https://doi.org/10.48550/arXiv.1706.03762'), true);
+  assert.equal(isDataCiteArxivDoi('10.1038/nature14539'), false);
 });
 
 const DRAFT = [

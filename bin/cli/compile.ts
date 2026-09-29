@@ -48,7 +48,7 @@ async function productionReVerify(paperRoot: string, input: ReVerifyInput): Prom
     // stale section escape unverified).
     return { passed: false, failingCitekeys: [] };
   }
-  const pass1 = await runPass1(draftMd, bibPath);
+  const pass1 = await runPass1(draftMd, bibPath, { root: paperRoot });
   const bibEntries = await parseBibFileAt(bibText, bibPath);
   const bibByCitekey = new Map<string, { DOI?: string }>(
     bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),

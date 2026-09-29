@@ -228,7 +228,7 @@ export const command = defineCommand({
     paper: { type: 'string', description: 'Work on this paper: a name from `pensmith list`, or a folder containing .paper/.', valueHint: 'name|path' },
     'dry-run': { type: 'boolean', description: 'Trial run in a folder with no paper: no network or model call (sources and model replies are labelled stand-ins); refused on an existing paper.', default: false },
     estimate: { type: 'boolean', description: 'Project the remaining token + USD cost, then offer to proceed.', default: false },
-    yolo: { type: 'boolean', description: 'Skip the approval gates --yolo may skip (outline approval, export confirmation, research scope/prune, add remap, revise swap, sketch confirm). Never skips the cost cap, detector consent or the active-paper choice.', default: false },
+    yolo: { type: 'boolean', description: 'Skip the approval gates --yolo may skip (outline approval, export confirmation, research scope/prune, plan --research hits, add remap, revise swap, sketch confirm). Never skips the cost cap, detector consent, the active-paper choice, reading your own PDF folder or Zotero collection for a paper, or attaching a PDF that does not show the work.', default: false },
     'show-prompts': { type: 'boolean', description: 'Mirror every outbound request (and full LLM prompts) to stderr before it is sent.', default: false },
     runtime: { type: 'string', description: 'LLM provider for this run: anthropic | openai | ollama | vllm | openai-compatible (overrides the config).', valueHint: 'provider' },
     model: { type: 'string', description: 'Generation model for this run (outline, plan, write); judgment steps keep their own model.', valueHint: 'id' },
@@ -942,7 +942,7 @@ export const ENVIRONMENT_DOCS: ReadonlyArray<readonly [string, string]> = Object
 
 const GLOBAL_FLAG_DOCS: ReadonlyArray<readonly [string, string]> = Object.freeze([
   ['--paper <name|path>', 'work on this paper (a name from `pensmith list`, or a folder containing .paper/)'],
-  ['--yolo', 'skip the gates --yolo may skip; never the cost cap, detector consent or the active-paper choice'],
+  ['--yolo', 'skip the gates --yolo may skip; never the cost cap, detector consent, the active-paper choice, your own PDF folder / Zotero collection, or attaching an unmatched PDF'],
   ['--dry-run', 'trial run in a folder with no paper: no network or model call (refused on an existing paper)'],
   ['--estimate', 'project the remaining cost, then offer to proceed'],
   ['--show-prompts', 'mirror outbound requests and LLM prompts to stderr before they are sent'],

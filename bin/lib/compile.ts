@@ -45,7 +45,7 @@ import { loadFrontmatterDoc } from './frontmatter.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { computeDraftHash } from './draft-hash.js';
-import { replaceCitekeys } from './citation-token.js';
+import { replaceCitationClusters } from './citation-token.js';
 import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
 import {
@@ -173,16 +173,20 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
 }
 
 /**
- * Substitute every [@key] in `text` with a fresh {{cite_K_M}} placeholder.
- * Returns the substituted text and the placeholder→[@key] restore map.
+ * Substitute every citation in `text` with a fresh {{cite_K_M}} placeholder.
+ * Returns the substituted text and the placeholder→citation restore map.
+ * Every citation cluster is masked — a bare `[@key]`, but also a mixed-case
+ * key, a locator or a multi-key cluster (citation-token.ts
+ * findCitationClusters) — so the smoother can never rewrite, drop or invent a
+ * citation the placeholder-set check would not see (fail closed).
  */
 function substitutePlaceholders(text: string, k: number): { masked: string; restore: Map<string, string> } {
   const restore = new Map<string, string>();
   let m = 0;
-  const masked = replaceCitekeys(text, (key) => {
+  const masked = replaceCitationClusters(text, (cluster) => {
     const ph = makePlaceholder(k, m);
     m += 1;
-    restore.set(ph, `[@${key}]`);
+    restore.set(ph, cluster.text);
     return ph;
   });
   return { masked, restore };

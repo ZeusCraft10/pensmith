@@ -40,6 +40,7 @@ import { updatePlanFrontmatter } from '../lib/plan-status.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
 import { offlineMarkerLine } from '../lib/http-mock.js';
 import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
+import { tryReadPaperConfigSync } from '../lib/config.js';
 
 // Force-bind the deterministic primitives so the acceptance grep
 // (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
@@ -166,7 +167,7 @@ export const verifyCommand = defineCommand({
     // Pass 1 and Pass 3 have nothing to check and the section is verified —
     // exactly as it is against a non-empty bib; a cited key absent from the bib
     // is FABRICATED (fail closed).
-    const pass1 = bibExists ? await runPass1(draftMd, bibPath) : [];
+    const pass1 = bibExists ? await runPass1(draftMd, bibPath, { root: projectRoot() }) : [];
     const bibEntries = bibExists ? await parseBibFileAt(readFileSync(bibPath, 'utf8'), bibPath) : [];
     // Widened value type (additive): carries title/author/abstract so Pass 2
     // (claim support) has source metadata. runPass3 reads only DOI, so the
@@ -219,7 +220,10 @@ export const verifyCommand = defineCommand({
     let pass2: Pass2Result[];
     let pass4: Pass4Result[] | null = null;
     try {
-      pass2 = await runPass2(draftMd, bibByCitekey, { n, root: projectRoot() });
+      // `[verification] send_byo_passages` (default off, PRD §9): only then do
+      // the user's own PDFs' passages go to the model provider.
+      const shareByoPassages = tryReadPaperConfigSync(projectRoot())?.verification?.send_byo_passages === true;
+      pass2 = await runPass2(draftMd, bibByCitekey, { n, root: projectRoot(), shareByoPassages });
     } catch (err) {
       if (!isFatalLlmError(err)) throw err;
       advisoryStop = err;

@@ -58,7 +58,9 @@ async function lane<T>(fn: (m: InstalledMockAgent) => Promise<T>): Promise<T> {
       if (v === undefined) delete process.env[k];
       else process.env[k] = v;
     }
-    rmSync(data, { recursive: true, force: true });
+    // A request that gave up waiting for its token may still be writing its
+    // log record into the data dir as the lane closes: retry the removal.
+    rmSync(data, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 }
 

@@ -31,6 +31,7 @@
 // Three-way lookups (D-19-05): found | not-found (HTTP 404) | failed. The
 // typed OfflineEgressError is rethrown (RUN-03).
 
+import { plainText, plainTextOpt } from '../markup.js';
 import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES, formatRetryAfter } from '../http.js';
 import { contactEmail } from '../contact-email.js';
 import { openAlexKey } from '../runtime.js';
@@ -147,7 +148,7 @@ export function openAlexToCandidate(item: OpenAlexWork): SourceCandidate | null 
   const doi = stripDoiUrl(item.doi);
   const id = str(item.id) ?? doi;
   if (!id) return null;
-  const title = String(item.title ?? item.display_name ?? '').replace(/\s+/g, ' ').trim();
+  const title = plainText(String(item.title ?? item.display_name ?? ''));
   if (!title) return null;
 
   // OpenAlex emits "Given Family" display names; author-normalize handles them.
@@ -159,7 +160,7 @@ export function openAlexToCandidate(item: OpenAlexWork): SourceCandidate | null 
   const y = item.publication_year;
   const year = typeof y === 'number' && y >= 1800 && y <= 2100 ? y : undefined;
   const source = item.primary_location?.source ?? undefined;
-  const venue = str(source?.display_name);
+  const venue = plainTextOpt(str(source?.display_name));
   const publisher = str(source?.host_organization_name);
   const type = openAlexCslType(item.type, source?.type);
   const volume = str(item.biblio?.volume);
@@ -167,7 +168,8 @@ export function openAlexToCandidate(item: OpenAlexWork): SourceCandidate | null 
   const first = str(item.biblio?.first_page);
   const last = str(item.biblio?.last_page);
   const pages = first && last && first !== last ? `${first}-${last}` : first;
-  const abstract = abstractFromInvertedIndex(item.abstract_inverted_index);
+  // The inverted index keeps the deposited markup as words (`<br>`, `<a href=…>`, `<i>`): text only.
+  const abstract = plainTextOpt(abstractFromInvertedIndex(item.abstract_inverted_index));
   const pmid = normalizePmid(String(item.ids?.pmid ?? '').replace(/^https?:\/\/pubmed\.ncbi\.nlm\.nih\.gov\//i, '').replace(/\/$/, ''));
   const pmcid = normalizePmcid(String(item.ids?.pmcid ?? '').replace(/^https?:\/\/(?:www\.)?ncbi\.nlm\.nih\.gov\/pmc\/articles\//i, '').replace(/\/$/, ''));
   const retracted = item.is_retracted === true;

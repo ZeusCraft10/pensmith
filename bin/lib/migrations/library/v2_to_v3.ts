@@ -23,11 +23,15 @@
 //     comma-less "Surname INITIALS" string becomes "Surname, INITIALS"
 //     (person-name.ts fromPubmedCompactName); every other author string and
 //     every citekey is kept as it is.
+//   - title, venue and publisher: their plain text (markup.ts plainText) — the
+//     v2 Crossref adapter stored `<i>…</i>` and `&amp;` as the registrar sent
+//     them, which the exported reference list printed literally.
 // Idempotent on v3 input. Values a v3 field already carries (a file written by
 // a newer writer and then stamped v2 by hand) are kept when they have the v3
 // type, so the migration never discards data it can represent.
 
 import { fromPubmedCompactName } from '../../person-name.js';
+import { plainText } from '../../markup.js';
 
 const NEW_NULLABLE_FIELDS = [
   'type',
@@ -53,6 +57,9 @@ export function migrate(input: unknown): unknown {
       if (!(k in e) || e[k] === undefined) e[k] = null;
     }
     if (!Array.isArray(e['editors'])) e['editors'] = [];
+    for (const k of ['title', 'venue', 'publisher'] as const) {
+      if (typeof e[k] === 'string') e[k] = plainText(e[k] as string) || null;
+    }
     if (typeof e['hydrated'] !== 'boolean') e['hydrated'] = true;
     if (typeof e['byo'] === 'object' && e['byo'] !== null) {
       const byo = { ...(e['byo'] as Record<string, unknown>) };

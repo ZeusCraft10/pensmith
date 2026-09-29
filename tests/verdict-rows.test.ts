@@ -188,8 +188,11 @@ test('D-17-07: an UNVERIFIABLE Pass-1 row is blocking with a "re-run online" ref
     mod.blockingRowReason(rows[0]!),
     /^citation \[@jumper2021\] is UNVERIFIABLE \(its source could not be checked: offline, --dry-run or a failed lookup\) — re-run online$/,
   );
-  assert.match(
-    mod.blockingRowReason({ citekey: 'x', verdict: 'FABRICATED' }),
-    /has a blocking verdict \(FABRICATED\/MIS-CITED\/NOT_FOUND\)/,
+  assert.match(mod.blockingRowReason({ citekey: 'x', verdict: 'FABRICATED' }), /has a blocking verdict \(FABRICATED\)$/);
+  // Review round 2: a retraction row is named as one (the label becomes RETRACTED with VRFY-15).
+  const retracted = mod.parseBlockingVerdictRows(
+    '- wakefield1998: **MIS-CITED** — titleJW=0.81, authorJW=1.00 — cited work is retracted (Crossref\'s record of 10.1016/x at verify time)',
   );
+  assert.deepEqual(retracted, [{ citekey: 'wakefield1998', verdict: 'MIS-CITED', retraction: true }]);
+  assert.match(mod.blockingRowReason(retracted[0]!), /^citation \[@wakefield1998\] has a blocking verdict \(MIS-CITED: the cited work is retracted\)$/);
 });

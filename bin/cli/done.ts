@@ -36,7 +36,7 @@ import { resolveStyleName, parseBibFileAt } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
 import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
-import { extractCitekeys } from '../lib/citation-token.js';
+import { extractCitedKeysForVerification } from '../lib/citation-token.js';
 import { sectionVerificationReasons } from '../lib/verify/verdict-rows.js';
 import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 
@@ -440,8 +440,10 @@ export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
 /**
  * Re-verify the humanized FINAL.md immediately before export (GATE-04).
  *
- * (a) Citekey-set diff: the set of [@key] tokens in finalMd MUST equal the
- *     set in draftMd. Any add/drop/swap is a HARD block.
+ * (a) Citekey-set diff: the set of cited keys in finalMd MUST equal the
+ *     set in draftMd — read in the broad Pandoc grammar (any case, locators,
+ *     clusters), so a key only a narrow reader would miss can still not be
+ *     added, dropped or swapped. Any add/drop/swap is a HARD block.
  * (b) Pass-3 quote re-check on finalMd: absent or empty bib → skip-clean
  *     (no quotes to check); else build bibByCitekey from the FULL CITATIONS.bib
  *     (Pitfall 4 — NOT filtered by DRAFT keys) and run runPass3. Any NOT_FOUND
@@ -457,8 +459,8 @@ export async function reCheckFinalMd(
   root?: string,
 ): Promise<{ passed: boolean; reason: string }> {
   // Step (a): citekey-set diff (runs FIRST — Pitfall 5).
-  const finalKeys = new Set(extractCitekeys(finalMd));
-  const draftKeys = new Set(extractCitekeys(draftMd));
+  const finalKeys = new Set(extractCitedKeysForVerification(finalMd));
+  const draftKeys = new Set(extractCitedKeysForVerification(draftMd));
 
   const added = [...finalKeys].filter((k) => !draftKeys.has(k));
   const dropped = [...draftKeys].filter((k) => !finalKeys.has(k));

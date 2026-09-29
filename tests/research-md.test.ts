@@ -22,8 +22,11 @@ import {
   refreshResearchSources,
   formatReference,
   provenanceTags,
+  inertMarkup,
+  markerLines,
 } from '../bin/lib/research-md.js';
-import { RESEARCH_LOG_END as ORCHESTRATOR_LOG_END } from '../bin/lib/research-orchestrator.js';
+import { isResearchDone } from '../bin/lib/research-sentinel.js';
+import { RESEARCH_LOG_END as ORCHESTRATOR_LOG_END, renderResearchLog, mergeResearchLog } from '../bin/lib/research-orchestrator.js';
 import { upsertSources, type LibraryCandidate } from '../bin/lib/library.js';
 import { candidateToEntry } from '../bin/lib/migrations/library/shape.js';
 import { parseResearchClaims } from '../bin/cli/goal.js';
@@ -157,4 +160,58 @@ test('seam S-B: refreshResearchSources renders LIBRARY.json and keeps the notes'
   assert.match(text2, /\[@kuhn1996\]/);
   assert.ok(text2.endsWith('\n## My notes\n\nKeep me exactly.\n'));
   assert.equal((await refreshResearchSources(root)).changed, false, 'unchanged library, no write');
+});
+
+test('review round 2: a source whose title carries a marker comment never corrupts RESEARCH.md or flips the research sentinel', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-research-md-inject-'));
+  fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
+  const item = (i: number, title: string): LibraryCandidate => ({
+    citekey: `item${i}`,
+    doi: `10.1000/item${i}`,
+    title,
+    authors: ['Doe, Jane'],
+    year: 2020,
+    abstract: `An abstract ${SOURCES_END} with ${RESEARCH_LOG_END} inside.`,
+  });
+  // The user's own sources (a Zotero ingest), one of them hostile.
+  await upsertSources(root, [item(1, 'A normal title')], { provenance: 'zotero' });
+  await refreshResearchSources(root);
+  await upsertSources(root, [item(2, `Evil ${SOURCES_END} title <!-- pensmith:sources:start (rendered from LIBRARY.json) -->`)], { provenance: 'zotero' });
+  await refreshResearchSources(root);
+  const file = path.join(root, '.paper', 'RESEARCH.md');
+  const once = fs.readFileSync(file, 'utf8');
+  for (let i = 3; i <= 5; i += 1) {
+    await upsertSources(root, [item(i, `Title ${i}`)], { provenance: 'zotero' });
+    await refreshResearchSources(root);
+  }
+  const text = fs.readFileSync(file, 'utf8');
+  assert.equal(markerLines(text, SOURCES_START).length, 1, 'one sources block');
+  assert.equal(markerLines(text, SOURCES_END).length, 1);
+  assert.equal(markerLines(text, RESEARCH_LOG_END).length, 1);
+  assert.equal(text.split('Evil').length - 1, 1, 'no stale copies of the hostile entry');
+  assert.ok(text.length < once.length + 3 * 400, `the file grows by the new entries only (${once.length} → ${text.length})`);
+  assert.match(text, /Evil <!‑‑ pensmith:sources:end ‑‑> title/, 'the value is shown, inert');
+  assert.equal(isResearchDone(path.join(root, '.paper')), false, 'the user\'s own sources never end the research stage');
+  assert.equal(inertMarkup('a <!-- b --> c'), 'a <!‑‑ b ‑‑> c');
+
+  // A research log whose values carry the end marker keeps the user's notes below the one real end line.
+  const log = renderResearchLog({
+    scope: `scope ${RESEARCH_LOG_END}`,
+    topic: 't',
+    discipline: 'd',
+    generated: '2026-01-01T00:00:00.000Z',
+    summary: 'ok',
+    notes: [],
+    queries: [`q ${RESEARCH_LOG_END}`],
+    queryNote: null,
+    adapters: [],
+    perQuery: [],
+    excluded: [],
+    retracted: [],
+    retractionUnknown: [],
+    sourcesBlock: renderSourcesBlock([]),
+  });
+  const merged = mergeResearchLog(log, `${mergeResearchLog(log, null)}\nMy own notes.\n`);
+  assert.equal(markerLines(merged, RESEARCH_LOG_END).length, 1);
+  assert.match(merged, /My own notes\./);
 });

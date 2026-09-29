@@ -12,11 +12,23 @@
 //      check is never used). A quote found there is OK — "verified against
 //      your local file <name> (sha256 …)"; a quote not found there is checked
 //      against the open-access copy too, and is NOT_FOUND unless that copy has
-//      it. The PDF is local, so this step runs offline too.
-//   3. Resolve citekey -> DOI from .paper/CITATIONS.bib.
+//      it. The PDF is local, so this step runs offline too. When the recorded
+//      copy is MISSING or CHANGED since ingest (moved, deleted, edited or
+//      replaced by another version), the quote was checkable and no longer is:
+//      it is NOT_FOUND (blocking) unless the open-access copy has it, with the
+//      way back (restore the PDF, or attach the right copy with
+//      --replace-pdf) — editing or removing a local file never turns a
+//      blocking verdict into a passing one (ROADMAP Phase 19 criterion 6).
+//   3. Resolve citekey -> DOI and arXiv id (`eprint`, or a DataCite arXiv DOI)
+//      from .paper/CITATIONS.bib.
 //   4. Look up the DOI's open-access copy through Unpaywall's three-way lookup
 //      (D-19-05): a failed lookup reports its reason (e.g. `Unpaywall skipped:
 //      set PENSMITH_CONTACT_EMAIL`, `HTTP 503 after retries`), never "no OA PDF".
+//      A work with an arXiv id whose DOI gives no open-access PDF (Unpaywall
+//      does not index DataCite arXiv DOIs) — or that has no DOI — is checked
+//      against its arXiv PDF, derived from the id Pass 1 verified at arXiv
+//      (never from a URL stored in a local file, S-17). full-text.ts marks
+//      exactly these sources as quotable (GRND-14).
 //   5. Fetch the OA PDF (source 'generic': the PDF host is not a polite pool and
 //      never receives the contact email), check that the final response really
 //      is a PDF (pdf-response.ts checkPdfResponse on the byte-faithful
@@ -56,7 +68,8 @@ import { errorFailureReason } from '../sources/search-failure.js';
 import { networkMode } from '../http-mock.js';
 import { isReservedDryRunId } from '../doi.js';
 import { extractQuotes, type ExtractedQuote } from '../quote-extractor.js';
-import { byoText, type ByoTextResult } from '../byo-text.js';
+import { byoText, byoCopyAltered, type ByoTextResult } from '../byo-text.js';
+import { arxivPdfUrl, arxivIdOfEntry, isDataCiteArxivDoi } from '../full-text.js';
 import { tryLoadLibrary } from '../library.js';
 import type { LibraryEntry } from '../schemas/library.js';
 
@@ -73,6 +86,9 @@ export interface Pass3Result {
 
 interface BibLike {
   DOI?: string;
+  /** BibTeX `eprint` / `archivePrefix` (an arXiv preprint). */
+  eprint?: string;
+  archivePrefix?: string;
 }
 
 export interface Pass3Options {
@@ -97,16 +113,42 @@ async function byoEntries(root: string | undefined): Promise<Map<string, Library
   return new Map((lib?.entries ?? []).filter((e) => e.byo !== null).map((e) => [e.citekey, e]));
 }
 
-/**
- * The quote checked against the open-access copy of `doi` (steps 4–7), or the
- * reason that copy is unavailable.
- */
-async function checkOpenAccess(q: ExtractedQuote, doi: string): Promise<Verdict> {
-  const mode = networkMode();
-  if (mode.sourcesOffline) {
-    // RUN-04: no Unpaywall lookup and no OA-PDF fetch offline or under --dry-run.
-    return unavailableVerdict(`text unavailable (${mode.dryRun ? 'dry-run' : 'offline'}) — re-run online to check the quote`);
+/** The quote checked against the PDF at `url` (steps 5–7), or why that copy's text is unavailable. */
+async function checkPdfAt(q: ExtractedQuote, url: string, source: 'generic' | 'arxiv', what: string): Promise<Verdict> {
+  // The OA PDF host is an arbitrary site: 'generic' (plain User-Agent, no
+  // contact email), every hop SSRF-checked by the transport; noCache so the
+  // byte-faithful bodyBytes is always present (audit #29). arXiv's own PDF
+  // goes through the arXiv host's politeness ('arxiv').
+  let resp: HttpResponse;
+  try {
+    resp = await httpFetch(url, { source, noCache: true, maxBytes: MAX_PDF_BYTES });
+  } catch (err) {
+    if (isOfflineEgressError(err)) return unavailableVerdict(`text unavailable (${offlineLabel(err)}) — re-run online to check the quote`);
+    return unavailableVerdict(`${what} fetch failed: ${errorFailureReason(err)}`);
   }
+  const pdf = checkPdfResponse(resp);
+  if (!pdf.ok) return unavailableVerdict(`${what} fetch returned ${pdf.reason}`);
+
+  let text: string;
+  try {
+    text = await extractPdfText(pdf.bytes);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return unavailableVerdict(`${what} text extraction failed: ${(msg.split(/\r?\n/)[0] ?? '').slice(0, 200)}`);
+  }
+  if (text.replace(/\s/g, '').length < 50) {
+    return { verdict: 'TEXT_UNAVAILABLE', levRatio: 0, reason: 'PDF appears image-only or scanned (<50 non-whitespace chars)' };
+  }
+  const ratio = levenshteinSubstring(nfkcNormalize(q.text), nfkcNormalize(text));
+  if (ratio >= QUOTE_LEV_THRESHOLD) return { verdict: 'OK', levRatio: ratio, reason: `levenshtein-substring above threshold (${what})` };
+  return { verdict: 'NOT_FOUND', levRatio: ratio, reason: `quote not found in the ${what} (lev=${ratio.toFixed(3)} < ${QUOTE_LEV_THRESHOLD})` };
+}
+
+/**
+ * The quote checked against the open-access copy of `doi` found through
+ * Unpaywall (steps 4–7), or the reason that copy is unavailable.
+ */
+async function checkUnpaywall(q: ExtractedQuote, doi: string): Promise<Verdict> {
   let lookup: Awaited<ReturnType<typeof unpaywallLookupById>>;
   try {
     lookup = await unpaywallLookupById(doi);
@@ -121,33 +163,38 @@ async function checkOpenAccess(q: ExtractedQuote, doi: string): Promise<Verdict>
   if (lookup.kind === 'not-found') return unavailableVerdict(`Unpaywall has no record of DOI ${doi} (${lookup.reason})`);
   const oaUrl = lookup.candidate.oa_pdf_url;
   if (!oaUrl) return unavailableVerdict(`No OA PDF available for DOI ${doi}`);
+  return checkPdfAt(q, oaUrl, 'generic', 'OA PDF');
+}
 
-  // The OA PDF host is an arbitrary site: 'generic' (plain User-Agent, no
-  // contact email), every hop SSRF-checked by the transport; noCache so the
-  // byte-faithful bodyBytes is always present (audit #29).
-  let resp: HttpResponse;
-  try {
-    resp = await httpFetch(oaUrl, { source: 'generic', noCache: true, maxBytes: MAX_PDF_BYTES });
-  } catch (err) {
-    if (isOfflineEgressError(err)) return unavailableVerdict(`text unavailable (${offlineLabel(err)}) — re-run online to check the quote`);
-    return unavailableVerdict(`OA PDF fetch failed: ${errorFailureReason(err)}`);
+/**
+ * The quote checked against the source's open-access text: the DOI's
+ * Unpaywall PDF, else (no DOI, a DataCite arXiv DOI Unpaywall does not index,
+ * or no PDF there) the arXiv PDF of its arXiv id; or why neither is available.
+ */
+async function checkOpenAccess(q: ExtractedQuote, claimed: BibLike | undefined): Promise<Verdict> {
+  const doi = claimed?.DOI;
+  const arxiv = claimed !== undefined ? arxivIdOfEntry({ doi: doi ?? null, arxiv: arxivEprint(claimed) }) : null;
+  if (!doi && arxiv === null) return unavailableVerdict('No DOI for citekey — cannot fetch OA PDF');
+  const mode = networkMode();
+  if (mode.sourcesOffline) {
+    // RUN-04: no Unpaywall lookup and no OA-PDF fetch offline or under --dry-run.
+    return unavailableVerdict(`text unavailable (${mode.dryRun ? 'dry-run' : 'offline'}) — re-run online to check the quote`);
   }
-  const pdf = checkPdfResponse(resp);
-  if (!pdf.ok) return unavailableVerdict(`OA PDF fetch returned ${pdf.reason}`);
+  const viaDoi = doi && !isDataCiteArxivDoi(doi) ? await checkUnpaywall(q, doi) : null;
+  if (viaDoi !== null && viaDoi.verdict !== 'PDF_UNAVAILABLE') return viaDoi;
+  if (arxiv === null) return viaDoi ?? unavailableVerdict('No DOI for citekey — cannot fetch OA PDF');
+  const viaArxiv = await checkPdfAt(q, arxivPdfUrl(arxiv), 'arxiv', `arXiv PDF of ${arxiv}`);
+  if (viaArxiv.verdict === 'PDF_UNAVAILABLE' && viaDoi !== null) {
+    return { ...viaArxiv, reason: `${viaDoi.reason}; ${viaArxiv.reason}` };
+  }
+  return viaArxiv;
+}
 
-  let text: string;
-  try {
-    text = await extractPdfText(pdf.bytes);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return unavailableVerdict(`OA PDF text extraction failed: ${(msg.split(/\r?\n/)[0] ?? '').slice(0, 200)}`);
-  }
-  if (text.replace(/\s/g, '').length < 50) {
-    return { verdict: 'TEXT_UNAVAILABLE', levRatio: 0, reason: 'PDF appears image-only or scanned (<50 non-whitespace chars)' };
-  }
-  const ratio = levenshteinSubstring(nfkcNormalize(q.text), nfkcNormalize(text));
-  if (ratio >= QUOTE_LEV_THRESHOLD) return { verdict: 'OK', levRatio: ratio, reason: 'levenshtein-substring above threshold' };
-  return { verdict: 'NOT_FOUND', levRatio: ratio, reason: `quote not found in OA PDF (lev=${ratio.toFixed(3)} < ${QUOTE_LEV_THRESHOLD})` };
+/** The entry's arXiv eprint (BibTeX `eprint` with an arXiv or no archivePrefix), else null. */
+function arxivEprint(claimed: BibLike): string | null {
+  const eprint = typeof claimed.eprint === 'string' ? claimed.eprint.trim() : '';
+  const prefix = typeof claimed.archivePrefix === 'string' ? claimed.archivePrefix.trim() : '';
+  return eprint && (prefix === '' || /^arxiv$/i.test(prefix)) ? eprint : null;
 }
 
 /**
@@ -187,6 +234,7 @@ export async function runPass3(
     // 2. The user's own PDF, re-hashed (S-17).
     let localMiss: { ratio: number; file: string } | null = null;
     let localUnavailable: string | null = null;
+    let localAltered: string | null = null;
     const entry = byo.get(q.citekey);
     if (entry !== undefined && opts.root !== undefined) {
       let t = byoTexts.get(q.citekey);
@@ -202,17 +250,30 @@ export async function runPass3(
           continue;
         }
         localMiss = { ratio, file: name };
+      } else if (byoCopyAltered(t.code)) {
+        localAltered = t.reason;
       } else {
         localUnavailable = `your local file: ${t.reason}`;
       }
     }
 
     // 3–7. The open-access copy.
-    const oa: Verdict = claimed?.DOI
-      ? await checkOpenAccess(q, claimed.DOI)
-      : unavailableVerdict('No DOI for citekey — cannot fetch OA PDF');
+    const oa: Verdict = await checkOpenAccess(q, claimed);
     if (oa.verdict === 'OK') {
       push(oa);
+      continue;
+    }
+    if (localAltered !== null) {
+      // The quote was checkable against the user's own PDF, which is no longer
+      // what was ingested: blocking, never a pass (see the header, step 2).
+      const oaNote = oa.verdict === 'NOT_FOUND' ? 'and it is not in the OA PDF' : `the open-access copy: ${oa.reason}`;
+      push({
+        verdict: 'NOT_FOUND',
+        levRatio: oa.levRatio,
+        reason:
+          `quote cannot be checked against your local file: ${localAltered} — restore that PDF, or attach the right copy with ` +
+          `\`pensmith add <identifier> --pdf <file> --replace-pdf\`; ${oaNote}`,
+      });
       continue;
     }
     if (localMiss !== null) {

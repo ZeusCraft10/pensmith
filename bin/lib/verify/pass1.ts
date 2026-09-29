@@ -38,8 +38,20 @@
 //
 // Retraction (SRC-04, D-19-11): the Crossref record carries its Retraction
 // Watch notices (`updated-by`); a record that says retracted blocks (MIS-CITED,
-// naming the notice) before the live re-query. The label becomes RETRACTED in
-// Phase 20 (VRFY-15).
+// naming the notice) before the live re-query. A retraction recorded when the
+// source entered the library (the bib's `note = {RETRACTED}`) blocks too, after
+// the same re-fetch, so the row carries the real title / first-author scores
+// and says where the flag came from (the library's notice, when `opts.root`
+// names the paper). The label becomes RETRACTED in Phase 20 (VRFY-15).
+//
+// DataCite arXiv DOIs (Phase 19 review round 2): Semantic Scholar and OpenAlex
+// give an arXiv-only work the DOI `10.48550/arXiv.<id>`. It is not a Crossref
+// DOI — Crossref's 404 for it says nothing about the work — so such an entry
+// is re-fetched at the arXiv registrar by that id (the DOI-less path below),
+// never read as "did not resolve" (FABRICATED).
+//
+// Titles are compared as plain text (markup.ts): a registrar that sends
+// `<i>Drosophila melanogaster</i>` and one that sends the words match.
 //
 // Entries without a DOI (SRC-11, SRC-13, ROADMAP Phase 19 criterion 7): an
 // arXiv-only preprint (`eprint` + `archivePrefix = {arXiv}`), a PubMed record
@@ -50,8 +62,13 @@
 // blocks); failed / offline → UNVERIFIABLE (blocking); only a definitive
 // not-found from EVERY identifier the entry carries is FABRICATED. An entry
 // with no DOI, arXiv id, PMID or ISBN stays FABRICATED ("cannot verify
-// upstream"). DataCite DOIs, the metadata search for identifier-less entries
-// and the remaining registrars are Phase 20 (VRFY-11, VRFY-12).
+// upstream") — except the user's own PDF that no registrar identified (an
+// unhydrated bring-your-own entry, read from LIBRARY.json when `opts.root` is
+// given): it is UNVERIFIABLE (blocking), with the command that identifies it,
+// because the user's real document is not an invented one (S-03; its OK-BYO
+// verdict is Phase 20, VRFY-14). Other DataCite DOIs, the metadata search for
+// identifier-less entries and the remaining registrars are Phase 20 (VRFY-11,
+// VRFY-12).
 //
 // Reserved dry-run identifiers (RUN-27, D-17-11): under --dry-run a reserved
 // `10.0000/pensmith-dryrun.*` DOI is re-fetched from the synthetic provider and
@@ -72,6 +89,11 @@ import { isOfflineEgressError, type OfflineEgressError } from '../http.js';
 import { isSourceLookupError, type LookupResult } from '../sources/lookup.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import { networkMode } from '../http-mock.js';
+import { plainText } from '../markup.js';
+import { normArxiv } from '../migrations/library/shape.js';
+import { isDataCiteArxivDoi } from '../full-text.js';
+import { tryLoadLibrary } from '../library.js';
+import type { LibraryEntry } from '../schemas/library.js';
 
 export type { FreshnessResult } from './freshness.js';
 export { renderFreshnessTable } from './freshness.js';
@@ -91,9 +113,13 @@ function unverifiable(ck: string, err: OfflineEgressError, what: string): Pass1R
 export interface Pass1Result {
   citekey: string;
   verdict: Pass1Verdict;
+  /** Title similarity; NaN when there was no record to compare (rendered `n/a`). */
   titleJW: number;
+  /** First-author similarity; NaN when there was no record to compare. */
   authorJW: number;
   reason: string;
+  /** True when the MIS-CITED verdict is a retraction (VRFY-15 labels it RETRACTED). */
+  retraction?: boolean;
 }
 
 interface BibAuthor {
@@ -166,6 +192,44 @@ function surnameOf(author: string | undefined): string {
   return firstAuthorSurname(String(author ?? '').replace(/[{}]/g, ''));
 }
 
+/** Title similarity on the plain text of both titles (markup.ts). */
+function titleSimilarity(actual: string | null | undefined, claimed: string): number {
+  return jaroWinkler(plainText(actual ?? ''), plainText(claimed));
+}
+
+/** A score that was not computed (no record to compare): rendered `n/a`. */
+const NOT_COMPARED = Number.NaN;
+
+/** The arXiv id a DataCite arXiv DOI stands for (`10.48550/arXiv.1706.03762` → `1706.03762`), else null. */
+export function arxivIdOfDataCiteDoi(doi: string): string | null {
+  return isDataCiteArxivDoi(doi) ? normArxiv(doi) : null;
+}
+
+/** What Pass 1 reads from the paper's LIBRARY.json (with `opts.root`). */
+interface LibraryFacts {
+  /** Recorded retraction notices, by citekey. */
+  readonly retractionDetails: ReadonlyMap<string, string>;
+  /** Bring-your-own entries no registrar identified: citekey → the stored PDF. */
+  readonly unidentifiedByo: ReadonlyMap<string, string>;
+}
+
+const NO_LIBRARY_FACTS: LibraryFacts = { retractionDetails: new Map(), unidentifiedByo: new Map() };
+
+async function libraryFacts(root: string | undefined): Promise<LibraryFacts> {
+  if (root === undefined) return NO_LIBRARY_FACTS;
+  let entries: readonly LibraryEntry[] = [];
+  try {
+    entries = (await tryLoadLibrary(root))?.entries ?? [];
+  } catch {
+    // An unreadable library only means no extra facts: the bib stays the basis.
+    return NO_LIBRARY_FACTS;
+  }
+  return {
+    retractionDetails: new Map(entries.filter((e) => e.retraction_details !== null).map((e) => [e.citekey, e.retraction_details as string])),
+    unidentifiedByo: new Map(entries.filter((e) => e.byo !== null && !e.hydrated).map((e) => [e.citekey, (e.byo as { file: string }).file])),
+  };
+}
+
 function bibTitle(claimed: BibEntry): string {
   if (Array.isArray(claimed.title)) {
     return claimed.title[0] ?? '';
@@ -184,6 +248,7 @@ function bibTitle(claimed: BibEntry): string {
 async function verdictForCitekey(
   ck: string,
   claimed: BibEntry | undefined,
+  facts: LibraryFacts = NO_LIBRARY_FACTS,
 ): Promise<Pass1Result> {
   if (!claimed) {
     return {
@@ -202,20 +267,61 @@ async function verdictForCitekey(
       reason: 'claimed citation metadata incomplete (empty title or no authors)',
     };
   }
+  const v = await registrarVerdict(ck, claimed, claimedTitle, claimedAuthorsD14, facts);
   // D-15 stored-retraction gate: honor BOTH the synthetic `retracted` boolean
   // (fixture / in-memory candidate path) AND the round-tripped BibTeX
   // `note = {RETRACTED}` (the on-disk .paper/CITATIONS.bib path). Without the
   // `note` check, every bib-sourced retracted work passes Pass-1 (the boolean is
   // undefined after the citation-js round-trip) and the stored-retraction block
   // is dead — leaving only the live Retraction Watch re-query, which is null
-  // offline. Mirrors compile.ts:482.
+  // offline. Mirrors compile.ts:482. The re-fetch above still ran, so the row
+  // carries the real scores (or n/a when there was no record to compare).
   if (claimed.retracted || claimed.note === 'RETRACTED') {
+    if (v.verdict === 'MIS-CITED' && v.retraction === true) return v;
+    const compared = v.verdict === 'OK' || (v.verdict === 'MIS-CITED' && Number.isFinite(v.titleJW) && v.titleJW > 0);
+    const notice = facts.retractionDetails.get(ck);
     return {
-      citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
-      reason: 'cited a retracted work (per Retraction Watch cross-check at research time)',
+      citekey: ck, verdict: 'MIS-CITED',
+      titleJW: compared ? v.titleJW : NOT_COMPARED,
+      authorJW: compared ? v.authorJW : NOT_COMPARED,
+      retraction: true,
+      reason:
+        `cited work is retracted (recorded when the source entered the library${notice ? `: ${notice}` : ''})` +
+        (v.verdict === 'OK'
+          ? ' — the metadata matches the registrar record'
+          : compared
+            ? ` — also: ${v.reason}`
+            : ` — the registrar re-fetch did not compare: ${v.reason}`),
     };
   }
-  if (!claimed.DOI) return verdictWithoutDoi(ck, claimed, claimedTitle, claimedAuthorsD14);
+  return v;
+}
+
+/**
+ * The verdict from the entry's registrar (Crossref for a DOI, the entry's own
+ * registrar otherwise), before the stored-retraction rule of verdictForCitekey.
+ */
+async function registrarVerdict(
+  ck: string,
+  claimed: BibEntry,
+  claimedTitle: string,
+  claimedAuthorsD14: string[],
+  facts: LibraryFacts,
+): Promise<Pass1Result> {
+  if (!claimed.DOI) return verdictWithoutDoi(ck, claimed, claimedTitle, claimedAuthorsD14, facts);
+
+  // A DataCite arXiv DOI is re-fetched at arXiv by its id (see the header).
+  const dataCiteArxiv = arxivIdOfDataCiteDoi(claimed.DOI);
+  if (dataCiteArxiv !== null) {
+    const eprint = typeof claimed.eprint === 'string' && claimed.eprint.trim() ? claimed.eprint : dataCiteArxiv;
+    if (normArxiv(eprint) !== dataCiteArxiv) {
+      return {
+        citekey: ck, verdict: 'MIS-CITED', titleJW: NOT_COMPARED, authorJW: NOT_COMPARED,
+        reason: `the DOI ${claimed.DOI} names arXiv:${dataCiteArxiv}, but the entry's eprint is ${eprint}`,
+      };
+    }
+    return verdictWithoutDoi(ck, { ...claimed, eprint: dataCiteArxiv, archivePrefix: 'arXiv' }, claimedTitle, claimedAuthorsD14, facts);
+  }
 
   // RUN-27: a reserved dry-run DOI is accepted ONLY under --dry-run, where the
   // synthetic provider stands in for the registrar (zero sockets).
@@ -258,12 +364,15 @@ async function verdictForCitekey(
     };
   }
 
+  const titleJW = titleSimilarity(actual.title, claimedTitle);
+  const authorJW = jaroWinkler(surnameOf(actual.authors?.[0]), surnameOf(claimedAuthorsD14[0]));
+
   // SRC-04 (D-19-11): the Crossref record's own Retraction Watch notice blocks.
   if (actual.retracted === true || actual.retraction_status === 'retracted') {
     const why = actual.retraction_details ? `: ${actual.retraction_details}` : '';
     return {
-      citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
-      reason: `cited work is retracted (Crossref record, Retraction Watch notice at verify time)${why}`,
+      citekey: ck, verdict: 'MIS-CITED', titleJW, authorJW, retraction: true,
+      reason: `cited work is retracted (Crossref's record of ${claimed.DOI} at verify time${why})`,
     };
   }
 
@@ -318,8 +427,8 @@ async function verdictForCitekey(
       ? `: ${liveRetraction.retraction_details}`
       : '';
     return {
-      citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
-      reason: `cited work appears in Retraction Watch (live re-query at verify time)${why}`,
+      citekey: ck, verdict: 'MIS-CITED', titleJW, authorJW, retraction: true,
+      reason: `cited work is retracted (Retraction Watch, re-queried at verify time${why})`,
     };
   }
   if (retractionUnavailable !== null) {
@@ -331,9 +440,6 @@ async function verdictForCitekey(
       reason: `${retractionUnknown} (Retraction Watch re-query) — re-run verify once the lookup answers`,
     };
   }
-
-  const titleJW = jaroWinkler(actual.title, claimedTitle);
-  const authorJW = jaroWinkler(surnameOf(actual.authors?.[0]), surnameOf(claimedAuthorsD14[0]));
 
   // Multi-DOI redirect handling — the claimed DOI may have redirected to a
   // different canonical DOI; strict-match (≥0.98 title / ≥0.95 author) lets
@@ -403,9 +509,19 @@ async function verdictWithoutDoi(
   claimed: BibEntry,
   claimedTitle: string,
   claimedAuthorsD14: string[],
+  facts: LibraryFacts = NO_LIBRARY_FACTS,
 ): Promise<Pass1Result> {
   const ids = doilessIdentifiers(claimed);
   if (ids.length === 0) {
+    const byoFile = facts.unidentifiedByo.get(ck);
+    if (byoFile !== undefined) {
+      return {
+        citekey: ck, verdict: 'UNVERIFIABLE', titleJW: NOT_COMPARED, authorJW: NOT_COMPARED,
+        reason:
+          `your own PDF ${byoFile} was not identified by any registrar, so this citation cannot be checked upstream — ` +
+          `give its identifier: pensmith add <DOI or arXiv id> --pdf .paper/${byoFile}`,
+      };
+    }
     return {
       citekey: ck, verdict: 'FABRICATED', titleJW: 0, authorJW: 0,
       reason: 'no DOI, arXiv id, PMID or ISBN in citation entry (cannot verify upstream)',
@@ -442,8 +558,11 @@ async function verdictWithoutDoi(
     if (actual.retracted === true || actual.retraction_status === 'retracted') {
       const why = actual.retraction_details ? `: ${actual.retraction_details}` : '';
       return {
-        citekey: ck, verdict: 'MIS-CITED', titleJW: 0, authorJW: 0,
-        reason: `cited work is retracted (${who} record of ${label} at verify time)${why}`,
+        citekey: ck, verdict: 'MIS-CITED',
+        titleJW: titleSimilarity(actual.title, claimedTitle),
+        authorJW: jaroWinkler(surnameOf(actual.authors?.[0]), surnameOf(claimedAuthorsD14[0])),
+        retraction: true,
+        reason: `cited work is retracted (${who}'s record of ${label} at verify time${why})`,
       };
     }
     return andGate(ck, actual, claimedTitle, claimedAuthorsD14, `${label} re-fetched from ${who}; `);
@@ -467,7 +586,7 @@ function andGate(
   claimedAuthorsD14: string[],
   prefix: string,
 ): Pass1Result {
-  const titleJW = jaroWinkler(actual.title, claimedTitle);
+  const titleJW = titleSimilarity(actual.title, claimedTitle);
   const authorJW = jaroWinkler(surnameOf(actual.authors?.[0]), surnameOf(claimedAuthorsD14[0]));
   if (titleJW >= TITLE_JW_THRESHOLD && authorJW >= AUTHOR_JW_THRESHOLD) {
     return { citekey: ck, verdict: 'OK', titleJW, authorJW, reason: `${prefix}D-11 AND-gate passed` };
@@ -490,9 +609,20 @@ function andGate(
  * 100% deterministic — no LLM, no narration, no side effects beyond the
  * Crossref HTTP read (cassette-served in offline test mode).
  */
+export interface Pass1Options {
+  /**
+   * The project root: LIBRARY.json then adds what the bib cannot carry — a
+   * recorded retraction notice, and which identifier-less entries are the
+   * user's own unidentified PDFs (UNVERIFIABLE, not FABRICATED). verify and
+   * compile pass it.
+   */
+  readonly root?: string;
+}
+
 export async function runPass1(
   draftMd: string,
   citationsBibPath: string,
+  opts: Pass1Options = {},
 ): Promise<Pass1Result[]> {
   const bibText = readFileSync(citationsBibPath, 'utf8');
   const entries = await parseBibFileAt(bibText, citationsBibPath);
@@ -507,9 +637,10 @@ export async function runPass1(
   // key not present in the (lowercase-keyed) bib falls through to FABRICATED.
   const unique = extractCitedKeysForVerification(draftMd);
 
+  const facts = unique.length > 0 ? await libraryFacts(opts.root) : NO_LIBRARY_FACTS;
   const results: Pass1Result[] = [];
   for (const ck of unique) {
-    results.push(await verdictForCitekey(ck, bibByCitekey.get(ck)));
+    results.push(await verdictForCitekey(ck, bibByCitekey.get(ck), facts));
   }
   return results;
 }

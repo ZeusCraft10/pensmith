@@ -27,6 +27,7 @@
 // Offline replay is the exact-match fixture store inside bin/lib/http.ts; the
 // typed OfflineEgressError is rethrown so callers report "unavailable (offline)".
 
+import { plainText, plainTextOpt } from '../markup.js';
 import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { type SearchOptions } from './search-failure.js';
 import { exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
@@ -100,7 +101,7 @@ function str(v: unknown): string | undefined {
 export function pubmedToCandidate(rec: PubmedRecord): SourceCandidate | null {
   const pmid = str(rec.uid);
   if (!pmid || rec.error !== undefined) return null;
-  const title = String(rec.title ?? '').replace(/\s+/g, ' ').trim().replace(/\.$/, '');
+  const title = plainText(String(rec.title ?? '')).replace(/\.$/, '');
   if (!title) return null;
 
   const authors = (rec.authors ?? [])
@@ -117,7 +118,7 @@ export function pubmedToCandidate(rec: PubmedRecord): SourceCandidate | null {
   const doi = articleId(rec, 'doi');
   const pmcRaw = articleId(rec, 'pmc') ?? articleId(rec, 'pmcid')?.replace(/^pmc-id:\s*/i, '').replace(/;.*$/, '');
   const pmcid = pmcRaw !== undefined ? normalizePmcid(pmcRaw) : null;
-  const venue = str(rec.fulljournalname) ?? str(rec.source) ?? str(rec.booktitle);
+  const venue = plainTextOpt(str(rec.fulljournalname) ?? str(rec.source) ?? str(rec.booktitle));
   const volume = str(rec.volume);
   const issue = str(rec.issue);
   const pages = str(rec.pages);

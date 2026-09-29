@@ -37,6 +37,12 @@ import { parseFrontmatter, serializeFrontmatter } from '../lib/frontmatter.js';
 import { PlanFrontmatterSchema } from '../lib/schemas/plan-frontmatter.js';
 import type { SectionPlan } from '../lib/llm-contracts.js';
 
+/** The CLI's output sink for the section research pass (section-research.ts never writes the streams itself). */
+const CLI_IO = {
+  out: (line: string): void => void process.stdout.write(`${line}\n`),
+  err: (line: string): void => void process.stderr.write(`${line}\n`),
+};
+
 /** Section context from OUTLINE.md, the library and upstream plans (all best-effort reads). */
 interface PlanContext {
   section: ParsedOutlineSection | null;
@@ -189,7 +195,7 @@ export const planCommand = defineCommand({
     const research = typeof args.research === 'string' && args.research.trim().length > 0 ? args.research : undefined;
     let researched: Awaited<ReturnType<typeof runSectionResearch>> | null = null;
     if (research) {
-      researched = await runSectionResearch({ root: projectRoot(), n, slug, query: research, yolo: args.yolo === true, verb: 'plan' });
+      researched = await runSectionResearch({ root: projectRoot(), n, slug, query: research, yolo: args.yolo === true, verb: 'plan', io: CLI_IO });
       if (args.revise !== true) return { mode: 'research', ...researched };
     }
 

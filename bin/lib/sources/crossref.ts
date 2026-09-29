@@ -38,6 +38,7 @@ import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupRes
 import { formatRetractionNotice, isRetractionUpdateType, type CrossrefUpdate } from './retraction-watch.js';
 import { generateCitekey } from '../citekey.js';
 import { normalizeDoi } from '../doi.js';
+import { decodeEntities, plainText, plainTextOpt } from '../markup.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import type { SourceType } from '../schemas/source-types.js';
 
@@ -136,18 +137,6 @@ function people(list: CrossrefPerson[] | undefined): string[] {
   return (Array.isArray(list) ? list : []).map(crossrefPersonName).filter((s) => s.length > 0);
 }
 
-const XML_ENTITIES: Readonly<Record<string, string>> = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'", nbsp: ' ' };
-
-function decodeEntities(s: string): string {
-  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, ent: string) => {
-    if (ent[0] === '#') {
-      const code = ent[1] === 'x' || ent[1] === 'X' ? parseInt(ent.slice(2), 16) : parseInt(ent.slice(1), 10);
-      return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
-    }
-    return XML_ENTITIES[ent.toLowerCase()] ?? whole;
-  });
-}
-
 /**
  * A Crossref JATS abstract as plain text: a leading `Abstract` heading is
  * dropped, section headings become `Heading: `, tags are stripped, entities
@@ -194,7 +183,9 @@ function retractionOf(item: CrossrefItem, title: string): Pick<SourceCandidate, 
 export function crossrefToCandidate(item: CrossrefItem): SourceCandidate | null {
   const doi = typeof item.DOI === 'string' ? item.DOI.trim() : '';
   if (!doi) return null;
-  const title = firstString(item.title).replace(/\s+/g, ' ');
+  // SRC-05 / SRC-12: inline JATS / HTML and entities out (markup.ts), so the
+  // bib, RESEARCH.md and the exported reference list show the title's text.
+  const title = plainText(firstString(item.title));
   if (!title) return null;
 
   const editors = people(item.editor);
@@ -204,7 +195,7 @@ export function crossrefToCandidate(item: CrossrefItem): SourceCandidate | null 
   if (authors.length === 0) return null;
 
   const year = parseYear(item);
-  const venue = firstString(item['container-title']);
+  const venue = plainText(firstString(item['container-title']));
   const type = crossrefCslType(item.type);
   const isbn = pickIsbn(item.ISBN);
   const abstract = stripJats(item.abstract);
@@ -212,7 +203,7 @@ export function crossrefToCandidate(item: CrossrefItem): SourceCandidate | null 
   const volume = str(item.volume);
   const issue = str(item.issue);
   const pages = str(item.page);
-  const publisher = str(item.publisher);
+  const publisher = plainTextOpt(str(item.publisher));
 
   return {
     source: 'crossref',

@@ -311,6 +311,28 @@ export async function lookupIdentifier(input: IdentifierInput): Promise<LookupRe
   return lookupFailed(`no ${input.kind === 'isbn' ? 'book (ISBN)' : name} lookup is available in this build`);
 }
 
+/** The arXiv API query for a title (the `ti:` field, as a phrase). */
+export function arxivTitleQuery(title: string): string {
+  return `ti:"${title.replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim()}"`;
+}
+
+/**
+ * Search a title at arXiv (pdf-identify.ts asks only when the title and first
+ * author matched nothing but a later re-post, or the OpenAlex search failed).
+ * Only the title is sent.
+ * OfflineEgressError propagates.
+ */
+export async function searchArxivByTitle(title: string): Promise<TitleSearchOutcome> {
+  let failed: string | null = null;
+  const hits = await sources.arxiv.search(arxivTitleQuery(title), {
+    limit: TITLE_SEARCH_LIMIT,
+    onFailure: (reason: string) => {
+      failed = reason;
+    },
+  });
+  return { candidates: hits, failures: failed !== null ? [`arxiv title search: ${String(failed)}`] : [] };
+}
+
 /** The records a title search returned, and the searches that failed. */
 export interface TitleSearchOutcome {
   readonly candidates: readonly SourceCandidate[];

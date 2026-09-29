@@ -15,13 +15,19 @@
 // everywhere or nowhere.
 //
 // Safety: a paper's config.toml can travel with the paper (a shared or synced
-// folder), so it must not be able to aim pensmith at an arbitrary secret and
-// send it to a scholarly API in a User-Agent. The configured variable name is
-// honoured only when it is an upper-case identifier that contains EMAIL or
-// MAILTO (e.g. MY_WORK_EMAIL); anything else is ignored with a one-time
-// warning and the default variable is used. The value is sent only when it
-// looks like an email address (one @, no spaces or angle brackets, ≤ 254
-// characters); otherwise it counts as unset, with a one-time warning.
+// folder), so it must not be able to aim pensmith at an arbitrary secret — or
+// at any other personal value in the reader's environment (GIT_AUTHOR_EMAIL,
+// SMTP_EMAIL_URL) — and send it to a scholarly API. A paper may name only a
+// variable in pensmith's own namespace that the user set for pensmith: an
+// upper-case `PENSMITH_…` identifier containing EMAIL or MAILTO and no secret
+// word (PASSWORD, SECRET, TOKEN, KEY, URL, URI, DSN, AUTH, CREDENTIAL) — e.g.
+// PENSMITH_WORK_EMAIL (review round 2); anything else is ignored with a
+// one-time warning and the default variable is used. The user's own
+// runtime.json may name any upper-case variable. The value is sent only when
+// it is an address `local@domain` whose local part holds only letters,
+// digits and `. _ % + -` (no `:` or `/`, so a credential URL such as
+// `smtp://user:pw@host` never passes) and whose domain has a dot, ≤ 254
+// characters; otherwise it counts as unset, with a one-time warning.
 //
 // The value is personal data (PRIVACY.md): it is never logged here, and
 // http.ts drops it from every log record.
@@ -34,11 +40,15 @@ import { globalRuntimeConfigPath } from './runtime.js';
 /** The variable read when no valid `[network] contact_email_env` is configured. */
 export const DEFAULT_CONTACT_EMAIL_ENV = 'PENSMITH_CONTACT_EMAIL';
 
-/** An environment-variable name a paper config may name for the contact email. */
+/** An upper-case environment-variable name (what runtime.json may name). */
 const ALLOWED_ENV_NAME = /^[A-Z][A-Z0-9_]*$/;
+/** The namespace a paper config may name a variable in. */
+const PAPER_ENV_PREFIX = 'PENSMITH_';
 const EMAIL_WORD = /(?:EMAIL|MAILTO)/;
-/** A plausible email address (not full RFC 5322 — enough to refuse junk and secrets). */
-const EMAIL_SHAPE = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[^\s@<>()",;]+$/;
+/** Words that mark a variable as holding a secret or a URL, never an address. */
+const SECRET_WORD = /(?:PASSWORD|PASSWD|SECRET|TOKEN|KEY|URL|URI|DSN|AUTH|CREDENTIAL)/;
+/** A plain email address (an addr-spec subset: enough to refuse junk, URLs and secrets). */
+const EMAIL_SHAPE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
 
 export interface ContactEmail {
   /** The address to send, or null when none is configured (or it is malformed). */
@@ -56,9 +66,9 @@ function warnOnce(key: string, message: string): void {
   process.stderr.write(`pensmith: ${message}\n`);
 }
 
-/** True for a variable name a paper config may point the contact email at. */
+/** True for a variable name a paper config may point the contact email at (see the header). */
 export function isAllowedContactEnvName(name: string): boolean {
-  return ALLOWED_ENV_NAME.test(name) && EMAIL_WORD.test(name);
+  return ALLOWED_ENV_NAME.test(name) && name.startsWith(PAPER_ENV_PREFIX) && EMAIL_WORD.test(name) && !SECRET_WORD.test(name);
 }
 
 /** True for a value pensmith will send as a contact email. */
@@ -123,8 +133,9 @@ function envNameFor(root: string): { envName: string; source: ContactEmail['sour
     if (configured) {
       warnOnce(
         `name:${configured}`,
-        `ignoring [network] contact_email_env = "${configured}": it must name an upper-case variable ` +
-          `containing EMAIL or MAILTO (e.g. MY_WORK_EMAIL); reading ${DEFAULT_CONTACT_EMAIL_ENV} instead.`,
+        `ignoring [network] contact_email_env = "${configured}": a paper may name only a PENSMITH_ variable ` +
+          `containing EMAIL or MAILTO (e.g. PENSMITH_WORK_EMAIL; runtime.json contactEmailEnv may name any); ` +
+          `reading ${DEFAULT_CONTACT_EMAIL_ENV} instead.`,
       );
     }
     const user = runtimeEnvName();

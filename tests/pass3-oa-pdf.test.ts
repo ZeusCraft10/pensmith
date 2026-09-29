@@ -16,13 +16,19 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runPass3 } from '../bin/lib/verify/pass3.js';
 import { _resetContactEmailForTest } from '../bin/lib/contact-email.js';
 import { _resetUnpaywallNoticeForTest } from '../bin/lib/sources/unpaywall.js';
 import { liveLane, uniq } from './sources/three-way.js';
 import { startHttpServer } from './helpers/local-servers/transport.js';
+import { enrichOpenAccess } from '../bin/lib/open-access.js';
+import { upsertSources, loadLibrary, type LibraryCandidate } from '../bin/lib/library.js';
+import { parseBibFileAt } from '../bin/lib/citations.js';
+import { fullTextAvailable } from '../bin/lib/full-text.js';
 
 const PDF = readFileSync(fileURLToPath(new URL('./fixtures/pdf/byo-text.pdf', import.meta.url)));
 const EMAIL = 'pensmith-dev@example.org';
@@ -201,4 +207,43 @@ test('SRC-01: an OA PDF location on a loopback listener that WOULD answer is ref
   } finally {
     await server.close();
   }
+});
+
+test('GRND-14 (review round 2): the full-text flag is true exactly when Pass 3 can fetch the text — Unpaywall\'s PDF, the arXiv PDF of an arXiv id; never an adapter\'s own link', async () => {
+  await liveLane(async (agent) => {
+    const root = mkdtempSync(join(tmpdir(), 'pensmith-fulltext-agree-'));
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    const open = `10.5555/${uniq('ft-open')}`;
+    const adapterOnly = `10.5555/${uniq('ft-adapter')}`;
+    const arxivId = '2102.05095';
+    // Unpaywall: a PDF for `open`, none for `adapterOnly` (OpenAlex had reported one).
+    unpaywallAnswer(agent, open, 'https://repo.example/open.pdf');
+    unpaywallAnswer(agent, adapterOnly, null);
+    agent.get('https://repo.example').intercept({ path: '/open.pdf', method: 'GET' }).reply(200, PDF, { headers: { 'content-type': 'application/pdf' } });
+    // The arXiv PDF, derived from the id (never a stored URL).
+    agent.get('https://arxiv.org').intercept({ path: `/pdf/${arxivId}`, method: 'GET' }).reply(200, PDF, { headers: { 'content-type': 'application/pdf' } });
+
+    const base = { authors: ['Vaswani, Ashish'], year: 2021, retracted: false, last_verified: '2026-01-01T00:00:00.000Z' };
+    const candidates: LibraryCandidate[] = [
+      { ...base, citekey: 'open2021', source: 'crossref', doi: open, title: 'Open work', type: 'article-journal' },
+      { ...base, citekey: 'adapter2021', source: 'openalex', doi: adapterOnly, title: 'Adapter-linked work', type: 'article-journal', oa_pdf_url: 'https://publisher.example/adapter.pdf' },
+      { ...base, citekey: 'arxiv2021', source: 'openalex', doi: `10.48550/arXiv.${arxivId}`, title: 'Space-time attention', oa_pdf_url: `https://arxiv.org/pdf/${arxivId}` },
+      { ...base, citekey: 'pmc2021', source: 'pubmed', pmid: '31978945', pmcid: 'PMC7092803', title: 'A PubMed-only work', type: 'article-journal' },
+    ];
+    const oa = await enrichOpenAccess(candidates);
+    assert.equal(oa.problem, null);
+    await upsertSources(root, candidates, { provenance: 'research' });
+    const lib = await loadLibrary(root);
+    const bibPath = join(root, '.paper', 'CITATIONS.bib');
+    const bib = new Map((await parseBibFileAt(readFileSync(bibPath, 'utf8'), bibPath)).map((e) => [String((e as { id?: string }).id), e as { DOI?: string }]));
+
+    const flags = new Map(lib.entries.map((e) => [e.citekey, fullTextAvailable(e)]));
+    assert.deepEqual(Object.fromEntries(flags), { open2021: true, adapter2021: false, arxiv2021: true, pmc2021: false });
+    for (const e of lib.entries) {
+      const [r] = await runPass3(QUOTED(e.citekey), bib);
+      const fetched = r !== undefined && r.verdict !== 'PDF_UNAVAILABLE';
+      assert.equal(fetched, flags.get(e.citekey), `${e.citekey}: flag ${String(flags.get(e.citekey))}, Pass 3 ${r?.verdict} (${r?.reason})`);
+      if (fetched) assert.equal(r!.verdict, 'OK', r!.reason);
+    }
+  }, { contactEmail: EMAIL });
 });

@@ -21,6 +21,7 @@
 // replay is the exact-match fixture store inside bin/lib/http.ts; the typed
 // OfflineEgressError is rethrown so callers report "unavailable (offline)".
 
+import { plainText, plainTextOpt } from '../markup.js';
 import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES, formatRetryAfter } from '../http.js';
 import { type SearchOptions } from './search-failure.js';
 import { exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
@@ -115,7 +116,7 @@ function str(v: unknown): string | undefined {
 export function s2ToCandidate(item: S2Paper): SourceCandidate | null {
   const id = str(item.paperId);
   if (!id) return null;
-  const title = String(item.title ?? '').replace(/\s+/g, ' ').trim();
+  const title = plainText(String(item.title ?? ''));
   if (!title) return null;
 
   const authors = (item.authors ?? []).map((a) => String(a?.name ?? '').trim()).filter(Boolean);
@@ -145,7 +146,7 @@ export function s2ToCandidate(item: S2Paper): SourceCandidate | null {
     ...(year !== undefined ? { year } : {}),
     // A null abstract (common in live S2 responses) is "no abstract", never a
     // reason to drop an otherwise valid candidate.
-    ...(typeof item.abstract === 'string' && item.abstract.trim() ? { abstract: item.abstract.trim() } : {}),
+    ...(plainTextOpt(item.abstract) !== undefined ? { abstract: plainTextOpt(item.abstract) as string } : {}),
     ...(venue !== undefined ? { venue } : {}),
     ...(volume !== undefined ? { volume } : {}),
     ...(pages !== undefined && pages.length > 0 ? { pages } : {}),

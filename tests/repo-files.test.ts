@@ -204,8 +204,10 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   // OPENALEX_API_KEY is sent, so it is no longer marked "not used yet"; then in
   // Phase 19 review round 1: the contact-email and Zotero probe entries
   // describe what those probes actually check (the resolved variable; the
-  // authenticated Zotero key check, local API / group, MCP detection).
-  const PINNED = 'b97be8c653accee7ecc401269c5ded9607cf40903e7f78d9d45a51b31d39e9aa';
+  // authenticated Zotero key check, local API / group, MCP detection); then in
+  // Phase 19 review round 2: a paper may name only a PENSMITH_ contact-email
+  // variable, and the value must be a plain address.
+  const PINNED = '14f56def8f4bbb27f5cae402e361631ccdd410bff4d358ef1eb243b43e40699c';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 

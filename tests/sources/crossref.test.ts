@@ -11,6 +11,12 @@ import * as crossref from '../../bin/lib/sources/crossref.js';
 import { SourceCandidateSchema } from '../../bin/lib/schemas/source-candidate.js';
 import { RECORDED_QUERY, RECORDED_DOI, RECORDED_CROSSREF_404_DOI, recorded, assertOfflineMiss } from './recorded.js';
 import { threeWayContract, liveLane, uniq } from './three-way.js';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { renderBibtex } from '../../bin/lib/bibtex-write.js';
+import { parseBibSync } from '../../bin/lib/citations.js';
+import { runPass1 } from '../../bin/lib/verify/pass1.js';
 
 interface Item {
   DOI?: string;
@@ -267,4 +273,46 @@ threeWayContract({
   },
   invalid: (m) => ({ body: { statusCode: '403', 'message-type': 'not-polite', message: `add a mailto ${m}` } }),
   offlineMissId: '10.9999/three-way-offline-miss',
+});
+
+test('SRC-05 / SRC-12 (review round 2): registrar markup — an <i> title and an &amp; journal — becomes plain text, and the bib round-trips it', async () => {
+  const pnas = await crossref.lookupById('10.1073/pnas.74.11.5041');
+  assert.equal(pnas.kind, 'found');
+  if (pnas.kind !== 'found') return;
+  assert.equal(pnas.candidate.title, 'Translation of Drosophila melanogaster sequences in Escherichia coli');
+  const jaac = await crossref.lookupById('10.1016/j.jaac.2010.05.017');
+  assert.equal(jaac.kind, 'found');
+  if (jaac.kind !== 'found') return;
+  assert.equal(jaac.candidate.venue, 'Journal of the American Academy of Child & Adolescent Psychiatry');
+  for (const c of [pnas.candidate, jaac.candidate]) {
+    assert.doesNotMatch(`${c.title} ${c.venue ?? ''} ${c.publisher ?? ''}`, /<\/?i>|&amp;|&[a-z]+;/, 'no markup, no entities');
+  }
+  // The bib writer, and citation-js reading it back.
+  const bib = renderBibtex([
+    { ...pnas.candidate, citekey: 'rambach1977' },
+    { ...jaac.candidate, citekey: 'merikangas2010' },
+  ] as Parameters<typeof renderBibtex>[0]);
+  assert.doesNotMatch(bib, /<i>|&amp;|\\textless|\\&amp;/);
+  const back = parseBibSync(bib);
+  const byId = new Map(back.map((e) => [String((e as { id?: string }).id), e as { title?: string; 'container-title'?: string }]));
+  assert.equal(byId.get('rambach1977')?.title, 'Translation of Drosophila melanogaster sequences in Escherichia coli');
+  assert.equal(byId.get('merikangas2010')?.['container-title'], 'Journal of the American Academy of Child & Adolescent Psychiatry');
+  // An entry stored before the adapters cleaned their strings still renders plain.
+  const legacy = renderBibtex([{ ...pnas.candidate, citekey: 'legacy1977', title: 'The Genome Sequence of <i>Drosophila melanogaster</i>', venue: 'Child &amp; Adolescent Psychiatry' }] as Parameters<typeof renderBibtex>[0]);
+  assert.match(legacy, /title = \{The Genome Sequence of \{Drosophila\} melanogaster\}/, 'plain text, the proper noun protected (SRC-12)');
+  assert.match(legacy, /Child \\& Adolescent Psychiatry/);
+  assert.equal((parseBibSync(legacy)[0] as { title?: string }).title, 'The Genome Sequence of Drosophila melanogaster');
+});
+
+test('SRC-05 (review round 2): Pass 1 compares plain titles — a bib title without the registrar\'s <i> markup verifies OK', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pensmith-crossref-markup-'));
+  mkdirSync(join(dir, '.paper'));
+  const bibPath = join(dir, '.paper', 'CITATIONS.bib');
+  writeFileSync(
+    bibPath,
+    '@article{rambach1977,\n  author = {Rambach, Alain and Hogness, David S.},\n  title = {Translation of Drosophila melanogaster sequences in Escherichia coli},\n  doi = {10.1073/pnas.74.11.5041},\n  year = {1977},\n}\n',
+  );
+  const [r] = await runPass1('A claim [@rambach1977].\n', bibPath);
+  assert.equal(r?.verdict, 'OK', r?.reason);
+  assert.equal(r?.titleJW, 1);
 });

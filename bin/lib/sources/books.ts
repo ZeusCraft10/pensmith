@@ -40,6 +40,7 @@
 // Google Books' keyless quota is shared and often exhausted; its 429 reads
 // `Google Books keyless quota exhausted`.
 
+import { plainTextOpt } from '../markup.js';
 import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { type SearchOptions } from './search-failure.js';
 import { exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
@@ -187,14 +188,15 @@ export function googleBooksToCandidate(volume: GbVolume, wantIsbn: string): Sour
   const info = volume.volumeInfo ?? {};
   const ids = (info.industryIdentifiers ?? []).map((x) => toIsbn13(String(x.identifier ?? ''))).filter((x): x is string => x !== null);
   if (!ids.includes(wantIsbn)) return null;
-  const base = str(info.title);
+  const base = plainTextOpt(str(info.title));
   if (!base) return null;
-  const subtitle = str(info.subtitle);
+  const subtitle = plainTextOpt(str(info.subtitle));
   const authors = (info.authors ?? []).map((a) => String(a).replace(/\s+/g, ' ').trim()).filter(Boolean);
   if (authors.length === 0) return null;
   const year = yearIn(info.publishedDate);
   const publisher = str(info.publisher);
-  const abstract = str(info.description);
+  // Google Books descriptions are HTML (`<br>`, `<a href=…>`, `<i>`): text only.
+  const abstract = plainTextOpt(str(info.description));
   return {
     source: 'books',
     id: `isbn:${wantIsbn}`,

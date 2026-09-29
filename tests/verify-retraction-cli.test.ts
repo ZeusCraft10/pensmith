@@ -86,3 +86,28 @@ test('SRC-04: `verify 1` citing the retracted Wakefield paper records a blocking
   const exported = existsSync(exportDir) ? readdirSync(exportDir).filter((f) => /\.(docx|pdf|md|tex|html)$/i.test(f)) : [];
   assert.deepEqual(exported, [], 'nothing is exported');
 });
+
+test('SRC-04 (review round 2): `add` of a retracted DOI says so; verify names the retraction with the real scores; compile names it too', () => {
+  const sb = sandbox('retraction-add-cli');
+  const root = sb.project('paper');
+  writeState(root, [], 'retraction-add');
+  const a = runCli(sb, root, ['add', WAKEFIELD_DOI, '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(a.status, 0, `${a.stdout}\n${a.stderr}`);
+  assert.match(a.stdout, /added wakefield1998/);
+  assert.match(a.stderr, /WARN — wakefield1998 is RETRACTED \(2010-02-06: Retraction \(notice 10\.1016\/s0140-6736\(10\)60175-4; Retraction Watch record 4036\)\): it fails Pass 1 \(blocking\) if cited\./);
+
+  writeState(root, [{ n: 1, slug: 'background' }], 'retraction-add');
+  writeOutline(root, [{ n: 1, slug: 'background', sources: ['wakefield1998'] }]);
+  writePlan(root, 1, 'background', { status: 'written', assigned_sources: '[wakefield1998]' });
+  const dir = sectionDirOf(root, 1, 'background');
+  writeFileSync(join(dir, 'DRAFT.md'), '# Background\n\nAn early case series proposed a link [@wakefield1998].\n');
+  const v = runCli(sb, root, ['verify', '1', '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(v.status, 4, `${v.stdout}\n${v.stderr}`);
+  const row = readFileSync(join(dir, 'VERIFICATION.md'), 'utf8').split('\n').find((l) => l.startsWith('- wakefield1998:')) ?? '';
+  assert.match(row, /\*\*MIS-CITED\*\* — titleJW=1\.00, authorJW=1\.00 — cited work is retracted/, "the stored record is Crossref's own: the metadata matches exactly");
+  assert.doesNotMatch(row, /titleJW=0\.00, authorJW=0\.00/, 'real scores, never a false 0.00');
+  assert.doesNotMatch(row, /Retraction Watch cross-check at research time/, 'the flag says where it came from');
+  const c = runCli(sb, root, ['compile', '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(c.status, 4);
+  assert.match(c.stdout + c.stderr, /citation \[@wakefield1998\] has a blocking verdict \(MIS-CITED: the cited work is retracted\)/);
+});

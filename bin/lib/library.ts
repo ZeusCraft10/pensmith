@@ -25,12 +25,17 @@
 //        b. arXiv id, PMID, PMCID, ISBN(-13) — an ISBN only between two
 //           book-level records: a chapter or a proceedings paper carries its
 //           book's ISBN, and is never the same work as the book — then
-//        c. the version rule: normalized titles with Jaro-Winkler >= 0.95, the
+//        c. versioned DOIs of one posted work (`<base>.vN` / `<base>_vN` and
+//           `<base>`, Figshare-style: one DOI per version) with the same
+//           normalized title and first author (review round 2);
+//        d. the version rule: normalized titles with Jaro-Winkler >= 0.95, the
 //           same first-author family name, and years at most 1 apart — applied
 //           only when at least one side is NOT a version of record (a
 //           preprint-server DOI such as SSRN / Research Square / arXiv /
-//           bioRxiv, or no DOI at all). Two distinct version-of-record DOIs
-//           never collapse (annual editorials share titles and authors).
+//           bioRxiv, a record typed `preprint` — Crossref's posted-content —
+//           whatever its DOI prefix, or no DOI at all). Two distinct
+//           version-of-record DOIs never collapse (annual editorials share
+//           titles and authors).
 //   3. Merges into it: the richer field wins (longer abstract, longer author
 //      list, any missing identifier / OA URL / venue), provenance tags are
 //      unioned, `retracted` is sticky, `last_verified` keeps the latest time.
@@ -40,6 +45,10 @@
 //      relation, VRFY-14) — and the record's title / year / venue / authors win.
 //   4. Otherwise appends a new entry whose citekey is unique in the library
 //      (base-26 collision suffix, audit #21).
+//   Every added or merged entry carries the tier its metadata decides
+//   (source-tier.ts deterministicTier, SRC-09) — for every ingest path, not
+//   only research; the evaluator's tier stands only where the metadata cannot
+//   decide.
 //   An existing entry's citekey NEVER changes: it is the primary key shared with
 //   CITATIONS.bib, PLAN.md assigned_sources[] and the drafts' [@citekey] tokens.
 //
@@ -50,6 +59,7 @@
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
+import { deterministicTier } from './source-tier.js';
 import { withLock } from './lock.js';
 import { loadAndMigrate, ForwardIncompatError } from './migrations/loader.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
@@ -57,6 +67,7 @@ import { migrate as migrateLibraryV1toV2 } from './migrations/library/v1_to_v2.j
 import { migrate as migrateLibraryV2toV3 } from './migrations/library/v2_to_v3.js';
 import {
   candidateToEntry,
+  doiVersionBase,
   isPreprintDoi,
   normArxiv,
   normTitle,
@@ -340,16 +351,14 @@ function familyName(authors: string[]): string {
   return firstAuthorSurname(authors[0] ?? '').replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
-/** A version of record: has a DOI that no preprint server minted. */
+/** A version of record: has a DOI that no preprint server minted, and is not typed a preprint (posted content). */
 function isVersionOfRecord(e: LibraryEntry): boolean {
-  return e.doi !== null && !isPreprintDoi(e.doi);
+  return e.doi !== null && !isPreprintDoi(e.doi) && e.type !== 'preprint';
 }
 
-/** Same work by the version rule (title JW, first author, year), see header. */
-export function sameWorkVersion(a: LibraryEntry, b: LibraryEntry): boolean {
-  if (!a.title || !b.title || a.year === null || b.year === null) return false;
-  if (Math.abs(a.year - b.year) > 1) return false;
-  if (isVersionOfRecord(a) && isVersionOfRecord(b)) return false;
+/** Same normalized title (JW >= VERSION_TITLE_JW) and the same first-author family name. */
+function sameTitleAndFirstAuthor(a: LibraryEntry, b: LibraryEntry): boolean {
+  if (!a.title || !b.title) return false;
   const fa = familyName(a.authors);
   const fb = familyName(b.authors);
   if (!fa || fa !== fb) return false;
@@ -357,6 +366,29 @@ export function sameWorkVersion(a: LibraryEntry, b: LibraryEntry): boolean {
   const tb = normTitle(b.title);
   if (!ta || !tb) return false;
   return jaroWinkler(ta, tb) >= VERSION_TITLE_JW;
+}
+
+/** Same work by the version rule (title JW, first author, year), see header. */
+export function sameWorkVersion(a: LibraryEntry, b: LibraryEntry): boolean {
+  if (a.year === null || b.year === null) return false;
+  if (Math.abs(a.year - b.year) > 1) return false;
+  if (isVersionOfRecord(a) && isVersionOfRecord(b)) return false;
+  return sameTitleAndFirstAuthor(a, b);
+}
+
+/** The version family of a DOI: its base when it carries a `.vN` / `_vN` suffix, else itself. */
+function doiFamily(doi: string): string {
+  return doiVersionBase(doi) ?? doi.toLowerCase();
+}
+
+/** Same work as versioned DOIs of one posted work (header 2c): a shared DOI family, and the same title and first author. */
+export function sameDoiVersionFamily(a: LibraryEntry, b: LibraryEntry): boolean {
+  const fa = [a.doi, ...a.alternate_dois].filter((x): x is string => x !== null);
+  const fb = [b.doi, ...b.alternate_dois].filter((x): x is string => x !== null);
+  const versioned = [...fa, ...fb].some((x) => doiVersionBase(x) !== null);
+  if (!versioned) return false;
+  const families = new Set(fa.map(doiFamily));
+  return fb.some((x) => families.has(doiFamily(x))) && sameTitleAndFirstAuthor(a, b);
 }
 
 /** A work that is part of a book (its ISBN is the container's): a chapter or a proceedings paper. */
@@ -386,6 +418,8 @@ function findMatch(entries: LibraryEntry[], d: LibraryEntry): { entry: LibraryEn
     const hit = entries.find((e) => e.zotero !== null && e.zotero.library === z.library && e.zotero.key === z.key);
     if (hit) return { entry: hit, by: 'zotero' };
   }
+  const family = entries.find((e) => sameDoiVersionFamily(e, d));
+  if (family) return { entry: family, by: 'version' };
   const version = entries.find((e) => sameWorkVersion(e, d));
   return version ? { entry: version, by: 'version' } : null;
 }
@@ -418,7 +452,8 @@ function mergeInto(e: LibraryEntry, d: LibraryEntry, now: string): boolean {
     if (!e.doi) {
       e.doi = d.doi;
       incomingIsRecord = !isPreprintDoi(d.doi);
-    } else if (isPreprintDoi(e.doi) && !isPreprintDoi(d.doi)) {
+    } else if ((isPreprintDoi(e.doi) || e.type === 'preprint') && !isPreprintDoi(d.doi) && d.type !== 'preprint') {
+      // (A posted-content record typed `preprint` is a preprint whatever its DOI prefix.)
       e.alternate_dois = union(e.alternate_dois, [e.doi]);
       e.doi = d.doi;
       incomingIsRecord = true;
@@ -478,6 +513,8 @@ function mergeInto(e: LibraryEntry, d: LibraryEntry, now: string): boolean {
   e.synthetic = e.synthetic || d.synthetic;
   e.last_verified = later(e.last_verified, d.last_verified);
   e.byo = e.byo ?? d.byo;
+  // SRC-09: the tier the merged metadata decides wins over any judgement.
+  e.tier = deterministicTier(e) ?? e.tier;
 
   const changed = JSON.stringify(e) !== before;
   if (changed) e.updatedAt = now;
@@ -711,6 +748,9 @@ export async function upsertSources(
       }
       draft.citekey = uniqueCitekey(draft, taken);
       taken.add(draft.citekey);
+      // SRC-09: every ingest path (add, bring-your-own, Zotero, research) gets
+      // the tier its metadata decides; the evaluator's tier only where it cannot.
+      draft.tier = deterministicTier(draft) ?? draft.tier;
       entries.push(draft);
       outcomes.push({ index, citekey: draft.citekey, status: 'added' });
     });

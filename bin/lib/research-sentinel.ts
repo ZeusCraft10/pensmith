@@ -77,17 +77,29 @@ const LOG_END = '<!-- end of the research log:';
  * before any research run.
  */
 export function isSourcesViewOnly(text: string): boolean {
+  // Markers count only at the start of a line (the renderer makes a value's
+  // own `<!--` inert, and a marker text inside a line is never one).
   let head = text;
-  const logEnd = head.indexOf(LOG_END);
+  const logEnd = lineStartIndex(head, LOG_END);
   if (logEnd < 0) return false;
   head = head.slice(0, logEnd);
-  const start = head.indexOf(SOURCES_START);
+  const start = lineStartIndex(head, SOURCES_START);
   if (start >= 0) {
-    const end = head.indexOf(SOURCES_END, start);
+    const end = lineStartIndex(head, SOURCES_END, start);
     if (end < 0) return false;
     head = head.slice(0, start) + head.slice(end + SOURCES_END.length);
   }
   return head.replace(/^#\s+Research\s*$/m, '').trim().length === 0;
+}
+
+/** The offset of the first line (at or after `from`) that starts with `prefix`, or -1. */
+function lineStartIndex(text: string, prefix: string, from = 0): number {
+  let at = text.indexOf(prefix, from);
+  while (at >= 0) {
+    if (at === 0 || text[at - 1] === '\n') return at;
+    at = text.indexOf(prefix, at + 1);
+  }
+  return -1;
 }
 
 /** True when `text` is the log of a research run that ended without a library. */

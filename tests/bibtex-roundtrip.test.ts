@@ -20,6 +20,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fc from 'fast-check';
 import { renderBibtex, writeBibtex, normalizeBibValue, type BibSource } from '../bin/lib/bibtex-write.js';
+import { plainText } from '../bin/lib/markup.js';
 import { parseBib, parseBibSync, renderInText, renderApa } from '../bin/lib/citations.js';
 import { parsePersonName } from '../bin/lib/person-name.js';
 
@@ -180,10 +181,15 @@ test('SRC-12: an identifier-less bring-your-own PDF is written (@misc); an ident
   assert.doesNotMatch(bib, /nothing2020/);
 });
 
-test('SRC-12: TeX ligatures and specials in titles read back as typed', () => {
-  const title = 'Pages 1--2, em---dash, ``quotes\'\', 50% & $5 #1 a_b ~x^2 \\cmd {braces} <i>x</i>';
+test('SRC-12: TeX ligatures and specials in titles read back as typed; registrar markup (<i>, &amp;) reads back as its text', () => {
+  const title = 'Pages 1--2, em---dash, ``quotes\'\', 50% & $5 #1 a_b ~x^2 \\cmd {braces} x < y';
   const bib = renderBibtex([{ citekey: 'tex2020', title, authors: ['A, B'], year: 2020, doi: '10.5555/tex' }]);
   assert.equal(entryById(bib, 'tex2020')['title'], title);
+  // Review round 2: inline HTML / JATS and XML entities are registrar markup,
+  // printed literally by pandoc in the exported reference list — the writer
+  // renders their text (markup.ts plainText).
+  const marked = renderBibtex([{ citekey: 'marked2020', title: 'The <i>x</i> of CO<sub>2</sub> &amp; more', authors: ['A, B'], year: 2020, doi: '10.5555/marked' }]);
+  assert.equal(entryById(marked, 'marked2020')['title'], 'The x of CO2 & more');
 });
 
 // ---------------------------------------------------------------------------
@@ -212,10 +218,14 @@ const textArb = fc.oneof(
 test('SRC-12 property: renderBibtex -> parseBib is lossless for Unicode names, titles and abstracts (1000 runs)', () => {
   fc.assert(
     fc.property(fc.array(nameArb, { minLength: 1, maxLength: 4 }), textArb, textArb, (names, title, abstract) => {
-      fc.pre(normalizeBibValue(title).length > 0);
+      // A title is written as its plain text (review round 2, markup.ts): a
+      // generated `<a>` / `<b>` tag or an `&#…;` entity is registrar markup,
+      // read back as the text it stands for; everything else is lossless.
+      const plainTitle = normalizeBibValue(plainText(title));
+      fc.pre(plainTitle.length > 0);
       const bib = renderBibtex([{ citekey: 'prop2020', title, authors: names, year: 2020, doi: '10.5555/prop', abstract }]);
       const e = parseBibSync(bib)[0]!;
-      assert.equal(e['title'], normalizeBibValue(title));
+      assert.equal(e['title'], plainTitle);
       const a = normalizeBibValue(abstract);
       if (a) assert.equal(e['abstract'], a);
       const got = (e['author'] as ParsedName[]).map((x) => ({ family: x.family, given: x.given }));
@@ -268,4 +278,50 @@ test('SRC-12: pandoc citeproc (when on PATH) renders "(Vaswani & Shazeer, 2017)"
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /A claim \(Vaswani & Shazeer, 2017\)\./);
   assert.match(r.stdout, /Vaswani, A\., & Shazeer, N\. \(2017\)\. Attention is all you need\./);
+});
+
+test('SRC-12 (review round 2): title capitals are brace-protected where they are proper nouns or acronyms; pandoc citeproc (when on PATH) keeps them in the APA reference', (t) => {
+  const zhu = {
+    citekey: 'zhu2020',
+    title: 'A Novel Coronavirus from Patients with Pneumonia in China, 2019',
+    abstract: 'In December 2019, a cluster of patients with pneumonia of unknown cause was linked to a seafood market in Wuhan, China. A previously unknown betacoronavirus was discovered.',
+    authors: ['Zhu, N.'],
+    year: 2020,
+    doi: '10.1056/NEJMoa2001017',
+    venue: 'New England Journal of Medicine',
+    type: 'article-journal',
+  };
+  const insta = { citekey: 'ruiz2023', title: 'Leveraging Instagram to engage adolescents with depression', authors: ['Ruiz, A.'], year: 2023, doi: '10.5555/insta', venue: 'Journal of Things', type: 'article-journal' };
+  const dna = { citekey: 'lee2019', title: 'Deep learning for DNA and mRNA sequence analysis', authors: ['Lee, K.'], year: 2019, doi: '10.5555/dna', venue: 'Journal of Things', type: 'article-journal' };
+  // Crossref's `The Genome Sequence of <i>Drosophila melanogaster</i>`: Title Case with a binomial.
+  const fly = { citekey: 'adams2000', title: 'The Genome Sequence of <i>Drosophila melanogaster</i>', authors: ['Adams, M. D.'], year: 2000, doi: '10.1126/science.287.5461.2185', venue: 'Science', type: 'article-journal' };
+  const bib = renderBibtex([VASWANI, zhu, insta, dna, fly]);
+  assert.match(bib, /title = \{The Genome Sequence of \{Drosophila\} melanogaster\}/, 'a capital before a lower-case content word in Title Case (a binomial)');
+  assert.match(bib, /title = \{A Novel Coronavirus from Patients with Pneumonia in \{China\}, 2019\}/, 'Title Case: only the proper noun the abstract confirms');
+  assert.match(bib, /title = \{Leveraging \{Instagram\} to engage adolescents with depression\}/, 'sentence case: the capitalised words are the proper nouns');
+  assert.match(bib, /title = \{Deep learning for \{DNA\} and \{mRNA\} sequence analysis\}/, 'acronyms and inner capitals');
+  assert.match(bib, /title = \{Attention Is All You Need\}/, 'Title Case with nothing to protect');
+  // citation-js drops the braces: Pass 1 compares the plain title.
+  for (const [id, title] of [['zhu2020', zhu.title], ['ruiz2023', insta.title], ['lee2019', dna.title]] as const) {
+    assert.equal(entryById(bib, id)['title'], title);
+  }
+  const pandoc = pandocBinary();
+  if (pandoc === null) {
+    t.diagnostic('pandoc is not on PATH: the citeproc half of this check needs it (the bib half ran above)');
+    return;
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-pandoc-apa-case-'));
+  fs.writeFileSync(path.join(dir, 'refs.bib'), bib);
+  fs.writeFileSync(path.join(dir, 'doc.md'), 'Claims [@vaswani2017; @zhu2020; @ruiz2023; @lee2019; @adams2000].\n');
+  const r = spawnSync(
+    pandoc,
+    ['doc.md', '--citeproc', '--bibliography', 'refs.bib', '--csl', path.join(REPO, 'templates', 'citation-styles', 'apa.csl'), '-t', 'plain', '--wrap=none'],
+    { cwd: dir, encoding: 'utf8' },
+  );
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /A novel coronavirus from patients with pneumonia in China, 2019\./);
+  assert.match(r.stdout, /Leveraging Instagram to engage adolescents with depression\./);
+  assert.match(r.stdout, /Deep learning for DNA and mRNA sequence analysis\./);
+  assert.match(r.stdout, /Attention is all you need\./);
+  assert.match(r.stdout, /The genome sequence of Drosophila melanogaster\./);
 });

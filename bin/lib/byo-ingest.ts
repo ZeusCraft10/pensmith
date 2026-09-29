@@ -47,16 +47,16 @@ import {
   tryLoadLibrary,
   attachByoRecord,
   hydrateEntry,
-  libraryPaths,
   type LibraryCandidate,
   type LibraryEntry,
 } from './library.js';
 import { refreshResearchSources } from './research-md.js';
 import { byoSourcesDir, sha256Hex, writeByoTextCache } from './byo-text.js';
-import { generateCitekey } from './citekey.js';
+import { CITEKEY_RE, generateCitekey } from './citekey.js';
 import { isOfflineEgressError, offlineLabel } from './http.js';
 import { updatePaperConfig, rawTable } from './config.js';
 import { PensmithError, EXIT_USAGE } from './exit-codes.js';
+import { isInsideProject } from './own-source-approvals.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 
 /** How deep a bring-your-own folder is searched for PDFs. */
@@ -89,8 +89,23 @@ export interface ByoIngestOptions {
   readonly now?: () => Date;
 }
 
-/** The PDFs in `dir` (and its sub-folders, to BYO_MAX_DEPTH), sorted; hidden entries and symlinked folders are skipped. */
-export async function listPdfsInDir(dir: string): Promise<string[]> {
+export interface ListPdfsOptions {
+  /**
+   * Read only the PDFs whose real path (links resolved) lies inside this
+   * folder — the project root, for a bring-your-own folder the user never
+   * approved themselves (own-source-approvals.ts): a symlinked file pointing
+   * outside the project is skipped and reported through `onSkip`.
+   */
+  readonly confineTo?: string;
+  readonly onSkip?: (file: string, reason: string) => void;
+}
+
+/**
+ * The PDFs in `dir` (and its sub-folders, to BYO_MAX_DEPTH), sorted; hidden
+ * entries and symlinked folders are skipped, and with `confineTo` every file
+ * that resolves outside it (see ListPdfsOptions).
+ */
+export async function listPdfsInDir(dir: string, opts: ListPdfsOptions = {}): Promise<string[]> {
   const out: string[] = [];
   const walk = async (d: string, depth: number): Promise<void> => {
     let entries: fs.Dirent[];
@@ -105,6 +120,10 @@ export async function listPdfsInDir(dir: string): Promise<string[]> {
       if (e.isDirectory()) {
         if (depth < BYO_MAX_DEPTH) await walk(p, depth + 1);
       } else if ((e.isFile() || e.isSymbolicLink()) && /\.pdf$/i.test(e.name)) {
+        if (opts.confineTo !== undefined && !isInsideProject(opts.confineTo, p)) {
+          opts.onSkip?.(p, 'it links to a file outside the paper folder, and you have not approved this folder for the paper');
+          continue;
+        }
         out.push(p);
       }
     }
@@ -147,9 +166,18 @@ export async function recordByoPdfDir(root: string, dir: string): Promise<string
   return stored;
 }
 
-/** A citekey-derived file name that is safe on every filesystem. */
-function pdfFileName(citekey: string): string {
-  return `${citekey.replace(/[^A-Za-z0-9._-]/g, '_')}.pdf`;
+/**
+ * A citekey-derived file name that is safe on every filesystem and unique per
+ * citekey — also on the case-insensitive filesystems macOS and Windows use by
+ * default (review round 2). A D-14 key (`[a-z][a-z0-9_-]*`, lowercase) is its
+ * own name; any other key (`smith:2020`, `Smith2020`) becomes its lowercased,
+ * sanitized form plus `.` and the first 12 hex digits of the key's sha256 —
+ * a `.` no D-14 key contains, so the two forms never meet.
+ */
+export function pdfFileName(citekey: string): string {
+  if (CITEKEY_RE.test(citekey)) return `${citekey}.pdf`;
+  const safe = citekey.toLowerCase().replace(/[^a-z0-9_-]/g, '_').slice(0, 64) || 'source';
+  return `${safe}.${sha256Hex(citekey).slice(0, 12)}.pdf`;
 }
 
 /** A citekey for a PDF no registrar identified: from its own metadata, else its file name. */
@@ -215,6 +243,14 @@ async function storePdf(
   const existing = lib?.entries.find((e) => e.citekey === citekey)?.byo ?? null;
   if (existing !== null && existing.sha256 !== prepared.sha256 && !replace) {
     return `${citekey} already has a PDF (${existing.file}); this copy was not stored`;
+  }
+  // Never overwrite the PDF another entry references (its recorded hash would
+  // stop matching, and its text would read as "changed since ingest").
+  const owner = lib?.entries.find(
+    (e) => e.citekey !== citekey && e.byo !== null && e.byo.file.toLowerCase() === record.file.toLowerCase() && e.byo.sha256 !== prepared.sha256,
+  );
+  if (owner !== undefined) {
+    return `${record.file} already holds the PDF of ${owner.citekey}, which this copy would overwrite; this copy was not stored`;
   }
   const dest = path.join(byoSourcesDir(root), name);
   let same = false;
@@ -416,7 +452,7 @@ export async function upsertWithPdf(
   }
   const kept = await storePdf(root, citekey, pdf.prepared, pdf.textSha, opts.replace === true, !pdf.matches);
   if (kept !== undefined) {
-    warnings.push(`${kept} — pass --replace-pdf to replace it`);
+    warnings.push(kept.includes('already has a PDF') ? `${kept} — pass --replace-pdf to replace it` : kept);
     return { citekey, status, stored: false, warnings };
   }
   if (pdf.imageOnly) warnings.push('the PDF has no extractable text (an image-only or scanned PDF)');
@@ -443,9 +479,4 @@ export function describeByoOutcome(o: ByoOutcome, prefix: string): { line: strin
       return { line: `${prefix}: bring-your-own: ${name} ${verb} ${o.citekey}${how}`, stream: 'stdout' };
     }
   }
-}
-
-/** Where the paper keeps its BYO copies (for messages and docs). */
-export function byoDirLabel(root: string): string {
-  return path.relative(path.dirname(libraryPaths(root).dir), byoSourcesDir(root)).split(path.sep).join('/');
 }

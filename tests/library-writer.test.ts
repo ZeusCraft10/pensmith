@@ -248,7 +248,9 @@ test('BRDTH-01 merge: richer metadata wins, provenance is unioned, retracted is 
         ...ENGEL,
         source: 'openalex',
         abstract: 'Photosynthetic complexes are exquisitely tuned to capture solar light efficiently…',
-        oa_pdf_url: 'https://example.org/engel.pdf',
+        // The Unpaywall-confirmed PDF (open-access.ts): the only open-access
+        // link the library stores (review round 2, GRND-14).
+        oa_url: 'https://example.org/engel.pdf',
         authors: ['Engel, Gregory S.', 'Calhoun, Tessa R.', 'Read, Elizabeth L.'],
         venue: 'Nature',
         retracted: true,
@@ -264,6 +266,11 @@ test('BRDTH-01 merge: richer metadata wins, provenance is unioned, retracted is 
   assert.match(e.abstract ?? '', /Photosynthetic complexes/);
   assert.equal(e.oa_url, 'https://example.org/engel.pdf');
   assert.equal(e.authors.length, 3, 'the longer author list wins');
+  // An adapter's own open-access link (OpenAlex's primary location) is not
+  // what Pass 3 checks, so it never becomes oa_url (full-text.ts).
+  const other = project();
+  await upsertSources(other, [{ ...ENGEL, source: 'openalex', oa_pdf_url: 'https://example.org/adapter.pdf' }], { provenance: 'research' });
+  assert.equal((await loadLibrary(other)).entries[0]!.oa_url, null);
   assert.equal(e.venue, 'Nature');
   assert.deepEqual(e.provenance, ['research:crossref', 'add:openalex', 'add:crossref']);
   assert.equal(e.retracted, true, 'a retraction is never un-set by a later record');
@@ -669,4 +676,80 @@ test('BRDTH-01 user path: `research --yolo` writes a current-version LIBRARY.jso
   const lib2 = LibrarySchema.parse(JSON.parse(fs.readFileSync(file, 'utf8')));
   assert.deepEqual(lib2.entries.map((e) => e.citekey), lib.entries.map((e) => e.citekey), 'a re-run never duplicates a source');
   assert.match(String(second.stdout), /0 new/);
+});
+
+test('ROADMAP Phase 19 criterion 4 (review round 2): versioned DOIs of one posted work (base, .v1, .v2) are one entry; two version-of-record editorials stay two', async () => {
+  const root = project();
+  const post = (doi: string): LibraryCandidate =>
+    cand({ citekey: 'hokby2025', id: doi, doi, type: 'preprint', title: 'Screen time effects on adolescent mental health', authors: ['Hökby, Sebastian'], year: 2025 });
+  const r = await upsertSources(root, [post('10.69622/28750280.v2'), post('10.69622/28750280.v1'), post('10.69622/28750280')], { provenance: 'research' });
+  assert.deepEqual(r.outcomes.map((o) => o.status), ['added', 'merged', 'merged']);
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 1, 'one entry per work');
+  assert.equal(lib.entries[0]!.doi, '10.69622/28750280.v2');
+  assert.deepEqual([...lib.entries[0]!.alternate_dois].sort(), ['10.69622/28750280', '10.69622/28750280.v1']);
+
+  // The version family alone is not enough: a different title under a shared base stays apart.
+  const other = project();
+  await upsertSources(other, [post('10.69622/1.v1'), { ...post('10.69622/1.v2'), title: 'An unrelated dataset about rainfall' }], { provenance: 'research' });
+  assert.equal((await loadLibrary(other)).entries.length, 2);
+
+  // Posted content typed `preprint` with an ordinary DOI prefix takes the version rule.
+  const posted = project();
+  await upsertSources(
+    posted,
+    [
+      cand({ id: '10.5555/posted.a', doi: '10.5555/posted.a', type: 'preprint', title: 'Measuring attention in classrooms', authors: ['Rao, Q.'], year: 2024 }),
+      cand({ id: '10.5555/posted.b', doi: '10.5555/posted.b', type: 'preprint', title: 'Measuring Attention in Classrooms', authors: ['Rao, Q.'], year: 2024 }),
+    ],
+    { provenance: 'research' },
+  );
+  assert.equal((await loadLibrary(posted)).entries.length, 1);
+  // …and its version of record, arriving later, becomes the primary DOI.
+  await upsertSources(
+    posted,
+    [cand({ id: '10.1234/classrooms.2024', doi: '10.1234/classrooms.2024', type: 'article-journal', title: 'Measuring attention in classrooms', authors: ['Rao, Q.'], year: 2024, venue: 'Journal of Things' })],
+    { provenance: 'research' },
+  );
+  const merged = (await loadLibrary(posted)).entries;
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]!.doi, '10.1234/classrooms.2024');
+  assert.deepEqual([...merged[0]!.alternate_dois].sort(), ['10.5555/posted.a', '10.5555/posted.b']);
+  assert.equal(merged[0]!.type, 'article-journal');
+
+  // Two version-of-record DOIs (annual editorials: same title, author, year) never collapse.
+  const editorials = project();
+  await upsertSources(
+    editorials,
+    [
+      cand({ id: '10.5555/ed.2020a', doi: '10.5555/ed.2020a', type: 'article-journal', title: 'Editorial', authors: ['Smith, A.'], year: 2020 }),
+      cand({ id: '10.5555/ed.2020b', doi: '10.5555/ed.2020b', type: 'article-journal', title: 'Editorial', authors: ['Smith, A.'], year: 2020 }),
+    ],
+    { provenance: 'research' },
+  );
+  assert.equal((await loadLibrary(editorials)).entries.length, 2);
+});
+
+test('SRC-09 (review round 2): add, bring-your-own and Zotero entries get the tier their metadata decides at upsert; an undecidable one stays unevaluated', async () => {
+  const root = project();
+  const r = await upsertSources(
+    root,
+    [
+      cand({ citekey: 'lecun2015', id: '10.1038/nature14539', doi: '10.1038/nature14539', type: 'article-journal', title: 'Deep learning', authors: ['LeCun, Yann'], year: 2015 }),
+      cand({ citekey: 'kuhn1996', source: 'books', id: 'isbn:9780226458083', isbn: '9780226458083', type: 'book', title: 'The Structure of Scientific Revolutions', authors: ['Kuhn, Thomas S.'], year: 1996 }),
+      cand({ citekey: 'untyped2020', id: '10.5555/untyped', doi: '10.5555/untyped', title: 'An untyped record', authors: ['Doe, Jane'], year: 2020 }),
+    ],
+    { provenance: 'add' },
+  );
+  assert.deepEqual(r.outcomes.map((o) => o.status), ['added', 'added', 'added']);
+  const byKey = new Map((await loadLibrary(root)).entries.map((e) => [e.citekey, e]));
+  assert.equal(byKey.get('lecun2015')!.tier, 'peer-reviewed');
+  assert.equal(byKey.get('kuhn1996')!.tier, 'book');
+  assert.equal(byKey.get('untyped2020')!.tier, null, 'the metadata cannot decide: the evaluator will');
+  // A later merge keeps an evaluator's tier where the metadata cannot decide, and the metadata's where it can.
+  await upsertSources(root, [{ ...cand({ id: '10.5555/untyped', doi: '10.5555/untyped', title: 'An untyped record', authors: ['Doe, Jane'], year: 2020 }), tier: 'gov-report' }], { provenance: 'research' });
+  await upsertSources(root, [{ ...cand({ id: '10.1038/nature14539', doi: '10.1038/nature14539', title: 'Deep learning', authors: ['LeCun, Yann'], year: 2015 }), tier: 'other' }], { provenance: 'research' });
+  const after = new Map((await loadLibrary(root)).entries.map((e) => [e.citekey, e]));
+  assert.equal(after.get('untyped2020')!.tier, 'gov-report');
+  assert.equal(after.get('lecun2015')!.tier, 'peer-reviewed', 'a model never overrides the registrar');
 });

@@ -18,7 +18,12 @@
 // NAME a source, but only the user can APPROVE it. So:
 //
 //   - a byo_pdf_dir that resolves (after realpath) INSIDE the project root is
-//     the paper's own folder and needs no approval;
+//     the paper's own folder and needs no approval — but then only the PDFs
+//     that themselves resolve inside the project are read: a symlinked file in
+//     it pointing elsewhere (a shared repo or archive can carry
+//     `pdfs/x.pdf -> /home/<reader>/private.pdf`) is skipped, unless the user
+//     approved that folder explicitly (byo-ingest.ts listPdfsInDir
+//     `confineTo`; review round 2);
 //   - anything else — a folder outside the project, any Zotero collection — is
 //     read only when this user approved it for this paper: on the command line
 //     (`new --pdfs <dir>`), or at the research gates `byo-folder` /
@@ -107,15 +112,23 @@ async function update(root: string, mutate: (paper: { byo_pdf_dirs: string[]; zo
 
 /** True when research may read the bring-your-own folder `dir` for the paper at `root`. */
 export function isByoFolderApproved(root: string, dir: string): boolean {
-  if (isInsideProject(root, dir)) return true;
+  return isInsideProject(root, dir) || isByoFolderExplicitlyApproved(root, dir);
+}
+
+/**
+ * True when the user approved the folder `dir` for the paper at `root` themselves
+ * (`new --pdfs`, the `byo-folder` gate): the links in it are then theirs to
+ * follow. A folder inside the project that nobody approved is readable
+ * (isByoFolderApproved) but confined to the project.
+ */
+export function isByoFolderExplicitlyApproved(root: string, dir: string): boolean {
   const paper = readApprovals(pensmithOwnSourceApprovalsPath()).papers[paperKey(root)];
   const want = pathKey(realPath(dir));
   return paper?.byo_pdf_dirs.some((d) => d === want) ?? false;
 }
 
-/** Record that the user approved reading `dir` for the paper at `root` (a folder inside the project needs no record). */
+/** Record that the user approved reading `dir` (and the files its links point to) for the paper at `root`. */
 export async function approveByoFolder(root: string, dir: string): Promise<void> {
-  if (isInsideProject(root, dir)) return;
   const want = pathKey(realPath(dir));
   await update(root, (paper) => {
     if (!paper.byo_pdf_dirs.includes(want)) paper.byo_pdf_dirs.push(want);

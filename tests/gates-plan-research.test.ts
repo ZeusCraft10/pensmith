@@ -55,7 +55,7 @@ async function seed(sb: LlmSandbox): Promise<string> {
       `const hits = ${JSON.stringify([hit(1), hit(2), hit(3)])};`,
       "__setResearchRegistryForTest({ crossref: { search: async (q) => q.endsWith('Background') ? [] : hits } });",
       'try {',
-      "  const r = await runSectionResearch({ root: process.cwd(), n: 2, slug: 'background', query: 'instagram adolescent depression', yolo: process.argv.includes('--yolo') });",
+      "  const r = await runSectionResearch({ root: process.cwd(), n: 2, slug: 'background', query: 'instagram adolescent depression', yolo: process.argv.includes('--yolo'), io: { out: (l) => process.stdout.write(l + '\\n'), err: (l) => process.stderr.write(l + '\\n') } });",
       "  process.stdout.write(JSON.stringify({ ok: true, added: r.added }) + '\\n');",
       '} catch (e) {',
       "  process.stdout.write(JSON.stringify({ ok: false, message: e.message, exitCode: e.exitCode ?? 1 }) + '\\n');",

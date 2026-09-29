@@ -128,7 +128,7 @@ function registryWith(results: (q: string) => SourceCandidate[]): { calls: Array
   return { calls, registry };
 }
 
-async function run(opts: Parameters<typeof runSectionResearch>[0]): Promise<{ value: Awaited<ReturnType<typeof runSectionResearch>> | null; error: unknown; out: string; err: string }> {
+async function run(opts: Omit<Parameters<typeof runSectionResearch>[0], 'io'>): Promise<{ value: Awaited<ReturnType<typeof runSectionResearch>> | null; error: unknown; out: string; err: string }> {
   const out: string[] = [];
   const err: string[] = [];
   const e = process.stderr.write.bind(process.stderr);

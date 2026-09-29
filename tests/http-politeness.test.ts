@@ -101,8 +101,8 @@ test('SRC-17: a Crossref request\'s User-Agent is `pensmith/<v> (mailto:pensmith
   assert.ok(!err.includes('not set'), 'no banner when the email is set');
 });
 
-test('D-19-09: `[network] contact_email_env = "MY_WORK_EMAIL"` is honoured for the User-Agent', async () => {
-  await withPaper('[network]\ncontact_email_env = "MY_WORK_EMAIL"\n', { MY_WORK_EMAIL: 'lab-contact@example.org', PENSMITH_CONTACT_EMAIL: 'other@example.org' }, async (seen) => {
+test('D-19-09: `[network] contact_email_env = "PENSMITH_WORK_EMAIL"` is honoured for the User-Agent', async () => {
+  await withPaper('[network]\ncontact_email_env = "PENSMITH_WORK_EMAIL"\n', { PENSMITH_WORK_EMAIL: 'lab-contact@example.org', PENSMITH_CONTACT_EMAIL: 'other@example.org' }, async (seen) => {
     await httpFetch('https://api.openalex.org/works/W1', { source: 'openalex', noCache: true });
     assert.match([...seen.values()][0]?.ua ?? '', /\(mailto:lab-contact@example\.org\)$/);
   });
@@ -121,14 +121,14 @@ test('D-19-09: a config that names a secret variable is ignored — the secret n
 });
 
 test('SRC-17: unset → `(no-contact)` and one banner naming the variable that was read', async () => {
-  const { err } = await withPaper('[network]\ncontact_email_env = "MY_WORK_EMAIL"\n', {}, async (seen) => {
+  const { err } = await withPaper('[network]\ncontact_email_env = "PENSMITH_WORK_EMAIL"\n', {}, async (seen) => {
     await httpFetch('https://api.crossref.org/works/10.1%2Fa', { source: 'crossref', noCache: true });
     await httpFetch('https://api.crossref.org/works/10.1%2Fb', { source: 'crossref', noCache: true });
     for (const v of seen.values()) assert.match(v.ua, /^pensmith\/\S+ \(no-contact\)$/);
   });
   const banners = err.split('\n').filter((l) => l.includes('is not set. Using no-contact User-Agent'));
   assert.equal(banners.length, 1, err);
-  assert.match(banners[0]!, /^pensmith: MY_WORK_EMAIL is not set\./, 'the banner names the configured variable');
+  assert.match(banners[0]!, /^pensmith: PENSMITH_WORK_EMAIL is not set\./, 'the banner names the configured variable');
 });
 
 test('D-19-09: a value that is not an email address is not sent', async () => {

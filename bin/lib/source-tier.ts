@@ -103,8 +103,3 @@ export function deterministicTier(c: TierInput): SourceTier | null {
   // 6. A judgment call (an untyped record, a non-government report).
   return null;
 }
-
-/** The final tier: the deterministic one when the metadata decides, else the evaluator's (null when neither). */
-export function finalTier(c: TierInput, evaluatorTier: SourceTier | null | undefined): SourceTier | null {
-  return deterministicTier(c) ?? evaluatorTier ?? null;
-}

@@ -40,6 +40,32 @@ export const RESEARCH_LOG_END =
 export const SOURCES_START = '<!-- pensmith:sources:start (rendered from LIBRARY.json) -->';
 export const SOURCES_END = '<!-- pensmith:sources:end -->';
 
+/**
+ * `s` with the HTML-comment delimiters made inert (`<!--` → `<!‑‑`, `-->` →
+ * `‑‑>`, U+2011 non-breaking hyphens). Titles, abstracts, notes and reasons
+ * come from registrars, Zotero items and PDF metadata: a value carrying a
+ * marker comment (`<!-- pensmith:sources:end -->`) must never read as one
+ * (review round 2). Every value rendered into RESEARCH.md goes through it.
+ */
+export function inertMarkup(s: string): string {
+  return s.replace(/<!--/g, '<!\u2011\u2011').replace(/-->/g, '\u2011\u2011>');
+}
+
+/**
+ * The start offsets of the lines of `text` that are exactly `marker` (a
+ * trailing `\r` allowed). Markers are matched only as whole lines: a marker's
+ * text inside a line is never one.
+ */
+export function markerLines(text: string, marker: string): number[] {
+  const out: number[] = [];
+  let at = 0;
+  for (const line of text.split('\n')) {
+    if (line.replace(/\r$/, '') === marker) out.push(at);
+    at += line.length + 1;
+  }
+  return out;
+}
+
 const ABSTRACT_CHARS = 600;
 const MAX_LISTED_AUTHORS = 3;
 
@@ -163,8 +189,7 @@ export function renderSourcesBlock(entries: readonly LibraryEntry[]): string {
       lines.push('  - Metadata: local only — no registrar record matched this PDF confidently; check it before citing');
     }
   }
-  lines.push(SOURCES_END);
-  return lines.join('\n');
+  return [SOURCES_START, ...lines.slice(1).map(inertMarkup), SOURCES_END].join('\n');
 }
 
 /**
@@ -179,12 +204,12 @@ export function upsertSourcesBlock(existing: string | null, block: string): stri
   }
   const eol = existing.includes('\r\n') ? '\r\n' : '\n';
   const b = eol === '\n' ? block : block.replace(/\n/g, '\r\n');
-  const start = existing.lastIndexOf(SOURCES_START);
-  const end = start >= 0 ? existing.indexOf(SOURCES_END, start) : -1;
+  const start = markerLines(existing, SOURCES_START).at(-1) ?? -1;
+  const end = start >= 0 ? markerLines(existing, SOURCES_END).find((i) => i > start) ?? -1 : -1;
   if (start >= 0 && end >= 0) {
     return existing.slice(0, start) + b + existing.slice(end + SOURCES_END.length);
   }
-  const logEnd = existing.indexOf(RESEARCH_LOG_END);
+  const logEnd = markerLines(existing, RESEARCH_LOG_END)[0] ?? -1;
   if (logEnd >= 0) {
     const before = existing.slice(0, logEnd).replace(/(?:\r?\n)*$/, '');
     return `${before}${eol}${eol}${b}${eol}${eol}${existing.slice(logEnd)}`;

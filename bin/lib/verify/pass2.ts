@@ -12,10 +12,13 @@
 //   2. (live branch only) asks the hash-pinned `claim-support` prompt for a
 //      verdict in {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}.
 //
-// The source text the judge reads is the bib abstract; for a source whose
-// bring-your-own PDF still matches its recorded hashes (SRC-15, S-17), also
-// the passages of that PDF's text nearest the claim (byo-text.ts byoPassages),
-// and `evidence` must be a verbatim substring of that text.
+// The source text the judge reads is the bib abstract. Only when the user
+// turned on `[verification] send_byo_passages` (off by default — PRD §9: the
+// contents of a bring-your-own PDF stay local; Phase 19 review round 2), a
+// source whose bring-your-own PDF still matches its recorded hashes (SRC-15,
+// S-17) also gets the passages of that PDF's text nearest the claim
+// (byo-text.ts byoPassages), sent to the configured model provider; `evidence`
+// must be a verbatim substring of the text the judge read.
 //
 // UNCLEAR-bias is the load-bearing correctness property (VRFY-03): both the
 // offline placeholder AND the prompt default to UNCLEAR rather than manufacturing
@@ -186,16 +189,16 @@ function clampText(text: string, max: number): string {
 }
 
 /**
- * The source text Pass 2 sends for one claim: the bib abstract, plus — for a
- * source whose bring-your-own PDF still matches its recorded hashes — the
- * passages of that PDF's text nearest the claim (byo-text.ts). A source
- * without a usable PDF gets its abstract alone.
+ * The source text Pass 2 sends for one claim: the bib abstract, plus — only
+ * with `share` (`[verification] send_byo_passages`) and for a source whose
+ * bring-your-own PDF still matches its recorded hashes — the passages of that
+ * PDF's text nearest the claim (byo-text.ts). Otherwise the abstract alone.
  */
-function byoSourceText(root: string | undefined): (citekey: string, claim: string, abstract: string) => Promise<string> {
+function byoSourceText(root: string | undefined, share: boolean): (citekey: string, claim: string, abstract: string) => Promise<string> {
   let entries: Promise<Map<string, LibraryEntry>> | null = null;
   const texts = new Map<string, Promise<ByoTextResult>>();
   return async (citekey, claim, abstract) => {
-    if (root === undefined) return abstract;
+    if (root === undefined || !share) return abstract;
     entries ??= tryLoadLibrary(root).then((lib) => new Map((lib?.entries ?? []).filter((e) => e.byo !== null).map((e) => [e.citekey, e])));
     const entry = (await entries).get(citekey);
     if (entry === undefined) return abstract;
@@ -242,11 +245,14 @@ export async function runPass2(
   opts: {
     n: number;
     /**
-     * The project root: a source with a hash-verified bring-your-own PDF is
-     * judged on its abstract plus the passages of its own text nearest the
-     * claim (SRC-15; read only through byo-text.ts, which re-hashes the PDF).
+     * The project root: with `shareByoPassages`, a source with a hash-verified
+     * bring-your-own PDF is judged on its abstract plus the passages of its own
+     * text nearest the claim (SRC-15; read only through byo-text.ts, which
+     * re-hashes the PDF).
      */
     root?: string;
+    /** `[verification] send_byo_passages` (default false: BYO text never leaves the machine, PRD §9). */
+    shareByoPassages?: boolean;
   },
 ): Promise<Pass2Result[]> {
   // Provider-agnostic offline gate: only PENSMITH_NO_LLM short-circuits to the
@@ -266,7 +272,7 @@ export async function runPass2(
   const promptTemplate = loadPrompt('claim-support');
 
   const results: Pass2Result[] = [];
-  const byoSource = byoSourceText(opts.root);
+  const byoSource = byoSourceText(opts.root, opts.shareByoPassages === true);
   // Set once no provider key is configured: the remaining pairs are skipped
   // (every call would fail the same way). Verify still writes its frozen
   // Pass-1/Pass-3 verdict — the advisory passes never need a key (D-V1-04:

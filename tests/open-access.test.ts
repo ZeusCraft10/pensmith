@@ -26,7 +26,7 @@ const oa = (doi: string, url: string | undefined): SourceCandidate =>
     ...(url !== undefined ? { oa_pdf_url: url } : {}),
   }) as SourceCandidate;
 
-test('GRND-14: enrichOpenAccess records Unpaywall\'s OA PDF for each DOI without one; others are left alone', async () => {
+test('GRND-14: enrichOpenAccess records Unpaywall\'s OA PDF as oa_url for each DOI without a confirmed one — an adapter\'s own link does not spare the lookup', async () => {
   const asked: string[] = [];
   const targets: OpenAccessTarget[] = [
     { doi: '10.5555/open' },
@@ -34,20 +34,26 @@ test('GRND-14: enrichOpenAccess records Unpaywall\'s OA PDF for each DOI without
     { doi: '10.5555/gone' },
     { doi: '10.5555/has', oa_url: 'https://example.org/already.pdf' },
     { doi: null },
+    // OpenAlex's open primary location (review round 2): not what Pass 3 checks.
+    { doi: '10.5555/adapter', oa_pdf_url: 'https://example.org/adapter.pdf' },
+    // A DataCite arXiv DOI: Unpaywall does not index it; its text is the arXiv PDF.
+    { doi: '10.48550/arxiv.2102.05095', oa_pdf_url: 'https://arxiv.org/pdf/2102.05095' },
   ];
   const s = await enrichOpenAccess(targets, {
     lookup: async (doi) => {
       asked.push(doi);
       if (doi === '10.5555/open') return lookupFound(oa(doi, 'https://example.org/open.pdf'));
-      if (doi === '10.5555/closed') return lookupFound(oa(doi, undefined));
+      if (doi === '10.5555/closed' || doi === '10.5555/adapter') return lookupFound(oa(doi, undefined));
       return lookupNotFound('HTTP 404');
     },
   });
-  assert.deepEqual(asked, ['10.5555/open', '10.5555/closed', '10.5555/gone'], 'only DOIs without an OA URL are looked up');
-  assert.equal(targets[0]!.oa_pdf_url, 'https://example.org/open.pdf');
-  assert.equal(targets[1]!.oa_pdf_url, undefined);
-  assert.deepEqual(s, { asked: 3, found: 1, problem: null });
-  assert.equal(describeOpenAccess(s), 'open access: 1 of 3 source(s) with a DOI have an open-access PDF (Unpaywall)');
+  assert.deepEqual(asked, ['10.5555/open', '10.5555/closed', '10.5555/gone', '10.5555/adapter'], 'every DOI without a confirmed oa_url, except a DataCite arXiv DOI');
+  assert.equal(targets[0]!.oa_url, 'https://example.org/open.pdf');
+  assert.equal(targets[1]!.oa_url, undefined);
+  assert.equal(targets[5]!.oa_url, undefined, 'Unpaywall has no PDF: the adapter link does not become oa_url');
+  assert.equal(targets[6]!.oa_url, undefined);
+  assert.deepEqual(s, { asked: 4, found: 1, problem: null });
+  assert.equal(describeOpenAccess(s), 'open access: 1 of 4 source(s) with a DOI have an open-access PDF (Unpaywall)');
 });
 
 test('GRND-14: a failed or offline lookup is reported, never a gate; offline stops asking', async () => {

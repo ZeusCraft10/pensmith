@@ -31,6 +31,12 @@ import { proposeSwap } from '../lib/revise-swap.js';
 import { assertLlmConfigured } from '../lib/anthropic.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
 
+/** The CLI's output sink for the section research pass (section-research.ts never writes the streams itself). */
+const CLI_IO = {
+  out: (line: string): void => void process.stdout.write(`${line}\n`),
+  err: (line: string): void => void process.stderr.write(`${line}\n`),
+};
+
 export const reviseCommand = defineCommand({
   meta: {
     name: 'revise',
@@ -72,7 +78,7 @@ export const reviseCommand = defineCommand({
     // pass `plan N --research` runs (bin/lib/section-research.ts): real hits,
     // added to section N only. A research-only call stops there.
     if (research) {
-      return { mode: 'research', ...(await runSectionResearch({ root: projectRoot(), n, slug, query: research, yolo: args.yolo === true, verb: 'revise' })) };
+      return { mode: 'research', ...(await runSectionResearch({ root: projectRoot(), n, slug, query: research, yolo: args.yolo === true, verb: 'revise', io: CLI_IO })) };
     }
 
     // GEN-06 / RUN-07 fail-loud probe: assert an LLM is configured BEFORE calling runRevise.

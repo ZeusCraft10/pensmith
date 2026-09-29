@@ -54,6 +54,7 @@
 // zero-length file (verify reads CITATIONS.bib; it must never ENOENT just
 // because a paper has zero sources).
 
+import { plainText } from './markup.js';
 import { parseBibSync } from './citations.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { generateCitekey } from './citekey.js';
@@ -179,8 +180,10 @@ export function normalizeBibValue(value: string): string {
 
 // The BibTeX-special ASCII characters. Braces are written as \textbraceleft{} /
 // \textbraceright{} (not \{ \}) so every value keeps balanced braces for BibTeX
-// itself; `<`/`>` stay raw (citation-js reads them as the rich-text tags —
-// <i>, <sub> — Crossref titles carry).
+// itself; `<`/`>` stay raw. Registrar markup (`<i>…</i>`, `&amp;`) never reaches
+// this point in a title, venue or publisher: toBibRecord takes their plain text
+// (markup.ts plainText) — pandoc prints a raw tag literally in the exported
+// reference list.
 const BIBTEX_SPECIAL: Readonly<Record<string, string>> = {
   '\\': '\\textbackslash{}',
   '{': '\\textbraceleft{}',
@@ -205,6 +208,60 @@ export function escapeBibtexUtf8(value: string): string {
     .replace(/[\\{}$&%#_~^`]/g, (ch) => BIBTEX_SPECIAL[ch] ?? ch)
     .replace(/-(?=-)/g, '-{}')
     .replace(/'(?=')/g, "'{}");
+}
+
+/** Short function words Title Case leaves in lower case (not evidence either way). */
+const TITLE_STOPWORDS: ReadonlySet<string> = new Set([
+  'from', 'with', 'into', 'onto', 'upon', 'over', 'than', 'that', 'this', 'these', 'those', 'about', 'after',
+  'under', 'between', 'through', 'without', 'within', 'among', 'across', 'against', 'during', 'before', 'versus',
+]);
+
+/**
+ * The title as a BibTeX value with its capitals protected (review round 2,
+ * SRC-12). BibTeX styles — and pandoc's citeproc for APA and the other
+ * sentence-case styles — lower-case every unbraced word of a title, so an
+ * unprotected proper noun (China, Instagram, Drosophila) prints in lower case
+ * in the exported reference list. A word is wrapped in braces when its
+ * capitals are not just title casing:
+ *   - a capital after its first letter (DNA, mRNA, COVID-19, iPhone, McDonald);
+ *   - in a sentence-case title (most longer words after the first are lower
+ *     case — PubMed's style), every capitalised word after the first: those
+ *     capitals are the source's proper nouns;
+ *   - in a Title Case title, a capitalised word the entry's abstract also
+ *     capitalises in mid-sentence (`… patients in Wuhan, China …`), or one
+ *     followed by a lower-case content word, which Title Case would have
+ *     capitalised (a binomial: `Drosophila melanogaster`, `Escherichia coli`)
+ *     — the title case of the other words still converts to sentence case.
+ * citation-js (Pass 1's reader) drops the braces again.
+ */
+export function titleBibValue(title: string, abstract: string | null = null): string {
+  const words = normalizeBibValue(title).split(' ');
+  const lettersOf = (w: string): string => w.replace(/[^\p{L}]/gu, '');
+  const isCapital = (w: string): boolean => /^\p{Lu}/u.test(lettersOf(w));
+  const later = words.slice(1).filter((w) => lettersOf(w).length >= 4 && !TITLE_STOPWORDS.has(lettersOf(w).toLowerCase()));
+  const titleCase = later.length > 0 && later.filter(isCapital).length / later.length >= 0.75;
+  const midSentence = new Set<string>();
+  if (titleCase && abstract) {
+    for (const m of abstract.matchAll(/[\p{Ll},;]\s+(\p{Lu}[\p{L}'’-]*)/gu)) midSentence.add(m[1]!);
+  }
+  return words
+    .map((word, i) => {
+      const letters = lettersOf(word);
+      const innerCapital = /\p{Lu}/u.test(letters.slice(1));
+      const next = words[i + 1];
+      const nextLetters = next !== undefined ? lettersOf(next) : '';
+      const beforeLowerContent =
+        nextLetters.length >= 4 && /^\p{Ll}/u.test(nextLetters) && !TITLE_STOPWORDS.has(nextLetters.toLowerCase()) && /^\p{L}/u.test(next ?? '');
+      const properNoun =
+        i > 0 &&
+        isCapital(word) &&
+        (!titleCase || midSentence.has(letters) || midSentence.has(word.replace(/[^\p{L}'’-]/gu, '')) || beforeLowerContent);
+      if (letters.length === 0 || !(innerCapital || properNoun)) return escapeBibtexUtf8(word);
+      // Brace the word itself, not the punctuation around it (`{China},`).
+      const m = /^(\P{L}*)(.*?)(\P{L}*)$/u.exec(word)!;
+      return `${escapeBibtexUtf8(m[1]!)}{${escapeBibtexUtf8(m[2]!)}}${escapeBibtexUtf8(m[3]!)}`;
+    })
+    .join(' ');
 }
 
 /** A verbatim field (doi, eprint): written as is; null when it cannot be (unbalanced braces). */
@@ -283,6 +340,16 @@ function text(v: unknown): string | null {
   return s.length > 0 ? s : null;
 }
 
+/**
+ * text() of a registrar string that may carry inline markup (a title, a
+ * journal, a publisher): its plain text, so an entry stored before the
+ * adapters cleaned their strings still renders `Child & Adolescent`, not
+ * `\&amp;`, and `Drosophila`, not `<i>Drosophila</i>`.
+ */
+function plain(v: unknown): string | null {
+  return typeof v === 'string' ? text(plainText(v)) : text(v);
+}
+
 /** The primary arXiv class of an old-style id ("hep-th/9901001" → "hep-th"), else null. */
 function primaryClassOf(arxiv: string): string | null {
   const slash = arxiv.indexOf('/');
@@ -325,11 +392,11 @@ export function toBibRecord(c: BibSource, citekey: string): BibRecord | null {
   push('author', nameList(authors));
   push('editor', nameList(editors));
 
-  const title = text(c.title) ?? citekey;
-  push('title', escapeBibtexUtf8(title));
+  const title = plain(c.title) ?? citekey;
+  push('title', titleBibValue(title, text(c.abstract)));
 
-  const venue = text(c.venue);
-  const publisher = text(c.publisher);
+  const venue = plain(c.venue);
+  const publisher = plain(c.publisher);
   const listValue = (s: string): string => (hasAndToken(s) ? `{${escapeBibtexUtf8(s)}}` : escapeBibtexUtf8(s));
   if (venue) {
     if (entryType === 'article') push('journal', escapeBibtexUtf8(venue));
@@ -425,13 +492,13 @@ export function toCsl(c: BibSource): CslEntry | null {
   if (!citable(c, ids)) return null;
   const entry: CslEntry = {
     type: cslTypeOf(c),
-    title: text(c.title) ?? c.citekey,
+    title: plain(c.title) ?? c.citekey,
     author: parseNames(c.authors).map(cslName),
   };
   const editors = parseNames(c.editors).map(cslName);
   if (editors.length > 0) entry.editor = editors;
   if (typeof c.year === 'number') entry.issued = { 'date-parts': [[c.year]] };
-  const venue = text(c.venue);
+  const venue = plain(c.venue);
   if (venue) entry['container-title'] = venue;
   const volume = text(c.volume);
   if (volume) entry.volume = volume;
@@ -439,7 +506,7 @@ export function toCsl(c: BibSource): CslEntry | null {
   if (issue) entry.issue = issue;
   const pages = text(c.pages);
   if (pages) entry.page = pages;
-  const publisher = text(c.publisher);
+  const publisher = plain(c.publisher);
   if (publisher) entry.publisher = publisher;
   if (ids.doi) entry.DOI = ids.doi;
   if (ids.isbn) entry.ISBN = ids.isbn;

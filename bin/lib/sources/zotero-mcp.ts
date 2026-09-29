@@ -22,7 +22,11 @@
 //   DOI / ISBN      → doi / isbn (also from `extra` lines)
 //   extra           → arXiv / PMID / PMCID / DOI lines, a Better BibTeX
 //                     `Citation Key:` line (kept as the citekey, like Zotero
-//                     7's own citationKey field)
+//                     7's own citationKey field, only when it is a D-14 key
+//                     `[a-z][a-z0-9_-]*` — every citation reader of the
+//                     pipeline (Pass 3's quote extractor, compile, done) reads
+//                     that grammar; BBT's default camelCase keys are replaced
+//                     by the generated key)
 //   archiveID / url → arXiv id (a preprint's `arXiv:1706.03762`)
 //   abstractNote, publicationTitle (or the book / proceedings / website /
 //   university / institution title), volume, issue, pages, publisher, date
@@ -35,7 +39,7 @@
 // ZOTERO_API_KEY (the client adds the header), so nothing here can leak it.
 
 import { z } from 'zod';
-import { generateCitekey } from '../citekey.js';
+import { CITEKEY_RE, generateCitekey } from '../citekey.js';
 import { normalizeDoi, normalizeArxiv, normalizePmid, normalizePmcid } from '../doi.js';
 import { normIsbn } from '../migrations/library/shape.js';
 import type { LibraryCandidate } from '../migrations/library/shape.js';
@@ -273,9 +277,15 @@ export function normalizeZoteroItem(item: ZoteroItem, library: string): ZoteroCa
   // users/0 is the Zotero local API's name for "this computer's library".
   const ref: ZoteroRef = { library: item.library !== null && item.library !== 'users/0' ? item.library : library, key: d.key };
   // Zotero 7's citationKey field, else a Better BibTeX `Citation Key:` line,
-  // else the generated key (the library writer keeps a valid Pandoc key verbatim).
-  const citekey =
-    clean((d as Record<string, unknown>)['citationKey']) ?? extra.get('citation key') ?? generateCitekey({ authors, ...(year !== undefined ? { year } : {}) });
+  // else the generated key. A user key is kept only when it is a D-14 key: the
+  // library writer would keep any Pandoc key verbatim, but a mixed-case or
+  // punctuated one (`lecunDeepLearning2015`, `smith:2020`) is invisible to the
+  // pipeline's D-14 citation readers, so a quote cited to it would never reach
+  // Pass 3.
+  const userKey = [clean((d as Record<string, unknown>)['citationKey']), extra.get('citation key')].find(
+    (k): k is string => typeof k === 'string' && CITEKEY_RE.test(k),
+  );
+  const citekey = userKey ?? generateCitekey({ authors, ...(year !== undefined ? { year } : {}) });
 
   return {
     source: 'zotero',
@@ -308,7 +318,7 @@ export function normalizeZoteroItem(item: ZoteroItem, library: string): ZoteroCa
  * at least one author and a D-14 citekey), or null when the item cannot be one.
  */
 export function toSourceCandidate(c: ZoteroCandidate): SourceCandidate | null {
-  const citekey = /^[a-z][a-z0-9_-]*$/.test(c.citekey ?? '')
+  const citekey = CITEKEY_RE.test(c.citekey ?? '')
     ? (c.citekey as string)
     : generateCitekey({ authors: c.authors, ...(typeof c.year === 'number' ? { year: c.year } : {}) });
   const parsed = SourceCandidateSchema.safeParse({

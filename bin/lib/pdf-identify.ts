@@ -23,7 +23,15 @@
 //      stamps, affiliations, e-mail and URL lines, journal running heads —
 //      searched at Crossref, then OpenAlex, accepting a hit only when its
 //      title's Jaro-Winkler similarity reaches TITLE_JW_THRESHOLD AND its first
-//      author's family name reaches AUTHOR_JW_THRESHOLD (the Pass-1 thresholds).
+//      author's family name reaches AUTHOR_JW_THRESHOLD (the Pass-1 thresholds)
+//      AND its year is plausible for the PDF (Phase 19 review round 2): a
+//      record dated more than YEAR_SLACK years after the year printed on the
+//      PDF's first page — or a preprint / posted-content record dated after it
+//      — is a later re-post of the work, not this PDF (OpenAlex now dates
+//      "Attention Is All You Need" 2025, under a re-post DOI). When such a
+//      re-post was the only match, or the OpenAlex search failed, the title is
+//      searched at arXiv (the preprint a PDF like that usually is) under the
+//      same rules.
 //
 // A record found through an identifier (GROBID's, the metadata's or one
 // printed in the text) is accepted only when it is the PDF's OWN work: a DOI
@@ -49,7 +57,7 @@ import { jaroWinkler, TITLE_JW_THRESHOLD, AUTHOR_JW_THRESHOLD } from './fuzzy.js
 import { firstAuthorSurname } from './author-normalize.js';
 import { normArxiv, normTitle } from './migrations/library/shape.js';
 import { parsePersonName } from './person-name.js';
-import { lookupIdentifier, searchByTitle, type TitleSearchOutcome } from './source-input.js';
+import { lookupIdentifier, searchByTitle, searchArxivByTitle, type TitleSearchOutcome } from './source-input.js';
 import type { LookupResult } from './sources/lookup.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 import type { PdfExtraction } from './pdf-text.js';
@@ -106,6 +114,12 @@ export interface IdentifyDeps {
   /** Search the title; `accept` says whether a hit is a confident match (the search may stop there). */
   searchTitle(title: string, accept: (c: SourceCandidate) => boolean): Promise<TitleSearchOutcome>;
   /**
+   * Search the title at arXiv — asked only when the title and first author
+   * matched nothing but a record dated after the PDF (a later re-post). Absent:
+   * not asked (default: source-input.ts searchArxivByTitle).
+   */
+  searchArxivTitle?(title: string): Promise<TitleSearchOutcome>;
+  /**
    * The user's local GROBID header for these PDF bytes, or null when GROBID is
    * not configured / found no header (default: bin/lib/grobid.ts grobidHeader).
    */
@@ -116,8 +130,26 @@ const DEFAULT_DEPS: IdentifyDeps = {
   lookupDoi: (doi) => lookupIdentifier({ kind: 'doi', raw: doi, doi }),
   lookupArxiv: (arxiv) => lookupIdentifier({ kind: 'arxiv', raw: arxiv, arxiv }),
   searchTitle: (title, accept) => searchByTitle(title, accept),
+  searchArxivTitle: (title) => searchArxivByTitle(title),
   grobidHeader: (pdf) => grobidHeader(pdf),
 };
+
+/**
+ * How many years a registrar record may postdate the year printed on the PDF
+ * (a preprint's version of record, a conference paper's journal version).
+ */
+export const YEAR_SLACK = 2;
+
+/**
+ * True unless `record` is dated after the PDF could have been (see the header):
+ * more than YEAR_SLACK years after the PDF's own year, or — for a preprint
+ * record, which the PDF would itself be — any year after it. Unknown years pass.
+ */
+export function plausibleYear(record: Pick<SourceCandidate, 'year' | 'type'>, local: Pick<LocalPdfMetadata, 'year'>): boolean {
+  if (typeof record.year !== 'number' || local.year === null) return true;
+  if (record.type === 'preprint') return record.year <= local.year;
+  return record.year <= local.year + YEAR_SLACK;
+}
 
 /** Options for identifyPdf beyond the extraction. */
 export interface IdentifyOptions {
@@ -537,20 +569,47 @@ export async function identifyPdf(ex: PdfExtraction, deps: IdentifyDeps = DEFAUL
   if (local.authors.length === 0) {
     return { kind: 'unidentified', reason: `no author found under the title "${local.title}" to confirm a match${cited}`, local, failures };
   }
-  const confident = (c: SourceCandidate): boolean => {
+  const matches = (c: SourceCandidate): boolean => {
     const s = matchScores(c, local);
     return s.titleJW >= TITLE_JW_THRESHOLD && s.authorJW >= AUTHOR_JW_THRESHOLD;
   };
+  const confident = (c: SourceCandidate): boolean => matches(c) && plausibleYear(c, local);
+  const bestOf = (candidates: readonly SourceCandidate[]): SourceCandidate | null => {
+    let best: { candidate: SourceCandidate; titleJW: number } | null = null;
+    for (const c of candidates) {
+      if (!confident(c)) continue;
+      const { titleJW } = matchScores(c, local);
+      if (best === null || titleJW > best.titleJW) best = { candidate: c, titleJW };
+    }
+    return best?.candidate ?? null;
+  };
   const search = await deps.searchTitle(local.title, confident);
   failures.push(...search.failures);
-  let best: { candidate: SourceCandidate; titleJW: number } | null = null;
-  for (const c of search.candidates) {
-    if (!confident(c)) continue;
-    const { titleJW } = matchScores(c, local);
-    if (best === null || titleJW > best.titleJW) best = { candidate: c, titleJW };
+  const found = bestOf(search.candidates);
+  if (found !== null) {
+    return { kind: 'identified', candidate: found, via: 'title-search', query: local.title, local };
   }
-  if (best !== null) {
-    return { kind: 'identified', candidate: best.candidate, via: 'title-search', query: local.title, local };
+  // Only a later re-post matched — or OpenAlex could not answer (keyless
+  // OpenAlex is often exhausted) — so the PDF may be the arXiv preprint.
+  const reposts = search.candidates.filter((c) => matches(c) && !plausibleYear(c, local));
+  const openAlexFailed = search.failures.some((f) => f.startsWith('openalex'));
+  if ((reposts.length > 0 || openAlexFailed) && deps.searchArxivTitle !== undefined) {
+    const arxiv = await deps.searchArxivTitle(local.title);
+    failures.push(...arxiv.failures);
+    const hit = bestOf(arxiv.candidates);
+    if (hit !== null) return { kind: 'identified', candidate: hit, via: 'title-search', query: local.title, local };
+  }
+  if (reposts.length > 0 && search.failures.length === 0) {
+    const r = reposts[0]!;
+    return {
+      kind: 'unidentified',
+      reason:
+        `the only record matching the title "${local.title}" and its first author is dated ${r.year}` +
+        `${r.doi ? ` (DOI ${r.doi})` : ''}, after the year the PDF shows (${local.year}) — a later re-post, not this PDF; ` +
+        `pass the DOI or arXiv id${cited}`,
+      local,
+      failures,
+    };
   }
   // A failed search is never "no match" (SRC-05): name every search that
   // could not be answered next to the ones that answered without a match.

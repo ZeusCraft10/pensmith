@@ -568,6 +568,10 @@ export const addCommand = defineCommand({
     if (status === 'added') out(`${P}: added ${key}.`);
     else out(`${P}: already in library as ${key}${status === 'merged' ? ' (its record was updated)' : ''}.`);
     if (title) out(`${P}: ${key}${title}`);
+    // SRC-04 (review round 2): a retracted work is added, and said so — as research does.
+    if (entry?.retracted === true || entry?.retraction_status === 'retracted') {
+      err(`${P}: WARN — ${key} is RETRACTED${entry.retraction_details ? ` (${entry.retraction_details})` : ''}: it fails Pass 1 (blocking) if cited.`);
+    }
 
     const { remapped } = await remapStep(paperRoot, entry ?? { citekey: key, title: null, abstract: null }, remapArgs);
     return { ok: true, citekey: key, added: status === 'added', alreadyInLibrary: status !== 'added', remapped: remapped.length };

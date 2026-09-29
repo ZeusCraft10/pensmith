@@ -228,14 +228,26 @@ export function registerPaperTools(server: McpServer): void {
       description:
         "Add items from the user's Zotero library to LIBRARY.json (tagged zotero). Pass the items a Zotero MCP server returned — " +
         'full Zotero API items ({key, library, data}) or their data objects, e.g. zotero_get_item_metadata with format="json" — as-is. ' +
-        'A malformed item rejects the whole call with its schema error; notes and attachments are skipped with a reason.',
+        'A malformed item rejects the whole call with its schema error; notes and attachments are skipped with a reason. ' +
+        "Items read from the collection the paper's config names ([sources] zotero_collection) must pass `collection`: they are " +
+        'refused (exit 3, nothing added) until the user approved that collection for this paper — ask with AskUserQuestion ' +
+        '(never assume yes, --yolo does not answer it) and on yes pass approveCollection: true.',
       inputSchema: {
         paperRoot: PaperRootArg,
         items: z.array(z.record(z.string(), z.unknown())).min(1).max(MAX_ZOTERO_INGEST_ITEMS),
+        collection: z.string().min(1).max(500).optional(),
+        approveCollection: z.boolean().optional(),
       },
     },
-    async ({ paperRoot, items }) =>
-      toolResult(await mutate(asProjectRoot(paperRoot), { verb: 'paper_ingest_zotero_items' }, () => ingestZoteroItems(asProjectRoot(paperRoot), items))),
+    async ({ paperRoot, items, collection, approveCollection }) =>
+      toolResult(
+        await mutate(asProjectRoot(paperRoot), { verb: 'paper_ingest_zotero_items' }, () =>
+          ingestZoteroItems(asProjectRoot(paperRoot), items, {
+            ...(collection !== undefined ? { collection } : {}),
+            ...(approveCollection !== undefined ? { approveCollection } : {}),
+          }),
+        ),
+      ),
   );
 
   // ===========================================================================

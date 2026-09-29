@@ -80,6 +80,7 @@ import { pullZoteroIntoLibrary } from '../lib/zotero-ingest.js';
 import { enrichOpenAccess, describeOpenAccess } from '../lib/open-access.js';
 import {
   isByoFolderApproved,
+  isByoFolderExplicitlyApproved,
   approveByoFolder,
   isZoteroCollectionApproved,
   approveZoteroCollection,
@@ -483,7 +484,19 @@ async function ingestOwnSources(
       rows.push({ adapter: 'bring-your-own', count: 0, status: 'skipped ([sources] byo_pdf_dir is outside the paper folder and not approved)' });
     } else {
       if (!approved) await approveByoFolder(root, dir);
-      const outcomes = await ingestByoPdfs(root, await listPdfsInDir(dir), { provenance: 'byo' });
+      // A folder inside the paper that the user never approved themselves is
+      // read only as far as the paper reaches: a link in it to a file
+      // elsewhere is not followed (a shared paper could ship one).
+      const confined = !isByoFolderExplicitlyApproved(root, dir);
+      let links = 0;
+      const files = await listPdfsInDir(dir, {
+        ...(confined ? { confineTo: root } : {}),
+        onSkip: (file, why) => {
+          links += 1;
+          io.err(`${P}: WARN — bring-your-own: ${path.basename(file)} skipped: ${why} (approve the folder with pensmith new --pdfs ${byoSetting}, or copy the PDF into it)`);
+        },
+      });
+      const outcomes = await ingestByoPdfs(root, files, { provenance: 'byo' });
       let inLibrary = 0;
       let fresh = 0;
       let skipped = 0;
@@ -502,6 +515,7 @@ async function ingestOwnSources(
       added += fresh;
       const parts = [`${fresh} new`, `${inLibrary - fresh} already in library`];
       if (skipped > 0) parts.push(`${skipped} skipped`);
+      if (links > 0) parts.push(`${links} outside the paper not followed`);
       rows.push({ adapter: 'bring-your-own', count: inLibrary, status: `${outcomes.length === 0 ? 'no PDFs' : 'ok'} (${byoSetting}: ${parts.join(', ')})` });
     }
   }
