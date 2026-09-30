@@ -227,7 +227,7 @@ test('review round 2 (Phase 20 + 23a merge): the skills send only a citekey row 
   const { body } = readSkill(ROUTER);
   const redo = /\| "redo section 3"[^\n]*\|/.exec(body)?.[0] ?? '';
   assert.match(redo, /or UNPARSEABLE on a bibliography entry — a row keyed `L<line>` is a citation form in the prose, not a citekey\), `plan 3 --revise`/);
-  assert.match(redo, /a quote no source text could check \(UNVERIFIABLE-QUOTE\) is paraphrased by `write 3` \(or the user edits the draft and runs `verify 3`\)/);
+  assert.match(redo, /a quote no source text could check \(UNVERIFIABLE-QUOTE\) needs only `write 3`, which re-drafts it paraphrased, or the user's own edit of the draft and `verify 3`, or accepting that quote/);
   assert.match(body, /it cannot rewrite prose \(a quote to\s+paraphrase, a citation form to rewrite as `\[@citekey\]`\)/);
   const plan = readSkill('plan-section').body;
   assert.match(plan, /or UNPARSEABLE on a bibliography entry\), one a run/);

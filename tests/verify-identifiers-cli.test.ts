@@ -68,21 +68,42 @@ function verify(sb: Sandbox, root: string): { status: number | null; md: string;
   return { status: v.status, md, out: `${v.stdout}\n${v.stderr}` };
 }
 
-test('SRC-12 (built CLI): `add PMID:31978945` stores "Zhu, N." and `verify 1` passes Pass 1 against Crossref (never MIS-CITED)', () => {
+// Review round 2 of the Phase 20 + 23a merge: `add PMID:…` confirms a PubMed
+// record that carries a DOI at Crossref (source-input.ts pubmedConfirmed), so
+// the entry holds the names Pass 1 compares — Crossref's `Zhu, Na` for
+// 31978945. PubMed's own "Family Initials" names are what a PMID whose DOI
+// Crossref does not hold keeps (42706103, below).
+test('SRC-12 (built CLI): `add PMID:31978945` stores the names of the DOI\'s Crossref record ("Zhu, Na", never "N, Zhu") and `verify 1` passes Pass 1 against Crossref (never MIS-CITED)', () => {
   const sb = sandbox('verify-ids-pmid');
   const { root, key } = paperCiting(sb, 'pmid', 'PMID:31978945');
   const [entry] = library(root);
   assert.equal(key, 'zhu2020', 'the citekey keys the real surname');
-  assert.equal(entry!.authors[0], 'Zhu, N.');
+  assert.equal(entry!.authors[0], 'Zhu, Na');
   const bib = readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8');
-  assert.match(bib, /author = \{Zhu, N\. and Zhang, D\. and /);
-  assert.doesNotMatch(bib, /\{N, Zhu/);
+  assert.match(bib, /author = \{Zhu, Na and Zhang, Dingyu and /);
+  assert.doesNotMatch(bib, /\{N, Zhu|\{Na, Zhu/);
   assert.match(bib, /pmid = \{31978945\}/);
 
   const v = verify(sb, root);
   assert.equal(v.status, 0, v.out);
   assert.match(v.md, /- zhu2020: \*\*OK\*\* — titleJW=1\.00, authorJW=1\.00/);
   assert.match(v.md, /^Status: verified$/m);
+});
+
+test('SRC-12 (built CLI): `add PMID:42706103` — its DOI is registered with ISTIC, not Crossref — keeps PubMed\'s "Family Initials" names as "Zou, P. R." (never "PR, Zou"), and `verify 1` passes it on its PMID', () => {
+  const sb = sandbox('verify-ids-pmid-istic');
+  const { root, key } = paperCiting(sb, 'pmid-istic', 'PMID:42706103');
+  const [entry] = library(root);
+  assert.equal(key, 'zou2026');
+  assert.equal(entry!.authors[0], 'Zou, P. R.');
+  const bib = readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8');
+  assert.match(bib, /author = \{Zou, P\. R\. and Lin, Q\. F\. and /);
+  assert.doesNotMatch(bib, /\{PR, Zou/);
+  assert.match(bib, /pmid = \{42706103\}/);
+
+  const v = verify(sb, root);
+  assert.equal(v.status, 0, v.out);
+  assert.match(v.md, /- zou2026: \*\*OK\*\* — .*PMID 42706103 re-fetched from PubMed; D-11 AND-gate passed/);
 });
 
 test('criterion 7 (built CLI): a book added by ISBN (no DOI) passes Pass 1 through the books registries, and compile accepts it', () => {

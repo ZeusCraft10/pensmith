@@ -148,7 +148,7 @@ finished.
 | "outline the paper" | `outline` |
 | "write the next section" / "continue" | the bare step above (`next`) |
 | "resume" / "continue where I left off" | `resume` |
-| "redo section 3" / "section 3 needs work" / "re-do section 3" | if section 3's verification flagged a citation by its citekey (FABRICATED, MIS-CITED, RETRACTED, UNASSIGNED, UNRESOLVABLE, a quote NOT_FOUND, or UNPARSEABLE on a bibliography entry — a row keyed `L<line>` is a citation form in the prose, not a citekey), `plan 3 --revise` (it repairs one flagged citation a run; repeat it while one is left), then `verify 3`; a quote no source text could check (UNVERIFIABLE-QUOTE) is paraphrased by `write 3` (or the user edits the draft and runs `verify 3`), or accepted (below); otherwise `plan 3`, then `write 3` (a fresh plan and draft; the route for every other blocking verdict too) |
+| "redo section 3" / "section 3 needs work" / "re-do section 3" | if section 3's verification flagged a citation by its citekey (FABRICATED, MIS-CITED, RETRACTED, UNASSIGNED, UNRESOLVABLE, a quote NOT_FOUND, or UNPARSEABLE on a bibliography entry — a row keyed `L<line>` is a citation form in the prose, not a citekey), `plan 3 --revise` (it repairs one flagged citation a run; repeat it while one is left), then `verify 3`; otherwise `plan 3`, then `write 3` (a fresh plan and draft; the route for every other blocking verdict too — a quote no source text could check (UNVERIFIABLE-QUOTE) needs only `write 3`, which re-drafts it paraphrased, or the user's own edit of the draft and `verify 3`, or accepting that quote, below) |
 | "check the citations in section 3" | `verify 3` |
 | "accept quote qK in section 3" (a quote section 3's VERIFICATION.md lists as UNVERIFIABLE-QUOTE) | `verify 3 --accept-quote qK` (the CLI form: `pensmith_verify` takes no such option). Ask the user first with AskUserQuestion, one quote id at a time, and accept only on their own decision: never on your own, never a blanket acceptance |
 | "make it sound less AI" | `done` (its humanize step) |
@@ -160,8 +160,8 @@ finished.
 | "add a section about counterexamples" / "drop the section about X" | edit the table in `.paper/OUTLINE.md`: a new row takes a lettered number after the section it follows (`3a` after §3), and no existing number changes (a renumbered row is refused); delete a row to drop that section. Then `outline` (it applies the table; a dropped section is archived, never deleted) |
 | "use a different source for the claim about X in section 4" | `add <DOI or id> --section 4` (`add --remap <citekey> --section 4` for a source already in the library; `plan 4 --research "<query>"` finds one), then `plan 4` and `write 4` |
 
-`plan N --revise` only repairs a citation the verifier flagged by its citekey;
-on a clean section it changes nothing, and it cannot rewrite prose (a quote to
+`plan N --revise` only repairs a citation the verifier flagged; on a clean
+section it changes nothing, and it cannot rewrite prose (a quote to
 paraphrase, a citation form to rewrite as `[@citekey]`), so a length or source
 change is never a `--revise`. This release has no single-claim source swap: the planner picks
 the source for each claim, so after `plan 4` read section 4's new PLAN.md and
