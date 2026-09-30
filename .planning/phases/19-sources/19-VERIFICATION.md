@@ -296,3 +296,35 @@ Gate after the round (Linux, as root):
 | `git status --porcelain` after the run | clean | clean |
 
 The one failure is the root-only `tests/atomic-write.test.ts` case (CLAUDE.md). The Node 24 run is the final `node scripts/run-tests.mjs` over Phase 19's new tests too. `npm run test:coverage` (Node 22) ran the same 2401 tests with the same single failure: 93.44 % lines / statements, 84.07 % branches, 90.09 % functions (gate 80 / 66).
+
+### 9.9 Merge review round 2 (fixer, 2026-09-30)
+
+Eleven findings (one blocker, one major, nine minor). Confirmed and fixed:
+
+| Finding | Fix |
+|---|---|
+| **The merge dropped Phase 19's quote-extractor resume** (blocker): a cited quote after a short straight-quoted phrase (a scare quote, an inch mark) was never extracted, so it skipped Pass 3 and the GRND-14 check | `quote-extractor.ts`: only a quote with a citation right after it consumes both marks; any other pairing resumes one character on (Phase 19's `lastIndex = m.index + 1`), kept with Phase 18's per-key and narrative attribution. A narrative citation now claims only a pair Pandoc renders as a quote (`pandocQuoteOpeners`), and a span never crosses an opening `“`. A 30,000-draft ground-truth fuzz: every cited quote extracted, no spurious text (the pre-fix HEAD missed 4,042 and produced 3,933 wrong texts). Tests: `tests/citation-clusters.test.ts` (extractQuotes, the GRND-14 violation), `tests/pass3-oa-pdf.test.ts` (a misquote in that shape is NOT_FOUND against the OA PDF, the true quote OK). |
+| **Collaboration and organisation authors split into fake people** (major, SRC-12) | `person-name.ts displayAuthorName` braces a display name that starts with "The" or ends in a group word (Collaboration, Consortium, Group, Team, Investigators, Organization, Institute, …); arXiv, OpenAlex, Semantic Scholar, Unpaywall's raw names and Open Library / Google Books use it, as Crossref and PubMed already braced theirs. The citekey is the name's (`atlas2012`); Pass 1 and pdf-identify read the name without its braces. New recording `arxiv/id-1207.7214`; tests in `tests/person-name.test.ts`, `tests/sources/{arxiv,openalex,semanticscholar}.test.ts` and `tests/bibtex-roundtrip.test.ts` (writeBibtex → parseBib → APA `(The ATLAS Collaboration, 2012)`, and pandoc citeproc when on PATH). |
+| `add <pdf|folder> --dry-run` read the PDFs and cached their text globally; a folder exited 1 (minor) | `add.ts`: under --dry-run a local PDF or folder prints one skipped line and exits 0 (RUN-03/04 preview), reading nothing; `byo-text.ts writeByoTextCache` is a no-op in the dry-run workspace. Test: `tests/dry-run-workspace.test.ts` (no `byo-text/` in the data dir, LIBRARY.json unchanged). |
+| Pass 1 sent one arXiv request per citation; the breaker then marked the rest UNVERIFIABLE unasked (minor) | `sources/arxiv.ts lookupByIds` (one `id_list=a,b,c&max_results=n` request per 50 ids) and `pass1.ts` asks for a draft's arXiv-routed ids up front. A failed batch is UNVERIFIABLE for each citation with its reason; a lone id, a batch arXiv rejects as a whole and an offline fixture miss are asked one id at a time as before. docs/SOURCES.md says so. Test: new `tests/pass1-arxiv-batch.test.ts`. `add <folder>` still identifies its PDFs one at a time (spaced at arXiv's floor; not batched here). |
+| Crossref dissertations lost their year (minor, SRC-05) | `crossref.ts`: the year falls back issued → published-print → published-online → published → approved → posted, and the search selects `approved` and `posted`. Re-recorded the Crossref search cassettes and the e2e corpus (`--corpus e2e`, D-18-31: new searches, kept sources li2024 / meng2023 / catapang2022 / sun2026 / wang2025 / spandan2024); new recordings `crossref/works-etd-tebp-5gr2` and `crossref/search-dissertation-year`. Test in `tests/sources/crossref.test.ts` (`patel2025`, never `…noyear`). |
+| One work kept twice after research met a BYO PDF (minor, criterion 4) | `library.ts sameWorkVersion`: the one-year limit is lifted when the whole author list (three or more, in order) matches; such a re-post merge keeps the earlier record's title, year, authors and DOI, the re-post's DOI a candidate only. Test in `tests/library-writer.test.ts` (the recorded arXiv 1706.03762 and OpenAlex 2025 re-post, both orders; another co-author stays another work). |
+| SESSION.log's http records lost their failure reason to the NAME rule (minor) | `pii.ts` gains an `exclude` option; an http record's `error` skips NAME, DATE and IP (EMAIL, PHONE, SSN, ID and IBAN still apply); every other field keeps the whole of stage 2. Test in `tests/session-log.test.ts`. |
+| The bare-run summary printed the attention message twice (minor, GRND-18) | `pensmith.ts chainLine`: a step that only reported the attention the router still reports ends `pensmith: ran status (needs attention — see above); next: do what it names, then run pensmith again`. `tests/section-registry.test.ts` asserts the line and that the message appears once; `workflows/next.md` shows the form. |
+| `plan N --research` WARN named `pensmith research` and RESEARCH.md (minor, GRND-17) | `research-orchestrator.ts discoverCandidates` takes a warn context; the section pass prints `pensmith plan --research: WARN — … (see the adapter table below)`. Test in `tests/section-research.test.ts`. |
+| PRD §8 still said books / JSTOR / PsycNET / NBER / PhilPapers are skipped (minor, SRC-11) | The sentence points at the D-19-14 paragraph below it. |
+
+Not changed, with reasons:
+- **The e2e chain exports IEEE on an "APA style" assignment (EXP-03, context only).** The finding itself assigns it to EXP-03 (Phase 21, open); it is not a Phase 18/19 regression, and feature work goes through GSD (CLAUDE.md), so it stays with Phase 21.
+
+Gate after the round (Linux, as root):
+
+| Step | Node 22.22.2 (pandoc 3.9 on PATH) | Node 24.21.0 (pandoc 3.9 on PATH) |
+|---|---|---|
+| `prebuild`, `lint`, `typecheck`, `build` | exit 0 each | exit 0 each |
+| `npm run test:tier-contract` | 57/57 | 57/57 |
+| `npm test` | 2416 tests: 2415 pass, 1 fail, 0 skipped | 2417 tests: 2416 pass, 1 fail, 0 skipped |
+| `npm run validate:manifests` | exit 0 | exit 0 |
+| `git status --porcelain` after the run | clean | clean |
+
+The one failure is the root-only `tests/atomic-write.test.ts` case (CLAUDE.md). The Node 22 run preceded the last commit (pdf-identify reads a braced name without braces, one new test, re-run alone on Node 22); the Node 24 run is on the final tree and is the final `node scripts/run-tests.mjs` over Phase 19's new tests too. `npm run test:coverage` (Node 22, final tree) ran the 2417 tests with the same single failure: 93.57 % lines / statements, 84.14 % branches, 90.04 % functions (gate 80 / 66).
