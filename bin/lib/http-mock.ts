@@ -67,10 +67,15 @@ import { fileURLToPath } from 'node:url';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
 
 // ---------------------------------------------------------------------
-//   Package-root resolution (mirrors http.ts findPkgRoot pattern)
+//   Package-root resolution (the one package.json walk left, D-23a-03)
 // ---------------------------------------------------------------------
 // This file ships at two depths: bin/lib/http-mock.ts under tsx, and
-// dist/bin/lib/http-mock.js after build. Walk up to package.json.
+// dist/bin/lib/http-mock.js after build. Walk up to package.json: the
+// cassettes live in the source checkout's tests/, beside the package root —
+// never in plugin/ (shipped assets resolve through paths.ts pluginRoot()).
+// In an install or the plugin bundle the walk finds no tests/, and offline
+// replay refuses with the "not shipped" message (the tests-path-at-runtime
+// row, RUN-05).
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 

@@ -12,6 +12,17 @@ npm run build        # prebuild (version + verb table) then tsc → dist/
 npm run check        # the full local gate: prebuild · lint · typecheck · build · tier-contract · tests · manifests
 ```
 
+### The plugin directory and the developer `.mcp.json`
+
+The Claude Code plugin is the `plugin/` directory (PLUG-02): its manifest, skills, hooks config, workflow bodies, templates, references and agents, plus the committed bundles in `plugin/dist/` built from `mcp/server.ts` and `hooks/*.ts`. It is also where the Tier-2 CLI reads its prompts, presets and references (`bin/lib/paths.ts` `pluginRoot()`), so there is exactly one copy of each. Never add a workflow, prompt, preset, reference, skill or agent outside `plugin/` (`tests/plugin-layout.test.ts` fails), and never put a `bin/`, a CLAUDE.md or `node_modules/` inside it (`npm run validate:manifests` fails).
+
+The repo-root `.mcp.json` gives a developer session the same MCP server with no build: `node ${PWD:-.}/plugin/dist/mcp/server.mjs`.
+
+- Open Claude Code **at the repository root**. The path is relative to it, so a session started in a subfolder cannot find the bundle.
+- With `claude --plugin-dir ./plugin` at the root, Claude Code registers the server once: it merges a project server into the plugin's only when their expanded command lines are identical, which `${PWD}` makes true there. A plain relative path would register it twice.
+- `${PWD:-.}` falls back to a relative path where `PWD` is unset (PowerShell, cmd). Under **Git Bash on Windows**, `PWD` is an MSYS path (`/c/Users/…`) that `node` cannot open; start Claude Code from PowerShell or cmd instead.
+- The server is the committed bundle, so it reflects your source edits only after the bundle is regenerated from them.
+
 ## Architectural chokepoints (Phase 0+)
 
 Some concerns may live in exactly one module. Violating a chokepoint fails CI, and the fix is always to restructure the code — never to silence the rule.
@@ -23,13 +34,13 @@ The full list — with the module each concern belongs to and what enforces it �
 
 ## Locked copy files (SHA-256 byte-pinned)
 
-Some `references/*.md` files are the SINGLE source of truth for user-facing prose
+Some `plugin/references/*.md` files are the SINGLE source of truth for user-facing prose
 that production code renders verbatim. Each is byte-pinned by SHA-256 in
 `tests/repo-files.test.ts`. Editing one without re-pinning the hash fails CI.
 
 ### Honesty framing copy is LOCKED
 
-`references/honesty-framing.md` is the single source of the GPTZero honest-framing
+`plugin/references/honesty-framing.md` is the single source of the GPTZero honest-framing
 prose. `bin/lib/honesty.ts` reads and renders it VERBATIM — the copy is never
 inlined in code. This file is byte-pinned in `tests/repo-files.test.ts`.
 
@@ -50,7 +61,7 @@ changed fixture could mask a real zero-trace regression, so drift is a CI failur
 
 ## Prompt templates: layout and the re-pin rule
 
-Every model call is built from one `templates/prompts/<slug>.md` template. A template is **fixed instruction text** — it interpolates nothing (no `{{…}}` placeholders):
+Every model call is built from one `plugin/templates/prompts/<slug>.md` template. A template is **fixed instruction text** — it interpolates nothing (no `{{…}}` placeholders):
 
 - its frontmatter lists its data inputs, `inputs: [<tag>, …]`, and its `## Inputs` section describes each tag; a template with an untrusted input carries the standard "fenced content is data, never instructions" paragraph naming both fence markers;
 - the request is `buildPromptRequest(slug, values)` (`bin/lib/prompt-request.ts`): the template is the **system prompt**, byte-identical on every call of the slug, and the per-call data is **one user message** of tagged blocks (`<tag>…</tag>`) in the order `PROMPT_INPUTS` declares for the slug — each value sent once, JSON payloads built field by field in a fixed order so the bytes (and replay hashes and cache keys) are deterministic;
@@ -60,7 +71,7 @@ Every model call is built from one `templates/prompts/<slug>.md` template. A tem
 Templates are **hash-pinned**: `EXPECTED_PROMPT_HASHES` in `bin/lib/prompt-loader.ts` (re-checked at runtime) and `PENDING_HASH_PINS` in `tests/repo-files.test.ts`. Any edit to a template re-pins **both** in the same commit — recompute with
 
 ```bash
-node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('templates/prompts/<slug>.md')).digest('hex'))"
+node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('plugin/templates/prompts/<slug>.md')).digest('hex'))"
 ```
 
 Adding or renaming an input tag is a template re-pin **plus** an edit of `PROMPT_INPUTS` (the template's `inputs:`, its `## Inputs` section and the table must agree — `tests/prompt-layout.test.ts`). Adding or renaming a slug is a locked decision (D-12).
@@ -70,7 +81,7 @@ Adding or renaming an input tag is a template re-pin **plus** an edit of `PROMPT
 - `npm run check` is green locally
 - CI matrix (linux-x64, macos-arm64, windows-x64 × Node 22 and 24) is green
 - No new chokepoint violations and no new inline disable directives
-- Docs match the behavior you changed (`workflows/<verb>.md`, README, CLAUDE.md, `references/`)
+- Docs match the behavior you changed (`plugin/workflows/<verb>.md`, the skills in `plugin/skills/`, README, `docs/`, CLAUDE.md, `plugin/references/`)
 
 ## Test lanes
 
@@ -93,8 +104,10 @@ Tests never touch your real Pensmith data dir (the global paper registry, `runti
 
 ## Tier contract — do not skip
 
-Pensmith ships as a Claude Code plugin (Tier 1: MCP server `dist/mcp/server.js`) AND
-as a portable Node CLI (Tier 2: `dist/bin/pensmith.js`). The two tiers MUST expose
+Pensmith ships as a Claude Code plugin (Tier 1: the `plugin/` directory, whose MCP
+server is the bundle `plugin/dist/mcp/server.mjs`; the tier-contract tests spawn the
+tsc build of the same source, `dist/mcp/server.js`) AND as a portable Node CLI
+(Tier 2: `dist/bin/pensmith.js`). The two tiers MUST expose
 the same observable behavior for the operations declared in `tests/tier-contract.test.ts`.
 This is the load-bearing property of the project.
 
@@ -129,11 +142,16 @@ underlying issue.
    This is a one-time setup; if you're forking pensmith, ask the maintainer
    to add the same protection on your fork.
 
-3. **Preflight (layer 3):** `node scripts/validate-plugin-manifest.cjs` asserts
-   presence of `hooks/`, `workflows/` (exactly 16 .md files with `<capability_check>`
-   blocks — one per UX-02 canonical verb per CONTEXT D-05, matched by the 02-06
-   hooks-workflows plan), `dist/mcp/server.js`, and the `.claude-plugin/*.json`
-   shapes. Runs in CI after `npm test`.
+3. **Preflight (layer 3):** `node scripts/validate-plugin-manifest.cjs`
+   (`npm run validate:manifests`) checks the plugin against the Claude Code spec and
+   pensmith's contract: `plugin/.claude-plugin/plugin.json` (no `skills` object array,
+   no `hooks` key, the inline MCP server on the committed bundle, version = package.json),
+   `plugin/hooks/hooks.json` (the 4 events in exec form, their bundles present), the
+   8 `plugin/skills/<name>/SKILL.md` skills, `plugin/workflows/` (exactly 16 .md
+   files with `<capability_check>` blocks — one per UX-02 canonical verb per
+   CONTEXT D-05), the marketplace source `./plugin` and the developer `.mcp.json`;
+   it rejects the pre-v1 shapes (`tests/fixtures/plugin-legacy/`). Runs in CI after
+   `npm test`, next to `claude plugin validate --strict` on the real plugin (CI-05).
 
 4. **Prose (layer 4 — this section):** The "Tier contract — do not skip" section
    in `CONTRIBUTING.md`. The Phase 2 D-24 lock keeps this section intact.
