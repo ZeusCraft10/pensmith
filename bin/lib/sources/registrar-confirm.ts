@@ -23,7 +23,10 @@
 // Crossref's `Mennyit felejtenek az orvostanhallgatók?`, and Pass 1 blocked
 // the kept source as MIS-CITED on the title. A PubMed candidate with a DOI is
 // confirmed too, and its record's original-language title
-// (pubmedVernacularTitle) counts as its title for the same-work check.
+// (pubmedVernacularTitle) counts as its title for the same-work check. Since
+// review round 2 a PMID identified like `add` is confirmed the same way
+// (source-input.ts lookupIdentifier → pubmedConfirmed): `add PMID:…`, a URL
+// that declares a PMID, and research's prune question.
 //
 // Best-effort and never fatal: a DOI Crossref does not know (a DataCite DOI),
 // a failed lookup, an offline miss, or a record that is another work leaves

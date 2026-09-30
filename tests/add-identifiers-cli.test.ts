@@ -20,13 +20,18 @@
 //           is "not a PDF (got text/html)" with no PDF-parser output; a
 //           loopback URL is refused with the SSRF reason and the listener gets
 //           no request.
+//   Review round 2 of the Phase 20 + 23a merge: `add PMID:40121571` — a
+//           Hungarian article whose PubMed title is the bracketed English
+//           translation — stores the title Crossref (its DOI's registrar)
+//           holds, so `verify` passes it instead of blocking it as MIS-CITED.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sandbox, writeState, CLI_BIN, STACK_LINE, type Sandbox } from './helpers/paper-cli-harness.js';
+import { seedGatePaper } from './helpers/gate-paper.js';
 import { startHttpServer } from './helpers/local-servers/transport.js';
 
 interface Run {
@@ -150,6 +155,34 @@ test('SRC-13 (built CLI): PMID:31978945 and pmid:31978945 are the same PubMed re
   assert.match(b.stdout, /^pensmith add: already in library as /m);
   assert.equal(libraryKeys(root).length, 1);
   assert.match(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8'), /"pmid": "31978945"/);
+});
+
+test('review round 2 (built CLI): `add PMID:40121571` stores the title Crossref holds for a translated PubMed title, and `verify` passes it', () => {
+  const p = seedGatePaper('add-cli-pmid-translated', [{ n: 1, slug: 'intro', assigned: [], draft: null }], null);
+  const added = p.cli(['add', 'PMID:40121571', '--section', '1']);
+  assert.equal(added.status, 0, `${added.stdout}\n${added.stderr}`);
+  const lib = JSON.parse(readFileSync(join(p.root, '.paper', 'LIBRARY.json'), 'utf8')) as {
+    entries: Array<{ citekey: string; title: string; pmid?: string; doi?: string; authors?: string[] }>;
+  };
+  assert.equal(lib.entries.length, 1);
+  const e = lib.entries[0]!;
+  // PubMed's esummary title is "[How much do medical students forget?]."; Crossref's is the printed one.
+  assert.equal(e.title, 'Mennyit felejtenek az orvostanhallgatók?', 'the title the DOI\'s registrar holds');
+  assert.equal(e.authors?.[0], 'Csaba, Gergely József', "Crossref's author names");
+  assert.equal(e.pmid, '40121571', 'the PMID stays');
+  assert.equal(e.doi, '10.1556/650.2025.33246');
+  const b = bib(p.root);
+  assert.match(b, /^ {2}title = \{Mennyit felejtenek az orvostanhallgatók\?/m);
+  assert.doesNotMatch(b, /How much do medical students forget/);
+  assert.match(added.stdout, new RegExp(`^pensmith add: ${e.citekey} mapped to §1 \\(assigned_sources only\\)\\.$`, 'm'));
+
+  // The section cites it; Pass 1 re-fetches the DOI at Crossref and finds the same title.
+  writeFileSync(join(p.sectionDir(1, 'intro'), 'DRAFT.md'), `# Intro\n\nMedical students forget much of what they learn [@${e.citekey}].\n`);
+  const v = p.cli(['verify', '1', '--yolo']);
+  assert.equal(v.status, 0, `${v.stdout}\n${v.stderr}`);
+  const verification = readFileSync(join(p.sectionDir(1, 'intro'), 'VERIFICATION.md'), 'utf8');
+  assert.match(verification, new RegExp(`^- ${e.citekey}: \\*\\*OK\\*\\*`, 'm'));
+  assert.doesNotMatch(verification, /MIS-CITED/);
 });
 
 test('SRC-01 (built CLI): the recorded 301 to a real PDF is followed hop by hop; a PDF that names no work is refused and nothing is added', async () => {

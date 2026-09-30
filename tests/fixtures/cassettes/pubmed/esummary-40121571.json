@@ -1,0 +1,126 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=40121571&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "40121571": {
+          "uid": "40121571",
+          "pubdate": "2025 Mar 23",
+          "epubdate": "2025 Mar 23",
+          "source": "Orv Hetil",
+          "authors": [
+            {
+              "name": "Csaba GJ",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Füzesi Z",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Csathó Á",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Csathó Á",
+          "title": "[How much do medical students forget?].",
+          "sorttitle": "how much do medical students forget",
+          "volume": "166",
+          "issue": "12",
+          "pages": "450-458",
+          "lang": [
+            "hun"
+          ],
+          "nlmuniqueid": "0376412",
+          "issn": "0030-6002",
+          "essn": "1788-6120",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "257",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "40121571"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1556/650.2025.33246"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2024/12/13 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2025/01/23 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2025/03/23 18:30"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2025/03/23 18:29"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2025/03/23 12:02"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Orvosi hetilap",
+          "elocationid": "doi: 10.1556/650.2025.33246",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2025/03/23 00:00",
+          "sortfirstauthor": "Csaba GJ",
+          "vernaculartitle": "Mennyit felejtenek az orvostanhallgatók?"
+        },
+        "uids": [
+          "40121571"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T18:20:46.315Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

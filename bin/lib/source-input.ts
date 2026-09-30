@@ -36,6 +36,7 @@ import { sources } from './sources/index.js';
 import { lookupFailed, lookupFound, lookupNotFound, isSourceLookupError, type LookupResult } from './sources/lookup.js';
 import { registrationAgency, doiPrefix } from './sources/doi-ra.js';
 import * as doiContent from './sources/doi-cn.js';
+import { confirmRegistrarRecords } from './sources/registrar-confirm.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 
 export type SourceInput =
@@ -325,7 +326,8 @@ function adapterId(input: IdentifierInput): string {
  * the reason says why) — never two (D-19-05). An adapter's `lookupById` is
  * used when it has one; otherwise `fetchById` (null = not-found, a thrown
  * SourceLookupError = failed). A DOI Crossref answers 404 for is not-found
- * only when doi.org says Crossref registers its prefix (crossrefNotFound). The
+ * only when doi.org says Crossref registers its prefix (crossrefNotFound). A
+ * PubMed record with a DOI is confirmed at Crossref (pubmedConfirmed). The
  * typed OfflineEgressError (sources offline with no recorded answer, or
  * --dry-run) propagates: it is a mode, not an outcome.
  */
@@ -335,7 +337,9 @@ export async function lookupIdentifier(input: IdentifierInput): Promise<LookupRe
   const id = adapterId(input);
   if (typeof adapter?.lookupById === 'function') {
     const r = await adapter.lookupById(id);
-    return input.kind === 'doi' && r.kind === 'not-found' ? crossrefNotFound(input.doi, r) : r;
+    if (input.kind === 'doi' && r.kind === 'not-found') return crossrefNotFound(input.doi, r);
+    if (input.kind === 'pmid' && r.kind === 'found') return pubmedConfirmed(r.candidate);
+    return r;
   }
   if (typeof adapter?.fetchById === 'function') {
     try {
@@ -352,6 +356,26 @@ export async function lookupIdentifier(input: IdentifierInput): Promise<LookupRe
     }
   }
   return lookupFailed(`no ${input.kind === 'isbn' ? 'book (ISBN)' : name} lookup is available in this build`);
+}
+
+/**
+ * PubMed's record of a PMID, as Pass 1 will read it (review round 2 of the
+ * Phase 20 + 23a merge): PubMed is not a DOI's registrar, and Pass 1 checks a
+ * cited DOI at Crossref. For a non-English article PubMed's title is the
+ * English translation in brackets while Crossref holds the printed title, so
+ * the record as PubMed gave it would be blocked as MIS-CITED on its own title.
+ * The one confirmation research applies to its kept hits
+ * (sources/registrar-confirm.ts: the same work — PubMed's original-language
+ * title counts — takes Crossref's bibliographic fields; identifiers, abstract
+ * and provenance stay) runs here too, so every path that identifies a PMID
+ * like `add` — `add`, a URL that declares a PMID, research's prune question —
+ * stores what verify finds. Best-effort: a DOI Crossref does not know, a
+ * failed or offline lookup, or another work under the DOI leaves the record
+ * as PubMed gave it.
+ */
+async function pubmedConfirmed(candidate: SourceCandidate): Promise<LookupResult> {
+  const { candidates } = await confirmRegistrarRecords([candidate], (doi) => sources.crossref.lookupById(doi));
+  return lookupFound(candidates[0] ?? candidate);
 }
 
 /**
