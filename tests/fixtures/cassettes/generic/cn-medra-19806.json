@@ -1,0 +1,57 @@
+[
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/10.1400/19806",
+    "status": 302,
+    "response": "<html><head><title>Handle Redirect</title></head>\n<body><a href=\"https://data.medra.org/10.1400%2F19806\">https://data.medra.org/10.1400%2F19806</a></body></html>",
+    "responseHeaders": {
+      "content-type": "text/html;charset=utf-8",
+      "location": "https://data.medra.org/10.1400%2F19806"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:52:55.723Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://data.medra.org",
+    "method": "GET",
+    "path": "/10.1400%2F19806",
+    "status": 200,
+    "response": {
+      "type": "article-journal",
+      "author": [
+        {
+          "family": "Navajas",
+          "given": "Gonzalo"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2005
+          ]
+        ]
+      },
+      "container-title": "Studi ispanici",
+      "DOI": "10.1400/19806",
+      "ISSN": "0585492X",
+      "issue": "4",
+      "medium": "JD",
+      "publisher": "Istituti Editoriali e Poligrafici Internazionali",
+      "publisher-place": "IT",
+      "title": "La historia y la literatura española postnacional",
+      "URL": "https://doi.org/10.1400/19806"
+    },
+    "responseHeaders": {
+      "content-type": "application/vnd.citationstyles.csl+json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:52:55.723Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  }
+]

@@ -184,7 +184,13 @@ export function renderSourcesBlock(entries: readonly LibraryEntry[]): string {
     if (e.retraction_status === 'retracted') {
       lines.push(`  - Retraction: RETRACTED${e.retraction_details ? ` — ${oneLine(e.retraction_details)}` : ''}`);
     } else if (e.retraction_status === 'unknown') {
-      lines.push('  - Retraction: retraction status unknown (the lookup failed; it is re-checked at verify time)');
+      // D-20-13: another agency's DOI has no retraction data (the reason is
+      // recorded); otherwise the lookup failed. Either way: never "clear".
+      lines.push(
+        e.retraction_details
+          ? `  - Retraction: retraction status unknown (${oneLine(e.retraction_details)}; it is re-checked at verify time)`
+          : '  - Retraction: retraction status unknown (the lookup failed; it is re-checked at verify time)',
+      );
     }
     if (!e.hydrated) {
       lines.push('  - Metadata: local only — no registrar record matched this PDF confidently; check it before citing');

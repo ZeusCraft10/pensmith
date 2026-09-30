@@ -81,6 +81,40 @@ export const ISTIC_DOI = '10.3760/cma.j.cn441530-20260508-00189-1';
 export const ISTIC_PMID = '42706103';
 /** A retracted work with a Retraction Watch record in Crossref (Wakefield et al. 1998). */
 export const RECORDED_RETRACTED_DOI = '10.1016/S0140-6736(97)11096-0';
+/**
+ * Phase 20 (VRFY-11): the identifiers the verifier's acceptance list names —
+ * each resolved at its own registrar (scripts/live-verify.mjs checks them live).
+ */
+export const VRFY11_CROSSREF_BOOK_DOI = '10.1017/CBO9780511804441';
+export const VRFY11_EDITED_VOLUME_DOI = '10.1007/978-3-319-24574-4';
+export const VRFY11_ZENODO_DOI = '10.5281/zenodo.1212303';
+export const VRFY11_PMID = '31535829';
+export const VRFY11_ARXIV_ID = '1810.04805';
+/** VRFY-13: The Elements of Statistical Learning, cited with its subtitle. */
+export const ESL_DOI = '10.1007/978-0-387-84858-7';
+/** A DataCite-prefix DOI DataCite has no record of (FABRICATED, VRFY-14). */
+export const DATACITE_FAKE_DOI = '10.5281/zenodo.pensmith-fake-2099';
+/** VRFY-10's fabricated bare identifier (`doi:10.9999/x` in the prose). */
+export const BARE_FAKE_DOI = '10.9999/x';
+/** The Crossref record the metadata search matches for Kuhn 1996 cited with no ISBN (VRFY-12). */
+export const KUHN_1996_DOI = '10.7208/chicago/9780226458106.001.0001';
+/** An mEDRA-registered DOI (doi.org content negotiation, D-20-10). */
+export const MEDRA_DOI = '10.1400/19806';
+/** A JaLC-registered DOI (doi.org content negotiation, D-20-10). */
+export const JALC_DOI = '10.11501/3140078';
+/** tests/fixtures/known-bad-citations.json: fabricated DOIs, each answered 404 by Crossref (VRFY-29). */
+export const KNOWN_BAD_DOIS = Object.freeze([
+  '10.99999/fake.001', '10.99999/fake.002', '10.99999/fake.003', '10.99999/fake.004', '10.99999/fake.005',
+  '10.1145/xxxxxxx.xxxxxxx', '10.1145/yyyyyyy.yyyyyyy', '10.1145/zzzzzzz.zzzzzzz', '10.1145/aaaaaaa.aaaaaaa',
+  '10.1145/bbbbbbb.bbbbbbb', '10.1145/ccccccc.ccccccc', '10.99999/fake.012',
+]);
+/** Pass 1's metadata searches (VRFY-12): the citations tests/metadata-search.test.ts and the tier contract send. */
+export const BIBLIOGRAPHIC_QUERIES = Object.freeze({
+  'search-bibliographic-lecun-2015': 'Deep learning LeCun 2015',
+  'search-bibliographic-no-match': 'A Work That Was Never Published Nobody 2017',
+  'search-bibliographic-vaswani-2017': 'Attention is All You Need Vaswani 2017',
+  'search-bibliographic-kuhn-1996': 'The Structure of Scientific Revolutions Kuhn 1996',
+});
 /** An arXiv id recorded for lookups. */
 export const RECORDED_ARXIV_ID = '1706.03762';
 /** An old-style arXiv id (archive/number) recorded for lookups. */
@@ -174,6 +208,23 @@ const QUERY_SETS = {
     // SRC-15: a research query whose Crossref hits include a bring-your-own PDF's
     // work (10.1038/nphys1170, tests/fixtures/byo/doi-footer.pdf) — the two merge.
     { file: 'search-byo-merge', calls: [{ fn: 'search', arg: BYO_MERGE_QUERY, limit: RESEARCH_LIMIT, minLimit: RESEARCH_LIMIT }] },
+    // Phase 20 (VRFY-11): a Crossref monograph, an edited volume (editors only), the ESL book (VRFY-13 subtitle).
+    { file: 'works-cbo9780511804441', calls: [{ fn: 'lookupById', arg: VRFY11_CROSSREF_BOOK_DOI }] },
+    { file: 'works-miccai-2015-part3', calls: [{ fn: 'lookupById', arg: VRFY11_EDITED_VOLUME_DOI }] },
+    { file: 'works-esl-2009', calls: [{ fn: 'lookupById', arg: ESL_DOI }] },
+    // Crossref's 404 for DOIs other agencies registered (DataCite, mEDRA, JaLC) and a fake DataCite-prefix DOI.
+    { file: 'works-other-agency-404', calls: [VRFY11_ZENODO_DOI, DATACITE_FAKE_DOI, MEDRA_DOI, JALC_DOI].map((arg) => ({ fn: 'lookupById', arg })) },
+    // VRFY-29: every fabricated DOI of tests/fixtures/known-bad-citations.json — Crossref's 404.
+    { file: 'works-known-bad-404', calls: KNOWN_BAD_DOIS.map((arg) => ({ fn: 'lookupById', arg })) },
+    // VRFY-10: a bare `doi:10.9999/x` in a draft's prose — Crossref's 404 (its prefix has no agency).
+    { file: 'works-bare-fake-404', calls: [{ fn: 'lookupById', arg: BARE_FAKE_DOI }] },
+    // VRFY-12: Pass 1's metadata searches (query.bibliographic) for entries with no identifier.
+    ...Object.entries(BIBLIOGRAPHIC_QUERIES).map(([file, arg]) => ({ file, calls: [{ fn: 'searchBibliographic', arg }] })),
+  ],
+  // Phase 20 (VRFY-11, D-20-10): DataCite DOI records (api.datacite.org).
+  datacite: [
+    { file: 'doi-zenodo-1212303', calls: [{ fn: 'lookupById', arg: VRFY11_ZENODO_DOI }] },
+    { file: 'doi-zenodo-fake-404', calls: [{ fn: 'lookupById', arg: DATACITE_FAKE_DOI }] },
   ],
   openalex: [
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3 }] },
@@ -195,6 +246,8 @@ const QUERY_SETS = {
     // SRC-12: a collaboration as the only author ("The ATLAS Collaboration") is
     // one braced name, never a person called "Collaboration, The ATLAS".
     { file: 'id-1207.7214', calls: [{ fn: 'lookupById', arg: '1207.7214', pauseMs: 3500 }] },
+    // Phase 20 (VRFY-11): an arXiv-id-only entry (BERT).
+    { file: 'id-1810.04805', calls: [{ fn: 'lookupById', arg: VRFY11_ARXIV_ID, pauseMs: 3500 }] },
     // PDF identification's arXiv title search (source-input.ts arxivTitleQuery),
     // asked when OpenAlex's only match is a later re-post (review round 2).
     { file: 'search-title-attention', calls: [{ fn: 'search', arg: `ti:"${BYO_PDF_TITLE}"`, limit: TITLE_LIMIT, minLimit: TITLE_LIMIT, pauseMs: 3500 }] },
@@ -204,9 +257,16 @@ const QUERY_SETS = {
   ],
   pubmed: [
     { file: 'search-attention-neural-networks', calls: [{ fn: 'search', arg: RECORDED_QUERY, limit: 10, minLimit: 3 }] },
-    { file: 'esummary-31978945', calls: [{ fn: 'lookupById', arg: '31978945' }] },
+    // Pass 1 asks esummary only (abstract: false); `add` also asks efetch for the abstract (D-20-16).
+    { file: 'esummary-31978945', calls: [{ fn: 'lookupById', arg: '31978945', opts: { abstract: false } }] },
+    { file: 'efetch-31978945', calls: [{ fn: 'fetchAbstracts', arg: ['31978945'] }] },
     // The PubMed record of the ISTIC-registered DOI above (Pass 1's PMID fallback).
-    { file: 'esummary-42706103', calls: [{ fn: 'lookupById', arg: ISTIC_PMID }] },
+    { file: 'esummary-42706103', calls: [{ fn: 'lookupById', arg: ISTIC_PMID, opts: { abstract: false } }] },
+    { file: 'efetch-42706103', calls: [{ fn: 'fetchAbstracts', arg: [ISTIC_PMID] }] },
+    // Phase 20 (VRFY-11): a PMID-only entry (the DAPA-HF trial). Its efetch
+    // answer is over the cassette cap (its collaborator list and references),
+    // so only the Pass-1 esummary is recorded.
+    { file: 'esummary-31535829', calls: [{ fn: 'lookupById', arg: VRFY11_PMID, opts: { abstract: false } }] },
     researchFrom2015(),
     ...planResearch(),
   ],
@@ -231,11 +291,19 @@ const QUERY_SETS = {
     { file: 'updates-foreco-2013', calls: [{ fn: 'fetchById', arg: '10.1016/j.foreco.2013.06.030' }] },
     { file: 'updates-nejmoa2001017', calls: [{ fn: 'fetchById', arg: '10.1056/nejmoa2001017' }] },
     { file: 'updates-pnas-drosophila-coli', calls: [{ fn: 'fetchById', arg: '10.1073/pnas.74.11.5041' }] },
+    // Phase 20 (VRFY-11): the re-query Pass 1 makes (the record's spelling) and the freshness probe (normalized).
+    { file: 'updates-cbo9780511804441', calls: [{ fn: 'fetchById', arg: VRFY11_CROSSREF_BOOK_DOI }, { fn: 'fetchById', arg: VRFY11_CROSSREF_BOOK_DOI.toLowerCase() }] },
+    { file: 'updates-miccai-2015-part3', calls: [{ fn: 'fetchById', arg: VRFY11_EDITED_VOLUME_DOI }] },
+    { file: 'updates-esl-2009', calls: [{ fn: 'fetchById', arg: ESL_DOI }] },
+    // VRFY-12: the re-query of the metadata search's match for Kuhn 1996.
+    { file: 'updates-kuhn-chicago-1996', calls: [{ fn: 'fetchById', arg: KUHN_1996_DOI }] },
   ],
   books: [
     // SRC-11: Kuhn, The Structure of Scientific Revolutions (3rd ed., 1996).
     { file: 'isbn-9780226458083', calls: [{ fn: 'lookupById', arg: 'isbn:9780226458083' }] },
     { file: 'search-economic-consequences-of-the-peace', calls: [{ fn: 'search', arg: 'The Economic Consequences of the Peace', limit: 5, minLimit: 2 }] },
+    // VRFY-12: Pass 1's title search for a book cited with no ISBN.
+    { file: 'title-search-kuhn-structure', calls: [{ fn: 'searchTitle', arg: ['The Structure of Scientific Revolutions', 'Kuhn'] }] },
   ],
   // Plain URL fetches through http.ts (source 'generic'), redirects recorded hop by hop.
   generic: [
@@ -264,8 +332,22 @@ const QUERY_SETS = {
         { fn: 'fetch', arg: 'https://doi.org/ra/10.99999' },
         { fn: 'fetch', arg: 'https://doi.org/ra/10.5555' },
         { fn: 'fetch', arg: 'https://doi.org/ra/10.3760' },
+        // Phase 20 (VRFY-11, VRFY-29, D-20-13): mEDRA, JaLC, ACM (the known-bad
+        // DOIs), and the prefixes research's retraction cross-check asks about
+        // for the recorded e2e corpus's non-Crossref-sourced kept sources.
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.1400' },
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.11501' },
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.1145' },
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.1109' },
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.1016' },
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.58346' },
+        { fn: 'fetch', arg: 'https://doi.org/ra/10.9999' },
       ],
     },
+    // Phase 20 (VRFY-11, D-20-10): doi.org content negotiation (CSL JSON) of an
+    // mEDRA and a JaLC DOI, each through its redirect to the agency's service.
+    { file: 'cn-medra-19806', calls: [{ fn: 'contentNegotiation', arg: MEDRA_DOI }] },
+    { file: 'cn-jalc-3140078', calls: [{ fn: 'contentNegotiation', arg: JALC_DOI }] },
   ],
 };
 
@@ -355,6 +437,12 @@ async function runChild(adapter, files = []) {
           const c = await oa.confirmOpenAccessPdf(url);
           if (!c.ok) throw new Error(`the open-access link did not answer with a PDF: ${c.reason}`);
         },
+        // Phase 20 (D-20-10): the doi.org content-negotiation lookup Pass 1 makes.
+        contentNegotiation: async (doi) => {
+          const cn = await import(bin(path.join('sources', 'doi-cn.js')));
+          const r = await cn.lookupById(doi);
+          if (r.kind !== 'found') throw new Error(`content negotiation of ${doi}: ${r.kind === 'failed' ? r.reason : 'not found'}`);
+        },
       }
     : await import(bin(path.join('sources', `${adapter}.js`)));
   const mock = await import(bin('http-mock.js'));
@@ -384,8 +472,26 @@ async function runChild(adapter, files = []) {
       return;
     }
     if (call.fn === 'lookupById') {
-      const r = await mod.lookupById(call.arg);
+      const r = await mod.lookupById(call.arg, call.opts ?? {});
       if (r.kind === 'failed') throw new Error(`lookup failed: ${r.reason}`);
+      return;
+    }
+    // Phase 20: Pass 1's metadata searches (Crossref query.bibliographic, Open
+    // Library title search) and PubMed's efetch abstracts.
+    if (call.fn === 'searchBibliographic') {
+      const r = await mod.searchBibliographic(call.arg);
+      if (r.kind === 'failed') throw new Error(`bibliographic search failed: ${r.reason}`);
+      return;
+    }
+    if (call.fn === 'searchTitle') {
+      const [title, author] = call.arg;
+      const r = await mod.searchTitle(title, author);
+      if (r.kind === 'failed') throw new Error(`title search failed: ${r.reason}`);
+      return;
+    }
+    if (call.fn === 'fetchAbstracts') {
+      const r = await mod.fetchAbstracts(call.arg);
+      if (r.failure !== null) throw new Error(`efetch failed: ${r.failure}`);
       return;
     }
     if (call.fn === 'fetch') {

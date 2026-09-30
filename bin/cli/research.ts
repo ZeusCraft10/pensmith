@@ -806,7 +806,13 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     err(`WARN: ${retracted.length} retracted source(s) found in LIBRARY.json: ${retracted.map((r) => r.citekey).join(', ')}. These will FAIL Pass-1 if cited.`);
   }
   if (unknown.length > 0) {
-    err(`WARN: retraction status unknown for ${unknown.length} source(s): ${unknown.map((r) => r.citekey).join(', ')} — the lookup failed; verify re-checks them.`);
+    // D-20-13: why each is unknown — a failed lookup, or a DOI another agency
+    // registered (no retraction data for it) — is in RESEARCH.md; never "clear".
+    const why = [...new Set(unknown.map((r) => r.detail).filter((d): d is string => typeof d === 'string' && d.length > 0))];
+    err(
+      `WARN: retraction status unknown for ${unknown.length} source(s): ${unknown.map((r) => r.citekey).join(', ')} — ` +
+        `${why.length === 1 ? why[0] : why.length > 1 ? `${why[0]} (and ${why.length - 1} other reason(s), see RESEARCH.md)` : 'the lookup failed'}; verify re-checks them.`,
+    );
   }
   out(
     `pensmith research: wrote LIBRARY.json (${upsert.library.entries.length} source(s); ${added} new` +

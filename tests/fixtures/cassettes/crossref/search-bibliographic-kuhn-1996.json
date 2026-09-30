@@ -1,0 +1,187 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query.bibliographic=The+Structure+of+Scientific+Revolutions+Kuhn+1996&rows=5&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by%2Csubtitle",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 5467364,
+        "items": [
+          {
+            "publisher": "University of Chicago Press",
+            "DOI": "10.7208/chicago/9780226458106.001.0001",
+            "type": "monograph",
+            "title": [
+              "The Structure of Scientific Revolutions"
+            ],
+            "author": [
+              {
+                "given": "Thomas S.",
+                "family": "Kuhn",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  1996
+                ]
+              ]
+            },
+            "ISBN": [
+              "9780226458083",
+              "9780226458076",
+              "9780226458106"
+            ]
+          },
+          {
+            "publisher": "Routledge",
+            "DOI": "10.4324/9781315849201-38",
+            "type": "book-chapter",
+            "page": "287-294",
+            "title": [
+              "Thomas Kuhn The Structure of Scientific Revolutions"
+            ],
+            "container-title": [
+              "Philosophy: The Classics"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2014,
+                  2,
+                  3
+                ]
+              ]
+            },
+            "ISBN": [
+              "9781315849201"
+            ]
+          },
+          {
+            "publisher": "University of Chicago Press",
+            "DOI": "10.7208/chicago/9780226317175.003.0004",
+            "type": "book-chapter",
+            "page": "71-95",
+            "title": [
+              "Thomas Kuhn and the Psychology of Scientific Revolutions"
+            ],
+            "container-title": [
+              "Kuhn's 'Structure of Scientific Revolutions' at Fifty"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2016
+                ]
+              ]
+            },
+            "ISBN": [
+              "9780226317205",
+              "9780226317038",
+              "9780226317175"
+            ]
+          },
+          {
+            "publisher": "Routledge",
+            "DOI": "10.4324/9780203103159-19",
+            "type": "book-chapter",
+            "page": "241-260",
+            "title": [
+              "The Structure of Philosophical History: Thoughts after Kuhn"
+            ],
+            "container-title": [
+              "Kuhn's The Structure of Scientific Revolutions Revisited"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2013,
+                  5,
+                  20
+                ]
+              ]
+            },
+            "ISBN": [
+              "9780203103159"
+            ]
+          },
+          {
+            "publisher": "University of Chicago Press",
+            "DOI": "10.7208/chicago/9780226458144.001.0001",
+            "type": "monograph",
+            "title": [
+              "The Structure of Scientific Revolutions"
+            ],
+            "author": [
+              {
+                "given": "Thomas S.",
+                "family": "Kuhn",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Ian",
+                "family": "Hacking",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "subtitle": [
+              "50th Anniversary Edition"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2012
+                ]
+              ]
+            },
+            "ISBN": [
+              "9780226458120",
+              "9780226458113",
+              "9780226458144"
+            ]
+          }
+        ],
+        "items-per-page": 5,
+        "query": {
+          "start-index": 0,
+          "search-terms": null
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:52:21.793Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

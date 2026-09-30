@@ -479,9 +479,11 @@ function retractionUnknownNote(agency: string): string {
 }
 
 /**
- * The verdict against a record: RETRACTED when it says so, the match
- * (OK / MIS-CITED naming the fields), and — for a Crossref record — the
- * Retraction Watch re-query.
+ * The verdict against a record: RETRACTED when the record says so; MIS-CITED
+ * naming the fields that do not match; and — a Crossref record that matches —
+ * the Retraction Watch re-query (a hit is RETRACTED, no answer is
+ * UNVERIFIABLE-NETWORK). An OK row for a registrar with no retraction data
+ * says the status is unknown (D-20-13).
  */
 async function compareRecord(
   c: Claimed,
@@ -502,11 +504,11 @@ async function compareRecord(
   const checkedAt = record.last_verified;
   const notice = retractedNotice(record);
   if (notice !== null) return row(c.ck, 'RETRACTED', `cited work is retracted (${opts.label} at verify time: ${notice})`, scores, checkedAt);
+  if (!match.ok) return row(c.ck, 'MIS-CITED', `${opts.prefix ? `${opts.prefix}: ` : ''}${match.detail}`, scores, checkedAt);
   if (opts.retractionDois !== undefined) {
     const rw = await retractionRequery(c, opts.retractionDois, scores, checkedAt, facts);
     if (rw !== null) return rw;
   }
-  if (!match.ok) return row(c.ck, 'MIS-CITED', `${opts.prefix ? `${opts.prefix}: ` : ''}${match.detail}`, scores, checkedAt);
   const unknown = opts.retractionDois === undefined && opts.agency !== 'PubMed' ? `; ${retractionUnknownNote(opts.agency)}` : '';
   return row(c.ck, 'OK', `${opts.prefix ? `${opts.prefix}; ` : ''}${match.detail}${unknown}`, scores, checkedAt);
 }
@@ -708,11 +710,11 @@ async function verdictForDoi(c: Claimed, claimed: BibEntry, doi: string, facts: 
     return row(c.ck, match.ok ? 'OK' : 'MIS-CITED', `dry-run synthetic source; ${match.detail}`, scores, synthetic.last_verified);
   }
 
-  const res = await resolveDoi(norm, refreshOf(c.ck, facts));
+  const res = await resolveDoi(doi.trim(), refreshOf(c.ck, facts));
   switch (res.kind) {
     case 'record': {
       const returned = normalizeDoi(res.candidate.doi ?? '') ?? norm;
-      const retractionDois = res.agency === 'Crossref' ? { retractionDois: [doi, returned] } : {};
+      const retractionDois = res.agency === 'Crossref' ? { retractionDois: [doi, res.candidate.doi ?? returned] } : {};
       if (returned === norm) return compareRecord(c, res.candidate, { label: res.label, prefix: res.prefix, agency: res.agency, ...retractionDois }, facts);
       // VRFY-14: an answer under another DOI passes only when the registrar asserts the relation.
       const alias = await aliasAsserted(norm, res.candidate);
@@ -837,7 +839,7 @@ async function bareRow(b: BareIdentifier, facts: LibraryFacts): Promise<Pass1Res
       const notice = retractedNotice(res.candidate);
       if (notice === null && res.agency === 'Crossref') {
         const c: Claimed = { ck: key, work: { title: res.candidate.title, authors: res.candidate.authors, year: res.candidate.year ?? null }, doi: b.id };
-        const rw = await retractionRequery(c, [b.id], { titleJW: NOT_COMPARED, authorJW: NOT_COMPARED }, res.candidate.last_verified, facts);
+        const rw = await retractionRequery(c, [b.id, res.candidate.doi ?? b.id], { titleJW: NOT_COMPARED, authorJW: NOT_COMPARED }, res.candidate.last_verified, facts);
         if (rw !== null) return rw;
       }
       const v = found(res.candidate, res.agency);

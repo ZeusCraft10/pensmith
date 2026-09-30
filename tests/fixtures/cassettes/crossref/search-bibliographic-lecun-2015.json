@@ -1,0 +1,269 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query.bibliographic=Deep+learning+LeCun+2015&rows=5&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by%2Csubtitle",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 8271101,
+        "items": [
+          {
+            "publisher": "Springer Science and Business Media LLC",
+            "issue": "7553",
+            "DOI": "10.1038/nature14539",
+            "type": "journal-article",
+            "page": "436-444",
+            "title": [
+              "Deep learning"
+            ],
+            "volume": "521",
+            "author": [
+              {
+                "given": "Yann",
+                "family": "LeCun",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Yoshua",
+                "family": "Bengio",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Geoffrey",
+                "family": "Hinton",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Nature"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2015,
+                  5,
+                  27
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "IEEE",
+            "DOI": "10.1109/hotchips.2015.7477328",
+            "type": "proceedings-article",
+            "page": "1-95",
+            "title": [
+              "Deep learning &amp; convolutional networks"
+            ],
+            "author": [
+              {
+                "given": "Yann",
+                "family": "LeCun",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "2015 IEEE Hot Chips 27 Symposium (HCS)"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2015,
+                  8
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "Springer Science and Business Media LLC",
+            "issue": "1",
+            "DOI": "10.1007/s11263-015-0813-1",
+            "type": "journal-article",
+            "page": "1-2",
+            "title": [
+              "Guest Editorial: Deep Learning"
+            ],
+            "volume": "113",
+            "author": [
+              {
+                "given": "Marc’Aurelio",
+                "family": "Ranzato",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Geoffrey",
+                "family": "Hinton",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Yann",
+                "family": "LeCun",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "International Journal of Computer Vision"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2015,
+                  4,
+                  24
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "IEEE",
+            "DOI": "10.1109/isscc.2019.8662396",
+            "type": "proceedings-article",
+            "page": "12-19",
+            "title": [
+              "1.1 Deep Learning Hardware: Past, Present, and Future"
+            ],
+            "author": [
+              {
+                "given": "Yann",
+                "family": "LeCun",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "2019 IEEE International Solid- State Circuits Conference - (ISSCC)"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2019,
+                  2
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "MIT Press",
+            "issue": "1-2",
+            "DOI": "10.1162/daed.a.972",
+            "type": "journal-article",
+            "page": "45-60",
+            "title": [
+              "Learning Abstractions: A Conversation with Yann LeCun"
+            ],
+            "volume": "155",
+            "author": [
+              {
+                "given": "Yann",
+                "family": "LeCun",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "James",
+                "family": "Manyika",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Daedalus"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026
+                ]
+              ]
+            }
+          }
+        ],
+        "items-per-page": 5,
+        "query": {
+          "start-index": 0,
+          "search-terms": null
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:52:21.793Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

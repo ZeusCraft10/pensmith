@@ -1,0 +1,114 @@
+[
+  {
+    "scope": "https://openlibrary.org",
+    "method": "GET",
+    "path": "/search.json?title=The+Structure+of+Scientific+Revolutions&author=Kuhn&fields=key%2Ctitle%2Csubtitle%2Cauthor_name%2Cfirst_publish_year%2Ceditions%2Ceditions.key%2Ceditions.title%2Ceditions.subtitle%2Ceditions.author_name%2Ceditions.publisher%2Ceditions.publish_date%2Ceditions.isbn&limit=5",
+    "status": 200,
+    "response": {
+      "numFound": 3,
+      "start": 0,
+      "numFoundExact": true,
+      "num_found": 3,
+      "documentation_url": "https://openlibrary.org/dev/docs/api/search",
+      "q": "",
+      "offset": null,
+      "docs": [
+        {
+          "author_name": [
+            "Thomas S. Kuhn",
+            "Dennis Holland"
+          ],
+          "first_publish_year": 1955,
+          "key": "/works/OL3259254W",
+          "title": "The Structure of Scientific Revolutions",
+          "editions": {
+            "numFound": 32,
+            "start": 0,
+            "numFoundExact": true,
+            "docs": [
+              {
+                "key": "/books/OL32144823M",
+                "title": "The Structure of Scientific Revolutions",
+                "author_name": [
+                  "Thomas S. Kuhn",
+                  "Dennis Holland"
+                ],
+                "publisher": [
+                  "The University of Chicago Press"
+                ],
+                "publish_date": [
+                  "1970"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "author_name": [
+            "Thomas Kuhn"
+          ],
+          "first_publish_year": 1962,
+          "key": "/works/OL45904278W",
+          "title": "The Structure of Scientific Revolutions",
+          "editions": {
+            "numFound": 1,
+            "start": 0,
+            "numFoundExact": true,
+            "docs": [
+              {
+                "key": "/books/OL62456513M",
+                "title": "The Structure of Scientific Revolutions",
+                "author_name": [
+                  "Thomas Kuhn"
+                ],
+                "publish_date": [
+                  "1962"
+                ],
+                "isbn": [
+                  "9781443255448",
+                  "1443255440"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "author_name": [
+            "Thomas S. Kuhn"
+          ],
+          "first_publish_year": 1986,
+          "key": "/works/OL44170357W",
+          "title": "The Structure of Scientific Revolutions; The Masterpieces of Science series",
+          "editions": {
+            "numFound": 1,
+            "start": 0,
+            "numFoundExact": true,
+            "docs": [
+              {
+                "key": "/books/OL60395057M",
+                "title": "The Structure of Scientific Revolutions; The Masterpieces of Science series",
+                "author_name": [
+                  "Thomas S. Kuhn"
+                ],
+                "publisher": [
+                  "New American Library"
+                ],
+                "publish_date": [
+                  "1986"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:52:54.171Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "books"
+    }
+  }
+]

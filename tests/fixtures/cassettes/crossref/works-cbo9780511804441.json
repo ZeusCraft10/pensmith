@@ -1,0 +1,182 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1017%2Fcbo9780511804441",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              30
+            ]
+          ],
+          "date-time": "2026-09-30T03:17:44Z",
+          "timestamp": 1790738264739,
+          "version": "4.1.0"
+        },
+        "edition-number": "1",
+        "reference-count": 0,
+        "publisher": "Cambridge University Press",
+        "isbn-type": [
+          {
+            "value": "9780521833783",
+            "type": "print"
+          },
+          {
+            "value": "9780511804441",
+            "type": "electronic"
+          }
+        ],
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2013,
+                  8,
+                  5
+                ]
+              ],
+              "date-time": "2013-08-05T00:00:00Z",
+              "timestamp": 1375660800000
+            },
+            "content-version": "unspecified",
+            "delay-in-days": 3437,
+            "URL": "https://www.cambridge.org/core/terms"
+          }
+        ],
+        "content-domain": {
+          "domain": [],
+          "crossmark-restriction": false
+        },
+        "short-container-title": [],
+        "published-print": {
+          "date-parts": [
+            [
+              2004,
+              3,
+              8
+            ]
+          ]
+        },
+        "DOI": "10.1017/cbo9780511804441",
+        "type": "monograph",
+        "created": {
+          "date-parts": [
+            [
+              2013,
+              8,
+              5
+            ]
+          ],
+          "date-time": "2013-08-05T00:52:28Z",
+          "timestamp": 1375663948000
+        },
+        "source": "Crossref",
+        "is-referenced-by-count": 42362,
+        "title": [
+          "Convex Optimization"
+        ],
+        "prefix": "10.1017",
+        "author": [
+          {
+            "given": "Stephen",
+            "family": "Boyd",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Lieven",
+            "family": "Vandenberghe",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "56",
+        "published-online": {
+          "date-parts": [
+            [
+              2013,
+              8,
+              5
+            ]
+          ]
+        },
+        "container-title": [],
+        "original-title": [],
+        "deposited": {
+          "date-parts": [
+            [
+              2019,
+              12,
+              3
+            ]
+          ],
+          "date-time": "2019-12-03T00:08:25Z",
+          "timestamp": 1575331705000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://www.cambridge.org/core/product/identifier/9780511804441/type/book"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2004,
+              3,
+              8
+            ]
+          ]
+        },
+        "ISBN": [
+          "9780521833783",
+          "9780511804441"
+        ],
+        "references-count": 0,
+        "URL": "https://doi.org/10.1017/cbo9780511804441",
+        "relation": {},
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2004,
+              3,
+              8
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:52:21.793Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]
