@@ -1,88 +1,39 @@
 #!/usr/bin/env node
-// hooks/post-tool-use.ts — Phase 3 Plan 03-08.
+// hooks/post-tool-use.ts — Claude Code PostToolUse hook entry (PLUG-14,
+// D-23a-15). Bundled to plugin/dist/hooks/post-tool-use.mjs (scripts/
+// bundle.mjs); plugin/hooks/hooks.json runs it after the plugin's own MCP
+// tools (matcher `mcp__plugin_pensmith_pensmith__.*`).
 //
-// Throttles CHECKPOINTS.jsonl writes to ≤1 per minute (T-3-DOS-04).
-// Silent on error — hooks must not crash the session.
+// In a folder that holds a paper it reads the stdin `tool_name` and
+// `session_id` and appends at most one checkpoint per minute to
+// pensmithDataDir()/checkpoints/<projectHash>.jsonl (bin/lib/hooks/
+// post-tool-use.ts) — never under the user's `.claude/` or the paper's
+// `.paper/`. Outside a paper it does nothing.
+//
+// It writes nothing to stdout; diagnostics go to stderr. It always exits 0.
 
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs';
-import { dirname } from 'node:path';
-import { lock } from 'proper-lockfile';
+import { isMainModule } from '../bin/lib/main-guard.js';
+import { readHookInput } from '../bin/lib/hooks/stdin.js';
+import { hookDiagnostic, hookPaperRoot } from '../bin/lib/hooks/entry.js';
 
-const CHECKPOINTS_PATH = '.claude/CHECKPOINTS.jsonl';
-const CHECKPOINTS_LOCK_PATH = '.claude/CHECKPOINTS.jsonl.lock';
-const THROTTLE_MS = 60_000;
-
-interface PostToolUseInput {
-  tool?: string;
-  cwd?: string;
+async function main(): Promise<void> {
+  const input = await readHookInput();
+  const root = hookPaperRoot(input);
+  if (root === null) return; // no paper here: no checkpoint
+  const [{ recordCheckpoint }, { routeOptionsFor }] = await Promise.all([
+    import('../bin/lib/hooks/post-tool-use.js'),
+    import('../bin/cli/route-options.js'),
+  ]);
+  const outcome = await recordCheckpoint(
+    root,
+    { sessionId: input?.session_id ?? null, toolName: input?.tool_name ?? null },
+    { routeOptions: routeOptionsFor(root) },
+  );
+  if (outcome.kind === 'failed') hookDiagnostic('post-tool-use', `checkpoint not written to ${outcome.file}`, outcome.error);
 }
 
-export async function onPostToolUse(input: PostToolUseInput = {}): Promise<void> {
-  try {
-    // CR-04 fix: gate the entire read-decide-append block under
-    // proper-lockfile against a sentinel .lock file. Two concurrent
-    // PostToolUse invocations previously raced — both saw the same
-    // stale lastWriteAt, both passed the throttle gate, and both
-    // appended. Partial-line interleaving across appendFileSync calls
-    // could also corrupt JSONL and permanently break the throttle.
-    //
-    // Same locking pattern as bin/lib/handoff.ts: lock against a
-    // sentinel file (NOT the target), realpath:false (target may not
-    // exist on first run), stale:10s, retries 5x@50ms.
-    mkdirSync(dirname(CHECKPOINTS_PATH), { recursive: true });
-    writeFileSync(CHECKPOINTS_LOCK_PATH, '', { flag: 'a' });
-
-    let release: (() => Promise<void>) | null = null;
-    try {
-      release = await lock(CHECKPOINTS_LOCK_PATH, {
-        retries: { retries: 5, minTimeout: 50 },
-        stale: 10_000,
-        realpath: false,
-      });
-    } catch {
-      // Could not acquire the lock — degrade silently per the
-      // hooks-must-not-crash-session contract.
-      return;
-    }
-
-    try {
-      let lastWriteAt = 0;
-      if (existsSync(CHECKPOINTS_PATH)) {
-        const text = readFileSync(CHECKPOINTS_PATH, 'utf8').trim();
-        if (text.length > 0) {
-          const lines = text.split('\n');
-          const last = lines[lines.length - 1];
-          if (last) {
-            try {
-              const parsed = JSON.parse(last) as { ts?: unknown };
-              if (typeof parsed.ts === 'string') {
-                lastWriteAt = Date.parse(parsed.ts) || 0;
-              }
-            } catch {
-              /* malformed last line — treat as 0 */
-            }
-          }
-        }
-      }
-      if (Date.now() - lastWriteAt < THROTTLE_MS) return;
-
-      const entry = JSON.stringify({
-        ts: new Date().toISOString(),
-        tool: input.tool ?? 'unknown',
-      });
-      appendFileSync(CHECKPOINTS_PATH, entry + '\n', 'utf8');
-    } finally {
-      await release();
-    }
-  } catch {
-    /* silent — hooks must not crash session */
-  }
+if (isMainModule(import.meta.url)) {
+  main()
+    .catch((e: unknown) => hookDiagnostic('post-tool-use', 'checkpoint skipped', e))
+    .finally(() => process.exit(0));
 }
-
-export default onPostToolUse;

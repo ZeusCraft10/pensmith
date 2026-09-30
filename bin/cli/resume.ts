@@ -9,7 +9,9 @@
 // skips its OWN approval gate, C3-HIGH-2); under --dry-run it loops (D-18-30).
 // It then CLEARS HANDOFF.json (best-effort rmSync) so a stale pointer cannot
 // re-trigger resume. resume MUST NEVER dispatch to itself — no resume→resume
-// loop (H4).
+// loop (H4). The summary names HANDOFF v2's phase, section and plan/write/
+// verify position (D-23a-16); a v1 file is read through the in-memory
+// migration, and a file from a newer pensmith is ignored and left in place.
 //
 // stdout-only for the underlying verbs; the resume summary and the step
 // summary go to STDERR (parity).
@@ -26,10 +28,10 @@
 // replayable.
 
 import { defineCommand, runCommand } from 'citty';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { paperDir, projectRoot } from '../lib/paths.js';
-import { HandoffSchema, type Handoff } from '../lib/schemas/handoff.js';
+import { readHandoff, type Handoff } from '../lib/handoff.js';
 import { runRouted, REAL_VERB_LOADERS } from '../pensmith.js';
 import { UX02_VERBS, type Ux02Verb } from '../lib/verbs.js';
 import { parseSectionId } from '../lib/section-id.js';
@@ -179,16 +181,14 @@ async function runReplay(paperRoot: string, entryId: string, yolo: boolean): Pro
   }
 }
 
-function safeReadHandoff(paperRoot: string): Handoff | null {
-  const handoffPath = join(paperDir(paperRoot), 'HANDOFF.json');
-  if (!existsSync(handoffPath)) return null;
-  try {
-    const raw = JSON.parse(readFileSync(handoffPath, 'utf8'));
-    const r = HandoffSchema.safeParse(raw);
-    return r.success ? r.data : null;
-  } catch {
-    return null;
-  }
+/**
+ * `pensmith resume: last at phase sectioning, section 2 (write). Next: …` —
+ * the HANDOFF summary (v1 files are read through the in-memory migration).
+ */
+export function handoffSummaryLine(h: Handoff): string {
+  const section = h.section ?? h.current_section ?? 'none';
+  const position = h.position ?? 'none';
+  return `pensmith resume: last at phase='${h.phase}', section='${section}', position='${position}'. Next: ${h.next_action}`;
 }
 
 export const resumeCommand = defineCommand({
@@ -213,13 +213,12 @@ export const resumeCommand = defineCommand({
       return runReplay(paperRoot, args.replay, args.yolo === true);
     }
 
-    // SUMMARY only — reading HANDOFF does NOT route (H4). safeParse never throws.
-    const handoff = safeReadHandoff(paperRoot);
-    if (handoff && handoff.phase !== 'done') {
-      process.stderr.write(
-        `pensmith resume: last at phase='${handoff.phase}', section='${handoff.current_section ?? 'none'}'. ` +
-          `Next: ${handoff.next_action}\n`,
-      );
+    // SUMMARY only — reading HANDOFF does NOT route (H4). readHandoff never
+    // throws: v1 is migrated in memory, and a file written by a newer pensmith
+    // is ignored and left in place (S-20, D-23a-16).
+    const read = readHandoff(paperDir(paperRoot));
+    if (read.kind === 'ok' && read.handoff.phase !== 'done') {
+      process.stderr.write(handoffSummaryLine(read.handoff) + '\n');
     }
 
     // ONE routed step through the HANDOFF-BLIND resolver — the same step a bare
@@ -242,11 +241,14 @@ export const resumeCommand = defineCommand({
     } finally {
       // CONSUME the HANDOFF: best-effort delete so a stale pointer can never
       // re-trigger resume on the next bare invocation (H4 lifecycle) — also
-      // after a failed step: the next resume starts from the router again.
-      try {
-        rmSync(join(paperDir(paperRoot), 'HANDOFF.json'), { force: true });
-      } catch {
-        /* best-effort consume */
+      // after a failed step: the next resume starts from the router again. A
+      // newer pensmith's HANDOFF is not ours to consume: it stays.
+      if (read.kind !== 'newer') {
+        try {
+          rmSync(join(paperDir(paperRoot), 'HANDOFF.json'), { force: true });
+        } catch {
+          /* best-effort consume */
+        }
       }
     }
   },
