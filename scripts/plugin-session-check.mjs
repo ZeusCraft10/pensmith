@@ -34,9 +34,12 @@
 //            missing-variable warning and no build — with PWD equal to the
 //            root and with PWD unset (`${PWD:-.}` falls back to `.`); a PWD
 //            naming another folder is recorded as a note (the documented
-//            limitation, CONTRIBUTING). With `--plugin-dir ./plugin` a session
-//            registers exactly one pensmith server (the project one, whose
-//            tools are mcp__pensmith__*), and in a paper at the root
+//            limitation, CONTRIBUTING). With `--plugin-dir ./plugin` and PWD =
+//            the root a session registers exactly one pensmith server (the
+//            project one, whose tools are mcp__pensmith__*); with PWD unset
+//            the number it keeps is recorded as a note (two: the documented
+//            limitation) and `disabledMcpjsonServers: ["pensmith"]` must leave
+//            exactly the plugin's server; and in a paper at the root
 //            `/pensmith status` runs mcp__pensmith__pensmith_status with no
 //            --allowedTools (the skill's allowed-tools pre-approves it) and
 //            the plugin's PostToolUse hook writes its checkpoint.
@@ -201,7 +204,7 @@ function readTranscript(stdout) {
   return t;
 }
 
-function headless(ctx, name, { cwd, prompt, pluginDir, tools = '', allowed = [], maxTurns = 1, resume = null }) {
+function headless(ctx, name, { cwd, prompt, pluginDir, tools = '', allowed = [], maxTurns = 1, resume = null, pwd = cwd, settings = null }) {
   if (maxTurns > 3) throw new Error('max-turns is capped at 3 (D-23a-19)');
   const debug = path.join(ctx.tmp, `${name}.debug.log`);
   const args = [
@@ -216,8 +219,13 @@ function headless(ctx, name, { cwd, prompt, pluginDir, tools = '', allowed = [],
   if (allowed.length > 0) args.push('--allowedTools', allowed.join(','));
   if (pluginDir) args.push('--plugin-dir', pluginDir);
   if (resume) args.push('--resume', resume);
+  if (settings) args.push('--settings', JSON.stringify(settings));
   if (ctx.model) args.push('--model', ctx.model);
-  const r = runClaude(ctx.claude, args, { cwd, env: { ...ctx.env, PWD: cwd }, timeoutMs: 300_000 });
+  // `pwd: null` starts the session with no PWD at all (PowerShell and cmd set none).
+  const env = { ...ctx.env };
+  delete env.PWD;
+  if (pwd !== null) env.PWD = pwd;
+  const r = runClaude(ctx.claude, args, { cwd, env, timeoutMs: 300_000 });
   writeFileSync(path.join(ctx.tmp, `${name}.stream.jsonl`), r.stdout);
   const transcript = readTranscript(r.stdout);
   const log = existsSync(debug) ? readFileSync(debug, 'utf8') : '';
@@ -348,6 +356,23 @@ function plug04(ctx) {
   const kept = servers.length === 1 ? servers[0].name : null;
   const prefix = kept === 'pensmith' ? 'mcp__pensmith__' : kept === PLUGIN_SERVER ? TOOL('') : null;
   note(`PLUG-04 dedupe: Claude Code kept ${kept === 'pensmith' ? 'the project .mcp.json server' : kept === PLUGIN_SERVER ? "the plugin's server" : 'no single server'} (${JSON.stringify(kept)}); its tools are ${prefix ?? '?'}*`);
+
+  // Review round 2: the dedupe needs the two expanded command lines to be
+  // identical, i.e. PWD = the root. With PWD unset (PowerShell, cmd) the
+  // project server runs `node ./plugin/…` and the plugin's runs an absolute
+  // path, so Claude Code keeps both (CONTRIBUTING documents it). The
+  // documented way to load the plugin from the checkout there is to turn the
+  // project server off for that session (`disabledMcpjsonServers`), which
+  // must leave exactly the plugin's server.
+  const u = headless(ctx, 'plug04-dedupe-pwd-unset', { cwd: root, prompt: 'Reply with the word ready.', pluginDir: './plugin', pwd: null });
+  const unsetServers = (u.transcript.init?.mcp_servers ?? []).filter((m) => /pensmith/.test(m.name));
+  note(`PLUG-04 documented limitation (CONTRIBUTING): PWD unset, --plugin-dir ./plugin at the root → ${unsetServers.length} pensmith servers ${JSON.stringify(unsetServers)}`);
+  const off = headless(ctx, 'plug04-pwd-unset-project-off', {
+    cwd: root, prompt: 'Reply with the word ready.', pluginDir: './plugin', pwd: null, settings: { disabledMcpjsonServers: ['pensmith'] },
+  });
+  const offServers = (off.transcript.init?.mcp_servers ?? []).filter((m) => /pensmith/.test(m.name));
+  evidence('PLUG-04', offServers.length === 1 && offServers[0].name === PLUGIN_SERVER && offServers[0].status === 'connected',
+    `PWD unset, --plugin-dir ./plugin with --settings '{"disabledMcpjsonServers":["pensmith"]}' (the CONTRIBUTING workaround): pensmith servers ${JSON.stringify(offServers)}`);
 
   // In that setup, the plugin's skill pre-approval and PostToolUse hook must
   // still reach the kept server's tools: `/pensmith status` in a paper at the
