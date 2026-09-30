@@ -1,125 +1,124 @@
-// tests/hooks/session-start.test.ts — Phase 7 Wave 0 RED scaffold for HOOK-02.
+// tests/hooks/session-start.test.ts — the SessionStart hook bundle (PLUG-14,
+// D-23a-15), spawned as Claude Code runs it: `node plugin/dist/hooks/
+// session-start.mjs` with the documented stdin JSON.
 //
-// SessionStart emits resume context from .paper/HANDOFF.json. Phase 2 ships a
-// bare `process.exit(0)` stub; Plan 07-03 upgrades it to emit a single JSON
-// frame carrying a `systemMessage`. RED-by-skip: the emission assertions skip
-// while session-start.ts is still the stub (detected by reading the source);
-// the empty-stdout-no-handoff case stays un-skipped (the stub satisfies it).
-//
-// stdout is the hook-protocol channel — it MUST be empty OR exactly one JSON
-// frame (T-07-01). Hooks run via execFileSync(process.execPath, ['--import',
-// 'tsx', hook], { cwd, stdio:['ignore','pipe','pipe'] }) exactly like
-// tests/hooks-noop.test.ts.
+// In a paper, stdout is exactly ONE JSON line
+//   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}
+// whose context names the router's next step, a not-done HANDOFF.json's
+// position (v1 and v2) and the /pensmith instruction — for every matcher
+// source (startup, resume, compact). It never emits `systemMessage` (shown to
+// the user, never to Claude). Outside a paper it prints nothing (see
+// tests/hooks-noop.test.ts for the timing and no-files checks).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { sandbox, sandboxDataPath } from '../helpers/paper-cli-harness.js';
+import { seedThreeSectionPaper } from '../helpers/status-fixture.js';
+import { assertBundlesPresent, hookInput, runHook } from './hook-runner.js';
 
-const HOOK = fileURLToPath(new URL('../../hooks/session-start.ts', import.meta.url));
-// Resolve tsx's loader to an ABSOLUTE file URL so the hook subprocess can load
-// it regardless of cwd (a bare `--import tsx` resolves relative to the child's
-// cwd, which is a tmpdir with no node_modules → ERR_MODULE_NOT_FOUND).
-const TSX_LOADER = import.meta.resolve('tsx');
+assertBundlesPresent();
 
-// RED-by-skip: the stub is literally `process.exit(0)` with no HANDOFF read.
-// Detect the upgrade by checking the source no longer matches the bare stub
-// (i.e. it references HANDOFF / systemMessage). existsSync alone is
-// insufficient — the file already exists as a stub.
-const hookSrc = existsSync(HOOK) ? readFileSync(HOOK, 'utf8') : '';
-const emissionWired = /HANDOFF|systemMessage/.test(hookSrc);
-
-interface RunResult { status: number | null; stdout: string; stderr: string; }
-function runHook(cwd: string): RunResult {
-  try {
-    const stdout = execFileSync(process.execPath, ['--import', TSX_LOADER, HOOK], {
-      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return { status: 0, stdout, stderr: '' };
-  } catch (e) {
-    const err = e as { status?: number | null; stdout?: Buffer | string; stderr?: Buffer | string };
-    return {
-      status: err.status ?? 1,
-      stdout: err.stdout ? err.stdout.toString() : '',
-      stderr: err.stderr ? err.stderr.toString() : '',
-    };
-  }
+interface Frame {
+  hookSpecificOutput?: { hookEventName?: unknown; additionalContext?: unknown };
+  systemMessage?: unknown;
 }
 
-function freshCwd(): string {
-  return mkdtempSync(join(tmpdir(), 'pensmith-session-start-'));
+/** Exactly one JSON line on stdout, parsed. */
+function oneFrame(stdout: string): Frame {
+  const lines = stdout.split('\n').filter((l) => l.length > 0);
+  assert.equal(lines.length, 1, `stdout must be exactly one JSON line, got: ${JSON.stringify(stdout)}`);
+  assert.ok(stdout.endsWith('\n'));
+  return JSON.parse(lines[0]!) as Frame;
 }
 
-function writeHandoff(cwd: string, phase: string): void {
-  const pDir = join(cwd, '.paper');
-  mkdirSync(pDir, { recursive: true });
-  writeFileSync(
-    join(pDir, 'HANDOFF.json'),
-    JSON.stringify({
-      schema_version: 1,
-      last_updated: new Date().toISOString(),
-      current_section: 'intro',
-      phase,
-      next_action: 'Resume write on section intro.',
-      breadcrumbs: [],
-      section_pointers: [
-        {
-          slug: 'intro',
-          plan_path: join(pDir, 'sections', '01-intro', 'PLAN.md'),
-          draft_path: null,
-          verification_path: null,
-          state: 'planned',
-        },
-      ],
-    }),
-  );
+function contextOf(frame: Frame): string {
+  assert.deepEqual(Object.keys(frame), ['hookSpecificOutput'], 'only hookSpecificOutput — never systemMessage');
+  assert.deepEqual(Object.keys(frame.hookSpecificOutput ?? {}).sort(), ['additionalContext', 'hookEventName']);
+  assert.equal(frame.hookSpecificOutput?.hookEventName, 'SessionStart');
+  const ctx = frame.hookSpecificOutput?.additionalContext;
+  assert.equal(typeof ctx, 'string');
+  assert.ok((ctx as string).length > 0 && (ctx as string).length < 10_000, 'within Claude Code\'s 10,000-char cap');
+  return ctx as string;
 }
 
-// === (a) no HANDOFF.json → empty stdout, exit 0 (un-skipped: stub satisfies) ===
-test('HOOK-02 (a): no .paper/HANDOFF.json → stdout empty, exit 0', () => {
-  const cwd = freshCwd();
-  const res = runHook(cwd);
-  assert.equal(res.status, 0, 'HOOK-02: SessionStart exits 0 with no HANDOFF');
-  assert.equal(res.stdout, '', 'HOOK-02: stdout MUST be empty when there is nothing to resume');
-});
-
-// === presence guard ===
-test('HOOK-02: session-start emission wiring is consistent with Wave-0 RED state', () => {
-  if (emissionWired) {
-    assert.ok(emissionWired, 'session-start.ts emits resume context — emission tests active');
-  } else {
-    assert.ok(!emissionWired, 'Wave-0: session-start.ts is still the exit-0 stub (RED-by-skip)');
+test('PLUG-14: SessionStart in a paper emits one additionalContext line naming the next step and /pensmith (startup, resume, compact)', async () => {
+  const sb = sandbox('hook-sessionstart');
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  for (const source of ['startup', 'resume', 'compact']) {
+    const r = runHook(sb, 'session-start', { cwd: root, input: hookInput('session-start', root, { source }) });
+    assert.equal(r.status, 0, r.stderr);
+    const ctx = contextOf(oneFrame(r.stdout));
+    assert.match(ctx, /pensmith paper/);
+    assert.match(ctx, /Next step \(the pensmith router\): Draft section §2 \(methods\): run \/pensmith \(or `pensmith write 2`\)/, ctx);
+    assert.match(ctx, /To continue the paper, run \/pensmith/);
+    assert.doesNotMatch(ctx, /Before the last context compaction/, 'no HANDOFF, no handoff summary');
+    assert.doesNotMatch(r.stdout, /systemMessage/);
   }
 });
 
-// === (b) valid non-done HANDOFF → single JSON frame with systemMessage ===
-test('HOOK-02 (b): valid non-done HANDOFF → JSON frame with a systemMessage naming phase + next_action',
-  { skip: !emissionWired }, () => {
-    const cwd = freshCwd();
-    writeHandoff(cwd, 'write');
-    const res = runHook(cwd);
-    assert.equal(res.status, 0, 'HOOK-02: exits 0 with a valid HANDOFF');
-    assert.notEqual(res.stdout.trim(), '', 'HOOK-02: stdout must carry a resume frame');
-    let parsed: { systemMessage?: unknown };
-    assert.doesNotThrow(
-      () => { parsed = JSON.parse(res.stdout) as { systemMessage?: unknown }; },
-      'HOOK-02: stdout MUST be exactly one parseable JSON frame (hook-protocol)',
-    );
-    parsed = JSON.parse(res.stdout) as { systemMessage?: unknown };
-    assert.equal(typeof parsed.systemMessage, 'string', 'HOOK-02: frame must carry a string systemMessage');
-    assert.match(String(parsed.systemMessage), /write/i, 'HOOK-02: systemMessage mentions the phase');
-    assert.match(String(parsed.systemMessage), /intro|Resume/i, 'HOOK-02: systemMessage mentions next_action');
-  });
+test('PLUG-14: SessionStart adds the HANDOFF summary — v2 as written by PreCompact, and a migrated v1 file', async () => {
+  const sb = sandbox('hook-sessionstart-handoff');
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  // The real round trip: the PreCompact bundle writes the handoff, SessionStart reads it.
+  assert.equal(runHook(sb, 'pre-compact', { cwd: root }).status, 0);
+  const r = runHook(sb, 'session-start', { cwd: root, input: hookInput('session-start', root, { source: 'compact' }) });
+  assert.equal(r.status, 0, r.stderr);
+  const ctx = contextOf(oneFrame(r.stdout));
+  assert.match(ctx, /Before the last context compaction \([^)]+\) it was at phase sectioning, section 2 \(write\): Draft section §2/, ctx);
 
-// === (c) phase 'done' → empty stdout (nothing to resume) ===
-test('HOOK-02 (c): HANDOFF with phase "done" → stdout empty',
-  { skip: !emissionWired }, () => {
-    const cwd = freshCwd();
-    writeHandoff(cwd, 'done');
-    const res = runHook(cwd);
-    assert.equal(res.status, 0, 'HOOK-02: exits 0 on a done HANDOFF');
-    assert.equal(res.stdout, '', 'HOOK-02: a done paper has nothing to resume → empty stdout');
-  });
+  // A v1 HANDOFF (phase 'verify') is migrated in memory.
+  writeFileSync(join(root, '.paper', 'HANDOFF.json'), JSON.stringify({
+    schema_version: 1,
+    last_updated: '2026-09-01T00:00:00.000Z',
+    current_section: 'methods',
+    phase: 'verify',
+    next_action: 'Resume verify on section methods. Last verb: write.',
+    breadcrumbs: [],
+    section_pointers: [{ slug: 'methods', plan_path: join(root, '.paper', 'sections', '02-methods', 'PLAN.md'), draft_path: null, verification_path: null, state: 'written' }],
+  }));
+  const r1 = runHook(sb, 'session-start', { cwd: root });
+  assert.match(contextOf(oneFrame(r1.stdout)), /it was at phase sectioning, section 2 \(verify\): Resume verify on section methods/);
+
+  // A done HANDOFF, or one written by a newer pensmith, adds no summary.
+  for (const body of [
+    { schema_version: 2, last_updated: '2026-09-01T00:00:00.000Z', phase: 'done', section: null, position: null, current_section: null, next_action: 'x', breadcrumbs: [], section_pointers: [] },
+    { schema_version: 3, whatever: true },
+  ]) {
+    writeFileSync(join(root, '.paper', 'HANDOFF.json'), JSON.stringify(body));
+    const rn = runHook(sb, 'session-start', { cwd: root });
+    assert.equal(rn.status, 0);
+    assert.doesNotMatch(contextOf(oneFrame(rn.stdout)), /Before the last context compaction/);
+  }
+});
+
+test('PLUG-14: SessionStart in a paper whose STATE.json is corrupt still exits 0 and reports attention', async () => {
+  const sb = sandbox('hook-sessionstart-states');
+  const attention = sb.project('attention');
+  mkdirSync(join(attention, '.paper'), { recursive: true });
+  writeFileSync(join(attention, '.paper', 'STATE.json'), '{ corrupt');
+  const r = runHook(sb, 'session-start', { cwd: attention });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(contextOf(oneFrame(r.stdout)), /Needs attention/);
+});
+
+test('PLUG-14: SessionStart follows the stdin cwd and PENSMITH_PAPER_ROOT, never the `open` pointer', async () => {
+  const sb = sandbox('hook-sessionstart-root');
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  const elsewhere = sb.project('elsewhere');
+  const viaStdin = runHook(sb, 'session-start', { cwd: elsewhere, input: hookInput('session-start', root) });
+  assert.match(contextOf(oneFrame(viaStdin.stdout)), /write 2/);
+  const viaEnv = runHook(sb, 'session-start', { cwd: elsewhere, input: hookInput('session-start', elsewhere), env: { PENSMITH_PAPER_ROOT: root } });
+  assert.match(contextOf(oneFrame(viaEnv.stdout)), /write 2/);
+
+  const pointer = sandboxDataPath(sb, 'active.json');
+  mkdirSync(join(pointer, '..'), { recursive: true });
+  writeFileSync(pointer, JSON.stringify({ paperId: 'x', folderPath: root }));
+  const viaPointer = runHook(sb, 'session-start', { cwd: elsewhere, input: hookInput('session-start', elsewhere) });
+  assert.equal(viaPointer.status, 0);
+  assert.equal(viaPointer.stdout, '', 'the open pointer is never followed: no paper here, no output');
+});

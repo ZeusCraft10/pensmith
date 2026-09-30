@@ -50,6 +50,13 @@ jobs:
       - name: Build (produces dist/mcp/server.js for manifest validation)
         run: npm run build
 
+      # PLUG-02 / D-23a-04: the committed plugin bundles (plugin/dist/) must be
+      # exactly what `npm run bundle` makes from these sources — fails on any
+      # modified, deleted or new file. Rebundle and commit after changing
+      # bin/lib, mcp/ or hooks/.
+      - name: Plugin bundles match their sources (bundle:check)
+        run: npm run bundle:check
+
       # CI-09 / D-17-40: tests must never touch the real user data dir. Record a
       # fingerprint (every file + sha256, or "absent") of the REAL pensmith data
       # dir (LOCALAPPDATA / ~/Library/Application Support / XDG_DATA_HOME) before
@@ -94,3 +101,47 @@ jobs:
             exit 1
           fi
           echo "OK: working tree is clean."
+
+  # CI-05 / D-23a-18: validate, install and launch the REAL plugin with a pinned
+  # Claude Code on every change, with no API key (scripts/plugin-smoke.mjs):
+  # `claude plugin validate --strict` on plugin/, its plugin.json and the
+  # marketplace (plus the plugin-legacy negative control); marketplace add +
+  # install + list + details from a fresh clone with no npm ci or build in an
+  # isolated CLAUDE_CONFIG_DIR; `claude mcp list` connected; the installed
+  # cache's server answering initialize + tools/list; and "not connected" with
+  # no node on PATH. Maintainer item: make this job a required check in the
+  # branch protection settings.
+  plugin:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      # >= 2.1.282, the version the 23a checks were made with. Pinned so a
+      # Claude Code release cannot change the verdict without a commit here.
+      CLAUDE_CODE_VERSION: 2.1.285
+      DISABLE_AUTOUPDATER: '1'
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      # The npm package installs the native claude binary on every OS (its
+      # postinstall copies the platform package's executable into bin/); on
+      # Windows npm adds a claude.cmd shim, which the smoke resolves to the
+      # claude.exe behind it so the no-node check can run it by absolute path.
+      - name: Install Claude Code ${{ env.CLAUDE_CODE_VERSION }} (pinned)
+        run: npm install -g "@anthropic-ai/claude-code@${{ env.CLAUDE_CODE_VERSION }}"
+
+      - name: Claude Code version
+        run: claude --version
+
+      - name: Plugin smoke (CI-05)
+        run: npm run plugin:smoke

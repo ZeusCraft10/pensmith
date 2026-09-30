@@ -9,7 +9,8 @@ Requires **Node ≥ 22.12** (CI runs the Node 22 and 24 LTS lines on Ubuntu, mac
 ```bash
 npm ci
 npm run build        # prebuild (version + verb table) then tsc → dist/
-npm run check        # the full local gate: prebuild · lint · typecheck · build · tier-contract · tests · manifests
+npm run bundle       # prebuild, then the committed plugin bundles → plugin/dist/ (esbuild)
+npm run check        # the full local gate: prebuild · lint · typecheck · build · tier-contract · tests · manifests · bundle:check
 ```
 
 ### The plugin directory and the developer `.mcp.json`
@@ -22,6 +23,19 @@ The repo-root `.mcp.json` gives a developer session the same MCP server with no 
 - With `claude --plugin-dir ./plugin` at the root, Claude Code registers the server once: it merges a project server into the plugin's only when their expanded command lines are identical, which `${PWD}` makes true there. A plain relative path would register it twice.
 - `${PWD:-.}` falls back to a relative path where `PWD` is unset (PowerShell, cmd). Under **Git Bash on Windows**, `PWD` is an MSYS path (`/c/Users/…`) that `node` cannot open; start Claude Code from PowerShell or cmd instead.
 - The server is the committed bundle, so it reflects your source edits only after the bundle is regenerated from them.
+
+### The committed plugin bundles (`plugin/dist/`)
+
+A git-marketplace install runs no build and Claude Code's plugin cache holds only `plugin/`, so the plugin's MCP server, its PDF worker and the four hooks ship as committed, self-contained ESM bundles (`scripts/bundle.mjs`: `plugin/dist/mcp/server.mjs`, `plugin/dist/mcp/pdf-worker.mjs`, `plugin/dist/hooks/<name>.mjs`; PLUG-02). They are generated files:
+
+- **After changing anything under `bin/lib/`, `mcp/` or `hooks/`, run `npm run bundle` and commit `plugin/dist/` with the change.** `npm run bundle:check` (in `npm run check` and every CI matrix entry) re-bundles and fails on any modified, deleted or new file under `plugin/dist/`.
+- Never edit a bundle by hand; ESLint ignores them and lint runs on their sources. `tests/plugin-bundle.test.ts` checks the 20 MB budget, that no bundle loads a module other than a Node builtin at runtime, and that the server boots from a copy of `plugin/` with no `node_modules`.
+- Bundles must be generated from dependencies that match `package-lock.json`: run `npm ci` in the checkout you bundle from. If your `node_modules` is a symlink into another checkout, remove the symlink (`rm node_modules`) and run `npm ci` in your own checkout first — never `npm install` or `npm ci` through the symlink, which rewrites the other checkout's `node_modules`.
+
+### The real plugin with Claude Code
+
+- `npm run plugin:smoke` (`scripts/plugin-smoke.mjs`, CI-05) runs the CI `plugin` job locally with the Claude Code on `PATH` (or `CLAUDE_BIN=/path/to/claude`) and no API key: `claude plugin validate --strict` on `plugin/`, its `plugin.json` and the marketplace, the `tests/fixtures/plugin-legacy` negative control, then — from a fresh `git clone --local` of your **committed** tree in a temp folder, with an isolated `CLAUDE_CONFIG_DIR` — marketplace add, install, `plugin list --json`, `plugin details`, `mcp list`, the installed server's `initialize` / `tools/list`, and "not connected" with no `node` on `PATH`. `--repo <dir>` checks another repository or a scratch assembly.
+- `node scripts/plugin-session-check.mjs` (`D-23a-19`, local only) runs short real headless sessions with the plugin against a fresh clone (isolated config, allow-listed environment, `--max-turns` ≤ 3, no permission bypass) and prints evidence lines for PLUG-03/04/05/14. It needs your Claude login (a credentials file in your Claude config dir is copied into the temp config; if yours lives in the macOS keychain, set `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`) and costs a few cents; pensmith itself needs no key. Run `npm run build` first — it makes its paper with `dist/bin/pensmith.js`.
 
 ## Architectural chokepoints (Phase 0+)
 
