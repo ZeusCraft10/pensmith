@@ -696,6 +696,11 @@ function querySlug(q) {
   return q.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+/** True for a recorded PubMed efetch request (D-20-16). */
+function isEfetch(entry) {
+  return typeof entry?.path === 'string' && entry.path.includes('/efetch.fcgi?');
+}
+
 /** The last recorded response per canonical key (a retried request records each attempt). */
 function lastPerKey(fixtures) {
   const byKey = new Map();
@@ -752,10 +757,19 @@ function readJson(file) {
   return JSON.parse(readFileSync(file, 'utf8'));
 }
 
+/**
+ * The statuses a committed recording may hold: an answer (200), a registrar's
+ * definitive not-found (404 — Crossref's for a DataCite DOI Pass 1 then asks
+ * DataCite about, Phase 20 D-20-10), and the redirect hops http.ts records one
+ * entry each (doi.org → an agency's content negotiation, D-19-07).
+ */
+const REPLAYABLE_STATUSES = new Set([200, 404, 301, 302, 303, 307, 308]);
+
 /** Why a set of recorded fixtures cannot be committed, or null. */
 function unrecordable(m, fixtures) {
   for (const f of fixtures) {
-    if (f.status !== 200) return `HTTP ${f.status}`;
+    if (!REPLAYABLE_STATUSES.has(f.status)) return `HTTP ${f.status}`;
+    if (f.status !== 200) continue;
     const why = m.mock.recordedErrorBody(f.status, f.response);
     if (why !== null) return `an error body (${why})`;
   }
@@ -825,9 +839,21 @@ const E2E_PHASE_RUNNERS = {
           misses.push({ adapter, query, why: `the live endpoint answered ${bad}` });
           continue;
         }
-        const entries = fx.filter((f) => !committed.has(f.key)).map((f) => recordedEntry(m.mock, f, adapter, recordedAt));
+        let entries = fx.filter((f) => !committed.has(f.key)).map((f) => recordedEntry(m.mock, f, adapter, recordedAt));
         if (entries.length === 0) continue; // a committed per-adapter cassette answers it already
-        const text = fitting(entries);
+        let text = fitting(entries);
+        // D-20-16: PubMed's efetch answer (abstracts + each article's reference
+        // list) is often over the cap. The search replays without it: offline,
+        // the adapter names the abstracts unavailable and keeps its hits.
+        if (text === null && entries.some((e) => isEfetch(e))) {
+          const without = entries.filter((e) => !isEfetch(e));
+          const t = without.length > 0 ? fitting(without) : null;
+          if (t !== null) {
+            process.stdout.write(`  ${adapter} "${query}": efetch not recorded (over the ${MAX_CASSETTE_BYTES}-byte cap) — offline, its abstracts are named unavailable\n`);
+            entries = without;
+            text = t;
+          }
+        }
         if (text === null) {
           const bytes = Buffer.byteLength(renderCassette(entries, true), 'utf8');
           misses.push({ adapter, query, why: `the recorded response is ${bytes} bytes, over the ${MAX_CASSETTE_BYTES}-byte cassette cap` });
@@ -923,8 +949,10 @@ const E2E_PHASE_RUNNERS = {
         process.stdout.write(`  not kept: ${r.citekey} (live Pass 1 ${r.verdict})\n`);
         continue;
       }
-      // doi.org HEAD probes are never made offline (freshness skips them): not recorded.
-      const fx = lastPerKey(r.fixtures).filter((f) => f.scope !== 'https://doi.org');
+      // doi.org HEAD probes are never made offline (freshness skips them): not
+      // recorded. Its GETs — the agency lookup of a prefix (the retraction
+      // cross-check, D-20-13) and content negotiation (D-20-10) — are.
+      const fx = lastPerKey(r.fixtures).filter((f) => !(f.scope === 'https://doi.org' && f.method === 'HEAD'));
       const bad = unrecordable(m, fx);
       if (bad !== null) {
         process.stdout.write(`  not kept: ${r.citekey} (a lookup answered ${bad})\n`);
