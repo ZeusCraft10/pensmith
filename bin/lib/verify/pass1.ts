@@ -1010,6 +1010,8 @@ export async function runFreshnessForDraft(
     readonly root?: string;
     /** Probe only the keys whose LIBRARY.json retraction status is `unknown` (done's re-check, D-20-13). */
     readonly onlyRecheck?: boolean;
+    /** Record the decided statuses through the library writer (default true; done records them only once it exports). */
+    readonly record?: boolean;
   } = {},
 ): Promise<FreshnessResult[]> {
   const entries = opts.bibEntries !== undefined ? [...opts.bibEntries] : await parseBibFileAt(readFileSync(citationsBibPath, 'utf8'), citationsBibPath);
@@ -1036,5 +1038,5 @@ export async function runFreshnessForDraft(
     };
   });
   const list = opts.onlyRecheck === true ? probes.filter((p) => p.recheck === true) : probes;
-  return probeFreshnessAll(list, opts.root !== undefined ? { root: opts.root } : {});
+  return probeFreshnessAll(list, opts.root !== undefined && opts.record !== false ? { root: opts.root } : {});
 }

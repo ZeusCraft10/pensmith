@@ -28,7 +28,8 @@
 //
 // A key whose LIBRARY.json retraction status is `unknown` (research could not
 // decide it) is RE-CHECKED on every verify (with the rest of the probe) and
-// done (only those keys, before export: runFreshnessForDraft `onlyRecheck`),
+// done (only those keys, before export: runFreshnessForDraft `onlyRecheck`;
+// a retraction found blocks, and done records the answers once it exports),
 // never from the HTTP cache (`refresh`); a decided answer (clear / retracted)
 // is recorded through the library writer (library.ts recordRetractionStatuses,
 // under its lock).

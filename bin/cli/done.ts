@@ -66,7 +66,7 @@ import { extractQuotes } from '../lib/quote-extractor.js';
 import { tryReadPaperConfigSync } from '../lib/config.js';
 import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.js';
 import { readQuoteAcceptances, sectionDirOfPlan } from '../lib/quote-acceptance.js';
-import { recordLastVerified, LibraryNotFoundError } from '../lib/library.js';
+import { recordLastVerified, recordRetractionStatuses, LibraryNotFoundError } from '../lib/library.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -799,22 +799,43 @@ function writeExportFindings(
   }
 }
 
+/** What done's re-check of `unknown` retraction statuses found (VRFY-15, D-20-13). */
+interface RetractionRecheck {
+  /** One refusal line per cited source found retracted now. */
+  readonly retracted: string[];
+  /** The decided statuses, recorded once done exports. */
+  readonly decided: Record<string, { status: 'clear' | 'retracted'; details: string | null }>;
+}
+
 /**
  * Re-check, live, the retraction status of every source `text` cites whose
  * LIBRARY.json status is `unknown` (research or an earlier verify could not
- * decide it), recording each decided answer (VRFY-15, D-20-13). Skipped under
- * --dry-run and for a bibliography that does not parse; never throws (a
- * failed re-check leaves the status unknown, as verify does).
+ * decide it). Nothing is written here. Skipped under --dry-run and for a
+ * bibliography that does not parse; never throws (a failed re-check leaves the
+ * status unknown, as verify does — the gate core's Pass 1 still decides).
  */
-async function recheckUnknownRetractions(paperRoot: string, text: string): Promise<void> {
-  if (networkMode().dryRun) return;
+async function recheckUnknownRetractions(paperRoot: string, text: string): Promise<RetractionRecheck> {
+  const none: RetractionRecheck = { retracted: [], decided: {} };
+  if (networkMode().dryRun) return none;
   const bib = loadBibliography(paperRoot);
-  if (!bib.exists || bib.problems.length > 0) return;
+  if (!bib.exists || bib.problems.length > 0) return none;
+  let results;
   try {
-    await runFreshnessForDraft(text, bib.path, { bibEntries: bib.entries, root: paperRoot, onlyRecheck: true });
+    results = await runFreshnessForDraft(text, bib.path, { bibEntries: bib.entries, root: paperRoot, onlyRecheck: true, record: false });
   } catch {
-    // advisory bookkeeping: the gate core's Pass 1 still decides the export
+    return none;
   }
+  const out: RetractionRecheck = { retracted: [], decided: {} };
+  for (const r of results) {
+    if (r.recheck === undefined || r.recheck.status === 'unknown') continue;
+    out.decided[r.citekey] = { status: r.recheck.status, details: r.recheck.details };
+    if (r.recheck.status === 'retracted') {
+      out.retracted.push(
+        `citation [@${r.citekey}] is RETRACTED — ${r.recheck.details ?? 'it appears in Retraction Watch'} (re-checked now: LIBRARY.json had its retraction status unknown) — replace the source`,
+      );
+    }
+  }
+  return out;
 }
 
 /** True when FINAL.md is absent or older than the compiled DRAFT.md. Never throws. */
@@ -896,10 +917,12 @@ export const doneCommand = defineCommand({
       reasons.push(...compileRecordProblems(paperRoot, sections.map((s) => s.identity), current));
     }
     // VRFY-15 (D-20-13): every cited source whose LIBRARY.json retraction
-    // status is `unknown` is re-checked live before export, never from the
-    // cache; a decided answer is recorded through the library writer — a
-    // retraction then blocks through Pass 1's stored-retraction rule below.
-    await recheckUnknownRetractions(paperRoot, draftMd);
+    // status is `unknown` is re-checked live, never from the cache: a
+    // retraction found now blocks the export; the decided answers are recorded
+    // (through the library writer) only once done exports — a refused done
+    // writes nothing.
+    const rechecked = await recheckUnknownRetractions(paperRoot, draftMd);
+    for (const r of rechecked.retracted) reasons.push(`.paper/DRAFT.md: ${r}`);
     const bib = loadBibliography(paperRoot);
     const draftGate = await recomputeExportGate(paperRoot, draftMd, { sections, bib, recheck: true });
     for (const r of draftGate.refusals) reasons.push(`.paper/DRAFT.md: ${r}`);
@@ -1047,11 +1070,19 @@ export const doneCommand = defineCommand({
     });
 
     // (6) VRFY-28: the registrar answers that confirmed the exported citations
-    // become their LIBRARY.json last_verified (the one writer, under its lock).
+    // become their LIBRARY.json last_verified (the one writer, under its lock);
+    // VRFY-15: the retraction statuses re-checked above are recorded.
     const stamps = { ...draftGate.gate.checkedAt, ...exportGate.checkedAt };
     if (Object.keys(stamps).length > 0) {
       try {
         await recordLastVerified(paperRoot, stamps);
+      } catch (e) {
+        if (!(e instanceof LibraryNotFoundError)) throw e;
+      }
+    }
+    if (Object.keys(rechecked.decided).length > 0) {
+      try {
+        await recordRetractionStatuses(paperRoot, rechecked.decided);
       } catch (e) {
         if (!(e instanceof LibraryNotFoundError)) throw e;
       }
