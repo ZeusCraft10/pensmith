@@ -48,10 +48,17 @@
 //     path: '/works?query=...',          (scrubbed params removed by the recorder)
 //     status: 200,
 //     response: <object for JSON bodies, string otherwise>,
-//     responseHeaders?: { 'content-type': 'application/json' },
+//     responseHeaders?: { 'content-type': 'application/json',
+//                         'location': '<url>' },   (a recorded redirect hop)
+//     bodyEncoding?: 'base64',           (a non-text body, e.g. a PDF: `response`
+//                                         is its base64 — D-19-07)
 //     bodySha256?: '<hex>',              (POST fixtures only)
 //     provenance?: { recordedAt, recorder, adapter }   (recorded fixtures)
 //   }
+//
+// A redirect is recorded as one entry per hop (a 3xx with its `location`, then
+// the next URL's answer); offline replay follows those hops through this same
+// exact-match store (bin/lib/http.ts), so a recorded chain replays exactly.
 
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -106,6 +113,11 @@ export interface Cassette {
   responseHeaders?: Record<string, string>;
   /** sha256 (hex) of the POST body this fixture answers (D-17-06). */
   bodySha256?: string;
+  /**
+   * `base64`: `response` is the base64 of a non-text body (a PDF), decoded to
+   * exact bytes on replay (D-19-07). Absent: `response` is the text / JSON body.
+   */
+  bodyEncoding?: 'base64';
   /** Written by scripts/refresh-cassettes.mjs for every real recording (CI-07). */
   provenance?: { recordedAt: string; recorder: string; adapter: string };
   /** CYCLE-3 substantive LOW REVIEWS CONVERGENCE — request-header bucket. */
@@ -129,6 +141,9 @@ export const SENSITIVE_HEADERS: ReadonlySet<string> = new Set([
   'x-amz-security-token',
   'x-csrf-token',
   'proxy-authorization',
+  // The Zotero Web API key header (SRC-16, D-19-24): never recorded, never part
+  // of an HTTP cache key, dropped on a cross-origin redirect hop.
+  'zotero-api-key',
 ]);
 
 /**
@@ -140,7 +155,10 @@ export const SCRUBBED_QUERY_PARAMS: ReadonlySet<string> = new Set([
   'mailto',
   'email',
   'api_key',
+  'apikey',
   'key',
+  'token',
+  'access_token',
   'tool',
   '_',
 ]);
@@ -497,9 +515,22 @@ export function listCassetteFiles(): string[] {
 export interface FixtureResponse {
   status: number;
   headers: Record<string, string>;
+  /** The body as text (the UTF-8 decode of `bodyBytes` for a base64 fixture — lossy for binary). */
   body: string;
+  /** The exact body bytes (a base64 fixture decodes to them; a text fixture is its UTF-8). */
+  bodyBytes: Buffer;
   /** Which committed file answered (for diagnostics and the http session record). */
   file: string;
+}
+
+/** The exact bytes a fixture entry answers with (D-19-07: a base64 body decodes to its bytes). */
+export function fixtureBodyBytes(entry: Pick<Cassette, 'response' | 'bodyEncoding'>): Buffer {
+  const r = entry.response;
+  if (entry.bodyEncoding === 'base64') {
+    return Buffer.from(typeof r === 'string' ? r : '', 'base64');
+  }
+  const text = typeof r === 'string' ? r : r === undefined || r === null ? '' : JSON.stringify(r);
+  return Buffer.from(text, 'utf8');
 }
 
 interface IndexedFixture {
@@ -542,11 +573,10 @@ export function lookupFixture(method: string, url: string, body?: string | Buffe
   if (fixtureIndex === null) fixtureIndex = buildIndex();
   const hit = fixtureIndex.get(canonicalFixtureKey(method, url, body));
   if (!hit) return null;
-  const r = hit.entry.response;
-  const bodyText = typeof r === 'string' ? r : r === undefined || r === null ? '' : JSON.stringify(r);
+  const bytes = fixtureBodyBytes(hit.entry);
   const headers: Record<string, string> = {};
   for (const [k, v] of Object.entries(hit.entry.responseHeaders ?? {})) {
     headers[k.toLowerCase()] = String(v);
   }
-  return { status: hit.entry.status, headers, body: bodyText, file: hit.file };
+  return { status: hit.entry.status, headers, body: bytes.toString('utf8'), bodyBytes: bytes, file: hit.file };
 }

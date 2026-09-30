@@ -14,9 +14,11 @@
 
 import {
   getProviderApiKey,
-  getOpenAlexApiKey,
+  openAlexKey,
+  s2ApiKeyValue,
   loadRuntimeConfig,
 } from '../../bin/lib/runtime.js';
+import { contactEmail } from '../../bin/lib/contact-email.js';
 
 interface Provider {
   id: string;
@@ -34,11 +36,17 @@ export async function handleCapabilitiesRead(provider: Provider) {
   // Violation 3: inline getProviderApiKey() call (D-12 selector B)
   const providerKey = await getProviderApiKey({ scope: 'paper' });
 
-  // Violation 4: inline getOpenAlexApiKey() call (D-12 selector B)
-  const openalexKey = await getOpenAlexApiKey();
+  // Violation 4: inline openAlexKey() call — returns the OpenAlex key value (D-12 selector B)
+  const openalexKey = (await openAlexKey()).value;
 
   // Violation 5: inline loadRuntimeConfig() call (D-12 selector B)
   const cfg = await loadRuntimeConfig();
+
+  // Violation 6: inline s2ApiKeyValue() call — returns the Semantic Scholar key (D-12 selector B)
+  const s2Key = s2ApiKeyValue();
+
+  // Violation 7: inline contactEmail() call — returns the user's address (D-12 selector B)
+  const email = contactEmail().email;
 
   return {
     // The whole point of D-12: even building this object is forbidden in mcp/.
@@ -47,6 +55,8 @@ export async function handleCapabilitiesRead(provider: Provider) {
       value: directComputed, // <- THIS is the leak D-12 prevents
     },
     openalex: { present: !!openalexKey },
+    s2: { present: !!s2Key },
+    contact: { value: email },
     cfgProviders: cfg.providers,
   };
 }

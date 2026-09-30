@@ -1,0 +1,502 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=instagram+adolescent+depression+longitudinal+Social+media+and+depression&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 5107791,
+        "items": [
+          {
+            "publisher": "Opast Group LLC",
+            "issue": "2",
+            "abstract": "<jats:p>Background: Instagram is a popular social media platform which uses algorithms to tailor content to the specific interests of individual users. We proposed that this tailored content induces a flow state where users become completely absorbed and time passes imperceptibly, creating a highly satisfying experience. For those who use Instagram to escape from depression, Instagram may provide the relief that they seek, but at a cost – neglecting real-life social supports and work/academic commitments. This neglect leads to further problems that prompt greater Instagram dependence. Methods: Using a repeated-measures design, 114 participants engaged in three conditions (Control, Generalized, and Personalized) for 10 minutes each. Participants answered questions about flow and positive affect (after each condition), as well as their Instagram use habits, depression, reasons for using Instagram, and time spent on Instagram. Results: We demonstrated that Instagram’s algorithms were effective. Participants experienced significantly greater flow and positive affect when using their tailored-content Instagram compared to a generalized account based on the interests of 30 random users. As evidence for our proposed cycle of dependence, we showed significant associations between depression, flow, and a measure of problematic Instagram use, as well as associations between being motivated to use Instagram to escape problems and problematic Instagram use. Conclusions: These results suggest that, at least for a subset of individuals with depression, Instagram serves as a maladaptive, escape-coping mechanism which induces flow and elevates mood, but ultimately leads to more problems due to overextended Instagram use.</jats:p>",
+            "DOI": "10.33140/jar.07.02.05",
+            "type": "journal-article",
+            "title": [
+              "Instagram, Depression, and Dark Flow - Using Social Media as a Maladaptive Coping Mechanism"
+            ],
+            "volume": "7",
+            "container-title": [
+              "Journal of Addiction Research"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2023,
+                  12,
+                  22
+                ]
+              ]
+            }
+          },
+          {
+            "DOI": "10.2139/ssrn.4391734",
+            "title": [
+              "Instagram, Depression, And Dark Flow – Using Social Media as a Maladaptive Coping Mechanism"
+            ],
+            "author": [
+              {
+                "given": "Sara",
+                "family": "Ahmed",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Mike  J.",
+                "family": "Dixon",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2023
+                ]
+              ]
+            },
+            "type": "posted-content",
+            "publisher": "Elsevier BV"
+          },
+          {
+            "publisher": "PLUS COMMUNICATION CONSULTING SRL",
+            "abstract": "<jats:p>This study ultimately aims to delineate the potential link between TikTok doomscrolling and behavioral problems amongst adolescent users while taking a psychological approach to analyze the insidious impacts of doomscrolling habits on individuals’ neurotic hormone levels. This study examines changes in stress-related hormones such as serotonin and dopamine in relation to doomscrolling behaviors. Furthermore, by bolstering the connection between neurotransmitter changes and behavioral changes analyzed from various research papers, this study aims to reveal a clear anatomical and psychological explanation behind rising behavior problems in young TikTok users. Hence, the study will establish specific guidelines warning young users of potential risks and promote safe social media usage.</jats:p>",
+            "DOI": "10.47577/tssj.v74i1.13121",
+            "type": "journal-article",
+            "page": "113-121",
+            "title": [
+              "Doomscrolling, Social Media, and Adolescent Depression: A Psychological and Neurological Perspective"
+            ],
+            "volume": "74",
+            "author": [
+              {
+                "given": "Brian",
+                "family": "Eun",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Technium Social Sciences Journal"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  8,
+                  7
+                ]
+              ]
+            }
+          },
+          {
+            "DOI": "10.18297/etd/2721",
+            "title": [
+              "A meta-analysis of the longitudinal relationship between adolescent depression and academic achievement."
+            ],
+            "author": [
+              {
+                "given": "Rachel",
+                "family": "Buehner",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "dissertation",
+            "publisher": "University of Louisville"
+          },
+          {
+            "publisher": "MDPI AG",
+            "issue": "5",
+            "abstract": "<jats:p>Objective: The purpose of this study is to gain insight into the effect of family support, school connectedness, and school environments on depressive symptoms among adolescents across racial/ethnic groups on both the student-level and school-level. Method: This study uses a sample of 4228 students (2122 girls and 2016 boys) from the public use data of the National Longitudinal Study of Adolescent Health. Students were measured at two time points (one year apart) on school connectedness, family support, socio-demographic factors, and the Center for Epidemiological Studies’ Depression Scale. Hierarchical Linear Modeling was used to examine potential predictors on adolescent depressive symptoms. This is, to the best of the author’s knowledge, the first study to examine the interplay of school connectedness, school racial composition, and adolescent depression. Results: School connectedness partially mediates the effects of family support on depressive symptoms, but both remain strong predictors of depressive symptoms. African American adolescents are the only racial/ethnic group that has constantly higher CES-D scores than the non-Hispanic white adolescents. School-level connectedness is positively related to students’ depressive symptoms. The racial composition of a school has different effects on students’ depressive symptoms on student’s race. Conclusions: Low perceived family support, low school connectedness, being female, and being African American are consistently associated with greater depressive symptoms one year later. The overall level of school connectedness of a school is found to be related with greater individual student’s depressive symptoms, while the effects of school proportion of minority students on students’ depressive symptoms differ significantly across the race/ethnicity of students. Future study is needed to explore the association between racial/ethnic segregation and adolescent depression while considering students’ racial/ethnic status.</jats:p>",
+            "DOI": "10.3390/socsci7050072",
+            "type": "journal-article",
+            "page": "72",
+            "title": [
+              "A Multi-Level Analysis on School Connectedness, Family Support, and Adolescent Depression: Evidence from the National Longitudinal Study of Adolescent Health, 1995–1996"
+            ],
+            "volume": "7",
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0002-4671-1129",
+                "authenticated-orcid": false,
+                "given": "Lin",
+                "family": "Zhu",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Center for Asian Health, Lewis Katz School of Medicine, Temple University, 3440 N Broad St., Kresge Bldg, Ste. 320, Philadelphia, PA 19140, USA"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Social Sciences"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2018,
+                  4,
+                  25
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "Elsevier BV",
+            "issue": "2",
+            "DOI": "10.1016/j.jadohealth.2007.11.018",
+            "type": "journal-article",
+            "page": "5",
+            "title": [
+              "5: Adolescent Media Use and Young Adult Depression: A Longitudinal Study"
+            ],
+            "volume": "42",
+            "author": [
+              {
+                "given": "Brian A.",
+                "family": "Primack",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Brandi",
+                "family": "Swanier",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Anna M.",
+                "family": "Georgiopoulos",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Stephanie R.",
+                "family": "Land",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Michael J.",
+                "family": "Fine",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Journal of Adolescent Health"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2008,
+                  2
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "Darcy & Roy Press Co. Ltd.",
+            "issue": "3",
+            "abstract": "<jats:p>Social media is widely used among teenagers, especially in 2022, the number of users soared. Mental health is crucial to adlescence, because 50% of mental problems occur around this period, but there is a lack of systematic clarification of the specific impact of social media on adolescent anxiety and depression. This study defines social media as an online platform for information media interaction. The mental health of adolescents involves emotional stability, including the ability to regulate negative emotions, self-awareness of reality, daily life, social adaptation, conflict resolution, and empathy for the integration of family/school/peers. It uses case analysis and data statistics to explore the impact of social media. The results show that social media induces adolescent anxiety through peer comparison, cyberbullying, appearance anxiety and addiction-related withdrawals. It also exacerbates depression in low-esteem teenagers who lack family companionship. Targeted solutions are proposed for families, schools and platforms. The study clarifies the key impact, provides guidance for protecting the mental health of adolescents, and lays the foundation for future research.</jats:p>",
+            "DOI": "10.54097/4yeshr16",
+            "type": "journal-article",
+            "page": "889-894",
+            "title": [
+              "The Impact of Social Media on Adolescent Anxiety and Depression"
+            ],
+            "volume": "13",
+            "author": [
+              {
+                "given": "Yutian",
+                "family": "Hu",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Academic Journal of Management and Social Sciences"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  12,
+                  30
+                ]
+              ]
+            }
+          },
+          {
+            "DOI": "10.31234/osf.io/ew5kv_v1",
+            "title": [
+              "Children’s Social Media Use, Depression, and Socioeconomic Inequalities - A Longitudinal Investigation Based on the ABCD Study®"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0009-0008-8450-7824",
+                "authenticated-orcid": true,
+                "given": "Marit",
+                "family": "Ackermans",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-9544-0150",
+                "authenticated-orcid": true,
+                "given": "Bruno",
+                "family": "Sauce",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-2637-7781",
+                "authenticated-orcid": true,
+                "given": "Ewa",
+                "family": "Miedzobrodzka",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  9,
+                  1
+                ]
+              ]
+            },
+            "abstract": "<p>This study investigated the moderating roles of socioeconomic status (SES) and social media use (SMU) in predicting changes in children’s depressive symptoms over 2 years. Data from 8182 American children (aged 10-14, 52.8% males, 53.6% White) participating in the Adolescent Brain Cognitive Development Study were used. Contrary to expectations, we found decreased depressive symptoms over time that were not predicted by social media use. However, SES was a significant moderator: the highest decreases in depressive symptoms were observed in the low SES and low SMU group (b = -.04) and in the high SES and high SMU group (b = -.037). This study contributes to a more nuanced understanding of social media effects on children.</p>",
+            "type": "posted-content",
+            "publisher": "Center for Open Science"
+          },
+          {
+            "DOI": "10.31234/osf.io/ew5kv_v2",
+            "title": [
+              "Youth’s Social Media Use, Depression, and Socioeconomic Inequalities  - A Longitudinal Investigation Based on the ABCD Study®"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0009-0008-8450-7824",
+                "authenticated-orcid": true,
+                "given": "Marit",
+                "family": "Ackermans",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-9544-0150",
+                "authenticated-orcid": true,
+                "given": "Bruno",
+                "family": "Sauce",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-2637-7781",
+                "authenticated-orcid": true,
+                "given": "Ewa",
+                "family": "Miedzobrodzka",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026,
+                  1,
+                  6
+                ]
+              ]
+            },
+            "abstract": "<p>Numerous studies have investigated the relationship between social media use and adolescent mental health yielding inconclusive findings. We aimed to advance this field by employing a longitudinal approach and determining which individuals might be most vulnerable to the potential effects of social media. In the current longitudinal study, we focused on the role of socioeconomic inequalities and investigated the moderating roles of socioeconomic status (SES) and social media use (SMU) in predicting changes in youth’s depressive symptoms over 2 years. We expected that frequent social media use among youth from the lower SES backgrounds would predict higher depressive symptoms over time. Data from 8182 American early adolescents (aged 10-14, 52.8% males) participating in the Adolescent Brain Cognitive Development Study were analyzed. Unexpectedly, we found a decrease in depressive symptoms over time, which was not predicted by social media use. However, SES moderated this relationship: the highest decreases in depressive symptoms were observed in the low SES and low SMU group (b = -.04) and in the high SES and high SMU group (b = -.037). This study contributes to a more nuanced understanding of the role of socioeconomic inequalities in the effects of social media use on youth’s mental health.</p>",
+            "type": "posted-content",
+            "publisher": "Center for Open Science"
+          },
+          {
+            "publisher": "Elsevier BV",
+            "issue": "6",
+            "DOI": "10.1016/j.jadohealth.2020.09.017",
+            "type": "journal-article",
+            "page": "873",
+            "title": [
+              "Elucidating the Role of Behavior in Social Media Use and Depression"
+            ],
+            "volume": "67",
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0003-3710-3065",
+                "authenticated-orcid": false,
+                "given": "Sarah",
+                "family": "Shidid",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Ramaswamy",
+                "family": "Viswanathan",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Journal of Adolescent Health"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2020,
+                  12
+                ]
+              ]
+            }
+          }
+        ],
+        "items-per-page": 10,
+        "query": {
+          "start-index": 0,
+          "search-terms": "instagram adolescent depression longitudinal Social media and depression"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T08:03:23.650Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

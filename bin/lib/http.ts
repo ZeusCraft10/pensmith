@@ -5,12 +5,17 @@
 // EXCEPT this file (per-file `no-restricted-imports: 'off'` exemption).
 //
 // =================================================================
-//   Polite scholarly client (D-23, D-24)
+//   Polite scholarly client (D-23, D-24, D-19-08, D-19-09)
 // =================================================================
-// User-Agent: pensmith/{version} ({PENSMITH_CONTACT_EMAIL || 'no-contact'})
-// On missing PENSMITH_CONTACT_EMAIL, WARN-once stderr banner from
-// references/http-warnings.md (locked string — Phase 2 doctor reuses it
-// verbatim, so drift is a lint failure).
+// User-Agent: `pensmith/{version} (mailto:{email})` for the services that ask
+// callers to identify themselves (Crossref and its retraction lookup, OpenAlex,
+// Unpaywall); the address comes from bin/lib/contact-email.ts contactEmail()
+// (the variable named by `[network] contact_email_env`, default
+// PENSMITH_CONTACT_EMAIL). Every other request — and any redirect hop that
+// leaves the service's origin — carries the plain `pensmith/{version}`. With no
+// address set, a polite-pool request says `(no-contact)` and prints the WARN-once
+// banner from references/http-warnings.md (locked string — the doctor probe
+// reuses it, so drift is a lint failure).
 //
 // =================================================================
 //   Per-source TTL disk cache (D-30)
@@ -18,33 +23,67 @@
 // crossref / openalex / arxiv / pubmed: 7d
 // unpaywall: 1d  (OA status flips faster than DOI metadata)
 // generic:   24h
-// Cache key:    sha256(method + ':' + url + ':' + sortedHeaders).slice(0,16)
+// Cache key:    sha256(method + ':' + url + ':' + sortedHeaders).slice(0,16), with
+//               the secret query parameters (api_key, apikey, key, token,
+//               access_token), the contact parameters and every SENSITIVE_HEADERS
+//               entry (zotero-api-key included) left out — a keyed and a keyless
+//               request share one entry, and no key ever shapes a cache file
+//               name (SRC-06, D-19-10).
 // Cache file:   pensmithHttpCacheDir() + '/' + key + '.json'
 // Cache write:  atomicWriteFile (W2 dependency) — never direct fs.writeFile.
-// Cache short-circuits BEFORE network and BEFORE the per-source rate bucket
-// (cache hits are free).
+// Cache short-circuits BEFORE network and BEFORE the per-host rate bucket
+// (cache hits are free). Only a validated answer is cached (seam S-B validate).
 //
 // =================================================================
 //   Retry (D-31, D-32)
 // =================================================================
-// Retryable status codes: 429, 500, 502, 503, 504
+// Retryable status codes: 429, 500, 502, 503, 504, 529
 // Retryable error codes:  ETIMEDOUT, ECONNRESET, ENOTFOUND, EAI_AGAIN
 // Backoff:                full-jitter via bin/lib/retry.ts (NOT p-retry's
 //                         bounded multiplicative jitter — see retry.ts header)
 // 4xx OTHER than 429 are NOT retried (they are application errors).
 // The retry's `fn` includes the bucket acquire, so a 429 retry re-acquires
-// politely — per ARCH-13.
+// politely — per ARCH-13. A Retry-After up to RETRY_AFTER_CAP_MS is honoured
+// before the next attempt.
 //
 // =================================================================
-//   Per-source TokenBucket (ARCH-13)
+//   Per-host politeness (ARCH-13, SRC-17, D-19-08)
 // =================================================================
-// Polite-pool RPS table (RESEARCH §RQ-1):
-//   crossref: 50  (polite pool)
-//   openalex: 10  (anonymous; up to 100 with key — defensive default)
-//   unpaywall: 10 (per-key budget)
-//   arxiv:    1   (relaxed from 1/3s — single bucket sufficient)
-//   pubmed:   3   (E-utilities anonymous)
-//   generic:  5   (untyped fallback)
+// Token buckets are keyed per HOST (Crossref search, works and retraction
+// lookups share api.crossref.org), seeded from the per-source table and a
+// per-host floor table (the lower wins):
+//   arXiv 1 request per 3 s, Crossref 3/s, PubMed 3/s, Semantic Scholar 1/s,
+//   OpenAlex 10/s, Unpaywall 10/s, Open Library 1/s, Zotero 5/s, generic 5/s.
+// A bucket holds ONE token (no burst): consecutive requests to a host are at
+// least 1 / rate apart, so no window of X-Rate-Limit-Interval ever holds more
+// than X-Rate-Limit-Limit requests (review round 3 — a 3-token bucket at 3/s
+// let ~6 through in the first second and drew Crossref's 429).
+// A scholarly API's own `X-Rate-Limit-Limit` / `X-Rate-Limit-Interval` (e.g.
+// 3 / 1s; RATE_HEADER_HOSTS only — any other host cannot lower pensmith's
+// rate) lowers that host's rate and never raises it; a declared rate slower
+// than one request per RETRY_AFTER_CAP_MS marks the host exhausted instead of
+// sleeping. Zotero's `Backoff: <s>` holds the host for that long. Waiting for a
+// token counts against the request's timeoutMs (a RateLimitExhaustedError
+// when it runs out): the rate limit never hangs a request.
+// Host availability (never for a model request, never for a fixture answer):
+//   - a Retry-After (or Backoff) beyond RETRY_AFTER_CAP_MS marks the host
+//     exhausted until then: the request is not retried, RateLimitExhaustedError
+//     is thrown, one stderr line is printed, and later requests to that host
+//     fail fast with zero sockets;
+//   - a 429 is "slow down", not "down": it holds the WHOLE host (every request
+//     to it, not just the retry) for its Retry-After, or — without one — for
+//     at least the declared interval (X-Rate-Limit-Interval), one bucket
+//     interval and MIN_THROTTLE_HOLD_MS, whichever is longest, and empties the
+//     bucket. A request's own 429 retries are ONE breaker strike, counted only
+//     when the request still ends throttled; BREAKER_THRESHOLD requests in a
+//     row that end throttled open the breaker (a transient throttle that the
+//     hold absorbs never takes the host down for the run);
+//   - 5xx is "down": the breaker opens after BREAKER_THRESHOLD consecutive 5xx
+//     RESPONSES (retries count, D-19-08), so a failing host costs ≤ 3 requests;
+//   - an open breaker: CircuitOpenError, one stderr line per host, the host
+//     skipped for the rest of the run; any other answer resets both counts;
+//     after BREAKER_HALF_OPEN_MS an open breaker lets one probe through (so the
+//     long-lived MCP server recovers), and a probe answered 429/5xx re-opens it.
 // Bucket acquire happens AFTER the cache short-circuit and INSIDE the
 // retry's `fn` so 429-retry re-pays the rate cost.
 //
@@ -56,20 +95,34 @@
 //        --dry-run          → every request refused (OfflineEgressError), 0 sockets;
 //        LLM stubbed        → an opts.llm request is refused;
 //        sources offline    → a non-LLM request is answered ONLY from the
-//                             exact-match fixture store or refused; an opts.llm
+//                             exact-match fixture store (recorded redirect hops
+//                             are followed through it) or refused; an opts.llm
 //                             request is allowed only to a loopback endpoint.
 //   2. DNS resolve + validate for EVERY request (trusted hosts included):
 //      private, loopback, link-local and CGNAT addresses are refused, except the
-//      configured LLM endpoint rules (D-17-09).
+//      configured LLM endpoint rules (D-17-09) and the two configured local
+//      services (FetchOptions.localService: the Zotero 7 local API at exactly
+//      http://127.0.0.1:23119 with PENSMITH_ZOTERO_LOCAL=1, and the loopback
+//      origin of PENSMITH_GROBID_URL — read from the environment only, by
+//      bin/lib/local-services.ts, so a paper file can enable neither;
+//      link-local and metadata addresses stay refused). http.ts itself reads
+//      no environment variable.
 //   3. Pin: a per-request dispatcher whose connect lookup answers ONLY with the
 //      validated addresses (no second DNS resolution — closes WR-03 / DNS
 //      rebinding), keeping the hostname for TLS SNI and the Host header.
-//      Redirects are never followed: undici's redirect count is 0 (SRC-01 adds a re-pinning redirect loop later).
+//      undici never follows a redirect (its redirect count stays zero): http.ts
+//      follows 301/302/303/307/308 itself, for GET and HEAD only, at most
+//      MAX_REDIRECTS hops, and every hop repeats steps 2-6 for its own URL — the
+//      scheme allowlist, DNS resolve + validate, a new pinned dispatcher, its own
+//      mirror line and its own http record. A cross-origin hop drops every
+//      SENSITIVE_HEADERS entry; https→http, a revisited URL, a missing Location
+//      and a sixth redirect are RedirectErrors; 303 becomes GET; a POST's 3xx is
+//      returned as-is and a model request's 3xx is an error (SRC-01, D-19-06).
 //   4. --show-prompts mirror (D-17-12), before any byte is sent.
 //   5. The body streams under maxBytes; ResponseTooLargeError aborts before
 //      full buffering (JSON 8 MiB, PDFs MAX_PDF_BYTES, LLM 16 MiB).
 //   6. A kind:"http" SESSION.log record for every request (D-17-13), including
-//      refused, cached and fixture-served ones.
+//      refused, cached and fixture-served ones, and one per redirect hop.
 // In sources-offline and dry-run modes the HTTP cache is neither read nor
 // written, so offline never serves a live cache entry and never pollutes it.
 //
@@ -99,9 +152,13 @@ import {
   canonicalFixtureKey,
   scrubbedPathAndQuery,
   SENSITIVE_HEADERS,
+  recordedErrorBody,
   type NetworkMode,
 } from './http-mock.js';
 import { openSessionLog, isMirrorPromptsEnabled, type SessionLogger } from './session-log.js';
+import { contactEmail, DEFAULT_CONTACT_EMAIL_ENV } from './contact-email.js';
+import { enabledLocalServiceOrigin, type LocalService } from './local-services.js';
+import { lookupTable } from './lookup-table.js';
 
 // ============================================================
 //   Typed egress errors (D-17-05)
@@ -150,6 +207,104 @@ export class ResponseTooLargeError extends PensmithError {
     this.name = 'ResponseTooLargeError';
     this.maxBytes = maxBytes;
     this.request = request;
+  }
+}
+
+// ------------------------------------------------------------
+//   Host-availability and redirect errors (Phase 19 seam S-B, SRC-01, SRC-17)
+// ------------------------------------------------------------
+// Declared by the seam so adapters and verbs can report them; thrown by the
+// transport once stream `net` lands the redirect loop, the exhausted-host
+// marker and the per-host circuit breaker.
+
+/** A rough, human wait: `~35 s`, `~12 min`, `~6 h`, `~2 d`. */
+export function formatRetryAfter(ms: number): string {
+  const s = Math.max(1, Math.round(ms / 1000));
+  if (s < 90) return `~${s} s`;
+  const min = Math.round(s / 60);
+  if (min < 90) return `~${min} min`;
+  const h = Math.round(s / 3600);
+  if (h < 48) return `~${h} h`;
+  return `~${Math.round(s / 86_400)} d`;
+}
+
+/**
+ * A host whose server asked callers to wait longer than RETRY_AFTER_CAP_MS
+ * (e.g. keyless OpenAlex's `Retry-After: 22400`): the request is not retried,
+ * and no further request goes to that host in this process until the wait has
+ * passed (SRC-17). Adapters report it as a failed lookup / search.
+ */
+export class RateLimitExhaustedError extends PensmithError {
+  readonly host: string;
+  readonly retryAfterMs: number;
+  readonly status: number;
+  /**
+   * What the response that exhausted the host said (its bounded body and its
+   * headers), so an adapter can tell WHY (e.g. OpenAlex's keyless daily budget
+   * versus its short load-shedding limit). Absent for a token-wait timeout.
+   */
+  readonly detail: { readonly body?: string; readonly headers?: Readonly<Record<string, string>> } | undefined;
+  constructor(
+    host: string,
+    retryAfterMs: number,
+    status: number = 429,
+    detail?: { readonly body?: string; readonly headers?: Readonly<Record<string, string>> },
+  ) {
+    super(`${host}: rate limit exhausted (retry after ${formatRetryAfter(retryAfterMs)})`, EXIT_ERROR);
+    this.name = 'RateLimitExhaustedError';
+    this.host = host;
+    this.retryAfterMs = retryAfterMs;
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+/**
+ * A host whose per-host circuit breaker is open: it answered 429/5xx too many
+ * times in a row, so it is skipped for the rest of the run (SRC-17).
+ */
+export class CircuitOpenError extends PensmithError {
+  readonly host: string;
+  readonly lastStatus: number;
+  readonly failures: number;
+  /**
+   * What opened the breaker, without the host: `3 consecutive HTTP 503
+   * responses` (5xx: responses count, retries included) or `3 requests in a
+   * row throttled (HTTP 429)` (429: a request counts once, when it still ends
+   * throttled after its retries).
+   */
+  readonly summary: string;
+  constructor(host: string, lastStatus: number, failures: number) {
+    const summary = lastStatus === 429
+      ? `${failures} requests in a row throttled (HTTP 429)`
+      : `${failures} consecutive HTTP ${lastStatus} responses`;
+    super(`${host}: skipped for the rest of this run after ${summary}`, EXIT_ERROR);
+    this.name = 'CircuitOpenError';
+    this.host = host;
+    this.lastStatus = lastStatus;
+    this.failures = failures;
+    this.summary = summary;
+  }
+}
+
+/** True for either host-availability error (the host is not being asked right now). */
+export function isHostUnavailableError(e: unknown): e is RateLimitExhaustedError | CircuitOpenError {
+  return e instanceof RateLimitExhaustedError || e instanceof CircuitOpenError;
+}
+
+/** Why a redirect chain was not followed to the end (SRC-01). */
+export type RedirectErrorKind = 'too-many' | 'loop' | 'downgrade' | 'no-location' | 'not-followed';
+
+/** A redirect chain http.ts refused to follow (every hop is SSRF-checked and pinned separately). */
+export class RedirectError extends PensmithError {
+  readonly kind: RedirectErrorKind;
+  /** The URL whose redirect was refused (secret params redacted). */
+  readonly url: string;
+  constructor(kind: RedirectErrorKind, url: string, detail: string) {
+    super(`${kind === 'too-many' ? 'too many redirects' : 'redirect refused'}: ${detail}`, EXIT_ERROR);
+    this.name = 'RedirectError';
+    this.kind = kind;
+    this.url = url;
   }
 }
 
@@ -439,6 +594,59 @@ export async function checkLlmEndpoint(
   return addrs;
 }
 
+// ============================================================
+//   Configured local services (SRC-15, SRC-16, D-19-21, D-19-24)
+// ============================================================
+
+// Which local services are enabled is read from the environment by
+// bin/lib/local-services.ts (never from a paper file); http.ts only enforces
+// the policy. Re-exported here for the modules and tests that speak to the gate.
+export { ZOTERO_LOCAL_ORIGIN, grobidOrigin, isZoteroLocalEnabled, type LocalService } from './local-services.js';
+
+/**
+ * The origin an ENABLED local service may be reached at right now, or null
+ * when the environment has not enabled it. (Under a test context a seam may
+ * move an enabled service to a loopback test server's origin.)
+ */
+export function localServiceOrigin(kind: LocalService): string | null {
+  const origin = enabledLocalServiceOrigin(kind);
+  if (origin === null) return null;
+  return activeSeams()?.localServiceOrigins?.[kind] ?? origin;
+}
+
+const LOCAL_SERVICE_HOW: Readonly<Record<LocalService, string>> = {
+  'zotero-local': 'the Zotero local API is enabled only by PENSMITH_ZOTERO_LOCAL=1',
+  grobid: 'GROBID is enabled only by PENSMITH_GROBID_URL naming a loopback server (127.0.0.1, ::1 or localhost)',
+};
+
+/**
+ * The local-service policy (enforced ONLY here): the request origin must equal
+ * the enabled service's origin, and every resolved address must be loopback
+ * (never link-local / metadata). Returns the validated addresses (pinned).
+ */
+async function checkLocalService(url: string, kind: LocalService, resolveFn: Resolver): Promise<ResolvedAddress[]> {
+  const parsed = parseHttpUrl(url);
+  const origin = localServiceOrigin(kind);
+  if (origin === null) {
+    throw new SsrfBlockedError(`SSRF guard: ${kind} is not enabled — ${LOCAL_SERVICE_HOW[kind]}`);
+  }
+  if (parsed.origin !== origin) {
+    throw new SsrfBlockedError(
+      `SSRF guard: ${kind} request origin ${parsed.origin} is not the enabled origin ${origin} (${LOCAL_SERVICE_HOW[kind]})`,
+    );
+  }
+  const host = bareHost(parsed);
+  const addrs = await resolveHost(host, resolveFn);
+  for (const { address } of addrs) {
+    if (isNeverAllowedIp(address) || !isLoopbackIp(address)) {
+      throw new SsrfBlockedError(
+        `SSRF guard: ${kind} host "${host}" resolves to ${address}, which is not a loopback address — blocked`,
+      );
+    }
+  }
+  return addrs;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -500,10 +708,17 @@ function loadWarnString(): string {
   return warnString;
 }
 
-function warnNoEmailOnce(): void {
+/**
+ * Print the locked no-contact banner once per process. When the paper names a
+ * different variable (`[network] contact_email_env`, validated by
+ * contact-email.ts), the banner names that variable instead of the default.
+ */
+function warnNoEmailOnce(envName: string): void {
   if (warnedNoEmail) return;
   warnedNoEmail = true;
-  process.stderr.write(loadWarnString() + '\n');
+  const text = loadWarnString();
+  const named = envName === DEFAULT_CONTACT_EMAIL_ENV ? text : text.split(DEFAULT_CONTACT_EMAIL_ENV).join(envName);
+  process.stderr.write(named + '\n');
 }
 
 /**
@@ -538,27 +753,34 @@ function pkgVersion(): string {
  * Sources whose APIs ask callers to identify themselves with a contact email
  * (the "polite pool"): Crossref (api.crossref.org, which also serves the
  * Retraction Watch data the retraction-watch adapter reads), OpenAlex and
- * Unpaywall. Only these get PENSMITH_CONTACT_EMAIL in the User-Agent.
+ * Unpaywall. Only these get the contact email in the User-Agent (D-19-08).
  */
 const POLITE_POOL_SOURCES: ReadonlySet<HttpSource> = new Set<HttpSource>(['crossref', 'openalex', 'unpaywall', 'retraction-watch']);
 
+/** True when requests for `source` identify pensmith with the contact email. */
+export function isPolitePoolSource(source: HttpSource): boolean {
+  return POLITE_POOL_SOURCES.has(source);
+}
+
 /**
- * The User-Agent for one request. A polite-pool source gets
- * `pensmith/<version> (<PENSMITH_CONTACT_EMAIL>)` — and the missing-email WARN
- * when it is unset. Every other request — a model provider (opts.llm), the
- * DuckDuckGo phrase search, GPTZero, a URL the user passed to `add`, an
- * open-access PDF host — gets the plain `pensmith/<version>`: the contact email
- * is personal data meant for the polite pools only (PRIVACY.md), and a run that
- * never called them has no reason to warn about their rate limits.
+ * The User-Agent for one request (hop). A polite-pool source gets
+ * `pensmith/<version> (mailto:<email>)` — the form Crossref, OpenAlex and
+ * Unpaywall document — with the address from contact-email.ts, and the
+ * missing-email WARN when none is set. Every other request — a model provider
+ * (opts.llm), the DuckDuckGo phrase search, GPTZero, a URL the user passed to
+ * `add`, an open-access PDF host, and any redirect hop that leaves the polite
+ * service's origin (`polite` false) — gets the plain `pensmith/<version>`: the
+ * contact email is personal data meant for the polite pools only (PRIVACY.md),
+ * and a run that never called them has no reason to warn about their limits.
  */
-function userAgent(source: HttpSource, llm: boolean): string {
-  if (llm || !POLITE_POOL_SOURCES.has(source)) return `pensmith/${pkgVersion()}`;
-  const email = process.env.PENSMITH_CONTACT_EMAIL?.trim();
-  if (!email) {
-    warnNoEmailOnce();
+function userAgent(source: HttpSource, llm: boolean, polite = true): string {
+  if (llm || !polite || !POLITE_POOL_SOURCES.has(source)) return `pensmith/${pkgVersion()}`;
+  const { email, envName } = contactEmail();
+  if (email === null) {
+    warnNoEmailOnce(envName);
     return `pensmith/${pkgVersion()} (no-contact)`;
   }
-  return `pensmith/${pkgVersion()} (${email})`;
+  return `pensmith/${pkgVersion()} (mailto:${email})`;
 }
 
 /**
@@ -567,7 +789,7 @@ function userAgent(source: HttpSource, llm: boolean): string {
  * contact email is dropped from every log record).
  */
 function scrubContactEmail(text: string): string {
-  const email = process.env.PENSMITH_CONTACT_EMAIL?.trim();
+  const email = contactEmail().email;
   if (!email) return text;
   let out = text;
   for (const form of new Set([email, encodeURIComponent(email)])) out = out.split(form).join('REDACTED_CONTACT_EMAIL');
@@ -585,6 +807,10 @@ export type HttpSource =
   | 'pubmed'
   | 'semanticscholar'
   | 'retraction-watch'
+  // Phase 19 seam S-B: the books adapter (Open Library, Google Books; SRC-11)
+  // and the Zotero Web / local API client (SRC-16).
+  | 'books'
+  | 'zotero'
   | 'generic';
 
 export interface HttpResponse {
@@ -602,6 +828,17 @@ export interface HttpResponse {
   /** True when a sources-offline request was answered from the exact-match fixture store (D-17-06). */
   fixture?: boolean;
   cachedAt?: string; // ISO8601
+  /**
+   * The URL that answered when http.ts followed redirects to get here (SRC-01).
+   * Absent when the requested URL answered itself (and on a cache hit, which
+   * stores the final answer under the requested URL).
+   */
+  finalUrl?: string;
+  /**
+   * True when the request asked for only a prefix of the body (`prefixBytes`)
+   * and the server had more: `body` / `bodyBytes` hold the first bytes only.
+   */
+  truncated?: boolean;
 }
 
 export interface FetchOptions {
@@ -628,6 +865,13 @@ export interface FetchOptions {
    */
   untrusted?: boolean;
   /**
+   * A configured service on the user's own machine (see LocalService): the
+   * request may go to exactly that service's enabled loopback origin and
+   * nowhere else. Enabled only by the environment (PENSMITH_ZOTERO_LOCAL=1,
+   * PENSMITH_GROBID_URL), never by a paper file.
+   */
+  localService?: LocalService;
+  /**
    * Phase 17 seam (verbatim V3): marks a call to the configured LLM endpoint.
    * Only the completion module (bin/lib/anthropic.ts) sets it. `endpoint` is the
    * configured base URL (e.g. https://api.anthropic.com or http://127.0.0.1:11434/v1);
@@ -636,6 +880,32 @@ export interface FetchOptions {
   llm?: { endpoint: string };
   /** Phase 17 seam (verbatim V3): abort once the response body exceeds this many bytes (SEC-03). */
   maxBytes?: number;
+  /**
+   * false: return a GET / HEAD's 3xx as the answer instead of following it
+   * (default true, SRC-01). The DOI freshness probe asks only whether doi.org
+   * resolves the handle — its 302 IS the answer; following it would land on
+   * Crossref's content-negotiation endpoint (which answers HEAD with 405) or
+   * on a publisher host.
+   */
+  followRedirects?: boolean;
+  /**
+   * Phase 19 seam S-B (SRC-17): the caller's schema check. Called with a live
+   * response before it is cached or recorded; a non-null return (the reason
+   * the body is not the service's answer) keeps it out of the HTTP cache and
+   * out of any recording. The response is still returned: the caller reports
+   * it as a failed lookup. Independently, a 200 whose body is an API error
+   * document (http-mock.ts recordedErrorBody) is never cached.
+   */
+  validate?: (res: HttpResponse) => string | null;
+  /**
+   * Read only the first `prefixBytes` bytes of the final answer's body, then
+   * close the connection (review round 3: open-access.ts asks whether a URL
+   * serves a PDF — its `%PDF-` header — without downloading the whole file).
+   * The response is marked `truncated` when more followed, and it is never
+   * cached. A prefix read never reads past the prefix, so `maxBytes` (and a
+   * larger declared Content-Length) does not refuse it.
+   */
+  prefixBytes?: number;
 }
 
 // ============================================================
@@ -651,6 +921,10 @@ const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
   unpaywall: 1 * ONE_DAY_MS,
   semanticscholar: 7 * ONE_DAY_MS,
   'retraction-watch': 1 * ONE_DAY_MS,
+  // Phase 19 seam S-B: book metadata changes rarely; a Zotero library changes
+  // under the user's hands (its client passes noCache).
+  books: 7 * ONE_DAY_MS,
+  zotero: ONE_HOUR_MS,
   generic: 1 * ONE_DAY_MS,
 };
 // WR-07 (cross-AI review): 404 responses are cached so the verifier doesn't
@@ -664,20 +938,31 @@ const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
 const NEGATIVE_RESPONSE_TTL_MS = ONE_HOUR_MS;
 
 // ============================================================
-//   Per-source TokenBucket (ARCH-13)
+//   Per-host TokenBucket seeds (ARCH-13, SRC-17, D-19-08; docs/SOURCES.md)
 // ============================================================
+// Requests per second, seeded per source; a host's bucket takes the LOWEST seed
+// of every source that reaches it and of HOST_RPS_FLOOR below, and a service's
+// own X-Rate-Limit-* headers can lower it further (never raise it).
 const RPS_BY_SOURCE: Record<HttpSource, number> = {
-  crossref: 50,
+  // Crossref's polite pool answers list queries with `x-rate-limit-limit: 3`
+  // (`polite-array`; single-work lookups allow 10, the public pool 1) — seed at
+  // 3/s and let its headers lower it (never raise it).
+  crossref: 3,
+  // OpenAlex: 10/s within the (keyed) daily budget.
   openalex: 10,
   unpaywall: 10,
-  arxiv: 1,
+  // arXiv API terms: no more than one request every three seconds.
+  arxiv: 1 / 3,
+  // NCBI E-utilities without an API key: 3 requests per second.
   pubmed: 3,
-  // S2 anonymous rate-limit is 100 RPM (~1.7 RPS); keep conservative at 1 RPS.
-  // With an API key it bumps to 1 RPS per partner (same effective limit here).
+  // Semantic Scholar: 1 request per second (keyless requests share a public pool).
   semanticscholar: 1,
-  // Retraction Watch (Crossref Labs) — used only as a side-channel filter,
-  // call volume is minimal; mirror unpaywall budget.
-  'retraction-watch': 10,
+  // The retraction lookup is a Crossref REST query (api.crossref.org, D-17-47):
+  // same host, same seed — the per-host bucket makes them share one budget.
+  'retraction-watch': 3,
+  // Phase 19 seam S-B: Open Library asks clients not to exceed ~1 request/s.
+  books: 1,
+  zotero: 5,
   generic: 5,
 };
 
@@ -703,10 +988,39 @@ class TokenBucket {
   private timerPending = false;
 
   constructor(
-    private readonly capacity: number,
-    private readonly refillPerSec: number,
+    private capacity: number,
+    private refillPerSec: number,
   ) {
     this.tokens = capacity;
+    this.lastRefillMs = Date.now();
+  }
+
+  /** The current refill rate (requests per second). */
+  get rate(): number {
+    return this.refillPerSec;
+  }
+
+  /**
+   * Lower the rate (never raises it). The capacity never grows: a per-host
+   * bucket holds one token (hostStateFor), so it never bursts above the rate.
+   * `drain` empties the bucket: used when a server's own rate-limit headers
+   * arrive on a response, so the NEXT request waits a full interval (1 / rate)
+   * after the one that was just answered (SRC-17).
+   */
+  lower(refillPerSec: number, drain: boolean): boolean {
+    if (!(refillPerSec > 0) || refillPerSec >= this.refillPerSec) return false;
+    this.refill();
+    this.refillPerSec = refillPerSec;
+    this.capacity = Math.min(this.capacity, Math.max(1, refillPerSec));
+    this.tokens = drain ? Math.min(this.tokens, 0) : Math.min(this.tokens, this.capacity);
+    this.lastRefillMs = Date.now();
+    return true;
+  }
+
+  /** Empty the bucket: the next token is a full interval (1 / rate) away (a 429, SRC-17). */
+  drain(): void {
+    this.refill();
+    this.tokens = Math.min(this.tokens, 0);
     this.lastRefillMs = Date.now();
   }
 
@@ -718,7 +1032,13 @@ class TokenBucket {
     this.lastRefillMs = now;
   }
 
-  async acquire(): Promise<void> {
+  /**
+   * Take one token, waiting in FIFO order. With `timeoutMs`, a wait longer
+   * than that rejects with `onTimeout()` and gives up its place in the queue:
+   * the rate limit never holds a request longer than the request's own
+   * timeout (SRC-17, audit #22 — "back off, but never hang").
+   */
+  async acquire(timeoutMs?: number, onTimeout?: () => Error): Promise<void> {
     this.refill();
     // Fast-path: tokens available AND no one waiting ahead of us.
     if (this.tokens >= 1 && this.waiters.length === 0) {
@@ -726,8 +1046,22 @@ class TokenBucket {
       return;
     }
     // Slow-path: enqueue and wait for the single grant timer to fire.
-    return new Promise<void>((resolve) => {
-      this.waiters.push(resolve);
+    return new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waiter = (): void => {
+        if (timer !== undefined) clearTimeout(timer);
+        resolve();
+      };
+      this.waiters.push(waiter);
+      if (timeoutMs !== undefined && Number.isFinite(timeoutMs) && timeoutMs >= 0) {
+        timer = setTimeout(() => {
+          const i = this.waiters.indexOf(waiter);
+          if (i < 0) return;
+          this.waiters.splice(i, 1);
+          reject(onTimeout?.() ?? new Error(`waited more than ${timeoutMs} ms for the rate limit`));
+        }, timeoutMs);
+        timer.unref?.();
+      }
       if (!this.timerPending) this._scheduleGrant();
     });
   }
@@ -756,25 +1090,301 @@ class TokenBucket {
  */
 export { TokenBucket as __TokenBucketForTest };
 
-const BUCKETS: Partial<Record<HttpSource, TokenBucket>> = {};
-function bucketFor(src: HttpSource): TokenBucket {
-  let b = BUCKETS[src];
-  if (!b) {
-    const rps = RPS_BY_SOURCE[src];
-    b = new TokenBucket(rps, rps);
-    BUCKETS[src] = b;
-  }
-  return b;
+// ============================================================
+//   Per-host state: bucket, exhausted marker, circuit breaker (SRC-17)
+// ============================================================
+
+/**
+ * Per-host floors (requests per second) for hosts a request can reach under
+ * more than one source label — e.g. an arXiv PDF fetched as `generic` still
+ * gets arXiv's one-request-per-3-seconds rule. The lower of this and the
+ * source seed wins.
+ */
+const HOST_RPS_FLOOR: Readonly<Record<string, number>> = lookupTable({
+  'export.arxiv.org': 1 / 3,
+  'arxiv.org': 1 / 3,
+  'api.crossref.org': 3,
+  'eutils.ncbi.nlm.nih.gov': 3,
+  'api.semanticscholar.org': 1,
+  'openlibrary.org': 1,
+  'api.zotero.org': 5,
+});
+
+/**
+ * The hosts whose `X-Rate-Limit-Limit` / `X-Rate-Limit-Interval` headers are
+ * honoured (SRC-17): the scholarly APIs pensmith is written against. Any other
+ * host — a URL from `add`, an open-access PDF host, a redirect target — cannot
+ * lower pensmith's rate: a server may ask to be asked less often, but only a
+ * service we are polite to by design gets to say how.
+ */
+const RATE_HEADER_HOSTS: ReadonlySet<string> = new Set([
+  'api.crossref.org',
+  'api.openalex.org',
+  'export.arxiv.org',
+  'eutils.ncbi.nlm.nih.gov',
+  'api.semanticscholar.org',
+  'api.unpaywall.org',
+  'openlibrary.org',
+  'www.googleapis.com',
+  'api.zotero.org',
+]);
+
+/**
+ * The slowest declared rate a bucket is lowered to: one request per
+ * RETRY_AFTER_CAP_MS. A server that declares a slower rate asks for a wait
+ * longer than the cap, which pensmith never sleeps through: the host is marked
+ * exhausted instead (fail fast, RateLimitExhaustedError), exactly like a long
+ * Retry-After (audit #22).
+ */
+export function minHonouredRate(): number {
+  return 1000 / RETRY_AFTER_CAP_MS;
 }
 
 /**
- * Test-only — reset every per-source bucket so test ordering doesn't
- * leak rate-limit state across files. NEVER call from production code.
+ * What opens a host's circuit breaker: this many consecutive 5xx responses, or
+ * this many requests in a row that still end throttled (429) after their
+ * retries.
+ */
+export const BREAKER_THRESHOLD = 3;
+/**
+ * The least a 429 without a Retry-After holds its host (SRC-17, review round
+ * 3): a throttled service is not asked again within the same second.
+ */
+export const MIN_THROTTLE_HOLD_MS = 1000;
+/** How long an open breaker waits before it lets one probe request through. */
+export const BREAKER_HALF_OPEN_MS = 10 * 60_000;
+
+interface HostState {
+  /** The URL host (hostname, plus the port when it is not the default). */
+  readonly host: string;
+  /** The bare hostname (lower case). */
+  readonly hostname: string;
+  readonly bucket: TokenBucket;
+  /** Epoch ms before which no request goes to the host (a short Backoff). */
+  notBefore: number;
+  /** Epoch ms until which the host is exhausted (a long Retry-After / Backoff); 0 = not. */
+  exhaustedUntil: number;
+  exhaustedStatus: number;
+  /** What the response that exhausted the host said (RateLimitExhaustedError.detail). */
+  exhaustedDetail: { body?: string; headers?: Record<string, string> } | undefined;
+  /** Consecutive 5xx responses (a request's retries count). */
+  failures: number;
+  /** Consecutive requests that ended throttled (429) after their retries. */
+  throttled: number;
+  lastStatus: number;
+  /** When the breaker opened (epoch ms), or null when closed. */
+  openedAt: number | null;
+  /** A half-open probe is in flight. */
+  probing: boolean;
+  announcedOpen: boolean;
+  announcedExhausted: boolean;
+}
+
+const HOSTS = new Map<string, HostState>();
+
+/** The state of `host`, created on first use; a lower seed from another source lowers its rate. */
+function hostStateFor(host: string, hostname: string, source: HttpSource): HostState {
+  const seed = Math.min(RPS_BY_SOURCE[source], HOST_RPS_FLOOR[hostname] ?? Number.POSITIVE_INFINITY);
+  let st = HOSTS.get(host);
+  if (!st) {
+    st = {
+      host,
+      hostname,
+      // One token: no burst above the seed (or the declared) rate.
+      bucket: new TokenBucket(1, seed),
+      notBefore: 0,
+      exhaustedUntil: 0,
+      exhaustedStatus: 0,
+      exhaustedDetail: undefined,
+      failures: 0,
+      throttled: 0,
+      lastStatus: 0,
+      openedAt: null,
+      probing: false,
+      announcedOpen: false,
+      announcedExhausted: false,
+    };
+    HOSTS.set(host, st);
+  } else {
+    st.bucket.lower(seed, false);
+  }
+  return st;
+}
+
+const sleepMs = (ms: number): Promise<void> => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Admit one request to `st`'s host: fail fast (zero sockets) while the host is
+ * exhausted or its breaker is open — except the one half-open probe — honour a
+ * short Backoff, then take a token from the host's bucket. A model request
+ * (llm) only takes the token: provider failures are classified by
+ * anthropic.ts, not by the breaker.
+ */
+async function enterHost(st: HostState, llm: boolean, timeoutMs: number): Promise<void> {
+  if (!llm) {
+    const now = Date.now();
+    if (st.exhaustedUntil > now) throw new RateLimitExhaustedError(st.host, st.exhaustedUntil - now, st.exhaustedStatus, st.exhaustedDetail);
+    if (st.exhaustedUntil !== 0) st.exhaustedUntil = 0;
+    if (st.openedAt !== null) {
+      if (st.probing || now - st.openedAt < BREAKER_HALF_OPEN_MS) {
+        throw new CircuitOpenError(st.host, st.lastStatus, st.lastStatus === 429 ? st.throttled : st.failures);
+      }
+      st.probing = true; // half-open: this request is the one probe
+    }
+    if (st.notBefore > now) await sleepMs(st.notBefore - now);
+  }
+  // The wait for a token counts against the request's timeout: never a hang.
+  await st.bucket.acquire(timeoutMs, () => new RateLimitExhaustedError(st.host, Math.ceil(1000 / st.bucket.rate), 0));
+}
+
+/** A request that got no response from the host (transport error, refusal): a half-open probe re-opens. */
+function hostNoAnswer(st: HostState): void {
+  if (st.probing) {
+    st.probing = false;
+    st.openedAt = Date.now();
+  }
+}
+
+/** The `X-Rate-Limit-Interval` a server declares, in seconds (`1s`, `500ms`, `1m`, `1h`; bare = seconds), or null. */
+function declaredIntervalSec(headers: Record<string, string>): number | null {
+  const m = /^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/i.exec((headers['x-rate-limit-interval'] ?? '').trim());
+  if (!m) return null;
+  const n = Number(m[1]);
+  const unit = (m[2] ?? 's').toLowerCase();
+  const seconds = unit === 'ms' ? n / 1000 : unit === 'm' ? n * 60 : unit === 'h' ? n * 3600 : n;
+  return seconds > 0 ? seconds : null;
+}
+
+/** Requests per second a server declares (`X-Rate-Limit-Limit` / `X-Rate-Limit-Interval`), or null. */
+export function declaredRate(headers: Record<string, string>): number | null {
+  const limit = Number((headers['x-rate-limit-limit'] ?? '').trim());
+  const seconds = declaredIntervalSec(headers);
+  if (!Number.isFinite(limit) || limit <= 0 || seconds === null) return null;
+  return limit / seconds;
+}
+
+/** True when a Retry-After header is present and parses (delta-seconds or an HTTP-date) — `0` included. */
+function hasRetryAfter(raw: string | undefined): boolean {
+  const v = (raw ?? '').trim();
+  return /^\d+$/.test(v) || (v !== '' && !Number.isNaN(Date.parse(v)));
+}
+
+/**
+ * How long a 429 holds its host (SRC-17, review round 3): the Retry-After when
+ * the server sent one (already known to be within the cap); otherwise at least
+ * the declared interval (only a RATE_HEADER_HOSTS host may declare one), one
+ * interval of the host's bucket, and MIN_THROTTLE_HOLD_MS — never capped
+ * below, never above RETRY_AFTER_CAP_MS.
+ */
+function throttleHoldMs(st: HostState, headers: Record<string, string>, retryAfterMs: number): number {
+  if (hasRetryAfter(headers['retry-after'])) return retryAfterMs;
+  const intervalSec = RATE_HEADER_HOSTS.has(st.hostname) ? declaredIntervalSec(headers) : null;
+  return Math.min(
+    RETRY_AFTER_CAP_MS,
+    Math.max(MIN_THROTTLE_HOLD_MS, Math.ceil(1000 / st.bucket.rate), intervalSec !== null ? Math.ceil(intervalSec * 1000) : 0),
+  );
+}
+
+/** Open `st`'s breaker (announced once per host) and return the error to throw. */
+function openBreaker(st: HostState, status: number, count: number, now: number): CircuitOpenError {
+  st.openedAt = now;
+  st.probing = false;
+  const err = new CircuitOpenError(st.host, status, count);
+  if (!st.announcedOpen) {
+    st.announcedOpen = true;
+    process.stderr.write(`pensmith: ${err.message}\n`);
+  }
+  return err;
+}
+
+/**
+ * A request to `st`'s host ended throttled — its last answer was a 429 after
+ * every retry it was allowed (or it asked for no retries): one breaker strike.
+ * Returns the CircuitOpenError to throw when this strike opens the breaker.
+ */
+function noteRequestThrottled(st: HostState): CircuitOpenError | null {
+  st.throttled += 1;
+  st.lastStatus = 429;
+  return st.throttled >= BREAKER_THRESHOLD ? openBreaker(st, 429, st.throttled, Date.now()) : null;
+}
+
+function markExhausted(
+  st: HostState,
+  waitMs: number,
+  status: number,
+  detail?: { body?: string; headers?: Record<string, string> },
+): RateLimitExhaustedError {
+  st.exhaustedUntil = Date.now() + waitMs;
+  st.exhaustedStatus = status;
+  st.exhaustedDetail = detail;
+  st.probing = false;
+  const err = new RateLimitExhaustedError(st.host, waitMs, status, detail);
+  if (!st.announcedExhausted) {
+    st.announcedExhausted = true;
+    process.stderr.write(`pensmith: ${err.message} — no further requests go to it in this run\n`);
+  }
+  return err;
+}
+
+/**
+ * Account one live response from `st`'s host (never a fixture, never a model
+ * response): lower the rate to what the server declares, honour Backoff, hold
+ * the host after a 429, and count 5xx toward the breaker. Throws
+ * RateLimitExhaustedError (a Retry-After beyond the cap) or CircuitOpenError
+ * (the BREAKER_THRESHOLD-th consecutive 5xx, or a failed half-open probe); any
+ * other answer resets both counts and closes the breaker. A 429 is counted per
+ * request, when the request ends (noteRequestThrottled).
+ */
+function noteHostResponse(st: HostState, status: number, headers: Record<string, string>, body = ''): void {
+  const now = Date.now();
+  const detail = { body: body.slice(0, 2000), headers };
+  // Only the scholarly APIs may lower the rate, and never below one request
+  // per RETRY_AFTER_CAP_MS: slower is "exhausted", never a sleep.
+  const declared = RATE_HEADER_HOSTS.has(st.hostname) ? declaredRate(headers) : null;
+  if (declared !== null) {
+    if (declared < minHonouredRate()) markExhausted(st, Math.ceil(1000 / declared), status, detail);
+    else st.bucket.lower(declared, true);
+  }
+  const backoffMs = parseRetryAfter(headers['backoff'], now);
+  if (backoffMs > RETRY_AFTER_CAP_MS) markExhausted(st, backoffMs, status, detail);
+  else if (backoffMs > 0) st.notBefore = Math.max(st.notBefore, now + backoffMs);
+  if (!RETRYABLE_STATUSES.has(status)) {
+    st.failures = 0;
+    st.throttled = 0;
+    st.openedAt = null;
+    st.probing = false;
+    return;
+  }
+  st.lastStatus = status;
+  const retryAfterMs = parseRetryAfter(headers['retry-after'], now);
+  if (retryAfterMs > RETRY_AFTER_CAP_MS) throw markExhausted(st, retryAfterMs, status, detail);
+  if (status === 429) {
+    // Slow down: nothing goes to this host until the hold ends, and the next
+    // token is a full interval after that (review round 3).
+    st.notBefore = Math.max(st.notBefore, now + throttleHoldMs(st, headers, retryAfterMs));
+    st.bucket.drain();
+    if (st.probing) throw openBreaker(st, status, Math.max(st.throttled, 1), now);
+    return;
+  }
+  st.failures += 1;
+  if (st.probing || st.failures >= BREAKER_THRESHOLD) throw openBreaker(st, status, st.failures, now);
+}
+
+/**
+ * Test-only — forget every host's bucket, exhausted marker and breaker so test
+ * ordering doesn't leak rate-limit state. NEVER call from production code.
+ */
+export function _resetHostStateForTest(): void {
+  HOSTS.clear();
+}
+
+/**
+ * Test-only — reset the rate buckets. Buckets are per host now (SRC-17), so
+ * this is _resetHostStateForTest: the breaker and exhausted markers go too.
+ * NEVER call from production code.
  */
 export function _resetBucketsForTest(): void {
-  for (const k of Object.keys(BUCKETS) as HttpSource[]) {
-    delete BUCKETS[k];
-  }
+  _resetHostStateForTest();
 }
 
 // ============================================================
@@ -784,15 +1394,40 @@ function cacheKey(method: string, url: string, headers: Record<string, string>):
   // We exclude User-Agent from the cache key on purpose — otherwise version
   // bumps and PENSMITH_CONTACT_EMAIL changes would invalidate every cached
   // body. The body is API-supplied and does not depend on those headers.
+  //
+  // SRC-06 (D-19-10): secrets never shape a cache key. The secret query
+  // parameters (api_key, apikey, key, token, access_token), the contact
+  // parameters (mailto, email) and every SENSITIVE_HEADERS entry (Authorization,
+  // x-api-key, Zotero-API-Key, cookies …) are left out, so a keyed and a keyless
+  // request for the same resource share one cache entry, and a key never
+  // influences which file a response lands in.
   const filtered: Array<[string, string]> = [];
   for (const [k, v] of Object.entries(headers)) {
     const lk = k.toLowerCase();
-    if (lk === 'user-agent') continue;
+    if (lk === 'user-agent' || SENSITIVE_HEADERS.has(lk)) continue;
     filtered.push([lk, v]);
   }
   filtered.sort(([a], [b]) => a.localeCompare(b));
   const headerStr = filtered.map(([k, v]) => `${k}:${v}`).join('|');
-  return createHash('sha256').update(`${method}:${url}:${headerStr}`).digest('hex').slice(0, 16);
+  return createHash('sha256').update(`${method}:${cacheKeyUrl(url)}:${headerStr}`).digest('hex').slice(0, 16);
+}
+
+/** The URL a cache key hashes: secret and contact query parameters removed (order kept). */
+function cacheKeyUrl(url: string): string {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return url;
+  }
+  const kept = [...u.searchParams.entries()].filter(([k]) => {
+    const lk = k.toLowerCase();
+    return !SECRET_QUERY_PARAMS.has(lk) && !CONTACT_QUERY_PARAMS.has(lk);
+  });
+  const q = new URLSearchParams(kept).toString();
+  u.username = '';
+  u.password = '';
+  return `${u.origin}${u.pathname}${q ? `?${q}` : ''}`;
 }
 
 interface CacheEnvelope {
@@ -1001,6 +1636,12 @@ export interface HttpTestSeams {
   readonly localHosts?: readonly string[];
   /** Extra CA (PEM) trusted for TLS to the localHosts only (the SEC-01 SNI server). */
   readonly ca?: string | Buffer;
+  /**
+   * Where an ENABLED local service listens in this test (a loopback test
+   * server's origin instead of 127.0.0.1:23119). The environment still has to
+   * enable the service; the origin and loopback rules still apply.
+   */
+  readonly localServiceOrigins?: Partial<Record<LocalService, string>>;
 }
 
 let testSeams: HttpTestSeams | null = null;
@@ -1076,8 +1717,10 @@ async function readCapped(
   maxBytes: number,
   requestLabel: string,
   declaredLength: number | null,
-): Promise<Buffer> {
-  if (declaredLength !== null && declaredLength > maxBytes) {
+  prefixBytes?: number,
+): Promise<{ bytes: Buffer; truncated: boolean }> {
+  const prefix = prefixBytes !== undefined && Number.isFinite(prefixBytes) && prefixBytes > 0 ? Math.floor(prefixBytes) : null;
+  if (prefix === null && declaredLength !== null && declaredLength > maxBytes) {
     body.destroy?.();
     throw new ResponseTooLargeError(maxBytes, requestLabel);
   }
@@ -1085,6 +1728,14 @@ async function readCapped(
   let total = 0;
   for await (const chunk of body) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    if (prefix !== null && total + buf.length >= prefix) {
+      // Enough: keep the prefix and close the connection (FetchOptions.prefixBytes).
+      chunks.push(buf.subarray(0, prefix - total));
+      const more = total + buf.length > prefix;
+      total = prefix;
+      body.destroy?.();
+      return { bytes: Buffer.concat(chunks, total), truncated: more || declaredLength === null || declaredLength > prefix };
+    }
     total += buf.length;
     if (total > maxBytes) {
       body.destroy?.();
@@ -1092,7 +1743,7 @@ async function readCapped(
     }
     chunks.push(buf);
   }
-  return Buffer.concat(chunks, total);
+  return { bytes: Buffer.concat(chunks, total), truncated: false };
 }
 
 // ============================================================
@@ -1108,6 +1759,9 @@ function mirrorRequest(method: string, url: string, body: string | Buffer | unde
     const text = Buffer.isBuffer(body) ? body.toString('utf8') : body;
     if (llm) {
       lines.push(`[show-prompts] body: ${text}`);
+    } else if (method === 'POST' && Buffer.isBuffer(body)) {
+      // A binary upload (a PDF to a local GROBID server): its size, never its bytes.
+      lines.push(`[show-prompts] body: ${body.length} bytes (binary)`);
     } else if (method === 'POST') {
       const n = Buffer.byteLength(text, 'utf8');
       lines.push(`[show-prompts] body: ${n} bytes: ${text.slice(0, MIRROR_PREVIEW_CHARS)}`);
@@ -1179,8 +1833,12 @@ export function _resetHttpLoggersForTest(): void {
 //   Cassette recorder hook (CI-07, D-17-14)
 // ============================================================
 
-/** Response headers a recorded fixture keeps (never Set-Cookie / Authorization …). */
-const RECORD_HEADER_ALLOWLIST: ReadonlySet<string> = new Set(['content-type']);
+/**
+ * Response headers a recorded fixture keeps (never Set-Cookie / Authorization …):
+ * the content type, and a redirect hop's `location` (D-19-07) so offline replay
+ * can follow the recorded chain.
+ */
+const RECORD_HEADER_ALLOWLIST: ReadonlySet<string> = new Set(['content-type', 'location']);
 
 export interface RecordedFixture {
   /** The canonical exact-match key (D-17-06). */
@@ -1192,31 +1850,105 @@ export interface RecordedFixture {
   status: number;
   response: unknown;
   responseHeaders: Record<string, string>;
+  /** `base64`: `response` is the base64 of a non-text body (a PDF) — D-19-07. */
+  bodyEncoding?: 'base64';
   bodySha256?: string;
   source: HttpSource;
 }
 
+/** One request/response of a fetch() call, as the recorder sees it (a redirect chain has several). */
+export interface RecordedHop {
+  readonly method: 'GET' | 'POST' | 'HEAD';
+  readonly url: string;
+  readonly body: string | Buffer | undefined;
+  readonly requestHeaders: Record<string, string>;
+  readonly res: HttpResponse;
+}
+
+/** The hops behind a live response that came through redirects (read by recordFixture). */
+const RESPONSE_CHAINS = new WeakMap<HttpResponse, readonly RecordedHop[]>();
+
 const recordedFixtures: RecordedFixture[] = [];
 
-function recordFixture(
-  method: 'GET' | 'POST' | 'HEAD',
-  url: string,
-  body: string | Buffer | undefined,
-  source: HttpSource,
-  res: HttpResponse,
-): void {
+/** Content types whose body is recorded as text (anything else is base64). */
+const TEXT_CONTENT_TYPE = /^(?:text\/|application\/(?:[\w.+-]*\+)?(?:json|xml)\b|application\/(?:javascript|x-www-form-urlencoded)\b)/i;
+
+/** True when `bytes` is valid UTF-8 (a lossless text recording). */
+function isUtf8(bytes: Buffer): boolean {
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The values a recording must never contain: every sensitive request header
+ * value and every secret query parameter value of the request (a service can
+ * echo them — Zotero's /keys/current answers with the key itself).
+ */
+function secretValues(url: string, requestHeaders: Record<string, string>): string[] {
+  const out = new Set<string>();
+  for (const [k, v] of Object.entries(requestHeaders)) {
+    if (SENSITIVE_HEADERS.has(k.toLowerCase()) && v.length >= 6) {
+      out.add(v);
+      const bearer = /^bearer\s+(.+)$/i.exec(v);
+      if (bearer?.[1]) out.add(bearer[1]);
+    }
+  }
+  try {
+    for (const [k, v] of new URL(url).searchParams.entries()) {
+      if (SECRET_QUERY_PARAMS.has(k.toLowerCase()) && v.length >= 6) out.add(v);
+    }
+  } catch {
+    /* an unparseable URL carries no parameters */
+  }
+  return [...out];
+}
+
+function scrubSecrets(text: string, secrets: readonly string[]): string {
+  let out = text;
+  for (const s of secrets) out = out.split(s).join('REDACTED');
+  return out;
+}
+
+/**
+ * The recorded-fixture entry for one hop (pure; the recorder hook pushes it):
+ * only allowlisted response headers (content-type, location); a non-text body
+ * base64-encoded with `bodyEncoding` (D-19-07); JSON bodies parsed; every
+ * secret the request carried (sensitive header values, secret query values)
+ * removed from the stored body and Location; the path without the scrubbed
+ * query parameters (contact and secret ones).
+ */
+export function fixtureEntryFor(hop: RecordedHop, source: HttpSource): RecordedFixture {
+  const { method, url, body, res } = hop;
   const u = new URL(url);
   const headers: Record<string, string> = {};
   for (const [k, v] of Object.entries(res.headers)) {
     const lk = k.toLowerCase();
     if (RECORD_HEADER_ALLOWLIST.has(lk) && !SENSITIVE_HEADERS.has(lk)) headers[lk] = v;
   }
-  let response: unknown = res.body;
-  if ((headers['content-type'] ?? '').includes('json')) {
-    try {
-      response = JSON.parse(res.body);
-    } catch {
-      response = res.body;
+  const secrets = secretValues(url, hop.requestHeaders);
+  if (headers['location'] !== undefined) headers['location'] = scrubSecrets(headers['location'], secrets);
+  const bytes = res.bodyBytes ?? Buffer.from(res.body, 'utf8');
+  const contentType = headers['content-type'] ?? '';
+  const asText = bytes.length === 0 || ((contentType === '' || TEXT_CONTENT_TYPE.test(contentType)) && isUtf8(bytes));
+  let response: unknown;
+  let bodyEncoding: 'base64' | undefined;
+  if (!asText) {
+    // A non-text body (a PDF): stored as base64 so replay returns the exact bytes.
+    response = bytes.toString('base64');
+    bodyEncoding = 'base64';
+  } else {
+    const text = scrubSecrets(bytes.toString('utf8'), secrets);
+    response = text;
+    if (contentType.includes('json')) {
+      try {
+        response = JSON.parse(text);
+      } catch {
+        response = text;
+      }
     }
   }
   const entry: RecordedFixture = {
@@ -1228,16 +1960,151 @@ function recordFixture(
     response,
     responseHeaders: headers,
     source,
+    ...(bodyEncoding !== undefined ? { bodyEncoding } : {}),
   };
   if (body !== undefined && method === 'POST') {
     entry.bodySha256 = createHash('sha256').update(body).digest('hex');
   }
-  recordedFixtures.push(entry);
+  return entry;
+}
+
+function pushFixture(hop: RecordedHop, source: HttpSource): void {
+  recordedFixtures.push(fixtureEntryFor(hop, source));
+}
+
+/**
+ * Buffer the recording of one fetch() call: one entry per hop when the answer
+ * came through redirects (each hop under its own URL, the 3xx with its
+ * `location`), else one entry for the request.
+ */
+function recordFixture(
+  method: 'GET' | 'POST' | 'HEAD',
+  url: string,
+  body: string | Buffer | undefined,
+  source: HttpSource,
+  res: HttpResponse,
+): void {
+  const chain = RESPONSE_CHAINS.get(res);
+  if (chain !== undefined) {
+    for (const hop of chain) pushFixture(hop, source);
+    return;
+  }
+  pushFixture({ method, url, body, requestHeaders: {}, res }, source);
 }
 
 /** Drain the fixtures recorded so far (scripts/refresh-cassettes.mjs). */
 export function takeRecordedFixtures(): RecordedFixture[] {
   return recordedFixtures.splice(0, recordedFixtures.length);
+}
+
+// ============================================================
+//   Redirects (SRC-01, D-19-06, D-19-07)
+// ============================================================
+
+/** The statuses http.ts follows (for GET and HEAD). 300 and 304 are answers, not redirects. */
+const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
+
+/** Redirects followed per request; the next one is RedirectError('too-many'). */
+export const MAX_REDIRECTS = 5;
+
+interface RedirectHop {
+  readonly url: string;
+  readonly method: 'GET' | 'POST' | 'HEAD';
+}
+
+function hrefWithoutHash(url: string): string {
+  try {
+    const u = new URL(url);
+    u.hash = '';
+    return u.href;
+  } catch {
+    return url;
+  }
+}
+
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
+}
+
+/** Request headers minus every credential (SENSITIVE_HEADERS: Authorization, x-api-key, Zotero-API-Key, cookies …). */
+function withoutSensitiveHeaders(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) if (!SENSITIVE_HEADERS.has(k.toLowerCase())) out[k] = v;
+  return out;
+}
+
+/** Request headers minus those that describe a request body (a 303 turns the request into a bodiless GET). */
+function withoutBodyHeaders(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) {
+    const lk = k.toLowerCase();
+    if (lk !== 'content-type' && lk !== 'content-length' && lk !== 'content-encoding') out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Where a response redirects the request, or null when it is an answer to
+ * return (not a redirect status, or a POST's 3xx, which is returned as-is).
+ * Throws RedirectError for a model request's redirect (`not-followed`), a
+ * missing or unusable Location (`no-location`), https → http (`downgrade`), a
+ * redirect beyond MAX_REDIRECTS (`too-many`) and a revisited URL (`loop`). The
+ * target's scheme, address and pin are checked when it is requested, like any
+ * other URL.
+ */
+function redirectTarget(
+  res: { status: number; headers: Record<string, string> },
+  fromUrl: string,
+  method: 'GET' | 'POST' | 'HEAD',
+  redirects: number,
+  visited: ReadonlySet<string>,
+  llm: boolean,
+): RedirectHop | null {
+  if (!REDIRECT_STATUSES.has(res.status)) return null;
+  const from = redactUrl(fromUrl, { dropContact: true });
+  if (llm) {
+    throw new RedirectError('not-followed', from, `the model endpoint answered HTTP ${res.status} at ${from} — a model request never follows a redirect`);
+  }
+  if (method === 'POST') return null;
+  const location = (res.headers['location'] ?? '').trim();
+  if (location === '') {
+    throw new RedirectError('no-location', from, `HTTP ${res.status} from ${from} has no Location header`);
+  }
+  let target: URL;
+  try {
+    target = new URL(location, fromUrl);
+  } catch {
+    throw new RedirectError('no-location', from, `HTTP ${res.status} from ${from} has an unusable Location header`);
+  }
+  target.hash = '';
+  const to = redactUrl(target.href, { dropContact: true });
+  if (new URL(fromUrl).protocol === 'https:' && target.protocol === 'http:') {
+    throw new RedirectError('downgrade', from, `${from} redirects to ${to} (https to http is never followed)`);
+  }
+  if (redirects >= MAX_REDIRECTS) {
+    throw new RedirectError('too-many', from, `more than ${MAX_REDIRECTS} redirects (the last from ${from} to ${to})`);
+  }
+  if (visited.has(target.href)) {
+    throw new RedirectError('loop', from, `${from} redirects back to ${to} (a redirect loop)`);
+  }
+  const nextMethod = res.status === 303 && method !== 'HEAD' ? 'GET' : method;
+  return { url: target.href, method: nextMethod };
+}
+
+/**
+ * A recorded redirect hop's target, checked without DNS (offline opens no
+ * socket): an allowed scheme, and never a private / reserved IP literal.
+ */
+function assertReplayHopAllowed(url: string): void {
+  const parsed = parseHttpUrl(url);
+  const host = bareHost(parsed);
+  if (isIP(host) !== 0 && isPrivateIp(host)) {
+    throw new SsrfBlockedError(`SSRF guard: "${host}" is a private/reserved IP — blocked (RFC1918/loopback/link-local)`);
+  }
 }
 
 // ============================================================
@@ -1287,8 +2154,8 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   const mode: NetworkMode = networkMode();
   const base = { source, method, url, offline: mode.sourcesOffline, ...(llm !== undefined ? { llm: true } : {}) };
 
-  const refuse = (err: Error): never => {
-    recordHttp({ ...base, status: null, cache: 'refused', bytes: 0, ms: Date.now() - started, error: err.message });
+  const refuse = (err: Error, at: string = url, how: string = method): never => {
+    recordHttp({ ...base, url: at, method: how, status: null, cache: 'refused', bytes: 0, ms: Date.now() - started, error: err.message });
     throw err;
   };
 
@@ -1303,22 +2170,59 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
   }
   if (mode.sourcesOffline && llm === undefined) {
     // Exact-match fixture replay, never a fallback (D-17-06). Mirrored so
-    // --show-prompts lists what the run would have sent.
-    const hit = lookupFixture(method, url, opts.body);
-    if (!hit) {
-      refuse(new OfflineEgressError('offline', mode.reason ?? 'offline', label,
-        `offline: no recorded fixture for ${label} — re-run online`));
+    // --show-prompts lists what the run would have sent. A recorded redirect
+    // is followed hop by hop through the same store under the same rules as a
+    // live chain (D-19-07); a fixture answer never touches the host state.
+    let hopUrl = url;
+    let hopMethod = method;
+    let hopBody = opts.body;
+    const visited = new Set<string>([hrefWithoutHash(url)]);
+    for (let redirects = 0; ; redirects += 1) {
+      const hopStarted = Date.now();
+      const hopLabel = `${hopMethod} ${redactUrl(hopUrl, { dropContact: true })}`;
+      const hit = lookupFixture(hopMethod, hopUrl, hopBody);
+      if (!hit) {
+        refuse(new OfflineEgressError('offline', mode.reason ?? 'offline', hopLabel,
+          `offline: no recorded fixture for ${hopLabel} — re-run online`), hopUrl, hopMethod);
+      }
+      const fx = hit as NonNullable<typeof hit>;
+      mirrorRequest(hopMethod, hopUrl, hopBody, false);
+      let next: RedirectHop | null = null;
+      try {
+        next = opts.followRedirects === false ? null : redirectTarget(fx, hopUrl, hopMethod, redirects, visited, false);
+        if (next !== null) assertReplayHopAllowed(next.url);
+      } catch (e) {
+        refuse(e as Error, hopUrl, hopMethod);
+      }
+      const bytes = fx.bodyBytes;
+      if (next === null) {
+        const prefix = opts.prefixBytes !== undefined && opts.prefixBytes > 0 ? Math.floor(opts.prefixBytes) : null;
+        if (prefix === null && bytes.length > maxBytes) refuse(new ResponseTooLargeError(maxBytes, hopLabel), hopUrl, hopMethod);
+        const cut = prefix !== null && bytes.length > prefix ? bytes.subarray(0, prefix) : bytes;
+        recordHttp({ ...base, url: hopUrl, method: hopMethod, status: fx.status, cache: 'fixture', bytes: cut.length, ms: Date.now() - hopStarted });
+        return {
+          status: fx.status,
+          headers: fx.headers,
+          body: cut === bytes ? fx.body : cut.toString('utf8'),
+          bodyBytes: cut,
+          cached: false,
+          fixture: true,
+          ...(cut !== bytes ? { truncated: true } : {}),
+          ...(hopUrl !== url ? { finalUrl: hopUrl } : {}),
+        };
+      }
+      recordHttp({ ...base, url: hopUrl, method: hopMethod, status: fx.status, cache: 'fixture', bytes: bytes.length, ms: Date.now() - hopStarted });
+      visited.add(next.url);
+      if (next.method !== hopMethod) {
+        hopMethod = next.method;
+        hopBody = undefined;
+      }
+      hopUrl = next.url;
     }
-    const fx = hit as NonNullable<typeof hit>;
-    mirrorRequest(method, url, opts.body, false);
-    const bytes = Buffer.from(fx.body, 'utf8');
-    if (bytes.length > maxBytes) refuse(new ResponseTooLargeError(maxBytes, label));
-    recordHttp({ ...base, status: fx.status, cache: 'fixture', bytes: bytes.length, ms: Date.now() - started });
-    return { status: fx.status, headers: fx.headers, body: fx.body, bodyBytes: bytes, cached: false, fixture: true };
   }
 
   // --- Cache short-circuit (live mode, GET only, opt-in) ---
-  const cacheAllowed = !mode.sourcesOffline && method === 'GET' && !opts.noCache && llm === undefined;
+  const cacheAllowed = !mode.sourcesOffline && method === 'GET' && !opts.noCache && llm === undefined && opts.prefixBytes === undefined;
   if (cacheAllowed) {
     const cached = await readCache(key, ttlMs);
     if (cached) {
@@ -1327,95 +2231,176 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     }
   }
 
-  let mirrored = false;
+  // --- 2..6, once per hop: host gate, resolve + validate, pin, mirror, capped
+  // stream. A redirect is followed by http.ts itself (SRC-01, D-19-06): every
+  // hop is a fresh request through this same function. ---
+  const mirroredHops = new Set<string>();
+  const localService = opts.localService;
+  let hops: RecordedHop[] = [];
+  // The host that gave the latest live (non-model) answer: a request that
+  // ends throttled is one breaker strike against it (noteRequestThrottled).
+  let lastHost: HostState | null = null;
 
-  // --- 2..5. One attempt: resolve + validate, pin, mirror, capped stream ---
-  const callOnce = async (): Promise<HttpResponse> => {
+  const hopOnce = async (
+    hopUrl: string,
+    hopMethod: 'GET' | 'POST' | 'HEAD',
+    hopHeaders: Record<string, string>,
+    hopBody: string | Buffer | undefined,
+    polite: boolean,
+  ): Promise<HttpResponse> => {
     const seams = activeSeams();
     const mock = installedMockAgent();
     const resolver: Resolver = seams?.resolve ?? (mock !== null ? mockAgentResolver : defaultResolver);
-    const parsed = parseHttpUrl(url);
+    const parsed = parseHttpUrl(hopUrl);
     const host = bareHost(parsed);
-
-    let addrs: ResolvedAddress[];
-    if (llm !== undefined) {
-      addrs = await checkLlmEndpoint(url, llm.endpoint, resolver);
-      if (mode.sourcesOffline && !addrs.every((a) => isLoopbackIp(a.address))) {
-        // Sources offline: the ONLY socket allowed is the configured LOOPBACK
-        // LLM endpoint (RUN-04) — e.g. the RUN-21 mock under the test runner.
-        throw new OfflineEgressError('offline', mode.reason ?? 'offline', label,
-          `offline: only a loopback LLM endpoint may be dialed while sources are offline (${label})`);
-      }
-    } else {
-      const localHosts = seams?.localHosts ?? [];
-      addrs = await resolveHost(host, resolver);
-      for (const { address } of addrs) {
-        const localTestHost = localHosts.includes(host) && isLoopbackIp(address);
-        if (isPrivateIp(address) && !localTestHost) {
-          throw new SsrfBlockedError(
-            `SSRF guard: "${host}" resolves to private/reserved IP ${address} — blocked (RFC1918/loopback/link-local)`,
-          );
+    const hopLabel = `${hopMethod} ${redactUrl(hopUrl, { dropContact: true })}`;
+    const st = hostStateFor(parsed.host.toLowerCase(), host.toLowerCase(), source);
+    // Exhausted host / open breaker: refused here, before DNS or any socket.
+    await enterHost(st, llm !== undefined, timeoutMs);
+    let answered = false;
+    try {
+      let addrs: ResolvedAddress[];
+      if (llm !== undefined) {
+        addrs = await checkLlmEndpoint(hopUrl, llm.endpoint, resolver);
+        if (mode.sourcesOffline && !addrs.every((a) => isLoopbackIp(a.address))) {
+          // Sources offline: the ONLY socket allowed is the configured LOOPBACK
+          // LLM endpoint (RUN-04) — e.g. the RUN-21 mock under the test runner.
+          throw new OfflineEgressError('offline', mode.reason ?? 'offline', hopLabel,
+            `offline: only a loopback LLM endpoint may be dialed while sources are offline (${hopLabel})`);
+        }
+      } else if (localService !== undefined) {
+        addrs = await checkLocalService(hopUrl, localService, resolver);
+      } else {
+        // No trusted-source bypass anywhere (D-19-06): an OA link, a URL from a
+        // paper, a redirect target — every hop is resolved and validated.
+        const localHosts = seams?.localHosts ?? [];
+        addrs = await resolveHost(host, resolver);
+        for (const { address } of addrs) {
+          const localTestHost = localHosts.includes(host) && isLoopbackIp(address);
+          if (isPrivateIp(address) && !localTestHost) {
+            throw new SsrfBlockedError(
+              `SSRF guard: "${host}" resolves to private/reserved IP ${address} — blocked (RFC1918/loopback/link-local)`,
+            );
+          }
         }
       }
-    }
 
-    const useCa = seams?.ca !== undefined && (seams.localHosts ?? []).includes(host) ? seams.ca : undefined;
-    const pinned = mock === null ? pinnedDispatcher(addrs, useCa) : null;
-    const dispatcher: Dispatcher = mock ?? (pinned as Agent);
+      const useCa = seams?.ca !== undefined && (seams.localHosts ?? []).includes(host) ? seams.ca : undefined;
+      const pinned = mock === null ? pinnedDispatcher(addrs, useCa) : null;
+      const dispatcher: Dispatcher = mock ?? (pinned as Agent);
 
-    // --- 4. Mirror before any byte leaves (once per request, not per retry) ---
-    if (!mirrored) {
-      mirrored = true;
-      mirrorRequest(method, url, opts.body, llm !== undefined);
-    }
-
-    try {
-      const reqInit = {
-        method,
-        headers: { 'user-agent': userAgent(source, llm !== undefined), ...headers },
-        headersTimeout: timeoutMs,
-        bodyTimeout: timeoutMs,
-        dispatcher,
-        // SEC-01: redirects are never followed here (SRC-01 adds a loop that
-        // re-pins every hop). tests/ssrf-pinning.test.ts fails if this changes.
-        maxRedirections: 0,
-        ...(opts.body !== undefined ? { body: opts.body } : {}),
-      } as Parameters<typeof request>[1];
-      const { statusCode, headers: rh, body } = await request(url, reqInit);
-      const flatHeaders: Record<string, string> = {};
-      for (const [k, v] of Object.entries(rh)) {
-        const lk = k.toLowerCase();
-        if (Array.isArray(v)) flatHeaders[lk] = v.join(', ');
-        else if (typeof v === 'string') flatHeaders[lk] = v;
-        else if (v == null) flatHeaders[lk] = '';
-        else flatHeaders[lk] = String(v);
+      // --- 4. Mirror before any byte leaves (once per hop URL, not per retry) ---
+      if (!mirroredHops.has(`${hopMethod} ${hopUrl}`)) {
+        mirroredHops.add(`${hopMethod} ${hopUrl}`);
+        mirrorRequest(hopMethod, hopUrl, hopBody, llm !== undefined);
       }
-      const declared = Number(flatHeaders['content-length']);
-      // --- 5. Stream under the cap; read the raw bytes ONCE (audit #29) ---
-      const bodyBytes = await readCapped(
-        body as unknown as AsyncIterable<Buffer> & { destroy?: (err?: Error) => void },
-        maxBytes,
-        label,
-        Number.isFinite(declared) && flatHeaders['content-length'] !== '' ? declared : null,
-      );
-      const text = bodyBytes.toString('utf8');
-      return { status: statusCode, headers: flatHeaders, body: text, bodyBytes, cached: false };
+
+      let res: HttpResponse;
+      try {
+        const reqInit = {
+          method: hopMethod,
+          headers: { 'user-agent': userAgent(source, llm !== undefined, polite), ...hopHeaders },
+          headersTimeout: timeoutMs,
+          bodyTimeout: timeoutMs,
+          dispatcher,
+          // SEC-01 / SRC-01: undici never follows a redirect — the loop in
+          // attempt() does, re-validating and re-pinning every hop.
+          // tests/ssrf-pinning.test.ts fails if this changes.
+          maxRedirections: 0,
+          ...(hopBody !== undefined ? { body: hopBody } : {}),
+        } as Parameters<typeof request>[1];
+        const { statusCode, headers: rh, body } = await request(hopUrl, reqInit);
+        const flatHeaders: Record<string, string> = {};
+        for (const [k, v] of Object.entries(rh)) {
+          const lk = k.toLowerCase();
+          if (Array.isArray(v)) flatHeaders[lk] = v.join(', ');
+          else if (typeof v === 'string') flatHeaders[lk] = v;
+          else if (v == null) flatHeaders[lk] = '';
+          else flatHeaders[lk] = String(v);
+        }
+        const declared = Number(flatHeaders['content-length']);
+        // --- 5. Stream under the cap; read the raw bytes ONCE (audit #29) ---
+        // A redirect hop's body is never the answer: only the final hop is
+        // cut to the prefix (it is the one the caller reads).
+        const isRedirect = statusCode >= 300 && statusCode < 400;
+        const read = await readCapped(
+          body as unknown as AsyncIterable<Buffer> & { destroy?: (err?: Error) => void },
+          maxBytes,
+          hopLabel,
+          Number.isFinite(declared) && flatHeaders['content-length'] !== '' ? declared : null,
+          isRedirect ? undefined : opts.prefixBytes,
+        );
+        const bodyBytes = read.bytes;
+        res = {
+          status: statusCode,
+          headers: flatHeaders,
+          body: bodyBytes.toString('utf8'),
+          bodyBytes,
+          cached: false,
+          ...(read.truncated ? { truncated: true } : {}),
+        };
+      } finally {
+        if (pinned !== null) await pinned.destroy().catch(() => undefined);
+      }
+      answered = true;
+      // SRC-17: rate headers, Backoff, the 429 hold, the exhausted marker and the breaker.
+      if (llm === undefined) {
+        lastHost = st;
+        noteHostResponse(st, res.status, res.headers, RETRYABLE_STATUSES.has(res.status) ? res.body : '');
+      }
+      return res;
     } finally {
-      if (pinned !== null) await pinned.destroy().catch(() => undefined);
+      if (!answered) hostNoAnswer(st);
     }
   };
 
-  // --- Bucket-acquired single attempt ---
-  const dispatch = async (): Promise<HttpResponse> => {
-    await bucketFor(source).acquire();
-    return callOnce();
+  // --- One attempt: the request plus the redirects it is answered with ---
+  const attempt = async (): Promise<HttpResponse> => {
+    hops = [];
+    let hopUrl = url;
+    let hopMethod = method;
+    let hopBody = opts.body;
+    let hopHeaders = headers;
+    const startOrigin = originOf(url);
+    const visited = new Set<string>([hrefWithoutHash(url)]);
+    for (let redirects = 0; ; redirects += 1) {
+      const hopStarted = Date.now();
+      const res = await hopOnce(hopUrl, hopMethod, hopHeaders, hopBody, originOf(hopUrl) === startOrigin);
+      hops.push({ method: hopMethod, url: hopUrl, body: hopBody, requestHeaders: hopHeaders, res });
+      const next =
+        opts.followRedirects === false && llm === undefined
+          ? null
+          : redirectTarget(res, hopUrl, hopMethod, redirects, visited, llm !== undefined);
+      if (next === null) return hopUrl === url ? res : { ...res, finalUrl: hopUrl };
+      // Each hop gets its own kind:"http" record (the final answer's is below).
+      recordHttp({
+        ...base,
+        url: hopUrl,
+        method: hopMethod,
+        status: res.status,
+        cache: 'miss',
+        bytes: res.bodyBytes?.length ?? 0,
+        ms: Date.now() - hopStarted,
+      });
+      visited.add(next.url);
+      // A hop to another origin never carries credentials (D-19-06).
+      if (originOf(next.url) !== originOf(hopUrl)) hopHeaders = withoutSensitiveHeaders(hopHeaders);
+      if (next.method !== hopMethod) {
+        // 303 See Other: the next request is a GET without a body.
+        hopMethod = next.method;
+        hopBody = undefined;
+        hopHeaders = withoutBodyHeaders(hopHeaders);
+      }
+      hopUrl = next.url;
+    }
   };
 
   // --- Optional retry wrap ---
   // serverRetryDelay captures the parsed Retry-After header from the most-recent
   // retryable response. On the next attempt, we sleep for this duration BEFORE
   // re-acquiring the rate bucket + dispatching — honoring the server's request
-  // on top of the existing fullJitter backoff (per ARCH-13 / D-01).
+  // on top of the existing fullJitter backoff (per ARCH-13 / D-01). A longer
+  // Retry-After never gets here: the host is marked exhausted instead (SRC-17).
   let serverRetryDelay = 0;
   const wrapped = async (): Promise<HttpResponse> => {
     if (serverRetryDelay > 0) {
@@ -1423,9 +2408,9 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
       // next attempt.
       const delay = serverRetryDelay;
       serverRetryDelay = 0;
-      await new Promise<void>((r) => setTimeout(r, delay));
+      await sleepMs(delay);
     }
-    const r = await dispatch();
+    const r = await attempt();
     if (RETRYABLE_STATUSES.has(r.status)) {
       const ra = r.headers['retry-after'];
       serverRetryDelay = cappedRetryAfterMs(typeof ra === 'string' ? ra : undefined, Date.now());
@@ -1440,15 +2425,24 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     return r;
   };
 
+  // A request whose last answer is still a 429 — after its retries, or with
+  // noRetry — is one strike against that host (SRC-17, review round 3); the
+  // strike that opens the breaker surfaces as the CircuitOpenError.
+  const endedThrottled = (status: number | undefined): CircuitOpenError | null =>
+    status === 429 && lastHost !== null ? noteRequestThrottled(lastHost) : null;
+
   let response: HttpResponse;
   try {
     response = opts.noRetry
-      ? await dispatch()
+      ? await attempt()
       : await retry(wrapped, {
           maxAttempts: 5,
           baseMs: 200,
           capMs: 30_000,
           retryOn: (err) => {
+            // The host said stop (exhausted / breaker open) or the redirect
+            // chain was refused: retrying cannot change the answer.
+            if (isHostUnavailableError(err) || err instanceof RedirectError) return false;
             const e = err as { status?: number; code?: string } | null;
             if (!e) return false;
             if (typeof e.status === 'number' && RETRYABLE_STATUSES.has(e.status)) return true;
@@ -1456,9 +2450,17 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
             return false;
           },
         });
-  } catch (err) {
+    const opened = endedThrottled(response.status);
+    if (opened !== null) throw opened;
+  } catch (caught) {
+    const opened = caught instanceof CircuitOpenError ? null : endedThrottled((caught as { status?: number } | null)?.status);
+    const err: unknown = opened ?? caught;
     const e = err as Error & { status?: number };
-    const refused = err instanceof OfflineEgressError || err instanceof SsrfBlockedError;
+    const refused =
+      err instanceof OfflineEgressError ||
+      err instanceof SsrfBlockedError ||
+      err instanceof RedirectError ||
+      isHostUnavailableError(err);
     recordHttp({
       ...base,
       status: typeof e.status === 'number' ? e.status : null,
@@ -1470,15 +2472,22 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
     throw err;
   }
 
-  recordHttp({ ...base, status: response.status, cache: 'miss', bytes: response.bodyBytes?.length ?? 0, ms: Date.now() - started });
+  // The recorder writes one entry per hop, each under its own URL (D-19-07).
+  RESPONSE_CHAINS.set(response, hops);
+  recordHttp({ ...base, url: response.finalUrl ?? url, status: response.status, cache: 'miss', bytes: response.bodyBytes?.length ?? 0, ms: Date.now() - started });
+
+  // --- Phase 19 seam S-B (SRC-17): a body that is not the service's answer is
+  // never cached and never recorded — the caller's schema check (validate), or
+  // an API error document served with HTTP 200 ---
+  const invalid = llm === undefined ? (opts.validate?.(response) ?? recordedErrorBody(response.status, response.body)) : null;
 
   // --- Recorder hook (http-mock.ts isRecordingEnabled: live, outside a test context) ---
-  if (llm === undefined && isRecordingEnabled()) {
+  if (llm === undefined && invalid === null && isRecordingEnabled()) {
     recordFixture(method, url, opts.body, source, response);
   }
 
   // --- Cache write (live GET, success or definite 404) ---
-  if (cacheAllowed && (response.status === 200 || response.status === 404)) {
+  if (cacheAllowed && invalid === null && (response.status === 200 || response.status === 404)) {
     await writeCache(key, response).catch(() => {
       // Cache write failures are non-fatal — the response is still returned
       // to the caller. Disk full / read-only FS would otherwise break every

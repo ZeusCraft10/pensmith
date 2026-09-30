@@ -466,8 +466,9 @@ export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
  *
  * (a) Citekey-set diff: the set of cited keys in finalMd MUST equal the set
  *     in draftMd. Any add/drop/swap is a HARD block. Keys are read with the
- *     broad cluster grammar (`[@a; @b]`, locators, mixed case), so a key dropped
- *     from or swapped into a cluster is seen — never treated as absent.
+ *     broad Pandoc grammar (`[@a; @b]`, locators, mixed case, `[-@k]`, `@{k}`,
+ *     narrative `@k`), so a key dropped from or swapped into a citation is
+ *     seen — never treated as absent.
  * (b) Pass-3 quote re-check on finalMd: absent or empty bib → skip-clean
  *     (no quotes to check); else build bibByCitekey from the FULL CITATIONS.bib
  *     (Pitfall 4 — NOT filtered by DRAFT keys) and run runPass3. Any NOT_FOUND
@@ -479,6 +480,8 @@ export async function reCheckFinalMd(
   finalMd: string,
   draftMd: string,
   bibPath: string,
+  /** The project root: Pass 3 re-checks quotes against the hash-verified bring-your-own PDFs too (SRC-15). */
+  root?: string,
 ): Promise<{ passed: boolean; reason: string }> {
   // Step (a): citekey-set diff (runs FIRST — Pitfall 5).
   const finalKeys = new Set(extractCitedKeysForVerification(finalMd));
@@ -523,7 +526,7 @@ export async function reCheckFinalMd(
 
   let pass3Results;
   try {
-    pass3Results = await runPass3(finalMd, bibByCitekey);
+    pass3Results = await runPass3(finalMd, bibByCitekey, root !== undefined ? { root } : {});
   } catch (err) {
     // GATE-04 FAIL-CLOSED: an unexpected runPass3 error is NOT a clean pass.
     // We already have a valid bibByCitekey map here, so an exception is unexpected
@@ -708,7 +711,7 @@ export const doneCommand = defineCommand({
     if (finalPath !== null) {
       const finalMd = readFileSync(finalPath, 'utf8');
       const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
-      const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath);
+      const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath, paperRoot);
       if (!gate4.passed) {
         process.stdout.write(
           `pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification: ${gate4.reason}\n`,

@@ -120,6 +120,29 @@ test('freshness (live): DOI HEAD 200 produces NO warning', async () => {
   });
 });
 
+test('freshness (live): doi.org\'s 302 is the answer — never followed to the content-negotiation endpoint (which answers HEAD with 405)', async () => {
+  await liveLane(async (agent) => {
+    // What doi.org answers today: a 302 to Crossref's transform endpoint, which refuses HEAD.
+    agent
+      .get('https://doi.org')
+      .intercept({ path: '/10.1038/nature14539', method: 'HEAD' })
+      .reply(302, '', { headers: { location: 'https://api.crossref.org/v1/works/10.1038%2Fnature14539/transform' } });
+    const followed: string[] = [];
+    const crossref = agent.get('https://api.crossref.org');
+    crossref
+      .intercept({ path: (p: string) => { if (p.includes('/transform')) followed.push(p); return p.includes('/transform'); }, method: 'HEAD' })
+      .reply(405, '')
+      .persist();
+    crossref
+      .intercept({ path: /^\/works\?filter=updates/, method: 'GET' })
+      .reply(200, NO_RETRACTION, { headers: { 'content-type': 'application/json' } });
+    const r = await probeFreshness('lecun2015', '10.1038/nature14539');
+    assert.deepEqual(r.warnings, [], 'a resolving DOI is fresh');
+    assert.deepEqual(followed, [], 'the redirect was not followed');
+    assert.match(renderFreshnessTable([r]), /\| lecun2015 \| DOI HEAD \| ok \|/);
+  });
+});
+
 test('freshness (live): DOI HEAD 404 produces a WARN row (advisory, not blocking)', async () => {
   await liveLane(async (agent) => {
     agent.get('https://doi.org').intercept({ path: '/10.5555/does-not-resolve', method: 'HEAD' }).reply(404, '');
@@ -158,5 +181,25 @@ test('freshness (live): a 200 carrying an error body is an unknown retraction st
       .reply(200, { statusCode: '403', 'message-type': 'not-polite', body: 'Please add a mailto' }, { headers: { 'content-type': 'application/json' } });
     const r = await probeFreshness('aspelmeyer2009', '10.1038/nphys1170');
     assert.equal(r.skipped?.find((s) => s.probe === 'retraction-watch')?.detail, 'unavailable');
+  });
+});
+
+test('freshness (D-19-05): an exhausted or open-breaker retraction host is an "unavailable" row naming why — never "ok"', async () => {
+  const { __setRegistrarSendForTest } = await import('../bin/lib/sources/registrar-response.js');
+  const { RateLimitExhaustedError } = await import('../bin/lib/http.js');
+  await liveLane(async (agent) => {
+    agent.get('https://doi.org').intercept({ path: '/10.5555/exhausted-rw', method: 'HEAD' }).reply(200, '');
+    try {
+      __setRegistrarSendForTest(async () => {
+        throw new RateLimitExhaustedError('api.crossref.org', 3_600_000, 429);
+      });
+      const r = await probeFreshness('late2020', '10.5555/exhausted-rw');
+      const rw = r.skipped?.find((s) => s.probe === 'retraction-watch');
+      assert.equal(rw?.detail, 'unavailable');
+      assert.match(rw?.note ?? '', /retraction status unknown for 10\.5555\/exhausted-rw: the Crossref lookup failed \(rate limit exhausted \(retry after ~60 min\)\) — re-run verify/);
+      assert.match(renderFreshnessTable([r]), /\| late2020 \| retraction-watch \| unavailable \| retraction status unknown/);
+    } finally {
+      __setRegistrarSendForTest(null);
+    }
   });
 });

@@ -40,7 +40,13 @@ export type GateId =
   // Phase 18 (GRND-01, GRND-02, GRND-09): seam S-A, applied byte-identically by every stream.
   | 'assignment-pickup'
   | 'intake-defaults'
-  | 'reoutline';
+  | 'reoutline'
+  // Phase 19 (GRND-17): seam S-B, applied byte-identically by every Phase 19 stream.
+  | 'plan-research'
+  // Phase 19 review round 1 (SRC-13, SRC-15, SRC-16): the user's own sources.
+  | 'byo-folder'
+  | 'zotero-collection'
+  | 'pdf-attach-unmatched';
 
 export interface GateDef {
   readonly id: GateId;
@@ -77,6 +83,10 @@ export const GATES: readonly GateDef[] = Object.freeze([
   { id: 'assignment-pickup', label: 'Use the assignment file in this folder?', yolo: 'skip', yoloChoice: 'use the file', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'GRND-01', summary: 'the assignment-file pickup' },
   { id: 'intake-defaults', label: 'Accept the intake defaults?', yolo: 'skip', yoloChoice: 'accept the defaults', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-02', summary: 'the intake defaults' },
   { id: 'reoutline', label: 'Re-outline a paper that already has drafts?', yolo: 'skip', yoloChoice: 're-outline (a model re-outline also needs --force)', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-09', summary: 'the re-outline confirmation (a model re-outline also needs `--force`)' },
+  { id: 'plan-research', label: 'Add these research hits to the section?', yolo: 'skip', yoloChoice: 'add every hit to the section', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-17', summary: 'the `plan N --research` hits' },
+  { id: 'byo-folder', label: 'Read the PDFs in this folder outside the paper and copy them into it?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'SRC-15', summary: 'reading a PDF folder outside the paper' },
+  { id: 'zotero-collection', label: 'Pull this Zotero collection from your library into the paper?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'SRC-16', summary: 'pulling a Zotero collection a paper\'s config names' },
+  { id: 'pdf-attach-unmatched', label: "Attach this PDF although its first page does not show the work's title and first author?", yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'SRC-13', summary: 'attaching a PDF whose first page does not show the work' },
 ] satisfies GateDef[]);
 
 /**

@@ -134,7 +134,11 @@ function extractCliFacts(
   const facts: Record<string, boolean> = {
     contact_email_set: probes['contact-email-presence']?.severity === 'PASS',
     pandoc: probes['pandoc-presence']?.severity === 'PASS',
-    zotero_mcp: probes['zotero-mcp-presence']?.severity === 'PASS',
+    // SRC-16 (D-19-24): the zotero-mcp-presence probe's severity is about the
+    // CLI's own access (an authenticated Web API key or the local API); the
+    // fact both tiers share is whether a Zotero MCP server is configured for
+    // Claude Code — the probe's `MCP server: detected` detail line.
+    zotero_mcp: /^MCP server: detected/m.test(probes['zotero-mcp-presence']?.detail ?? ''),
     humanizer: probes['humanizer-skill-presence']?.severity === 'PASS',
   };
   // Parse per-provider entries from runtime-config-presence.detail.
@@ -578,6 +582,20 @@ function seedPaperFixture(): string {
 }
 
 /**
+ * research-scoped brief (SRC-07, D-19-03): `pensmith research` reads the
+ * paper's INTAKE.md and exits 1 when it finds no usable source. The topic is
+ * the query the recorded source cassettes answer, so the offline (test
+ * runner) run finds real recorded hits under PENSMITH_NO_LLM (the stubbed
+ * disambiguator's first query is the topic itself).
+ */
+function seedResearchBrief(root: string): void {
+  writeFileSync(
+    join(root, '.paper', 'INTAKE.md'),
+    '---\ntopic: attention mechanisms in neural networks\ndiscipline: computer-science\n---\n# Intake\n\n## Assignment\n\nWrite a review of attention mechanisms in neural networks.\n',
+  );
+}
+
+/**
  * verify-section-scoped DRAFT.md seed (Plan 05-04 Task 2). Writes a minimal,
  * deterministic section DRAFT.md carrying a single [@citekey] sentence into the
  * MIDDLE_SECTION placeholder dir so `pensmith verify` reaches the advisory Pass
@@ -677,6 +695,12 @@ for (const tc of PHASE_3_CASES) {
     }
     if (tc.name === 'write-section') {
       seedPlannedMiddleSection(root);
+    }
+    // SRC-07 / D-19-03: research is seeded from the paper's brief and exits 1
+    // when it finds no source, so its case gets a brief (research-scoped seed,
+    // like verify-section's) whose topic is the query the cassettes record.
+    if (tc.name === 'research') {
+      seedResearchBrief(root);
     }
 
     // --- Tier 2 (CLI) ---
@@ -1723,7 +1747,8 @@ test('tier-contract: no 17th verb — adding the skills/plumbing namespace keeps
 // bin/cli/research.ts → writeRis path, mcpTool:null — the documented
 // compile/done CLI-only asymmetry), and (2) re-asserts the 16-verb bijection:
 // exactly 16 verbs and NO Phase-10 surface (zotero/ris/style) leaked into the
-// locked set, while 'zotero-mcp' lives ONLY in the sources registry.
+// locked set, while 'zotero' (Phase 19: was 'zotero-mcp') lives ONLY in the
+// sources registry.
 
 const researchVerbExists = existsSync(new URL('../bin/cli/research.ts', import.meta.url));
 
@@ -1735,6 +1760,7 @@ test('tier-contract: research — emits CITATIONS.ris alongside CITATIONS.bib (C
   // when no candidates — parity with the empty .bib). This proves the CITE-05
   // RIS surface is reached through the research verb on both tiers.
   const root = seedPaperFixture();
+  seedResearchBrief(root);
   const r = runCliInDir(['research', '--yolo'], root);
   assert.equal(
     r.exitCode,
@@ -1750,7 +1776,7 @@ test('tier-contract: research — emits CITATIONS.ris alongside CITATIONS.bib (C
   );
 });
 
-test('tier-contract: 16-verb bijection re-asserted — no zotero/ris/style verb leak, zotero-mcp confined to the sources registry (T-10-04-03)', () => {
+test('tier-contract: 16-verb bijection re-asserted — no zotero/ris/style verb leak, zotero confined to the sources registry (T-10-04-03)', () => {
   // The locked-16 set is unchanged by the Phase-10 library/source surfaces.
   assert.equal(UX02_VERBS.length, 16, 'the locked-16 bijection must stay at exactly 16 verbs after the Phase-10 surfaces land');
   assert.equal(new Set(UX02_VERBS).size, 16, 'UX02_VERBS must contain 16 DISTINCT verbs (no duplicate/17th leak)');
@@ -1766,15 +1792,14 @@ test('tier-contract: 16-verb bijection re-asserted — no zotero/ris/style verb 
     );
   }
 
-  // 'zotero-mcp' IS a key of the sources registry (a source provider) — confirming
-  // it lives there and NOT in the verb set (the bijection-preserving placement).
-  assert.ok(
-    'zotero-mcp' in sources,
-    "'zotero-mcp' must be registered in the sources registry (a source provider, not a verb)",
-  );
+  // 'zotero' IS a key of the sources registry (a source provider; SRC-16
+  // renamed it from 'zotero-mcp') — confirming it lives there and NOT in the
+  // verb set (the bijection-preserving placement).
+  assert.ok('zotero' in sources, "'zotero' must be registered in the sources registry (a source provider, not a verb)");
+  assert.ok(!('zotero-mcp' in sources), "the old 'zotero-mcp' registry key is gone (D-19-24)");
   // Its registry presence does NOT promote it to a verb.
   assert.ok(
-    !(UX02_VERBS as readonly string[]).includes('zotero-mcp'),
-    "'zotero-mcp' is a sources-registry key, NOT a UX-02 verb",
+    !(UX02_VERBS as readonly string[]).includes('zotero'),
+    "'zotero' is a sources-registry key, NOT a UX-02 verb",
   );
 });

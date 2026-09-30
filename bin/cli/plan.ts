@@ -25,6 +25,8 @@
 //     router sends a planned section to write; only write sets `writing`.
 //   - The --revise path imports the shared proposeSwap from bin/lib/revise-swap.ts
 //     (ONE implementation; no duplication with revise.ts — GEN-02).
+//   - The --research <query> path is bin/lib/section-research.ts
+//     runSectionResearch (GRND-17): real hits, added to section <n> only.
 //
 // D-12 LOCKED prompt slug: 'section-planner'.
 // D-06 LOCKED chokepoint: --revise delegates to runRevise (bin/lib/revise.ts).
@@ -36,6 +38,7 @@ import { existsSync } from 'node:fs';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionPlan, projectRoot } from '../lib/paths.js';
 import { isPlanResearchFor, runRevise } from '../lib/revise.js';
+import { runSectionResearch } from '../lib/section-research.js';
 import { proposeSwap } from '../lib/revise-swap.js';
 import { complete, assertLlmConfigured, correctiveMessages, StructuredOutputError, type ChatMessage } from '../lib/anthropic.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
@@ -52,6 +55,12 @@ import { withLock } from '../lib/lock.js';
 import { networkMode, offlineMarkerLine } from '../lib/http-mock.js';
 import { EXIT_ERROR, PensmithError } from '../lib/exit-codes.js';
 import type { SectionPlan } from '../lib/llm-contracts.js';
+
+/** The CLI's output sink for the section research pass (section-research.ts never writes the streams itself). */
+const CLI_IO = {
+  out: (line: string): void => void process.stdout.write(`${line}\n`),
+  err: (line: string): void => void process.stderr.write(`${line}\n`),
+};
 
 /** The planner's output failed validation after the one corrective turn (GRND-13): one line, EXIT_ERROR. */
 export class PlannerInvalidError extends PensmithError {
@@ -107,7 +116,7 @@ export const planCommand = defineCommand({
     },
     research: {
       type: 'string',
-      description: 'Section-scoped additional research query (PLAN-03 / D-09).',
+      description: 'Search for more sources for this section and add the ones you approve to its assigned sources (GRND-17).',
     },
     yolo: {
       type: 'boolean',
@@ -122,29 +131,38 @@ export const planCommand = defineCommand({
     // no outline yet.
     const { n, slug, suffix, id } = resolveSectionArg('plan', projectRoot(), args.n, args.slug);
 
+    // GRND-17 / D-19-18: `plan <N> --research <query>` is a real section-scoped
+    // research pass that adds hits to section N only (bin/lib/section-research.ts;
+    // `revise --research` runs the same function). It refuses a run that could
+    // never answer its approval question before anything else happens.
+    const research = typeof args.research === 'string' && args.research.trim().length > 0 ? args.research : undefined;
+    let researchPass: Awaited<ReturnType<typeof runSectionResearch>> | null = null;
+    if (research) {
+      researchPass = await runSectionResearch({ root: projectRoot(), n, suffix, slug, query: research, yolo: args.yolo === true, verb: 'plan', io: CLI_IO });
+      if (args.revise !== true) return { mode: 'research', ...researchPass };
+    }
+
     // GEN-06 / RUN-07 fail-loud probe: assert an LLM is configured before any LLM work.
     await assertLlmConfigured('plan');
 
-    // PLAN-02 / D-05: `pensmith plan <N> --revise` (and `--research`) is the
-    // canonical revise surface. Both route through the single runRevise
-    // chokepoint (D-06) — identical to bin/cli/revise.ts. This keeps the locked
-    // UX-02 16-verb set intact (no new top-level verb) while shipping WRTE-02.
-    const research = typeof args.research === 'string' && args.research.length > 0 ? args.research : undefined;
-    if (args.revise === true || research) {
+    // PLAN-02 / D-05: `pensmith plan <N> --revise` is the canonical revise
+    // surface. It routes through the single runRevise chokepoint (D-06) —
+    // identical to bin/cli/revise.ts. This keeps the locked UX-02 16-verb set
+    // intact (no new top-level verb) while shipping WRTE-02.
+    if (args.revise === true) {
       const result = await runRevise({
         paperRoot: projectRoot(),
         n,
         suffix,
         slug,
         yolo: args.yolo === true,
-        ...(research ? { research } : {}),
         // Real shared proposeSwap from bin/lib/revise-swap.ts (GEN-02).
         // runRevise owns parsing the returned JSON + the membership guard that
         // rejects any replacement_citekey ∉ assigned_sources (T-04-14 / T-11-09).
         proposeSwap,
       });
       process.stdout.write(`pensmith plan --revise: ${result.message}\n`);
-      return { ok: !result.retryExhausted, mode: 'revise', ...result };
+      return { ok: !result.retryExhausted, mode: 'revise', ...result, ...(researchPass ? { research: researchPass } : {}) };
     }
 
     // ── Normal plan path (GRND-12, GRND-13, FEED-01) ──

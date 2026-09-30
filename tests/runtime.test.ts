@@ -18,7 +18,7 @@ import { withLlmSandbox } from './helpers/llm-sandbox.js';
 import {
   MissingApiKeyError,
   RuntimeConfigError,
-  getOpenAlexApiKey,
+  openAlexKey,
   getProviderApiKey,
   loadRuntimeConfig,
   resolveRuntime,
@@ -280,18 +280,18 @@ test('saveRuntimeConfig refuses an invalid config before touching disk', async (
   });
 });
 
-test('getOpenAlexApiKey: undefined when unset + optional, the value when set, MissingApiKeyError when required', async () => {
+test('openAlexKey: no value when unset (optional), the value when set, the configured variable and `required` from runtime.json', async () => {
   await withLlmSandbox({}, async (sb) => {
     delete process.env['OPENALEX_API_KEY'];
-    assert.equal(await getOpenAlexApiKey(), undefined);
+    assert.deepEqual(await openAlexKey(), { value: undefined, envName: 'OPENALEX_API_KEY', required: false });
     process.env['OPENALEX_API_KEY'] = 'oa-key-1';
     try {
-      assert.equal(await getOpenAlexApiKey(), 'oa-key-1');
+      assert.equal((await openAlexKey()).value, 'oa-key-1');
     } finally {
       delete process.env['OPENALEX_API_KEY'];
     }
     sb.writeGlobalRuntime({ $schemaVersion: 2, openalexApiKeyOptional: false });
-    await assert.rejects(getOpenAlexApiKey(), MissingApiKeyError);
+    assert.deepEqual(await openAlexKey(), { value: undefined, envName: 'OPENALEX_API_KEY', required: true });
   });
 });
 

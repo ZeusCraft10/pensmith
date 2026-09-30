@@ -17,7 +17,9 @@
 //
 //   User types "2\n" on stdin → returns { id: 'discipline', kind: 'select', value: 'bio' }
 //   For multiselect:  user types "1,3\n"  → returns { value: ['cs', 'history'] }
-//   For text:         user types raw string (blank line keeps default)
+//   For text:         user types raw string (blank line keeps default; an
+//                     `optional` text question also takes its default when
+//                     the scripted answers have run out)
 //   For confirm:      user types y/Y/yes/n/N/no (blank line keeps default)
 //   For multiline:    user types (or pastes) any number of lines, then a line
 //                     holding only "." (or EOF) ends the text (GRND-01 paste)
@@ -55,6 +57,10 @@ export const TextQuestionSchema = z.object({
   label: z.string().min(1),
   default: z.string().optional(),
   placeholder: z.string().optional(),
+  // An optional follow-up line (e.g. research's "add a source you know"): when
+  // scripted numbered answers run out before it, it takes its default instead
+  // of aborting the run.
+  optional: z.boolean().optional(),
 });
 
 export const ConfirmQuestionSchema = z.object({

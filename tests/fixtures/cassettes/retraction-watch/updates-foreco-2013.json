@@ -1,0 +1,31 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?filter=updates%3A10.1016%2Fj.foreco.2013.06.030&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 0,
+        "items": [],
+        "items-per-page": 20,
+        "query": {
+          "start-index": 0,
+          "search-terms": null
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T05:48:06.736Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "retraction-watch"
+    }
+  }
+]

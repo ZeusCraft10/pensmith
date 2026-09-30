@@ -37,7 +37,7 @@ const { runExportBlockingGate } = await import('../bin/cli/done.js');
 const { computeDraftHash } = await import('../bin/lib/draft-hash.js');
 const { runPlagiarism } = await import('../bin/lib/plagiarism.js');
 const { scoreHonestyWithOptions } = await import('../bin/lib/honesty.js');
-const { runResearchOrchestrator } = await import('../bin/lib/research-orchestrator.js');
+const { runResearchPassWithLog } = await import('./helpers/research-pass.js');
 
 const PENSMITH_TS = fileURLToPath(new URL('../bin/pensmith.ts', import.meta.url));
 const TSX_LOADER = import.meta.resolve('tsx');
@@ -77,7 +77,7 @@ test('RUN-03: the test runner is a sources-offline mode with fixtures available'
 // Adapters: an unrecorded identifier is a miss — never another paper's record.
 // ---------------------------------------------------------------------------
 
-test('RUN-03: fetchById on an unrecorded identifier throws OfflineEgressError in every adapter (no fallback)', async () => {
+test('RUN-03: fetchById on an unrecorded identifier throws OfflineEgressError in every adapter (no fallback)', async (t) => {
   const cases: Array<[string, (id: string) => Promise<unknown>, string]> = [
     ['crossref', sources.crossref.fetchById, UNRECORDED_DOI],
     ['unpaywall', sources.unpaywall.fetchById, UNRECORDED_DOI],
@@ -86,7 +86,16 @@ test('RUN-03: fetchById on an unrecorded identifier throws OfflineEgressError in
     ['semanticscholar', sources.semanticscholar.fetchById, `DOI:${UNRECORDED_DOI}`],
     ['arxiv', sources.arxiv.fetchById, '2999.99999'],
     ['pubmed', sources.pubmed.fetchById, '99999999'],
+    ['books', sources.books.fetchById, 'isbn:9791000000008'],
   ];
+  // Unpaywall refuses to run without a contact email (D-19-12, "Unpaywall
+  // skipped") before any request; with one, its miss is the offline refusal.
+  const savedEmail = process.env['PENSMITH_CONTACT_EMAIL'];
+  process.env['PENSMITH_CONTACT_EMAIL'] = 'pensmith-dev@example.org';
+  t.after(() => {
+    if (savedEmail === undefined) delete process.env['PENSMITH_CONTACT_EMAIL'];
+    else process.env['PENSMITH_CONTACT_EMAIL'] = savedEmail;
+  });
   for (const [name, fetchById, id] of cases) {
     await assert.rejects(
       fetchById(id),
@@ -108,10 +117,17 @@ test('RUN-03: a recorded fixture replays ONLY for its own identifier', async () 
   assert.equal(hit.title, 'Measured measurement');
   // The same record is never returned for another DOI.
   await assert.rejects(sources.crossref.fetchById('10.1038/nphys1171'), (e: unknown) => isOfflineEgressError(e));
-  // Unpaywall replays its own record (null: the current Unpaywall shape is
-  // SRC-03's parse fix) — never a record for another DOI.
-  const up = await sources.unpaywall.fetchById('10.1038/nphys1170');
-  assert.ok(up === null || up.doi === '10.1038/nphys1170');
+  // Unpaywall replays its own record (the current shape parses since SRC-03) —
+  // never a record for another DOI. It needs the contact email (D-19-12).
+  const savedEmail = process.env['PENSMITH_CONTACT_EMAIL'];
+  process.env['PENSMITH_CONTACT_EMAIL'] = 'pensmith-dev@example.org';
+  try {
+    const up = await sources.unpaywall.fetchById('10.1038/nphys1170');
+    assert.equal(up?.doi, '10.1038/nphys1170');
+  } finally {
+    if (savedEmail === undefined) delete process.env['PENSMITH_CONTACT_EMAIL'];
+    else process.env['PENSMITH_CONTACT_EMAIL'] = savedEmail;
+  }
   const ax = await sources.arxiv.fetchById('1706.03762');
   assert.ok(ax === null || ax.id.includes('1706.03762'), `arXiv replays its own id, got ${ax?.id}`);
 });
@@ -130,7 +146,7 @@ test('RUN-03: offline research on an unrecorded query yields 0 candidates with t
   const root = tmp('pensmith-offline-research-');
   mkdirSync(join(root, '.paper'), { recursive: true });
   const { value, err } = await captureStreams(() =>
-    runResearchOrchestrator(['medieval Icelandic sagas'], {
+    runResearchPassWithLog(['medieval Icelandic sagas'], {
       topic: 'medieval Icelandic sagas', discipline: 'history', paperRoot: root,
     }),
   );

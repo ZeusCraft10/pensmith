@@ -251,7 +251,7 @@ test('PRIVACY: PENSMITH_CONTACT_EMAIL rides only in polite-pool User-Agents — 
       }
     });
     for (const polite of ['https://api.crossref.org', 'https://api.openalex.org', 'https://api.unpaywall.org']) {
-      assert.match(seen.get(polite) ?? '', /^pensmith\/\S+ \(jane\.student@example\.edu\)$/, polite);
+      assert.match(seen.get(polite) ?? '', /^pensmith\/\S+ \(mailto:jane\.student@example\.edu\)$/, polite);
     }
     for (const other of ['https://html.duckduckgo.com', 'https://api.gptzero.me', 'https://some-publisher.example', 'https://export.arxiv.org']) {
       assert.match(seen.get(other) ?? '(not called)', /^pensmith\/\S+$/, `${other} gets the plain User-Agent: ${seen.get(other)}`);

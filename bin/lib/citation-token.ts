@@ -747,6 +747,25 @@ export function stripCitationClusters(md: string): string {
   return out + md.slice(at);
 }
 
+/**
+ * `md` with every citation of findCitations — bracketed clusters and narrative
+ * citations, code included — replaced by `fn(citation)`; the text between
+ * citations is left untouched. For the fail-closed rewriters that must not
+ * miss a citation form: compile's smoother masking (every citation becomes a
+ * placeholder the model cannot rewrite, drop or re-key) and byo-text.ts's
+ * claim words (Phase 19 review round 2).
+ */
+export function replaceCitations(md: string, fn: (citation: CitationCluster) => string): string {
+  let out = '';
+  let at = 0;
+  for (const c of findCitations(md)) {
+    if (c.start < at) continue;
+    out += md.slice(at, c.start) + fn(c);
+    at = c.end;
+  }
+  return out + md.slice(at);
+}
+
 /** The first citation in `md` — a cluster or a narrative citation — or null. */
 export function firstCitation(md: string): CitationCluster | null {
   return findCitations(md)[0] ?? null;

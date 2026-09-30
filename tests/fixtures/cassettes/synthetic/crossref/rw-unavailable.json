@@ -6,15 +6,34 @@
     "status": 200,
     "response": {
       "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
       "message": {
         "DOI": "10.0000/rw-unavailable",
-        "title": ["A Retraction-Status-Unavailable Fixture"],
-        "author": [{ "family": "Gap", "given": "Rita" }],
-        "issued": { "date-parts": [[2018]] },
-        "container-title": ["Test Journal"],
+        "title": [
+          "A Retraction-Status-Unavailable Fixture"
+        ],
+        "author": [
+          {
+            "family": "Gap",
+            "given": "Rita"
+          }
+        ],
+        "issued": {
+          "date-parts": [
+            [
+              2018
+            ]
+          ]
+        },
+        "container-title": [
+          "Test Journal"
+        ],
         "type": "journal-article"
       }
     },
-    "responseHeaders": { "content-type": "application/json" }
+    "responseHeaders": {
+      "content-type": "application/json"
+    }
   }
 ]

@@ -1,0 +1,739 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1016%2Fj.jaac.2010.05.017",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              29
+            ]
+          ],
+          "date-time": "2026-09-29T12:08:09Z",
+          "timestamp": 1790683689080,
+          "version": "4.1.0"
+        },
+        "reference-count": 43,
+        "publisher": "Elsevier BV",
+        "issue": "10",
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2010,
+                  10,
+                  1
+                ]
+              ],
+              "date-time": "2010-10-01T00:00:00Z",
+              "timestamp": 1285891200000
+            },
+            "content-version": "tdm",
+            "delay-in-days": 0,
+            "URL": "https://www.elsevier.com/tdm/userlicense/1.0/"
+          }
+        ],
+        "content-domain": {
+          "domain": [],
+          "crossmark-restriction": false
+        },
+        "short-container-title": [
+          "Journal of the American Academy of Child &amp; Adolescent Psychiatry"
+        ],
+        "published-print": {
+          "date-parts": [
+            [
+              2010,
+              10
+            ]
+          ]
+        },
+        "DOI": "10.1016/j.jaac.2010.05.017",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2011,
+              1,
+              19
+            ]
+          ],
+          "date-time": "2011-01-19T05:13:41Z",
+          "timestamp": 1295414021000
+        },
+        "page": "980-989",
+        "source": "Crossref",
+        "is-referenced-by-count": 5043,
+        "title": [
+          "Lifetime Prevalence of Mental Disorders in U.S. Adolescents: Results from the National Comorbidity Survey Replication–Adolescent Supplement (NCS-A)"
+        ],
+        "prefix": "10.1016",
+        "volume": "49",
+        "author": [
+          {
+            "given": "Kathleen Ries",
+            "family": "Merikangas",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Jian-ping",
+            "family": "He",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Marcy",
+            "family": "Burstein",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Sonja A.",
+            "family": "Swanson",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Shelli",
+            "family": "Avenevoli",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Lihong",
+            "family": "Cui",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Corina",
+            "family": "Benjet",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Katholiki",
+            "family": "Georgiades",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Joel",
+            "family": "Swendsen",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "78",
+        "reference": [
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib1",
+            "series-title": "Mental Health Services: A Public Health Perspective",
+            "first-page": "111",
+            "article-title": "Prevalence of psychiatric disorders in childhood and adolescence",
+            "author": "Costello",
+            "year": "2004"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib2",
+            "doi-asserted-by": "crossref",
+            "first-page": "851",
+            "DOI": "10.1111/j.1469-7610.1993.tb01094.x",
+            "article-title": "An epidemiological study of disorders in late childhood and adolescence—I",
+            "volume": "34",
+            "author": "Cohen",
+            "year": "1993",
+            "journal-title": "J Child Psychol Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib3",
+            "doi-asserted-by": "crossref",
+            "first-page": "369",
+            "DOI": "10.1097/00004583-199303000-00019",
+            "article-title": "Prevalence of psychiatric disorders in a community population of older adolescents",
+            "volume": "32",
+            "author": "Reinherz",
+            "year": "1993",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib4",
+            "doi-asserted-by": "crossref",
+            "first-page": "1129",
+            "DOI": "10.1001/archpsyc.1996.01830120067012",
+            "article-title": "The Great Smoky Mountains Study of Youths: Goals, design, methods, and the prevalence of DSM-III-R Disorders",
+            "volume": "53",
+            "author": "Costello",
+            "year": "1996",
+            "journal-title": "Arch Gen Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib5",
+            "doi-asserted-by": "crossref",
+            "first-page": "855",
+            "DOI": "10.1097/00004583-199607000-00011",
+            "article-title": "The NIMH Methods for the Epidemiology of Child and Adolescent Mental Disorders (MECA) Study: Background and methodology",
+            "volume": "35",
+            "author": "Lahey",
+            "year": "1996",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib6",
+            "doi-asserted-by": "crossref",
+            "first-page": "765",
+            "DOI": "10.1016/S0272-7358(98)00010-5",
+            "article-title": "Major depressive disorder in older adolescents: Prevalence, risk factors, and clinical implications",
+            "volume": "18",
+            "author": "Lewinsohn",
+            "year": "1998",
+            "journal-title": "Clin Psychol Rev"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib7",
+            "doi-asserted-by": "crossref",
+            "first-page": "85",
+            "DOI": "10.1001/archpsyc.61.1.85",
+            "article-title": "The DSM-IV rates of child and adolescent disorders in Puerto Rico: Prevalence, correlates, service use, and the effects of impairment",
+            "volume": "61",
+            "author": "Canino",
+            "year": "2004",
+            "journal-title": "Arch Gen Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib8",
+            "doi-asserted-by": "crossref",
+            "first-page": "959",
+            "DOI": "10.1016/j.jpsychires.2006.09.006",
+            "article-title": "Rates of DSM-IV psychiatric disorders among adolescents in a large metropolitan area",
+            "volume": "41",
+            "author": "Roberts",
+            "year": "2007",
+            "journal-title": "J Psychiatr Res"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib9",
+            "doi-asserted-by": "crossref",
+            "first-page": "303",
+            "DOI": "10.1177/003335490612100314",
+            "article-title": "Estimating the prevalence of early childhood serious emotional/behavioral disorders: Challenges and recommendations",
+            "volume": "121",
+            "author": "Brauner",
+            "year": "2006",
+            "journal-title": "Public Health Rep"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib10",
+            "doi-asserted-by": "crossref",
+            "first-page": "972",
+            "DOI": "10.1097/01.chi.0000172552.41596.6f",
+            "article-title": "10-year research update review: The epidemiology of child and adolescent psychiatric disorders: I",
+            "volume": "44",
+            "author": "Costello",
+            "year": "2005",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib11",
+            "doi-asserted-by": "crossref",
+            "first-page": "75",
+            "DOI": "10.1542/peds.2008-2598",
+            "article-title": "Prevalence and treatment of mental disorders among US children in the 2001-2004 NHANES",
+            "volume": "125",
+            "author": "Merikangas",
+            "year": "2010",
+            "journal-title": "Pediatrics"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib12",
+            "series-title": "Mental Health: A Report of the Surgeon General",
+            "year": "1999"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib14",
+            "doi-asserted-by": "crossref",
+            "first-page": "557",
+            "DOI": "10.1097/01.chi.0000159157.57075.c8",
+            "article-title": "The Strengths and Difficulties Questionnaire: U.S. normative data and psychometric properties",
+            "volume": "44",
+            "author": "Bourdon",
+            "year": "2005",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib15",
+            "doi-asserted-by": "crossref",
+            "first-page": "865",
+            "DOI": "10.1097/00004583-199607000-00012",
+            "article-title": "The NIMH Diagnostic Interview Schedule for Children Version 2.3 (DISC-2.3): Description, acceptability, prevalence rates, and performance in the MECA study",
+            "volume": "35",
+            "author": "Shaffer",
+            "year": "1996",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib16",
+            "doi-asserted-by": "crossref",
+            "first-page": "93",
+            "DOI": "10.1002/mpr.168",
+            "article-title": "The World Mental Health (WMH) Survey Initiative Version of the World Health Organization (WHO) Composite International Diagnostic Interview (CIDI)",
+            "volume": "13",
+            "author": "Kessler",
+            "year": "2004",
+            "journal-title": "Int J Methods Psychiatr Res"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib17",
+            "doi-asserted-by": "crossref",
+            "first-page": "367",
+            "DOI": "10.1097/CHI.0b013e31819996f1",
+            "article-title": "National comorbidity survey replication adolescent supplement (NCS-A): I",
+            "volume": "48",
+            "author": "Merikangas",
+            "year": "2009",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib18",
+            "doi-asserted-by": "crossref",
+            "first-page": "380",
+            "DOI": "10.1097/CHI.0b013e3181999705",
+            "article-title": "National comorbidity survey replication adolescent supplement (NCS-A): II",
+            "volume": "48",
+            "author": "Kessler",
+            "year": "2009",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib19",
+            "doi-asserted-by": "crossref",
+            "first-page": "386",
+            "DOI": "10.1097/CHI.0b013e31819a1cbc",
+            "article-title": "National comorbidity survey replication adolescent supplement (NCS-A): III",
+            "volume": "48",
+            "author": "Kessler",
+            "year": "2009",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib20",
+            "doi-asserted-by": "crossref",
+            "first-page": "69",
+            "DOI": "10.1002/mpr.279",
+            "article-title": "Design and field procedures in the US National Comorbidity Survey Replication Adolescent Supplement (NCS-A)",
+            "volume": "18",
+            "author": "Kessler",
+            "year": "2009",
+            "journal-title": "Int J Methods Psychiatr Res"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib21",
+            "doi-asserted-by": "crossref",
+            "first-page": "60",
+            "DOI": "10.1002/mpr.166",
+            "article-title": "The National Comorbidity Survey Replication (NCS-R): Background and aims",
+            "volume": "13",
+            "author": "Kessler",
+            "year": "2004",
+            "journal-title": "Int J Methods Psychiatr Res"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib22",
+            "doi-asserted-by": "crossref",
+            "first-page": "610",
+            "DOI": "10.1097/00004583-199705000-00011",
+            "article-title": "Correspondence between adolescent report and parent report of psychiatric diagnostic data",
+            "volume": "36",
+            "author": "Cantwell",
+            "year": "1997",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib23",
+            "doi-asserted-by": "crossref",
+            "first-page": "57",
+            "DOI": "10.1023/A:1014573708569",
+            "article-title": "Issues in parent-child agreement: The case of structured diagnostic interviews",
+            "volume": "5",
+            "author": "Grills",
+            "year": "2002",
+            "journal-title": "Clin Child Fam Psychol Rev"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib24",
+            "doi-asserted-by": "crossref",
+            "first-page": "99",
+            "DOI": "10.1093/aje/kwg109",
+            "article-title": "US childhood asthma prevalence estimates: The Impact of the 1997 National Health Interview Survey redesign",
+            "volume": "158",
+            "author": "Akinbami",
+            "year": "2003",
+            "journal-title": "Am J Epidemiol"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib26",
+            "series-title": "Mental Health: A Report of the Surgeon General",
+            "year": "1999"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib27",
+            "doi-asserted-by": "crossref",
+            "first-page": "50",
+            "DOI": "10.1097/00004583-199201000-00009",
+            "article-title": "DSM-III disorders from age 11 to age 15 years",
+            "volume": "31",
+            "author": "McGee",
+            "year": "1992",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib28",
+            "doi-asserted-by": "crossref",
+            "first-page": "133",
+            "DOI": "10.1037/0021-843X.102.1.133",
+            "article-title": "Adolescent Psychopathology: I. Prevalence and incidence of depression and other DSM-III-R disorders in high school students",
+            "volume": "102",
+            "author": "Lewinsohn",
+            "year": "1993",
+            "journal-title": "J Abnorm Psychol"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib29",
+            "doi-asserted-by": "crossref",
+            "first-page": "709",
+            "DOI": "10.1001/archpsyc.60.7.709",
+            "article-title": "Prior juvenile diagnoses in adults with mental disorder: Developmental follow-back of a prospective-longitudinal cohort",
+            "volume": "60",
+            "author": "Kim-Cohen",
+            "year": "2003",
+            "journal-title": "Arch Gen Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib30",
+            "doi-asserted-by": "crossref",
+            "first-page": "56",
+            "DOI": "10.1001/archpsyc.55.1.56",
+            "article-title": "The risk for early adulthood anxiety and depressive disorders in adolescents with anxiety and depressive disorders",
+            "volume": "55",
+            "author": "Pine",
+            "year": "1998",
+            "journal-title": "Arch Gen Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib31",
+            "doi-asserted-by": "crossref",
+            "first-page": "631",
+            "DOI": "10.1016/j.chc.2005.06.003",
+            "article-title": "The developmental epidemiology of anxiety disorders: Phenomenology, prevalence, and comorbidity",
+            "volume": "14",
+            "author": "Costello",
+            "year": "2005",
+            "journal-title": "Child Adolesc Psychiatr Clin North Am"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib32",
+            "doi-asserted-by": "crossref",
+            "first-page": "1468",
+            "DOI": "10.1097/00004583-200012000-00007",
+            "article-title": "Oppositional defiant and conduct disorder: A review of the past 10 years, part I",
+            "volume": "39",
+            "author": "Loeber",
+            "year": "2000",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib33",
+            "doi-asserted-by": "crossref",
+            "first-page": "298",
+            "DOI": "10.1207/S15374424jccp280302",
+            "article-title": "Development of psychiatric comorbidity with substance abuse in adolescents: Effects of timing and sex",
+            "volume": "28",
+            "author": "Costello",
+            "year": "1999",
+            "journal-title": "J Clin Child Psychol"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib34",
+            "doi-asserted-by": "crossref",
+            "first-page": "57",
+            "DOI": "10.1111/1469-7610.00424",
+            "article-title": "Comorbidity",
+            "volume": "40",
+            "author": "Angold",
+            "year": "1999",
+            "journal-title": "J Child Psychol Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib35",
+            "doi-asserted-by": "crossref",
+            "first-page": "244",
+            "DOI": "10.1037/0033-2909.111.2.244",
+            "article-title": "Comorbidity of anxiety and depression in children and adolescents",
+            "volume": "111",
+            "author": "Brady",
+            "year": "1992",
+            "journal-title": "Psychol Bull"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib36",
+            "doi-asserted-by": "crossref",
+            "first-page": "1063",
+            "DOI": "10.1111/j.1469-7610.1991.tb00350.x",
+            "article-title": "Comorbidity in child psychopathology: Concepts, issues and research strategies",
+            "volume": "32",
+            "author": "Caron",
+            "year": "1991",
+            "journal-title": "J Child Psychol Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib37",
+            "doi-asserted-by": "crossref",
+            "first-page": "43",
+            "DOI": "10.2105/AJPH.66.1.43",
+            "article-title": "The epidemiology of drug use among New York State high school students: Distribution, trends, and change in rates of use",
+            "volume": "66",
+            "author": "Kandel",
+            "year": "1976",
+            "journal-title": "Am J Public Health"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib38",
+            "doi-asserted-by": "crossref",
+            "first-page": "7",
+            "DOI": "10.31887/DCNS.2009.11.1/krmerikangas",
+            "article-title": "Epidemiology of mental disorders in children and adolescents",
+            "volume": "11",
+            "author": "Merikangas",
+            "year": "2009",
+            "journal-title": "Dialogues Clin Neurosci"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib39",
+            "doi-asserted-by": "crossref",
+            "first-page": "213",
+            "DOI": "10.1016/0165-2281(82)90011-X",
+            "article-title": "Parental education and child health: Intracountry evidence",
+            "volume": "2",
+            "author": "Cochrane",
+            "year": "1982",
+            "journal-title": "Health Policy Educ"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib40",
+            "doi-asserted-by": "crossref",
+            "first-page": "861",
+            "DOI": "10.1097/00004583-198911000-00009",
+            "article-title": "A longitudinal analysis of selected risk factors for childhood psychopathology",
+            "volume": "28",
+            "author": "Velez",
+            "year": "1989",
+            "journal-title": "J Am Acad Child Adolesc Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib41",
+            "doi-asserted-by": "crossref",
+            "first-page": "34",
+            "DOI": "10.1111/j.1469-7610.2007.01822.x",
+            "article-title": "Specificity of putative psychosocial risk factors for psychiatric disorders in children and adolescents",
+            "volume": "49",
+            "author": "Shanahan",
+            "year": "2008",
+            "journal-title": "J Child Psychol Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib42",
+            "doi-asserted-by": "crossref",
+            "first-page": "287",
+            "DOI": "10.1046/j.1440-1614.2001.00902.x",
+            "article-title": "The Christchurch Health and Development Study: Review of findings on child and adolescent mental health",
+            "volume": "35",
+            "author": "Fergusson",
+            "year": "2001",
+            "journal-title": "Aust N Z J Psychiatry"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib43",
+            "doi-asserted-by": "crossref",
+            "first-page": "349",
+            "DOI": "10.1037/0012-1649.39.2.349",
+            "article-title": "A biopsychosocial model of the development of chronic conduct problems in adolescence",
+            "volume": "39",
+            "author": "Dodge",
+            "year": "2003",
+            "journal-title": "Dev Psychol"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib44",
+            "doi-asserted-by": "crossref",
+            "first-page": "151",
+            "DOI": "10.1196/annals.1376.014",
+            "article-title": "Prevention approaches to enhance resilience among high-risk youth: Comments on the papers of Dishion & Connell and Greenberg",
+            "volume": "1094",
+            "author": "Kumpfer",
+            "year": "2006",
+            "journal-title": "Ann N Y Acad Sci"
+          },
+          {
+            "key": "10.1016/j.jaac.2010.05.017_bib45",
+            "series-title": "Preventing Mental, Emotional, and Behavioral Disorders Among Young People: Progress and Possibilities",
+            "author": "O'Connell",
+            "year": "2009"
+          }
+        ],
+        "container-title": [
+          "Journal of the American Academy of Child &amp; Adolescent Psychiatry"
+        ],
+        "original-title": [],
+        "language": "en",
+        "link": [
+          {
+            "URL": "https://api.elsevier.com/content/article/PII:S0890856710004764?httpAccept=text/xml",
+            "content-type": "text/xml",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://api.elsevier.com/content/article/PII:S0890856710004764?httpAccept=text/plain",
+            "content-type": "text/plain",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2021,
+              11,
+              17
+            ]
+          ],
+          "date-time": "2021-11-17T11:53:33Z",
+          "timestamp": 1637150013000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://linkinghub.elsevier.com/retrieve/pii/S0890856710004764"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2010,
+              10
+            ]
+          ]
+        },
+        "references-count": 43,
+        "journal-issue": {
+          "issue": "10",
+          "published-print": {
+            "date-parts": [
+              [
+                2010,
+                10
+              ]
+            ]
+          }
+        },
+        "alternative-id": [
+          "S0890856710004764"
+        ],
+        "URL": "https://doi.org/10.1016/j.jaac.2010.05.017",
+        "relation": {},
+        "ISSN": [
+          "0890-8567"
+        ],
+        "issn-type": [
+          {
+            "value": "0890-8567",
+            "type": "print"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2010,
+              10
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T21:03:47.947Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

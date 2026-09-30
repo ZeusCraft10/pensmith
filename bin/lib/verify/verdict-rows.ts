@@ -21,6 +21,8 @@ export const BLOCKING_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MI
 export interface BlockingVerdictRow {
   citekey: string;
   verdict: string;
+  /** The row says the cited work is retracted (a MIS-CITED retraction verdict; RETRACTED from VRFY-15). */
+  retraction?: boolean;
 }
 
 /**
@@ -36,7 +38,9 @@ export function renderPass1VerdictRow(
   authorJW: number,
   reason: string,
 ): string {
-  return `- ${citekey}: **${verdict}** — titleJW=${titleJW.toFixed(2)}, authorJW=${authorJW.toFixed(2)} — ${reason}`;
+  // A score that was not computed (no record to compare, NaN) reads `n/a`, never a false 0.00.
+  const score = (x: number): string => (Number.isFinite(x) ? x.toFixed(2) : 'n/a');
+  return `- ${citekey}: **${verdict}** — titleJW=${score(titleJW)}, authorJW=${score(authorJW)} — ${reason}`;
 }
 
 /**
@@ -100,7 +104,8 @@ export function parseBlockingVerdictRows(verificationMd: string): BlockingVerdic
     const citekey = pass3?.[1] ?? pass1?.[1];
     // FAIL CLOSED (audit #2/#20, VRFY-09): a blocking verdict on a row whose key
     // cannot be read still blocks — it is never treated as absent.
-    out.push({ citekey: citekey ?? UNREADABLE_CITEKEY, verdict });
+    const retraction = /\bcited work is retracted\b/.test(line);
+    out.push({ citekey: citekey ?? UNREADABLE_CITEKEY, verdict, ...(retraction ? { retraction: true } : {}) });
   }
   return out;
 }
@@ -138,7 +143,7 @@ export function blockingRowReason(row: BlockingVerdictRow): string {
   const cite = row.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row.citekey}]`;
   return row.verdict === 'UNVERIFIABLE'
     ? `${cite} is UNVERIFIABLE (its source could not be checked: offline, --dry-run or a failed lookup) — re-run online`
-    : `${cite} has a blocking verdict (FABRICATED/MIS-CITED/NOT_FOUND)`;
+    : `${cite} has a blocking verdict (${row.verdict}${row.retraction === true ? ': the cited work is retracted' : ''})`;
 }
 
 /**

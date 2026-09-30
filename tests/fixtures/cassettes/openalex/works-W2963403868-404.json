@@ -1,0 +1,17 @@
+[
+  {
+    "scope": "https://api.openalex.org",
+    "method": "GET",
+    "path": "/works/W2963403868?select=id%2Cdoi%2Ctitle%2Cpublication_year%2Cauthorships%2Ctype%2Cprimary_location%2Cbiblio%2Cabstract_inverted_index%2Cids%2Cis_retracted",
+    "status": 404,
+    "response": "<!doctype html>\n<html lang=en>\n<title>404 Not Found</title>\n<h1>Not Found</h1>\n<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>\n",
+    "responseHeaders": {
+      "content-type": "text/html; charset=utf-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T05:27:51.891Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "openalex"
+    }
+  }
+]

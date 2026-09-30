@@ -6,8 +6,12 @@
 //   (2) Integration tests — exercise bin/lib/http.ts against the
 //       crossref-doi-429-retry and crossref-doi-500-retry cassettes to
 //       prove the retry contract end-to-end (D-32). These verify that
-//       HTTP 429 / 500 responses are auto-retried, and that exhausting
-//       `maxAttempts` on a permanent 500 throws.
+//       HTTP 429 / 500 responses are auto-retried, and that a permanent 500
+//       throws. Since SRC-17 (D-19-08) the per-host circuit breaker stops a
+//       permanently failing host after BREAKER_THRESHOLD (3) consecutive 5xx
+//       responses — before retry()'s five attempts are used up — so that case
+//       asserts three requests and a CircuitOpenError. retry() itself (the
+//       pure shim tests) is unchanged.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -37,6 +41,8 @@ import {
   fetch,
   _resetWarnedForTest,
   _resetBucketsForTest,
+  CircuitOpenError,
+  BREAKER_THRESHOLD,
 } from '../bin/lib/http.js';
 
 // ------------------------------------------------------------------
@@ -353,10 +359,11 @@ test('retry-cassette: 4xx (404) is NOT retried', async () => {
   });
 });
 
-test('retry-cassette: permanent 500 — maxAttempts exhausted -> throws', async () => {
+test('retry-cassette: permanent 500 — the breaker stops the host after 3 consecutive 500s -> throws', async () => {
   await withFreshState(async () => {
-    // Build a cassette that ALWAYS returns 500 — register 5 interceptors
-    // (the maxAttempts default) and assert all are consumed.
+    // A host that ALWAYS returns 500: register 5 interceptors (retry()'s
+    // maxAttempts) and assert only BREAKER_THRESHOLD of them are used — the
+    // per-host circuit breaker (SRC-17) opens on the third consecutive 500.
     const url = 'https://api.crossref.org/works/10.1038/permerr';
     const agent = installAgent();
     const u = new URL(url);
@@ -369,12 +376,18 @@ test('retry-cassette: permanent 500 — maxAttempts exhausted -> throws', async 
     try {
       await assert.rejects(
         () => fetch(url, { source: 'crossref' }),
-        /HTTP 500/,
+        (e: unknown) => {
+          assert.ok(e instanceof CircuitOpenError, `a CircuitOpenError, got ${String(e)}`);
+          assert.equal(e.failures, BREAKER_THRESHOLD);
+          assert.equal(e.lastStatus, 500);
+          assert.match(e.message, /skipped for the rest of this run after 3 consecutive HTTP 500 responses/);
+          return true;
+        },
       );
-      assert.deepEqual(
-        agent.pendingInterceptors(),
-        [],
-        'all 5 interceptors must have fired before the throw',
+      assert.equal(
+        agent.pendingInterceptors().length,
+        5 - BREAKER_THRESHOLD,
+        'exactly 3 of the 5 interceptors fired before the breaker opened',
       );
     } finally {
       await restoreAgents();

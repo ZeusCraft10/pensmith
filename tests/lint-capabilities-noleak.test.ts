@@ -2,15 +2,16 @@
 // Regression gate for the D-12 capabilities-no-leak AST chokepoint (Phase 2).
 //
 // D-12: mcp/**/*.ts MUST NOT read secrets via computed process.env[…] or
-// call the runtime.ts secret-resolution helpers (getProviderApiKey /
-// getOpenAlexApiKey / loadRuntimeConfig). The paper://capabilities handler
-// MUST expose only presence flags — never resolved key values.
+// call the helpers that return a secret or personal value (runtime.ts
+// getProviderApiKey / openAlexKey / s2ApiKeyValue / loadRuntimeConfig,
+// contact-email.ts contactEmail). The paper://capabilities handler MUST expose
+// only presence flags — never resolved key values.
 //
 // Three tests:
-//   1. INLINE positive: inline-rule instance flags all 5 fixture violations.
+//   1. INLINE positive: inline-rule instance flags all 7 fixture violations.
 //   2. INLINE control: static process.env.FOO dot-access does NOT fire D-12.
 //   3. PROJECT: load the real eslint.config.js, copy fixture to
-//      mcp/_capabilities-noleak-fixture-tmp.ts, assert >=5 D-12 messages.
+//      mcp/_capabilities-noleak-fixture-tmp.ts, assert >=7 D-12 messages.
 //
 // Note: the fixture imports from bin/lib/runtime.ts and uses TypeScript
 // interface syntax. We include tseslint.configs.recommended to wire the
@@ -39,7 +40,7 @@ test('D-12 INLINE: selectors fire on red-team fixture', async () => {
         rules: {
           'no-restricted-syntax': ['error',
             { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][computed=true]", message: 'D-12: computed process.env[…] read forbidden in mcp/**.' },
-            { selector: "CallExpression[callee.name=/^(getProviderApiKey|getOpenAlexApiKey|loadRuntimeConfig)$/]", message: 'D-12: do not call runtime.ts secret-resolution helpers inside mcp/**.' },
+            { selector: "CallExpression[callee.name=/^(getProviderApiKey|openAlexKey|s2ApiKeyValue|contactEmail|loadRuntimeConfig)$/]", message: 'D-12: do not call runtime.ts secret-resolution helpers inside mcp/**.' },
           ],
         },
       },
@@ -48,7 +49,7 @@ test('D-12 INLINE: selectors fire on red-team fixture', async () => {
   const results = await eslint.lintFiles([FIXTURE]);
   assert.equal(results.length, 1, `expected 1 fixture result, got ${results.length}`);
   const d12 = (results[0]?.messages ?? []).filter((m) => /D-12/.test(m.message));
-  assert.ok(d12.length >= 5, `expected >=5 D-12 messages, got ${d12.length}: ${JSON.stringify(results[0]?.messages, null, 2)}`);
+  assert.ok(d12.length >= 7, `expected >=7 D-12 messages, got ${d12.length}: ${JSON.stringify(results[0]?.messages, null, 2)}`);
 });
 
 test('D-12 INLINE: static dot-access process.env.FOO is allowed', async () => {
@@ -62,7 +63,7 @@ test('D-12 INLINE: static dot-access process.env.FOO is allowed', async () => {
         rules: {
           'no-restricted-syntax': ['error',
             { selector: "MemberExpression[object.object.name='process'][object.property.name='env'][computed=true]", message: 'D-12: computed process.env[…] read forbidden in mcp/**.' },
-            { selector: "CallExpression[callee.name=/^(getProviderApiKey|getOpenAlexApiKey|loadRuntimeConfig)$/]", message: 'D-12: do not call runtime.ts secret-resolution helpers inside mcp/**.' },
+            { selector: "CallExpression[callee.name=/^(getProviderApiKey|openAlexKey|s2ApiKeyValue|contactEmail|loadRuntimeConfig)$/]", message: 'D-12: do not call runtime.ts secret-resolution helpers inside mcp/**.' },
           ],
         },
       },
@@ -110,8 +111,8 @@ test('D-12 PROJECT: real eslint.config.js fires on fixture copied to mcp/', asyn
     const messages = results[0]?.messages ?? [];
     const d12 = messages.filter((m) => /D-12/.test(m.message));
     assert.ok(
-      d12.length >= 5,
-      `expected >=5 D-12 messages from project config, got ${d12.length}: ${JSON.stringify(messages, null, 2)}`,
+      d12.length >= 7,
+      `expected >=7 D-12 messages from project config, got ${d12.length}: ${JSON.stringify(messages, null, 2)}`,
     );
     // Control: staticEnvAccess export (process.env.HOME) must NOT produce any D-12 message.
     // The fixture control function is at the bottom of the file (lines 53-55).

@@ -50,7 +50,8 @@ export function migrate(input: unknown, now: string = new Date().toISOString()):
       authors,
       year: year ?? null,
       abstract: typeof e['abstract'] === 'string' ? e['abstract'] : null,
-      oa_pdf_url: typeof e['oa_pdf_url'] === 'string' ? e['oa_pdf_url'] : null,
+      // v1's oa_pdf_url becomes the v2 entry's oa_url, as it always did.
+      oa_url: typeof e['oa_pdf_url'] === 'string' ? e['oa_pdf_url'] : null,
       retracted: e['retracted'] === true,
       retraction_details: typeof e['retraction_details'] === 'string' ? e['retraction_details'] : null,
       last_verified: typeof e['last_verified'] === 'string' ? e['last_verified'] : null,

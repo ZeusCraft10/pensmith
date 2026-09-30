@@ -1,0 +1,62 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=instagram+adolescent+depression+longitudinal+Social+media+and+depression&retmode=json&retmax=10",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esearch",
+        "version": "0.3"
+      },
+      "esearchresult": {
+        "count": "7",
+        "retmax": "7",
+        "retstart": "0",
+        "idlist": [
+          "42574044",
+          "40350583",
+          "37563766",
+          "34524103",
+          "31256313",
+          "29039700",
+          "28966426"
+        ],
+        "translationset": [
+          {
+            "from": "adolescent",
+            "to": "\"adolescences\"[All Fields] OR \"adolescency\"[All Fields] OR \"adolescent\"[MeSH Terms] OR \"adolescent\"[All Fields] OR \"adolescence\"[All Fields] OR \"adolescents\"[All Fields] OR \"adolescent's\"[All Fields]"
+          },
+          {
+            "from": "depression",
+            "to": "\"depressed\"[All Fields] OR \"depression\"[MeSH Terms] OR \"depression\"[All Fields] OR \"depressions\"[All Fields] OR \"depression's\"[All Fields] OR \"depressive disorder\"[MeSH Terms] OR (\"depressive\"[All Fields] AND \"disorder\"[All Fields]) OR \"depressive disorder\"[All Fields] OR \"depressivity\"[All Fields] OR \"depressive\"[All Fields] OR \"depressively\"[All Fields] OR \"depressiveness\"[All Fields] OR \"depressives\"[All Fields]"
+          },
+          {
+            "from": "longitudinal",
+            "to": "\"longitudinal\"[All Fields] OR \"longitudinally\"[All Fields]"
+          },
+          {
+            "from": "Social media",
+            "to": "\"social media\"[MeSH Terms] OR (\"social\"[All Fields] AND \"media\"[All Fields]) OR \"social media\"[All Fields]"
+          }
+        ],
+        "querytranslation": "\"instagram\"[All Fields] AND (\"adolescences\"[All Fields] OR \"adolescency\"[All Fields] OR \"adolescent\"[MeSH Terms] OR \"adolescent\"[All Fields] OR \"adolescence\"[All Fields] OR \"adolescents\"[All Fields] OR \"adolescent s\"[All Fields]) AND (\"depressed\"[All Fields] OR \"depression\"[MeSH Terms] OR \"depression\"[All Fields] OR \"depressions\"[All Fields] OR \"depression s\"[All Fields] OR \"depressive disorder\"[MeSH Terms] OR (\"depressive\"[All Fields] AND \"disorder\"[All Fields]) OR \"depressive disorder\"[All Fields] OR \"depressivity\"[All Fields] OR \"depressive\"[All Fields] OR \"depressively\"[All Fields] OR \"depressiveness\"[All Fields] OR \"depressives\"[All Fields]) AND (\"longitudinal\"[All Fields] OR \"longitudinally\"[All Fields]) AND (\"social media\"[MeSH Terms] OR (\"social\"[All Fields] AND \"media\"[All Fields]) OR \"social media\"[All Fields]) AND (\"depressed\"[All Fields] OR \"depression\"[MeSH Terms] OR \"depression\"[All Fields] OR \"depressions\"[All Fields] OR \"depression s\"[All Fields] OR \"depressive disorder\"[MeSH Terms] OR (\"depressive\"[All Fields] AND \"disorder\"[All Fields]) OR \"depressive disorder\"[All Fields] OR \"depressivity\"[All Fields] OR \"depressive\"[All Fields] OR \"depressively\"[All Fields] OR \"depressiveness\"[All Fields] OR \"depressives\"[All Fields])",
+        "warninglist": {
+          "phrasesignored": [
+            "and"
+          ],
+          "quotedphrasesnotfound": [],
+          "outputmessages": []
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T08:03:40.522Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

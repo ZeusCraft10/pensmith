@@ -1,83 +1,126 @@
 // bin/lib/doctor/probes/zotero-mcp-presence.ts
 //
-// DOCT-02b: Zotero MCP server presence probe — TRI-STATE auth check (RSCH-06).
-// D-15 severity:
-//   PASS  — Zotero MCP configured in Claude MCP config AND ZOTERO_API_KEY set.
-//   WARN  — not configured (ABSENT), OR configured but ZOTERO_API_KEY not set
-//           (CONFIGURED_NO_AUTH — RESEARCH Pitfall 6: configured-but-not-auth'd).
-// D-19 read-only: readFileSync only, no writes.
+// DOCT-02b / SRC-16 (D-19-24): can pensmith read the user's Zotero library?
+// The probe id stays `zotero-mcp-presence` (references/doctor-output.md is
+// locked); the summary always starts with `Zotero: `.
 //
-// T-01-07 no-leak: the probe emits only the env-var NAME (ZOTERO_API_KEY) and a
-// boolean-derived message — it NEVER interpolates process.env['ZOTERO_API_KEY']
-// (the value) into any string.
+//   ZOTERO_API_KEY set  → an authenticated check through http.ts:
+//                         `GET https://api.zotero.org/keys/current`
+//                           200 → PASS  "Zotero: authenticated (…)"
+//                           403 → WARN  "Zotero: key rejected (…)"
+//                           other / transport → WARN "Zotero: not checked (…)"
+//                           sources offline without a fixture → SKIP
+//                             "Zotero: not checked (offline)"
+//   PENSMITH_ZOTERO_LOCAL=1 (no key) → the Zotero 7 local API answers?
+//                           PASS "Zotero: local API reachable" / WARN.
+//   ZOTERO_GROUP_ID only → a public group library readable without a key?
+//   otherwise           → WARN, "Zotero: MCP server detected — not
+//                         authenticated for the CLI" when a Zotero MCP server
+//                         is configured for Claude Code, else
+//                         "Zotero: not detected".
+// "authenticated" is never inferred from a key's presence. The detail always
+// starts with `MCP server: detected …` / `MCP server: not detected` (the fact
+// paper://capabilities reports as zotero_mcp — tier-contract Case A), then
+// the config files checked.
 //
-// NOTE: this probe composes its OWN `isZoteroMcpPresent() && !!key` check inline
-// rather than calling the adapter's key-only isZoteroAuthenticated() (which is
-// decoupled from FS-presence per the H3 fix). The coupling is intentional: the
-// probe must distinguish ABSENT from CONFIGURED_NO_AUTH to report REAL state.
+// T-01-07 no-leak: the key VALUE never reaches any output — only the variable
+// name. D-19 read-only: no writes (one GET at most).
 
-import type { Probe, ProbeResult } from '../probes.js';
-import { isZoteroMcpPresent } from '../../ecosystem-presence.js';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import type { Probe, ProbeResult, Severity } from '../probes.js';
+import { detectZoteroMcpServers, describeZoteroMcpSearch } from '../../ecosystem-presence.js';
+import { isZoteroLocalEnabled, ZOTERO_LOCAL_ORIGIN } from '../../http.js';
+import {
+  checkZoteroKey,
+  checkZoteroLibrary,
+  zoteroConnection,
+  ZOTERO_KEYS_URL,
+  ZOTERO_WEB_ORIGIN,
+  type ZoteroConnection,
+} from '../../sources/zotero.js';
 
-// T-01-07: the env-var NAME (never its value) is the only key-derived token that
-// ever reaches probe output.
-const API_KEY_ENV = 'ZOTERO_API_KEY';
+const ID = 'zotero-mcp-presence';
+/** A Zotero MCP server for Claude Code (verified reachable when written, D-19-24). */
+export const ZOTERO_MCP_SERVER_REPO = 'https://github.com/54yyyu/zotero-mcp';
 
-// Standard locations where Claude MCP server configs live (kept here for
-// the WARN-path `detail` text so users see where we looked).
-function candidatePaths(): string[] {
-  const home = homedir();
-  return [
-    join(home, '.claude', 'mcp_servers.json'),
-    join(home, '.config', 'claude', 'mcp_servers.json'),
-  ];
+const SETUP_FIX =
+  `Optional — to use your Zotero library: set ZOTERO_API_KEY (create a read-only key at ${ZOTERO_KEYS_URL}), ` +
+  'or enable the Zotero 7 local API (Settings → Advanced → "Allow other applications on this computer to communicate with Zotero") ' +
+  `and set PENSMITH_ZOTERO_LOCAL=1. In Claude Code you can also add a Zotero MCP server, e.g. ${ZOTERO_MCP_SERVER_REPO}.`;
+
+/** The detail is one line (the doctor renders it on one indented line), parts joined by "; ". */
+function result(severity: Severity, summary: string, detail: string[], fix?: string): ProbeResult {
+  return { id: ID, severity, summary, detail: detail.join('; '), ...(fix !== undefined ? { fix } : {}) };
+}
+
+async function keylessCheck(conn: ZoteroConnection, lines: string[], mcpDetected: boolean): Promise<ProbeResult> {
+  const check = await checkZoteroLibrary(conn);
+  const what = conn.mode === 'local' ? `local API (${ZOTERO_LOCAL_ORIGIN})` : `group library groups/${conn.groupId ?? ''} (no key)`;
+  if (check.status === 'readable') {
+    return result('PASS', `Zotero: ${conn.mode === 'local' ? 'local API reachable' : `group library ${check.library} readable`} — research can pull from it`, [...lines, `${what}: readable`]);
+  }
+  if (check.status === 'offline') {
+    return result('SKIP', `Zotero: not checked (${check.reason})`, [...lines, `${what}: not checked (${check.reason})`]);
+  }
+  const fix =
+    conn.mode === 'local'
+      ? 'Start Zotero 7 and tick Settings → Advanced → "Allow other applications on this computer to communicate with Zotero".'
+      : `A private group needs ZOTERO_API_KEY (create one at ${ZOTERO_KEYS_URL}); check ZOTERO_GROUP_ID.`;
+  const also = mcpDetected ? ' (Claude Code research can still use the Zotero MCP server)' : '';
+  return result('WARN', `Zotero: ${what} not readable — ${check.reason}${also}`, [...lines, `${what}: ${check.reason}`], fix);
 }
 
 export const zoteroMcpPresenceProbe: Probe = {
-  id: 'zotero-mcp-presence',
+  id: ID,
   async run(): Promise<ProbeResult> {
-    // CR-01: share the FS-presence detection with bin/lib/capabilities.ts via
-    // ecosystem-presence.ts so both tiers report the same boolean. Tri-state:
-    //   configured     = Zotero MCP server in a known Claude MCP config.
-    //   authenticated  = configured AND ZOTERO_API_KEY present (boolean-only).
-    const configured = isZoteroMcpPresent();
-    // T-01-07: boolean presence ONLY — the value is never read into a variable
-    // that could reach output. D-12: DOT-ACCESS env read (not a computed
-    // process.env[var] index) keeps this probe inside the doctor-probe chokepoint
-    // (only runtime-config-presence.ts may bind a computed env key — see
-    // contact-email-presence.ts for the same dot-access pattern). The boolean
-    // coercion discards the value immediately.
-    const authenticated = configured && !!process.env.ZOTERO_API_KEY;
+    const detection = detectZoteroMcpServers();
+    const mcpDetected = detection.servers.length > 0;
+    const lines = [
+      mcpDetected
+        ? `MCP server: detected — ${detection.servers.map((s) => `"${s.name}" (${s.scope} scope, ${s.file})`).join('; ')}`
+        : 'MCP server: not detected',
+      describeZoteroMcpSearch(detection),
+    ];
 
-    if (!configured) {
-      // ABSENT — keeps 'Checked:' in detail so the existing WARN-branch test holds.
-      return {
-        id: 'zotero-mcp-presence',
-        severity: 'WARN',
-        summary: 'Zotero MCP server not configured — research will not search your Zotero library (the live scholarly sources are unaffected).',
-        detail: `Checked: ${candidatePaths().join(', ')}`,
-        fix: 'Optional: install a Zotero MCP server and add it to your Claude MCP config (one of the files checked above) to include your Zotero library in research.',
-      };
+    let conn: ZoteroConnection | null;
+    try {
+      conn = zoteroConnection();
+    } catch (e) {
+      return result('WARN', `Zotero: not checked — ${(e as Error).message}`, lines, 'Set ZOTERO_GROUP_ID to the number in the group\'s URL (zotero.org/groups/<number>).');
     }
 
-    if (!authenticated) {
-      // CONFIGURED_NO_AUTH — RESEARCH Pitfall 6. Keeps 'Checked:' in detail and
-      // emits only the env-var NAME (never the value).
-      return {
-        id: 'zotero-mcp-presence',
-        severity: 'WARN',
-        summary: `Zotero MCP configured but ${API_KEY_ENV} not set — Zotero sources will be skipped.`,
-        detail: `Checked: ${candidatePaths().join(', ')}. ${API_KEY_ENV} not found in env.`,
-        fix: `Set ${API_KEY_ENV} in your environment so Zotero sources can be pulled during research.`,
-      };
+    if (process.env.ZOTERO_API_KEY?.trim()) {
+      // An authenticated check — never inferred from the key's presence.
+      const key = await checkZoteroKey();
+      const web = `Web API: GET ${ZOTERO_WEB_ORIGIN}/keys/current`;
+      switch (key.status) {
+        case 'authenticated':
+          return result(
+            'PASS',
+            `Zotero: authenticated (Web API, library ${conn?.groupId ? `groups/${conn.groupId}` : `users/${key.userId}`}${key.libraryAccess ? '' : '; the key has no library read access'})`,
+            [...lines, `${web} → 200`],
+            key.libraryAccess ? undefined : `Give the key "Allow library access" at ${ZOTERO_KEYS_URL}.`,
+          );
+        case 'rejected':
+          return result('WARN', `Zotero: key rejected (HTTP ${key.httpStatus}) — ZOTERO_API_KEY is not a valid Zotero key`, [...lines, `${web} → ${key.httpStatus}`], `Create a key at ${ZOTERO_KEYS_URL} (read access to your library) and set ZOTERO_API_KEY to it.`);
+        case 'offline':
+          return result('SKIP', `Zotero: not checked (${key.reason})`, [...lines, `${web}: not sent (${key.reason})`]);
+        case 'failed':
+          return result('WARN', `Zotero: not checked (${key.reason})`, [...lines, `${web} → ${key.reason}`], 'Re-run `pensmith doctor` later; Zotero may be unreachable right now.');
+        default:
+          break;
+      }
     }
 
-    return {
-      id: 'zotero-mcp-presence',
-      severity: 'PASS',
-      summary: 'Zotero MCP configured and authenticated',
-    };
+    if (conn !== null && (isZoteroLocalEnabled() || conn.groupId !== null)) return keylessCheck(conn, lines, mcpDetected);
+
+    if (mcpDetected) {
+      return result(
+        'WARN',
+        'Zotero: MCP server detected — not authenticated for the CLI (Claude Code research can use the MCP server; the CLI needs ZOTERO_API_KEY or PENSMITH_ZOTERO_LOCAL=1)',
+        lines,
+        `For the CLI, set ZOTERO_API_KEY (${ZOTERO_KEYS_URL}) or enable the Zotero 7 local API and set PENSMITH_ZOTERO_LOCAL=1.`,
+      );
+    }
+    return result('WARN', 'Zotero: not detected — research will not search your Zotero library (the scholarly sources are unaffected)', lines, SETUP_FIX);
   },
 };

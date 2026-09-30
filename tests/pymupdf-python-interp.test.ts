@@ -4,7 +4,7 @@
 // absent on a standard Windows install (where it's `python` or the `py`
 // launcher) — so the fallback never ran there even with Python + fitz present.
 // pythonCandidates() now returns an ordered candidate list (Windows tries
-// `python`/`py` first), and pymupdfShellout tries each until one works.
+// `python`/`py` first), and pymupdfExtract tries each until one works.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';

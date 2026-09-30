@@ -29,7 +29,8 @@ import { runPass2, renderPass2Section, pass2NotRun, NO_LLM_SKIP_REASON, type Pas
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { isFatalLlmError } from '../lib/anthropic.js';
 import { extractCitedKeysForVerification } from '../lib/citation-token.js';
-import { parseBibFileAt } from '../lib/citations.js';
+import { parseBibFile, parseBibFileAt } from '../lib/citations.js';
+import { rerenderCitations, LibraryNotFoundError } from '../lib/library.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, sectionPlan, paperDir, projectRoot } from '../lib/paths.js';
 import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
@@ -40,12 +41,46 @@ import { resolveSectionArg } from '../lib/section-slug.js';
 import { formatSectionId, loggedSectionId, sectionIdOf } from '../lib/section-id.js';
 import { offlineMarkerLine } from '../lib/http-mock.js';
 import { EXIT_ERROR } from '../lib/exit-codes.js';
+import { tryReadPaperConfigSync } from '../lib/config.js';
 
 // Force-bind the deterministic primitives so the acceptance grep
 // (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
 // stays GREEN even if a refactor later inlines runPass1/runPass3.
 void jaroWinkler;
 void levenshteinSubstring;
+
+/**
+ * SRC-12: when CITATIONS.bib does not parse and the paper has a LIBRARY.json,
+ * re-render the bib (and RIS) from the library — one stderr notice, the
+ * unreadable file kept as a backup — so verification proceeds on a bib that
+ * holds exactly the library's sources. Without a library nothing changes and
+ * Pass 1 reports the parse error (fail closed).
+ */
+async function rerenderBibIfBroken(root: string, bibPath: string): Promise<void> {
+  let text: string;
+  try {
+    text = readFileSync(bibPath, 'utf8');
+  } catch {
+    return;
+  }
+  try {
+    await parseBibFile(text);
+    return;
+  } catch {
+    /* does not parse — re-render below */
+  }
+  let result;
+  try {
+    result = await rerenderCitations(root);
+  } catch (e) {
+    if (e instanceof LibraryNotFoundError) return;
+    throw e;
+  }
+  process.stderr.write(
+    `pensmith verify: .paper/CITATIONS.bib did not parse (${result.previousProblem ?? 'invalid BibTeX'}) — re-rendered it from LIBRARY.json` +
+      `${result.backup ? `; the old file is kept at ${result.backup}` : ''}\n`,
+  );
+}
 
 /** One line naming why the advisory passes stopped (for the "not run" rows). */
 function stopReason(err: unknown): string {
@@ -129,13 +164,19 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
     return { ok: false, status: 'failed', path: verifPath, exitCode: EXIT_ERROR };
   }
 
+  // SRC-12 (D-19-19): a CITATIONS.bib that does not parse — e.g. one an older
+  // pensmith wrote with `{\u …}` name escapes (E2E-12) — is re-rendered from
+  // LIBRARY.json, the paper's source of truth, with one notice; the old file
+  // is kept as a backup. With no LIBRARY.json the parse error below stands.
+  if (bibExists) await rerenderBibIfBroken(projectRoot(), bibPath);
+
   // An empty CITATIONS.bib is zero entries (the library writer renders an
   // empty library as an empty bib, BRDTH-01), and a draft that cites nothing
   // needs no bib at all: both take the normal path below. With no citation,
   // Pass 1 and Pass 3 have nothing to check and the section is verified —
   // exactly as it is against a non-empty bib; a cited key absent from the bib
   // is FABRICATED (fail closed).
-  const pass1 = bibExists ? await runPass1(draftMd, bibPath) : [];
+  const pass1 = bibExists ? await runPass1(draftMd, bibPath, { root: projectRoot() }) : [];
   const bibEntries = bibExists ? await parseBibFileAt(readFileSync(bibPath, 'utf8'), bibPath) : [];
   // Widened value type (additive): carries title/author/abstract so Pass 2
   // (claim support) has source metadata. runPass3 reads only DOI, so the
@@ -149,7 +190,7 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
   const bibByCitekey = new Map<string, BibValue>(
     bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as BibValue]),
   );
-  const pass3 = await runPass3(draftMd, bibByCitekey);
+  const pass3 = await runPass3(draftMd, bibByCitekey, { root: projectRoot() });
 
   // RSCH-10 freshness probe (D-10, WARN-only). Runs AFTER the blocking
   // verdict computation and NEVER influences `status` — a stale DOI or a
@@ -190,7 +231,10 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
   let pass2: Pass2Result[];
   let pass4: Pass4Result[] | null = null;
   try {
-    pass2 = await runPass2(draftMd, bibByCitekey, { n: logged });
+    // `[verification] send_byo_passages` (default off, PRD §9): only then do
+    // the user's own PDFs' passages go to the model provider.
+    const shareByoPassages = tryReadPaperConfigSync(projectRoot())?.verification?.send_byo_passages === true;
+    pass2 = await runPass2(draftMd, bibByCitekey, { n: logged, root: projectRoot(), shareByoPassages });
   } catch (err) {
     if (!isFatalLlmError(err)) throw err;
     advisoryStop = err;

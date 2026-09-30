@@ -685,6 +685,19 @@ async function enterMutatingSession(session: InvocationSession, verb: Ux02Verb |
 // `pensmith write` must reach citty/runMain, not the single-section router path.
 const SECTION_SCOPED_VERBS: readonly Ux02Verb[] = ['plan', 'verify'];
 
+/** True when argv carries a non-empty `--research <query>` (or `--research=<query>`). */
+function hasResearchFlag(argv: readonly string[]): boolean {
+  for (let i = 0; i < argv.length; i++) {
+    const tok = argv[i] ?? '';
+    if (tok.startsWith('--research=')) return tok.slice('--research='.length).trim().length > 0;
+    if (tok === '--research') {
+      const next = argv[i + 1];
+      return next !== undefined && !next.startsWith('--') && next.trim().length > 0;
+    }
+  }
+  return false;
+}
+
 /** True if `verb` is section-scoped AND no numeric positional follows it in argv. */
 function isSectionVerbWithoutNumber(argv: string[], verb: Ux02Verb): boolean {
   if (!SECTION_SCOPED_VERBS.includes(verb)) return false;
@@ -708,7 +721,13 @@ async function invocationScope(argv: string[], checked: ValidatedArgv): Promise<
   const verb = checked.verb;
   if (verb !== null && verb !== 'next' && verb !== 'resume' && !isSectionVerbWithoutNumber(argv, verb)) {
     const n = checked.positionals.find((p) => /^\d+[a-z]?$/.test(p));
-    return n !== undefined ? { verb, section: /^\d+$/.test(n) ? Number(n) : n } : { verb };
+    const base: EstimateScope = n !== undefined ? { verb, section: /^\d+$/.test(n) ? Number(n) : n } : { verb };
+    // GRND-17: `plan N --research <q>` is the section research pass
+    // (evaluator calls), not the planner's call (unless --revise follows it).
+    if (verb === 'plan' && hasResearchFlag(argv)) {
+      return { ...base, research: true, ...(argv.includes('--revise') ? { revise: true } : {}) };
+    }
+    return base;
   }
   const root = projectRoot();
   const decision = await resolveNextAction(root, routeOptionsFor(root));
@@ -1220,6 +1239,13 @@ export const ENVIRONMENT_DOCS: ReadonlyArray<readonly [string, string]> = Object
   ['PENSMITH_NO_LLM', 'replaces every LLM call with a deterministic stub (testing and dry-run)'],
   ['PENSMITH_OFFLINE', 'sources, verification, detector and plagiarism checks use recorded fixtures instead of the network (a disclosed offline mode)'],
   ['PENSMITH_PAPER_ROOT', 'the project folder (containing .paper/) to work on; the CLI, the MCP server and the hooks honour it'],
+  ['PENSMITH_CONTACT_EMAIL', 'polite-pool contact sent to Crossref, OpenAlex and Unpaywall only (Unpaywall is skipped without it)'],
+  ['OPENALEX_API_KEY', 'optional, free: OpenAlex key sent as api_key (keyless requests share a small daily budget)'],
+  ['PENSMITH_S2_API_KEY', 'optional: Semantic Scholar key sent as x-api-key (keyless requests are often rate limited)'],
+  ['ZOTERO_API_KEY', 'optional: read your Zotero library through the Zotero Web API (sent only as Zotero-API-Key)'],
+  ['ZOTERO_GROUP_ID', 'optional: read a Zotero group library instead of your own'],
+  ['PENSMITH_ZOTERO_LOCAL', '1 reads Zotero 7\'s local API on this machine (127.0.0.1:23119); nothing leaves the machine'],
+  ['PENSMITH_GROBID_URL', 'optional: a loopback GROBID server that reads your PDFs\' title, authors and DOI'],
   ['PENSMITH_COST_CAP_USD', 'session cost cap in USD (overrides [budget] cost_cap_usd)'],
   ['PENSMITH_PROMPT_MODE', '"numbered" reads gate answers from stdin one line per question (scripted answers)'],
   ['PENSMITH_DEBUG', 'print a stack trace for an unexpected error'],
@@ -1227,7 +1253,7 @@ export const ENVIRONMENT_DOCS: ReadonlyArray<readonly [string, string]> = Object
 
 const GLOBAL_FLAG_DOCS: ReadonlyArray<readonly [string, string]> = Object.freeze([
   ['--paper <name|path>', 'work on this paper (a name from `pensmith list`, or a folder containing .paper/)'],
-  ['--yolo', 'skip the gates --yolo may skip; never the cost cap, detector consent or the active-paper choice'],
+  ['--yolo', 'skip the gates --yolo may skip; never the cost cap, detector consent, the active-paper choice, your own PDF folder / Zotero collection, or attaching an unmatched PDF'],
   ['--dry-run', 'trial run in ./.paper-dry-run/ (seeded from .paper/, never writing it): no network or model call'],
   ['--estimate', 'project the remaining cost, then offer to proceed'],
   ['--show-prompts', 'mirror outbound requests and LLM prompts to stderr before they are sent'],

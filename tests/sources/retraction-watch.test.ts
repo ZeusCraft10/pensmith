@@ -14,9 +14,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as rw from '../../bin/lib/sources/retraction-watch.js';
-import { _resetBucketsForTest } from '../../bin/lib/http.js';
+import { _resetBucketsForTest, RateLimitExhaustedError, CircuitOpenError, type HttpResponse } from '../../bin/lib/http.js';
 import { installMockAgent } from '../helpers/local-servers/mock-agent.js';
+import { __setRegistrarSendForTest } from '../../bin/lib/sources/registrar-response.js';
 import { RECORDED_DOI, recorded, assertOfflineMiss } from './recorded.js';
+import { cacheMentions } from './three-way.js';
 
 /** A retracted work with a Retraction Watch record (scripts/refresh-cassettes.mjs RECORDED_RETRACTED_DOI). */
 const RECORDED_RETRACTED_DOI = '10.1016/S0140-6736(97)11096-0';
@@ -83,10 +85,49 @@ test('SRC-04: a 200 carrying an error document is "retraction status unknown", n
       .reply(200, { statusCode: '403', 'message-type': 'not-polite', body: 'Please add a mailto' }, { headers: { 'content-type': 'application/json' } });
     await assert.rejects(() => rw.fetchById('10.5555/error-body'), (e: unknown) => {
       assert.ok(rw.isRetractionLookupError(e), String(e));
-      assert.match((e as Error).message, /retraction status unknown for 10\.5555\/error-body: Crossref answered without a work list/);
+      assert.match(
+        (e as Error).message,
+        /^retraction status unknown for 10\.5555\/error-body: the Crossref lookup failed \(response is not a Crossref answer \(an error document: an inner statusCode 403\)\)$/,
+      );
       return true;
     });
   });
+});
+
+test('SRC-04/SRC-17: an error document inside a 200 is never cached — the next lookup asks Crossref again', async () => {
+  await liveLane(async (agent) => {
+    const marker = `marker-rw-${process.pid}-${Date.now()}`;
+    agent
+      .get('https://api.crossref.org')
+      .intercept({ path: /^\/works\?filter=updates%3A10\.5555%2Fnot-cached/, method: 'GET' })
+      .reply(200, { statusCode: '400', 'message-type': 'validation-failure', message: marker }, { headers: { 'content-type': 'application/json' } });
+    await assert.rejects(() => rw.fetchById('10.5555/not-cached'), (e: unknown) => rw.isRetractionLookupError(e));
+    assert.deepEqual(cacheMentions(marker), [], 'nothing was cached');
+    agent
+      .get('https://api.crossref.org')
+      .intercept({ path: /^\/works\?filter=updates%3A10\.5555%2Fnot-cached/, method: 'GET' })
+      .reply(200, { status: 'ok', 'message-type': 'work-list', message: { items: [] } }, { headers: { 'content-type': 'application/json' } });
+    assert.equal(await rw.fetchById('10.5555/not-cached'), null, 'a live "not retracted" answer on the second request');
+  });
+});
+
+test('SRC-04: an exhausted or open-breaker host is "retraction status unknown" (RetractionLookupError), never "not retracted"', async () => {
+  try {
+    __setRegistrarSendForTest(async (): Promise<HttpResponse> => {
+      throw new RateLimitExhaustedError('api.crossref.org', 120_000, 429);
+    });
+    await assert.rejects(() => rw.fetchById('10.5555/exhausted'), (e: unknown) => {
+      assert.ok(rw.isRetractionLookupError(e));
+      assert.match((e as Error).message, /^retraction status unknown for 10\.5555\/exhausted: the Crossref lookup failed \(rate limit exhausted \(retry after ~2 min\)\)$/);
+      return true;
+    });
+    __setRegistrarSendForTest(async (): Promise<HttpResponse> => {
+      throw new CircuitOpenError('api.crossref.org', 503, 3);
+    });
+    await assert.rejects(() => rw.fetchById('10.5555/breaker'), /retraction status unknown for 10\.5555\/breaker: the Crossref lookup failed \(skipped after 3 consecutive HTTP 503 responses\)/);
+  } finally {
+    __setRegistrarSendForTest(null);
+  }
 });
 
 test('SRC-04: a non-200 or a transport failure is "retraction status unknown"', async () => {

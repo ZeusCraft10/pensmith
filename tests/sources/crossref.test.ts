@@ -1,23 +1,37 @@
 // tests/sources/crossref.test.ts — Crossref adapter against RECORDED cassettes
-// (RSCH-03/04, T-3-13, CI-07). Offline replay is exact-match only (RUN-03).
+// (RSCH-03/04, SRC-04, SRC-05, T-3-13, CI-07) and the three-way lookup contract
+// (D-19-05). Offline replay is exact-match only (RUN-03).
+//
+// The recordings are real (scripts/refresh-cassettes.mjs, D-19-26); the
+// assertions name the values Crossref holds for these works.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as crossref from '../../bin/lib/sources/crossref.js';
+import { SourceCandidateSchema } from '../../bin/lib/schemas/source-candidate.js';
 import { RECORDED_QUERY, RECORDED_DOI, RECORDED_CROSSREF_404_DOI, recorded, assertOfflineMiss } from './recorded.js';
+import { threeWayContract, liveLane, uniq } from './three-way.js';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { renderBibtex } from '../../bin/lib/bibtex-write.js';
+import { parseBibSync } from '../../bin/lib/citations.js';
+import { runPass1 } from '../../bin/lib/verify/pass1.js';
 
 interface Item {
   DOI?: string;
   title?: string[];
-  author?: Array<{ family?: string; given?: string }>;
+  author?: Array<{ family?: string; given?: string; name?: string }>;
+  editor?: Array<{ family?: string; given?: string; name?: string }>;
   issued?: { 'date-parts'?: number[][] };
 }
 
-test('crossref.search() returns exactly the recorded works for the recorded query (RSCH-03)', async () => {
+test('crossref.search() returns exactly the recorded works for the recorded query, with complete records (RSCH-03, SRC-05)', async () => {
   const [entry] = recorded('crossref', 'search-attention-neural-networks');
-  const items = ((entry!.response as { message: { items: Item[] } }).message.items);
+  assert.match(entry!.path, /select=[^&]*updated-by/, 'the search selects updated-by (D-19-11)');
+  const items = (entry!.response as { message: { items: Item[] } }).message.items;
   const expected = items
-    .filter((i) => i.DOI && i.title?.[0] && (i.author ?? []).some((a) => (a.family ?? '').trim()))
+    .filter((i) => i.DOI && i.title?.[0] && ((i.author ?? []).length > 0 || (i.editor ?? []).length > 0))
     .map((i) => i.DOI);
   assert.ok(expected.length > 0, 'the recording carries usable works');
 
@@ -29,24 +43,152 @@ test('crossref.search() returns exactly the recorded works for the recorded quer
     assert.match(r.citekey, /^[a-z][a-z0-9_-]*$/);
     assert.ok(r.authors.length > 0 && r.authors.every((a) => a.length > 0));
     assert.equal(r.retracted, false);
+    assert.equal(r.retraction_status, 'clear', 'a Crossref record without a retraction notice is decided clear');
+    assert.ok(r.type !== undefined, 'every Crossref work has a CSL type');
+    assert.ok(SourceCandidateSchema.safeParse(r).success, `${r.doi} validates`);
+  }
+  assert.ok(results.some((r) => r.venue !== undefined), 'container titles become venues');
+});
+
+test('SRC-05: 10.1038/nature14539 — Nature, 521(7553), 436-444, publisher, CSL type, authors', async () => {
+  const r = await crossref.lookupById('10.1038/nature14539');
+  assert.equal(r.kind, 'found');
+  if (r.kind !== 'found') return;
+  const c = r.candidate;
+  assert.equal(c.title, 'Deep learning');
+  assert.deepEqual(c.authors, ['LeCun, Yann', 'Bengio, Yoshua', 'Hinton, Geoffrey']);
+  assert.equal(c.year, 2015);
+  assert.equal(c.venue, 'Nature');
+  assert.equal(c.volume, '521');
+  assert.equal(c.issue, '7553');
+  assert.equal(c.pages, '436-444');
+  assert.equal(c.publisher, 'Springer Science and Business Media LLC');
+  assert.equal(c.type, 'article-journal');
+  assert.equal(c.retraction_status, 'clear');
+  assert.equal(c.citekey, 'lecun2015');
+});
+
+test('SRC-05: 10.1038/nature11247 — the ENCODE consortium is ONE corporate author, braced', async () => {
+  const c = await crossref.fetchById('10.1038/nature11247');
+  assert.ok(c);
+  assert.equal(c.title, 'An integrated encyclopedia of DNA elements in the human genome');
+  assert.deepEqual(c.authors, ['{The ENCODE Project Consortium}']);
+  assert.equal(c.venue, 'Nature');
+  assert.equal(c.volume, '489');
+  assert.equal(c.issue, '7414');
+  assert.equal(c.pages, '57-74');
+  assert.equal(c.year, 2012);
+});
+
+test('SRC-04: the Wakefield 1998 record carries its Retraction Watch notice → retracted with details', async () => {
+  const [entry] = recorded('crossref', 'works-wakefield-1998');
+  const msg = (entry!.response as { message: { 'updated-by'?: Array<{ type: string }> } }).message;
+  assert.ok((msg['updated-by'] ?? []).some((u) => u.type === 'retraction'), 'the recording carries the notice');
+  const c = await crossref.fetchById('10.1016/S0140-6736(97)11096-0');
+  assert.ok(c);
+  assert.equal(c.retracted, true);
+  assert.equal(c.retraction_status, 'retracted');
+  assert.equal(c.retraction_details, '2010-02-06: Retraction (notice 10.1016/s0140-6736(10)60175-4; Retraction Watch record 4036)');
+  assert.equal(c.venue, 'The Lancet');
+  assert.equal(c.authors[0], 'Wakefield, AJ');
+  assert.ok(SourceCandidateSchema.safeParse(c).success);
+});
+
+test('SRC-05: a particle surname keeps its particle (van der Maaten 2013)', async () => {
+  const c = await crossref.fetchById('10.1016/j.foreco.2013.06.030');
+  assert.ok(c);
+  assert.deepEqual(c.authors, ['van der Maaten, Ernst']);
+  assert.equal(c.venue, 'Forest Ecology and Management');
+  assert.equal(c.volume, '306');
+  assert.equal(c.pages, '135-141');
+  assert.equal(c.citekey, 'vandermaaten2013');
+});
+
+test('crossref.lookupById() hydrates the recorded work for exactly that DOI (RSCH-04), any DOI spelling', async () => {
+  const [entry] = recorded('crossref', 'works-nphys1170');
+  const msg = (entry!.response as { message: Item }).message;
+  for (const spelling of [RECORDED_DOI, 'https://doi.org/10.1038/NPHYS1170', 'doi:10.1038/nphys1170']) {
+    const r = await crossref.fetchById(spelling);
+    assert.ok(r, `${spelling} resolves`);
+    assert.equal(r.doi?.toLowerCase(), RECORDED_DOI);
+    assert.equal(r.title, msg.title?.[0]);
+    assert.equal(r.authors[0], `${msg.author?.[0]?.family}, ${msg.author?.[0]?.given}`);
+    assert.equal(r.year, msg.issued?.['date-parts']?.[0]?.[0]);
   }
 });
 
-test('crossref.fetchById() hydrates the recorded work for exactly that DOI (RSCH-04)', async () => {
-  const [entry] = recorded('crossref', 'works-nphys1170');
-  const msg = (entry!.response as { message: Item }).message;
-  const r = await crossref.fetchById(RECORDED_DOI);
-  assert.ok(r, 'the recorded DOI resolves');
-  assert.equal(r.doi?.toLowerCase(), RECORDED_DOI);
-  assert.equal(r.title, msg.title?.[0]);
-  assert.equal(r.authors[0], `${msg.author?.[0]?.family}, ${msg.author?.[0]?.given}`);
-  assert.equal(r.year, msg.issued?.['date-parts']?.[0]?.[0]);
-});
-
-test('crossref.fetchById() of a DOI Crossref does not know returns null (a recorded 404, not a fallback)', async () => {
+test('a DOI Crossref does not know is not-found (a recorded 404) — fetchById null', async () => {
   const [entry] = recorded('crossref', 'works-arxiv-doi-404');
   assert.equal(entry!.status, 404);
+  const r = await crossref.lookupById(RECORDED_CROSSREF_404_DOI);
+  assert.equal(r.kind, 'not-found');
   assert.equal(await crossref.fetchById(RECORDED_CROSSREF_404_DOI), null);
+});
+
+test('SRC-04: a 200 carrying an inner 403 ("not-polite") is a failed lookup — never a record, never not-found', async () => {
+  const r = await crossref.lookupById('10.5555/inner-403');
+  assert.deepEqual(r, { kind: 'failed', reason: 'response is not a Crossref answer (an error document: an inner statusCode 403)', status: 200 });
+  await assert.rejects(() => crossref.fetchById('10.5555/inner-403'), /crossref lookup of 10\.5555\/inner-403 failed: response is not a Crossref answer/);
+});
+
+test('SRC-10/SRC-11: fromYear → filter=from-pub-date, doiPrefix → filter=prefix (the nber preference)', async () => {
+  const url = new URL(crossref.searchUrl('minimum wage', { limit: 3, fromYear: 2015, doiPrefix: '10.3386' }));
+  assert.equal(url.searchParams.get('filter'), 'from-pub-date:2015,prefix:10.3386');
+  assert.equal(new URL(crossref.searchUrl('x', { doiPrefix: 'not a prefix' })).searchParams.get('filter'), null);
+  // The recorded NBER search: every hit is an NBER working paper.
+  const hits = await crossref.search('minimum wage employment', { limit: 3, doiPrefix: '10.3386' });
+  assert.ok(hits.length > 0);
+  for (const h of hits) {
+    assert.ok((h.doi ?? '').startsWith('10.3386/w'), `${h.doi} is an NBER working paper DOI`);
+    assert.equal(h.type, 'report');
+  }
+});
+
+test('D-19-13: Crossref types map to CSL; JATS abstracts are stripped', () => {
+  assert.equal(crossref.crossrefCslType('journal-article'), 'article-journal');
+  assert.equal(crossref.crossrefCslType('proceedings-article'), 'paper-conference');
+  assert.equal(crossref.crossrefCslType('edited-book'), 'book');
+  assert.equal(crossref.crossrefCslType('book-chapter'), 'chapter');
+  assert.equal(crossref.crossrefCslType('dissertation'), 'thesis');
+  assert.equal(crossref.crossrefCslType('posted-content'), 'preprint');
+  assert.equal(crossref.crossrefCslType('peer-review'), 'other');
+  assert.equal(crossref.crossrefCslType(undefined), undefined);
+  // Review round 3: HTML markup a publisher put inside the JATS as escaped text
+  // (`&lt;b&gt;`) is markup, not prose — stripped like the JATS tags; a bare
+  // `<` or `>` in the text survives.
+  assert.equal(
+    crossref.stripJats('<jats:title>Abstract</jats:title><jats:p>Deep learning allows &lt;b&gt; models &amp; more, for x &lt; y.</jats:p>'),
+    'Deep learning allows models & more, for x < y.',
+  );
+  assert.equal(
+    crossref.stripJats('<jats:sec><jats:title>Background</jats:title><jats:p>One.</jats:p></jats:sec>\r\n<jats:sec><jats:title>Methods</jats:title><jats:p>Two.</jats:p></jats:sec>'),
+    'Background: One. Methods: Two.',
+  );
+  assert.equal(crossref.stripJats('   '), undefined);
+});
+
+test('D-19-13: names — corporate, suffix, mononym; an editor-only work is attributed to its editors', () => {
+  assert.equal(crossref.crossrefPersonName({ name: 'The {ENCODE} Project Consortium' }), '{The ENCODE Project Consortium}');
+  assert.equal(crossref.crossrefPersonName({ family: 'King', given: 'Martin Luther', suffix: 'Jr.' }), 'King, Martin Luther, Jr.');
+  assert.equal(crossref.crossrefPersonName({ given: 'Plato' }), 'Plato');
+  const edited = crossref.crossrefToCandidate({
+    DOI: '10.5555/edited',
+    title: ['An Edited Volume'],
+    editor: [{ family: 'Doe', given: 'Jane' }],
+    type: 'edited-book',
+    ISBN: ['0-226-45808-3', '978-0-226-45808-3'],
+    issued: { 'date-parts': [[2001]] },
+  });
+  assert.ok(edited);
+  assert.deepEqual(edited.authors, ['Doe, Jane']);
+  assert.deepEqual(edited.editors, ['Doe, Jane']);
+  assert.equal(edited.type, 'book');
+  assert.equal(edited.isbn, '9780226458083');
+  // Title marked RETRACTED: without a notice is still retracted.
+  const marked = crossref.crossrefToCandidate({ DOI: '10.5555/m', title: ['RETRACTED: A Study'], author: [{ family: 'X' }] });
+  assert.equal(marked?.retraction_status, 'retracted');
+  // Nobody to cite → no candidate.
+  assert.equal(crossref.crossrefToCandidate({ DOI: '10.5555/n', title: ['T'] }), null);
 });
 
 test('RUN-03: an unrecorded DOI or query is a typed offline miss — never the first search item', async () => {
@@ -54,4 +196,126 @@ test('RUN-03: an unrecorded DOI or query is a typed offline miss — never the f
   await assertOfflineMiss(() => crossref.search('medieval Icelandic sagas', { limit: 10 }), 'search miss');
   // Exact means exact: the recorded query at a different result count is a different request.
   await assertOfflineMiss(() => crossref.search(RECORDED_QUERY, { limit: 7 }), 'limit mismatch');
+});
+
+test('SRC-17: a search whose 200 is not a Crossref answer reports failed and returns []', async () => {
+  await liveLane(async (agent) => {
+    const q = uniq('crossref search invalid');
+    agent
+      .get('https://api.crossref.org')
+      .intercept({ path: (p: string) => p.startsWith('/works?query='), method: 'GET' })
+      .reply(200, JSON.stringify({ statusCode: '403', 'message-type': 'not-polite' }), { headers: { 'content-type': 'application/json' } });
+    const reasons: string[] = [];
+    assert.deepEqual(await crossref.search(q, { limit: 3, onFailure: (r) => reasons.push(r) }), []);
+    assert.deepEqual(reasons, ['response is not a Crossref answer (an error document: an inner statusCode 403)']);
+  });
+});
+
+test('a Crossref record with no author or editor (a standard) is a PERMANENT failure: never not-found, never "retry"; Pass 1 says so', async () => {
+  await liveLane(async (agent) => {
+    const t = uniq('crossref-standard');
+    const doi = `10.5555/${t}`;
+    agent
+      .get('https://api.crossref.org')
+      .intercept({ path: (p: string) => decodeURIComponent(p).startsWith(`/works/10.5555/${t}`), method: 'GET' })
+      .reply(
+        200,
+        JSON.stringify({
+          status: 'ok',
+          'message-type': 'work',
+          message: { DOI: doi, type: 'standard', title: ['IEEE Standard for Floating-Point Arithmetic'], issued: { 'date-parts': [[2008]] } },
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      )
+      .persist();
+    const r = await crossref.lookupById(doi);
+    assert.equal(r.kind, 'failed');
+    assert.equal(r.kind === 'failed' ? r.permanent : undefined, true);
+    assert.match(r.kind === 'failed' ? r.reason : '', /no author or editor.*asking again gives the same answer/);
+    await assert.rejects(() => crossref.fetchById(doi), (e: { permanent?: boolean }) => e.permanent === true);
+
+    const { runPass1 } = await import('../../bin/lib/verify/pass1.js');
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-pass1-standard-'));
+    const bib = path.join(dir, 'CITATIONS.bib');
+    fs.writeFileSync(bib, `@misc{ieee2008,\n  author = {{IEEE}},\n  title = {IEEE Standard for Floating-Point Arithmetic},\n  year = {2008},\n  doi = {${doi}},\n}\n`);
+    const [v] = await runPass1('Floats round [@ieee2008].', bib);
+    assert.equal(v!.verdict, 'UNVERIFIABLE', 'still blocking');
+    assert.match(v!.reason, /no author or editor/);
+    assert.doesNotMatch(v!.reason, /re-run verify once the lookup answers/, 'no false promise that a retry helps');
+  });
+});
+
+threeWayContract({
+  adapter: 'crossref',
+  lookupById: crossref.lookupById,
+  fetchById: crossref.fetchById,
+  origin: 'https://api.crossref.org',
+  idFor: (t) => `10.5555/${t}`,
+  pathPrefixFor: (t) => `/works/10.5555/${t}`,
+  found: (t) => ({
+    body: {
+      status: 'ok',
+      'message-type': 'work',
+      message: {
+        DOI: `10.5555/${t}`,
+        title: ['A Found Work'],
+        author: [{ family: 'Found', given: 'Fay' }],
+        issued: { 'date-parts': [[2020]] },
+        'container-title': ['Journal of Tests'],
+        type: 'journal-article',
+      },
+    },
+  }),
+  checkFound: (c, t) => {
+    assert.equal(c.doi, `10.5555/${t}`);
+    assert.equal(c.venue, 'Journal of Tests');
+    assert.equal(c.retraction_status, 'clear');
+  },
+  invalid: (m) => ({ body: { statusCode: '403', 'message-type': 'not-polite', message: `add a mailto ${m}` } }),
+  offlineMissId: '10.9999/three-way-offline-miss',
+});
+
+test('SRC-05 / SRC-12 (review round 2): registrar markup — an <i> title and an &amp; journal — becomes plain text, and the bib round-trips it', async () => {
+  const pnas = await crossref.lookupById('10.1073/pnas.74.11.5041');
+  assert.equal(pnas.kind, 'found');
+  if (pnas.kind !== 'found') return;
+  assert.equal(pnas.candidate.title, 'Translation of Drosophila melanogaster sequences in Escherichia coli');
+  const jaac = await crossref.lookupById('10.1016/j.jaac.2010.05.017');
+  assert.equal(jaac.kind, 'found');
+  if (jaac.kind !== 'found') return;
+  assert.equal(jaac.candidate.venue, 'Journal of the American Academy of Child & Adolescent Psychiatry');
+  for (const c of [pnas.candidate, jaac.candidate]) {
+    assert.doesNotMatch(`${c.title} ${c.venue ?? ''} ${c.publisher ?? ''}`, /<\/?i>|&amp;|&[a-z]+;/, 'no markup, no entities');
+  }
+  // The bib writer, and citation-js reading it back.
+  const bib = renderBibtex([
+    { ...pnas.candidate, citekey: 'rambach1977' },
+    { ...jaac.candidate, citekey: 'merikangas2010' },
+  ] as Parameters<typeof renderBibtex>[0]);
+  assert.doesNotMatch(bib, /<i>|&amp;|\\textless|\\&amp;/);
+  const back = parseBibSync(bib);
+  const byId = new Map(back.map((e) => [String((e as { id?: string }).id), e as { title?: string; 'container-title'?: string }]));
+  assert.equal(byId.get('rambach1977')?.title, 'Translation of Drosophila melanogaster sequences in Escherichia coli');
+  assert.equal(byId.get('merikangas2010')?.['container-title'], 'Journal of the American Academy of Child & Adolescent Psychiatry');
+  // An entry stored before the adapters cleaned their strings still renders plain.
+  const legacy = renderBibtex([{ ...pnas.candidate, citekey: 'legacy1977', title: 'The Genome Sequence of <i>Drosophila melanogaster</i>', venue: 'Child &amp; Adolescent Psychiatry' }] as Parameters<typeof renderBibtex>[0]);
+  assert.match(legacy, /title = \{The Genome Sequence of \{Drosophila\} melanogaster\}/, 'plain text, the proper noun protected (SRC-12)');
+  assert.match(legacy, /Child \\& Adolescent Psychiatry/);
+  assert.equal((parseBibSync(legacy)[0] as { title?: string }).title, 'The Genome Sequence of Drosophila melanogaster');
+});
+
+test('SRC-05 (review round 2): Pass 1 compares plain titles — a bib title without the registrar\'s <i> markup verifies OK', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pensmith-crossref-markup-'));
+  mkdirSync(join(dir, '.paper'));
+  const bibPath = join(dir, '.paper', 'CITATIONS.bib');
+  writeFileSync(
+    bibPath,
+    '@article{rambach1977,\n  author = {Rambach, Alain and Hogness, David S.},\n  title = {Translation of Drosophila melanogaster sequences in Escherichia coli},\n  doi = {10.1073/pnas.74.11.5041},\n  year = {1977},\n}\n',
+  );
+  const [r] = await runPass1('A claim [@rambach1977].\n', bibPath);
+  assert.equal(r?.verdict, 'OK', r?.reason);
+  assert.equal(r?.titleJW, 1);
 });

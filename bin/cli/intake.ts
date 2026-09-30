@@ -40,6 +40,8 @@ import { complete, assertLlmConfigured } from '../lib/anthropic.js';
 import { buildPromptRequest, requestHints, type PromptJson } from '../lib/prompt-request.js';
 import { tryReadPaperConfigSync, readIntakeAnswersFile, writeIntakeConfig } from '../lib/config.js';
 import type { IntakeClarification } from '../lib/llm-contracts.js';
+import { resolveByoDirArg, recordByoPdfDir, listPdfsInDir, ingestByoPdfs, describeByoOutcome } from '../lib/byo-ingest.js';
+import { approveByoFolder } from '../lib/own-source-approvals.js';
 import { paperDir, projectRoot } from '../lib/paths.js';
 import { resolveAssignment, type ResolvedAssignment } from '../lib/assignment.js';
 import { initState, loadState, StateAlreadyExistsError } from '../lib/state.js';
@@ -298,6 +300,29 @@ function followUpNote(f: FollowUpAnswer, yolo: boolean): string {
   return `${f.answer || '(no suggestion)'} — the clarifier's suggested answer, not asked (${yolo ? '--yolo' : 'no terminal'})`;
 }
 
+/**
+ * SRC-15 (D-19-21): `new --pdfs <dir>` — record the folder as `[sources]
+ * byo_pdf_dir` (and, in the data dir, the user's approval to read it for this
+ * paper) and ingest every PDF in it through byo-ingest.ts (hashed,
+ * identified, tagged bring-your-own; an unidentified PDF is kept unhydrated
+ * with a warning). One line per PDF; a PDF that cannot be ingested never
+ * fails intake.
+ */
+async function ingestByoFolderForNew(cwd: string, dir: string): Promise<void> {
+  const stored = await recordByoPdfDir(cwd, dir);
+  // The user named the folder on the command line: research may re-read it
+  // for this paper (own-source-approvals.ts; a folder inside the project
+  // needs no record).
+  await approveByoFolder(cwd, dir);
+  const files = await listPdfsInDir(dir);
+  process.stdout.write(`pensmith new: bring-your-own: ${files.length} PDF(s) in ${stored} (recorded as [sources] byo_pdf_dir)\n`);
+  const outcomes = await ingestByoPdfs(cwd, files, { provenance: 'byo' });
+  for (const o of outcomes) {
+    const d = describeByoOutcome(o, 'pensmith new');
+    (d.stream === 'stdout' ? process.stdout : process.stderr).write(`${d.line}\n`);
+  }
+}
+
 export const intakeCommand = defineCommand({
   meta: {
     name: 'new',
@@ -369,6 +394,15 @@ export const intakeCommand = defineCommand({
       description: 'Accept the suggested defaults for every unanswered intake question (and print them).',
       default: false,
     },
+    // SRC-15 (D-19-21): a folder of the user's own PDFs. Each is hashed,
+    // identified (only a title or identifier leaves the machine) and added to
+    // LIBRARY.json tagged bring-your-own; the folder is recorded as
+    // `[sources] byo_pdf_dir` so research picks up files added later.
+    pdfs: {
+      type: 'string',
+      description: 'A folder of your own PDFs to add as sources (bring-your-own).',
+      valueHint: 'dir',
+    },
   },
   async run({ args }) {
     const a = args as Record<string, unknown>;
@@ -379,6 +413,8 @@ export const intakeCommand = defineCommand({
     }
 
     const cwd = projectRoot();
+    // SRC-15: an unusable --pdfs folder is a usage error before anything is sent or written.
+    const byoDir = typeof a['pdfs'] === 'string' ? resolveByoDirArg(a['pdfs'] as string) : null;
     const yolo = a['yolo'] === true;
     const prompting = canPrompt();
     const questions = intakeQuestions();
@@ -607,6 +643,8 @@ export const intakeCommand = defineCommand({
       piiRedaction: piiOn,
       styleSamplesDir: samplesDir,
     });
+    // SRC-15 (D-19-21): bring-your-own PDFs, after STATE.json, INTAKE.md and config.toml exist.
+    if (byoDir !== null) await ingestByoFolderForNew(cwd, byoDir);
     let paperId: string | null = null;
     try {
       paperId = (await loadState(cwd)).paperId;

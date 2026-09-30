@@ -213,15 +213,18 @@ Each subsection below describes a workflow stage. Most are invoked transparently
 
 ### 7.2 Research (`/pensmith research`)
 
-- Reads the brief (`.paper/INTAKE.md`, §7.1) + config.toml; its queries are seeded from the brief's structured topic and the assignment, never from clarifier text (GRND-03).
-- **Topic disambiguation gate**: spawns a tiny disambiguation subagent that scans the assignment for ambiguous terms (e.g., "transformer" could be ML or EE). If ambiguous, asks the user before searching. Saves wasted research passes.
-- Generates 5–10 focused search queries from the assignment.
-- Spawns one `pensmith-source-researcher` subagent per query (Tier 1) or loops sequentially (Tier 2). Each returns 3–5 candidates.
-- **If user provided BYO PDFs** (§9): also ingests, parses, and merges them into the candidate pool, tagged `bring-your-own`.
-- **If Zotero MCP is detected** (§11): also pulls relevant items from the user's Zotero library, tagged `zotero`.
-- `pensmith-source-evaluator` scores candidates for relevance, recency, policy compliance; dedupes; tiers (peer-reviewed / preprint / book / gov-report / other).
-- **Approval gate**: shows the curated list, lets the user prune/approve/add.
-- Writes `.paper/RESEARCH.md` (curated source list with abstracts + why-relevant notes) and `.paper/CITATIONS.bib` (BibTeX seed).
+- Reads the paper's brief (`.paper/INTAKE.md`, §7.1: topic, discipline, assignment) + config.toml (`[sources]`, `[project] discipline_preset`); its queries are seeded from the brief's structured topic and the assignment, never from clarifier text (GRND-03).
+- **Topic disambiguation gate**: the `topic-disambiguator` step reads the topic and the assignment for ambiguous terms (e.g., "transformer" could be ML or EE) and proposes 1–3 scopes, each with a label, a one-line description and its queries. If the topic is ambiguous (or more than one scope came back), the user picks one before anything is searched (registry gate `research-scope`): a select in a terminal, `--scope <n|text>` non-interactively (a scope number, or words from its label or description; a value that names no scope is a usage error listing them), and `--yolo` takes scope 1 and says so. Saves wasted research passes.
+- Generates 5–10 focused search queries (at most 8 words each): a scope's queries are clamped to 10 (`--queries <n>` lowers the cap) and a short scope is padded from a deterministic expansion of the topic's keywords (every expanded query keeps the topic's subject; never a lone keyword). Without a model (`PENSMITH_NO_LLM`, `--dry-run`) that deterministic expansion is the query list, and the run says so on stdout and in RESEARCH.md.
+- Queries go to the discipline preset's preferred adapters first (§8 source preference, mapped to adapters: `nber` is Crossref restricted to NBER's DOI prefix 10.3386; JSTOR, APA PsycNET and PhilPapers are reached through OpenAlex / Crossref / PubMed coverage), then the rest of the default five (OpenAlex, Semantic Scholar, Crossref, arXiv, PubMed); `[sources] allowed_databases` restricts the plan to exactly the listed databases. Spawns one `pensmith-source-researcher` subagent per query (Tier 1) or loops sequentially (Tier 2).
+- **Every adapter's outcome is reported**, on stdout and in RESEARCH.md, per adapter and per query: a result count, or the reason it returned nothing — `failed (<reason with its hint>)` (e.g. `HTTP 429 — rate limited; set PENSMITH_S2_API_KEY`), `offline: no recorded fixture`, `skipped (not in allowed_databases)`, `skipped (not configured)`. A failed adapter never reads as "no results".
+- **The user's own sources first** *(amended in v1.0.0 Phase 19, SRC-15 / SRC-16)*: new PDFs in `[sources] byo_pdf_dir` (§9) are ingested — hashed, identified from an identifier or the title only, tagged `bring-your-own` — and, when Zotero is configured (§11) and `[sources] zotero_collection` names a collection, that whole collection is pulled, tagged `zotero`; without a collection, Zotero is searched per query like any other adapter. The user's own sources go into the library as they are read and are rows of the per-adapter report; the source evaluator annotates them (tier, relevance, why-relevant note) with the search candidates, but the user chose them, so neither the evaluator nor pruning drops them.
+- Candidates are deduped (DOI, then title) and tiered (peer-reviewed / preprint / book / gov-report / other): deterministically from the registrar's metadata wherever it decides the tier (a journal or conference article, a preprint server or an arXiv-only record, a book or an ISBN, a report from a government publisher or domain, news and web pages), by the source evaluator otherwise. The `[sources]` policy (§10) is then enforced deterministically; an excluded candidate is listed with the rule that excluded it.
+- `pensmith-source-evaluator` judges each remaining candidate — keep or reject, a short reason, a relevance score (0–1) and a tier — with the candidates sent once, at most 150 per call. Its rejections are respected: when it rejects every candidate, research reports `no relevant sources` with guidance and keeps none. A candidate the evaluator could not judge (a failed call, a missing verdict) is kept as "not evaluated", with a disclosure. Kept sources rank by relevance, ties by source preference.
+- **Approval gate** (`research-prune`): shows the kept candidates (preselected) and the evaluator's rejections (unselected, with the reason), each with its tier, year and an abstract excerpt, and lets the user prune/approve/add — sources the user adds (DOIs, arXiv ids, `PMID:` / `isbn:` identifiers, URLs) are identified exactly as `pensmith add` identifies them before the library is written, tagged `added`. `--yolo` keeps the evaluator's picks and adds nothing.
+- Zero usable sources (none found, all excluded by the policy, all rejected, none kept) exits non-zero naming why; LIBRARY.json is left unchanged and the research log is still written.
+- Cross-checks retractions before the library write: a retracted source is flagged (and warned about), one whose lookup failed is listed as "retraction status unknown".
+- Merges the kept sources into `.paper/LIBRARY.json` with their type, tier, relevance and why-relevant note (the evaluator's reason), rendering `.paper/CITATIONS.bib` (BibTeX seed) and `.paper/CITATIONS.ris` from it. Writes `.paper/RESEARCH.md`: the research log (scope, queries, per-adapter and per-query outcomes, exclusions, retractions) and the curated source list rendered from LIBRARY.json — per source the formatted reference, tier, relevance, provenance tags (search, bring-your-own, zotero, added, plan-research), why-relevant note and abstract. The user's notes below the log are never touched.
 - Each citation gets a `last_verified` ISO timestamp (§7.12).
 
 ### 7.3 Outline (`/pensmith outline`)
@@ -251,13 +254,14 @@ This is the equivalent of GSD's `roadmap` step — it produces the section struc
 - For each claim the section will make: identifies which sources support it, what evidence is required, what counterexamples should be addressed.
 - The planner is fed the intake brief, the section's OUTLINE row (title, purpose, role, dependencies, word target, voice), short summaries of the claims its dependencies already planned, and only the section's own sources: its allowed set is the OUTLINE row's sources, its PLAN.md `assigned_sources` and its `plan --research` additions, minus the sources the citation verifier cannot check yet (§7.3, D-18-37), which `plan` names in a WARN. Its reply is validated — the section it names, its dependencies, and every citekey within the section's sources — with one corrective turn; a reply that is still invalid writes nothing and leaves the stub as it was.
 - Optional `--revise` flag: re-plans an existing section based on new feedback (e.g., from a verification gap).
-- Optional `--research <query>` flag: triggers a section-scoped research pass for additional sources if the outline allocation is insufficient.
+- Optional `--research <query>` flag: triggers a section-scoped research pass for additional sources if the outline allocation is insufficient — the query and the query joined to the section title, through the same adapters, tiers, policy and evaluator as §7.2; the approved hits (registry gate `plan-research`, `--yolo` adds every kept hit) join LIBRARY.json and ONLY that section's `assigned_sources`, a section-scoped `RESEARCH-LOG.md` entry records the pass, and the curated RESEARCH.md keeps its content (only its source list is refreshed). Zero hits are reported with each adapter's reason (non-zero exit).
 - Writes `.paper/sections/<N>/PLAN.md` (claim-source mapping, paragraph-level structure, target word count, voice hints) with `status: planned` and no `stub` flag. A stub routes to `plan`; a planned section routes to `write`. (Before v1.0 a planned PLAN.md without `stub` routed to `plan`; only hand-made files had that shape.)
 
 ### 7.6 Write section (`/pensmith write <N>` — equivalent to `/gsd:execute-phase`)
 
 - Reads `sections/<N>/PLAN.md`. A section still holding the outline's stub is not planned, and `write` refuses it, naming `pensmith plan <N>`.
 - The write subagent's prompt receives ONLY the sources mapped to this section (source-isolation enforced by directory structure, not just prompt convention). The request is built only from a validated drafter input (the brief, the section's outline entry, its plan, its voice and its sources' records), and every draft is checked: a draft that cites a source outside the section gets one corrective turn, and if it still does, it is not kept — it is saved as `DRAFT.rejected.md`, the section is marked `failed` with the reason, and no other section is touched.
+- **Direct quotes only from sources with real text** *(amended in v1.0.0, GRND-14)*: each source record tells the drafter whether its full text is available to the verifier — a bring-your-own PDF that still matches its recorded hashes, the open-access PDF Unpaywall confirmed for its DOI, or its arXiv PDF. The drafter quotes directly only from those and paraphrases the others; a draft that quotes a source without full text gets the same one corrective turn and, if it persists, the same rejection.
 - Drafts the section.
 - Writes `.paper/sections/<N>/DRAFT.md`.
 - **Style-match (§7.18)** is applied per-section if enabled. A voice the outline gives the section takes precedence over the style-match profile.
@@ -271,8 +275,8 @@ Bounded to a single section. Four passes, all scoped to this section's draft:
 **Pass 1 — DOI/identifier integrity (deterministic):**
 - Extract every DOI / arXiv ID / PMID from the section.
 - DOI normalization (`bin/lib/doi.js` — strips prefixes, normalizes case) before lookup.
-- Re-fetch each via Crossref / arXiv / PubMed.
-- 404 → `FABRICATED` (hard fail; blocks compile).
+- Re-fetch each via Crossref / arXiv / PubMed. *(Amended in v1.0.0 Phase 19 review round 1 — SRC-11, SRC-13: an entry without a DOI is re-fetched at its own registrar — its arXiv id at arXiv, its PMID at PubMed, its ISBN at the books registries — so a book or an arXiv-only preprint can pass; a failed lookup is UNVERIFIABLE and blocks.)*
+- 404 → `FABRICATED` (hard fail; blocks compile) — for a DOI-less entry, only when every registrar it names answers not-found.
 - Fuzzy-match cited authors/year/title against canonical metadata; mismatch → `MIS-CITED`. *Author/title verification is part of Pass 1, not optional.*
 
 **Pass 2 — Claim support (LLM-judged):**
@@ -377,6 +381,8 @@ Same patterns as GSD:
 
 For when the researcher misses something the user knows about. Accepts a DOI / arXiv ID / URL / local PDF path; verifies it; adds to RESEARCH.md. **Surfaces a "should I remap sections to use this?" prompt** so the user doesn't end up with a stranded source not mapped to any section.
 
+*(Amended in v1.0.0 Phase 19 — SRC-13, SRC-14, SRC-15; reason: `add` hydrated the wrong work from a PDF's licence line, missed arXiv / PMID / ISBN inputs, and remapped every section.)* The argument is classified before any request: a DOI (including `DOI: 10.…` and percent-encoded doi.org links), an arXiv id (new or old style, versioned, `arxiv.org/abs|pdf` links — never downloaded), `PMID:<id>`, `isbn:<ISBN>` (or a checksum-valid ISBN), any other URL, a local PDF, or a folder of PDFs (bring-your-own ingest, §9); anything else is a usage error. An identifier is resolved at its registrar with three outcomes — found, not found, or a failed lookup that is reported and never read as "not found". A URL is fetched through the one transport (SSRF guard, redirects re-checked, size cap); a `.pdf` link that answers HTML is `not a PDF`, and a landing page must declare its identifier in its own `<meta>` tags. A PDF is identified from its embedded identifiers, then the arXiv stamp or a DOI on its first pages, then its title and first author — accepted only above the Pass-1 title and author thresholds; otherwise `add` refuses with `could not confidently identify this PDF — pass its DOI: pensmith add <doi> --pdf <file>` and changes nothing, so a wrong work is never added. `add <id> --pdf <file>` attaches the PDF as the work's bring-your-own copy. The remap is a multi-select that preselects only the sections whose title, purpose or plan share topic words with the source; `add --remap <key> --section N` changes only §N, and `--yolo` or a run without a terminal skips the remap and prints the command. Every message and PLAN.md use the real citekey, collision suffix included.
+
 ### 7.16 Sketch / thinking-partner mode (`/pensmith sketch`)
 
 Entry point for users who haven't found their angle yet.
@@ -441,10 +447,13 @@ For power users / batch processing / CI testing:
 | `sketch-confirm` | Proceed to intake with this thesis? | skip: proceed to intake | refuse: 3 | 3 | ERGO-05 |
 | `assignment-pickup` | Use the assignment file in this folder? | skip: use the file | skip: 0 | 0 | GRND-01 |
 | `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 |
-| `plan-research` | Run this section-scoped research? | skip: run it | refuse: 3 | 3 | GRND-17 (planned) |
+| `plan-research` | Add these research hits to the section? | skip: add every hit to the section | refuse: 3 | 3 | GRND-17 |
 | `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |
 | `quote-accept` | Accept this quote match? | never | refuse: 3 | 3 | VRFY-20 (planned) |
 | `reoutline` | Re-outline a paper that already has drafts? | skip: re-outline (a model re-outline also needs --force) | refuse: 3 | 3 | GRND-09 |
+| `byo-folder` | Read the PDFs in this folder outside the paper and copy them into it? | never | skip: 0 | 0 | SRC-15 |
+| `zotero-collection` | Pull this Zotero collection from your library into the paper? | never | skip: 0 | 0 | SRC-16 |
+| `pdf-attach-unmatched` | Attach this PDF although its first page does not show the work's title and first author? | never | refuse: 3 | 3 | SRC-13 |
 
 Automatic revision of a failed section is not a gate `--yolo` can open: it is its own opt-in, `--auto-revise` or `[project] auto_revise = true` (REV-01). Detector consent persisted in `config.toml` (EXP-17) is the only way that gate is answered without asking.
 
@@ -492,6 +501,8 @@ Override examples (parsed deterministically from the assignment and every intake
 - "I need a literature review section before methods" at intake → modifies sectioning (the note reaches the outline).
 - Edit `.paper/config.toml` directly for power users.
 
+**How the source preferences are reached (Phase 19, D-19-14).** `books` is the books adapter: Open Library title/author search and ISBN lookups, with Google Books as the keyless ISBN fallback; it returns `@book` records with publisher, year and ISBN-13. `NBER` is Crossref search restricted to NBER's DOI prefix `10.3386` (its working papers are registered there). JSTOR and APA PsycNET offer no free, terms-of-service-compliant search API, and PhilPapers' documented API has no search endpoint, needs a registered key and blocks automated clients, so pensmith does not call them: their content is reached through the coverage of OpenAlex, Crossref and PubMed (`jstor` → OpenAlex + Crossref, `psycnet` → PubMed + OpenAlex, `philpapers` → OpenAlex). The "(if configured)" preferences above therefore name the substitutes that run, never a service pensmith would scrape.
+
 ---
 
 ## 9. Bring-your-own sources (BYO PDFs)
@@ -515,14 +526,23 @@ Pensmith then:
 
 Edge cases documented in PRIVACY.md: PDF contents stay local; only Crossref/OpenAlex hydration calls leave the box (and only the title — not the full text).
 
+*(Amended in v1.0.0 Phase 19 — SRC-15, SEC-02, D-19-21; reason: an ingested PDF's text must be trusted only while the PDF is unchanged, and hydration must never pick the wrong work.)* The folder is recorded as `[sources] byo_pdf_dir`; `pensmith add <folder>` and `pensmith add <file.pdf>` use the same path. Per PDF:
+1. The size cap and the `%PDF-` header are checked and the PDF's sha256 taken; re-ingest is idempotent by it.
+2. Text and metadata are extracted in a worker thread that is terminated on timeout (pdf-parse; PyMuPDF when pdf-parse fails or finds no text; a PDF with no extractable text is image-only).
+3. Identification uses, in order, the PDF's embedded Info/XMP identifiers, the arXiv stamp or a DOI on its first pages (accepted only when the record is the PDF's own work — its title and first author match the PDF's, or its title is printed as the PDF's title with that author below it; a DOI in a footnote or reference list names a cited work and is never accepted), then its title and first author (from real metadata or a layout heuristic that skips licence and boilerplate lines) searched at Crossref, then OpenAlex, accepted only above the Pass-1 title and first-author thresholds and when the record's year is plausible for the PDF (a record dated more than two years after the year the PDF shows, or a preprint dated after it, is a later re-post; when only such a re-post matched, or the OpenAlex search failed, the title is searched at arXiv under the same rules). Only an identifier or the title is sent.
+4. An identified PDF enters LIBRARY.json through the one library writer with provenance `byo` (tag `bring-your-own`); a later research hit for the same work merges into it. A PDF with no confident match is kept with its own metadata, `hydrated: false`, and a warning — never as a search hit.
+5. The PDF is kept at `.paper/sources/<citekey>.pdf`; LIBRARY.json records `byo: {file, sha256, text_sha256, asserted}`. `add <id> --pdf <file>` checks that the PDF shows that work (its own identifier, or its title and first author); one that does not is attached only after the user confirms it in a terminal (registry gate `pdf-attach-unmatched`, never `--yolo`) and is recorded `asserted` — its text is never evidence. A work's identified copy is replaced only with `--replace-pdf`.
+5a. A `byo_pdf_dir` inside the project folder is the paper's own. `.paper/config.toml` travels with a shared paper, so a folder outside the project — and any `[sources] zotero_collection` — is read only once the user approved it for that paper (`new --pdfs <dir>`, or the `byo-folder` / `zotero-collection` gates, never `--yolo`; approvals live in the user data folder).
+6. Its text is read only through a re-hash (`bin/lib/byo-text.ts`): a PDF whose sha256 changed makes the text unavailable; the text is served from a cache in the user data folder only when its hash equals `text_sha256`, otherwise the PDF is extracted again and checked; a loose `.paper/sources/<citekey>.txt` is never read (S-17). Pass 3 checks a quote against this text first (verify, compile and done); a quote checkable against a recorded copy that is later moved, deleted or edited stays blocking (NOT_FOUND, naming the way back) — editing a local file never turns a verdict into a pass. Pass 2 sends its passages nearest each claim to the model provider only when the user sets `[verification] send_byo_passages = true` (off by default, so the §9 edge case above holds). The drafter's full-text flag (`bin/lib/full-text.ts`, GRND-14) reads the recorded hashes only (a non-asserted BYO PDF with a text hash), the same basis Pass 3 uses; it never reads or sends the text.
+
 ---
 
 ## 10. Per-project config (`.paper/config.toml`)
 
-`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 1`. An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
+`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 2` (v2 since Phase 19: `[verification] send_byo_passages` and the `books` / `nber` values of `[sources] allowed_databases`). An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent, except where a comment marks the value as an example. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
 
 ```toml
-schema_version = 1                   # MANDATORY — see §14 NFRs
+schema_version = 2                   # MANDATORY — see §14 NFRs
 
 [project]
 # `pensmith new` writes mode, goal, class, discipline_preset, citation_style,
@@ -541,19 +561,20 @@ counterargument_required = true
 pii_redaction = false                # if true, intake redacts PII before any LLM call
 
 [sources]
-require_doi = true
+require_doi = true                   # require a registrar identifier: a DOI, an ISBN (books), an arXiv id (preprints) or a PMID — Pass 1 can re-check each; the History, Literature and Philosophy presets prefer books, which carry ISBNs, not DOIs
 allow_preprints = true
 allow_books = true
 allow_gov_reports = true
-allow_news = false
-allowed_databases = ["openalex", "semanticscholar", "crossref", "arxiv", "pubmed"]
+allow_news = false                   # newspaper and magazine articles
+allowed_databases = ["openalex", "semanticscholar", "crossref", "arxiv", "pubmed"]  # example — unset: the preset's source preference (§8), then these five; values: openalex | semanticscholar | crossref | arxiv | pubmed | books | nber (Crossref, DOI prefix 10.3386) | zotero
 byo_pdf_dir = ""                     # path to user-provided PDFs, optional
-zotero_collection = ""               # optional Zotero collection name, if Zotero MCP connected
-min_year = 2010
-peer_reviewed_only = false
+zotero_collection = ""               # optional Zotero collection name: research pulls this whole collection (Zotero Web / local API, or the Zotero MCP server in Claude Code)
+min_year = 2010                      # example — unset: no year filter (passed to the adapters as a search filter where they have one)
+peer_reviewed_only = false           # true: only sources whose tier is peer-reviewed (an unknown tier is excluded)
 
 [verification]
 fetch_full_text = true
+send_byo_passages = false           # Pass 2 may send your own PDFs' passages nearest a claim to the model (off: §9)
 flag_threshold = "low"               # low | medium | high
 recheck_after_days = 30
 plagiarism_check = true              # free distinctive-phrase check
@@ -621,33 +642,42 @@ session_bodies = "full"              # full | redacted — redacted keeps hashes
 
 ## 11. Ecosystem composition
 
-At startup, pensmith probes for and adapts to other installed tools:
+Pensmith detects and adapts to other tools the user has installed. Nothing here is required; each is detected when it is needed (`pensmith doctor`, the `paper://capabilities` resource and the step that uses it), not cached.
 
-- **Zotero MCP** (if installed AND authenticated): exposes a `pull-from-zotero` source provider. Auth status check, not just presence.
+- **Zotero** (SRC-16, D-19-24) — the user's own library as a source, read-only, in both tiers:
+  - *Tier 2 (CLI):* the Zotero Web API (`api.zotero.org`) with `ZOTERO_API_KEY` (the user id comes from `GET /keys/current`; the key is sent only as the `Zotero-API-Key` header, never logged, cached or recorded), `ZOTERO_GROUP_ID` for a group library (a public group needs no key), or the Zotero 7 local API at exactly `http://127.0.0.1:23119` when `PENSMITH_ZOTERO_LOCAL=1` (Zotero's "Allow other applications on this computer to communicate with Zotero" setting). `[sources] zotero_collection` limits the pull to one collection, by name. The adapter's registry key is `zotero`.
+  - *Tier 1 (Claude Code):* Claude reads Zotero through the user's own Zotero MCP server (e.g. [54yyyu/zotero-mcp](https://github.com/54yyyu/zotero-mcp)) and submits the items to the MCP tool `paper_ingest_zotero_items({paperRoot, items, collection?, approveCollection?})`, which validates every item (one malformed item rejects the call with its schema error and writes nothing) and ingests them through `bin/lib/zotero-ingest.ts`. Items read from the paper's `[sources] zotero_collection` pass `collection`; until the user approved that collection for the paper (Claude asks with AskUserQuestion, never assumed, never `--yolo`, and then passes `approveCollection: true`, which records the approval), every call is refused with exit 3 and nothing added — with or without `collection` — as the CLI's Zotero search reads nothing then (§9 step 5a).
+  - Both tiers normalize items the same way (creators → authors and editors, item type → CSL type, DOI, ISBN, arXiv / PMID from `extra`, venue, volume, issue, pages, publisher, the item's `zotero` ref), upsert them through the one library writer with provenance `zotero` (an item whose DOI is already in the library merges into that entry) and refresh RESEARCH.md; `tests/tier-contract/zotero-ingest.test.ts` asserts the same LIBRARY entries from both.
+  - `pensmith doctor` reports `Zotero: authenticated` only after `/keys/current` answers 200 (an auth check, never key presence), `Zotero: key rejected` on 403, whether the local API or a group answers, and whether a Zotero MCP server is configured for Claude Code (`.claude.json` user or project scope, the project's `.mcp.json`, legacy `mcp_servers.json`) — else `Zotero: not detected`.
+- **GROBID** (optional, SRC-15): when `PENSMITH_GROBID_URL` names a GROBID server on the user's own machine (a loopback URL; anything else is ignored with a warning, because the PDF is uploaded to it), PDF identification (bring-your-own folders, `add <file.pdf>` and a PDF `add` fetched from a URL) asks it for the header (title, authors, DOI, arXiv id) first — its identifiers are looked up first and its title and authors replace the layout heuristic's — with consolidation off so the server itself calls out to nothing.
 - **Pandoc** (if installed): enables `.pdf` and richer `.docx` exports. Else degrades to markdown-based `.docx`, skips PDF with a clear note.
 - **The user's installed humanizer skill**: pensmith auto-detects and uses it. If absent, prints a clear note and skips with no error.
 
-Detection cached in `.paper/CAPABILITIES.json` for the run.
+The two local services (the Zotero local API and GROBID) are the only loopback addresses the egress gate allows besides a configured local model endpoint, and only the environment can enable them — a paper's own files cannot.
 
 ---
 
 ## 12. External dependencies (the source clients)
 
-All free, no keys required for the basics. Polite User-Agent with `PENSMITH_CONTACT_EMAIL`.
+All free; no key is required for the basics, and each optional key raises a service's limits. Crossref, OpenAlex and Unpaywall receive a polite `User-Agent: pensmith/<version> (mailto:<contact email>)` (the address from `PENSMITH_CONTACT_EMAIL`, or the variable `[network] contact_email_env` names, D-19-09); every other service gets the plain `pensmith/<version>`. The per-service rates, what each service receives, and the key rules are in [docs/SOURCES.md](docs/SOURCES.md).
 
-| Source | Endpoint | Use |
-|---|---|---|
-| OpenAlex | `api.openalex.org` | Primary search backend |
-| Crossref | `api.crossref.org` | DOI verification + canonical metadata for fuzzy match |
-| arXiv | `export.arxiv.org/api` | STEM preprints |
-| PubMed | NCBI E-utilities | Biomedical |
-| Semantic Scholar | `api.semanticscholar.org` | Citation graph (optional, rate-limited) |
-| Unpaywall | `api.unpaywall.org` | OA full-text PDF discovery |
-| GPTZero | `api.gptzero.me` (free tier) | Honesty score (§7.11) |
-| Retraction Watch | `api.crossref.org/works?filter=updates:<doi>` (the Retraction Watch data Crossref serves as `update-to` notices) | Recheck flagging (§7.12); an unanswerable lookup is "retraction status unknown", never "not retracted" |
-| DuckDuckGo HTML | (no formal API) | Free distinctive-phrase plagiarism check (§7.17) |
+| Source | Endpoint | Use | Rate pensmith keeps (per host) |
+|---|---|---|---|
+| OpenAlex | `api.openalex.org` | Primary search backend; `OPENALEX_API_KEY` (free) sent as `api_key` | 10/s within the key's daily budget |
+| Crossref | `api.crossref.org` | DOI verification + canonical metadata for fuzzy match; search | 3/s, lowered by Crossref's `X-Rate-Limit-*` headers |
+| doi.org | `doi.org/ra/<prefix>` | Which agency registered a DOI prefix, asked when Crossref has no record of a DOI `add` resolves (a DataCite DOI is reported as such, never as "not found"; only the prefix is sent) | 5/s (the default per host) |
+| arXiv | `export.arxiv.org/api` | STEM preprints | 1 request per 3 s |
+| PubMed | NCBI E-utilities | Biomedical | 3/s |
+| Semantic Scholar | `api.semanticscholar.org` | Citation graph (optional, rate-limited); `PENSMITH_S2_API_KEY` sent as `x-api-key` | 1/s |
+| Unpaywall | `api.unpaywall.org` | OA full-text PDF discovery. Requires a contact email (`email=`); without one it is skipped with a visible reason | 10/s |
+| Open Library | `openlibrary.org` | Books: title/author search and ISBN lookup (§8) | 1/s |
+| Google Books | `www.googleapis.com/books` | Books: keyless ISBN fallback | 1/s |
+| Zotero | `api.zotero.org`, or the Zotero 7 local API at `127.0.0.1:23119` | The user's own library (§11); `ZOTERO_API_KEY` sent as `Zotero-API-Key` | 5/s plus Zotero's `Backoff` header |
+| GPTZero | `api.gptzero.me` (free tier) | Honesty score (§7.11) | 5/s (the default per host) |
+| Retraction Watch | `api.crossref.org/works?filter=updates:<doi>` (the Retraction Watch data Crossref serves as `update-to` notices) | Recheck flagging (§7.12); an unanswerable lookup is "retraction status unknown", never "not retracted" | shares Crossref's budget |
+| DuckDuckGo HTML | (no formal API) | Free distinctive-phrase plagiarism check (§7.17) | 5/s (the default per host) |
 
-All HTTP traffic goes through `bin/lib/http.js` which provides: response cache (TTL per source), exponential backoff with jitter, retry on transient errors, polite User-Agent, DOI normalization on the way in.
+All HTTP traffic goes through `bin/lib/http.ts`, which provides: a response cache (TTL per source; only validated answers; keys never part of a cache key), full-jitter exponential backoff and retry on transient errors (a `Retry-After` up to 30 s honoured), a per-host token bucket with no burst above the service's declared rate, a 429 that holds the whole host for its `Retry-After` (at least one second and the declared interval without one), a host marked exhausted when a service asks for a longer wait, a per-host circuit breaker (three consecutive 5xx responses, or three requests in a row still throttled after their retries, skip the host for the run, with a 10-minute half-open probe), redirects followed by its own loop with a fresh SSRF check and pinned connection per hop (SRC-01), and the polite User-Agent (SRC-17, D-19-06..10).
 
 ---
 

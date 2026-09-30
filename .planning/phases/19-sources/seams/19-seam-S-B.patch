@@ -1,0 +1,2225 @@
+diff --git a/PRD.md b/PRD.md
+index 208d8b5..e4e7bc8 100644
+--- a/PRD.md
++++ b/PRD.md
+@@ -424,7 +424,7 @@ For power users / batch processing / CI testing:
+ | `sketch-confirm` | Proceed to intake with this thesis? | skip: proceed to intake | refuse: 3 | 3 | ERGO-05 |
+ | `assignment-pickup` | Use the assignment file in this folder? | skip: use the file | skip: 0 | 0 | GRND-01 |
+ | `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 |
+-| `plan-research` | Run this section-scoped research? | skip: run it | refuse: 3 | 3 | GRND-17 (planned) |
++| `plan-research` | Add these research hits to the section? | skip: add every hit to the section | refuse: 3 | 3 | GRND-17 |
+ | `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |
+ | `quote-accept` | Accept this quote match? | never | refuse: 3 | 3 | VRFY-20 (planned) |
+ | `reoutline` | Re-outline a paper that already has drafts? | skip: re-outline (only with --force) | refuse: 3 | 3 | GRND-09 |
+diff --git a/bin/lib/contact-email.ts b/bin/lib/contact-email.ts
+new file mode 100644
+index 0000000..d96eeb8
+--- /dev/null
++++ b/bin/lib/contact-email.ts
+@@ -0,0 +1,129 @@
++// bin/lib/contact-email.ts — the one resolver of the polite-pool contact email
++// (Phase 19 seam S-B; SRC-03, SRC-04, SRC-17; PRD §10 [network], §12).
++//
++// SEAM FILE (Phase 19 plan, S-B). Every Phase 19 stream applies it
++// byte-identically from .planning/phases/19-sources/seams/; no stream edits it
++// during Phase 19.
++//
++// Crossref (and its retraction lookup), OpenAlex and Unpaywall ask callers to
++// identify themselves with a contact email. Which environment variable holds it
++// is `[network] contact_email_env` in .paper/config.toml, default
++// PENSMITH_CONTACT_EMAIL. Every consumer — http.ts's User-Agent, the adapters'
++// `mailto` / `email` parameters, Unpaywall's "skipped: set …" notice and the
++// doctor probe — asks this module, so the configured variable is honoured
++// everywhere or nowhere.
++//
++// Safety: a paper's config.toml can travel with the paper (a shared or synced
++// folder), so it must not be able to aim pensmith at an arbitrary secret and
++// send it to a scholarly API in a User-Agent. The configured variable name is
++// honoured only when it is an upper-case identifier that contains EMAIL or
++// MAILTO (e.g. MY_WORK_EMAIL); anything else is ignored with a one-time
++// warning and the default variable is used. The value is sent only when it
++// looks like an email address (one @, no spaces or angle brackets, ≤ 254
++// characters); otherwise it counts as unset, with a one-time warning.
++//
++// The value is personal data (PRIVACY.md): it is never logged here, and
++// http.ts drops it from every log record.
++
++import { existsSync, statSync } from 'node:fs';
++import { paperConfigPath, tryReadPaperConfigSync } from './config.js';
++import { projectRoot } from './paths.js';
++
++/** The variable read when no valid `[network] contact_email_env` is configured. */
++export const DEFAULT_CONTACT_EMAIL_ENV = 'PENSMITH_CONTACT_EMAIL';
++
++/** An environment-variable name a paper config may name for the contact email. */
++const ALLOWED_ENV_NAME = /^[A-Z][A-Z0-9_]*$/;
++const EMAIL_WORD = /(?:EMAIL|MAILTO)/;
++/** A plausible email address (not full RFC 5322 — enough to refuse junk and secrets). */
++const EMAIL_SHAPE = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[^\s@<>()",;]+$/;
++
++export interface ContactEmail {
++  /** The address to send, or null when none is configured (or it is malformed). */
++  readonly email: string | null;
++  /** The environment variable that was read. */
++  readonly envName: string;
++  /** Where the variable name came from. */
++  readonly source: 'config' | 'default';
++}
++
++const warned = new Set<string>();
++function warnOnce(key: string, message: string): void {
++  if (warned.has(key)) return;
++  warned.add(key);
++  process.stderr.write(`pensmith: ${message}\n`);
++}
++
++/** True for a variable name a paper config may point the contact email at. */
++export function isAllowedContactEnvName(name: string): boolean {
++  return ALLOWED_ENV_NAME.test(name) && EMAIL_WORD.test(name);
++}
++
++/** True for a value pensmith will send as a contact email. */
++export function isPlausibleEmail(value: string): boolean {
++  return value.length <= 254 && EMAIL_SHAPE.test(value);
++}
++
++interface CachedName {
++  readonly stamp: string;
++  readonly envName: string;
++  readonly source: ContactEmail['source'];
++}
++const nameCache = new Map<string, CachedName>();
++
++function configStamp(file: string): string {
++  if (!existsSync(file)) return 'absent';
++  try {
++    const st = statSync(file);
++    return `${st.mtimeMs}:${st.size}`;
++  } catch {
++    return 'unreadable';
++  }
++}
++
++/** The variable name for the paper at `root` (cached per config file stamp). */
++function envNameFor(root: string): { envName: string; source: ContactEmail['source'] } {
++  const file = paperConfigPath(root);
++  const stamp = configStamp(file);
++  const hit = nameCache.get(file);
++  if (hit && hit.stamp === stamp) return hit;
++  let envName = DEFAULT_CONTACT_EMAIL_ENV;
++  let source: ContactEmail['source'] = 'default';
++  const configured = tryReadPaperConfigSync(root)?.network?.contact_email_env?.trim();
++  if (configured) {
++    if (isAllowedContactEnvName(configured)) {
++      envName = configured;
++      source = 'config';
++    } else {
++      warnOnce(
++        `name:${configured}`,
++        `ignoring [network] contact_email_env = "${configured}": it must name an upper-case variable ` +
++          `containing EMAIL or MAILTO (e.g. MY_WORK_EMAIL); reading ${DEFAULT_CONTACT_EMAIL_ENV} instead.`,
++      );
++    }
++  }
++  const entry: CachedName = { stamp, envName, source };
++  nameCache.set(file, entry);
++  return entry;
++}
++
++/**
++ * The contact email for requests made on behalf of the paper at `root`
++ * (default: the current project root). Never throws.
++ */
++export function contactEmail(root: string = projectRoot()): ContactEmail {
++  const { envName, source } = envNameFor(root);
++  const raw = process.env[envName]?.trim() ?? '';
++  if (raw.length === 0) return { email: null, envName, source };
++  if (!isPlausibleEmail(raw)) {
++    warnOnce(`value:${envName}`, `${envName} is set but is not an email address; no contact email is sent.`);
++    return { email: null, envName, source };
++  }
++  return { email: raw, envName, source };
++}
++
++/** Test hook: forget cached variable names and one-time warnings. */
++export function _resetContactEmailForTest(): void {
++  nameCache.clear();
++  warned.clear();
++}
+diff --git a/bin/lib/gates.ts b/bin/lib/gates.ts
+index 3712792..8fb8a21 100644
+--- a/bin/lib/gates.ts
++++ b/bin/lib/gates.ts
+@@ -40,7 +40,9 @@ export type GateId =
+   // Phase 18 (GRND-01, GRND-02, GRND-09): seam S-A, applied byte-identically by every stream.
+   | 'assignment-pickup'
+   | 'intake-defaults'
+-  | 'reoutline';
++  | 'reoutline'
++  // Phase 19 (GRND-17): seam S-B, applied byte-identically by every Phase 19 stream.
++  | 'plan-research';
+ 
+ export interface GateDef {
+   readonly id: GateId;
+@@ -75,6 +77,7 @@ export const GATES: readonly GateDef[] = Object.freeze([
+   { id: 'assignment-pickup', label: 'Use the assignment file in this folder?', yolo: 'skip', yoloChoice: 'use the file', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'GRND-01' },
+   { id: 'intake-defaults', label: 'Accept the intake defaults?', yolo: 'skip', yoloChoice: 'accept the defaults', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-02' },
+   { id: 'reoutline', label: 'Re-outline a paper that already has drafts?', yolo: 'skip', yoloChoice: 're-outline (only with --force)', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-09' },
++  { id: 'plan-research', label: 'Add these research hits to the section?', yolo: 'skip', yoloChoice: 'add every hit to the section', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'GRND-17' },
+ ] satisfies GateDef[]);
+ 
+ export function gateDef(id: GateId): GateDef {
+diff --git a/bin/lib/http.ts b/bin/lib/http.ts
+index b2a5c6f..e1c2d3e 100644
+--- a/bin/lib/http.ts
++++ b/bin/lib/http.ts
+@@ -99,6 +99,7 @@ import {
+   canonicalFixtureKey,
+   scrubbedPathAndQuery,
+   SENSITIVE_HEADERS,
++  recordedErrorBody,
+   type NetworkMode,
+ } from './http-mock.js';
+ import { openSessionLog, isMirrorPromptsEnabled, type SessionLogger } from './session-log.js';
+@@ -153,6 +154,81 @@ export class ResponseTooLargeError extends PensmithError {
+   }
+ }
+ 
++// ------------------------------------------------------------
++//   Host-availability and redirect errors (Phase 19 seam S-B, SRC-01, SRC-17)
++// ------------------------------------------------------------
++// Declared by the seam so adapters and verbs can report them; thrown by the
++// transport once stream `net` lands the redirect loop, the exhausted-host
++// marker and the per-host circuit breaker.
++
++/** A rough, human wait: `~35 s`, `~12 min`, `~6 h`, `~2 d`. */
++export function formatRetryAfter(ms: number): string {
++  const s = Math.max(1, Math.round(ms / 1000));
++  if (s < 90) return `~${s} s`;
++  const min = Math.round(s / 60);
++  if (min < 90) return `~${min} min`;
++  const h = Math.round(s / 3600);
++  if (h < 48) return `~${h} h`;
++  return `~${Math.round(s / 86_400)} d`;
++}
++
++/**
++ * A host whose server asked callers to wait longer than RETRY_AFTER_CAP_MS
++ * (e.g. keyless OpenAlex's `Retry-After: 22400`): the request is not retried,
++ * and no further request goes to that host in this process until the wait has
++ * passed (SRC-17). Adapters report it as a failed lookup / search.
++ */
++export class RateLimitExhaustedError extends PensmithError {
++  readonly host: string;
++  readonly retryAfterMs: number;
++  readonly status: number;
++  constructor(host: string, retryAfterMs: number, status: number = 429) {
++    super(`${host}: rate limit exhausted (retry after ${formatRetryAfter(retryAfterMs)})`, EXIT_ERROR);
++    this.name = 'RateLimitExhaustedError';
++    this.host = host;
++    this.retryAfterMs = retryAfterMs;
++    this.status = status;
++  }
++}
++
++/**
++ * A host whose per-host circuit breaker is open: it answered 429/5xx too many
++ * times in a row, so it is skipped for the rest of the run (SRC-17).
++ */
++export class CircuitOpenError extends PensmithError {
++  readonly host: string;
++  readonly lastStatus: number;
++  readonly failures: number;
++  constructor(host: string, lastStatus: number, failures: number) {
++    super(`${host}: skipped for the rest of this run after ${failures} consecutive HTTP ${lastStatus} responses`, EXIT_ERROR);
++    this.name = 'CircuitOpenError';
++    this.host = host;
++    this.lastStatus = lastStatus;
++    this.failures = failures;
++  }
++}
++
++/** True for either host-availability error (the host is not being asked right now). */
++export function isHostUnavailableError(e: unknown): e is RateLimitExhaustedError | CircuitOpenError {
++  return e instanceof RateLimitExhaustedError || e instanceof CircuitOpenError;
++}
++
++/** Why a redirect chain was not followed to the end (SRC-01). */
++export type RedirectErrorKind = 'too-many' | 'loop' | 'downgrade' | 'no-location' | 'not-followed';
++
++/** A redirect chain http.ts refused to follow (every hop is SSRF-checked and pinned separately). */
++export class RedirectError extends PensmithError {
++  readonly kind: RedirectErrorKind;
++  /** The URL whose redirect was refused (secret params redacted). */
++  readonly url: string;
++  constructor(kind: RedirectErrorKind, url: string, detail: string) {
++    super(`${kind === 'too-many' ? 'too many redirects' : 'redirect refused'}: ${detail}`, EXIT_ERROR);
++    this.name = 'RedirectError';
++    this.kind = kind;
++    this.url = url;
++  }
++}
++
+ /** Default response caps (SEC-03). PDF callers pass MAX_PDF_BYTES from pdf-text.ts. */
+ export const MAX_JSON_RESPONSE_BYTES = 8 * 1024 * 1024;
+ export const MAX_LLM_RESPONSE_BYTES = 16 * 1024 * 1024;
+@@ -585,6 +661,10 @@ export type HttpSource =
+   | 'pubmed'
+   | 'semanticscholar'
+   | 'retraction-watch'
++  // Phase 19 seam S-B: the books adapter (Open Library, Google Books; SRC-11)
++  // and the Zotero Web / local API client (SRC-16).
++  | 'books'
++  | 'zotero'
+   | 'generic';
+ 
+ export interface HttpResponse {
+@@ -636,6 +716,15 @@ export interface FetchOptions {
+   llm?: { endpoint: string };
+   /** Phase 17 seam (verbatim V3): abort once the response body exceeds this many bytes (SEC-03). */
+   maxBytes?: number;
++  /**
++   * Phase 19 seam S-B (SRC-17): the caller's schema check. Called with a live
++   * response before it is cached or recorded; a non-null return (the reason
++   * the body is not the service's answer) keeps it out of the HTTP cache and
++   * out of any recording. The response is still returned: the caller reports
++   * it as a failed lookup. Independently, a 200 whose body is an API error
++   * document (http-mock.ts recordedErrorBody) is never cached.
++   */
++  validate?: (res: HttpResponse) => string | null;
+ }
+ 
+ // ============================================================
+@@ -651,6 +740,10 @@ const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
+   unpaywall: 1 * ONE_DAY_MS,
+   semanticscholar: 7 * ONE_DAY_MS,
+   'retraction-watch': 1 * ONE_DAY_MS,
++  // Phase 19 seam S-B: book metadata changes rarely; a Zotero library changes
++  // under the user's hands (its client passes noCache).
++  books: 7 * ONE_DAY_MS,
++  zotero: ONE_HOUR_MS,
+   generic: 1 * ONE_DAY_MS,
+ };
+ // WR-07 (cross-AI review): 404 responses are cached so the verifier doesn't
+@@ -678,6 +771,9 @@ const RPS_BY_SOURCE: Record<HttpSource, number> = {
+   // Retraction Watch (Crossref Labs) — used only as a side-channel filter,
+   // call volume is minimal; mirror unpaywall budget.
+   'retraction-watch': 10,
++  // Phase 19 seam S-B: Open Library asks clients not to exceed ~1 request/s.
++  books: 1,
++  zotero: 5,
+   generic: 5,
+ };
+ 
+@@ -1472,13 +1568,18 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
+ 
+   recordHttp({ ...base, status: response.status, cache: 'miss', bytes: response.bodyBytes?.length ?? 0, ms: Date.now() - started });
+ 
++  // --- Phase 19 seam S-B (SRC-17): a body that is not the service's answer is
++  // never cached and never recorded — the caller's schema check (validate), or
++  // an API error document served with HTTP 200 ---
++  const invalid = llm === undefined ? (opts.validate?.(response) ?? recordedErrorBody(response.status, response.body)) : null;
++
+   // --- Recorder hook (http-mock.ts isRecordingEnabled: live, outside a test context) ---
+-  if (llm === undefined && isRecordingEnabled()) {
++  if (llm === undefined && invalid === null && isRecordingEnabled()) {
+     recordFixture(method, url, opts.body, source, response);
+   }
+ 
+   // --- Cache write (live GET, success or definite 404) ---
+-  if (cacheAllowed && (response.status === 200 || response.status === 404)) {
++  if (cacheAllowed && invalid === null && (response.status === 200 || response.status === 404)) {
+     await writeCache(key, response).catch(() => {
+       // Cache write failures are non-fatal — the response is still returned
+       // to the caller. Disk full / read-only FS would otherwise break every
+diff --git a/bin/lib/library.ts b/bin/lib/library.ts
+index 5bfb4f5..64f1d07 100644
+--- a/bin/lib/library.ts
++++ b/bin/lib/library.ts
+@@ -11,7 +11,7 @@
+ // It composes the lower-level chokepoints:
+ //   atomicWriteFile (D-04)  — crash-safe writes via tmp+rename
+ //   withLock        (D-26)  — one critical section per paper library
+-//   loadAndMigrate  (D-37)  — version envelope, v1→v2 migration, zod validation
++//   loadAndMigrate  (D-37)  — version envelope, v1→v2→v3 migrations, zod validation
+ //   openSessionLog  (D-49)  — JSONL structured log, kind:'event'
+ //
+ // upsertSources, under ONE lock on LIBRARY.json (read → merge → validate →
+@@ -52,6 +52,7 @@ import { withLock } from './lock.js';
+ import { loadAndMigrate, ForwardIncompatError } from './migrations/loader.js';
+ import { PensmithError, EXIT_ERROR } from './exit-codes.js';
+ import { migrate as migrateLibraryV1toV2 } from './migrations/library/v1_to_v2.js';
++import { migrate as migrateLibraryV2toV3 } from './migrations/library/v2_to_v3.js';
+ import {
+   candidateToEntry,
+   isPreprintDoi,
+@@ -86,6 +87,8 @@ export const VERSION_TITLE_JW = 0.95;
+ /** Registered forward migrations for LIBRARY.json, keyed by FROM version. */
+ export const LIBRARY_MIGRATIONS: Record<number, (input: unknown) => unknown> = {
+   1: (input) => migrateLibraryV1toV2(input),
++  // Phase 19 seam S-B: the v3 bibliographic, evaluation, BYO, retraction and Zotero fields.
++  2: (input) => migrateLibraryV2toV3(input),
+ };
+ 
+ // ---------------------------------------------------------------------------
+@@ -327,7 +330,7 @@ export async function findEntry(
+ // Matching and merging.
+ // ---------------------------------------------------------------------------
+ 
+-export type MatchKind = 'doi' | 'arxiv' | 'pmid' | 'pmcid' | 'isbn' | 'version';
++export type MatchKind = 'doi' | 'arxiv' | 'pmid' | 'pmcid' | 'isbn' | 'zotero' | 'version';
+ 
+ function familyName(authors: string[]): string {
+   return firstAuthorSurname(authors[0] ?? '').replace(/[^\p{L}\p{N}]+/gu, '');
+@@ -364,6 +367,12 @@ function findMatch(entries: LibraryEntry[], d: LibraryEntry): { entry: LibraryEn
+     const hit = byField(k);
+     if (hit) return { entry: hit, by: k };
+   }
++  // Phase 19 seam S-B (SRC-16): the same Zotero item re-pulled.
++  if (d.zotero) {
++    const z = d.zotero;
++    const hit = entries.find((e) => e.zotero !== null && e.zotero.library === z.library && e.zotero.key === z.key);
++    if (hit) return { entry: hit, by: 'zotero' };
++  }
+   const version = entries.find((e) => sameWorkVersion(e, d));
+   return version ? { entry: version, by: 'version' } : null;
+ }
+@@ -410,22 +419,49 @@ function mergeInto(e: LibraryEntry, d: LibraryEntry, now: string): boolean {
+     if (e[k] === null && d[k] !== null) e[k] = d[k];
+   }
+ 
++  // Phase 19 seam S-B (SRC-15): a registrar-hydrated record replaces the
++  // local metadata of an unhydrated bring-your-own entry.
++  if (!e.hydrated && d.hydrated) incomingIsRecord = true;
++
+   if (incomingIsRecord) {
+     e.title = d.title ?? e.title;
+     e.year = d.year ?? e.year;
+     e.venue = d.venue ?? e.venue;
+     if (d.authors.length > 0) e.authors = d.authors;
++    e.type = d.type ?? e.type;
++    e.publisher = d.publisher ?? e.publisher;
++    e.volume = d.volume ?? e.volume;
++    e.issue = d.issue ?? e.issue;
++    e.pages = d.pages ?? e.pages;
++    if (d.editors.length > 0) e.editors = d.editors;
+   } else {
+     e.title = e.title ?? d.title;
+     e.year = e.year ?? d.year;
+     e.venue = e.venue ?? d.venue;
+     if (d.authors.length > e.authors.length) e.authors = d.authors;
++    e.type = e.type ?? d.type;
++    e.publisher = e.publisher ?? d.publisher;
++    e.volume = e.volume ?? d.volume;
++    e.issue = e.issue ?? d.issue;
++    e.pages = e.pages ?? d.pages;
++    if (d.editors.length > e.editors.length) e.editors = d.editors;
+   }
++  e.hydrated = e.hydrated || d.hydrated;
++  // The latest evaluation wins (SRC-09); an ingest path that did not evaluate
++  // (null) never erases an earlier judgement.
++  e.tier = d.tier ?? e.tier;
++  e.relevance = d.relevance ?? e.relevance;
++  e.why_relevant = d.why_relevant ?? e.why_relevant;
++  e.zotero = e.zotero ?? d.zotero;
+   e.abstract = longer(e.abstract, d.abstract);
+   e.oa_url = e.oa_url ?? d.oa_url;
+   e.provenance = union(e.provenance, d.provenance);
+   e.retracted = e.retracted || d.retracted;
+   e.retraction_details = e.retraction_details ?? d.retraction_details;
++  // SRC-04: `retracted` is sticky; otherwise the newer lookup outcome wins
++  // (an `unchecked` incoming record never overrides a real outcome).
++  if (e.retracted) e.retraction_status = 'retracted';
++  else if (d.retraction_status !== 'unchecked') e.retraction_status = d.retraction_status;
+   e.synthetic = e.synthetic || d.synthetic;
+   e.last_verified = later(e.last_verified, d.last_verified);
+   e.byo = e.byo ?? d.byo;
+diff --git a/bin/lib/migrations/library/shape.ts b/bin/lib/migrations/library/shape.ts
+index 11062e0..ae1c181 100644
+--- a/bin/lib/migrations/library/shape.ts
++++ b/bin/lib/migrations/library/shape.ts
+@@ -1,5 +1,5 @@
+ // bin/lib/migrations/library/shape.ts — pure shaping of source records into
+-// LIBRARY.json v2 entries (BRDTH-01 / D-17-43).
++// LIBRARY.json entries (BRDTH-01 / D-17-43; the v3 fields by Phase 19 seam S-B).
+ //
+ // Shared by the v1→v2 migration (v1_to_v2.ts, which must turn research-written
+ // SourceCandidate[] entries into v2 entries) and the one library writer
+@@ -17,7 +17,17 @@
+ 
+ import { normalizeDoi, normalizeArxiv, normalizePmid, normalizePmcid } from '../../doi.js';
+ import { generateCitekey } from '../../citekey.js';
+-import { CITEKEY_GRAMMAR, type LibraryEntry } from '../../schemas/library.js';
++import { CITEKEY_GRAMMAR, ByoRecordSchema, type ByoRecord, type LibraryEntry } from '../../schemas/library.js';
++import {
++  SourceTypeSchema,
++  SourceTierSchema,
++  RetractionStatusSchema,
++  ZoteroRefSchema,
++  type SourceType,
++  type SourceTier,
++  type RetractionStatus,
++  type ZoteroRef,
++} from '../../schemas/source-types.js';
+ 
+ /**
+  * A source handed to the library writer. SourceCandidate (research adapters)
+@@ -51,6 +61,23 @@ export interface LibraryCandidate {
+   synthetic?: boolean | undefined;
+   last_verified?: string | null | undefined;
+   raw?: unknown;
++  // v3 (Phase 19 seam S-B) — every field optional; unknown values are dropped
++  // by candidateToEntry (an invalid enum value or a non-string becomes null).
++  type?: SourceType | string | null | undefined;
++  publisher?: string | null | undefined;
++  volume?: string | number | null | undefined;
++  issue?: string | number | null | undefined;
++  pages?: string | null | undefined;
++  editors?: string[] | undefined;
++  tier?: SourceTier | string | null | undefined;
++  relevance?: number | null | undefined;
++  why_relevant?: string | null | undefined;
++  /** false = a bring-your-own PDF kept with local metadata only (SRC-15). */
++  hydrated?: boolean | undefined;
++  retraction_status?: RetractionStatus | string | null | undefined;
++  zotero?: ZoteroRef | null | undefined;
++  /** The bring-your-own PDF record (file under .paper/, sha256s) — SRC-15. */
++  byo?: ByoRecord | null | undefined;
+ }
+ 
+ export function normDoi(v: unknown): string | null {
+@@ -156,6 +183,22 @@ function validIso(v: unknown): string | null {
+   return s && !Number.isNaN(Date.parse(s)) && /^\d{4}-\d{2}-\d{2}T/.test(s) ? new Date(s).toISOString() : null;
+ }
+ 
++/** A short bibliographic string (volume / issue): numbers become their decimal text. */
++function shortField(v: unknown): string | null {
++  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
++  return nonEmpty(v);
++}
++
++function enumOrNull<T>(schema: { safeParse(v: unknown): { success: true; data: T } | { success: false } }, v: unknown): T | null {
++  const r = schema.safeParse(v);
++  return r.success ? r.data : null;
++}
++
++/** Relevance in [0, 1] (the evaluator's score), else null. */
++function relevanceOrNull(v: unknown): number | null {
++  return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : null;
++}
++
+ /** Best-effort venue from an adapter's native payload (Crossref, OpenAlex). */
+ function venueFromRaw(raw: unknown): string | null {
+   if (!raw || typeof raw !== 'object') return null;
+@@ -190,8 +233,8 @@ export function sanitizeCitekey(raw: unknown, c: Pick<LibraryCandidate, 'authors
+ }
+ 
+ /**
+- * Shape one candidate into a v2 entry (identifiers normalized, SourceCandidate
+- * spellings mapped). `citekey` is the candidate's (sanitized) key — the writer
++ * Shape one candidate into a current-version entry (identifiers normalized,
++ * SourceCandidate spellings mapped, the v3 fields validated or nulled). `citekey` is the candidate's (sanitized) key — the writer
+  * resolves collisions against the library afterwards.
+  */
+ export function candidateToEntry(c: LibraryCandidate, provenance: string[], now: string): LibraryEntry {
+@@ -214,6 +257,11 @@ export function candidateToEntry(c: LibraryCandidate, provenance: string[], now:
+   if (doi) alternates.delete(doi);
+   const authors = (c.authors ?? []).map((a) => (typeof a === 'string' ? a.trim() : '')).filter((a) => a.length > 0);
+   const year = typeof c.year === 'number' && Number.isInteger(c.year) && c.year >= 1000 && c.year <= 2200 ? c.year : null;
++  const editors = (c.editors ?? []).map((a) => (typeof a === 'string' ? a.trim() : '')).filter((a) => a.length > 0);
++  // Fail closed (SRC-04): a retraction recorded either way is recorded both ways.
++  const statusIn = enumOrNull(RetractionStatusSchema, c.retraction_status);
++  const retracted = c.retracted === true || statusIn === 'retracted';
++  const retraction_status: RetractionStatus = retracted ? 'retracted' : statusIn ?? 'unchecked';
+   return {
+     citekey: sanitizeCitekey(c.citekey, { authors, year }),
+     doi,
+@@ -229,11 +277,23 @@ export function candidateToEntry(c: LibraryCandidate, provenance: string[], now:
+     oa_url: validUrl(c.oa_url) ?? validUrl(c.oa_pdf_url),
+     alternate_dois: [...alternates],
+     provenance: [...new Set(provenance.filter((p) => p.length > 0))],
+-    retracted: c.retracted === true,
++    retracted,
+     retraction_details: nonEmpty(c.retraction_details),
+     synthetic: c.synthetic === true,
+     last_verified: validIso(c.last_verified),
+-    byo: null,
++    byo: enumOrNull(ByoRecordSchema, c.byo),
++    type: enumOrNull(SourceTypeSchema, c.type),
++    publisher: nonEmpty(c.publisher),
++    volume: shortField(c.volume),
++    issue: shortField(c.issue),
++    pages: nonEmpty(c.pages),
++    editors,
++    tier: enumOrNull(SourceTierSchema, c.tier),
++    relevance: relevanceOrNull(c.relevance),
++    why_relevant: nonEmpty(c.why_relevant),
++    hydrated: c.hydrated !== false,
++    retraction_status,
++    zotero: enumOrNull(ZoteroRefSchema, c.zotero),
+     addedAt: now,
+     updatedAt: now,
+   };
+diff --git a/bin/lib/migrations/library/v2_to_v3.ts b/bin/lib/migrations/library/v2_to_v3.ts
+new file mode 100644
+index 0000000..9283fb2
+--- /dev/null
++++ b/bin/lib/migrations/library/v2_to_v3.ts
+@@ -0,0 +1,56 @@
++// bin/lib/migrations/library/v2_to_v3.ts — LIBRARY.json v2 → v3 (Phase 19 seam
++// S-B; SRC-04, SRC-05, SRC-09, SRC-11, SRC-15, SRC-16).
++//
++// SEAM FILE (Phase 19 plan, S-B). Applied byte-identically by every Phase 19
++// stream; no stream edits it during Phase 19.
++//
++// v3 adds, per entry: type, publisher, volume, issue, pages, editors, tier,
++// relevance, why_relevant, hydrated, retraction_status and zotero (see
++// bin/lib/schemas/library.ts). Every v2 entry keeps every v2 value; the new
++// fields take their "unknown" defaults, except:
++//   - retraction_status: `retracted` when the v2 entry was flagged retracted
++//     (and `retracted` becomes true whenever either field says so — fail
++//     closed), else `unchecked` (a v2 library never recorded a clean lookup,
++//     so nothing is claimed `clear` by the migration);
++//   - hydrated: true (v2 had no unhydrated entries: BYO ingest lands in v3).
++// Idempotent on v3 input. Values a v3 field already carries (a file written by
++// a newer writer and then stamped v2 by hand) are kept when they have the v3
++// type, so the migration never discards data it can represent.
++
++const NEW_NULLABLE_FIELDS = [
++  'type',
++  'publisher',
++  'volume',
++  'issue',
++  'pages',
++  'tier',
++  'relevance',
++  'why_relevant',
++  'zotero',
++] as const;
++
++export function migrate(input: unknown): unknown {
++  if (typeof input !== 'object' || input === null) return input;
++  const src = input as Record<string, unknown>;
++  if (src['$schemaVersion'] === 3) return JSON.parse(JSON.stringify(src)) as unknown;
++  const rawEntries = Array.isArray(src['entries']) ? (src['entries'] as unknown[]) : [];
++  const entries = rawEntries.map((raw) => {
++    if (typeof raw !== 'object' || raw === null) return raw;
++    const e = { ...(raw as Record<string, unknown>) };
++    for (const k of NEW_NULLABLE_FIELDS) {
++      if (!(k in e) || e[k] === undefined) e[k] = null;
++    }
++    if (!Array.isArray(e['editors'])) e['editors'] = [];
++    if (typeof e['hydrated'] !== 'boolean') e['hydrated'] = true;
++    // Fail closed: a retraction recorded either way stays recorded both ways.
++    const status = e['retraction_status'];
++    const retracted = e['retracted'] === true || status === 'retracted';
++    e['retracted'] = retracted;
++    if (retracted) e['retraction_status'] = 'retracted';
++    else if (status !== 'clear' && status !== 'unknown' && status !== 'unchecked') e['retraction_status'] = 'unchecked';
++    return e;
++  });
++  return { ...src, $schemaVersion: 3, entries };
++}
++
++export default migrate;
+diff --git a/bin/lib/pdf-response.ts b/bin/lib/pdf-response.ts
+new file mode 100644
+index 0000000..fee9e25
+--- /dev/null
++++ b/bin/lib/pdf-response.ts
+@@ -0,0 +1,52 @@
++// bin/lib/pdf-response.ts — is this HTTP response really a PDF? (Phase 19 seam
++// S-B; SRC-01).
++//
++// SEAM FILE (Phase 19 plan, S-B). Every Phase 19 stream applies it
++// byte-identically from .planning/phases/19-sources/seams/; no stream edits it
++// during Phase 19.
++//
++// Every caller that fetches a PDF (`add <url>`, Pass 3's open-access copy, BYO
++// hydration) checks what it actually got BEFORE handing bytes to the PDF
++// extractor: the final status (after http.ts followed any redirects), then the
++// content type or the `%PDF-` magic. A landing page, a login wall or an error
++// page served as text/html is reported as `not a PDF (got text/html)` — never
++// fed to pdf-parse, whose errors on HTML are noise the user cannot act on.
++//
++// The bytes are the byte-faithful `bodyBytes` (audit #29): the UTF-8 `body`
++// string of a binary response is lossy and is never used here.
++
++import type { HttpResponse } from './http.js';
++
++export type PdfResponseCheck =
++  | { readonly ok: true; readonly bytes: Buffer }
++  | { readonly ok: false; readonly reason: string };
++
++const PDF_MAGIC = Buffer.from('%PDF-', 'latin1');
++/** PDF 1.x allows up to 1024 bytes of junk before the header. */
++const MAGIC_WINDOW = 1024;
++
++/** The media type without parameters, lower-cased ('' when absent). */
++function mediaType(headers: Readonly<Record<string, string>>): string {
++  const ct = headers['content-type'] ?? '';
++  return (ct.split(';')[0] ?? '').trim().toLowerCase();
++}
++
++/** True when `bytes` carries the PDF header within the first 1024 bytes. */
++export function hasPdfMagic(bytes: Uint8Array): boolean {
++  const window = Buffer.from(bytes.buffer, bytes.byteOffset, Math.min(bytes.byteLength, MAGIC_WINDOW));
++  return window.indexOf(PDF_MAGIC) >= 0;
++}
++
++/**
++ * Accept `res` as a PDF, or say why not. A 200 with the PDF magic is accepted
++ * whatever its declared type (some repositories send application/octet-stream);
++ * a 200 without the magic is refused, naming the declared type.
++ */
++export function checkPdfResponse(res: Pick<HttpResponse, 'status' | 'headers' | 'bodyBytes'>): PdfResponseCheck {
++  if (res.status !== 200) return { ok: false, reason: `HTTP ${res.status}` };
++  const bytes = res.bodyBytes;
++  if (!bytes || bytes.byteLength === 0) return { ok: false, reason: 'empty response body' };
++  if (hasPdfMagic(bytes)) return { ok: true, bytes: Buffer.from(bytes) };
++  const type = mediaType(res.headers);
++  return { ok: false, reason: `not a PDF (got ${type || 'no content type'})` };
++}
+diff --git a/bin/lib/research-md.ts b/bin/lib/research-md.ts
+new file mode 100644
+index 0000000..bf3b4a6
+--- /dev/null
++++ b/bin/lib/research-md.ts
+@@ -0,0 +1,219 @@
++// bin/lib/research-md.ts — the curated source list of .paper/RESEARCH.md,
++// rendered from LIBRARY.json (Phase 19 seam S-B; SRC-09, SRC-14, SRC-15,
++// SRC-16, GRND-17; PRD §7.2, §7.15, §9).
++//
++// SEAM FILE (Phase 19 plan, S-B). Every Phase 19 stream applies it
++// byte-identically from .planning/phases/19-sources/seams/; no stream edits it
++// during Phase 19.
++//
++// RESEARCH.md has three parts:
++//   1. the generated research log (scope, queries, per-adapter outcomes),
++//      rewritten by each `pensmith research` run;
++//   2. inside it, the SOURCES BLOCK — every LIBRARY.json entry with its
++//      formatted reference, tier, relevance, provenance tags (search,
++//      bring-your-own, zotero, added, plan-research, imported), why-relevant
++//      note and abstract — between SOURCES_START and SOURCES_END;
++//   3. after RESEARCH_LOG_END, the user's notes, never touched.
++// The sources block is a VIEW of LIBRARY.json: every ingest path (research,
++// `add`, BYO ingest, Zotero ingest, `plan --research`) calls
++// refreshResearchSources() after its upsertSources(), so RESEARCH.md never
++// lists a source the library lacks or misses one it has. Nothing else in the
++// file changes. The block uses list items only (no `### ` headings), so the
++// tutorial's curated-claims parser (bin/cli/goal.ts) never mistakes a source
++// for a curated `supports:` entry.
++
++import * as fs from 'node:fs';
++import * as path from 'node:path';
++import { atomicWriteFile } from './atomic-write.js';
++import { withLock } from './lock.js';
++import { libraryPaths, tryLoadLibrary } from './library.js';
++import type { LibraryEntry } from './schemas/library.js';
++
++/**
++ * The line that ends the generated research log. Identical to (and asserted
++ * equal with) research-orchestrator.ts's RESEARCH_LOG_END; stream `research`
++ * turns that one into a re-export of this.
++ */
++export const RESEARCH_LOG_END =
++  '<!-- end of the research log: `pensmith research` rewrites everything above this line; notes below it are kept -->';
++
++export const SOURCES_START = '<!-- pensmith:sources:start (rendered from LIBRARY.json) -->';
++export const SOURCES_END = '<!-- pensmith:sources:end -->';
++
++const ABSTRACT_CHARS = 600;
++const MAX_LISTED_AUTHORS = 3;
++
++/** Provenance-tag prefix → the tag RESEARCH.md shows. */
++const TAG_FOR_PREFIX: Readonly<Record<string, string>> = Object.freeze({
++  research: 'search',
++  add: 'added',
++  byo: 'bring-your-own',
++  zotero: 'zotero',
++  'plan-research': 'plan-research',
++  'bib-import': 'imported',
++  v1: 'imported',
++});
++
++function oneLine(s: string): string {
++  return s.replace(/\s+/g, ' ').trim();
++}
++
++/** `text` cut at a word boundary to at most `max` characters, with an ellipsis when cut. */
++function excerpt(text: string, max: number): string {
++  const flat = oneLine(text);
++  if (flat.length <= max) return flat;
++  const cut = flat.slice(0, max);
++  const at = cut.lastIndexOf(' ');
++  return `${(at > max * 0.6 ? cut.slice(0, at) : cut).replace(/[\s,;:.]+$/, '')}…`;
++}
++
++/** The provenance tags of an entry, in first-seen order, deduplicated. */
++export function provenanceTags(entry: Pick<LibraryEntry, 'provenance' | 'byo' | 'synthetic'>): string[] {
++  const tags: string[] = [];
++  const push = (t: string): void => {
++    if (!tags.includes(t)) tags.push(t);
++  };
++  for (const p of entry.provenance) {
++    const [prefix = p, adapter = ''] = p.split(':');
++    // A research hit from the user's own library is tagged by where it came
++    // from (`research:zotero` → zotero, `research:byo` → bring-your-own).
++    if (adapter === 'zotero' || adapter === 'zotero-mcp') push('zotero');
++    else if (adapter === 'byo') push('bring-your-own');
++    else push(TAG_FOR_PREFIX[prefix] ?? prefix);
++  }
++  if (entry.byo !== null) push('bring-your-own');
++  if (entry.synthetic) push('synthetic (dry-run)');
++  return tags;
++}
++
++/** An author string as a reader sees it: braces of a corporate name removed. */
++function displayAuthor(a: string): string {
++  const t = a.trim();
++  return t.startsWith('{') && t.endsWith('}') ? t.slice(1, -1).trim() : t;
++}
++
++/** The persistent identifier a reader can follow, or null. */
++function identifierText(e: LibraryEntry): string | null {
++  if (e.doi) return `https://doi.org/${e.doi}`;
++  if (e.arxiv) return `arXiv:${e.arxiv}`;
++  if (e.isbn) return `ISBN ${e.isbn}`;
++  if (e.pmid) return `PMID ${e.pmid}`;
++  if (e.pmcid) return e.pmcid;
++  return null;
++}
++
++/**
++ * A deterministic, style-neutral reference line: Authors (Year). Title.
++ * Venue, Volume(Issue), Pages. Publisher. Identifier. (The paper's CSL style is
++ * applied at export; this line only has to identify the work unambiguously.)
++ */
++export function formatReference(e: LibraryEntry): string {
++  const names = e.authors.map(displayAuthor).filter((a) => a.length > 0);
++  const who =
++    names.length === 0
++      ? e.editors.length > 0
++        ? `${e.editors.slice(0, MAX_LISTED_AUTHORS).map(displayAuthor).join('; ')} (Ed${e.editors.length > 1 ? 's' : ''}.)`
++        : 'Anonymous'
++      : names.length > MAX_LISTED_AUTHORS
++        ? `${names.slice(0, MAX_LISTED_AUTHORS).join('; ')}; et al.`
++        : names.join('; ');
++  const parts: string[] = [`${who} (${e.year ?? 'n.d.'}).`];
++  parts.push(`${oneLine(e.title ?? '(untitled)').replace(/[.]+$/, '')}.`);
++  const where: string[] = [];
++  if (e.venue) where.push(oneLine(e.venue));
++  if (e.volume) where.push(e.issue ? `${e.volume}(${e.issue})` : e.volume);
++  else if (e.issue) where.push(`(${e.issue})`);
++  if (e.pages) where.push(e.pages);
++  if (where.length > 0) parts.push(`${where.join(', ')}.`);
++  if (e.publisher && e.publisher !== e.venue) parts.push(`${oneLine(e.publisher)}.`);
++  const id = identifierText(e);
++  if (id) parts.push(id);
++  return parts.join(' ');
++}
++
++/** Sources sorted for reading: relevance (highest first, unscored last), then citekey. */
++function sortedForReading(entries: readonly LibraryEntry[]): LibraryEntry[] {
++  return [...entries].sort((a, b) => {
++    const ra = a.relevance ?? -1;
++    const rb = b.relevance ?? -1;
++    if (ra !== rb) return rb - ra;
++    return a.citekey < b.citekey ? -1 : a.citekey > b.citekey ? 1 : 0;
++  });
++}
++
++/** The sources block (markers included) for `entries`. Deterministic. */
++export function renderSourcesBlock(entries: readonly LibraryEntry[]): string {
++  const lines: string[] = [SOURCES_START, `## Sources (${entries.length})`, ''];
++  if (entries.length === 0) lines.push('_No sources in LIBRARY.json yet._');
++  for (const e of sortedForReading(entries)) {
++    lines.push(`- [@${e.citekey}] ${formatReference(e)}`);
++    const facts: string[] = [`Tier: ${e.tier ?? 'not evaluated'}`];
++    if (e.relevance !== null) facts.push(`Relevance: ${e.relevance.toFixed(2)}`);
++    const tags = provenanceTags(e);
++    if (tags.length > 0) facts.push(`Tags: ${tags.join(', ')}`);
++    lines.push(`  - ${facts.join(' · ')}`);
++    if (e.why_relevant) lines.push(`  - Why relevant: ${oneLine(e.why_relevant)}`);
++    if (e.abstract) lines.push(`  - Abstract: ${excerpt(e.abstract, ABSTRACT_CHARS)}`);
++    if (e.retraction_status === 'retracted') {
++      lines.push(`  - Retraction: RETRACTED${e.retraction_details ? ` — ${oneLine(e.retraction_details)}` : ''}`);
++    } else if (e.retraction_status === 'unknown') {
++      lines.push('  - Retraction: retraction status unknown (the lookup failed; it is re-checked at verify time)');
++    }
++    if (!e.hydrated) {
++      lines.push('  - Metadata: local only — no registrar record matched this PDF confidently; check it before citing');
++    }
++  }
++  lines.push(SOURCES_END);
++  return lines.join('\n');
++}
++
++/**
++ * `existing` RESEARCH.md text with its sources block replaced by `block`
++ * (inserted just above RESEARCH_LOG_END when the file has none; a new file
++ * when `existing` is null or blank). Everything outside the block is kept
++ * byte-for-byte. The block adopts the file's line ending (LF or CRLF).
++ */
++export function upsertSourcesBlock(existing: string | null, block: string): string {
++  if (existing === null || existing.trim().length === 0) {
++    return `# Research\n\n${block}\n\n${RESEARCH_LOG_END}\n`;
++  }
++  const eol = existing.includes('\r\n') ? '\r\n' : '\n';
++  const b = eol === '\n' ? block : block.replace(/\n/g, '\r\n');
++  const start = existing.lastIndexOf(SOURCES_START);
++  const end = start >= 0 ? existing.indexOf(SOURCES_END, start) : -1;
++  if (start >= 0 && end >= 0) {
++    return existing.slice(0, start) + b + existing.slice(end + SOURCES_END.length);
++  }
++  const logEnd = existing.indexOf(RESEARCH_LOG_END);
++  if (logEnd >= 0) {
++    const before = existing.slice(0, logEnd).replace(/(?:\r?\n)*$/, '');
++    return `${before}${eol}${eol}${b}${eol}${eol}${existing.slice(logEnd)}`;
++  }
++  return `# Research${eol}${eol}${b}${eol}${eol}${RESEARCH_LOG_END}${eol}${eol}${existing}`;
++}
++
++export interface RefreshResult {
++  readonly path: string;
++  readonly changed: boolean;
++  readonly count: number;
++}
++
++/**
++ * Re-render the sources block of the paper's RESEARCH.md from its LIBRARY.json
++ * (under the RESEARCH.md lock; written only when the text changes). A paper
++ * with neither a library nor a RESEARCH.md is left alone.
++ */
++export async function refreshResearchSources(root: string): Promise<RefreshResult> {
++  const dir = libraryPaths(root).dir;
++  const file = path.join(dir, 'RESEARCH.md');
++  const library = await tryLoadLibrary(root);
++  const entries = library?.entries ?? [];
++  return withLock(file, async () => {
++    const existing = fs.existsSync(file) ? await fs.promises.readFile(file, 'utf8') : null;
++    if (existing === null && entries.length === 0) return { path: file, changed: false, count: 0 };
++    const next = upsertSourcesBlock(existing, renderSourcesBlock(entries));
++    if (next === existing) return { path: file, changed: false, count: entries.length };
++    await atomicWriteFile(file, next);
++    return { path: file, changed: true, count: entries.length };
++  });
++}
+diff --git a/bin/lib/schemas/library.ts b/bin/lib/schemas/library.ts
+index 7513ede..b020c81 100644
+--- a/bin/lib/schemas/library.ts
++++ b/bin/lib/schemas/library.ts
+@@ -1,5 +1,5 @@
+ // bin/lib/schemas/library.ts — the per-paper source library, `.paper/LIBRARY.json`
+-// (LIB-01, D-59; v2 by BRDTH-01 / D-17-43).
++// (LIB-01, D-59; v2 by BRDTH-01 / D-17-43; v3 by Phase 19 seam S-B).
+ //
+ // LIBRARY.json is the paper's source of truth for sources. It has ONE writer,
+ // bin/lib/library.ts (upsertSources — research, add, plan --research, and later
+@@ -27,12 +27,35 @@
+ //     against its registrar (VRFY-28 re-check scheduling reads it).
+ //   - byo: the bring-your-own PDF record (SRC-15 fills it; hashes, not text).
+ //
++// v3 (Phase 19 seam S-B, migration bin/lib/migrations/library/v2_to_v3.ts):
++//   - type / publisher / volume / issue / pages / editors: the bibliographic
++//     fields a formatted reference needs (SRC-05, SRC-11, SRC-12). `type` is a
++//     CSL type (bin/lib/schemas/source-types.ts).
++//   - tier / relevance / why_relevant: the source evaluator's judgement
++//     (SRC-09): tier ∈ peer-reviewed | preprint | book | gov-report | other,
++//     relevance 0–1, why_relevant = the evaluator's reason, shown in RESEARCH.md.
++//   - hydrated: false for a bring-your-own PDF kept with its local metadata
++//     because no registrar record matched it confidently (SRC-15).
++//   - retraction_status: unchecked | clear | retracted | unknown (SRC-04). An
++//     unanswerable lookup is `unknown`, never `clear`; `retracted` mirrors it.
++//   - zotero: the Zotero item identity, when the entry came from Zotero (SRC-16).
++//
++// Author strings: "Family, Given" where the family is known, "Given Family"
++// as a registrar displays it, or "{Corporate Name}" (braced) for a corporate
++// or consortium author (the BibTeX writer emits it as one literal name).
++//
+ // Any new field needs a v(N)→v(N+1) migration and a CURRENT_LIBRARY_VERSION
+ // bump in the same change (S-20).
+ 
+ import { z } from 'zod';
++import {
++  SourceTypeSchema,
++  SourceTierSchema,
++  RetractionStatusSchema,
++  ZoteroRefSchema,
++} from './source-types.js';
+ 
+-export const CURRENT_LIBRARY_VERSION = 2;
++export const CURRENT_LIBRARY_VERSION = 3;
+ 
+ /** The Pandoc citation-key grammar (a superset of the D-14 generated form). */
+ export const CITEKEY_GRAMMAR = /^[\p{L}\p{N}_](?:[\p{L}\p{N}_:.#$%&+?<>~/-]*[\p{L}\p{N}_])?$/u;
+@@ -72,10 +95,33 @@ export const LibraryEntrySchema = z
+     synthetic: z.boolean().default(false),
+     last_verified: IsoDateTime.nullable().default(null),
+     byo: ByoRecordSchema.nullable().default(null),
++    // v3 (Phase 19 seam S-B).
++    type: SourceTypeSchema.nullable().default(null),
++    publisher: z.string().min(1).nullable().default(null),
++    volume: z.string().min(1).nullable().default(null),
++    issue: z.string().min(1).nullable().default(null),
++    pages: z.string().min(1).nullable().default(null),
++    editors: z.array(z.string().min(1)).default([]),
++    tier: SourceTierSchema.nullable().default(null),
++    relevance: z.number().min(0).max(1).nullable().default(null),
++    why_relevant: z.string().min(1).nullable().default(null),
++    hydrated: z.boolean().default(true),
++    retraction_status: RetractionStatusSchema.default('unchecked'),
++    zotero: ZoteroRefSchema.nullable().default(null),
+     addedAt: IsoDateTime,
+     updatedAt: IsoDateTime,
+   })
+-  .strict();
++  .strict()
++  .superRefine((e, ctx) => {
++    // `retracted` and `retraction_status` never disagree (SRC-04).
++    if (e.retracted !== (e.retraction_status === 'retracted')) {
++      ctx.addIssue({
++        code: z.ZodIssueCode.custom,
++        path: ['retraction_status'],
++        message: `retraction_status "${e.retraction_status}" disagrees with retracted: ${String(e.retracted)}`,
++      });
++    }
++  });
+ 
+ export const Schema = z
+   .object({
+diff --git a/bin/lib/schemas/source-candidate.ts b/bin/lib/schemas/source-candidate.ts
+index 66a20df..050df05 100644
+--- a/bin/lib/schemas/source-candidate.ts
++++ b/bin/lib/schemas/source-candidate.ts
+@@ -23,6 +23,12 @@
+ //          bin/lib/bibtex-write.ts before persistence (BL-4 chokepoint).
+ 
+ import { z } from 'zod';
++import {
++  SourceTypeSchema,
++  RetractionStatusSchema,
++  ZoteroRefSchema,
++  OaLocationSchema,
++} from './source-types.js';
+ 
+ const BaseFields = {
+   id: z.string().min(1),
+@@ -42,6 +48,26 @@ const BaseFields = {
+   synthetic: z.boolean().optional(),
+   arxiv: z.string().optional(),
+   isbn: z.string().optional(),
++  // Phase 19 seam S-B — the fields a full reference and the evaluator need
++  // (SRC-02, SRC-03, SRC-04, SRC-05, SRC-11, SRC-16). All optional: an adapter
++  // sets what its registrar returns. The library writer copies them into the
++  // LIBRARY.json v3 entry (bin/lib/migrations/library/shape.ts).
++  pmid: z.string().optional(),
++  pmcid: z.string().optional(),
++  venue: z.string().optional(),
++  volume: z.string().optional(),
++  issue: z.string().optional(),
++  pages: z.string().optional(),
++  publisher: z.string().optional(),
++  type: SourceTypeSchema.optional(),
++  /** Editors, for edited volumes / editor-only works (author strings, same forms). */
++  editors: z.array(z.string()).optional(),
++  /** Every open-access location Unpaywall lists (SRC-03); oa_pdf_url is the best PDF among them. */
++  oa_locations: z.array(OaLocationSchema).optional(),
++  /** Retraction lookup outcome when the adapter's own record carries it (Crossref updated-by, SRC-04). */
++  retraction_status: RetractionStatusSchema.optional(),
++  /** The Zotero item identity (SRC-16). */
++  zotero: ZoteroRefSchema.optional(),
+ };
+ 
+ export const SourceCandidateSchema = z.discriminatedUnion('source', [
+@@ -60,5 +86,11 @@ export const SourceCandidateSchema = z.discriminatedUnion('source', [
+   // RUN-27: the labelled synthetic dry-run provider (bin/lib/sources/dry-run.ts).
+   // Only ever produced under --dry-run; outside it research filters reserved ids.
+   z.object({ ...BaseFields, source: z.literal('dry-run') }),
++  // Phase 19 seam S-B: the books adapter (Open Library / Google Books, SRC-11),
++  // the Zotero Web / local API client (SRC-16) and bring-your-own PDFs entering
++  // the research candidate pool (SRC-15).
++  z.object({ ...BaseFields, source: z.literal('books') }),
++  z.object({ ...BaseFields, source: z.literal('zotero') }),
++  z.object({ ...BaseFields, source: z.literal('byo') }),
+ ]);
+ export type SourceCandidate = z.infer<typeof SourceCandidateSchema>;
+diff --git a/bin/lib/schemas/source-types.ts b/bin/lib/schemas/source-types.ts
+new file mode 100644
+index 0000000..8e2bc5b
+--- /dev/null
++++ b/bin/lib/schemas/source-types.ts
+@@ -0,0 +1,86 @@
++// bin/lib/schemas/source-types.ts — the shared vocabularies of a source record
++// (Phase 19 seam S-B; SRC-05, SRC-09, SRC-04, SRC-16).
++//
++// SEAM FILE (Phase 19 plan, S-B). Every Phase 19 stream applies it
++// byte-identically from .planning/phases/19-sources/seams/; no stream edits it
++// during Phase 19.
++//
++// Used by the SourceCandidate schema (adapter output), the LIBRARY.json v3
++// entry schema (bin/lib/schemas/library.ts) and the library writer.
++
++import { z } from 'zod';
++
++/**
++ * The kind of work a source is, in CSL-JSON type spelling (the BibTeX writer
++ * maps each to an entry type: article-journal → @article, book → @book,
++ * chapter → @incollection, paper-conference → @inproceedings, report →
++ * @techreport, thesis → @phdthesis, preprint → @misc with eprint fields, …).
++ * Adapters set it when the registrar says (Crossref `type`, OpenAlex `type`,
++ * arXiv → preprint, Open Library → book); null when unknown.
++ */
++export const SOURCE_TYPES = [
++  'article-journal',
++  'paper-conference',
++  'chapter',
++  'book',
++  'report',
++  'thesis',
++  'preprint',
++  'dataset',
++  'article-newspaper',
++  'article-magazine',
++  'webpage',
++  'other',
++] as const;
++export type SourceType = (typeof SOURCE_TYPES)[number];
++export const SourceTypeSchema = z.enum(SOURCE_TYPES);
++
++/**
++ * The evaluator tiers of PRD §7.2 (SRC-09). Derived deterministically from
++ * metadata where possible (bin/lib/source-tier.ts), with the source-evaluator
++ * model as the tie-breaker.
++ */
++export const SOURCE_TIERS = ['peer-reviewed', 'preprint', 'book', 'gov-report', 'other'] as const;
++export type SourceTier = (typeof SOURCE_TIERS)[number];
++export const SourceTierSchema = z.enum(SOURCE_TIERS);
++
++/**
++ * Retraction status of a work (SRC-04):
++ *   unchecked     — no retraction lookup has run for it yet;
++ *   clear         — a live lookup answered and listed no retraction notice;
++ *   retracted     — a retraction / withdrawal / removal notice updates it;
++ *   unknown       — the lookup failed (non-200, error body, rate limit,
++ *                   transport error): the status is UNKNOWN, never "clear".
++ */
++export const RETRACTION_STATUSES = ['unchecked', 'clear', 'retracted', 'unknown'] as const;
++export type RetractionStatus = (typeof RETRACTION_STATUSES)[number];
++export const RetractionStatusSchema = z.enum(RETRACTION_STATUSES);
++
++/**
++ * A Zotero item's identity (SRC-16): the library it lives in (`users/<id>`,
++ * `groups/<id>`, or `local` for the Zotero 7 local API) and its 8-character
++ * item key. Lets the library writer merge a re-pulled identifier-less item
++ * instead of duplicating it.
++ */
++export const ZoteroRefSchema = z
++  .object({
++    library: z.string().regex(/^(?:users\/\d+|groups\/\d+|local)$/),
++    key: z.string().regex(/^[A-Z0-9]{8}$/),
++  })
++  .strict();
++export type ZoteroRef = z.infer<typeof ZoteroRefSchema>;
++
++/**
++ * One open-access location of a work (Unpaywall `oa_locations[]`, SRC-03): a
++ * landing page and/or a direct PDF link, its host type and version.
++ */
++export const OaLocationSchema = z
++  .object({
++    url: z.string().url().optional(),
++    url_for_pdf: z.string().url().optional(),
++    host_type: z.string().optional(),
++    version: z.string().optional(),
++    license: z.string().optional(),
++  })
++  .strict();
++export type OaLocation = z.infer<typeof OaLocationSchema>;
+diff --git a/bin/lib/sources/lookup.ts b/bin/lib/sources/lookup.ts
+new file mode 100644
+index 0000000..b3be623
+--- /dev/null
++++ b/bin/lib/sources/lookup.ts
+@@ -0,0 +1,115 @@
++// bin/lib/sources/lookup.ts — the three-way identifier lookup contract every
++// source adapter implements (Phase 19 seam S-B; SRC-05, used by VRFY-12).
++//
++// SEAM FILE (Phase 19 plan, S-B). Every Phase 19 stream applies it
++// byte-identically from .planning/phases/19-sources/seams/; no stream edits it
++// during Phase 19.
++//
++// An identifier lookup has THREE outcomes, never two:
++//   found      — the registrar answered with a record (the candidate);
++//   not-found  — the registrar answered definitively that it has no such
++//                record (HTTP 404, or an empty result for an exact-id query);
++//   failed     — the lookup could not be answered: a non-200 status after
++//                retries (429, 5xx), a rate-limit budget exhausted, an open
++//                circuit breaker, a transport error, a timeout, a body that is
++//                not the registrar's schema (an error document inside a 200
++//                included), a missing precondition such as Unpaywall's required
++//                contact email.
++// A failure is never "not found": Pass 1 turns it into UNVERIFIABLE (S-03,
++// VRFY-12), `add` reports it and adds nothing, Pass 3 reports the text as
++// unavailable with the reason.
++//
++// Each adapter exports
++//     lookupById(id: string): Promise<LookupResult>
++// and keeps
++//     fetchById(id: string): Promise<SourceCandidate | null>
++// as `unwrapLookup(await lookupById(id), <adapter>, id)`: the candidate, null
++// for not-found, and a thrown SourceLookupError for failed — so no caller can
++// read a failed lookup as a missing record. The typed OfflineEgressError
++// (sources offline with no exact fixture, or --dry-run) is still thrown as-is
++// by both functions: it is a mode, not a lookup outcome (RUN-03).
++
++import { PensmithError, EXIT_ERROR } from '../exit-codes.js';
++import type { SourceCandidate } from '../schemas/source-candidate.js';
++
++export interface LookupFound {
++  readonly kind: 'found';
++  readonly candidate: SourceCandidate;
++}
++
++export interface LookupNotFound {
++  readonly kind: 'not-found';
++  /** One line: why the registrar's answer means "no such record" (e.g. `HTTP 404`). */
++  readonly reason: string;
++}
++
++export interface LookupFailed {
++  readonly kind: 'failed';
++  /** One user-facing line, hint included (e.g. `HTTP 503 after retries`, `Unpaywall skipped: set PENSMITH_CONTACT_EMAIL`). */
++  readonly reason: string;
++  /** The last HTTP status, when there was a response. */
++  readonly status?: number;
++  /** How long the service asked callers to wait, when it said so (Retry-After). */
++  readonly retryAfterMs?: number;
++}
++
++export type LookupResult = LookupFound | LookupNotFound | LookupFailed;
++
++export function lookupFound(candidate: SourceCandidate): LookupFound {
++  return { kind: 'found', candidate };
++}
++
++export function lookupNotFound(reason: string): LookupNotFound {
++  return { kind: 'not-found', reason };
++}
++
++export function lookupFailed(reason: string, extra: { status?: number; retryAfterMs?: number } = {}): LookupFailed {
++  return {
++    kind: 'failed',
++    reason,
++    ...(extra.status !== undefined ? { status: extra.status } : {}),
++    ...(extra.retryAfterMs !== undefined ? { retryAfterMs: extra.retryAfterMs } : {}),
++  };
++}
++
++/**
++ * A lookup that could not be answered, thrown by an adapter's fetchById. It is
++ * an expected, user-reportable condition (one line, no stack): the verb that
++ * receives it says the lookup failed and why, and never treats the identifier
++ * as unknown to the registrar.
++ */
++export class SourceLookupError extends PensmithError {
++  readonly source: string;
++  readonly id: string;
++  readonly reason: string;
++  readonly status: number | undefined;
++  readonly retryAfterMs: number | undefined;
++  constructor(source: string, id: string, failed: Pick<LookupFailed, 'reason' | 'status' | 'retryAfterMs'>) {
++    super(`${source} lookup of ${id} failed: ${failed.reason}`, EXIT_ERROR);
++    this.name = 'SourceLookupError';
++    this.source = source;
++    this.id = id;
++    this.reason = failed.reason;
++    this.status = failed.status;
++    this.retryAfterMs = failed.retryAfterMs;
++  }
++}
++
++export function isSourceLookupError(e: unknown): e is SourceLookupError {
++  return e instanceof SourceLookupError;
++}
++
++/**
++ * The fetchById view of a lookup: the candidate, null for a definitive
++ * not-found, and a thrown SourceLookupError for a failed lookup.
++ */
++export function unwrapLookup(result: LookupResult, source: string, id: string): SourceCandidate | null {
++  switch (result.kind) {
++    case 'found':
++      return result.candidate;
++    case 'not-found':
++      return null;
++    case 'failed':
++      throw new SourceLookupError(source, id, result);
++  }
++}
+diff --git a/bin/lib/sources/search-failure.ts b/bin/lib/sources/search-failure.ts
+index e34d900..1c4a9ed 100644
+--- a/bin/lib/sources/search-failure.ts
++++ b/bin/lib/sources/search-failure.ts
+@@ -8,13 +8,35 @@
+ // `HTTP 503 after retries`, `HTTP 400`, or the transport error. The research
+ // orchestrator records that as `failed (…)` instead of `no results`.
+ 
+-import { isRetryableStatus } from '../http.js';
++import {
++  isRetryableStatus,
++  RateLimitExhaustedError,
++  CircuitOpenError,
++  RedirectError,
++  SsrfBlockedError,
++  ResponseTooLargeError,
++  formatRetryAfter,
++} from '../http.js';
+ 
+ /** The options every source adapter's search() accepts. */
+ export interface SearchOptions {
+   limit?: number;
+   /** Called once with a one-line reason when the search request failed (the result is then []). */
+   onFailure?: (reason: string) => void;
++  /**
++   * Phase 19 seam S-B (SRC-10): only works published in or after this year,
++   * pushed down into the service's own filter where it has one (Crossref
++   * `from-pub-date`, OpenAlex `from_publication_date`, PubMed `mindate`,
++   * Semantic Scholar `year=`); adapters without one ignore it and the
++   * research policy filter ([sources] min_year) still applies.
++   */
++  fromYear?: number;
++  /**
++   * Phase 19 seam S-B (SRC-11): restrict to one DOI registrant prefix — the
++   * `nber` source preference is Crossref search with `10.3386`. Adapters that
++   * cannot filter by prefix ignore it.
++   */
++  doiPrefix?: string;
+ }
+ 
+ /** `HTTP 429 after retries` for a status http.ts retried, else `HTTP <status>`. */
+@@ -28,6 +50,13 @@ export function httpFailureReason(status: number): string {
+  * first line of the error (bounded).
+  */
+ export function errorFailureReason(err: unknown): string {
++  // Phase 19 seam S-B (SRC-17, SRC-01): the transport's own refusals read as
++  // what happened, not as a raw error name.
++  if (err instanceof RateLimitExhaustedError) return `rate limit exhausted (retry after ${formatRetryAfter(err.retryAfterMs)})`;
++  if (err instanceof CircuitOpenError) return `skipped after ${err.failures} consecutive HTTP ${err.lastStatus} responses`;
++  if (err instanceof RedirectError) return err.message;
++  if (err instanceof SsrfBlockedError) return err.message;
++  if (err instanceof ResponseTooLargeError) return 'response too large';
+   const status = (err as { status?: unknown } | null)?.status;
+   if (typeof status === 'number') return httpFailureReason(status);
+   const msg = err instanceof Error ? `${err.name !== 'Error' ? `${err.name}: ` : ''}${err.message}` : String(err);
+diff --git a/tests/gates-registry.test.ts b/tests/gates-registry.test.ts
+index 5f26f99..12b868d 100644
+--- a/tests/gates-registry.test.ts
++++ b/tests/gates-registry.test.ts
+@@ -332,8 +332,9 @@ test('RUN-28: PRD §7.20 carries the gate table and it matches GATES (drift test
+   for (const row of rows.filter((r) => !ids.has(r.id))) {
+     assert.match(row.owner, /^[A-Z]+-\d+ \(planned\)$/, `${row.id} is not in GATES, so it must be marked (planned) with its landing requirement`);
+   }
+-  // GRND-01, GRND-02 and GRND-09 landed their gates in Phase 18 (seam S-A).
+-  for (const req of ['GRND-17', 'VRFY-22', 'VRFY-20']) {
++  // GRND-01, GRND-02 and GRND-09 landed their gates in Phase 18 (seam S-A);
++  // GRND-17 landed plan-research in Phase 19 (seam S-B).
++  for (const req of ['VRFY-22', 'VRFY-20']) {
+     assert.ok(rows.some((r) => r.owner === `${req} (planned)`), `future gate from ${req} is listed`);
+   }
+ });
+diff --git a/tests/http-validate-cache.test.ts b/tests/http-validate-cache.test.ts
+new file mode 100644
+index 0000000..9a1646d
+--- /dev/null
++++ b/tests/http-validate-cache.test.ts
+@@ -0,0 +1,94 @@
++// tests/http-validate-cache.test.ts — Phase 19 seam S-B (SRC-17): a response
++// body that is not the service's answer never reaches the HTTP cache.
++//
++//   - a caller's `validate` that names a reason keeps a 200 out of the cache
++//     (the response is still returned, so the adapter can report it);
++//   - a 200 carrying an API error document (http-mock.ts recordedErrorBody —
++//     e.g. `{"status":"failed"}` or an inner statusCode 403) is never cached,
++//     with or without a validator;
++//   - a valid 200 is cached as before.
++
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import * as fsp from 'node:fs/promises';
++import * as fs from 'node:fs';
++import path from 'node:path';
++import os from 'node:os';
++import { installMockAgent, type InstalledMockAgent } from './helpers/local-servers/mock-agent.js';
++import { fetch, _resetWarnedForTest, _resetBucketsForTest, type HttpResponse } from '../bin/lib/http.js';
++import { pensmithHttpCacheDir } from '../bin/lib/paths.js';
++
++async function withLiveLane<T>(fn: (m: InstalledMockAgent) => Promise<T>): Promise<T> {
++  const tmpRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'pensmith-validate-'));
++  const saved = {
++    lane: process.env['PENSMITH_NETWORK_TESTS'],
++    lad: process.env['LOCALAPPDATA'],
++    xdg: process.env['XDG_DATA_HOME'],
++    home: process.env['HOME'],
++  };
++  process.env['PENSMITH_NETWORK_TESTS'] = '1';
++  process.env['LOCALAPPDATA'] = tmpRoot;
++  process.env['XDG_DATA_HOME'] = tmpRoot;
++  process.env['HOME'] = tmpRoot;
++  _resetWarnedForTest();
++  _resetBucketsForTest();
++  const m = installMockAgent();
++  try {
++    return await fn(m);
++  } finally {
++    await m.restore().catch(() => undefined);
++    for (const [k, v] of [['PENSMITH_NETWORK_TESTS', saved.lane], ['LOCALAPPDATA', saved.lad], ['XDG_DATA_HOME', saved.xdg], ['HOME', saved.home]] as const) {
++      if (v === undefined) delete process.env[k];
++      else process.env[k] = v;
++    }
++    await fsp.rm(tmpRoot, { recursive: true, force: true }).catch(() => undefined);
++  }
++}
++
++function cacheFiles(): string[] {
++  const dir = pensmithHttpCacheDir();
++  return fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.json')) : [];
++}
++
++const JSON_HEADERS = { 'content-type': 'application/json' };
++
++test('seam S-B: a validate() reason keeps a 200 out of the cache but returns it', async () => {
++  await withLiveLane(async ({ agent }) => {
++    const pool = agent.get('https://api.crossref.org');
++    pool.intercept({ path: '/works/10.5555%2Fbad-shape', method: 'GET' }).reply(200, { status: 'ok', message: 'not a work' }, { headers: JSON_HEADERS });
++    const seen: HttpResponse[] = [];
++    const res = await fetch('https://api.crossref.org/works/10.5555%2Fbad-shape', {
++      source: 'crossref',
++      validate: (r) => {
++        seen.push(r);
++        return 'message is not a work record';
++      },
++    });
++    assert.equal(res.status, 200);
++    assert.equal(seen.length, 1, 'validate saw the live response');
++    assert.deepEqual(cacheFiles(), [], 'nothing was cached');
++  });
++});
++
++test('seam S-B: an error document served with HTTP 200 is never cached', async () => {
++  await withLiveLane(async ({ agent }) => {
++    const pool = agent.get('https://api.crossref.org');
++    pool
++      .intercept({ path: '/works?filter=updates%3A10.5555%2Fx', method: 'GET' })
++      .reply(200, { statusCode: '403', 'message-type': 'not-polite', body: 'no mailto' }, { headers: JSON_HEADERS });
++    const res = await fetch('https://api.crossref.org/works?filter=updates%3A10.5555%2Fx', { source: 'retraction-watch' });
++    assert.equal(res.status, 200);
++    assert.deepEqual(cacheFiles(), []);
++  });
++});
++
++test('seam S-B: a valid 200 is still cached', async () => {
++  await withLiveLane(async ({ agent }) => {
++    const pool = agent.get('https://api.crossref.org');
++    pool
++      .intercept({ path: '/works/10.5555%2Fgood', method: 'GET' })
++      .reply(200, { status: 'ok', 'message-type': 'work', message: { DOI: '10.5555/good' } }, { headers: JSON_HEADERS });
++    await fetch('https://api.crossref.org/works/10.5555%2Fgood', { source: 'crossref', validate: () => null });
++    assert.equal(cacheFiles().length, 1);
++  });
++});
+diff --git a/tests/library-v3.test.ts b/tests/library-v3.test.ts
+new file mode 100644
+index 0000000..25551b7
+--- /dev/null
++++ b/tests/library-v3.test.ts
+@@ -0,0 +1,236 @@
++// tests/library-v3.test.ts — LIBRARY.json v3 (Phase 19 seam S-B).
++//
++// Covers the v2 → v3 migration (defaults, retraction status, idempotence, fail
++// closed on a hand-edited retraction), the v3 entry invariants, the shaping of
++// the new candidate fields (invalid values dropped, not stored), and the merge
++// rules the library writer applies to them: the latest evaluation wins, a
++// registrar-hydrated record replaces an unhydrated BYO entry's local metadata,
++// `retracted` stays sticky while other retraction outcomes follow the newest
++// lookup, and a re-pulled Zotero item merges by its item key.
++
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import * as fs from 'node:fs';
++import * as os from 'node:os';
++import * as path from 'node:path';
++import {
++  upsertSources,
++  loadLibrary,
++  libraryPaths,
++  LIBRARY_MIGRATIONS,
++  type LibraryCandidate,
++} from '../bin/lib/library.js';
++import { Schema as LibrarySchema, LibraryEntrySchema, CURRENT_LIBRARY_VERSION } from '../bin/lib/schemas/library.js';
++import { migrate as v2ToV3 } from '../bin/lib/migrations/library/v2_to_v3.js';
++import { candidateToEntry } from '../bin/lib/migrations/library/shape.js';
++
++const NOW = '2026-09-28T00:00:00.000Z';
++
++function project(): string {
++  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-libv3-'));
++  fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
++  return root;
++}
++
++function v2Entry(over: Record<string, unknown>): Record<string, unknown> {
++  return {
++    citekey: 'engel2007',
++    doi: '10.1038/nature05678',
++    arxiv: null,
++    pmid: null,
++    pmcid: null,
++    isbn: null,
++    title: 'Evidence for wavelike energy transfer',
++    authors: ['Engel, Gregory S.'],
++    year: 2007,
++    venue: 'Nature',
++    abstract: null,
++    oa_url: null,
++    alternate_dois: [],
++    provenance: ['research:crossref'],
++    retracted: false,
++    retraction_details: null,
++    synthetic: false,
++    last_verified: NOW,
++    byo: null,
++    addedAt: NOW,
++    updatedAt: NOW,
++    ...over,
++  };
++}
++
++test('seam S-B: the library is version 3 and registers the v2 → v3 migration', () => {
++  assert.equal(CURRENT_LIBRARY_VERSION, 3);
++  assert.equal(typeof LIBRARY_MIGRATIONS[1], 'function');
++  assert.equal(typeof LIBRARY_MIGRATIONS[2], 'function');
++});
++
++test('seam S-B: v2 → v3 keeps every v2 value and adds the v3 defaults', () => {
++  const out = v2ToV3({
++    $schemaVersion: 2,
++    entries: [v2Entry({}), v2Entry({ citekey: 'wakefield1998', doi: '10.1016/s0140-6736(97)11096-0', retracted: true, retraction_details: 'Retraction' })],
++  }) as { $schemaVersion: number; entries: Array<Record<string, unknown>> };
++  assert.equal(out.$schemaVersion, 3);
++  const [engel, wakefield] = out.entries as [Record<string, unknown>, Record<string, unknown>];
++  assert.equal(engel['venue'], 'Nature');
++  for (const k of ['type', 'publisher', 'volume', 'issue', 'pages', 'tier', 'relevance', 'why_relevant', 'zotero']) {
++    assert.equal(engel[k], null, `${k} defaults to null`);
++  }
++  assert.deepEqual(engel['editors'], []);
++  assert.equal(engel['hydrated'], true);
++  assert.equal(engel['retraction_status'], 'unchecked', 'a v2 entry never claims a clean lookup');
++  assert.equal(wakefield['retraction_status'], 'retracted');
++  const parsed = LibrarySchema.parse(out);
++  assert.equal(parsed.entries.length, 2);
++});
++
++test('seam S-B: v2 → v3 is idempotent and fails closed on a hand-edited retraction', () => {
++  const v3 = v2ToV3({ $schemaVersion: 2, entries: [v2Entry({})] });
++  assert.deepEqual(v2ToV3(v3), v3, 'v3 input is returned unchanged');
++  const edited = v2ToV3({ $schemaVersion: 2, entries: [v2Entry({ retraction_status: 'retracted', retracted: false })] }) as {
++    entries: Array<Record<string, unknown>>;
++  };
++  assert.equal(edited.entries[0]!['retracted'], true, 'a retraction recorded either way is recorded both ways');
++  assert.equal(edited.entries[0]!['retraction_status'], 'retracted');
++});
++
++test('seam S-B: a v3 entry never has retracted and retraction_status disagreeing', () => {
++  const base = v2ToV3({ $schemaVersion: 2, entries: [v2Entry({})] }) as { entries: Array<Record<string, unknown>> };
++  const e = base.entries[0]!;
++  assert.equal(LibraryEntrySchema.safeParse(e).success, true);
++  assert.equal(LibraryEntrySchema.safeParse({ ...e, retracted: true }).success, false);
++  assert.equal(LibraryEntrySchema.safeParse({ ...e, retraction_status: 'retracted' }).success, false);
++  assert.equal(LibraryEntrySchema.safeParse({ ...e, retracted: true, retraction_status: 'retracted' }).success, true);
++  assert.equal(LibraryEntrySchema.safeParse({ ...e, relevance: 1.5 }).success, false);
++  assert.equal(LibraryEntrySchema.safeParse({ ...e, tier: 'blog' }).success, false);
++  assert.equal(LibraryEntrySchema.safeParse({ ...e, zotero: { library: 'users/12', key: 'ABCD2345' } }).success, true);
++  assert.equal(LibraryEntrySchema.safeParse({ ...e, zotero: { library: 'users/12', key: 'short' } }).success, false);
++});
++
++test('seam S-B: loadLibrary migrates a v2 file on disk to v3', async () => {
++  const root = project();
++  const file = libraryPaths(root).library;
++  fs.writeFileSync(file, JSON.stringify({ $schemaVersion: 2, entries: [v2Entry({})] }, null, 2));
++  const lib = await loadLibrary(root);
++  assert.equal(lib.$schemaVersion, 3);
++  assert.equal(lib.entries[0]!.retraction_status, 'unchecked');
++  assert.equal(lib.entries[0]!.hydrated, true);
++});
++
++test('seam S-B: candidateToEntry shapes the v3 fields and drops invalid values', () => {
++  const c: LibraryCandidate = {
++    citekey: 'lecun2015',
++    source: 'crossref',
++    doi: '10.1038/nature14539',
++    title: 'Deep learning',
++    authors: ['LeCun, Yann'],
++    year: 2015,
++    venue: 'Nature',
++    type: 'article-journal',
++    volume: 521,
++    issue: '7553',
++    pages: '436-444',
++    publisher: 'Springer Science and Business Media LLC',
++    editors: [' ', 'Doe, Jane'],
++    tier: 'peer-reviewed',
++    relevance: 0.9,
++    why_relevant: 'Defines the deep-learning family the paper builds on.',
++    retraction_status: 'clear',
++    zotero: { library: 'groups/4711', key: 'ZXCV1234' },
++    byo: { file: 'sources/lecun2015.pdf', sha256: 'a'.repeat(64), text_sha256: 'b'.repeat(64) },
++  };
++  const e = candidateToEntry(c, ['add:crossref'], NOW);
++  assert.equal(e.type, 'article-journal');
++  assert.equal(e.volume, '521', 'a numeric volume becomes its text');
++  assert.equal(e.issue, '7553');
++  assert.deepEqual(e.editors, ['Doe, Jane']);
++  assert.equal(e.tier, 'peer-reviewed');
++  assert.equal(e.relevance, 0.9);
++  assert.equal(e.retraction_status, 'clear');
++  assert.equal(e.retracted, false);
++  assert.deepEqual(e.zotero, { library: 'groups/4711', key: 'ZXCV1234' });
++  assert.equal(e.byo?.file, 'sources/lecun2015.pdf');
++  assert.equal(e.hydrated, true);
++  LibraryEntrySchema.parse(e);
++
++  const bad = candidateToEntry(
++    { title: 'x', authors: ['A, B'], type: 'blogpost', tier: 'blog', relevance: 7, retraction_status: 'maybe', zotero: { library: 'x', key: 'y' } as never, byo: { file: '', sha256: 'nope' } as never },
++    ['add'],
++    NOW,
++  );
++  assert.equal(bad.type, null);
++  assert.equal(bad.tier, null);
++  assert.equal(bad.relevance, null);
++  assert.equal(bad.retraction_status, 'unchecked');
++  assert.equal(bad.zotero, null);
++  assert.equal(bad.byo, null);
++
++  const retracted = candidateToEntry({ title: 'y', authors: ['A, B'], retraction_status: 'retracted' }, ['add'], NOW);
++  assert.equal(retracted.retracted, true, 'a retracted status sets the flag (fail closed)');
++});
++
++test('seam S-B: the latest evaluation wins and a non-evaluating ingest never erases it', async () => {
++  const root = project();
++  const base: LibraryCandidate = { citekey: 'lecun2015', source: 'crossref', doi: '10.1038/nature14539', title: 'Deep learning', authors: ['LeCun, Yann'], year: 2015 };
++  await upsertSources(root, [{ ...base, tier: 'peer-reviewed', relevance: 0.4, why_relevant: 'first look' }], { provenance: 'research' });
++  await upsertSources(root, [{ ...base, relevance: 0.8, why_relevant: 'central to section 2' }], { provenance: 'plan-research:§2' });
++  await upsertSources(root, [{ ...base }], { provenance: 'add' });
++  const [e] = (await loadLibrary(root)).entries;
++  assert.equal(e!.tier, 'peer-reviewed');
++  assert.equal(e!.relevance, 0.8);
++  assert.equal(e!.why_relevant, 'central to section 2');
++});
++
++test('seam S-B: a hydrated record replaces an unhydrated BYO entry\'s local metadata', async () => {
++  const root = project();
++  const byo = { file: 'sources/vaswani2017.pdf', sha256: 'c'.repeat(64), text_sha256: 'd'.repeat(64) };
++  await upsertSources(
++    root,
++    [{ citekey: 'vaswani2017', title: 'Attention is all you need (local copy)', authors: ['Vaswani'], year: 2017, arxiv: '1706.03762', hydrated: false, byo }],
++    { provenance: 'byo' },
++  );
++  const out = await upsertSources(
++    root,
++    [{ source: 'arxiv', arxiv: '1706.03762', title: 'Attention Is All You Need', authors: ['Ashish Vaswani', 'Noam Shazeer'], year: 2017, type: 'preprint' }],
++    { provenance: 'research' },
++  );
++  assert.equal(out.outcomes[0]!.matchedBy, 'arxiv');
++  const [e] = (await loadLibrary(root)).entries;
++  assert.equal(e!.citekey, 'vaswani2017', 'the citekey never changes');
++  assert.equal(e!.hydrated, true);
++  assert.equal(e!.title, 'Attention Is All You Need');
++  assert.deepEqual(e!.authors, ['Ashish Vaswani', 'Noam Shazeer']);
++  assert.equal(e!.type, 'preprint');
++  assert.deepEqual(e!.byo, byo, 'the BYO record is kept');
++});
++
++test('seam S-B: retraction status — retracted is sticky, otherwise the newest lookup wins', async () => {
++  const root = project();
++  const base: LibraryCandidate = { citekey: 'smith2020', source: 'crossref', doi: '10.5555/example.1', title: 'A study', authors: ['Smith, A'], year: 2020 };
++  await upsertSources(root, [{ ...base, retraction_status: 'clear' }], { provenance: 'research' });
++  await upsertSources(root, [{ ...base, retraction_status: 'unknown' }], { provenance: 'research' });
++  assert.equal((await loadLibrary(root)).entries[0]!.retraction_status, 'unknown');
++  await upsertSources(root, [{ ...base }], { provenance: 'add' });
++  assert.equal((await loadLibrary(root)).entries[0]!.retraction_status, 'unknown', 'an unchecked record never overrides an outcome');
++  await upsertSources(root, [{ ...base, retracted: true, retraction_details: 'Retraction notice' }], { provenance: 'research' });
++  await upsertSources(root, [{ ...base, retraction_status: 'clear' }], { provenance: 'research' });
++  const e = (await loadLibrary(root)).entries[0]!;
++  assert.equal(e.retracted, true);
++  assert.equal(e.retraction_status, 'retracted');
++});
++
++test('seam S-B: a re-pulled identifier-less Zotero item merges by its item key', async () => {
++  const root = project();
++  const item: LibraryCandidate = {
++    source: 'zotero',
++    title: 'Field notes from the archive',
++    authors: ['Jones, Mary'],
++    year: 1999,
++    zotero: { library: 'users/12345', key: 'QWER5678' },
++  };
++  const first = await upsertSources(root, [item], { provenance: 'zotero' });
++  const second = await upsertSources(root, [{ ...item, title: 'Field Notes from the Archive', year: 2001 }], { provenance: 'zotero' });
++  assert.equal(second.outcomes[0]!.matchedBy, 'zotero');
++  assert.equal(second.outcomes[0]!.citekey, first.outcomes[0]!.citekey);
++  assert.equal((await loadLibrary(root)).entries.length, 1);
++});
+diff --git a/tests/library-writer.test.ts b/tests/library-writer.test.ts
+index d79c82d..2eddbe6 100644
+--- a/tests/library-writer.test.ts
++++ b/tests/library-writer.test.ts
+@@ -34,6 +34,8 @@ import {
+ } from '../bin/lib/library.js';
+ import { Schema as LibrarySchema } from '../bin/lib/schemas/library.js';
+ import { migrate } from '../bin/lib/migrations/library/v1_to_v2.js';
++import { migrate as migrateV2toV3 } from '../bin/lib/migrations/library/v2_to_v3.js';
++import { CURRENT_LIBRARY_VERSION } from '../bin/lib/schemas/library.js';
+ import { isPreprintDoi } from '../bin/lib/migrations/library/shape.js';
+ import { parseBib } from '../bin/lib/citations.js';
+ 
+@@ -99,9 +101,11 @@ test('BRDTH-01 migration: the research-written v1 shape (SourceCandidate[], no a
+       },
+     ],
+   };
+-  const v2 = migrate(v1, '2026-09-27T00:00:00.000Z');
+-  const lib = LibrarySchema.parse(v2);
+-  assert.equal(lib.$schemaVersion, 2);
++  const v2 = migrate(v1, '2026-09-27T00:00:00.000Z') as { $schemaVersion: number };
++  assert.equal(v2.$schemaVersion, 2, 'the v1 → v2 step yields v2');
++  // Phase 19 seam S-B: the loader chains v2 → v3; the current schema is v3.
++  const lib = LibrarySchema.parse(migrateV2toV3(v2));
++  assert.equal(lib.$schemaVersion, CURRENT_LIBRARY_VERSION);
+   const [a, b] = lib.entries;
+   assert.equal(a!.citekey, 'vaswani2017');
+   assert.equal(a!.doi, '10.48550/arxiv.1706.03762', 'DOI normalized (lowercase)');
+@@ -124,24 +128,24 @@ test('BRDTH-01 migration: the strict v1 foundation shape migrates; duplicate key
+       { id: 'cite-1', pmid: '123', addedAt: '2099-01-02T00:00:00.000Z' },
+     ],
+   };
+-  const lib = LibrarySchema.parse(migrate(v1, '2026-09-27T00:00:00.000Z'));
++  const v2 = migrate(v1, '2026-09-27T00:00:00.000Z');
++  const lib = LibrarySchema.parse(migrateV2toV3(v2));
+   assert.deepEqual(lib.entries.map((e) => e.citekey), ['cite-1', 'cite-1a']);
+   assert.equal(lib.entries[0]!.doi, '10.5555/abc');
+   assert.equal(lib.entries[0]!.addedAt, '2099-01-01T00:00:00.000Z');
+   assert.deepEqual(lib.entries[1]!.provenance, ['v1']);
+   assert.equal(lib.entries[1]!.title, null);
+-  const again = migrate(lib);
+-  assert.deepEqual(again, lib, 'idempotent on v2');
++  assert.deepEqual(migrate(v2), v2, 'idempotent on v2');
+ });
+ 
+-test('BRDTH-01 migration: loadLibrary migrates a research-written v1 file and writes the v2 file back', async () => {
++test('BRDTH-01 migration: loadLibrary migrates a research-written v1 file and writes the current-version file back', async () => {
+   const root = project();
+   const file = path.join(root, '.paper', 'LIBRARY.json');
+   fs.writeFileSync(file, JSON.stringify({ $schemaVersion: 1, entries: [{ ...ENGEL, citekey: 'engel2007', raw: {} }] }, null, 2));
+   const lib = await loadLibrary(root);
+   assert.equal(lib.entries.length, 1);
+   const onDisk = JSON.parse(fs.readFileSync(file, 'utf8')) as { $schemaVersion: number; entries: Array<Record<string, unknown>> };
+-  assert.equal(onDisk.$schemaVersion, 2, 'the migrated file is written back');
++  assert.equal(onDisk.$schemaVersion, CURRENT_LIBRARY_VERSION, 'the migrated file is written back (v1 → v2 → v3)');
+   assert.ok(typeof onDisk.entries[0]!['addedAt'] === 'string');
+   LibrarySchema.parse(onDisk);
+ });
+@@ -563,7 +567,7 @@ async function readPaperLibraryOverMcp(cwd: string): Promise<{ entries: Array<{
+   }
+ }
+ 
+-test('BRDTH-01 user path: `research --yolo` writes a v2 LIBRARY.json that paper://library returns; a re-run adds no duplicate', async () => {
++test('BRDTH-01 user path: `research --yolo` writes a current-version LIBRARY.json that paper://library returns; a re-run adds no duplicate', async () => {
+   assert.ok(fs.existsSync(DIST_CLI) && fs.existsSync(DIST_MCP), 'run `npm run build` first');
+   const root = project();
+   fs.writeFileSync(
+@@ -586,7 +590,7 @@ test('BRDTH-01 user path: `research --yolo` writes a v2 LIBRARY.json that paper:
+     assert.ok(e.provenance.some((p) => p.startsWith('research')), `${e.citekey} carries a research provenance tag`);
+   }
+   const served = await readPaperLibraryOverMcp(root);
+-  assert.equal(served.$schemaVersion, 2);
++  assert.equal(served.$schemaVersion, CURRENT_LIBRARY_VERSION);
+   assert.deepEqual(served.entries.map((e) => e.citekey), lib.entries.map((e) => e.citekey), 'paper://library returns the entries');
+ 
+   const second = run();
+diff --git a/tests/library.test.ts b/tests/library.test.ts
+index e8d2e98..5caa57c 100644
+--- a/tests/library.test.ts
++++ b/tests/library.test.ts
+@@ -52,15 +52,16 @@ function src(i: number, extra: Record<string, unknown> = {}): Record<string, unk
+   };
+ }
+ 
+-test('initLibrary then loadLibrary returns an empty v2 library', async () => {
++test('initLibrary then loadLibrary returns an empty current-version library', async () => {
+   const root = mkPaperRoot();
+   const { initLibrary, loadLibrary } = await import('../bin/lib/library.js');
++  const { CURRENT_LIBRARY_VERSION } = await import('../bin/lib/schemas/library.js');
+ 
+   await initLibrary(root);
+   const loaded = await loadLibrary(root);
+ 
+   assert.deepEqual(loaded.entries, []);
+-  assert.equal(loaded.$schemaVersion, 2);
++  assert.equal(loaded.$schemaVersion, CURRENT_LIBRARY_VERSION);
+   assert.ok(fs.existsSync(path.join(root, '.paper', 'LIBRARY.json')), 'LIBRARY.json lives under .paper/');
+ });
+ 
+@@ -171,14 +172,14 @@ test('forward-incompat: $schemaVersion=999 throws ForwardIncompatError (never do
+ });
+ 
+ test('the library refuses to persist a duplicate citekey (schema invariant)', async () => {
+-  const { Schema } = await import('../bin/lib/schemas/library.js');
++  const { Schema, CURRENT_LIBRARY_VERSION } = await import('../bin/lib/schemas/library.js');
+   const e = {
+     citekey: 'dup2020',
+     title: 'x',
+     addedAt: '2026-01-01T00:00:00.000Z',
+     updatedAt: '2026-01-01T00:00:00.000Z',
+   };
+-  const r = Schema.safeParse({ $schemaVersion: 2, entries: [e, { ...e, doi: '10.5555/other' }] });
++  const r = Schema.safeParse({ $schemaVersion: CURRENT_LIBRARY_VERSION, entries: [e, { ...e, doi: '10.5555/other' }] });
+   assert.equal(r.success, false);
+   assert.match(JSON.stringify(r.error?.issues), /duplicate citekey/);
+ });
+diff --git a/tests/research-md.test.ts b/tests/research-md.test.ts
+new file mode 100644
+index 0000000..2c40266
+--- /dev/null
++++ b/tests/research-md.test.ts
+@@ -0,0 +1,160 @@
++// tests/research-md.test.ts — the RESEARCH.md sources block (Phase 19 seam S-B).
++//
++// The block is a view of LIBRARY.json: rendered deterministically (formatted
++// reference, tier, relevance, provenance tags, why-relevant, abstract excerpt,
++// retraction and unhydrated notes), inserted above the research-log end line,
++// replaced in place on refresh, adopting the file's line ending, and never
++// touching anything outside its markers (the user's notes survive byte-for-
++// byte). It uses no `### ` headings, so the tutorial's curated-claims parser
++// cannot mistake a source for a curated entry.
++
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import * as fs from 'node:fs';
++import * as os from 'node:os';
++import * as path from 'node:path';
++import {
++  RESEARCH_LOG_END,
++  SOURCES_START,
++  SOURCES_END,
++  renderSourcesBlock,
++  upsertSourcesBlock,
++  refreshResearchSources,
++  formatReference,
++  provenanceTags,
++} from '../bin/lib/research-md.js';
++import { RESEARCH_LOG_END as ORCHESTRATOR_LOG_END } from '../bin/lib/research-orchestrator.js';
++import { upsertSources, type LibraryCandidate } from '../bin/lib/library.js';
++import { candidateToEntry } from '../bin/lib/migrations/library/shape.js';
++import { parseResearchClaims } from '../bin/cli/goal.js';
++
++const NOW = '2026-09-28T00:00:00.000Z';
++
++function entry(c: LibraryCandidate, provenance: string[] = ['research:crossref']) {
++  return candidateToEntry(c, provenance, NOW);
++}
++
++const LECUN = entry({
++  citekey: 'lecun2015',
++  doi: '10.1038/nature14539',
++  title: 'Deep learning',
++  authors: ['LeCun, Yann', 'Bengio, Yoshua', 'Hinton, Geoffrey'],
++  year: 2015,
++  venue: 'Nature',
++  volume: '521',
++  issue: '7553',
++  pages: '436-444',
++  tier: 'peer-reviewed',
++  relevance: 0.92,
++  why_relevant: 'The review the background section summarizes.',
++  abstract: 'Deep learning allows computational models that are composed of multiple processing layers to learn representations of data with multiple levels of abstraction. '.repeat(8),
++  retraction_status: 'clear',
++});
++const KUHN = entry(
++  { citekey: 'kuhn1996', isbn: '9780226458083', title: 'The Structure of Scientific Revolutions', authors: ['Kuhn, Thomas S.'], year: 1996, publisher: 'University of Chicago Press', type: 'book', tier: 'book' },
++  ['add:books', 'zotero:users/1'],
++);
++const WAKEFIELD = entry({
++  citekey: 'wakefield1998',
++  doi: '10.1016/s0140-6736(97)11096-0',
++  title: 'RETRACTED: Ileal-lymphoid-nodular hyperplasia',
++  authors: ['Wakefield, A.J.', 'Murch, S.H.', 'Anthony, A.', 'Linnell, J.'],
++  year: 1998,
++  retracted: true,
++  retraction_details: '2010-02-06: Retraction (notice 10.1016/s0140-6736(10)60175-4)',
++});
++const BYO = entry(
++  { citekey: 'notes2020', title: 'Course reader: week 3', authors: ['{Department of History}'], year: 2020, hydrated: false, byo: { file: 'sources/notes2020.pdf', sha256: 'e'.repeat(64), text_sha256: null }, retraction_status: 'unknown' },
++  ['byo'],
++);
++
++test('seam S-B: RESEARCH_LOG_END is the research orchestrator\'s end line', () => {
++  assert.equal(RESEARCH_LOG_END, ORCHESTRATOR_LOG_END);
++});
++
++test('seam S-B: formatReference and provenanceTags', () => {
++  assert.equal(
++    formatReference(LECUN),
++    'LeCun, Yann; Bengio, Yoshua; Hinton, Geoffrey (2015). Deep learning. Nature, 521(7553), 436-444. https://doi.org/10.1038/nature14539',
++  );
++  assert.equal(
++    formatReference(KUHN),
++    'Kuhn, Thomas S. (1996). The Structure of Scientific Revolutions. University of Chicago Press. ISBN 9780226458083',
++  );
++  assert.match(formatReference(WAKEFIELD), /^Wakefield, A\.J\.; Murch, S\.H\.; Anthony, A\.; et al\. \(1998\)/);
++  assert.match(formatReference(BYO), /^Department of History \(2020\)\. Course reader: week 3\.$/);
++  assert.deepEqual(provenanceTags(KUHN), ['added', 'zotero']);
++  assert.deepEqual(provenanceTags(BYO), ['bring-your-own']);
++  const mixed = entry({ title: 'x', authors: ['A, B'] }, ['research:openalex', 'research:zotero', 'research:byo', 'plan-research:§2', 'bib-import']);
++  assert.deepEqual(provenanceTags(mixed), ['search', 'zotero', 'bring-your-own', 'plan-research', 'imported']);
++});
++
++test('seam S-B: renderSourcesBlock is deterministic, ordered by relevance, list-only', () => {
++  const block = renderSourcesBlock([BYO, WAKEFIELD, KUHN, LECUN]);
++  assert.equal(block, renderSourcesBlock([LECUN, KUHN, WAKEFIELD, BYO]), 'input order does not matter');
++  assert.ok(block.startsWith(`${SOURCES_START}\n## Sources (4)\n`));
++  assert.ok(block.endsWith(SOURCES_END));
++  const keys = [...block.matchAll(/^- \[@([^\]]+)\]/gm)].map((m) => m[1]);
++  assert.deepEqual(keys, ['lecun2015', 'kuhn1996', 'notes2020', 'wakefield1998'], 'scored first, then by citekey');
++  assert.match(block, /Tier: peer-reviewed · Relevance: 0\.92 · Tags: search/);
++  assert.match(block, /Why relevant: The review the background section summarizes\./);
++  const abstractLine = block.split('\n').find((l) => l.startsWith('  - Abstract: ')) ?? '';
++  assert.ok(abstractLine.length <= '  - Abstract: '.length + 601, 'abstract excerpt is bounded');
++  assert.ok(abstractLine.endsWith('…'));
++  assert.match(block, /Retraction: RETRACTED — 2010-02-06: Retraction/);
++  assert.match(block, /Retraction: retraction status unknown/);
++  assert.match(block, /Metadata: local only/);
++  assert.match(block, /Tier: not evaluated/);
++  assert.doesNotMatch(block, /^### /m);
++  assert.equal(parseResearchClaims(block).size, 0, 'the curated-claims parser sees no entries');
++  assert.match(renderSourcesBlock([]), /_No sources in LIBRARY\.json yet\._/);
++});
++
++test('seam S-B: upsertSourcesBlock inserts, replaces and preserves everything else', () => {
++  const block = renderSourcesBlock([LECUN]);
++  const fresh = upsertSourcesBlock(null, block);
++  assert.equal(fresh, `# Research\n\n${block}\n\n${RESEARCH_LOG_END}\n`);
++
++  const log = `# Research log\n\nScope: x\n\n${RESEARCH_LOG_END}\n\n## My notes\n\nKeep me.\n`;
++  const inserted = upsertSourcesBlock(log, block);
++  assert.ok(inserted.startsWith('# Research log\n\nScope: x\n\n' + block + '\n\n' + RESEARCH_LOG_END));
++  assert.ok(inserted.endsWith('## My notes\n\nKeep me.\n'));
++
++  const block2 = renderSourcesBlock([LECUN, KUHN]);
++  const replaced = upsertSourcesBlock(inserted, block2);
++  assert.equal(replaced, inserted.replace(block, block2));
++  assert.equal(upsertSourcesBlock(replaced, block2), replaced, 'idempotent');
++
++  const notesOnly = 'Hand-written notes, no log yet.\n';
++  const prepended = upsertSourcesBlock(notesOnly, block);
++  assert.ok(prepended.endsWith(`${RESEARCH_LOG_END}\n\n${notesOnly}`), 'existing notes move below the end line untouched');
++
++  const crlf = log.replace(/\n/g, '\r\n');
++  const out = upsertSourcesBlock(crlf, block);
++  assert.doesNotMatch(out.replace(/\r\n/g, ''), /\n/, 'a CRLF file stays CRLF');
++});
++
++test('seam S-B: refreshResearchSources renders LIBRARY.json and keeps the notes', async () => {
++  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-researchmd-'));
++  fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
++  const file = path.join(root, '.paper', 'RESEARCH.md');
++
++  assert.deepEqual(await refreshResearchSources(root), { path: file, changed: false, count: 0 }, 'no library, no file: nothing written');
++  assert.equal(fs.existsSync(file), false);
++
++  await upsertSources(root, [{ citekey: 'lecun2015', source: 'crossref', doi: '10.1038/nature14539', title: 'Deep learning', authors: ['LeCun, Yann'], year: 2015 }], { provenance: 'add' });
++  const first = await refreshResearchSources(root);
++  assert.equal(first.changed, true);
++  assert.equal(first.count, 1);
++  const text1 = fs.readFileSync(file, 'utf8');
++  assert.match(text1, /- \[@lecun2015\] LeCun, Yann \(2015\)\. Deep learning\./);
++
++  fs.appendFileSync(file, '\n## My notes\n\nKeep me exactly.\n');
++  await upsertSources(root, [{ citekey: 'kuhn1996', source: 'books', isbn: '9780226458083', title: 'The Structure of Scientific Revolutions', authors: ['Kuhn, Thomas S.'], year: 1996 }], { provenance: 'add' });
++  const second = await refreshResearchSources(root);
++  assert.equal(second.changed, true);
++  const text2 = fs.readFileSync(file, 'utf8');
++  assert.match(text2, /\[@kuhn1996\]/);
++  assert.ok(text2.endsWith('\n## My notes\n\nKeep me exactly.\n'));
++  assert.equal((await refreshResearchSources(root)).changed, false, 'unchanged library, no write');
++});
+diff --git a/tests/schemas.test.ts b/tests/schemas.test.ts
+index e7eb059..62f7231 100644
+--- a/tests/schemas.test.ts
++++ b/tests/schemas.test.ts
+@@ -3,7 +3,7 @@
+ // Coverage matrix (per VALIDATION 01-07-03):
+ //   - All 5 CURRENT_*_VERSION constants are 1
+ //   - state    : valid + 3 invalid (empty paperId / wrong version / bad date)
+-//   - library  : valid empty, valid with entry, rejects empty-citekey entry (v2, BRDTH-01)
++//   - library  : valid empty, valid with entry, rejects empty-citekey entry (v3: BRDTH-01 v2 + Phase 19 seam S-B)
+ //   - checkpoint: valid + rejects empty label
+ //   - session-log: valid (kind=event/tool_call), rejects bad-kind, rejects missing run_id
+ //   - runtime-config (v2, Phase 17 D-17-19): flat provider/model form + defaults;
+@@ -39,9 +39,9 @@ import { migrate as runtimeV1ToV2 } from '../bin/lib/migrations/runtime-config/v
+ 
+ const ISO = '2026-05-08T00:00:00.000Z';
+ 
+-test('CURRENT_*_VERSION constants (state=2, library=2, session-log=2, runtime-config=2, others=1)', () => {
++test('CURRENT_*_VERSION constants (state=2, library=3, session-log=2, runtime-config=2, others=1)', () => {
+   assert.equal(CURRENT_STATE_VERSION, 2);
+-  assert.equal(CURRENT_LIBRARY_VERSION, 2); // BRDTH-01: LIBRARY.json v2 (one writer)
++  assert.equal(CURRENT_LIBRARY_VERSION, 3); // BRDTH-01 v2 (one writer); Phase 19 seam S-B v3 (source fields)
+   assert.equal(CURRENT_CHECKPOINT_VERSION, 1);
+   assert.equal(CURRENT_SESSION_LOG_VERSION, 2); // Phase 17: the llm + http record kinds
+   assert.equal(CURRENT_RUNTIME_CONFIG_VERSION, 2);
+@@ -90,24 +90,26 @@ test('state: rejects empty paperId / wrong $schemaVersion / bad createdAt', () =
+ 
+ test('library: valid empty + valid with entry', () => {
+   assert.ok(
+-    LibrarySchema.safeParse({ $schemaVersion: 2, entries: [] }).success,
++    LibrarySchema.safeParse({ $schemaVersion: 3, entries: [] }).success,
+   );
+   assert.ok(
+     LibrarySchema.safeParse({
+-      $schemaVersion: 2,
++      $schemaVersion: 3,
+       entries: [{ citekey: 'x2020', doi: '10.5555/x', title: 'X', addedAt: ISO, updatedAt: ISO }],
+     }).success,
+   );
+-  assert.ok(
+-    !LibrarySchema.safeParse({ $schemaVersion: 1, entries: [] }).success,
+-    'a v1 envelope is migrated by the loader, never parsed as v2',
+-  );
++  for (const old of [1, 2]) {
++    assert.ok(
++      !LibrarySchema.safeParse({ $schemaVersion: old, entries: [] }).success,
++      `a v${old} envelope is migrated by the loader, never parsed as the current version`,
++    );
++  }
+ });
+ 
+ test('library: rejects entry with empty citekey', () => {
+   assert.ok(
+     !LibrarySchema.safeParse({
+-      $schemaVersion: 2,
++      $schemaVersion: 3,
+       entries: [{ citekey: '', addedAt: ISO, updatedAt: ISO }],
+     }).success,
+   );
+diff --git a/tests/seam-s-b-contracts.test.ts b/tests/seam-s-b-contracts.test.ts
+new file mode 100644
+index 0000000..d831acd
+--- /dev/null
++++ b/tests/seam-s-b-contracts.test.ts
+@@ -0,0 +1,206 @@
++// tests/seam-s-b-contracts.test.ts — the small shared contracts of Phase 19
++// seam S-B: the three-way lookup result, the PDF-response check, the contact
++// email resolver, the transport's host-availability errors and their
++// user-facing reasons, and the extended SourceCandidate schema.
++
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import * as fs from 'node:fs';
++import * as os from 'node:os';
++import * as path from 'node:path';
++import {
++  lookupFound,
++  lookupNotFound,
++  lookupFailed,
++  unwrapLookup,
++  SourceLookupError,
++  isSourceLookupError,
++} from '../bin/lib/sources/lookup.js';
++import { checkPdfResponse, hasPdfMagic } from '../bin/lib/pdf-response.js';
++import {
++  contactEmail,
++  isAllowedContactEnvName,
++  isPlausibleEmail,
++  DEFAULT_CONTACT_EMAIL_ENV,
++  _resetContactEmailForTest,
++} from '../bin/lib/contact-email.js';
++import { updatePaperConfig, rawTable } from '../bin/lib/config.js';
++import {
++  RateLimitExhaustedError,
++  CircuitOpenError,
++  RedirectError,
++  SsrfBlockedError,
++  isHostUnavailableError,
++  formatRetryAfter,
++} from '../bin/lib/http.js';
++import { errorFailureReason } from '../bin/lib/sources/search-failure.js';
++import { SourceCandidateSchema, type SourceCandidate } from '../bin/lib/schemas/source-candidate.js';
++import { EXIT_ERROR } from '../bin/lib/exit-codes.js';
++
++const CANDIDATE: SourceCandidate = {
++  source: 'books',
++  id: '9780226458083',
++  isbn: '9780226458083',
++  title: 'The Structure of Scientific Revolutions',
++  authors: ['Kuhn, Thomas S.'],
++  year: 1996,
++  publisher: 'University of Chicago Press',
++  type: 'book',
++  retracted: false,
++  last_verified: '2026-09-28T00:00:00.000Z',
++  citekey: 'kuhn1996',
++  raw: null,
++};
++
++test('seam S-B: SourceCandidate accepts the new sources and bibliographic fields', () => {
++  assert.equal(SourceCandidateSchema.safeParse(CANDIDATE).success, true);
++  for (const source of ['zotero', 'byo', 'books']) {
++    assert.equal(SourceCandidateSchema.safeParse({ ...CANDIDATE, source }).success, true, source);
++  }
++  const withOa = {
++    ...CANDIDATE,
++    source: 'unpaywall',
++    oa_locations: [{ url: 'https://example.org/landing', url_for_pdf: 'https://example.org/x.pdf', host_type: 'repository', version: 'acceptedVersion' }],
++    retraction_status: 'clear',
++    zotero: { library: 'users/1', key: 'ABCDEFGH' },
++    volume: '521',
++    issue: '7553',
++    pages: '436-444',
++    editors: ['Doe, J.'],
++    venue: 'Nature',
++    pmid: '26017442',
++  };
++  assert.equal(SourceCandidateSchema.safeParse(withOa).success, true);
++  assert.equal(SourceCandidateSchema.safeParse({ ...CANDIDATE, type: 'blogpost' }).success, false);
++});
++
++test('seam S-B: unwrapLookup — found → candidate, not-found → null, failed → SourceLookupError', () => {
++  assert.equal(unwrapLookup(lookupFound(CANDIDATE), 'books', 'x'), CANDIDATE);
++  assert.equal(unwrapLookup(lookupNotFound('HTTP 404'), 'crossref', '10.5555/none'), null);
++  const failed = lookupFailed('HTTP 503 after retries', { status: 503, retryAfterMs: 1000 });
++  assert.deepEqual(failed, { kind: 'failed', reason: 'HTTP 503 after retries', status: 503, retryAfterMs: 1000 });
++  assert.deepEqual(lookupFailed('offline'), { kind: 'failed', reason: 'offline' }, 'absent extras are omitted');
++  assert.throws(
++    () => unwrapLookup(failed, 'crossref', '10.1038/nature14539'),
++    (e: unknown) => {
++      assert.ok(isSourceLookupError(e));
++      const err = e as SourceLookupError;
++      assert.equal(err.message, 'crossref lookup of 10.1038/nature14539 failed: HTTP 503 after retries');
++      assert.equal(err.exitCode, EXIT_ERROR);
++      assert.equal(err.status, 503);
++      assert.equal(err.retryAfterMs, 1000);
++      assert.equal(err.source, 'crossref');
++      return true;
++    },
++  );
++});
++
++test('seam S-B: checkPdfResponse accepts real PDF bytes and names what else came back', () => {
++  const pdf = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(64, 0x20)]);
++  assert.equal(hasPdfMagic(pdf), true);
++  const ok = checkPdfResponse({ status: 200, headers: { 'content-type': 'application/octet-stream' }, bodyBytes: pdf });
++  assert.equal(ok.ok, true);
++  const junkFirst = Buffer.concat([Buffer.alloc(200, 0x0a), pdf]);
++  assert.equal(checkPdfResponse({ status: 200, headers: {}, bodyBytes: junkFirst }).ok, true, 'junk before the header is allowed');
++  assert.deepEqual(
++    checkPdfResponse({ status: 200, headers: { 'content-type': 'text/html; charset=utf-8' }, bodyBytes: Buffer.from('<html>login</html>') }),
++    { ok: false, reason: 'not a PDF (got text/html)' },
++  );
++  assert.deepEqual(checkPdfResponse({ status: 404, headers: {}, bodyBytes: pdf }), { ok: false, reason: 'HTTP 404' });
++  assert.deepEqual(checkPdfResponse({ status: 200, headers: {} }), { ok: false, reason: 'empty response body' });
++  assert.deepEqual(checkPdfResponse({ status: 200, headers: {}, bodyBytes: Buffer.from('plain') }), { ok: false, reason: 'not a PDF (got no content type)' });
++});
++
++function withEnv(vars: Record<string, string | undefined>, fn: () => void | Promise<void>): Promise<void> {
++  const saved: Record<string, string | undefined> = {};
++  for (const k of Object.keys(vars)) {
++    saved[k] = process.env[k];
++    if (vars[k] === undefined) delete process.env[k];
++    else process.env[k] = vars[k];
++  }
++  return Promise.resolve()
++    .then(fn)
++    .finally(() => {
++      for (const [k, v] of Object.entries(saved)) {
++        if (v === undefined) delete process.env[k];
++        else process.env[k] = v;
++      }
++    });
++}
++
++function captureStderr(): { text: () => string; restore: () => void } {
++  const original = process.stderr.write.bind(process.stderr);
++  let buf = '';
++  (process.stderr as unknown as { write: (c: string | Uint8Array) => boolean }).write = (c: string | Uint8Array): boolean => {
++    buf += typeof c === 'string' ? c : Buffer.from(c).toString('utf8');
++    return true;
++  };
++  return { text: () => buf, restore: () => { (process.stderr as unknown as { write: typeof original }).write = original; } };
++}
++
++test('seam S-B: contact email — default variable, configured variable, refusals', async () => {
++  _resetContactEmailForTest();
++  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-contact-'));
++  fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
++  await withEnv({ PENSMITH_CONTACT_EMAIL: 'pensmith-dev@example.org', MY_WORK_EMAIL: 'work@example.org', AWS_SECRET_ACCESS_KEY: 'secret-value' }, async () => {
++    assert.deepEqual(contactEmail(root), { email: 'pensmith-dev@example.org', envName: DEFAULT_CONTACT_EMAIL_ENV, source: 'default' });
++
++    await updatePaperConfig(root, (raw) => {
++      rawTable(raw, 'network')['contact_email_env'] = 'MY_WORK_EMAIL';
++    });
++    assert.deepEqual(contactEmail(root), { email: 'work@example.org', envName: 'MY_WORK_EMAIL', source: 'config' });
++
++    const err = captureStderr();
++    try {
++      await updatePaperConfig(root, (raw) => {
++        rawTable(raw, 'network')['contact_email_env'] = 'AWS_SECRET_ACCESS_KEY';
++      });
++      const r = contactEmail(root);
++      assert.equal(r.envName, DEFAULT_CONTACT_EMAIL_ENV, 'a non-email variable name is never read');
++      assert.equal(r.email, 'pensmith-dev@example.org');
++      contactEmail(root);
++    } finally {
++      err.restore();
++    }
++    assert.equal((err.text().match(/ignoring \[network\] contact_email_env/g) ?? []).length, 1, 'warned once');
++    assert.doesNotMatch(err.text(), /secret-value/);
++  });
++  await withEnv({ PENSMITH_CONTACT_EMAIL: 'not an email' }, () => {
++    const err = captureStderr();
++    try {
++      const other = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-contact2-'));
++      assert.equal(contactEmail(other).email, null);
++    } finally {
++      err.restore();
++    }
++    assert.match(err.text(), /not an email address/);
++    assert.doesNotMatch(err.text(), /not an email"/);
++  });
++  await withEnv({ PENSMITH_CONTACT_EMAIL: undefined }, () => {
++    const other = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-contact3-'));
++    assert.equal(contactEmail(other).email, null);
++  });
++  assert.equal(isAllowedContactEnvName('LAB_MAILTO'), true);
++  assert.equal(isAllowedContactEnvName('lower_email'), false);
++  assert.equal(isAllowedContactEnvName('GITHUB_TOKEN'), false);
++  assert.equal(isPlausibleEmail('a@b.co'), true);
++  assert.equal(isPlausibleEmail('Name <a@b.co>'), false);
++  assert.equal(isPlausibleEmail(`${'x'.repeat(250)}@b.co`), false);
++});
++
++test('seam S-B: host-availability and redirect errors read as what happened', () => {
++  assert.equal(formatRetryAfter(35_000), '~35 s');
++  assert.equal(formatRetryAfter(12 * 60_000), '~12 min');
++  assert.equal(formatRetryAfter(22_400_000), '~6 h');
++  assert.equal(formatRetryAfter(3 * 86_400_000), '~3 d');
++  const exhausted = new RateLimitExhaustedError('api.openalex.org', 22_400_000);
++  assert.equal(exhausted.message, 'api.openalex.org: rate limit exhausted (retry after ~6 h)');
++  assert.equal(exhausted.status, 429);
++  const open = new CircuitOpenError('api.labs.example.org', 503, 3);
++  assert.ok(isHostUnavailableError(exhausted) && isHostUnavailableError(open));
++  assert.equal(isHostUnavailableError(new Error('x')), false);
++  assert.equal(errorFailureReason(exhausted), 'rate limit exhausted (retry after ~6 h)');
++  assert.equal(errorFailureReason(open), 'skipped after 3 consecutive HTTP 503 responses');
++  assert.equal(errorFailureReason(new RedirectError('too-many', 'https://x/', 'more than 5 hops from https://x/')), 'too many redirects: more than 5 hops from https://x/');
++  assert.match(errorFailureReason(new SsrfBlockedError('SSRF guard: "x" resolves to private/reserved IP 127.0.0.1 — blocked')), /^SSRF guard/);
++});

@@ -25,7 +25,7 @@ import { join, relative, sep } from 'node:path';
 import { REPO, loadE2eManifest, loadE2eMockScript, type E2eManifest } from './helpers/e2e-chain.js';
 import { SENSITIVE_HEADERS, SCRUBBED_QUERY_PARAMS, networkMode, lookupFixture, type Cassette } from '../bin/lib/http-mock.js';
 import { contractFor } from '../bin/lib/llm-contracts.js';
-import { discoverSources } from '../bin/lib/research-orchestrator.js';
+import { discoverCandidates, researchAdapterPlan, researchRegistry } from '../bin/lib/research-orchestrator.js';
 import { crossCheckRetractions } from '../bin/lib/sources/retraction-cross-check.js';
 import { upsertSources } from '../bin/lib/library.js';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
@@ -133,8 +133,12 @@ test('D-18-31: offline under the test runner, the corpus answers the chain — r
   assert.equal(mode.dryRun, false);
   const root = mkdtempSync(join(tmpdir(), 'pensmith-e2e-corpus-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
-  const { candidates } = await discoverSources([...manifest.queries], { topic: manifest.topic, discipline: manifest.discipline, paperRoot: root });
-  const byKey = new Map(candidates.map((c) => [c.citekey, c]));
+  // The discovery `pensmith research` runs (bin/cli/research.ts): the preset's
+  // adapter plan, every query to every planned adapter, dedup and citekeys.
+  const registry = researchRegistry();
+  const plan = researchAdapterPlan({ registry, byPreference: true, discipline: manifest.discipline, configDiscipline: undefined, allowed: undefined });
+  const { candidates } = await discoverCandidates({ queries: [...manifest.queries], plan, registry, warn: () => undefined });
+  const byKey = new Map(candidates.map((d) => [d.candidate.citekey, d.candidate]));
   const kept = manifest.keptSources.map((k) => {
     const c = byKey.get(k.citekey);
     assert.ok(c, `the replayed research finds kept source ${k.citekey}`);

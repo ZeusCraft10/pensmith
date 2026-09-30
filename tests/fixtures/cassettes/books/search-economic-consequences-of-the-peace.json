@@ -1,0 +1,194 @@
+[
+  {
+    "scope": "https://openlibrary.org",
+    "method": "GET",
+    "path": "/search.json?q=The+Economic+Consequences+of+the+Peace&fields=key%2Ctitle%2Csubtitle%2Cauthor_name%2Cfirst_publish_year%2Ceditions%2Ceditions.key%2Ceditions.title%2Ceditions.subtitle%2Ceditions.author_name%2Ceditions.publisher%2Ceditions.publish_date%2Ceditions.isbn&limit=5",
+    "status": 200,
+    "response": {
+      "numFound": 125,
+      "start": 0,
+      "numFoundExact": true,
+      "num_found": 125,
+      "documentation_url": "https://openlibrary.org/dev/docs/api/search",
+      "q": "The Economic Consequences of the Peace",
+      "offset": null,
+      "docs": [
+        {
+          "author_name": [
+            "John Maynard Keynes",
+            "Jens Hölscher",
+            "Matthias Klaes",
+            "Anonymous"
+          ],
+          "first_publish_year": 1919,
+          "key": "/works/OL35914W",
+          "title": "The Economic Consequences of the Peace (Twentieth-Century Classics)",
+          "editions": {
+            "numFound": 197,
+            "start": 0,
+            "numFoundExact": true,
+            "docs": [
+              {
+                "key": "/books/OL24152207M",
+                "title": "The economic consequences of the peace",
+                "author_name": [
+                  "John Maynard Keynes",
+                  "Jens Hölscher",
+                  "Matthias Klaes",
+                  "Anonymous"
+                ],
+                "publisher": [
+                  "Macmillan"
+                ],
+                "publish_date": [
+                  "1920"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "author_name": [
+            "John Maynard Keynes"
+          ],
+          "first_publish_year": 1922,
+          "key": "/works/OL35944W",
+          "title": "A revision of the Treaty",
+          "editions": {
+            "numFound": 14,
+            "start": 0,
+            "numFoundExact": true,
+            "docs": [
+              {
+                "key": "/books/OL14084742M",
+                "title": "A revision of the Treaty",
+                "subtitle": "being a sequel to The economic consequences of the Peace",
+                "author_name": [
+                  "John Maynard Keynes"
+                ],
+                "publisher": [
+                  "F.D. Goodchild"
+                ],
+                "publish_date": [
+                  "1922"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "author_name": [
+            "John Maynard Keynes",
+            "Dr Mark G Spencer",
+            "Tom Griffith"
+          ],
+          "first_publish_year": 2017,
+          "key": "/works/OL24394216W",
+          "title": "The General Theory of Employment, Interest and Money",
+          "editions": {
+            "numFound": 1,
+            "start": 0,
+            "numFoundExact": true,
+            "docs": [
+              {
+                "key": "/books/OL32306710M",
+                "title": "The General Theory of Employment, Interest and Money",
+                "subtitle": "With the Economic Consequences of the Peace",
+                "author_name": [
+                  "John Maynard Keynes",
+                  "Dr Mark G Spencer",
+                  "Tom Griffith"
+                ],
+                "publisher": [
+                  "Wordsworth Editions"
+                ],
+                "publish_date": [
+                  "Apr 01, 2017"
+                ],
+                "isbn": [
+                  "9781840227475",
+                  "1840227478"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "author_name": [
+            "John Maynard Keynes"
+          ],
+          "first_publish_year": 1922,
+          "key": "/works/OL34674653W",
+          "title": "Revision of the Treaty",
+          "editions": {
+            "numFound": 4,
+            "start": 0,
+            "numFoundExact": true,
+            "docs": [
+              {
+                "key": "/books/OL55128086M",
+                "title": "Revision of the Treaty",
+                "subtitle": "Being a Sequel to the Economic Consequences of the Peace",
+                "author_name": [
+                  "John Maynard Keynes"
+                ],
+                "publisher": [
+                  "CreateSpace Independent Publishing Platform"
+                ],
+                "publish_date": [
+                  "1922"
+                ],
+                "isbn": [
+                  "9781548665685",
+                  "1548665681"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "author_name": [
+            "John Maynard Keynes",
+            "Dennis Logan"
+          ],
+          "first_publish_year": 2026,
+          "key": "/works/OL45923611W",
+          "title": "THE ECONOMIC CONSEQUENCES OF THE PEACE",
+          "editions": {
+            "numFound": 1,
+            "start": 0,
+            "numFoundExact": true,
+            "docs": [
+              {
+                "key": "/books/OL62481355M",
+                "title": "THE ECONOMIC CONSEQUENCES OF THE PEACE",
+                "subtitle": "A Penemue Reader's Edition",
+                "author_name": [
+                  "John Maynard Keynes",
+                  "Dennis Logan"
+                ],
+                "publisher": [
+                  "Penemue Media"
+                ],
+                "publish_date": [
+                  "2026"
+                ],
+                "isbn": [
+                  "9798903750160"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T05:27:04.214Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "books"
+    }
+  }
+]

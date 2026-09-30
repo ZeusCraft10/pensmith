@@ -1,0 +1,291 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=31978945&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "31978945": {
+          "uid": "31978945",
+          "pubdate": "2020 Feb 20",
+          "epubdate": "2020 Jan 24",
+          "source": "N Engl J Med",
+          "authors": [
+            {
+              "name": "Zhu N",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhang D",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Wang W",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Li X",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yang B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Song J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhao X",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Huang B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Shi W",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Lu R",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Niu P",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhan F",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ma X",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Wang D",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Xu W",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Wu G",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Gao GF",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Tan W",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "China Novel Coronavirus Investigating and Research Team",
+              "authtype": "CollectiveName",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Tan W",
+          "title": "A Novel Coronavirus from Patients with Pneumonia in China, 2019.",
+          "sorttitle": "novel coronavirus from patients with pneumonia in china 2019",
+          "volume": "382",
+          "issue": "8",
+          "pages": "727-733",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "0255562",
+          "issn": "0028-4793",
+          "essn": "1533-4406",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "256",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "31978945"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC7092803"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC7092803;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1056/NEJMoa2001017"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "pubmed",
+              "date": "2020/01/25 06:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2020/03/07 06:00"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2020/01/25 06:00"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2020/03/24 00:00"
+            }
+          ],
+          "references": [
+            {
+              "refsource": "N Engl J Med. 2020 Feb 20;382(8):760-762. doi: 10.1056/NEJMe2001126.",
+              "reftype": "Comment in",
+              "pmid": 31978944,
+              "note": ""
+            },
+            {
+              "refsource": "Lancet. 2020 Feb 8;395(10222):391-393. doi: 10.1016/S0140-6736(20)30300-7.",
+              "reftype": "Comment in",
+              "pmid": 32035533,
+              "note": ""
+            },
+            {
+              "refsource": "J Med Virol. 2020 May;92(5):461-463. doi: 10.1002/jmv.25711.",
+              "reftype": "Comment in",
+              "pmid": 32073161,
+              "note": ""
+            },
+            {
+              "refsource": "J Infect Dev Ctries. 2020 Jan 31;14(1):1-2. doi: 10.3855/jidc.12496.",
+              "reftype": "Comment in",
+              "pmid": 32088678,
+              "note": ""
+            },
+            {
+              "refsource": "J Diabetes. 2020 Apr;12(4):347-348. doi: 10.1111/1753-0407.13027.",
+              "reftype": "Comment in",
+              "pmid": 32162476,
+              "note": ""
+            },
+            {
+              "refsource": "Haemophilia. 2020 May;26(3):371-372. doi: 10.1111/hae.14001.",
+              "reftype": "Comment in",
+              "pmid": 32246879,
+              "note": ""
+            },
+            {
+              "refsource": "Crit Care. 2020 Apr 7;24(1):135. doi: 10.1186/s13054-020-02863-0.",
+              "reftype": "Comment in",
+              "pmid": 32264974,
+              "note": ""
+            },
+            {
+              "refsource": "G Ital Cardiol (Rome). 2020 May;21(5):317-320. doi: 10.1714/3343.33126.",
+              "reftype": "Comment in",
+              "pmid": 32310914,
+              "note": ""
+            },
+            {
+              "refsource": "J Neurol Neurosurg Psychiatry. 2020 Jun;91(6):568-570. doi: 10.1136/jnnp-2020-323414.",
+              "reftype": "Comment in",
+              "pmid": 32312872,
+              "note": ""
+            },
+            {
+              "refsource": "Int J Infect Dis. 2020 Jun;95:361-362. doi: 10.1016/j.ijid.2020.04.056.",
+              "reftype": "Comment in",
+              "pmid": 32339717,
+              "note": ""
+            },
+            {
+              "refsource": "Euro Surveill. 2020 Jun;25(23). doi: 10.2807/1560-7917.ES.2020.25.23.2000272.",
+              "reftype": "Comment in",
+              "pmid": 32553062,
+              "note": ""
+            },
+            {
+              "refsource": "Br Dent J. 2020 Jun;228(12):971-975. doi: 10.1038/s41415-020-1747-8.",
+              "reftype": "Comment in",
+              "pmid": 32591714,
+              "note": ""
+            },
+            {
+              "refsource": "Radiologe. 2020 Oct;60(10):891-892. doi: 10.1007/s00117-020-00750-x.",
+              "reftype": "Comment in",
+              "pmid": 32995967,
+              "note": ""
+            }
+          ],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 17,
+          "fulljournalname": "The New England journal of medicine",
+          "elocationid": "doi: 10.1056/NEJMoa2001017",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2020/02/20 00:00",
+          "sortfirstauthor": "Zhu N",
+          "vernaculartitle": ""
+        },
+        "uids": [
+          "31978945"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T05:27:02.844Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

@@ -1,0 +1,12 @@
+// Chokepoint fixture (contact-email, SRC-17 / D-19-09): a second reader of the
+// polite-pool contact email outside bin/lib/contact-email.ts. It reads the
+// default variable directly (ignoring a configured [network] contact_email_env
+// and the email-shape check) and honours any variable name a paper's config
+// names — the rule must flag both reads.
+import { tryReadPaperConfigSync } from '../lib/config.js';
+
+export function sneakyContact(root: string): string | undefined {
+  const name = tryReadPaperConfigSync(root)?.network?.contact_email_env;
+  if (name) return process.env[name];
+  return process.env.PENSMITH_CONTACT_EMAIL;
+}

@@ -131,3 +131,45 @@ test('RUN-26: p90 is nearest-rank over recorded samples; length parsing and sect
   assert.equal(sectionCountForLength(3000), 6);
   assert.equal(sectionCountForLength(20_000), 8);
 });
+
+test('SRC-08 / SRC-09: the research row is one disambiguator call plus ceil(candidates / 150) evaluator calls from the paper\'s adapter plan', async () => {
+  const { researchCalls } = await import('../bin/lib/estimator.js');
+  const { estimatedResearchCandidates, evaluatorCallsFor } = await import('../bin/lib/adapter-plan.js');
+  await withLlmSandbox({}, async (sb) => {
+    fs.writeFileSync(path.join(sb.paper, 'INTAKE.md'), '---\ntopic: attention\ndiscipline: computer-science\n---\n# Intake\n');
+    // computer-science: arxiv, semanticscholar, openalex, crossref, pubmed → 10 × 5 × 10 / 2 = 250 candidates → 2 calls.
+    assert.equal(estimatedResearchCandidates(10, 5), 250);
+    assert.deepEqual(researchCalls(sb.root, {}), [['topic-disambiguator', 1], ['source-evaluator', evaluatorCallsFor(250)]]);
+    assert.equal(evaluatorCallsFor(250), 2);
+    const res = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100 });
+    const row = res.rows.find((r) => r.step === 'research')!;
+    assert.deepEqual(row.calls.map((c) => [c.slug, c.calls]), [['topic-disambiguator', 1], ['source-evaluator', 2]]);
+    const scoped = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100, scope: { verb: 'research' } });
+    assert.deepEqual(scoped.rows[0]!.calls.map((c) => [c.slug, c.calls]), [['topic-disambiguator', 1], ['source-evaluator', 2]], 'the --estimate research row');
+    // allowed_databases narrows the plan: one adapter → 50 candidates → 1 call.
+    sb.writePaperConfig('schema_version = 1\n\n[sources]\nallowed_databases = ["openalex"]\n');
+    assert.deepEqual(researchCalls(sb.root, {}), [['topic-disambiguator', 1], ['source-evaluator', 1]]);
+    // A configured Zotero library joins the plan.
+    sb.writePaperConfig('schema_version = 1\n');
+    assert.deepEqual(researchCalls(sb.root, { ZOTERO_API_KEY: 'set' }), [['topic-disambiguator', 1], ['source-evaluator', evaluatorCallsFor(estimatedResearchCandidates(10, 6))]]);
+  });
+});
+
+test('GRND-17: `plan N --research` is priced as the section research pass — evaluator calls over its two queries, the planner only with --revise', async () => {
+  const { sectionResearchCalls, SECTION_RESEARCH_QUERIES } = await import('../bin/lib/estimator.js');
+  const { estimatedResearchCandidates, evaluatorCallsFor } = await import('../bin/lib/adapter-plan.js');
+  await withLlmSandbox({}, async (sb) => {
+    fs.writeFileSync(path.join(sb.paper, 'INTAKE.md'), '---\ntopic: attention\ndiscipline: computer-science\n---\n# Intake\n');
+    assert.equal(SECTION_RESEARCH_QUERIES, 2);
+    const evaluator = Math.max(1, evaluatorCallsFor(estimatedResearchCandidates(2, 5)));
+    assert.deepEqual(sectionResearchCalls(sb.root, {}), [['source-evaluator', evaluator]]);
+    const research = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100, scope: { verb: 'plan', section: 2, research: true } });
+    assert.equal(research.rows.length, 1);
+    assert.equal(research.rows[0]!.step, 'plan §2 --research');
+    assert.deepEqual(research.rows[0]!.calls.map((c) => [c.slug, c.calls]), [['source-evaluator', evaluator]], 'no planner call without --revise');
+    const revise = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100, scope: { verb: 'plan', section: 2, research: true, revise: true } });
+    assert.deepEqual(revise.rows[0]!.calls.map((c) => [c.slug, c.calls]), [['source-evaluator', evaluator], ['section-planner', 1]]);
+    const plain = await projectEstimate({ paperRoot: sb.root, sessionCapUsd: 100, scope: { verb: 'plan', section: 2 } });
+    assert.deepEqual(plain.rows[0]!.calls.map((c) => [c.slug, c.calls]), [['section-planner', 1]], 'a plain plan is the planner call');
+  });
+});

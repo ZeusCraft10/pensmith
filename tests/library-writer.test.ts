@@ -36,6 +36,8 @@ import { tryAcquire } from '../bin/lib/lock.js';
 import { pensmithLockDir } from '../bin/lib/paths.js';
 import { Schema as LibrarySchema } from '../bin/lib/schemas/library.js';
 import { migrate } from '../bin/lib/migrations/library/v1_to_v2.js';
+import { migrate as migrateV2toV3 } from '../bin/lib/migrations/library/v2_to_v3.js';
+import { CURRENT_LIBRARY_VERSION } from '../bin/lib/schemas/library.js';
 import { isPreprintDoi } from '../bin/lib/migrations/library/shape.js';
 import { parseBib } from '../bin/lib/citations.js';
 
@@ -101,9 +103,11 @@ test('BRDTH-01 migration: the research-written v1 shape (SourceCandidate[], no a
       },
     ],
   };
-  const v2 = migrate(v1, '2026-09-27T00:00:00.000Z');
-  const lib = LibrarySchema.parse(v2);
-  assert.equal(lib.$schemaVersion, 2);
+  const v2 = migrate(v1, '2026-09-27T00:00:00.000Z') as { $schemaVersion: number };
+  assert.equal(v2.$schemaVersion, 2, 'the v1 → v2 step yields v2');
+  // Phase 19 seam S-B: the loader chains v2 → v3; the current schema is v3.
+  const lib = LibrarySchema.parse(migrateV2toV3(v2));
+  assert.equal(lib.$schemaVersion, CURRENT_LIBRARY_VERSION);
   const [a, b] = lib.entries;
   assert.equal(a!.citekey, 'vaswani2017');
   assert.equal(a!.doi, '10.48550/arxiv.1706.03762', 'DOI normalized (lowercase)');
@@ -126,24 +130,24 @@ test('BRDTH-01 migration: the strict v1 foundation shape migrates; duplicate key
       { id: 'cite-1', pmid: '123', addedAt: '2099-01-02T00:00:00.000Z' },
     ],
   };
-  const lib = LibrarySchema.parse(migrate(v1, '2026-09-27T00:00:00.000Z'));
+  const v2 = migrate(v1, '2026-09-27T00:00:00.000Z');
+  const lib = LibrarySchema.parse(migrateV2toV3(v2));
   assert.deepEqual(lib.entries.map((e) => e.citekey), ['cite-1', 'cite-1a']);
   assert.equal(lib.entries[0]!.doi, '10.5555/abc');
   assert.equal(lib.entries[0]!.addedAt, '2099-01-01T00:00:00.000Z');
   assert.deepEqual(lib.entries[1]!.provenance, ['v1']);
   assert.equal(lib.entries[1]!.title, null);
-  const again = migrate(lib);
-  assert.deepEqual(again, lib, 'idempotent on v2');
+  assert.deepEqual(migrate(v2), v2, 'idempotent on v2');
 });
 
-test('BRDTH-01 migration: loadLibrary migrates a research-written v1 file and writes the v2 file back', async () => {
+test('BRDTH-01 migration: loadLibrary migrates a research-written v1 file and writes the current-version file back', async () => {
   const root = project();
   const file = path.join(root, '.paper', 'LIBRARY.json');
   fs.writeFileSync(file, JSON.stringify({ $schemaVersion: 1, entries: [{ ...ENGEL, citekey: 'engel2007', raw: {} }] }, null, 2));
   const lib = await loadLibrary(root);
   assert.equal(lib.entries.length, 1);
   const onDisk = JSON.parse(fs.readFileSync(file, 'utf8')) as { $schemaVersion: number; entries: Array<Record<string, unknown>> };
-  assert.equal(onDisk.$schemaVersion, 2, 'the migrated file is written back');
+  assert.equal(onDisk.$schemaVersion, CURRENT_LIBRARY_VERSION, 'the migrated file is written back (v1 → v2 → v3)');
   assert.ok(typeof onDisk.entries[0]!['addedAt'] === 'string');
   LibrarySchema.parse(onDisk);
 });
@@ -164,6 +168,40 @@ test('BRDTH-01 dedup: a DOI in URL / doi: / upper-case form matches the stored e
   const lib = await loadLibrary(root);
   assert.equal(lib.entries.length, 1, 'no duplicate entry (RM-13: add used to create engel2009a)');
   assert.equal(lib.entries[0]!.title, ENGEL.title, 'an existing title is not replaced by a poorer record');
+});
+
+test('BRDTH-01 dedup: a chapter carries its book\'s ISBN but is a different work — never merged by ISBN', async () => {
+  const root = project();
+  await upsertSources(
+    root,
+    [
+      cand({
+        doi: '10.1093/0199242380.003.0011',
+        type: 'chapter',
+        isbn: '9780199291922',
+        title: 'Reparations for historical injustice',
+        authors: ['Colonomos, Ariel'],
+        year: 2006,
+        venue: 'The Handbook of Reparations',
+      }),
+    ],
+    { provenance: 'research' },
+  );
+  const book = await upsertSources(
+    root,
+    [cand({ source: 'books', isbn: '9780199291922', type: 'book', title: 'The Handbook of Reparations', authors: ['De Greiff, Pablo'], year: 2006 })],
+    { provenance: 'research' },
+  );
+  assert.equal(book.outcomes[0]!.status, 'added', 'the book is its own entry');
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 2);
+  const chapter = lib.entries.find((e) => e.type === 'chapter')!;
+  assert.equal(chapter.title, 'Reparations for historical injustice', 'the chapter keeps its own title');
+  assert.deepEqual(chapter.provenance, ['research:crossref']);
+  // The same book again merges with the book, not the chapter.
+  const again = await upsertSources(root, [cand({ source: 'books', isbn: '978-0-19-929192-2', type: 'book', title: 'The Handbook of Reparations', authors: ['De Greiff, P.'], year: 2006 })], { provenance: 'add' });
+  assert.deepEqual([again.outcomes[0]!.status === 'added', again.outcomes[0]!.matchedBy], [false, 'isbn']);
+  assert.equal((await loadLibrary(root)).entries.length, 2);
 });
 
 test('BRDTH-01 dedup: arXiv id (abs URL, versioned, DataCite DOI), PMID and ISBN-10 vs ISBN-13', async () => {
@@ -212,7 +250,9 @@ test('BRDTH-01 merge: richer metadata wins, provenance is unioned, retracted is 
         ...ENGEL,
         source: 'openalex',
         abstract: 'Photosynthetic complexes are exquisitely tuned to capture solar light efficiently…',
-        oa_pdf_url: 'https://example.org/engel.pdf',
+        // The Unpaywall-confirmed PDF (open-access.ts): the only open-access
+        // link the library stores (review round 2, GRND-14).
+        oa_url: 'https://example.org/engel.pdf',
         authors: ['Engel, Gregory S.', 'Calhoun, Tessa R.', 'Read, Elizabeth L.'],
         venue: 'Nature',
         retracted: true,
@@ -228,6 +268,11 @@ test('BRDTH-01 merge: richer metadata wins, provenance is unioned, retracted is 
   assert.match(e.abstract ?? '', /Photosynthetic complexes/);
   assert.equal(e.oa_url, 'https://example.org/engel.pdf');
   assert.equal(e.authors.length, 3, 'the longer author list wins');
+  // An adapter's own open-access link (OpenAlex's primary location) is not
+  // what Pass 3 checks, so it never becomes oa_url (full-text.ts).
+  const other = project();
+  await upsertSources(other, [{ ...ENGEL, source: 'openalex', oa_pdf_url: 'https://example.org/adapter.pdf' }], { provenance: 'research' });
+  assert.equal((await loadLibrary(other)).entries[0]!.oa_url, null);
   assert.equal(e.venue, 'Nature');
   assert.deepEqual(e.provenance, ['research:crossref', 'add:openalex', 'add:crossref']);
   assert.equal(e.retracted, true, 'a retraction is never un-set by a later record');
@@ -421,6 +466,43 @@ test('BRDTH-01: Cyrillic, Greek, CJK and Arabic authors and titles render a CITA
   }
   // Latin-script entries keep the LaTeX-escaped form BibTeX users expect.
   assert.doesNotMatch(bibText, /author = \{, \}/, 'no empty author is ever rendered');
+});
+
+test('SRC-12: a bib-only entry is imported with its eprint, abstract, editors and bibliographic fields, then re-rendered whole', async () => {
+  const root = project();
+  await upsertSources(root, [ENGEL], { provenance: 'research' });
+  const bibPath = path.join(root, '.paper', 'CITATIONS.bib');
+  fs.appendFileSync(
+    bibPath,
+    [
+      '',
+      '@incollection{handmade2019,',
+      '  author = {{van der Maaten}, Laurens and King, Jr., Martin Luther},',
+      '  editor = {Editor, Eve},',
+      '  title = {A hand-made chapter},',
+      '  booktitle = {The Handbook},',
+      '  publisher = {Pub House},',
+      '  pages = {10--20},',
+      '  year = {2019},',
+      '  eprint = {1906.00001},',
+      '  archivePrefix = {arXiv},',
+      '  abstract = {An abstract \\& more.},',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  await upsertSources(root, [cand({ citekey: 'x2020', doi: '10.5555/lib.x', title: 'Trigger a render', year: 2020 })], { provenance: 'research' });
+  const e = (await loadLibrary(root)).entries.find((x) => x.citekey === 'handmade2019')!;
+  assert.deepEqual(e.provenance, ['bib-import']);
+  assert.equal(e.arxiv, '1906.00001', 'the eprint is the arXiv id');
+  assert.equal(e.abstract, 'An abstract & more.');
+  assert.deepEqual(e.authors, ['van der Maaten, Laurens', 'King, Martin Luther, Jr.']);
+  assert.deepEqual(e.editors, ['Editor, Eve']);
+  assert.equal(e.type, 'chapter');
+  assert.equal(e.venue, 'The Handbook');
+  assert.equal(e.pages, '10-20');
+  const rendered = fs.readFileSync(bibPath, 'utf8');
+  assert.match(rendered, /@incollection\{handmade2019,[\s\S]*booktitle = \{The Handbook\}[\s\S]*eprint = \{1906\.00001\}[\s\S]*abstract = \{An abstract \\& more\.\}/);
 });
 
 test('BRDTH-01: verify on an unparseable CITATIONS.bib is one classified line (no stack hint), never "no citations"', () => {
@@ -636,7 +718,7 @@ async function readPaperLibraryOverMcp(cwd: string): Promise<{ entries: Array<{ 
   }
 }
 
-test('BRDTH-01 user path: `research --yolo` writes a v2 LIBRARY.json that paper://library returns; a re-run adds no duplicate', async () => {
+test('BRDTH-01 user path: `research --yolo` writes a current-version LIBRARY.json that paper://library returns; a re-run adds no duplicate', async () => {
   assert.ok(fs.existsSync(DIST_CLI) && fs.existsSync(DIST_MCP), 'run `npm run build` first');
   const root = project();
   fs.writeFileSync(
@@ -659,7 +741,7 @@ test('BRDTH-01 user path: `research --yolo` writes a v2 LIBRARY.json that paper:
     assert.ok(e.provenance.some((p) => p.startsWith('research')), `${e.citekey} carries a research provenance tag`);
   }
   const served = await readPaperLibraryOverMcp(root);
-  assert.equal(served.$schemaVersion, 2);
+  assert.equal(served.$schemaVersion, CURRENT_LIBRARY_VERSION);
   assert.deepEqual(served.entries.map((e) => e.citekey), lib.entries.map((e) => e.citekey), 'paper://library returns the entries');
 
   const second = run();
@@ -667,4 +749,80 @@ test('BRDTH-01 user path: `research --yolo` writes a v2 LIBRARY.json that paper:
   const lib2 = LibrarySchema.parse(JSON.parse(fs.readFileSync(file, 'utf8')));
   assert.deepEqual(lib2.entries.map((e) => e.citekey), lib.entries.map((e) => e.citekey), 'a re-run never duplicates a source');
   assert.match(String(second.stdout), /0 new/);
+});
+
+test('ROADMAP Phase 19 criterion 4 (review round 2): versioned DOIs of one posted work (base, .v1, .v2) are one entry; two version-of-record editorials stay two', async () => {
+  const root = project();
+  const post = (doi: string): LibraryCandidate =>
+    cand({ citekey: 'hokby2025', id: doi, doi, type: 'preprint', title: 'Screen time effects on adolescent mental health', authors: ['Hökby, Sebastian'], year: 2025 });
+  const r = await upsertSources(root, [post('10.69622/28750280.v2'), post('10.69622/28750280.v1'), post('10.69622/28750280')], { provenance: 'research' });
+  assert.deepEqual(r.outcomes.map((o) => o.status), ['added', 'merged', 'merged']);
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 1, 'one entry per work');
+  assert.equal(lib.entries[0]!.doi, '10.69622/28750280.v2');
+  assert.deepEqual([...lib.entries[0]!.alternate_dois].sort(), ['10.69622/28750280', '10.69622/28750280.v1']);
+
+  // The version family alone is not enough: a different title under a shared base stays apart.
+  const other = project();
+  await upsertSources(other, [post('10.69622/1.v1'), { ...post('10.69622/1.v2'), title: 'An unrelated dataset about rainfall' }], { provenance: 'research' });
+  assert.equal((await loadLibrary(other)).entries.length, 2);
+
+  // Posted content typed `preprint` with an ordinary DOI prefix takes the version rule.
+  const posted = project();
+  await upsertSources(
+    posted,
+    [
+      cand({ id: '10.5555/posted.a', doi: '10.5555/posted.a', type: 'preprint', title: 'Measuring attention in classrooms', authors: ['Rao, Q.'], year: 2024 }),
+      cand({ id: '10.5555/posted.b', doi: '10.5555/posted.b', type: 'preprint', title: 'Measuring Attention in Classrooms', authors: ['Rao, Q.'], year: 2024 }),
+    ],
+    { provenance: 'research' },
+  );
+  assert.equal((await loadLibrary(posted)).entries.length, 1);
+  // …and its version of record, arriving later, becomes the primary DOI.
+  await upsertSources(
+    posted,
+    [cand({ id: '10.1234/classrooms.2024', doi: '10.1234/classrooms.2024', type: 'article-journal', title: 'Measuring attention in classrooms', authors: ['Rao, Q.'], year: 2024, venue: 'Journal of Things' })],
+    { provenance: 'research' },
+  );
+  const merged = (await loadLibrary(posted)).entries;
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]!.doi, '10.1234/classrooms.2024');
+  assert.deepEqual([...merged[0]!.alternate_dois].sort(), ['10.5555/posted.a', '10.5555/posted.b']);
+  assert.equal(merged[0]!.type, 'article-journal');
+
+  // Two version-of-record DOIs (annual editorials: same title, author, year) never collapse.
+  const editorials = project();
+  await upsertSources(
+    editorials,
+    [
+      cand({ id: '10.5555/ed.2020a', doi: '10.5555/ed.2020a', type: 'article-journal', title: 'Editorial', authors: ['Smith, A.'], year: 2020 }),
+      cand({ id: '10.5555/ed.2020b', doi: '10.5555/ed.2020b', type: 'article-journal', title: 'Editorial', authors: ['Smith, A.'], year: 2020 }),
+    ],
+    { provenance: 'research' },
+  );
+  assert.equal((await loadLibrary(editorials)).entries.length, 2);
+});
+
+test('SRC-09 (review round 2): add, bring-your-own and Zotero entries get the tier their metadata decides at upsert; an undecidable one stays unevaluated', async () => {
+  const root = project();
+  const r = await upsertSources(
+    root,
+    [
+      cand({ citekey: 'lecun2015', id: '10.1038/nature14539', doi: '10.1038/nature14539', type: 'article-journal', title: 'Deep learning', authors: ['LeCun, Yann'], year: 2015 }),
+      cand({ citekey: 'kuhn1996', source: 'books', id: 'isbn:9780226458083', isbn: '9780226458083', type: 'book', title: 'The Structure of Scientific Revolutions', authors: ['Kuhn, Thomas S.'], year: 1996 }),
+      cand({ citekey: 'untyped2020', id: '10.5555/untyped', doi: '10.5555/untyped', title: 'An untyped record', authors: ['Doe, Jane'], year: 2020 }),
+    ],
+    { provenance: 'add' },
+  );
+  assert.deepEqual(r.outcomes.map((o) => o.status), ['added', 'added', 'added']);
+  const byKey = new Map((await loadLibrary(root)).entries.map((e) => [e.citekey, e]));
+  assert.equal(byKey.get('lecun2015')!.tier, 'peer-reviewed');
+  assert.equal(byKey.get('kuhn1996')!.tier, 'book');
+  assert.equal(byKey.get('untyped2020')!.tier, null, 'the metadata cannot decide: the evaluator will');
+  // A later merge keeps an evaluator's tier where the metadata cannot decide, and the metadata's where it can.
+  await upsertSources(root, [{ ...cand({ id: '10.5555/untyped', doi: '10.5555/untyped', title: 'An untyped record', authors: ['Doe, Jane'], year: 2020 }), tier: 'gov-report' }], { provenance: 'research' });
+  await upsertSources(root, [{ ...cand({ id: '10.1038/nature14539', doi: '10.1038/nature14539', title: 'Deep learning', authors: ['LeCun, Yann'], year: 2015 }), tier: 'other' }], { provenance: 'research' });
+  const after = new Map((await loadLibrary(root)).entries.map((e) => [e.citekey, e]));
+  assert.equal(after.get('untyped2020')!.tier, 'gov-report');
+  assert.equal(after.get('lecun2015')!.tier, 'peer-reviewed', 'a model never overrides the registrar');
 });

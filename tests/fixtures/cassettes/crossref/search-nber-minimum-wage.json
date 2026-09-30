@@ -1,0 +1,158 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=minimum+wage+employment&rows=3&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by&filter=prefix%3A10.3386",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 1059,
+        "items": [
+          {
+            "DOI": "10.3386/w3859",
+            "title": [
+              "Evidence on Employment Effects of Minimum Wages and Subminimum Wage Provisions From Panel Data on State Minimum Wage Laws"
+            ],
+            "author": [
+              {
+                "given": "David",
+                "family": "Neumark",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "William",
+                "family": "Wascher",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  1991,
+                  10
+                ]
+              ]
+            },
+            "type": "report",
+            "publisher": "National Bureau of Economic Research"
+          },
+          {
+            "DOI": "10.3386/w0812",
+            "title": [
+              "Employment Effects of the Federal Minimum Wage"
+            ],
+            "author": [
+              {
+                "given": "John",
+                "family": "Boschen",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Herschel",
+                "family": "Grossman",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  1981,
+                  12
+                ]
+              ]
+            },
+            "type": "report",
+            "publisher": "National Bureau of Economic Research"
+          },
+          {
+            "DOI": "10.3386/w0652",
+            "title": [
+              "The Federal Minimum Wage, Inflation, and Employment"
+            ],
+            "author": [
+              {
+                "given": "John",
+                "family": "Boschen",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Herschel",
+                "family": "Grossman",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  1981,
+                  4
+                ]
+              ]
+            },
+            "type": "report",
+            "publisher": "National Bureau of Economic Research"
+          }
+        ],
+        "items-per-page": 3,
+        "query": {
+          "start-index": 0,
+          "search-terms": "minimum wage employment"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T05:26:48.315Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

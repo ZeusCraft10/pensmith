@@ -14,10 +14,17 @@
 // that order, dropping keys the library does not hold — so a section can never
 // be shown a source assigned only to another section (PRD §7.6).
 //
-// `full_text` has exactly one derivation, fullTextAvailable(entry). Phase 18:
-// a BYO PDF record or an open-access URL. Phase 19 (SRC-03/SRC-15/GRND-14)
-// refines THAT function only; the drafter template already tells the model to
-// quote directly only from `full_text: true` sources.
+// `full_text` has exactly one derivation, fullTextAvailable(entry), which is
+// full-text.ts's (GRND-14, the Phase 18/19 merge): true only for text Pass 3
+// can check — a non-asserted hashed bring-your-own PDF, an Unpaywall-confirmed
+// `oa_url` with a (non-DataCite) DOI, or an arXiv id. The drafter template tells
+// the model to quote directly only from `full_text: true` sources, and
+// draft-containment.ts's `quote-without-full-text` violation enforces it. This
+// module reads the recorded hashes only; `write` re-checks a BYO PDF through
+// byo-text.ts before it builds the drafter request (write.ts withVerifiedByo).
+
+import { fullTextAvailable as fullTextFromLibrary } from './full-text.js';
+import type { LibraryEntry } from './schemas/library.js';
 
 /** The library fields this module reads (a LibraryEntry, or a legacy v1 record). */
 export interface SourceContextInput {
@@ -28,7 +35,10 @@ export interface SourceContextInput {
   readonly venue?: string | null | undefined;
   readonly abstract?: string | null | undefined;
   readonly oa_url?: string | null | undefined;
-  readonly byo?: unknown;
+  /** The bring-your-own PDF record (SRC-15): hashes, never text. */
+  readonly byo?: LibraryEntry['byo'] | undefined;
+  /** The bare arXiv id (its arXiv PDF is text Pass 3 can check, GRND-14). */
+  readonly arxiv?: string | null | undefined;
   /** Source tier (SRC-09, Phase 19); read when present. */
   readonly tier?: unknown;
   /** The DOI (read by verifierBlindSpot). */
@@ -71,12 +81,16 @@ export const OUTLINE_ABSTRACT_CHARS = 300;
 
 /**
  * Whether a source's full text is available (so the drafter may quote it and
- * Pass 3 can check the quote). THE single derivation of `full_text`.
+ * Pass 3 can check the quote). THE single derivation of `full_text`: it
+ * delegates to full-text.ts, whose basis is exactly Pass 3's (GRND-14).
  */
-export function fullTextAvailable(entry: Pick<SourceContextInput, 'byo' | 'oa_url'>): boolean {
-  const byo = entry.byo;
-  if (byo === true || (typeof byo === 'object' && byo !== null)) return true;
-  return typeof entry.oa_url === 'string' && entry.oa_url.trim().length > 0;
+export function fullTextAvailable(entry: Pick<SourceContextInput, 'byo' | 'oa_url' | 'doi' | 'arxiv'>): boolean {
+  return fullTextFromLibrary({
+    byo: entry.byo ?? null,
+    oa_url: entry.oa_url ?? null,
+    doi: entry.doi ?? null,
+    arxiv: entry.arxiv ?? null,
+  });
 }
 
 /** Cut `text` to at most `max` UTF-16 units without splitting a surrogate pair. */

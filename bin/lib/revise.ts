@@ -22,14 +22,13 @@
 //   6. --yolo auto-loop: re-run the SAME path up to 2 retries; on exhaustion
 //      write a RETRY_EXHAUSTED verdict to VERIFICATION.md (D-06).
 //
-// --research (D-09 / PLAN-03): merge the query's findings into the paper
-// library through the one library writer (bin/lib/library.ts upsertSources,
-// BRDTH-01 — LIBRARY.json + the CITATIONS.bib/.ris rendered from it, provenance
-// tag `plan-research:§<N>`), append them to the project-level .paper/RESEARCH.md,
-// AND append a provenance row to
-// sections/<N>/RESEARCH-LOG.md (query, adapter, hit-count, citekeys-added,
-// ISO timestamp). RESEARCH-LOG.md is the ONLY section-level file --research
-// creates — NO other section's files are touched (section-as-phase isolation).
+// `--research <query>` is NOT handled here: `plan N --research` and
+// `revise N --research` both call bin/lib/section-research.ts
+// runSectionResearch (GRND-17, D-19-18) — the real research pass that adds
+// hits to section N only, tagged `plan-research:§<id>` (planResearchProvenance
+// below, which the planner's allowed set reads through isPlanResearchFor).
+// (The old research branch of this module applied the hits of an injected
+// adapter that defaulted to none; it is gone.)
 //
 // ALL writes route through atomicWriteFile (D-07 chokepoint) — never raw fs.
 
@@ -41,10 +40,8 @@ import { parsePlanBody } from './plan-render.js';
 import { runGate, declineGate, canPrompt } from './gates.js';
 import { withLock } from './lock.js';
 import { findCitations, removeCitekey, renameCitekey } from './citation-token.js';
-import { upsertSources } from './library.js';
-import { sectionDraft, sectionPlan, sectionVerification, sectionResearch, paperDir } from './paths.js';
-import type { SourceCandidate } from './schemas/source-candidate.js';
-import { formatSectionId, sectionIdOf, type SectionId } from './section-id.js';
+import { sectionDraft, sectionPlan, sectionVerification } from './paths.js';
+import { formatSectionId, type SectionId } from './section-id.js';
 
 // --yolo retry cap (D-06): 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
@@ -74,16 +71,6 @@ export interface ReviseSwapVars {
   voice_hint: string;
 }
 
-/** A research hit the --research adapter returns (loose superset of SourceCandidate). */
-export interface ResearchHit {
-  citekey: string;
-  title: string;
-  authors: string[];
-  year?: number;
-  doi?: string;
-  source?: SourceCandidate['source'];
-}
-
 export interface ReviseOptions {
   paperRoot: string;
   n: number;
@@ -91,8 +78,6 @@ export interface ReviseOptions {
   suffix?: string | undefined;
   slug: string;
   yolo: boolean;
-  /** Section-scoped additional research query (PLAN-03 / D-09). */
-  research?: string;
   /**
    * LLM call seam. Returns the raw strict-JSON string the revise-swap prompt
    * asks for. Default (production) loads the hash-pinned prompt + invokes the
@@ -104,8 +89,6 @@ export interface ReviseOptions {
    * TTY (exit code 3 in a non-TTY without --yolo). Tests inject a boolean.
    */
   approve?: (proposal: ReviseSwapProposal) => Promise<boolean>;
-  /** --research adapter seam (PLAN-03). Default uses bin/lib/sources/*. */
-  researchAdapter?: (query: string) => Promise<ResearchHit[]>;
 }
 
 export interface ReviseResult {
@@ -119,8 +102,6 @@ export interface ReviseResult {
   retryExhausted: boolean;
   /** Why a proposal was rejected (membership guard / invalid shape), if any. */
   rejectedReason?: string;
-  /** True iff a --research query was applied. */
-  researchApplied: boolean;
   /** Human-readable summary for the CLI / workflow narration. */
   message: string;
 }
@@ -316,7 +297,7 @@ async function applyProposal(
 }
 
 // ---------------------------------------------------------------------------
-// --research: project RESEARCH.md + bib merge + section RESEARCH-LOG.md.
+// The `plan <N> --research` provenance tag (GRND-17, bin/lib/section-research.ts).
 // ---------------------------------------------------------------------------
 
 /**
@@ -332,54 +313,6 @@ export function planResearchProvenance(id: SectionId): string {
 export function isPlanResearchFor(tag: string, id: SectionId): boolean {
   const base = planResearchProvenance(id);
   return tag === base || tag.startsWith(`${base}:`);
-}
-
-async function applyResearch(opts: ReviseOptions, hits: ResearchHit[]): Promise<void> {
-  const query = opts.research ?? '';
-  const root = opts.paperRoot;
-  const now = new Date().toISOString();
-
-  // 1. Merge the hits into the paper library through the ONE library writer
-  //    (BRDTH-01 / D-17-43): LIBRARY.json gains them — deduped against what is
-  //    already there, tagged `plan-research:§<N>` — and CITATIONS.bib / .ris are
-  //    re-rendered from it. A work already in the library keeps its citekey, so
-  //    the records below use the REAL keys.
-  const upsert = await upsertSources(
-    root,
-    hits.map((h) => ({
-      citekey: h.citekey,
-      title: h.title,
-      authors: h.authors,
-      ...(h.year !== undefined ? { year: h.year } : {}),
-      ...(h.doi !== undefined ? { doi: h.doi } : {}),
-      ...(h.source !== undefined ? { source: h.source } : {}),
-      last_verified: now,
-    })),
-    { provenance: planResearchProvenance(sectionIdOf(opts.n, opts.suffix)) },
-  );
-  const keyOf = (i: number): string => upsert.outcomes[i]?.citekey ?? hits[i]!.citekey;
-  const citekeysAdded = upsert.outcomes.filter((o) => o.status === 'added').map((o) => o.citekey);
-
-  // 2. Append to project-level .paper/RESEARCH.md (append, never overwrite).
-  const researchPath = `${paperDir(root)}/RESEARCH.md`;
-  const prior = existsSync(researchPath) ? readFileSync(researchPath, 'utf8') : '';
-  const block = [
-    prior.endsWith('\n') || prior.length === 0 ? '' : '\n',
-    `\n## Section ${opts.n} additional research — ${now}`,
-    '',
-    `Query: ${query}`,
-    '',
-    ...hits.map((h, i) => `- [@${keyOf(i)}] ${h.title} (${(h.authors ?? []).join('; ')}${h.year ? `, ${h.year}` : ''})`),
-    '',
-  ].join('\n');
-  await atomicWriteFile(researchPath, prior + block);
-
-  // 3. Append a provenance row to sections/<N>/RESEARCH-LOG.md (the ONLY
-  //    section-level file --research writes — D-09 / PLAN-03 isolation).
-  const logPath = sectionResearch(opts.n, opts.slug, root).replace(/RESEARCH\.md$/, 'RESEARCH-LOG.md');
-  const priorLog = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '# RESEARCH-LOG (section provenance)\n\n| timestamp | query | adapter | hits | citekeys-added |\n| --- | --- | --- | --- | --- |\n';
-  const row = `| ${now} | ${query} | revise --research | ${hits.length} | ${citekeysAdded.join(', ')} |\n`;
-  await atomicWriteFile(logPath, priorLog + row);
 }
 
 // ---------------------------------------------------------------------------
@@ -413,26 +346,8 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     flagged_citekey: null,
     replacement_citekey: null,
     retryExhausted: false,
-    researchApplied: false,
     message: '',
   };
-
-  // --research is orthogonal to the swap loop and may run alongside it.
-  if (opts.research && opts.research.trim().length > 0) {
-    const adapter = opts.researchAdapter ?? (() => Promise.resolve([] as ResearchHit[]));
-    const hits = await adapter(opts.research);
-    await applyResearch(opts, hits);
-    base.researchApplied = true;
-    base.message = `--research applied: ${hits.length} hit(s) for "${opts.research}".`;
-  }
-
-  // --research is orthogonal to the swap loop: a `revise --research <query>`
-  // invocation with no proposeSwap transport injected is a valid "research
-  // only" call. When research ran and no swap transport is wired, return the
-  // research result without attempting (and throwing on) the swap loop.
-  if (base.researchApplied && !opts.proposeSwap) {
-    return base;
-  }
 
   if (!existsSync(verifPath)) {
     return { ...base, message: `${base.message} No VERIFICATION.md at section ${opts.n} — nothing to revise.`.trim() };

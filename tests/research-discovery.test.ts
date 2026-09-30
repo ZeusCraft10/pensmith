@@ -1,30 +1,17 @@
-// tests/research-discovery.test.ts — Phase 12 Wave 0 RED-by-skip scaffold for GEN-03.
+// tests/research-discovery.test.ts — the research pass's discovery half
+// (GEN-03, D-17-10, SRC-07; bin/lib/research-orchestrator.ts).
 //
-// Behavioral contract for the live-discovery path (research-orchestrator):
-//   (1) fan-out returns >=1 deduped SourceCandidate for a fixture assignment.
-//   (2) two candidates with the same DOI collapse to one (DOI dedup via normalizeDoi).
-//   (3) source-evaluator parse failure under PENSMITH_NO_LLM keeps all candidates
-//       (defensive fallback — T-11-10).
-//   (4) zero-candidate degenerate case writes a real EMPTY LIBRARY.json with WARN;
-//       assert NO literal `tier2-placeholder` / `PLACEHOLDER_LIBRARY` / `_note`
-//       marker appears in the written file.
-//   (5) crossCheckRetractions runs BEFORE writeBibtex (D-15) — assert via call-order
-//       capture on the production chokepoint sequence.
+// runResearchPassWithLog(queries, opts) (tests/helpers/research-pass.ts) runs
+// one research pass (adapters → dedup → tiers → policy → evaluator) plus its
+// log in .paper/RESEARCH.md from the same exported pieces `pensmith research`
+// runs, without the library write the verb owns. These cases run
+// it against the recorded source cassettes (the test runner is sources-offline,
+// RUN-01: exact fixtures or a fail-closed miss) and against injected fake
+// adapters.
 //
-// RED-by-skip stance: every behavioral test SKIPS until discoverySeamWired() returns
-// true (the research-orchestrator module exists AND the swap-seam block in
-// bin/cli/research.ts has been replaced). Until Wave 1 / Plan 02 lands, the suite
-// reports SKIPS with ZERO failures.
-//
-// CRITICAL path resolution (T-12-W0-01 / Phase-11 local-vs-CI bug): ALL paths
-// resolved via fileURLToPath(new URL(..., import.meta.url)) — NEVER via
-// import.meta.url.pathname or a file:// regex strip. The repo path contains spaces
-// ("OneDrive - Roanoke College") which cause %20-encoded readFileSync paths to
-// throw, silently skipping tests locally while running untested on CI.
-//
-// Offline mode (T-12-W0-02): PENSMITH_NO_LLM=1 set at module top; the test runner
-// is sources-offline (RUN-01) → adapters replay EXACT recorded fixtures (D-17-06):
-// the topic 'attention mechanisms in neural networks' is the query
+// Offline (T-12-W0-02): PENSMITH_NO_LLM=1 is set before any import, so the
+// source-evaluator is the deterministic stub (it keeps every candidate). The
+// topic 'attention mechanisms in neural networks' is the query
 // scripts/refresh-cassettes.mjs records; any other query is an offline miss.
 
 import { test } from 'node:test';
@@ -34,499 +21,139 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// ---- Offline gate (T-12-W0-02) -------------------------------------------------
-// Set BEFORE any dynamic import so the LLM mock + adapter cassettes short-circuit
-// before any network or real LLM call. PENSMITH_NETWORK_TESTS is deliberately NOT
-// set → isOfflineMode() returns true.
 process.env['PENSMITH_NO_LLM'] = '1';
-
-// ---- Path helpers (T-12-W0-01) -------------------------------------------------
-// Use fileURLToPath everywhere — the repo path contains spaces that URL-encode as
-// %20, breaking readFileSync if .pathname is used instead.
 
 function repoPath(rel: string): string {
   return fileURLToPath(new URL('../' + rel, import.meta.url));
 }
 
-// ---- Skip-guard predicate -------------------------------------------------------
-// discoverySeamWired() returns true when:
-//   a) bin/lib/research-orchestrator.ts exists (Wave 1 / Plan 02 creates it), AND
-//   b) bin/cli/research.ts no longer contains the literal swap-seam comment token
-//      `Phase-12 / GEN-03 swap seam` (Plan 02 replaces that block), OR alternatively
-//      research.ts imports from research-orchestrator (the positive signal).
-//
-// Both conditions must be met so the tests do not accidentally activate between
-// Plan 02 creating the orchestrator module and Plan 02 wiring research.ts.
-
 const orchestratorSrcPath = repoPath('bin/lib/research-orchestrator.ts');
 const researchSrcPath = repoPath('bin/cli/research.ts');
 
-function discoverySeamWired(): boolean {
-  // Condition a: research-orchestrator.ts must exist.
-  if (!fs.existsSync(orchestratorSrcPath)) return false;
-
-  // Condition b: the swap-seam marker must be gone OR the import wired.
-  try {
-    const src = fs.readFileSync(researchSrcPath, 'utf8');
-    const swapSeamPresent = src.includes('Phase-12 / GEN-03 swap seam');
-    const orchestratorImported = src.includes('research-orchestrator');
-    // Wired = no longer has the placeholder comment OR already imports orchestrator.
-    if (swapSeamPresent && !orchestratorImported) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const SEAM_WIRED = discoverySeamWired();
-
-// ---- Sandbox helpers (T-12-W0-03) -----------------------------------------------
-// Each test writes into a fresh tmpdir with HOME/LOCALAPPDATA/XDG_DATA_HOME overridden
-// so any STATE.json / LIBRARY.json writes land in the sandbox, not the real home dir.
-
 function mkPaperRoot(): string {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-discovery-'));
-  process.env.LOCALAPPDATA = tmp;
-  process.env.XDG_DATA_HOME = tmp;
-  process.env.HOME = tmp;
-  // Create the .paper directory structure that research needs.
   fs.mkdirSync(path.join(tmp, '.paper'), { recursive: true });
   return tmp;
 }
 
-// ---- Fixture assignment text (used as the research context) ---------------------
-const FIXTURE_ASSIGNMENT = `
-Write a literature review on attention mechanisms in neural networks.
-The paper should cover self-attention, multi-head attention, and transformer architectures.
-Target discipline: computer science / machine learning.
-`.trim();
+const SEARCHABLE = 'attention mechanisms in neural networks';
+const orch = await import('../bin/lib/research-orchestrator.js');
+const { runResearchPassWithLog } = await import('./helpers/research-pass.js');
+const { RESEARCH_LOG_END } = await import('../bin/lib/research-md.js');
 
-// ---- Module URLs (dynamic import — resolved after env overrides) ----------------
-// These module URLs are declared here but only imported inside test bodies where
-// the skip-guard is active, so they are never imported (and thus never throw) when
-// SEAM_WIRED is false.
-const orchestratorModUrl = new URL('../bin/lib/research-orchestrator.js', import.meta.url);
-
-// ---- Helper: check a LIBRARY.json file has NO forbidden placeholder tokens ------
-function assertNoPlaceholderTokens(libraryJson: string): void {
-  const forbidden = ['tier2-placeholder', 'PLACEHOLDER_LIBRARY', '_note'];
-  for (const token of forbidden) {
-    assert.ok(
-      !libraryJson.includes(token),
-      `LIBRARY.json must NOT contain placeholder token "${token}"; got:\n${libraryJson.slice(0, 400)}`,
-    );
+async function captureStderr<T>(fn: () => Promise<T>): Promise<{ value: T; stderr: string }> {
+  const lines: string[] = [];
+  const orig = process.stderr.write.bind(process.stderr);
+  (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => {
+    lines.push(String(s));
+    return true;
+  };
+  try {
+    return { value: await fn(), stderr: lines.join('') };
+  } finally {
+    (process.stderr as unknown as { write: typeof orig }).write = orig;
   }
 }
 
-// ================================================================================
-// Tests (all RED-by-skip until SEAM_WIRED === true)
-// ================================================================================
-
-test(
-  'research-discovery: fan-out returns >=1 deduped SourceCandidate for fixture assignment (GEN-03)',
-  { skip: !SEAM_WIRED },
-  async () => {
-    // This test will only activate once the research-orchestrator module exists and
-    // bin/cli/research.ts has been wired to use it. Until then it skips cleanly.
-    //
-    // Expected: calling the orchestrator (or research.ts) with a fixture assignment
-    // under PENSMITH_NO_LLM=1 + adapter cassettes returns an array of >=1 valid
-    // SourceCandidate objects (no crash, no empty-set if any cassette has data).
-    const root = mkPaperRoot();
-    process.chdir(root);
-
-    const mod = await import(orchestratorModUrl.href) as {
-      runResearchOrchestrator?: (opts: {
-        assignment: string;
-        topic: string;
-        discipline: string;
-        paperRoot?: string;
-      }) => Promise<Array<{ id: string; title: string; authors: string[]; source: string; citekey: string }>>;
-    };
-
-    assert.ok(
-      typeof mod.runResearchOrchestrator === 'function',
-      'research-orchestrator must export runResearchOrchestrator function',
-    );
-
-    const candidates = await mod.runResearchOrchestrator!({
-      assignment: FIXTURE_ASSIGNMENT,
-      topic: 'attention mechanisms in neural networks',
-      discipline: 'cs',
-      paperRoot: root,
-    });
-
-    assert.ok(Array.isArray(candidates), 'runResearchOrchestrator must return an array');
-    assert.ok(
-      candidates.length >= 1,
-      `fan-out must return >=1 candidate from cassettes (got ${candidates.length})`,
-    );
-
-    // Each candidate must have the required fields.
-    for (const c of candidates) {
-      assert.ok(typeof c.id === 'string' && c.id.length > 0, `candidate id must be non-empty: ${JSON.stringify(c)}`);
-      assert.ok(typeof c.title === 'string' && c.title.length > 0, `candidate title must be non-empty: ${JSON.stringify(c)}`);
-      assert.ok(Array.isArray(c.authors) && c.authors.length > 0, `candidate authors must be non-empty: ${JSON.stringify(c)}`);
-      assert.ok(typeof c.source === 'string', `candidate source must be a string: ${JSON.stringify(c)}`);
-      assert.ok(typeof c.citekey === 'string' && /^[a-z][a-z0-9_-]*$/.test(c.citekey), `candidate citekey must match [a-z][a-z0-9_-]*: ${JSON.stringify(c)}`);
-    }
-
-    // D-17-10: the research log lands in .paper/RESEARCH.md, marker first.
-    const researchMd = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
-    const lines = researchMd.split(/\r?\n/);
-    assert.equal(lines[0], '> OFFLINE MODE (test runner) — recorded fixtures, not live results.');
-    assert.ok(lines.includes('Scope: auto'));
-    assert.ok(lines.includes('1. attention mechanisms in neural networks'), 'the query is listed');
-    assert.match(researchMd, /\| attention mechanisms in neural networks \| crossref \| [1-9]\d* \| ok \|/, 'per-adapter count');
-    assert.match(researchMd, /\| attention mechanisms in neural networks \| (openalex|semanticscholar) \| 0 \| offline: no recorded fixture \|/, 'an offline miss is reported per adapter');
-    assert.match(researchMd, new RegExp(`## Candidates \\(${candidates.length}\\)`));
-    for (const c of candidates) assert.ok(researchMd.includes(`[@${c.citekey}]`), `candidate ${c.citekey} is listed`);
-  },
-);
-
-test(
-  'RUN-03 / D-17-10: an unrecorded query offline prints "offline: no recorded results for this query" and yields 0 candidates',
-  { skip: !SEAM_WIRED },
-  async () => {
-    const root = mkPaperRoot();
-    const mod = await import(orchestratorModUrl.href) as {
-      runResearchOrchestrator?: (opts: { assignment: string; topic: string; discipline: string; paperRoot?: string }) => Promise<unknown[]>;
-    };
-    const stderr: string[] = [];
-    const orig = process.stderr.write.bind(process.stderr);
-    (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => {
-      stderr.push(String(s));
-      return orig(s);
-    };
-    let candidates: unknown[] = [];
-    try {
-      candidates = await mod.runResearchOrchestrator!({
-        assignment: 'Write a 1500-word essay on medieval Icelandic sagas.',
-        topic: 'medieval Icelandic sagas',
-        discipline: 'history',
-        paperRoot: root,
-      });
-    } finally {
-      (process.stderr as unknown as { write: typeof orig }).write = orig;
-    }
-    assert.equal(candidates.length, 0, 'no fixture is ever substituted for another query');
-    assert.match(stderr.join(''), /offline: no recorded results for this query \("medieval Icelandic sagas"\)/);
-    const researchMd = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
-    assert.match(researchMd, /^> OFFLINE MODE \(test runner\)/);
-    assert.match(researchMd, /## Candidates \(0\)/);
-    assert.match(researchMd, /_offline: no recorded results for these queries — re-run online\._/);
-  },
-);
-
-test(
-  'D-17-10: a research re-run rewrites only the generated log — notes below the end line (revise --research) are kept',
-  { skip: !SEAM_WIRED },
-  async () => {
-    const root = mkPaperRoot();
-    const mod = await import(orchestratorModUrl.href) as {
-      runResearchOrchestrator: (opts: { assignment: string; topic: string; discipline: string; paperRoot?: string }) => Promise<unknown[]>;
-      RESEARCH_LOG_END: string;
-    };
-    const rPath = path.join(root, '.paper', 'RESEARCH.md');
-    // A pre-existing notes file (no research log yet) is kept below the new log.
-    const notes = '### vaswani2017\nsupports: attention alone suffices for translation\n';
-    fs.writeFileSync(rPath, notes);
-    const run = (topic: string): Promise<unknown[]> =>
-      mod.runResearchOrchestrator({ assignment: topic, topic, discipline: 'history', paperRoot: root });
-    await run('medieval Icelandic sagas');
-    const first = fs.readFileSync(rPath, 'utf8');
-    assert.match(first, /^> OFFLINE MODE \(test runner\)/, 'the marker stays the first line');
-    assert.ok(first.includes(mod.RESEARCH_LOG_END));
-    assert.ok(first.endsWith(notes), 'the existing notes are kept verbatim below the log');
-    // Notes appended below the end line survive a second run; the log is replaced.
-    fs.appendFileSync(rPath, '\n### appended2020\nsupports: an appended finding\n');
-    await run('norse skaldic poetry');
-    const second = fs.readFileSync(rPath, 'utf8');
-    assert.equal(second.split(mod.RESEARCH_LOG_END).length, 2, 'exactly one end line');
-    const [log, kept] = second.split(mod.RESEARCH_LOG_END) as [string, string];
-    assert.match(log, /1\. norse skaldic poetry/);
-    assert.ok(!log.includes('medieval Icelandic sagas'), 'the previous log is replaced, not stacked');
-    assert.ok(kept.includes(notes) && kept.includes('### appended2020'), 'every note below the end line is kept');
-  },
-);
-
-test(
-  'research-discovery: two candidates with same DOI collapse to one (DOI dedup, GEN-03)',
-  { skip: !SEAM_WIRED },
-  async () => {
-    // Asserts that normalizeDoi-based DOI deduplication works: if two adapters
-    // return the same DOI, only one entry survives in the final candidate set.
-    const root = mkPaperRoot();
-
-    const mod = await import(orchestratorModUrl.href) as {
-      runResearchOrchestrator?: (opts: {
-        assignment: string;
-        topic: string;
-        discipline: string;
-        paperRoot?: string;
-      }) => Promise<Array<{ id: string; doi?: string }>>;
-    };
-
-    assert.ok(typeof mod.runResearchOrchestrator === 'function', 'must export runResearchOrchestrator');
-
-    const candidates = await mod.runResearchOrchestrator!({
-      assignment: FIXTURE_ASSIGNMENT,
-      topic: 'attention mechanisms in neural networks',
-      discipline: 'cs',
-      paperRoot: root,
-    });
-
-    // Build a map of normalized DOIs and assert no DOI appears more than once.
-    const seenDois = new Map<string, number>();
-    for (const c of candidates) {
-      if (c.doi) {
-        // normalizeDoi lowercases and strips https://doi.org/ prefix.
-        const normalized = c.doi
-          .toLowerCase()
-          .replace(/^https?:\/\/(?:dx\.)?doi\.org\//, '')
-          .trim();
-        seenDois.set(normalized, (seenDois.get(normalized) ?? 0) + 1);
-      }
-    }
-
-    for (const [doi, count] of seenDois) {
-      assert.equal(
-        count,
-        1,
-        `DOI "${doi}" appears ${count} times — DOI dedup must reduce to exactly 1 (normalizeDoi)`,
-      );
-    }
-  },
-);
-
-test(
-  'research-discovery: source-evaluator parse failure under PENSMITH_NO_LLM keeps all candidates (T-11-10 defensive fallback)',
-  { skip: !SEAM_WIRED },
-  async () => {
-    // Under PENSMITH_NO_LLM=1 the offline mock returns a non-JSON string for the
-    // source-evaluator prompt. The orchestrator must WARN and keep ALL adapter
-    // candidates (not drop them). This test verifies the defensive fallback.
-    const root = mkPaperRoot();
-
-    const mod = await import(orchestratorModUrl.href) as {
-      runResearchOrchestrator?: (opts: {
-        assignment: string;
-        topic: string;
-        discipline: string;
-        paperRoot?: string;
-      }) => Promise<Array<{ id: string }>>;
-    };
-
-    assert.ok(typeof mod.runResearchOrchestrator === 'function', 'must export runResearchOrchestrator');
-
-    // Capture stderr to confirm the WARN is emitted (not a crash).
-    const stderrLines: string[] = [];
-    const origStderrWrite = process.stderr.write.bind(process.stderr);
-    (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => {
-      stderrLines.push(s);
-      return true;
-    };
-
-    let candidates: Array<{ id: string }>;
-    try {
-      candidates = await mod.runResearchOrchestrator!({
-        assignment: FIXTURE_ASSIGNMENT,
-        topic: 'attention mechanisms in neural networks',
-        discipline: 'cs',
-        paperRoot: root,
-      });
-    } finally {
-      (process.stderr as unknown as { write: typeof origStderrWrite }).write = origStderrWrite;
-    }
-
-    // Under PENSMITH_NO_LLM=1 the source-evaluator will fail to parse. Candidates
-    // must NOT be dropped — defensive fallback keeps them all.
-    assert.ok(Array.isArray(candidates!), 'must return an array even on parse failure');
-    // The candidates count must be >=0 (no crash). A WARN is expected on stderr when
-    // the evaluator parse fails (not required to check exact message here — the
-    // important assertion is no crash and no candidate loss).
-    assert.ok(
-      candidates!.length >= 0,
-      'defensive fallback must keep all candidates (no crash, no drop on parse failure)',
-    );
-  },
-);
-
-test(
-  'research-discovery: zero-candidate degenerate case writes real EMPTY LIBRARY.json with WARN, no placeholder tokens (GEN-03)',
-  { skip: !SEAM_WIRED },
-  async () => {
-    // When NO adapters return candidates (all offline cassettes empty for this
-    // query), the orchestrator must:
-    //   a) emit a WARN to stderr.
-    //   b) write LIBRARY.json with { entries: [] } — a real empty library, not a
-    //      placeholder stub.
-    //   c) LIBRARY.json must contain NO `tier2-placeholder`, `PLACEHOLDER_LIBRARY`,
-    //      or `_note` tokens.
-    const root = mkPaperRoot();
-    const libraryPath = path.join(root, '.paper', 'LIBRARY.json');
-
-    const mod = await import(orchestratorModUrl.href) as {
-      runResearchOrchestrator?: (opts: {
-        assignment: string;
-        topic: string;
-        discipline: string;
-        paperRoot?: string;
-        // Allow a test-only override for empty-cassette simulation.
-        __forceCandidates?: Array<never>;
-      }) => Promise<Array<unknown>>;
-    };
-
-    assert.ok(typeof mod.runResearchOrchestrator === 'function', 'must export runResearchOrchestrator');
-
-    // Capture stderr to confirm WARN is emitted.
-    const stderrLines: string[] = [];
-    const origStderrWrite = process.stderr.write.bind(process.stderr);
-    (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => {
-      stderrLines.push(s);
-      return true;
-    };
-
-    try {
-      // Force empty candidates by providing an obscure topic that no cassette covers.
-      // The orchestrator must still write LIBRARY.json when called from research.ts.
-      await mod.runResearchOrchestrator!({
-        assignment: 'xyzzy-no-cassette-match-12345',
-        topic: 'xyzzy-no-cassette-match-12345',
-        discipline: 'other',
-        paperRoot: root,
-        __forceCandidates: [],
-      });
-    } catch {
-      // Not-yet-wired path may throw — the actual assertion is on the LIBRARY.json below.
-      // If the orchestrator doesn't support __forceCandidates, this test will still
-      // exercise the zero-candidate path when cassettes return nothing.
-    } finally {
-      (process.stderr as unknown as { write: typeof origStderrWrite }).write = origStderrWrite;
-    }
-
-    // Check LIBRARY.json if it was written.
-    // When candidates=[], research.ts writes the file; if not written, the test
-    // documents the expected behavior for the verifier.
-    if (fs.existsSync(libraryPath)) {
-      const libraryJson = fs.readFileSync(libraryPath, 'utf8');
-      const parsed = JSON.parse(libraryJson) as { entries?: unknown[] };
-      assert.ok(Array.isArray(parsed.entries), 'LIBRARY.json must have an entries array');
-      // The entries array may be empty — that is the correct behavior.
-      assertNoPlaceholderTokens(libraryJson);
-    }
-
-    // A WARN must have been emitted for zero candidates.
-    // (The exact message is checked loosely — implementation may vary.)
-    // This assertion is advisory; the no-placeholder check above is the hard gate.
-    const stderrText = stderrLines.join('');
-    // If candidates were zero, expect a WARN in stderr.
-    if (stderrText.includes('0 candidate')) {
-      assert.match(
-        stderrText,
-        /warn/i,
-        'zero-candidate path must emit a WARN to stderr',
-      );
-    }
-  },
-);
-
-test(
-  'research-discovery: crossCheckRetractions runs BEFORE the library write (D-15 LOCKED ordering)',
-  { skip: !SEAM_WIRED },
-  async () => {
-    // D-15 LOCKED: crossCheckRetractions MUST run before the library write, so the
-    // retracted flag reaches LIBRARY.json and the CITATIONS.bib rendered from it.
-    // BRDTH-01 / D-17-43 made bin/lib/library.ts upsertSources the ONE writer of
-    // LIBRARY.json + CITATIONS.bib + CITATIONS.ris (it renders the bib via
-    // writeBibtex internally), so research.ts calls upsertSources, not writeBibtex.
-    //
-    // Strategy: a source-level ordering assertion on research.ts (the runtime is
-    // production code; the ordering is enforced by code structure, not by a spy).
-
-    const researchSrc = fs.readFileSync(researchSrcPath, 'utf8');
-
-    const crossCheckIdx = researchSrc.indexOf('crossCheckRetractions(');
-    const upsertIdx = researchSrc.indexOf('upsertSources(');
-
-    assert.ok(
-      crossCheckIdx !== -1,
-      'research.ts must still call crossCheckRetractions (D-15 LOCKED)',
-    );
-    assert.ok(
-      upsertIdx !== -1,
-      'research.ts must write the library through upsertSources (BRDTH-01 — the one library writer)',
-    );
-    assert.ok(
-      crossCheckIdx < upsertIdx,
-      `D-15 LOCKED ordering violated: crossCheckRetractions (char ${crossCheckIdx}) must appear BEFORE upsertSources (char ${upsertIdx}) in research.ts`,
-    );
-    assert.ok(
-      !researchSrc.includes('writeBibtex(') && !researchSrc.includes('writeRis('),
-      'research.ts must not render CITATIONS.bib/.ris itself — library.ts does (library-writer chokepoint)',
-    );
-
-    // The orchestrator returns candidates; it never writes the library.
-    const orchSrc = fs.readFileSync(orchestratorSrcPath, 'utf8');
-    assert.ok(
-      !orchSrc.includes('writeBibtex(') && !orchSrc.includes('upsertSources('),
-      'research-orchestrator must NOT write the library — research.ts owns the call (D-15)',
-    );
-  },
-);
-
-// ---- Consistency check: verify predicate resolves to a meaningful value --------
-// This test ALWAYS runs (no skip-guard) so we can confirm the path resolution
-// itself works on this spaced-path machine. The test documents whether SEAM_WIRED
-// is true or false (expected: false in Wave 0).
-
-test('research-discovery: discoverySeamWired() resolves correctly (path sanity — T-12-W0-01)', () => {
-  // The orchestratorSrcPath must resolve to a real absolute path (no %20 in it
-  // because fileURLToPath decodes percent-encoding).
-  assert.ok(
-    !orchestratorSrcPath.includes('%20'),
-    `orchestratorSrcPath must not contain %20 (fileURLToPath decodes spaces): ${orchestratorSrcPath}`,
+test('research-discovery: the recorded fan-out returns deduped, validated candidates and logs every adapter per query (GEN-03, SRC-07)', async () => {
+  const root = mkPaperRoot();
+  const { value: candidates } = await captureStderr(() =>
+    runResearchPassWithLog([SEARCHABLE], { topic: SEARCHABLE, discipline: 'cs', paperRoot: root }),
   );
-  assert.ok(
-    !researchSrcPath.includes('%20'),
-    `researchSrcPath must not contain %20 (fileURLToPath decodes spaces): ${researchSrcPath}`,
-  );
+  assert.ok(candidates.length >= 1, `>=1 candidate from the cassettes (got ${candidates.length})`);
+  for (const c of candidates) {
+    assert.ok(c.id.length > 0 && c.title.length > 0 && c.authors.length > 0, JSON.stringify(c).slice(0, 200));
+    assert.match(c.citekey, /^[a-z][a-z0-9_-]*$/);
+  }
+  assert.equal(new Set(candidates.map((c) => c.citekey)).size, candidates.length, 'citekeys are unique');
 
-  // The research.ts source file must exist and be readable (it pre-exists).
-  assert.ok(
-    fs.existsSync(researchSrcPath),
-    `researchSrcPath must exist at: ${researchSrcPath}`,
-  );
+  // D-17-10 / §3.4: the research log, marker first.
+  const researchMd = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
+  const lines = researchMd.split(/\r?\n/);
+  assert.equal(lines[0], '> OFFLINE MODE (test runner) — recorded fixtures, not live results.');
+  assert.ok(lines.includes('# Research log'));
+  assert.ok(lines.includes('Scope: auto'));
+  assert.ok(lines.includes(`1. ${SEARCHABLE}`), 'the query is listed');
+  assert.ok(lines.includes('| Adapter | Results | Status |'), 'the per-adapter table');
+  assert.match(researchMd, new RegExp(`\\| ${SEARCHABLE} \\| crossref \\| [1-9]\\d* \\| ok \\|`), 'per-query count');
+  assert.match(researchMd, new RegExp(`\\| ${SEARCHABLE} \\| openalex \\| 0 \\| offline: no recorded fixture \\|`), 'an offline miss is reported per adapter');
+  // SRC-10: a computer-science paper queries the preset's adapters first.
+  const adapterRows = lines.filter((l) => /^\| [a-z]+ \| \d+ \| /.test(l)).map((l) => l.split('|')[1]!.trim());
+  assert.deepEqual(adapterRows.slice(0, 3), ['arxiv', 'semanticscholar', 'openalex'], `preset order first: ${adapterRows.join(', ')}`);
+  assert.match(researchMd, new RegExp(`## Sources \\(${candidates.length}\\)`));
+  for (const c of candidates) assert.ok(researchMd.includes(`[@${c.citekey}]`), `candidate ${c.citekey} is listed`);
+  assert.ok(researchMd.includes(RESEARCH_LOG_END));
+});
 
-  // Log the predicate value so skip messages reflect actual reason.
-  const reason = !fs.existsSync(orchestratorSrcPath)
-    ? 'not yet wired — bin/lib/research-orchestrator.ts absent (Wave 0 RED-by-skip)'
-    : (() => {
-        try {
-          const src = fs.readFileSync(researchSrcPath, 'utf8');
-          return src.includes('Phase-12 / GEN-03 swap seam') && !src.includes('research-orchestrator')
-            ? 'not yet wired — swap-seam block still present in research.ts'
-            : 'wired';
-        } catch {
-          return 'not yet wired — could not read research.ts';
-        }
-      })();
-
-  // This is always-pass — we're just documenting the state.
-  assert.ok(
-    typeof SEAM_WIRED === 'boolean',
-    `discoverySeamWired() returns a boolean (${String(SEAM_WIRED)}): ${reason}`,
+test('RUN-03 / D-17-10: an unrecorded query offline prints "offline: no recorded results for this query" and yields 0 candidates', async () => {
+  const root = mkPaperRoot();
+  const { value: candidates, stderr } = await captureStderr(() =>
+    runResearchPassWithLog(['medieval Icelandic sagas'], { topic: 'medieval Icelandic sagas', discipline: 'history', paperRoot: root }),
   );
+  assert.equal(candidates.length, 0, 'no fixture is ever substituted for another query');
+  assert.match(stderr, /offline: no recorded results for this query \("medieval Icelandic sagas"\)/);
+  const researchMd = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
+  assert.match(researchMd, /^> OFFLINE MODE \(test runner\)/);
+  assert.match(researchMd, /\| openalex \| 0 \| offline: no recorded fixture \|/);
+  assert.match(researchMd, /## Sources \(0\)/);
+});
+
+test('D-17-10: a research re-run rewrites only the generated log — notes below the end line are kept', async () => {
+  const root = mkPaperRoot();
+  const rPath = path.join(root, '.paper', 'RESEARCH.md');
+  // A pre-existing notes file (no research log yet) is kept below the new log.
+  const notes = '### vaswani2017\nsupports: attention alone suffices for translation\n';
+  fs.writeFileSync(rPath, notes);
+  const run = (topic: string): Promise<unknown> =>
+    captureStderr(() => runResearchPassWithLog([topic], { topic, discipline: 'history', paperRoot: root }));
+  await run('medieval Icelandic sagas');
+  const first = fs.readFileSync(rPath, 'utf8');
+  assert.match(first, /^> OFFLINE MODE \(test runner\)/, 'the marker stays the first line');
+  assert.ok(first.includes(RESEARCH_LOG_END));
+  assert.ok(first.endsWith(notes), 'the existing notes are kept verbatim below the log');
+  fs.appendFileSync(rPath, '\n### appended2020\nsupports: an appended finding\n');
+  await run('norse skaldic poetry');
+  const second = fs.readFileSync(rPath, 'utf8');
+  assert.equal(second.split(RESEARCH_LOG_END).length, 2, 'exactly one end line');
+  const [log, kept] = second.split(RESEARCH_LOG_END) as [string, string];
+  assert.match(log, /1\. norse skaldic poetry/);
+  assert.ok(!log.includes('medieval Icelandic sagas'), 'the previous log is replaced, not stacked');
+  assert.ok(kept.includes(notes) && kept.includes('### appended2020'), 'every note below the end line is kept');
+});
+
+test('research-discovery: two candidates with the same DOI collapse to one, keeping both adapters and the best rank', async () => {
+  const now = new Date().toISOString();
+  const base = { title: 'Attention Is All You Need', authors: ['Vaswani, Ashish'], year: 2017, retracted: false, last_verified: now, citekey: 'vaswani2017', raw: {} };
+  const registry = {
+    crossref: { search: async () => [{ ...base, source: 'crossref' as const, id: '10.48550/arXiv.1706.03762', doi: '10.48550/arXiv.1706.03762' }] },
+    arxiv: { search: async () => [{ ...base, source: 'arxiv' as const, id: '1706.03762', doi: 'https://doi.org/10.48550/ARXIV.1706.03762', abstract: 'The dominant sequence transduction models…' }] },
+  };
+  const plan = orch.researchAdapterPlan({ registry, byPreference: false, discipline: 'other' });
+  const d = await orch.discoverCandidates({ queries: ['q'], plan, registry, warn: () => undefined });
+  assert.equal(d.found, 2);
+  assert.equal(d.candidates.length, 1, 'normalizeDoi dedup');
+  assert.deepEqual([...d.candidates[0]!.foundBy], ['crossref', 'arxiv']);
+  assert.equal(d.candidates[0]!.rank, 0, 'the best preference rank');
+  assert.ok(d.candidates[0]!.candidate.abstract, 'the record with an abstract wins');
+});
+
+test('research-discovery: crossCheckRetractions runs BEFORE the library write (D-15 LOCKED ordering)', () => {
+  const researchSrc = fs.readFileSync(researchSrcPath, 'utf8');
+  const crossCheckIdx = researchSrc.indexOf('crossCheckRetractions(');
+  const upsertIdx = researchSrc.indexOf('upsertSources(');
+  assert.ok(crossCheckIdx !== -1, 'research.ts must still call crossCheckRetractions (D-15 LOCKED)');
+  assert.ok(upsertIdx !== -1, 'research.ts must write the library through upsertSources (BRDTH-01)');
+  assert.ok(crossCheckIdx < upsertIdx, `D-15: crossCheckRetractions (char ${crossCheckIdx}) must come before upsertSources (char ${upsertIdx})`);
+  assert.ok(!researchSrc.includes('writeBibtex(') && !researchSrc.includes('writeRis('), 'research.ts never renders CITATIONS.bib/.ris itself');
+  const orchSrc = fs.readFileSync(orchestratorSrcPath, 'utf8');
+  assert.ok(!orchSrc.includes('writeBibtex(') && !orchSrc.includes('upsertSources('), 'the orchestrator never writes the library');
+  // SRC-07: the keep-all fallback is gone.
+  assert.doesNotMatch(orchSrc, /keeping all \$\{candidates\.length\}|defensive fallback to avoid empty result/, 'no keep-all fallback');
 });
 
 test('D-17-10: an adapter whose request failed (HTTP 429 after retries) is `failed (…)` in RESEARCH.md — never `no results` — with one stderr line', async () => {
   const root = mkPaperRoot();
-  const { runResearchOrchestrator } = await import(orchestratorModUrl.href) as {
-    runResearchOrchestrator: (queries: string[], opts: Record<string, unknown>) => Promise<unknown[]>;
-  };
-  const { httpFailureReason } = await import(new URL('../bin/lib/sources/search-failure.js', import.meta.url).href) as {
-    httpFailureReason: (status: number) => string;
-  };
+  const { httpFailureReason } = await import('../bin/lib/sources/search-failure.js');
   const registry = {
     'rate-limited': {
       async search(_q: string, opts: { onFailure?: (r: string) => void } = {}) {
@@ -536,24 +163,15 @@ test('D-17-10: an adapter whose request failed (HTTP 429 after retries) is `fail
     },
     empty: { async search() { return []; } },
   };
-  const stderr: string[] = [];
-  const orig = process.stderr.write.bind(process.stderr);
-  (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => {
-    stderr.push(s);
-    return true;
-  };
-  try {
-    await runResearchOrchestrator(['query one', 'query two'], {
-      topic: 'attention', discipline: 'other', paperRoot: root, __adapterRegistry: registry,
-    });
-  } finally {
-    (process.stderr as unknown as { write: typeof orig }).write = orig;
-  }
+  const { stderr } = await captureStderr(() =>
+    runResearchPassWithLog(['query one', 'query two'], { topic: 'attention', discipline: 'other', paperRoot: root, registry }),
+  );
   const md = fs.readFileSync(path.join(root, '.paper', 'RESEARCH.md'), 'utf8');
   assert.match(md, /\| query one \| rate-limited \| 0 \| failed \(HTTP 429 after retries\) \|/);
   assert.match(md, /\| query two \| rate-limited \| 0 \| failed \(HTTP 429 after retries\) \|/);
   assert.match(md, /\| query one \| empty \| 0 \| no results \|/, 'an empty answer is still `no results`');
-  const warns = stderr.join('').split('\n').filter((l) => l.includes('rate-limited failed'));
+  assert.match(md, /\| rate-limited \| 0 \| failed \(HTTP 429 after retries\) \|/, 'the aggregated adapter row');
+  const warns = stderr.split('\n').filter((l) => l.includes('rate-limited failed'));
   assert.deepEqual(warns, ['pensmith research: WARN — rate-limited failed (HTTP 429 after retries) for 2 of 2 queries; its results are missing from this run (see RESEARCH.md)']);
 });
 
@@ -575,7 +193,8 @@ test('D-17-10: a source adapter reports its failed search request through onFail
     const again: string[] = [];
     assert.deepEqual(await openalex.search('pensmith onfailure probe two', { onFailure: (r) => again.push(r) }), []);
     assert.equal(again.length, 1);
-    assert.match(again[0]!, /^SyntaxError: /);
+    // SRC-17 / D-19-05: a 200 whose body is not the service's answer is a named failure (and never cached).
+    assert.equal(again[0]!, 'response is not an OpenAlex answer (unreadable JSON)');
     // A retryable status fetch() gave up on arrives as a thrown error carrying it.
     const { errorFailureReason } = await import('../bin/lib/sources/search-failure.js');
     assert.equal(errorFailureReason(Object.assign(new Error('HTTP 503'), { status: 503 })), 'HTTP 503 after retries');

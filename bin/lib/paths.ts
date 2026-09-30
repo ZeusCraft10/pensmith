@@ -234,6 +234,29 @@ export function pensmithStyleFingerprintsPath(
   return path.join(pensmithDataDir(platform, env), 'style-fingerprints.json');
 }
 
+/**
+ * The user's home folder (os.homedir()): the ONE place outside the data-dir
+ * resolution that asks for it (D-41). Used for the user-level Claude Code
+ * files the doctor and capability probes look at (~/.claude/…).
+ */
+export function userHomeDir(): string {
+  return os.homedir();
+}
+
+/**
+ * Returns `<pensmithDataDir>/own-source-approvals.json` — which of the user's
+ * own sources (a bring-your-own folder outside the paper, a Zotero collection)
+ * each paper may read (SRC-15, SRC-16; bin/lib/own-source-approvals.ts). It
+ * lives in the data dir, never in `.paper/`: a paper's config.toml travels
+ * with a shared or synced paper and so cannot approve anything itself.
+ */
+export function pensmithOwnSourceApprovalsPath(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return path.join(pensmithDataDir(platform, env), 'own-source-approvals.json');
+}
+
 // ---------------------------------------------------------------------------
 // The active paper root (RUN-13 / RUN-14, D-17-32 / D-17-33).
 //

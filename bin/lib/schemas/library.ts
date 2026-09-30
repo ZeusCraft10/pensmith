@@ -1,5 +1,5 @@
 // bin/lib/schemas/library.ts — the per-paper source library, `.paper/LIBRARY.json`
-// (LIB-01, D-59; v2 by BRDTH-01 / D-17-43).
+// (LIB-01, D-59; v2 by BRDTH-01 / D-17-43; v3 by Phase 19 seam S-B).
 //
 // LIBRARY.json is the paper's source of truth for sources. It has ONE writer,
 // bin/lib/library.ts (upsertSources — research, add, plan --research, and later
@@ -27,12 +27,37 @@
 //     against its registrar (VRFY-28 re-check scheduling reads it).
 //   - byo: the bring-your-own PDF record (SRC-15 fills it; hashes, not text).
 //
+// v3 (Phase 19 seam S-B, migration bin/lib/migrations/library/v2_to_v3.ts):
+//   - type / publisher / volume / issue / pages / editors: the bibliographic
+//     fields a formatted reference needs (SRC-05, SRC-11, SRC-12). `type` is a
+//     CSL type (bin/lib/schemas/source-types.ts).
+//   - tier / relevance / why_relevant: the source evaluator's judgement
+//     (SRC-09): tier ∈ peer-reviewed | preprint | book | gov-report | other,
+//     relevance 0–1, why_relevant = the evaluator's reason, shown in RESEARCH.md.
+//   - hydrated: false for a bring-your-own PDF kept with its local metadata
+//     because no registrar record matched it confidently (SRC-15).
+//   - retraction_status: unchecked | clear | retracted | unknown (SRC-04). An
+//     unanswerable lookup is `unknown`, never `clear`; `retracted` mirrors it.
+//   - zotero: the Zotero item identity, when the entry came from Zotero (SRC-16).
+//   - byo.asserted: the PDF was attached by the user's say-so, not because it
+//     shows the work (SRC-13); false for every v2 record.
+//
+// Author strings: "Family, Given" where the family is known, "Given Family"
+// as a registrar displays it, or "{Corporate Name}" (braced) for a corporate
+// or consortium author (the BibTeX writer emits it as one literal name).
+//
 // Any new field needs a v(N)→v(N+1) migration and a CURRENT_LIBRARY_VERSION
 // bump in the same change (S-20).
 
 import { z } from 'zod';
+import {
+  SourceTypeSchema,
+  SourceTierSchema,
+  RetractionStatusSchema,
+  ZoteroRefSchema,
+} from './source-types.js';
 
-export const CURRENT_LIBRARY_VERSION = 2;
+export const CURRENT_LIBRARY_VERSION = 3;
 
 /** The Pandoc citation-key grammar (a superset of the D-14 generated form). */
 export const CITEKEY_GRAMMAR = /^[\p{L}\p{N}_](?:[\p{L}\p{N}_:.#$%&+?<>~/-]*[\p{L}\p{N}_])?$/u;
@@ -44,6 +69,11 @@ export const ByoRecordSchema = z
     file: z.string().min(1),
     sha256: z.string().regex(/^[0-9a-f]{64}$/),
     text_sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable().default(null),
+    // v3: true when the user attached this PDF to a registrar record
+    // (`add <id> --pdf <file>`) although its first page does not show that
+    // work's title and first author, and confirmed it at the
+    // `pdf-attach-unmatched` gate. Its text is never evidence (byo-text.ts).
+    asserted: z.boolean().default(false),
   })
   .strict();
 
@@ -72,10 +102,33 @@ export const LibraryEntrySchema = z
     synthetic: z.boolean().default(false),
     last_verified: IsoDateTime.nullable().default(null),
     byo: ByoRecordSchema.nullable().default(null),
+    // v3 (Phase 19 seam S-B).
+    type: SourceTypeSchema.nullable().default(null),
+    publisher: z.string().min(1).nullable().default(null),
+    volume: z.string().min(1).nullable().default(null),
+    issue: z.string().min(1).nullable().default(null),
+    pages: z.string().min(1).nullable().default(null),
+    editors: z.array(z.string().min(1)).default([]),
+    tier: SourceTierSchema.nullable().default(null),
+    relevance: z.number().min(0).max(1).nullable().default(null),
+    why_relevant: z.string().min(1).nullable().default(null),
+    hydrated: z.boolean().default(true),
+    retraction_status: RetractionStatusSchema.default('unchecked'),
+    zotero: ZoteroRefSchema.nullable().default(null),
     addedAt: IsoDateTime,
     updatedAt: IsoDateTime,
   })
-  .strict();
+  .strict()
+  .superRefine((e, ctx) => {
+    // `retracted` and `retraction_status` never disagree (SRC-04).
+    if (e.retracted !== (e.retraction_status === 'retracted')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['retraction_status'],
+        message: `retraction_status "${e.retraction_status}" disagrees with retracted: ${String(e.retracted)}`,
+      });
+    }
+  });
 
 export const Schema = z
   .object({
@@ -101,3 +154,5 @@ export type LibraryEntry = z.infer<typeof LibraryEntrySchema>;
 export type LibraryEntryInput = z.input<typeof LibraryEntrySchema>;
 export type Library = z.infer<typeof Schema>;
 export type ByoRecord = z.infer<typeof ByoRecordSchema>;
+/** A BYO record as a writer passes it (`asserted` / `text_sha256` default). */
+export type ByoRecordInput = z.input<typeof ByoRecordSchema>;

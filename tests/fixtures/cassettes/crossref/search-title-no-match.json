@@ -1,0 +1,107 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=Field+Notes+on+Moss+Growth+Beside+the+Old+Mill+Stream&rows=5&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 5337887,
+        "items": [
+          {
+            "DOI": "10.31096/wua9999-wp_1104_box_9",
+            "title": [
+              "Midsummer Night's Musicale out beside the Mill Stream"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "database",
+            "publisher": "Willamette University"
+          },
+          {
+            "DOI": "10.31096/wua9999-wp_1105_box_9",
+            "title": [
+              "Midsummer Night's Musicale out beside the Mill Stream"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "database",
+            "publisher": "Willamette University"
+          },
+          {
+            "DOI": "10.31096/wua9999-wp_1109_box_9",
+            "title": [
+              "Midsummer Night's Musicale out beside the Mill Stream"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "database",
+            "publisher": "Willamette University"
+          },
+          {
+            "DOI": "10.31096/wua9999-wp_1106_box_9",
+            "title": [
+              "Midsummer Night's Musicale out beside the Mill Stream"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "database",
+            "publisher": "Willamette University"
+          },
+          {
+            "DOI": "10.31096/wua9999-wp_1108_box_9",
+            "title": [
+              "Midsummer Night's Musicale out beside the Mill Stream"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "database",
+            "publisher": "Willamette University"
+          }
+        ],
+        "items-per-page": 5,
+        "query": {
+          "start-index": 0,
+          "search-terms": "Field Notes on Moss Growth Beside the Old Mill Stream"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T08:03:23.650Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

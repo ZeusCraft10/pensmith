@@ -19,8 +19,13 @@
 import { z } from 'zod';
 import { PROJECT_CONFIG_FRAGMENT } from '../tutorial.js';
 import { EffortSchema, ProviderNameSchema, RefusalFallbacksSchema } from './runtime-config.js';
+import { lookupTable } from '../lookup-table.js';
 
-export const CURRENT_CONFIG_VERSION = 1;
+/**
+ * v2 (Phase 19, review round 3): `[verification] send_byo_passages` and the
+ * `[sources] allowed_databases` values `books` / `nber` (migrations/config/v1_to_v2.ts).
+ */
+export const CURRENT_CONFIG_VERSION = 2;
 
 /** The 8 citation styles (display names from PRD §10 / the intake clarifier, plus their CSL keys). */
 export const CITATION_STYLE_NAMES = [
@@ -41,8 +46,9 @@ export const CITATION_STYLE_NAMES = [
  * "referencing" / "edition" collapse first, so "APA 7th edition", "Chicago
  * (Author-Date)", "chicago-notes-bib" and "MLA style" all resolve. A bare
  * "Chicago" is notes-bibliography (the Chicago Manual's default system).
+ * A null-prototype table (lookup-table.ts): it is looked up by config text.
  */
-export const CITATION_STYLE_KEYS: Readonly<Record<string, string>> = Object.freeze({
+export const CITATION_STYLE_KEYS: Readonly<Record<string, string>> = lookupTable({
   apa: 'apa',
   'apa 7': 'apa',
   apa7: 'apa',
@@ -138,7 +144,13 @@ export const ProjectSchema = z.object({
   pii_redaction: z.boolean().optional(),
 });
 
-export const SOURCE_DATABASES = ['openalex', 'semanticscholar', 'crossref', 'arxiv', 'pubmed', 'zotero'] as const;
+/**
+ * `[sources] allowed_databases` values (SRC-10, SRC-11): the registry adapters
+ * research can query, plus `nber` (Crossref restricted to NBER's DOI prefix
+ * 10.3386) and `books` (Open Library / Google Books). bin/lib/adapter-plan.ts
+ * maps each to the adapter it searches.
+ */
+export const SOURCE_DATABASES = ['openalex', 'semanticscholar', 'crossref', 'arxiv', 'pubmed', 'zotero', 'books', 'nber'] as const;
 
 export const SourcesSchema = z.object({
   require_doi: z.boolean().optional(),
@@ -155,6 +167,10 @@ export const SourcesSchema = z.object({
 
 export const VerificationSchema = z.object({
   fetch_full_text: z.boolean().optional(),
+  // Pass 2 (advisory claim support) may send the passages of the user's own
+  // PDFs nearest each claim to the configured model provider; off by default
+  // (PRD §9: a bring-your-own PDF's contents stay local). Phase 19 review round 2.
+  send_byo_passages: z.boolean().optional(),
   flag_threshold: z.enum(['low', 'medium', 'high']).optional(),
   recheck_after_days: NonNegInt.optional(),
   plagiarism_check: z.boolean().optional(),

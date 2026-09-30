@@ -2,7 +2,7 @@
   {
     "scope": "https://api.semanticscholar.org",
     "method": "GET",
-    "path": "/graph/v1/paper/search?query=attention+mechanisms+in+neural+networks&limit=10&fields=title%2Cauthors%2Cyear%2CexternalIds%2Cabstract",
+    "path": "/graph/v1/paper/search?query=attention+mechanisms+in+neural+networks&limit=10&fields=title%2Cauthors%2Cyear%2CexternalIds%2Cabstract%2Cvenue%2CpublicationTypes%2Cjournal",
     "status": 200,
     "response": {
       "total": 42238,
@@ -18,12 +18,20 @@
             "CorpusId": 284532748
           },
           "title": "Attention mechanisms in neural networks",
+          "venue": "arXiv.org",
           "year": 2026,
           "openAccessPdf": {
             "url": "",
             "status": null,
             "license": null,
             "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2601.03329, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "ArXiv",
+            "volume": "abs/2601.03329"
           },
           "authors": [
             {
@@ -43,12 +51,20 @@
             "CorpusId": 211296403
           },
           "title": "A^3: Accelerating Attention Mechanisms in Neural Networks with Approximation",
+          "venue": "International Symposium on High-Performance Computer Architecture",
           "year": 2020,
           "openAccessPdf": {
             "url": "https://arxiv.org/pdf/2002.10941",
             "status": "GREEN",
             "license": null,
             "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2002.10941, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "2020 IEEE International Symposium on High Performance Computer Architecture (HPCA)",
+            "pages": "328-341"
           },
           "authors": [
             {
@@ -106,12 +122,21 @@
             "CorpusId": 252096827
           },
           "title": "Enabling Energy-Efficient Inference for Self-Attention Mechanisms in Neural Networks",
+          "venue": "International Conference on Artificial Intelligence Circuits and Systems",
           "year": 2022,
           "openAccessPdf": {
             "url": "https://www.zora.uzh.ch/id/eprint/231282/1/2022_IEDM_Special_Session.pdf",
             "status": "GREEN",
             "license": "other-oa",
             "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/AICAS54282.2022.9869924?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/AICAS54282.2022.9869924, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle",
+            "Conference"
+          ],
+          "journal": {
+            "name": "2022 IEEE 4th International Conference on Artificial Intelligence Circuits and Systems (AICAS)",
+            "pages": "25-28"
           },
           "authors": [
             {
@@ -141,12 +166,21 @@
             "CorpusId": 243472146
           },
           "title": "Visual vs internal attention mechanisms in deep neural networks for image classification and object detection",
+          "venue": "Pattern Recognition",
           "year": 2021,
           "openAccessPdf": {
             "url": "https://doi.org/10.1016/j.patcog.2021.108411",
             "status": "BRONZE",
             "license": null,
             "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1016/j.patcog.2021.108411?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1016/j.patcog.2021.108411, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Pattern Recognit.",
+            "pages": "108411",
+            "volume": "123"
           },
           "authors": [
             {
@@ -176,12 +210,21 @@
             "CorpusId": 240247694
           },
           "title": "Convolutional-Recurrent Neural Networks With Multiple Attention Mechanisms for Speech Emotion Recognition",
+          "venue": "IEEE Transactions on Cognitive and Developmental Systems",
           "year": 2022,
           "openAccessPdf": {
             "url": "",
             "status": null,
             "license": null,
             "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/TCDS.2021.3123979?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/TCDS.2021.3123979, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "IEEE Transactions on Cognitive and Developmental Systems",
+            "pages": "1564-1573",
+            "volume": "14"
           },
           "authors": [
             {
@@ -215,12 +258,20 @@
             "CorpusId": 279932514
           },
           "title": "ELA: efficient location attention for deep convolution neural networks",
+          "venue": "Journal of Real-Time Image Processing",
           "year": 2025,
           "openAccessPdf": {
             "url": "",
             "status": null,
             "license": null,
             "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1007/s11554-025-01719-6?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1007/s11554-025-01719-6, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Journal of Real-Time Image Processing",
+            "volume": "22"
           },
           "authors": [
             {
@@ -248,12 +299,20 @@
             "PubMed": "31130990"
           },
           "title": "Dual Convolutional Neural Networks With Attention Mechanisms Based Method for Predicting Disease-Related lncRNA Genes",
+          "venue": "Frontiers in Genetics",
           "year": 2019,
           "openAccessPdf": {
             "url": "https://www.frontiersin.org/articles/10.3389/fgene.2019.00416/pdf",
             "status": "GOLD",
             "license": "CCBY",
             "disclaimer": "Notice: Paper or abstract available at https://pmc.ncbi.nlm.nih.gov/articles/PMC6509943, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Frontiers in Genetics",
+            "volume": "10"
           },
           "authors": [
             {
@@ -289,12 +348,21 @@
             "CorpusId": 118673006
           },
           "title": "An Empirical Study of Spatial Attention Mechanisms in Deep Networks",
+          "venue": "IEEE International Conference on Computer Vision",
           "year": 2019,
           "openAccessPdf": {
             "url": "https://arxiv.org/pdf/1904.05873",
             "status": "GREEN",
             "license": null,
             "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/1904.05873, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle",
+            "Conference"
+          ],
+          "journal": {
+            "name": "2019 IEEE/CVF International Conference on Computer Vision (ICCV)",
+            "pages": "6687-6696"
           },
           "authors": [
             {
@@ -329,12 +397,21 @@
             "CorpusId": 257985104
           },
           "title": "RFAConv: Receptive-field attention convolution for improving convolutional neural networks",
+          "venue": "Pattern Recognition",
           "year": 2023,
           "openAccessPdf": {
             "url": "https://arxiv.org/pdf/2304.03198",
             "status": "GREEN",
             "license": "public-domain",
             "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/2304.03198, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Pattern Recognit.",
+            "pages": "113208",
+            "volume": "176"
           },
           "authors": [
             {
@@ -369,40 +446,40 @@
           "abstract": "In the realm of deep learning, spatial attention mechanisms have emerged as a vital method for enhancing the performance of convolutional neural networks. However, these mechanisms possess inherent limitations that cannot be overlooked. This work delves into the mechanism of spatial attention and reveals a new insight. It is that the mechanism essentially addresses the issue of convolutional parameter sharing. By addressing this issue, the convolutional kernel can efficiently extract features by employing varying weights at distinct locations. However, current spatial attention mechanisms focus on shallow attention to spatial features, which is insufficient to address the fundamental challenge of parameter sharing in convolutions involving larger kernels. In response to this challenge, we introduce a novel attention mechanism known as Receptive-Field Attention (RFA). Compared to existing spatial attention methods, RFA not only concentrates on the receptive-field spatial features but also offers effective attention weights for large convolutional kernels. Building upon the RFA concept, a Receptive-Field Attention Convolution (RFAConv) is proposed to supplant the conventional standard convolution. Notably, it offers nearly negligible increment of computational overhead and parameters, while significantly improving network performance. Furthermore, this work reveals that current spatial attention mechanisms require enhanced prioritization of receptive-field spatial features to optimize network performance. To validate the advantages of the proposed methods, we conduct many experiments across several authoritative datasets, including ImageNet, COCO, VOC, and Roboflow..."
         },
         {
-          "paperId": "480921c9fdd9dad3f87b8f3935b1fc6ffb67f7ab",
+          "paperId": "7f8756ce8df017329dd56d208369a535dd775bd4",
           "externalIds": {
-            "DBLP": "journals/ijns/JiangNXM24",
-            "DOI": "10.1142/s0129065724500631",
-            "CorpusId": 271850156,
-            "PubMed": "39212940"
+            "PubMedCentral": "12289692",
+            "DOI": "10.3389/fnins.2025.1622847",
+            "CorpusId": 280132435,
+            "PubMed": "40717726"
           },
-          "title": "A Generalized Attention Mechanism to Enhance the Accuracy Performance of Neural Networks",
-          "year": 2024,
+          "title": "SVM-enhanced attention mechanisms for motor imagery EEG classification in brain-computer interfaces",
+          "venue": "Frontiers in Neuroscience",
+          "year": 2025,
           "openAccessPdf": {
-            "url": "",
-            "status": "CLOSED",
-            "license": null,
-            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1142/s0129065724500631?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1142/s0129065724500631, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+            "url": "https://www.frontiersin.org/journals/neuroscience/articles/10.3389/fnins.2025.1622847/pdf",
+            "status": "GOLD",
+            "license": "CCBY",
+            "disclaimer": "Notice: Paper or abstract available at https://pmc.ncbi.nlm.nih.gov/articles/PMC12289692, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Frontiers in Neuroscience",
+            "volume": "19"
           },
           "authors": [
             {
-              "authorId": "2149498281",
-              "name": "Pengcheng Jiang"
+              "authorId": "1486443050",
+              "name": "Zhenis Otarbay"
             },
             {
-              "authorId": "2249151256",
-              "name": "Ferrante Neri"
-            },
-            {
-              "authorId": "2149677172",
-              "name": "Yu Xue"
-            },
-            {
-              "authorId": "1696937",
-              "name": "U. Maulik"
+              "authorId": "2120322882",
+              "name": "A. Kyzyrkanov"
             }
           ],
-          "abstract": "In many modern machine learning (ML) models, attention mechanisms (AMs) play a crucial role in processing data and identifying significant parts of the inputs, whether these are text or images. This selective focus enables subsequent stages of the model to achieve improved classification performance. Traditionally, AMs are applied as a preprocessing substructure before a neural network, such as in encoder/decoder architectures. In this paper, we extend the application of AMs to intermediate stages of data propagation within ML models. Specifically, we propose a generalized attention mechanism (GAM), which can be integrated before each layer of a neural network for classification tasks. The proposed GAM allows for at each layer/step of the ML architecture identification of the most relevant sections of the intermediate results. Our experimental results demonstrate that incorporating the proposed GAM into various ML models consistently enhances the accuracy of these models. This improvement is achieved with only a marginal increase in the number of parameters, which does not significantly affect the training time."
+          "abstract": "Brain-Computer Interfaces (BCIs) leverage brain signals to facilitate communication and control, particularly benefiting individuals with motor impairments. Motor imagery (MI)-based BCIs, utilizing non-invasive electroencephalography (EEG), face challenges due to high signal variability, noise, and class overlap. Deep learning architectures, such as CNNs and LSTMs, have improved EEG classification but still struggle to fully capture discriminative features for overlapping motor imagery classes. This study introduces a hybrid deep neural architecture that integrates Convolutional Neural Networks, Long Short-Term Memory networks, and a novel SVM-enhanced attention mechanism. The proposed method embeds the margin maximization objective of Support Vector Machines directly into the self-attention computation to improve interclass separability during feature learning. We evaluate our model on four benchmark datasets: Physionet, Weibo, BCI Competition IV 2a, and 2b, using a Leave-One-Subject-Out (LOSO) protocol to ensure robustness and generalizability. Results demonstrate consistent improvements in classification accuracy, F1-score, and sensitivity compared to conventional attention mechanisms and baseline CNN-LSTM models. Additionally, the model significantly reduces computational cost, supporting real-time BCI applications. Our findings highlight the potential of SVM-enhanced attention to improve EEG decoding performance by enforcing feature relevance and geometric class separability simultaneously."
         }
       ]
     },
@@ -410,7 +487,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-27T21:44:45.809Z",
+      "recordedAt": "2026-09-28T05:27:27.310Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "semanticscholar"
     }

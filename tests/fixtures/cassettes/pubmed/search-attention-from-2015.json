@@ -1,0 +1,61 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=attention+mechanisms+in+neural+networks&retmode=json&retmax=10&datetype=pdat&mindate=2015&maxdate=3000",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esearch",
+        "version": "0.3"
+      },
+      "esearchresult": {
+        "count": "8622",
+        "retmax": "10",
+        "retstart": "0",
+        "idlist": [
+          "42801104",
+          "42800368",
+          "42800132",
+          "42795149",
+          "42794920",
+          "42793749",
+          "42792979",
+          "42791834",
+          "42789547",
+          "42786768"
+        ],
+        "translationset": [
+          {
+            "from": "attention",
+            "to": "\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention's\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]"
+          },
+          {
+            "from": "mechanisms",
+            "to": "\"mechanism\"[All Fields] OR \"mechanisms\"[All Fields]"
+          },
+          {
+            "from": "neural networks",
+            "to": "\"neural networks, computer\"[MeSH Terms] OR (\"neural\"[All Fields] AND \"networks\"[All Fields] AND \"computer\"[All Fields]) OR \"computer neural networks\"[All Fields] OR (\"neural\"[All Fields] AND \"networks\"[All Fields]) OR \"neural networks\"[All Fields]"
+          }
+        ],
+        "querytranslation": "(\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention s\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]) AND (\"mechanism\"[All Fields] OR \"mechanisms\"[All Fields]) AND (\"neural networks, computer\"[MeSH Terms] OR (\"neural\"[All Fields] AND \"networks\"[All Fields] AND \"computer\"[All Fields]) OR \"computer neural networks\"[All Fields] OR (\"neural\"[All Fields] AND \"networks\"[All Fields]) OR \"neural networks\"[All Fields]) AND 2015/01/01:3000/12/31[Date - Publication]",
+        "warninglist": {
+          "phrasesignored": [
+            "in"
+          ],
+          "quotedphrasesnotfound": [],
+          "outputmessages": []
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T08:05:14.029Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

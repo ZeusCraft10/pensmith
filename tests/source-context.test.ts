@@ -21,9 +21,9 @@ import {
 } from '../bin/lib/source-context.js';
 
 const LIB: SourceContextInput[] = [
-  { citekey: 'a2020', title: 'Alpha', authors: ['A, One', 'B, Two', 'C, Three', 'D, Four', 'E, Five', 'F, Six'], year: 2020, venue: 'J', abstract: 'x'.repeat(2000), oa_url: 'https://example.org/a.pdf', byo: null },
+  { citekey: 'a2020', title: 'Alpha', authors: ['A, One', 'B, Two', 'C, Three', 'D, Four', 'E, Five', 'F, Six'], year: 2020, venue: 'J', abstract: 'x'.repeat(2000), oa_url: 'https://example.org/a.pdf', doi: '10.1000/a2020', byo: null },
   { citekey: 'b2019', title: '  Beta   study ', authors: [], year: null, venue: null, abstract: null, oa_url: null, byo: null },
-  { citekey: 'c2018', title: 'Gamma', authors: ['G, H'], year: 2018, venue: null, abstract: 'short', oa_url: null, byo: { file: 'c.pdf', sha256: 'f'.repeat(64), text_sha256: null } },
+  { citekey: 'c2018', title: 'Gamma', authors: ['G, H'], year: 2018, venue: null, abstract: 'short', oa_url: null, byo: { file: 'c.pdf', sha256: 'f'.repeat(64), text_sha256: 'e'.repeat(64), asserted: false } },
   { citekey: 'd2017', title: null, authors: ['Z, Z'], year: 2017, abstract: '   ', tier: 'peer-reviewed' },
 ];
 
@@ -49,12 +49,21 @@ test('FEED-01: the record shape — ≤5 authors, ≤800-char abstract, nulls fo
   assert.deepEqual(Object.keys(a!).sort(), ['abstract', 'authors', 'citekey', 'full_text', 'tier', 'title', 'venue', 'year']);
 });
 
-test('FEED-01: full_text has one derivation — a BYO record or an open-access URL', () => {
-  assert.equal(fullTextAvailable({ byo: null, oa_url: 'https://x.org/p.pdf' }), true);
-  assert.equal(fullTextAvailable({ byo: { file: 'p.pdf' }, oa_url: null }), true);
-  assert.equal(fullTextAvailable({ byo: true, oa_url: null }), true);
+test('FEED-01 / GRND-14: full_text has one derivation — full-text.ts, exactly the text Pass 3 can check', () => {
+  const byo = (over: Partial<{ text_sha256: string | null; asserted: boolean }> = {}) =>
+    ({ file: 'p.pdf', sha256: 'f'.repeat(64), text_sha256: 'e'.repeat(64), asserted: false, ...over });
+  // An Unpaywall-confirmed open-access PDF of a (Crossref) DOI.
+  assert.equal(fullTextAvailable({ byo: null, oa_url: 'https://x.org/p.pdf', doi: '10.1000/x' }), true);
+  assert.equal(fullTextAvailable({ byo: null, oa_url: 'https://x.org/p.pdf' }), false, 'an oa_url without a DOI is not what Pass 3 fetches');
+  assert.equal(fullTextAvailable({ byo: null, oa_url: 'https://x.org/p.pdf', doi: '10.48550/arXiv.1706.03762' }), true, 'a DataCite arXiv DOI is its arXiv PDF');
+  // A hashed bring-your-own PDF — never one attached at the user's word, or one with no extracted text.
+  assert.equal(fullTextAvailable({ byo: byo(), oa_url: null }), true);
+  assert.equal(fullTextAvailable({ byo: byo({ asserted: true }), oa_url: null }), false, 'an asserted BYO copy is never evidence');
+  assert.equal(fullTextAvailable({ byo: byo({ text_sha256: null }), oa_url: null }), false, 'a BYO PDF with no text');
+  // An arXiv id: Pass 3 fetches its arXiv PDF.
+  assert.equal(fullTextAvailable({ byo: null, oa_url: null, arxiv: '1706.03762' }), true);
   assert.equal(fullTextAvailable({ byo: null, oa_url: null }), false);
-  assert.equal(fullTextAvailable({ byo: null, oa_url: '  ' }), false);
+  assert.equal(fullTextAvailable({ byo: null, oa_url: '  ', doi: '10.1000/x' }), false);
   const recs = buildSourceContext(LIB, ['a2020', 'b2019', 'c2018']);
   assert.deepEqual(recs.map((r) => r.full_text), [true, false, true]);
 });

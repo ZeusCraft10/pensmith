@@ -160,8 +160,9 @@ The fix is never to disable the rule. The fix is to write the code differently.
   `StdioServerTransport`.
 
 - **D-12 capabilities-no-leak** (`tests/lint-capabilities-noleak.test.ts`): no
-  computed `process.env[<expr>]` reads and no inline calls to
-  `getProviderApiKey()` / `getOpenAlexApiKey()` / `loadRuntimeConfig()` inside
+  computed `process.env[<expr>]` reads and no inline calls to the helpers that
+  return a secret or personal value — `getProviderApiKey()`, `openAlexKey()`,
+  `s2ApiKeyValue()`, `loadRuntimeConfig()` and `contactEmail()` — inside
   `mcp/**`. The `paper://capabilities` resource emits only boolean presence
   flags. If you need to know whether a key is set in an MCP handler, expose
   the boolean through `paper://state` (which is loaded from
@@ -190,7 +191,7 @@ The fixes that ARE acceptable, in order of preference:
 
 ## Cassette Refresh Workflow
 
-`npm test` replays recorded HTTP fixtures under `tests/fixtures/cassettes/<adapter>/` for every source adapter (Crossref, OpenAlex, arXiv, PubMed, Semantic Scholar, Unpaywall, Retraction Watch, and the detector / plagiarism services). Replay is **exact-match**: a fixture answers only the method, origin, path and canonical query it was recorded for, and a miss fails closed (`OfflineEgressError`) instead of returning some other record. Hand-written negative-test fixtures live in `tests/fixtures/cassettes/synthetic/`; `tests/cassette-provenance.test.ts` rejects fabricated identifiers (`10.0000/`, `10.1234/example`) anywhere else. Real users never see cassettes: the CLI is live by default, and fixtures are a test and `PENSMITH_OFFLINE=1` mechanism only.
+`npm test` replays recorded HTTP fixtures under `tests/fixtures/cassettes/<adapter>/` for every source adapter (Crossref, OpenAlex, arXiv, PubMed, Semantic Scholar, Unpaywall, Retraction Watch, Open Library `books`, plain URL fetches under `generic/`, and the detector / plagiarism services). Replay is **exact-match**: a fixture answers only the method, origin, path and canonical query it was recorded for, and a miss fails closed (`OfflineEgressError`) instead of returning some other record. Hand-written negative-test fixtures live in `tests/fixtures/cassettes/synthetic/`; `tests/cassette-provenance.test.ts` rejects fabricated identifiers (`10.0000/`, `10.1234/example`) anywhere else. Real users never see cassettes: the CLI is live by default, and fixtures are a test and `PENSMITH_OFFLINE=1` mechanism only.
 
 A separate workflow (`.github/workflows/cassette-refresh.yml`) re-records the cassettes against the live APIs on a weekly schedule and opens a PR with the refreshed fixtures.
 
@@ -212,13 +213,20 @@ A separate workflow (`.github/workflows/cassette-refresh.yml`) re-records the ca
 **Option B — local re-record:**
 
 ```bash
-export PENSMITH_CONTACT_EMAIL=you@example.com   # required: polite-pool contact (the recorder fails fast without it)
+export PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org   # required: the project's polite-pool contact — never a personal address
 npm run cassettes:refresh                        # every adapter
 npm run cassettes:refresh -- --only crossref     # one adapter
+npm run cassettes:refresh -- --only crossref --files search-title-attention   # named files only
 node --import tsx --test tests/cassette-no-leak.test.ts tests/cassette-size.test.ts tests/cassette-provenance.test.ts
 ```
 
-The recorder (`scripts/refresh-cassettes.mjs`) drives each adapter's recorded query set through the real adapter code, live and outside any test context, so each stored request is exactly what the adapter sends. It keeps only the `content-type` response header, strips `mailto` / `email` / `api_key` / `key` / `tool` query parameters, redacts the contact email everywhere else, and never records a response the adapter rejected (a 429 or 5xx leaves that adapter's committed cassettes untouched — record it on a later run) or an error document inside an HTTP 200 (e.g. `{"statusCode":"403","message-type":"not-polite"}`: fix the adapter's request instead; `tests/cassette-provenance.test.ts` fails on a committed one). Never hand-write a response the real API does not return.
+The recorder (`scripts/refresh-cassettes.mjs`) drives each adapter's recorded query set through the real adapter code, live and outside any test context, so each stored request is exactly what the adapter sends. It keeps only the `content-type` response header, strips `mailto` / `email` / `api_key` / `key` / `tool` query parameters, redacts the contact email and every other email address a response carries (`tests/cassette-no-leak.test.ts` fails on one), and never records a response the adapter rejected (a 429 or 5xx, an exhausted host, a body the adapter's shape check refuses: that FILE keeps its committed copy and is reported as not recorded — record it on a later run) or an error document inside an HTTP 200 (e.g. `{"statusCode":"403","message-type":"not-polite"}`: fix the adapter's request instead; `tests/cassette-provenance.test.ts` fails on a committed one). Files no longer in an adapter's query set are removed (with `--files`, only the named files are recorded and every other file is left as it is). A request another file of the same directory already answers is left to that file, so the exact-match store stays unambiguous.
+
+Redirects and binary bodies (D-19-07): the transport follows redirects itself, so a call answered through redirects is recorded as one entry per hop — each 3xx under its own URL with its `location` header — and offline replay follows the recorded hops through the same store (the `generic` group records plain URL fetches, e.g. the W3C `dummy.pdf` behind its http → https 301). A non-text body (a PDF) is stored base64 with `"bodyEncoding": "base64"`, and replay returns the exact bytes. A binary answer still has to fit the 51200-byte cap, so only small real PDFs can be recorded; larger ones are covered with MockAgent tests or the generated fixtures in `tests/fixtures/byo/` (`scripts/gen-byo-pdf.mjs`). A request that reads only a prefix of its answer (`FetchOptions.prefixBytes` — `open-access.ts` checks an open-access link's first 1029 bytes for `%PDF-`) records that prefix, so a real publisher PDF's check fits (the `generic` group's `confirmOpenAccessPdf` calls, e.g. `generic/oa-pdf-prefix-plos-one.json`); doi.org's registration-agency answers are recorded there too (`generic/doi-ra-prefixes.json`).
+
+Scenario recordings: the research fixture lane (`tests/research-cli-lane.test.ts`, `tests/plan-research-cli.test.ts`, `tests/byo-new-cli.test.ts`) replays searches recorded exactly as research asks them (10 results per query, `fromYear` for `min_year`); the recorder refuses to lower their result count, since a lowered count would never replay. An adapter whose answer cannot fit the cap at that size (OpenAlex with abstracts) is reported by those runs as `offline: no recorded fixture`, and the live lane covers it. Never hand-write a response the real API does not return.
+
+`npm run live:sources` (`scripts/live-sources.mjs`, with `PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org`) runs the adapter-level assertions against the live services — arXiv, Crossref (ENCODE, `nature14539`, Wakefield retracted), Unpaywall, PubMed, OpenAlex, Semantic Scholar and the books adapter — and exits non-zero on a failed check. A check whose key is absent (`OPENALEX_API_KEY`, `PENSMITH_S2_API_KEY`) prints a visible `SKIP` line. The default `npm test` never calls these services.
 
 ### The recorded e2e corpus (`--corpus e2e`)
 
@@ -258,8 +266,10 @@ permissions block; do NOT promote them to repo-wide `contents: write`.
 Every recorded cassette file MUST be ≤ 51200 bytes. The `cassette-size`
 test enforces this on every PR. The recorder meets the cap by re-recording a
 search with a lower result count (and reports the new count so the test that
-replays it can be updated) — never by truncating JSON, and never by raising
-the cap.
+replays it can be updated), or — for a single record that only fits without
+indentation, such as Crossref's `/works/{doi}` (no `select` on that route) — by
+writing that one response on a single line; never by truncating JSON, and
+never by raising the cap.
 
 ### Sensitive-header scan (T-3-02 / T-01-07)
 

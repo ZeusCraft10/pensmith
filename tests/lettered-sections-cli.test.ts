@@ -40,13 +40,14 @@ test('GRND-09: `add --remap <key> --section 1a` remaps the lettered section, not
   const introBefore = readFileSync(intro, 'utf8');
   const r = runCli(sb, root, ['add', '--remap', 'castellan2023', '--section', '1a']);
   assert.equal(r.status, EXIT_OK, `${r.stdout}\n${r.stderr}`);
-  assert.match(r.stdout, /remapped 1 section\(s\)/);
+  // SRC-14's remap output (Phase 19) names the section as the user typed it.
+  assert.match(r.stdout, /castellan2023 mapped to §1a \(assigned_sources only\)/);
   assert.match(readFileSync(background, 'utf8'), /^ {2}- castellan2023$/m, '§1a gains the source');
   assert.equal(readFileSync(intro, 'utf8'), introBefore, '§1 is untouched');
   // An unknown lettered section is still a usage error naming the argument.
   const bad = runCli(sb, root, ['add', '--remap', 'castellan2023', '--section', '1b']);
   assert.equal(bad.status, 2, `${bad.stdout}\n${bad.stderr}`);
-  assert.match(bad.stdout, /--section 1b could not be resolved/);
+  assert.match(`${bad.stdout}${bad.stderr}`, /--section 1b is not one of this paper's sections/);
 });
 
 test('GRND-09: compile names a lettered section as §1a in its refusals', () => {

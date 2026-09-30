@@ -200,8 +200,14 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   // round 2: http-crossref-ping is SKIP unless offline replay is active (RUN-05)
   // and OPENALEX_API_KEY is reported as "not used yet"; then in review round 3:
   // the pandoc and humanizer probes describe what `pensmith done` does without
-  // them (there is no `export` or `humanize` verb).
-  const PINNED = '1ac6aeec14feefdc7db3f330ac9bb130ff77c9f79b3c15d6df84c59b138a80e6';
+  // them (there is no `export` or `humanize` verb); then in Phase 19 (SRC-06):
+  // OPENALEX_API_KEY is sent, so it is no longer marked "not used yet"; then in
+  // Phase 19 review round 1: the contact-email and Zotero probe entries
+  // describe what those probes actually check (the resolved variable; the
+  // authenticated Zotero key check, local API / group, MCP detection); then in
+  // Phase 19 review round 2: a paper may name only a PENSMITH_ contact-email
+  // variable, and the value must be a plain address.
+  const PINNED = '14f56def8f4bbb27f5cae402e361631ccdd410bff4d358ef1eb243b43e40699c';
   assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 
@@ -331,8 +337,8 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // CYCLE-4 M-1 REVIEWS CONVERGENCE — `export` keyword present so Plan 09 Task 9.3.5
   // dynamic-imports this array (not undefined); single source of truth for the 9 hash-pin slugs.
   { slug: 'intake-clarifier',    path: 'templates/prompts/intake-clarifier.md',    decision: 'D-12', hash: '7700947abfc9a94d2785996fd7b26e8f812a5b01c77ab24ee1563314b7eb9a53' },  // re-pinned Phase 18 GRND-02/RUN-26 — suggestions-only contract v2, data-last layout; WN-3 lockstep with prompt-loader pin
-  { slug: 'topic-disambiguator', path: 'templates/prompts/topic-disambiguator.md', decision: 'D-12', hash: 'c5a480cff0215f481b3c0f15e489bb6691f64821e61d2fe8b4d203a275977e5d' },
-  { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12', hash: '98e79aae30e90e173330e3f36f84edb06bb0aa4f39ac56daac05f01ae951ccb6' },
+  { slug: 'topic-disambiguator', path: 'templates/prompts/topic-disambiguator.md', decision: 'D-12', hash: '34587e4f81be0e16848f7aa19bd176f050da2381cba31a1ea6b36c54816b1378' },  // re-pinned Phase 19 SRC-08 — WN-3 lockstep with prompt-loader pin
+  { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12', hash: 'b10cd38425ab01dd5572592dc01f11b646006dbd86b13be311f8b0eb9ca0eed4' },  // re-pinned Phase 19 SRC-09 — WN-3 lockstep with prompt-loader pin
   { slug: 'outline-author',      path: 'templates/prompts/outline-author.md',      decision: 'D-12', hash: '914bdd23f6182ac47b5679b45144a10ada702ab8e6eb3415db879063f7419c2a' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin
   { slug: 'section-planner',     path: 'templates/prompts/section-planner.md',     decision: 'D-12', hash: 'd10b4513bec7bbce182e6fb8fe31b64bc5f5f1352dda498ee0b2414ad3f5f28c' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin
   { slug: 'section-drafter',     path: 'templates/prompts/section-drafter.md',     decision: 'D-12', hash: '0600aed58e85b9182a5c3ea0e7e45a691d41a8e21797ed00559e7b56b08999cc' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin

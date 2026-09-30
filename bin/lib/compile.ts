@@ -46,7 +46,7 @@ import { loadFrontmatterDoc } from './frontmatter.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { computeDraftHash } from './draft-hash.js';
-import { extractCitedKeysForVerification, replaceCitekeys } from './citation-token.js';
+import { extractCitedKeysForVerification, replaceCitations } from './citation-token.js';
 import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
 import {
@@ -179,16 +179,21 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
 }
 
 /**
- * Substitute every [@key] in `text` with a fresh {{cite_K_M}} placeholder.
- * Returns the substituted text and the placeholder→[@key] restore map.
+ * Substitute every citation in `text` with a fresh {{cite_K_M}} placeholder.
+ * Returns the substituted text and the placeholder→citation restore map.
+ * Every citation is masked — a bare `[@key]`, but also a mixed-case key, a
+ * locator, a multi-key cluster, `[-@k]`, `@{k}` and a narrative `@k`
+ * (citation-token.ts replaceCitations over findCitations) — so the smoother
+ * can never rewrite or drop a citation the placeholder-set check would not
+ * see (fail closed; Phase 19 review round 2, D-18-40).
  */
 function substitutePlaceholders(text: string, k: number): { masked: string; restore: Map<string, string> } {
   const restore = new Map<string, string>();
   let m = 0;
-  const masked = replaceCitekeys(text, (key) => {
+  const masked = replaceCitations(text, (cluster) => {
     const ph = makePlaceholder(k, m);
     m += 1;
-    restore.set(ph, `[@${key}]`);
+    restore.set(ph, cluster.text);
     return ph;
   });
   return { masked, restore };
@@ -437,11 +442,11 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       const newTail = restorePlaceholders((parts[0] ?? smoothed), restore);
       const newHead = restorePlaceholders(parts.length > 1 ? parts.slice(1).join('\n\n') : '', restore);
 
-      // D-18-40: the placeholders cover only bare [@key] tokens. Any other
-      // citation form (a cluster, [-@k], @{k}, a narrative @k) reaches the model
-      // raw, and the model could also write a new one — a citation no section
-      // verified. The smoothed boundary must cite exactly the keys the original
-      // did (the one fail-closed grammar), else it is rejected like a drift.
+      // D-18-40: the placeholders cover every citation the reader finds, but
+      // the model could still write a NEW one (or rebuild one from its prose)
+      // — a citation no section verified. The smoothed boundary must cite
+      // exactly the keys the original did (the one fail-closed grammar), else
+      // it is rejected like a drift.
       const citedBefore = new Set(extractCitedKeysForVerification(`${tailRaw}\n\n${headRaw}`));
       const citedAfter = new Set(extractCitedKeysForVerification(`${newTail}\n\n${newHead}`));
       if (!setsEqual(citedBefore, citedAfter)) {

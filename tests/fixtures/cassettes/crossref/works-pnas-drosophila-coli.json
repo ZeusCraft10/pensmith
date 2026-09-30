@@ -1,0 +1,213 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1073%2Fpnas.74.11.5041",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              6,
+              10
+            ]
+          ],
+          "date-time": "2026-06-10T15:29:59Z",
+          "timestamp": 1781105399997,
+          "version": "3.54.1"
+        },
+        "reference-count": 0,
+        "publisher": "National Academy of Sciences",
+        "issue": "11",
+        "content-domain": {
+          "domain": [
+            "www.pnas.org"
+          ],
+          "crossmark-restriction": true
+        },
+        "short-container-title": [
+          "Proc. Natl. Acad. Sci. U.S.A."
+        ],
+        "published-print": {
+          "date-parts": [
+            [
+              1977,
+              11
+            ]
+          ]
+        },
+        "abstract": "<jats:p>\n                    Thirty-seven independently cloned segments of\n                    <jats:italic>Drosophila melanogaster</jats:italic>\n                    DNA (Dm segments) were individually tested for their ability to promote the synthesis of new polypeptides in\n                    <jats:italic>Escherichia coli</jats:italic>\n                    K-12. The cloning vector was the pSC101 plasmid and the test system consisted of\n                    <jats:italic>E. coli</jats:italic>\n                    K-12 minicells that contained the hybrid pDm plasmids. Each of four pDm plasmids produced a new polypeptide, and one, pDm107, was selected for detailed mapping of the sequences required for the translation of its 38,000-dalton polypeptide, the Dm107 protein. Mapping was accomplished by constructing (\n                    <jats:italic>i</jats:italic>\n                    ) deletion derivatives of pDm107 and (\n                    <jats:italic>ii</jats:italic>\n                    ) new plasmids consisting of fragments of the Dm107 segment inserted into other vectors, and then testing these hybrids for their ability to promote the synthesis of the Dm107 protein, or truncated versions of this protein, in minicells. The 1000 base pairs of sequences that are translated to yield the Dm107 protein were thereby mapped at the center of the 18,000-base pair Dm107 segment, which consists of nonrepetitive sequences located at the base of the right arm of chromosome 2. The four polypeptides produced by the four pDm plasmids require sequences of 4000 base pairs for their translation, and the total amount of DNA in the 37 cloned Dm segments that were tested is approximately 400,000 base pairs. Because no new polypeptides were detected with the remaining 33 pDm plasmids, the fraction of\n                    <jats:italic>D. melanogaster</jats:italic>\n                    sequences that can be efficiently translated in\n                    <jats:italic>E. coli</jats:italic>\n                    K-12 is estimated to be 1 × 10\n                    <jats:sup>-2</jats:sup>\n                    .\n                  </jats:p>",
+        "DOI": "10.1073/pnas.74.11.5041",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2006,
+              5,
+              31
+            ]
+          ],
+          "date-time": "2006-05-31T03:24:55Z",
+          "timestamp": 1149045895000
+        },
+        "page": "5041-5045",
+        "update-policy": "https://doi.org/10.1073/pnas.cm10313",
+        "source": "Crossref",
+        "is-referenced-by-count": 45,
+        "title": [
+          "Translation of\n                    <i>Drosophila melanogaster</i>\n                    sequences in\n                    <i>Escherichia coli</i>"
+        ],
+        "prefix": "10.1073",
+        "volume": "74",
+        "author": [
+          {
+            "given": "Alain",
+            "family": "Rambach",
+            "sequence": "first",
+            "affiliation": [
+              {
+                "name": "Department of Biochemistry, Stanford University School of Medicine, Stanford, California 94305"
+              }
+            ],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "David S.",
+            "family": "Hogness",
+            "sequence": "additional",
+            "affiliation": [
+              {
+                "name": "Department of Biochemistry, Stanford University School of Medicine, Stanford, California 94305"
+              }
+            ],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "341",
+        "published-online": {
+          "date-parts": [
+            [
+              1977,
+              11
+            ]
+          ]
+        },
+        "container-title": [
+          "Proceedings of the National Academy of Sciences"
+        ],
+        "original-title": [],
+        "language": "en",
+        "link": [
+          {
+            "URL": "https://pnas.org/doi/pdf/10.1073/pnas.74.11.5041",
+            "content-type": "unspecified",
+            "content-version": "vor",
+            "intended-application": "similarity-checking"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2022,
+              4,
+              13
+            ]
+          ],
+          "date-time": "2022-04-13T11:10:04Z",
+          "timestamp": 1649848204000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://pnas.org/doi/full/10.1073/pnas.74.11.5041"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              1977,
+              11
+            ]
+          ]
+        },
+        "references-count": 0,
+        "journal-issue": {
+          "issue": "11",
+          "published-print": {
+            "date-parts": [
+              [
+                1977,
+                11
+              ]
+            ]
+          }
+        },
+        "alternative-id": [
+          "10.1073/pnas.74.11.5041"
+        ],
+        "URL": "https://doi.org/10.1073/pnas.74.11.5041",
+        "relation": {},
+        "ISSN": [
+          "0027-8424",
+          "1091-6490"
+        ],
+        "issn-type": [
+          {
+            "value": "0027-8424",
+            "type": "print"
+          },
+          {
+            "value": "1091-6490",
+            "type": "electronic"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              1977,
+              11
+            ]
+          ]
+        },
+        "assertion": [
+          {
+            "value": "1977-11-01",
+            "order": 2,
+            "name": "published",
+            "label": "Published",
+            "group": {
+              "name": "publication_history",
+              "label": "Publication History"
+            }
+          }
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T21:04:19.454Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

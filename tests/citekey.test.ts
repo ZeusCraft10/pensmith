@@ -57,3 +57,11 @@ test('citekey 6: idempotency — 100 invocations all return identical string', (
     assert.equal(generateCitekey(input), expected);
   }
 });
+
+test('citekey 7 (SRC-05 / D-19-19): a braced corporate author keys by its first significant word, not its last', () => {
+  assert.equal(generateCitekey(fix({ authors: ['{The ENCODE Project Consortium}'], year: 2012 })), 'encode2012');
+  assert.equal(generateCitekey(fix({ authors: ['{World Health Organization}'], year: 2020 })), 'world2020');
+  assert.equal(generateCitekey(fix({ authors: ['{The 1000 Genomes Project Consortium}'], year: 2015 })), 'genomes2015', 'words without letters are skipped (D-14: a letter first)');
+  // A person named "Consortium" is unaffected (no braces).
+  assert.equal(generateCitekey(fix({ authors: ['Consortium, Ann'], year: 2012 })), 'consortium2012');
+});

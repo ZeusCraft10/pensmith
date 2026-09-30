@@ -1,0 +1,12 @@
+[
+  {
+    "scope": "https://unavailable.pensmith.test",
+    "method": "GET",
+    "path": "/service",
+    "status": 503,
+    "response": "Service Unavailable",
+    "responseHeaders": {
+      "content-type": "text/plain"
+    }
+  }
+]

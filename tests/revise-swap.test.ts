@@ -14,14 +14,18 @@
 //     out of a cassette (tests/fixtures/cassettes/revise-swap/*.json).
 //   - approve(proposal) — the approval-gate seam. Default is the clack TTY;
 //     tests inject a deterministic boolean (and --yolo skips it entirely).
-//   - researchAdapter(query) — the --research seam (PLAN-03). Returns synthetic
-//     SourceCandidate-shaped hits so no network is touched.
+//
+// `--research <query>` is no longer part of runRevise: `plan N --research` and
+// `revise N --research` run bin/lib/section-research.ts (GRND-17, D-19-18),
+// covered by tests/section-research.test.ts and tests/plan-research-cli.test.ts.
+// The old research test here injected a `researchAdapter` whose production
+// default returned no hits; that seam and its applyResearch are deleted.
 //
 // RED in Task 1 (bin/lib/revise.ts absent → import throws). GREEN in Task 2.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, utimesSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadCassetteFile } from '../bin/lib/http-mock.js';
@@ -258,50 +262,16 @@ test('revise: --yolo remove deletes the flagged citation mechanically', async ()
 });
 
 // ===========================================================================
-// 5. --research appends to project RESEARCH.md AND section RESEARCH-LOG.md,
-//    leaving a SIBLING section's files untouched (PLAN-03 / D-09 isolation).
+// 5. runRevise has no research branch any more (GRND-17 moved it to
+//    bin/lib/section-research.ts): the options it accepts are the swap loop's.
 // ===========================================================================
-test('revise --research: section-scoped append, sibling untouched (PLAN-03 / D-09)', async () => {
-  const { root } = seedFixture();
-  const siblingDraft = join(root, '.paper', 'sections', '03-sibling', 'DRAFT.md');
-  const researchMd = join(root, '.paper', 'RESEARCH.md');
-  const logPath = join(root, '.paper', 'sections', '02-target', 'RESEARCH-LOG.md');
-
-  // Backdate the sibling so an unintended touch would change its mtime.
-  const past = new Date(Date.now() - 60_000);
-  utimesSync(siblingDraft, past, past);
-  const siblingBefore = readFileSync(siblingDraft, 'utf8');
-  const siblingMtimeBefore = statSync(siblingDraft).mtimeMs;
-  const researchBefore = readFileSync(researchMd, 'utf8');
-
-  const res = await runRevise({
-    paperRoot: root,
-    n: 2,
-    slug: 'target',
-    yolo: true,
-    research: 'mechanism robustness follow-up',
-    researchAdapter: () => Promise.resolve([
-      { citekey: 'wu2021', title: 'Robustness of the Mechanism', authors: ['Wu, A.'], year: 2021, doi: '10.1000/wu2021', source: 'openalex' },
-    ]),
-  });
-
-  assert.equal(res.researchApplied, true);
-
-  // Project RESEARCH.md grew (append, not overwrite).
-  const researchAfter = readFileSync(researchMd, 'utf8');
-  assert.ok(researchAfter.startsWith(researchBefore), 'RESEARCH.md must be appended to, not rewritten');
-  assert.ok(researchAfter.length > researchBefore.length, 'RESEARCH.md must grow');
-  assert.match(researchAfter, /mechanism robustness follow-up/, 'query must be recorded in RESEARCH.md');
-
-  // Section provenance log created/appended (the ONLY section-level file --research writes).
-  assert.ok(existsSync(logPath), 'sections/02-target/RESEARCH-LOG.md must exist');
-  const log = readFileSync(logPath, 'utf8');
-  assert.match(log, /mechanism robustness follow-up/, 'RESEARCH-LOG.md must record the query');
-  assert.match(log, /wu2021/, 'RESEARCH-LOG.md must record the added citekey');
-
-  // Sibling section untouched (content AND mtime).
-  assert.equal(readFileSync(siblingDraft, 'utf8'), siblingBefore, 'sibling DRAFT.md content must be unchanged');
-  assert.equal(statSync(siblingDraft).mtimeMs, siblingMtimeBefore, 'sibling DRAFT.md mtime must be unchanged');
+test('revise: runRevise no longer takes a research query (GRND-17 — section-research.ts owns --research)', async () => {
+  const src = readFileSync(new URL('../bin/lib/revise.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(src, /researchAdapter|applyResearch/, 'the injected-adapter research branch is deleted');
+  const cli = readFileSync(new URL('../bin/cli/revise.ts', import.meta.url), 'utf8');
+  assert.match(cli, /runSectionResearch\(/, 'revise --research routes to the section research pass');
+  const plan = readFileSync(new URL('../bin/cli/plan.ts', import.meta.url), 'utf8');
+  assert.match(plan, /runSectionResearch\(/, 'plan --research routes to the section research pass');
 });
 
 // ===========================================================================

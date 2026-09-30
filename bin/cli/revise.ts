@@ -25,10 +25,17 @@
 
 import { defineCommand } from 'citty';
 import { runRevise } from '../lib/revise.js';
+import { runSectionResearch } from '../lib/section-research.js';
 import { projectRoot } from '../lib/paths.js';
 import { proposeSwap } from '../lib/revise-swap.js';
 import { assertLlmConfigured } from '../lib/anthropic.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
+
+/** The CLI's output sink for the section research pass (section-research.ts never writes the streams itself). */
+const CLI_IO = {
+  out: (line: string): void => void process.stdout.write(`${line}\n`),
+  err: (line: string): void => void process.stderr.write(`${line}\n`),
+};
 
 export const reviseCommand = defineCommand({
   meta: {
@@ -52,7 +59,7 @@ export const reviseCommand = defineCommand({
     },
     research: {
       type: 'string',
-      description: 'Section-scoped additional research query (PLAN-03 / D-09).',
+      description: 'Search for more sources for this section and add the ones you approve to its assigned sources (GRND-17).',
     },
     yolo: {
       type: 'boolean',
@@ -64,8 +71,15 @@ export const reviseCommand = defineCommand({
     const rawN = (args.n ?? args.section) as string | number | undefined;
     // RUN-09: the same <n>/--slug validation as plan/write/verify (EXIT_USAGE),
     // and the slug comes from OUTLINE.md — 'placeholder' only with no outline.
-    const { n, slug } = resolveSectionArg('revise', projectRoot(), rawN, args.slug);
-    const research = typeof args.research === 'string' && args.research.length > 0 ? args.research : undefined;
+    const { n, slug, suffix } = resolveSectionArg('revise', projectRoot(), rawN, args.slug);
+    const research = typeof args.research === 'string' && args.research.trim().length > 0 ? args.research : undefined;
+
+    // GRND-17 / D-19-18: `--research <query>` is the section-scoped research
+    // pass `plan N --research` runs (bin/lib/section-research.ts): real hits,
+    // added to section N only. A research-only call stops there.
+    if (research) {
+      return { mode: 'research', ...(await runSectionResearch({ root: projectRoot(), n, suffix, slug, query: research, yolo: args.yolo === true, verb: 'revise', io: CLI_IO })) };
+    }
 
     // GEN-06 / RUN-07 fail-loud probe: assert an LLM is configured BEFORE calling runRevise.
     await assertLlmConfigured('revise');
@@ -73,9 +87,9 @@ export const reviseCommand = defineCommand({
     const result = await runRevise({
       paperRoot: projectRoot(),
       n,
+      suffix,
       slug,
       yolo: args.yolo === true,
-      ...(research ? { research } : {}),
       // Real proposeSwap from bin/lib/revise-swap.ts (GEN-02).
       // runRevise owns parsing the returned JSON + the membership guard that
       // rejects any replacement_citekey ∉ assigned_sources (T-04-14 / T-11-09).

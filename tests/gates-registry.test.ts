@@ -25,7 +25,7 @@ import {
   yoloGateSummary,
   type GateId,
 } from '../bin/lib/gates.js';
-import { EXIT_OK, EXIT_USAGE, EXIT_APPROVAL, EXIT_COST_CAP } from '../bin/lib/exit-codes.js';
+import { EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_APPROVAL, EXIT_COST_CAP } from '../bin/lib/exit-codes.js';
 import { CURRENT_PLAN_FRONTMATTER_VERSION } from '../bin/lib/schemas/plan-frontmatter.js';
 import {
   REPO,
@@ -47,13 +47,23 @@ import {
 import { withLlmSandbox } from './helpers/llm-sandbox.js';
 
 const IGNORE_LOGS = /^\.paper[\\/](SESSION\.log|sessions)/;
-const NEVER: ReadonlySet<GateId> = new Set(['cost-cap', 'estimate-proceed', 'detector-consent', 'paper-pointer']);
+// The own-source gates (Phase 19 review round 1): a paper file can name the
+// reader's folder or Zotero collection, only the user can approve reading it.
+const NEVER: ReadonlySet<GateId> = new Set([
+  'cost-cap',
+  'estimate-proceed',
+  'detector-consent',
+  'paper-pointer',
+  'byo-folder',
+  'zotero-collection',
+  'pdf-attach-unmatched',
+]);
 
 // ---------------------------------------------------------------------------
 // 1. The registry
 // ---------------------------------------------------------------------------
 
-test('RUN-28: GATES is one table of unique gates; --yolo never skips cost-cap, estimate-proceed, detector-consent or paper-pointer', () => {
+test('RUN-28: GATES is one table of unique gates; --yolo never skips cost-cap, estimate-proceed, detector-consent, paper-pointer or the own-source gates', () => {
   const ids = GATES.map((g) => g.id);
   assert.equal(new Set(ids).size, ids.length, 'unique ids');
   assert.deepEqual(new Set(GATES.filter((g) => g.yolo === 'never').map((g) => g.id)), NEVER);
@@ -181,6 +191,9 @@ test('RUN-28 research-prune: no terminal → 3 before any search, and nothing wr
   const sb = sandbox('gate-prune');
   const root = sb.project('p');
   assert.equal(runCli(sb, root, ['new', '--yolo', '--from', ASSIGNMENT_FIXTURE]).status, EXIT_OK);
+  // SRC-08: research seeds its queries from the brief's topic; this one is the
+  // query the source cassettes record, so the stubbed run finds real hits.
+  writeFileSync(join(root, '.paper', 'INTAKE.md'), `---\ntopic: ${SEARCHABLE}\ndiscipline: computer-science\n---\n# Intake\n\n## Assignment\n\nWrite a 1500-word review of ${SEARCHABLE}.\n`);
   const before = snapshot(root);
   const r = runCli(sb, root, ['research']);
   assert.equal(r.status, EXIT_APPROVAL, `${r.stdout}\n${r.stderr}`);
@@ -188,7 +201,10 @@ test('RUN-28 research-prune: no terminal → 3 before any search, and nothing wr
   assert.deepEqual(changedPaths(before, snapshot(root), IGNORE_LOGS), [], 'nothing written (no RESEARCH.md, no LIBRARY.json)');
   const y = runCli(sb, root, ['research', '--yolo']);
   assert.equal(y.status, EXIT_OK, `${y.stdout}\n${y.stderr}`);
-  assert.ok(existsSync(join(root, '.paper', 'LIBRARY.json')));
+  const lib = JSON.parse(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: unknown[] };
+  const kept = /^pensmith research: (\d+) kept/m.exec(y.stdout);
+  assert.ok(kept, y.stdout);
+  assert.ok(lib.entries.length >= 1 && lib.entries.length === Number(kept[1]), `--yolo kept every candidate the evaluator kept: ${y.stdout}`);
 });
 
 // The research and outline gates through the REAL verbs against the mock LLM:
@@ -222,8 +238,8 @@ test('RUN-28 research-scope + research-prune: scripted answers drive both questi
     seedIntake(sb.paper);
     const scopes = { scopes: [{ label: 'unrelated-scope', queries: ['zz no recorded results zz'] }, { label: 'attention-scope', queries: [SEARCHABLE] }] };
     sb.mock!.script('topic-disambiguator', { data: scopes });
-    // Scope question → option 2; prune question → keep only candidate 1.
-    const r = await sb.runTsx(null, ['research'], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '2\n1\n' });
+    // Scope question → option 2; prune question → keep only candidate 1; add nothing.
+    const r = await sb.runTsx(null, ['research'], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '2\n1\n\n' });
     assert.equal(r.status, EXIT_OK, `${r.stdout}\n${r.stderr}`);
     assert.match(r.stderr, /Which research scope should I use\?/, 'the scope question was asked');
     assert.match(r.stderr, /Select candidates to keep \(\d+ found\)/, 'the prune question was asked');
@@ -234,12 +250,19 @@ test('RUN-28 research-scope + research-prune: scripted answers drive both questi
     const lib = JSON.parse(readFileSync(join(sb.paper, 'LIBRARY.json'), 'utf8')) as { entries: unknown[] };
     assert.equal(lib.entries.length, 1, 'the prune answer kept one source');
 
-    // --yolo takes the registry choice for both: the first scope, every candidate.
+    // --yolo takes the registry choice for both: the first scope (announced),
+    // every kept candidate. That scope's queries have no recorded results, so
+    // the run finds no source: SRC-07 exits 1 naming why, logs the run in
+    // RESEARCH.md and leaves LIBRARY.json as it was.
     sb.mock!.script('topic-disambiguator', { data: scopes });
+    const libBefore = readFileSync(join(sb.paper, 'LIBRARY.json'), 'utf8');
     const y = await sb.runTsx(null, ['research', '--yolo']);
-    assert.equal(y.status, EXIT_OK, y.stderr);
+    assert.equal(y.status, EXIT_ERROR, y.stderr);
     assert.doesNotMatch(y.stderr, /Which research scope should I use\?/);
+    assert.match(y.stdout, /--yolo: using scope 1 of 2 — "unrelated-scope"/);
+    assert.match(y.stderr, /^pensmith research: no sources found — /m);
     assert.match(readFileSync(join(sb.paper, 'RESEARCH.md'), 'utf8'), /unrelated-scope/, '--yolo searched the first proposed scope');
+    assert.equal(readFileSync(join(sb.paper, 'LIBRARY.json'), 'utf8'), libBefore, 'LIBRARY.json unchanged');
   });
 });
 
@@ -334,8 +357,9 @@ test('RUN-28: PRD §7.20 carries the gate table and it matches GATES (drift test
   for (const row of rows.filter((r) => !ids.has(r.id))) {
     assert.match(row.owner, /^[A-Z]+-\d+ \(planned\)$/, `${row.id} is not in GATES, so it must be marked (planned) with its landing requirement`);
   }
-  // GRND-01, GRND-02 and GRND-09 landed their gates in Phase 18 (seam S-A).
-  for (const req of ['GRND-17', 'VRFY-22', 'VRFY-20']) {
+  // GRND-01, GRND-02 and GRND-09 landed their gates in Phase 18 (seam S-A);
+  // GRND-17 landed plan-research in Phase 19 (seam S-B).
+  for (const req of ['VRFY-22', 'VRFY-20']) {
     assert.ok(rows.some((r) => r.owner === `${req} (planned)`), `future gate from ${req} is listed`);
   }
 });

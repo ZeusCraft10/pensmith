@@ -1,46 +1,44 @@
-// bin/lib/research-orchestrator.ts — GEN-03 live-adapter discovery orchestrator.
+// bin/lib/research-orchestrator.ts — the research pass shared by
+// `pensmith research` (SRC-07..SRC-10) and `plan N --research` (GRND-17).
 //
-// Fans out the searchable adapters (crossref, openalex, arxiv, pubmed,
-// semanticscholar, zotero-mcp — NOT retraction-watch, NOT unpaywall.search),
-// aggregates SourceCandidate[], applies DOI + Jaro-Winkler title dedup,
-// then calls the source-evaluator LLM step to tier the results.
+// One pass, in this order (D-19-15, D-19-16):
+//   1. DISCOVER — every query goes to every adapter of the adapter plan
+//      (bin/lib/adapter-plan.ts: the preset's source preference, then PRD §10's
+//      default five, or exactly `[sources] allowed_databases`), with
+//      `fromYear` from `[sources] min_year`. Each adapter's outcome is recorded
+//      per query and aggregated per adapter: a count, `failed (<reason>)` (the
+//      adapter's own complete reason, e.g. `HTTP 429 — rate limited; set
+//      PENSMITH_S2_API_KEY`), `offline: no recorded fixture`, or a plan skip.
+//      Results are schema-validated, reserved dry-run identifiers dropped
+//      outside --dry-run (RUN-27), deduplicated (normalized DOI, then title
+//      Jaro-Winkler) and given batch-unique citekeys. A work several adapters
+//      found keeps its best preference rank.
+//   2. TIER + POLICY — the deterministic tier (bin/lib/source-tier.ts) of each
+//      candidate; the `[sources]` policy (bin/lib/source-policy.ts) with that
+//      tier, so the evaluator is never paid to judge what the policy drops.
+//   3. EVALUATE — the source-evaluator model, through the one prompt layout
+//      (bin/lib/prompt-request.ts buildPromptRequest): the candidates are sent
+//      ONCE, fenced, at most EVALUATOR_BATCH per call. Its verdicts are applied
+//      by the pure applySourceEvaluations() (also Tier 1's, PLUG-07): kept,
+//      rejected (with the reason), or — when a call failed after its corrective
+//      retry or a candidate got no verdict — `not evaluated`, kept with a
+//      disclosure. There is NO keep-all fallback: a candidate the evaluator
+//      rejected is rejected (SRC-07).
+//   4. POLICY again with the final tier (the evaluator decides the tier the
+//      metadata did not), then RANK: relevance, ties by preference rank.
 //
-// Load-bearing constraints enforced here:
-//   - 'search' in adapter guard: retraction-watch (fetchById-only) is excluded.
-//   - unpaywall excluded by name: its search() always returns [] by design.
-//   - per-query cap 10 (Pitfall 6 budget; T-12-03).
-//   - Per-adapter search() failure → swallowed WARN (ARCH-03).
-//   - DOI dedup: normalizeDoi() map, first-wins (prefer abstract).
-//   - Title dedup: jaroWinkler >= TITLE_JW_THRESHOLD for no-DOI candidates.
-//   - source-evaluator parse failure → keep ALL deduped candidates + WARN (T-11-10).
-//   - SourceCandidateSchema.safeParse per adapter result element (T-11-10).
-//   - Injectable adapter-registry seam for offline tests.
-//   - Does NOT call crossCheckRetractions, writeBibtex, writeRis — research.ts owns.
+// The verbs own the approval gates, the retraction cross-check, the library
+// write (bin/lib/library.ts upsertSources) and RESEARCH.md; this module renders
+// the research log (renderResearchLog) around the sources block research-md.ts
+// renders from LIBRARY.json (D-19-17).
 //
-// Network modes (RUN-01..RUN-04, RUN-27, D-17-10, D-17-11):
-//   - --dry-run: ONLY the labelled synthetic dry-run provider is searched
-//     (bin/lib/sources/dry-run.ts) — zero sockets, deterministic sources, all
-//     flagged synthetic.
-//   - sources offline (PENSMITH_OFFLINE=1 / test runner): adapters replay exact
-//     recorded fixtures; a miss is a typed OfflineEgressError, counted per
-//     adapter, and a query with no recorded results prints
-//     "offline: no recorded results for this query" and yields 0 candidates.
-//   - outside --dry-run, reserved dry-run identifiers are filtered out.
-//   - Every research run writes .paper/RESEARCH.md: the offline marker (when
-//     offline), the scope, the queries, per-adapter counts and failures, and the
-//     candidates discovered. The generated log is the top block of the file and
-//     ends at RESEARCH_LOG_END; anything below that line (e.g. findings appended
-//     by `revise --research`, or other curated notes) is kept verbatim
-//     when a later run rewrites the log — a re-run never destroys notes.
+// Network modes (RUN-01..RUN-04, RUN-27): under --dry-run the only source is
+// the labelled synthetic provider (bin/lib/sources/dry-run.ts); offline, an
+// adapter without a recorded fixture reports `offline: no recorded fixture`.
 //
-// Threat mitigations:
-//   T-12-01: defensive Zod safeParse on all LLM JSON outputs.
-//   T-12-02: candidates serialized as JSON (structured) in ONE fenced data block
-//            of the evaluator request, sent once (FEED-05, SWP-61).
-//   T-12-03: per-query limit cap = 10; dedup BEFORE evaluator.
-//   T-12-04: 'search' in adapter guard (retraction-watch excluded).
-//   T-12-05: no new fetch surface — all network via existing adapter modules.
-//   T-12-06: complete() owns no-leak header path.
+// Test seam: __setResearchRegistryForTest() swaps the adapter registry for the
+// real verbs, and only inside a test context (NODE_TEST_CONTEXT /
+// PENSMITH_TEST=1) — a shipped run can never be pointed at fake adapters.
 
 import path from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
@@ -48,208 +46,164 @@ import { sources } from './sources/index.js';
 import * as dryRunProvider from './sources/dry-run.js';
 import type { SearchOptions } from './sources/search-failure.js';
 import { SourceCandidateSchema, type SourceCandidate } from './schemas/source-candidate.js';
+import type { SourceTier } from './schemas/source-types.js';
+import type { LibraryEntry } from './schemas/library.js';
 import { normalizeDoi, isReservedDryRunId } from './doi.js';
 import { isOfflineEgressError, offlineLabel } from './http.js';
-import { networkMode, offlineMarkerLine } from './http-mock.js';
+import { networkMode, offlineMarkerLine, isTestContext } from './http-mock.js';
 import { atomicWriteFile } from './atomic-write.js';
+import { withLock } from './lock.js';
 import { paperDir } from './paths.js';
 import { jaroWinkler, TITLE_JW_THRESHOLD } from './fuzzy.js';
 import { assignUniqueCitekeys } from './bibtex-write.js';
 import { complete, isFatalLlmError } from './anthropic.js';
 import type { SourceEvaluation } from './llm-contracts.js';
 import { buildPromptRequest, requestHints, type PromptJson } from './prompt-request.js';
+import { candidateToEntry, doiVersionBase } from './migrations/library/shape.js';
+import { deterministicTier } from './source-tier.js';
+import { applySourcePolicy, type PolicyExclusion, type PolicyInput, type SourcePolicy } from './source-policy.js';
+import { planAdapters, zoteroConfigured, RESEARCH_PER_QUERY_LIMIT, EVALUATOR_BATCH, evaluatorCallsFor, type AdapterPlan } from './adapter-plan.js';
+import { resolveDiscipline } from './disciplines.js';
+import { RESEARCH_LOG_END, formatReference, inertMarkup, markerLines } from './research-md.js';
+
+export { RESEARCH_LOG_END };
 
 // ---------------------------------------------------------------------------
-// Injectable adapter registry seam (mirrors zotero-mcp.ts setZoteroClientForTest).
-// Tests inject a fake registry via the optional parameter — production uses the
-// real `sources` registry from sources/index.ts.
+// Limits
 // ---------------------------------------------------------------------------
 
-/**
- * Minimal adapter shape required by the orchestrator fan-out. Adapters that
- * expose `search` are included in the fan-out; others are excluded.
- */
+export { RESEARCH_PER_QUERY_LIMIT, EVALUATOR_BATCH, evaluatorCallsFor };
+
+/** Longest abstract excerpt sent to the evaluator, in characters. */
+export const EVALUATOR_ABSTRACT_CHARS = 500;
+
+/** Most authors sent to the evaluator per candidate. */
+export const EVALUATOR_AUTHORS = 5;
+
+// ---------------------------------------------------------------------------
+// Adapter registry (+ the test seam)
+// ---------------------------------------------------------------------------
+
+/** The adapter shape the fan-out needs. */
 export interface SearchableAdapter {
   search(query: string, opts?: SearchOptions): Promise<SourceCandidate[]>;
 }
 
-/** Registry type accepted by runResearchOrchestrator for DI. */
+/** A registry of adapters by key (the `sources` registry, or a test's fakes). */
 export type AdapterRegistry = Record<string, SearchableAdapter | { fetchById?: unknown }>;
 
-// ---------------------------------------------------------------------------
-// Dedup helpers
-// ---------------------------------------------------------------------------
+let testRegistry: AdapterRegistry | null = null;
 
 /**
- * DOI-first dedup: first-wins, prefer the record with an abstract.
- * Returns a new array; does not mutate input.
+ * Test seam (active only in a test context): the registry every research pass
+ * uses until reset with null. Throws outside a test context.
  */
-function dedupCandidates(raw: SourceCandidate[]): SourceCandidate[] {
-  // Phase 1: DOI dedup
-  const doiMap = new Map<string, SourceCandidate>();
-  const noDoi: SourceCandidate[] = [];
-
-  for (const c of raw) {
-    if (c.doi) {
-      const key = normalizeDoi(c.doi);
-      if (key) {
-        const existing = doiMap.get(key);
-        if (!existing) {
-          doiMap.set(key, c);
-        } else if (!existing.abstract && c.abstract) {
-          // Prefer the record with an abstract (better metadata).
-          doiMap.set(key, c);
-        }
-        // else: first-wins (existing stays).
-        continue;
-      }
-    }
-    noDoi.push(c);
+export function __setResearchRegistryForTest(registry: AdapterRegistry | null): void {
+  if (registry !== null && !isTestContext()) {
+    throw new Error('__setResearchRegistryForTest is available only under the test runner');
   }
-
-  // Phase 2: title dedup for no-DOI candidates using Jaro-Winkler.
-  const titleDeduped: SourceCandidate[] = [];
-  for (const c of noDoi) {
-    let isDuplicate = false;
-
-    // Check against DOI-deduped set first.
-    for (const existing of doiMap.values()) {
-      // WR-02: skip title comparison when either title is empty/whitespace.
-      // jaroWinkler("","") === 1 >= threshold, which would falsely drop a second
-      // empty-title candidate as a duplicate. DOI dedup still applies above.
-      if (!c.title.trim() || !existing.title.trim()) continue;
-      if (jaroWinkler(c.title, existing.title) >= TITLE_JW_THRESHOLD) {
-        isDuplicate = true;
-        break;
-      }
-    }
-
-    if (!isDuplicate) {
-      // Check against already-accepted no-DOI candidates.
-      for (const accepted of titleDeduped) {
-        // WR-02: same empty-title guard as above.
-        if (!c.title.trim() || !accepted.title.trim()) continue;
-        if (jaroWinkler(c.title, accepted.title) >= TITLE_JW_THRESHOLD) {
-          isDuplicate = true;
-          break;
-        }
-      }
-    }
-
-    if (!isDuplicate) {
-      titleDeduped.push(c);
-    }
-  }
-
-  return [...doiMap.values(), ...titleDeduped];
+  testRegistry = registry;
 }
 
-// ---------------------------------------------------------------------------
-// Source-evaluator LLM step
-// ---------------------------------------------------------------------------
+/** The registry a research pass searches: the test seam, the dry-run provider, or the real adapters. */
+export function researchRegistry(): AdapterRegistry {
+  if (testRegistry !== null && isTestContext()) return testRegistry;
+  if (networkMode().dryRun) return { 'dry-run': dryRunProvider };
+  return sources as AdapterRegistry;
+}
 
-/** At most `max` UTF-16 units of `text`, never ending inside a surrogate pair. */
-function truncateText(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const cut = text.slice(0, max);
-  const last = cut.charCodeAt(cut.length - 1);
-  return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
+function isSearchable(name: string, a: unknown): a is SearchableAdapter {
+  // unpaywall.search is inert by design; retraction-watch is fetchById-only (D-15).
+  return name !== 'unpaywall' && typeof a === 'object' && a !== null && typeof (a as { search?: unknown }).search === 'function';
+}
+
+/** The searchable keys of a registry, in registry order. */
+export function searchableKeys(registry: AdapterRegistry): string[] {
+  return Object.entries(registry).filter(([name, a]) => isSearchable(name, a)).map(([name]) => name);
 }
 
 /**
- * One candidate as the evaluator's `candidates` block carries it (18-PLAN.md
- * §3.3): built field by field in a fixed order so identical candidates give
- * identical request bytes (replay hashes, prompt-cache keys); `null` where the
- * adapter reported nothing. The adapter's `raw` payload never reaches a model.
+ * The adapter plan of a paper. `byPreference` (every real run): the resolved
+ * preset's source preference (the brief's discipline, overridden by
+ * `[project] discipline_preset`), the `[sources]` table and Zotero's
+ * configuration decide which adapters of the registry are queried, in which
+ * order (bin/lib/adapter-plan.ts). Otherwise (the --dry-run provider, an
+ * explicitly injected registry) every searchable adapter of the registry is
+ * queried in registry order.
  */
-function evaluatorCandidate(c: SourceCandidate): PromptJson {
-  return {
-    citekey: c.citekey,
-    title: c.title,
-    authors: c.authors.slice(0, 5),
-    year: c.year ?? null,
-    // The candidate schema carries no venue; an arXiv search result is an arXiv
-    // preprint by construction (the template's preprint rule reads this).
-    venue: c.source === 'arxiv' ? 'arXiv' : null,
-    doi: c.doi ?? null,
-    // WR-03: abstracts capped at 500 characters to bound the request.
-    abstract: c.abstract ? truncateText(c.abstract, 500) : null,
-  };
+export function researchAdapterPlan(args: {
+  registry: AdapterRegistry;
+  byPreference: boolean;
+  discipline: string;
+  configDiscipline?: string | undefined;
+  allowed?: readonly string[] | undefined;
+  env?: Readonly<Record<string, string | undefined>>;
+}): AdapterPlan {
+  const available = searchableKeys(args.registry);
+  if (!args.byPreference) {
+    return { entries: available.map((id, rank) => ({ id, adapter: id, options: {}, rank })), skipped: [] };
+  }
+  const resolved = resolveDiscipline({ discipline: { intake: args.discipline, config: args.configDiscipline } });
+  return planAdapters({
+    preference: resolved.sourcePreference,
+    allowed: args.allowed,
+    zoteroConfigured: zoteroConfigured(args.env ?? process.env),
+    available,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Discovery
+// ---------------------------------------------------------------------------
+
+/** One adapter's outcome for one query. */
+export interface QueryOutcome {
+  readonly query: string;
+  readonly adapter: string;
+  readonly count: number;
+  /** `ok` | `no results` | `offline: no recorded fixture` | `failed (<reason>)` */
+  readonly status: string;
+}
+
+/** One adapter's outcome over every query (or a plan skip). */
+export interface AdapterOutcome {
+  readonly adapter: string;
+  readonly count: number;
+  readonly status: string;
+}
+
+/** A deduplicated candidate with the adapters that found it. */
+export interface DiscoveredCandidate {
+  readonly candidate: SourceCandidate;
+  /** Plan entry ids that returned this work. */
+  readonly foundBy: readonly string[];
+  /** The best (lowest) preference rank among them. */
+  readonly rank: number;
+}
+
+export interface DiscoveryResult {
+  readonly candidates: DiscoveredCandidate[];
+  readonly adapters: AdapterOutcome[];
+  readonly perQuery: QueryOutcome[];
+  /** Candidates found before deduplication. */
+  readonly found: number;
+}
+
+function firstLine(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (msg.split(/\r?\n/)[0] ?? '').slice(0, 200);
 }
 
 /**
- * Run the source-evaluator LLM step to tier the deduplicated candidates.
- *
- * source-evaluator is a STRUCTURED slug (RUN-25): complete() returns
- * {verdicts:[{citekey, keep, reason?}]} validated against the llm-contracts.ts
- * schema (the old bare-array reply is accepted by the tolerant parser). The
- * request is the fixed template as the system prompt (the cacheable prefix,
- * RUN-26) and one data message whose `candidates` block — fenced, sent once
- * (D-18-03/04, SWP-61) — follows the topic, discipline and scope. Under
- * PENSMITH_NO_LLM the stub keeps every candidate. An advisory failure
- * (provider error, refusal, truncation, a reply that never matched the
- * schema) keeps ALL deduped candidates with a WARN (T-11-10); the session cost
- * cap, a missing key and invalid configuration propagate (isFatalLlmError).
+ * An evaluator batch's failure, as research reports it. The provider errors
+ * end with the advice for a verb that writes the model's output ("nothing was
+ * written — re-run"); research keeps these candidates as "not evaluated"
+ * (D-19-16) and does write them, so that clause is replaced by what happens.
  */
-async function evaluateCandidates(
-  candidates: SourceCandidate[],
-  opts: { topic: string; scope: string; discipline: string },
-): Promise<SourceCandidate[]> {
-  if (candidates.length === 0) return [];
-
-  let verdicts: SourceEvaluation['verdicts'];
-  try {
-    const request = buildPromptRequest('source-evaluator', {
-      topic: opts.topic,
-      discipline: opts.discipline,
-      scope: opts.scope,
-      candidates: candidates.map(evaluatorCandidate),
-    });
-    const result = await complete<SourceEvaluation>({
-      slug: 'source-evaluator',
-      system: request.system,
-      messages: request.messages,
-      stubHint: requestHints(request),
-    });
-    verdicts = (result.data as SourceEvaluation).verdicts;
-  } catch (err) {
-    if (isFatalLlmError(err)) throw err;
-    process.stderr.write(
-      `pensmith research: WARN — source-evaluator step failed (${(err as Error).message}); ` +
-      `keeping all ${candidates.length} deduped candidates (T-11-10 defensive fallback).\n`,
-    );
-    return candidates;
-  }
-
-  const keepSet = new Set(verdicts.filter((v) => v.keep).map((v) => v.citekey));
-
-  // If the evaluator said keep nothing (edge case: hostile or confused response),
-  // fall back to keeping all candidates.
-  if (keepSet.size === 0) {
-    process.stderr.write(
-      `pensmith research: WARN — source-evaluator returned keep:false for all candidates; ` +
-      `keeping all ${candidates.length} (defensive fallback to avoid empty result).\n`,
-    );
-    return candidates;
-  }
-
-  const filtered = candidates.filter((c) => keepSet.has(c.citekey));
-
-  // If the evaluator filtered out ALL known citekeys (citekey mismatch), fall back.
-  if (filtered.length === 0 && candidates.length > 0) {
-    process.stderr.write(
-      `pensmith research: WARN — source-evaluator citekey mismatch (no candidates match ` +
-      `keep-set); keeping all ${candidates.length} (T-11-10 defensive fallback).\n`,
-    );
-    return candidates;
-  }
-
-  return filtered;
+function evaluatorFailure(err: unknown): string {
+  const line = firstLine(err).replace(/[;,]?\s*(?:the truncated reply was discarded and )?nothing was written(?:\s*—.*)?$/i, '');
+  return `${line}; these candidates are kept unevaluated`;
 }
-
-// ---------------------------------------------------------------------------
-// Reserved-id filter + research log (RUN-27, D-17-10)
-// ---------------------------------------------------------------------------
 
 /** True when a candidate carries any reserved dry-run identifier (RUN-27). */
 function isReservedCandidate(c: SourceCandidate): boolean {
@@ -263,31 +217,704 @@ function isReservedCandidate(c: SourceCandidate): boolean {
   );
 }
 
-function firstLine(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  return (msg.split(/\r?\n/)[0] ?? '').slice(0, 160);
+interface Found {
+  candidate: SourceCandidate;
+  foundBy: string[];
+  rank: number;
 }
 
-/** One adapter's outcome for one query. */
-interface AdapterLogRow {
-  query: string;
-  adapter: string;
-  count: number;
-  /** 'ok' | 'no results' | 'offline: no recorded fixture' | 'dry-run: no recorded fixture' | 'failed (<reason>)' */
-  status: string;
+/** Merge `b` into the kept record `a`: the adapters and best rank; the record with an abstract wins. */
+function mergeFound(a: Found, b: Found): Found {
+  const foundBy = [...a.foundBy, ...b.foundBy.filter((x) => !a.foundBy.includes(x))];
+  const rank = Math.min(a.rank, b.rank);
+  const candidate = !a.candidate.abstract && b.candidate.abstract ? b.candidate : a.candidate;
+  return { candidate, foundBy, rank };
+}
+
+/**
+ * DOI-first dedup (first wins, the record with an abstract preferred) — the
+ * versioned DOIs of one posted work (`<base>.vN`) count as one DOI (review
+ * round 2) — then title Jaro-Winkler.
+ */
+function dedup(raw: Found[]): Found[] {
+  const byDoi = new Map<string, Found>();
+  const order: Array<{ doi: string } | { item: Found }> = [];
+  for (const f of raw) {
+    const norm = f.candidate.doi ? normalizeDoi(f.candidate.doi) : null;
+    const key = norm ? doiVersionBase(norm) ?? norm : null;
+    if (key) {
+      const prev = byDoi.get(key);
+      if (prev) byDoi.set(key, mergeFound(prev, f));
+      else {
+        byDoi.set(key, f);
+        order.push({ doi: key });
+      }
+      continue;
+    }
+    order.push({ item: f });
+  }
+  const out: Found[] = [];
+  for (const o of order) {
+    if ('doi' in o) {
+      out.push(byDoi.get(o.doi) as Found);
+      continue;
+    }
+    const f = o.item;
+    const title = f.candidate.title.trim();
+    // WR-02: an empty title never matches (jaroWinkler("","") === 1).
+    const at = title ? out.findIndex((x) => x.candidate.title.trim() !== '' && jaroWinkler(title, x.candidate.title) >= TITLE_JW_THRESHOLD) : -1;
+    if (at >= 0) out[at] = mergeFound(out[at] as Found, f);
+    else out.push(f);
+  }
+  return out;
+}
+
+function aggregateStatus(rows: readonly QueryOutcome[], total: number): string {
+  const n = rows.length;
+  const failed = rows.filter((r) => r.status.startsWith('failed ('));
+  const offline = rows.filter((r) => r.status.endsWith('no recorded fixture'));
+  if (n > 0 && failed.length === n) {
+    const reasons = [...new Set(failed.map((r) => r.status))];
+    return reasons.length === 1 ? (reasons[0] as string) : `${reasons[0] as string} (and ${reasons.length - 1} other reason(s))`;
+  }
+  if (n > 0 && offline.length === n) return (offline[0] as QueryOutcome).status;
+  const parts: string[] = [total > 0 ? 'ok' : 'no results'];
+  if (failed.length > 0) parts.push(`${failed[0]?.status ?? 'failed'} for ${failed.length} of ${n} queries`);
+  if (offline.length > 0) parts.push(`no recorded fixture for ${offline.length} of ${n} queries`);
+  return parts.join('; ');
+}
+
+/**
+ * Run every query against every plan entry (adapters in parallel per query).
+ * Never throws for an adapter failure: it becomes that adapter's status.
+ */
+export async function discoverCandidates(args: {
+  queries: readonly string[];
+  plan: AdapterPlan;
+  registry: AdapterRegistry;
+  fromYear?: number | undefined;
+  /** Stderr sink for the per-adapter WARN lines (default process.stderr). */
+  warn?: (line: string) => void;
+}): Promise<DiscoveryResult> {
+  const warn = args.warn ?? ((line: string): void => void process.stderr.write(`${line}\n`));
+  const mode = networkMode();
+  const raw: Found[] = [];
+  const perQuery: QueryOutcome[] = [];
+  let found = 0;
+
+  for (const query of args.queries) {
+    const settled = await Promise.all(
+      args.plan.entries.map(async (entry) => {
+        const adapter = args.registry[entry.adapter];
+        if (!isSearchable(entry.adapter, adapter)) {
+          return { entry, results: [] as SourceCandidate[], status: 'skipped (no adapter)' };
+        }
+        let failure: string | null = null;
+        try {
+          const opts: SearchOptions = {
+            limit: RESEARCH_PER_QUERY_LIMIT,
+            onFailure: (reason) => {
+              failure ??= reason;
+            },
+            ...(args.fromYear !== undefined ? { fromYear: args.fromYear } : {}),
+            ...(entry.options.doiPrefix !== undefined ? { doiPrefix: entry.options.doiPrefix } : {}),
+          };
+          const results = await adapter.search(query, opts);
+          if (failure !== null && results.length === 0) return { entry, results, status: `failed (${failure})` };
+          return { entry, results, status: 'ok' };
+        } catch (err) {
+          if (isOfflineEgressError(err)) {
+            // RUN-03: an offline miss is a distinct "no recorded fixture" result.
+            return { entry, results: [] as SourceCandidate[], status: `${offlineLabel(err)}: no recorded fixture` };
+          }
+          return { entry, results: [] as SourceCandidate[], status: `failed (${firstLine(err)})` };
+        }
+      }),
+    );
+    let queryCount = 0;
+    let offlineMisses = 0;
+    for (const { entry, results, status } of settled) {
+      if (status.endsWith('no recorded fixture')) offlineMisses += 1;
+      let kept = 0;
+      for (const item of results) {
+        // T-11-10: every adapter result is validated.
+        const parsed = SourceCandidateSchema.safeParse(item);
+        if (!parsed.success) {
+          warn(
+            `pensmith research: WARN — adapter "${entry.id}" returned a candidate that failed SourceCandidateSchema ` +
+              `validation (dropped, T-11-10): ${parsed.error.message.slice(0, 120)}`,
+          );
+          continue;
+        }
+        // RUN-27: outside --dry-run a reserved dry-run identifier never enters the library.
+        if (!mode.dryRun && isReservedCandidate(parsed.data)) {
+          warn(
+            `pensmith research: WARN — dropped a reserved dry-run identifier from "${entry.id}" ` +
+              `(${parsed.data.doi ?? parsed.data.id}); synthetic sources exist only under --dry-run.`,
+          );
+          continue;
+        }
+        raw.push({ candidate: parsed.data, foundBy: [entry.id], rank: entry.rank });
+        kept += 1;
+      }
+      found += kept;
+      queryCount += kept;
+      perQuery.push({ query, adapter: entry.id, count: kept, status: status === 'ok' && kept === 0 ? 'no results' : status });
+    }
+    if (mode.sourcesOffline && !mode.dryRun && queryCount === 0 && offlineMisses > 0) {
+      warn(`offline: no recorded results for this query ("${query}")`);
+    }
+  }
+
+  const adapters: AdapterOutcome[] = args.plan.entries.map((entry) => {
+    const rows = perQuery.filter((r) => r.adapter === entry.id);
+    const count = rows.reduce((a, r) => a + r.count, 0);
+    return { adapter: entry.id, count, status: aggregateStatus(rows, count) };
+  });
+  // D-17-10: one stderr line per failed adapter (all queries).
+  for (const entry of args.plan.entries) {
+    const rows = perQuery.filter((r) => r.adapter === entry.id && r.status.startsWith('failed ('));
+    if (rows.length === 0) continue;
+    const reason = (rows[0] as QueryOutcome).status.slice('failed ('.length, -1);
+    const n = args.queries.length;
+    warn(
+      `pensmith research: WARN — ${entry.id} failed (${reason}) for ${rows.length} of ${n} ` +
+        `quer${n === 1 ? 'y' : 'ies'}; its results are missing from this run (see RESEARCH.md)`,
+    );
+  }
+  for (const s of args.plan.skipped) adapters.push({ adapter: s.id, count: 0, status: s.status });
+
+  const deduped = dedup(raw);
+  // Audit #21/#31/#32: batch-unique citekeys BEFORE the evaluator, the gate and
+  // the library write — every consumer filters on the citekey.
+  const keyed = assignUniqueCitekeys(deduped.map((f) => f.candidate));
+  const candidates = deduped.map((f, i) => ({ candidate: keyed[i] as SourceCandidate, foundBy: f.foundBy, rank: f.rank }));
+  return { candidates, adapters, perQuery, found };
+}
+
+// ---------------------------------------------------------------------------
+// Evaluation
+// ---------------------------------------------------------------------------
+
+/** One validated evaluator verdict (the SourceEvaluatorSchema element). */
+export type SourceVerdict = SourceEvaluation['verdicts'][number];
+
+export type EvaluationDecision = 'kept' | 'rejected' | 'not-evaluated';
+
+/** A candidate with the evaluator's decision applied. */
+export interface EvaluatedSource<T> {
+  readonly candidate: T;
+  readonly decision: EvaluationDecision;
+  /** The final tier: the deterministic tier hint when there is one, else the evaluator's. */
+  readonly tier: SourceTier | null;
+  readonly relevance: number | null;
+  /** The evaluator's reason (a kept source's why-relevant note); null when not evaluated. */
+  readonly reason: string | null;
+}
+
+export interface AppliedEvaluations<T> {
+  readonly kept: EvaluatedSource<T>[];
+  readonly rejected: EvaluatedSource<T>[];
+  /** Kept too (never silently dropped), with a disclosure: no verdict came back for them. */
+  readonly notEvaluated: EvaluatedSource<T>[];
+  /** Verdict citekeys that name no candidate (ignored). */
+  readonly unknownVerdicts: string[];
+}
+
+/**
+ * Apply evaluator verdicts to candidates (pure; Tier 1's
+ * paper_submit_source_evaluations applies the same function, PLUG-07). The
+ * first verdict per citekey counts; a candidate without a verdict is
+ * `not evaluated`; the tier hint (the deterministic tier) wins over the
+ * verdict's tier. Input order is preserved within each list.
+ */
+export function applySourceEvaluations<T extends { citekey: string }>(
+  candidates: readonly T[],
+  verdicts: readonly SourceVerdict[],
+  tierHints: ReadonlyMap<string, SourceTier | null>,
+): AppliedEvaluations<T> {
+  const byKey = new Map<string, SourceVerdict>();
+  const known = new Set(candidates.map((c) => c.citekey));
+  const unknownVerdicts: string[] = [];
+  for (const v of verdicts) {
+    if (!known.has(v.citekey)) {
+      if (!unknownVerdicts.includes(v.citekey)) unknownVerdicts.push(v.citekey);
+      continue;
+    }
+    if (!byKey.has(v.citekey)) byKey.set(v.citekey, v);
+  }
+  const kept: EvaluatedSource<T>[] = [];
+  const rejected: EvaluatedSource<T>[] = [];
+  const notEvaluated: EvaluatedSource<T>[] = [];
+  for (const c of candidates) {
+    const hint = tierHints.get(c.citekey) ?? null;
+    const v = byKey.get(c.citekey);
+    if (!v) {
+      notEvaluated.push({ candidate: c, decision: 'not-evaluated', tier: hint, relevance: null, reason: null });
+      continue;
+    }
+    const e: EvaluatedSource<T> = {
+      candidate: c,
+      decision: v.keep ? 'kept' : 'rejected',
+      tier: hint ?? v.tier,
+      relevance: v.relevance,
+      reason: v.reason.trim() || null,
+    };
+    (v.keep ? kept : rejected).push(e);
+  }
+  return { kept, rejected, notEvaluated, unknownVerdicts };
+}
+
+/** Truncate to at most `max` characters, never inside a surrogate pair. */
+function codePointSlice(text: string, max: number): string {
+  const cps = Array.from(text);
+  return cps.length <= max ? text : cps.slice(0, max).join('');
+}
+
+/** The evaluator payload of one candidate, field by field in a fixed order (deterministic bytes). */
+export function evaluatorPayload(c: SourceCandidate, view: LibraryEntry, tierHint: SourceTier | null): PromptJson {
+  return {
+    citekey: c.citekey,
+    title: c.title,
+    authors: c.authors.slice(0, EVALUATOR_AUTHORS),
+    year: c.year ?? null,
+    venue: view.venue ?? null,
+    type: view.type ?? null,
+    doi: view.doi ?? null,
+    tier_hint: tierHint,
+    abstract: c.abstract ? codePointSlice(c.abstract.replace(/\s+/g, ' ').trim(), EVALUATOR_ABSTRACT_CHARS) : null,
+  };
+}
+
+export interface EvaluatorRun {
+  readonly verdicts: SourceVerdict[];
+  /** Calls made (one per batch). */
+  readonly calls: number;
+  /** One line per failed batch: `<n> candidate(s): <reason>`. */
+  readonly failures: string[];
+}
+
+/**
+ * Run the source-evaluator over `items` in batches of EVALUATOR_BATCH. A
+ * batch whose call fails (after the corrective retry) yields no verdicts —
+ * its candidates become `not evaluated` — and a failure line; the session cost
+ * cap, a missing key, invalid configuration and a replay miss propagate
+ * (isFatalLlmError).
+ */
+export async function runSourceEvaluator(
+  items: ReadonlyArray<{ candidate: SourceCandidate; view: LibraryEntry; tierHint: SourceTier | null }>,
+  ctx: { topic: string; discipline: string; scope: string },
+): Promise<EvaluatorRun> {
+  const verdicts: SourceVerdict[] = [];
+  const failures: string[] = [];
+  let calls = 0;
+  for (let i = 0; i < items.length; i += EVALUATOR_BATCH) {
+    const batch = items.slice(i, i + EVALUATOR_BATCH);
+    const req = buildPromptRequest('source-evaluator', {
+      topic: ctx.topic,
+      discipline: ctx.discipline,
+      scope: ctx.scope,
+      candidates: batch.map((b) => evaluatorPayload(b.candidate, b.view, b.tierHint)),
+    });
+    calls += 1;
+    try {
+      const result = await complete<SourceEvaluation>({
+        slug: 'source-evaluator',
+        system: req.system,
+        messages: req.messages,
+        stubHint: requestHints(req),
+      });
+      verdicts.push(...(result.data as SourceEvaluation).verdicts);
+    } catch (err) {
+      if (isFatalLlmError(err)) throw err;
+      failures.push(`${batch.length} candidate(s): ${evaluatorFailure(err)}`);
+    }
+  }
+  return { verdicts, calls, failures };
+}
+
+// ---------------------------------------------------------------------------
+// The research pass
+// ---------------------------------------------------------------------------
+
+export type ResearchDecision = EvaluationDecision | 'excluded';
+
+/** One candidate of a research pass, with everything the verbs show and persist. */
+export interface ResearchItem {
+  readonly candidate: SourceCandidate;
+  /** The candidate as a LIBRARY entry (normalized identifiers, venue, type) — display and payload. */
+  readonly view: LibraryEntry;
+  readonly foundBy: readonly string[];
+  readonly rank: number;
+  readonly tierHint: SourceTier | null;
+  readonly tier: SourceTier | null;
+  readonly relevance: number | null;
+  readonly reason: string | null;
+  readonly decision: ResearchDecision;
+  /** Set when the `[sources]` policy excluded it. */
+  readonly exclusion?: PolicyExclusion;
+}
+
+/**
+ * The evaluator's judgement of one of the user's own library entries
+ * (bring-your-own, Zotero): it annotates the entry — tier, relevance, the
+ * why-relevant note — and never removes it (19-PLAN §7.2, SRC-15).
+ */
+export interface OwnEvaluation {
+  readonly entry: LibraryEntry;
+  readonly decision: EvaluationDecision;
+  readonly tier: SourceTier | null;
+  readonly relevance: number | null;
+  readonly reason: string | null;
+}
+
+/** The provenance prefixes of the user's own sources. */
+const OWN_PREFIXES = new Set(['byo', 'zotero']);
+
+/** An entry's first own-source provenance (`byo:arxiv` → {prefix: byo, source: arxiv}), or null. */
+export function ownProvenance(entry: Pick<LibraryEntry, 'provenance'>): { prefix: string; source: string | null } | null {
+  for (const p of entry.provenance) {
+    const [prefix = p, source] = p.split(':');
+    if (OWN_PREFIXES.has(prefix)) return { prefix, source: source ?? null };
+  }
+  return null;
+}
+
+/**
+ * The user's own library entries research asks the evaluator about: tagged
+ * bring-your-own or zotero, not evaluated yet, and carrying a registrar
+ * identifier — so the library writer merges the annotation into that very
+ * entry. A local-only (unhydrated) PDF has no identifier and stays as it is.
+ */
+export function ownSourcesToEvaluate(entries: readonly LibraryEntry[]): LibraryEntry[] {
+  return entries.filter(
+    (e) => ownProvenance(e) !== null && e.relevance === null && !e.synthetic && [e.doi, e.arxiv, e.pmid, e.pmcid, e.isbn].some((x) => x !== null),
+  );
+}
+
+/** A library entry as the evaluator's candidate (its payload fields and its citekey). */
+function entryAsCandidate(e: LibraryEntry): SourceCandidate {
+  const own = ownProvenance(e);
+  return {
+    source: own?.prefix === 'zotero' ? 'zotero' : 'byo',
+    id: e.doi ?? e.arxiv ?? e.pmid ?? e.isbn ?? e.citekey,
+    ...(e.doi !== null ? { doi: e.doi } : {}),
+    ...(e.arxiv !== null ? { arxiv: e.arxiv } : {}),
+    ...(e.isbn !== null ? { isbn: e.isbn } : {}),
+    title: e.title ?? '',
+    authors: [...e.authors],
+    ...(e.year !== null ? { year: e.year } : {}),
+    ...(e.abstract !== null ? { abstract: e.abstract } : {}),
+    retracted: e.retracted,
+    last_verified: e.last_verified,
+    citekey: e.citekey,
+    raw: {},
+  } as SourceCandidate;
+}
+
+export interface ResearchPassResult {
+  readonly adapters: AdapterOutcome[];
+  readonly perQuery: QueryOutcome[];
+  /** Candidates found (before dedup). */
+  readonly found: number;
+  /** Distinct works after dedup. */
+  readonly distinct: number;
+  /** Kept by the evaluator or not evaluated, ranked (relevance, then preference). */
+  readonly kept: ResearchItem[];
+  readonly rejected: ResearchItem[];
+  readonly excluded: ResearchItem[];
+  readonly notEvaluated: number;
+  readonly evaluator: { readonly calls: number; readonly failures: string[]; readonly unknownVerdicts: string[] };
+  /** The evaluator's annotations of the user's own entries (never kept / rejected / excluded here). */
+  readonly own: OwnEvaluation[];
+}
+
+/** Relevance (highest first; unscored after scored), then preference rank, then discovery order. */
+export function rankItems<T extends { relevance: number | null; rank: number }>(items: readonly T[]): T[] {
+  return items
+    .map((item, i) => ({ item, i }))
+    .sort((a, b) => {
+      const ra = a.item.relevance ?? -1;
+      const rb = b.item.relevance ?? -1;
+      if (ra !== rb) return rb - ra;
+      if (a.item.rank !== b.item.rank) return a.item.rank - b.item.rank;
+      return a.i - b.i;
+    })
+    .map((x) => x.item);
+}
+
+/** The policy's view of a candidate (identifiers normalized by the library shape). */
+function policyInputOf(b: { candidate: SourceCandidate; view: LibraryEntry }): PolicyInput {
+  return {
+    source: b.candidate.source,
+    id: b.candidate.id,
+    year: b.view.year,
+    type: b.view.type,
+    doi: b.view.doi,
+    isbn: b.view.isbn,
+    arxiv: b.view.arxiv,
+    pmid: b.view.pmid,
+  };
+}
+
+/**
+ * Discover, tier, filter, evaluate and rank. Writes nothing: the verbs gate,
+ * cross-check retractions, write the library and the log.
+ */
+export async function runResearchPass(args: {
+  queries: readonly string[];
+  plan: AdapterPlan;
+  registry: AdapterRegistry;
+  policy: SourcePolicy;
+  topic: string;
+  discipline: string;
+  /** The evaluator's `<scope>` block: the chosen scope (or the section query). */
+  scope: string;
+  warn?: (line: string) => void;
+  /**
+   * The user's own library entries to annotate (ownSourcesToEvaluate): they
+   * join the evaluator's batch after the discovered candidates, and their
+   * verdicts come back in `own` — the policy and the prune never touch them.
+   */
+  own?: readonly LibraryEntry[];
+}): Promise<ResearchPassResult> {
+  const discovery = await discoverCandidates({
+    queries: args.queries,
+    plan: args.plan,
+    registry: args.registry,
+    fromYear: args.policy.minYear ?? undefined,
+    ...(args.warn ? { warn: args.warn } : {}),
+  });
+  const now = new Date().toISOString();
+  const base = discovery.candidates.map((d) => {
+    const view = candidateToEntry(d.candidate, [], now);
+    const tierHint = deterministicTier({ ...d.candidate, venue: view.venue, type: view.type, doi: view.doi, arxiv: view.arxiv, isbn: view.isbn });
+    return { ...d, view, tierHint };
+  });
+
+  // Policy before the evaluator: deterministic tiers only (an unknown tier waits).
+  const excluded: ResearchItem[] = [];
+  const pre: typeof base = [];
+  for (const b of base) {
+    const r = applySourcePolicy([policyInputOf(b)], () => b.tierHint, args.policy, { tierFinal: false });
+    const ex = r.excluded[0];
+    if (ex) {
+      excluded.push({ ...b, tier: b.tierHint, relevance: null, reason: null, decision: 'excluded', exclusion: ex.exclusion });
+    } else pre.push(b);
+  }
+
+  // The most preferred adapters' candidates go first (the first batch, when there are several).
+  pre.sort((a, b) => a.rank - b.rank);
+
+  // The user's own entries join the batch — except one a discovered candidate
+  // already is (same citekey or identifier): that candidate's evaluation merges
+  // into the entry through the library writer anyway.
+  const taken = new Set(base.map((b) => b.candidate.citekey));
+  const ids = new Set(base.flatMap((b) => [b.view.doi, b.view.arxiv, b.view.pmid, b.view.isbn].filter((x): x is string => x !== null)));
+  const ownItems = (args.own ?? [])
+    .filter((e) => !taken.has(e.citekey) && ![e.doi, e.arxiv, e.pmid, e.isbn].some((x) => x !== null && ids.has(x)))
+    .map((e) => {
+      const candidate = entryAsCandidate(e);
+      const tierHint = deterministicTier({ ...candidate, venue: e.venue, type: e.type, doi: e.doi, arxiv: e.arxiv, isbn: e.isbn });
+      return { entry: e, candidate, view: e, tierHint };
+    });
+
+  const toEvaluate = [...pre, ...ownItems];
+  const run = toEvaluate.length > 0 ? await runSourceEvaluator(toEvaluate, { topic: args.topic, discipline: args.discipline, scope: args.scope }) : { verdicts: [], calls: 0, failures: [] };
+  const hints = new Map(pre.map((b) => [b.candidate.citekey, b.tierHint] as const));
+  const ownHints = new Map(ownItems.map((o) => [o.candidate.citekey, o.tierHint] as const));
+  const ownApplied = applySourceEvaluations(ownItems.map((o) => o.candidate), run.verdicts, ownHints);
+  const ownByKey = new Map(ownItems.map((o) => [o.candidate.citekey, o.entry] as const));
+  const own: OwnEvaluation[] = [...ownApplied.kept, ...ownApplied.rejected].map((e) => ({
+    entry: ownByKey.get(e.candidate.citekey) as LibraryEntry,
+    decision: e.decision,
+    tier: e.tier,
+    relevance: e.relevance,
+    reason: e.reason,
+  }));
+  const applied = applySourceEvaluations(pre.map((b) => b.candidate), run.verdicts.filter((v) => !ownByKey.has(v.citekey)), hints);
+  const byKey = new Map(pre.map((b) => [b.candidate.citekey, b] as const));
+  const toItem = (e: EvaluatedSource<SourceCandidate>): ResearchItem => {
+    const b = byKey.get(e.candidate.citekey) as (typeof base)[number];
+    return { ...b, tier: e.tier, relevance: e.relevance, reason: e.reason, decision: e.decision };
+  };
+
+  // Policy again with the final tier (the evaluator decided the tiers the metadata did not).
+  const kept: ResearchItem[] = [];
+  const rejected: ResearchItem[] = [];
+  for (const e of [...applied.kept, ...applied.notEvaluated, ...applied.rejected].map(toItem)) {
+    const ex = applySourcePolicy([policyInputOf(e)], () => e.tier, args.policy, { tierFinal: true }).excluded[0];
+    if (ex) excluded.push({ ...e, decision: 'excluded', exclusion: ex.exclusion });
+    else if (e.decision === 'rejected') rejected.push(e);
+    else kept.push(e);
+  }
+  return {
+    adapters: discovery.adapters,
+    perQuery: discovery.perQuery,
+    found: discovery.found,
+    distinct: discovery.candidates.length,
+    kept: rankItems(kept),
+    rejected: rankItems(rejected),
+    excluded,
+    notEvaluated: kept.filter((k) => k.decision === 'not-evaluated').length,
+    evaluator: { calls: run.calls, failures: run.failures, unknownVerdicts: applied.unknownVerdicts },
+    own,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Presentation: the per-adapter table, the tier summary, the research log
+// ---------------------------------------------------------------------------
+
+/** The stdout per-adapter table (PRD §7.2, SRC-07): `  <adapter>  <count>  <status>`. */
+export function renderAdapterTable(adapters: readonly AdapterOutcome[]): string[] {
+  const w = Math.max(8, ...adapters.map((a) => a.adapter.length));
+  const cw = Math.max(1, ...adapters.map((a) => String(a.count).length));
+  return adapters.map((a) => `  ${a.adapter.padEnd(w)}  ${String(a.count).padStart(cw)}  ${a.status}`);
+}
+
+/** `38 kept (peer-reviewed 21, preprint 12, book 3, other 2)`. */
+export function tierSummary(items: readonly { tier: SourceTier | null }[]): string {
+  const order: Array<SourceTier | null> = ['peer-reviewed', 'preprint', 'book', 'gov-report', 'other', null];
+  const parts: string[] = [];
+  for (const t of order) {
+    const n = items.filter((i) => i.tier === t).length;
+    if (n > 0) parts.push(`${t ?? 'tier unknown'} ${n}`);
+  }
+  return `${items.length} kept${parts.length > 0 ? ` (${parts.join(', ')})` : ''}`;
+}
+
+/** How one upsert's outcomes split, for the count lines research prints. */
+export interface UpsertCounts {
+  /** Citekeys of the works new to LIBRARY.json. */
+  readonly added: string[];
+  /** Distinct citekeys of works LIBRARY.json already held before this write. */
+  readonly known: string[];
+  /**
+   * Candidates that collapsed into another candidate of the same write (the
+   * same work found twice, a preprint and its version of record), or hit a
+   * known work a second time — neither new nor a separate library entry.
+   */
+  readonly duplicates: number;
+}
+
+/**
+ * Split upsertSources outcomes into new works, works the library already had
+ * and within-write duplicates. A non-`added` outcome whose citekey was added
+ * by this same write matched a sibling candidate, not the prior library, so it
+ * is a duplicate — counting it as "already in library" would claim a fresh
+ * library held sources it never had.
+ */
+export function upsertCounts(outcomes: readonly { citekey: string; status: string }[]): UpsertCounts {
+  const added = [...new Set(outcomes.filter((o) => o.status === 'added').map((o) => o.citekey))];
+  const fresh = new Set(added);
+  const known = [...new Set(outcomes.filter((o) => o.status !== 'added' && !fresh.has(o.citekey)).map((o) => o.citekey))];
+  return { added, known, duplicates: outcomes.length - added.length - known.length };
 }
 
 function cell(s: string): string {
   return s.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 }
 
+function oneLine(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+/** An excluded or rejected candidate, as a RESEARCH.md list item. */
+export interface LogExclusion {
+  readonly citekey: string;
+  readonly reference: string;
+  /** `policy: <rule reason>`, `evaluator: <reason>` or `deselected at the approval gate`. */
+  readonly why: string;
+}
+
+/** A retraction line for RESEARCH.md. */
+export interface LogRetraction {
+  readonly citekey: string;
+  readonly detail: string | null;
+}
+
+export interface ResearchLogInput {
+  readonly scope: string;
+  readonly topic: string;
+  readonly discipline: string;
+  readonly generated: string;
+  readonly queries: readonly string[];
+  /** A disclosure under the queries (the deterministic expansion, padding, clamping), or null. */
+  readonly queryNote: string | null;
+  readonly summary: string;
+  /** Disclosure lines (not evaluated, evaluator failures). */
+  readonly notes: readonly string[];
+  readonly adapters: readonly AdapterOutcome[];
+  readonly perQuery: readonly QueryOutcome[];
+  readonly excluded: readonly LogExclusion[];
+  readonly retracted: readonly LogRetraction[];
+  readonly retractionUnknown: readonly LogRetraction[];
+  /** The sources block (research-md.ts renderSourcesBlock of LIBRARY.json). */
+  readonly sourcesBlock: string;
+}
+
 /**
- * The line that ends the generated research log in .paper/RESEARCH.md. Every
- * `pensmith research` run rewrites the text above it; the text below it is
- * never touched (D-17-10; `revise --research` appends, curated notes).
+ * The generated part of .paper/RESEARCH.md (19-PLAN §3.4): the offline marker
+ * (when offline), the header, queries, per-adapter and per-query tables, the
+ * exclusions and retractions, then the sources block. List items only — no
+ * `### ` blocks — so the curated-claims parser never mistakes an entry for a
+ * curated `supports:` note.
  */
-export const RESEARCH_LOG_END =
-  '<!-- end of the research log: `pensmith research` rewrites everything above this line; notes below it are kept -->';
+export function renderResearchLog(input: ResearchLogInput): string {
+  const lines: string[] = [];
+  const marker = offlineMarkerLine();
+  if (marker !== null) lines.push(marker, '');
+  lines.push(
+    '# Research log',
+    '',
+    `Scope: ${oneLine(input.scope)}`,
+    `Topic: ${oneLine(input.topic) || '(unknown)'}`,
+    `Discipline: ${input.discipline || '(unknown)'}`,
+    `Generated: ${input.generated}`,
+    `Result: ${oneLine(input.summary)}`,
+    ...input.notes.map((n) => `Note: ${oneLine(n)}`),
+    '',
+    '## Queries',
+    '',
+    ...(input.queries.length > 0 ? input.queries.map((q, i) => `${i + 1}. ${q}`) : ['_(none)_']),
+  );
+  if (input.queryNote) lines.push('', `(${input.queryNote})`);
+  lines.push(
+    '',
+    '## Adapters',
+    '',
+    '| Adapter | Results | Status |',
+    '|---------|---------|--------|',
+    ...(input.adapters.length > 0
+      ? input.adapters.map((a) => `| ${a.adapter} | ${a.count} | ${cell(a.status)} |`)
+      : ['| _(none)_ | 0 | no adapter ran |']),
+    '',
+    '## Per query',
+    '',
+    '| Query | Adapter | Results | Status |',
+    '|-------|---------|---------|--------|',
+    ...(input.perQuery.length > 0
+      ? input.perQuery.map((r) => `| ${cell(r.query)} | ${r.adapter} | ${r.count} | ${cell(r.status)} |`)
+      : ['| _(none)_ | — | 0 | no adapter ran |']),
+    '',
+    `## Excluded (${input.excluded.length})`,
+    '',
+    ...(input.excluded.length > 0
+      ? input.excluded.map((x) => `- [@${x.citekey}] ${oneLine(x.reference)} — ${oneLine(x.why)}`)
+      : ['_None._']),
+  );
+  if (input.retracted.length > 0 || input.retractionUnknown.length > 0) {
+    lines.push('', '## Retractions', '');
+    for (const r of input.retracted) lines.push(`- RETRACTED: [@${r.citekey}]${r.detail ? ` — ${oneLine(r.detail)}` : ''} (fails Pass 1 if cited)`);
+    for (const r of input.retractionUnknown) {
+      lines.push(`- retraction status unknown: [@${r.citekey}]${r.detail ? ` — ${oneLine(r.detail)}` : ''} (re-checked at verify time)`);
+    }
+  }
+  // Every value above comes from registrars, the model or the user's sources:
+  // a marker comment inside one must never read as a marker (research-md.ts).
+  return [...lines.map(inertMarkup), '', input.sourcesBlock, ''].join('\n');
+}
 
 /**
  * The new RESEARCH.md: the freshly rendered log, the end line, then whatever an
@@ -297,7 +924,7 @@ export const RESEARCH_LOG_END =
 export function mergeResearchLog(log: string, existing: string | null): string {
   let kept = '';
   if (existing !== null) {
-    const at = existing.indexOf(RESEARCH_LOG_END);
+    const at = markerLines(existing, RESEARCH_LOG_END)[0] ?? -1;
     kept = at >= 0 ? existing.slice(at + RESEARCH_LOG_END.length) : existing;
     kept = kept.replace(/^(?:\r?\n)+/, '');
   }
@@ -305,374 +932,41 @@ export function mergeResearchLog(log: string, existing: string | null): string {
   return kept.trim().length > 0 ? `${head}\n${kept}` : head;
 }
 
-/**
- * Render .paper/RESEARCH.md (D-10): the offline marker first (when offline),
- * then the scope, the queries, per-adapter counts and failures, and the
- * candidates. List items only — no `### ` blocks, so the curated-claims
- * parser never mistakes a candidate for a curated `supports:` entry.
- */
-export function renderResearchLog(input: {
-  scope: string;
-  topic: string;
-  discipline: string;
-  queries: readonly string[];
-  log: readonly AdapterLogRow[];
-  candidates: readonly SourceCandidate[];
-}): string {
-  const marker = offlineMarkerLine();
-  const lines: string[] = [];
-  if (marker !== null) lines.push(marker, '');
-  lines.push(
-    '# Research log',
-    '',
-    `Scope: ${input.scope}`,
-    `Topic: ${input.topic || '(unknown)'}`,
-    `Discipline: ${input.discipline || '(unknown)'}`,
-    `Generated: ${new Date().toISOString()}`,
-    '',
-    '## Queries',
-    '',
-    ...(input.queries.length > 0 ? input.queries.map((q, i) => `${i + 1}. ${q}`) : ['_(none)_']),
-    '',
-    '## Adapters',
-    '',
-    '| Query | Adapter | Results | Status |',
-    '|-------|---------|---------|--------|',
-    ...(input.log.length > 0
-      ? input.log.map((r) => `| ${cell(r.query)} | ${r.adapter} | ${r.count} | ${cell(r.status)} |`)
-      : ['| _(none)_ | — | 0 | no adapter ran |']),
-    '',
-    `## Candidates (${input.candidates.length})`,
-    '',
-  );
-  if (input.candidates.length === 0) {
-    lines.push(
-      networkMode().sourcesOffline && !networkMode().dryRun
-        ? '_offline: no recorded results for these queries — re-run online._'
-        : '_No candidates discovered._',
-    );
-  }
-  for (const c of input.candidates) {
-    const who = c.authors.slice(0, 3).join('; ') + (c.authors.length > 3 ? '; et al.' : '');
-    const id = c.doi ? `doi:${c.doi}` : `id:${c.id}`;
-    const synthetic = c.synthetic === true ? ' — synthetic dry-run source' : '';
-    lines.push(`- [@${c.citekey}] ${c.title} (${c.year ?? 'n.d.'}) — ${who} — ${id} — ${c.source}${synthetic}`);
-  }
-  lines.push('');
-  return lines.join('\n');
+/** `<root>/.paper/RESEARCH.md`. */
+export function researchMdPath(root: string): string {
+  return path.join(paperDir(root), 'RESEARCH.md');
 }
 
-// ---------------------------------------------------------------------------
-// Options shape
-// ---------------------------------------------------------------------------
-
-export interface ResearchOrchestratorOptions {
-  /** Assignment text (full INTAKE.md content or raw assignment). */
-  assignment: string;
-  /** Topic phrase for query context and evaluator prompt. */
-  topic: string;
-  /** INTK-03 discipline slug (e.g. 'computer-science', 'other'). */
-  discipline: string;
-  /**
-   * Project root (the folder containing .paper/). When given, the research log
-   * is written to <paperRoot>/.paper/RESEARCH.md. The (queries, opts) overload
-   * used by `pensmith research` always writes it (default: paperDir()).
-   */
-  paperRoot?: string;
-  /**
-   * Test-only: injectable adapter registry seam.
-   * Defaults to the production `sources` registry from sources/index.ts.
-   * Pass an object with adapters exposing `search()` to override for offline tests.
-   */
-  __adapterRegistry?: AdapterRegistry;
-  /**
-   * Test-only: force the candidate array returned by the fan-out (bypasses
-   * adapter network entirely). Used by the zero-candidate degenerate test.
-   */
-  __forceCandidates?: SourceCandidate[];
-}
-
-// ---------------------------------------------------------------------------
-// Main export: runResearchOrchestrator
-// ---------------------------------------------------------------------------
-
-/**
- * Fan out the searchable adapters, aggregate, dedup, and evaluate candidates.
- *
- * This function:
- *   1. Selects the searchable adapter set (excludes retraction-watch by guard,
- *      excludes unpaywall by name — its search() always returns []).
- *   2. For each query in the chosen scope, calls adapter.search(query, {limit:10}).
- *   3. Swallows per-adapter errors (non-fatal WARN; ARCH-03).
- *   4. Validates each result through SourceCandidateSchema.safeParse (T-11-10).
- *   5. Deduplicates via normalizeDoi (DOI) + jaroWinkler >= TITLE_JW_THRESHOLD (title).
- *   6. Calls the source-evaluator LLM step (defensive fallback: keep all on failure).
- *   7. Returns the final SourceCandidate[].
- *
- * Does NOT call crossCheckRetractions, writeBibtex, or writeRis — those
- * chokepoints belong exclusively to bin/cli/research.ts (D-15).
- *
- * @param queries  Array of query strings from the chosen topic-disambiguator scope.
- * @param opts     Orchestrator options including topic/discipline/assignment context.
- */
-export async function runResearchOrchestrator(
-  opts: ResearchOrchestratorOptions,
-): Promise<SourceCandidate[]>;
-
-/**
- * Overload: called from research.ts with explicit queries + opts.
- */
-export async function runResearchOrchestrator(
-  queries: string[],
-  opts: Omit<ResearchOrchestratorOptions, 'assignment' | 'topic' | 'discipline'> & {
-    topic: string;
-    discipline: string;
-    assignment?: string;
-    scopeLabel?: string;
-  },
-): Promise<SourceCandidate[]>;
-
-export async function runResearchOrchestrator(
-  queriesOrOpts: string[] | ResearchOrchestratorOptions,
-  optsArg?: DiscoverOptions,
-): Promise<SourceCandidate[]> {
-  const discovery = await discover(queriesOrOpts, optsArg);
-  await discovery.writeLog(discovery.candidates);
-  return discovery.candidates;
-}
-
-/** The (queries, opts) options of `pensmith research`. */
-type DiscoverOptions = Omit<ResearchOrchestratorOptions, 'assignment' | 'topic' | 'discipline'> & {
-  topic: string;
-  discipline: string;
-  assignment?: string;
-  scopeLabel?: string;
-};
-
-/** Discovered candidates plus the deferred writer of their research log. */
-export interface ResearchDiscovery {
-  readonly candidates: SourceCandidate[];
-  /**
-   * Write .paper/RESEARCH.md for this discovery (a no-op when the caller has
-   * no paper root). `pensmith research` calls it only AFTER its approval gates
-   * pass (RUN-28), so a refused or aborted research writes nothing.
-   */
-  writeLog(candidates: SourceCandidate[]): Promise<void>;
-}
-
-/**
- * Discovery WITHOUT writing the research log: `pensmith research` runs its
- * candidate approval gate first and then calls `writeLog`.
- */
-export async function discoverSources(queries: string[], opts: DiscoverOptions): Promise<ResearchDiscovery> {
-  return discover(queries, opts);
-}
-
-async function discover(
-  queriesOrOpts: string[] | ResearchOrchestratorOptions,
-  optsArg?: DiscoverOptions,
-): Promise<ResearchDiscovery> {
-  // Normalize overloads.
-  let queries: string[];
-  let topic: string;
-  let discipline: string;
-  let scopeLabel: string;
-  let adapterRegistry: AdapterRegistry;
-  let explicitRegistry: AdapterRegistry | undefined;
-  let forceCandidates: SourceCandidate[] | undefined;
-  let researchMdPath: string | null;
-
-  if (Array.isArray(queriesOrOpts)) {
-    // Called from research.ts with (queries[], opts).
-    queries = queriesOrOpts;
-    topic = optsArg!.topic;
-    discipline = optsArg!.discipline;
-    scopeLabel = optsArg?.scopeLabel ?? 'auto';
-    explicitRegistry = optsArg?.__adapterRegistry;
-    adapterRegistry = explicitRegistry ?? (sources as AdapterRegistry);
-    forceCandidates = undefined;
-    // `pensmith research` always writes the research log (D-17-10).
-    researchMdPath = path.join(
-      optsArg?.paperRoot !== undefined ? paperDir(optsArg.paperRoot) : paperDir(),
-      'RESEARCH.md',
-    );
-  } else {
-    // Called from tests with a single opts object.
-    const singleOpts = queriesOrOpts;
-    topic = singleOpts.topic;
-    discipline = singleOpts.discipline;
-    scopeLabel = 'auto';
-    explicitRegistry = singleOpts.__adapterRegistry;
-    adapterRegistry = explicitRegistry ?? (sources as AdapterRegistry);
-    forceCandidates = singleOpts.__forceCandidates;
-    researchMdPath =
-      singleOpts.paperRoot !== undefined ? path.join(paperDir(singleOpts.paperRoot), 'RESEARCH.md') : null;
-    // When called from tests without explicit queries, derive a default query
-    // from the topic string (the topic-disambiguator step belongs to research.ts).
-    queries = [topic];
-  }
-
-  // Short-circuit: test-only forced candidates (zero-candidate path simulation).
-  if (forceCandidates !== undefined) {
-    if (forceCandidates.length === 0) {
-      process.stderr.write(
-        `pensmith research: WARN — 0 candidates found across all adapters (forced empty).\n`,
-      );
-    }
-    return { candidates: forceCandidates, writeLog: async () => undefined };
-  }
-
-  const mode = networkMode();
-
-  // RUN-27: under --dry-run the ONLY source is the labelled synthetic provider
-  // (unless a test injected its own registry).
-  if (mode.dryRun && explicitRegistry === undefined) {
-    adapterRegistry = { 'dry-run': dryRunProvider };
-  }
-
-  // Build the searchable adapter set.
-  // Guard 1: 'search' in adapter — excludes retraction-watch (D-15/T-12-04).
-  // Guard 2: name !== 'unpaywall' — its search() always returns [] by design.
-  const searchableEntries = Object.entries(adapterRegistry).filter(
-    ([name, adapter]) =>
-      name !== 'unpaywall' && 'search' in adapter,
-  ) as Array<[string, SearchableAdapter]>;
-
-  // Fan-out: for each query, call each adapter in parallel, collect results.
-  const allRaw: SourceCandidate[] = [];
-  const log: AdapterLogRow[] = [];
-
-  // D-17-10: an adapter whose request failed (a 429 after retries, a 5xx, a
-  // transport error) is `failed (<reason>)` in RESEARCH.md — never `no results`
-  // — and gets one stderr line after the fan-out (per adapter, all queries).
-  const failures = new Map<string, { reason: string; queries: number }>();
-  const noteFailure = (adapterName: string, reason: string): void => {
-    const f = failures.get(adapterName);
-    if (f) f.queries += 1;
-    else failures.set(adapterName, { reason, queries: 1 });
-  };
-
-  for (const query of queries) {
-    const perQueryResults = await Promise.allSettled(
-      searchableEntries.map(async ([adapterName, adapter]) => {
-        let failure: string | null = null;
-        try {
-          const results = await adapter.search(query, {
-            limit: 10,
-            onFailure: (reason) => {
-              failure ??= reason;
-            },
-          });
-          if (failure !== null && results.length === 0) {
-            noteFailure(adapterName, failure);
-            return { adapterName, results, status: `failed (${failure})` };
-          }
-          return { adapterName, results, status: 'ok' as const };
-        } catch (err) {
-          if (isOfflineEgressError(err)) {
-            // RUN-03: an offline miss is a distinct "no recorded fixture" result.
-            return { adapterName, results: [] as SourceCandidate[], status: `${offlineLabel(err)}: no recorded fixture` };
-          }
-          noteFailure(adapterName, firstLine(err));
-          return { adapterName, results: [] as SourceCandidate[], status: `failed (${firstLine(err)})` };
-        }
-      }),
-    );
-
-    let queryCount = 0;
-    let offlineMisses = 0;
-    for (const settled of perQueryResults) {
-      if (settled.status === 'rejected') {
-        // Promise.allSettled should not reject since we catch inside,
-        // but handle defensively.
-        process.stderr.write(
-          `pensmith research: WARN — unexpected rejection during adapter fan-out: ` +
-          `${String(settled.reason)}\n`,
-        );
-        continue;
-      }
-      const { adapterName, results, status } = settled.value;
-      if (status !== 'ok' && status.endsWith('no recorded fixture')) offlineMisses += 1;
-      let kept = 0;
-      // Validate each result through SourceCandidateSchema.safeParse (T-11-10).
-      for (const item of results) {
-        const parsed = SourceCandidateSchema.safeParse(item);
-        if (!parsed.success) {
-          process.stderr.write(
-            `pensmith research: WARN — adapter "${adapterName}" returned a candidate ` +
-            `that failed SourceCandidateSchema validation (dropped, T-11-10): ` +
-            `${parsed.error.message.slice(0, 120)}\n`,
-          );
-          continue;
-        }
-        // RUN-27: outside --dry-run a reserved dry-run identifier never enters
-        // the library, whatever adapter produced it.
-        if (!mode.dryRun && isReservedCandidate(parsed.data)) {
-          process.stderr.write(
-            `pensmith research: WARN — dropped a reserved dry-run identifier from "${adapterName}" ` +
-            `(${parsed.data.doi ?? parsed.data.id}); synthetic sources exist only under --dry-run.\n`,
-          );
-          continue;
-        }
-        allRaw.push(parsed.data);
-        kept += 1;
-      }
-      queryCount += kept;
-      log.push({ query, adapter: adapterName, count: kept, status: status === 'ok' && kept === 0 ? 'no results' : status });
-    }
-
-    if (mode.sourcesOffline && !mode.dryRun && queryCount === 0 && offlineMisses > 0) {
-      process.stderr.write(`offline: no recorded results for this query ("${query}")\n`);
-    }
-  }
-
-  for (const [adapterName, f] of failures) {
-    process.stderr.write(
-      `pensmith research: WARN — ${adapterName} failed (${f.reason}) for ${f.queries} of ${queries.length} ` +
-        `quer${queries.length === 1 ? 'y' : 'ies'}; its results are missing from this run (see RESEARCH.md)\n`,
-    );
-  }
-
-  const writeLog = async (candidates: SourceCandidate[]): Promise<void> => {
-    if (researchMdPath === null) return;
-    const existing = existsSync(researchMdPath) ? readFileSync(researchMdPath, 'utf8') : null;
-    await atomicWriteFile(
-      researchMdPath,
-      mergeResearchLog(renderResearchLog({ scope: scopeLabel, topic, discipline, queries, log, candidates }), existing),
-    );
-  };
-
-  if (allRaw.length === 0) {
-    process.stderr.write(
-      `pensmith research: WARN — 0 candidates found across all adapters for queries: ` +
-      `${queries.slice(0, 3).join(', ')}${queries.length > 3 ? ' ...' : ''}.\n`,
-    );
-    return { candidates: [], writeLog };
-  }
-
-  // Dedup: DOI first-wins (prefer abstract), then title JW >= threshold.
-  const deduped = dedupCandidates(allRaw);
-
-  // Audit #21/#31/#32: assign globally-unique citekeys to the deduped set BEFORE
-  // it flows to the evaluator keep-set, the approval gate, LIBRARY.json, and
-  // CITATIONS.bib. The citekey is the primary key all of those filter on; two
-  // same-base-key papers (same first author + year) must not share one, or the
-  // keep-sets prune the wrong rows and LIBRARY.json diverges from the suffixed
-  // bib. Done here (not in each writer) so every downstream consumer agrees.
-  const uniquelyKeyed = assignUniqueCitekeys(deduped);
-
-  // Source-evaluator LLM tier step (defensive: keep all on failure).
-  const evaluated = await evaluateCandidates(uniquelyKeyed, {
-    topic,
-    scope: scopeLabel,
-    discipline,
+/** Write the research log (under the RESEARCH.md lock), keeping everything below the end line. */
+export async function writeResearchLog(root: string, log: string): Promise<string> {
+  const file = researchMdPath(root);
+  await withLock(file, async () => {
+    const existing = existsSync(file) ? readFileSync(file, 'utf8') : null;
+    await atomicWriteFile(file, mergeResearchLog(log, existing));
   });
-
-  return { candidates: evaluated, writeLog };
+  return file;
 }
 
-/**
- * Alias exported as `runResearchDiscovery` for research.ts import compatibility.
- * Both names point to the same implementation.
- */
-export const runResearchDiscovery = runResearchOrchestrator;
+/** The exclusion list items of a pass (policy first, then the evaluator's rejections). */
+export function logExclusions(excluded: readonly ResearchItem[], rejected: readonly ResearchItem[]): LogExclusion[] {
+  return [
+    ...excluded.map((x) => ({ citekey: x.candidate.citekey, reference: formatReference(x.view), why: `policy: ${x.exclusion?.reason ?? 'excluded'}` })),
+    ...rejected.map((x) => ({ citekey: x.candidate.citekey, reference: formatReference(x.view), why: `evaluator: ${x.reason ?? 'rejected'}` })),
+  ];
+}
+
+/** The evaluator disclosure lines of a pass (not evaluated, failed calls, unknown citekeys). */
+export function evaluatorNotes(pass: ResearchPassResult): string[] {
+  const notes: string[] = [];
+  if (pass.notEvaluated > 0) {
+    notes.push(
+      `${pass.notEvaluated} source(s) were not evaluated (no evaluator verdict came back for them); ` +
+        'they are kept, marked "not evaluated" — review them before citing',
+    );
+  }
+  for (const f of pass.evaluator.failures) notes.push(`the source evaluator failed for ${f}`);
+  if (pass.evaluator.unknownVerdicts.length > 0) {
+    notes.push(`the source evaluator returned verdicts for unknown citekeys (ignored): ${pass.evaluator.unknownVerdicts.slice(0, 5).join(', ')}`);
+  }
+  return notes;
+}

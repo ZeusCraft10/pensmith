@@ -49,6 +49,9 @@ as INTAKE.md.
   redaction (gitignored via `.paper/.gitignore`, never committed, never sent to a model).
 - The paper's entry in the global paper registry, under the answered class
   (`pensmith list`).
+- With `--pdfs <dir>`: `[sources] byo_pdf_dir` in `.paper/config.toml`, and
+  `.paper/LIBRARY.json`, `.paper/CITATIONS.bib` / `.ris`, `.paper/RESEARCH.md` and
+  `.paper/sources/<citekey>.pdf` for the bring-your-own PDFs.
 
 ## Body
 
@@ -137,11 +140,26 @@ as INTAKE.md.
    opted in (a notice is printed, unconditionally, when the same samples styled
    an earlier paper), and the registry entry.
 
-9. **Shell fallback** (TIER-06 equivalence path): `pensmith new [@<file>]
+9. **Bring-your-own PDFs** (SRC-15, PRD §7.15 / §9): with `--pdfs <dir>` — checked
+   before anything is sent or written (a missing folder is exit 2) — the folder is
+   recorded as `[sources] byo_pdf_dir` in `.paper/config.toml` (relative to the paper
+   folder when it lies inside it), and every PDF in it is ingested after `INTAKE.md`
+   and config.toml exist (`bin/lib/byo-ingest.ts`): hashed (sha256; re-ingest is
+   idempotent), read in the SEC-02 worker, identified from its metadata, the
+   identifiers on its first pages, or its title and first author (only an identifier
+   or the title leaves the machine, one lookup per registrar consulted), copied to
+   `.paper/sources/<citekey>.pdf`, and added to `.paper/LIBRARY.json` tagged
+   bring-your-own with the PDF's and its text's sha256. A PDF no registrar matches
+   confidently is kept with its own metadata, flagged unhydrated, with a warning.
+   One line per PDF; a PDF that cannot be ingested never fails `new`. RESEARCH.md's
+   source list shows them with the bring-your-own tag, and the next step is still
+   research.
+
+10. **Shell fallback** (TIER-06 equivalence path): `pensmith new [@<file>]
    [--from <file>] [--answers <file.toml>] [--discipline <preset>] [--mode
    draft|outline] [--class <name>] [--counterargument yes|no|auto]
    [--style-samples <dir>] [--pii-redact] [--length <words>] [--citation-style
-   <style>] [--thesis <text>] [--yolo]` — give the assignment once (`@<file>` or
+   <style>] [--thesis <text>] [--pdfs <dir>] [--yolo]` — give the assignment once (`@<file>` or
    `--from`); `--no-pii-redact` answers the PII question with no,
    `--style-samples no` the style-match question; the purpose flag and every
    answers-file key are listed by `pensmith new --questions`.

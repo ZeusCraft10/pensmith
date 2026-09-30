@@ -1,0 +1,573 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=measured+measurement+Aspelmeyer&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 1000270,
+        "items": [
+          {
+            "publisher": "Springer Science and Business Media LLC",
+            "issue": "1",
+            "DOI": "10.1038/nphys1170",
+            "type": "journal-article",
+            "page": "11-12",
+            "title": [
+              "Measured measurement"
+            ],
+            "volume": "5",
+            "author": [
+              {
+                "given": "Markus",
+                "family": "Aspelmeyer",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Nature Physics"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2009,
+                  1
+                ]
+              ]
+            }
+          },
+          {
+            "DOI": "10.1017/cbo9780511762314.018",
+            "title": [
+              "Quantum optomechanics"
+            ],
+            "author": [
+              {
+                "given": "Garrett D.",
+                "family": "Cole",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Markus",
+                "family": "Aspelmeyer",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2012,
+                  1,
+                  12
+                ]
+              ]
+            },
+            "container-title": [
+              "Optical Coatings and Thermal Noise in Precision Measurement"
+            ],
+            "type": "book-chapter",
+            "page": "259-279",
+            "publisher": "Cambridge University Press"
+          },
+          {
+            "publisher": "Springer Science and Business Media LLC",
+            "issue": "7849",
+            "DOI": "10.1038/s41586-021-03250-7",
+            "type": "journal-article",
+            "page": "225-228",
+            "title": [
+              "Measurement of gravitational coupling between millimetre-sized masses"
+            ],
+            "volume": "591",
+            "author": [
+              {
+                "given": "Tobias",
+                "family": "Westphal",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-1137-5073",
+                "authenticated-orcid": false,
+                "given": "Hans",
+                "family": "Hepach",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Jeremias",
+                "family": "Pfaff",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-4499-7335",
+                "authenticated-orcid": false,
+                "given": "Markus",
+                "family": "Aspelmeyer",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Nature"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2021,
+                  3,
+                  10
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "Springer Science and Business Media LLC",
+            "issue": "1",
+            "DOI": "10.1038/ncomms3295",
+            "type": "journal-article",
+            "title": [
+              "Cooling-by-measurement and mechanical state tomography via pulsed optomechanics"
+            ],
+            "volume": "4",
+            "author": [
+              {
+                "given": "M. R.",
+                "family": "Vanner",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "J.",
+                "family": "Hofer",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "G. D.",
+                "family": "Cole",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "M.",
+                "family": "Aspelmeyer",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Nature Communications"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2013,
+                  8,
+                  15
+                ]
+              ]
+            }
+          },
+          {
+            "DOI": "10.1887/0750307625/b1105b4",
+            "title": [
+              "Measurement of loudness"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "container-title": [
+              "Measured Tones"
+            ],
+            "type": "book-chapter",
+            "publisher": "IOP Publishing Ltd",
+            "ISBN": [
+              "0750307625"
+            ]
+          },
+          {
+            "DOI": "10.1055/f-0008-0001-b000000799",
+            "title": [
+              "Measured quantities and units of measurement\n               measured quantities (units of measurement)"
+            ],
+            "editor": [
+              {
+                "given": "Gerhard",
+                "family": "Breves",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "editor",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Martin",
+                "family": "Diener",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "editor",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Gotthold",
+                "family": "Gäbel",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "editor",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "David",
+                "family": "Fraser",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "editor",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025
+                ]
+              ]
+            },
+            "container-title": [
+              "Veterinary Physiology"
+            ],
+            "type": "book-chapter",
+            "publisher": "Georg Thieme Verlag KG",
+            "ISBN": [
+              "9783132451704",
+              "9783132451735"
+            ]
+          },
+          {
+            "DOI": "10.1887/0750307625/b1105b3",
+            "title": [
+              "Measurement of pitch intervals"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "container-title": [
+              "Measured Tones"
+            ],
+            "type": "book-chapter",
+            "publisher": "IOP Publishing Ltd",
+            "ISBN": [
+              "0750307625"
+            ]
+          },
+          {
+            "DOI": "10.1364/cleo_qels.2014.fm1a.1",
+            "title": [
+              "Quantum Optomechanics"
+            ],
+            "author": [
+              {
+                "given": "Markus",
+                "family": "Aspelmeyer",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2014
+                ]
+              ]
+            },
+            "container-title": [
+              "CLEO: 2014"
+            ],
+            "type": "proceedings-article",
+            "page": "FM1A.1",
+            "publisher": "OSA"
+          },
+          {
+            "DOI": "10.1364/qim.2019.s3c.4",
+            "title": [
+              "Nanophotonic near-field levitated optomechanics"
+            ],
+            "author": [
+              {
+                "given": "Lorenzo",
+                "family": "Magrini",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Richard A.",
+                "family": "Norte",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Ralf",
+                "family": "Riedinger",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Igor",
+                "family": "Marinković",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "David",
+                "family": "Grass",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Uroš",
+                "family": "Delić",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Simon",
+                "family": "Gröblacher",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Sungkun",
+                "family": "Hong",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Markus",
+                "family": "Aspelmeyer",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2019
+                ]
+              ]
+            },
+            "container-title": [
+              "Quantum Information and Measurement (QIM) V: Quantum Technologies"
+            ],
+            "type": "proceedings-article",
+            "page": "S3C.4",
+            "publisher": "OSA"
+          },
+          {
+            "DOI": "10.1117/2.3201302.14",
+            "title": [
+              "Markus Aspelmeyer plenary talk: Quantum Optomechanics"
+            ],
+            "author": [
+              {
+                "family": "SPIE",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2013,
+                  2,
+                  8
+                ]
+              ]
+            },
+            "container-title": [
+              "SPIE Newsroom"
+            ],
+            "type": "journal-article",
+            "publisher": "SPIE-Intl Soc Optical Eng"
+          }
+        ],
+        "items-per-page": 10,
+        "query": {
+          "start-index": 0,
+          "search-terms": "measured measurement Aspelmeyer"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T08:20:17.991Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

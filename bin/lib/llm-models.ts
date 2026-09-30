@@ -391,8 +391,11 @@ const SLUG_LIST: readonly SlugSpec[] = [
   s('tutorial-research-rationale', 'research', 'generation', 'medium', 8_000, 2_500, 4_000, true, false),
   s('tutorial-section-provenance', 'write', 'generation', 'medium', 8_000, 2_500, 4_000, true, false),
   // Judgment slugs: claude-haiku-4-5 / the small OpenAI model / the configured local model.
-  s('topic-disambiguator', 'research', 'judgment', 'low', 4_000, 900, 1_500, true, true),
-  s('source-evaluator', 'research', 'judgment', 'low', 16_000, 3_500, 15_000, true, true),
+  // Research (SRC-08, SRC-09): the disambiguator answers up to 3 scopes of <=10 queries;
+  // one evaluator call judges up to 150 candidates (EVALUATOR_BATCH), ~240 input and
+  // ~80 output tokens each, so its budget fits a full batch with headroom.
+  s('topic-disambiguator', 'research', 'judgment', 'low', 4_000, 1_200, 2_500, true, true),
+  s('source-evaluator', 'research', 'judgment', 'low', 24_000, 12_000, 37_000, true, true),
   s('claim-support', 'verify', 'judgment', 'low', 2_000, 350, 1_200, true, true),
   s('orphan-label', 'verify', 'judgment', 'low', 1_000, 120, 700, true, true),
 ];

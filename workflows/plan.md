@@ -67,8 +67,8 @@ The implementation lives in `bin/cli/plan.ts`; the source records in
 > CommandDef delegate to the SAME `bin/lib/revise.ts::runRevise` chokepoint
 > (D-06 — no divergent Tier-1/Tier-2 path). WRTE-02 is satisfied here.
 
-When invoked with `--revise` (or `--research <query>`), `pensmith plan <N>`
-repairs ONE verifier-flagged citation rather than authoring a fresh PLAN.md:
+When invoked with `--revise`, `pensmith plan <N>` repairs ONE
+verifier-flagged citation rather than authoring a fresh PLAN.md:
 
 1. **Parse the verdict** — read `<sectionVerification(n, slug)>` and take the
    FIRST `FABRICATED` / `MIS-CITED` / `NOT_FOUND` citation in order of
@@ -92,11 +92,42 @@ repairs ONE verifier-flagged citation rather than authoring a fresh PLAN.md:
    citation clause (NO LLM prose rewrite). The patched DRAFT.md is written via
    `bin/lib/atomic-write.ts` and `verified_against_draft_hash` is reset to
    `null` (D-05), so the next `pensmith verify <N>` re-runs from scratch.
-6. **`--research <query>`** (PLAN-03 / D-09) — merge the findings into the
-   paper library through the one library writer (`upsertSources` in
-   `bin/lib/library.ts`, BRDTH-01: `.paper/LIBRARY.json`, deduped, provenance
-   tag `plan-research:§<N>`, with `.paper/CITATIONS.bib` / `.ris` re-rendered
-   from it), append them to the project-level `.paper/RESEARCH.md`, and append a provenance row to `sections/<N>/RESEARCH-LOG.md` (query,
-   adapter, hit-count, citekeys-added, timestamp). This is the ONLY
-   section-level file `--research` creates — NO other section's files are
-   touched (section-as-phase isolation, TEST-09).
+6. **`--research <query>`** is not a revise step: it is the section research
+   pass below (a `--revise --research` run does the research first, then the
+   repair).
+
+## Research body (GRND-17 — `plan <N> --research <query>`)
+
+`pensmith plan <N> --research <query>` (and `revise <N> --research <query>`,
+the same function, `bin/lib/section-research.ts`) searches for more sources
+for section N and adds the ones the user approves to that section only:
+
+1. **Refuse up front** (registry gate `plan-research`, RUN-28): a run that
+   cannot ask (no terminal, no scripted numbered answers) and has no `--yolo`
+   exits 3 before any model call, search or write. Section N must have a
+   PLAN.md (a stub from the outline, or a planned one); otherwise exit 1.
+2. **Queries**: the user's query, and the query joined to the section's title.
+   With PII redaction on (the brief's or `[project] pii_redaction`), the query
+   is redacted before any search or model request.
+3. **The research pass** of `pensmith research` (`workflows/research.md` steps
+   4–7): the discipline's adapter plan, dedup, deterministic tiers, the
+   `[sources]` policy and the source evaluator (topic = the brief's topic and
+   the section title, scope = the query). The per-adapter outcomes are printed.
+   Zero hits → the per-adapter reasons, exit 1, nothing written.
+4. **Approve** (`plan-research`): the hits are listed with tier, year and the
+   evaluator's reason — a work the library already has is marked "already in
+   library as <key>", the evaluator's rejections are listed unselected — via
+   `AskUserQuestion` in Tier 1 or a multi-select in Tier 2. `--yolo` adds every
+   hit the evaluator kept; choosing none exits 3 with nothing changed.
+5. **Write**: the retraction cross-check (D-15), then the one library writer
+   (`upsertSources`, provenance `plan-research:§<N>`: `.paper/LIBRARY.json`,
+   deduped by DOI / identifiers / the version rule, with `.paper/CITATIONS.bib`
+   / `.ris` re-rendered). Then ONLY section N's PLAN.md `assigned_sources` gains
+   the real library citekeys (under its lock; its `status` and
+   `verified_against_draft_hash` are untouched), an entry is appended to
+   `sections/<NN>-<slug>/RESEARCH-LOG.md` (queries, per-adapter outcomes,
+   added keys, what was not added and why), and the sources block of
+   `.paper/RESEARCH.md` is refreshed from LIBRARY.json — the research log and
+   the user's notes are kept byte-for-byte. Besides those paper-level library
+   files, no file outside section N's folder is touched; no other section's
+   files are read for writing (section-as-phase isolation, TEST-09).

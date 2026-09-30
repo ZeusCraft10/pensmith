@@ -45,6 +45,11 @@ const PROJECT_WIDE_RESTRICTED_SYNTAX = [
     message: 'os.homedir() is a chokepoint (D-41) — use bin/lib/paths.ts',
   },
   {
+    // The same call through a named import (`import { homedir } from 'node:os'`).
+    selector: "ImportDeclaration[source.value=/^(node:)?os$/] > ImportSpecifier[imported.name='homedir']",
+    message: 'homedir from node:os is a chokepoint (D-41) — use bin/lib/paths.ts userHomeDir()',
+  },
+  {
     selector: "MemberExpression[object.object.name='process'][object.property.name='env'][property.name='LOCALAPPDATA']",
     message: 'process.env.LOCALAPPDATA is a chokepoint (D-41) — use bin/lib/paths.ts',
   },
@@ -80,11 +85,11 @@ export default [
           { name: 'node:https', message: 'Import HTTP only via bin/lib/http.ts' },
           {
             name: 'pdf-parse',
-            message: 'pdf-parse must only be imported from bin/lib/pdf-text.ts (D-06, T-3-11 chokepoint). All PDF text extraction routes through that single wrapper.',
+            message: 'pdf-parse must only be imported from bin/lib/pdf-text.ts and its worker bin/lib/pdf-worker.ts (D-06, T-3-11, SEC-02 chokepoint). All PDF text extraction routes through pdf-text.ts.',
           },
           {
             name: 'pdf-parse/lib/pdf-parse.js',
-            message: 'Direct sub-path import is exempt only inside bin/lib/pdf-text.ts (D-06 ENOENT workaround). Other code MUST go through bin/lib/pdf-text.ts.',
+            message: 'Direct sub-path import is exempt only inside bin/lib/pdf-text.ts and bin/lib/pdf-worker.ts (D-06 ENOENT workaround, SEC-02 worker). Other code MUST go through bin/lib/pdf-text.ts.',
           },
           {
             name: 'citation-js',
@@ -113,12 +118,14 @@ export default [
     rules: { 'no-restricted-imports': 'off' },
   },
 
-  // === pdf-parse chokepoint EXEMPTION for bin/lib/pdf-text.ts (Phase 3, D-06/T-3-11) ===
-  // bin/lib/pdf-text.ts is the ONLY file allowed to import pdf-parse.
-  // It is still subject to: HTTP imports (undici/http/https/node:http/node:https),
-  // citation-js chokepoint, and all other project-wide restrictions.
+  // === pdf-parse chokepoint EXEMPTION for bin/lib/pdf-text.ts and its worker (Phase 3, D-06/T-3-11; SEC-02) ===
+  // bin/lib/pdf-text.ts and bin/lib/pdf-worker.ts (the worker_threads entry that
+  // runs pdf-parse so a timeout can terminate it, D-19-22) are the ONLY files
+  // allowed to import pdf-parse. They are still subject to: HTTP imports
+  // (undici/http/https/node:http/node:https), the citation-js chokepoint, and
+  // all other project-wide restrictions.
   {
-    files: ['bin/lib/pdf-text.ts'],
+    files: ['bin/lib/pdf-text.ts', 'bin/lib/pdf-worker.ts'],
     rules: {
       'no-restricted-imports': ['error', {
         paths: [
@@ -131,7 +138,7 @@ export default [
             name: 'citation-js',
             message: 'citation-js must only be imported from bin/lib/citations.ts (D-19 chokepoint). All BibTeX parsing and APA rendering routes through that single wrapper.',
           },
-          // pdf-parse is ALLOWED in this file only (exempted by omission from the list).
+          // pdf-parse is ALLOWED in these two files only (exempted by omission from the list).
         ],
       }],
     },
@@ -153,11 +160,11 @@ export default [
           { name: 'node:https', message: 'Import HTTP only via bin/lib/http.ts' },
           {
             name: 'pdf-parse',
-            message: 'pdf-parse must only be imported from bin/lib/pdf-text.ts (D-06, T-3-11 chokepoint). All PDF text extraction routes through that single wrapper.',
+            message: 'pdf-parse must only be imported from bin/lib/pdf-text.ts and its worker bin/lib/pdf-worker.ts (D-06, T-3-11, SEC-02 chokepoint). All PDF text extraction routes through pdf-text.ts.',
           },
           {
             name: 'pdf-parse/lib/pdf-parse.js',
-            message: 'Direct sub-path import is exempt only inside bin/lib/pdf-text.ts (D-06 ENOENT workaround). Other code MUST go through bin/lib/pdf-text.ts.',
+            message: 'Direct sub-path import is exempt only inside bin/lib/pdf-text.ts and bin/lib/pdf-worker.ts (D-06 ENOENT workaround, SEC-02 worker). Other code MUST go through bin/lib/pdf-text.ts.',
           },
           // citation-js is ALLOWED in this file only (exempted by omission from the list).
         ],
@@ -383,9 +390,10 @@ export default [
 
   // === D-12: capabilities-no-leak chokepoint (file-scoped to mcp/**/*.ts) ===
   // D-12 forbids (a) computed process.env[…] reads and (b) inline calls to the
-  // runtime.ts secret-resolution helpers (getProviderApiKey / getOpenAlexApiKey /
-  // loadRuntimeConfig) inside mcp/**. The paper://capabilities handler MUST expose
-  // only presence flags — never resolved key values.
+  // helpers that return a secret or personal value (runtime.ts getProviderApiKey /
+  // openAlexKey / s2ApiKeyValue / loadRuntimeConfig, contact-email.ts
+  // contactEmail — the user's address) inside mcp/**. The paper://capabilities
+  // handler MUST expose only presence flags — never resolved key values.
   //
   // ESLint 9 flat-config semantics: this file-scoped block OVERRIDES the
   // previous mcp/**/*.ts block for no-restricted-syntax (last-match wins per
@@ -409,8 +417,8 @@ export default [
           message: 'D-12: computed process.env[…] read forbidden in mcp/**. Capabilities must surface only presence flags. Read secrets via bin/lib/runtime.ts in non-mcp code, then expose boolean to mcp via paper://state.',
         },
         {
-          selector: "CallExpression[callee.name=/^(getProviderApiKey|getOpenAlexApiKey|loadRuntimeConfig)$/]",
-          message: 'D-12: do not call runtime.ts secret-resolution helpers inside mcp/**. Those return the resolved value to the caller. Expose presence flags only via paper://capabilities.',
+          selector: "CallExpression[callee.name=/^(getProviderApiKey|openAlexKey|s2ApiKeyValue|contactEmail|loadRuntimeConfig)$/]",
+          message: 'D-12: do not call the secret / personal-value resolvers (runtime.ts key helpers, contact-email.ts contactEmail) inside mcp/**. Those return the resolved value to the caller. Expose presence flags only via paper://capabilities.',
         },
       ],
     },

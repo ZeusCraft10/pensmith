@@ -118,9 +118,12 @@ test('RUN-25: the tolerant parser accepts bare, fenced, prose-wrapped, trailing-
   }
   // A brace inside a JSON string does not break the balanced scan.
   assert.deepEqual(candidateValues('prefix {"a":"x}y"} suffix')[0], { a: 'x}y' });
-  // The old prompt's bare-array root is coerced into the object contract.
-  const ev = parseStructured('source-evaluator', '[{"citekey":"a2020","keep":true,"reason":"relevant"}]');
+  // A bare-array root is coerced into the object contract (SRC-09: every
+  // verdict carries relevance and tier; a verdict without them fails the schema).
+  const ev = parseStructured('source-evaluator', '[{"citekey":"a2020","keep":true,"reason":"relevant","relevance":0.8,"tier":"Peer reviewed"}]');
   assert.equal(ev.ok, true, ev.ok ? '' : ev.error);
+  assert.equal(ev.ok && (ev.data as { verdicts: Array<{ tier: string }> }).verdicts[0]?.tier, 'peer-reviewed', 'the tier is normalised');
+  assert.equal(parseStructured('source-evaluator', '[{"citekey":"a2020","keep":true,"reason":"relevant"}]').ok, false, 'no relevance or tier → schema miss (the corrective retry asks for them)');
   // OpenAI strict nulls for optional fields are stripped before validation.
   const nulls = parseStructured('outline-author', JSON.stringify({
     thesis: 't',

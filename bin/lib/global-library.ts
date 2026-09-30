@@ -47,6 +47,7 @@ import { loadAndMigrate } from './migrations/loader.js';
 import { loadState, StateNotFoundError, readStateTextSync, migrateStateValue } from './state.js';
 import { Schema as StateSchema, type State } from './schemas/state.js';
 import { readSectionState } from './router.js';
+import { isResearchDone } from './research-sentinel.js';
 import { paperDir, sectionPlan, pensmithGlobalLibraryIndexPath, dryRunWorkspaceActive } from './paths.js';
 import {
   GlobalLibrarySchema,
@@ -400,12 +401,10 @@ export function deriveLibraryStatus(
     const pDir = paperDir(folderPath);
 
     // (2) STATE.json present — walk the on-disk stage probes. existsSync never
-    //     throws (returns false on any error). "Research done" keys on LIBRARY.json
-    //     (the research verb's canonical output) OR the legacy RESEARCH.md — see
-    //     router.ts (audit M1); gating on RESEARCH.md alone mislabelled every
-    //     post-research paper as 'intake'.
-    const researchDone =
-      existsSync(join(pDir, 'LIBRARY.json')) || existsSync(join(pDir, 'RESEARCH.md'));
+    //     throws (returns false on any error). "Research done" is the router's
+    //     sentinel (bin/lib/research-sentinel.ts, audit M1 / D-19-16): a
+    //     LIBRARY.json with entries, or a RESEARCH.md that is not a failed run's log.
+    const researchDone = isResearchDone(pDir);
     if (!researchDone) return { status: 'intake' };
     if (!existsSync(join(pDir, 'OUTLINE.md'))) return { status: 'research' };
 

@@ -1,8 +1,14 @@
 // bin/lib/sources/index.ts — typed adapter registry (RSCH-03/04, T-3-13).
 //
-// Re-exports all 7 source adapters under a single typed const. Downstream
+// Re-exports every source adapter under a single typed const. Downstream
 // consumers (the research orchestrator, the verifier's retraction filter)
 // import `sources` and iterate `AdapterName`.
+//
+// The registrar adapters (crossref, openalex, arxiv, pubmed, semanticscholar,
+// unpaywall, books) implement the three-way lookup contract of
+// ./lookup.ts (SRC-05, D-19-05): `lookupById(id) → found | not-found | failed`,
+// with `fetchById` as its unwrapped view (a failed lookup throws
+// SourceLookupError, never reads as "not found").
 //
 // IMPORTANT: 'retraction-watch' (D-15 LOCKED) exposes `fetchById` ONLY —
 // the registry surface for that key intentionally omits `search`. Consumers
@@ -16,7 +22,8 @@ import * as pubmed from './pubmed.js';
 import * as semanticscholar from './semanticscholar.js';
 import * as unpaywall from './unpaywall.js';
 import * as retractionWatch from './retraction-watch.js';
-import * as zoteroMcp from './zotero-mcp.js';
+import * as books from './books.js';
+import * as zotero from './zotero.js';
 
 export const sources = {
   crossref,
@@ -26,11 +33,15 @@ export const sources = {
   semanticscholar,
   unpaywall,
   'retraction-watch': retractionWatch,
-  // RSCH-06: Zotero MCP source provider. Unlike 'retraction-watch', this key
-  // DOES expose `search` — generic iterators that guard `if ('search' in
-  // adapter)` include it. On CI (absent + no client wired) search() safely
-  // returns [] (absence-non-breaking, ARCH-03).
-  'zotero-mcp': zoteroMcp,
+  // SRC-11 (D-19-14): books — Open Library search and ISBN lookups, Google
+  // Books as the keyless ISBN fallback.
+  books,
+  // SRC-16 (D-19-24): the user's Zotero library through the Zotero Web API
+  // (ZOTERO_API_KEY) or the Zotero 7 local API (PENSMITH_ZOTERO_LOCAL=1) —
+  // registry key `zotero` (was `zotero-mcp`). Not configured → search()
+  // returns [] without a request. Tier 1 reaches Zotero through the user's
+  // Zotero MCP server and the paper_ingest_zotero_items tool instead.
+  zotero,
 } as const;
 
 export type AdapterName = keyof typeof sources;

@@ -24,6 +24,7 @@ import { contractFor } from './llm-contracts.js';
 import { FALLBACK_DISCIPLINE } from './disciplines.js';
 import { disciplineMentionFrom, paperTypeFrom, parseIntakeOverrides, thesisSeedFrom, topicFromAssignment } from './intake-overrides.js';
 import { hintsFromMessages, type StubMessage } from './llm-text-stubs.js';
+import { expandTopicQueries, topicKeywords, topicLabel, MAX_QUERY_WORDS } from './query-expansion.js';
 
 /** Optional per-call hint: a topic string, or a small object of call context. */
 export type StubHint = string | Readonly<Record<string, unknown>> | undefined;
@@ -58,19 +59,6 @@ function hintStrings(hint: StubHint, key: string): string[] {
   if (typeof hint !== 'object' || hint === null) return [];
   const v = hint[key];
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
-}
-
-/** Citekeys of a list of records (`[{citekey, …}]`, e.g. the evaluator's `candidates` block). */
-function hintRecordCitekeys(hint: StubHint, key: string): string[] {
-  if (typeof hint !== 'object' || hint === null) return [];
-  const v = hint[key];
-  if (!Array.isArray(v)) return [];
-  const out: string[] = [];
-  for (const item of v) {
-    const k = item !== null && typeof item === 'object' ? (item as Record<string, unknown>)['citekey'] : undefined;
-    if (typeof k === 'string' && k.length > 0 && !out.includes(k)) out.push(k);
-  }
-  return out;
 }
 
 function queryFrom(topic: string): string {
@@ -210,24 +198,88 @@ function intakeClarifierStub(hint: StubHint): unknown {
   };
 }
 
-const STUBS: Readonly<Record<string, (hint: StubHint) => unknown>> = Object.freeze({
-  // The `topic` block (the brief's topic); a request with no topic falls back
-  // to the first words of its `assignment` block.
-  'topic-disambiguator': (hint) => {
-    const topic = hintString(hint, 'topic') ?? hintString(hint, 'assignment') ?? 'research topic';
-    return { scopes: [{ label: 'primary-scope', queries: [queryFrom(topic)] }] };
-  },
-  // Keeps every candidate of the `candidates` block (or a bare `citekeys` list).
-  'source-evaluator': (hint) => {
-    const fromRecords = hintRecordCitekeys(hint, 'candidates');
-    return {
-      verdicts: (fromRecords.length > 0 ? fromRecords : hintStrings(hint, 'citekeys')).map((citekey) => ({
-        citekey,
+/** A hint block that is absent, blank or the renderer's `(none)`. */
+function hintText(hint: StubHint, key: string): string {
+  const v = hintString(hint, key);
+  return v === undefined || v === '(none)' ? '' : v;
+}
+
+/**
+ * topic-disambiguator (SRC-08, D-19-15): ONE unambiguous scope whose queries
+ * are the deterministic expansion of the request's `topic` (and `discipline`)
+ * blocks — bin/lib/query-expansion.ts, the same expansion research discloses
+ * as "deterministic expansion of the intake topic". A request without a topic
+ * falls back to the assignment's keywords.
+ */
+function topicDisambiguatorStub(hint: StubHint): unknown {
+  const topic = hintText(hint, 'topic');
+  const discipline = hintText(hint, 'discipline');
+  const seed = topicKeywords(topic).length > 0 ? topic : topicKeywords(hintText(hint, 'assignment')).slice(0, MAX_QUERY_WORDS).join(' ');
+  const queries = expandTopicQueries(seed, discipline);
+  const label = topicLabel(seed);
+  return {
+    ambiguous: false,
+    scopes: [{
+      label,
+      description: `Deterministic expansion of the intake topic${seed ? ` "${seed}"` : ''} (LLM stubbed)`,
+      queries: queries.length > 0 ? queries : [seed || 'research topic'],
+    }],
+  };
+}
+
+interface StubCandidate {
+  citekey: string;
+  text: string;
+  tier: string | null;
+}
+
+/** The candidates of a source-evaluator request (each citekey once): the `candidates` block, else bare citekeys. */
+function stubCandidates(hint: StubHint): StubCandidate[] {
+  const out: StubCandidate[] = [];
+  const raw = typeof hint === 'object' && hint !== null ? hint['candidates'] : undefined;
+  if (Array.isArray(raw)) {
+    for (const c of raw) {
+      if (typeof c !== 'object' || c === null) continue;
+      const r = c as Record<string, unknown>;
+      if (typeof r['citekey'] !== 'string' || r['citekey'].length === 0) continue;
+      if (out.some((o) => o.citekey === r['citekey'])) continue;
+      const text = [r['title'], r['abstract']].filter((x): x is string => typeof x === 'string').join(' ');
+      const tier = typeof r['tier_hint'] === 'string' ? r['tier_hint'] : null;
+      out.push({ citekey: r['citekey'], text, tier });
+    }
+    return out;
+  }
+  return hintStrings(hint, 'citekeys').map((citekey) => ({ citekey, text: '', tier: null }));
+}
+
+const STUB_TIERS: ReadonlySet<string> = new Set(['peer-reviewed', 'preprint', 'book', 'gov-report', 'other']);
+
+/**
+ * source-evaluator (SRC-09): keeps EVERY candidate it is handed, with its
+ * `tier_hint` (else `other`) and a deterministic relevance — the share of the
+ * topic's keywords found in the candidate's title and abstract, mapped to
+ * 0.50–1.00 — and a reason that says no judgment was made.
+ */
+function sourceEvaluatorStub(hint: StubHint): unknown {
+  const keywords = topicKeywords(hintText(hint, 'topic'));
+  return {
+    verdicts: stubCandidates(hint).map((c) => {
+      const words = new Set(topicKeywords(c.text));
+      const share = keywords.length === 0 ? 0 : keywords.filter((k) => words.has(k)).length / keywords.length;
+      return {
+        citekey: c.citekey,
         keep: true,
-        reason: 'stub verdict (LLM stubbed): kept for review',
-      })),
-    };
-  },
+        reason: 'LLM stubbed: kept for your review; no relevance judgment was made',
+        relevance: Math.round((0.5 + share / 2) * 100) / 100,
+        tier: c.tier !== null && STUB_TIERS.has(c.tier) ? c.tier : 'other',
+      };
+    }),
+  };
+}
+
+const STUBS: Readonly<Record<string, (hint: StubHint) => unknown>> = Object.freeze({
+  'topic-disambiguator': topicDisambiguatorStub,
+  'source-evaluator': sourceEvaluatorStub,
   'intake-clarifier': intakeClarifierStub,
   'outline-author': outlineStub,
   'section-planner': plannerStub,

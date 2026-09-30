@@ -290,6 +290,9 @@ test('T-11-08: OpenAI provider sends the chat-completions body and Authorization
 // ---------------------------------------------------------------------------
 
 const VERBS_FOR_INTEGRATION = ['intake', 'research', 'outline', 'plan', 'write', 'revise'] as const;
+
+/** A brief whose topic is the query the recorded source cassettes answer. */
+const RESEARCH_BRIEF = '---\ntopic: attention mechanisms in neural networks\ndiscipline: computer-science\n---\n# Intake\n\n## Assignment\n\nWrite a review of attention mechanisms in neural networks.\n';
 type GenerativeVerb = typeof VERBS_FOR_INTEGRATION[number];
 
 // Minimal args to reach the LLM check. research/outline pass --yolo: their
@@ -363,6 +366,10 @@ for (const verb of VERBS_FOR_INTEGRATION) {
         '---\nschema_version: 2\nsection: 1\nslug: placeholder\ntitle: Section one\ndepends_on: []\nassigned_sources: []\nstatus: planned\nverified_against_draft_hash: null\n---\n\n## Claims\n\n1. A claim.\n   - Sources: (none)\n',
       );
     }
+    // SRC-07 / D-19-03: research seeds its queries from the paper's brief and
+    // exits 1 when it finds no source, so it gets a brief whose topic is the
+    // query the source cassettes record.
+    if (verb === 'research') fs.writeFileSync(path.join(tmpRoot, '.paper', 'INTAKE.md'), RESEARCH_BRIEF);
     try {
       const result = spawnSync(process.execPath, [CLI_BIN, VERB_CLI_NAME[verb], ...VERB_REQUIRED_ARGS[verb]], {
         cwd: tmpRoot, env: spawnEnv(tmpRoot, { PENSMITH_NO_LLM: '1' }), encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'],

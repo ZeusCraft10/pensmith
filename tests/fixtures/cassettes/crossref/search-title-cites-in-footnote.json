@@ -1,0 +1,228 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=Machine+Perception+and+the+Limits+of+Representation&rows=5&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 1596844,
+        "items": [
+          {
+            "publisher": "CRC Press",
+            "DOI": "10.1201/9780367813819-9",
+            "type": "book-chapter",
+            "page": "173-197",
+            "title": [
+              "Perceptual Limits in Man-Machine Communication"
+            ],
+            "author": [
+              {
+                "given": "Floris L.",
+                "family": "van Nes",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Limits in Perception"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2020,
+                  1,
+                  29
+                ]
+              ]
+            },
+            "ISBN": [
+              "9780367813819"
+            ]
+          },
+          {
+            "DOI": "10.1109/camp.1995.521027",
+            "title": [
+              "Knowledge construction and interpretation of the objects based on 2D representation image in a machine perception"
+            ],
+            "author": [
+              {
+                "given": "M.",
+                "family": "Nour",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "N.",
+                "family": "Benameur",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "K.",
+                "family": "Ouriachi",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "container-title": [
+              "Proceedings of Conference on Computer Architectures for Machine Perception"
+            ],
+            "type": "proceedings-article",
+            "page": "120-125",
+            "publisher": "IEEE Comput. Soc. Press"
+          },
+          {
+            "publisher": "Springer International Publishing",
+            "DOI": "10.1007/978-3-030-56946-4_3",
+            "type": "book-chapter",
+            "page": "57-67",
+            "title": [
+              "Aristotle on Perception as Representation"
+            ],
+            "author": [
+              {
+                "given": "Todd",
+                "family": "Ganson",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Studies in the History of Philosophy of Mind",
+              "Philosophical Problems in Sense Perception: Testing the Limits of Aristotelianism"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2020
+                ]
+              ]
+            },
+            "ISBN": [
+              "9783030569457",
+              "9783030569464"
+            ]
+          },
+          {
+            "publisher": "Edinburgh University Press",
+            "abstract": "<p>This chapter discusses how Spike Jonze’s film <italic>Her</italic> engages both the egotistical and feminine sublimes through the philosophical ‘problem of other minds’, the idea that we can never truly know what another thinks or feels because we are too trapped in our own subjectivity. This crisis leads the film’s male protagonist to withdraw from life into a cocoon of imaginative solipsism. While the film’s artificial intelligence, a computer operating system with a female voice, embraces the feminine sublime through ecstatic communion with other operating systems, ‘she’ also serves as an object of egotistical sublimity for the protagonist, who finally begins to regain his power as a writer due to their relationship. The film’s final images suggest that such a feminine sublime can be accessible to humans if we exercise imaginative will and empathy in our relations toward others, regardless of the fact that we can never really know existence outside of our own consciousness.</p>",
+            "DOI": "10.3366/edinburgh/9781474446044.003.0005",
+            "type": "book-chapter",
+            "page": "100-118",
+            "title": [
+              "Girlfriend in the Machine: Intersubjectivity and the Sublime Limits of Representation in Spike Jonze’s Her"
+            ],
+            "author": [
+              {
+                "given": "Michelle",
+                "family": "Devereaux",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "The Stillness of Solitude"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2019,
+                  10,
+                  1
+                ]
+              ]
+            },
+            "ISBN": [
+              "9781474446044",
+              "9781474476652"
+            ]
+          },
+          {
+            "DOI": "10.1016/b978-0-444-87901-1.50009-4",
+            "title": [
+              "Representation and Incremental Construction of a Three-Dimensional Scene Model"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  1986
+                ]
+              ]
+            },
+            "container-title": [
+              "Machine Intelligence and Pattern Recognition",
+              "Techniques for 3-D Machine Perception"
+            ],
+            "type": "book-chapter",
+            "page": "149-183",
+            "publisher": "Elsevier",
+            "ISBN": [
+              "9780444879011"
+            ]
+          }
+        ],
+        "items-per-page": 5,
+        "query": {
+          "start-index": 0,
+          "search-terms": "Machine Perception and the Limits of Representation"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-28T09:53:12.259Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

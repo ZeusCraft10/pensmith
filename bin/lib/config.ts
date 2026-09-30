@@ -9,7 +9,7 @@
 //   1. read + TOML-parse (a parse error is a one-line ConfigError);
 //   2. version gate: no `schema_version` is v0; a version newer than this
 //      build is refused with an upgrade message;
-//   3. migrate v0 → v1 (bin/lib/migrations/config/); the async loader writes
+//   3. migrate v0 → v1 → v2 (bin/lib/migrations/config/); the async loader writes
 //      the migrated file back (writeBack defaults on);
 //   4. refusals: `[verification] verify_quotes` (PRD §14: Pass 3 is blocking)
 //      and `[runtime] endpoint` / `api_key_env` (S-18: they live only in the
@@ -42,6 +42,7 @@ import {
 } from './schemas/config.js';
 import { PROJECT_CONFIG_FRAGMENT, PROJECT_CONFIG_FRAGMENT_DEFAULTS } from './tutorial.js';
 import { migrate as v0ToV1 } from './migrations/config/v0_to_v1.js';
+import { migrate as v1ToV2 } from './migrations/config/v1_to_v2.js';
 import { editTomlText } from './config-text.js';
 import { isDisciplineSlug, presetFor } from './disciplines.js';
 
@@ -58,6 +59,7 @@ export class ConfigError extends PensmithError {
 
 const MIGRATIONS: Readonly<Record<number, (raw: Record<string, unknown>) => Record<string, unknown>>> = Object.freeze({
   0: v0ToV1,
+  1: v1ToV2,
 });
 
 export const VERIFY_QUOTES_REFUSAL =
@@ -287,7 +289,7 @@ export interface PaperConfigRead {
 
 /**
  * Synchronous read (no write-back). Throws ConfigError on an invalid, newer or
- * refused file; an absent file yields the empty v1 config.
+ * refused file; an absent file yields the empty current-version config.
  */
 export function readPaperConfigSync(root: string = projectRoot()): PaperConfigRead {
   const file = paperConfigPath(root);
@@ -319,7 +321,7 @@ export function readPaperModeSync(root: string = projectRoot()): 'draft' | 'outl
 
 /**
  * Async read. An older file is migrated and, with writeBack (default true),
- * written back under the per-file lock with `schema_version = 1`.
+ * written back under the per-file lock with the current `schema_version`.
  */
 export async function loadPaperConfig(
   root: string = projectRoot(),
@@ -395,7 +397,7 @@ function serialize(raw: Record<string, unknown>): string {
 /**
  * The single config writer. Reads the current file (migrating it), lets the
  * caller mutate the raw object, re-validates, and writes atomically with
- * `schema_version = 1` — editing only the changed keys, so the user's comments
+ * the current `schema_version` — editing only the changed keys, so the user's comments
  * and formatting survive (writeConfigText). A malformed existing file is
  * refused (never silently replaced).
  */

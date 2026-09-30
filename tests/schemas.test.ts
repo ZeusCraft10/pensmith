@@ -3,7 +3,7 @@
 // Coverage matrix (per VALIDATION 01-07-03):
 //   - All 5 CURRENT_*_VERSION constants are 1
 //   - state    : valid + 3 invalid (empty paperId / wrong version / bad date)
-//   - library  : valid empty, valid with entry, rejects empty-citekey entry (v2, BRDTH-01)
+//   - library  : valid empty, valid with entry, rejects empty-citekey entry (v3: BRDTH-01 v2 + Phase 19 seam S-B)
 //   - checkpoint: valid + rejects empty label
 //   - session-log: valid (kind=event/tool_call), rejects bad-kind, rejects missing run_id
 //   - runtime-config (v2, Phase 17 D-17-19): flat provider/model form + defaults;
@@ -39,9 +39,9 @@ import { migrate as runtimeV1ToV2 } from '../bin/lib/migrations/runtime-config/v
 
 const ISO = '2026-05-08T00:00:00.000Z';
 
-test('CURRENT_*_VERSION constants (state=3, library=2, session-log=2, runtime-config=2, others=1)', () => {
+test('CURRENT_*_VERSION constants (state=3, library=3, session-log=2, runtime-config=2, others=1)', () => {
   assert.equal(CURRENT_STATE_VERSION, 3); // Phase 18 GRND-09: optional section `suffix` (§1a)
-  assert.equal(CURRENT_LIBRARY_VERSION, 2); // BRDTH-01: LIBRARY.json v2 (one writer)
+  assert.equal(CURRENT_LIBRARY_VERSION, 3); // BRDTH-01 v2 (one writer); Phase 19 seam S-B v3 (source fields)
   assert.equal(CURRENT_CHECKPOINT_VERSION, 1);
   assert.equal(CURRENT_SESSION_LOG_VERSION, 2); // Phase 17: the llm + http record kinds
   assert.equal(CURRENT_RUNTIME_CONFIG_VERSION, 2);
@@ -90,24 +90,26 @@ test('state: rejects empty paperId / wrong $schemaVersion / bad createdAt', () =
 
 test('library: valid empty + valid with entry', () => {
   assert.ok(
-    LibrarySchema.safeParse({ $schemaVersion: 2, entries: [] }).success,
+    LibrarySchema.safeParse({ $schemaVersion: 3, entries: [] }).success,
   );
   assert.ok(
     LibrarySchema.safeParse({
-      $schemaVersion: 2,
+      $schemaVersion: 3,
       entries: [{ citekey: 'x2020', doi: '10.5555/x', title: 'X', addedAt: ISO, updatedAt: ISO }],
     }).success,
   );
-  assert.ok(
-    !LibrarySchema.safeParse({ $schemaVersion: 1, entries: [] }).success,
-    'a v1 envelope is migrated by the loader, never parsed as v2',
-  );
+  for (const old of [1, 2]) {
+    assert.ok(
+      !LibrarySchema.safeParse({ $schemaVersion: old, entries: [] }).success,
+      `a v${old} envelope is migrated by the loader, never parsed as the current version`,
+    );
+  }
 });
 
 test('library: rejects entry with empty citekey', () => {
   assert.ok(
     !LibrarySchema.safeParse({
-      $schemaVersion: 2,
+      $schemaVersion: 3,
       entries: [{ citekey: '', addedAt: ISO, updatedAt: ISO }],
     }).success,
   );

@@ -19,6 +19,13 @@
 //     turn names the offending keys; a persistent violation keeps no draft
 //     (DRAFT.rejected.md), sets PLAN.md `status: failed` + `failure_reason`,
 //     touches no other section and exits EXIT_BLOCKED.
+//   - Quote policy (GRND-14, the Phase 18/19 merge): each source record in the
+//     drafter request carries `full_text` (source-context.ts → full-text.ts:
+//     text Pass 3 can check). A bring-your-own PDF counts only while byo-text.ts
+//     still verifies it (a PDF deleted or edited since ingest is no full text).
+//     checkDraft flags a direct quote from a source without full text
+//     (`quote-without-full-text`) through the same corrective turn and failure
+//     path.
 //   - write → verify (GRND-15, D-18-26): after each successful draft the
 //     section is verified (verify.ts verifySection) and its verify status is
 //     printed; the command exits with verify's code. `--no-verify` leaves the
@@ -51,6 +58,8 @@ import { complete, assertLlmConfigured, correctiveMessages, isFatalLlmError, typ
 import { requestHints } from '../lib/prompt-request.js';
 import { tryLoadLibrary } from '../lib/library.js';
 import type { SourceContextInput } from '../lib/source-context.js';
+import { byoText } from '../lib/byo-text.js';
+import { fullTextByCitekey } from '../lib/full-text.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
 import { formatSectionId, loggedSectionId, parseSectionId, sectionIdOf } from '../lib/section-id.js';
 import { EXIT_BLOCKED, EXIT_COST_CAP, EXIT_ERROR, EXIT_OK, PensmithError, type ExitCode } from '../lib/exit-codes.js';
@@ -114,6 +123,33 @@ async function libraryEntries(paperRoot: string): Promise<SourceContextInput[]> 
 }
 
 /**
+ * GRND-14: `entries` with each of `assigned`'s bring-your-own PDFs re-checked
+ * through byo-text.ts (the full-text flag reads the recorded hashes only). A
+ * BYO record whose PDF no longer verifies — missing, changed, outside
+ * `.paper/sources/`, or attached at the user's word — is dropped for this
+ * request, so the source's `full_text` falls back to what else Pass 3 can
+ * check (its open-access or arXiv PDF), and a quote from it is corrected.
+ */
+async function withVerifiedByo(
+  paperRoot: string,
+  entries: readonly SourceContextInput[],
+  assigned: readonly string[],
+): Promise<{ entries: SourceContextInput[]; changed: boolean }> {
+  const keys = new Set(assigned);
+  let changed = false;
+  const out = await Promise.all(
+    entries.map(async (e) => {
+      if (!keys.has(e.citekey) || e.byo === undefined || e.byo === null) return e;
+      const text = await byoText(paperRoot, { citekey: e.citekey, byo: e.byo });
+      if (text.available) return e;
+      changed = true;
+      return { ...e, byo: null };
+    }),
+  );
+  return { entries: out, changed };
+}
+
+/**
  * Write ONE section's DRAFT.md. This is the single-section drafter path, shared
  * verbatim by `pensmith write <n>` and the wave orchestrator's per-node
  * callback. The drafter input is assembled and validated (WRTE-04) BEFORE the
@@ -126,7 +162,17 @@ async function writeOneSection(
 ): Promise<WrittenSection> {
   // Throws SectionNotPlannedError (EXIT_USAGE) for the outline's stub and
   // PlanUnreadableError (file + field) for a malformed PLAN.md.
-  const { input, missingRecords } = assembleDrafterInput(paperRoot, section, entries);
+  let { input, missingRecords } = assembleDrafterInput(paperRoot, section, entries);
+  // GRND-14: the full-text flag of each assigned source, with every BYO PDF
+  // re-verified first; the drafter request and checkDraft read the same flags.
+  const verified = await withVerifiedByo(paperRoot, entries, input.sources);
+  if (verified.changed) ({ input, missingRecords } = assembleDrafterInput(paperRoot, section, verified.entries));
+  const assignedKeys = new Set(input.sources);
+  const fullText = fullTextByCitekey(
+    verified.entries
+      .filter((e) => assignedKeys.has(e.citekey))
+      .map((e) => ({ citekey: e.citekey, byo: e.byo ?? null, oa_url: e.oa_url ?? null, doi: e.doi ?? null, arxiv: e.arxiv ?? null })),
+  );
   const id = formatSectionId(sectionIdOf(input.section.n, input.section.suffix));
   if (input.sources.length === 0) {
     process.stderr.write(
@@ -157,12 +203,12 @@ async function writeOneSection(
   const call = async (messages: ChatMessage[]): Promise<string> =>
     (await complete({ slug: 'section-drafter', section: loggedSectionId(input.section.n, input.section.suffix), system: req.system, messages, stubHint: requestHints(req) })).text;
 
-  // FEED-04 containment: one corrective turn, then fail the section.
+  // FEED-04 containment and the GRND-14 quote policy: one corrective turn, then fail the section.
   let draft = await call(req.messages);
-  let violations = checkDraft(draft, { assigned: input.sources, section: id });
+  let violations = checkDraft(draft, { assigned: input.sources, section: id, fullText });
   if (violations.length > 0) {
     draft = await call(correctiveMessages(req.messages, draft, containmentCorrection(violations, input.sources)));
-    violations = checkDraft(draft, { assigned: input.sources, section: id });
+    violations = checkDraft(draft, { assigned: input.sources, section: id, fullText });
   }
   const draftPath = sectionDraft(section.n, section.slug, paperRoot);
   const rejectedPath = path.join(path.dirname(draftPath), 'DRAFT.rejected.md');
