@@ -393,7 +393,7 @@ test('VRFY-14 (MockAgent): an answer under another DOI passes only when the regi
   });
 });
 
-test('VRFY-12 (MockAgent): Crossref 429, 500 and a transport failure are UNVERIFIABLE-NETWORK with the reason — never FABRICATED', async () => {
+test('VRFY-12 (MockAgent): Crossref 429, 500, a transport failure and a timeout are UNVERIFIABLE-NETWORK with the reason — never FABRICATED', async () => {
   for (const [label, arm] of [
     ['429', (i: { reply: (s: number, b: string, o: object) => { persist: () => void } }) => i.reply(429, 'Too Many Requests', { headers: { 'content-type': 'text/plain', 'retry-after': '0' } }).persist()],
     ['500', (i: { reply: (s: number, b: string, o: object) => { persist: () => void } }) => i.reply(500, 'Internal Server Error', { headers: { 'content-type': 'text/plain' } }).persist()],
@@ -413,6 +413,25 @@ test('VRFY-12 (MockAgent): Crossref 429, 500 and a transport failure are UNVERIF
     assert.equal(r.verdict, 'UNVERIFIABLE-NETWORK', r.reason);
     assert.match(r.reason, /failed: .* — re-run verify once the lookup answers$/);
   });
+  // A timeout: undici's headers / body timeouts (thrown at once, not retried)
+  // and a socket-level ETIMEDOUT (retried by the transport, then thrown).
+  for (const [code, message] of [
+    ['UND_ERR_HEADERS_TIMEOUT', 'Headers Timeout Error'],
+    ['UND_ERR_BODY_TIMEOUT', 'Body Timeout Error'],
+    ['ETIMEDOUT', 'connect ETIMEDOUT'],
+  ] as const) {
+    await liveLane(async (agent) => {
+      const doi = `10.5555/${uniq(`p1-${code}`)}`;
+      agent
+        .get('https://api.crossref.org')
+        .intercept({ path: (p: string) => decodeURIComponent(p) === `/works/${doi}`, method: 'GET' })
+        .replyWithError(Object.assign(new Error(message), { code }))
+        .persist();
+      const r = await one(`@article{slow2020,\n  author = {Doe, Jane},\n  title = {Some Work},\n  year = {2020},\n  doi = {${doi}},\n}\n`, 'slow2020');
+      assert.equal(r.verdict, 'UNVERIFIABLE-NETWORK', `${code}: ${r.reason}`);
+      assert.match(r.reason, /failed: .* — re-run verify once the lookup answers$/, code);
+    });
+  }
 });
 
 test('VRFY-28 (MockAgent): checkedAt is when the registrar answered — a cached answer\'s time; `refresh` skips the cache read and writes the fresh answer back', async () => {
