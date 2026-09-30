@@ -251,7 +251,7 @@ Kept whole: Node 24's readline pause-after-close (`prompts/numbered.ts`), the pd
 | `npm run validate:manifests` | exit 0 | exit 0 |
 | `node scripts/e2e-smoke.mjs` | PASS=16, FINDING=0, FAIL=0 | PASS=16, FINDING=0, FAIL=0 |
 
-The one failure in every run is `tests/atomic-write.test.ts` "preserves OLD content on rename/write failure", which is root-only (`chmod 0o500` does not stop root; CLAUDE.md) and passes in CI. The runner's real-data-dir fingerprint (CI-09) reported no change. A final `node scripts/run-tests.mjs` on Node 24 without pandoc (the CI shape: the dry-run export falls back to Markdown) gave the same 2383 / 2384. Before the CI fixes were merged, the suite on Node 22 without pandoc ran 2383 tests: 2381 pass and 2 fail — the root-only case and the doi.org RA case of `tests/add-identifiers.test.ts`, a session-log flush race that is fixed (§9.4).
+The one failure in every run is `tests/atomic-write.test.ts` "preserves OLD content on rename/write failure", which is root-only (`chmod 0o500` does not stop root; CLAUDE.md) and passes in CI. The runner's real-data-dir fingerprint (CI-09) reported no change. `npm run test:coverage` (Node 22, no pandoc — CI's step) ran the same 2384 tests with the same single failure; coverage is 93.41 % lines / statements, 83.97 % branches and 90.08 % functions, over the 80 / 66 gate. A final `node scripts/run-tests.mjs` on Node 24 without pandoc (the CI shape: the dry-run export falls back to Markdown) gave the same 2383 / 2384. Before the CI fixes were merged, the suite on Node 22 without pandoc ran 2383 tests: 2381 pass and 2 fail — the root-only case and the doi.org RA case of `tests/add-identifiers.test.ts`, a session-log flush race that is fixed (§9.4).
 
 ### 9.7 Final status at the merge
 
