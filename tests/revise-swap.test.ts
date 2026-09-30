@@ -261,6 +261,34 @@ test('revise: --yolo remove deletes the flagged citation mechanically', async ()
   assert.match(plan, /verified_against_draft_hash:\s*(null|~)\s*$/m, 'hash must be reset on remove too');
 });
 
+test('revise (review round 1): a flagged citation an earlier revise already removed is skipped — the next one still in DRAFT.md is repaired; none left is "nothing to change", no model call', async () => {
+  const { root } = seedFixture();
+  // Two flagged rows; the first (jones2019) was removed by an earlier revise, VERIFICATION.md not yet re-run.
+  writeFileSync(targetVerifPath(root), TARGET_VERIFICATION + '- brown2018: **MIS-CITED** — titleJW=0.41, authorJW=1.00 — JW below threshold\n');
+  writeFileSync(targetDraftPath(root), 'The effect is established.\nA second line cites [@smith2020] and [@brown2018].\n');
+  const asked: string[] = [];
+  const res = await runRevise({
+    paperRoot: root, n: 2, slug: 'target', yolo: true,
+    proposeSwap: (vars) => {
+      asked.push(vars.flagged_citekey);
+      return Promise.resolve(JSON.stringify({ action: 'remove', flagged_citekey: vars.flagged_citekey, replacement_citekey: null, rationale: 'r', patch: { before_excerpt: 'a', after_excerpt: 'b' } }));
+    },
+  });
+  assert.deepEqual(asked, ['brown2018'], 'the citation still in the draft is the one proposed');
+  assert.equal(res.accepted, true);
+  assert.equal(res.flagged_citekey, 'brown2018');
+  assert.doesNotMatch(readFileSync(targetDraftPath(root), 'utf8'), /brown2018/);
+
+  // Every flagged citation is gone now: a third run changes nothing and says so.
+  const before = readFileSync(targetDraftPath(root), 'utf8');
+  const planBefore = readFileSync(targetPlanPath(root), 'utf8');
+  const again = await runRevise({ paperRoot: root, n: 2, slug: 'target', yolo: true, proposeSwap: () => Promise.reject(new Error('no model call expected')) });
+  assert.equal(again.accepted, false);
+  assert.match(again.message, /^Nothing to change: every citation VERIFICATION\.md flags in section 2 \(jones2019, brown2018\) is already gone from DRAFT\.md — re-check the section with `pensmith verify 2`\.$/);
+  assert.equal(readFileSync(targetDraftPath(root), 'utf8'), before, 'DRAFT.md unchanged');
+  assert.equal(readFileSync(targetPlanPath(root), 'utf8'), planBefore, 'PLAN.md unchanged (no hash reset reported as applied)');
+});
+
 // ===========================================================================
 // 5. runRevise has no research branch any more (GRND-17 moved it to
 //    bin/lib/section-research.ts): the options it accepts are the swap loop's.

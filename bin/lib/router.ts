@@ -453,7 +453,7 @@ export async function resolveNextAction(
               section: id,
               detail:
                 `section ${label} failed verification (see its VERIFICATION.md) and its draft has not changed since — ` +
-                `repair the flagged citations with \`pensmith plan ${label} --revise\`, or re-draft with \`pensmith write ${label}\` ` +
+                `repair the flagged citations with \`pensmith plan ${label} --revise\` (one per run; then \`pensmith\` re-verifies the section), or re-draft with \`pensmith write ${label}\` ` +
                 `(\`pensmith verify ${label}\` re-checks it as it is)`,
             };
           }

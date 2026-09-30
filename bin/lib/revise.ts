@@ -5,7 +5,9 @@
 // (WRTE-02 satisfied by this single module). The flow follows 04-RESEARCH §I:
 //
 //   1. Parse sections/<N>/VERIFICATION.md for the FIRST failing citation
-//      (FABRICATED / MIS-CITED / NOT_FOUND), in order of appearance.
+//      (FABRICATED / MIS-CITED / NOT_FOUND), in order of appearance, that the
+//      current DRAFT.md still cites (an earlier revise may have removed the
+//      first ones before the next verify); none left → "nothing to change".
 //   2. Load PLAN.md frontmatter → assigned_sources + the section voice hint
 //      (WRTE-02 per-section consume point — threaded into the prompt vars).
 //   3. Ask the LLM (via the hash-pinned revise-swap prompt) for a citekey swap.
@@ -39,9 +41,9 @@ import { updateFrontmatter, migrateFrontmatterText, loadFrontmatterDoc, parseFro
 import { parsePlanBody } from './plan-render.js';
 import { runGate, declineGate, canPrompt } from './gates.js';
 import { withLock } from './lock.js';
-import { findCitations, removeCitekey, renameCitekey } from './citation-token.js';
+import { extractCitedKeysForVerification, findCitations, removeCitekey, renameCitekey } from './citation-token.js';
 import { sectionDraft, sectionPlan, sectionVerification } from './paths.js';
-import { formatSectionId, type SectionId } from './section-id.js';
+import { formatSectionId, sectionIdOf, type SectionId } from './section-id.js';
 
 // --yolo retry cap (D-06): 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
@@ -113,6 +115,30 @@ export interface ReviseResult {
 interface FailingCitation {
   citekey: string;
   reason: string;
+}
+
+/**
+ * Every failing citation in VERIFICATION.md, in order of appearance (each
+ * citekey once). A failing line looks like:
+ *   - jones2019: **FABRICATED** — ... — <reason>
+ * i.e. a line whose verdict is one of FAILING_VERDICTS.
+ */
+export function failingCitations(verificationMd: string): FailingCitation[] {
+  const out: FailingCitation[] = [];
+  const seen = new Set<string>();
+  for (const line of verificationMd.split(/\r?\n/)) {
+    // `- <citekey>: **<VERDICT>** — ...rest`
+    const m = /^\s*-\s*([a-z][a-z0-9_-]*)\s*[:(].*?\*\*([A-Z_-]+)\*\*\s*(.*)$/.exec(line);
+    if (!m) continue;
+    const citekey = m[1];
+    const verdict = m[2];
+    if (citekey === undefined || verdict === undefined || seen.has(citekey)) continue;
+    if ((FAILING_VERDICTS as readonly string[]).includes(verdict)) {
+      seen.add(citekey);
+      out.push({ citekey, reason: `${verdict}: ${(m[3] ?? '').replace(/^—\s*/, '').trim()}` });
+    }
+  }
+  return out;
 }
 
 /**
@@ -353,15 +379,32 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     return { ...base, message: `${base.message} No VERIFICATION.md at section ${opts.n} — nothing to revise.`.trim() };
   }
   const verificationMd = readFileSync(verifPath, 'utf8');
-  const failing = firstFailingCitation(verificationMd);
-  if (!failing) {
+  const flagged = failingCitations(verificationMd);
+  if (flagged.length === 0) {
     return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation in section ${opts.n}.`.trim() };
   }
-  base.flagged_citekey = failing.citekey;
 
   if (!existsSync(planPath) || !existsSync(draftPath)) {
+    base.flagged_citekey = flagged[0]!.citekey;
     return { ...base, message: `${base.message} Section ${opts.n} is missing PLAN.md or DRAFT.md.`.trim() };
   }
+  const draftMd = readFileSync(draftPath, 'utf8');
+  // VERIFICATION.md is not rewritten until the next verify, so an earlier
+  // revise may already have repaired its first rows: repair the first flagged
+  // citation the CURRENT draft still carries (review round 1 — re-proposing a
+  // citation that is gone was a no-op reported as applied).
+  const stillCited = new Set(extractCitedKeysForVerification(draftMd));
+  const failing = flagged.find((f) => stillCited.has(f.citekey));
+  if (!failing) {
+    const id = formatSectionId(sectionIdOf(opts.n, opts.suffix));
+    return {
+      ...base,
+      message:
+        `Nothing to change: every citation VERIFICATION.md flags in section ${id} (${flagged.map((f) => f.citekey).join(', ')}) ` +
+        `is already gone from DRAFT.md — re-check the section with \`pensmith verify ${id}\`.`,
+    };
+  }
+  base.flagged_citekey = failing.citekey;
   // CONF-04: the versioned PLAN.md reader, read-only here: a rejected proposal
   // leaves PLAN.md byte-identical; applyProposal persists the migration.
   const { frontmatter, text: planMd } = await loadFrontmatterDoc('plan', planPath);
@@ -371,7 +414,6 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
 
   const proposeSwap = opts.proposeSwap ?? defaultProposeSwap;
   const approve = opts.approve ?? defaultApprove;
-  const draftMd = readFileSync(draftPath, 'utf8');
 
   const vars: ReviseSwapVars = {
     flagged_citekey: failing.citekey,

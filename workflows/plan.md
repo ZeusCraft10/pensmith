@@ -72,7 +72,11 @@ verifier-flagged citation rather than authoring a fresh PLAN.md:
 
 1. **Parse the verdict** — read `<sectionVerification(n, slug)>` and take the
    FIRST `FABRICATED` / `MIS-CITED` / `NOT_FOUND` citation in order of
-   appearance (one-at-a-time; re-run until clean).
+   appearance that the current DRAFT.md still cites (one-at-a-time; re-run
+   until clean — VERIFICATION.md is rewritten only by the next verify, so the
+   rows an earlier revise repaired are skipped). When every flagged citation is
+   already gone, nothing changes and the step says so, naming
+   `pensmith verify <N>`.
 2. **Load `assigned_sources` + voice hint** from `<sectionPlan(n, slug)>`
    (WRTE-02 per-section voice consume point — the voice is threaded into the
    swap prompt's `voice` block): the planner's `## Voice` section, else the
