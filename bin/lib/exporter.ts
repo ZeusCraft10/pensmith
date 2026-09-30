@@ -702,7 +702,11 @@ function buildPandocArgs(
   const to = format === 'latex' ? 'latex' : format;
   const args = [
     inputPath,
-    '--from', 'markdown',
+    // Defence in depth behind the gate's UNSUPPORTED-FORM rows (VRFY-10): a
+    // YAML metadata block in the text never sets `references` / `bibliography`
+    // / `csl` / `nocite` / `header-includes`, and a `{=format}` block or span
+    // is never copied into the output raw — both read as ordinary text.
+    '--from', 'markdown-yaml_metadata_block-raw_attribute',
     '--to', to,
     '--output', outputPath,
     '--metadata', 'title=',

@@ -516,7 +516,8 @@ const FENCE_ATTRS_RE = /^\{(?:=[\p{L}\p{N}_-]+|[ \t]*(?:(?:[#.]\p{L}[\p{L}\p{N}_
 const SPANS_LINES_RE = /[`$[\]^|{}]|^[ \t]*[:~]/;
 
 /**
- * The fenced code blocks of `md`, when every fence in it is unambiguous: an
+ * The fenced code blocks of `md` (a raw `{=format}` block is not code — Pandoc
+ * copies it into the output), when every fence in it is unambiguous: an
  * opening fence at column 0 — right after a blank line, the start of the
  * document or a closed block, or (backticks only: Pandoc lets them interrupt
  * a paragraph) right after paragraph lines that nothing can continue into it
@@ -554,7 +555,10 @@ function fencedCodeBlocks(lines: readonly SourceLine[]): Array<[number, number]>
       }
     }
     if (close === -1) return [];
-    out.push([line.start, (lines[close] as SourceLine).end]);
+    // A raw block (```{=openxml}, ```{=latex}) is not code: Pandoc copies its
+    // interior into the output, so every scanner reads it (and the
+    // UNSUPPORTED-FORM scanner refuses the block itself).
+    if (!/^\{=/.test(info)) out.push([line.start, (lines[close] as SourceLine).end]);
     i = close;
     afterBlank = true;
     paragraphSpansLines = false;

@@ -106,6 +106,18 @@ const POSITIVE: readonly Case[] = [
     ['numeric-marker', 1, '[1, 5]'], ['numeric-marker', 1, '[2, 3]'], ['numeric-marker', 1, '[1]'], ['numeric-marker', 1, '[2]'],
   ]],
   ['superscript markers', 'Trees help.¹ Studies²,³ agree.^4^', [['superscript-marker', 1, '¹'], ['superscript-marker', 1, '²,³'], ['superscript-marker', 1, '^4^']]],
+  // A metadata block (its `references` take priority over CITATIONS.bib) and raw output (copied into the export unread).
+  [
+    'a metadata block redefining a key',
+    'Deep learning helps [@lecun2015].\n\n---\nreferences:\n- id: lecun2015\n  title: "A totally fabricated title"\n...\n',
+    [['metadata-block', 3, '---']],
+  ],
+  ['a leading metadata block', '---\ntitle: X\nnocite: "@*"\n---\n\nBody [@k].', [['metadata-block', 1, '---']]],
+  [
+    'raw blocks and spans',
+    'Text [@k].\n\n```{=latex}\n\\section*{References}\nFakename, Z. (1999) \\cite{fake2019}.\n```\n\n~~~{=openxml}\n<w:p/>\n~~~\n\nInline `(Nguyen, 2019)`{=html} too.',
+    [['raw-output', 3, '```{=latex}'], ['raw-output', 8, '~~~{=openxml}'], ['raw-output', 12, '`(Nguyen, 2019)`{=html}']],
+  ],
 ];
 
 const NEGATIVE: ReadonlyArray<readonly [string, string]> = [
@@ -123,6 +135,7 @@ const NEGATIVE: ReadonlyArray<readonly [string, string]> = [
   ['headings that are not reference lists', '## Notes on method\n\nText.\n\n## Background\n\nMore text.'],
   ['reference-list words with prose under them', '## Literature Review\n\nThe literature on street trees is broad [@k].\n\n## Literature\n\nMost studies measure heat [@k].\n\n## Sources of Error\n\nSampling was uneven.'],
   ['a place name before a year', 'Washington, D.C. (2019) hosted the summit, and Paris, France is large.'],
+  ['a rule, a table and code with braces', 'Para.\n\n---\n\nNext part.\n\n---\nSome text\n---\n\n```python\nx = {"a": 1}\n```\n\nDone [@k].'],
   ['numbered labels', 'See (Figure 3), (Level 2), (Apollo 11), (Python 3), (World War 2), (COVID 19), (Windows 10), (Grade 5) and (Title 9).'],
   ['a parenthetical aside', 'Paris (France) is large, and the result (a small one) held.'],
   // Intervals, index lists and shapes are not numbered markers (a citation number is never 0, never descends).

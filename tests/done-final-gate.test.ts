@@ -3,7 +3,8 @@
 // (the Tier-1 Task transport; here the exporter's test seam) returns the
 // compiled draft plus one citation form it must never introduce — an
 // unassigned or fabricated key in any Pandoc form, author-date prose, a
-// footnote or a typed reference list — and done refuses: exit 4, nothing
+// footnote, a typed reference list, a metadata block that redefines a cited
+// key, a raw {=format} block or span — and done refuses: exit 4, nothing
 // exported, nothing under sections/ touched. A humanized FINAL.md that keeps
 // the citations exports. Sources offline (recorded fixtures), in process.
 
@@ -46,6 +47,10 @@ const ADDED: ReadonlyArray<readonly [string, string]> = [
   ['author-date prose', 'The effect is large (Nguyen & Patel, 2019).'],
   ['a footnote', 'The effect is large.[^1]\n\n[^1]: Nguyen, T. (2019). Shade and heat. Urban Climate.'],
   ['a typed reference list', 'The effect is large.\n\n### References\n\n- Nguyen, T. (2019). Shade and heat. Urban Climate.'],
+  ['a reference list under another heading', 'The effect is large.\n\n## References Cited\n\nNguyen, T., & Patel, R. (2019). Shade and heat. Urban Climate, 12, 45–67.'],
+  ['a metadata block redefining a cited key', 'The effect is large.\n\n---\nreferences:\n- id: lecun2015\n  type: article-journal\n  title: A totally fabricated title\n...'],
+  ['a raw block', 'The effect is large.\n\n```{=openxml}\n<w:p><w:r><w:t>(Nguyen &amp; Patel, 2019)</w:t></w:r></w:p>\n```'],
+  ['a raw span', 'The effect is large `(Nguyen, 2019)`{=latex}.'],
 ];
 
 test('VRFY-26 (in process): a humanized FINAL.md is gated on its own bytes — every added citation form is refused (exit 4, nothing exported, sections/ untouched); one that keeps the citations exports', async () => {

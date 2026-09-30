@@ -42,6 +42,8 @@ export const UNSUPPORTED_FORMS = [
   'html-cite',
   'numeric-marker',
   'superscript-marker',
+  'metadata-block',
+  'raw-output',
 ] as const;
 export type UnsupportedForm = (typeof UNSUPPORTED_FORMS)[number];
 
@@ -59,6 +61,12 @@ export const UNSUPPORTED_FORM_REASONS: Readonly<Record<UnsupportedForm, string>>
     'if it is a number range or an index, not a citation, write it as math: $[1, 5]$',
   'superscript-marker':
     'a superscript citation marker the verifier cannot check — write [@citekey] (a numeric citation style numbers the citations at export)',
+  'metadata-block':
+    'a Pandoc metadata block, which can replace or add to the bibliography the export renders (references, bibliography, csl, nocite) ' +
+    'or inject raw output, and which the verifier cannot check — remove it and cite as [@citekey]: the export sets its own metadata',
+  'raw-output':
+    'raw output (a {=format} block or span) that the export would copy into the document unread and the verifier cannot check — ' +
+    'remove it and write Markdown, citing as [@citekey]',
 };
 
 interface RawFinding {
@@ -353,6 +361,73 @@ function inlineNotes(md: string): RawFinding[] {
   for (let at = md.indexOf('^['); at !== -1; at = md.indexOf('^[', at + 2)) {
     if (escaped(md, at)) continue;
     out.push({ form: 'inline-note', start: at, end: closeBracket(md, at + 1) });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Pandoc metadata blocks and raw output.
+//
+// A YAML metadata block anywhere in the text (Pandoc's yaml_metadata_block:
+// `---` at the start or after a blank line, not followed by a blank line, up to
+// `---` or `...`) can set `references` — inline entries that take priority over
+// CITATIONS.bib, so the export renders a work Pass 1 never checked — or
+// `bibliography`, `csl`, `nocite`, `header-includes`. A raw block
+// (```{=openxml}, ```{=latex}, ```{=html}) or a raw span (`…`{=format}) is
+// copied into the output as is: author-date text, a reference list or a quote
+// inside one reaches the exported document without any scanner reading it.
+// A draft has no use for either; both are refused.
+// ---------------------------------------------------------------------------
+
+const YAML_FENCE_RE = /^---[ \t]*$/;
+const YAML_END_RE = /^(?:---|\.\.\.)[ \t]*$/;
+/** A line that reads as a YAML key (`references:`, `  "nocite": …`) or a flow mapping. */
+const YAML_KEY_RE = /^[ \t]*(?:["']?[\p{L}\p{N}_][\p{L}\p{N}_ -]*["']?[ \t]*:(?:[ \t]|$)|\{)/u;
+
+function metadataBlocks(lines: readonly Line[]): RawFinding[] {
+  const out: RawFinding[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!YAML_FENCE_RE.test((lines[i] as Line).text)) continue;
+    if (i > 0 && !BLANK_RE.test((lines[i - 1] as Line).text)) continue;
+    const next = lines[i + 1];
+    if (next === undefined || BLANK_RE.test(next.text)) continue;
+    let end = -1;
+    for (let j = i + 1; j < lines.length; j += 1) {
+      if (YAML_END_RE.test((lines[j] as Line).text)) {
+        end = j;
+        break;
+      }
+    }
+    if (end === -1) continue;
+    if (!lines.slice(i + 1, end).some((l) => YAML_KEY_RE.test(l.text))) continue;
+    out.push({ form: 'metadata-block', start: (lines[i] as Line).start, end: (lines[end] as Line).end });
+    i = end;
+  }
+  return out;
+}
+
+const RAW_FENCE_RE = /^[ \t]*(`{3,}|~{3,})[ \t]*\{[ \t]*=[^}\s]+[ \t]*\}[ \t]*$/;
+
+function rawOutput(md: string, lines: readonly Line[]): RawFinding[] {
+  const out: RawFinding[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = RAW_FENCE_RE.exec((lines[i] as Line).text);
+    if (m === null) continue;
+    const fence = m[1] as string;
+    let end = lines.length - 1;
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const c = /^[ \t]*(`{3,}|~{3,})[ \t]*$/.exec((lines[j] as Line).text);
+      if (c !== null && (c[1] as string)[0] === fence[0] && (c[1] as string).length >= fence.length) {
+        end = j;
+        break;
+      }
+    }
+    out.push({ form: 'raw-output', start: (lines[i] as Line).start, end: (lines[end] as Line).end });
+    i = end;
+  }
+  // Inline raw spans: `<w:p/>`{=openxml}, ``\cite{x}``{=latex}.
+  for (const m of md.matchAll(/(`+)(?:(?!\1)[\s\S])+?\1\{[ \t]*=[^}\s]+[ \t]*\}/g)) {
+    out.push({ form: 'raw-output', start: m.index, end: m.index + m[0].length });
   }
   return out;
 }
@@ -674,6 +749,8 @@ export function findUnsupportedForms(md: string): TextFinding[] {
   const skip = [...code, ...mathSpans(md, code)];
   const lines = linesOf(md);
   const raw = [
+    ...metadataBlocks(lines),
+    ...rawOutput(md, lines),
     ...referenceLists(md, lines),
     ...footnotes(md, lines),
     ...inlineNotes(md),

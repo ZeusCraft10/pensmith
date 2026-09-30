@@ -6,7 +6,8 @@
 // and punctuated (`: . - _ / # $ % & + ? < > ~`) citations, the UNPARSEABLE
 // shapes, the VRFY-10 unsupported forms (footnotes, inline notes, in-draft
 // reference lists, raw TeX and HTML citations, numbered and superscript
-// markers, author-date prose), and noise (emails, escapes, code, math), with
+// markers, author-date prose, metadata blocks, raw {=format} output), and
+// noise (emails, escapes, code, math, intervals, numbered labels), with
 // LF or CRLF line endings. The drafts are batched into a few `pandoc -t json`
 // calls (one fenced Div per draft; a batch whose Divs do not come back one per
 // draft is re-run draft by draft), and every draft is checked for:
@@ -208,6 +209,14 @@ const block: fc.Arbitrary<{ text: string; flagged: boolean; note?: string }> = f
   })) },
   { weight: 1, arbitrary: key.map((k) => ({ text: `\`\`\`\n@${k} and \\cite{${k}}\n\`\`\``, flagged: false })) },
   { weight: 1, arbitrary: fc.constant({ text: '### References\n\n- Nguyen, T. (2019). Shade and heat. Urban Climate.', flagged: true }) },
+  // A metadata block that redefines a key, raw output (copied into the export unread).
+  { weight: 1, arbitrary: key.map((k) => ({ text: `---\nreferences:\n- id: ${k.replace(/[^A-Za-z0-9]/g, '')}\n  title: Fabricated\n...`, flagged: true })) },
+  {
+    weight: 1,
+    arbitrary: fc
+      .constantFrom('```{=latex}\n(Nguyen \\& Patel, 2019) \\cite{fake2019}\n```', '```{=openxml}\n<w:p><w:t>(Nguyen, 2019)</w:t></w:p>\n```', 'Inline `(Nguyen, 2019)`{=html} text.')
+      .map((text) => ({ text, flagged: true })),
+  },
   // Reference lists under other headings, or none (APA, MLA, Vancouver entries).
   {
     weight: 1,
