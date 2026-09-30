@@ -307,9 +307,19 @@ function followUpNote(f: FollowUpAnswer, yolo: boolean): string {
  * identified, tagged bring-your-own; an unidentified PDF is kept unhydrated
  * with a warning). One line per PDF; a PDF that cannot be ingested never
  * fails intake.
+ *
+ * Under --dry-run nothing of the user's is touched (as research skips its
+ * own-source step, GRND-19 / D-18-29): the folder is recorded in the dry-run
+ * workspace's config.toml only — no approval is written to the data dir (a
+ * dry run writes nothing global), no PDF is read or copied, and no entry
+ * enters the workspace library.
  */
 async function ingestByoFolderForNew(cwd: string, dir: string): Promise<void> {
   const stored = await recordByoPdfDir(cwd, dir);
+  if (networkMode().dryRun) {
+    process.stdout.write(`pensmith new: bring-your-own: skipped (--dry-run) — ${stored} recorded as [sources] byo_pdf_dir; no PDF was read\n`);
+    return;
+  }
   // The user named the folder on the command line: research may re-read it
   // for this paper (own-source-approvals.ts; a folder inside the project
   // needs no record).

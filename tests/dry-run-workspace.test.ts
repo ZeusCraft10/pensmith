@@ -27,6 +27,8 @@ import {
   sandbox,
   runCli,
   seedCompiledPaper,
+  sandboxDataPath,
+  REPO,
   type Sandbox,
 } from './helpers/paper-cli-harness.js';
 import {
@@ -286,4 +288,26 @@ test('GRND-19: `status --dry-run` on a real paper before any dry run seeds the w
   assert.match(r.stdout, /next: outline/, 'its research is done (LIBRARY.json)');
   assert.ok(existsSync(join(root, '.paper-dry-run', SEED_FILE)), 'the workspace is seeded');
   assert.deepEqual(fingerprint(join(root, '.paper')), before, '.paper/ is byte- and mtime-identical');
+});
+
+test('GRND-19 / D-18-29 (review round 1): `new --pdfs <dir> --dry-run` touches nothing of the user\'s — no global approval, no PDF read or copied, no library entry', () => {
+  const sb = sandbox('ws-new-pdfs');
+  const root = sb.project('p');
+  mkdirSync(join(root, 'pdfs'));
+  for (const f of ['attention-arxiv-layout.pdf', 'no-match.pdf']) {
+    writeFileSync(join(root, 'pdfs', f), readFileSync(join(REPO, 'tests', 'fixtures', 'byo', f)));
+  }
+  const r = runCli(sb, root, ['new', '--from', ASSIGNMENT_FIXTURE, '--pdfs', 'pdfs', '--dry-run', '--yolo']);
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+  assert.match(r.stdout, /pensmith new: bring-your-own: skipped \(--dry-run\) — pdfs recorded as \[sources\] byo_pdf_dir; no PDF was read/);
+  const ws = join(root, '.paper-dry-run');
+  assert.match(readFileSync(join(ws, 'config.toml'), 'utf8'), /byo_pdf_dir = "pdfs"/, 'the folder is recorded in the workspace config only');
+  assert.equal(existsSync(sandboxDataPath(sb, 'own-source-approvals.json')), false, 'a dry run writes nothing global');
+  assert.equal(existsSync(join(ws, 'sources')), false, 'no PDF is copied');
+  const lib = join(ws, 'LIBRARY.json');
+  if (existsSync(lib)) {
+    const entries = (JSON.parse(readFileSync(lib, 'utf8')) as { entries: Array<{ synthetic: boolean }> }).entries;
+    assert.ok(entries.every((e) => e.synthetic), 'every dry-run LIBRARY entry is synthetic');
+  }
+  assert.equal(existsSync(join(root, '.paper')), false, 'the real .paper/ is never created');
 });

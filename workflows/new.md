@@ -153,7 +153,10 @@ as INTAKE.md.
    confidently is kept with its own metadata, flagged unhydrated, with a warning.
    One line per PDF; a PDF that cannot be ingested never fails `new`. RESEARCH.md's
    source list shows them with the bring-your-own tag, and the next step is still
-   research.
+   research. Under `--dry-run` nothing of the user's is touched (GRND-19): the
+   folder is recorded in the dry-run workspace's config.toml only — no approval in
+   the data dir, no PDF read or copied, no library entry — and `new` prints
+   `bring-your-own: skipped (--dry-run)`.
 
 10. **Shell fallback** (TIER-06 equivalence path): `pensmith new [@<file>]
    [--from <file>] [--answers <file.toml>] [--discipline <preset>] [--mode
