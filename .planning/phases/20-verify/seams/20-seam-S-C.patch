@@ -1,0 +1,720 @@
+diff --git a/bin/cli/compile.ts b/bin/cli/compile.ts
+index 37a0cf1..825f01a 100644
+--- a/bin/cli/compile.ts
++++ b/bin/cli/compile.ts
+@@ -29,6 +29,7 @@ import { runPass3 } from '../lib/verify/pass3.js';
+ import { parseBibFileAt } from '../lib/citations.js';
+ import { sectionDraft, paperDir, projectRoot } from '../lib/paths.js';
+ import { readPaperBrief } from '../lib/paper-brief.js';
++import { blocksCompile } from '../lib/verify/verdicts.js';
+ 
+ /**
+  * Production staleness re-verify seam (D-08 — Pass 1 + Pass 3 ONLY). Runs the
+@@ -57,8 +58,9 @@ async function productionReVerify(paperRoot: string, input: ReVerifyInput): Prom
+   const pass3 = await runPass3(draftMd, bibByCitekey, { root: paperRoot });
+ 
+   const failing: string[] = [];
+-  for (const r of pass1) if (r.verdict !== 'OK') failing.push(r.citekey);
+-  for (const r of pass3) if (r.verdict === 'NOT_FOUND') failing.push(r.citekey);
++  // The one blocking rule (verify/verdicts.ts, Phase 20 seam S-C).
++  for (const r of pass1) if (blocksCompile(r.verdict)) failing.push(r.citekey);
++  for (const r of pass3) if (blocksCompile(r.verdict)) failing.push(r.citekey);
+   return { passed: failing.length === 0, failingCitekeys: [...new Set(failing)] };
+ }
+ 
+diff --git a/bin/cli/done.ts b/bin/cli/done.ts
+index 5de902e..ade4f77 100644
+--- a/bin/cli/done.ts
++++ b/bin/cli/done.ts
+@@ -44,6 +44,7 @@ import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
+ import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
+ import { sectionWriteBlockReason } from '../lib/plan-status.js';
+ import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
++import { blocksCompile, PASS2_TABLE_HEADER, PASS2_TABLE_HEADER_V1 } from '../lib/verify/verdicts.js';
+ 
+ // ---------------------------------------------------------------------------
+ // DONE-09 gate-issue collection
+@@ -309,11 +310,11 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
+ // bin/lib/verify/pass2.ts renderPass2Section — if that writer ever changes its
+ // table header or its bolded-verdict cell convention, the desync MUST be caught
+ // here (the parser fails safe rather than silently dropping UNSUPPORTED rows).
+-//   header:        | Citekey | Claim Sentence | Verdict | Rationale |
++//   header:        verify/verdicts.ts PASS2_TABLE_HEADER (with the VRFY-22
++//                  Evidence column) or PASS2_TABLE_HEADER_V1 (without it)
+ //   verdict cell:  **<VERDICT>**  (e.g. **UNSUPPORTED**)
+ //   empty section: _(no citations to judge)_
+ const PASS2_HEADING = '## Pass-2';
+-const PASS2_TABLE_HEADER = '| Citekey | Claim Sentence | Verdict | Rationale |';
+ const PASS2_EMPTY_MARKER = '_(no citations to judge)_';
+ const VALID_VERDICTS: ReadonlySet<string> = new Set([
+   'SUPPORTED',
+@@ -369,8 +370,9 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
+   // Explicit empty-section marker → clean.
+   if (bodyText.includes(PASS2_EMPTY_MARKER)) return [];
+ 
+-  // The Pass-2 section is present but non-empty. Find the pinned header row.
+-  const headerLineIdx = body.findIndex((l) => l.trim() === PASS2_TABLE_HEADER);
++  // The Pass-2 section is present but non-empty. Find the pinned header row
++  // (5 columns with Evidence, or the 4-column layout written before Phase 20).
++  const headerLineIdx = body.findIndex((l) => l.trim() === PASS2_TABLE_HEADER || l.trim() === PASS2_TABLE_HEADER_V1);
+   if (headerLineIdx === -1) {
+     // Heading present but the pinned 4-column header is missing → fail safe.
+     return [unparseableSentinel(sectionName)];
+@@ -384,6 +386,7 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
+     return [unparseableSentinel(sectionName)];
+   }
+ 
++  const columns = (body[headerLineIdx] ?? '').trim() === PASS2_TABLE_HEADER ? 5 : 4;
+   const out: Pass2Result[] = [];
+   for (let i = sepIdx + 1; i < body.length; i++) {
+     const raw = (body[i] ?? '').trim();
+@@ -395,15 +398,16 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
+       .split('|')
+       .slice(1, -1)
+       .map((c) => c.trim());
+-    if (cells.length !== 4) {
+-      // A row that does not parse into the expected 4 cells → fail safe.
++    if (cells.length !== columns) {
++      // A row that does not parse into the header's cells → fail safe.
+       return [unparseableSentinel(sectionName)];
+     }
+-    const [citekey, claimSentence, verdictCell, rationale] = cells as [
++    const [citekey, claimSentence, verdictCell, rationale, evidence = ''] = cells as [
+       string,
+       string,
+       string,
+       string,
++      string | undefined,
+     ];
+     // The verdict cell is bolded: **<VERDICT>**. Strip the ** markers.
+     const verdict = verdictCell.replace(/\*\*/g, '').trim();
+@@ -417,7 +421,7 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
+         claimSentence,
+         verdict: 'UNSUPPORTED' as Pass2Verdict,
+         rationale,
+-        evidence: '',
++        evidence,
+       });
+     }
+   }
+@@ -544,7 +548,8 @@ export async function reCheckFinalMd(
+     };
+   }
+ 
+-  const notFound = pass3Results.filter((r) => r.verdict === 'NOT_FOUND');
++  // The one blocking rule (verify/verdicts.ts, Phase 20 seam S-C).
++  const notFound = pass3Results.filter((r) => blocksCompile(r.verdict));
+   if (notFound.length > 0) {
+     const detail = notFound
+       .map((r) => `[@${r.citekey}] "${r.quoteSnippet}"`)
+diff --git a/bin/cli/verify.ts b/bin/cli/verify.ts
+index 98e107b..b7e2f41 100644
+--- a/bin/cli/verify.ts
++++ b/bin/cli/verify.ts
+@@ -34,6 +34,7 @@ import { rerenderCitations, LibraryNotFoundError } from '../lib/library.js';
+ import { atomicWriteFile } from '../lib/atomic-write.js';
+ import { sectionDraft, sectionVerification, sectionPlan, paperDir, projectRoot } from '../lib/paths.js';
+ import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
++import { sectionOutcome } from '../lib/verify/verdicts.js';
+ import { loadFrontmatterDoc } from '../lib/frontmatter.js';
+ import { computeDraftHash } from '../lib/draft-hash.js';
+ import { sectionWriteBlockReason, updatePlanFrontmatter } from '../lib/plan-status.js';
+@@ -197,19 +198,17 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
+   // retraction-watch hit surfaces as an advisory table row, not a block.
+   const freshness = bibExists ? await runFreshnessForDraft(draftMd, bibPath) : [];
+ 
+-  // Aggregate: any FABRICATED → status: failed; any MIS-CITED → status: failed;
+-  // any Pass-1 UNVERIFIABLE (the re-fetch was unavailable offline / under
+-  // --dry-run, D-17-07) → status: unverifiable AND blocked (exit 4; compile and
+-  // done refuse the row with "re-run online"); any PDF_UNAVAILABLE /
+-  // TEXT_UNAVAILABLE → status: unverifiable (advisory); else verified.
+-  const hasFail = pass1.some((r) => r.verdict === 'FABRICATED' || r.verdict === 'MIS-CITED')
+-    || pass3.some((r) => r.verdict === 'NOT_FOUND');
+-  const blockingUnverifiable = pass1.some((r) => r.verdict === 'UNVERIFIABLE');
+-  const hasUnverifiable = blockingUnverifiable
+-    || pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
+-  const status: 'verified' | 'failed' | 'unverifiable' = hasFail
+-    ? 'failed'
+-    : (hasUnverifiable ? 'unverifiable' : 'verified');
++  // Aggregate through the ONE status rule (verify/verdicts.ts, Phase 20 seam
++  // S-C): any failing verdict (FABRICATED, MIS-CITED, NOT_FOUND, …) → status:
++  // failed; any unverifiable verdict (a Pass-1 UNVERIFIABLE: the re-fetch was
++  // unavailable offline / under --dry-run, D-17-07) → status: unverifiable AND
++  // blocked (exit 4; compile and done refuse the row with "re-run online"); a
++  // legacy PDF_UNAVAILABLE / TEXT_UNAVAILABLE → status: unverifiable
++  // (advisory); else verified.
++  const outcome = sectionOutcome([...pass1, ...pass3]);
++  const status = outcome.status;
++  const hasFail = status === 'failed';
++  const blockingUnverifiable = outcome.blocked && !hasFail;
+   // Blocking UNVERIFIABLE maps to EXIT_BLOCKED through the result (ok:false,
+   // blocked:true); verifySection never sets process.exitCode itself, so write
+   // can chain it once per section (GRND-15).
+diff --git a/bin/lib/router.ts b/bin/lib/router.ts
+index 4aba33c..5ab0cf8 100644
+--- a/bin/lib/router.ts
++++ b/bin/lib/router.ts
+@@ -74,6 +74,7 @@ import { computeDraftHash } from './draft-hash.js';
+ import { compiledInputsCurrent } from './compile-inputs.js';
+ import { outlineProblem, sectionRegistryProblem } from './section-registry.js';
+ import { parseBlockingVerdictRows, sectionVerificationReasons } from './verify/verdict-rows.js';
++import { RETRY_ONLINE_VERDICTS } from './verify/verdicts.js';
+ import { isResearchDone } from './research-sentinel.js';
+ import type { Handoff } from './schemas/handoff.js';
+ 
+@@ -213,7 +214,7 @@ function verificationBlockers(verificationPath: string): string[] {
+   }
+   const reasons = sectionVerificationReasons(md, dryRunWorkspaceActive());
+   // One line for the usual case — every blocker an UNVERIFIABLE row.
+-  const unverifiable = parseBlockingVerdictRows(md).filter((r) => r.verdict === 'UNVERIFIABLE');
++  const unverifiable = parseBlockingVerdictRows(md).filter((r) => r.verdict === 'UNVERIFIABLE' || RETRY_ONLINE_VERDICTS.has(r.verdict));
+   if (reasons.length > 1 && unverifiable.length === reasons.length) {
+     const keys = unverifiable.map((r) => `[@${r.citekey}]`);
+     const list = `${keys.slice(0, -1).join(', ')} and ${keys[keys.length - 1] as string}`;
+diff --git a/bin/lib/verify/pass1.ts b/bin/lib/verify/pass1.ts
+index 3a80717..8af65f4 100644
+--- a/bin/lib/verify/pass1.ts
++++ b/bin/lib/verify/pass1.ts
+@@ -105,11 +105,13 @@ import { tryLoadLibrary } from '../library.js';
+ import { registrationAgency, doiPrefix } from '../sources/doi-ra.js';
+ import { doilessIdentifiers as routeIdentifiers, type CitationIdentifiers, type NoDoiRegistrar } from './pass1-identifiers.js';
+ import type { LibraryEntry } from '../schemas/library.js';
++import type { Pass1RowVerdict } from './verdicts.js';
+ 
+ export type { FreshnessResult } from './freshness.js';
+ export { renderFreshnessTable } from './freshness.js';
+ 
+-export type Pass1Verdict = 'OK' | 'MIS-CITED' | 'FABRICATED' | 'UNVERIFIABLE';
++/** The Pass-1 verdict vocabulary (verify/verdicts.ts, Phase 20 seam S-C). */
++export type Pass1Verdict = Pass1RowVerdict;
+ 
+ /** The fixed UNVERIFIABLE reasons (D-17-07). */
+ export const UNVERIFIABLE_OFFLINE_REASON = 'offline: no recorded fixture — re-run online';
+@@ -131,6 +133,13 @@ export interface Pass1Result {
+   reason: string;
+   /** True when the MIS-CITED verdict is a retraction (VRFY-15 labels it RETRACTED). */
+   retraction?: boolean;
++  /**
++   * When the registrar answer this verdict rests on was obtained (ISO-8601):
++   * the live fetch time, or the HTTP-cache entry's savedAt (Phase 20 seam S-C;
++   * VRFY-28 records it as the entry's last_verified). Absent when no registrar
++   * answered.
++   */
++  checkedAt?: string;
+ }
+ 
+ interface BibAuthor {
+@@ -711,6 +720,19 @@ export interface Pass1Options {
+    * compile pass it.
+    */
+   readonly root?: string;
++  /**
++   * The bibliography's entries, already parsed (Phase 20 seam S-C): verify
++   * parses CITATIONS.bib entry by entry (VRFY-16) and passes the entries that
++   * parsed; `citationsBibPath` is then only named in messages. Absent: the file
++   * at `citationsBibPath` is read and parsed.
++   */
++  readonly bibEntries?: ReadonlyArray<Record<string, unknown>>;
++  /**
++   * Citekeys whose registrar lookups bypass the HTTP cache (the answer is
++   * fetched live and written back): the citations whose last_verified is older
++   * than `[verification] recheck_after_days` (VRFY-28; Phase 20 seam S-C).
++   */
++  readonly refresh?: ReadonlySet<string>;
+ }
+ 
+ export async function runPass1(
+@@ -718,8 +740,9 @@ export async function runPass1(
+   citationsBibPath: string,
+   opts: Pass1Options = {},
+ ): Promise<Pass1Result[]> {
+-  const bibText = readFileSync(citationsBibPath, 'utf8');
+-  const entries = await parseBibFileAt(bibText, citationsBibPath);
++  const entries = opts.bibEntries !== undefined
++    ? [...opts.bibEntries]
++    : await parseBibFileAt(readFileSync(citationsBibPath, 'utf8'), citationsBibPath);
+   const bibByCitekey = new Map<string, BibEntry>(
+     entries.map((e) => [String(e['id'] ?? ''), e as BibEntry]),
+   );
+diff --git a/bin/lib/verify/pass3.ts b/bin/lib/verify/pass3.ts
+index fc3bbf3..fa7b03f 100644
+--- a/bin/lib/verify/pass3.ts
++++ b/bin/lib/verify/pass3.ts
+@@ -72,16 +72,23 @@ import { byoText, byoCopyAltered, type ByoTextResult } from '../byo-text.js';
+ import { arxivPdfUrl, arxivIdOfEntry, isDataCiteArxivDoi } from '../full-text.js';
+ import { tryLoadLibrary } from '../library.js';
+ import type { LibraryEntry } from '../schemas/library.js';
++import { quoteId, quoteTextSha256 } from './verdicts.js';
+ 
+ export type Pass3Verdict = 'OK' | 'NOT_FOUND' | 'PDF_UNAVAILABLE' | 'TEXT_UNAVAILABLE';
+ 
+ export interface Pass3Result {
+   citekey: string;
++  /** The quote's id in its draft, in document order: `q1`, `q2`, … (Phase 20 seam S-C; VRFY-20). */
++  id: string;
++  /** verdicts.ts quoteTextSha256 of the whole quote — what a quote acceptance is bound to (VRFY-20). */
++  quoteSha256: string;
+   /** First 40 chars of the claimed quote — for human-readable diagnostics. */
+   quoteSnippet: string;
+   verdict: Pass3Verdict;
+   levRatio: number;
+   reason: string;
++  /** The user's own PDF the quote was verified against (`sources/<file>`), when it was (VRFY-19, VRFY-26). */
++  localFile?: string;
+ }
+ 
+ interface BibLike {
+@@ -100,7 +107,7 @@ export interface Pass3Options {
+   readonly root?: string;
+ }
+ 
+-type Verdict = Omit<Pass3Result, 'citekey' | 'quoteSnippet'>;
++type Verdict = Omit<Pass3Result, 'citekey' | 'id' | 'quoteSha256' | 'quoteSnippet'>;
+ 
+ function unavailableVerdict(reason: string): Verdict {
+   return { verdict: 'PDF_UNAVAILABLE', levRatio: 0, reason };
+@@ -217,9 +224,10 @@ export async function runPass3(
+   // One re-hash / extraction per source per run.
+   const byoTexts = new Map<string, ByoTextResult>();
+ 
+-  for (const q of quotes) {
++  for (const [index, q] of quotes.entries()) {
+     const snippet = q.text.slice(0, 40);
+-    const push = (v: Verdict): void => void results.push({ citekey: q.citekey, quoteSnippet: snippet, ...v });
++    const ids = { id: quoteId(index), quoteSha256: quoteTextSha256(q.text) };
++    const push = (v: Verdict): void => void results.push({ citekey: q.citekey, ...ids, quoteSnippet: snippet, ...v });
+     const claimed = bibByCitekey.get(q.citekey);
+ 
+     if (claimed?.DOI !== undefined && isReservedDryRunId(claimed.DOI)) {
+@@ -246,7 +254,7 @@ export async function runPass3(
+       if (t.available) {
+         const ratio = levenshteinSubstring(nfkcNormalize(q.text), nfkcNormalize(t.text));
+         if (ratio >= QUOTE_LEV_THRESHOLD) {
+-          push({ verdict: 'OK', levRatio: ratio, reason: `verified against your local file ${name} (sha256 ${t.sha256.slice(0, 12)}…)` });
++          push({ verdict: 'OK', levRatio: ratio, reason: `verified against your local file ${name} (sha256 ${t.sha256.slice(0, 12)}…)`, localFile: name });
+           continue;
+         }
+         localMiss = { ratio, file: name };
+diff --git a/bin/lib/verify/verdict-rows.ts b/bin/lib/verify/verdict-rows.ts
+index 60d2a50..8c61ced 100644
+--- a/bin/lib/verify/verdict-rows.ts
++++ b/bin/lib/verify/verdict-rows.ts
+@@ -10,12 +10,14 @@
+ // change will break the round-trip test (tests/verdict-rows.test.ts) rather
+ // than silently nulling the blocking set.
+ 
++import { BLOCKING_VERDICTS, RETRY_ONLINE_VERDICTS, ACCEPTABLE_QUOTE_VERDICT } from './verdicts.js';
++
+ /**
+- * Verdicts that block compile and done. UNVERIFIABLE (D-17-07) is a Pass-1 row
+- * recorded when the re-fetch was unavailable because of the network mode
+- * (offline fixture miss or --dry-run); it blocks with a "re-run online" message.
++ * Verdicts that block compile and done: the ONE vocabulary of verdicts.ts
++ * (Phase 20 seam S-C). UNVERIFIABLE / UNVERIFIABLE-NETWORK (D-17-07, VRFY-12)
++ * rows block with a "re-run online" message.
+  */
+-export const BLOCKING_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'UNVERIFIABLE']);
++export { BLOCKING_VERDICTS };
+ 
+ /** One blocking verdict row parsed from a VERIFICATION.md body. */
+ export interface BlockingVerdictRow {
+@@ -141,9 +143,16 @@ export function sectionVerificationReasons(verificationMd: string, dryRunNow: bo
+ /** The refusal wording for one blocking row (compile refuse-gate, done re-check). */
+ export function blockingRowReason(row: BlockingVerdictRow): string {
+   const cite = row.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row.citekey}]`;
+-  return row.verdict === 'UNVERIFIABLE'
+-    ? `${cite} is UNVERIFIABLE (its source could not be checked: offline, --dry-run or a failed lookup) — re-run online`
+-    : `${cite} has a blocking verdict (${row.verdict}${row.retraction === true ? ': the cited work is retracted' : ''})`;
++  if (row.verdict === 'UNVERIFIABLE' || RETRY_ONLINE_VERDICTS.has(row.verdict)) {
++    return `${cite} is ${row.verdict} (its source could not be checked: offline, --dry-run or a failed lookup) — re-run online`;
++  }
++  if (row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
++    return (
++      `${cite} has a quote no source text could be checked against (${row.verdict}) — add the source's PDF (pensmith add <pdf>), ` +
++      'paraphrase the quote (pensmith plan <N> --revise), or accept that one quote (pensmith verify <N> --accept-quote <id>)'
++    );
++  }
++  return `${cite} has a blocking verdict (${row.verdict}${row.retraction === true ? ': the cited work is retracted' : ''})`;
+ }
+ 
+ /**
+diff --git a/bin/lib/verify/verdicts.ts b/bin/lib/verify/verdicts.ts
+new file mode 100644
+index 0000000..767a61b
+--- /dev/null
++++ b/bin/lib/verify/verdicts.ts
+@@ -0,0 +1,215 @@
++// bin/lib/verify/verdicts.ts — the verifier's verdict vocabulary and the
++// section-status rule (Phase 20 seam S-C; D-20-01, D-20-02, D-20-03).
++//
++// SEAM FILE (.planning/phases/20-verify/seams/20-seam-S-C.patch). Every Phase
++// 20 stream applies the seam as its first commit and never edits this file;
++// once Phase 20 is merged it is ordinary code.
++//
++// ONE vocabulary for every writer and reader of a verdict: verify writes rows
++// with these labels, compile's and done's recomputation decides with these
++// sets, the verdict-row parser (verdict-rows.ts) reads them, and the router
++// words its attention from them. A label that is not listed as passing here
++// never passes (fail closed).
++//
++// PURE: no I/O.
++
++import { createHash } from 'node:crypto';
++
++/**
++ * Pass-1 row verdicts: one row per cited key, per bare identifier in the prose
++ * (VRFY-10) and per citation-shaped text the verifier cannot check.
++ *   OK                    the registrar's record matches the entry's title, first author and year
++ *   OK-BYO                no registrar identifier (or its lookup failed) and the user's own PDF
++ *                         still matches its recorded hashes (VRFY-14); the row names file and hash
++ *   FABRICATED            the key is not in the bibliography, or every applicable registrar
++ *                         definitively does not know the identifier
++ *   MIS-CITED             the record exists but its title, first author or year does not match
++ *   RETRACTED             the cited work is retracted (VRFY-15, S-02)
++ *   UNASSIGNED            the key is not in the section's PLAN.md assigned_sources (VRFY-17)
++ *   UNPARSEABLE           a citation-shaped token that does not parse (VRFY-09), or a cited key
++ *                         whose bibliography entry does not parse (VRFY-16)
++ *   UNSUPPORTED-FORM      an attribution the verifier cannot check against the bibliography:
++ *                         author-date prose, footnotes, a reference list, raw TeX or HTML
++ *                         citations (VRFY-10)
++ *   UNRESOLVABLE          an entry with no identifier that no metadata search matches (VRFY-12)
++ *   UNVERIFIABLE-NETWORK  no answer: an offline fixture miss, a transport error or timeout,
++ *                         429 / 5xx after retries, an exhausted host or an open breaker —
++ *                         retry online (VRFY-12, D-V1-03)
++ *   UNVERIFIABLE          a definitive answer the verifier cannot compare (an agency with no
++ *                         queryable record, an unusable record)
++ */
++export const PASS1_VERDICTS = [
++  'OK',
++  'OK-BYO',
++  'FABRICATED',
++  'MIS-CITED',
++  'RETRACTED',
++  'UNASSIGNED',
++  'UNPARSEABLE',
++  'UNSUPPORTED-FORM',
++  'UNRESOLVABLE',
++  'UNVERIFIABLE-NETWORK',
++  'UNVERIFIABLE',
++] as const;
++export type Pass1RowVerdict = (typeof PASS1_VERDICTS)[number];
++
++/**
++ * Pass-3 row verdicts: one row per (direct quote, cited source).
++ *   PASS                  the quote is in the source's text (after normalization)
++ *   FUZZY                 the quote matches at or above QUOTE_LEV_THRESHOLD but not
++ *                         verbatim — passes, and the row says so
++ *   NOT_FOUND             the source's real text does not contain the quote
++ *   UNVERIFIABLE-QUOTE    an answer that gives no text: no open-access copy, paywalled
++ *                         (abstract only), no contact email for Unpaywall, a link that did not
++ *                         serve a usable PDF, an image-only PDF. Blocks until the user supplies
++ *                         the PDF, paraphrases, or accepts THIS quote (VRFY-20, S-04)
++ *   UNVERIFIABLE-NETWORK  no answer (see Pass 1) — retry online; never acceptable
++ *   UNATTRIBUTED          a direct quote with no citation it can be attributed to (VRFY-18)
++ */
++export const PASS3_VERDICTS = ['PASS', 'FUZZY', 'NOT_FOUND', 'UNVERIFIABLE-QUOTE', 'UNVERIFIABLE-NETWORK', 'UNATTRIBUTED'] as const;
++export type Pass3RowVerdict = (typeof PASS3_VERDICTS)[number];
++
++/**
++ * Whole-draft verdicts (VRFY-24):
++ *   PLACEHOLDER    the draft is stub or placeholder text (a no-LLM / --dry-run stub
++ *                  draft outside --dry-run): the section is `unverifiable`, never
++ *                  verified, and compile and done refuse it (S-13: other sections go on)
++ *   NO-CITATIONS   the draft cites nothing although the section has assigned sources:
++ *                  the section fails
++ */
++export const DRAFT_VERDICTS = ['PLACEHOLDER', 'NO-CITATIONS'] as const;
++export type DraftVerdict = (typeof DRAFT_VERDICTS)[number];
++
++/** Verdicts that pass. `OK` is also the Pass-3 label written before Phase 20. */
++export const PASSING_VERDICTS: ReadonlySet<string> = new Set(['OK', 'OK-BYO', 'PASS', 'FUZZY']);
++
++/** Verdicts that fail a section: Status `failed`, and compile and done refuse. */
++export const FAILING_VERDICTS: ReadonlySet<string> = new Set([
++  'FABRICATED',
++  'MIS-CITED',
++  'RETRACTED',
++  'UNASSIGNED',
++  'UNPARSEABLE',
++  'UNSUPPORTED-FORM',
++  'UNRESOLVABLE',
++  'NOT_FOUND',
++  'UNATTRIBUTED',
++  'NO-CITATIONS',
++]);
++
++/** Verdicts that leave a section `unverifiable` and block compile and done until resolved. */
++export const UNVERIFIABLE_VERDICTS: ReadonlySet<string> = new Set(['UNVERIFIABLE-NETWORK', 'UNVERIFIABLE', 'UNVERIFIABLE-QUOTE', 'PLACEHOLDER']);
++
++/** Every blocking verdict (failing or unverifiable). */
++export const BLOCKING_VERDICTS: ReadonlySet<string> = new Set([...FAILING_VERDICTS, ...UNVERIFIABLE_VERDICTS]);
++
++/** The only verdict a per-quote acceptance can cover (VRFY-20, S-04, S-17). */
++export const ACCEPTABLE_QUOTE_VERDICT = 'UNVERIFIABLE-QUOTE';
++
++/** Verdicts whose remedy is "retry when online" (the lookup was not answered). */
++export const RETRY_ONLINE_VERDICTS: ReadonlySet<string> = new Set(['UNVERIFIABLE-NETWORK']);
++
++/**
++ * Pass-3 labels written before Phase 20 for a quote whose text was not
++ * available: they left the section `unverifiable` without blocking it. Only
++ * VERIFICATION.md files written by an older pensmith carry them; the Phase 20
++ * Pass 3 writes UNVERIFIABLE-QUOTE / UNVERIFIABLE-NETWORK instead.
++ */
++export const LEGACY_UNAVAILABLE_VERDICTS: ReadonlySet<string> = new Set(['PDF_UNAVAILABLE', 'TEXT_UNAVAILABLE']);
++
++/** The citekey slot of an UNATTRIBUTED Pass-3 row (a quote with no citation). */
++export const UNATTRIBUTED_CITEKEY = '(unattributed)';
++
++/** A verdict row as the status rule reads it. */
++export interface VerdictRowLike {
++  readonly verdict: string;
++  /** An UNVERIFIABLE-QUOTE row the user accepted for this exact quote in this exact draft (VRFY-20). */
++  readonly accepted?: boolean;
++}
++
++export type SectionStatus = 'verified' | 'failed' | 'unverifiable';
++
++export interface SectionOutcome {
++  readonly status: SectionStatus;
++  /** True when compile and done must refuse this text (verify exits EXIT_BLOCKED). */
++  readonly blocked: boolean;
++}
++
++/**
++ * True when `verdict` stops compile and done: every label that is not passing,
++ * not a legacy advisory label and not an accepted UNVERIFIABLE-QUOTE — an
++ * unknown label included (fail closed).
++ */
++export function blocksCompile(verdict: string, accepted = false): boolean {
++  if (PASSING_VERDICTS.has(verdict) || LEGACY_UNAVAILABLE_VERDICTS.has(verdict)) return false;
++  return !(accepted && verdict === ACCEPTABLE_QUOTE_VERDICT);
++}
++
++/**
++ * The section status from every row of its verification (Pass 1, Pass 3 and
++ * the draft checks): `failed` when any row fails (an unknown label counts as
++ * failing), else `unverifiable` when any row is unverifiable (a legacy
++ * advisory row does not block), else `verified`. An accepted
++ * UNVERIFIABLE-QUOTE row counts as passing.
++ */
++export function sectionOutcome(rows: Iterable<VerdictRowLike>): SectionOutcome {
++  let failed = false;
++  let unverifiable = false;
++  let blocked = false;
++  for (const r of rows) {
++    if (PASSING_VERDICTS.has(r.verdict)) continue;
++    if (r.accepted === true && r.verdict === ACCEPTABLE_QUOTE_VERDICT) continue;
++    if (LEGACY_UNAVAILABLE_VERDICTS.has(r.verdict)) {
++      unverifiable = true;
++      continue;
++    }
++    if (UNVERIFIABLE_VERDICTS.has(r.verdict)) {
++      unverifiable = true;
++      blocked = true;
++      continue;
++    }
++    failed = true;
++    blocked = true;
++  }
++  return { status: failed ? 'failed' : unverifiable ? 'unverifiable' : 'verified', blocked };
++}
++
++/**
++ * The hash that binds a quote acceptance to a quote (VRFY-20): sha256 of the
++ * quote's text, NFKC-normalized with whitespace collapsed, so the same quote
++ * re-extracted from the same draft always hashes the same.
++ */
++export function quoteTextSha256(text: string): string {
++  return createHash('sha256').update(text.normalize('NFKC').replace(/\s+/gu, ' ').trim(), 'utf8').digest('hex');
++}
++
++/** The id of the `index`-th quote (0-based) of a draft, in document order: `q1`, `q2`, … */
++export function quoteId(index: number): string {
++  return `q${index + 1}`;
++}
++
++/** A quote id as `verify N --accept-quote <id>` takes it. */
++export const QUOTE_ID_RE = /^q[1-9]\d*$/;
++
++/** What a text scan found that the verifier cannot check (VRFY-09, VRFY-10). */
++export interface TextFinding {
++  readonly verdict: 'UNPARSEABLE' | 'UNSUPPORTED-FORM';
++  /**
++   * The form found: `empty-key`, `unbalanced-bracket`, `unterminated-braced-key`,
++   * `nested-bracket` (UNPARSEABLE); `author-date`, `footnote`, `inline-note`,
++   * `reference-list`, `tex-cite`, `html-cite` (UNSUPPORTED-FORM).
++   */
++  readonly form: string;
++  /** The text as written (the renderer clamps it). */
++  readonly text: string;
++  /** 1-based line of the scanned text. */
++  readonly line: number;
++  /** One line: why it blocks and what to write instead. */
++  readonly reason: string;
++}
++
++/** The Pass-2 table header verify writes from Phase 20 on (VRFY-22: the Evidence column). */
++export const PASS2_TABLE_HEADER = '| Citekey | Claim Sentence | Verdict | Rationale | Evidence |';
++
++/** The Pass-2 table header written before Phase 20 (no Evidence column); readers accept both. */
++export const PASS2_TABLE_HEADER_V1 = '| Citekey | Claim Sentence | Verdict | Rationale |';
+diff --git a/tests/verdicts.test.ts b/tests/verdicts.test.ts
+new file mode 100644
+index 0000000..4019ba6
+--- /dev/null
++++ b/tests/verdicts.test.ts
+@@ -0,0 +1,153 @@
++// tests/verdicts.test.ts — the Phase 20 seam S-C contract (D-20-01..03):
++// one verdict vocabulary, one section-status rule, and the readers routed
++// through it. With the labels verify wrote before Phase 20 every reader must
++// behave exactly as it did; a label a Phase 20 stream adds must block (or
++// pass) everywhere at once.
++
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
++import { join } from 'node:path';
++import { tmpdir } from 'node:os';
++import {
++  PASS1_VERDICTS,
++  PASS3_VERDICTS,
++  DRAFT_VERDICTS,
++  PASSING_VERDICTS,
++  FAILING_VERDICTS,
++  UNVERIFIABLE_VERDICTS,
++  BLOCKING_VERDICTS,
++  ACCEPTABLE_QUOTE_VERDICT,
++  RETRY_ONLINE_VERDICTS,
++  LEGACY_UNAVAILABLE_VERDICTS,
++  PASS2_TABLE_HEADER,
++  PASS2_TABLE_HEADER_V1,
++  QUOTE_ID_RE,
++  blocksCompile,
++  sectionOutcome,
++  quoteTextSha256,
++  quoteId,
++} from '../bin/lib/verify/verdicts.js';
++import { BLOCKING_VERDICTS as ROWS_BLOCKING, blockingRowReason, parseBlockingVerdictRows, renderPass1VerdictRow, renderPass3VerdictRow } from '../bin/lib/verify/verdict-rows.js';
++import { readSectionUnsupported } from '../bin/cli/done.js';
++
++test('seam S-C: every verdict of every pass is exactly one of passing, failing or unverifiable', () => {
++  const all = [...PASS1_VERDICTS, ...PASS3_VERDICTS, ...DRAFT_VERDICTS];
++  for (const v of all) {
++    const classes = [PASSING_VERDICTS.has(v), FAILING_VERDICTS.has(v), UNVERIFIABLE_VERDICTS.has(v)].filter(Boolean).length;
++    assert.equal(classes, 1, `${v} is in exactly one class`);
++  }
++  for (const v of [...FAILING_VERDICTS, ...UNVERIFIABLE_VERDICTS]) assert.ok(BLOCKING_VERDICTS.has(v), `${v} blocks`);
++  for (const v of PASSING_VERDICTS) assert.ok(!BLOCKING_VERDICTS.has(v), `${v} does not block`);
++  assert.ok(UNVERIFIABLE_VERDICTS.has(ACCEPTABLE_QUOTE_VERDICT));
++  for (const v of RETRY_ONLINE_VERDICTS) assert.ok(UNVERIFIABLE_VERDICTS.has(v));
++  assert.strictEqual(ROWS_BLOCKING, BLOCKING_VERDICTS, 'verdict-rows.ts reads the one set');
++});
++
++test('seam S-C: the status rule reproduces the pre-Phase-20 aggregation for the old labels', () => {
++  // verify.ts before the seam: FABRICATED / MIS-CITED / NOT_FOUND → failed (blocked);
++  // a Pass-1 UNVERIFIABLE → unverifiable and blocked; PDF_UNAVAILABLE /
++  // TEXT_UNAVAILABLE → unverifiable, not blocked; else verified.
++  const row = (verdict: string) => ({ verdict });
++  assert.deepEqual(sectionOutcome([]), { status: 'verified', blocked: false });
++  assert.deepEqual(sectionOutcome([row('OK'), row('OK')]), { status: 'verified', blocked: false });
++  for (const v of ['FABRICATED', 'MIS-CITED', 'NOT_FOUND']) {
++    assert.deepEqual(sectionOutcome([row('OK'), row(v)]), { status: 'failed', blocked: true }, v);
++  }
++  assert.deepEqual(sectionOutcome([row('OK'), row('UNVERIFIABLE')]), { status: 'unverifiable', blocked: true });
++  for (const v of LEGACY_UNAVAILABLE_VERDICTS) {
++    assert.deepEqual(sectionOutcome([row('OK'), row(v)]), { status: 'unverifiable', blocked: false }, v);
++  }
++  assert.deepEqual(sectionOutcome([row('UNVERIFIABLE'), row('FABRICATED')]), { status: 'failed', blocked: true });
++  assert.deepEqual(sectionOutcome([row('PDF_UNAVAILABLE'), row('UNVERIFIABLE')]), { status: 'unverifiable', blocked: true });
++});
++
++test('seam S-C: the Phase 20 labels, the accepted quote and an unknown label', () => {
++  const row = (verdict: string, accepted?: boolean) => (accepted === undefined ? { verdict } : { verdict, accepted });
++  for (const v of ['OK-BYO', 'PASS', 'FUZZY']) assert.deepEqual(sectionOutcome([row(v)]), { status: 'verified', blocked: false }, v);
++  for (const v of ['RETRACTED', 'UNASSIGNED', 'UNPARSEABLE', 'UNSUPPORTED-FORM', 'UNRESOLVABLE', 'UNATTRIBUTED', 'NO-CITATIONS']) {
++    assert.deepEqual(sectionOutcome([row(v)]), { status: 'failed', blocked: true }, v);
++  }
++  for (const v of ['UNVERIFIABLE-NETWORK', 'UNVERIFIABLE-QUOTE', 'PLACEHOLDER']) {
++    assert.deepEqual(sectionOutcome([row(v)]), { status: 'unverifiable', blocked: true }, v);
++  }
++  // An acceptance lifts only an UNVERIFIABLE-QUOTE row.
++  assert.deepEqual(sectionOutcome([row('UNVERIFIABLE-QUOTE', true)]), { status: 'verified', blocked: false });
++  assert.deepEqual(sectionOutcome([row('NOT_FOUND', true)]), { status: 'failed', blocked: true });
++  assert.deepEqual(sectionOutcome([row('UNVERIFIABLE-NETWORK', true)]), { status: 'unverifiable', blocked: true });
++  // Fail closed on a label nobody defined.
++  assert.deepEqual(sectionOutcome([row('BANANA')]), { status: 'failed', blocked: true });
++
++  assert.equal(blocksCompile('OK'), false);
++  assert.equal(blocksCompile('PDF_UNAVAILABLE'), false);
++  assert.equal(blocksCompile('UNVERIFIABLE-QUOTE'), true);
++  assert.equal(blocksCompile('UNVERIFIABLE-QUOTE', true), false);
++  assert.equal(blocksCompile('NOT_FOUND', true), true);
++  assert.equal(blocksCompile('BANANA'), true);
++});
++
++test('seam S-C: quote ids and the acceptance hash', () => {
++  assert.equal(quoteId(0), 'q1');
++  assert.equal(quoteId(9), 'q10');
++  assert.ok(QUOTE_ID_RE.test('q1') && QUOTE_ID_RE.test('q42'));
++  assert.ok(!QUOTE_ID_RE.test('q0') && !QUOTE_ID_RE.test('Q1') && !QUOTE_ID_RE.test('q1a'));
++  const a = quoteTextSha256('attention mechanisms are\nnothing   more than lookup tables');
++  assert.match(a, /^[0-9a-f]{64}$/);
++  assert.equal(quoteTextSha256('  attention mechanisms are nothing more than lookup tables '), a, 'whitespace is collapsed');
++  assert.equal(quoteTextSha256('ﬁnal answer'), quoteTextSha256('final answer'), 'NFKC');
++  assert.notEqual(quoteTextSha256('attention mechanisms are nothing more than lookup tables!'), a);
++});
++
++test('seam S-C: the refusal wording of the retry-online and the unverifiable-quote rows; the parser reads the new labels', () => {
++  const md = [
++    'Status: unverifiable',
++    renderPass1VerdictRow('ghost.2099', 'UNVERIFIABLE-NETWORK', Number.NaN, Number.NaN, 'Crossref re-fetch failed: HTTP 503 after retries'),
++    renderPass3VerdictRow('aggarwal2022', 'attention mechanisms are nothing more t', 'UNVERIFIABLE-QUOTE', 0, 'no open-access copy'),
++    renderPass1VerdictRow('ok2020', 'OK-BYO', Number.NaN, Number.NaN, 'your own PDF sources/ok2020.pdf'),
++  ].join('\n');
++  const rows = parseBlockingVerdictRows(md);
++  assert.deepEqual(rows.map((r) => `${r.citekey}:${r.verdict}`), ['ghost.2099:UNVERIFIABLE-NETWORK', 'aggarwal2022:UNVERIFIABLE-QUOTE']);
++  assert.match(blockingRowReason(rows[0]!), /\[@ghost\.2099\] is UNVERIFIABLE-NETWORK .* re-run online$/);
++  assert.match(blockingRowReason(rows[1]!), /pensmith add <pdf>.*--revise.*--accept-quote <id>/);
++  assert.match(blockingRowReason({ citekey: 'x', verdict: 'FABRICATED' }), /\[@x\].*FABRICATED/);
++});
++
++test('seam S-C: done reads the Pass-2 table with or without the Evidence column (LF and CRLF)', () => {
++  const root = mkdtempSync(join(tmpdir(), 'pensmith-verdicts-'));
++  try {
++    const write = (dir: string, body: string): void => {
++      mkdirSync(join(root, '.paper', 'sections', dir), { recursive: true });
++      writeFileSync(join(root, '.paper', 'sections', dir, 'VERIFICATION.md'), body);
++    };
++    const v1 = ['# VERIFICATION', 'Status: verified', '', '## Pass-2 (claim support, advisory — LLM-judged)', '', PASS2_TABLE_HEADER_V1, '|---|---|---|---|', '| a2020 | Claim A. | **UNSUPPORTED** | contradicts |', '| b2020 | Claim B. | **SUPPORTED** | fine |', ''].join('\n');
++    const v2 = ['# VERIFICATION', 'Status: verified', '', '## Pass-2 (claim support, advisory — LLM-judged)', '', PASS2_TABLE_HEADER, '|---|---|---|---|---|', '| c2020 | Claim C. | **UNSUPPORTED** | contradicts | the abstract says the opposite |', ''].join('\r\n');
++    write('01-a', v1);
++    write('02-c', v2);
++    const rows = readSectionUnsupported(root).sort((x, y) => x.citekey.localeCompare(y.citekey));
++    assert.deepEqual(rows.map((r) => [r.citekey, r.verdict, r.evidence]), [
++      ['a2020', 'UNSUPPORTED', ''],
++      ['c2020', 'UNSUPPORTED', 'the abstract says the opposite'],
++    ]);
++    // A 5-column header with a 4-cell row fails safe (an UNSUPPORTED sentinel), never clean.
++    write('02-c', v2.replace('| contradicts | the abstract says the opposite |', '| contradicts |'));
++    assert.ok(readSectionUnsupported(root).some((r) => r.citekey === '<unparseable>'));
++  } finally {
++    rmSync(root, { recursive: true, force: true });
++  }
++});
++
++test('seam S-C: runPass1 reads pre-parsed bibliography entries (no file read); runPass3 rows carry the quote id and hash', async () => {
++  const { runPass1 } = await import('../bin/lib/verify/pass1.js');
++  const missingBib = join(tmpdir(), 'pensmith-verdicts-no-such-dir', 'CITATIONS.bib');
++  const rows = await runPass1('A claim [@ghost2099].', missingBib, { bibEntries: [] });
++  assert.deepEqual(rows.map((r) => `${r.citekey}:${r.verdict}`), ['ghost2099:FABRICATED']);
++
++  const { runPass3 } = await import('../bin/lib/verify/pass3.js');
++  const q1 = 'the dominant sequence transduction models are based on complex recurrent networks';
++  const q2 = 'we propose a new simple network architecture based solely on attention mechanisms';
++  const draft = `As shown, "${q1}" [@nodoi2017]. Later, "${q2}" [@nodoi2017].\n`;
++  const p3 = await runPass3(draft, new Map());
++  assert.deepEqual(p3.map((r) => r.id), ['q1', 'q2']);
++  assert.deepEqual(p3.map((r) => r.quoteSha256), [quoteTextSha256(q1), quoteTextSha256(q2)]);
++  assert.ok(p3.every((r) => r.localFile === undefined));
++});
