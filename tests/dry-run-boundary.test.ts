@@ -16,6 +16,8 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { join } from 'node:path';
 import { EXIT_BLOCKED, EXIT_ERROR, EXIT_USAGE } from '../bin/lib/exit-codes.js';
 import { extractCitedKeysForVerification } from '../bin/lib/citation-token.js';
+import { isPandocPresent } from '../bin/lib/ecosystem-presence.js';
+import JSZip from 'jszip';
 import {
   ASSIGNMENT_FIXTURE,
   sandbox,
@@ -32,6 +34,14 @@ import {
 } from './helpers/paper-cli-harness.js';
 
 const MY_DRAFT = 'My own hand-written paragraph about sagas [@harris2011].\n';
+
+/** Every XML part of a .docx, concatenated: the text a marker would have to appear in (a .docx is a zip). */
+async function docxXml(file: string): Promise<string> {
+  const zip = await JSZip.loadAsync(readFileSync(file));
+  const parts = Object.values(zip.files).filter((e) => !e.dir && /\.(?:xml|rels)$/.test(e.name));
+  assert.ok(parts.some((e) => e.name === 'word/document.xml'), `${file} is a Word document`);
+  return (await Promise.all(parts.map((e) => e.async('string')))).join('\n');
+}
 
 test('GRND-19: --dry-run over a REAL paper works in .paper-dry-run/ and leaves every .paper/ file byte-identical', () => {
   const sb = sandbox('dryrun-real');
@@ -146,7 +156,7 @@ test('RUN-27: outside --dry-run the library writer drops synthetic sources a dry
   assert.match(r.bib, /10\.1038\/nphys1170/);
 });
 
-test('RUN-27 / BRDTH-01 / GRND-19: one --dry-run --yolo reaches a .dry-run export that carries only the cited (synthetic) sources and no dry-run marker', () => {
+test('RUN-27 / BRDTH-01 / GRND-19: one --dry-run --yolo reaches a .dry-run export that carries only the cited (synthetic) sources and no dry-run marker', async () => {
   const sb = sandbox('dryrun-export');
   const root = sb.project('p');
   writeFileSync(join(root, 'assignment.txt'), readFileSync(ASSIGNMENT_FIXTURE, 'utf8'));
@@ -154,11 +164,13 @@ test('RUN-27 / BRDTH-01 / GRND-19: one --dry-run --yolo reaches a .dry-run expor
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
   const ws = join(root, '.paper-dry-run');
   const exportDir = join(ws, 'export');
-  // The export format depends on the host (DOCX with Pandoc, else Markdown):
-  // either way it is named DRAFT.dry-run.<ext> (GRND-19).
+  // done's default format is DOCX; without Pandoc the exporter falls back to
+  // Markdown (exporter.ts, isPandocPresent). Either way the draft export is
+  // named DRAFT.dry-run.<ext> (GRND-19) — and it is the one this host makes.
+  const ext = isPandocPresent() ? 'docx' : 'md';
   const exported = existsSync(exportDir) ? readdirSync(exportDir).filter((f) => f.startsWith('DRAFT.dry-run.')) : [];
-  assert.equal(exported.length, 1, `the dry run reached done in one invocation: ${exported.join(', ')}`);
-  assert.match(r.stdout, new RegExp(`pensmith done: exported .*DRAFT\\.dry-run\\.(?:md|docx|pdf|tex)`));
+  assert.deepEqual(exported, [`DRAFT.dry-run.${ext}`], 'the dry run reached done in one invocation');
+  assert.match(r.stdout, new RegExp(`pensmith done: exported .*DRAFT\\.dry-run\\.${ext}\\b`));
   const library = readFileSync(join(ws, 'CITATIONS.bib'), 'utf8');
   const libraryKeys = [...library.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
   assert.ok(libraryKeys.length > 0, 'research left synthetic sources in the library');
@@ -183,7 +195,7 @@ test('RUN-27 / BRDTH-01 / GRND-19: one --dry-run --yolo reaches a .dry-run expor
   // (D-18-29). Exports stay zero-trace otherwise — no offline/dry-run marker line.
   assert.equal((exportedText.match(/10\.0000\/pensmith-dryrun\./g) ?? []).length, exportedKeys.length, 'each exported record is a labelled synthetic source');
   for (const f of readdirSync(exportDir)) {
-    const text = readFileSync(join(exportDir, f), 'utf8');
+    const text = f.endsWith('.docx') ? await docxXml(join(exportDir, f)) : readFileSync(join(exportDir, f), 'utf8');
     assert.doesNotMatch(text, /OFFLINE MODE|DRY RUN|made by pensmith/i, `${f} carries no dry-run marker`);
     assert.match(f, /^(?:DRAFT|CITATIONS)\.dry-run\./, `${f} is named as a dry-run export`);
   }

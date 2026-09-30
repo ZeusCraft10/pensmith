@@ -230,17 +230,19 @@ test('GRND-18: the step exits with the last verb\'s code — a blocking verify e
   assert.equal(verify.status, EXIT_BLOCKED, `${verify.stdout}\n${verify.stderr}`);
 });
 
-test('review round 3 (D-18-43): a section left `unverifiable` by advisory rows only (its quoted source has no full text) is verified ONCE; the chain moves on', async () => {
+test('review round 3 (D-18-43): a section left `unverifiable` by advisory rows only (its quoted source\'s text cannot be fetched) is verified ONCE; the chain moves on', async () => {
   const sb = await sandbox('bare-chain-advisory');
   await seedPaper(sb.root, TWO_SECTIONS);
   // GRND-14 (Phase 18/19 merge): the drafter may keep a direct quote only from a
   // source whose full text Pass 3 can check — here an open-access PDF recorded
-  // for its DOI (`oa_url`, what research's Unpaywall enrichment writes).
+  // for its DOI (`oa_url`, what research's Unpaywall enrichment writes). A
+  // quote from an abstract-only source would be corrected at write instead
+  // (tests/grnd14-quote-policy.test.ts).
   const libPath = join(sb.root, '.paper', 'LIBRARY.json');
   const lib = JSON.parse(readFileSync(libPath, 'utf8')) as { entries: Array<Record<string, unknown>> };
   for (const e of lib.entries) if (e['citekey'] === RECORDED.citekey) e['oa_url'] = 'https://example.org/aspelmeyer2009.pdf';
   writeFileSync(libPath, `${JSON.stringify(lib, null, 2)}\n`);
-  // A direct quote: Pass 3 cannot fetch the source's text offline — PDF/TEXT_UNAVAILABLE, advisory (Pitfall 3).
+  // A direct quote: offline, Pass 3 cannot fetch that PDF — PDF/TEXT_UNAVAILABLE, advisory (Pitfall 3).
   sb.mock.script('section-drafter', {
     text: `# Introduction\n\nAs the authors put it, "measurement always shapes what is observed in these systems, whatever the apparatus and whatever the observer happens to intend" [@${RECORDED.citekey}].\n`,
   });
