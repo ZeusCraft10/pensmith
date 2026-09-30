@@ -526,6 +526,31 @@ function detachGraph(entry: Record<string, unknown>): Record<string, unknown> {
   return entry;
 }
 
+/**
+ * The BibTeX fields of an entry parseBibEntries returned, as written (names
+ * lower-cased, values with their outer braces removed) — citation-js keeps
+ * them in the entry's `_graph`. The biblatex fields CSL has no slot for
+ * (`date`, `subtitle`, `titleaddon`, `maintitle`, …), which Pandoc's biblatex
+ * reader renders, are only here. Empty when the parser kept no raw entry.
+ */
+export function bibEntryRawFields(entry: Record<string, unknown>): Readonly<Record<string, string>> {
+  const graph = entry['_graph'];
+  if (!Array.isArray(graph)) return {};
+  const label = String(entry['citation-key'] ?? entry['id'] ?? '');
+  for (const step of graph as Array<{ data?: unknown }>) {
+    if (!Array.isArray(step?.data)) continue;
+    for (const e of step.data as Array<{ label?: unknown; properties?: Record<string, unknown> }>) {
+      if (e?.label !== label || typeof e.properties !== 'object' || e.properties === null) continue;
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(e.properties)) {
+        if (typeof v === 'string') out[k.toLowerCase()] = v.replace(/^\{(.*)\}$/s, '$1').trim();
+      }
+      return out;
+    }
+  }
+  return {};
+}
+
 function parseBibEntriesRaw(text: string): BibEntriesResult {
   if (typeof text !== 'string' || text.trim().length === 0) return { entries: [], problems: [] };
   const blocks = splitBibBlocks(text);

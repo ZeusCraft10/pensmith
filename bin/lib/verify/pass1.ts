@@ -89,7 +89,7 @@
 // D-14 "Family, Given" strings every comparison reads.
 
 import { sources } from '../sources/index.js';
-import { parseBibFileAt } from '../citations.js';
+import { parseBibFileAt, bibEntryRawFields } from '../citations.js';
 import { readFileSync } from 'node:fs';
 import { probeFreshnessAll, type FreshnessResult, type FreshnessSource } from './freshness.js';
 import { fetchById as retractionWatchFetchById, isRetractionLookupError } from '../sources/retraction-watch.js';
@@ -162,7 +162,7 @@ interface BibAuthor {
   'dropping-particle'?: string;
 }
 
-interface BibEntry {
+export interface BibEntry {
   id?: string;
   title?: string | string[];
   author?: BibAuthor[];
@@ -223,6 +223,49 @@ function bibTitle(claimed: BibEntry): string {
 function bibYear(claimed: BibEntry): number | null {
   const y = Number(claimed.issued?.['date-parts']?.[0]?.[0]);
   return Number.isInteger(y) && y > 0 ? y : null;
+}
+
+/**
+ * biblatex fields Pandoc's biblatex reader prints as (part of) the work's
+ * title or date, and that no registrar record can confirm: an entry setting
+ * one is refused rather than exported unchecked (pensmith never writes them).
+ */
+const UNCHECKED_RENDERED_FIELDS = ['maintitle', 'mainsubtitle', 'maintitleaddon', 'shorttitle', 'origtitle', 'origdate', 'origyear', 'pubstate'] as const;
+
+/** A raw biblatex value as plain text (braces and the common escapes removed). */
+function rawText(v: string | undefined): string {
+  return (v ?? '').replace(/\\([&%$#_])/g, '$1').replace(/[{}]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * What the export prints for the entry's title and year, read the way
+ * Pandoc's biblatex reader reads CITATIONS.bib (VRFY-13): the title with its
+ * `subtitle` (`Title: Subtitle`) and `titleaddon` (`… . Addon`), and the year
+ * of `date`, which wins over `year`. citation-js drops those fields, so Pass
+ * 1 would otherwise compare a title and year the export never shows. A
+ * reason string when the entry sets a field Pass 1 cannot compare.
+ */
+export function renderedClaim(claimed: BibEntry, title = bibTitle(claimed)): { title: string; wholeTitle: boolean; year: number | null } | { refused: string } {
+  const raw = bibEntryRawFields(claimed as unknown as Record<string, unknown>);
+  const unchecked = UNCHECKED_RENDERED_FIELDS.filter((f) => raw[f] !== undefined && raw[f] !== '');
+  if (unchecked.length > 0) {
+    return {
+      refused:
+        `the entry sets ${unchecked.map((f) => `\`${f}\``).join(', ')}, which the export prints as the work's title or date and no registrar record confirms — ` +
+        'remove it from CITATIONS.bib (pensmith writes the bibliography from LIBRARY.json)',
+    };
+  }
+  const subtitle = rawText(raw['subtitle']);
+  const addon = rawText(raw['titleaddon']);
+  const rendered = [subtitle !== '' ? `${title.replace(/[\s.:]+$/u, '')}: ${subtitle}` : title, addon].filter((x) => x !== '').join('. ');
+  let year = bibYear(claimed);
+  const date = rawText(raw['date']);
+  if (date !== '') {
+    const y = /^(\d{4})(?![\d])/.exec(date);
+    if (y === null) return { refused: `the entry's \`date = {${date}}\` is not a date Pass 1 can read (the export prints it as the work's date) — write the year as \`date = {YYYY}\` or \`year = {YYYY}\`` };
+    year = Number(y[1]);
+  }
+  return { title: rendered, wholeTitle: subtitle !== '' || addon !== '', year };
 }
 
 /** The arXiv id a DataCite arXiv DOI stands for (`10.48550/arXiv.1706.03762` → `1706.03762`), else null. */
@@ -780,7 +823,14 @@ async function verdictForCitekey(ck: string, claimed: BibEntry | undefined, fact
   if (!title || (authors.length === 0 && editors.length === 0)) {
     return row(ck, 'MIS-CITED', 'claimed citation metadata incomplete (empty title, or no author or editor)', { titleJW: 0, authorJW: 0 });
   }
-  const c: Claimed = { ck, work: { title, authors, editors, year: bibYear(claimed) }, doi: claimed.DOI ?? null };
+  // VRFY-13: compare what the export prints (biblatex `date`, `subtitle`, `titleaddon` as Pandoc reads them).
+  const shown = renderedClaim(claimed, title);
+  if ('refused' in shown) return row(ck, 'MIS-CITED', shown.refused, { titleJW: 0, authorJW: 0 });
+  const c: Claimed = {
+    ck,
+    work: { title: shown.title, ...(shown.wholeTitle ? { wholeTitle: true } : {}), authors, editors, year: shown.year },
+    doi: claimed.DOI ?? null,
+  };
   const v = await registrarVerdict(c, claimed, facts);
   // D-15 stored-retraction gate: the bib's `note = {RETRACTED}` (the on-disk
   // path) or the in-memory `retracted` flag. The re-fetch above still ran, so

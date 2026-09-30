@@ -100,10 +100,10 @@ export function titleForms(title: string, subtitle?: string | null): string[] {
   return [...forms];
 }
 
-/** The best Jaro-Winkler score between the claimed title's forms and the record's. */
-export function titleSimilarity(record: { title: string | null | undefined; subtitle?: string | null | undefined }, claimed: string): number {
+/** The best Jaro-Winkler score between the claimed title's forms (only its whole form with `whole`) and the record's. */
+export function titleSimilarity(record: { title: string | null | undefined; subtitle?: string | null | undefined }, claimed: string, whole = false): number {
   const a = titleForms(record.title ?? '', record.subtitle ?? null);
-  const b = titleForms(claimed);
+  const b = whole ? [foldText(tidyTitle(claimed))].filter((x) => x !== '') : titleForms(claimed);
   let best = 0;
   for (const x of a) for (const y of b) best = Math.max(best, jaroWinkler(x, y));
   return best;
@@ -242,6 +242,12 @@ export function authorSimilarity(recordAuthor: string | null | undefined, claime
 /** What a citation claims about the work (D-14 author strings). */
 export interface ClaimedWork {
   readonly title: string;
+  /**
+   * Compare the claimed title only whole, never without its subtitle: the
+   * subtitle is one the bibliography entry adds (biblatex `subtitle`,
+   * `titleaddon`) and the export prints, so it must be the record's too.
+   */
+  readonly wholeTitle?: boolean;
   readonly authors: readonly string[];
   /** Editors, for an editor-only work (an edited volume). */
   readonly editors?: readonly string[];
@@ -292,7 +298,7 @@ export function matchWork(
   const tt = opts.titleThreshold ?? TITLE_JW_THRESHOLD;
   const at = opts.authorThreshold ?? AUTHOR_JW_THRESHOLD;
   const tol = opts.yearTolerance ?? YEAR_TOLERANCE;
-  const titleJW = titleSimilarity(record, claimed.title);
+  const titleJW = titleSimilarity(record, claimed.title, claimed.wholeTitle === true);
   const authorJW = firstAuthorScore(claimed, record);
   const years =
     typeof claimed.year === 'number' && Number.isInteger(claimed.year) && typeof record.year === 'number' && Number.isInteger(record.year)
