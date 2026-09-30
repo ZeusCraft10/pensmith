@@ -17,6 +17,10 @@ export const LECUN_BIB =
   '@article{lecun2015,\n  title = {Deep learning},\n  author = {LeCun, Yann and Bengio, Yoshua and Hinton, Geoffrey},\n  journal = {Nature},\n  year = {2015},\n  doi = {10.1038/nature14539}\n}\n';
 export const ASPELMEYER_BIB =
   '@article{aspelmeyer2009,\n  title = {Measured measurement},\n  author = {Aspelmeyer, Markus},\n  journal = {Nature Physics},\n  year = {2009},\n  doi = {10.1038/nphys1170}\n}\n';
+export const ZHU_BIB =
+  '@article{zhu2020,\n  title = {A Novel Coronavirus from Patients with Pneumonia in China, 2019},\n  author = {Zhu, Na},\n  journal = {New England Journal of Medicine},\n  year = {2020},\n  doi = {10.1056/NEJMoa2001017}\n}\n';
+/** Three recorded works (Crossref + Retraction Watch answers replay offline): Pass 1 OK with no network. */
+export const RECORDED_BIB = LECUN_BIB + ASPELMEYER_BIB + ZHU_BIB;
 /** A DOI Crossref answers 404 for (recorded): FABRICATED offline. */
 export const FAKE_DOI_BIB =
   '@article{fake2017,\n  title = {A Study That Does Not Exist},\n  author = {Nobody, Nora},\n  journal = {Journal of Nothing},\n  year = {2017},\n  doi = {10.5555/pensmith-no-such-work-2017}\n}\n';

@@ -34,6 +34,9 @@ import {
 
 const TSX_LOADER = import.meta.resolve('tsx');
 const IGNORE_LOGS = /^\.paper[\\/](SESSION\.log|sessions)/;
+// The lock is taken by a write; it drafts without the chained verify, whose
+// verdict on a PENSMITH_NO_LLM stub draft is PLACEHOLDER (VRFY-24, exit 4).
+const WRITE_1 = ['write', '1', '--no-verify'];
 
 function paperWithSection(sb: Sandbox, name: string): string {
   const root = sb.project(name);
@@ -98,7 +101,7 @@ test('RUN-23: while another session holds the paper, `write 1` refuses with the 
   const holder = await holdLock(sb, root, 'cli');
   try {
     const before = snapshot(root);
-    const w = runCli(sb, root, ['write', '1']);
+    const w = runCli(sb, root, WRITE_1);
     assert.equal(w.status, EXIT_ERROR, `${w.stdout}\n${w.stderr}`);
     assert.match(
       w.stderr,
@@ -115,7 +118,7 @@ test('RUN-23: while another session holds the paper, `write 1` refuses with the 
     await release(holder);
   }
   assert.ok(!existsSync(holder.file), 'the holder removed its record on release');
-  const after = runCli(sb, root, ['write', '1']);
+  const after = runCli(sb, root, WRITE_1);
   assert.equal(after.status, 0, `once the holder ends, write works: ${after.stderr}`);
   assert.ok(!existsSync(holder.file), 'the CLI releases the lock when it exits');
 });
@@ -126,7 +129,7 @@ test('RUN-23: after kill -9 of the holder, the next run prints "cleared stale lo
   const holder = await holdLock(sb, root, 'cli');
   await kill9(holder);
   assert.ok(existsSync(holder.file), 'a killed holder leaves its record behind');
-  const r = runCli(sb, root, ['write', '1']);
+  const r = runCli(sb, root, WRITE_1);
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
   assert.match(r.stderr, new RegExp(`^pensmith: cleared stale lock \\(pid ${holder.pid}, started [^)]+\\) — process not running\\.$`, 'm'));
   assert.ok(existsSync(join(sectionDirOf(root, 1, 'intro'), 'DRAFT.md')));
@@ -151,14 +154,14 @@ test('RUN-23: a record older than 6 h is stale; a young record from another host
   await kill9(holder);
   const rec = JSON.parse(readFileSync(holder.file, 'utf8')) as SessionOwner;
   writeFileSync(holder.file, JSON.stringify({ ...rec, pid: process.pid, startedAt: new Date(Date.now() - STALE_SESSION_MS - 60_000).toISOString() }));
-  const r = runCli(sb, root, ['write', '1']);
+  const r = runCli(sb, root, WRITE_1);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stderr, /cleared stale lock \(pid \d+, started [^)]+\) — older than 6 h\./);
 
   // A young record from another host is honoured (its PID cannot be checked here).
   mkdirSync(join(holder.file, '..'), { recursive: true });
   writeFileSync(holder.file, JSON.stringify({ ...rec, hostname: 'another-host', pid: 424242, startedAt: new Date().toISOString() }));
-  const refused = runCli(sb, root, ['write', '1']);
+  const refused = runCli(sb, root, WRITE_1);
   assert.equal(refused.status, EXIT_ERROR);
   assert.match(refused.stderr, /another pensmith session \(pid 424242,/);
 });

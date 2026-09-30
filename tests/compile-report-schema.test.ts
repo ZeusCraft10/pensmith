@@ -84,7 +84,11 @@ test('CompileReportSchema: Pandoc-reserved keys present even when empty', () => 
 
 // ---- renderer ----
 
-test('renderCompileReport: emits exactly the 5 D-14 body headers in fixed order', () => {
+// D-14 additive (Phase 20, VRFY-19 / VRFY-20): two quote sections after the
+// five locked ones, always present (an empty marker when there is nothing).
+const D14_ADDITIVE = ['## Accepted Quotes', '## Quotes Verified Against Your Files'];
+
+test('renderCompileReport: emits the 5 D-14 body headers in fixed order, then the 2 additive quote sections', () => {
   const md = renderCompileReport({
     compiled_at: '2026-05-29T12:00:00.000Z',
     sections_count: 3,
@@ -92,7 +96,21 @@ test('renderCompileReport: emits exactly the 5 D-14 body headers in fixed order'
     refuse_reasons: [],
   });
   const headers = [...md.matchAll(/^## .+$/gm)].map((m) => m[0]);
-  assert.deepEqual(headers, D14_BODY_ORDER, 'body headers must match D-14 order exactly');
+  assert.deepEqual(headers, [...D14_BODY_ORDER, ...D14_ADDITIVE], 'the D-14 order first, the additive sections after');
+  assert.match(md, /## Accepted Quotes\n\n_No quotes accepted without a source check\._/);
+  assert.match(md, /## Quotes Verified Against Your Files\n\n_No quotes verified against your own files\._/);
+});
+
+test('renderCompileReport (VRFY-20, VRFY-19): accepted quotes with their timestamps, and quotes verified against the user\'s files', () => {
+  const md = renderCompileReport({
+    compiled_at: '2026-05-29T12:00:00.000Z',
+    sections_count: 1,
+    stale_resolved_count: 0,
+    accepted_quotes: [{ section: '1', id: 'q1', citekey: 'aggarwal2022', excerpt: 'attention mechanisms are "nothing" more', accepted_at: '2026-09-30T10:00:00.000Z', via: 'flag' }],
+    local_file_quotes: [{ id: 'q2', citekey: 'lecun2015', excerpt: 'deep learning allows computational models', file: 'sources/lecun2015.pdf' }],
+  });
+  assert.match(md, /^- section 1 q1 \[@aggarwal2022\] "attention mechanisms are 'nothing' more" — accepted 2026-09-30T10:00:00\.000Z \(--accept-quote\)$/m);
+  assert.match(md, /^- q2 \[@lecun2015\] "deep learning allows computational models…" — verified against your local file sources\/lecun2015\.pdf$/m);
 });
 
 test('renderCompileReport: Advisory Findings carries the explicit empty marker', () => {

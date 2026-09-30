@@ -27,6 +27,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { RECORDED_BIB } from './helpers/gate-paper.js';
 
 /**
  * Seed a paper root with an OUTLINE.md (locked GFM table) and one or more
@@ -64,8 +65,10 @@ function seedPaper(specs: SectionSpec[]): string {
   ].join('\n');
   writeFileSync(join(root, '.paper', 'OUTLINE.md'), outline);
 
-  // Seed an empty CITATIONS.bib so the bib-regen step has a file to read.
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+  // Recorded works (lecun2015, aspelmeyer2009, zhu2020): compile recomputes
+  // every section (VRFY-25), so a clean section must cite a source that really
+  // verifies offline; the refusal cases cite keys the bib does not hold.
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), RECORDED_BIB);
 
   for (const s of specs) {
     const dir = join(root, '.paper', 'sections', `${String(s.n).padStart(2, '0')}-${s.slug}`);
@@ -180,19 +183,19 @@ test('COMP-01: all-clean sections do NOT refuse and DO write DRAFT.md', async ()
   const root = seedPaper([
     {
       n: 1, slug: 'intro', title: 'Intro',
-      draft: '# Intro\n\nA grounded claim [@smith2020].\n',
-      assignedSources: ['smith2020'],
-      verdictLines: [PASS_LINE('smith2020')],
+      draft: '# Intro\n\nA grounded claim [@lecun2015].\n',
+      assignedSources: ['lecun2015'],
+      verdictLines: [PASS_LINE('lecun2015')],
     },
     {
       n: 2, slug: 'body', title: 'Body',
-      draft: '# Body\n\nAnother grounded claim [@jones2019].\n',
-      assignedSources: ['jones2019'],
-      verdictLines: [PASS_LINE('jones2019')],
+      draft: '# Body\n\nAnother grounded claim [@aspelmeyer2009].\n',
+      assignedSources: ['aspelmeyer2009'],
+      verdictLines: [PASS_LINE('aspelmeyer2009')],
     },
   ]);
   const result = await runCompile({ paperRoot: root, yolo: true });
-  assert.equal(result.refused, false, 'clean sections must NOT refuse');
+  assert.equal(result.refused, false, `clean sections must NOT refuse: ${(result.refuseReasons ?? []).join(' | ')}`);
   assert.equal(
     existsSync(join(root, '.paper', 'DRAFT.md')),
     true,
@@ -250,7 +253,7 @@ function seedPaperWithVerif(
     '',
   ].join('\n');
   writeFileSync(join(root, '.paper', 'OUTLINE.md'), outline);
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), RECORDED_BIB);
 
   const dir = join(root, '.paper', 'sections', `${String(n).padStart(2, '0')}-${slug}`);
   mkdirSync(dir, { recursive: true });
@@ -393,7 +396,7 @@ test('GATE-01: valid VERIFICATION.md (Status: verified + OK row) → compiles (n
     '',
     '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
     '',
-    '- smith2020: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed',
+    '- lecun2015: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed',
     '',
     '## Pass-3 (quote integrity, deterministic — levenshtein-substring)',
     '',
@@ -402,8 +405,8 @@ test('GATE-01: valid VERIFICATION.md (Status: verified + OK row) → compiles (n
 
   const root = seedPaperWithVerif(
     1, 'intro',
-    '# Intro\n\nA grounded claim [@smith2020].\n',
-    ['smith2020'],
+    '# Intro\n\nA grounded claim [@lecun2015].\n',
+    ['lecun2015'],
     verifBody,
     'verified',
   );
