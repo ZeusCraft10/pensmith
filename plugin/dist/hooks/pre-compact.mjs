@@ -6993,7 +6993,7 @@ function nextActionOf(decision) {
       text = `Export the paper: ${run("done")}.`;
       break;
     case "status":
-      text = decision.reason === "done" ? "The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it)." : `Needs attention: ${decision.detail ?? "run /pensmith status to see what"}`;
+      text = decision.reason === "done" ? decision.detail ? `Nothing more is routed: ${decision.detail}` : "The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it)." : `Needs attention: ${decision.detail ?? "run /pensmith status to see what"}`;
       break;
     default:
       text = "Run /pensmith status to see where the paper stands.";

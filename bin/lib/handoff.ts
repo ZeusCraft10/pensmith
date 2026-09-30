@@ -142,8 +142,12 @@ export function nextActionOf(decision: RouterDecision): string {
       text = `Export the paper: ${run('done')}.`;
       break;
     case 'status':
+      // A `done` with a detail is a mode's own end state (GRND-02 outline-only:
+      // OUTLINE_ONLY_DONE), not a finished paper.
       text = decision.reason === 'done'
-        ? 'The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it).'
+        ? decision.detail
+          ? `Nothing more is routed: ${decision.detail}`
+          : 'The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it).'
         : `Needs attention: ${decision.detail ?? 'run /pensmith status to see what'}`;
       break;
     default:

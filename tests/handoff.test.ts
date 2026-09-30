@@ -130,6 +130,12 @@ test('HANDOFF v2: every router decision maps to its phase, section and position'
   assert.equal(nextStepLabel({ verb: 'compile' }), 'compile');
   assert.match(nextActionOf({ verb: 'write', n: 2, slug: 'methods' }), /Draft section §2 \(methods\): run \/pensmith \(or `pensmith write 2`\)/);
   assert.match(nextActionOf({ verb: 'status', reason: 'attention', detail: 'fix OUTLINE.md row 3' }), /Needs attention: fix OUTLINE\.md row 3/);
+  assert.match(nextActionOf({ verb: 'status', reason: 'done' }), /The paper is complete/);
+  assert.match(
+    nextActionOf({ verb: 'status', reason: 'done', detail: 'outline only: the approved outline is .paper/OUTLINE.md' }),
+    /^Nothing more is routed: outline only/,
+    'a mode\'s own end state is never called complete',
+  );
   const long = nextActionOf({ verb: 'status', reason: 'attention', detail: 'x'.repeat(500) });
   assert.equal(long.length, 200, 'next_action is bounded at 200 chars');
 });

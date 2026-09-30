@@ -56,7 +56,7 @@ export async function buildSessionStartContext(root: string, opts: SessionStartO
   }
   lines.push(
     decision.verb === 'status' && decision.reason === 'done'
-      ? 'The paper is finished; run /pensmith status to review it.'
+      ? 'Nothing more is routed for this paper; run /pensmith status to review it.'
       : 'To continue the paper, run /pensmith (one step at a time; /pensmith status shows where it stands).',
   );
   const text = lines.join('\n');

@@ -6989,7 +6989,7 @@ function nextActionOf(decision) {
       text = `Export the paper: ${run("done")}.`;
       break;
     case "status":
-      text = decision.reason === "done" ? "The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it)." : `Needs attention: ${decision.detail ?? "run /pensmith status to see what"}`;
+      text = decision.reason === "done" ? decision.detail ? `Nothing more is routed: ${decision.detail}` : "The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it)." : `Needs attention: ${decision.detail ?? "run /pensmith status to see what"}`;
       break;
     default:
       text = "Run /pensmith status to see where the paper stands.";
@@ -17658,7 +17658,7 @@ async function buildSessionStartContext(root, opts = {}) {
     );
   }
   lines.push(
-    decision.verb === "status" && decision.reason === "done" ? "The paper is finished; run /pensmith status to review it." : "To continue the paper, run /pensmith (one step at a time; /pensmith status shows where it stands)."
+    decision.verb === "status" && decision.reason === "done" ? "Nothing more is routed for this paper; run /pensmith status to review it." : "To continue the paper, run /pensmith (one step at a time; /pensmith status shows where it stands)."
   );
   const text = lines.join("\n");
   return text.length > MAX_CONTEXT_CHARS ? `${text.slice(0, MAX_CONTEXT_CHARS - 1)}\u2026` : text;
