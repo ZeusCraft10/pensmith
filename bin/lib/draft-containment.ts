@@ -143,7 +143,8 @@ export function containmentCorrection(violations: readonly DraftViolation[], ass
   if (forms) {
     parts.push(
       `Your draft uses ${forms}. Cite only with [@citekey] tokens from the sources block: no reference list or bibliography, ` +
-        'no footnotes or notes, no author-date citations such as (Author, 2020), no \\cite commands, HTML citation tags or numbered markers.',
+        'no footnotes or notes, no author-date citations such as (Author, 2020), no \\cite commands, HTML citation tags or numbered markers such as [1] ' +
+        '(write a number range or an index as math instead, e.g. $[1, 5]$).',
     );
   }
   parts.push('Reply with the complete corrected section.');

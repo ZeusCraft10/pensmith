@@ -50,7 +50,9 @@ export const UNSUPPORTED_FORM_REASONS: Readonly<Record<UnsupportedForm, string>>
     'a reference list typed into the draft, which the verifier cannot check — remove it: the export builds the bibliography from the [@citekey] citations',
   'tex-cite': 'a raw TeX citation command the verifier cannot check — write [@citekey]',
   'html-cite': 'HTML citation markup the verifier cannot check — write [@citekey]',
-  'numeric-marker': 'a numbered citation marker the verifier cannot check — write [@citekey] (a numeric citation style numbers the citations at export)',
+  'numeric-marker':
+    'a numbered citation marker the verifier cannot check — write [@citekey] (a numeric citation style numbers the citations at export); ' +
+    'if it is a number range or an index, not a citation, write it as math: $[1, 5]$',
   'superscript-marker':
     'a superscript citation marker the verifier cannot check — write [@citekey] (a numeric citation style numbers the citations at export)',
 };
@@ -335,19 +337,113 @@ function superscriptMarkers(md: string): RawFinding[] {
 
 // ---------------------------------------------------------------------------
 // Numbered markers `[1]`, `[2, 3]`, `[4–6]`, `[7, p. 12]`.
+//
+// Only a group that CAN be citation numbers is a marker: positive integers
+// written without a leading zero, strictly ascending, each range low → high.
+// "[0, 1]", "[32, 224, 224, 3]", "[5, 1]" cannot be. A group that reads as a
+// value is not a marker either: after a word naming an interval, a range, an
+// index or a shape ("the interval [1, 5]", "shape [32, 128]", "indices [1]
+// and [2]"), after a relation or operator ("x ∈ [1, 5]", "= [2, 3]"), a
+// two-or-more-number group after a preposition that introduces a value ("lies
+// in [1, 5]", "scaled to [1, 10]" — but not "as described in [1, 5]" or
+// "according to [2, 3]"), or a group that an operator continues
+// ("[1, 5] × [1, 5]"). A group joined to such a value by "and", "or", "to", a
+// comma or a dash is one too. What is left — "[1]" after a claim, "as shown
+// [3]", "[2, 3]" — is a marker (fail closed).
 // ---------------------------------------------------------------------------
+
+/** Words after which any bracketed number group is a value ("indices [1]", "the interval [1, 5]", "shape [32, 128]"). */
+const VALUE_WORDS: ReadonlySet<string> = new Set([
+  'interval', 'intervals', 'range', 'ranges', 'bound', 'bounds', 'domain', 'codomain', 'support', 'window', 'windows', 'span',
+  'index', 'indices', 'indexes', 'element', 'elements', 'entry', 'entries', 'position', 'positions', 'slot', 'slots', 'offset', 'offsets',
+  'row', 'rows', 'column', 'columns', 'cell', 'cells', 'axis', 'axes', 'dimension', 'dimensions', 'dim', 'dims',
+  'shape', 'shapes', 'size', 'sizes', 'array', 'arrays', 'vector', 'vectors', 'tensor', 'tensors', 'matrix', 'matrices',
+  'tuple', 'tuples', 'coordinate', 'coordinates', 'point', 'points', 'pair', 'pairs', 'set', 'sets', 'list', 'lists', 'value', 'values',
+]);
+/** Prepositions after which a group of two or more numbers is a value ("lies in [1, 5]", "scaled to [1, 10]", "between [2, 4]"). */
+const VALUE_PREPOSITIONS: ReadonlySet<string> = new Set(['in', 'to', 'into', 'onto', 'between', 'within', 'inside', 'outside']);
+/**
+ * Words that make the preposition after them introduce a source, not a value:
+ * "as described in [1, 5]", "according to [2, 3]", "compared to [4, 6]" —
+ * the group stays a marker.
+ */
+const CITING_BEFORE_PREPOSITION: ReadonlySet<string> = new Set([
+  'as', 'see', 'cf', 'according', 'refer', 'referred', 'compared', 'similar', 'contrast', 'due', 'owing', 'thanks', 'attributed', 'credited',
+  'shown', 'described', 'reported', 'discussed', 'presented', 'proposed', 'introduced', 'given', 'found', 'studied', 'reviewed', 'summarized',
+  'summarised', 'cited', 'used', 'demonstrated', 'observed', 'noted', 'outlined', 'detailed', 'explained', 'established', 'argued', 'suggested',
+  'examined', 'investigated', 'analyzed', 'analysed', 'developed', 'listed', 'published', 'appeared', 'documented', 'derived', 'proved', 'proven',
+  'considered', 'adopted', 'employed', 'applied', 'discussion', 'work', 'works', 'studies', 'study', 'literature', 'papers', 'paper',
+]);
+/** A relation or operator right before a group ("x ∈ [1, 5]", "= [2, 3]", "≤ [1]"). */
+const VALUE_BEFORE_RE = /[=∈∊∉⊂⊆⊃⊇×→↦≤≥±∓−]\s*$/u;
+/** An operator right after a group ("[1, 5] × [1, 5]", "[1, 5]^2", "[1, 5] ∪ …"). */
+const VALUE_AFTER_RE = /^\s*(?:[×^=∪∩⊂⊆→↦−]|\\times\b)/u;
+/** A connective between two groups: "and", "or", "to", a comma, a dash or "×". */
+const GROUP_JOIN_RE = /^\s*(?:,|and|or|to|through|[-–—×])?\s*$/u;
+
+/** The numbers of a marker group in order, or null when a number has a leading zero or is 0. */
+function groupNumbers(group: string): { values: number[]; rangesAscend: boolean } | null {
+  const body = group.replace(/^\[\s*|\s*\]$/g, '').replace(/\s*,\s*pp?\.\s*\d+(?:\s*[-–—]\s*\d+)?$/, '');
+  const values: number[] = [];
+  let rangesAscend = true;
+  for (const part of body.split(/\s*,\s*/)) {
+    const range = part.split(/\s*[-–—]\s*/);
+    const nums: number[] = [];
+    for (const n of range) {
+      if (!/^[1-9]\d{0,2}$/.test(n)) return null; // 0, a leading zero
+      nums.push(Number(n));
+    }
+    if (nums.length === 2 && (nums[0] as number) >= (nums[1] as number)) rangesAscend = false;
+    values.push(...nums);
+  }
+  return { values, rangesAscend };
+}
+
+/** True when a group's numbers can be citation numbers: strictly ascending, each range low → high. */
+function citationNumbers(group: string): boolean {
+  const g = groupNumbers(group);
+  if (g === null || !g.rangesAscend) return false;
+  return g.values.every((v, i) => i === 0 || v > (g.values[i - 1] as number));
+}
+
+/** The last two words before offset `at` (lower case, nearest first; '' when absent). */
+function wordsBefore(md: string, at: number): [string, string] {
+  const head = md.slice(Math.max(0, at - 60), at);
+  const m = /(?:([\p{L}]+)[^\p{L}\n]+)?([\p{L}]+)[\s\p{Pd}]*$/u.exec(head);
+  return [m?.[2]?.toLowerCase() ?? '', m?.[1]?.toLowerCase() ?? ''];
+}
 
 function numericMarkers(md: string): RawFinding[] {
   const out: RawFinding[] = [];
   const re = /\[\s*\d{1,3}(?:\s*[-–—,]\s*\d{1,3})*(?:\s*,\s*pp?\.\s*\d+(?:\s*[-–—]\s*\d+)?)?\s*\]/g;
+  /** The groups already read as values, by end offset (a group joined to one is one too). */
+  const valueEnds: number[] = [];
   for (const m of md.matchAll(re)) {
-    const before = m.index > 0 ? (md[m.index - 1] as string) : '';
-    const after = md[m.index + m[0].length] ?? '';
+    const start = m.index;
+    const end = start + m[0].length;
+    const before = start > 0 ? (md[start - 1] as string) : '';
+    const after = md[end] ?? '';
     // An array index `x[1]`, a reference link `[text][1]`, an image, an
     // escape, an inline note `^[1]`, a link `[1](…)` / `[1][…]` or a link
     // definition `[1]: …` is not a citation marker.
     if (/[\p{L}\p{N}\]!\\^]/u.test(before) || /[([:]/.test(after)) continue;
-    out.push({ form: 'numeric-marker', start: m.index, end: m.index + m[0].length });
+    const several = /[-–—,]/.test(m[0].replace(/,\s*pp?\..*$/, ''));
+    const lineStart = md.lastIndexOf('\n', start - 1) + 1;
+    const head = md.slice(lineStart, start);
+    const joined = valueEnds.some((e) => e <= start && GROUP_JOIN_RE.test(md.slice(e, start)));
+    const [word, previous] = wordsBefore(md, start);
+    const value =
+      !citationNumbers(m[0]) ||
+      joined ||
+      VALUE_WORDS.has(word) ||
+      (several && VALUE_PREPOSITIONS.has(word) && !CITING_BEFORE_PREPOSITION.has(previous) && /\s$/.test(head)) ||
+      VALUE_BEFORE_RE.test(head) ||
+      VALUE_AFTER_RE.test(md.slice(end, end + 12));
+    if (value) {
+      valueEnds.push(end);
+      continue;
+    }
+    out.push({ form: 'numeric-marker', start, end });
   }
   return out;
 }

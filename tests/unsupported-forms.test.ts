@@ -75,6 +75,10 @@ const POSITIVE: readonly Case[] = [
   ]],
   // Numbered and superscript markers.
   ['numbered markers', 'Trees help [1]. Shade helps [2, 3] and [4–6, p. 12].', [['numeric-marker', 1, '[1]'], ['numeric-marker', 1, '[2, 3]'], ['numeric-marker', 1, '[4–6, p. 12]']]],
+  // A citing verb before the preposition keeps a group a marker; a plain claim keeps one too.
+  ['numbered markers after a citing phrase', 'As described in [1, 5], and according to [2, 3], trees help. As reported in [1] and later [2].', [
+    ['numeric-marker', 1, '[1, 5]'], ['numeric-marker', 1, '[2, 3]'], ['numeric-marker', 1, '[1]'], ['numeric-marker', 1, '[2]'],
+  ]],
   ['superscript markers', 'Trees help.¹ Studies²,³ agree.^4^', [['superscript-marker', 1, '¹'], ['superscript-marker', 1, '²,³'], ['superscript-marker', 1, '^4^']]],
 ];
 
@@ -92,6 +96,10 @@ const NEGATIVE: ReadonlyArray<readonly [string, string]> = [
   ['Pandoc citations', 'Trees cool cities [@nguyen2019; @patel2019, p. 4]. As @smith2020 argues, shade helps [-@lee2021].'],
   ['headings that are not reference lists', '## Notes on method\n\nText.\n\n## Background\n\nMore text.'],
   ['a parenthetical aside', 'Paris (France) is large, and the result (a small one) held.'],
+  // Intervals, index lists and shapes are not numbered markers (a citation number is never 0, never descends).
+  ['intervals', 'Scores are normalized to the interval [0, 1] [@k]. Probabilities lie in [0,1]. Values lie in [1, 5]; ages in the range [18, 65] were eligible.'],
+  ['shapes and indices', 'The input tensor has shape [32, 224, 224, 3] [@k], embeddings have shape [32, 128], and array indices [1] and [2] refer to rows.'],
+  ['relations and operators', 'We map x ∈ [2, 7], set w = [1, 3], and cover the square [1, 5] × [1, 5]. Weights are scaled to [1, 10].'],
 ];
 
 function crlf(s: string): string {

@@ -259,6 +259,18 @@ test('VRFY-09 / VRFY-10 at write: a draft attributing sources in a form the veri
   });
 });
 
+test('VRFY-10 at write: interval and shape notation is not a citation form — no corrective turn, the draft is kept as written', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await plannedPaper(sb);
+    const text = 'Attention weights lie in the range [0, 1] and sum to one [@bahdanau2015]. The key tensor has shape [32, 128].\n';
+    sb.mock!.script('section-drafter', { text });
+    const r = await write(sb, '2', '--no-verify');
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(sb.mock!.callCount('section-drafter'), 1, 'no corrective turn');
+    assert.equal(fs.readFileSync(path.join(sb.paper, 'sections', '02-background', 'DRAFT.md'), 'utf8'), text);
+  });
+});
+
 test('VRFY-10 at write: an uncheckable form that persists fails the section (exit 4, DRAFT.rejected.md, failure_reason naming it)', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
     await plannedPaper(sb);
