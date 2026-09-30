@@ -144991,14 +144991,15 @@ function projectDirs(dir) {
   return out2;
 }
 __name(projectDirs, "projectDirs");
-function samePath(a3, b3) {
-  const fold = /* @__PURE__ */ __name((p2) => process.platform === "win32" ? resolve2(p2).toLowerCase() : resolve2(p2), "fold");
-  return fold(a3) === fold(b3);
+function pathSpellings(p2) {
+  const fold = /* @__PURE__ */ __name((x3) => process.platform === "win32" ? x3.toLowerCase() : x3, "fold");
+  return [.../* @__PURE__ */ new Set([fold(resolve2(p2)), fold(realpathNearest(p2))])];
 }
-__name(samePath, "samePath");
+__name(pathSpellings, "pathSpellings");
 function detectZoteroMcpServers(root, env = process.env) {
   const project = root ?? activePaperRoot() ?? servicePaperRoot(env);
   const dirs = projectDirs(project);
+  const projectKeys = new Set([...dirs, ...projectDirs(realpathNearest(project))].flatMap(pathSpellings));
   const servers = [];
   const checked = [];
   const claudeJson = join7(claudeConfigHome(env), ".claude.json");
@@ -145008,7 +145009,7 @@ function detectZoteroMcpServers(root, env = process.env) {
     servers.push(...zoteroServersIn(cfg.mcpServers, "user", claudeJson));
     if (typeof cfg.projects === "object" && cfg.projects !== null) {
       for (const [path29, entry] of Object.entries(cfg.projects)) {
-        if (!dirs.some((d3) => samePath(d3, path29))) continue;
+        if (!pathSpellings(path29).some((k2) => projectKeys.has(k2))) continue;
         servers.push(...zoteroServersIn(entry?.mcpServers, "local", claudeJson));
       }
     }
