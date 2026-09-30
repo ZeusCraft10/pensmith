@@ -5,7 +5,8 @@
 // (WRTE-02 satisfied by this single module). The flow follows 04-RESEARCH §I:
 //
 //   1. Parse sections/<N>/VERIFICATION.md for the FIRST failing citation
-//      (FABRICATED / MIS-CITED / NOT_FOUND), in order of appearance, that the
+//      (FABRICATED / MIS-CITED / RETRACTED / UNASSIGNED / UNPARSEABLE /
+//      UNRESOLVABLE / NOT_FOUND — REVISABLE_VERDICTS), in order of appearance, that the
 //      current DRAFT.md still cites (an earlier revise may have removed the
 //      first ones before the next verify); none left → "nothing to change".
 //   2. Load PLAN.md frontmatter → assigned_sources + the section voice hint
@@ -48,8 +49,29 @@ import { formatSectionId, sectionIdOf, type SectionId } from './section-id.js';
 // --yolo retry cap (D-06): 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
 
-/** The verifier verdicts that --revise repairs, in priority/appearance order. */
-const FAILING_VERDICTS = ['FABRICATED', 'MIS-CITED', 'NOT_FOUND'] as const;
+/**
+ * The verifier verdicts that --revise repairs by swapping or removing the
+ * flagged citation: every failing verdict whose row names a citekey (Phase 20:
+ * RETRACTED, UNASSIGNED, UNPARSEABLE and UNRESOLVABLE join FABRICATED,
+ * MIS-CITED and NOT_FOUND). The rows without a citekey (a citation form the
+ * grammar cannot read, an unattributed quote, NO-CITATIONS) need a re-plan —
+ * REV-03 (Phase 22).
+ */
+export const REVISABLE_VERDICTS = ['FABRICATED', 'MIS-CITED', 'RETRACTED', 'UNASSIGNED', 'UNPARSEABLE', 'UNRESOLVABLE', 'NOT_FOUND'] as const;
+
+/**
+ * One verdict row of VERIFICATION.md (D-20-20): a Pass-3 quote row
+ * `- <key> [q<N>] ("<snippet>…"): **<VERDICT>** — rest` or a keyed row
+ * `- <key>: **<VERDICT>** — rest` (any citekey the grammar accepts). Null for
+ * any other line.
+ */
+function verdictRowOf(line: string): { citekey: string; verdict: string; rest: string } | null {
+  const m =
+    /^\s*-\s*(\S+?)(?:\s+\[q[1-9]\d*\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line) ??
+    /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*\s*(.*)$/u.exec(line);
+  if (!m || m[1] === undefined || m[2] === undefined) return null;
+  return { citekey: m[1], verdict: m[2], rest: m[3] ?? '' };
+}
 
 // Strict-JSON contract for the revise-swap LLM response (04-RESEARCH §I).
 const ReviseSwapSchema = z.object({
@@ -121,21 +143,18 @@ interface FailingCitation {
  * Every failing citation in VERIFICATION.md, in order of appearance (each
  * citekey once). A failing line looks like:
  *   - jones2019: **FABRICATED** — ... — <reason>
- * i.e. a line whose verdict is one of FAILING_VERDICTS.
+ *   - jones2019 [q2] ("…"): **NOT_FOUND** — ... — <reason>
+ * i.e. a row whose verdict is one of REVISABLE_VERDICTS.
  */
 export function failingCitations(verificationMd: string): FailingCitation[] {
   const out: FailingCitation[] = [];
   const seen = new Set<string>();
   for (const line of verificationMd.split(/\r?\n/)) {
-    // `- <citekey>: **<VERDICT>** — ...rest`
-    const m = /^\s*-\s*([a-z][a-z0-9_-]*)\s*[:(].*?\*\*([A-Z_-]+)\*\*\s*(.*)$/.exec(line);
-    if (!m) continue;
-    const citekey = m[1];
-    const verdict = m[2];
-    if (citekey === undefined || verdict === undefined || seen.has(citekey)) continue;
-    if ((FAILING_VERDICTS as readonly string[]).includes(verdict)) {
-      seen.add(citekey);
-      out.push({ citekey, reason: `${verdict}: ${(m[3] ?? '').replace(/^—\s*/, '').trim()}` });
+    const row = verdictRowOf(line);
+    if (row === null || seen.has(row.citekey)) continue;
+    if ((REVISABLE_VERDICTS as readonly string[]).includes(row.verdict)) {
+      seen.add(row.citekey);
+      out.push({ citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, '').trim()}` });
     }
   }
   return out;
@@ -143,25 +162,12 @@ export function failingCitations(verificationMd: string): FailingCitation[] {
 
 /**
  * Find the FIRST failing citation in VERIFICATION.md (one-at-a-time, in order
- * of appearance — 04-RESEARCH §I). A failing line looks like:
- *   - jones2019: **FABRICATED** — ... — <reason>
- * We scan top-to-bottom and return the first line whose verdict is one of
- * FAILING_VERDICTS. Returns null when the section has no failing citation.
+ * of appearance — 04-RESEARCH §I): the first row whose verdict is one of
+ * REVISABLE_VERDICTS (failingCitations' first). Returns null when the section
+ * has no failing citation.
  */
 export function firstFailingCitation(verificationMd: string): FailingCitation | null {
-  const lines = verificationMd.split(/\r?\n/);
-  for (const line of lines) {
-    // `- <citekey>: **<VERDICT>** — ...rest`
-    const m = /^\s*-\s*([a-z][a-z0-9_-]*)\s*[:(].*?\*\*([A-Z_-]+)\*\*\s*(.*)$/.exec(line);
-    if (!m) continue;
-    const citekey = m[1];
-    const verdict = m[2];
-    if (citekey === undefined || verdict === undefined) continue;
-    if ((FAILING_VERDICTS as readonly string[]).includes(verdict)) {
-      return { citekey, reason: `${verdict}: ${(m[3] ?? '').replace(/^—\s*/, '').trim()}` };
-    }
-  }
-  return null;
+  return failingCitations(verificationMd)[0] ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +387,7 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
   const verificationMd = readFileSync(verifPath, 'utf8');
   const flagged = failingCitations(verificationMd);
   if (flagged.length === 0) {
-    return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation in section ${opts.n}.`.trim() };
+    return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation (nor RETRACTED, UNASSIGNED, UNPARSEABLE or UNRESOLVABLE) in section ${opts.n}.`.trim() };
   }
 
   if (!existsSync(planPath) || !existsSync(draftPath)) {
