@@ -392,7 +392,7 @@ test('SRC-15 (review round 2): BYO file names are unique per citekey (case-insen
   assert.equal(sha256Hex(fs.readFileSync(path.join(legacy, '.paper', byoFile))), lib2.entries[0]!.byo!.sha256, 'the file is intact');
 });
 
-test('S-03 (review round 2): citing the user\'s own PDF that no registrar identified is UNVERIFIABLE (blocking, with the way to identify it) — never FABRICATED', async () => {
+test('S-03 (review round 2) / VRFY-14: citing the user\'s own PDF that no registrar identified is OK-BYO while the PDF still matches its hash, naming the file and hash — never FABRICATED', async () => {
   const root = paper();
   const o = await ingestByoPdf(root, path.join(BYO, 'no-match.pdf'));
   assert.equal(o.status, 'added', JSON.stringify(o));
@@ -400,9 +400,9 @@ test('S-03 (review round 2): citing the user\'s own PDF that no registrar identi
   const key = o.status === 'added' ? o.citekey : '';
   const bib = path.join(root, '.paper', 'CITATIONS.bib');
   const [r] = await runPass1(`A claim [@${key}].\n`, bib, { root });
-  assert.equal(r!.verdict, 'UNVERIFIABLE', r!.reason);
-  assert.match(r!.reason, new RegExp(`your own PDF sources/${key}\\.pdf was not identified by any registrar[^]*pensmith add <DOI or arXiv id> --pdf \\.paper/sources/${key}\\.pdf`));
-  // An identifier-less entry that is NOT the user's own PDF stays FABRICATED ("cannot verify upstream").
+  assert.equal(r!.verdict, 'OK-BYO', r!.reason);
+  assert.match(r!.reason, new RegExp(`your own PDF sources/${key}\\.pdf \\(sha256 [0-9a-f]{12}\\) still matches what you ingested`));
+  // An identifier-less entry that is NOT the user's own PDF goes to the metadata search (VRFY-12) — offline and unrecorded here, so it has no answer; never FABRICATED.
   const [bare] = await runPass1(`A claim [@${key}].\n`, bib);
-  assert.equal(bare!.verdict, 'FABRICATED', 'without the library (no root) nothing says it is the user\'s own');
+  assert.equal(bare!.verdict, 'UNVERIFIABLE-NETWORK', `without the library (no root) nothing says it is the user's own: ${bare!.reason}`);
 });
