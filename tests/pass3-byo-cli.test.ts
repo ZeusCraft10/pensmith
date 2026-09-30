@@ -50,11 +50,11 @@ test('SRC-15 / S-17 (built CLI): a quote is verified against the user\'s hash-ma
 
   const ok = verifyQuote(sb, root, REAL);
   assert.equal(ok.status, 0, ok.out);
-  assert.match(ok.md, /lecun2015 \("deep learning allows computational model…"\): \*\*OK\*\* — .*verified against your local file sources\/lecun2015\.pdf \(sha256 [0-9a-f]{12}…\)/);
+  assert.match(ok.md, /lecun2015 \[q1\] \("deep learning allows computational model…"\): \*\*OK\*\* — .*verified against your local file sources\/lecun2015\.pdf \(sha256 [0-9a-f]{12}…\)/);
 
   const fake = verifyQuote(sb, root, FAKE);
   assert.equal(fake.status, 4, fake.out);
-  assert.match(fake.md, /lecun2015 \("deep learning has already solved every o…"\): \*\*NOT_FOUND\*\* — .*quote not found in your local file sources\/lecun2015\.pdf/);
+  assert.match(fake.md, /lecun2015 \[q1\] \("deep learning has already solved every o…"\): \*\*NOT_FOUND\*\* — .*quote not found in your local file sources\/lecun2015\.pdf/);
   const c = runCli(sb, root, ['compile', '--yolo'], { timeoutMs: 120_000 });
   assert.equal(c.status, 4, `compile refuses\n${c.stdout}\n${c.stderr}`);
 });
@@ -69,10 +69,10 @@ test('S-17 (built CLI): an edited PDF or a forged .txt never makes a quote pass 
   fs.appendFileSync(pdf, `\n% ${FAKE}\n`);
   const r = verifyQuote(sb, root, FAKE);
   assert.equal(r.status, 4, `verify still blocks\n${r.out}`);
-  assert.doesNotMatch(r.md, /lecun2015 \("deep learning has already[^\n]*\*\*OK\*\*/, r.out);
+  assert.doesNotMatch(r.md, /lecun2015 \[q1\] \("deep learning has already[^\n]*\*\*OK\*\*/, r.out);
   assert.match(
     r.md,
-    /lecun2015 \("deep learning has already[^\n]*\*\*NOT_FOUND\*\*[^\n]*quote cannot be checked against your local file: PDF changed since ingest[^\n]*restore that PDF, or attach the right copy with `pensmith add <identifier> --pdf <file> --replace-pdf`/,
+    /lecun2015 \[q1\] \("deep learning has already[^\n]*\*\*NOT_FOUND\*\*[^\n]*quote cannot be checked against your local file: PDF changed since ingest[^\n]*restore that PDF, or attach the right copy with `pensmith add <identifier> --pdf <file> --replace-pdf`/,
   );
   assert.match(r.md, /^Status: failed$/m);
   const c = runCli(sb, root, ['compile', '--yolo'], { timeoutMs: 120_000 });
@@ -91,7 +91,7 @@ test('S-17 (built CLI, review round 2): a quote verified against the user\'s PDF
   fs.renameSync(pdf, moved);
   const gone = verifyQuote(sb, root, REAL);
   assert.equal(gone.status, 4, gone.out);
-  assert.match(gone.md, /lecun2015 \("deep learning allows computational model…"\): \*\*NOT_FOUND\*\* — [^\n]*the PDF sources\/lecun2015\.pdf is missing[^\n]*restore that PDF/);
+  assert.match(gone.md, /lecun2015 \[q1\] \("deep learning allows computational model…"\): \*\*NOT_FOUND\*\* — [^\n]*the PDF sources\/lecun2015\.pdf is missing[^\n]*restore that PDF/);
   const c = runCli(sb, root, ['compile', '--yolo'], { timeoutMs: 120_000 });
   assert.equal(c.status, 4, `compile refuses\n${c.stdout}\n${c.stderr}`);
   const done = runCli(sb, root, ['done', '--yolo'], { timeoutMs: 120_000 });
