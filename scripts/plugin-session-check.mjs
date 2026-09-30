@@ -196,7 +196,9 @@ function readTranscript(stdout) {
     } else if (m.type === 'user') {
       for (const c of m.message?.content ?? []) {
         if (c.type === 'tool_result') {
-          const text = Array.isArray(c.content) ? c.content.map((x) => x.text ?? '').join('') : String(c.content ?? '');
+          // One line break between content blocks: pensmith_status sends a data
+          // note and then the fenced status text as two blocks (review round 3).
+          const text = Array.isArray(c.content) ? c.content.map((x) => x.text ?? '').join('\n') : String(c.content ?? '');
           t.toolResults.push({ id: c.tool_use_id, text, isError: c.is_error === true });
         }
       }
