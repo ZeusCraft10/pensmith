@@ -34,6 +34,7 @@ import { rerenderCitations, LibraryNotFoundError } from '../lib/library.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { sectionDraft, sectionVerification, sectionPlan, paperDir, projectRoot } from '../lib/paths.js';
 import { renderPass1VerdictRow, renderPass3VerdictRow } from '../lib/verify/verdict-rows.js';
+import { sectionOutcome } from '../lib/verify/verdicts.js';
 import { loadFrontmatterDoc } from '../lib/frontmatter.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { sectionWriteBlockReason, updatePlanFrontmatter } from '../lib/plan-status.js';
@@ -197,19 +198,17 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
   // retraction-watch hit surfaces as an advisory table row, not a block.
   const freshness = bibExists ? await runFreshnessForDraft(draftMd, bibPath) : [];
 
-  // Aggregate: any FABRICATED → status: failed; any MIS-CITED → status: failed;
-  // any Pass-1 UNVERIFIABLE (the re-fetch was unavailable offline / under
-  // --dry-run, D-17-07) → status: unverifiable AND blocked (exit 4; compile and
-  // done refuse the row with "re-run online"); any PDF_UNAVAILABLE /
-  // TEXT_UNAVAILABLE → status: unverifiable (advisory); else verified.
-  const hasFail = pass1.some((r) => r.verdict === 'FABRICATED' || r.verdict === 'MIS-CITED')
-    || pass3.some((r) => r.verdict === 'NOT_FOUND');
-  const blockingUnverifiable = pass1.some((r) => r.verdict === 'UNVERIFIABLE');
-  const hasUnverifiable = blockingUnverifiable
-    || pass3.some((r) => r.verdict === 'PDF_UNAVAILABLE' || r.verdict === 'TEXT_UNAVAILABLE');
-  const status: 'verified' | 'failed' | 'unverifiable' = hasFail
-    ? 'failed'
-    : (hasUnverifiable ? 'unverifiable' : 'verified');
+  // Aggregate through the ONE status rule (verify/verdicts.ts, Phase 20 seam
+  // S-C): any failing verdict (FABRICATED, MIS-CITED, NOT_FOUND, …) → status:
+  // failed; any unverifiable verdict (a Pass-1 UNVERIFIABLE: the re-fetch was
+  // unavailable offline / under --dry-run, D-17-07) → status: unverifiable AND
+  // blocked (exit 4; compile and done refuse the row with "re-run online"); a
+  // legacy PDF_UNAVAILABLE / TEXT_UNAVAILABLE → status: unverifiable
+  // (advisory); else verified.
+  const outcome = sectionOutcome([...pass1, ...pass3]);
+  const status = outcome.status;
+  const hasFail = status === 'failed';
+  const blockingUnverifiable = outcome.blocked && !hasFail;
   // Blocking UNVERIFIABLE maps to EXIT_BLOCKED through the result (ok:false,
   // blocked:true); verifySection never sets process.exitCode itself, so write
   // can chain it once per section (GRND-15).

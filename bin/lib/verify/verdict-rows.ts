@@ -10,12 +10,14 @@
 // change will break the round-trip test (tests/verdict-rows.test.ts) rather
 // than silently nulling the blocking set.
 
+import { BLOCKING_VERDICTS, RETRY_ONLINE_VERDICTS, ACCEPTABLE_QUOTE_VERDICT } from './verdicts.js';
+
 /**
- * Verdicts that block compile and done. UNVERIFIABLE (D-17-07) is a Pass-1 row
- * recorded when the re-fetch was unavailable because of the network mode
- * (offline fixture miss or --dry-run); it blocks with a "re-run online" message.
+ * Verdicts that block compile and done: the ONE vocabulary of verdicts.ts
+ * (Phase 20 seam S-C). UNVERIFIABLE / UNVERIFIABLE-NETWORK (D-17-07, VRFY-12)
+ * rows block with a "re-run online" message.
  */
-export const BLOCKING_VERDICTS: ReadonlySet<string> = new Set(['FABRICATED', 'MIS-CITED', 'NOT_FOUND', 'UNVERIFIABLE']);
+export { BLOCKING_VERDICTS };
 
 /** One blocking verdict row parsed from a VERIFICATION.md body. */
 export interface BlockingVerdictRow {
@@ -141,9 +143,16 @@ export function sectionVerificationReasons(verificationMd: string, dryRunNow: bo
 /** The refusal wording for one blocking row (compile refuse-gate, done re-check). */
 export function blockingRowReason(row: BlockingVerdictRow): string {
   const cite = row.citekey === UNREADABLE_CITEKEY ? `a citation in ${UNREADABLE_CITEKEY}` : `citation [@${row.citekey}]`;
-  return row.verdict === 'UNVERIFIABLE'
-    ? `${cite} is UNVERIFIABLE (its source could not be checked: offline, --dry-run or a failed lookup) — re-run online`
-    : `${cite} has a blocking verdict (${row.verdict}${row.retraction === true ? ': the cited work is retracted' : ''})`;
+  if (row.verdict === 'UNVERIFIABLE' || RETRY_ONLINE_VERDICTS.has(row.verdict)) {
+    return `${cite} is ${row.verdict} (its source could not be checked: offline, --dry-run or a failed lookup) — re-run online`;
+  }
+  if (row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
+    return (
+      `${cite} has a quote no source text could be checked against (${row.verdict}) — add the source's PDF (pensmith add <pdf>), ` +
+      'paraphrase the quote (pensmith plan <N> --revise), or accept that one quote (pensmith verify <N> --accept-quote <id>)'
+    );
+  }
+  return `${cite} has a blocking verdict (${row.verdict}${row.retraction === true ? ': the cited work is retracted' : ''})`;
 }
 
 /**

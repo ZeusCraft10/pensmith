@@ -29,6 +29,7 @@ import { runPass3 } from '../lib/verify/pass3.js';
 import { parseBibFileAt } from '../lib/citations.js';
 import { sectionDraft, paperDir, projectRoot } from '../lib/paths.js';
 import { readPaperBrief } from '../lib/paper-brief.js';
+import { blocksCompile } from '../lib/verify/verdicts.js';
 
 /**
  * Production staleness re-verify seam (D-08 — Pass 1 + Pass 3 ONLY). Runs the
@@ -57,8 +58,9 @@ async function productionReVerify(paperRoot: string, input: ReVerifyInput): Prom
   const pass3 = await runPass3(draftMd, bibByCitekey, { root: paperRoot });
 
   const failing: string[] = [];
-  for (const r of pass1) if (r.verdict !== 'OK') failing.push(r.citekey);
-  for (const r of pass3) if (r.verdict === 'NOT_FOUND') failing.push(r.citekey);
+  // The one blocking rule (verify/verdicts.ts, Phase 20 seam S-C).
+  for (const r of pass1) if (blocksCompile(r.verdict)) failing.push(r.citekey);
+  for (const r of pass3) if (blocksCompile(r.verdict)) failing.push(r.citekey);
   return { passed: failing.length === 0, failingCitekeys: [...new Set(failing)] };
 }
 
