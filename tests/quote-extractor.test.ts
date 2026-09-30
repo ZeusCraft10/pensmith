@@ -141,6 +141,8 @@ test('VRFY-18: an apostrophe never opens a straight single quote (it\'s, the aut
   ]) {
     assert.deepEqual(both(md), [], md);
   }
+  // An abbreviation is not a list marker: `Dr. > 5 mg` is prose, not a block quote.
+  assert.deepEqual(both('Dr. > 5 mg was given to every single patient in the trial.\n'), []);
   // A plural possessive inside the quote never cuts it short.
   assert.deepEqual(both("He said 'the students' results were strong across every single cohort' [@k].").map((q) => q.text), [
     "the students' results were strong across every single cohort",

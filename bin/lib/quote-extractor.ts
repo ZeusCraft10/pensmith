@@ -266,7 +266,7 @@ function citationBefore(md: string, at: number, from: number, cites: readonly Ci
  * A list-item or definition marker a block quote may follow on its line
  * (`- > …`, `1. > …`, `(a) > …`, `#. > …`, `(@) > …`, `:   > …`, `~ > …`).
  */
-const ITEM_MARKER = String.raw`(?:[-*+:~]|\d{1,9}[.)]|\(?[A-Za-z]{1,4}[.)]|#[.)]|\(@[\w-]*\))`;
+const ITEM_MARKER = String.raw`(?:[-*+:~]|\(?\d{1,9}[.)]|\(?[A-Za-z][.)]|\(?[ivxlcdmIVXLCDM]{1,6}[.)]|#[.)]|\(@[\w-]*\))`;
 /**
  * A block-quote line: `>` after any indentation (a list item's continuation,
  * a nested list) and any list or definition markers — Pandoc reads each as a

@@ -241,7 +241,7 @@ const ENTRY_SHAPES: readonly RegExp[] = [
   // MLA / Chicago notes-bibliography: Nguyen, Thanh. "Title." … / Nguyen, Thanh, and Raj Patel. *Title*. …
   new RegExp(String.raw`${ENTRY_MARKER}${FAMILY},\s+${GIVEN}(?:,?\s+(?:and\s+${GIVEN}\s+${FAMILY}|et\s+al))?\.\s+(?:["“][^"”\n]{3,}[.?!,]?["”]|\*[^*\n]{3,}\*|_[^_\n]{3,}_)`, 'u'),
   // Vancouver / AMA: Nguyen T, Patel R. Title. Journal. 2019;12(3):45-67.
-  new RegExp(String.raw`${ENTRY_MARKER}${FAMILY}\s+\p{Lu}{1,3}(?:,\s+${FAMILY}\s+\p{Lu}{1,3})*(?:,\s+et\s+al)?\.\s+[^.\n]{3,}\.\s+[^.\n]{2,}\.\s*(?:(?:1[5-9]|20)\d{2})\b`, 'u'),
+  new RegExp(String.raw`${ENTRY_MARKER}${FAMILY}\s+\p{Lu}{1,3}(?:,\s+${FAMILY}\s+\p{Lu}{1,3})*(?:,\s+et\s+al)?\.\s+[^.\n]{3,}\.\s+[^.\n]{2,}\.\s*(?:1[5-9]|20)\d{2}(?:\s+\p{Lu}\p{Ll}{2}(?:\s+\d{1,2})?)?\s*[;:(.]`, 'u'),
 ];
 
 /** True when `text` (a paragraph's or list item's first line) has the shape of a typed reference entry. */

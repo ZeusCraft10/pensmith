@@ -135,6 +135,7 @@ const NEGATIVE: ReadonlyArray<readonly [string, string]> = [
   ['headings that are not reference lists', '## Notes on method\n\nText.\n\n## Background\n\nMore text.'],
   ['reference-list words with prose under them', '## Literature Review\n\nThe literature on street trees is broad [@k].\n\n## Literature\n\nMost studies measure heat [@k].\n\n## Sources of Error\n\nSampling was uneven.'],
   ['a place name before a year', 'Washington, D.C. (2019) hosted the summit, and Paris, France is large.'],
+  ['prose that opens like a Vancouver entry', 'World War II. It was long. Many died. 1945 ended it [@k].'],
   ['a rule, a table and code with braces', 'Para.\n\n---\n\nNext part.\n\n---\nSome text\n---\n\n```python\nx = {"a": 1}\n```\n\nDone [@k].'],
   ['numbered labels', 'See (Figure 3), (Level 2), (Apollo 11), (Python 3), (World War 2), (COVID 19), (Windows 10), (Grade 5) and (Title 9).'],
   ['a parenthetical aside', 'Paris (France) is large, and the result (a small one) held.'],
