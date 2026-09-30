@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0.0
 milestone_name: Open Source Release
 status: executing
-last_updated: "2026-09-30T02:00:00.000Z"
+last_updated: "2026-09-30T22:30:00.000Z"
 last_activity: 2026-09-30
 progress:
   total_phases: 11
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 9
+  completed_phases: 2
+  total_plans: 4
+  completed_plans: 4
+  percent: 18
 ---
 
 # Project State
@@ -20,17 +20,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-27 for the v1.0.0 Open Source Release milestone)
 
 **Core value:** Every citation in every exported paper is real and supports the claim it's attached to — verified by re-fetching the live DOI/quote. The verifier blocks compile and export; no FABRICATED, MIS-CITED, or quote-NOT_FOUND ever escapes.
-**Current focus:** v1.0.0 Open Source Release roadmapped (Phases 17–27, 168 requirements covering all 200 items of the 2026-09-25 gap register). Goal: every completeness category at 100% and the product ready for open source. v0.3.0 Truly End-to-End never started and is absorbed (FEED → Phase 18, SEC → Phase 24, HARDEN → Phase 26, HARDEN-03 → Phase 20). Phase 17 RUNTIME has shipped its runtime foundations: live network by default (D-V1-01), valid models and runtimes (D-V1-02), documented exit codes, one paper root, the session log, the cost cap, and the deterministic mock LLM that every later phase tests against. 36/37 of its requirements are Complete; CI-06 is open. Phase 18 GROUND is complete: intake collects the assignment and the §7.1 answers into a versioned brief, outline, plan and write run on validated contracts fed by each section's own fenced sources, bare `pensmith --yolo` goes from assignment.txt to an export, `--dry-run` runs in `.paper-dry-run/`, and prompt caching works (RUN-26). Phase 19 SOURCES was built concurrently on `v1/p19` and is merged (19/20 requirements Complete; SRC-06's keyed live round trip is a maintainer item). Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
+**Current focus:** v1.0.0 Open Source Release roadmapped (Phases 17–27, 168 requirements covering all 200 items of the 2026-09-25 gap register). Goal: every completeness category at 100% and the product ready for open source. v0.3.0 Truly End-to-End never started and is absorbed (FEED → Phase 18, SEC → Phase 24, HARDEN → Phase 26, HARDEN-03 → Phase 20). Phase 17 RUNTIME has shipped its runtime foundations: live network by default (D-V1-01), valid models and runtimes (D-V1-02), documented exit codes, one paper root, the session log, the cost cap, and the deterministic mock LLM that every later phase tests against. 36/37 of its requirements are Complete; CI-06 is open. Phase 18 GROUND is complete: intake collects the assignment and the §7.1 answers into a versioned brief, outline, plan and write run on validated contracts fed by each section's own fenced sources, bare `pensmith --yolo` goes from assignment.txt to an export, `--dry-run` runs in `.paper-dry-run/`, and prompt caching works (RUN-26). Phase 19 SOURCES was built concurrently on `v1/p19` and is merged (19/20 requirements Complete; SRC-06's keyed live round trip is a maintainer item). Phase 20 VERIFY is complete. There is one Pandoc citation grammar, and every other attribution form fails closed. Every identifier is checked at its own registrar with real-world name matching. A lookup with no answer is UNVERIFIABLE-NETWORK, never FABRICATED. Pass 3 runs against real open-access or hash-matched BYO text, with per-quote acceptance. Pass 2 judges on real source text with evidence and recorded decisions, and Pass 4 has a deterministic orphan floor. compile and done recompute the gate from the exact bytes, trusting no local file. `last_verified` goes through the library writer. HARDEN-03 has a pandoc oracle. Two milestones shipped (v0.1.0 + v0.2.0); 3-OS CI green.
 
 ## Current Position
 
-Phase: 19 — Sources and Library (SOURCES). **Merged** into the main branch on 2026-09-29/30 (the Phase 18/19 merge), after Phase 18 closed; the cross-platform CI fixes (`v1/ci-fix-18`: Node 24 readline and pdf-parse byte offset, Windows piped stdin and fake TTY, macOS data-dir leaks, installed-bin EBUSY, c8 merge-async, CI-09 after a failed test step) were merged after it and applied to Phase 19's PDF worker (19-VERIFICATION §9.5). At the merge, GRND-14's drafter half was wired exactly as the 19-SUMMARY "Closer" row describes (`source-context.ts fullTextAvailable` delegates to `full-text.ts`, the drafter request carries each source's `full_text` with a BYO source re-checked through `byoText`, and `checkDraft` has the `quote-without-full-text` violation) and both acceptance tests pass, so **19 of 20 Phase 19 requirements are Complete and 7 of 8 success criteria met** (`.planning/phases/19-sources/19-VERIFICATION.md` §9). One is open:
-- **SRC-06.** Built and tested, and the keyless budget report was observed live. The keyed OpenAlex / Semantic Scholar live round trip is unobserved because there is no key here (a maintainer item: `OPENALEX_API_KEY=… PENSMITH_S2_API_KEY=… PENSMITH_CONTACT_EMAIL=… npm run live:sources` plus one keyed `pensmith research --yolo`, recorded in 19-VERIFICATION §8.4).
+Phase: 20 — Verifier Completeness (VERIFY). **Complete** (2026-09-30) on `akhil/pensive-faraday-qx3o58`: all 22 requirements (VRFY-09..29, HARDEN-03) and all 7 success criteria, after four parallel streams, an integration pass and three review rounds. The closer re-ran the full gate (`CI=true npm test`: 2766 tests, 2765 pass; the one failure is the root-only atomic-write case). The closer also ran the live `npm run live:verify` lanes (0 of 56 computer-science and 0 of 55 medicine sources falsely blocked; Pass 3 against real open-access PDFs) and sixteen user-path checks on the built CLI (`.planning/phases/20-verify/20-VERIFICATION.md`). Caveats: no CI run has been observed for this code (CI-06), including the ci.yml pandoc step that HARDEN-03 needs; the Tier-1 halves of VRFY-20 and VRFY-22 are PLUG-10 and PLUG-07 (Phase 23).
 
-Phase 18 — Grounded Generation (GROUND) is **Complete** (2026-09-29): all 21 of its requirements and the Phase 17 carry-over RUN-26 (`.planning/phases/18-ground/18-VERIFICATION.md`). Phase 17 — Tier-2 Runtime Foundations (RUNTIME) is open on CI-06 only.
+Running concurrently: Phase 23a (plugin packaging: PLUG-01..05, 13, 14, CI-05) on `v1/p23a` in `/home/user/pensmith-p23a`. It moves workflows/, templates/, references/, presets, skills/ and agents/ into `plugin/`. At its merge, re-apply the 13 files Phase 20 edited there (20-SUMMARY "Close-out" → Open items; `git diff 1e43b9e^ <phase-20 head> -- workflows templates skills`).
 
-Next up: Phase 20 — Verifier Completeness (VERIFY). See the 19-SUMMARY "Hand-offs" section and 18-VERIFICATION's caveats (VRFY-13 author normalisation; VRFY-11's DataCite resolution — `verifierBlindSpot` already follows Pass 1's arXiv / PMID / ISBN route since the merge's review round 1).
-Last activity: 2026-09-30. Phase 18/19 merge completed and the CI fixes merged; the gate is green on Node 22 and Node 24 apart from the root-only atomic-write case (19-VERIFICATION §9.6).
+Earlier phases: Phase 19 — Sources and Library (SOURCES) is merged, with 19 of 20 requirements Complete. SRC-06 is open: its keyed OpenAlex / Semantic Scholar live round trip is a maintainer item (19-VERIFICATION §8.4). Phase 18 — Grounded Generation (GROUND) is **Complete** (2026-09-29). Phase 17 — Tier-2 Runtime Foundations (RUNTIME) is open on CI-06 only.
+
+Next up: Phase 21 — Compile, Done and Export (EXPORT), which depends on Phase 20's grammar and gate recomputation. See the Phase 21/22 hand-offs in 20-SUMMARY "Hand-offs": note-style footnotes are made after the gate; the offline exporter's `[@k 33]` locator differs from Pandoc's.
+Last activity: 2026-09-30. Phase 20 closed (20-SUMMARY.md, 20-VERIFICATION.md).
 
 ## Performance Metrics
 
@@ -309,15 +310,14 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 
 ### Pending Todos
 
-- Phase 20 (VRFY-13): Pass-1 author matching for PubMed "Family Initials" names and compound surnames. It blocks an unattended live `--yolo` run of the PRD §15 assignment (18-VERIFICATION.md U1). Include a live-lane check that the §15 assignment reaches done unaided.
 - Phase 21 (EXP-04): without pandoc, the md export of a note style renders the full note inline and leaves a doubled period after the DOI.
 - Phase 22 (REV-03): `plan N --revise` removes one flagged citation per run.
 - Intake (minor): `disciplineMentionFrom` does not read a bare course-code line (`Biology 210: …`), so the offline stub falls back to `other`.
 - CI-06: after the maintainer pushes, record the first green 6-leg `ci.yml` run, then mark CI-06 Complete and tick Phase 17 in ROADMAP.md.
-- Phase 20 (VRFY): the freshness table prints `DOI HEAD | ok` for a citekey with no DOI. It is advisory, but misleading.
 - Phase 23 (PLUG-01 / CI-05): `claude plugin validate .` fails on the `plugin.json` `skills` shape. This predates Phase 17.
 - SRC-06: the maintainer runs `OPENALEX_API_KEY=… PENSMITH_S2_API_KEY=… PENSMITH_CONTACT_EMAIL=… npm run live:sources` and one keyed `pensmith research --yolo`, records the output in 19-VERIFICATION §8.4, then marks SRC-06 Complete.
-- Follow-ups from the Phase 19 closer: PubMed entries have no abstract (esummary), so Pass 2 has no text and APA lowercases the proper nouns of a Title Case title ("china") — VRFY-21 / EXP-03. `done` reads the citation style only from INTAKE.md, so a paper without one exports raw `[@key]` tokens — EXP-03.
+- Follow-ups from the Phase 19 closer (EXP-03): APA lowercases the proper nouns of a Title Case title ("china"), and `done` reads the citation style only from INTAKE.md, so a paper without one exports raw `[@key]` tokens. (The missing PubMed abstracts were closed in Phase 20: `efetch`, VRFY-21.)
+- Phase 23a merge: re-apply the 13 workflow / template / skill files Phase 20 edited (20-SUMMARY "Close-out" → Open items) after PLUG-02 moves them into `plugin/`.
 
 ### Blockers/Concerns
 
@@ -339,12 +339,14 @@ Items acknowledged and carried forward at the v0.2.0 milestone close (2026-06-24
 
 ## Session Continuity
 
-Last session: 2026-09-30T02:00:00.000Z
-Stopped at: Phase 18/19 merge and the cross-platform CI fixes merged (GRND-14 wired and accepted; e2e corpus re-recorded; Phase 19 19/20 with SRC-06 open for the maintainer's keyed run; gate green on Node 22 and 24). Phase 17 remains open on CI-06 only. Next: /gsd:plan-phase 20.
+Last session: 2026-09-30T22:30:00.000Z
+Stopped at: Phase 20 closed. All 22 requirements are Complete and all 7 success criteria are met (20-VERIFICATION.md). Phase 23a is running concurrently on `v1/p23a`. Phase 17 remains open on CI-06, and Phase 19 on SRC-06. Next: /gsd:plan-phase 21.
 Resume file: None
 
 ## Operator Next Steps
 
 - Push the branch and confirm that the `ci.yml` matrix (Node 22 and 24 × ubuntu/macOS/Windows) is green; the `v1/ci-fix-18` fixes for the Node 24, macOS and Windows failures are merged, but no run with them has been observed. That closes CI-06, and with it Phase 17. It is also the cross-OS evidence for RUN-10, RUN-22, RUN-23 and CI-09, for Phase 18's new parsers, workspace copies, archive moves and fake-TTY preload, and for Phase 19's PDF worker (Windows worker threads), CRLF parsers and junction handling.
 - With keys: run the keyed `live:sources` and one keyed `research` to close SRC-06 (19-VERIFICATION §8.4).
-- Run /gsd:plan-phase 20 (Verifier Completeness). Include VRFY-13's author normalisation, with a live-lane check that the PRD §15 assignment reaches done unaided, VRFY-11's DataCite resolution (`verifierBlindSpot` already follows Pass 1's route for arXiv ids, PMIDs, ISBNs and DataCite arXiv DOIs since the merge's review round 1), and the Phase 19 hand-offs (19-SUMMARY "Hand-offs").
+- Run /gsd:plan-phase 21 (Compile, Done and Export). Include the Phase 20 hand-offs (20-SUMMARY "Hand-offs": note-style footnotes after the gate; the offline exporter's `[@k 33]` locator) and the EXP-03 follow-ups under Pending Todos.
+- When Phase 23a merges, re-apply the 13 files Phase 20 edited under workflows/, templates/ and skills/ (20-SUMMARY "Close-out" → Open items).
+- At the first CI run, confirm the pandoc 3.9 step (`r-lib/actions/setup-pandoc@v2`) on all three OSes. HARDEN-03 fails without it when `CI=true`.

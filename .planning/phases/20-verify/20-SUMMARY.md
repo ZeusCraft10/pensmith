@@ -1,6 +1,6 @@
 ---
 phase: 20-verify
-status: integrated on akhil/pensive-faraday-qx3o58 (streams merged, cross-stream wiring and acceptance done); close-out (20-VERIFICATION.md, REQUIREMENTS / ROADMAP / STATE) pending
+status: complete (closed 2026-09-30 on akhil/pensive-faraday-qx3o58 after three review rounds; 22/22 requirements and 7/7 success criteria met — 20-VERIFICATION.md)
 requirements: [VRFY-09, VRFY-10, VRFY-11, VRFY-12, VRFY-13, VRFY-14, VRFY-15, VRFY-16, VRFY-17, VRFY-18, VRFY-19, VRFY-20, VRFY-21, VRFY-22, VRFY-23, VRFY-24, VRFY-25, VRFY-26, VRFY-27, VRFY-28, VRFY-29, HARDEN-03]
 streams: [grammar (v1/p20-grammar 857d26c), registrar (v1/p20-registrar 2bab275), quotes (v1/p20-quotes 8ebdbf0), gate (v1/p20-gate 95959e2)]
 ---
@@ -183,8 +183,18 @@ Every confirmed finding was fixed with tests; one sub-point was rejected (below)
 
 **Files under the folders Phase 23a moves, changed in this round** (re-apply after PLUG-02): `workflows/verify.md` (the round-3 forms, the BOM, duplicate keys, the fallback-DOI rule, the consortium rule, OK-BYO identifiers, quote titles and attribution, brackets and elisions, Europe PMC binding, `--accept-quote` checked first), `workflows/write.md` (the chained verify asks `quote-accept`), `workflows/next.md` (the gate in the bare flow), `workflows/research.md` (step 10's retraction cross-check). No template, prompt, reference or skill file changed; `tests/fixtures/known-bad-quotes.json` was re-pinned in `tests/repo-files.test.ts`.
 
+## Close-out (phase closer, 2026-09-30, at 887a648)
+
+The closer re-ran the full gate, the live lanes and sixteen user-path checks on the built CLI (20-VERIFICATION.md §1–§3) and closed the phase: **22 of 22 requirements met, 7 of 7 success criteria met.**
+
+- **Gate** (Node 22.22.2, as root, pandoc 3.9 on `PATH`): `npm run prebuild`, `build` (tree clean after it), `lint`, `typecheck`, `validate:manifests` green; `npm run test:tier-contract` 59 / 59; `node scripts/e2e-smoke.mjs` 17 PASS, 0 FINDING, 0 FAIL; `CI=true npm test` **2766 tests, 2765 pass** — the one failure is the root-only `atomic-write` case (CLAUDE.md gotcha); HARDEN-03 1000 drafts against pandoc 3.9 (seed 1075530414); `CI=true npm run test:coverage` COVERAGE_SUMMARY.
+- **Live** (`PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org npm run live:verify`): 8 passed, 0 failed, and every Pass-3 check passed. Self-consistency blocked 0 of 56 computer-science and 0 of 55 medicine sources. OpenAlex's keyless budget was exhausted, so three identifier-less rows failed closed as UNVERIFIABLE-NETWORK and were reported as INFO.
+- **User paths** (offline fixture lane, isolated data dirs, `scratchpad/p20/closer/up/`): the VRFY-20 flow (UNVERIFIABLE-QUOTE q1 → compile REFUSED with the three remedies → an unknown `--accept-unverifiable-quotes` exit 2 → a hand-written acceptance line ignored → `--accept-quote q1` → compile and done list it → one changed byte voids it); VRFY-27's two stale refusals; VRFY-26's appended `[@smith2099fake]`; every VRFY-09 / VRFY-10 form in one draft; VRFY-13's year, title and first-author MIS-CITED; Wakefield RETRACTED; VRFY-16's malformed and empty bibliographies; UNASSIGNED and NO-CITATIONS; Pass-4 orphans at done; a BYO PDF deciding a quote NOT_FOUND / PASS "verified against your local file"; an ISBN-only source's freshness row; and, under a real pty, done's `unsupported-claims` gate listing the claim with its evidence and recording `Confirmed by user <ISO>`.
+- **Test added by the closer:** VRFY-12's acceptance names a Crossref timeout, and the MockAgent case covered only 429, 500 and a refused connection. `tests/pass1-registrars.test.ts` now also drives undici's headers and body timeouts and a socket `ETIMEDOUT` through `runPass1`, and each is UNVERIFIABLE-NETWORK (4fd12f1). No shipped code changed at close.
+- **Observed, not a defect:** when CITATIONS.bib does not parse and a LIBRARY.json exists, verify re-renders the bib from LIBRARY.json before Pass 1. This is the one writer (BRDTH-01). verify says so on stderr and keeps the old file as `CITATIONS.bib.unparsed-<time>.bak`, so a hand-typed entry that LIBRARY.json lacks becomes FABRICATED ("citekey not in CITATIONS.bib") instead of UNPARSEABLE. Both verdicts fail closed. The UNPARSEABLE row of VRFY-16's acceptance appears when there is no LIBRARY.json, and at compile and done, which never write the bib.
+
 ## Open items
 
-- The ci.yml pandoc step (`r-lib/actions/setup-pandoc@v2`, 3.9) and the Node 24 leg have not run here (no GitHub runner; no Node 24 in the container); confirm both at the first CI run on Ubuntu, macOS arm64 and Windows.
-- Close-out: `20-VERIFICATION.md`, the REQUIREMENTS.md checkboxes and traceability, the ROADMAP Phase 20 status and STATE.md are left to the phase closer (20-PLAN §7.8).
-- The files in "Files under the folders Phase 23a moves" must be re-applied after PLUG-02.
+- CI-06 (Phase 17): the ci.yml pandoc step (`r-lib/actions/setup-pandoc@v2`, 3.9) and the Node 22 / 24 legs on Ubuntu, macOS arm64 and Windows have not run for this code (the branch is not pushed); HARDEN-03 requires pandoc on every runner.
+- Phase 23a merge: the files in "Files under the folders Phase 23a moves" (13 in total over the phase: `templates/prompts/claim-support.md`, `templates/prompts/orphan-label.md`, `workflows/{add,compile,done,next,outline,plan,research,verify,write}.md`, `skills/plan-section.md`, `skills/verify-section.md`; `git diff 1e43b9e^ <phase-20 head> -- workflows templates skills`) must be re-applied after PLUG-02. No `references/` file or preset changed.
+- Phase 23 (PLUG-07 / PLUG-10), Phase 21 (EXP) and the e2e-corpus re-record: see "Hand-offs".
