@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_BLOCKED } from '../../bin/lib/exit-codes.js';
+import { unfence } from '../../bin/lib/untrusted-fence.js';
 import {
   CLI_BIN,
   MCP_BIN,
@@ -28,6 +29,13 @@ import {
 interface McpOutcome {
   isError: boolean;
   body: { exit_code?: number; classification?: string; message?: string | null } & Record<string, unknown>;
+  /** The failure line the reply carries after its data note, inside the FEED-05 fence (review round 2); null when none. */
+  words?: string | null;
+}
+
+/** The fenced block after the JSON half and its data note (mcp/tools.ts verbToolResult), unfenced. */
+function fencedWords(content: Array<{ text?: string }>): string | null {
+  return content.length >= 3 ? unfence(content[2]?.text ?? '') : null;
 }
 
 async function callTool(sb: Sandbox, root: string, name: string, args: Record<string, unknown>): Promise<McpOutcome> {
@@ -41,8 +49,9 @@ async function callTool(sb: Sandbox, root: string, name: string, args: Record<st
   await client.connect(transport);
   try {
     const res = await client.callTool({ name, arguments: args });
-    const text = (res.content as Array<{ text: string }>)[0]?.text ?? 'null';
-    return { isError: res.isError === true, body: (JSON.parse(text) ?? {}) as McpOutcome['body'] };
+    const content = res.content as Array<{ text: string }>;
+    const text = content[0]?.text ?? 'null';
+    return { isError: res.isError === true, body: (JSON.parse(text) ?? {}) as McpOutcome['body'], words: fencedWords(content) };
   } finally {
     await client.close();
   }
@@ -123,7 +132,10 @@ test('RUN-09 parity: an expected failure (a PLAN.md from a newer pensmith) is EX
   const mcp = await callTool(sb, roots[1]!, 'pensmith_write', { n: 1, yolo: true });
   assertParity('newer PLAN.md', cli.status, mcp, EXIT_ERROR, 'EXIT_ERROR');
   assert.match(cli.stderr, /upgrade pensmith$/m);
-  assert.match(String(mcp.body.message), /upgrade pensmith$/);
+  // The same one line (each tier names its own paper's PLAN.md), fenced after the JSON half (review round 2): never in the JSON itself.
+  assert.equal(mcp.words, cli.stderr.trim().split('\n').at(-1)?.split(roots[0]!).join(roots[1]!));
+  assert.match(String(mcp.words), /upgrade pensmith$/);
+  assert.equal(mcp.body.message, undefined, 'the JSON half carries no text');
 });
 
 // Review round 2 (PLUG-05): the plugin's section tools refuse a folder with no
@@ -157,10 +169,11 @@ test('RUN-09 / PLUG-05 parity: plan, write and verify in a folder with no paper 
     try {
       for (const [verb, tool] of verbs) {
         const res = await client.callTool({ name: tool, arguments: { n: 1, yolo: true } });
-        const text = (res.content as Array<{ text: string }>)[0]?.text ?? 'null';
-        const body = JSON.parse(text) as McpOutcome['body'];
+        const content = res.content as Array<{ text: string }>;
+        const body = JSON.parse(content[0]?.text ?? 'null') as McpOutcome['body'];
         assertParity(`${tool} with no paper`, EXIT_USAGE, { isError: res.isError === true, body }, EXIT_USAGE, 'EXIT_USAGE');
-        assert.equal(body.message, noPaperLine(root), `${tool}: the CLI's one line (${verb})`);
+        assert.equal(fencedWords(content), `pensmith: ${noPaperLine(root)}`, `${tool}: the CLI's one line (${verb}), fenced`);
+        assert.equal(body.message, undefined, `${tool}: the JSON half carries no text`);
         assert.equal(body['result'], null, `${tool}: the verb never ran`);
       }
     } finally {

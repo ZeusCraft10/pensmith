@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { EXIT_USAGE } from '../bin/lib/exit-codes.js';
+import { unfence } from '../bin/lib/untrusted-fence.js';
 import { MCP_BIN, REPO, sandbox, writeOutline, writeState, type Sandbox } from './helpers/paper-cli-harness.js';
 
 const BUNDLED_SERVER = join(REPO, 'plugin', 'dist', 'mcp', 'server.mjs');
@@ -35,6 +36,8 @@ interface ToolAnswer {
   isError: boolean;
   text: string;
   body: { exit_code?: number; classification?: string; message?: string | null; result?: unknown };
+  /** The failure line after the JSON half and its data note, unfenced (review round 2); null when there is none. */
+  words: string | null;
 }
 
 async function withServer<T>(server: string, sb: Sandbox, cwd: string, env: Record<string, string | undefined>, fn: (call: (name: string, args: Record<string, unknown>) => Promise<ToolAnswer>) => Promise<T>): Promise<T> {
@@ -51,7 +54,8 @@ async function withServer<T>(server: string, sb: Sandbox, cwd: string, env: Reco
       } catch {
         body = {};
       }
-      return { isError: res.isError === true, text, body };
+      const blocks = res.content as Array<{ text?: string }>;
+      return { isError: res.isError === true, text, body, words: blocks.length >= 3 ? unfence(blocks[2]?.text ?? '') : null };
     });
   } finally {
     await client.close();
@@ -73,7 +77,8 @@ for (const leg of LEGS) {
       assert.equal(a.isError, true, a.text);
       assert.equal(a.body.exit_code, EXIT_USAGE, a.text);
       assert.equal(a.body.classification, 'EXIT_USAGE');
-      assert.equal(a.body.message, `no paper in ${empty} — run pensmith new to start one here, or pass --paper <name|path> (pensmith list shows your papers)`);
+      assert.equal(a.words, `pensmith: no paper in ${empty} — run pensmith new to start one here, or pass --paper <name|path> (pensmith list shows your papers)`);
+      assert.equal(a.body.message, undefined, 'the line is fenced, never in the JSON half');
       assert.equal(a.body.result, null, 'the verb never ran');
     }
     assert.deepEqual(readdirSync(empty), [], 'no .paper/, no placeholder section, no cost ledger');
@@ -93,7 +98,7 @@ for (const leg of LEGS) {
     ]);
     for (const a of answers.slice(0, 2)) {
       assert.equal(a.isError, true, a.text);
-      assert.match(String(a.body.message), /^pensmith (plan|write): no LLM key configured \(ANTHROPIC_API_KEY is not set for provider anthropic\)\. Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY \(or configure a local endpoint\); `pensmith doctor` checks the setup \(README: Model runtimes\)\.$/);
+      assert.match(String(a.words), /^pensmith (plan|write): no LLM key configured \(ANTHROPIC_API_KEY is not set for provider anthropic\)\. Set one of: ANTHROPIC_API_KEY, OPENAI_API_KEY \(or configure a local endpoint\); `pensmith doctor` checks the setup \(README: Model runtimes\)\.$/);
     }
     for (const a of answers) assert.doesNotMatch(a.text, /key-free/i, 'no tool promises key-free operation in this release');
     assert.equal(existsSync(join(root, '.paper', 'sections', '01-intro', 'PLAN.md')), false, 'nothing was planned');
