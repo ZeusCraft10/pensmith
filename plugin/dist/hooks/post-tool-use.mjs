@@ -113,6 +113,7 @@ import { createHash } from "node:crypto";
 import * as fs3 from "node:fs";
 import os from "node:os";
 import path3 from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 function validateSlug(slug) {
   if (typeof slug !== "string" || !SLUG_RE.test(slug)) {
     throw new Error(
@@ -194,6 +195,46 @@ function pensmithGlobalLibraryIndexPath(platform = process.platform, env = proce
 }
 function pensmithActivePointerPath(platform = process.platform, env = process.env) {
   return path3.join(pensmithDataDir(platform, env), "active.json");
+}
+function isRegularFile(p) {
+  try {
+    return fs3.statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+function findPluginRoot(start) {
+  const from = path3.resolve(start);
+  let cur = from;
+  for (; ; ) {
+    if (isRegularFile(path3.join(cur, PLUGIN_MANIFEST_REL))) {
+      return { root: cur, layout: "plugin", packageRoot: null };
+    }
+    const nested = path3.join(cur, PLUGIN_DIR_NAME);
+    if (isRegularFile(path3.join(nested, PLUGIN_MANIFEST_REL))) {
+      return { root: nested, layout: "package", packageRoot: cur };
+    }
+    const next = path3.dirname(cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  throw new PensmithError(
+    `plugin assets not found: neither ${PLUGIN_MANIFEST_REL} nor ${path3.join(PLUGIN_DIR_NAME, PLUGIN_MANIFEST_REL)} exists in ${from} or any folder above it; reinstall pensmith (or restore plugin/ in a source checkout)`,
+    EXIT_ERROR
+  );
+}
+function pluginRootHit() {
+  pluginRootHitCache ??= findPluginRoot(path3.dirname(fileURLToPath2(import.meta.url)));
+  return pluginRootHitCache;
+}
+function pluginRoot() {
+  return pluginRootHit().root;
+}
+function pluginPath(...segments) {
+  return path3.join(pluginRoot(), ...segments);
+}
+function pluginTemplatePath(...segments) {
+  return pluginPath("templates", ...segments);
 }
 function setActivePaperRoot(root) {
   activeRoot = root === null ? null : path3.resolve(root);
@@ -460,7 +501,7 @@ function sectionDraft(n, slug, root = projectRoot()) {
 function sectionVerification(n, slug, root = projectRoot()) {
   return path3.join(strictSectionDir(n, slug, root), "VERIFICATION.md");
 }
-var SLUG_RE, activeRoot, PAPER_DIR_NAME, DRY_RUN_PAPER_DIR_NAME, dryRunWorkspaceOverride, LEGACY_STATE_MAX_BYTES, ASSIGNMENT_FILE_NAMES, NEW_PAPER_VERBS, PAPERLESS_CWD_VERBS;
+var SLUG_RE, PLUGIN_DIR_NAME, PLUGIN_MANIFEST_REL, pluginRootHitCache, activeRoot, PAPER_DIR_NAME, DRY_RUN_PAPER_DIR_NAME, dryRunWorkspaceOverride, LEGACY_STATE_MAX_BYTES, ASSIGNMENT_FILE_NAMES, NEW_PAPER_VERBS, PAPERLESS_CWD_VERBS;
 var init_paths = __esm({
   "bin/lib/paths.ts"() {
     "use strict";
@@ -474,6 +515,15 @@ var init_paths = __esm({
     __name(pensmithLockDir, "pensmithLockDir");
     __name(pensmithGlobalLibraryIndexPath, "pensmithGlobalLibraryIndexPath");
     __name(pensmithActivePointerPath, "pensmithActivePointerPath");
+    PLUGIN_DIR_NAME = "plugin";
+    PLUGIN_MANIFEST_REL = path3.join(".claude-plugin", "plugin.json");
+    __name(isRegularFile, "isRegularFile");
+    __name(findPluginRoot, "findPluginRoot");
+    pluginRootHitCache = null;
+    __name(pluginRootHit, "pluginRootHit");
+    __name(pluginRoot, "pluginRoot");
+    __name(pluginPath, "pluginPath");
+    __name(pluginTemplatePath, "pluginTemplatePath");
     activeRoot = null;
     __name(setActivePaperRoot, "setActivePaperRoot");
     __name(workingDirectory, "workingDirectory");
@@ -519,6 +569,21 @@ var init_paths = __esm({
     __name(sectionPlan, "sectionPlan");
     __name(sectionDraft, "sectionDraft");
     __name(sectionVerification, "sectionVerification");
+  }
+});
+
+// bin/lib/output-sink.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+function setOutputSink(sink) {
+  replaced = sink;
+}
+var replaced, captures;
+var init_output_sink = __esm({
+  "bin/lib/output-sink.ts"() {
+    "use strict";
+    replaced = null;
+    captures = new AsyncLocalStorage();
+    __name(setOutputSink, "setOutputSink");
   }
 });
 
@@ -1038,8 +1103,8 @@ var init_parseUtil = __esm({
     init_errors();
     init_en();
     makeIssue = /* @__PURE__ */ __name((params) => {
-      const { data, path: path11, errorMaps, issueData } = params;
-      const fullPath = [...path11, ...issueData.path || []];
+      const { data, path: path10, errorMaps, issueData } = params;
+      const fullPath = [...path10, ...issueData.path || []];
       const fullIssue = {
         ...issueData,
         path: fullPath
@@ -1354,11 +1419,11 @@ var init_types = __esm({
       static {
         __name(this, "ParseInputLazyPath");
       }
-      constructor(parent, value, path11, key) {
+      constructor(parent, value, path10, key) {
         this._cachedPath = [];
         this.parent = parent;
         this.data = value;
-        this._path = path11;
+        this._path = path10;
         this._key = key;
       }
       get path() {
@@ -5084,14 +5149,14 @@ var require_polyfills = __commonJS({
       fs8.fstatSync = statFixSync(fs8.fstatSync);
       fs8.lstatSync = statFixSync(fs8.lstatSync);
       if (fs8.chmod && !fs8.lchmod) {
-        fs8.lchmod = function(path11, mode, cb) {
+        fs8.lchmod = function(path10, mode, cb) {
           if (cb) process.nextTick(cb);
         };
         fs8.lchmodSync = function() {
         };
       }
       if (fs8.chown && !fs8.lchown) {
-        fs8.lchown = function(path11, uid, gid, cb) {
+        fs8.lchown = function(path10, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
         fs8.lchownSync = function() {
@@ -5160,9 +5225,9 @@ var require_polyfills = __commonJS({
         };
       })(fs8.readSync);
       function patchLchmod(fs9) {
-        fs9.lchmod = function(path11, mode, callback) {
+        fs9.lchmod = function(path10, mode, callback) {
           fs9.open(
-            path11,
+            path10,
             constants.O_WRONLY | constants.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -5178,8 +5243,8 @@ var require_polyfills = __commonJS({
             }
           );
         };
-        fs9.lchmodSync = function(path11, mode) {
-          var fd = fs9.openSync(path11, constants.O_WRONLY | constants.O_SYMLINK, mode);
+        fs9.lchmodSync = function(path10, mode) {
+          var fd = fs9.openSync(path10, constants.O_WRONLY | constants.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
@@ -5201,8 +5266,8 @@ var require_polyfills = __commonJS({
       __name(patchLchmod, "patchLchmod");
       function patchLutimes(fs9) {
         if (constants.hasOwnProperty("O_SYMLINK") && fs9.futimes) {
-          fs9.lutimes = function(path11, at, mt, cb) {
-            fs9.open(path11, constants.O_SYMLINK, function(er, fd) {
+          fs9.lutimes = function(path10, at, mt, cb) {
+            fs9.open(path10, constants.O_SYMLINK, function(er, fd) {
               if (er) {
                 if (cb) cb(er);
                 return;
@@ -5214,8 +5279,8 @@ var require_polyfills = __commonJS({
               });
             });
           };
-          fs9.lutimesSync = function(path11, at, mt) {
-            var fd = fs9.openSync(path11, constants.O_SYMLINK);
+          fs9.lutimesSync = function(path10, at, mt) {
+            var fd = fs9.openSync(path10, constants.O_SYMLINK);
             var ret;
             var threw = true;
             try {
@@ -5343,11 +5408,11 @@ var require_legacy_streams = __commonJS({
         ReadStream,
         WriteStream
       };
-      function ReadStream(path11, options) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path11, options);
+      function ReadStream(path10, options) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path10, options);
         Stream.call(this);
         var self = this;
-        this.path = path11;
+        this.path = path10;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -5393,10 +5458,10 @@ var require_legacy_streams = __commonJS({
         });
       }
       __name(ReadStream, "ReadStream");
-      function WriteStream(path11, options) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path11, options);
+      function WriteStream(path10, options) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path10, options);
         Stream.call(this);
-        this.path = path11;
+        this.path = path10;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -5546,14 +5611,14 @@ var require_graceful_fs = __commonJS({
       fs9.createWriteStream = createWriteStream;
       var fs$readFile = fs9.readFile;
       fs9.readFile = readFile4;
-      function readFile4(path11, options, cb) {
+      function readFile4(path10, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$readFile(path11, options, cb);
-        function go$readFile(path12, options2, cb2, startTime) {
-          return fs$readFile(path12, options2, function(err) {
+        return go$readFile(path10, options, cb);
+        function go$readFile(path11, options2, cb2, startTime) {
+          return fs$readFile(path11, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue2([go$readFile, [path12, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue2([go$readFile, [path11, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -5565,14 +5630,14 @@ var require_graceful_fs = __commonJS({
       __name(readFile4, "readFile");
       var fs$writeFile = fs9.writeFile;
       fs9.writeFile = writeFile;
-      function writeFile(path11, data, options, cb) {
+      function writeFile(path10, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$writeFile(path11, data, options, cb);
-        function go$writeFile(path12, data2, options2, cb2, startTime) {
-          return fs$writeFile(path12, data2, options2, function(err) {
+        return go$writeFile(path10, data, options, cb);
+        function go$writeFile(path11, data2, options2, cb2, startTime) {
+          return fs$writeFile(path11, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue2([go$writeFile, [path12, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue2([go$writeFile, [path11, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -5585,14 +5650,14 @@ var require_graceful_fs = __commonJS({
       var fs$appendFile = fs9.appendFile;
       if (fs$appendFile)
         fs9.appendFile = appendFile2;
-      function appendFile2(path11, data, options, cb) {
+      function appendFile2(path10, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$appendFile(path11, data, options, cb);
-        function go$appendFile(path12, data2, options2, cb2, startTime) {
-          return fs$appendFile(path12, data2, options2, function(err) {
+        return go$appendFile(path10, data, options, cb);
+        function go$appendFile(path11, data2, options2, cb2, startTime) {
+          return fs$appendFile(path11, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue2([go$appendFile, [path12, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue2([go$appendFile, [path11, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -5627,31 +5692,31 @@ var require_graceful_fs = __commonJS({
       var fs$readdir = fs9.readdir;
       fs9.readdir = readdir;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir(path11, options, cb) {
+      function readdir(path10, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? /* @__PURE__ */ __name(function go$readdir2(path12, options2, cb2, startTime) {
-          return fs$readdir(path12, fs$readdirCallback(
-            path12,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? /* @__PURE__ */ __name(function go$readdir2(path11, options2, cb2, startTime) {
+          return fs$readdir(path11, fs$readdirCallback(
+            path11,
             options2,
             cb2,
             startTime
           ));
-        }, "go$readdir") : /* @__PURE__ */ __name(function go$readdir2(path12, options2, cb2, startTime) {
-          return fs$readdir(path12, options2, fs$readdirCallback(
-            path12,
+        }, "go$readdir") : /* @__PURE__ */ __name(function go$readdir2(path11, options2, cb2, startTime) {
+          return fs$readdir(path11, options2, fs$readdirCallback(
+            path11,
             options2,
             cb2,
             startTime
           ));
         }, "go$readdir");
-        return go$readdir(path11, options, cb);
-        function fs$readdirCallback(path12, options2, cb2, startTime) {
+        return go$readdir(path10, options, cb);
+        function fs$readdirCallback(path11, options2, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue2([
                 go$readdir,
-                [path12, options2, cb2],
+                [path11, options2, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -5724,7 +5789,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path11, options) {
+      function ReadStream(path10, options) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -5746,7 +5811,7 @@ var require_graceful_fs = __commonJS({
         });
       }
       __name(ReadStream$open, "ReadStream$open");
-      function WriteStream(path11, options) {
+      function WriteStream(path10, options) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -5766,24 +5831,24 @@ var require_graceful_fs = __commonJS({
         });
       }
       __name(WriteStream$open, "WriteStream$open");
-      function createReadStream(path11, options) {
-        return new fs9.ReadStream(path11, options);
+      function createReadStream(path10, options) {
+        return new fs9.ReadStream(path10, options);
       }
       __name(createReadStream, "createReadStream");
-      function createWriteStream(path11, options) {
-        return new fs9.WriteStream(path11, options);
+      function createWriteStream(path10, options) {
+        return new fs9.WriteStream(path10, options);
       }
       __name(createWriteStream, "createWriteStream");
       var fs$open = fs9.open;
       fs9.open = open3;
-      function open3(path11, flags, mode, cb) {
+      function open3(path10, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path11, flags, mode, cb);
-        function go$open(path12, flags2, mode2, cb2, startTime) {
-          return fs$open(path12, flags2, mode2, function(err, fd) {
+        return go$open(path10, flags, mode, cb);
+        function go$open(path11, flags2, mode2, cb2, startTime) {
+          return fs$open(path11, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue2([go$open, [path12, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue2([go$open, [path11, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -6321,7 +6386,7 @@ var require_mtime_precision = __commonJS({
 var require_lockfile = __commonJS({
   "node_modules/proper-lockfile/lib/lockfile.js"(exports, module) {
     "use strict";
-    var path11 = __require("path");
+    var path10 = __require("path");
     var fs8 = require_graceful_fs();
     var retry = require_retry2();
     var onExit = require_signal_exit();
@@ -6333,7 +6398,7 @@ var require_lockfile = __commonJS({
     __name(getLockFile, "getLockFile");
     function resolveCanonicalPath(file, options, callback) {
       if (!options.realpath) {
-        return callback(null, path11.resolve(file));
+        return callback(null, path10.resolve(file));
       }
       options.fs.realpath(file, callback);
     }
@@ -7117,11 +7182,11 @@ function migrate2(input) {
   if (version === 2) {
     return JSON.parse(JSON.stringify(obj));
   }
-  const out = {};
+  const out2 = {};
   for (const [k, v] of Object.entries(obj)) {
     if (DROPPED_TOP_LEVEL.has(k)) continue;
     if (k === "sections" && Array.isArray(v)) {
-      out["sections"] = v.map((entry, idx) => {
+      out2["sections"] = v.map((entry, idx) => {
         if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
           return entry;
         }
@@ -7139,12 +7204,12 @@ function migrate2(input) {
       });
       continue;
     }
-    out[k] = v;
+    out2[k] = v;
   }
   const targetField = field ?? "schema_version";
-  out[targetField] = 2;
-  out["$schemaVersion"] = 2;
-  return out;
+  out2[targetField] = 2;
+  out2["$schemaVersion"] = 2;
+  return out2;
 }
 var DROPPED_TOP_LEVEL, DROPPED_SECTION_FIELDS, v1_to_v2, v1_to_v2_default;
 var init_v1_to_v22 = __esm({
@@ -7165,9 +7230,9 @@ var init_v1_to_v22 = __esm({
     __name(detectVersion, "detectVersion");
     __name(migrate2, "migrate");
     v1_to_v2 = /* @__PURE__ */ __name((input) => {
-      const out = migrate2(input);
+      const out2 = migrate2(input);
       void deepEqual;
-      return out;
+      return out2;
     }, "v1_to_v2");
     v1_to_v2_default = v1_to_v2;
   }
@@ -7192,11 +7257,11 @@ function migrate3(input) {
       `pensmith: refuse-forward \u2014 state $schemaVersion=${version} is newer than CURRENT_STATE_VERSION=${TARGET} (ARCH-07). Upgrade pensmith, or restore from a v${TARGET}-or-older snapshot.`
     );
   }
-  const out = JSON.parse(JSON.stringify(obj));
-  if (version === TARGET) return out;
-  out["$schemaVersion"] = TARGET;
-  if ("schema_version" in out) out["schema_version"] = TARGET;
-  return out;
+  const out2 = JSON.parse(JSON.stringify(obj));
+  if (version === TARGET) return out2;
+  out2["$schemaVersion"] = TARGET;
+  if ("schema_version" in out2) out2["schema_version"] = TARGET;
+  return out2;
 }
 function v2_to_v3(input) {
   return migrate3(input);
@@ -7859,11 +7924,11 @@ function nameTokens(raw) {
   return raw.split(/\s+/).filter((t) => new RegExp("^(?:\\p{Lu}['\u2019])?\\p{Lu}\\p{Ll}", "u").test(t));
 }
 function keepTokens(keep) {
-  const out = /* @__PURE__ */ new Set();
+  const out2 = /* @__PURE__ */ new Set();
   for (const phrase of keep ?? []) {
-    for (const w of phrase.split(/[^\p{L}'’-]+/u)) if (new RegExp("^\\p{Lu}", "u").test(w)) out.add(w.replace(/['’]s$/u, ""));
+    for (const w of phrase.split(/[^\p{L}'’-]+/u)) if (new RegExp("^\\p{Lu}", "u").test(w)) out2.add(w.replace(/['’]s$/u, ""));
   }
-  return out;
+  return out2;
 }
 function resolveName(raw, keep, after = "", person = false) {
   const all = nameTokens(raw);
@@ -7893,34 +7958,34 @@ function resolveName(raw, keep, after = "", person = false) {
   return { raw: kept, startDelta };
 }
 function protectedSpans(text) {
-  const out = [];
+  const out2 = [];
   for (const re of PROTECTED) {
     for (const m2 of text.matchAll(re)) {
       const at = m2.index ?? 0;
-      out.push([at, at + m2[0].length]);
+      out2.push([at, at + m2[0].length]);
     }
   }
-  return out;
+  return out2;
 }
 function overlapsAny(span, spans) {
   return spans.some(([a, b]) => span[0] < b && span[1] > a);
 }
 function personPhraseSpans(text) {
-  const out = [];
+  const out2 = [];
   for (const m2 of text.matchAll(PERSON_PHRASE)) {
     const at = (m2.index ?? 0) + m2[0].length;
     const list2 = PERSON_LIST.exec(text.slice(at, at + 400));
-    if (list2 !== null) out.push([at, at + list2[0].length]);
+    if (list2 !== null) out2.push([at, at + list2[0].length]);
   }
-  return out;
+  return out2;
 }
 function personLineSpans(text) {
-  const out = [];
+  const out2 = [];
   for (const m2 of text.matchAll(PERSON_LINE)) {
     const at = m2.index ?? 0;
-    out.push([at, at + m2[0].length]);
+    out2.push([at, at + m2[0].length]);
   }
-  return out;
+  return out2;
 }
 function classifyPii(text, opts = {}) {
   if (typeof text !== "string" || text.length === 0) return [];
@@ -7978,13 +8043,13 @@ function redactPii(text, opts = {}) {
   if (typeof text !== "string" || text.length === 0) return text;
   const spans = classifyPii(text, opts);
   if (spans.length === 0) return text;
-  let out = text;
+  let out2 = text;
   for (let i = spans.length - 1; i >= 0; i--) {
     const s2 = spans[i];
     if (!s2) continue;
-    out = out.slice(0, s2.span[0]) + `[REDACTED:${s2.kind}]` + out.slice(s2.span[1]);
+    out2 = out2.slice(0, s2.span[0]) + `[REDACTED:${s2.kind}]` + out2.slice(s2.span[1]);
   }
-  return out;
+  return out2;
 }
 function isPlainObject(v) {
   if (v === null || typeof v !== "object") return false;
@@ -7994,11 +8059,11 @@ function isPlainObject(v) {
 function deepClone(v) {
   if (Array.isArray(v)) return v.map(deepClone);
   if (isPlainObject(v)) {
-    const out = /* @__PURE__ */ Object.create(null);
+    const out2 = /* @__PURE__ */ Object.create(null);
     for (const k of Object.keys(v)) {
-      out[k] = deepClone(v[k]);
+      out2[k] = deepClone(v[k]);
     }
-    return out;
+    return out2;
   }
   return v;
 }
@@ -8043,22 +8108,22 @@ function deepRedactWalk(node, opts, seen) {
   if (isPlainObject(node)) {
     if (seen.has(node)) return "[CIRCULAR]";
     seen.add(node);
-    const out = /* @__PURE__ */ Object.create(null);
+    const out2 = /* @__PURE__ */ Object.create(null);
     for (const k of Object.keys(node)) {
       const lower = k.toLowerCase();
       if (SENSITIVE.has(lower)) {
         const val = node[k];
         if (typeof val === "string") {
           const redacted = redactPii(val, opts);
-          out[k] = redacted !== val ? redacted : "[REDACTED]";
+          out2[k] = redacted !== val ? redacted : "[REDACTED]";
         } else {
-          out[k] = "[REDACTED]";
+          out2[k] = "[REDACTED]";
         }
       } else {
-        out[k] = deepRedactWalk(node[k], opts, seen);
+        out2[k] = deepRedactWalk(node[k], opts, seen);
       }
     }
-    return out;
+    return out2;
   }
   return node;
 }
@@ -8588,13 +8653,13 @@ function resolveRoot(scope, cwd) {
   return { logFile, spillRoot };
 }
 function scrubSecrets(line) {
-  let out = line;
+  let out2 = line;
   for (const s2 of secrets) {
     const escaped = JSON.stringify(s2).slice(1, -1);
-    if (out.includes(s2)) out = out.split(s2).join("[REDACTED]");
-    if (escaped !== s2 && out.includes(escaped)) out = out.split(escaped).join("[REDACTED]");
+    if (out2.includes(s2)) out2 = out2.split(s2).join("[REDACTED]");
+    if (escaped !== s2 && out2.includes(escaped)) out2 = out2.split(escaped).join("[REDACTED]");
   }
-  return out;
+  return out2;
 }
 function buildRecord(kind, payload, bindings, run_id) {
   const merged = { ...bindings, ...payload };
@@ -8630,9 +8695,9 @@ function redactLlmBodies(rec) {
   if (resp && typeof resp === "object") {
     const r = resp;
     const text = typeof r["text"] === "string" ? r["text"] : "";
-    const out = { sha256: sha256Hex(text), chars: text.length, preview: previewOf(text) };
-    if (r["data"] !== void 0) out["data_sha256"] = sha256Hex(JSON.stringify(r["data"]));
-    rec["response"] = out;
+    const out2 = { sha256: sha256Hex(text), chars: text.length, preview: previewOf(text) };
+    if (r["data"] !== void 0) out2["data_sha256"] = sha256Hex(JSON.stringify(r["data"]));
+    rec["response"] = out2;
   }
 }
 async function llmLine(spillRoot, record) {
@@ -8804,13 +8869,13 @@ function migrateStateValue(value) {
     const n = typeof v === "object" && v !== null ? v["$schemaVersion"] : void 0;
     return typeof n === "number" && Number.isInteger(n) && n >= 1 ? n : 1;
   }, "versionOf");
-  let out = value;
-  for (let version = versionOf2(out); version < CURRENT_STATE_VERSION; version = versionOf2(out)) {
+  let out2 = value;
+  for (let version = versionOf2(out2); version < CURRENT_STATE_VERSION; version = versionOf2(out2)) {
     const step = STATE_MIGRATIONS[version];
     if (!step) throw new Error(`pensmith: missing migration state v${version} -> v${version + 1}`);
-    out = step(out);
+    out2 = step(out2);
   }
-  return out;
+  return out2;
 }
 function stateFile(paperRoot) {
   return paperStateFile(asProjectRoot(paperRoot));
@@ -9026,17 +9091,17 @@ var require_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    function visit_(key, node, visitor, path11) {
-      const ctrl = callVisitor(key, node, visitor, path11);
+    function visit_(key, node, visitor, path10) {
+      const ctrl = callVisitor(key, node, visitor, path10);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path11, ctrl);
-        return visit_(key, ctrl, visitor, path11);
+        replaceNode(key, path10, ctrl);
+        return visit_(key, ctrl, visitor, path10);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path11 = Object.freeze(path11.concat(node));
+          path10 = Object.freeze(path10.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = visit_(i, node.items[i], visitor, path11);
+            const ci = visit_(i, node.items[i], visitor, path10);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -9047,13 +9112,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path11 = Object.freeze(path11.concat(node));
-          const ck = visit_("key", node.key, visitor, path11);
+          path10 = Object.freeze(path10.concat(node));
+          const ck = visit_("key", node.key, visitor, path10);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = visit_("value", node.value, visitor, path11);
+          const cv = visit_("value", node.value, visitor, path10);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -9076,17 +9141,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node, visitor, path11) {
-      const ctrl = await callVisitor(key, node, visitor, path11);
+    async function visitAsync_(key, node, visitor, path10) {
+      const ctrl = await callVisitor(key, node, visitor, path10);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path11, ctrl);
-        return visitAsync_(key, ctrl, visitor, path11);
+        replaceNode(key, path10, ctrl);
+        return visitAsync_(key, ctrl, visitor, path10);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node)) {
-          path11 = Object.freeze(path11.concat(node));
+          path10 = Object.freeze(path10.concat(node));
           for (let i = 0; i < node.items.length; ++i) {
-            const ci = await visitAsync_(i, node.items[i], visitor, path11);
+            const ci = await visitAsync_(i, node.items[i], visitor, path10);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -9097,13 +9162,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node)) {
-          path11 = Object.freeze(path11.concat(node));
-          const ck = await visitAsync_("key", node.key, visitor, path11);
+          path10 = Object.freeze(path10.concat(node));
+          const ck = await visitAsync_("key", node.key, visitor, path10);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node.key = null;
-          const cv = await visitAsync_("value", node.value, visitor, path11);
+          const cv = await visitAsync_("value", node.value, visitor, path10);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -9132,24 +9197,24 @@ var require_visit = __commonJS({
       return visitor;
     }
     __name(initVisitor, "initVisitor");
-    function callVisitor(key, node, visitor, path11) {
+    function callVisitor(key, node, visitor, path10) {
       if (typeof visitor === "function")
-        return visitor(key, node, path11);
+        return visitor(key, node, path10);
       if (identity.isMap(node))
-        return visitor.Map?.(key, node, path11);
+        return visitor.Map?.(key, node, path10);
       if (identity.isSeq(node))
-        return visitor.Seq?.(key, node, path11);
+        return visitor.Seq?.(key, node, path10);
       if (identity.isPair(node))
-        return visitor.Pair?.(key, node, path11);
+        return visitor.Pair?.(key, node, path10);
       if (identity.isScalar(node))
-        return visitor.Scalar?.(key, node, path11);
+        return visitor.Scalar?.(key, node, path10);
       if (identity.isAlias(node))
-        return visitor.Alias?.(key, node, path11);
+        return visitor.Alias?.(key, node, path10);
       return void 0;
     }
     __name(callVisitor, "callVisitor");
-    function replaceNode(key, path11, node) {
-      const parent = path11[path11.length - 1];
+    function replaceNode(key, path10, node) {
+      const parent = path10[path10.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node;
       } else if (identity.isPair(parent)) {
@@ -9781,10 +9846,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path11, value) {
+    function collectionFromPath(schema, path10, value) {
       let v = value;
-      for (let i = path11.length - 1; i >= 0; --i) {
-        const k = path11[i];
+      for (let i = path10.length - 1; i >= 0; --i) {
+        const k = path10[i];
         if (typeof k === "number" && Number.isInteger(k) && k >= 0) {
           const a = [];
           a[k] = v;
@@ -9804,7 +9869,7 @@ var require_Collection = __commonJS({
       });
     }
     __name(collectionFromPath, "collectionFromPath");
-    var isEmptyPath = /* @__PURE__ */ __name((path11) => path11 == null || typeof path11 === "object" && !!path11[Symbol.iterator]().next().done, "isEmptyPath");
+    var isEmptyPath = /* @__PURE__ */ __name((path10) => path10 == null || typeof path10 === "object" && !!path10[Symbol.iterator]().next().done, "isEmptyPath");
     var Collection = class extends Node.NodeBase {
       static {
         __name(this, "Collection");
@@ -9837,11 +9902,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path11, value) {
-        if (isEmptyPath(path11))
+      addIn(path10, value) {
+        if (isEmptyPath(path10))
           this.add(value);
         else {
-          const [key, ...rest] = path11;
+          const [key, ...rest] = path10;
           const node = this.get(key, true);
           if (identity.isCollection(node))
             node.addIn(rest, value);
@@ -9855,8 +9920,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path11) {
-        const [key, ...rest] = path11;
+      deleteIn(path10) {
+        const [key, ...rest] = path10;
         if (rest.length === 0)
           return this.delete(key);
         const node = this.get(key, true);
@@ -9870,8 +9935,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path11, keepScalar) {
-        const [key, ...rest] = path11;
+      getIn(path10, keepScalar) {
+        const [key, ...rest] = path10;
         const node = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node) ? node.value : node;
@@ -9889,8 +9954,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path11) {
-        const [key, ...rest] = path11;
+      hasIn(path10) {
+        const [key, ...rest] = path10;
         if (rest.length === 0)
           return this.has(key);
         const node = this.get(key, true);
@@ -9900,8 +9965,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path11, value) {
-        const [key, ...rest] = path11;
+      setIn(path10, value) {
+        const [key, ...rest] = path10;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -12478,9 +12543,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path11, value) {
+      addIn(path10, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path11, value);
+          this.contents.addIn(path10, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -12555,14 +12620,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path11) {
-        if (Collection.isEmptyPath(path11)) {
+      deleteIn(path10) {
+        if (Collection.isEmptyPath(path10)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path11) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path10) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -12577,10 +12642,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path11, keepScalar) {
-        if (Collection.isEmptyPath(path11))
+      getIn(path10, keepScalar) {
+        if (Collection.isEmptyPath(path10))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path11, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path10, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -12591,10 +12656,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path11) {
-        if (Collection.isEmptyPath(path11))
+      hasIn(path10) {
+        if (Collection.isEmptyPath(path10))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path11) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path10) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -12611,13 +12676,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path11, value) {
-        if (Collection.isEmptyPath(path11)) {
+      setIn(path10, value) {
+        if (Collection.isEmptyPath(path10)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path11), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path10), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path11, value);
+          this.contents.setIn(path10, value);
         }
       }
       /**
@@ -14629,9 +14694,9 @@ var require_cst_visit = __commonJS({
     visit.BREAK = BREAK;
     visit.SKIP = SKIP;
     visit.REMOVE = REMOVE;
-    visit.itemAtPath = (cst, path11) => {
+    visit.itemAtPath = (cst, path10) => {
       let item = cst;
-      for (const [field, index] of path11) {
+      for (const [field, index] of path10) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -14640,23 +14705,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit.parentCollection = (cst, path11) => {
-      const parent = visit.itemAtPath(cst, path11.slice(0, -1));
-      const field = path11[path11.length - 1][0];
+    visit.parentCollection = (cst, path10) => {
+      const parent = visit.itemAtPath(cst, path10.slice(0, -1));
+      const field = path10[path10.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path11, item, visitor) {
-      let ctrl = visitor(item, path11);
+    function _visit(path10, item, visitor) {
+      let ctrl = visitor(item, path10);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i = 0; i < token.items.length; ++i) {
-            const ci = _visit(Object.freeze(path11.concat([[field, i]])), token.items[i], visitor);
+            const ci = _visit(Object.freeze(path10.concat([[field, i]])), token.items[i], visitor);
             if (typeof ci === "number")
               i = ci - 1;
             else if (ci === BREAK)
@@ -14667,10 +14732,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path11);
+            ctrl = ctrl(item, path10);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path11) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path10) : ctrl;
     }
     __name(_visit, "_visit");
     exports.visit = visit;
@@ -16538,27 +16603,14 @@ var init_v1_to_v23 = __esm({
 
 // bin/lib/disciplines.ts
 import { readFileSync as readFileSync3 } from "node:fs";
-import path8 from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
-function findPkgRoot(start) {
-  let cur = start;
-  for (let i = 0; i < 8; i += 1) {
-    try {
-      readFileSync3(path8.join(cur, "package.json"));
-      return cur;
-    } catch {
-    }
-    const next = path8.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
+function disciplinesPath() {
+  return pluginTemplatePath("presets", "disciplines.json");
 }
 function parsePresetFile(raw) {
   const file = PresetsFileSchema.parse(raw);
-  const out = {};
+  const out2 = {};
   for (const [slug, p] of Object.entries(file.presets)) {
-    out[slug] = Object.freeze({
+    out2[slug] = Object.freeze({
       slug,
       name: p.name,
       aliases: Object.freeze([...p.aliases]),
@@ -16571,10 +16623,10 @@ function parsePresetFile(raw) {
       densityPerParagraph: Object.freeze({ min: p.densityPerParagraph.min, max: p.densityPerParagraph.max })
     });
   }
-  return Object.freeze(out);
+  return Object.freeze(out2);
 }
 function loadDisciplinePresets() {
-  if (cache === null) cache = parsePresetFile(JSON.parse(readFileSync3(DISCIPLINES_PATH, "utf8")));
+  if (cache === null) cache = parsePresetFile(JSON.parse(readFileSync3(disciplinesPath(), "utf8")));
   return cache;
 }
 function normalizeText(raw) {
@@ -16597,11 +16649,12 @@ function normalizeDisciplineSlug(raw) {
   }
   return best?.slug ?? FALLBACK_DISCIPLINE;
 }
-var SOURCE_PREFERENCE_IDS, CSL_STYLE_KEYS, COUNTERARGUMENT_DEFAULTS, FALLBACK_DISCIPLINE, SLUG_RE2, DensityBandSchema, PresetSchema, PresetsFileSchema, DISCIPLINES_PATH, cache;
+var SOURCE_PREFERENCE_IDS, CSL_STYLE_KEYS, COUNTERARGUMENT_DEFAULTS, FALLBACK_DISCIPLINE, SLUG_RE2, DensityBandSchema, PresetSchema, PresetsFileSchema, cache;
 var init_disciplines = __esm({
   "bin/lib/disciplines.ts"() {
     "use strict";
     init_zod();
+    init_paths();
     SOURCE_PREFERENCE_IDS = [
       "arxiv",
       "semanticscholar",
@@ -16643,13 +16696,7 @@ var init_disciplines = __esm({
       $schemaVersion: external_exports.literal(1),
       presets: external_exports.record(external_exports.string().regex(SLUG_RE2), PresetSchema)
     }).strict().refine((f) => FALLBACK_DISCIPLINE in f.presets, { message: `the "${FALLBACK_DISCIPLINE}" preset is required` });
-    __name(findPkgRoot, "findPkgRoot");
-    DISCIPLINES_PATH = path8.join(
-      findPkgRoot(path8.dirname(fileURLToPath2(import.meta.url))),
-      "templates",
-      "presets",
-      "disciplines.json"
-    );
+    __name(disciplinesPath, "disciplinesPath");
     cache = null;
     __name(parsePresetFile, "parsePresetFile");
     __name(loadDisciplinePresets, "loadDisciplinePresets");
@@ -16735,16 +16782,16 @@ function migrateFrontmatterText(kind, text, file = `${kind} document`) {
       diskVersion
     );
   }
-  let out = text;
+  let out2 = text;
   for (let v = diskVersion; v < def.current; v += 1) {
     const step = def.migrations[v];
     if (!step) {
       throw new FrontmatterVersionError(kind, file, `missing ${kind} frontmatter migration v${v} \u2192 v${v + 1}`, diskVersion);
     }
-    out = step(out);
+    out2 = step(out2);
   }
-  const { frontmatter, body } = parseFrontmatter(out);
-  return { kind, frontmatter, body, text: out, diskVersion, version: def.current, migrated: out !== text };
+  const { frontmatter, body } = parseFrontmatter(out2);
+  return { kind, frontmatter, body, text: out2, diskVersion, version: def.current, migrated: out2 !== text };
 }
 function loadFrontmatterDocSync(kind, file) {
   return migrateFrontmatterText(kind, fs7.readFileSync(file, "utf8"), file);
@@ -17115,7 +17162,7 @@ function outlineIdentitiesSync(paperRoot) {
   return doc.sections.map((s2) => s2.suffix !== void 0 ? { n: s2.n, suffix: s2.suffix, slug: s2.slug } : { n: s2.n, slug: s2.slug });
 }
 function sectionRegistryDivergence(registered, outline) {
-  const out = [];
+  const out2 = [];
   const regBySlug = new Map(registered.map((s2) => [s2.slug, s2]));
   const regById = new Map(registered.map((s2) => [identityLabel(s2), s2]));
   const rowSlugs = new Set(outline.map((s2) => s2.slug));
@@ -17125,23 +17172,23 @@ function sectionRegistryDivergence(registered, outline) {
     const reg = regBySlug.get(row.slug);
     if (reg !== void 0) {
       if (identityLabel(reg) !== id) {
-        out.push(`OUTLINE.md numbers "${row.slug}" \xA7${id}, but STATE.json registers it as \xA7${identityLabel(reg)}`);
+        out2.push(`OUTLINE.md numbers "${row.slug}" \xA7${id}, but STATE.json registers it as \xA7${identityLabel(reg)}`);
       }
       continue;
     }
     const holder = regById.get(id);
     if (holder !== void 0 && !rowSlugs.has(holder.slug)) {
       claimedIds.add(id);
-      out.push(`OUTLINE.md lists \xA7${id} as "${row.slug}", but STATE.json registers \xA7${id} as "${holder.slug}"`);
+      out2.push(`OUTLINE.md lists \xA7${id} as "${row.slug}", but STATE.json registers \xA7${id} as "${holder.slug}"`);
     } else {
-      out.push(`OUTLINE.md lists \xA7${id} "${row.slug}", which STATE.json does not register`);
+      out2.push(`OUTLINE.md lists \xA7${id} "${row.slug}", which STATE.json does not register`);
     }
   }
   for (const reg of registered) {
     if (rowSlugs.has(reg.slug) || claimedIds.has(identityLabel(reg))) continue;
-    out.push(`STATE.json registers \xA7${identityLabel(reg)} "${reg.slug}", which OUTLINE.md does not list`);
+    out2.push(`STATE.json registers \xA7${identityLabel(reg)} "${reg.slug}", which OUTLINE.md does not list`);
   }
-  return out;
+  return out2;
 }
 function outlineProblem(paperRoot) {
   const read = readOutlineChecked(paperRoot);
@@ -17190,7 +17237,7 @@ var init_section_registry = __esm({
 
 // bin/lib/verify/verdict-rows.ts
 function parseBlockingVerdictRows(verificationMd) {
-  const out = [];
+  const out2 = [];
   for (const line of verificationMd.split(/\r?\n/)) {
     const any = /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
     const verdict = any?.[1];
@@ -17199,9 +17246,9 @@ function parseBlockingVerdictRows(verificationMd) {
     const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*[A-Z_-]+\*\*/u.exec(line);
     const citekey = pass3?.[1] ?? pass1?.[1];
     const retraction = /\bcited work is retracted\b/.test(line);
-    out.push({ citekey: citekey ?? UNREADABLE_CITEKEY, verdict, ...retraction ? { retraction: true } : {} });
+    out2.push({ citekey: citekey ?? UNREADABLE_CITEKEY, verdict, ...retraction ? { retraction: true } : {} });
   }
-  return out;
+  return out2;
 }
 function sectionVerificationReasons(verificationMd, dryRunNow) {
   const status = /^Status:\s*(\S+)/m.exec(verificationMd)?.[1];
@@ -17557,13 +17604,13 @@ __export(post_tool_use_exports, {
   recordCheckpoint: () => recordCheckpoint
 });
 import * as fsp4 from "node:fs/promises";
-import path9 from "node:path";
+import path8 from "node:path";
 function canonicalRoot(root) {
   const r = realpathNearest(asProjectRoot(root));
   return process.platform === "win32" ? r.toLowerCase() : r;
 }
 function checkpointFile(root) {
-  return path9.join(pensmithDataDir(), "checkpoints", `${projectHash(canonicalRoot(root))}.jsonl`);
+  return path8.join(pensmithDataDir(), "checkpoints", `${projectHash(canonicalRoot(root))}.jsonl`);
 }
 function lastCheckpointAt(text) {
   const lines = text.split("\n").filter((l) => l.trim().length > 0);
@@ -17582,7 +17629,7 @@ async function recordCheckpoint(root, input, opts = {}) {
   try {
     file = checkpointFile(root);
     const target = file;
-    await fsp4.mkdir(path9.dirname(target), { recursive: true });
+    await fsp4.mkdir(path8.dirname(target), { recursive: true });
     return await withLock(
       target,
       async () => {
@@ -19097,26 +19144,26 @@ var init_config = __esm({
 
 // bin/lib/migrations/config/v0_to_v1.ts
 function migrate7(input) {
-  const out = { schema_version: 1 };
+  const out2 = { schema_version: 1 };
   for (const [k, v] of Object.entries(input)) {
     if (k === "schema_version") continue;
-    out[k] = v;
+    out2[k] = v;
   }
-  const verification = out["verification"];
+  const verification = out2["verification"];
   if (typeof verification === "object" && verification !== null && !Array.isArray(verification)) {
     const v = { ...verification };
     if (v["verify_quotes"] === true) delete v["verify_quotes"];
-    out["verification"] = v;
+    out2["verification"] = v;
   }
-  const runtime = out["runtime"];
+  const runtime = out2["runtime"];
   if (typeof runtime === "object" && runtime !== null && !Array.isArray(runtime)) {
     const r = { ...runtime };
     if (r["endpoint"] === "") delete r["endpoint"];
     const provider = typeof r["provider"] === "string" ? r["provider"] : "anthropic";
     if (r["api_key_env"] !== void 0 && r["api_key_env"] === V1_DEFAULT_KEY_ENV[provider]) delete r["api_key_env"];
-    out["runtime"] = r;
+    out2["runtime"] = r;
   }
-  return out;
+  return out2;
 }
 var V1_DEFAULT_KEY_ENV;
 var init_v0_to_v13 = __esm({
@@ -19132,12 +19179,12 @@ var init_v0_to_v13 = __esm({
 
 // bin/lib/migrations/config/v1_to_v2.ts
 function migrate8(input) {
-  const out = { schema_version: 2 };
+  const out2 = { schema_version: 2 };
   for (const [k, v] of Object.entries(input)) {
     if (k === "schema_version") continue;
-    out[k] = v;
+    out2[k] = v;
   }
-  return out;
+  return out2;
 }
 var init_v1_to_v24 = __esm({
   "bin/lib/migrations/config/v1_to_v2.ts"() {
@@ -19155,16 +19202,16 @@ var init_config_text = __esm({
 
 // bin/lib/config.ts
 import { existsSync as existsSync5, readFileSync as readFileSync9 } from "node:fs";
-import path10 from "node:path";
+import path9 from "node:path";
 function paperConfigPath(root = projectRoot()) {
-  return path10.join(paperDir(root), "config.toml");
+  return path9.join(paperDir(root), "config.toml");
 }
 function globalRuntimePath() {
-  return path10.join(pensmithDataDir(), "runtime.json");
+  return path9.join(pensmithDataDir(), "runtime.json");
 }
 function relName(root, file) {
-  const rel = path10.relative(root, file);
-  return rel && !rel.startsWith("..") ? rel.split(path10.sep).join("/") : file;
+  const rel = path9.relative(root, file);
+  return rel && !rel.startsWith("..") ? rel.split(path9.sep).join("/") : file;
 }
 function warnOnce(line) {
   if (warned.has(line)) return;
@@ -19181,9 +19228,9 @@ function normalizeTomlValues(v) {
   }
   if (Array.isArray(v)) return v.map(normalizeTomlValues);
   if (isPlainObject2(v)) {
-    const out = {};
-    for (const [k, val] of Object.entries(v)) out[k] = normalizeTomlValues(val);
-    return out;
+    const out2 = {};
+    for (const [k, val] of Object.entries(v)) out2[k] = normalizeTomlValues(val);
+    return out2;
   }
   return v;
 }
@@ -19406,6 +19453,7 @@ var init_goal = __esm({
     init_paths();
     init_tutorial();
     init_config2();
+    init_output_sink();
     __name(readGoalFromConfig, "readGoalFromConfig");
     __name(stopAfterResearchFor, "stopAfterResearchFor");
   }
@@ -19477,12 +19525,12 @@ function parseHookInput(text) {
   }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   const o = parsed;
-  const out = {};
+  const out2 = {};
   for (const k of STRING_FIELDS) {
     const v = o[k];
-    if (typeof v === "string" && v.length > 0 && v.length <= 4096) out[k] = v;
+    if (typeof v === "string" && v.length > 0 && v.length <= 4096) out2[k] = v;
   }
-  return out;
+  return out2;
 }
 __name(parseHookInput, "parseHookInput");
 function hookInputCwd(input) {
@@ -19521,10 +19569,12 @@ __name(readHookInput, "readHookInput");
 
 // bin/lib/hooks/entry.ts
 init_paths();
+init_output_sink();
 function hookPaperRoot(input, env = process.env) {
   const resolution = resolvePaperRoot({ mode: "hook", verb: null, cwd: hookInputCwd(input) ?? workingDirectory(), env });
   if (resolution.kind !== "root" || !hasPaper(resolution.root)) return null;
   setActivePaperRoot(resolution.root);
+  setOutputSink(process.stderr);
   return resolution.root;
 }
 __name(hookPaperRoot, "hookPaperRoot");

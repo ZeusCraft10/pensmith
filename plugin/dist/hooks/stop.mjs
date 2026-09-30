@@ -372,7 +372,7 @@ function resolvePaperRoot(opts) {
   }
   return { kind: "root", root: cwd, source: "fallback" };
 }
-var activeRoot, PAPER_DIR_NAME, DRY_RUN_PAPER_DIR_NAME, dryRunWorkspaceOverride, LEGACY_STATE_MAX_BYTES, ASSIGNMENT_FILE_NAMES, NEW_PAPER_VERBS, PAPERLESS_CWD_VERBS;
+var PLUGIN_MANIFEST_REL, activeRoot, PAPER_DIR_NAME, DRY_RUN_PAPER_DIR_NAME, dryRunWorkspaceOverride, LEGACY_STATE_MAX_BYTES, ASSIGNMENT_FILE_NAMES, NEW_PAPER_VERBS, PAPERLESS_CWD_VERBS;
 var init_paths = __esm({
   "bin/lib/paths.ts"() {
     "use strict";
@@ -383,6 +383,7 @@ var init_paths = __esm({
     __name(pensmithLockDir, "pensmithLockDir");
     __name(pensmithGlobalLibraryIndexPath, "pensmithGlobalLibraryIndexPath");
     __name(pensmithActivePointerPath, "pensmithActivePointerPath");
+    PLUGIN_MANIFEST_REL = path3.join(".claude-plugin", "plugin.json");
     activeRoot = null;
     __name(setActivePaperRoot, "setActivePaperRoot");
     __name(workingDirectory, "workingDirectory");
@@ -1957,8 +1958,8 @@ var init_parseUtil = __esm({
     init_errors();
     init_en();
     makeIssue = /* @__PURE__ */ __name((params) => {
-      const { data, path: path9, errorMaps, issueData } = params;
-      const fullPath = [...path9, ...issueData.path || []];
+      const { data, path: path8, errorMaps, issueData } = params;
+      const fullPath = [...path8, ...issueData.path || []];
       const fullIssue = {
         ...issueData,
         path: fullPath
@@ -2273,11 +2274,11 @@ var init_types = __esm({
       static {
         __name(this, "ParseInputLazyPath");
       }
-      constructor(parent, value, path9, key) {
+      constructor(parent, value, path8, key) {
         this._cachedPath = [];
         this.parent = parent;
         this.data = value;
-        this._path = path9;
+        this._path = path8;
         this._key = key;
       }
       get path() {
@@ -5838,14 +5839,14 @@ var require_polyfills = __commonJS({
       fs6.fstatSync = statFixSync(fs6.fstatSync);
       fs6.lstatSync = statFixSync(fs6.lstatSync);
       if (fs6.chmod && !fs6.lchmod) {
-        fs6.lchmod = function(path9, mode, cb) {
+        fs6.lchmod = function(path8, mode, cb) {
           if (cb) process.nextTick(cb);
         };
         fs6.lchmodSync = function() {
         };
       }
       if (fs6.chown && !fs6.lchown) {
-        fs6.lchown = function(path9, uid, gid, cb) {
+        fs6.lchown = function(path8, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
         fs6.lchownSync = function() {
@@ -5914,9 +5915,9 @@ var require_polyfills = __commonJS({
         };
       })(fs6.readSync);
       function patchLchmod(fs7) {
-        fs7.lchmod = function(path9, mode, callback) {
+        fs7.lchmod = function(path8, mode, callback) {
           fs7.open(
-            path9,
+            path8,
             constants.O_WRONLY | constants.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -5932,8 +5933,8 @@ var require_polyfills = __commonJS({
             }
           );
         };
-        fs7.lchmodSync = function(path9, mode) {
-          var fd = fs7.openSync(path9, constants.O_WRONLY | constants.O_SYMLINK, mode);
+        fs7.lchmodSync = function(path8, mode) {
+          var fd = fs7.openSync(path8, constants.O_WRONLY | constants.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
@@ -5955,8 +5956,8 @@ var require_polyfills = __commonJS({
       __name(patchLchmod, "patchLchmod");
       function patchLutimes(fs7) {
         if (constants.hasOwnProperty("O_SYMLINK") && fs7.futimes) {
-          fs7.lutimes = function(path9, at, mt, cb) {
-            fs7.open(path9, constants.O_SYMLINK, function(er, fd) {
+          fs7.lutimes = function(path8, at, mt, cb) {
+            fs7.open(path8, constants.O_SYMLINK, function(er, fd) {
               if (er) {
                 if (cb) cb(er);
                 return;
@@ -5968,8 +5969,8 @@ var require_polyfills = __commonJS({
               });
             });
           };
-          fs7.lutimesSync = function(path9, at, mt) {
-            var fd = fs7.openSync(path9, constants.O_SYMLINK);
+          fs7.lutimesSync = function(path8, at, mt) {
+            var fd = fs7.openSync(path8, constants.O_SYMLINK);
             var ret;
             var threw = true;
             try {
@@ -6097,11 +6098,11 @@ var require_legacy_streams = __commonJS({
         ReadStream,
         WriteStream
       };
-      function ReadStream(path9, options) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path9, options);
+      function ReadStream(path8, options) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path8, options);
         Stream.call(this);
         var self = this;
-        this.path = path9;
+        this.path = path8;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -6147,10 +6148,10 @@ var require_legacy_streams = __commonJS({
         });
       }
       __name(ReadStream, "ReadStream");
-      function WriteStream(path9, options) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path9, options);
+      function WriteStream(path8, options) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path8, options);
         Stream.call(this);
-        this.path = path9;
+        this.path = path8;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -6300,14 +6301,14 @@ var require_graceful_fs = __commonJS({
       fs7.createWriteStream = createWriteStream;
       var fs$readFile = fs7.readFile;
       fs7.readFile = readFile;
-      function readFile(path9, options, cb) {
+      function readFile(path8, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$readFile(path9, options, cb);
-        function go$readFile(path10, options2, cb2, startTime) {
-          return fs$readFile(path10, options2, function(err) {
+        return go$readFile(path8, options, cb);
+        function go$readFile(path9, options2, cb2, startTime) {
+          return fs$readFile(path9, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$readFile, [path10, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$readFile, [path9, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -6319,14 +6320,14 @@ var require_graceful_fs = __commonJS({
       __name(readFile, "readFile");
       var fs$writeFile = fs7.writeFile;
       fs7.writeFile = writeFile;
-      function writeFile(path9, data, options, cb) {
+      function writeFile(path8, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$writeFile(path9, data, options, cb);
-        function go$writeFile(path10, data2, options2, cb2, startTime) {
-          return fs$writeFile(path10, data2, options2, function(err) {
+        return go$writeFile(path8, data, options, cb);
+        function go$writeFile(path9, data2, options2, cb2, startTime) {
+          return fs$writeFile(path9, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$writeFile, [path10, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$writeFile, [path9, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -6339,14 +6340,14 @@ var require_graceful_fs = __commonJS({
       var fs$appendFile = fs7.appendFile;
       if (fs$appendFile)
         fs7.appendFile = appendFile;
-      function appendFile(path9, data, options, cb) {
+      function appendFile(path8, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$appendFile(path9, data, options, cb);
-        function go$appendFile(path10, data2, options2, cb2, startTime) {
-          return fs$appendFile(path10, data2, options2, function(err) {
+        return go$appendFile(path8, data, options, cb);
+        function go$appendFile(path9, data2, options2, cb2, startTime) {
+          return fs$appendFile(path9, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$appendFile, [path10, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$appendFile, [path9, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -6381,31 +6382,31 @@ var require_graceful_fs = __commonJS({
       var fs$readdir = fs7.readdir;
       fs7.readdir = readdir;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir(path9, options, cb) {
+      function readdir(path8, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? /* @__PURE__ */ __name(function go$readdir2(path10, options2, cb2, startTime) {
-          return fs$readdir(path10, fs$readdirCallback(
-            path10,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? /* @__PURE__ */ __name(function go$readdir2(path9, options2, cb2, startTime) {
+          return fs$readdir(path9, fs$readdirCallback(
+            path9,
             options2,
             cb2,
             startTime
           ));
-        }, "go$readdir") : /* @__PURE__ */ __name(function go$readdir2(path10, options2, cb2, startTime) {
-          return fs$readdir(path10, options2, fs$readdirCallback(
-            path10,
+        }, "go$readdir") : /* @__PURE__ */ __name(function go$readdir2(path9, options2, cb2, startTime) {
+          return fs$readdir(path9, options2, fs$readdirCallback(
+            path9,
             options2,
             cb2,
             startTime
           ));
         }, "go$readdir");
-        return go$readdir(path9, options, cb);
-        function fs$readdirCallback(path10, options2, cb2, startTime) {
+        return go$readdir(path8, options, cb);
+        function fs$readdirCallback(path9, options2, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue([
                 go$readdir,
-                [path10, options2, cb2],
+                [path9, options2, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -6478,7 +6479,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path9, options) {
+      function ReadStream(path8, options) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -6500,7 +6501,7 @@ var require_graceful_fs = __commonJS({
         });
       }
       __name(ReadStream$open, "ReadStream$open");
-      function WriteStream(path9, options) {
+      function WriteStream(path8, options) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -6520,24 +6521,24 @@ var require_graceful_fs = __commonJS({
         });
       }
       __name(WriteStream$open, "WriteStream$open");
-      function createReadStream(path9, options) {
-        return new fs7.ReadStream(path9, options);
+      function createReadStream(path8, options) {
+        return new fs7.ReadStream(path8, options);
       }
       __name(createReadStream, "createReadStream");
-      function createWriteStream(path9, options) {
-        return new fs7.WriteStream(path9, options);
+      function createWriteStream(path8, options) {
+        return new fs7.WriteStream(path8, options);
       }
       __name(createWriteStream, "createWriteStream");
       var fs$open = fs7.open;
       fs7.open = open2;
-      function open2(path9, flags, mode, cb) {
+      function open2(path8, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path9, flags, mode, cb);
-        function go$open(path10, flags2, mode2, cb2, startTime) {
-          return fs$open(path10, flags2, mode2, function(err, fd) {
+        return go$open(path8, flags, mode, cb);
+        function go$open(path9, flags2, mode2, cb2, startTime) {
+          return fs$open(path9, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$open, [path10, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$open, [path9, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -7075,7 +7076,7 @@ var require_mtime_precision = __commonJS({
 var require_lockfile = __commonJS({
   "node_modules/proper-lockfile/lib/lockfile.js"(exports, module) {
     "use strict";
-    var path9 = __require("path");
+    var path8 = __require("path");
     var fs6 = require_graceful_fs();
     var retry = require_retry2();
     var onExit = require_signal_exit();
@@ -7087,7 +7088,7 @@ var require_lockfile = __commonJS({
     __name(getLockFile, "getLockFile");
     function resolveCanonicalPath(file, options, callback) {
       if (!options.realpath) {
-        return callback(null, path9.resolve(file));
+        return callback(null, path8.resolve(file));
       }
       options.fs.realpath(file, callback);
     }
@@ -7966,28 +7967,12 @@ var init_config_text = __esm({
 });
 
 // bin/lib/disciplines.ts
-import { readFileSync as readFileSync2 } from "node:fs";
-import path6 from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
-function findPkgRoot(start) {
-  let cur = start;
-  for (let i = 0; i < 8; i += 1) {
-    try {
-      readFileSync2(path6.join(cur, "package.json"));
-      return cur;
-    } catch {
-    }
-    const next = path6.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-var SOURCE_PREFERENCE_IDS, CSL_STYLE_KEYS, COUNTERARGUMENT_DEFAULTS, FALLBACK_DISCIPLINE, SLUG_RE, DensityBandSchema, PresetSchema, PresetsFileSchema, DISCIPLINES_PATH;
+var SOURCE_PREFERENCE_IDS, CSL_STYLE_KEYS, COUNTERARGUMENT_DEFAULTS, FALLBACK_DISCIPLINE, SLUG_RE, DensityBandSchema, PresetSchema, PresetsFileSchema;
 var init_disciplines = __esm({
   "bin/lib/disciplines.ts"() {
     "use strict";
     init_zod();
+    init_paths();
     SOURCE_PREFERENCE_IDS = [
       "arxiv",
       "semanticscholar",
@@ -8029,13 +8014,6 @@ var init_disciplines = __esm({
       $schemaVersion: external_exports.literal(1),
       presets: external_exports.record(external_exports.string().regex(SLUG_RE), PresetSchema)
     }).strict().refine((f) => FALLBACK_DISCIPLINE in f.presets, { message: `the "${FALLBACK_DISCIPLINE}" preset is required` });
-    __name(findPkgRoot, "findPkgRoot");
-    DISCIPLINES_PATH = path6.join(
-      findPkgRoot(path6.dirname(fileURLToPath2(import.meta.url))),
-      "templates",
-      "presets",
-      "disciplines.json"
-    );
   }
 });
 
@@ -8096,7 +8074,7 @@ var init_config2 = __esm({
 });
 
 // bin/lib/dry-run-paper.ts
-import path7 from "node:path";
+import path6 from "node:path";
 var WORKSPACE_MARKER_TEXT, PAPER_ARTIFACTS, SeedRecordSchema;
 var init_dry_run_paper = __esm({
   "bin/lib/dry-run-paper.ts"() {
@@ -8117,7 +8095,7 @@ var init_dry_run_paper = __esm({
       ""
     ].join("\n");
     PAPER_ARTIFACTS = /* @__PURE__ */ new Set([
-      path7.basename(paperStateFile(".")),
+      path6.basename(paperStateFile(".")),
       "INTAKE.md",
       "INTAKE.raw.local",
       "LIBRARY.json",
@@ -8147,10 +8125,10 @@ var init_dry_run_paper = __esm({
 });
 
 // bin/lib/http-mock.ts
-import { existsSync, readdirSync as readdirSync2, readFileSync as readFileSync3, statSync as statSync2 } from "node:fs";
+import { existsSync, readdirSync as readdirSync2, readFileSync as readFileSync2, statSync as statSync2 } from "node:fs";
 import { join, dirname as dirname2 } from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
-function findPkgRoot2(start) {
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+function findPkgRoot(start) {
   let cur = start;
   for (let i = 0; i < 8; i++) {
     try {
@@ -8168,23 +8146,23 @@ var init_http_mock = __esm({
   "bin/lib/http-mock.ts"() {
     "use strict";
     init_exit_codes();
-    __filename = fileURLToPath3(import.meta.url);
+    __filename = fileURLToPath2(import.meta.url);
     __dirname = dirname2(__filename);
-    __name(findPkgRoot2, "findPkgRoot");
-    PKG_ROOT = findPkgRoot2(__dirname);
+    __name(findPkgRoot, "findPkgRoot");
+    PKG_ROOT = findPkgRoot(__dirname);
     CASSETTES_ROOT = join(PKG_ROOT, "tests", "fixtures", "cassettes");
   }
 });
 
 // bin/lib/session-lock.ts
 import * as fs5 from "node:fs";
-import path8 from "node:path";
+import path7 from "node:path";
 function canonicalRoot(root) {
   const r = realpathNearest(asProjectRoot(root));
   return process.platform === "win32" ? r.toLowerCase() : r;
 }
 function sessionLockFile(root) {
-  return path8.join(pensmithLockDir(), `session-${projectHash(canonicalRoot(root))}.json`);
+  return path7.join(pensmithLockDir(), `session-${projectHash(canonicalRoot(root))}.json`);
 }
 function isOwner(v) {
   if (!v || typeof v !== "object") return false;
@@ -8369,10 +8347,22 @@ __name(readHookInput, "readHookInput");
 
 // bin/lib/hooks/entry.ts
 init_paths();
+
+// bin/lib/output-sink.ts
+import { AsyncLocalStorage } from "node:async_hooks";
+var replaced = null;
+var captures = new AsyncLocalStorage();
+function setOutputSink(sink) {
+  replaced = sink;
+}
+__name(setOutputSink, "setOutputSink");
+
+// bin/lib/hooks/entry.ts
 function hookPaperRoot(input, env = process.env) {
   const resolution = resolvePaperRoot({ mode: "hook", verb: null, cwd: hookInputCwd(input) ?? workingDirectory(), env });
   if (resolution.kind !== "root" || !hasPaper(resolution.root)) return null;
   setActivePaperRoot(resolution.root);
+  setOutputSink(process.stderr);
   return resolution.root;
 }
 __name(hookPaperRoot, "hookPaperRoot");
