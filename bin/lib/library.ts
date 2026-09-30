@@ -868,6 +868,48 @@ export async function recordLastVerified(
   });
 }
 
+/**
+ * Record the outcome of re-checking retraction statuses LIBRARY.json holds as
+ * `unknown` (VRFY-15, D-20-13: the freshness pass re-checks every unknown
+ * status on each verify and done). Only an `unknown` entry changes: `clear`,
+ * or `retracted` with the notice (sticky, as everywhere in the library). An
+ * entry already decided is never overwritten here. Same lock and render path
+ * as upsertSources; unknown keys are ignored and returned.
+ */
+export async function recordRetractionStatuses(
+  root: string,
+  outcomes: Readonly<Record<string, { status: 'clear' | 'retracted'; details?: string | null }>>,
+): Promise<{ updated: string[]; unknown: string[] }> {
+  const paths = libraryPaths(root);
+  return withLock(paths.library, async () => {
+    const current = await readUnlocked(paths.library, false);
+    if (!current) throw new LibraryNotFoundError(`LIBRARY.json not found at ${paths.library}`);
+    const byKey = new Map(current.entries.map((e) => [e.citekey, e]));
+    const updated: string[] = [];
+    const unknown: string[] = [];
+    const now = new Date().toISOString();
+    for (const [key, o] of Object.entries(outcomes)) {
+      const e = byKey.get(key);
+      if (!e) {
+        unknown.push(key);
+        continue;
+      }
+      if (e.retraction_status !== 'unknown') continue;
+      if (o.status === 'retracted') {
+        e.retracted = true;
+        e.retraction_status = 'retracted';
+        e.retraction_details = e.retraction_details ?? (o.details && o.details.trim() ? o.details.trim() : null);
+      } else {
+        e.retraction_status = 'clear';
+      }
+      e.updatedAt = now;
+      updated.push(key);
+    }
+    if (updated.length > 0) await persist(paths, current);
+    return { updated, unknown };
+  });
+}
+
 export interface RerenderResult {
   readonly paths: LibraryPaths;
   /** Where the previous CITATIONS.bib was kept, when it did not parse; else null. */
@@ -1065,6 +1107,113 @@ function splitRisRecords(text: string): Array<{ key: string | null; text: string
   return out;
 }
 
+/**
+ * The BibTeX / BibLaTeX fields an exported bibliography keeps (Phase 20,
+ * VRFY-28, D-20-15: zero trace). Everything else — pensmith's `last_verified`,
+ * a reference manager's `file` / `owner` / `timestamp`, any field a standard
+ * style does not read — stays in `.paper/`; so does `note = {RETRACTED}`.
+ */
+export const EXPORT_BIB_FIELDS: ReadonlySet<string> = new Set([
+  'abstract', 'address', 'annote', 'archiveprefix', 'author', 'booktitle', 'chapter', 'date', 'doi', 'edition',
+  'editor', 'eprint', 'eprintclass', 'eprinttype', 'howpublished', 'institution', 'isbn', 'issn', 'issue', 'journal',
+  'journaltitle', 'keywords', 'language', 'location', 'maintitle', 'month', 'note', 'number', 'organization',
+  'pages', 'pagetotal', 'pmcid', 'pmid', 'primaryclass', 'publisher', 'school', 'series', 'subtitle', 'title',
+  'titleaddon', 'translator', 'type', 'url', 'urldate', 'version', 'volume', 'year',
+]);
+
+/** One `name = value` field of an entry block: its lower-cased name and its text as written. */
+interface BibFieldText {
+  readonly name: string;
+  readonly text: string;
+  /** The value without its outer braces / quotes (for `note = {RETRACTED}`). */
+  readonly value: string;
+}
+
+/**
+ * The fields of one `@type{key, …}` block, each with its text as written, or
+ * null when the block cannot be read field by field. Values are braced (any
+ * nesting), quoted, or bare words / numbers, optionally joined with `#`.
+ */
+function bibBlockFields(text: string): { head: string; fields: BibFieldText[]; close: string } | null {
+  const open = /^@[A-Za-z]+\s*([{(])\s*/.exec(text);
+  if (!open) return null;
+  const closer = open[1] === '(' ? ')' : '}';
+  let i = open[0].length;
+  const comma = text.indexOf(',', i);
+  if (comma < 0) return null;
+  const head = text.slice(0, comma + 1);
+  i = comma + 1;
+  const fields: BibFieldText[] = [];
+  const skipWs = (): void => {
+    while (i < text.length && /[\s,]/.test(text[i]!)) i++;
+  };
+  for (;;) {
+    skipWs();
+    if (i >= text.length) return null;
+    if (text[i] === closer) break;
+    const name = /^[A-Za-z][\w:.+-]*/.exec(text.slice(i))?.[0];
+    if (name === undefined) return null;
+    const start = i;
+    i += name.length;
+    while (i < text.length && /\s/.test(text[i]!)) i++;
+    if (text[i] !== '=') return null;
+    i++;
+    let value = '';
+    for (;;) {
+      while (i < text.length && /\s/.test(text[i]!)) i++;
+      const ch = text[i];
+      if (ch === '{' || ch === '"') {
+        const endCh = ch === '{' ? '}' : '"';
+        let depth = 0;
+        let j = i;
+        for (; j < text.length; j++) {
+          const c = text[j];
+          if (c === '\\') {
+            j++;
+            continue;
+          }
+          if (c === '{') depth++;
+          else if (c === '}') depth--;
+          if (ch === '{' && depth === 0) break;
+          if (ch === '"' && c === endCh && j > i && depth === 0) break;
+        }
+        if (j >= text.length) return null;
+        value += text.slice(i + 1, j);
+        i = j + 1;
+      } else {
+        const bare = /^[^\s,#{}()"]+/.exec(text.slice(i))?.[0];
+        if (bare === undefined) return null;
+        value += bare;
+        i += bare.length;
+      }
+      while (i < text.length && /\s/.test(text[i]!)) i++;
+      if (text[i] === '#') {
+        i++;
+        continue;
+      }
+      break;
+    }
+    fields.push({ name: name.toLowerCase(), text: text.slice(start, i).trimEnd(), value: value.trim() });
+  }
+  return { head, fields, close: text.slice(i) };
+}
+
+/** An exported entry: the block without its non-standard fields (byte for byte when nothing is dropped). */
+function exportedBibBlock(block: BibBlock): string {
+  const parsed = bibBlockFields(block.text);
+  if (parsed === null) {
+    throw new PensmithError(
+      `could not export the cited bibliography: the entry ${block.key ?? '(no key)'} of .paper/CITATIONS.bib cannot be read field by field — check its braces and quotes`,
+      EXIT_ERROR,
+    );
+  }
+  const keep = (f: BibFieldText): boolean => EXPORT_BIB_FIELDS.has(f.name) && !(f.name === 'note' && /^retracted$/i.test(f.value));
+  if (parsed.fields.every(keep)) return block.text;
+  const eol = block.text.includes('\r\n') ? '\r\n' : '\n';
+  const kept = parsed.fields.filter(keep).map((f) => `  ${f.text}`);
+  return `${parsed.head}${eol}${kept.join(`,${eol}`)}${kept.length > 0 ? `,${eol}` : ''}${parsed.close.trimEnd()}${eol}`;
+}
+
 export interface CitedExportResult {
   /** The written export/CITATIONS.bib, or null when no cited source is in the bib. */
   bibPath: string | null;
@@ -1081,8 +1230,10 @@ export interface CitedExportResult {
  * sources `citekeys` names (the keys the compiled draft cites), never the
  * whole research library — uncited candidates, unverified and retracted-flagged
  * entries and synthetic --dry-run records stay in `.paper/`. Each kept entry
- * is the paper's `.paper/CITATIONS.bib` / `.ris` entry byte for byte (a hand
- * edit survives); the result is re-parsed and must hold exactly the kept keys.
+ * is the paper's `.paper/CITATIONS.bib` / `.ris` entry with only its standard
+ * fields (EXPORT_BIB_FIELDS — zero trace, D-20-15: no `last_verified`, no
+ * `note = {RETRACTED}`, no RIS `N1  - RETRACTED`), byte for byte otherwise (a
+ * hand edit survives); the result is re-parsed and must hold exactly the kept keys.
  * A file with no cited source is not written (a stale one from an earlier
  * export is removed). `.paper/CITATIONS.bib` that does not parse is a one-line
  * BibParseError — the export never guesses.
@@ -1124,7 +1275,7 @@ export async function exportCitedCitations(
       ? ''
       : blocks
           .filter((b) => b.kind === 'string' || b.kind === 'preamble' || (b.key !== null && wanted.has(b.key)))
-          .map((b) => b.text)
+          .map((b) => (b.key !== null ? exportedBibBlock(b) : b.text))
           .join('');
   if (keptBib) {
     const readBack = parseBibSync(keptBib).map((c) => String(c['id']));
@@ -1138,7 +1289,8 @@ export async function exportCitedCitations(
 
   const keptRis = splitRisRecords(risText)
     .filter((r) => r.key !== null && wanted.has(r.key))
-    .map((r) => r.text)
+    // Zero trace (D-20-15): the library's RETRACTED note never leaves .paper/.
+    .map((r) => r.text.split(/(?<=\n)/).filter((line) => !/^N1 {2}- RETRACTED\s*$/i.test(line)).join(''))
     .join('');
 
   const bibDst = path.join(exportDir, `${stem}.bib`);

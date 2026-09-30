@@ -343,6 +343,141 @@ export function isPmcid(s: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Bare identifiers in a draft's prose (Phase 20, VRFY-10, D-20-14).
+//
+// A draft can attribute a claim to a work with no Pandoc citation at all:
+// `doi:10.…`, a doi.org link, a bare `10.….` DOI, `arXiv:…`, an arxiv.org
+// abs / pdf link, `PMID: …` or a PubMed link. Pass 1 verifies each one at its
+// registrar (a fabricated identifier is FABRICATED, never silently absent).
+// Everything is scanned except spans that are provably code: a fenced code
+// block (``` / ~~~, closed) and an inline code span (a backtick run closed by
+// the same run in its paragraph). Anything else — an unclosed fence, an
+// indented block, a link target — is scanned (fail closed). Every pattern is
+// linear (T-01-DOS-03).
+// ---------------------------------------------------------------------------
+
+export type BareIdentifierKind = 'doi' | 'arxiv' | 'pmid';
+
+/** One identifier found in a draft's text. */
+export interface BareIdentifier {
+  readonly kind: BareIdentifierKind;
+  /** The canonical id: a normalized DOI, an arXiv id without its version, PMID digits. */
+  readonly id: string;
+  /** The text as written. */
+  readonly text: string;
+  /** Offsets of the match in the scanned text. */
+  readonly start: number;
+  readonly end: number;
+  /** 1-based line of the match (CRLF-safe). */
+  readonly line: number;
+}
+
+/** The Pass-1 row key of a bare identifier: `doi:<doi>`, `arXiv:<id>`, `PMID:<id>`. */
+export function bareIdentifierKey(b: Pick<BareIdentifier, 'kind' | 'id'>): string {
+  return b.kind === 'doi' ? `doi:${b.id}` : b.kind === 'arxiv' ? `arXiv:${b.id}` : `PMID:${b.id}`;
+}
+
+const DOI_BODY = String.raw`10\.\d{4,9}\/[^\s"'<>{}|\\^\x60\]]+`;
+const ARXIV_BODY = String.raw`(?:\d{4}\.\d{4,5}|[a-z][a-z-]*(?:\.[A-Za-z-]{2,})?\/\d{7})(?:v\d+)?`;
+const BARE_ID_PATTERNS: ReadonlyArray<{ kind: BareIdentifierKind; re: RegExp }> = [
+  // doi.org links (any scheme / host spelling doi.ts accepts) and `doi:` labels first:
+  // they claim the DOI text a bare-DOI match would also see.
+  { kind: 'doi', re: new RegExp(String.raw`(?:https?:\/\/)?(?:www\.|dx\.)*doi\.org\/(?:10\.\d{4,9}(?:\/|%2[fF])[^\s"'<>{}|\\^\x60\]]+)`, 'gi') },
+  { kind: 'doi', re: new RegExp(String.raw`\bdoi:\s?${DOI_BODY}`, 'gi') },
+  { kind: 'doi', re: new RegExp(String.raw`\b${DOI_BODY}`, 'g') },
+  { kind: 'arxiv', re: new RegExp(String.raw`(?:https?:\/\/)?(?:www\.|export\.)?arxiv\.org\/(?:abs|pdf)\/${ARXIV_BODY}(?:\.pdf)?`, 'gi') },
+  { kind: 'arxiv', re: new RegExp(String.raw`\barxiv:\s?${ARXIV_BODY}`, 'gi') },
+  { kind: 'pmid', re: /(?:https?:\/\/)?(?:pubmed\.ncbi\.nlm\.nih\.gov\/|(?:www\.)?ncbi\.nlm\.nih\.gov\/pubmed\/)\d{1,9}\b/gi },
+  { kind: 'pmid', re: /\bPMID:?\s*\d{1,9}\b/gi },
+];
+
+/** The spans of `md` that are provably code (closed fences, closed inline code spans). */
+export function provableCodeSpans(md: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  // Fenced code blocks: an opening ``` / ~~~ line (≤ 3 spaces of indent) closed
+  // by a fence of the same character at least as long. An unclosed fence is
+  // not provable code.
+  const lineStarts: number[] = [0];
+  for (let i = 0; i < md.length; i++) if (md[i] === '\n') lineStarts.push(i + 1);
+  const lineText = (k: number): string => md.slice(lineStarts[k]!, (lineStarts[k + 1] ?? md.length + 1) - 1).replace(/\r$/, '');
+  for (let k = 0; k < lineStarts.length; k++) {
+    const open = /^ {0,3}(`{3,}|~{3,})/.exec(lineText(k));
+    if (!open) continue;
+    const fence = open[1]!;
+    let close = -1;
+    for (let j = k + 1; j < lineStarts.length; j++) {
+      const m = /^ {0,3}(`{3,}|~{3,})\s*$/.exec(lineText(j));
+      if (m && m[1]![0] === fence[0] && m[1]!.length >= fence.length) {
+        close = j;
+        break;
+      }
+    }
+    if (close < 0) continue;
+    spans.push([lineStarts[k]!, (lineStarts[close + 1] ?? md.length + 1) - 1]);
+    k = close;
+  }
+  // Inline code: a backtick run closed by a run of the same length in its paragraph.
+  const inFence = (i: number): boolean => spans.some(([a, b]) => i >= a && i < b);
+  const tick = /`+/g;
+  for (let m = tick.exec(md); m !== null; m = tick.exec(md)) {
+    if (inFence(m.index)) continue;
+    const run = m[0];
+    const rest = md.slice(m.index + run.length);
+    const paragraphEnd = rest.search(/\r?\n[ \t]*\r?\n/);
+    const scope = paragraphEnd >= 0 ? rest.slice(0, paragraphEnd) : rest;
+    const closeRe = new RegExp(`(?<!\`)${run}(?!\`)`, 'g');
+    const close = closeRe.exec(scope);
+    if (!close) continue;
+    const end = m.index + run.length + close.index + run.length;
+    spans.push([m.index, end]);
+    tick.lastIndex = end;
+  }
+  return spans;
+}
+
+function canonicalBareId(kind: BareIdentifierKind, text: string): string | null {
+  if (kind === 'doi') return normalizeDoi(text);
+  if (kind === 'pmid') return normalizePmid(text.replace(/^.*\/(?=\d)/, ''));
+  const url = /arxiv\.org\/(?:abs|pdf)\/(.+?)(?:\.pdf)?$/i.exec(text);
+  const n = normalizeArxiv(url?.[1] ? `arXiv:${url[1]}` : text);
+  return n === null ? null : n.replace(/^arxiv:/, '').replace(/v\d+$/, '');
+}
+
+/**
+ * The identifiers in `md`'s prose (see the section header), in order of
+ * appearance, one per canonical id (the first occurrence).
+ */
+export function findBareIdentifiers(md: string): BareIdentifier[] {
+  const code = md.includes('`') || md.includes('~') ? provableCodeSpans(md) : [];
+  const inCode = (i: number): boolean => code.some(([a, b]) => i >= a && i < b);
+  const claimed: Array<[number, number]> = [];
+  const overlaps = (a: number, b: number): boolean => claimed.some(([x, y]) => a < y && x < b);
+  const found: BareIdentifier[] = [];
+  for (const { kind, re } of BARE_ID_PATTERNS) {
+    re.lastIndex = 0;
+    for (let m = re.exec(md); m !== null; m = re.exec(md)) {
+      const start = m.index;
+      const end = start + m[0].length;
+      if (inCode(start) || overlaps(start, end)) continue;
+      const id = canonicalBareId(kind, m[0]);
+      if (id === null) continue;
+      claimed.push([start, end]);
+      let line = 1;
+      for (let i = 0; i < start; i++) if (md.charCodeAt(i) === 10) line++;
+      found.push({ kind, id, text: m[0], start, end, line });
+    }
+  }
+  found.sort((a, b) => a.start - b.start);
+  const seen = new Set<string>();
+  return found.filter((b) => {
+    const key = bareIdentifierKey(b);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+// ---------------------------------------------------------------------------
 // DOI verification — re-fetch + metadata check via Crossref (Phase 2).
 // This is the thin integration point between the normalization chokepoint
 // and bin/lib/http.ts. mcp/tools.ts paper_doi_verify delegates here.
