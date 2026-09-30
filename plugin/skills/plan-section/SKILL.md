@@ -1,44 +1,20 @@
 ---
-description: "PLUMBING: scriptable per-section planning, mapping onto the existing plan verb. Trigger phrases (PRD §5.4/§5.6): \"plan section N\", \"redo section N\", \"redo section N plan\", \"section N needs a new plan\", \"section N needs work\", \"re-plan section N\", \"swap the source for the claim in section N\", \"use a different source in section N\", \"make section N shorter\". The redo/revise/swap-source/length-change corrections ride plan --revise — there is NO separate revise verb (04-04 preserves the locked-16 bijection)."
-name: pensmith:plan-section
+name: plan-section
+description: "Plumbing for scripts: plan one section, the same step as `/pensmith plan N`."
+disable-model-invocation: true
+argument-hint: "<N> [--revise] [--research \"query\"]"
 ---
 
-# pensmith:plan-section — plumbing skill (porcelain: bare /pensmith)
+# /pensmith:plan-section
 
-Scriptable namespace for planning a single section. This is a routing shim onto
-the existing `plan` verb; it adds no workflow logic.
+Run the pensmith verb `plan $ARGUMENTS` and nothing else.
 
-`N` is the section id as `pensmith status` shows it: a number (`3`), or a number
-and a letter for a section a re-outline inserted (`1a`). Outline approval leaves
-every section a stub PLAN.md ("outlined (not planned)" in status); `plan N`
-replaces the stub with the section's claims, structure and sources. The planner
-sees only that section's own sources — its outline allocation, its PLAN.md
-`assigned_sources` and its `plan N --research` additions, minus any source the
-citation verifier cannot check yet (no DOI, arXiv id, PMID or ISBN, or only a
-Zenodo / figshare / Dryad DataCite DOI; or flagged retracted; `plan` names them
-in a WARN) — and a reply that names any other citekey is refused:
-nothing is written and the stub stays as it was. If the user edited OUTLINE.md
-so that section N no longer matches its registration, `plan` refuses and names
-`pensmith outline`, which applies the edited outline.
+Use the Skill tool to invoke the `pensmith:pensmith` skill with the arguments
+`plan $ARGUMENTS`, and follow it: it knows how each verb runs in this release
+(an MCP tool or the pensmith CLI) and how to report the result. Do not pick a
+different verb, chain further steps or change the arguments. This command is
+the scriptable spelling of `/pensmith plan $ARGUMENTS` (and of
+`pensmith plan $ARGUMENTS` in a terminal), for automation such as
+`claude -p "/pensmith:plan-section ..."`. It adds no verb: pensmith keeps exactly 16.
 
-## Routing
-
-| The user says… | Route to |
-| --- | --- |
-| "plan section N" | `pensmith plan N` |
-| "redo section N" / "section N needs work" | `pensmith plan N --revise` then `pensmith write N` |
-| "section N needs a new plan" | `pensmith plan N --revise` |
-| "swap the source for the claim in section N" | `pensmith plan N --revise` (re-maps `assigned_sources` in that section's PLAN.md) |
-| "use a different source in section N" | `pensmith plan N --revise` |
-| "make section N 1500 words instead of 2500" | `pensmith plan N --revise` (updates the word target, re-trims) |
-
-## No 17th verb (LOAD-BEARING)
-
-The inline corrections — redo, revise, swap-source, length-change, add/drop —
-all delegate to the EXISTING `plan` verb and its `--revise` flag, which routes
-through the single `bin/lib/revise.ts::runRevise` chokepoint (04-04). The
-`revise` correction is an ALIAS for `plan --revise`; it is NOT a standalone verb
-and must never be registered as one. The locked-16 verbs stay bijective with
-`workflows/*.md`.
-
-Scriptable invocation: `/pensmith:plan-section` (plumbing) ≡ `pensmith plan`.
+`N` is the section id as `pensmith status` shows it (`3`, or `1a` for a section a re-outline inserted). `--revise` re-plans a section whose draft or verification needs work.

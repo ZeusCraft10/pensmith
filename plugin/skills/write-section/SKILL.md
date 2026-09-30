@@ -1,39 +1,20 @@
 ---
-description: "PLUMBING: scriptable per-section drafting, mapping onto the existing write verb. Trigger phrases (PRD §5.4): \"write section N\", \"draft section N\", \"rewrite section N\", \"re-draft section N\", \"write the draft for section N\". No new verb is introduced."
-name: pensmith:write-section
+name: write-section
+description: "Plumbing for scripts: draft one section and verify it, the same step as `/pensmith write N`."
+disable-model-invocation: true
+argument-hint: "<N> [--no-verify]"
 ---
 
-# pensmith:write-section — plumbing skill (porcelain: bare /pensmith)
+# /pensmith:write-section
 
-Scriptable namespace for drafting a single section. Routing shim onto the
-existing `write` verb; adds no workflow logic.
+Run the pensmith verb `write $ARGUMENTS` and nothing else.
 
-## Routing
+Use the Skill tool to invoke the `pensmith:pensmith` skill with the arguments
+`write $ARGUMENTS`, and follow it: it knows how each verb runs in this release
+(an MCP tool or the pensmith CLI) and how to report the result. Do not pick a
+different verb, chain further steps or change the arguments. This command is
+the scriptable spelling of `/pensmith write $ARGUMENTS` (and of
+`pensmith write $ARGUMENTS` in a terminal), for automation such as
+`claude -p "/pensmith:write-section ..."`. It adds no verb: pensmith keeps exactly 16.
 
-| The user says… | Route to |
-| --- | --- |
-| "write section N" / "draft section N" | `pensmith write N` |
-| "rewrite section N" / "re-draft section N" | `pensmith write N` |
-
-A bare "rewrite section N" re-runs the `write` verb against that section's
-existing PLAN.md (section directories are independent — `section-as-phase`
-isolation means re-writing section N never touches the other sections).
-
-`N` is the section id as `pensmith status` shows it (`3`, or `1a`). The section
-must be planned first: on the outline's stub PLAN.md, `write N` stops with
-"section N is not planned yet — run `pensmith plan N` first". `write N` verifies
-the draft right away and reports the verify status (`--no-verify` leaves the
-section `written`). A draft that breaks the section's source rules twice is not
-kept (it goes to `DRAFT.rejected.md`, the section is marked failed with the
-reason, exit 4): one that cites a source outside the section's
-`assigned_sources`, or one that quotes a source directly although its full text
-is not available to check the quote (GRND-14: only a source marked `full_text`
-— your own hash-verified PDF, an open-access PDF, or an arXiv PDF — may be
-quoted; the others are paraphrased). Adjust the plan or sources, then run
-`pensmith write N` again.
-
-## No 17th verb
-
-`write` is one of the locked-16 verbs (bijective with `workflows/write.md`).
-This plumbing skill never introduces a new verb. Scriptable invocation:
-`/pensmith:write-section` ≡ `pensmith write`.
+`N` is the section id as `pensmith status` shows it. The section must be planned first; `write` verifies the new draft unless `--no-verify`.

@@ -1,29 +1,20 @@
 ---
-description: "PLUMBING: scriptable per-section verification, mapping onto the existing verify verb. Trigger phrases (PRD §5.4): \"verify section N\", \"check section N citations\", \"check the citations in section N\", \"re-verify section N\", \"re-run verification on section N\". No new verb is introduced."
-name: pensmith:verify-section
+name: verify-section
+description: "Plumbing for scripts: re-check one section's citations, the same step as `/pensmith verify N`."
+disable-model-invocation: true
+argument-hint: "<N>"
 ---
 
-# pensmith:verify-section — plumbing skill (porcelain: bare /pensmith)
+# /pensmith:verify-section
 
-Scriptable namespace for verifying a single section's citations. Routing shim
-onto the existing `verify` verb; adds no workflow logic.
+Run the pensmith verb `verify $ARGUMENTS` and nothing else.
 
-## Routing
+Use the Skill tool to invoke the `pensmith:pensmith` skill with the arguments
+`verify $ARGUMENTS`, and follow it: it knows how each verb runs in this release
+(an MCP tool or the pensmith CLI) and how to report the result. Do not pick a
+different verb, chain further steps or change the arguments. This command is
+the scriptable spelling of `/pensmith verify $ARGUMENTS` (and of
+`pensmith verify $ARGUMENTS` in a terminal), for automation such as
+`claude -p "/pensmith:verify-section ..."`. It adds no verb: pensmith keeps exactly 16.
 
-| The user says… | Route to |
-| --- | --- |
-| "verify section N" | `pensmith verify N` |
-| "check section N citations" / "check the citations in section N" | `pensmith verify N` |
-| "re-verify section N" | `pensmith verify N` |
-
-The verifier blocks compile and export: no FABRICATED, MIS-CITED, or
-quote-NOT_FOUND citation escapes a section (CLAUDE.md non-negotiable). This
-plumbing skill only routes — the blocking semantics live in the `verify` verb.
-A section whose last `write` failed is not verified: `verify N` refuses (exit 4)
-and names `pensmith write N`, the step that fixes it.
-
-## No 17th verb
-
-`verify` is one of the locked-16 verbs (bijective with `workflows/verify.md`).
-This plumbing skill never introduces a new verb. Scriptable invocation:
-`/pensmith:verify-section` ≡ `pensmith verify`.
+`N` is the section id as `pensmith status` shows it. A blocking verdict (FABRICATED, MIS-CITED, UNVERIFIABLE or a quote NOT_FOUND) stops compile and export until the section is fixed.
