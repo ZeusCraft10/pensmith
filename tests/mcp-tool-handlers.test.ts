@@ -1,6 +1,9 @@
 // tests/mcp-tool-handlers.test.ts
 //
-// TIER-06: each of the 6 MCP tools parses input via zod. Malformed input is rejected.
+// TIER-06: each MCP tool parses input via zod. Malformed input is rejected.
+// PLUG-03 / PLUG-13: pensmith_status returns the CLI's status text, captured
+// per call through bin/lib/output-sink.ts (11 tools; the counts are asserted
+// in mcp-server-thin-shim and tier-contract/preflight).
 // Uses InMemoryTransport (faster than stdio); the stdio path is covered
 // by 02-07's tier-contract test.
 //
@@ -17,10 +20,14 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { buildServer } from '../mcp/server.js';
+import { out, setOutputSink, resetOutputSink } from '../bin/lib/output-sink.js';
+import { buildStatusView, renderStatusView } from '../bin/lib/status-view.js';
+import { routeOptionsFor } from '../bin/cli/route-options.js';
+import { seedThreeSectionPaper } from './helpers/status-fixture.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
@@ -182,4 +189,87 @@ test('TIER-06: paper_capability_probe accepts empty args', async () => {
   // D-12 invariant: no secret values leaked.
   const flat = JSON.stringify(payload);
   assert.equal(/sk-[a-zA-Z0-9]/.test(flat), false, 'no API-key-shaped strings in capability probe output');
+});
+
+// ===== pensmith_status (PLUG-03, D-23a-12) =====
+
+/** Every file under `dir` (relative, sorted) — to prove a read-only call wrote nothing. */
+function listTree(dir: string): string[] {
+  const out: string[] = [];
+  const walk = (d: string): void => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const full = join(d, e.name);
+      if (e.isDirectory()) walk(full);
+      else out.push(relative(dir, full));
+    }
+  };
+  walk(dir);
+  return out.sort();
+}
+
+/** A process-wide sink double installed for `fn` (what the server's stderr sink would receive). */
+async function withRecordingSink<T>(fn: (printed: () => string) => Promise<T>): Promise<T> {
+  const chunks: string[] = [];
+  setOutputSink({ write: (t: string) => chunks.push(t) });
+  try {
+    return await fn(() => chunks.join(''));
+  } finally {
+    resetOutputSink();
+  }
+}
+
+test('PLUG-03: pensmith_status returns exactly the text `pensmith status` prints, captured (never on the process sink), and writes nothing', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-status-tool-'));
+  await seedThreeSectionPaper(root);
+  const { client } = await pair(root);
+  const expected = renderStatusView(await buildStatusView(root, { tier: 'cli', ...routeOptionsFor(root) })) + '\n';
+  const before = listTree(root);
+  await withRecordingSink(async (printed) => {
+    const res = await client.callTool({ name: 'pensmith_status', arguments: {} });
+    assert.notEqual(res.isError, true);
+    const content = res.content as Array<{ type: string; text: string }>;
+    assert.equal(content.length, 1, 'one text block: the status text');
+    assert.equal(content[0]!.type, 'text');
+    assert.equal(content[0]!.text, expected, 'byte-identical to the CLI rendering');
+    assert.match(content[0]!.text, /^pensmith status:\n {2}paper: Tidal Power and Coastal Ecology/);
+    assert.match(content[0]!.text, /next: write .2\n$/);
+    assert.equal(printed(), '', 'the status text was captured, not written to the process-wide sink');
+  });
+  assert.deepEqual(listTree(root), before, 'read-only: no file created or removed');
+});
+
+test('PLUG-03: pensmith_status on a folder without a paper is an error carrying the CLI text and exit code', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-status-tool-empty-'));
+  const { client } = await pair(root);
+  const res = await client.callTool({ name: 'pensmith_status', arguments: {} });
+  assert.equal(res.isError, true);
+  const content = res.content as Array<{ type: string; text: string }>;
+  assert.match(content[0]!.text, /^pensmith status: no active paper .* run `pensmith new` to start\.\n$/);
+  const body = JSON.parse(content[1]!.text) as { exit_code: number; classification: string };
+  assert.deepEqual(body, { exit_code: 1, classification: 'EXIT_ERROR', message: null });
+  assert.deepEqual(listTree(root), [], 'nothing created in a folder without a paper');
+});
+
+test('PLUG-13: parallel pensmith_status calls and other printing never mix (the capture is per call)', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-status-tool-parallel-'));
+  await seedThreeSectionPaper(root);
+  const { client } = await pair(root);
+  const expected = renderStatusView(await buildStatusView(root, { tier: 'cli', ...routeOptionsFor(root) })) + '\n';
+  await withRecordingSink(async (printed) => {
+    // Another call chain printing through the sink while the tool calls run
+    // (as a pensmith_plan call's `pensmith plan: …` lines would).
+    const noise = (async () => {
+      for (let i = 0; i < 20; i += 1) {
+        out(`pensmith plan: line ${i}\n`);
+        await new Promise((r) => setImmediate(r));
+      }
+    })();
+    const calls = await Promise.all(Array.from({ length: 4 }, () => client.callTool({ name: 'pensmith_status', arguments: {} })));
+    await noise;
+    for (const res of calls) {
+      assert.notEqual(res.isError, true);
+      assert.equal((res.content as Array<{ text: string }>)[0]!.text, expected);
+    }
+    assert.equal(printed(), Array.from({ length: 20 }, (_, i) => `pensmith plan: line ${i}\n`).join(''), 'the other chain printed on the process sink, in order, and nothing else did');
+  });
 });

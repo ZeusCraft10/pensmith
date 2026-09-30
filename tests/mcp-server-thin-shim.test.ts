@@ -2,7 +2,7 @@
 //
 // D-08 positive case: every real handler body in mcp/ is ≤30 statements.
 // The chokepoint LINT (02-01) covers fixtures; this test covers the
-// SHIPPED code. Counts: 5 resources (TIER-01) + 6 tools (TIER-02).
+// SHIPPED code. Counts: 5 resources (TIER-01) + 11 tools (TIER-02 + later phases).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -62,7 +62,7 @@ function countHandlerStmts(
   return results;
 }
 
-test('D-08: every mcp/tools.ts handler ≤30 statements (6 Phase 2 + 3 Phase 3 Plan 03-07 + 1 Phase 19 = 10 tools)', () => {
+test('D-08: every mcp/tools.ts handler ≤30 statements (6 Phase 2 + 3 Phase 3 Plan 03-07 + 1 Phase 19 + 1 Phase 23a = 11 tools)', () => {
   const handlers = countHandlerStmts('mcp/tools.ts', 'registerTool');
   // Phase 2 (TIER-02): paper_init_section, paper_advance_section,
   //   paper_record_verification, paper_set_status, paper_doi_verify,
@@ -72,7 +72,10 @@ test('D-08: every mcp/tools.ts handler ≤30 statements (6 Phase 2 + 3 Phase 3 P
   //   same bin/cli/<verb>.ts CommandDef the dispatcher uses.
   // Phase 19 (SRC-16, D-19-24): paper_ingest_zotero_items — the Tier 1 half of
   //   the Zotero source, a thin shim over bin/lib/zotero-ingest.ts.
-  assert.equal(handlers.length, 10, `expected 10 tools (6 Phase 2 + 3 Phase 3 Plan 03-07 + 1 Phase 19), got ${handlers.length}: ${JSON.stringify(handlers.map((h) => h.name))}`);
+  // Phase 23a (PLUG-03, D-23a-12): pensmith_status — read-only, the status verb
+  //   under a capturing output sink.
+  assert.equal(handlers.length, 11, `expected 11 tools (6 Phase 2 + 3 Phase 3 Plan 03-07 + 1 Phase 19 + 1 Phase 23a), got ${handlers.length}: ${JSON.stringify(handlers.map((h) => h.name))}`);
+  assert.ok(handlers.some((h) => h.name === 'pensmith_status'), 'pensmith_status is registered');
   for (const h of handlers) {
     assert.ok(h.stmts <= 30, `${h.name}: ${h.stmts} stmts (max 30)`);
   }

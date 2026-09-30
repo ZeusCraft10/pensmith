@@ -1,7 +1,8 @@
 // mcp/tools.ts
 //
 // TIER-02 + D-13: 6 Phase-2 state-mutation tools + 3 Phase-3 per-section
-// verb tools (Plan 03-07 Task 7.3) + 1 Phase-19 source tool — total 10 tools:
+// verb tools (Plan 03-07 Task 7.3) + 1 Phase-19 source tool + 1 Phase-23a
+// status tool — total 11 tools:
 //   Phase 2:  paper_init_section, paper_advance_section,
 //             paper_record_verification, paper_set_status,
 //             paper_doi_verify, paper_capability_probe
@@ -10,6 +11,8 @@
 //   Phase 19: paper_ingest_zotero_items (SRC-16, D-19-24: the Tier 1 half of
 //             the Zotero source — items Claude read through the user's Zotero
 //             MCP server, validated and upserted by bin/lib/zotero-ingest.ts)
+//   Phase 23a: pensmith_status (PLUG-03, D-23a-12: the read-only Tier 1
+//             equivalent of `pensmith status` — exactly the text the CLI prints)
 // D-08: each handler body ≤30 stmts (AST-asserted in tests/mcp-server-thin-shim.test.ts).
 // RUN-23: every MUTATING tool runs inside the paper's session lock (mutate()
 //         → bin/lib/session-lock.ts withPaperSession): a CLI session working
@@ -21,7 +24,9 @@
 //       wraps the record in z.object() internally. Passing z.object({...}) makes
 //       the schema double-wrapped and tool args arrive as { value: {...} }.
 //
-// No console.* allowed (D-07 / Pitfall 7 — corrupts stdio MCP frame).
+// Nothing here writes to stdout (D-07 / Pitfall 7 — it is the stdio MCP frame).
+// The verbs the pensmith_* tools run print through bin/lib/output-sink.ts, which
+// the server points at stderr (PLUG-13); pensmith_status captures it instead.
 //
 // Tier-1 ↔ Tier-2 equivalence (D-17 contract): the 3 Phase-3 handlers
 // import the same bin/cli/{plan,write,verify}.ts CommandDef objects the
@@ -42,7 +47,8 @@ import { verifyDoi } from '../bin/lib/doi.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
 import { projectRoot, asProjectRoot } from '../bin/lib/paths.js';
 import { withPaperSession } from '../bin/lib/session-lock.js';
-import { runClassified, type ClassifiedOutcome } from '../bin/lib/verb-outcome.js';
+import { runClassified, failureLine, type ClassifiedOutcome } from '../bin/lib/verb-outcome.js';
+import { withCapturedOutput } from '../bin/lib/output-sink.js';
 import { ingestZoteroItems, MAX_ZOTERO_INGEST_ITEMS } from '../bin/lib/zotero-ingest.js';
 import {
   SectionStateSchema,
@@ -103,6 +109,19 @@ function toolResult(o: ClassifiedOutcome): { content: Array<{ type: 'text'; text
   if (!o.isError) return { content: [{ type: 'text', text: JSON.stringify(o.result ?? null, null, 2) }] };
   const body = { exit_code: o.exitCode, classification: o.classification, message: o.message, result: o.result ?? null };
   return { isError: true, content: [{ type: 'text', text: JSON.stringify(body, null, 2) }] };
+}
+
+/**
+ * The MCP result of a verb whose product is the text it prints (pensmith_status):
+ * that text exactly as the CLI writes it to stdout. A failure is `isError` with
+ * the printed text (or the CLI's one failure line when nothing was printed)
+ * followed by the same exit-code classification toolResult() carries.
+ */
+function printedResult(o: ClassifiedOutcome, printed: string): { content: Array<{ type: 'text'; text: string }>; isError?: boolean } {
+  if (!o.isError) return { content: [{ type: 'text', text: printed }] };
+  const body = { exit_code: o.exitCode, classification: o.classification, message: o.message };
+  const text = printed || failureLine(o.message ?? o.classification);
+  return { isError: true, content: [{ type: 'text', text }, { type: 'text', text: JSON.stringify(body, null, 2) }] };
 }
 
 /**
@@ -321,5 +340,31 @@ export function registerPaperTools(server: McpServer): void {
         () => import('../bin/cli/verify.js').then((m) => m.default),
         { n: String(n), slug: slug ?? '', yolo: yolo ?? false },
       ))),
+  );
+
+  // Tool 11: pensmith_status — Tier 1 equivalent of `pensmith status` (PLUG-03,
+  //          D-23a-12). READ-ONLY, so no session lock (status never takes it,
+  //          RUN-23): it runs the SAME bin/cli/status.ts CommandDef under a
+  //          capturing output sink (bin/lib/output-sink.ts, scoped to this call)
+  //          and returns exactly the text the CLI prints, for the paper the
+  //          server resolved at boot — never the `pensmith open` pointer
+  //          (D-17-33). tests/tier-contract.test.ts compares it with the CLI.
+  server.registerTool(
+    'pensmith_status',
+    {
+      title: 'Show the paper status',
+      description:
+        'Tier 1 equivalent of `pensmith status`: the paper, its current section and step, each section\'s status, ' +
+        'the cost meter and the next step — exactly the text the CLI prints. Read-only.',
+      inputSchema: {},
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async () => {
+      const { result, output } = await withCapturedOutput(() => runClassified(() => runVerbDirect(
+        () => import('../bin/cli/status.js').then((m) => m.default),
+        { config: false },
+      )));
+      return printedResult(result, output);
+    },
   );
 }
