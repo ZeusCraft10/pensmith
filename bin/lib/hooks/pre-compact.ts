@@ -6,17 +6,20 @@
 // router's decision gives the phase, the section id and the plan/write/verify
 // position (handoff.ts handoffPositionOf); the section pointers come from the
 // sections STATE.json registers (the one authority on section identity,
-// D-18-38), each with its PLAN.md status; breadcrumbs from
-// `.paper/BREADCRUMBS.jsonl` as in v1.
+// D-18-38), each with its PLAN.md status. A HANDOFF.json written by a newer
+// pensmith is left in place (writeHandoff, never downgraded).
 //
-// Read-only except for HANDOFF.json itself. No model call (D-12). Bounded by
-// PRECOMPACT_DEADLINE_MS, inside the 10 s timeout hooks.json gives the hook.
-// Returns what happened and never writes stdout (the entry, hooks/
-// pre-compact.ts, prints nothing — PreCompact has no output protocol).
+// It writes HANDOFF.json and nothing else of the paper's except the
+// `state.load` events every STATE.json read appends to SESSION.log; it never
+// runs the legacy-layout move (the entry, hooks/pre-compact.ts, only runs in a
+// folder whose `.paper/` holds the paper — bin/lib/hooks/entry.ts). No model
+// call (D-12). Bounded by PRECOMPACT_DEADLINE_MS, inside the 10 s timeout
+// hooks.json gives the hook. Returns what happened and never writes stdout
+// (PreCompact has no output protocol).
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { assembleHandoff, writeHandoff, type Handoff, type HandoffBreadcrumb, type HandoffSectionPointer } from '../handoff.js';
+import { assembleHandoff, writeHandoff, type Handoff, type HandoffSectionPointer } from '../handoff.js';
 import { SectionStateSchema } from '../schemas/state.js';
 import { loadState } from '../state.js';
 import { paperDir, sectionDraft, sectionPlan, sectionVerification } from '../paths.js';
@@ -36,35 +39,6 @@ export interface PreCompactOptions {
 export type PreCompactResult =
   | { readonly written: true; readonly handoff: Handoff; readonly file: string }
   | { readonly written: false; readonly error: string };
-
-/** The last 5 well-formed `.paper/BREADCRUMBS.jsonl` records (v1 behaviour). */
-export function readBreadcrumbs(pDir: string): HandoffBreadcrumb[] {
-  const file = path.join(pDir, 'BREADCRUMBS.jsonl');
-  if (!existsSync(file)) return [];
-  let lines: string[];
-  try {
-    lines = readFileSync(file, 'utf8').split(/\r?\n/).filter((l) => l.trim().length > 0).slice(-5);
-  } catch {
-    return [];
-  }
-  const out: HandoffBreadcrumb[] = [];
-  for (const line of lines) {
-    try {
-      const p = JSON.parse(line) as { ts?: unknown; verb?: unknown; section?: unknown; ok?: unknown };
-      if (
-        typeof p.ts === 'string' && !Number.isNaN(Date.parse(p.ts))
-        && typeof p.verb === 'string' && p.verb.length <= 40
-        && (p.section === null || (typeof p.section === 'string' && p.section.length <= 40))
-        && typeof p.ok === 'boolean'
-      ) {
-        out.push({ ts: new Date(p.ts).toISOString(), verb: p.verb, section: p.section, ok: p.ok });
-      }
-    } catch {
-      /* a malformed line is skipped */
-    }
-  }
-  return out;
-}
 
 /** A path under the project root, POSIX-spelled and relative (a synced `.paper/` stays portable). */
 function rel(root: string, abs: string): string {
@@ -110,12 +84,18 @@ export async function writePreCompactHandoff(root: string, opts: PreCompactOptio
     const pDir = paperDir(root);
     const handoff = assembleHandoff({
       decision,
-      breadcrumbs: readBreadcrumbs(pDir),
       sectionPointers: await collectSectionPointers(root),
       ...(opts.now ? { now: opts.now } : {}),
     });
-    await writeHandoff(handoff, pDir);
-    return { written: true, handoff, file: path.join(pDir, 'HANDOFF.json') };
+    const file = path.join(pDir, 'HANDOFF.json');
+    const w = await writeHandoff(handoff, pDir);
+    if (!w.written) {
+      return {
+        written: false,
+        error: `${file} was written by a newer pensmith (schema_version ${w.newerVersion}); left in place, never downgraded`,
+      };
+    }
+    return { written: true, handoff, file };
   })();
   const deadline = new Promise<PreCompactResult>((resolve) => {
     timer = setTimeout(

@@ -28,7 +28,6 @@ test('handoff-size: a 40-section handoff fits 5120 bytes, keeps the current sect
   const current = pointers[24]!;
   const h = assembleHandoff({
     decision: { verb: 'write', n: 25, slug: current.slug },
-    breadcrumbs: [],
     sectionPointers: pointers,
   });
   const bytes = Buffer.byteLength(JSON.stringify(h, null, 2) + '\n', 'utf8');
@@ -38,7 +37,7 @@ test('handoff-size: a 40-section handoff fits 5120 bytes, keeps the current sect
   assert.ok(h.section_pointers.every((p) => p.state !== 'verified'), 'verified sections are dropped first');
   assert.ok(h.section_pointers.length > 1, 'as many pointers as fit are kept');
 
-  const small = assembleHandoff({ decision: { verb: 'compile' }, breadcrumbs: [], sectionPointers: pointers.slice(0, 3) });
+  const small = assembleHandoff({ decision: { verb: 'compile' }, sectionPointers: pointers.slice(0, 3) });
   assert.equal(small.section_pointers.length, 3, 'a handoff under the budget keeps every pointer');
 });
 

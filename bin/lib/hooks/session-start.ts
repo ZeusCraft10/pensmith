@@ -14,6 +14,21 @@
 //   - the instruction to run `/pensmith` to continue.
 // It never emits `systemMessage` and never writes stdout itself: it returns
 // the protocol object, and hooks/session-start.ts prints it as one JSON line.
+//
+// Only validated or router-derived values reach the model (review round 1).
+// `.paper/` may be shared or synced, so anyone who can write a paper's files
+// could otherwise put instructions into every session opened in its folder.
+// The context therefore never quotes free text read from the paper:
+//   - the next step is nextActionOf(decision, { quoteDetail: false }): the
+//     verb, the section id and the STATE.json slug (schema-checked
+//     `[a-z0-9-]+`), never the router's attention detail, which can carry a
+//     PLAN.md failure_reason or status, VERIFICATION.md rows or an OUTLINE.md
+//     problem — an attention step names `/pensmith status` instead;
+//   - the HANDOFF summary is its `last_updated` (an ISO datetime), `phase` and
+//     `position` (enums) and `section` (SECTION_ID_RE) only — never its
+//     `next_action` or `current_section` strings.
+// The folder path is the one the session runs in, which Claude Code already
+// knows.
 
 import path from 'node:path';
 import { describeHandoffPosition, loadHandoff, nextActionOf } from '../handoff.js';
@@ -36,7 +51,7 @@ export interface SessionStartOptions {
 const MAX_CONTEXT_CHARS = 2_000;
 
 function nextStepLine(decision: RouterDecision): string {
-  return `Next step (the pensmith router): ${nextActionOf(decision)}`;
+  return `Next step (the pensmith router): ${nextActionOf(decision, { quoteDetail: false })}`;
 }
 
 /** The resume context for the paper at `root`. Read-only; never throws. */
@@ -51,7 +66,7 @@ export async function buildSessionStartContext(root: string, opts: SessionStartO
   const handoff = loadHandoff(paperDir(root));
   if (handoff !== null && handoff.phase !== 'done') {
     lines.push(
-      `Before the last context compaction (${handoff.last_updated}) it was at ${describeHandoffPosition(handoff)}: ${handoff.next_action}`,
+      `Before the last context compaction (${handoff.last_updated}) it was at ${describeHandoffPosition(handoff, { slugFallback: false })}.`,
     );
   }
   lines.push(

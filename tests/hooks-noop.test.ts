@@ -9,12 +9,17 @@
 // or garbage. The time is the best of three spawns (the hook's own cost, not
 // the test runner's scheduling noise); every spawn must also stay under 2 s.
 //
+// A folder in the pre-v1 layout (a root-level pensmith STATE.json and
+// config.toml, with or without a `.paper/` beside them) is left byte-identical
+// by every hook: the legacy-layout move renames the user's files, so only the
+// next CLI or MCP run makes it, under the paper's session lock.
+//
 // (The v0 hooks.json shape case that lived here is gone: stream layout's
 // tests/manifest.test.ts asserts the spec's plugin/hooks/hooks.json.)
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { changedPaths, sandbox, snapshot } from './helpers/paper-cli-harness.js';
 import { assertBundlesPresent, hookInput, runHook, type HookName } from './hooks/hook-runner.js';
@@ -50,5 +55,23 @@ for (const name of HOOKS) {
     }
     assert.deepEqual(changedPaths(beforeCwd, snapshot(cwd)), [], 'no file created in the folder');
     assert.deepEqual(changedPaths(beforeData, snapshot(sb.data)), [], 'no file created in the data dir');
+  });
+}
+
+for (const name of HOOKS) {
+  test(`PLUG-14: ${name} leaves a pre-v1 layout byte-identical (the legacy move is a CLI or MCP run's, never a hook's)`, () => {
+    const sb = sandbox(`hook-legacy-${name}`);
+    const cwd = sb.project('legacy-paper');
+    writeFileSync(join(cwd, 'STATE.json'), JSON.stringify({ $schemaVersion: 1, paperId: 'legacy-paper', createdAt: '2025-01-01T00:00:00.000Z', sections: [] }));
+    writeFileSync(join(cwd, 'config.toml'), 'schema_version = 1\n');
+    for (const withPaperDir of [false, true]) {
+      if (withPaperDir) mkdirSync(join(cwd, '.paper', 'sections'), { recursive: true });
+      const before = snapshot(cwd);
+      const r = runHook(sb, name, { cwd, input: hookInput(name, cwd) });
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '', `${name} prints nothing for a paper it does not address`);
+      assert.equal(r.stderr, '', `${name} moves nothing, so it reports nothing`);
+      assert.deepEqual(changedPaths(before, snapshot(cwd)), [], `nothing moved or written (.paper/ present: ${withPaperDir})`);
+    }
   });
 }

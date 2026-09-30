@@ -244,6 +244,11 @@ function hasPaper(root) {
   if (dryRunWorkspaceActive() && isDirectory(realPaperDir(r))) return true;
   return isLegacyPensmithState(r);
 }
+function hasCurrentLayoutPaper(root) {
+  const r = path3.resolve(root);
+  if (isPaperDirName(path3.basename(r)) || dryRunWorkspaceActive()) return false;
+  return isDirectory(paperDir(r)) && !isLegacyPensmithState(r);
+}
 function findAssignmentFile(root) {
   for (const name of ASSIGNMENT_FILE_NAMES) {
     const p = path3.join(path3.resolve(root), name);
@@ -402,6 +407,7 @@ var init_paths = __esm({
     __name(isLegacyPensmithState, "isLegacyPensmithState");
     __name(isDirectory, "isDirectory");
     __name(hasPaper, "hasPaper");
+    __name(hasCurrentLayoutPaper, "hasCurrentLayoutPaper");
     ASSIGNMENT_FILE_NAMES = Object.freeze([
       "assignment.txt",
       "assignment.md",
@@ -8360,7 +8366,7 @@ __name(setOutputSink, "setOutputSink");
 // bin/lib/hooks/entry.ts
 function hookPaperRoot(input, env = process.env) {
   const resolution = resolvePaperRoot({ mode: "hook", verb: null, cwd: hookInputCwd(input) ?? workingDirectory(), env });
-  if (resolution.kind !== "root" || !hasPaper(resolution.root)) return null;
+  if (resolution.kind !== "root" || !hasCurrentLayoutPaper(resolution.root)) return null;
   setActivePaperRoot(resolution.root);
   setOutputSink(process.stderr);
   return resolution.root;

@@ -300,6 +300,11 @@ function hasPaper(root) {
   if (dryRunWorkspaceActive() && isDirectory(realPaperDir(r))) return true;
   return isLegacyPensmithState(r);
 }
+function hasCurrentLayoutPaper(root) {
+  const r = path3.resolve(root);
+  if (isPaperDirName(path3.basename(r)) || dryRunWorkspaceActive()) return false;
+  return isDirectory(paperDir(r)) && !isLegacyPensmithState(r);
+}
 function findAssignmentFile(root) {
   for (const name of ASSIGNMENT_FILE_NAMES) {
     const p = path3.join(path3.resolve(root), name);
@@ -539,6 +544,7 @@ var init_paths = __esm({
     __name(isLegacyPensmithState, "isLegacyPensmithState");
     __name(isDirectory, "isDirectory");
     __name(hasPaper, "hasPaper");
+    __name(hasCurrentLayoutPaper, "hasCurrentLayoutPaper");
     ASSIGNMENT_FILE_NAMES = Object.freeze([
       "assignment.txt",
       "assignment.md",
@@ -4918,7 +4924,7 @@ var init_section_id = __esm({
 });
 
 // bin/lib/schemas/handoff.ts
-var HANDOFF_MAX_BYTES, CURRENT_HANDOFF_VERSION, HANDOFF_PHASES, HANDOFF_POSITIONS, BreadcrumbSchema, SectionPointerSchema, withinBudget, BUDGET_MESSAGE, HandoffV1Schema, HandoffSchema;
+var HANDOFF_MAX_BYTES, CURRENT_HANDOFF_VERSION, HANDOFF_PHASES, HANDOFF_POSITIONS, BreadcrumbSchema, HANDOFF_SLUG_MAX, SectionPointerSchema, withinBudget, BUDGET_MESSAGE, HandoffV1Schema, HandoffSchema;
 var init_handoff = __esm({
   "bin/lib/schemas/handoff.ts"() {
     "use strict";
@@ -4944,8 +4950,9 @@ var init_handoff = __esm({
       section: external_exports.string().max(40).nullable(),
       ok: external_exports.boolean()
     });
+    HANDOFF_SLUG_MAX = 120;
     SectionPointerSchema = external_exports.object({
-      slug: external_exports.string().max(120),
+      slug: external_exports.string().max(HANDOFF_SLUG_MAX),
       plan_path: external_exports.string().max(400),
       draft_path: external_exports.string().max(400).nullable(),
       verification_path: external_exports.string().max(400).nullable(),
@@ -4982,9 +4989,8 @@ var init_handoff = __esm({
       phase: external_exports.enum(HANDOFF_PHASES),
       section: external_exports.string().regex(SECTION_ID_RE).nullable(),
       position: external_exports.enum(HANDOFF_POSITIONS).nullable(),
-      current_section: external_exports.string().max(120).nullable(),
+      current_section: external_exports.string().max(HANDOFF_SLUG_MAX).nullable(),
       next_action: external_exports.string().min(1).max(200),
-      breadcrumbs: external_exports.array(BreadcrumbSchema).max(5),
       section_pointers: external_exports.array(SectionPointerSchema)
     }).refine((h) => h.position !== null === (h.phase === "sectioning"), {
       message: 'position is set exactly when phase is "sectioning" (plan, write or verify of one section)',
@@ -5013,7 +5019,6 @@ function migrate(v1) {
     position: step,
     current_section: v1.current_section,
     next_action: v1.next_action,
-    breadcrumbs: v1.breadcrumbs,
     section_pointers: v1.section_pointers
   };
 }
@@ -7023,96 +7028,6 @@ var init_lock = __esm({
   }
 });
 
-// bin/lib/handoff.ts
-import { existsSync, readFileSync as readFileSync2 } from "node:fs";
-import path6 from "node:path";
-function nextActionOf(decision) {
-  const run = /* @__PURE__ */ __name((cmd) => `run /pensmith (or \`pensmith ${cmd}\`)`, "run");
-  let text;
-  switch (decision.verb) {
-    case "new":
-      text = `Start the paper from the assignment: ${run("new")}.`;
-      break;
-    case "research":
-      text = `Find and evaluate sources: ${run("research")}.`;
-      break;
-    case "outline":
-      text = `Outline the paper and approve it: ${run("outline")}.`;
-      break;
-    case "plan":
-    case "write":
-    case "verify": {
-      const id = formatSectionId(sectionIdOf(decision.n, decision.suffix));
-      const what = { plan: "Plan", write: "Draft", verify: "Verify the citations of" }[decision.verb];
-      text = `${what} section ${sectionLabel(sectionIdOf(decision.n, decision.suffix))} (${decision.slug}): ${run(`${decision.verb} ${id}`)}.`;
-      break;
-    }
-    case "compile":
-      text = `Compile the verified sections into DRAFT.md: ${run("compile")}.`;
-      break;
-    case "done":
-      text = `Export the paper: ${run("done")}.`;
-      break;
-    case "status":
-      text = decision.reason === "done" ? decision.detail ? `Nothing more is routed: ${decision.detail}` : "The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it)." : `Needs attention: ${decision.detail ?? "run /pensmith status to see what"}`;
-      break;
-    default:
-      text = "Run /pensmith status to see where the paper stands.";
-  }
-  return text.length > 200 ? `${text.slice(0, 199)}\u2026` : text;
-}
-function readHandoff(paperDir2) {
-  const file = path6.join(paperDir2, HANDOFF_FILENAME);
-  if (!existsSync(file)) return { kind: "absent" };
-  let raw;
-  try {
-    raw = JSON.parse(readFileSync2(file, "utf8"));
-  } catch {
-    return { kind: "invalid" };
-  }
-  const version = raw !== null && typeof raw === "object" ? raw.schema_version : void 0;
-  if (typeof version === "number" && Number.isInteger(version) && version > CURRENT_HANDOFF_VERSION) {
-    return { kind: "newer", version };
-  }
-  if (version === 1) {
-    const v1 = HandoffV1Schema.safeParse(raw);
-    if (!v1.success) return { kind: "invalid" };
-    const v22 = HandoffSchema.safeParse(migrate(v1.data));
-    return v22.success ? { kind: "ok", handoff: v22.data, migratedFrom: 1 } : { kind: "invalid" };
-  }
-  const v2 = HandoffSchema.safeParse(raw);
-  return v2.success ? { kind: "ok", handoff: v2.data, migratedFrom: null } : { kind: "invalid" };
-}
-function loadHandoff(paperDir2) {
-  const r = readHandoff(paperDir2);
-  return r.kind === "ok" ? r.handoff : null;
-}
-function describeHandoffPosition(h) {
-  if (h.phase === "sectioning") {
-    return `phase sectioning, section ${h.section ?? h.current_section ?? "?"} (${h.position ?? "?"})`;
-  }
-  const at = h.section !== null ? `, section ${h.section}` : h.current_section !== null ? `, section ${h.current_section}` : "";
-  return `phase ${h.phase}${at}`;
-}
-var HANDOFF_FILENAME, HANDOFF_PATH;
-var init_handoff2 = __esm({
-  "bin/lib/handoff.ts"() {
-    "use strict";
-    init_handoff();
-    init_v1_to_v2();
-    init_atomic_write();
-    init_lock();
-    init_paths();
-    init_section_id();
-    HANDOFF_FILENAME = "HANDOFF.json";
-    HANDOFF_PATH = `.paper/${HANDOFF_FILENAME}`;
-    __name(nextActionOf, "nextActionOf");
-    __name(readHandoff, "readHandoff");
-    __name(loadHandoff, "loadHandoff");
-    __name(describeHandoffPosition, "describeHandoffPosition");
-  }
-});
-
 // bin/lib/migrations/loader.ts
 import * as fsp3 from "node:fs/promises";
 function readVersion(raw) {
@@ -8710,7 +8625,7 @@ var init_pii = __esm({
 
 // bin/lib/session-log.ts
 import * as fs5 from "node:fs";
-import * as path7 from "node:path";
+import * as path6 from "node:path";
 import { createHash as createHash2, randomUUID } from "node:crypto";
 function resolveRoot(scope, cwd) {
   let root;
@@ -8735,8 +8650,8 @@ function resolveRoot(scope, cwd) {
       useGlobalName = true;
     }
   }
-  const logFile = path7.join(root, useGlobalName ? "session.log" : "SESSION.log");
-  const spillRoot = path7.join(root, "sessions");
+  const logFile = path6.join(root, useGlobalName ? "session.log" : "SESSION.log");
+  const spillRoot = path6.join(root, "sessions");
   return { logFile, spillRoot };
 }
 function scrubSecrets(line) {
@@ -8792,7 +8707,7 @@ async function llmLine(spillRoot, record) {
   if (Buffer.byteLength(line, "utf8") <= MAX_LLM_RECORD_BYTES) return line;
   const id = typeof record["id"] === "string" ? record["id"] : `${record.run_id}:0`;
   const seq = id.slice(id.lastIndexOf(":") + 1) || "0";
-  const spillFile = path7.join(spillRoot, record.run_id, `${seq}.json`);
+  const spillFile = path6.join(spillRoot, record.run_id, `${seq}.json`);
   try {
     await atomicWriteFile(spillFile, scrubSecrets(JSON.stringify(record, null, 2)) + "\n");
   } catch {
@@ -8822,7 +8737,7 @@ async function writeLineOrTruncate(spillRoot, run_id, seqRef, record, maxRecordB
   if (sizeBytes <= maxRecordBytes) return line;
   const { at, kind, run_id: rid, ...payload } = record;
   const seq = seqRef.value++;
-  const spillFile = path7.join(spillRoot, run_id, `${seq}.json`);
+  const spillFile = path6.join(spillRoot, run_id, `${seq}.json`);
   try {
     await atomicWriteFile(spillFile, JSON.stringify(record, null, 2) + "\n");
   } catch {
@@ -8950,7 +8865,7 @@ var init_session_log = __esm({
 
 // bin/lib/state.ts
 import * as fs6 from "node:fs";
-import * as path8 from "node:path";
+import * as path7 from "node:path";
 function migrateStateValue(value) {
   const versionOf2 = /* @__PURE__ */ __name((v) => {
     const n = typeof v === "object" && v !== null ? v["$schemaVersion"] : void 0;
@@ -8970,7 +8885,7 @@ function stateFile(paperRoot) {
 async function moveLegacyFile(legacy, dest) {
   return withLock(dest, async () => {
     if (!fs6.existsSync(legacy)) return false;
-    await fs6.promises.mkdir(path8.dirname(dest), { recursive: true });
+    await fs6.promises.mkdir(path7.dirname(dest), { recursive: true });
     if (fs6.existsSync(dest)) {
       const [a, b] = await Promise.all([fs6.promises.readFile(legacy), fs6.promises.readFile(dest)]);
       if (!a.equals(b)) throw new LegacyLayoutConflictError(legacy, dest);
@@ -16689,7 +16604,7 @@ var init_v1_to_v23 = __esm({
 });
 
 // bin/lib/disciplines.ts
-import { readFileSync as readFileSync4 } from "node:fs";
+import { readFileSync as readFileSync3 } from "node:fs";
 function disciplinesPath() {
   return pluginTemplatePath("presets", "disciplines.json");
 }
@@ -16713,7 +16628,7 @@ function parsePresetFile(raw) {
   return Object.freeze(out2);
 }
 function loadDisciplinePresets() {
-  if (cache === null) cache = parsePresetFile(JSON.parse(readFileSync4(disciplinesPath(), "utf8")));
+  if (cache === null) cache = parsePresetFile(JSON.parse(readFileSync3(disciplinesPath(), "utf8")));
   return cache;
 }
 function normalizeText(raw) {
@@ -16967,14 +16882,14 @@ var init_compile_inputs = __esm({
 
 // bin/lib/compile-inputs.ts
 import { createHash as createHash4 } from "node:crypto";
-import { readFileSync as readFileSync6 } from "node:fs";
+import { readFileSync as readFileSync5 } from "node:fs";
 import { join as join2 } from "node:path";
 function compileInputsPath(paperRoot) {
   return join2(paperDir(paperRoot), COMPILE_INPUTS_FILE);
 }
 function fileSha256(file) {
   try {
-    return createHash4("sha256").update(readFileSync6(file)).digest("hex");
+    return createHash4("sha256").update(readFileSync5(file)).digest("hex");
   } catch {
     return "";
   }
@@ -16989,7 +16904,7 @@ function currentSectionInputs(paperRoot, s2) {
 }
 function readCompileInputs(paperRoot) {
   try {
-    const parsed = CompileInputsSchema.safeParse(JSON.parse(readFileSync6(compileInputsPath(paperRoot), "utf8")));
+    const parsed = CompileInputsSchema.safeParse(JSON.parse(readFileSync5(compileInputsPath(paperRoot), "utf8")));
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
@@ -17200,7 +17115,7 @@ var init_outline_parse = __esm({
 });
 
 // bin/lib/outline.ts
-import { existsSync as existsSync3, readFileSync as readFileSync7 } from "node:fs";
+import { existsSync as existsSync2, readFileSync as readFileSync6 } from "node:fs";
 import { join as join3 } from "node:path";
 function outlinePath(paperRoot) {
   return join3(paperDir(paperRoot), "OUTLINE.md");
@@ -17211,9 +17126,9 @@ function readOutlineSync(paperRoot) {
 }
 function readOutlineChecked(paperRoot) {
   const file = outlinePath(paperRoot);
-  if (!existsSync3(file)) return { kind: "absent" };
+  if (!existsSync2(file)) return { kind: "absent" };
   try {
-    return { kind: "ok", doc: parseOutline(readFileSync7(file, "utf8")) };
+    return { kind: "ok", doc: parseOutline(readFileSync6(file, "utf8")) };
   } catch (e) {
     const error = e.message.replace(/^outline-parse:\s*/, "");
     return /^no section table found/.test(error) ? { kind: "no-table" } : { kind: "invalid", error };
@@ -17373,7 +17288,7 @@ var init_verdict_rows = __esm({
 });
 
 // bin/lib/research-sentinel.ts
-import { existsSync as existsSync4, readFileSync as readFileSync8 } from "node:fs";
+import { existsSync as existsSync3, readFileSync as readFileSync7 } from "node:fs";
 import { join as join4 } from "node:path";
 function isOwnOnly(entry) {
   const tags = entry?.provenance;
@@ -17382,9 +17297,9 @@ function isOwnOnly(entry) {
 }
 function libraryState(pDir) {
   const file = join4(pDir, "LIBRARY.json");
-  if (!existsSync4(file)) return "absent";
+  if (!existsSync3(file)) return "absent";
   try {
-    const parsed = JSON.parse(readFileSync8(file, "utf8"));
+    const parsed = JSON.parse(readFileSync7(file, "utf8"));
     if (!Array.isArray(parsed.entries)) return "unreadable";
     if (parsed.entries.length === 0) return "empty";
     return parsed.entries.every(isOwnOnly) ? "own-only" : "researched";
@@ -17422,14 +17337,14 @@ function isFailedResearchLog(text) {
 }
 function readText(file) {
   try {
-    return existsSync4(file) ? readFileSync8(file, "utf8") : null;
+    return existsSync3(file) ? readFileSync7(file, "utf8") : null;
   } catch {
     return null;
   }
 }
 function isResearchDone(pDir) {
   try {
-    if (existsSync4(join4(pDir, "OUTLINE.md"))) return true;
+    if (existsSync3(join4(pDir, "OUTLINE.md"))) return true;
     const lib = libraryState(pDir);
     const log2 = readText(join4(pDir, "RESEARCH.md"));
     if (log2 !== null && isFailedResearchLog(log2)) {
@@ -17466,11 +17381,11 @@ var init_research_sentinel = __esm({
 });
 
 // bin/lib/router.ts
-import { existsSync as existsSync5, readFileSync as readFileSync9, statSync as statSync3 } from "node:fs";
+import { existsSync as existsSync4, readFileSync as readFileSync8, statSync as statSync3 } from "node:fs";
 import { join as join5 } from "node:path";
 function readSectionInfo(planPath) {
   const none = { stub: false, failureReason: null, verifiedHash: null, assignedSources: [] };
-  if (!existsSync5(planPath)) {
+  if (!existsSync4(planPath)) {
     return { status: "planned", corrupt: false, absent: true, ...none };
   }
   try {
@@ -17495,7 +17410,7 @@ function readSectionInfo(planPath) {
 }
 function draftHashOf(draftPath, assignedSources) {
   try {
-    return computeDraftHash(readFileSync9(draftPath), [...assignedSources]);
+    return computeDraftHash(readFileSync8(draftPath), [...assignedSources]);
   } catch {
     return null;
   }
@@ -17503,7 +17418,7 @@ function draftHashOf(draftPath, assignedSources) {
 function verificationBlockers(verificationPath) {
   let md;
   try {
-    md = readFileSync9(verificationPath, "utf8");
+    md = readFileSync8(verificationPath, "utf8");
   } catch {
     return ["its VERIFICATION.md is missing or unreadable"];
   }
@@ -17525,7 +17440,7 @@ function mtimeOf(p) {
 }
 function compiledSectionCount(pDir) {
   try {
-    const m2 = /^sections_count:\s*(\d+)\s*$/m.exec(readFileSync9(join5(pDir, "COMPILE-REPORT.md"), "utf8"));
+    const m2 = /^sections_count:\s*(\d+)\s*$/m.exec(readFileSync8(join5(pDir, "COMPILE-REPORT.md"), "utf8"));
     return m2 ? Number(m2[1]) : null;
   } catch {
     return null;
@@ -17565,7 +17480,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
       return { verb: "status", reason: "done" };
     }
     const sections = state.sections ?? [];
-    if (sections.length === 0 && existsSync5(join5(pDir, "OUTLINE.rejected.md"))) {
+    if (sections.length === 0 && existsSync4(join5(pDir, "OUTLINE.rejected.md"))) {
       return {
         verb: "status",
         reason: "attention",
@@ -17574,7 +17489,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
     }
     const outlineIssue = outlineProblem(paperRoot);
     if (outlineIssue !== null) return { verb: "status", reason: "attention", detail: outlineIssue };
-    if (!existsSync5(join5(pDir, "OUTLINE.md"))) return { verb: "outline" };
+    if (!existsSync4(join5(pDir, "OUTLINE.md"))) return { verb: "outline" };
     if (sections.length === 0) return { verb: "outline" };
     const registry = sectionRegistryProblem(paperRoot);
     if (registry !== null) return { verb: "status", reason: "attention", detail: registry };
@@ -17601,7 +17516,7 @@ async function resolveNextAction(paperRoot, opts = {}) {
         case "writing":
           return { verb: "write", ...id };
         case "failed":
-          if (r.failureReason !== null || !existsSync5(sectionDraft(n, slug, paperRoot))) {
+          if (r.failureReason !== null || !existsSync4(sectionDraft(n, slug, paperRoot))) {
             return {
               verb: "status",
               reason: "attention",
@@ -17680,6 +17595,108 @@ var init_router = __esm({
   }
 });
 
+// bin/lib/handoff.ts
+import { existsSync as existsSync5, readFileSync as readFileSync9 } from "node:fs";
+import path8 from "node:path";
+function nextActionOf(decision, opts = {}) {
+  const quoteDetail = opts.quoteDetail ?? true;
+  const run = /* @__PURE__ */ __name((cmd) => `run /pensmith (or \`pensmith ${cmd}\`)`, "run");
+  let text;
+  switch (decision.verb) {
+    case "new":
+      text = `Start the paper from the assignment: ${run("new")}.`;
+      break;
+    case "research":
+      text = `Find and evaluate sources: ${run("research")}.`;
+      break;
+    case "outline":
+      text = `Outline the paper and approve it: ${run("outline")}.`;
+      break;
+    case "plan":
+    case "write":
+    case "verify": {
+      const id = formatSectionId(sectionIdOf(decision.n, decision.suffix));
+      const what = { plan: "Plan", write: "Draft", verify: "Verify the citations of" }[decision.verb];
+      text = `${what} section ${sectionLabel(sectionIdOf(decision.n, decision.suffix))} (${decision.slug}): ${run(`${decision.verb} ${id}`)}.`;
+      break;
+    }
+    case "compile":
+      text = `Compile the verified sections into DRAFT.md: ${run("compile")}.`;
+      break;
+    case "done":
+      text = `Export the paper: ${run("done")}.`;
+      break;
+    case "status": {
+      const detail = decision.detail !== void 0 && (quoteDetail || decision.detail === OUTLINE_ONLY_DONE) ? decision.detail : null;
+      if (decision.reason === "done") {
+        text = decision.detail !== void 0 ? `Nothing more is routed: ${detail ?? "run /pensmith status to see why."}` : "The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it).";
+      } else if (detail !== null) {
+        text = `Needs attention: ${detail}`;
+      } else {
+        const at = decision.section ? ` at section ${sectionLabel(sectionIdOf(decision.section.n, decision.section.suffix))} (${decision.section.slug})` : "";
+        text = `Needs attention${at}: run /pensmith status to see what and the command that fixes it.`;
+      }
+      break;
+    }
+    default:
+      text = "Run /pensmith status to see where the paper stands.";
+  }
+  return text.length > 200 ? `${text.slice(0, 199)}\u2026` : text;
+}
+function readHandoff(paperDir2) {
+  const file = path8.join(paperDir2, HANDOFF_FILENAME);
+  if (!existsSync5(file)) return { kind: "absent" };
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync9(file, "utf8"));
+  } catch {
+    return { kind: "invalid" };
+  }
+  const version = raw !== null && typeof raw === "object" ? raw.schema_version : void 0;
+  if (typeof version === "number" && Number.isInteger(version) && version > CURRENT_HANDOFF_VERSION) {
+    return { kind: "newer", version };
+  }
+  if (version === 1) {
+    const v1 = HandoffV1Schema.safeParse(raw);
+    if (!v1.success) return { kind: "invalid" };
+    const v22 = HandoffSchema.safeParse(migrate(v1.data));
+    return v22.success ? { kind: "ok", handoff: v22.data, migratedFrom: 1 } : { kind: "invalid" };
+  }
+  const v2 = HandoffSchema.safeParse(raw);
+  return v2.success ? { kind: "ok", handoff: v2.data, migratedFrom: null } : { kind: "invalid" };
+}
+function loadHandoff(paperDir2) {
+  const r = readHandoff(paperDir2);
+  return r.kind === "ok" ? r.handoff : null;
+}
+function describeHandoffPosition(h, opts = {}) {
+  const slug = opts.slugFallback ?? true ? h.current_section : null;
+  if (h.phase === "sectioning") {
+    return `phase sectioning, section ${h.section ?? slug ?? "?"} (${h.position ?? "?"})`;
+  }
+  const at = h.section !== null ? `, section ${h.section}` : slug !== null ? `, section ${slug}` : "";
+  return `phase ${h.phase}${at}`;
+}
+var HANDOFF_FILENAME, HANDOFF_PATH;
+var init_handoff2 = __esm({
+  "bin/lib/handoff.ts"() {
+    "use strict";
+    init_handoff();
+    init_v1_to_v2();
+    init_atomic_write();
+    init_lock();
+    init_paths();
+    init_section_id();
+    init_router();
+    HANDOFF_FILENAME = "HANDOFF.json";
+    HANDOFF_PATH = `.paper/${HANDOFF_FILENAME}`;
+    __name(nextActionOf, "nextActionOf");
+    __name(readHandoff, "readHandoff");
+    __name(loadHandoff, "loadHandoff");
+    __name(describeHandoffPosition, "describeHandoffPosition");
+  }
+});
+
 // bin/lib/hooks/session-start.ts
 var session_start_exports = {};
 __export(session_start_exports, {
@@ -17688,7 +17705,7 @@ __export(session_start_exports, {
 });
 import path9 from "node:path";
 function nextStepLine(decision) {
-  return `Next step (the pensmith router): ${nextActionOf(decision)}`;
+  return `Next step (the pensmith router): ${nextActionOf(decision, { quoteDetail: false })}`;
 }
 async function buildSessionStartContext(root, opts = {}) {
   let decision;
@@ -17701,7 +17718,7 @@ async function buildSessionStartContext(root, opts = {}) {
   const handoff = loadHandoff(paperDir(root));
   if (handoff !== null && handoff.phase !== "done") {
     lines.push(
-      `Before the last context compaction (${handoff.last_updated}) it was at ${describeHandoffPosition(handoff)}: ${handoff.next_action}`
+      `Before the last context compaction (${handoff.last_updated}) it was at ${describeHandoffPosition(handoff, { slugFallback: false })}.`
     );
   }
   lines.push(
@@ -19622,7 +19639,7 @@ init_paths();
 init_output_sink();
 function hookPaperRoot(input, env = process.env) {
   const resolution = resolvePaperRoot({ mode: "hook", verb: null, cwd: hookInputCwd(input) ?? workingDirectory(), env });
-  if (resolution.kind !== "root" || !hasPaper(resolution.root)) return null;
+  if (resolution.kind !== "root" || !hasCurrentLayoutPaper(resolution.root)) return null;
   setActivePaperRoot(resolution.root);
   setOutputSink(process.stderr);
   return resolution.root;

@@ -6,8 +6,9 @@
 //   v1 intake | research | outline | compile | done → the same phase, position null
 // `section` (the section id, "2" / "1a") did not exist in v1: it is read from
 // the `current_section` pointer's folder name (`sections/02-methods/PLAN.md`
-// → "2", `01a-background` → "1a"), else null. Every other field is carried
-// over unchanged. Pure: the input is a parsed v1 document (HandoffV1Schema),
+// → "2", `01a-background` → "1a"), else null. v1's `breadcrumbs` are dropped
+// (v2 has none: nothing ever wrote them). Every other field is carried over
+// unchanged. Pure: the input is a parsed v1 document (HandoffV1Schema),
 // and the caller validates the result against the v2 schema. HANDOFF is a
 // disposable pointer file, so the migration runs in memory only (loadHandoff
 // never writes the upgraded file back).
@@ -39,7 +40,6 @@ export function migrate(v1: HandoffV1): Handoff {
     position: step,
     current_section: v1.current_section,
     next_action: v1.next_action,
-    breadcrumbs: v1.breadcrumbs,
     section_pointers: v1.section_pointers,
   };
 }

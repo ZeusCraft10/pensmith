@@ -300,6 +300,11 @@ function hasPaper(root) {
   if (dryRunWorkspaceActive() && isDirectory(realPaperDir(r))) return true;
   return isLegacyPensmithState(r);
 }
+function hasCurrentLayoutPaper(root) {
+  const r = path3.resolve(root);
+  if (isPaperDirName(path3.basename(r)) || dryRunWorkspaceActive()) return false;
+  return isDirectory(paperDir(r)) && !isLegacyPensmithState(r);
+}
 function findAssignmentFile(root) {
   for (const name of ASSIGNMENT_FILE_NAMES) {
     const p = path3.join(path3.resolve(root), name);
@@ -539,6 +544,7 @@ var init_paths = __esm({
     __name(isLegacyPensmithState, "isLegacyPensmithState");
     __name(isDirectory, "isDirectory");
     __name(hasPaper, "hasPaper");
+    __name(hasCurrentLayoutPaper, "hasCurrentLayoutPaper");
     ASSIGNMENT_FILE_NAMES = Object.freeze([
       "assignment.txt",
       "assignment.md",
@@ -4918,7 +4924,7 @@ var init_section_id = __esm({
 });
 
 // bin/lib/schemas/handoff.ts
-var HANDOFF_MAX_BYTES, CURRENT_HANDOFF_VERSION, HANDOFF_PHASES, HANDOFF_POSITIONS, BreadcrumbSchema, SectionPointerSchema, withinBudget, BUDGET_MESSAGE, HandoffV1Schema, HandoffSchema;
+var HANDOFF_MAX_BYTES, CURRENT_HANDOFF_VERSION, HANDOFF_PHASES, HANDOFF_POSITIONS, BreadcrumbSchema, HANDOFF_SLUG_MAX, SectionPointerSchema, withinBudget, BUDGET_MESSAGE, HandoffV1Schema, HandoffSchema;
 var init_handoff = __esm({
   "bin/lib/schemas/handoff.ts"() {
     "use strict";
@@ -4944,8 +4950,9 @@ var init_handoff = __esm({
       section: external_exports.string().max(40).nullable(),
       ok: external_exports.boolean()
     });
+    HANDOFF_SLUG_MAX = 120;
     SectionPointerSchema = external_exports.object({
-      slug: external_exports.string().max(120),
+      slug: external_exports.string().max(HANDOFF_SLUG_MAX),
       plan_path: external_exports.string().max(400),
       draft_path: external_exports.string().max(400).nullable(),
       verification_path: external_exports.string().max(400).nullable(),
@@ -4982,9 +4989,8 @@ var init_handoff = __esm({
       phase: external_exports.enum(HANDOFF_PHASES),
       section: external_exports.string().regex(SECTION_ID_RE).nullable(),
       position: external_exports.enum(HANDOFF_POSITIONS).nullable(),
-      current_section: external_exports.string().max(120).nullable(),
+      current_section: external_exports.string().max(HANDOFF_SLUG_MAX).nullable(),
       next_action: external_exports.string().min(1).max(200),
-      breadcrumbs: external_exports.array(BreadcrumbSchema).max(5),
       section_pointers: external_exports.array(SectionPointerSchema)
     }).refine((h) => h.position !== null === (h.phase === "sectioning"), {
       message: 'position is set exactly when phase is "sectioning" (plan, write or verify of one section)',
@@ -4994,9 +5000,35 @@ var init_handoff = __esm({
 });
 
 // bin/lib/migrations/handoff/v1_to_v2.ts
+function sectionIdFromPlanPath(planPath) {
+  const parts = planPath.split(/[\\/]/).filter(Boolean);
+  const folder = parts.length >= 2 ? parts[parts.length - 2] : void 0;
+  const m2 = /^(\d{1,2})([a-z])?-/.exec(folder ?? "");
+  if (!m2) return null;
+  return `${Number(m2[1])}${m2[2] ?? ""}`;
+}
+function migrate(v1) {
+  const pointer = v1.current_section === null ? void 0 : v1.section_pointers.find((p) => p.slug === v1.current_section);
+  const section = pointer ? sectionIdFromPlanPath(pointer.plan_path) : null;
+  const step = SECTION_STEPS.has(v1.phase) ? v1.phase : null;
+  return {
+    schema_version: 2,
+    last_updated: v1.last_updated,
+    phase: step !== null ? "sectioning" : v1.phase,
+    section,
+    position: step,
+    current_section: v1.current_section,
+    next_action: v1.next_action,
+    section_pointers: v1.section_pointers
+  };
+}
+var SECTION_STEPS;
 var init_v1_to_v2 = __esm({
   "bin/lib/migrations/handoff/v1_to_v2.ts"() {
     "use strict";
+    SECTION_STEPS = /* @__PURE__ */ new Set(["plan", "write", "verify"]);
+    __name(sectionIdFromPlanPath, "sectionIdFromPlanPath");
+    __name(migrate, "migrate");
   }
 });
 
@@ -6996,139 +7028,6 @@ var init_lock = __esm({
   }
 });
 
-// bin/lib/handoff.ts
-import path6 from "node:path";
-function sectionOf(d) {
-  return { id: formatSectionId(sectionIdOf(d.n, d.suffix)), slug: d.slug };
-}
-function handoffPositionOf(decision) {
-  switch (decision.verb) {
-    case "new":
-      return { phase: "intake", section: null, position: null, current_section: null };
-    case "research":
-    case "outline":
-    case "compile":
-      return { phase: decision.verb, section: null, position: null, current_section: null };
-    case "plan":
-    case "write":
-    case "verify": {
-      const s2 = sectionOf(decision);
-      return { phase: "sectioning", section: s2.id, position: decision.verb, current_section: s2.slug };
-    }
-    case "done":
-      return { phase: "export", section: null, position: null, current_section: null };
-    case "status": {
-      const s2 = decision.section ? sectionOf(decision.section) : null;
-      return {
-        phase: decision.reason === "done" ? "done" : "attention",
-        section: s2?.id ?? null,
-        position: null,
-        current_section: s2?.slug ?? null
-      };
-    }
-    default:
-      return { phase: "attention", section: null, position: null, current_section: null };
-  }
-}
-function nextActionOf(decision) {
-  const run = /* @__PURE__ */ __name((cmd) => `run /pensmith (or \`pensmith ${cmd}\`)`, "run");
-  let text;
-  switch (decision.verb) {
-    case "new":
-      text = `Start the paper from the assignment: ${run("new")}.`;
-      break;
-    case "research":
-      text = `Find and evaluate sources: ${run("research")}.`;
-      break;
-    case "outline":
-      text = `Outline the paper and approve it: ${run("outline")}.`;
-      break;
-    case "plan":
-    case "write":
-    case "verify": {
-      const id = formatSectionId(sectionIdOf(decision.n, decision.suffix));
-      const what = { plan: "Plan", write: "Draft", verify: "Verify the citations of" }[decision.verb];
-      text = `${what} section ${sectionLabel(sectionIdOf(decision.n, decision.suffix))} (${decision.slug}): ${run(`${decision.verb} ${id}`)}.`;
-      break;
-    }
-    case "compile":
-      text = `Compile the verified sections into DRAFT.md: ${run("compile")}.`;
-      break;
-    case "done":
-      text = `Export the paper: ${run("done")}.`;
-      break;
-    case "status":
-      text = decision.reason === "done" ? decision.detail ? `Nothing more is routed: ${decision.detail}` : "The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it)." : `Needs attention: ${decision.detail ?? "run /pensmith status to see what"}`;
-      break;
-    default:
-      text = "Run /pensmith status to see where the paper stands.";
-  }
-  return text.length > 200 ? `${text.slice(0, 199)}\u2026` : text;
-}
-function serializedSize(h) {
-  return Buffer.byteLength(JSON.stringify(h, null, 2), "utf8") + 1;
-}
-function fitPointers(base, pointers) {
-  let kept = [...pointers];
-  const fits = /* @__PURE__ */ __name(() => serializedSize({ ...base, section_pointers: kept }) <= HANDOFF_MAX_BYTES, "fits");
-  if (fits()) return kept;
-  kept = kept.filter((p) => p.state !== "verified");
-  while (kept.length > 0 && !fits()) {
-    const at = kept.findIndex((p) => p.slug === base.current_section);
-    if (at < 0 || kept.length - 1 - at >= at) kept.pop();
-    else kept.shift();
-  }
-  return kept;
-}
-function assembleHandoff(input) {
-  const pos = handoffPositionOf(input.decision);
-  const base = {
-    schema_version: CURRENT_HANDOFF_VERSION,
-    last_updated: (input.now ?? /* @__PURE__ */ new Date()).toISOString(),
-    phase: pos.phase,
-    section: pos.section,
-    position: pos.position,
-    current_section: pos.current_section,
-    next_action: nextActionOf(input.decision),
-    breadcrumbs: input.breadcrumbs.slice(-5)
-  };
-  return HandoffSchema.parse({ ...base, section_pointers: fitPointers(base, input.sectionPointers) });
-}
-async function writeHandoff(handoff, paperDir2 = paperDir()) {
-  HandoffSchema.parse(handoff);
-  const content = JSON.stringify(handoff, null, 2) + "\n";
-  const size = Buffer.byteLength(content, "utf8");
-  if (size > HANDOFF_MAX_BYTES) {
-    throw new Error(
-      `HANDOFF serialized size ${size} exceeds ${HANDOFF_MAX_BYTES} bytes (D-17)`
-    );
-  }
-  const targetPath = path6.join(paperDir2, HANDOFF_FILENAME);
-  await withLock(targetPath, () => atomicWriteFile(targetPath, content), { timeoutMs: WRITE_LOCK_TIMEOUT_MS });
-}
-var HANDOFF_FILENAME, HANDOFF_PATH, WRITE_LOCK_TIMEOUT_MS;
-var init_handoff2 = __esm({
-  "bin/lib/handoff.ts"() {
-    "use strict";
-    init_handoff();
-    init_v1_to_v2();
-    init_atomic_write();
-    init_lock();
-    init_paths();
-    init_section_id();
-    HANDOFF_FILENAME = "HANDOFF.json";
-    HANDOFF_PATH = `.paper/${HANDOFF_FILENAME}`;
-    WRITE_LOCK_TIMEOUT_MS = 5e3;
-    __name(sectionOf, "sectionOf");
-    __name(handoffPositionOf, "handoffPositionOf");
-    __name(nextActionOf, "nextActionOf");
-    __name(serializedSize, "serializedSize");
-    __name(fitPointers, "fitPointers");
-    __name(assembleHandoff, "assembleHandoff");
-    __name(writeHandoff, "writeHandoff");
-  }
-});
-
 // bin/lib/migrations/loader.ts
 import * as fsp3 from "node:fs/promises";
 function readVersion(raw) {
@@ -8726,7 +8625,7 @@ var init_pii = __esm({
 
 // bin/lib/session-log.ts
 import * as fs5 from "node:fs";
-import * as path7 from "node:path";
+import * as path6 from "node:path";
 import { createHash as createHash2, randomUUID } from "node:crypto";
 function resolveRoot(scope, cwd) {
   let root;
@@ -8751,8 +8650,8 @@ function resolveRoot(scope, cwd) {
       useGlobalName = true;
     }
   }
-  const logFile = path7.join(root, useGlobalName ? "session.log" : "SESSION.log");
-  const spillRoot = path7.join(root, "sessions");
+  const logFile = path6.join(root, useGlobalName ? "session.log" : "SESSION.log");
+  const spillRoot = path6.join(root, "sessions");
   return { logFile, spillRoot };
 }
 function scrubSecrets(line) {
@@ -8808,7 +8707,7 @@ async function llmLine(spillRoot, record) {
   if (Buffer.byteLength(line, "utf8") <= MAX_LLM_RECORD_BYTES) return line;
   const id = typeof record["id"] === "string" ? record["id"] : `${record.run_id}:0`;
   const seq = id.slice(id.lastIndexOf(":") + 1) || "0";
-  const spillFile = path7.join(spillRoot, record.run_id, `${seq}.json`);
+  const spillFile = path6.join(spillRoot, record.run_id, `${seq}.json`);
   try {
     await atomicWriteFile(spillFile, scrubSecrets(JSON.stringify(record, null, 2)) + "\n");
   } catch {
@@ -8838,7 +8737,7 @@ async function writeLineOrTruncate(spillRoot, run_id, seqRef, record, maxRecordB
   if (sizeBytes <= maxRecordBytes) return line;
   const { at, kind, run_id: rid, ...payload } = record;
   const seq = seqRef.value++;
-  const spillFile = path7.join(spillRoot, run_id, `${seq}.json`);
+  const spillFile = path6.join(spillRoot, run_id, `${seq}.json`);
   try {
     await atomicWriteFile(spillFile, JSON.stringify(record, null, 2) + "\n");
   } catch {
@@ -8966,7 +8865,7 @@ var init_session_log = __esm({
 
 // bin/lib/state.ts
 import * as fs6 from "node:fs";
-import * as path8 from "node:path";
+import * as path7 from "node:path";
 function migrateStateValue(value) {
   const versionOf2 = /* @__PURE__ */ __name((v) => {
     const n = typeof v === "object" && v !== null ? v["$schemaVersion"] : void 0;
@@ -8986,7 +8885,7 @@ function stateFile(paperRoot) {
 async function moveLegacyFile(legacy, dest) {
   return withLock(dest, async () => {
     if (!fs6.existsSync(legacy)) return false;
-    await fs6.promises.mkdir(path8.dirname(dest), { recursive: true });
+    await fs6.promises.mkdir(path7.dirname(dest), { recursive: true });
     if (fs6.existsSync(dest)) {
       const [a, b] = await Promise.all([fs6.promises.readFile(legacy), fs6.promises.readFile(dest)]);
       if (!a.equals(b)) throw new LegacyLayoutConflictError(legacy, dest);
@@ -17696,37 +17595,193 @@ var init_router = __esm({
   }
 });
 
+// bin/lib/handoff.ts
+import { existsSync as existsSync5, readFileSync as readFileSync9 } from "node:fs";
+import path8 from "node:path";
+function sectionOf(d) {
+  return { id: formatSectionId(sectionIdOf(d.n, d.suffix)), slug: d.slug };
+}
+function handoffPositionOf(decision) {
+  switch (decision.verb) {
+    case "new":
+      return { phase: "intake", section: null, position: null, current_section: null };
+    case "research":
+    case "outline":
+    case "compile":
+      return { phase: decision.verb, section: null, position: null, current_section: null };
+    case "plan":
+    case "write":
+    case "verify": {
+      const s2 = sectionOf(decision);
+      return { phase: "sectioning", section: s2.id, position: decision.verb, current_section: s2.slug };
+    }
+    case "done":
+      return { phase: "export", section: null, position: null, current_section: null };
+    case "status": {
+      const s2 = decision.section ? sectionOf(decision.section) : null;
+      return {
+        phase: decision.reason === "done" ? "done" : "attention",
+        section: s2?.id ?? null,
+        position: null,
+        current_section: s2?.slug ?? null
+      };
+    }
+    default:
+      return { phase: "attention", section: null, position: null, current_section: null };
+  }
+}
+function nextActionOf(decision, opts = {}) {
+  const quoteDetail = opts.quoteDetail ?? true;
+  const run = /* @__PURE__ */ __name((cmd) => `run /pensmith (or \`pensmith ${cmd}\`)`, "run");
+  let text;
+  switch (decision.verb) {
+    case "new":
+      text = `Start the paper from the assignment: ${run("new")}.`;
+      break;
+    case "research":
+      text = `Find and evaluate sources: ${run("research")}.`;
+      break;
+    case "outline":
+      text = `Outline the paper and approve it: ${run("outline")}.`;
+      break;
+    case "plan":
+    case "write":
+    case "verify": {
+      const id = formatSectionId(sectionIdOf(decision.n, decision.suffix));
+      const what = { plan: "Plan", write: "Draft", verify: "Verify the citations of" }[decision.verb];
+      text = `${what} section ${sectionLabel(sectionIdOf(decision.n, decision.suffix))} (${decision.slug}): ${run(`${decision.verb} ${id}`)}.`;
+      break;
+    }
+    case "compile":
+      text = `Compile the verified sections into DRAFT.md: ${run("compile")}.`;
+      break;
+    case "done":
+      text = `Export the paper: ${run("done")}.`;
+      break;
+    case "status": {
+      const detail = decision.detail !== void 0 && (quoteDetail || decision.detail === OUTLINE_ONLY_DONE) ? decision.detail : null;
+      if (decision.reason === "done") {
+        text = decision.detail !== void 0 ? `Nothing more is routed: ${detail ?? "run /pensmith status to see why."}` : "The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it).";
+      } else if (detail !== null) {
+        text = `Needs attention: ${detail}`;
+      } else {
+        const at = decision.section ? ` at section ${sectionLabel(sectionIdOf(decision.section.n, decision.section.suffix))} (${decision.section.slug})` : "";
+        text = `Needs attention${at}: run /pensmith status to see what and the command that fixes it.`;
+      }
+      break;
+    }
+    default:
+      text = "Run /pensmith status to see where the paper stands.";
+  }
+  return text.length > 200 ? `${text.slice(0, 199)}\u2026` : text;
+}
+function serializedSize(h) {
+  return Buffer.byteLength(JSON.stringify(h, null, 2), "utf8") + 1;
+}
+function fitPointers(base, pointers) {
+  let kept = pointers.filter((p) => SectionPointerSchema.safeParse(p).success);
+  const fits = /* @__PURE__ */ __name(() => serializedSize({ ...base, section_pointers: kept }) <= HANDOFF_MAX_BYTES, "fits");
+  if (fits()) return kept;
+  kept = kept.filter((p) => p.state !== "verified");
+  while (kept.length > 0 && !fits()) {
+    const at = kept.findIndex((p) => p.slug === base.current_section);
+    if (at < 0 || kept.length - 1 - at >= at) kept.pop();
+    else kept.shift();
+  }
+  return kept;
+}
+function assembleHandoff(input) {
+  const pos = handoffPositionOf(input.decision);
+  const base = {
+    schema_version: CURRENT_HANDOFF_VERSION,
+    last_updated: (input.now ?? /* @__PURE__ */ new Date()).toISOString(),
+    phase: pos.phase,
+    section: pos.section,
+    position: pos.position,
+    // A slug longer than the schema allows is recorded as null (the section
+    // id still says where the paper is).
+    current_section: pos.current_section !== null && pos.current_section.length <= HANDOFF_SLUG_MAX ? pos.current_section : null,
+    next_action: nextActionOf(input.decision)
+  };
+  return HandoffSchema.parse({ ...base, section_pointers: fitPointers(base, input.sectionPointers) });
+}
+async function writeHandoff(handoff, paperDir2 = paperDir()) {
+  HandoffSchema.parse(handoff);
+  const content = JSON.stringify(handoff, null, 2) + "\n";
+  const size = Buffer.byteLength(content, "utf8");
+  if (size > HANDOFF_MAX_BYTES) {
+    throw new Error(
+      `HANDOFF serialized size ${size} exceeds ${HANDOFF_MAX_BYTES} bytes (D-17)`
+    );
+  }
+  const targetPath = path8.join(paperDir2, HANDOFF_FILENAME);
+  return withLock(
+    targetPath,
+    async () => {
+      const existing = readHandoff(paperDir2);
+      if (existing.kind === "newer") return { written: false, newerVersion: existing.version };
+      await atomicWriteFile(targetPath, content);
+      return { written: true };
+    },
+    { timeoutMs: WRITE_LOCK_TIMEOUT_MS }
+  );
+}
+function readHandoff(paperDir2) {
+  const file = path8.join(paperDir2, HANDOFF_FILENAME);
+  if (!existsSync5(file)) return { kind: "absent" };
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync9(file, "utf8"));
+  } catch {
+    return { kind: "invalid" };
+  }
+  const version = raw !== null && typeof raw === "object" ? raw.schema_version : void 0;
+  if (typeof version === "number" && Number.isInteger(version) && version > CURRENT_HANDOFF_VERSION) {
+    return { kind: "newer", version };
+  }
+  if (version === 1) {
+    const v1 = HandoffV1Schema.safeParse(raw);
+    if (!v1.success) return { kind: "invalid" };
+    const v22 = HandoffSchema.safeParse(migrate(v1.data));
+    return v22.success ? { kind: "ok", handoff: v22.data, migratedFrom: 1 } : { kind: "invalid" };
+  }
+  const v2 = HandoffSchema.safeParse(raw);
+  return v2.success ? { kind: "ok", handoff: v2.data, migratedFrom: null } : { kind: "invalid" };
+}
+var HANDOFF_FILENAME, HANDOFF_PATH, WRITE_LOCK_TIMEOUT_MS;
+var init_handoff2 = __esm({
+  "bin/lib/handoff.ts"() {
+    "use strict";
+    init_handoff();
+    init_v1_to_v2();
+    init_atomic_write();
+    init_lock();
+    init_paths();
+    init_section_id();
+    init_router();
+    HANDOFF_FILENAME = "HANDOFF.json";
+    HANDOFF_PATH = `.paper/${HANDOFF_FILENAME}`;
+    WRITE_LOCK_TIMEOUT_MS = 5e3;
+    __name(sectionOf, "sectionOf");
+    __name(handoffPositionOf, "handoffPositionOf");
+    __name(nextActionOf, "nextActionOf");
+    __name(serializedSize, "serializedSize");
+    __name(fitPointers, "fitPointers");
+    __name(assembleHandoff, "assembleHandoff");
+    __name(writeHandoff, "writeHandoff");
+    __name(readHandoff, "readHandoff");
+  }
+});
+
 // bin/lib/hooks/pre-compact.ts
 var pre_compact_exports = {};
 __export(pre_compact_exports, {
   PRECOMPACT_DEADLINE_MS: () => PRECOMPACT_DEADLINE_MS,
   collectSectionPointers: () => collectSectionPointers,
-  readBreadcrumbs: () => readBreadcrumbs,
   writePreCompactHandoff: () => writePreCompactHandoff
 });
-import { existsSync as existsSync5, readFileSync as readFileSync9 } from "node:fs";
+import { existsSync as existsSync6 } from "node:fs";
 import path9 from "node:path";
-function readBreadcrumbs(pDir) {
-  const file = path9.join(pDir, "BREADCRUMBS.jsonl");
-  if (!existsSync5(file)) return [];
-  let lines;
-  try {
-    lines = readFileSync9(file, "utf8").split(/\r?\n/).filter((l) => l.trim().length > 0).slice(-5);
-  } catch {
-    return [];
-  }
-  const out2 = [];
-  for (const line of lines) {
-    try {
-      const p = JSON.parse(line);
-      if (typeof p.ts === "string" && !Number.isNaN(Date.parse(p.ts)) && typeof p.verb === "string" && p.verb.length <= 40 && (p.section === null || typeof p.section === "string" && p.section.length <= 40) && typeof p.ok === "boolean") {
-        out2.push({ ts: new Date(p.ts).toISOString(), verb: p.verb, section: p.section, ok: p.ok });
-      }
-    } catch {
-    }
-  }
-  return out2;
-}
 function rel(root, abs) {
   return path9.relative(root, abs).split(path9.sep).join("/");
 }
@@ -17748,8 +17803,8 @@ async function collectSectionPointers(root) {
       out2.push({
         slug,
         plan_path: rel(root, plan),
-        draft_path: existsSync5(draft) ? rel(root, draft) : null,
-        verification_path: existsSync5(verification) ? rel(root, verification) : null,
+        draft_path: existsSync6(draft) ? rel(root, draft) : null,
+        verification_path: existsSync6(verification) ? rel(root, verification) : null,
         state: !info.absent && !info.corrupt && state.success ? state.data : "planned"
       });
     } catch {
@@ -17765,12 +17820,18 @@ async function writePreCompactHandoff(root, opts = {}) {
     const pDir = paperDir(root);
     const handoff = assembleHandoff({
       decision,
-      breadcrumbs: readBreadcrumbs(pDir),
       sectionPointers: await collectSectionPointers(root),
       ...opts.now ? { now: opts.now } : {}
     });
-    await writeHandoff(handoff, pDir);
-    return { written: true, handoff, file: path9.join(pDir, "HANDOFF.json") };
+    const file = path9.join(pDir, "HANDOFF.json");
+    const w = await writeHandoff(handoff, pDir);
+    if (!w.written) {
+      return {
+        written: false,
+        error: `${file} was written by a newer pensmith (schema_version ${w.newerVersion}); left in place, never downgraded`
+      };
+    }
+    return { written: true, handoff, file };
   })();
   const deadline = new Promise((resolve) => {
     timer = setTimeout(
@@ -17798,7 +17859,6 @@ var init_pre_compact = __esm({
     init_router();
     init_section_id();
     PRECOMPACT_DEADLINE_MS = 8e3;
-    __name(readBreadcrumbs, "readBreadcrumbs");
     __name(rel, "rel");
     __name(collectSectionPointers, "collectSectionPointers");
     __name(writePreCompactHandoff, "writePreCompactHandoff");
@@ -19324,7 +19384,7 @@ var init_config_text = __esm({
 });
 
 // bin/lib/config.ts
-import { existsSync as existsSync6, readFileSync as readFileSync10 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync10 } from "node:fs";
 import path10 from "node:path";
 function paperConfigPath(root = projectRoot()) {
   return path10.join(paperDir(root), "config.toml");
@@ -19467,7 +19527,7 @@ function emitWarnings(fileLabel, warnings) {
 }
 function readPaperConfigSync(root = projectRoot()) {
   const file = paperConfigPath(root);
-  if (!existsSync6(file)) return { config: EMPTY_CONFIG, exists: false, path: file, migratedFrom: null };
+  if (!existsSync7(file)) return { config: EMPTY_CONFIG, exists: false, path: file, migratedFrom: null };
   const label = relName(root, file);
   const parsed = parseAndValidate(readFileSync10(file, "utf8"), label);
   emitWarnings(label, parsed.warnings);
@@ -19695,7 +19755,7 @@ init_paths();
 init_output_sink();
 function hookPaperRoot(input, env = process.env) {
   const resolution = resolvePaperRoot({ mode: "hook", verb: null, cwd: hookInputCwd(input) ?? workingDirectory(), env });
-  if (resolution.kind !== "root" || !hasPaper(resolution.root)) return null;
+  if (resolution.kind !== "root" || !hasCurrentLayoutPaper(resolution.root)) return null;
   setActivePaperRoot(resolution.root);
   setOutputSink(process.stderr);
   return resolution.root;

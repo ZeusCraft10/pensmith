@@ -159,8 +159,10 @@ function stateFile(paperRoot: string): string {
 // destination's per-file lock — and prints a one-time notice. It never leaves
 // two copies: an identical `.paper/` copy absorbs the root file, and two
 // DIFFERENT copies are refused with a one-line error (nothing is overwritten).
-// It runs when a root is resolved (the dispatcher, the MCP server, the hooks)
-// and inside every STATE.json accessor below, so no reader can miss it.
+// It runs when a root is resolved (the dispatcher, the MCP server) and inside
+// every STATE.json accessor below, so no reader can miss it. The Claude Code
+// hooks never reach it: they skip a folder whose move is still pending
+// (paths.ts hasCurrentLayoutPaper).
 //
 // The move is keyed on the legacy STATE.json, and only on a PENSMITH one
 // (paths.ts isLegacyPensmithState: a `$schemaVersion` / `paperId` / `createdAt`

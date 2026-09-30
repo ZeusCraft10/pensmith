@@ -11,14 +11,25 @@
 // Writing: bin/lib/atomic-write.ts (the D-07 chokepoint) under the lock.ts
 // resource lock on the HANDOFF path — its lock files live in the data dir
 // (D-40), never beside HANDOFF.json in `.paper/`, which may be a sync folder.
-// The document is bounded at HANDOFF_MAX_BYTES: pointers to verified sections
-// are dropped first, then the ones furthest from the current section, so a
-// long paper still gets a handoff instead of a failed write.
+// Assembly is total (review round 1): a current slug longer than the schema
+// allows is recorded as null and a section pointer that fails its schema is
+// dropped, since STATE.json slugs have no length bound. The document is then
+// bounded at HANDOFF_MAX_BYTES: pointers to verified sections are dropped
+// first, then the ones furthest from the current section, so a long paper
+// still gets a handoff instead of a failed write.
 //
 // Reading (loadHandoff, S-20): a v1 file is migrated in memory
 // (migrations/handoff/v1_to_v2.ts); a file newer than this build understands
 // is ignored and left alone — HANDOFF is a disposable pointer, so a newer one
-// never blocks and is never downgraded.
+// never blocks and is never downgraded: writeHandoff re-reads the file under
+// its lock and leaves a newer one in place (PRD §14, D-23a-16).
+//
+// next_action quotes the router's attention detail, which can carry text read
+// from the paper's files (a PLAN.md failure_reason or status, VERIFICATION.md
+// rows, OUTLINE.md problems). The CLI prints it to the user (resume); the
+// SessionStart hook, whose text reaches the model's context, uses
+// nextActionOf(decision, { quoteDetail: false }) and never HANDOFF's own
+// free-text fields (see hooks/session-start.ts).
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -27,8 +38,9 @@ import {
   HandoffSchema,
   HandoffV1Schema,
   HANDOFF_MAX_BYTES,
+  HANDOFF_SLUG_MAX,
+  SectionPointerSchema,
   type Handoff,
-  type HandoffBreadcrumb,
   type HandoffPhase,
   type HandoffPosition,
   type HandoffSectionPointer,
@@ -38,11 +50,11 @@ import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { paperDir as paperDirOf } from './paths.js';
 import { formatSectionId, sectionIdOf, sectionLabel } from './section-id.js';
-import type { RouterDecision } from './router.js';
+import { OUTLINE_ONLY_DONE, type RouterDecision } from './router.js';
 
 // Re-export the schema so tests + consumers can import a single module.
-export { HandoffSchema, HANDOFF_MAX_BYTES, CURRENT_HANDOFF_VERSION };
-export type { Handoff, HandoffBreadcrumb, HandoffSectionPointer };
+export { HandoffSchema, HANDOFF_MAX_BYTES, HANDOFF_SLUG_MAX, CURRENT_HANDOFF_VERSION };
+export type { Handoff, HandoffSectionPointer };
 
 export const HANDOFF_FILENAME = 'HANDOFF.json';
 export const HANDOFF_PATH = `.paper/${HANDOFF_FILENAME}`;
@@ -113,8 +125,21 @@ export function nextStepLabel(decision: RouterDecision): string {
   }
 }
 
+export interface NextActionOptions {
+  /**
+   * Quote the router's attention detail (default true). It can carry text read
+   * from the paper's files — a PLAN.md `failure_reason` or unknown `status`,
+   * VERIFICATION.md rows, an OUTLINE.md problem — so text bound for the
+   * model's context (the SessionStart hook) passes false: an attention step
+   * then names the section and `/pensmith status` instead. The one `done`
+   * detail the router writes itself (OUTLINE_ONLY_DONE) is still quoted.
+   */
+  readonly quoteDetail?: boolean;
+}
+
 /** One line: what the next step is and how to take it (≤ 200 chars). */
-export function nextActionOf(decision: RouterDecision): string {
+export function nextActionOf(decision: RouterDecision, opts: NextActionOptions = {}): string {
+  const quoteDetail = opts.quoteDetail ?? true;
   const run = (cmd: string): string => `run /pensmith (or \`pensmith ${cmd}\`)`;
   let text: string;
   switch (decision.verb) {
@@ -141,15 +166,26 @@ export function nextActionOf(decision: RouterDecision): string {
     case 'done':
       text = `Export the paper: ${run('done')}.`;
       break;
-    case 'status':
+    case 'status': {
       // A `done` with a detail is a mode's own end state (GRND-02 outline-only:
       // OUTLINE_ONLY_DONE), not a finished paper.
-      text = decision.reason === 'done'
+      const detail = decision.detail !== undefined && (quoteDetail || decision.detail === OUTLINE_ONLY_DONE)
         ? decision.detail
-          ? `Nothing more is routed: ${decision.detail}`
-          : 'The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it).'
-        : `Needs attention: ${decision.detail ?? 'run /pensmith status to see what'}`;
+        : null;
+      if (decision.reason === 'done') {
+        text = decision.detail !== undefined
+          ? `Nothing more is routed: ${detail ?? 'run /pensmith status to see why.'}`
+          : 'The paper is complete: .paper/FINAL.md and .paper/export/ hold it (/pensmith status shows it).';
+      } else if (detail !== null) {
+        text = `Needs attention: ${detail}`;
+      } else {
+        const at = decision.section
+          ? ` at section ${sectionLabel(sectionIdOf(decision.section.n, decision.section.suffix))} (${decision.section.slug})`
+          : '';
+        text = `Needs attention${at}: run /pensmith status to see what and the command that fixes it.`;
+      }
       break;
+    }
     default:
       text = 'Run /pensmith status to see where the paper stands.';
   }
@@ -163,7 +199,6 @@ export function nextActionOf(decision: RouterDecision): string {
 export interface AssembleInput {
   /** The router's decision for the paper (resolveNextAction). */
   decision: RouterDecision;
-  breadcrumbs: readonly HandoffBreadcrumb[];
   sectionPointers: readonly HandoffSectionPointer[];
   /** Defaults to the current time. */
   now?: Date;
@@ -180,7 +215,10 @@ function serializedSize(h: unknown): number {
  * the current section.
  */
 function fitPointers(base: Omit<Handoff, 'section_pointers'>, pointers: readonly HandoffSectionPointer[]): HandoffSectionPointer[] {
-  let kept = [...pointers];
+  // A pointer the schema refuses (a slug or path over its bound) is dropped
+  // first: STATE.json slugs have no length bound, and one long slug must not
+  // cost the paper its whole handoff.
+  let kept = pointers.filter((p) => SectionPointerSchema.safeParse(p).success);
   const fits = (): boolean => serializedSize({ ...base, section_pointers: kept }) <= HANDOFF_MAX_BYTES;
   if (fits()) return kept;
   kept = kept.filter((p) => p.state !== 'verified');
@@ -201,9 +239,10 @@ export function assembleHandoff(input: AssembleInput): Handoff {
     phase: pos.phase,
     section: pos.section,
     position: pos.position,
-    current_section: pos.current_section,
+    // A slug longer than the schema allows is recorded as null (the section
+    // id still says where the paper is).
+    current_section: pos.current_section !== null && pos.current_section.length <= HANDOFF_SLUG_MAX ? pos.current_section : null,
     next_action: nextActionOf(input.decision),
-    breadcrumbs: input.breadcrumbs.slice(-5),
   };
   return HandoffSchema.parse({ ...base, section_pointers: fitPointers(base, input.sectionPointers) });
 }
@@ -212,10 +251,20 @@ export function assembleHandoff(input: AssembleInput): Handoff {
 // Writing.
 // ---------------------------------------------------------------------------
 
+export type HandoffWrite =
+  | { readonly written: true }
+  /** A HANDOFF.json written by a newer pensmith is there: left in place, never downgraded. */
+  | { readonly written: false; readonly newerVersion: number };
+
+/**
+ * Write `handoff` to `<paperDir>/HANDOFF.json` (validated, bounded, atomic,
+ * under the file's lock) — unless the file there was written by a newer
+ * pensmith, which is left byte-identical (never downgraded, PRD §14).
+ */
 export async function writeHandoff(
   handoff: Handoff,
   paperDir: string = paperDirOf(),
-): Promise<void> {
+): Promise<HandoffWrite> {
   HandoffSchema.parse(handoff);
   const content = JSON.stringify(handoff, null, 2) + '\n';
   const size = Buffer.byteLength(content, 'utf8');
@@ -225,7 +274,17 @@ export async function writeHandoff(
     );
   }
   const targetPath = path.join(paperDir, HANDOFF_FILENAME);
-  await withLock(targetPath, () => atomicWriteFile(targetPath, content), { timeoutMs: WRITE_LOCK_TIMEOUT_MS });
+  return withLock(
+    targetPath,
+    async (): Promise<HandoffWrite> => {
+      // Re-read under the lock: a newer writer's file is never replaced.
+      const existing = readHandoff(paperDir);
+      if (existing.kind === 'newer') return { written: false, newerVersion: existing.version };
+      await atomicWriteFile(targetPath, content);
+      return { written: true };
+    },
+    { timeoutMs: WRITE_LOCK_TIMEOUT_MS },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -270,11 +329,22 @@ export function loadHandoff(paperDir: string): Handoff | null {
   return r.kind === 'ok' ? r.handoff : null;
 }
 
+export interface DescribeHandoffOptions {
+  /**
+   * Fall back to the file's free-text `current_section` when it has no section
+   * id (default true, for `pensmith resume`, which prints to the user). The
+   * SessionStart hook passes false: only the schema's enums and the
+   * SECTION_ID_RE-checked id reach the model's context.
+   */
+  readonly slugFallback?: boolean;
+}
+
 /** `phase sectioning, section 2 (write)` — the one-line summary resume and SessionStart print. */
-export function describeHandoffPosition(h: Handoff): string {
+export function describeHandoffPosition(h: Handoff, opts: DescribeHandoffOptions = {}): string {
+  const slug = (opts.slugFallback ?? true) ? h.current_section : null;
   if (h.phase === 'sectioning') {
-    return `phase sectioning, section ${h.section ?? h.current_section ?? '?'} (${h.position ?? '?'})`;
+    return `phase sectioning, section ${h.section ?? slug ?? '?'} (${h.position ?? '?'})`;
   }
-  const at = h.section !== null ? `, section ${h.section}` : h.current_section !== null ? `, section ${h.current_section}` : '';
+  const at = h.section !== null ? `, section ${h.section}` : slug !== null ? `, section ${slug}` : '';
   return `phase ${h.phase}${at}`;
 }

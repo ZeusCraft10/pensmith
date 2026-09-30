@@ -592,6 +592,21 @@ export function hasPaper(root: string): boolean {
   return isLegacyPensmithState(r);
 }
 
+/**
+ * True when `root` holds a paper in the current layout: a `.paper/` directory
+ * and no pre-v1 root-level pensmith STATE.json still waiting for the
+ * legacy-layout move. The Claude Code hooks address only such a paper
+ * (bin/lib/hooks/entry.ts): the move renames the user's files, so it belongs
+ * to the next CLI or MCP run, under the paper's session lock — never to a hook
+ * that fires at session start or after a tool call. Under a dry run it is
+ * false (hooks never run one).
+ */
+export function hasCurrentLayoutPaper(root: string): boolean {
+  const r = path.resolve(root);
+  if (isPaperDirName(path.basename(r)) || dryRunWorkspaceActive()) return false;
+  return isDirectory(paperDir(r)) && !isLegacyPensmithState(r);
+}
+
 /** The assignment file names bare `pensmith` and `new` pick up (PRD §5.1 row 1). */
 export const ASSIGNMENT_FILE_NAMES: readonly string[] = Object.freeze([
   'assignment.txt',

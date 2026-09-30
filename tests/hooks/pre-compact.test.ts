@@ -6,15 +6,18 @@
 // with §2 `writing`: {phase:'sectioning', section:'2', position:'write'} —
 // within its 10 s timeout, prints nothing, exits 0, and changes nothing else in
 // `.paper/` (its lock lives in the data dir). Section pointers are relative
-// paths. A pre-v1 root-level paper resolves too; the stdin `cwd` and
-// PENSMITH_PAPER_ROOT pick the paper; the `open` pointer never does.
+// paths. The stdin `cwd` and PENSMITH_PAPER_ROOT pick the paper; the `open`
+// pointer never does. A HANDOFF.json written by a newer pensmith is left
+// byte-identical, and a registered slug longer than the schema allows still
+// gets a handoff. (A pre-v1 root-level layout is never touched by a hook:
+// tests/hooks-noop.test.ts.)
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { HandoffSchema, HANDOFF_MAX_BYTES } from '../../bin/lib/handoff.js';
-import { changedPaths, sandbox, sandboxDataPath, snapshot, writeState } from '../helpers/paper-cli-harness.js';
+import { changedPaths, sandbox, sandboxDataPath, snapshot, writeOutline, writeState } from '../helpers/paper-cli-harness.js';
 import { seedThreeSectionPaper } from '../helpers/status-fixture.js';
 import { assertBundlesPresent, hookInput, runHook } from './hook-runner.js';
 
@@ -118,4 +121,34 @@ test('PLUG-14: PreCompact with a corrupt STATE.json still exits 0 and records at
   const h = HandoffSchema.parse(readHandoffFile(root));
   assert.equal(h.phase, 'attention');
   assert.deepEqual(h.section_pointers, []);
+});
+
+test('PLUG-14: PreCompact leaves a HANDOFF.json written by a newer pensmith byte-identical (never downgraded)', async () => {
+  const sb = sandbox('hook-precompact-newer');
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  const file = join(root, '.paper', 'HANDOFF.json');
+  const newer = JSON.stringify({ schema_version: 3, future: true });
+  writeFileSync(file, newer);
+  const r = runHook(sb, 'pre-compact', { cwd: root, input: hookInput('pre-compact', root, { session_id: 's', trigger: 'auto' }) });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  assert.equal(readFileSync(file, 'utf8'), newer, 'the newer file is not replaced');
+  assert.match(r.stderr, /\[pensmith pre-compact\] HANDOFF\.json not written: .*written by a newer pensmith \(schema_version 3\)/);
+});
+
+test('PLUG-14: PreCompact still writes a handoff when a registered slug is longer than the schema allows', () => {
+  const sb = sandbox('hook-precompact-long-slug');
+  const root = sb.project('paper');
+  const long = `long-${'x'.repeat(120)}`;
+  assert.ok(long.length > 120);
+  writeState(root, [{ n: 1, slug: long }, { n: 2, slug: 'short' }]);
+  writeFileSync(join(root, '.paper', 'RESEARCH.md'), '# Research log\n');
+  writeOutline(root, [{ n: 1, slug: long }, { n: 2, slug: 'short' }]);
+  const r = runHook(sb, 'pre-compact', { cwd: root });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, '', 'no failed-write diagnostic');
+  const h = HandoffSchema.parse(readHandoffFile(root));
+  assert.deepEqual([h.phase, h.section, h.position, h.current_section], ['sectioning', '1', 'plan', null], 'the id records the position; the over-long slug is null');
+  assert.deepEqual(h.section_pointers.map((p) => p.slug), ['short'], 'the pointer the schema refuses is dropped, the rest kept');
 });

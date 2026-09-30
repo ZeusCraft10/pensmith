@@ -11,13 +11,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { hookInputCwd, parseHookInput, readHookInput, HOOK_STDIN_MAX_BYTES, type HookStdin } from '../../bin/lib/hooks/stdin.js';
 import { hookPaperRoot } from '../../bin/lib/hooks/entry.js';
 import { buildSessionStartContext, sessionStartOutput } from '../../bin/lib/hooks/session-start.js';
-import { collectSectionPointers, readBreadcrumbs, writePreCompactHandoff } from '../../bin/lib/hooks/pre-compact.js';
+import { collectSectionPointers, writePreCompactHandoff } from '../../bin/lib/hooks/pre-compact.js';
 import { checkpointFile, recordCheckpoint, CHECKPOINT_KEEP_LINES, CHECKPOINT_MAX_BYTES } from '../../bin/lib/hooks/post-tool-use.js';
 import { stopHook } from '../../bin/lib/hooks/stop.js';
 import { HandoffSchema } from '../../bin/lib/handoff.js';
@@ -109,6 +109,21 @@ test('hooks/entry: hookPaperRoot resolves the stdin cwd or PENSMITH_PAPER_ROOT, 
     assert.equal(hookPaperRoot({ cwd: empty }, {}), null);
     assert.equal(hookPaperRoot({ cwd: empty }, { PENSMITH_PAPER_ROOT: root }), root);
     assert.equal(hookPaperRoot({ cwd: root }, { PENSMITH_PAPER_ROOT: empty }), null, 'PENSMITH_PAPER_ROOT wins');
+
+    // A pre-v1 layout (a root-level pensmith STATE.json, with or without a
+    // `.paper/` beside it) is not addressed: the legacy move is the next CLI or
+    // MCP run's, under the session lock — never a hook's.
+    const legacy = tmpDir('hook-logic-legacy');
+    const legacyState = JSON.stringify({ $schemaVersion: 1, paperId: 'legacy-paper', createdAt: '2025-01-01T00:00:00.000Z' });
+    writeFileSync(join(legacy, 'STATE.json'), legacyState);
+    assert.equal(hookPaperRoot({ cwd: legacy }, {}), null, 'a root-level STATE.json only');
+    mkdirSync(join(legacy, '.paper', 'sections'), { recursive: true });
+    assert.equal(hookPaperRoot({ cwd: legacy }, {}), null, 'a .paper/ beside a legacy STATE.json still awaiting the move');
+    assert.equal(readFileSync(join(legacy, 'STATE.json'), 'utf8'), legacyState, 'nothing moved');
+    assert.equal(existsSync(join(legacy, '.paper', 'STATE.json')), false);
+    // A root-level STATE.json that is not pensmith's is the user's own: the paper in .paper/ is addressed.
+    writeFileSync(join(root, 'STATE.json'), JSON.stringify({ app: 'someone else' }));
+    assert.equal(hookPaperRoot({ cwd: root }, {}), root);
   } finally {
     setActivePaperRoot(before);
     resetOutputSink();
@@ -179,22 +194,25 @@ test('hooks/session-start: the context names the router step, a not-done handoff
 // PreCompact
 // ---------------------------------------------------------------------------
 
-test('hooks/pre-compact: pointers follow STATE.json; breadcrumbs are the last five valid ones; the deadline is honoured', async () => {
+test('hooks/pre-compact: pointers follow STATE.json; a newer HANDOFF is kept; the deadline is honoured', async () => {
   const root = await paper();
   const pointers = await collectSectionPointers(root);
   assert.deepEqual(pointers.map((p) => [p.slug, p.state]), [['intro', 'verified'], ['methods', 'writing'], ['results', 'planned']]);
   assert.deepEqual(await collectSectionPointers(tmpDir('no-state')), [], 'no STATE.json: no pointers');
 
   const pDir = join(root, '.paper');
-  const good = (i: number): string => JSON.stringify({ ts: `2026-09-0${i}T00:00:00.000Z`, verb: 'plan', section: String(i), ok: true });
-  writeFileSync(join(pDir, 'BREADCRUMBS.jsonl'), [good(1), 'not json', good(2), JSON.stringify({ ts: 'x', verb: 1 }), good(3), good(4), good(5), good(6)].join('\r\n') + '\n');
-  assert.deepEqual(readBreadcrumbs(pDir).map((b) => b.section), ['3', '4', '5', '6'], 'the last five lines, invalid ones skipped');
-
   const r = await writePreCompactHandoff(root, { now: new Date('2026-09-30T00:00:00.000Z') });
   assert.equal(r.written, true);
   const h = HandoffSchema.parse(JSON.parse(readFileSync(join(pDir, 'HANDOFF.json'), 'utf8')));
   assert.equal(h.last_updated, '2026-09-30T00:00:00.000Z');
-  assert.equal(h.breadcrumbs.length, 4);
+  assert.equal('breadcrumbs' in JSON.parse(readFileSync(join(pDir, 'HANDOFF.json'), 'utf8')), false, 'v2 carries no breadcrumbs');
+
+  const newer = JSON.stringify({ schema_version: 3, future: true });
+  writeFileSync(join(pDir, 'HANDOFF.json'), newer);
+  const kept = await writePreCompactHandoff(root);
+  assert.equal(kept.written, false);
+  assert.match(kept.written ? '' : kept.error, /written by a newer pensmith \(schema_version 3\); left in place, never downgraded/);
+  assert.equal(readFileSync(join(pDir, 'HANDOFF.json'), 'utf8'), newer);
 
   const late = await writePreCompactHandoff(root, { deadlineMs: 0 });
   assert.deepEqual(late, { written: false, error: 'the HANDOFF.json write did not finish within 0s' });

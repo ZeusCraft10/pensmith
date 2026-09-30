@@ -304,6 +304,11 @@ function hasPaper(root) {
   if (dryRunWorkspaceActive() && isDirectory(realPaperDir(r))) return true;
   return isLegacyPensmithState(r);
 }
+function hasCurrentLayoutPaper(root) {
+  const r = path3.resolve(root);
+  if (isPaperDirName(path3.basename(r)) || dryRunWorkspaceActive()) return false;
+  return isDirectory(paperDir(r)) && !isLegacyPensmithState(r);
+}
 function findAssignmentFile(root) {
   for (const name of ASSIGNMENT_FILE_NAMES) {
     const p = path3.join(path3.resolve(root), name);
@@ -544,6 +549,7 @@ var init_paths = __esm({
     __name(isLegacyPensmithState, "isLegacyPensmithState");
     __name(isDirectory, "isDirectory");
     __name(hasPaper, "hasPaper");
+    __name(hasCurrentLayoutPaper, "hasCurrentLayoutPaper");
     ASSIGNMENT_FILE_NAMES = Object.freeze([
       "assignment.txt",
       "assignment.md",
@@ -5015,7 +5021,7 @@ var init_section_id = __esm({
 });
 
 // bin/lib/schemas/handoff.ts
-var HANDOFF_MAX_BYTES, CURRENT_HANDOFF_VERSION, HANDOFF_PHASES, HANDOFF_POSITIONS, BreadcrumbSchema, SectionPointerSchema, withinBudget, BUDGET_MESSAGE, HandoffV1Schema, HandoffSchema;
+var HANDOFF_MAX_BYTES, CURRENT_HANDOFF_VERSION, HANDOFF_PHASES, HANDOFF_POSITIONS, BreadcrumbSchema, HANDOFF_SLUG_MAX, SectionPointerSchema, withinBudget, BUDGET_MESSAGE, HandoffV1Schema, HandoffSchema;
 var init_handoff = __esm({
   "bin/lib/schemas/handoff.ts"() {
     "use strict";
@@ -5041,8 +5047,9 @@ var init_handoff = __esm({
       section: external_exports.string().max(40).nullable(),
       ok: external_exports.boolean()
     });
+    HANDOFF_SLUG_MAX = 120;
     SectionPointerSchema = external_exports.object({
-      slug: external_exports.string().max(120),
+      slug: external_exports.string().max(HANDOFF_SLUG_MAX),
       plan_path: external_exports.string().max(400),
       draft_path: external_exports.string().max(400).nullable(),
       verification_path: external_exports.string().max(400).nullable(),
@@ -5079,9 +5086,8 @@ var init_handoff = __esm({
       phase: external_exports.enum(HANDOFF_PHASES),
       section: external_exports.string().regex(SECTION_ID_RE).nullable(),
       position: external_exports.enum(HANDOFF_POSITIONS).nullable(),
-      current_section: external_exports.string().max(120).nullable(),
+      current_section: external_exports.string().max(HANDOFF_SLUG_MAX).nullable(),
       next_action: external_exports.string().min(1).max(200),
-      breadcrumbs: external_exports.array(BreadcrumbSchema).max(5),
       section_pointers: external_exports.array(SectionPointerSchema)
     }).refine((h) => h.position !== null === (h.phase === "sectioning"), {
       message: 'position is set exactly when phase is "sectioning" (plan, write or verify of one section)',
@@ -6997,35 +7003,6 @@ var init_lock = __esm({
   }
 });
 
-// bin/lib/handoff.ts
-function nextStepLabel(decision) {
-  switch (decision.verb) {
-    case "plan":
-    case "write":
-    case "verify":
-      return `${decision.verb} ${formatSectionId(sectionIdOf(decision.n, decision.suffix))}`;
-    case "status":
-      return `status (${decision.reason})`;
-    default:
-      return decision.verb;
-  }
-}
-var HANDOFF_FILENAME, HANDOFF_PATH;
-var init_handoff2 = __esm({
-  "bin/lib/handoff.ts"() {
-    "use strict";
-    init_handoff();
-    init_v1_to_v2();
-    init_atomic_write();
-    init_lock();
-    init_paths();
-    init_section_id();
-    HANDOFF_FILENAME = "HANDOFF.json";
-    HANDOFF_PATH = `.paper/${HANDOFF_FILENAME}`;
-    __name(nextStepLabel, "nextStepLabel");
-  }
-});
-
 // bin/lib/migrations/loader.ts
 import * as fsp3 from "node:fs/promises";
 function readVersion(raw) {
@@ -7168,7 +7145,7 @@ function detectVersion(input) {
   }
   return { version: 1, field: null };
 }
-function migrate2(input) {
+function migrate(input) {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new Error("v1_to_v2: input must be a non-null, non-array object");
   }
@@ -7228,9 +7205,9 @@ var init_v1_to_v22 = __esm({
     ]);
     __name(normalizeSectionSlug, "normalizeSectionSlug");
     __name(detectVersion, "detectVersion");
-    __name(migrate2, "migrate");
+    __name(migrate, "migrate");
     v1_to_v2 = /* @__PURE__ */ __name((input) => {
-      const out2 = migrate2(input);
+      const out2 = migrate(input);
       void deepEqual;
       return out2;
     }, "v1_to_v2");
@@ -7246,7 +7223,7 @@ function versionOf(obj) {
   if (typeof snake === "number" && Number.isInteger(snake) && snake >= 1) return snake;
   return 1;
 }
-function migrate3(input) {
+function migrate2(input) {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new Error("v2_to_v3: input must be a non-null, non-array object");
   }
@@ -7264,7 +7241,7 @@ function migrate3(input) {
   return out2;
 }
 function v2_to_v3(input) {
-  return migrate3(input);
+  return migrate2(input);
 }
 var TARGET;
 var init_v2_to_v3 = __esm({
@@ -7272,7 +7249,7 @@ var init_v2_to_v3 = __esm({
     "use strict";
     TARGET = 3;
     __name(versionOf, "versionOf");
-    __name(migrate3, "migrate");
+    __name(migrate2, "migrate");
     __name(v2_to_v3, "v2_to_v3");
   }
 });
@@ -16578,26 +16555,26 @@ var init_plan_frontmatter = __esm({
 });
 
 // bin/lib/migrations/plan/v0_to_v1.ts
-function migrate4(text) {
+function migrate3(text) {
   return setFrontmatterVersionText(text, 1);
 }
 var init_v0_to_v1 = __esm({
   "bin/lib/migrations/plan/v0_to_v1.ts"() {
     "use strict";
     init_loader();
-    __name(migrate4, "migrate");
+    __name(migrate3, "migrate");
   }
 });
 
 // bin/lib/migrations/plan/v1_to_v2.ts
-function migrate5(text) {
+function migrate4(text) {
   return setFrontmatterVersionText(text, 2);
 }
 var init_v1_to_v23 = __esm({
   "bin/lib/migrations/plan/v1_to_v2.ts"() {
     "use strict";
     init_loader();
-    __name(migrate5, "migrate");
+    __name(migrate4, "migrate");
   }
 });
 
@@ -16728,7 +16705,7 @@ function legacyDiscipline(text) {
   const m2 = /^discipline\s*:\s*(.+)$/im.exec(text);
   return normalizeDisciplineSlug(m2 ? m2[1] ?? "" : "");
 }
-function migrate6(text) {
+function migrate5(text) {
   if (FRONTMATTER_BLOCK_RE2.test(text)) return setFrontmatterVersionText(text, 1);
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   const yaml = (0, import_yaml.stringify)({ schema_version: 1, topic: legacyTopic(text), discipline: legacyDiscipline(text) }).replace(/\n/g, eol);
@@ -16744,7 +16721,7 @@ var init_v0_to_v12 = __esm({
     FRONTMATTER_BLOCK_RE2 = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
     __name(legacyTopic, "legacyTopic");
     __name(legacyDiscipline, "legacyDiscipline");
-    __name(migrate6, "migrate");
+    __name(migrate5, "migrate");
   }
 });
 
@@ -16812,8 +16789,8 @@ var init_frontmatter = __esm({
     __name(parseFrontmatter, "parseFrontmatter");
     INTAKE_FRONTMATTER_VERSION = 1;
     FRONTMATTER_KINDS = Object.freeze({
-      plan: { current: CURRENT_PLAN_FRONTMATTER_VERSION, migrations: { 0: migrate4, 1: migrate5 } },
-      intake: { current: INTAKE_FRONTMATTER_VERSION, migrations: { 0: migrate6 } },
+      plan: { current: CURRENT_PLAN_FRONTMATTER_VERSION, migrations: { 0: migrate3, 1: migrate4 } },
+      intake: { current: INTAKE_FRONTMATTER_VERSION, migrations: { 0: migrate5 } },
       draft: { current: 0, migrations: {} },
       verification: { current: 0, migrations: {} }
     });
@@ -17590,6 +17567,36 @@ var init_router = __esm({
     __name(compiledDraftStale, "compiledDraftStale");
     OUTLINE_ONLY_DONE = 'outline only: the approved outline is .paper/OUTLINE.md (its sources in .paper/LIBRARY.json and CITATIONS.bib) \u2014 to draft the paper, set mode = "draft" under [project] in .paper/config.toml, or run a section yourself (`pensmith plan 1`)';
     __name(resolveNextAction, "resolveNextAction");
+  }
+});
+
+// bin/lib/handoff.ts
+function nextStepLabel(decision) {
+  switch (decision.verb) {
+    case "plan":
+    case "write":
+    case "verify":
+      return `${decision.verb} ${formatSectionId(sectionIdOf(decision.n, decision.suffix))}`;
+    case "status":
+      return `status (${decision.reason})`;
+    default:
+      return decision.verb;
+  }
+}
+var HANDOFF_FILENAME, HANDOFF_PATH;
+var init_handoff2 = __esm({
+  "bin/lib/handoff.ts"() {
+    "use strict";
+    init_handoff();
+    init_v1_to_v2();
+    init_atomic_write();
+    init_lock();
+    init_paths();
+    init_section_id();
+    init_router();
+    HANDOFF_FILENAME = "HANDOFF.json";
+    HANDOFF_PATH = `.paper/${HANDOFF_FILENAME}`;
+    __name(nextStepLabel, "nextStepLabel");
   }
 });
 
@@ -19572,7 +19579,7 @@ init_paths();
 init_output_sink();
 function hookPaperRoot(input, env = process.env) {
   const resolution = resolvePaperRoot({ mode: "hook", verb: null, cwd: hookInputCwd(input) ?? workingDirectory(), env });
-  if (resolution.kind !== "root" || !hasPaper(resolution.root)) return null;
+  if (resolution.kind !== "root" || !hasCurrentLayoutPaper(resolution.root)) return null;
   setActivePaperRoot(resolution.root);
   setOutputSink(process.stderr);
   return resolution.root;
