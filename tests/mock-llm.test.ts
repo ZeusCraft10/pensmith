@@ -95,11 +95,15 @@ test('RUN-21: SSE streaming (slow chunks) — the >16k retry streams and parses'
 
 test('RUN-21: scripted replies per slug are served in order, then the default', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
-    sb.mock!.script('orphan-label', { data: { label: 'claim' } }, { text: '{"label":"definition"}' });
-    const a = await complete<{ label: string }>({ slug: 'orphan-label', system: '', messages: [{ role: 'user', content: 'x' }] });
-    const b = await complete<{ label: string }>({ slug: 'orphan-label', system: '', messages: [{ role: 'user', content: 'y' }] });
-    const c = await complete<{ label: string }>({ slug: 'orphan-label', system: '', messages: [{ role: 'user', content: 'z' }] });
-    assert.deepEqual([a.data?.label, b.data?.label, c.data?.label], ['claim', 'definition', 'UNCLEAR']);
+    const claim = { sentence: 'Trees lower asthma rates.', needs_citation: true, supported_by: [] };
+    sb.mock!.script('orphan-label', { data: { claims: [claim] } }, { text: '{"claims":[{"sentence":"A definition.","needs_citation":false,"supported_by":[]}]}' });
+    type Audit = { claims: Array<{ sentence: string; needs_citation: boolean }> };
+    const a = await complete<Audit>({ slug: 'orphan-label', system: '', messages: [{ role: 'user', content: 'x' }] });
+    const b = await complete<Audit>({ slug: 'orphan-label', system: '', messages: [{ role: 'user', content: 'y' }] });
+    const c = await complete<Audit>({ slug: 'orphan-label', system: '', messages: [{ role: 'user', content: 'z' }] });
+    assert.deepEqual(a.data?.claims, [claim], 'the first scripted reply (an object)');
+    assert.deepEqual(b.data?.claims.map((x) => x.needs_citation), [false], 'the second scripted reply (text)');
+    assert.deepEqual(c.data?.claims, [], 'then the default: the conservative stub names no claim (D-20-29)');
   });
 });
 
@@ -212,7 +216,8 @@ test('RUN-12: verify whose advisory Pass 2 hits a model the provider does not se
     fs.mkdirSync(sec, { recursive: true });
     fs.writeFileSync(path.join(sb.paper, 'STATE.json'), JSON.stringify({ $schemaVersion: 2, paperId: 'p2-404', createdAt: new Date().toISOString(), sections: [{ n: 1, slug: 'intro' }] }));
     fs.writeFileSync(path.join(sb.paper, 'OUTLINE.md'), ['# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', '| 1 | intro | Introduction | | 300 | aspelmeyer2009 |', ''].join('\n'));
-    fs.writeFileSync(path.join(sb.paper, 'CITATIONS.bib'), '@article{aspelmeyer2009,\n  title = {Measured measurement},\n  author = {Aspelmeyer, Markus},\n  doi = {10.1038/nphys1170},\n  year = {2009}\n}\n');
+    // An abstract gives Pass 2 source text to judge (with none it makes no model call, D-20-28).
+    fs.writeFileSync(path.join(sb.paper, 'CITATIONS.bib'), '@article{aspelmeyer2009,\n  title = {Measured measurement},\n  author = {Aspelmeyer, Markus},\n  doi = {10.1038/nphys1170},\n  year = {2009},\n  abstract = {Quantum measurement shapes what an observer can record.}\n}\n');
     fs.writeFileSync(path.join(sec, 'PLAN.md'), ['---', 'section: 1', 'slug: intro', 'title: Introduction', 'depends_on: []', 'assigned_sources: [aspelmeyer2009]', 'status: written', '---', ''].join('\n'));
     fs.writeFileSync(path.join(sec, 'DRAFT.md'), '# Introduction\n\nMeasurement shapes what an observer records [@aspelmeyer2009].\n');
     sb.mock!.fail({ kind: 'model_not_found' }, { slug: 'claim-support', times: 5 });

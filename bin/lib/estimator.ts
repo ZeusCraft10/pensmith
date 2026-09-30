@@ -162,7 +162,7 @@ export interface EstimateResult {
   lengthWords: number;
 }
 
-/** Calls per section for the advisory verify passes (Pass 2 per citation, Pass 4 per ambiguous sentence). */
+/** Calls per section for the advisory verify passes (Pass 2 per (citing sentence, key) pair, Pass 4 per paragraph with a claim; D-20-28/29). */
 export const VERIFY_CALLS_PER_SECTION = Object.freeze({ 'claim-support': 6, 'orphan-label': 4 });
 
 const DEFAULT_LENGTH_WORDS = 1500;

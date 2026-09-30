@@ -21,7 +21,9 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { ESLint } from 'eslint';
+import { ESLint, Linter } from 'eslint';
+import tseslint from 'typescript-eslint';
+import chokepointRule from '../scripts/eslint-rules/chokepoint.mjs';
 import {
   REPO_ROOT,
   MATCH_KINDS,
@@ -242,6 +244,63 @@ test('RUN-29: import-graph rows hold on the real tree', () => {
   for (const row of ROWS.filter((r) => matchersOf(r).some((m) => m.kind === 'import-graph'))) {
     assert.deepEqual(importGraphViolations(row, TREE, io), [], `row ${row.id}`);
   }
+});
+
+/**
+ * The chokepoint rule alone, with inline configuration ignored: an inline
+ * disable directive cannot hide a violation from this re-check.
+ */
+function strictChokepointLint(text: string, rel: string): Linter.LintMessage[] {
+  const linter = new Linter({ configType: 'flat' });
+  return linter.verify(
+    text,
+    [
+      {
+        files: ['**/*.{ts,mts,cts,js,mjs,cjs}'],
+        languageOptions: { parser: tseslint.parser as Linter.Parser, ecmaVersion: 2022, sourceType: 'module' },
+        plugins: { pensmith: { rules: { chokepoint: chokepointRule as unknown as NonNullable<ESLint.Plugin['rules']>[string] } } },
+        rules: { 'pensmith/chokepoint': 'error' },
+      },
+    ],
+    { filename: path.join(REPO_ROOT, rel), allowInlineConfig: false },
+  );
+}
+
+test('VRFY-09: regex-literal rows hold on every in-scope file (inline disables ignored)', () => {
+  const rows = ROWS.filter((r) => matchersOf(r).some((m) => m.kind === 'regex-literal'));
+  assert.ok(rows.some((r) => r.id === 'citation-grammar'), 'the citation-grammar row ships');
+  const offenders: string[] = [];
+  for (const rel of TREE) {
+    const active = rows.filter((r) => matchesAny(rel, r.scope) && !matchesAny(rel, r.allow));
+    if (active.length === 0) continue;
+    const messages = strictChokepointLint(fs.readFileSync(path.join(REPO_ROOT, rel), 'utf8'), rel);
+    for (const m of messages) {
+      if (m.fatal) offenders.push(`${rel}: parse error ${m.message}`);
+      else if (active.some((r) => m.message.includes(`"${r.id}"`))) offenders.push(`${rel}:${m.line}: ${m.message}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
+
+test('VRFY-09: the citation-grammar matcher — regex literals and static RegExp patterns, never other regexes or the grammar module', () => {
+  const lint = (text: string, rel = 'bin/lib/zz-citations.ts'): number =>
+    strictChokepointLint(text, rel).filter((m) => m.message.includes('"citation-grammar"')).length;
+  assert.equal(lint('export const R = /\\[@(\\w+)\\]/g;\n'), 1, 'a bracketed-citation regex literal');
+  assert.equal(lint('export const R = /@\\{[^}]*\\}/;\n'), 1, 'a braced-key regex literal');
+  assert.equal(lint('export const R = /\\[\\s*-?@/;\n'), 1, 'whitespace and author suppression between the bracket and the @');
+  assert.equal(lint("export const R = new RegExp('\\\\[@', 'g');\n"), 1, 'a RegExp string pattern');
+  assert.equal(lint('export const R = RegExp(String.raw`@\\{`);\n'), 1, 'a String.raw pattern');
+  assert.equal(lint("const P = '\\\\[' + '@';\nexport const R = new RegExp(P);\n"), 1, 'a concatenated pattern held in a const');
+  assert.equal(lint('export const R = new globalThis.RegExp(`\\\\[@k`);\n'), 1, 'globalThis.RegExp with a template literal');
+  // The directive is assembled so this file holds none (row no-new-eslint-disable).
+  const disable = ['//', 'eslint-disable-next-line'].join(' ');
+  assert.equal(lint(`${disable}\nexport const R = /\\[@/;\n`), 1, 'an inline disable does not hide it from the harness');
+  assert.equal(lint('export const A = /^10\\./;\nexport const B = /(^|\\s)@[a-z]+/;\nexport const C = /@{2}/;\nexport const D = /\\[\\^x\\]/;\n'), 0, 'other regexes (a DOI prefix, an @handle, a quantifier, a footnote) are not citation regexes');
+  assert.equal(lint('declare const src: string;\nexport const R = new RegExp(src);\n'), 0, 'a dynamic pattern is not static text');
+  assert.equal(lint('export const R = /\\[@(\\w+)\\]/g;\n', 'bin/lib/citation-token.ts'), 0, 'the grammar module is allowed');
+  assert.equal(lint('export const R = /\\[@(\\w+)\\]/g;\n', 'mcp/zz-tool.ts'), 1, 'mcp/ is in scope');
+  assert.equal(lint('export const R = /\\[@(\\w+)\\]/g;\n', 'hooks/zz-hook.ts'), 1, 'hooks/ is in scope');
+  assert.equal(lint('export const R = /\\[@(\\w+)\\]/g;\n', 'tests/zz.test.ts'), 0, 'tests may hold citation regexes (they check the grammar)');
 });
 
 test('RUN-10: no module other than bin/lib/main-guard.ts compares with pathToFileURL(process.argv[1])', () => {

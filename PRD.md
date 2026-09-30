@@ -280,11 +280,12 @@ Bounded to a single section. Four passes, all scoped to this section's draft:
 - Fuzzy-match cited authors/year/title against canonical metadata; mismatch → `MIS-CITED`. *Author/title verification is part of Pass 1, not optional.*
 
 **Pass 2 — Claim support (LLM-judged):**
-- For each in-text citation in this section, find the supported sentence(s).
-- Pull cited paper's abstract; if open-access via Unpaywall, also pull the relevant section.
-- Spawn `pensmith-claim-verifier` per citation, in waves of 5.
-- Verdict ∈ {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}, with rationale + quoted evidence.
+- For each in-text citation in this section, find the supported sentence(s). *(Amended in v1.0.0 Phase 20 — VRFY-21, D-20-28: every (citing sentence, citekey) pair is judged once — sentences split as Pass 4 splits them, keys read by the one citation grammar, so `[@smith2020, p. 5]`, clusters, `[-@k]` and narrative `@k` each yield their keys.)*
+- Pull cited paper's abstract; if open-access via Unpaywall, also pull the relevant section. *(Amended in Phase 20: the source text is the LIBRARY.json abstract, else the bib abstract; when `[verification] fetch_full_text` is on (default) the open-access full text's passage nearest the claim is added; a bring-your-own PDF's passages only with `send_byo_passages = true` (§9). A source with no text at all is `UNCLEAR` — "no source text (no abstract or full text)" — with no model call, never a judgment on the title alone.)*
+- Spawn `pensmith-claim-verifier` per citation, in waves of 5. *(Amended in Phase 20: at most 5 claim-support requests in flight.)*
+- Verdict ∈ {SUPPORTED, PARTIAL, UNSUPPORTED, UNCLEAR}, with rationale + quoted evidence. *(Amended in Phase 20 — VRFY-22: the evidence is kept only when it is a verbatim substring of the source text sent, and VERIFICATION.md's Pass-2 table carries it in an Evidence column, clamped to 160 characters, for done's UNSUPPORTED-claim confirmation.)*
 - Prompt calibrated to err toward UNCLEAR rather than false-confident SUPPORTED.
+- Advisory: Pass 2 never changes a section's status.
 
 **Pass 3 — Quotation verification:**
 - For every direct quote in this section, fetch OA full text and confirm presence.
@@ -292,8 +293,8 @@ Bounded to a single section. Four passes, all scoped to this section's draft:
 - NOT_FOUND blocks compile.
 
 **Pass 4 — Per-paragraph claim audit:**
-- For each paragraph, list claims it makes and which sources support each.
-- Flag orphan claims (asserted but uncited).
+- For each paragraph, list claims it makes and which sources support each. *(Amended in v1.0.0 Phase 20 — VRFY-23, D-20-29: the `orphan-label` prompt audits each paragraph with a claim once and returns its claims with `needs_citation` and `supported_by`; it can only ADD orphans.)*
+- Flag orphan claims (asserted but uncited). *(Amended in Phase 20: a deterministic floor works offline and is a lower bound no model answer can lower — a sentence of at least 8 words that is not a question or a definition is a claim when it holds one strong marker (a causal verb, a universal quantifier, an evidential verb in any inflection, a statistic or percentage, a comparative change) or two weak ones, and an orphan when the sentence itself carries no citation of any Pandoc form. VERIFICATION.md lists per paragraph the counts and each orphan sentence. Advisory; done runs it whole-paper over the exact text it exports.)*
 
 Output `.paper/sections/<N>/VERIFICATION.md` with summary table. Section is marked `verified` only when Passes 1 and 3 are clean (FABRICATED, MIS-CITED, NOT_FOUND must all be 0).
 

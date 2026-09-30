@@ -1,0 +1,17 @@
+// Chokepoint fixture (citation-grammar, VRFY-09): private citation regular
+// expressions outside bin/lib/citation-token.ts. Each sees only a bare
+// lowercase `[@key]` (or one braced form) and misses every other form Pandoc
+// renders — `[@a; @b]`, `[@k, p. 5]`, `[-@k]`, `@{k}`, a narrative `@k` — so
+// a citation looks absent to the code that uses it. The rule must flag the
+// regex literal and the RegExp(...) pattern (and the const it names).
+const CITEKEY_RE = /\[@(\w+)\]/g;
+
+export function citedKeys(md: string): string[] {
+  return [...md.matchAll(CITEKEY_RE)].map((m) => m[1] ?? '');
+}
+
+const BRACED = '@\\{';
+
+export function bracedStarts(md: string): number {
+  return (md.match(new RegExp(BRACED, 'g')) ?? []).length;
+}

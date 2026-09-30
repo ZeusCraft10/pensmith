@@ -36,6 +36,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import { replaceCitations } from './citation-token.js';
 import { CITEKEY_RE } from './citekey.js';
 import { promptHints } from './prompt-request.js';
 
@@ -190,9 +191,13 @@ function plainWords(s: string, max = 80): string {
   return (space > max / 2 ? cut.slice(0, space) : cut).trim();
 }
 
-/** Words of prose, citation tokens excluded — the measure the word target applies to. */
+/**
+ * Words of prose, citations excluded (every Pandoc form, read by the one
+ * citation grammar — citation-token.ts, VRFY-09) — the measure the word
+ * target applies to.
+ */
 export function proseWordCount(md: string): number {
-  return md.replace(/\[@[^\]]*\]/g, ' ').split(/\s+/).filter((w) => w.length > 0).length;
+  return replaceCitations(md, () => ' ').split(/\s+/).filter((w) => w.length > 0).length;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,271 @@
+{
+ "$comment": "UNPARSEABLE rules (VRFY-09, D-20-07) against Pandoc. Each case lists the forms findUnparseableCitations must report (in order) and Pandoc's reading of the markdown: its Cite clusters (items with citation modes) and the literal text it prints outside citations. tests/citation-grammar-pandoc.test.ts asserts each rule agrees with that reading — empty-key and unterminated-braced-key text is printed as text, an unbalanced bracket is printed around a narrative (AuthorInText) citation, and a nested bracket is a bracketed (NormalCitation) citation that findCitations reads as narrative — and that the negatives are read by Pandoc exactly as the grammar reads them. Re-record the readings with `node scripts/record-pandoc-cites.mjs` (needs pandoc on PATH).",
+ "pandoc": "3.9",
+ "cases": [
+  {
+   "name": "empty key",
+   "md": "A claim [@] here.",
+   "forms": [
+    "empty-key"
+   ],
+   "reading": {
+    "cites": [],
+    "literal": "A claim [@] here."
+   }
+  },
+  {
+   "name": "space after the @",
+   "md": "A claim [@ smith2020] here.",
+   "forms": [
+    "empty-key"
+   ],
+   "reading": {
+    "cites": [],
+    "literal": "A claim [@ smith2020] here."
+   }
+  },
+  {
+   "name": "empty author-suppressed key",
+   "md": "A claim [-@] here.",
+   "forms": [
+    "empty-key"
+   ],
+   "reading": {
+    "cites": [],
+    "literal": "A claim [-@] here."
+   }
+  },
+  {
+   "name": "empty second item",
+   "md": "A claim [@smith2020; @] here.",
+   "forms": [
+    "empty-key"
+   ],
+   "reading": {
+    "cites": [
+     [
+      {
+       "id": "smith2020",
+       "mode": "AuthorInText"
+      }
+     ]
+    ],
+    "literal": "A claim [; @] here."
+   }
+  },
+  {
+   "name": "unbalanced bracket",
+   "md": "A claim [@smith2020 about trees.",
+   "forms": [
+    "unbalanced-bracket"
+   ],
+   "reading": {
+    "cites": [
+     [
+      {
+       "id": "smith2020",
+       "mode": "AuthorInText"
+      }
+     ]
+    ],
+    "literal": "A claim [ about trees."
+   }
+  },
+  {
+   "name": "unbalanced bracket with a prefix",
+   "md": "A claim [see @smith2020 and more.",
+   "forms": [
+    "unbalanced-bracket"
+   ],
+   "reading": {
+    "cites": [
+     [
+      {
+       "id": "smith2020",
+       "mode": "AuthorInText"
+      }
+     ]
+    ],
+    "literal": "A claim [see  and more."
+   }
+  },
+  {
+   "name": "unterminated braced key",
+   "md": "A claim @{unterminated here.",
+   "forms": [
+    "unterminated-braced-key"
+   ],
+   "reading": {
+    "cites": [],
+    "literal": "A claim @{unterminated here."
+   }
+  },
+  {
+   "name": "braced key with a space",
+   "md": "A claim [@{two words}] here.",
+   "forms": [
+    "unterminated-braced-key"
+   ],
+   "reading": {
+    "cites": [],
+    "literal": "A claim [@{two words}] here."
+   }
+  },
+  {
+   "name": "nested bracket in the suffix",
+   "md": "Claim A [@smith2020 [see note]].",
+   "forms": [
+    "nested-bracket"
+   ],
+   "reading": {
+    "cites": [
+     [
+      {
+       "id": "smith2020",
+       "mode": "NormalCitation"
+      }
+     ]
+    ],
+    "literal": "Claim A ."
+   }
+  },
+  {
+   "name": "nested bracket in the prefix",
+   "md": "A claim [see [x] @smith2020] here.",
+   "forms": [
+    "nested-bracket"
+   ],
+   "reading": {
+    "cites": [
+     [
+      {
+       "id": "smith2020",
+       "mode": "NormalCitation"
+      }
+     ]
+    ],
+    "literal": "A claim  here."
+   }
+  },
+  {
+   "name": "nested bracket in the locator",
+   "md": "A claim [@smith2020, p. [5]] here.",
+   "forms": [
+    "nested-bracket"
+   ],
+   "reading": {
+    "cites": [
+     [
+      {
+       "id": "smith2020",
+       "mode": "NormalCitation"
+      }
+     ]
+    ],
+    "literal": "A claim  here."
+   }
+  },
+  {
+   "name": "negative: well-formed clusters",
+   "md": "Clusters [@a; @b] and [see @c, p. 5; -@d] and [@{e}].",
+   "forms": [],
+   "reading": {
+    "cites": [
+     [
+      {
+       "id": "a",
+       "mode": "NormalCitation"
+      },
+      {
+       "id": "b",
+       "mode": "NormalCitation"
+      }
+     ],
+     [
+      {
+       "id": "c",
+       "mode": "NormalCitation"
+      },
+      {
+       "id": "d",
+       "mode": "SuppressAuthor"
+      }
+     ],
+     [
+      {
+       "id": "e",
+       "mode": "NormalCitation"
+      }
+     ]
+    ],
+    "literal": "Clusters  and  and ."
+   }
+  },
+  {
+   "name": "negative: narrative citations",
+   "md": "As @a argues, and -@b shows, @{c} agrees.",
+   "forms": [],
+   "reading": {
+    "cites": [
+     [
+      {
+       "id": "a",
+       "mode": "AuthorInText"
+      }
+     ],
+     [
+      {
+       "id": "b",
+       "mode": "SuppressAuthor"
+      }
+     ],
+     [
+      {
+       "id": "c",
+       "mode": "AuthorInText"
+      }
+     ]
+    ],
+    "literal": "As  argues, and  shows,  agrees."
+   }
+  },
+  {
+   "name": "negative: an email and escapes",
+   "md": "Write to x@example.org; \\@a and \\[@b are text.",
+   "forms": [],
+   "reading": {
+    "cites": [
+     [
+      {
+       "id": "b",
+       "mode": "AuthorInText"
+      }
+     ]
+    ],
+    "literal": "Write to x@example.org; @a and [ are text."
+   }
+  },
+  {
+   "name": "negative: extra brackets around a citation",
+   "md": "Brackets [[@a] and [@b]] around citations.",
+   "forms": [],
+   "reading": {
+    "cites": [
+     [
+      {
+       "id": "a",
+       "mode": "NormalCitation"
+      }
+     ],
+     [
+      {
+       "id": "b",
+       "mode": "NormalCitation"
+      }
+     ]
+    ],
+    "literal": "Brackets [ and ] around citations."
+   }
+  }
+ ]
+}

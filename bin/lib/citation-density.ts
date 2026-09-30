@@ -17,7 +17,7 @@
 // D-14 §3 (LOCKED): the report still carries each section's
 // citations_per_1000_words and the paper-wide mean and stdev of those.
 
-import { countCitations as countCitationKeys } from './citation-token.js';
+import { countCitations as countCitationKeys, replaceCitations } from './citation-token.js';
 import { densityBandFor, normalizeDisciplineSlug } from './disciplines.js';
 
 export type DensityStatus = 'below' | 'within' | 'above';
@@ -143,8 +143,9 @@ function statusOf(value: number, band: DensityBand): DensityStatus {
   return 'within';
 }
 
+/** A paragraph's first words (≤ 8), its citations (every Pandoc form) left out. */
 function firstWords(p: string): string {
-  const words = p.replace(/\[@[^\]]*\]/g, '').split(/\s+/).filter(Boolean);
+  const words = replaceCitations(p, () => ' ').split(/\s+/).filter(Boolean);
   return words.slice(0, 8).join(' ') + (words.length > 8 ? ' …' : '');
 }
 

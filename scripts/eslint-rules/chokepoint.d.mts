@@ -1,7 +1,7 @@
 // Type declarations for scripts/eslint-rules/chokepoint.mjs (RUN-29), so the
 // strict TypeScript tests (tests/chokepoints.test.ts) can import the harness.
 
-export type ChokepointKind = 'string-literal' | 'import' | 'call' | 'member' | 'file-regex' | 'import-graph';
+export type ChokepointKind = 'string-literal' | 'import' | 'call' | 'member' | 'file-regex' | 'import-graph' | 'regex-literal';
 
 export interface ChokepointMatcher {
   kind: ChokepointKind;
@@ -55,6 +55,9 @@ export function importGraphViolations(
   entries: readonly string[],
   io: { read(abs: string): string; exists(abs: string): boolean; root?: string; path?: typeof import('node:path') },
 ): ImportGraphViolation[];
+
+/** The static text(s) of a RegExp pattern argument (an ESTree node), or [] when not static. */
+export function staticPatternTexts(node: unknown, sourceCode: unknown, context: unknown, depth?: number): string[];
 
 declare const rule: {
   meta: Record<string, unknown>;

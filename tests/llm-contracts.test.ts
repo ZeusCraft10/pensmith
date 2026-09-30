@@ -102,20 +102,29 @@ test('RUN-25: the converter is driven by the zod schema — a changed schema cha
 });
 
 test('RUN-25: the tolerant parser accepts bare, fenced, prose-wrapped, trailing-commentary and YAML replies', () => {
-  const obj = { label: 'claim' };
+  // orphan-label (D-20-29): the per-paragraph audit object.
+  const obj = { claims: [{ sentence: 'Trees lower asthma rates.', needs_citation: true, supported_by: [] }] };
+  const json = JSON.stringify(obj);
+  const fence = '```';
+  const yaml = 'claims:\n  - sentence: Trees lower asthma rates.\n    needs_citation: true\n    supported_by: []';
   const replies = [
-    JSON.stringify(obj),
-    '```json\n{"label":"claim"}\n```',
-    'Here is the label you asked for:\n\n{"label": "claim"}\n\nLet me know if you need more.',
-    '{"label":"claim"}\n\nNote: I chose "claim" because the sentence asserts a finding.',
-    '```yaml\nlabel: claim\n```',
-    'label: claim',
+    json,
+    `${fence}json\n${json}\n${fence}`,
+    `Here is the audit you asked for:\n\n${json}\n\nLet me know if you need more.`,
+    `${json}\n\nNote: I marked the sentence because it states a finding.`,
+    `${fence}yaml\n${yaml}\n${fence}`,
+    yaml,
+    // A bare-array root is coerced into the object contract.
+    JSON.stringify(obj.claims),
   ];
   for (const r of replies) {
     const parsed = parseStructured('orphan-label', r);
     assert.equal(parsed.ok, true, `parsed: ${JSON.stringify(r)}`);
     assert.deepEqual(parsed.ok && parsed.data, obj);
   }
+  // A missing supported_by defaults to [] (the audit names no support).
+  const lean = parseStructured('orphan-label', '{"claims":[{"sentence":"S.","needs_citation":false}]}');
+  assert.deepEqual(lean.ok && lean.data, { claims: [{ sentence: 'S.', needs_citation: false, supported_by: [] }] });
   // A brace inside a JSON string does not break the balanced scan.
   assert.deepEqual(candidateValues('prefix {"a":"x}y"} suffix')[0], { a: 'x}y' });
   // A bare-array root is coerced into the object contract (SRC-09: every
@@ -131,15 +140,15 @@ test('RUN-25: the tolerant parser accepts bare, fenced, prose-wrapped, trailing-
   }), { strictNulls: true });
   assert.equal(nulls.ok, true, nulls.ok ? '' : nulls.error);
   // Schema violations are reported, not silently accepted.
-  const bad = parseStructured('orphan-label', '{"label":"not-a-label"}');
+  const bad = parseStructured('orphan-label', '{"claims":[{"sentence":"S.","needs_citation":"maybe"}]}');
   assert.equal(bad.ok, false);
 });
 
 test('RUN-25: exactly one corrective retry — invalid then valid succeeds with 2 requests', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
-    sb.mock!.script('orphan-label', { text: 'I think this is a claim.' }, { text: '{"label":"claim"}' });
-    const r = await call<{ label: string }>('orphan-label');
-    assert.equal(r.data?.label, 'claim');
+    sb.mock!.script('orphan-label', { text: 'I think this is a claim.' }, { text: '{"claims":[{"sentence":"Trees lower asthma rates.","needs_citation":true,"supported_by":[]}]}' });
+    const r = await call<{ claims: Array<{ needs_citation: boolean }> }>('orphan-label');
+    assert.equal(r.data?.claims[0]?.needs_citation, true);
     const bodies = sb.mock!.bodiesFor('orphan-label');
     assert.equal(bodies.length, 2);
     const msgs = bodies[1]!['messages'] as Array<{ role: string; content: string }>;
@@ -153,9 +162,9 @@ test('RUN-25: exactly one corrective retry — invalid then valid succeeds with 
 
 test('RUN-25: a first reply with no text (thinking only) — the correction joins the user turn; no empty assistant turn is ever sent', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
-    sb.mock!.script('orphan-label', { text: '' }, { text: '{"label":"claim"}' });
-    const r = await call<{ label: string }>('orphan-label');
-    assert.equal(r.data?.label, 'claim', 'the corrective retry repaired the output (the mock 400s an empty non-final turn, like the API)');
+    sb.mock!.script('orphan-label', { text: '' }, { text: '{"claims":[{"sentence":"Trees lower asthma rates.","needs_citation":true,"supported_by":[]}]}' });
+    const r = await call<{ claims: Array<{ needs_citation: boolean }> }>('orphan-label');
+    assert.equal(r.data?.claims[0]?.needs_citation, true, 'the corrective retry repaired the output (the mock 400s an empty non-final turn, like the API)');
     const bodies = sb.mock!.bodiesFor('orphan-label');
     assert.equal(bodies.length, 2);
     const first = bodies[0]!['messages'] as Array<{ role: string; content: string }>;

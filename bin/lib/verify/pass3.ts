@@ -72,16 +72,23 @@ import { byoText, byoCopyAltered, type ByoTextResult } from '../byo-text.js';
 import { arxivPdfUrl, arxivIdOfEntry, isDataCiteArxivDoi } from '../full-text.js';
 import { tryLoadLibrary } from '../library.js';
 import type { LibraryEntry } from '../schemas/library.js';
+import { quoteId, quoteTextSha256 } from './verdicts.js';
 
 export type Pass3Verdict = 'OK' | 'NOT_FOUND' | 'PDF_UNAVAILABLE' | 'TEXT_UNAVAILABLE';
 
 export interface Pass3Result {
   citekey: string;
+  /** The quote's id in its draft, in document order: `q1`, `q2`, … (Phase 20 seam S-C; VRFY-20). */
+  id: string;
+  /** verdicts.ts quoteTextSha256 of the whole quote — what a quote acceptance is bound to (VRFY-20). */
+  quoteSha256: string;
   /** First 40 chars of the claimed quote — for human-readable diagnostics. */
   quoteSnippet: string;
   verdict: Pass3Verdict;
   levRatio: number;
   reason: string;
+  /** The user's own PDF the quote was verified against (`sources/<file>`), when it was (VRFY-19, VRFY-26). */
+  localFile?: string;
 }
 
 interface BibLike {
@@ -100,7 +107,7 @@ export interface Pass3Options {
   readonly root?: string;
 }
 
-type Verdict = Omit<Pass3Result, 'citekey' | 'quoteSnippet'>;
+type Verdict = Omit<Pass3Result, 'citekey' | 'id' | 'quoteSha256' | 'quoteSnippet'>;
 
 function unavailableVerdict(reason: string): Verdict {
   return { verdict: 'PDF_UNAVAILABLE', levRatio: 0, reason };
@@ -217,9 +224,10 @@ export async function runPass3(
   // One re-hash / extraction per source per run.
   const byoTexts = new Map<string, ByoTextResult>();
 
-  for (const q of quotes) {
+  for (const [index, q] of quotes.entries()) {
     const snippet = q.text.slice(0, 40);
-    const push = (v: Verdict): void => void results.push({ citekey: q.citekey, quoteSnippet: snippet, ...v });
+    const ids = { id: quoteId(index), quoteSha256: quoteTextSha256(q.text) };
+    const push = (v: Verdict): void => void results.push({ citekey: q.citekey, ...ids, quoteSnippet: snippet, ...v });
     const claimed = bibByCitekey.get(q.citekey);
 
     if (claimed?.DOI !== undefined && isReservedDryRunId(claimed.DOI)) {
@@ -246,7 +254,7 @@ export async function runPass3(
       if (t.available) {
         const ratio = levenshteinSubstring(nfkcNormalize(q.text), nfkcNormalize(t.text));
         if (ratio >= QUOTE_LEV_THRESHOLD) {
-          push({ verdict: 'OK', levRatio: ratio, reason: `verified against your local file ${name} (sha256 ${t.sha256.slice(0, 12)}…)` });
+          push({ verdict: 'OK', levRatio: ratio, reason: `verified against your local file ${name} (sha256 ${t.sha256.slice(0, 12)}…)`, localFile: name });
           continue;
         }
         localMiss = { ratio, file: name };

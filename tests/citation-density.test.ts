@@ -112,3 +112,13 @@ test('GRND-06: COMPILE-REPORT.md shows the band, each section\'s citations per p
   assert.match(md, /^- 2 \(body\): 0 citations\/paragraph over 2 paragraph\(s\) \(BELOW 0\.5–2\); 0 citations\/1000 words$/m);
   assert.match(md, /^ {2}- paragraph 1 \(0 citations\): "Nothing cited here at all, just prose words\."$/m);
 });
+
+test('VRFY-09: the density count and each paragraph\'s first words read every citation form through the one grammar', () => {
+  const report = computeCitationDensity(
+    [{ n: 1, slug: 'intro', text: 'As @smith2020 argues [@a, p. 5; -@b], trees cool [see @Vaswani2017] streets and shade the whole block from noon sun.' }],
+    'history',
+  );
+  const s = report.sections[0]!;
+  assert.equal(s.citations, 4, 'narrative @k, a cluster of two with a locator and author suppression, a prefixed mixed-case key');
+  assert.deepEqual(s.out_of_band.map((p) => p.firstWords), ['As argues , trees cool streets and shade …']);
+});

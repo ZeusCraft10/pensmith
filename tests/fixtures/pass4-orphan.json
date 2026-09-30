@@ -1,44 +1,157 @@
-[
-  {
-    "paragraph": "The collected experimental data demonstrates that the catalyst reveals a stronger binding affinity. Independent replication consequently confirms that the observed effect proves highly reproducible across laboratories.",
-    "in_text_citekeys": [],
-    "expected_orphan_count": 2,
-    "description": "Shape (a): zero citations + two HIGH-confidence claims, both orphaned. S1 'The collected experimental data demonstrates that the catalyst reveals a stronger binding affinity.' [13 words] survives R5; R3 not a question; R4 not a definition; R6 markers matched {demonstrates, reveals} = 2 distinct surface forms; R7 -> HIGH; R2 paragraph contains no [@citekey] -> uncited -> R8 orphan. S2 'Independent replication consequently confirms that the observed effect proves highly reproducible across laboratories.' [13 words] survives R5; R3 not a question; R4 not a definition; R6 markers matched {consequently, confirms, proves} = 3 distinct surface forms; R7 -> HIGH; R2 uncited -> R8 orphan. Both sentences clear the R5 8-word floor and are HIGH; neither is cited; orphanCount = 2 per R8."
-  },
-  {
-    "paragraph": "The experimental data demonstrates that the catalyst reveals a stronger binding affinity than the predicted baseline value here [@brown2020].",
-    "in_text_citekeys": ["brown2020"],
-    "expected_orphan_count": 0,
-    "description": "Shape (c) cited-control single-claim: one HIGH claim WITH a citation in the same (only) sentence -> not an orphan. S1 'The experimental data demonstrates that the catalyst reveals a stronger binding affinity than the predicted baseline value here [@brown2020].' [18 words, [@brown2020] counted as one word] survives R5; R3 not a question; R4 not a definition; R6 markers {demonstrates, reveals} = 2 distinct surface forms; R7 -> HIGH; R2 the paragraph contains [@brown2020] within ORPHAN_PROXIMITY_CHARS=500 of the sentence span -> cited -> NOT an orphan per R8. orphanCount = 0."
-  },
-  {
-    "paragraph": "The experimental data demonstrates that the catalyst reveals a stronger binding affinity than the predicted baseline value here.",
-    "in_text_citekeys": [],
-    "expected_orphan_count": 1,
-    "description": "Shape (b)/(a) uncited single-claim companion to the cited control: identical sentence WITHOUT the citation -> one orphan. S1 'The experimental data demonstrates that the catalyst reveals a stronger binding affinity than the predicted baseline value here.' [17 words] survives R5; R3 not a question; R4 not a definition; R6 markers {demonstrates, reveals} = 2 distinct surface forms; R7 -> HIGH; R2 the paragraph contains NO [@citekey] token -> uncited -> orphan per R8. orphanCount = 1. Together with the prior cited-control entry this isolates R2 cited-vs-uncited deterministically (same sentence, only the [@citekey] differs)."
-  },
-  {
-    "paragraph": "Every HIGH claim in this paragraph carries its own citation marker. The data demonstrates that the catalyst reveals a stronger binding affinity than predicted [@brown2020]. A second run consequently confirms that the effect proves stable across replicates [@chen2019].",
-    "in_text_citekeys": ["brown2020", "chen2019"],
-    "expected_orphan_count": 0,
-    "description": "Shape (c) control: every HIGH claim cited -> orphanCount 0. S1 'Every HIGH claim in this paragraph carries its own citation marker.' [11 words] survives R5; R3 not a question; R4 not a definition; R6 markers — scanning {is,are,demonstrates,shows,proves,indicates,suggests,reveals,confirms,establishes,argues,claims,because,therefore,thus,hence,consequently}: 'carries' is not a marker, no marker words present -> 0 distinct; R7 -> 0 markers -> NOT a claim (dropped). S2 'The data demonstrates that the catalyst reveals a stronger binding affinity than predicted [@brown2020].' [14 words, [@brown2020]=1 word] survives R5; R6 markers {demonstrates, reveals} = 2 distinct; R7 -> HIGH; R2 [@brown2020] present within 500 chars -> cited -> not orphan. S3 'A second run consequently confirms that the effect proves stable across replicates [@chen2019].' [14 words, [@chen2019]=1 word] survives R5; R6 markers {consequently, confirms, proves} = 3 distinct; R7 -> HIGH; R2 [@chen2019] present within 500 chars -> cited -> not orphan. Both HIGH claims are cited; the lone non-marker sentence is not a claim; orphanCount = 0 per R8."
-  },
-  {
-    "paragraph": "Photosynthesis is defined as the biochemical conversion of light energy into stored chemical energy within plants.",
-    "in_text_citekeys": [],
-    "expected_orphan_count": 0,
-    "description": "Shape (d) definition non-claim: dropped at R4 before any marker counting -> contributes 0. S1 'Photosynthesis is defined as the biochemical conversion of light energy into stored chemical energy within plants.' [16 words] R3 not a question; R4 matches DEFINITION_MARKERS /\\b(defined as|refers to|known as)\\b/i ('defined as') -> discarded as NOT a claim BEFORE R5/R6. Even though the sentence contains the marker 'is', it is removed at R4 and never marker-counted (R4 sits in the same skip stage as R3/R5, ahead of R6). orphanCount = 0 per R8."
-  },
-  {
-    "paragraph": "Climate change demonstrates accelerating ice loss across both polar regions. This clearly proves that the climate feedback loop is intensifying rapidly. Ice sheets are retreating globally according to recent satellite measurements.",
-    "in_text_citekeys": [],
-    "expected_orphan_count": 1,
-    "description": "CANONICAL example (byte-identical to Plan 05-03's worked example). S1 'Climate change demonstrates accelerating ice loss across both polar regions.' [10 words] survives R5; R3 not a question; R4 not a definition; R6 markers {demonstrates} = 1 distinct; R7 -> AMBIGUOUS -> NOT counted by R8. S2 'This clearly proves that the climate feedback loop is intensifying rapidly.' [11 words] survives R5; R3 not a question; R4 not a definition; R6 markers {proves, is} = 2 distinct; R7 -> HIGH; R2 no [@citekey] within proximity -> uncited -> the one orphan. S3 'Ice sheets are retreating globally according to recent satellite measurements.' [10 words] survives R5; R3 not a question; R4 not a definition; R6 markers {are} = 1 distinct; R7 -> AMBIGUOUS -> NOT counted by R8. S1 [10 words] survives R5, AMBIGUOUS (1 marker: demonstrates); S2 [11 words] survives R5, HIGH (2 distinct markers: proves, is), uncited -> the one orphan; S3 [10 words] survives R5, AMBIGUOUS (1 marker: are). All three clear the R5 8-word floor; only S2 is HIGH; orphanCount = 1 per R8 (S1 and S3 excluded as AMBIGUOUS)."
-  },
-  {
-    "paragraph": "Is the catalyst effective? The short fragment fails. The longer analysis demonstrates that the new catalyst reveals a substantially stronger binding affinity than the legacy reagent baseline.",
-    "in_text_citekeys": [],
-    "expected_orphan_count": 1,
-    "description": "Mixed skips exercising R3 (rhetorical) and R5 (length floor) before the one true HIGH orphan. S1 'Is the catalyst effective?' [4 words] R3 ends in '?' -> rhetorical, discarded before marker counting (also under 8 words, but R3 fires first in the skip stage). S2 'The short fragment fails.' [4 words] R3 not a question; R4 not a definition; R5 word count = 4 (< 8) -> dropped at R5 before R6, never marker-counted. S3 'The longer analysis demonstrates that the new catalyst reveals a substantially stronger binding affinity than the legacy reagent baseline.' [19 words] survives R5; R3 not a question; R4 not a definition; R6 markers {demonstrates, reveals} = 2 distinct; R7 -> HIGH; R2 no [@citekey] -> uncited -> orphan. orphanCount = 1 per R8 (S1 dropped at R3, S2 dropped at R5, only S3 is a HIGH orphan)."
-  }
-]
+{
+  "$comment": "Pass 4 deterministic-floor fixture (VRFY-06, VRFY-23, D-20-29). Each paragraph's expected_orphans / expected_orphan_count follow the floor rule in bin/lib/verify/pass4.ts: split the paragraph into sentences (a . ! or ? — with any closing quote or bracket — followed by whitespace or the end, never inside a citation; a piece holding only citations joins the sentence before it); drop a sentence under 8 words (citations not counted), a question, or a definition (defined as / refers to / known as); a sentence is a claim (HIGH) with ONE strong marker — causal verb (cause(s|d), lead(s) to, result(s|ed) in, increase(s|d), decrease(s|d), reduce(s|d), improve(s|d), lower(s|ed), raise(s|d), drive(s), prevent(s|ed)), universal quantifier (every, all, always, never, no one, none), evidential verb in any inflection (show/shows/showed/shown, demonstrate(s|d), find(s)/found, report(s|ed), indicate(s|d), prove(s|d|n), reveal(s|ed), confirm(s|ed), establish(es|ed)), statistic or percentage (73%, 40 percent, per cent, N times, twice as), comparative change (more/less/higher/lower/greater/fewer than, rose, fell, doubled, tripled) — or TWO distinct weak markers (is, are, demonstrates, shows, proves, indicates, suggests, reveals, confirms, establishes, argues, claims, because, therefore, thus, hence, consequently); one weak marker alone is AMBIGUOUS and never counted by the floor. A HIGH claim is an orphan when the sentence itself carries no citation of any Pandoc form. The counts were derived by walking each paragraph through that rule by hand (the description of each case records the walk) and are re-checked, LLM-independent (PENSMITH_NO_LLM=1), by tests/known-bad-pass4.test.ts; after a rule change re-derive them the same way and review every changed count. The two register sentences are the audit's CORE-35 / SWP-82 examples.",
+  "cases": [
+    {
+      "paragraph": "The collected experimental data demonstrates that the catalyst reveals a stronger binding affinity. Independent replication consequently confirms that the observed effect proves highly reproducible across laboratories.",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 2,
+      "expected_orphans": [
+        "The collected experimental data demonstrates that the catalyst reveals a stronger binding affinity.",
+        "Independent replication consequently confirms that the observed effect proves highly reproducible across laboratories."
+      ],
+      "description": "Two uncited claims. S1 (13 words): evidential verbs demonstrates, reveals → HIGH, no citation → orphan. S2 (13 words): evidential confirms, proves → HIGH, no citation → orphan."
+    },
+    {
+      "paragraph": "The experimental data demonstrates that the catalyst reveals a stronger binding affinity than the predicted baseline value here [@brown2020].",
+      "in_text_citekeys": ["brown2020"],
+      "expected_orphan_count": 0,
+      "expected_orphans": [],
+      "description": "Cited control: the one HIGH claim (evidential demonstrates) carries [@brown2020] in the sentence → not an orphan."
+    },
+    {
+      "paragraph": "The experimental data demonstrates that the catalyst reveals a stronger binding affinity than the predicted baseline value here.",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 1,
+      "expected_orphans": ["The experimental data demonstrates that the catalyst reveals a stronger binding affinity than the predicted baseline value here."],
+      "description": "The same sentence without its citation → one orphan (isolates the sentence-level citation check)."
+    },
+    {
+      "paragraph": "Every HIGH claim in this paragraph carries its own citation marker. The data demonstrates that the catalyst reveals a stronger binding affinity than predicted [@brown2020]. A second run consequently confirms that the effect proves stable across replicates [@chen2019].",
+      "in_text_citekeys": ["brown2020", "chen2019"],
+      "expected_orphan_count": 1,
+      "expected_orphans": ["Every HIGH claim in this paragraph carries its own citation marker."],
+      "description": "S1 (11 words) holds the universal quantifier Every → HIGH and carries no citation → orphan (the old rule needed two weak markers and a citation within 500 characters, so it gave 0). S2 and S3 are HIGH and each carries its own citation → not orphans."
+    },
+    {
+      "paragraph": "Photosynthesis is defined as the biochemical conversion of light energy into stored chemical energy within plants.",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 0,
+      "expected_orphans": [],
+      "description": "A definition (defined as) is not a claim."
+    },
+    {
+      "paragraph": "Climate change demonstrates accelerating ice loss across both polar regions. This clearly proves that the climate feedback loop is intensifying rapidly. Ice sheets are retreating globally according to recent satellite measurements.",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 2,
+      "expected_orphans": [
+        "Climate change demonstrates accelerating ice loss across both polar regions.",
+        "This clearly proves that the climate feedback loop is intensifying rapidly."
+      ],
+      "description": "The canonical paragraph. S1: evidential demonstrates (one strong marker is enough, D-20-29) → HIGH orphan (the old rule, which needed two markers, gave 1 for the paragraph). S2: evidential proves → HIGH orphan. S3: only the weak marker are → AMBIGUOUS, never counted by the floor."
+    },
+    {
+      "paragraph": "Is the catalyst effective? The short fragment fails. The longer analysis demonstrates that the new catalyst reveals a substantially stronger binding affinity than the legacy reagent baseline.",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 1,
+      "expected_orphans": ["The longer analysis demonstrates that the new catalyst reveals a substantially stronger binding affinity than the legacy reagent baseline."],
+      "description": "S1 is a question, S2 has 4 words: neither is a claim. S3: evidential demonstrates → HIGH, uncited → orphan."
+    },
+    {
+      "paragraph": "Social media use clearly causes depression in every adolescent.",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 1,
+      "expected_orphans": ["Social media use clearly causes depression in every adolescent."],
+      "description": "Register sentence 1 (CORE-35 / SWP-82; the old rule counted 0): causal causes + universal every → HIGH, uncited → orphan."
+    },
+    {
+      "paragraph": "Studies show that 73% of American cities saw street trees lower asthma hospitalizations by 40 percent.",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 1,
+      "expected_orphans": ["Studies show that 73% of American cities saw street trees lower asthma hospitalizations by 40 percent."],
+      "description": "Register sentence 2 (SWP-82, the old rule counted 0): evidential show, causal lower, statistics 73% and 40 percent → HIGH, uncited → orphan."
+    },
+    {
+      "paragraph": "Social media use clearly causes depression in every adolescent. Studies show that 73% of American cities saw street trees lower asthma hospitalizations by 40 percent.",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 2,
+      "expected_orphans": [
+        "Social media use clearly causes depression in every adolescent.",
+        "Studies show that 73% of American cities saw street trees lower asthma hospitalizations by 40 percent."
+      ],
+      "description": "Both register sentences, uncited, in one paragraph → orphan count 2 (VRFY-23 acceptance)."
+    },
+    {
+      "paragraph": "Social media use clearly causes depression in every adolescent [@smith2020]. Studies show that 73% of American cities saw street trees lower asthma hospitalizations by 40 percent [@lee2021, p. 4].",
+      "in_text_citekeys": ["smith2020", "lee2021"],
+      "expected_orphan_count": 0,
+      "expected_orphans": [],
+      "description": "Both register sentences, each cited (a bare key and a locator) → orphan count 0 (VRFY-23 acceptance)."
+    },
+    {
+      "paragraph": "Social media use clearly causes depression in every adolescent.\r\nStudies show that 73% of American cities saw street trees lower asthma hospitalizations by 40 percent.\r\n",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 2,
+      "expected_orphans": [
+        "Social media use clearly causes depression in every adolescent.",
+        "Studies show that 73% of American cities saw street trees lower asthma hospitalizations by 40 percent."
+      ],
+      "description": "The register paragraph with CRLF line endings → the same two orphans."
+    },
+    {
+      "paragraph": "Research has demonstrated that street trees lower asthma hospitalizations by 40 percent.",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 1,
+      "expected_orphans": ["Research has demonstrated that street trees lower asthma hospitalizations by 40 percent."],
+      "description": "The audit's appended sentence (V1 register §d): evidential demonstrated, causal lower, statistic 40 percent → HIGH, uncited → orphan."
+    },
+    {
+      "paragraph": "Depression rates among adolescents doubled over the last decade because of smartphones and social media.",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 1,
+      "expected_orphans": ["Depression rates among adolescents doubled over the last decade because of smartphones and social media."],
+      "description": "The audit's second CORE-35 sentence: comparative change doubled → HIGH, uncited → orphan."
+    },
+    {
+      "paragraph": "As @smith2020 shows, social media use clearly causes depression in every adolescent. Street trees lower asthma hospitalizations by 40 percent in most cities [@lee2021; @park2019].",
+      "in_text_citekeys": ["smith2020", "lee2021", "park2019"],
+      "expected_orphan_count": 0,
+      "expected_orphans": [],
+      "description": "Every Pandoc form counts as a citation at sentence level: a narrative @smith2020 and a cluster [@lee2021; @park2019] → 0."
+    },
+    {
+      "paragraph": "This review argues that attention is the dominant sequence architecture because it scales well and therefore displaces recurrence [@Vaswani2017].",
+      "in_text_citekeys": ["Vaswani2017"],
+      "expected_orphan_count": 0,
+      "expected_orphans": [],
+      "description": "SWP-91: a mixed-case key is a citation (the old [@lowercase] regex made it a false orphan). Weak argues, is, because, therefore → HIGH, cited → 0."
+    },
+    {
+      "paragraph": "Street trees lower asthma rates in every city studied so far. Other work agrees with this reading of the data [@lee2021].",
+      "in_text_citekeys": ["lee2021"],
+      "expected_orphan_count": 1,
+      "expected_orphans": ["Street trees lower asthma rates in every city studied so far."],
+      "description": "A citation in the NEXT sentence does not cover a claim (the old 500-character proximity did): S1 causal lower + universal every → HIGH, uncited → orphan; S2 has no marker."
+    },
+    {
+      "paragraph": "Street trees lower asthma rates in every city studied so far. [@lee2021]",
+      "in_text_citekeys": ["lee2021"],
+      "expected_orphan_count": 0,
+      "expected_orphans": [],
+      "description": "A citation left alone after the full stop joins its sentence → cited → 0."
+    },
+    {
+      "paragraph": "Does social media use cause depression in every adolescent who uses it daily?",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 0,
+      "expected_orphans": [],
+      "description": "A question is not a claim, whatever its markers."
+    },
+    {
+      "paragraph": "The section develops this point in steps, so that each claim can be checked against its source.",
+      "in_text_citekeys": [],
+      "expected_orphan_count": 0,
+      "expected_orphans": [],
+      "description": "Signposting with no marker is not a claim (the stub drafter's filler prose)."
+    }
+  ]
+}
