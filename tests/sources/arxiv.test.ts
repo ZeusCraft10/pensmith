@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import * as arxiv from '../../bin/lib/sources/arxiv.js';
 import { SourceCandidateSchema } from '../../bin/lib/schemas/source-candidate.js';
 import { RECORDED_QUERY, RECORDED_ARXIV_ID, recorded, assertOfflineMiss } from './recorded.js';
-import { threeWayContract, liveLane } from './three-way.js';
+import { threeWayContract, liveLane, idDigits } from './three-way.js';
 
 function entryTitles(xml: string): string[] {
   return [...xml.matchAll(/<entry\b[^>]*>([\s\S]*?)<\/entry>/g)].map((m) => {
@@ -126,11 +126,15 @@ test('the Atom parser reads a CRLF feed exactly like an LF one', async () => {
   });
 });
 
-/** A modern arXiv id per token (the contract needs unique ids). */
+/**
+ * A modern arXiv id of its own per token (the contract needs unique ids):
+ * `9<pid>.0<serial>` from idDigits, never a hash of the token (CI run 72). A
+ * 9xxx year-month is no real arXiv id and no recorded fixture's, and the
+ * five-digit number stays under 10000, below pass1-arxiv-batch's ids.
+ */
 const idFor = (t: string): string => {
-  let h = 0;
-  for (const ch of t) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return `2${String(h % 1000).padStart(3, '0')}.${String(h % 100000).padStart(5, '0')}`;
+  const d = idDigits(t);
+  return `9${d.slice(0, 3)}.${d.slice(3)}`;
 };
 
 threeWayContract({
