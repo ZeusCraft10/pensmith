@@ -77,7 +77,9 @@ export function runHook(sb: Sandbox, name: HookName, opts: RunHookOptions): Hook
   const started = process.hrtime.bigint();
   const r = spawnSync(process.execPath, [hookBundle(name)], {
     cwd: opts.cwd,
-    env: sb.env(opts.env),
+    // The bundles are not coverage targets (c8 counts their sources, bin/ and
+    // hooks/): no raw V8 coverage file per spawn under `npm run test:coverage`.
+    env: sb.env({ NODE_V8_COVERAGE: undefined, ...opts.env }),
     encoding: 'utf8',
     timeout: 30_000,
     ...(input === null

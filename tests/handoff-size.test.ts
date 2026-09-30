@@ -57,7 +57,7 @@ test('handoff-size: the bundled PreCompact hook writes ≤ 5120 bytes for a 40-s
   for (const s of sections) writePlan(root, s.n, s.slug, { status: s.n < 30 ? 'verified' : 'planned' });
   const r = spawnSync(process.execPath, [HOOK], {
     cwd: root,
-    env: sb.env(),
+    env: sb.env({ NODE_V8_COVERAGE: undefined }), // a bundle is not a coverage target
     input: JSON.stringify({ session_id: 's-size', cwd: root, hook_event_name: 'PreCompact', trigger: 'auto' }),
     encoding: 'utf8',
     timeout: 30_000,

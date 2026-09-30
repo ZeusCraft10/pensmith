@@ -232,7 +232,7 @@ test('PLUG-14: each hooks/*.ts entry (under tsx) behaves exactly like its commit
   const sb = sandbox('hook-entries');
   const run = (name: HookName, file: string, cwd: string, loader: boolean): { status: number | null; stdout: string } => {
     const r = spawnSync(process.execPath, [...(loader ? ['--import', TSX] : []), file], {
-      cwd, env: sb.env(), input: JSON.stringify(hookInput(name, cwd)), encoding: 'utf8', timeout: 60_000,
+      cwd, env: sb.env(loader ? {} : { NODE_V8_COVERAGE: undefined }), input: JSON.stringify(hookInput(name, cwd)), encoding: 'utf8', timeout: 60_000,
     });
     return { status: r.status, stdout: String(r.stdout ?? '') };
   };
