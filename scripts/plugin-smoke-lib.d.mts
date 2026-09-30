@@ -76,7 +76,12 @@ export declare function gitCgiEnv(
   projectRoot: string,
   req: { url?: string; method?: string; headers?: Record<string, string | string[] | undefined> },
 ): Record<string, string | undefined>;
+export declare function serveGitHttpBackend(opts: {
+  projectRoot: string;
+  env?: Record<string, string | undefined>;
+}): Promise<{ url: string; close(): Promise<void> }>;
 export declare function startGitHttpBackend(opts: {
   projectRoot: string;
   env?: Record<string, string | undefined>;
+  timeoutMs?: number;
 }): Promise<{ url: string; close(): Promise<void> }>;

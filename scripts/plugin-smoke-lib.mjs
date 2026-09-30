@@ -9,6 +9,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** The skills the plugin must load (the 23a contract: the router plus seven plumbing skills). */
 export const EXPECTED_SKILLS = Object.freeze([
@@ -335,9 +336,11 @@ export function gitCgiEnv(baseEnv, projectRoot, req) {
  * Serve the bare repositories under `projectRoot` over git's smart HTTP
  * protocol on 127.0.0.1 (a random port), through `git http-backend` as CGI —
  * the transport Claude Code clones a git-hosted marketplace with. Read-only
- * (no receive-pack). Resolves to {url, close()}.
+ * (no receive-pack). Resolves to {url, close()}. It serves from THIS process's
+ * event loop, so a caller that blocks it (spawnSync) must use
+ * startGitHttpBackend, which runs it in a child process.
  */
-export function startGitHttpBackend({ projectRoot, env = process.env }) {
+export function serveGitHttpBackend({ projectRoot, env = process.env }) {
   const server = http.createServer((req, res) => {
     const child = spawn('git', ['http-backend'], { env: gitCgiEnv(env, projectRoot, req), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     let head = Buffer.alloc(0);
@@ -379,6 +382,50 @@ export function startGitHttpBackend({ projectRoot, env = process.env }) {
         close: () => new Promise((r) => {
           server.closeAllConnections?.();
           server.close(() => r());
+        }),
+      });
+    });
+  });
+}
+
+/**
+ * serveGitHttpBackend in a child process (scripts/git-http-host.mjs), so the
+ * smoke's synchronous `claude` calls cannot starve it. Resolves to
+ * {url, close()} once the child printed its URL.
+ */
+export function startGitHttpBackend({ projectRoot, env = process.env, timeoutMs = 30_000 }) {
+  const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'git-http-host.mjs');
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [script, projectRoot], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    let out = '';
+    let err = '';
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`the git host did not start within ${timeoutMs / 1000}s: ${err.trim()}`));
+    }, timeoutMs);
+    child.stderr.on('data', (c) => {
+      err += String(c);
+    });
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+    child.on('exit', (code) => {
+      clearTimeout(timer);
+      if (!out.includes('\n')) reject(new Error(`the git host exited (${code}) before serving: ${err.trim()}`));
+    });
+    child.stdout.on('data', (c) => {
+      out += String(c);
+      const nl = out.indexOf('\n');
+      if (nl < 0) return;
+      clearTimeout(timer);
+      const url = out.slice(0, nl).trim();
+      resolve({
+        url,
+        close: () => new Promise((r) => {
+          if (child.exitCode !== null) return r();
+          child.once('exit', () => r());
+          child.kill();
         }),
       });
     });
