@@ -42,6 +42,17 @@ test('VRFY-18: the acceptance list — each form yields its entries (keys, locat
     [`"${Q}" [-@k].`, [['k', undefined]]],
     [`"${Q}" @k [p. 3].`, [['k', 'p. 3']]],
     [`‘${Q}’ [@k].`, [['k', undefined]]],
+    // Straight single quotes, entity and escaped marks, block quotes in a list item or a definition.
+    [`As noted, '${Q}' [@k, p. 3].`, [['k', 'p. 3']]],
+    [`@k notes that '${Q}'.`, [['k', undefined]]],
+    [`As noted, &ldquo;${Q}&rdquo; [@k].`, [['k', undefined]]],
+    [`As noted, &#8216;${Q}&#8217; [@k].`, [['k', undefined]]],
+    [`As noted, &quot;${Q}&quot; [@k].`, [['k', undefined]]],
+    [`As noted, \\"${Q}\\" [@k].`, [['k', undefined]]],
+    [`Intro.\n\n- > ${Q} [@k]\n`, [['k', undefined]]],
+    [`Intro.\n\n1. > ${Q} [@k]\n`, [['k', undefined]]],
+    [`Term\n:   > ${Q} [@k]\n`, [['k', undefined]]],
+    [`- item\n\n    > ${Q} [@k]\n`, [['k', undefined]]],
   ];
   for (const [md, want] of cases) {
     const got = both(md);
@@ -119,6 +130,21 @@ test('VRFY-18: quotes in provable code are skipped; code the grammar cannot prov
   assert.deepEqual(keys('Before.\n\n    x = "one two three four five six"\n'), [null]);
   // A paragraph that holds a construct able to take a backtick: no proof.
   assert.deepEqual(keys('Math $x$ and `print("hello world this is a test")` here.'), [null]);
+});
+
+test('VRFY-18: an apostrophe never opens a straight single quote (it\'s, the authors\', \'90s, rock \'n\' roll)', () => {
+  for (const md of [
+    "It's the authors' view that data rarely lie about such things at all [@k].",
+    "Since the 1980s, many of the country's largest teachers' unions grew stronger [@k].",
+    "In the '90s, the teachers' unions grew stronger across the whole country [@k].",
+    "Rock 'n' roll was loud and it was everywhere in the whole wide world [@k].",
+  ]) {
+    assert.deepEqual(both(md), [], md);
+  }
+  // A plural possessive inside the quote never cuts it short.
+  assert.deepEqual(both("He said 'the students' results were strong across every single cohort' [@k].").map((q) => q.text), [
+    "the students' results were strong across every single cohort",
+  ]);
 });
 
 test('VRFY-18: straight and typographic marks pair the way Pandoc pairs them', () => {
@@ -201,7 +227,8 @@ function draftOf(r: () => number): { md: string; expected: Expected[] } {
   const words = (n: number): string => Array.from({ length: n }, () => pick(WORDS)).join(' ');
   const key = (): string => pick(['smith2020', 'lee2019', 'Vaswani2017', 'doe_2021', 'chen:2018']);
   const prose = (): string => `${pick(['We', 'They', 'Most', 'Some'])} ${words(3 + Math.floor(r() * 6))}.`;
-  const quoteMarks = (): [string, string] => pick([['"', '"'], ['“', '”'], ['‘', '’']] as Array<[string, string]>);
+  const quoteMarks = (): [string, string] =>
+    pick([['"', '"'], ['“', '”'], ['‘', '’'], ["'", "'"], ['&ldquo;', '&rdquo;'], ['&#39;', '&#39;'], ['\\"', '\\"']] as Array<[string, string]>);
   const expected: Expected[] = [];
   const paragraphs: string[] = [];
   const blocks = 2 + Math.floor(r() * 5);
@@ -211,9 +238,10 @@ function draftOf(r: () => number): { md: string; expected: Expected[] } {
       // A block quote, attributed after, inside, before, or not at all.
       const text = words(DEFAULT_QUOTE_MIN_WORDS + Math.floor(r() * 8));
       const k = key();
-      const how = Math.floor(r() * 4);
+      const how = Math.floor(r() * 5);
       // (Paragraphs are joined by blank lines; `\n` here keeps a line in the same paragraph.)
-      if (how === 0) paragraphs.push(`> ${text}`, `[@${k}, p. ${1 + Math.floor(r() * 99)}]`);
+      if (how === 4) paragraphs.push(`${pick(['- > ', '1. > ', 'Term\n:   > '])}${text} [@${k}]`);
+      else if (how === 0) paragraphs.push(`> ${text}`, `[@${k}, p. ${1 + Math.floor(r() * 99)}]`);
       else if (how === 1) paragraphs.push(`> ${text.split(' ').slice(0, 3).join(' ')}\n> ${text.split(' ').slice(3).join(' ')} [@${k}]`);
       else if (how === 2) paragraphs.push(`As @${k} puts it:`, `> ${text}`);
       else paragraphs.push(`${prose()}`, `> ${text}\nlazy`, prose());

@@ -7,11 +7,15 @@
 //
 // What counts as a quote (outside code the one grammar proves Pandoc reads as
 // code — citation-token.ts; everything else counts, fail closed):
-//   - inline text in straight or typographic double quotes ("…", “…”) or in
-//     typographic single quotes (‘…’), paired the way Pandoc's smart-quote
-//     reader pairs them, one paragraph at a time;
+//   - inline text in straight or typographic double quotes ("…", “…”) or
+//     straight or typographic single quotes ('…', ‘…’), paired the way
+//     Pandoc's smart-quote reader pairs them, one paragraph at a time — an
+//     apostrophe inside a word (`it's`, `the authors'`) never opens one; the
+//     marks may be written as HTML entities (`&ldquo;`, `&#8220;`, `&quot;`,
+//     `&#39;` …) or escaped (`\"`): the export shows them as quotation marks;
 //   - a block quote: one quote per `>` run, lazy continuation lines included
-//     (Pandoc continues a block-quote paragraph on a line without `>`);
+//     (Pandoc continues a block-quote paragraph on a line without `>`), also
+//     inside a list item or a definition (`- > …`, `1. > …`, `:   > …`);
 //   - with at least `[verification] quote_min_words` words once citations are
 //     stripped (default 5: DEFAULT_QUOTE_MIN_WORDS). Fewer words is a scare
 //     quote or a quoted term, not a quotation.
@@ -108,13 +112,53 @@ function words(text: string): string[] {
  * link reduced to its text, whitespace collapsed.
  */
 function quoteText(raw: string): string {
-  return replaceCitations(raw, () => ' ')
+  return decodeTextEntities(replaceCitations(raw, () => ' '))
     .replace(/!?\[([^[\]]*)\]\([^()\s]*(?:\s+"[^"]*")?\)/g, '$1')
     .replace(/\\([!-/:-@[-`{-~])/g, '$1')
     .replace(/\*+/g, '')
     .replace(/(^|[\s\p{P}])_+|_+(?=[\s\p{P}]|$)/gu, '$1')
     .replace(/\s+/gu, ' ')
     .trim();
+}
+
+/** The quotation-mark entities Pandoc's smart reader reads as marks (charOrRef), by name. */
+const QUOTE_ENTITY_NAMES: Readonly<Record<string, string>> = { quot: '"', ldquo: '“', rdquo: '”', lsquo: '‘', rsquo: '’', apos: "'" };
+/** Windows-1252 code points HTML maps to quotation marks (`&#147;` is “). */
+const CP1252_QUOTES: Readonly<Record<number, string>> = { 145: '‘', 146: '’', 147: '“', 148: '”' };
+const QUOTE_CHARS = new Set(['"', "'", '“', '”', '‘', '’']);
+
+/** The character an entity reference stands for, or null. */
+function entityChar(name: string | undefined, dec: string | undefined, hex: string | undefined): string | null {
+  if (name !== undefined) return QUOTE_ENTITY_NAMES[name.toLowerCase()] ?? null;
+  const code = dec !== undefined ? Number(dec) : Number.parseInt(hex ?? '', 16);
+  if (!Number.isFinite(code)) return null;
+  const cp = CP1252_QUOTES[code];
+  if (cp !== undefined) return cp;
+  return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : null;
+}
+
+/**
+ * `md` with every quotation-mark entity (`&ldquo;`, `&#8220;`, `&#x201C;`,
+ * `&quot;`, `&#39;`, `&#147;` …) written as its mark — the export shows the
+ * mark, so the quote is paired like one typed directly. Entities never span
+ * a line, so line numbers are unchanged.
+ */
+function decodeQuoteEntities(md: string): string {
+  if (!md.includes('&')) return md;
+  return md.replace(/&(?:([A-Za-z]+)|#(\d{1,7})|#[xX]([0-9A-Fa-f]{1,6}));/g, (m, name?: string, dec?: string, hex?: string) => {
+    const c = entityChar(name, dec, hex);
+    return c !== null && QUOTE_CHARS.has(c) ? c : m;
+  });
+}
+
+/** Quote text as the export shows it: the common entities decoded (`&amp;` → `&`, `&#8212;` → `—`). */
+function decodeTextEntities(text: string): string {
+  if (!text.includes('&')) return text;
+  const named: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>', nbsp: '\u00a0', mdash: '—', ndash: '–', hellip: '…', ...QUOTE_ENTITY_NAMES };
+  return text.replace(/&(?:([A-Za-z]+)|#(\d{1,7})|#[xX]([0-9A-Fa-f]{1,6}));/g, (m, name?: string, dec?: string, hex?: string) => {
+    if (name !== undefined) return named[name.toLowerCase()] ?? m;
+    return entityChar(undefined, dec, hex) ?? m;
+  });
 }
 
 /** 1-based line of `offset` (lines end at `\n`). */
@@ -218,8 +262,46 @@ function citationBefore(md: string, at: number, from: number, cites: readonly Ci
 // Block quotes.
 // ---------------------------------------------------------------------------
 
-const BLOCK_LINE_RE = /^ {0,3}>/;
-const BLOCK_MARKERS_RE = /^(?: {0,3}> ?)+/;
+/**
+ * A list-item or definition marker a block quote may follow on its line
+ * (`- > …`, `1. > …`, `(a) > …`, `#. > …`, `(@) > …`, `:   > …`, `~ > …`).
+ */
+const ITEM_MARKER = String.raw`(?:[-*+:~]|\d{1,9}[.)]|\(?[A-Za-z]{1,4}[.)]|#[.)]|\(@[\w-]*\))`;
+/**
+ * A block-quote line: `>` after any indentation (a list item's continuation,
+ * a nested list) and any list or definition markers — Pandoc reads each as a
+ * BlockQuote. Deeper indentation outside a list is an indented code block to
+ * Pandoc, which the grammar cannot prove: counted, fail closed.
+ */
+const BLOCK_QUOTE_LINE_RE = new RegExp(String.raw`^([ \t]*)(?:${ITEM_MARKER}[ \t]+)*>`);
+const BLOCK_MARKERS_RE = new RegExp(String.raw`^(?:[ \t]*(?:${ITEM_MARKER}[ \t]+)*> ?)+`);
+const LIST_ITEM_LINE_RE = new RegExp(String.raw`^ {0,3}${ITEM_MARKER}[ \t]`);
+
+/** Columns of a line's leading whitespace (a tab to the next multiple of 4). */
+function indentWidth(ws: string): number {
+  let w = 0;
+  for (const ch of ws) w = ch === '\t' ? w + 4 - (w % 4) : w + 1;
+  return w;
+}
+
+/**
+ * True when line `i` is a block-quote line: `>` after at most three columns
+ * of indentation (and any list or definition markers), or after more inside
+ * a list or definition (a line indented under an item). Four columns outside
+ * a list is an indented code block to Pandoc, never a quote.
+ */
+function blockLine(lines: readonly Line[], i: number): boolean {
+  const m = BLOCK_QUOTE_LINE_RE.exec(lines[i]!.text);
+  if (m === null) return false;
+  if (indentWidth(m[1] ?? '') < 4) return true;
+  for (let j = i - 1; j >= 0; j -= 1) {
+    const t = lines[j]!.text;
+    if (/^[ \t\r]*$/.test(t)) continue;
+    if (LIST_ITEM_LINE_RE.test(t)) return true;
+    if (!/^[ \t]/.test(t)) return false; // an unindented line that is not an item ends the list
+  }
+  return false;
+}
 
 interface Line {
   readonly start: number;
@@ -246,7 +328,7 @@ function blockRuns(lines: readonly Line[]): Array<{ first: number; last: number;
   const out: Array<{ first: number; last: number; text: string }> = [];
   let i = 0;
   while (i < lines.length) {
-    if (!BLOCK_LINE_RE.test(lines[i]!.text)) {
+    if (!blockLine(lines, i)) {
       i += 1;
       continue;
     }
@@ -255,7 +337,7 @@ function blockRuns(lines: readonly Line[]): Array<{ first: number; last: number;
     let lazyOk = false;
     while (i < lines.length) {
       const l = lines[i]!;
-      if (BLOCK_LINE_RE.test(l.text)) {
+      if (blockLine(lines, i)) {
         const content = l.text.replace(BLOCK_MARKERS_RE, '');
         parts.push(content);
         lazyOk = !/^[ \t\r]*$/.test(content);
@@ -274,7 +356,7 @@ function blockRuns(lines: readonly Line[]): Array<{ first: number; last: number;
 /** The offset where the paragraph holding line `j` ends. */
 function paragraphEnd(lines: readonly Line[], j: number): number {
   let k = j;
-  while (k + 1 < lines.length && !isBlank(lines[k + 1]) && !BLOCK_LINE_RE.test(lines[k + 1]!.text)) k += 1;
+  while (k + 1 < lines.length && !isBlank(lines[k + 1]) && !blockLine(lines, k + 1)) k += 1;
   return lines[k]!.end;
 }
 
@@ -307,7 +389,7 @@ function blockCandidates(md: string, lines: readonly Line[], cites: readonly Cit
         blanks += 1;
       }
       const next = lines[j];
-      if (next !== undefined && !isBlank(next) && !BLOCK_LINE_RE.test(next.text)) {
+      if (next !== undefined && !isBlank(next) && !blockLine(lines, j)) {
         const ws = /^[ \t]*/.exec(next.text)?.[0].length ?? 0;
         const dashed = /^[ \t]*(?:[—–]|--?)[ \t]*/.exec(next.text)?.[0].length ?? -1;
         opener = cites.find((x) => x.start === next.start + ws || (dashed > ws && x.start === next.start + dashed)) ?? null;
@@ -322,9 +404,9 @@ function blockCandidates(md: string, lines: readonly Line[], cites: readonly Cit
       let j = run.first - 1;
       if (j >= 0 && isBlank(lines[j])) j -= 1;
       const lead = lines[j];
-      if (lead !== undefined && !isBlank(lead) && !BLOCK_LINE_RE.test(lead.text)) {
+      if (lead !== undefined && !isBlank(lead) && !blockLine(lines, j)) {
         let k = j;
-        while (k - 1 >= 0 && !isBlank(lines[k - 1]) && !BLOCK_LINE_RE.test(lines[k - 1]!.text)) k -= 1;
+        while (k - 1 >= 0 && !isBlank(lines[k - 1]) && !blockLine(lines, k - 1)) k -= 1;
         const c = citationBefore(md, lead.end, lines[k]!.start, cites);
         if (c !== null) cite = { c, src: md };
       }
@@ -358,8 +440,8 @@ interface Span {
 
 const ALNUM_RE = /[\p{L}\p{N}]/u;
 
-/** True when an odd run of backslashes ends just before `i`: the mark there is a literal, never a delimiter. */
-function escaped(md: string, i: number): boolean {
+/** True when an odd run of backslashes ends just before `i` (the mark there is escaped). */
+function oddBackslashesBefore(md: string, i: number): boolean {
   let n = 0;
   for (let j = i - 1; j >= 0 && md[j] === '\\'; j -= 1) n += 1;
   return n % 2 === 1;
@@ -370,15 +452,34 @@ function escaped(md: string, i: number): boolean {
  * right as Pandoc's smart-quote reader pairs them: outside a quote, `"` or
  * `“` followed by a non-space (a straight `"` also not right after a letter or
  * digit, where it is an inch mark or a closing quote) opens one; inside, the
- * next `"` or `”` closes it, and another `“` starts it again.
+ * next `"` or `”` closes it, and another `“` starts it again. An escaped `\"`
+ * is a literal mark inside such a quote; outside every one, escaped marks
+ * pair among themselves (`\"…\"`): Pandoc prints them as straight `"`, which
+ * a reader of the export sees as quotation marks.
  */
 function doubleQuoteSpans(md: string, from: number, to: number): Span[] {
+  const out = smartDoubleQuoteSpans(md, from, to);
+  let open = -1;
+  for (let i = from; i < to; i += 1) {
+    if (md[i] !== '"' || !oddBackslashesBefore(md, i) || out.some((s) => i >= s.open && i <= s.close)) continue;
+    if (open === -1) {
+      if (/\S/u.test(md[i + 1] ?? ' ')) open = i;
+    } else {
+      out.push({ open, close: i });
+      open = -1;
+    }
+  }
+  return out.sort((a, b) => a.open - b.open);
+}
+
+/** The double-quoted spans Pandoc's smart reader makes (escaped marks are literals). */
+function smartDoubleQuoteSpans(md: string, from: number, to: number): Span[] {
   const out: Span[] = [];
   let open = -1;
   for (let i = from; i < to; i += 1) {
     const c = md[i];
     if (c !== '"' && c !== '“' && c !== '”') continue;
-    if (escaped(md, i)) continue;
+    if (oddBackslashesBefore(md, i)) continue;
     if (open !== -1 && c === '“' && /\S/u.test(md[i + 1] ?? ' ')) {
       open = i;
       continue;
@@ -396,33 +497,53 @@ function doubleQuoteSpans(md: string, from: number, to: number): Span[] {
   return out;
 }
 
+/** Elisions a straight `'` opens without opening a quote ('90s, 'tis, 'em, 'n', 'til, 'cause). */
+const ELISION_RE = /^'(?:\d\d?s\b|tis\b|twas\b|em\b|n'|til\b|cause\b)/iu;
+
 /**
- * The typographic single-quoted spans of one paragraph. A `’` right before a
- * letter or digit is an apostrophe (`it’s`), never a closing mark. Of the
- * closing marks before the next `‘`, the first one followed by a citation
- * closes the quote; without one, the last does (a plural possessive `the
- * students’` inside the quote never cuts it short).
+ * True when the mark at `i` can open a single quote: `‘`, or a straight `'`
+ * that is not inside a word (`it's`, `the authors'` — right after a letter
+ * or digit) and not an elision; either followed by a non-space.
+ */
+function singleOpener(md: string, i: number): boolean {
+  const c = md[i];
+  if (c !== '‘' && c !== "'") return false;
+  if (!/\S/u.test(md[i + 1] ?? ' ')) return false;
+  if (c === "'" && (ALNUM_RE.test(md[i - 1] ?? ' ') || ELISION_RE.test(md.slice(i, i + 8)))) return false;
+  return true;
+}
+
+/** True when the mark at `i` can close a single quote: `’` or `'` not followed by a letter or digit (`it’s` is an apostrophe), a `'` not after a space. */
+function singleCloser(md: string, i: number): boolean {
+  const c = md[i];
+  if (c !== '’' && c !== "'") return false;
+  if (ALNUM_RE.test(md[i + 1] ?? ' ')) return false;
+  return c === '’' || !/\s/u.test(md[i - 1] ?? ' ');
+}
+
+/**
+ * The single-quoted spans of one paragraph, straight ('…') or typographic
+ * (‘…’), mixed as Pandoc mixes them. Of the closing marks before the next
+ * opening mark, the first one followed by a citation closes the quote;
+ * without one, the last does (a plural possessive `the students’` inside the
+ * quote never cuts it short).
  */
 function singleQuoteSpans(md: string, from: number, to: number, cites: readonly CitationCluster[]): Span[] {
   const out: Span[] = [];
-  let i = from;
-  while (i < to) {
-    const open = md.indexOf('‘', i);
-    if (open === -1 || open >= to) break;
-    if (!/\S/u.test(md[open + 1] ?? ' ')) {
-      i = open + 1;
-      continue;
-    }
-    const nextOpen = md.indexOf('‘', open + 1);
-    const limit = nextOpen === -1 || nextOpen > to ? to : nextOpen;
+  const nextOpener = (at: number): number => {
+    for (let j = at; j < to; j += 1) if (singleOpener(md, j)) return j;
+    return -1;
+  };
+  let open = nextOpener(from);
+  while (open !== -1) {
+    const nextOpen = nextOpener(open + 1);
+    const limit = nextOpen === -1 ? to : nextOpen;
     const closers: number[] = [];
-    for (let j = md.indexOf('’', open + 1); j !== -1 && j < limit; j = md.indexOf('’', j + 1)) {
-      if (!ALNUM_RE.test(md[j + 1] ?? ' ')) closers.push(j);
-    }
+    for (let j = open + 1; j < limit; j += 1) if (singleCloser(md, j)) closers.push(j);
     const cited = closers.find((j) => citationRightAfter(md, j + 1, cites, to) !== null);
     const close = cited ?? closers[closers.length - 1];
     if (close !== undefined) out.push({ open, close });
-    i = close !== undefined ? close + 1 : limit;
+    open = close !== undefined ? nextOpener(close + 1) : nextOpen;
   }
   return out;
 }
@@ -458,7 +579,8 @@ function inlineCandidates(
     for (const s of spans) {
       if (s.open < outerEnd) continue; // a quote inside a quote is part of the outer one
       outerEnd = s.close;
-      const raw = md.slice(s.open + 1, s.close);
+      // An escaped closing mark (`\"`): its backslash is not part of the quote.
+      const raw = md.slice(s.open + 1, oddBackslashesBefore(md, s.close) ? s.close - 1 : s.close);
       const text = quoteText(raw);
       if (words(text).length < minWords) continue;
       const lineStart = md.lastIndexOf('\n', s.open) + 1;
@@ -494,7 +616,7 @@ function inlineCandidates(
  */
 export function extractQuotes(draftMd: string, opts: ExtractQuotesOptions = {}): ExtractedQuote[] {
   const minWords = Math.max(1, Math.floor(opts.minWords ?? DEFAULT_QUOTE_MIN_WORDS));
-  const md = draftMd.replace(/\r\n/g, '\n');
+  const md = decodeQuoteEntities(draftMd.replace(/\r\n/g, '\n'));
   const lines = linesOf(md);
   const cites = findCitations(md);
 
