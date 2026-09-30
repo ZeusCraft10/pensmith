@@ -18,6 +18,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runPass3 } from '../bin/lib/verify/pass3.js';
+import { __setHttpTestSeams } from '../bin/lib/http.js';
 import { _resetSourceTextMemoForTest, openAccessPdfText, sourceTextPassage } from '../bin/lib/verify/source-text.js';
 import { extractPdf } from '../bin/lib/pdf-text.js';
 import { textPdf } from './helpers/text-pdf.js';
@@ -185,6 +186,40 @@ test('D-20-03: no text and no answer (a refused connection) is UNVERIFIABLE-NETW
     const [down] = await pass3(`"${REAL}" [@k].`, new Map([['k', { DOI: doi }]]));
     assert.equal(down?.verdict, 'UNVERIFIABLE-NETWORK', down?.reason);
     assert.match(down?.reason ?? '', /^no answer from Unpaywall for DOI .+ — retry verification when online$/);
+  }, { contactEmail: EMAIL });
+});
+
+test('D-20-03 / VRFY-19: Unpaywall answers but the PDF host name does not resolve (offline, the resolver down) — UNVERIFIABLE-NETWORK, never an acceptable "fetch failed"', async () => {
+  await liveLane(async (agent) => {
+    const doi = `10.5555/${uniq('dns')}`;
+    for (const code of ['EAI_AGAIN', 'ENOTFOUND']) {
+      __setHttpTestSeams({
+        resolve: async (host: string) => {
+          if (host === 'pdf-host.example') throw Object.assign(new Error(`getaddrinfo ${code} ${host}`), { code });
+          return [{ address: '192.0.2.1', family: 4 }];
+        },
+      });
+      try {
+        unpaywall(agent, doi, oaRecord(doi, ['https://pdf-host.example/paper.pdf']));
+        const [row] = await pass3(`"${REAL}" [@k].`, new Map([['k', { DOI: doi }]]));
+        assert.equal(row?.verdict, 'UNVERIFIABLE-NETWORK', `${code}: ${row?.reason}`);
+        assert.match(row?.reason ?? '', new RegExp(`host name did not resolve \\(${code}\\) — retry verification when online`));
+        assert.doesNotMatch(row?.reason ?? '', /fetch failed|SSRF guard/);
+        if (code === 'ENOTFOUND') assert.match(row?.reason ?? '', /the link is dead: add the source's PDF/);
+      } finally {
+        __setHttpTestSeams(null);
+      }
+    }
+  }, { contactEmail: EMAIL });
+});
+
+test('VRFY-19: a policy refusal of the PDF link (a private address) stays an answer without text — UNVERIFIABLE-QUOTE naming it', async () => {
+  await liveLane(async (agent) => {
+    const doi = `10.5555/${uniq('private')}`;
+    unpaywall(agent, doi, oaRecord(doi, ['https://10.0.0.7/paper.pdf']));
+    const [row] = await pass3(`"${REAL}" [@k].`, new Map([['k', { DOI: doi }]]));
+    assert.equal(row?.verdict, 'UNVERIFIABLE-QUOTE', row?.reason);
+    assert.match(row?.reason ?? '', /fetch failed: SSRF guard/);
   }, { contactEmail: EMAIL });
 });
 

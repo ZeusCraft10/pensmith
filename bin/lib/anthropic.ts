@@ -43,7 +43,7 @@
 import type Anthropic from '@anthropic-ai/sdk';                  // types only — no network
 import type { ChatCompletion } from 'openai/resources/index.js'; // types only — no network
 import { createHash } from 'node:crypto';
-import { fetch, isRetryableStatus, SsrfBlockedError, type HttpResponse } from './http.js';
+import { fetch, isRetryableStatus, dnsLookupFailure, type HttpResponse } from './http.js';
 import { isOfflineMode } from './http-mock.js';
 import {
   getProviderApiKey,
@@ -753,9 +753,6 @@ function duration(ms: number): string {
   return ms < 1000 ? `${Math.max(0, Math.round(ms))} ms` : `${Math.round(ms / 1000)}s`;
 }
 
-/** DNS failure codes: the endpoint's host name does not resolve (a typo, or no network). */
-const DNS_FAILURE_CODES: ReadonlySet<string> = new Set(['ENOTFOUND', 'EAI_AGAIN', 'EAI_NONAME', 'EAI_FAIL', 'ENODATA']);
-
 function transportError(plan: CallPlan, err: unknown, elapsedMs: number): PensmithError {
   const e = err as { status?: number; response?: HttpResponse; code?: string; name?: string; message?: string };
   const where = plan.rt.endpointSource === 'global' ? `"endpoint" in ${globalRuntimeConfigPath()}` : `the ${plan.provider} endpoint`;
@@ -763,9 +760,10 @@ function transportError(plan: CallPlan, err: unknown, elapsedMs: number): Pensmi
   // the DNS code). For the configured model endpoint that is not a policy
   // refusal: the host name does not resolve — say where to fix it (RUN-12).
   // A genuine policy refusal (a private or metadata address) keeps its wording.
-  if (err instanceof SsrfBlockedError && typeof e.code === 'string' && DNS_FAILURE_CODES.has(e.code)) {
+  const dns = dnsLookupFailure(err);
+  if (dns !== null) {
     return new ProviderHttpError(
-      `could not reach ${plan.provider} at ${plan.endpoint} (${e.code}: the host name does not resolve) — check the ` +
+      `could not reach ${plan.provider} at ${plan.endpoint} (${dns}: the host name does not resolve) — check the ` +
         `network, or fix ${where}`,
       null,
     );

@@ -337,6 +337,23 @@ export class SsrfBlockedError extends PensmithError {
   }
 }
 
+/** Resolver error codes: the host name did not resolve (a typo, a dead domain, or no network). */
+const DNS_FAILURE_CODES: ReadonlySet<string> = new Set(['ENOTFOUND', 'EAI_AGAIN', 'EAI_NONAME', 'EAI_FAIL', 'ENODATA', 'ETIMEOUT']);
+
+/**
+ * The resolver code when `err` is the egress gate's fail-closed refusal of a
+ * host name that did not resolve (the SsrfBlockedError resolveHost throws),
+ * else null. Unlike the gate's policy refusals (a private or loopback
+ * address, a scheme, a redirect), this is NO ANSWER: offline, the resolver
+ * down, or a name that does not exist — a caller must not read it as a
+ * definitive answer about the resource (D-20-03).
+ */
+export function dnsLookupFailure(err: unknown): string | null {
+  if (!(err instanceof SsrfBlockedError)) return null;
+  const code = (err as { code?: unknown }).code;
+  return typeof code === 'string' && DNS_FAILURE_CODES.has(code) ? code : null;
+}
+
 /** Extract the embedded IPv4 of an IPv4-mapped IPv6 address, or null. */
 function mappedV4(addr: string): string | null {
   // Dotted form:     ::ffff:127.0.0.1
@@ -507,7 +524,9 @@ async function resolveHost(host: string, resolveFn: Resolver): Promise<ResolvedA
     throw err;
   }
   if (!Array.isArray(addrs) || addrs.length === 0) {
-    throw new SsrfBlockedError(`SSRF guard: "${host}" resolved to no address (blocked, fail-closed)`);
+    const err = new SsrfBlockedError(`SSRF guard: "${host}" resolved to no address (blocked, fail-closed)`) as SsrfBlockedError & { code?: string };
+    err.code = 'ENODATA';
+    throw err;
   }
   return addrs.map((a) => ({ address: a.address, family: a.family }));
 }

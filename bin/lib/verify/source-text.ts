@@ -52,6 +52,7 @@ import {
   RedirectError,
   ResponseTooLargeError,
   SsrfBlockedError,
+  dnsLookupFailure,
   sourceTtlMs,
   type HttpSource,
 } from '../http.js';
@@ -259,9 +260,26 @@ function hostOf(url: string): string {
   }
 }
 
-/** A thrown fetch error as an attempt: a refusal by policy is an answer (no-text); anything else is no answer. */
+/**
+ * A thrown fetch error as an attempt: a refusal by policy (a private or
+ * loopback address, a redirect outside policy, an oversized body) is an
+ * answer (no-text, which the user may accept); anything else is no answer —
+ * a host name that did not resolve (offline, the resolver down) included, so
+ * a cached Unpaywall answer with no network never invites an acceptance
+ * (VRFY-19, D-20-03).
+ */
 function fetchFailure(err: unknown, label: string): TextAttempt {
   if (isOfflineEgressError(err)) return { kind: 'no-answer', reason: `${label}: ${err.message}` };
+  const dns = dnsLookupFailure(err);
+  if (dns !== null) {
+    const dead = dns === 'ENOTFOUND' || dns === 'EAI_NONAME' || dns === 'ENODATA';
+    return {
+      kind: 'no-answer',
+      reason:
+        `no answer from ${label}: its host name did not resolve (${dns}) — retry verification when online` +
+        (dead ? "; if this repeats while you are online, the link is dead: add the source's PDF (`pensmith add <pdf>`)" : ''),
+    };
+  }
   if (err instanceof SsrfBlockedError || err instanceof RedirectError || err instanceof ResponseTooLargeError) {
     return { kind: 'no-text', reason: `fetch failed: ${errorFailureReason(err)} (${label})` };
   }
