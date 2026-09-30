@@ -39,6 +39,8 @@ Four streams built Phase 20 in parallel on seam S-C, then an integration pass me
 - `--accept-quote` on an unattributed quote said `([@(unattributed)])`; it says `(no citation)`.
 - HARDEN-03's generator made a clean draft only ~1 time in 10, so its coverage assertion (> 10% clean) failed on some seeds (seed 1645320681); a quarter of the drafts now come from clean blocks.
 - "an Europe PMC answer" → "a Europe PMC answer".
+- With a missing or empty CITATIONS.bib the gate core rewrote every FABRICATED row to "the bibliography is missing / has no entries", including a bare identifier found in the prose, whose verdict came from its registrar; only cited keys' rows are rewritten now (`tests/gate-core.test.ts`).
+- The live e2e recording found two IEEE records that Crossref holds with the family and given names swapped ("Qi, Lin", "Xiulian, Du"), which Pass 1 called MIS-CITED. `name-match.ts` `authorSimilarity` now also reads the two names crosswise; both parts must match, and an initial matches the name it begins, so a different person still fails (`tests/name-match.test.ts`).
 - The test runner leaked every test's mkdtemp dir into the system temp dir (the streams filled a disk with ~85k of them): `scripts/run-tests.mjs` points `TMPDIR` / `TEMP` / `TMP` at the per-run dir (the data dir is its `data/`), deleted with the run.
 
 **Cross-stream acceptance suites (§7.3).**
@@ -71,12 +73,13 @@ Edited in place, no new files there:
 
 - Phase 23 (PLUG-07 / PLUG-10): the MCP tools call `bin/lib/verify/gate.ts` `recomputeGate` and `bin/lib/quote-acceptance.ts` `recordQuoteAcceptances` (after an AskUserQuestion confirmation) as they stand.
 - Phase 21/22 (EXP-03 / EXP-04): note-style footnotes are produced by the exporter after the gate and never re-enter it.
-- The recorded e2e corpus (D-20-16) still replays (an unrecorded PubMed `efetch` is named and never fatal); re-record it with `npm run cassettes:refresh -- --corpus e2e` when OpenAlex's keyless daily budget is available (it was exhausted by the live lanes on 2026-09-30).
+- The recorded e2e corpus (D-20-16) was re-recorded after the merge with `npm run cassettes:refresh -- --corpus e2e` (`PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org`). It has six kept sources, each OK at live Pass 1. The OpenAlex searches (keyless daily budget) and some Semantic Scholar searches were rate-limited and are recorded as expected misses. PubMed `efetch` answers exceed the 51200-byte cassette cap and stay unrecorded; this is named in the adapter's status and is never fatal. Re-record the corpus once OpenAlex has keyless budget again if you want those searches in it.
 
 ## Verification (integration, 2026-09-30, Node 22, as root in the cloud container)
 
 - `npm run prebuild`, `lint`, `typecheck`, `build`, `validate:manifests`: green; the build leaves the tree clean.
 - `CI=true npm test` with pandoc 3.9 on `PATH`: 2661 tests, 2660 pass — the one failure is the root-only `tests/atomic-write.test.ts` "preserves OLD content on rename/write failure" (CLAUDE.md gotcha). HARDEN-03 ran 1000 drafts against pandoc in ~4 s.
+- `npm run test:coverage`: 93 % lines and statements, 84.41 % branches, 90.12 % functions (gate 80 / 66).
 - `npm run test:tier-contract`: 58 / 58. `node scripts/e2e-smoke.mjs`: 17 PASS, 0 FINDING, 0 FAIL.
 - `PENSMITH_CONTACT_EMAIL=pensmith-dev@example.org npm run live:verify` (live): every VRFY-11 identifier OK and `10.99999/fake.001` FABRICATED; the metadata search names the DOI it found and an unknown work is UNRESOLVABLE; 12 / 12 known-bad FABRICATED; 7 / 7 known mis-cited MIS-CITED; Wakefield RETRACTED (VERIFICATION.md, stderr, exit 4); self-consistency 0 of 65 (computer science) and 0 of 56 (medicine) blocked; Pass 3 live — the NumPy sentence PASS and the penguin sentence NOT_FOUND, the PLOS PDF 49,906 characters, arXiv 1706.03762 through its redirect, a second run from the caches with 0 connections. (OpenAlex's keyless budget was exhausted and Semantic Scholar answered 429 during the research half; both are reported, not counted.)
 - The PRD §15 assignment ("Write a 1500-word literature review on attention mechanisms in transformers, APA style.") reached done unaided with the RUN-21 mock LLM as the model and live sources: 8 bare `pensmith --yolo` runs (new, research, outline, three sections planned → written → verified, compile, done); every section `verified` (98 citations OK, 7 of them "retraction status unknown" for DataCite DOIs), `last_verified` on every source in LIBRARY.json and `.paper/CITATIONS.bib`, `export/DRAFT.docx` with no pensmith trace and `export/CITATIONS.bib` with no `last_verified`.
