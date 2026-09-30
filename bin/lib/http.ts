@@ -801,6 +801,9 @@ function scrubContactEmail(text: string): string {
 // ============================================================
 export type HttpSource =
   | 'crossref'
+  // Phase 20 (VRFY-11, D-20-10): DataCite's REST API (api.datacite.org) —
+  // Zenodo, figshare, Dryad and the other DataCite DOIs Pass 1 re-fetches.
+  | 'datacite'
   | 'openalex'
   | 'unpaywall'
   | 'arxiv'
@@ -854,6 +857,14 @@ export interface FetchOptions {
   timeoutMs?: number;
   /** Skip the cache entirely (read AND write). */
   noCache?: boolean;
+  /**
+   * Skip the cache READ only: the request goes to the network and a cacheable
+   * answer is written back (Phase 20, VRFY-28, D-20-15). Pass 1 sets it for a
+   * citation whose last_verified is older than `[verification]
+   * recheck_after_days`, so the re-check is a real answer and the next run is
+   * served that fresh answer from the cache. Ignored offline (no cache).
+   */
+  refresh?: boolean;
   /** Skip the retry wrapper (fire-and-fail). */
   noRetry?: boolean;
   /**
@@ -915,6 +926,8 @@ const ONE_DAY_MS = 24 * 3_600_000;
 const ONE_HOUR_MS = 3_600_000;
 const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
   crossref: 7 * ONE_DAY_MS,
+  // Phase 20 (VRFY-11): a DataCite record changes as rarely as a Crossref one.
+  datacite: 7 * ONE_DAY_MS,
   openalex: 7 * ONE_DAY_MS,
   arxiv: 7 * ONE_DAY_MS,
   pubmed: 7 * ONE_DAY_MS,
@@ -948,6 +961,9 @@ const RPS_BY_SOURCE: Record<HttpSource, number> = {
   // (`polite-array`; single-work lookups allow 10, the public pool 1) — seed at
   // 3/s and let its headers lower it (never raise it).
   crossref: 3,
+  // DataCite REST API: 3,000 requests per 5 minutes per IP (10/s documented);
+  // pensmith asks at most 5/s (docs/SOURCES.md, Phase 20 VRFY-11).
+  datacite: 5,
   // OpenAlex: 10/s within the (keyed) daily budget.
   openalex: 10,
   unpaywall: 10,
@@ -1104,6 +1120,7 @@ const HOST_RPS_FLOOR: Readonly<Record<string, number>> = lookupTable({
   'export.arxiv.org': 1 / 3,
   'arxiv.org': 1 / 3,
   'api.crossref.org': 3,
+  'api.datacite.org': 5,
   'eutils.ncbi.nlm.nih.gov': 3,
   'api.semanticscholar.org': 1,
   'openlibrary.org': 1,
@@ -1119,6 +1136,7 @@ const HOST_RPS_FLOOR: Readonly<Record<string, number>> = lookupTable({
  */
 const RATE_HEADER_HOSTS: ReadonlySet<string> = new Set([
   'api.crossref.org',
+  'api.datacite.org',
   'api.openalex.org',
   'export.arxiv.org',
   'eutils.ncbi.nlm.nih.gov',
@@ -2223,7 +2241,9 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
 
   // --- Cache short-circuit (live mode, GET only, opt-in) ---
   const cacheAllowed = !mode.sourcesOffline && method === 'GET' && !opts.noCache && llm === undefined && opts.prefixBytes === undefined;
-  if (cacheAllowed) {
+  // FetchOptions.refresh (VRFY-28): the cache is not READ, but a cacheable
+  // answer is still written back below.
+  if (cacheAllowed && opts.refresh !== true) {
     const cached = await readCache(key, ttlMs);
     if (cached) {
       recordHttp({ ...base, status: cached.status, cache: 'hit', bytes: Buffer.byteLength(cached.body, 'utf8'), ms: Date.now() - started });

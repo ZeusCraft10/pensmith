@@ -38,7 +38,7 @@ import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES, formatRetryAfter } from '.
 import { contactEmail } from '../contact-email.js';
 import { openAlexKey } from '../runtime.js';
 import { type SearchOptions } from './search-failure.js';
-import { exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
+import { answeredAt, exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
 import { displayAuthorName } from '../person-name.js';
@@ -147,7 +147,7 @@ function httpUrl(v: unknown): string | undefined {
   }
 }
 
-export function openAlexToCandidate(item: OpenAlexWork): SourceCandidate | null {
+export function openAlexToCandidate(item: OpenAlexWork, checkedAt: string = new Date().toISOString()): SourceCandidate | null {
   const doi = stripDoiUrl(item.doi);
   const id = str(item.id) ?? doi;
   if (!id) return null;
@@ -200,7 +200,7 @@ export function openAlexToCandidate(item: OpenAlexWork): SourceCandidate | null 
     ...(retracted
       ? { retraction_status: 'retracted' as const, retraction_details: 'OpenAlex marks this work as retracted' }
       : {}),
-    last_verified: new Date().toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...(year !== undefined ? { year } : {}) }),
     raw: item,
   };
@@ -290,7 +290,8 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     return [];
   }
   const results = (JSON.parse(ex.res.body) as { results: OpenAlexWork[] }).results;
-  return results.map(openAlexToCandidate).filter((c): c is SourceCandidate => c !== null);
+  const at = answeredAt(ex.res);
+  return results.map((r) => openAlexToCandidate(r, at)).filter((c): c is SourceCandidate => c !== null);
 }
 
 /**
@@ -326,7 +327,7 @@ export async function lookupById(id: string): Promise<LookupResult> {
     if (ex.res.status === 404) return lookupNotFound('HTTP 404 (OpenAlex has no such work)');
     return lookupFailed(statusReason(ex.res), { status: ex.res.status });
   }
-  const candidate = openAlexToCandidate(JSON.parse(ex.res.body) as OpenAlexWork);
+  const candidate = openAlexToCandidate(JSON.parse(ex.res.body) as OpenAlexWork, answeredAt(ex.res));
   if (candidate === null) return lookupFailed('the OpenAlex record has no title or no authors (an incomplete registrar record — asking again gives the same answer)', { status: 200, permanent: true });
   return lookupFound(candidate);
 }

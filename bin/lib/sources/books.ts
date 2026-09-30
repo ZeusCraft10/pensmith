@@ -43,7 +43,7 @@
 import { plainTextOpt } from '../markup.js';
 import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { type SearchOptions } from './search-failure.js';
-import { exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
+import { answeredAt, exchange, jsonShape, statusReason, validator, type Exchange, type LookupOptions, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
 import { displayAuthorName } from '../person-name.js';
@@ -151,7 +151,7 @@ function workId(key: string | undefined): string | undefined {
 }
 
 /** An Open Library work (+ its matching edition) as a book candidate. */
-export function openLibraryToCandidate(work: OlWork, wantIsbn?: string): SourceCandidate | null {
+export function openLibraryToCandidate(work: OlWork, wantIsbn?: string, checkedAt: string = new Date().toISOString()): SourceCandidate | null {
   const editions = work.editions?.docs ?? [];
   const edition = wantIsbn
     ? editions.find((e) => (e.isbn ?? []).some((i) => toIsbn13(String(i)) === wantIsbn))
@@ -178,14 +178,14 @@ export function openLibraryToCandidate(work: OlWork, wantIsbn?: string): SourceC
     ...(isbn !== undefined ? { isbn } : {}),
     type: 'book',
     retracted: false,
-    last_verified: new Date().toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...(year !== undefined ? { year } : {}) }),
     raw: { openLibrary: { work: work.key, edition: edition?.key } },
   };
 }
 
 /** A Google Books volume as a book candidate (the ISBN it was asked for must be among its identifiers). */
-export function googleBooksToCandidate(volume: GbVolume, wantIsbn: string): SourceCandidate | null {
+export function googleBooksToCandidate(volume: GbVolume, wantIsbn: string, checkedAt: string = new Date().toISOString()): SourceCandidate | null {
   const info = volume.volumeInfo ?? {};
   const ids = (info.industryIdentifiers ?? []).map((x) => toIsbn13(String(x.identifier ?? ''))).filter((x): x is string => x !== null);
   if (!ids.includes(wantIsbn)) return null;
@@ -209,7 +209,7 @@ export function googleBooksToCandidate(volume: GbVolume, wantIsbn: string): Sour
     isbn: wantIsbn,
     type: 'book',
     retracted: false,
-    last_verified: new Date().toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...(year !== undefined ? { year } : {}) }),
     raw: { googleBooks: volume.id ?? null },
   };
@@ -229,16 +229,16 @@ const GB_VOLUMES: ShapeCheck = jsonShape(
   'Google Books volume list',
 );
 
-async function openLibrary(url: string): Promise<Exchange> {
+async function openLibrary(url: string, opts: LookupOptions = {}): Promise<Exchange> {
   return exchange(
-    () => httpFetch(url, { source: 'books', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(OL_SEARCH) }),
+    () => httpFetch(url, { source: 'books', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(OL_SEARCH), ...(opts.refresh === true ? { refresh: true } : {}) }),
     { service: 'Open Library', check: OL_SEARCH },
   );
 }
 
-async function googleBooks(url: string): Promise<Exchange> {
+async function googleBooks(url: string, opts: LookupOptions = {}): Promise<Exchange> {
   return exchange(
-    () => httpFetch(url, { source: 'books', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(GB_VOLUMES) }),
+    () => httpFetch(url, { source: 'books', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(GB_VOLUMES), ...(opts.refresh === true ? { refresh: true } : {}) }),
     { service: 'Google Books', check: GB_VOLUMES, rateLimited: () => 'Google Books keyless quota exhausted (HTTP 429)' },
   );
 }
@@ -260,8 +260,41 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     opts.onFailure?.(statusReason(ex.res));
     return [];
   }
+  const at = answeredAt(ex.res);
   const docs = (JSON.parse(ex.res.body) as { docs: OlWork[] }).docs;
-  return docs.map((d) => openLibraryToCandidate(d)).filter((c): c is SourceCandidate => c !== null);
+  return docs.map((d) => openLibraryToCandidate(d, undefined, at)).filter((c): c is SourceCandidate => c !== null);
+}
+
+/**
+ * The title-search URL (Phase 20, VRFY-12, D-20-11): Open Library's `title` +
+ * `author` fields (exported for the recorder and tests — the exact request).
+ */
+export function titleSearchUrl(title: string, author: string | null, limit = 5): string {
+  return (
+    `${OPEN_LIBRARY}/search.json?title=${encodeURIComponent(title)}` +
+    (author ? `&author=${encodeURIComponent(author)}` : '') +
+    `&fields=${encodeURIComponent(FIELDS)}&limit=${limit}`
+  );
+}
+
+/** A title search's outcome: the works Open Library found, or why it did not answer. */
+export type TitleSearchResult =
+  | { readonly kind: 'ok'; readonly candidates: SourceCandidate[] }
+  | { readonly kind: 'failed'; readonly reason: string };
+
+/**
+ * Pass 1's metadata search for a book with no ISBN (VRFY-12): Open Library's
+ * title (+ first-author surname) search. An empty list is Open Library's
+ * definitive "no such book"; `failed` is no answer. The typed
+ * OfflineEgressError is rethrown.
+ */
+export async function searchTitle(title: string, author: string | null, opts: LookupOptions = {}): Promise<TitleSearchResult> {
+  const ex = await openLibrary(titleSearchUrl(title, author), opts);
+  if (ex.kind === 'failed') return { kind: 'failed', reason: `Open Library: ${ex.reason}` };
+  if (ex.kind === 'status') return { kind: 'failed', reason: `Open Library: ${statusReason(ex.res)}` };
+  const at = answeredAt(ex.res);
+  const docs = (JSON.parse(ex.res.body) as { docs: OlWork[] }).docs;
+  return { kind: 'ok', candidates: docs.map((d) => openLibraryToCandidate(d, undefined, at)).filter((c): c is SourceCandidate => c !== null) };
 }
 
 type Attempt = { kind: 'found'; candidate: SourceCandidate } | { kind: 'not-found'; reason: string } | { kind: 'failed'; reason: string; status?: number };
@@ -325,14 +358,16 @@ async function editionAuthors(editionKey: string, indexNames: readonly string[])
   return kept.length > 0 ? kept : null;
 }
 
-async function lookupIsbn(isbn: string): Promise<LookupResult> {
+async function lookupIsbn(isbn: string, opts: LookupOptions): Promise<LookupResult> {
+  const olEx = await openLibrary(`${OPEN_LIBRARY}/search.json?isbn=${isbn}&fields=${encodeURIComponent(FIELDS)}&limit=1`, opts);
+  const olAt = olEx.kind === 'ok' ? answeredAt(olEx.res) : undefined;
   const ol = attemptFrom(
-    await openLibrary(`${OPEN_LIBRARY}/search.json?isbn=${isbn}&fields=${encodeURIComponent(FIELDS)}&limit=1`),
+    olEx,
     'Open Library',
     (body) => {
       const docs = (JSON.parse(body) as { docs: OlWork[] }).docs;
       for (const d of docs) {
-        const c = openLibraryToCandidate(d, isbn);
+        const c = openLibraryToCandidate(d, isbn, olAt);
         if (c) return c;
       }
       return null;
@@ -348,13 +383,15 @@ async function lookupIsbn(isbn: string): Promise<LookupResult> {
   }
 
   // The keyless fallback (D-19-14).
+  const gbEx = await googleBooks(`${GOOGLE_BOOKS}/books/v1/volumes?q=${encodeURIComponent(`isbn:${isbn}`)}`, opts);
+  const gbAt = gbEx.kind === 'ok' ? answeredAt(gbEx.res) : undefined;
   const gb = attemptFrom(
-    await googleBooks(`${GOOGLE_BOOKS}/books/v1/volumes?q=${encodeURIComponent(`isbn:${isbn}`)}`),
+    gbEx,
     'Google Books',
     (body) => {
       const items = (JSON.parse(body) as { items?: GbVolume[] }).items ?? [];
       for (const v of items) {
-        const c = googleBooksToCandidate(v, isbn);
+        const c = googleBooksToCandidate(v, isbn, gbAt);
         if (c) return c;
       }
       return null;
@@ -368,16 +405,18 @@ async function lookupIsbn(isbn: string): Promise<LookupResult> {
   return lookupFailed(`${ol.reason}; ${gb.reason}`, status !== undefined ? { status } : {});
 }
 
-async function lookupWork(id: string): Promise<LookupResult> {
+async function lookupWork(id: string, opts: LookupOptions): Promise<LookupResult> {
   const ex = await openLibrary(
     `${OPEN_LIBRARY}/search.json?q=${encodeURIComponent(`key:/works/${id}`)}&fields=${encodeURIComponent(FIELDS)}&limit=1`,
+    opts,
   );
+  const at = ex.kind === 'ok' ? answeredAt(ex.res) : undefined;
   const a = attemptFrom(
     ex,
     'Open Library',
     (body) => {
       const doc = (JSON.parse(body) as { docs: OlWork[] }).docs.find((d) => workId(d.key) === id);
-      return doc ? openLibraryToCandidate(doc) : null;
+      return doc ? openLibraryToCandidate(doc, undefined, at) : null;
     },
     `no work ${id}`,
   );
@@ -390,13 +429,13 @@ async function lookupWork(id: string): Promise<LookupResult> {
  * A book by identifier: `isbn:<ISBN-10|13>` (or a bare, checksum-valid ISBN)
  * or an Open Library work id (`OL3259254W`, `/works/OL3259254W`).
  */
-export async function lookupById(id: string): Promise<LookupResult> {
+export async function lookupById(id: string, opts: LookupOptions = {}): Promise<LookupResult> {
   const s = id.trim();
   const work = workId(s.replace(/^openlibrary:/i, ''));
-  if (work) return lookupWork(work);
+  if (work) return lookupWork(work, opts);
   const isbn = toIsbn13(s);
   if (isbn === null) return lookupNotFound(`not an ISBN or Open Library work id: ${JSON.stringify(s.slice(0, 80))}`);
-  return lookupIsbn(isbn);
+  return lookupIsbn(isbn, opts);
 }
 
 export async function fetchById(id: string): Promise<SourceCandidate | null> {

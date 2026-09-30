@@ -33,7 +33,7 @@
 
 import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { type SearchOptions } from './search-failure.js';
-import { exchange, jsonShape, statusReason, validator, type ShapeCheck } from './registrar-response.js';
+import { answeredAt, exchange, jsonShape, statusReason, validator, type LookupOptions, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { formatRetractionNotice, isRetractionUpdateType, type CrossrefUpdate } from './retraction-watch.js';
 import { generateCitekey } from '../citekey.js';
@@ -79,6 +79,10 @@ export interface CrossrefItem {
   publisher?: string;
   ISBN?: string[];
   'updated-by'?: CrossrefUpdate[];
+  /** The subtitle Crossref keeps apart from the title (Phase 20, VRFY-13). */
+  subtitle?: string[] | string;
+  /** Relations the depositor asserts to other works: `{ "is-preprint-of": [{ "id-type": "doi", "id": "10.…" }] }` (VRFY-14). */
+  relation?: Record<string, Array<{ 'id-type'?: string; id?: string }> | undefined>;
 }
 
 /** Crossref work types → CSL types (D-19-13). */
@@ -198,10 +202,32 @@ function retractionOf(item: CrossrefItem, title: string): Pick<SourceCandidate, 
 }
 
 /**
- * A Crossref work as a SourceCandidate, or null when it has no DOI, no title,
- * or nobody to attribute it to (no author and no editor).
+ * The DOIs a Crossref record says it is related to (Phase 20, VRFY-14,
+ * D-20-12): every `relation` entry whose id is a DOI, with its relation type
+ * as Crossref spells it (`is-identical-to`, `has-preprint`, …) and the DOI
+ * normalized. Pass 1 accepts an answer under another DOI only on one of these.
  */
-export function crossrefToCandidate(item: CrossrefItem): SourceCandidate | null {
+export function crossrefRelations(item: CrossrefItem): Array<{ type: string; doi: string }> {
+  const out: Array<{ type: string; doi: string }> = [];
+  const rel = item.relation;
+  if (typeof rel !== 'object' || rel === null) return out;
+  for (const [type, list] of Object.entries(rel)) {
+    for (const r of Array.isArray(list) ? list : []) {
+      if (String(r?.['id-type'] ?? '').toLowerCase() !== 'doi' || typeof r?.id !== 'string') continue;
+      const doi = normalizeDoi(r.id);
+      if (doi !== null && !out.some((o) => o.type === type && o.doi === doi)) out.push({ type, doi });
+    }
+  }
+  return out;
+}
+
+/**
+ * A Crossref work as a SourceCandidate, or null when it has no DOI, no title,
+ * or nobody to attribute it to (no author and no editor). `checkedAt` is when
+ * the answer was obtained (the HTTP cache entry's time for a cached answer,
+ * VRFY-28).
+ */
+export function crossrefToCandidate(item: CrossrefItem, checkedAt: string = new Date().toISOString()): SourceCandidate | null {
   const doi = typeof item.DOI === 'string' ? item.DOI.trim() : '';
   if (!doi) return null;
   // SRC-05 / SRC-12: inline JATS / HTML and entities out (markup.ts), so the
@@ -225,12 +251,16 @@ export function crossrefToCandidate(item: CrossrefItem): SourceCandidate | null 
   const issue = str(item.issue);
   const pages = str(item.page);
   const publisher = plainTextOpt(str(item.publisher));
+  const subtitle = plainTextOpt(firstString(item.subtitle));
+  const relations = crossrefRelations(item);
 
   return {
     source: 'crossref',
     id: doi,
     doi,
     title,
+    ...(subtitle !== undefined && subtitle.length > 0 ? { subtitle } : {}),
+    ...(relations.length > 0 ? { relations } : {}),
     authors,
     ...(year !== undefined ? { year } : {}),
     ...(abstract !== undefined ? { abstract } : {}),
@@ -243,7 +273,7 @@ export function crossrefToCandidate(item: CrossrefItem): SourceCandidate | null 
     ...(type !== undefined ? { type } : {}),
     ...(editors.length > 0 ? { editors } : {}),
     ...retractionOf(item, title),
-    last_verified: new Date().toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...(year !== undefined ? { year } : {}) }),
     raw: item,
   };
@@ -301,17 +331,57 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     opts.onFailure?.(statusReason(ex.res));
     return [];
   }
+  const at = answeredAt(ex.res);
   const items = ((JSON.parse(ex.res.body) as { message: { items: CrossrefItem[] } }).message.items);
-  return items.map(crossrefToCandidate).filter((c): c is SourceCandidate => c !== null);
+  return items.map((i) => crossrefToCandidate(i, at)).filter((c): c is SourceCandidate => c !== null);
 }
 
-/** Crossref's answer for one DOI: found | not-found (HTTP 404) | failed (reason). */
-export async function lookupById(id: string): Promise<LookupResult> {
+/** The Crossref fields a bibliographic-search candidate needs (the search fields plus the subtitle). */
+const BIBLIOGRAPHIC_SELECT = `${SEARCH_SELECT},subtitle`;
+
+/**
+ * The metadata-search URL (Phase 20, VRFY-12, D-20-11): Crossref's
+ * `query.bibliographic` — a free-form citation (title, first author, year) —
+ * exported for the recorder and tests (the exact request the search makes).
+ */
+export function bibliographicSearchUrl(citation: string, rows = 5): string {
+  return (
+    `${BASE}/works?query.bibliographic=${encodeURIComponent(citation)}&rows=${rows}` +
+    `&select=${encodeURIComponent(BIBLIOGRAPHIC_SELECT)}`
+  );
+}
+
+/** A metadata search's outcome: the candidates Crossref ranked, or why it did not answer. */
+export type BibliographicSearchResult =
+  | { readonly kind: 'ok'; readonly candidates: SourceCandidate[] }
+  | { readonly kind: 'failed'; readonly reason: string };
+
+/**
+ * Search Crossref for the work a citation describes (Pass 1's metadata search
+ * for an entry with no identifier, VRFY-12). An empty `candidates` list is
+ * Crossref's definitive "nothing matches"; `failed` is no answer. The typed
+ * OfflineEgressError is rethrown.
+ */
+export async function searchBibliographic(citation: string, opts: LookupOptions & { rows?: number } = {}): Promise<BibliographicSearchResult> {
+  const url = bibliographicSearchUrl(citation, opts.rows ?? 5);
+  const ex = await exchange(
+    () => httpFetch(url, { source: 'crossref', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(WORK_LIST), ...(opts.refresh === true ? { refresh: true } : {}) }),
+    { service: SERVICE, check: WORK_LIST },
+  );
+  if (ex.kind === 'failed') return { kind: 'failed', reason: ex.reason };
+  if (ex.kind === 'status') return { kind: 'failed', reason: statusReason(ex.res) };
+  const at = answeredAt(ex.res);
+  const items = (JSON.parse(ex.res.body) as { message: { items: CrossrefItem[] } }).message.items;
+  return { kind: 'ok', candidates: items.map((i) => crossrefToCandidate(i, at)).filter((c): c is SourceCandidate => c !== null) };
+}
+
+/** Crossref's answer for one DOI: found | not-found (HTTP 404) | failed (reason). `refresh` skips the cache read (VRFY-28). */
+export async function lookupById(id: string, opts: LookupOptions = {}): Promise<LookupResult> {
   const doi = normalizeDoi(id);
   if (doi === null) return lookupNotFound(`not a DOI: ${JSON.stringify(id.slice(0, 80))}`);
   const url = `${BASE}/works/${encodeURIComponent(doi)}`;
   const ex = await exchange(
-    () => httpFetch(url, { source: 'crossref', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(WORK) }),
+    () => httpFetch(url, { source: 'crossref', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(WORK), ...(opts.refresh === true ? { refresh: true } : {}) }),
     { service: SERVICE, check: WORK },
   );
   if (ex.kind === 'failed') {
@@ -325,7 +395,7 @@ export async function lookupById(id: string): Promise<LookupResult> {
     return lookupFailed(statusReason(ex.res), { status: ex.res.status });
   }
   const msg = (JSON.parse(ex.res.body) as { message: CrossrefItem }).message;
-  const candidate = crossrefToCandidate(msg);
+  const candidate = crossrefToCandidate(msg, answeredAt(ex.res));
   if (candidate === null) {
     return lookupFailed(
       "Crossref's record of this DOI lists no title, or no author or editor, so it cannot be cited or checked (an incomplete registrar record — asking again gives the same answer)",

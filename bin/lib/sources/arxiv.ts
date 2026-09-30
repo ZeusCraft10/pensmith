@@ -36,7 +36,7 @@
 import { texToText } from '../markup.js';
 import { fetch as httpFetch, isOfflineEgressError, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { type SearchOptions } from './search-failure.js';
-import { exchange, statusReason, validator, type ShapeCheck } from './registrar-response.js';
+import { answeredAt, exchange, statusReason, validator, type LookupOptions, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
 import { displayAuthorName } from '../person-name.js';
@@ -156,7 +156,7 @@ function entryArxivId(entryId: string): string | undefined {
   return canonicalArxivId(entryId) ?? undefined;
 }
 
-function toCandidate(entry: ArxivEntry): SourceCandidate | null {
+function toCandidate(entry: ArxivEntry, checkedAt: string): SourceCandidate | null {
   if (!entry.id || !entry.title) return null;
   if (entry.authors.length === 0) return null;
 
@@ -183,7 +183,7 @@ function toCandidate(entry: ArxivEntry): SourceCandidate | null {
     ...(entry.journalRef !== undefined ? { venue: entry.journalRef } : {}),
     type: 'preprint',
     retracted: false,
-    last_verified: new Date().toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors: entry.authors, ...(year !== undefined ? { year } : {}) }),
     raw: entry,
   };
@@ -197,12 +197,12 @@ function isErrorEntry(entryXml: string): boolean {
 // CR-05: the lazy `extractAll` regex is linear on well-formed input; a huge
 // malformed feed is bounded upstream — bin/lib/http.ts streams every body under
 // maxBytes and aborts with ResponseTooLargeError before full buffering (SEC-03).
-function parseFeed(xml: string): SourceCandidate[] {
+function parseFeed(xml: string, checkedAt: string = new Date().toISOString()): SourceCandidate[] {
   return extractAll(xml, 'entry')
     .filter((e) => !isErrorEntry(e))
     .map(parseEntry)
     .filter((e): e is ArxivEntry => e !== null)
-    .map(toCandidate)
+    .map((e) => toCandidate(e, checkedAt))
     .filter((c): c is SourceCandidate => c !== null);
 }
 
@@ -224,16 +224,23 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     opts.onFailure?.(statusReason(ex.res));
     return [];
   }
-  return parseFeed(ex.res.body);
+  return parseFeed(ex.res.body, answeredAt(ex.res));
 }
 
-/** arXiv's answer for one identifier: found | not-found | failed (reason). */
-export async function lookupById(id: string): Promise<LookupResult> {
+/** arXiv's answer for one identifier: found | not-found | failed (reason). `refresh` skips the cache read (VRFY-28). */
+export async function lookupById(id: string, opts: LookupOptions = {}): Promise<LookupResult> {
   const canonical = canonicalArxivId(id);
   if (canonical === null) return lookupNotFound(`not an arXiv identifier: ${JSON.stringify(id.slice(0, 80))}`);
   const url = `${BASE}/api/query?id_list=${encodeURIComponent(canonical)}`;
   const ex = await exchange(
-    () => httpFetch(url, { source: 'arxiv', headers: ATOM_HEADERS, maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(FEED) }),
+    () =>
+      httpFetch(url, {
+        source: 'arxiv',
+        headers: ATOM_HEADERS,
+        maxBytes: MAX_JSON_RESPONSE_BYTES,
+        validate: validator(FEED),
+        ...(opts.refresh === true ? { refresh: true } : {}),
+      }),
     { service: SERVICE, check: FEED },
   );
   if (ex.kind === 'failed') {
@@ -248,7 +255,7 @@ export async function lookupById(id: string): Promise<LookupResult> {
   }
   const entries = extractAll(ex.res.body, 'entry');
   if (entries.some(isErrorEntry)) return lookupNotFound(`arXiv has no paper ${canonical} (the id was rejected)`);
-  const match = parseFeed(ex.res.body).find((c) => c.arxiv === canonical);
+  const match = parseFeed(ex.res.body, answeredAt(ex.res)).find((c) => c.arxiv === canonical);
   if (!match) return lookupNotFound(`arXiv has no paper ${canonical}`);
   return lookupFound(match);
 }
@@ -270,7 +277,7 @@ export const ARXIV_BATCH_IDS = 50;
  * error entry names no id), and a batch that no recorded fixture answers in
  * the offline or dry-run mode.
  */
-export async function lookupByIds(ids: readonly string[]): Promise<Map<string, LookupResult>> {
+export async function lookupByIds(ids: readonly string[], opts: LookupOptions = {}): Promise<Map<string, LookupResult>> {
   const out = new Map<string, LookupResult>();
   const byCanonical = new Map<string, string[]>();
   for (const id of ids) {
@@ -285,7 +292,7 @@ export async function lookupByIds(ids: readonly string[]): Promise<Map<string, L
   for (let i = 0; i < canonicals.length; i += ARXIV_BATCH_IDS) {
     const batch = canonicals.slice(i, i + ARXIV_BATCH_IDS);
     if (batch.length < 2) continue;
-    const answers = await lookupBatch(batch);
+    const answers = await lookupBatch(batch, opts);
     if (answers === null) continue;
     for (const [canonical, answer] of answers) {
       for (const id of byCanonical.get(canonical) ?? []) out.set(id, answer);
@@ -295,12 +302,19 @@ export async function lookupByIds(ids: readonly string[]): Promise<Map<string, L
 }
 
 /** One batched request's answers by canonical id, or null when each id must be asked on its own (see lookupByIds). */
-async function lookupBatch(batch: readonly string[]): Promise<Map<string, LookupResult> | null> {
+async function lookupBatch(batch: readonly string[], opts: LookupOptions): Promise<Map<string, LookupResult> | null> {
   const url = `${BASE}/api/query?id_list=${batch.map(encodeURIComponent).join(',')}&max_results=${batch.length}`;
   let ex: Awaited<ReturnType<typeof exchange>>;
   try {
     ex = await exchange(
-      () => httpFetch(url, { source: 'arxiv', headers: ATOM_HEADERS, maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(FEED) }),
+      () =>
+        httpFetch(url, {
+          source: 'arxiv',
+          headers: ATOM_HEADERS,
+          maxBytes: MAX_JSON_RESPONSE_BYTES,
+          validate: validator(FEED),
+          ...(opts.refresh === true ? { refresh: true } : {}),
+        }),
       { service: SERVICE, check: FEED },
     );
   } catch (e) {
@@ -319,7 +333,7 @@ async function lookupBatch(batch: readonly string[]): Promise<Map<string, Lookup
     return every(lookupFailed(statusReason(ex.res), { status: ex.res.status }));
   }
   if (extractAll(ex.res.body, 'entry').some(isErrorEntry)) return null;
-  const found = new Map(parseFeed(ex.res.body).map((c) => [c.arxiv, c]));
+  const found = new Map(parseFeed(ex.res.body, answeredAt(ex.res)).map((c) => [c.arxiv, c]));
   return new Map(batch.map((c) => {
     const match = found.get(c);
     return [c, match ? lookupFound(match) : lookupNotFound(`arXiv has no paper ${c}`)];

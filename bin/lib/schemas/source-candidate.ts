@@ -68,10 +68,27 @@ const BaseFields = {
   retraction_status: RetractionStatusSchema.optional(),
   /** The Zotero item identity (SRC-16). */
   zotero: ZoteroRefSchema.optional(),
+  // Phase 20 (VRFY-13, VRFY-14): what Pass 1 compares beyond the title and
+  // authors. Neither is persisted (the library keeps the title as registered).
+  /** The registrar's subtitle, when it keeps it apart from the title (Crossref `subtitle`, DataCite `Subtitle`). */
+  subtitle: z.string().optional(),
+  /**
+   * The relations the registrar itself asserts between this work and another
+   * DOI (Crossref `relation`, DataCite `relatedIdentifiers`): `type` in the
+   * registrar's kebab-case spelling (`is-identical-to`, `has-preprint`, …),
+   * `doi` normalized. Pass 1 accepts an answer under another DOI only on one
+   * of these (VRFY-14, D-20-12).
+   */
+  relations: z.array(z.object({ type: z.string().min(1), doi: z.string().min(1) }).strict()).optional(),
 };
 
 export const SourceCandidateSchema = z.discriminatedUnion('source', [
   z.object({ ...BaseFields, source: z.literal('crossref') }),
+  // Phase 20 (VRFY-11, D-20-10): a DataCite record (api.datacite.org), and a
+  // record another agency served through doi.org content negotiation
+  // (mEDRA, JaLC, KISTI — CSL JSON).
+  z.object({ ...BaseFields, source: z.literal('datacite') }),
+  z.object({ ...BaseFields, source: z.literal('doi.org') }),
   z.object({ ...BaseFields, source: z.literal('openalex') }),
   z.object({ ...BaseFields, source: z.literal('arxiv') }),
   z.object({ ...BaseFields, source: z.literal('pubmed') }),
