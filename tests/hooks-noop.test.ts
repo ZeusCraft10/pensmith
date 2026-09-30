@@ -1,62 +1,77 @@
+// tests/hooks-noop.test.ts — every hook bundle outside a paper (PLUG-14,
+// D-23a-15; T-07-01 stdout protocol).
+//
+// The plugin's hooks fire in every project the plugin is enabled in, so in a
+// folder with no paper each of the four bundles (`node plugin/dist/hooks/
+// <name>.mjs`, as Claude Code runs them) must exit 0 in under 500 ms, print
+// nothing on stdout and create no file — neither in the folder nor in the data
+// dir — whatever arrives on stdin: Claude Code's JSON, nothing, an empty body
+// or garbage. The time is the best of three spawns (the hook's own cost, not
+// the test runner's scheduling noise); every spawn must also stay under 2 s.
+//
+// A folder in the pre-v1 layout (a root-level pensmith STATE.json and
+// config.toml, with or without a `.paper/` beside them) is left byte-identical
+// by every hook: the legacy-layout move renames the user's files, so only the
+// next CLI or MCP run makes it, under the paper's session lock.
+//
+// (The v0 hooks.json shape case that lived here is gone: stream layout's
+// tests/manifest.test.ts asserts the spec's plugin/hooks/hooks.json.)
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { changedPaths, sandbox, snapshot } from './helpers/paper-cli-harness.js';
+import { assertBundlesPresent, hookInput, runHook, type HookName } from './hooks/hook-runner.js';
 
-// stdout-protocol gate (T-07-01 / T-02-06-02): a hook's stdout is the Claude
-// Code hook-protocol channel — it MUST be empty OR exactly one parseable JSON
-// frame. Phase 7 Plan 07-03 upgraded SessionStart to emit a single
-// { systemMessage } resume frame WHEN a .paper/HANDOFF.json exists; the other
-// three hooks must NEVER write stdout. These tests run from the repo root cwd
-// (which has no .paper/HANDOFF.json), so even SessionStart takes its no-op path
-// and emits nothing here. The JSON-frame case is covered by
-// tests/hooks/session-start.test.ts (it seeds a HANDOFF in a tmpdir cwd).
+assertBundlesPresent();
 
-// Three hooks must produce ABSOLUTELY no stdout, ever.
-const SILENT_HOOKS = [
-  'hooks/pre-compact.ts',
-  'hooks/post-tool-use.ts',
-  'hooks/stop.ts',
-];
+const HOOKS: readonly HookName[] = ['session-start', 'pre-compact', 'post-tool-use', 'stop'];
+const BUDGET_MS = 500;
 
-for (const hook of SILENT_HOOKS) {
-  test(`TIER-03/07: ${hook} exists and exits 0 with empty stdout`, () => {
-    assert.ok(existsSync(hook), `${hook} missing`);
-    // Hooks run under Node via tsx. Execute via tsx to avoid build coupling.
-    const out = execFileSync(process.execPath, [
-      '--import', 'tsx', hook,
-    ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    // Must produce no stdout (would corrupt hook-protocol frame).
-    assert.equal(out, '', `${hook} stdout MUST be empty, got: ${out}`);
+for (const name of HOOKS) {
+  test(`PLUG-14: ${name} outside a paper exits 0 in < ${BUDGET_MS} ms with empty stdout and creates no file`, () => {
+    const sb = sandbox(`hook-noop-${name}`);
+    const cwd = sb.project('not-a-paper');
+    // A folder a Claude Code user works in: it has a .claude/ of its own.
+    mkdirSync(join(cwd, '.claude'), { recursive: true });
+    const beforeCwd = snapshot(cwd);
+    const beforeData = snapshot(sb.data);
+    const times: number[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const r = runHook(sb, name, { cwd, input: hookInput(name, cwd) });
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '', `${name} stdout must be empty outside a paper`);
+      assert.equal(r.stderr, '', `${name} has nothing to report outside a paper`);
+      assert.ok(r.ms < 2_000, `${name} took ${r.ms.toFixed(0)} ms`);
+      times.push(r.ms);
+    }
+    const best = Math.min(...times);
+    assert.ok(best < BUDGET_MS, `${name} took ${best.toFixed(0)} ms (best of ${times.map((t) => t.toFixed(0)).join(', ')})`);
+    for (const input of [null, '', '{not json', '[1,2]', JSON.stringify({ cwd: 'relative/path' })]) {
+      const r = runHook(sb, name, { cwd, input });
+      assert.equal(r.status, 0, `${name} with stdin ${JSON.stringify(input)}: ${r.stderr}`);
+      assert.equal(r.stdout, '');
+    }
+    assert.deepEqual(changedPaths(beforeCwd, snapshot(cwd)), [], 'no file created in the folder');
+    assert.deepEqual(changedPaths(beforeData, snapshot(sb.data)), [], 'no file created in the data dir');
   });
 }
 
-// SessionStart: in the NO-HANDOFF path (repo-root cwd has none) stdout must
-// STILL be empty — it only emits the documented JSON frame when there is a
-// paper to resume. The populated-HANDOFF JSON-frame case lives in
-// tests/hooks/session-start.test.ts and is not duplicated here.
-test('TIER-03/07: hooks/session-start.ts exits 0; empty stdout in the no-HANDOFF path', () => {
-  assert.ok(existsSync('hooks/session-start.ts'), 'hooks/session-start.ts missing');
-  // Defensive: only meaningful while the repo root has no .paper/HANDOFF.json.
-  assert.ok(
-    !existsSync('.paper/HANDOFF.json'),
-    'precondition: repo root must have no .paper/HANDOFF.json for the no-op stdout assertion',
-  );
-  const out = execFileSync(process.execPath, [
-    '--import', 'tsx', 'hooks/session-start.ts',
-  ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  assert.equal(out, '', `session-start stdout MUST be empty with no HANDOFF, got: ${out}`);
-});
-
-test('TIER-03: hooks/hooks.json declares all 4 hooks', () => {
-  assert.ok(existsSync('hooks/hooks.json'), 'hooks/hooks.json missing');
-  const raw = readFileSync('hooks/hooks.json', 'utf8');
-  const parsed = JSON.parse(raw) as { schemaVersion: number; hooks: Array<{ event: string; script: string }> };
-  assert.equal(parsed.schemaVersion, 1);
-  const events = parsed.hooks.map((h) => h.event).sort();
-  assert.deepEqual(events, ['PostToolUse', 'PreCompact', 'SessionStart', 'Stop'].sort());
-  // Every declared script must exist under hooks/.
-  for (const h of parsed.hooks) {
-    assert.ok(existsSync(`hooks/${h.script}`), `hooks/${h.script} declared in hooks.json but missing on disk`);
-  }
-});
+for (const name of HOOKS) {
+  test(`PLUG-14: ${name} leaves a pre-v1 layout byte-identical (the legacy move is a CLI or MCP run's, never a hook's)`, () => {
+    const sb = sandbox(`hook-legacy-${name}`);
+    const cwd = sb.project('legacy-paper');
+    writeFileSync(join(cwd, 'STATE.json'), JSON.stringify({ $schemaVersion: 1, paperId: 'legacy-paper', createdAt: '2025-01-01T00:00:00.000Z', sections: [] }));
+    writeFileSync(join(cwd, 'config.toml'), 'schema_version = 1\n');
+    for (const withPaperDir of [false, true]) {
+      if (withPaperDir) mkdirSync(join(cwd, '.paper', 'sections'), { recursive: true });
+      const before = snapshot(cwd);
+      const r = runHook(sb, name, { cwd, input: hookInput(name, cwd) });
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '', `${name} prints nothing for a paper it does not address`);
+      assert.equal(r.stderr, '', `${name} moves nothing, so it reports nothing`);
+      assert.deepEqual(changedPaths(before, snapshot(cwd)), [], `nothing moved or written (.paper/ present: ${withPaperDir})`);
+    }
+  });
+}

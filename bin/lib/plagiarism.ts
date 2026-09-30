@@ -28,6 +28,7 @@ import { fetch as httpFetch } from './http.js';
 import { networkMode } from './http-mock.js';
 import { Semaphore } from './budget.js';
 import { replaceCitations } from './citation-token.js';
+import { out } from './output-sink.js';
 
 // ============================================================
 //   Public types
@@ -271,7 +272,7 @@ export async function runPlagiarism(
   if (mode.sourcesOffline) {
     // RUN-03: offline never queries and never replays a canned search page.
     const skipped = mode.dryRun ? 'dry-run' : 'offline';
-    process.stdout.write(
+    out(
       `pensmith: plagiarism check skipped (${skipped}) — ${phrases.length} distinctive phrase(s) not queried.\n`,
     );
     return phrases.map((phrase) => ({ phrase, matches: [], skipped }));

@@ -5,9 +5,12 @@
 // Fields: title and name, class, `current: §N (step)`, per-section glyphs
 // (✓ verified, ⌛ in progress, ⌽ pending, ! needs attention — ASCII [x] [~] [ ]
 // [!] when the locale is not UTF-8), the cost meter
-// `cost: $X.XX this session / $Y.YY total (cap $Z.ZZ)` (`cost: n/a (Claude
-// session)` in Tier 1, where the user's Claude session does the generation),
-// and `next: …` from the router. A session is one process (D-17-26), so a
+// `cost: $X.XX this session / $Y.YY total (cap $Z.ZZ)` — the same in both tiers
+// (review round 2: in this release the plugin's pensmith_plan / pensmith_write
+// bill the provider configured for pensmith and write COSTS.jsonl exactly as
+// the CLI does, so the Tier-1 view meters that spend; it used to print
+// `cost: n/a (Claude session)`, which understated it) — and `next: …` from the
+// router. A session is one process (D-17-26), so a
 // standalone `status` meters the session that is RUNNING on the paper (the
 // live session-lock holder, `$X running session`) or else the LAST one that
 // recorded a cost (`$X last session`); `this session` is used only when this
@@ -150,9 +153,9 @@ async function meteredSession(root: string): Promise<{ sessionUsd: number; sessi
 }
 
 /**
- * Build the status view for the paper at `root`. `tier: 'mcp'` renders the
- * Tier-1 cost line; `stopAfterResearch` is the goal-agnostic router flag the
- * CLI tier derives (bin/cli/goal.ts).
+ * Build the status view for the paper at `root` (`tier` is recorded in
+ * `cost.tier`; both tiers meter the same COSTS.jsonl). `stopAfterResearch` is
+ * the goal-agnostic router flag the CLI tier derives (bin/cli/goal.ts).
  */
 export async function buildStatusView(
   root: string,
@@ -235,7 +238,7 @@ export async function buildStatusView(
   let sessionLabel: StatusView['cost']['sessionLabel'] = null;
   try {
     totalUsd = await totalCost({ root });
-    if (opts.tier === 'cli') ({ sessionUsd, sessionLabel } = await meteredSession(root));
+    ({ sessionUsd, sessionLabel } = await meteredSession(root));
   } catch {
     totalUsd = 0;
   }
@@ -248,9 +251,7 @@ export async function buildStatusView(
     capUsd = null;
   }
   const capText = capUsd === null ? 'cap invalid: fix PENSMITH_COST_CAP_USD' : `cap ${money(capUsd)}`;
-  const costLine = opts.tier === 'mcp'
-    ? 'cost: n/a (Claude session)'
-    : `cost: ${money(sessionUsd ?? 0)} ${sessionLabel ?? 'this session'} / ${money(totalUsd)} total (${capText})`;
+  const costLine = `cost: ${money(sessionUsd ?? 0)} ${sessionLabel ?? 'this session'} / ${money(totalUsd)} total (${capText})`;
 
   return {
     glyphSet,

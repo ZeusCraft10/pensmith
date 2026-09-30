@@ -300,7 +300,7 @@ test('SRC-12: an arXiv collaboration author (recorded 1207.7214) is written, rea
   fs.writeFileSync(path.join(dir, 'doc.md'), 'Higgs [@atlas2012].\n');
   const r = spawnSync(
     pandoc,
-    ['doc.md', '--citeproc', '--bibliography', 'CITATIONS.bib', '--csl', path.join(REPO, 'templates', 'citation-styles', 'apa.csl'), '-t', 'plain', '--wrap=none'],
+    ['doc.md', '--citeproc', '--bibliography', 'CITATIONS.bib', '--csl', path.join(REPO, 'plugin', 'templates', 'citation-styles', 'apa.csl'), '-t', 'plain', '--wrap=none'],
     { cwd: dir, encoding: 'utf8' },
   );
   assert.equal(r.status, 0, r.stderr);
@@ -320,7 +320,7 @@ test('SRC-12: pandoc citeproc (when on PATH) renders "(Vaswani & Shazeer, 2017)"
   fs.writeFileSync(path.join(dir, 'doc.md'), 'A claim [@vaswani2017].\n');
   const r = spawnSync(
     pandoc,
-    ['doc.md', '--citeproc', '--bibliography', 'refs.bib', '--csl', path.join(REPO, 'templates', 'citation-styles', 'apa.csl'), '-t', 'plain'],
+    ['doc.md', '--citeproc', '--bibliography', 'refs.bib', '--csl', path.join(REPO, 'plugin', 'templates', 'citation-styles', 'apa.csl'), '-t', 'plain'],
     { cwd: dir, encoding: 'utf8' },
   );
   assert.equal(r.status, 0, r.stderr);
@@ -363,7 +363,7 @@ test('SRC-12 (review round 2): title capitals are brace-protected where they are
   fs.writeFileSync(path.join(dir, 'doc.md'), 'Claims [@vaswani2017; @zhu2020; @ruiz2023; @lee2019; @adams2000].\n');
   const r = spawnSync(
     pandoc,
-    ['doc.md', '--citeproc', '--bibliography', 'refs.bib', '--csl', path.join(REPO, 'templates', 'citation-styles', 'apa.csl'), '-t', 'plain', '--wrap=none'],
+    ['doc.md', '--citeproc', '--bibliography', 'refs.bib', '--csl', path.join(REPO, 'plugin', 'templates', 'citation-styles', 'apa.csl'), '-t', 'plain', '--wrap=none'],
     { cwd: dir, encoding: 'utf8' },
   );
   assert.equal(r.status, 0, r.stderr);
@@ -392,7 +392,7 @@ test('SRC-12 (review round 3): hyphenated Title Case compounds are title casing,
   fs.writeFileSync(path.join(dir, 'doc.md'), 'Claims [@almeida2006; @ren2015; @smith2021].\n');
   const r = spawnSync(
     pandoc,
-    ['doc.md', '--citeproc', '--bibliography', 'refs.bib', '--csl', path.join(REPO, 'templates', 'citation-styles', 'apa.csl'), '-t', 'plain', '--wrap=none'],
+    ['doc.md', '--citeproc', '--bibliography', 'refs.bib', '--csl', path.join(REPO, 'plugin', 'templates', 'citation-styles', 'apa.csl'), '-t', 'plain', '--wrap=none'],
     { cwd: dir, encoding: 'utf8' },
   );
   assert.equal(r.status, 0, r.stderr);

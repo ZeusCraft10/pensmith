@@ -23,6 +23,7 @@ import * as path from 'node:path';
 import { loadGlobalLibrary } from '../lib/global-library.js';
 import { pensmithActivePointerPath, hasPaper } from '../lib/paths.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
+import { out } from '../lib/output-sink.js';
 
 export const openCommand = defineCommand({
   meta: {
@@ -42,7 +43,7 @@ export const openCommand = defineCommand({
     const lib = await loadGlobalLibrary();
     const entry = lib.entries.find((e) => e.name === name);
     if (!entry) {
-      process.stdout.write(
+      out(
         `pensmith open: no paper named "${name}". Run \`pensmith list\` to see papers.\n`,
       );
       return { ok: false, reason: 'not-found' };
@@ -51,7 +52,7 @@ export const openCommand = defineCommand({
     // T-08-01-04: never switch to a missing/relocated folder. existsSync never
     // throws (returns false on any error).
     if (!fs.existsSync(entry.folderPath) || !hasPaper(entry.folderPath)) {
-      process.stdout.write(
+      out(
         `pensmith open: folder not found for "${entry.name}": ${entry.folderPath}\n`,
       );
       return { ok: false, reason: 'folder-missing' };
@@ -77,7 +78,7 @@ export const openCommand = defineCommand({
     // RUN-14 / D-17-33: the pointer serves read-only verbs (status, list, doctor,
     // --estimate) from any folder; a mutating run elsewhere asks first in a
     // terminal, and needs --paper otherwise.
-    process.stdout.write(
+    out(
       `pensmith open: switched to "${entry.name}" at ${entry.folderPath}\n` +
         `pensmith open: status/list/doctor now show it from any folder; to change it from elsewhere, ` +
         `pass --paper ${JSON.stringify(entry.name)}.\n`,

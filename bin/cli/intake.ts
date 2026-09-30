@@ -84,6 +84,7 @@ import {
   THESIS_SEED_LABEL,
 } from '../lib/intake-overrides.js';
 import { TUTORIAL_INTAKE_QUESTION } from '../lib/tutorial.js';
+import { out as writeOut } from '../lib/output-sink.js';
 
 /** The length target when neither the assignment nor the clarifier states one (D-18-09). */
 export const DEFAULT_LENGTH_WORDS = 1500;
@@ -103,7 +104,7 @@ const DISCLAIMER = [
 ].join('\n');
 
 function say(line: string): void {
-  process.stdout.write(line + '\n');
+  writeOut(line + '\n');
 }
 
 function oneLine(s: string): string {
@@ -317,7 +318,7 @@ function followUpNote(f: FollowUpAnswer, yolo: boolean): string {
 async function ingestByoFolderForNew(cwd: string, dir: string): Promise<void> {
   const stored = await recordByoPdfDir(cwd, dir);
   if (networkMode().dryRun) {
-    process.stdout.write(`pensmith new: bring-your-own: skipped (--dry-run) — ${stored} recorded as [sources] byo_pdf_dir; no PDF was read\n`);
+    writeOut(`pensmith new: bring-your-own: skipped (--dry-run) — ${stored} recorded as [sources] byo_pdf_dir; no PDF was read\n`);
     return;
   }
   // The user named the folder on the command line: research may re-read it
@@ -325,11 +326,12 @@ async function ingestByoFolderForNew(cwd: string, dir: string): Promise<void> {
   // needs no record).
   await approveByoFolder(cwd, dir);
   const files = await listPdfsInDir(dir);
-  process.stdout.write(`pensmith new: bring-your-own: ${files.length} PDF(s) in ${stored} (recorded as [sources] byo_pdf_dir)\n`);
+  writeOut(`pensmith new: bring-your-own: ${files.length} PDF(s) in ${stored} (recorded as [sources] byo_pdf_dir)\n`);
   const outcomes = await ingestByoPdfs(cwd, files, { provenance: 'byo' });
   for (const o of outcomes) {
     const d = describeByoOutcome(o, 'pensmith new');
-    (d.stream === 'stdout' ? process.stdout : process.stderr).write(`${d.line}\n`);
+    if (d.stream === 'stdout') writeOut(`${d.line}\n`);
+    else process.stderr.write(`${d.line}\n`);
   }
 }
 
@@ -456,7 +458,7 @@ export const intakeCommand = defineCommand({
 
     // 4. RUN-07: a usable provider, before anything is written or sent.
     await assertLlmConfigured('new');
-    process.stdout.write(DISCLAIMER + '\n\n');
+    writeOut(DISCLAIMER + '\n\n');
 
     // 5. PII (GRND-05): settled BEFORE the model call.
     const piiQ = questions.find((q) => q.id === Q.pii) as IntakeQuestion;

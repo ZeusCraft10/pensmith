@@ -36,7 +36,7 @@ function repoPath(rel: string): string {
 }
 
 const BIN_LIB = repoPath('bin/lib');
-const WORKFLOWS = repoPath('workflows');
+const WORKFLOWS = repoPath('plugin/workflows');
 
 // Only this ONE file is allowed to be goal-aware.
 const TUTORIAL_FILE = join(BIN_LIB, 'tutorial.ts');
@@ -118,9 +118,9 @@ test('zero-branch invariant: NO bin/lib/**/*.ts (router.ts INCLUDED) references 
   }
 });
 
-test('zero-branch invariant: NO workflows/**/*.md references educator-mode vocabulary', () => {
+test('zero-branch invariant: NO plugin/workflows/**/*.md references educator-mode vocabulary', () => {
   const files = walk(WORKFLOWS, '.md');
-  assert.ok(files.length > 0, 'expected to scan ≥1 workflows/**/*.md file');
+  assert.ok(files.length > 0, 'expected to scan ≥1 plugin/workflows/**/*.md file');
   for (const file of files) {
     const body = stripComments(readFileSync(file, 'utf8'), '.md');
     const m = FORBIDDEN.exec(body);

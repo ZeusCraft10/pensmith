@@ -63,6 +63,7 @@ import {
 import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.js';
 import { readQuoteAcceptances, sectionDirOfPlan } from '../lib/quote-acceptance.js';
 import { recordLastVerified, LibraryNotFoundError } from '../lib/library.js';
+import { out as writeOut } from '../lib/output-sink.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -116,36 +117,36 @@ export interface DoneGateResult {
  * example citekeys / phrases). Called BEFORE approve() when hasIssues is true.
  */
 function writeGateSummary(issues: GateIssues): void {
-  process.stdout.write('pensmith done: advisory issues found before export (DONE-09):\n');
+  writeOut('pensmith done: advisory issues found before export (DONE-09):\n');
   if (issues.unsupported.length > 0) {
     const sample = issues.unsupported
       .slice(0, 3)
       .map((r) => r.citekey)
       .join(', ');
-    process.stdout.write(
+    writeOut(
       `  - ${issues.unsupported.length} UNSUPPORTED claim(s) (Pass 2): ${sample}\n`,
     );
   }
   if (issues.orphanClaims.length > 0) {
     const total = issues.orphanClaims.reduce((sum, r) => sum + r.orphanCount, 0);
-    process.stdout.write(
+    writeOut(
       `  - ${total} orphan claim(s) across ${issues.orphanClaims.length} paragraph(s) (Pass 4)\n`,
     );
     // VRFY-23: name the uncited claims themselves (the first few).
     const sentences = issues.orphanClaims.flatMap((r) => r.orphans ?? []);
-    for (const o of sentences.slice(0, 5)) process.stdout.write(`      uncited: "${cell(o, 160)}"\n`);
-    if (sentences.length > 5) process.stdout.write(`      … and ${sentences.length - 5} more (see .paper/VERIFICATION.md)\n`);
+    for (const o of sentences.slice(0, 5)) writeOut(`      uncited: "${cell(o, 160)}"\n`);
+    if (sentences.length > 5) writeOut(`      … and ${sentences.length - 5} more (see .paper/VERIFICATION.md)\n`);
   }
   if (issues.plagiarismHits.length > 0) {
     const sample = issues.plagiarismHits
       .slice(0, 3)
       .map((r) => r.phrase.replace(/[\r\n]+/g, ' ').slice(0, 60))
       .join(' | ');
-    process.stdout.write(
+    writeOut(
       `  - ${issues.plagiarismHits.length} distinctive phrase(s) with web matches (plagiarism): ${sample}\n`,
     );
   }
-  process.stdout.write('These are advisory only — review before confirming export.\n');
+  writeOut('These are advisory only — review before confirming export.\n');
 }
 
 /**
@@ -750,19 +751,19 @@ function writeExportFindings(
   byoQuotes: readonly ByoQuote[],
   unjudged: readonly UnjudgedSection[] = [],
 ): void {
-  for (const u of unjudged) process.stdout.write(`pensmith done: ${unjudgedLine(u)}\n`);
+  for (const u of unjudged) writeOut(`pensmith done: ${unjudgedLine(u)}\n`);
   if (claims.length > 0) {
-    process.stdout.write(`pensmith done: ${claims.length} claim(s) Pass 2 judged UNSUPPORTED by the cited source (VRFY-22):\n`);
+    writeOut(`pensmith done: ${claims.length} claim(s) Pass 2 judged UNSUPPORTED by the cited source (VRFY-22):\n`);
     for (const c of claims) {
-      process.stdout.write(`  - §${c.section} [@${c.result.citekey}] "${cell(c.result.claimSentence, 160)}" — ${cell(c.result.rationale, 200)}\n`);
-      process.stdout.write(`      evidence: ${c.result.evidence.trim().length > 0 ? `"${cell(c.result.evidence, 200)}"` : '(none quoted)'}\n`);
+      writeOut(`  - §${c.section} [@${c.result.citekey}] "${cell(c.result.claimSentence, 160)}" — ${cell(c.result.rationale, 200)}\n`);
+      writeOut(`      evidence: ${c.result.evidence.trim().length > 0 ? `"${cell(c.result.evidence, 200)}"` : '(none quoted)'}\n`);
     }
   }
   for (const a of accepted) {
-    process.stdout.write(`  - accepted without a source check: ${a.section !== undefined ? `§${a.section} ` : ''}${a.id} [@${a.citekey}] "${cell(a.excerpt, 80)}" (${a.acceptedAt})\n`);
+    writeOut(`  - accepted without a source check: ${a.section !== undefined ? `§${a.section} ` : ''}${a.id} [@${a.citekey}] "${cell(a.excerpt, 80)}" (${a.acceptedAt})\n`);
   }
   for (const q of byoQuotes) {
-    process.stdout.write(`  - ${q.id} [@${q.citekey}] "${cell(q.snippet, 60)}…" verified against your local file ${q.localFile}\n`);
+    writeOut(`  - ${q.id} [@${q.citekey}] "${cell(q.snippet, 60)}…" verified against your local file ${q.localFile}\n`);
   }
 }
 
@@ -814,16 +815,16 @@ export const doneCommand = defineCommand({
       const gate = runExportBlockingGate(paperRoot);
       const refused = [...(gate.verdictReasons ?? []), ...(gate.recordedBlocks ?? [])];
       if (refused.length > 0) {
-        process.stdout.write(
+        writeOut(
           'pensmith done: BLOCKED — there is no compiled draft because compile refuses these sections:\n',
         );
-        for (const r of refused) process.stdout.write(`  - ${r}\n`);
-        process.stdout.write(
+        for (const r of refused) writeOut(`  - ${r}\n`);
+        writeOut(
           "Fix the cited section(s) — re-run 'pensmith verify <N>' then 'pensmith compile' — and try again.\n",
         );
         return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
       }
-      process.stdout.write(
+      writeOut(
         `pensmith done: no compiled draft at ${draftPath} — run 'pensmith compile' first.\n`,
       );
       return { ok: false, exitCode: EXIT_ERROR };
@@ -848,11 +849,11 @@ export const doneCommand = defineCommand({
     const draftGate = await recomputeExportGate(paperRoot, draftMd, { sections, bib, recheck: true });
     for (const r of draftGate.refusals) reasons.push(`.paper/DRAFT.md: ${r}`);
     if (reasons.length > 0) {
-      process.stdout.write(
+      writeOut(
         'pensmith done: BLOCKED — export refused (unresolved blocking citations, unverified or stale sections, or a stale compiled draft):\n',
       );
-      for (const r of reasons) process.stdout.write(`  - ${r}\n`);
-      process.stdout.write(
+      for (const r of reasons) writeOut(`  - ${r}\n`);
+      writeOut(
         "Fix the cited section(s) — re-run 'pensmith verify <N>' then 'pensmith compile' — and try again.\n",
       );
       return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
@@ -914,8 +915,8 @@ export const doneCommand = defineCommand({
       const finalGate = await recomputeExportGate(paperRoot, finalMd, { sections, bib });
       finalReasons.push(...finalGate.refusals);
       if (finalReasons.length > 0) {
-        process.stdout.write('pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification:\n');
-        for (const r of finalReasons) process.stdout.write(`  - ${r}\n`);
+        writeOut('pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification:\n');
+        for (const r of finalReasons) writeOut(`  - ${r}\n`);
         return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
       }
       exportedText = finalMd;
@@ -1038,10 +1039,10 @@ export const doneCommand = defineCommand({
       await atomicWriteFile(finalMdPath, draftMd);
     }
 
-    process.stdout.write(`pensmith done: exported ${result.outputPath}\n`);
+    writeOut(`pensmith done: exported ${result.outputPath}\n`);
     if (networkMode().dryRun) {
       // GRND-19 (D-18-29): say plainly that this is the dry run's trial export.
-      process.stdout.write(
+      writeOut(
         `pensmith done: this is a dry-run export (synthetic sources, stub text) in ${join(paperDir(paperRoot), 'export')}; ` +
           'the real paper was not touched\n',
       );

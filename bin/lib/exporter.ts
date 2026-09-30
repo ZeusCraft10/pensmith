@@ -29,42 +29,18 @@
 
 import { execFile } from 'node:child_process';
 import * as fsp from 'node:fs/promises';
-import { existsSync, statSync } from 'node:fs';
-import path, { basename, extname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+import { basename, extname, join } from 'node:path';
 import { promisify } from 'node:util';
 import JSZip from 'jszip';
 import { PDFDocument, PDFName } from 'pdf-lib';
 import { parseBib, renderStyle, renderCitationItems, type CitationItemInput } from './citations.js';
+import { out as writeOut } from './output-sink.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
-import { paperDir, projectRoot, dryRunWorkspaceActive } from './paths.js';
+import { paperDir, projectRoot, dryRunWorkspaceActive, pluginTemplatePath } from './paths.js';
 import { exportCitedCitations } from './library.js';
 import { citationItems, extractCitedKeysForVerification, findRenderedCitations, splitLocator, type CitationItem } from './citation-token.js';
-
-// =====================================================================
-//   PKG_ROOT — locate templates/citation-styles/ relative to this file
-//   (same pattern as bin/lib/citations.ts lines 84-102)
-// =====================================================================
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const PKG_ROOT = findPkgRoot(__dirname);
 
 const execFileAsync = promisify(execFile);
 
@@ -144,7 +120,7 @@ export async function runHumanizer(
 
     // No runner wired (Tier 2 / no transport): check skill presence.
     if (!isHumanizerSkillPresent()) {
-      process.stdout.write(
+      writeOut(
         'pensmith done: humanizer skill not found at ~/.claude/skills/humanizer/ — skipping humanize step.\n',
       );
       return null;
@@ -152,13 +128,13 @@ export async function runHumanizer(
 
     // Skill present but no Task transport (Tier-2 era): skip cleanly with a
     // distinct banner; the export proceeds on DRAFT.md.
-    process.stdout.write(
+    writeOut(
       'pensmith done: humanizer skill present but no Task transport in this tier — skipping humanize step (export proceeds on DRAFT.md).\n',
     );
     return null;
   } catch {
     // Advisory — the humanize step must NEVER fail the export (Pitfall 7).
-    process.stdout.write(
+    writeOut(
       'pensmith done: humanizer skill not found at ~/.claude/skills/humanizer/ — skipping humanize step.\n',
     );
     return null;
@@ -775,7 +751,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   // Compute CSL path for Pandoc citeproc args and offline rendering.
   // style is only meaningful when bibCopied (no bib → no citation rendering).
   const style = opts.style;
-  const cslPath = style ? path.join(PKG_ROOT, 'templates', 'citation-styles', `${style}.csl`) : '';
+  const cslPath = style ? pluginTemplatePath('citation-styles', `${style}.csl`) : '';
   const citeOpts =
     style && bibCopied && existsSync(cslPath)
       ? { cslPath, bibPath: bibDst }
@@ -817,7 +793,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   } else if (format === 'md' || !pandoc) {
     // md-only path (explicit md request OR Pandoc-absent fallback for docx/pdf).
     if (!pandoc && format !== 'md') {
-      process.stdout.write('pensmith export: Pandoc not found — markdown-only fallback.\n');
+      writeOut('pensmith export: Pandoc not found — markdown-only fallback.\n');
     }
     outputPath = join(exportDir, `${stem}.md`);
     const rawMd = await fsp.readFile(inputPath, 'utf8');
@@ -839,7 +815,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
       pandocUsed = true;
     } catch {
       // A missing PDF engine (or any Pandoc failure) → md-only fallback, never throw.
-      process.stdout.write(
+      writeOut(
         `pensmith export: ${format === 'pdf' ? 'PDF engine' : 'Pandoc'} not available — markdown-only fallback.\n`,
       );
       outputPath = join(exportDir, `${stem}.md`);

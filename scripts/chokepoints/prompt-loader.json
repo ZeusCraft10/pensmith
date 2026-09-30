@@ -2,7 +2,7 @@
   "id": "prompt-loader",
   "requirement": "RUN-29",
   "module": "bin/lib/prompt-loader.ts",
-  "description": "Only bin/lib/prompt-loader.ts builds a path into templates/prompts/: loadPrompt() checks every prompt's sha256 against EXPECTED_PROMPT_HASHES (D-12) before it is sent to a model, so a second reader would bypass the hash pin and let an edited prompt reach the provider. Everything else calls loadPrompt(slug), or builds a request with prompt-request.ts buildPromptRequest(slug, values).",
+  "description": "Only bin/lib/prompt-loader.ts builds a path into plugin/templates/prompts/ (through paths.ts pluginTemplatePath): loadPrompt() checks every prompt's sha256 against EXPECTED_PROMPT_HASHES (D-12) before it is sent to a model, so a second reader would bypass the hash pin and let an edited prompt reach the provider. Everything else calls loadPrompt(slug), or builds a request with prompt-request.ts buildPromptRequest(slug, values).",
   "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs"],
   "allow": ["bin/lib/prompt-loader.ts"],
   "match": {

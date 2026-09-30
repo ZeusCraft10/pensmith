@@ -1,99 +1,154 @@
-// tests/hooks/pre-compact.test.ts — Phase 7 Wave 0 RED scaffold for HOOK-01.
+// tests/hooks/pre-compact.test.ts — the PreCompact hook bundle (PLUG-14,
+// D-23a-15, D-23a-16), spawned as Claude Code runs it:
+// `node plugin/dist/hooks/pre-compact.mjs` with the documented stdin JSON.
 //
-// PreCompact writes .paper/HANDOFF.json (D-17 LOCKED, <= 5120 bytes) before
-// context compaction. onPreCompact already writes the HANDOFF (Phase 3), so the
-// size/parse assertions PASS now. The 10s timeout race lands in Plan 07-03;
-// that assertion is RED-by-skip on a PRECOMPACT_TIMEOUT_MS token in the source.
-//
-// HANDOFF_MAX_BYTES = 5120 (bin/lib/schemas/handoff.ts).
+// In a paper it writes `.paper/HANDOFF.json` v2 from the router's decision —
+// with §2 `writing`: {phase:'sectioning', section:'2', position:'write'} —
+// within its 10 s timeout, prints nothing, exits 0, and changes nothing else in
+// `.paper/` (its lock lives in the data dir). Section pointers are relative
+// paths. The stdin `cwd` and PENSMITH_PAPER_ROOT pick the paper; the `open`
+// pointer never does. A HANDOFF.json written by a newer pensmith is left
+// byte-identical, and a registered slug longer than the schema allows still
+// gets a handoff. (A pre-v1 root-level layout is never touched by a hook:
+// tests/hooks-noop.test.ts.)
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { HandoffSchema, HANDOFF_MAX_BYTES } from '../../bin/lib/handoff.js';
+import { changedPaths, sandbox, sandboxDataPath, snapshot, writeOutline, writeState } from '../helpers/paper-cli-harness.js';
+import { seedThreeSectionPaper } from '../helpers/status-fixture.js';
+import { assertBundlesPresent, hookInput, runHook } from './hook-runner.js';
 
-const HOOK_SRC = fileURLToPath(new URL('../../hooks/pre-compact.ts', import.meta.url));
-const HOOK_MOD = new URL('../../hooks/pre-compact.js', import.meta.url).href;
-const HANDOFF_SCHEMA_MOD = new URL('../../bin/lib/schemas/handoff.js', import.meta.url).href;
+assertBundlesPresent();
 
-const hookSrc = existsSync(HOOK_SRC) ? readFileSync(HOOK_SRC, 'utf8') : '';
-// RED-by-skip: the 10s race (PRECOMPACT_TIMEOUT_MS) lands in 07-03.
-const timeoutWired = /PRECOMPACT_TIMEOUT_MS/.test(hookSrc);
-
-function freshPaperDir(): string {
-  const root = mkdtempSync(join(tmpdir(), 'pensmith-pre-compact-'));
-  const paperDir = join(root, '.paper');
-  mkdirSync(paperDir, { recursive: true });
-  // Minimal STATE.json so readState resolves a phase.
-  writeFileSync(
-    join(paperDir, 'STATE.json'),
-    JSON.stringify({
-      $schemaVersion: 2,
-      paperId: 'pre-compact-test',
-      createdAt: new Date().toISOString(),
-      phase: 'write',
-      sections: [{ n: 1, slug: 'intro' }],
-    }),
-  );
-  return paperDir;
+function readHandoffFile(root: string): unknown {
+  return JSON.parse(readFileSync(join(root, '.paper', 'HANDOFF.json'), 'utf8'));
 }
 
-// === onPreCompact writes a HANDOFF.json that parses + is <= 5120 bytes, fast ===
-test('HOOK-01: onPreCompact writes .paper/HANDOFF.json that parses under HandoffSchema and is <= 5120 bytes',
-  async () => {
-    const paperDir = freshPaperDir();
-    const mod = (await import(HOOK_MOD)) as {
-      onPreCompact: (input: { paperDir?: string }) => Promise<void>;
-    };
-    const schemaMod = (await import(HANDOFF_SCHEMA_MOD)) as {
-      HandoffSchema: { parse: (v: unknown) => unknown };
-      HANDOFF_MAX_BYTES: number;
-    };
-
-    const start = Date.now();
-    await mod.onPreCompact({ paperDir });
-    const elapsed = Date.now() - start;
-
-    const handoffPath = join(paperDir, 'HANDOFF.json');
-    assert.ok(existsSync(handoffPath), 'HOOK-01: onPreCompact must write .paper/HANDOFF.json');
-
-    const bytes = readFileSync(handoffPath);
-    assert.ok(
-      bytes.byteLength <= 5120,
-      `HOOK-01: HANDOFF.json must be <= 5120 bytes (HANDOFF_MAX_BYTES), got ${bytes.byteLength}`,
-    );
-    assert.equal(schemaMod.HANDOFF_MAX_BYTES, 5120, 'HOOK-01: HANDOFF_MAX_BYTES is the 5120-byte cap');
-
-    const parsed = JSON.parse(bytes.toString('utf8')) as unknown;
-    assert.doesNotThrow(
-      () => schemaMod.HandoffSchema.parse(parsed),
-      'HOOK-01: the written HANDOFF.json must validate against HandoffSchema',
-    );
-
-    // Runs well under the 10s budget (HOOK-01 timeout is 10_000ms).
-    assert.ok(elapsed < 10_000, `HOOK-01: onPreCompact must complete well under 10s, took ${elapsed}ms`);
-  });
-
-// === presence guard for the timeout race ===
-test('HOOK-01: pre-compact 10s-timeout wiring is consistent with Wave-0 RED state', () => {
-  if (timeoutWired) {
-    assert.ok(timeoutWired, 'pre-compact.ts carries PRECOMPACT_TIMEOUT_MS — timeout test active');
-  } else {
-    assert.ok(!timeoutWired, 'Wave-0: pre-compact.ts has no 10s race yet (RED-by-skip; lands in 07-03)');
-  }
+test('PLUG-14: PreCompact in a paper with §2 writing writes a valid v2 HANDOFF {sectioning, 2, write} within 10 s', async () => {
+  const sb = sandbox('hook-precompact');
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  const before = snapshot(join(root, '.paper'));
+  const r = runHook(sb, 'pre-compact', { cwd: root });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '', 'PreCompact prints nothing on stdout');
+  assert.ok(r.ms < 10_000, `finished within the 10 s hook timeout (${r.ms.toFixed(0)} ms)`);
+  const file = join(root, '.paper', 'HANDOFF.json');
+  assert.ok(existsSync(file), `HANDOFF.json written (stderr: ${r.stderr})`);
+  assert.ok(statSync(file).size <= HANDOFF_MAX_BYTES);
+  const h = HandoffSchema.parse(readHandoffFile(root));
+  assert.equal(h.schema_version, 2);
+  assert.equal(h.phase, 'sectioning');
+  assert.equal(h.section, '2');
+  assert.equal(h.position, 'write');
+  assert.equal(h.current_section, 'methods');
+  assert.match(h.next_action, /Draft section §2 \(methods\)/);
+  assert.deepEqual(
+    h.section_pointers.map((p) => [p.slug, p.state, p.plan_path]),
+    [
+      ['intro', 'verified', '.paper/sections/01-intro/PLAN.md'],
+      ['methods', 'writing', '.paper/sections/02-methods/PLAN.md'],
+      ['results', 'planned', '.paper/sections/03-results/PLAN.md'],
+    ],
+    'one pointer per registered section, relative POSIX paths, PLAN.md status',
+  );
+  // SESSION.log is the paper's own session log: every STATE.json read appends a
+  // `state.load` event there (as `pensmith status` does). Nothing else changes.
+  assert.deepEqual(
+    changedPaths(before, snapshot(join(root, '.paper')), /^SESSION\.log$/),
+    ['HANDOFF.json'],
+    'only HANDOFF.json changes in .paper/ (no lock file beside it)',
+  );
 });
 
-// === timeout-path: a slow write must reject within ~10s (RED-by-skip) ===
-test('HOOK-01: onPreCompact bounds the HANDOFF write with a ~10s timeout (PRECOMPACT_TIMEOUT_MS)',
-  { skip: !timeoutWired }, async () => {
-    // The 07-03 implementation wraps writeHandoff in a Promise.race against a
-    // PRECOMPACT_TIMEOUT_MS deadline. When that token is present this case
-    // asserts the source bounds the write so a hung compaction cannot block the
-    // session indefinitely. A full slow-write injection requires a seam 07-03
-    // exposes; here we pin the source-level contract that the race exists.
-    assert.match(hookSrc, /PRECOMPACT_TIMEOUT_MS/, 'HOOK-01: the 10s timeout constant must be declared');
-    assert.match(hookSrc, /(race|setTimeout|AbortController)/,
-      'HOOK-01: the write must be bounded by a race / timeout against PRECOMPACT_TIMEOUT_MS');
-  });
+test('PLUG-14: PreCompact reflects the router — a paper before research is at phase research; a finished section moves the position', async () => {
+  const sb = sandbox('hook-precompact-phase');
+  const early = sb.project('early');
+  writeState(early, []);
+  assert.equal(runHook(sb, 'pre-compact', { cwd: early }).status, 0);
+  const e = HandoffSchema.parse(readHandoffFile(early));
+  assert.deepEqual([e.phase, e.section, e.position], ['research', null, null]);
+
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  const plan = join(root, '.paper', 'sections', '02-methods', 'PLAN.md');
+  writeFileSync(plan, readFileSync(plan, 'utf8').replace('status: writing', 'status: written'));
+  writeFileSync(join(root, '.paper', 'sections', '02-methods', 'DRAFT.md'), '# Methods\n\nA draft.\n');
+  assert.equal(runHook(sb, 'pre-compact', { cwd: root }).status, 0);
+  const h = HandoffSchema.parse(readHandoffFile(root));
+  assert.deepEqual([h.phase, h.section, h.position], ['sectioning', '2', 'verify']);
+  assert.equal(h.section_pointers[1]?.draft_path, '.paper/sections/02-methods/DRAFT.md');
+});
+
+test('PLUG-14: PreCompact addresses the stdin cwd or PENSMITH_PAPER_ROOT, never the `open` pointer', async () => {
+  const sb = sandbox('hook-precompact-root');
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  const elsewhere = sb.project('elsewhere');
+
+  // Claude Code passes the session's cwd on stdin.
+  assert.equal(runHook(sb, 'pre-compact', { cwd: elsewhere, input: hookInput('pre-compact', root) }).status, 0);
+  assert.ok(existsSync(join(root, '.paper', 'HANDOFF.json')), 'written for the stdin cwd');
+  assert.equal(existsSync(join(elsewhere, '.paper')), false);
+
+  const other = sb.project('other');
+  await seedThreeSectionPaper(other);
+  assert.equal(runHook(sb, 'pre-compact', { cwd: elsewhere, input: hookInput('pre-compact', elsewhere), env: { PENSMITH_PAPER_ROOT: other } }).status, 0);
+  assert.ok(existsSync(join(other, '.paper', 'HANDOFF.json')), 'written for PENSMITH_PAPER_ROOT');
+
+  const pointed = sb.project('pointed');
+  await seedThreeSectionPaper(pointed);
+  const pointer = sandboxDataPath(sb, 'active.json');
+  mkdirSync(join(pointer, '..'), { recursive: true });
+  writeFileSync(pointer, JSON.stringify({ paperId: 'x', folderPath: pointed }));
+  const r = runHook(sb, 'pre-compact', { cwd: elsewhere, input: hookInput('pre-compact', elsewhere) });
+  assert.equal(r.status, 0);
+  assert.equal(existsSync(join(pointed, '.paper', 'HANDOFF.json')), false, 'the open pointer is never followed');
+  assert.equal(existsSync(join(elsewhere, '.paper')), false, 'and nothing is created where the hook ran');
+});
+
+test('PLUG-14: PreCompact with a corrupt STATE.json still exits 0 and records attention', async () => {
+  const sb = sandbox('hook-precompact-corrupt');
+  const root = sb.project('paper');
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  writeFileSync(join(root, '.paper', 'STATE.json'), '{ not json');
+  const r = runHook(sb, 'pre-compact', { cwd: root });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  const h = HandoffSchema.parse(readHandoffFile(root));
+  assert.equal(h.phase, 'attention');
+  assert.deepEqual(h.section_pointers, []);
+});
+
+test('PLUG-14: PreCompact leaves a HANDOFF.json written by a newer pensmith byte-identical (never downgraded)', async () => {
+  const sb = sandbox('hook-precompact-newer');
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  const file = join(root, '.paper', 'HANDOFF.json');
+  const newer = JSON.stringify({ schema_version: 3, future: true });
+  writeFileSync(file, newer);
+  const r = runHook(sb, 'pre-compact', { cwd: root, input: hookInput('pre-compact', root, { session_id: 's', trigger: 'auto' }) });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  assert.equal(readFileSync(file, 'utf8'), newer, 'the newer file is not replaced');
+  assert.match(r.stderr, /\[pensmith pre-compact\] HANDOFF\.json not written: .*written by a newer pensmith \(schema_version 3\)/);
+});
+
+test('PLUG-14: PreCompact still writes a handoff when a registered slug is longer than the schema allows', () => {
+  const sb = sandbox('hook-precompact-long-slug');
+  const root = sb.project('paper');
+  const long = `long-${'x'.repeat(120)}`;
+  assert.ok(long.length > 120);
+  writeState(root, [{ n: 1, slug: long }, { n: 2, slug: 'short' }]);
+  writeFileSync(join(root, '.paper', 'RESEARCH.md'), '# Research log\n');
+  writeOutline(root, [{ n: 1, slug: long }, { n: 2, slug: 'short' }]);
+  const r = runHook(sb, 'pre-compact', { cwd: root });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr, '', 'no failed-write diagnostic');
+  const h = HandoffSchema.parse(readHandoffFile(root));
+  assert.deepEqual([h.phase, h.section, h.position, h.current_section], ['sectioning', '1', 'plan', null], 'the id records the position; the over-long slug is null');
+  assert.deepEqual(h.section_pointers.map((p) => p.slug), ['short'], 'the pointer the schema refuses is dropped, the rest kept');
+});

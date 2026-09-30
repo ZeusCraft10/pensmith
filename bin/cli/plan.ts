@@ -55,10 +55,11 @@ import { withLock } from '../lib/lock.js';
 import { networkMode, offlineMarkerLine } from '../lib/http-mock.js';
 import { EXIT_ERROR, PensmithError } from '../lib/exit-codes.js';
 import type { SectionPlan } from '../lib/llm-contracts.js';
+import { out } from '../lib/output-sink.js';
 
 /** The CLI's output sink for the section research pass (section-research.ts never writes the streams itself). */
 const CLI_IO = {
-  out: (line: string): void => void process.stdout.write(`${line}\n`),
+  out: (line: string): void => out(`${line}\n`),
   err: (line: string): void => void process.stderr.write(`${line}\n`),
 };
 
@@ -161,7 +162,7 @@ export const planCommand = defineCommand({
         // rejects any replacement_citekey ∉ assigned_sources (T-04-14 / T-11-09).
         proposeSwap,
       });
-      process.stdout.write(`pensmith plan --revise: ${result.message}\n`);
+      out(`pensmith plan --revise: ${result.message}\n`);
       return { ok: !result.retryExhausted, mode: 'revise', ...result, ...(researchPass ? { research: researchPass } : {}) };
     }
 
@@ -295,7 +296,7 @@ export const planCommand = defineCommand({
       { marker: networkMode().dryRun ? offlineMarkerLine() : null },
     );
     await withLock(planPath, () => atomicWriteFile(planPath, md));
-    process.stdout.write(
+    out(
       `pensmith plan: wrote PLAN.md to ${planPath} (${plan.claims.length} claim(s), ` +
         `${new Set(plan.frontmatter.assigned_sources).size} source(s))\n`,
     );

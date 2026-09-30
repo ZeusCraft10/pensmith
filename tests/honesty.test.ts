@@ -52,7 +52,7 @@ const hasHard05Seam = typeof GPTZERO_MAX_BYTES_VAL === 'number';
 
 const honestySrcPath = fileURLToPath(new URL('../bin/lib/honesty.ts', import.meta.url));
 const honestyModUrl = new URL('../bin/lib/honesty.js', import.meta.url);
-const framingPath = fileURLToPath(new URL('../references/honesty-framing.md', import.meta.url));
+const framingPath = fileURLToPath(new URL('../plugin/references/honesty-framing.md', import.meta.url));
 
 /** Extract the note paragraph below "## Note" from the locked framing file —
  *  the SAME extraction honesty.ts must perform. Used to assert verbatim render. */

@@ -24,7 +24,8 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { PensmithError, EXIT_USAGE } from './exit-codes.js';
+import { fileURLToPath } from 'node:url';
+import { PensmithError, EXIT_ERROR, EXIT_USAGE } from './exit-codes.js';
 import { stdinMayCarryAssignment } from './stdin-source.js';
 
 // ---------------------------------------------------------------------------
@@ -268,6 +269,141 @@ export function pensmithOwnSourceApprovalsPath(
 }
 
 // ---------------------------------------------------------------------------
+// The plugin asset root (PLUG-02, D-23a-03).
+//
+// `plugin/` is the one home of every shipped asset — workflow bodies,
+// templates (prompts, citation styles, presets, stubs, the dry-run corpus),
+// references, skills and agents — for both tiers. This is the ONE resolver:
+// the `plugin-assets` chokepoint row lets only this file name the asset
+// directories, and everything else calls the helpers below.
+//
+// Resolution is lazy and cached, and walks up from THIS module's own location
+// (never an environment variable such as CLAUDE_PLUGIN_ROOT — an env var could
+// point anywhere; the module's location is authoritative):
+//   - a folder holding `.claude-plugin/plugin.json` IS the plugin root — the
+//     bundle in `plugin/dist/…`, or a Claude Code plugin-cache copy (which holds
+//     only the plugin directory);
+//   - otherwise a folder holding `plugin/.claude-plugin/plugin.json` yields
+//     `<folder>/plugin` — the source tree under tsx, the tsc build in `dist/`,
+//     and an `npm pack` / `npm install -g` install (package.json `files` ships
+//     `plugin/`).
+// Neither found: one PensmithError line naming where it looked.
+// ---------------------------------------------------------------------------
+
+/** The plugin directory's name inside a source checkout or an npm install. */
+export const PLUGIN_DIR_NAME = 'plugin';
+/** The plugin manifest, relative to the plugin root. */
+const PLUGIN_MANIFEST_REL = path.join('.claude-plugin', 'plugin.json');
+
+/**
+ * How the plugin root was found: `plugin` — this module runs inside the plugin
+ * itself (a bundle, a plugin-cache copy); `package` — it runs from a package
+ * that holds the plugin as `plugin/` (source, `dist/`, an npm install).
+ */
+export type PluginLayout = 'plugin' | 'package';
+
+export interface PluginRootHit {
+  /** The plugin root: the folder that holds `.claude-plugin/plugin.json`. */
+  readonly root: string;
+  readonly layout: PluginLayout;
+  /** The package folder that holds `plugin/` (layout `package`); null inside the plugin itself. */
+  readonly packageRoot: string | null;
+}
+
+function isRegularFile(p: string): boolean {
+  try {
+    return fs.statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Find the plugin root from `start` upward (the pure walk behind pluginRoot();
+ * tests drive it over synthetic layouts). The nearest folder wins, and at each
+ * folder the plugin itself is checked before a nested `plugin/`.
+ *
+ * @throws PensmithError (EXIT_ERROR) when no folder from `start` up to the
+ *   filesystem root holds either manifest.
+ */
+export function findPluginRoot(start: string): PluginRootHit {
+  const from = path.resolve(start);
+  let cur = from;
+  for (;;) {
+    if (isRegularFile(path.join(cur, PLUGIN_MANIFEST_REL))) {
+      return { root: cur, layout: 'plugin', packageRoot: null };
+    }
+    const nested = path.join(cur, PLUGIN_DIR_NAME);
+    if (isRegularFile(path.join(nested, PLUGIN_MANIFEST_REL))) {
+      return { root: nested, layout: 'package', packageRoot: cur };
+    }
+    const next = path.dirname(cur);
+    if (next === cur) break;
+    cur = next;
+  }
+  throw new PensmithError(
+    `plugin assets not found: neither ${PLUGIN_MANIFEST_REL} nor ${path.join(PLUGIN_DIR_NAME, PLUGIN_MANIFEST_REL)} ` +
+      `exists in ${from} or any folder above it; reinstall pensmith (or restore plugin/ in a source checkout)`,
+    EXIT_ERROR,
+  );
+}
+
+let pluginRootHitCache: PluginRootHit | null = null;
+
+function pluginRootHit(): PluginRootHit {
+  pluginRootHitCache ??= findPluginRoot(path.dirname(fileURLToPath(import.meta.url)));
+  return pluginRootHitCache;
+}
+
+/** The plugin root (absolute): the folder holding `.claude-plugin/plugin.json`. */
+export function pluginRoot(): string {
+  return pluginRootHit().root;
+}
+
+/** How the plugin root was found (see PluginLayout). */
+export function pluginLayout(): PluginLayout {
+  return pluginRootHit().layout;
+}
+
+/**
+ * The package folder holding `plugin/` — a source checkout or an npm install,
+ * where the Tier-2 CLI build lives (`dist/bin/pensmith.js`). Null when this
+ * module runs inside the plugin itself (a bundle or a plugin-cache copy),
+ * which ships no CLI.
+ */
+export function cliPackageRoot(): string | null {
+  return pluginRootHit().packageRoot;
+}
+
+/** `segments` joined under the plugin root. */
+export function pluginPath(...segments: string[]): string {
+  return path.join(pluginRoot(), ...segments);
+}
+
+/** A file under the plugin's `templates/` (prompts, citation styles, presets, stubs, the dry-run corpus). */
+export function pluginTemplatePath(...segments: string[]): string {
+  return pluginPath('templates', ...segments);
+}
+
+/** A file under the plugin's `references/` (locked copy the code renders verbatim). */
+export function pluginReferencePath(file: string): string {
+  return pluginPath('references', file);
+}
+
+/** The workflow body of `verb`: `workflows/<verb>.md` under the plugin root. */
+export function pluginWorkflowPath(verb: string): string {
+  return pluginPath('workflows', `${verb}.md`);
+}
+
+/** The Tier-1 MCP server bundle the plugin manifest launches (D-23a-04/05). */
+export function pluginMcpServerBundle(): string {
+  return pluginPath('dist', 'mcp', 'server.mjs');
+}
+
+/** The MCP server bundle's path as a user reads it in a source checkout or an install. */
+export const PLUGIN_MCP_SERVER_LABEL = 'plugin/dist/mcp/server.mjs';
+
+// ---------------------------------------------------------------------------
 // The active paper root (RUN-13 / RUN-14, D-17-32 / D-17-33).
 //
 // "Paper root" means the PROJECT folder that contains `.paper/`, everywhere:
@@ -466,6 +602,21 @@ export function hasPaper(root: string): boolean {
   return isLegacyPensmithState(r);
 }
 
+/**
+ * True when `root` holds a paper in the current layout: a `.paper/` directory
+ * and no pre-v1 root-level pensmith STATE.json still waiting for the
+ * legacy-layout move. The Claude Code hooks address only such a paper
+ * (bin/lib/hooks/entry.ts): the move renames the user's files, so it belongs
+ * to the next CLI or MCP run, under the paper's session lock — never to a hook
+ * that fires at session start or after a tool call. Under a dry run it is
+ * false (hooks never run one).
+ */
+export function hasCurrentLayoutPaper(root: string): boolean {
+  const r = path.resolve(root);
+  if (isPaperDirName(path.basename(r)) || dryRunWorkspaceActive()) return false;
+  return isDirectory(paperDir(r)) && !isLegacyPensmithState(r);
+}
+
 /** The assignment file names bare `pensmith` and `new` pick up (PRD §5.1 row 1). */
 export const ASSIGNMENT_FILE_NAMES: readonly string[] = Object.freeze([
   'assignment.txt',
@@ -563,6 +714,18 @@ export function mutatingVerbNeedsPaper(verb: string | null): boolean {
 export function noPaperHereMessage(cwd: string): string {
   return `no paper in ${cwd} — run pensmith new to start one here, or pass --paper <name|path> ` +
     '(pensmith list shows your papers)';
+}
+
+/**
+ * The CLI's refusal of a verb that needs a paper, for the MCP section tools
+ * (pensmith_plan / pensmith_write / pensmith_verify, review round 2): the MCP
+ * server resolves its root once (PENSMITH_PAPER_ROOT or the cwd, never the
+ * pointer), so a folder with no paper would otherwise get a placeholder
+ * section, a model bill and a stray `.paper/`. Throws the same EXIT_USAGE line
+ * `pensmith plan|write|verify <N>` exits with there; nothing is created.
+ */
+export function assertPaperHere(root: string): void {
+  if (!hasPaper(root)) throw new PensmithError(noPaperHereMessage(root), EXIT_USAGE);
 }
 
 /** `(active paper "<name>" at <path>)` — the read-only pointer banner. */
@@ -724,7 +887,16 @@ export function resolvePaperRoot(opts: ResolvePaperRootOptions): PaperRootResolu
     // A relative --paper is relative to where the user typed it.
     return { kind: 'root', root: resolvePaperFlag(opts.paperFlag, here), source: 'flag' };
   }
-  if (envRoot) return { kind: 'root', root: asProjectRoot(envRoot), source: 'env' };
+  if (envRoot) {
+    // PENSMITH_PAPER_ROOT names the paper like `--paper` does: a verb that
+    // needs a paper refuses a folder without one there too, rather than build
+    // a placeholder section in it (review round 2 — the MCP tools refuse alike).
+    const root = asProjectRoot(envRoot);
+    if (opts.readOnly !== true && mutatingVerbNeedsPaper(opts.verb) && !hasPaper(root)) {
+      throw new PensmithError(noPaperHereMessage(root), EXIT_USAGE);
+    }
+    return { kind: 'root', root, source: 'env' };
+  }
   if (hasPaper(cwd)) return { kind: 'root', root: cwd, source: 'cwd' };
   // A bare run starts a new paper here when the folder holds an assignment
   // file (GRND-01, D-18-08).

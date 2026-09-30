@@ -111,10 +111,15 @@ export function activePdfWorkers(): number {
   return liveWorkers;
 }
 
-/** The worker entry next to this module: `.ts` from source (tsx), `.js` from dist/. */
-export function pdfWorkerEntry(): string {
-  const here = fileURLToPath(import.meta.url);
-  const ext = path.extname(here) === '.ts' ? '.ts' : '.js';
+/**
+ * The worker entry next to this module: `.ts` from source (tsx), `.js` from
+ * dist/, and `.mjs` inside a plugin bundle (PLUG-02) — there this module is
+ * inlined into `plugin/dist/mcp/server.mjs` and the worker is its own bundle,
+ * `plugin/dist/mcp/pdf-worker.mjs`, in the same directory.
+ */
+export function pdfWorkerEntry(here: string = fileURLToPath(import.meta.url)): string {
+  const own = path.extname(here);
+  const ext = own === '.ts' || own === '.mjs' ? own : '.js';
   return path.join(path.dirname(here), `pdf-worker${ext}`);
 }
 

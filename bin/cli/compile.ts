@@ -31,6 +31,7 @@ import { readPaperBrief } from '../lib/paper-brief.js';
 import { gateRefusals, rowBlocks } from '../lib/verify/gate.js';
 import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
 import { verifySection } from './verify.js';
+import { out } from '../lib/output-sink.js';
 
 /**
  * Production staleness re-verify seam (D-08, D-20-23): the section verifier
@@ -104,15 +105,15 @@ export const compileCommand = defineCommand({
     });
 
     if (result.refused) {
-      process.stdout.write(
+      out(
         `pensmith compile: REFUSED — ${(result.refuseReasons ?? []).length} blocking citation issue(s). No DRAFT.md written.\n`,
       );
-      for (const r of result.refuseReasons ?? []) process.stdout.write(`  - ${r}\n`);
+      for (const r of result.refuseReasons ?? []) out(`  - ${r}\n`);
       // RUN-09: a verifier refusal is EXIT_BLOCKED (result.refused → 4).
       return { ok: false, ...result, exitCode: EXIT_BLOCKED };
     }
 
-    process.stdout.write(
+    out(
       `pensmith compile: wrote ${result.draftPath} and ${result.reportPath} (${result.sectionsCount} sections, ${result.staleResolvedCount} stale resolved).\n`,
     );
     return { ok: true, ...result };

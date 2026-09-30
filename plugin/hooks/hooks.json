@@ -1,0 +1,35 @@
+{
+  "description": "Pensmith session continuity: resume context at session start, a HANDOFF.json before compaction, progress checkpoints after pensmith tool calls, and session-lock release at stop. Each hook exits at once outside a paper.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact|fork",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/dist/hooks/session-start.mjs"], "timeout": 10 }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/dist/hooks/pre-compact.mjs"], "timeout": 10 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^mcp__(?:plugin_pensmith_)?pensmith__.*",
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/dist/hooks/post-tool-use.mjs"], "timeout": 10 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/dist/hooks/stop.mjs"], "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}

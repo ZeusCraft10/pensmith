@@ -150,7 +150,7 @@ The slash command is the *fallback* for explicit control, not the primary UX.
 
 ### 5.5 Hidden namespace for scripting
 
-The full set still exists as `/pensmith:plan-section`, `/pensmith:write-section`, etc. — they aren't taught in the README but are documented for users building automation or scheduled tasks on top of pensmith. Like `git` plumbing vs. porcelain.
+The full set still exists as `/pensmith:plan-section`, `/pensmith:write-section`, etc. — they aren't taught in the README but are documented for users building automation or scheduled tasks on top of pensmith. Like `git` plumbing vs. porcelain. (Phase 23a, PLUG-05: seven user-invoked skills — `research`, `outline`, `plan-section`, `write-section`, `verify-section`, `compile`, `done` — each forwarding one of the 16 verbs, documented in `docs/PLUMBING.md`.)
 
 ### 5.6 Inline conversational corrections
 
@@ -197,7 +197,7 @@ Each subsection below describes a workflow stage. Most are invoked transparently
 - **The assignment** (amended by GRND-01): `--from <file>` or `@file.{pdf,md,txt}` (a PDF is reduced to its text through the pdf-text chokepoint; no PDF bytes are stored), an assignment piped on stdin (read only when no file is named, stdin is a pipe or a file and not scripted numbered answers, and given up after 2 s of silence), an `assignment.{txt,md,pdf}` in the folder (the `assignment-pickup` gate: confirmed in a terminal, used and named under `--yolo` or without a terminal; several such files need a choice), or an interactive multi-line paste in a terminal. A `--thesis` seed (from `sketch`) may stand in for it. Missing, unreadable, unsupported or empty input fails with one line; no assignment in a run that cannot prompt exits 2 (`no assignment found`) and writes nothing.
 - **The questions** (amended by GRND-02), asked deterministically — via AskUserQuestion (Tier 1), in the terminal or through scripted numbered answers (Tier 2), or answered up front with flags or `--answers <file.toml>` (`pensmith new --questions` lists each question's id, options, flag and answers-file key):
   1. **PII redaction?** — opt-in, default no. Asked first: it must be settled before the assignment reaches any model. If yes, intake redacts names, IDs, emails, phones and dates before the LLM call and before INTAKE.md is written (§14, GRND-05).
-  2. **Discipline preset** (see §8) — the presets of `templates/presets/disciplines.json`; names and abbreviations are accepted. Pre-fills sensible defaults for the rest.
+  2. **Discipline preset** (see §8) — the presets of `plugin/templates/presets/disciplines.json`; names and abbreviations are accepted. Pre-fills sensible defaults for the rest.
   3. **Mode** — `draft` (full paper through compile) or `outline` (outline-only: stops after outline approval; produces sourced outline + annotated bibliography).
   4. **Goal** — `producing a draft` / `learning the topic` / `both` (see §7.13 educator mode).
   5. **Class** for library grouping (optional; defaults to "Unfiled").
@@ -382,6 +382,8 @@ Same patterns as GSD:
 - PreCompact hook writes HANDOFF.json (schema in `schema/handoff-v1.json`). Section-granular: includes current section number, plan/write/verify position within it.
 - SessionStart auto-invokes resume.
 - PostToolUse writes throttled mid-session checkpoint (≤1/min).
+
+*(Amended in v1.0.0 Phase 23a — PLUG-14, D-23a-15, D-23a-16; reason: the hooks never ran, SessionStart's resume note reached only the user, and v1's phase field mixed paper and section stages.)* The PreCompact hook writes `.paper/HANDOFF.json` **v2** within its 10 s timeout: `phase` (intake, research, outline, sectioning, compile, export, done, attention), `section` (the id `status` prints), `position` (plan, write or verify inside `sectioning`), the slug, the next action and pointers to each registered section, all from the router's decision — the zod schema in `bin/lib/schemas/handoff.ts` (≤ 5,120 bytes; there is no `schema/handoff-v1.json`). A v1 file is migrated in memory; a file written by a newer pensmith is neither read nor overwritten. SessionStart does not run resume: on every session start (startup, resume, `/clear`, compaction, fork) it gives Claude (as `hookSpecificOutput.additionalContext`) the router's next step and — only on the SessionStart that follows a compaction (`source: compact`), since HANDOFF.json stays until `pensmith resume` and would otherwise describe a position the paper has left — a summary of a not-done HANDOFF, built only from validated or router-derived values — never free text from the paper's files, which may be shared — and the instruction to run `/pensmith`. PostToolUse writes at most one checkpoint line per minute per paper to `pensmithDataDir()/checkpoints/`, never under `.claude/` or `.paper/`; within the minute, a call that moved the paper replaces that line, so the last line always names the current step. Stop releases only a paper session lock that this Claude session's MCP server left behind (its process no longer running); a lock a live server holds is a tool call still in flight and stays. Every hook exits at once, printing nothing, outside a paper, and never moves a pre-v1 layout.
 - `/pensmith status` shows: current paper, current section, per-section status (✓ written/verified, ⌛ in progress, ⌽ pending), running cost meter.
 
 ### 7.15 Add source manually (`/pensmith add`)
@@ -423,11 +425,11 @@ If user provides a folder of their past writing samples at intake:
 ### 7.19 Dry-run + cost estimator + cost cap
 
 - `/pensmith --dry-run` runs the entire workflow without calling external APIs or LLMs: zero sockets, sources from a labelled synthetic provider, and every model call answered by a deterministic stub that satisfies the step's contract (the drafter stub writes to the word target and cites the section's assigned sources). Sources it finds are synthetic and labelled as such (reserved `10.0000/pensmith-dryrun.*` identifiers, a `synthetic` flag and an `OFFLINE MODE (reason: --dry-run)` banner that names the workspace); they are accepted by the verifier only under `--dry-run` and never reach a real paper. A real citation is reported UNVERIFIABLE (dry-run) — a dry run never fakes a verdict.
-  - **Workspace** (D-18-29). A dry run works in `./.paper-dry-run/`, never in `.paper/`. When the folder holds a real paper, the workspace is seeded from `.paper/` (a copy of its paper files; `SEED.json` records the fingerprint — relative paths, sizes, sha256 — of what was copied), kept across dry runs, and re-seeded when `.paper/` changes. `SESSION.log`, `COSTS.jsonl`, `INTAKE.raw.local` and `export/` are not copied. The real `.paper/` is never created, never written, and read only to seed. The dry run holds the paper's own session lock, a dry-run paper is never registered in the library (§6), and `.paper-dry-run/` is ignored like `.paper/`. Every dry-run artifact carries a marker (`.paper-dry-run/DRY-RUN.md`, the offline marker line in RESEARCH/VERIFICATION/COMPILE-REPORT and in the INTAKE/OUTLINE/PLAN bodies, `synthetic: true` on library entries) except the section drafts, the compiled `DRAFT.md`/`FINAL.md` and the exports, which stay zero-trace and are disclosed by their name and place: `.paper-dry-run/export/DRAFT.dry-run.<ext>`, whose path `done` prints.
+  - **Workspace** (D-18-29). A dry run works in `./.paper-dry-run/`, never in `.paper/`. When the folder holds a real paper, the workspace is seeded from `.paper/` (a copy of its paper files; `SEED.json` records the fingerprint — relative paths, sizes, sha256 — of what was copied), kept across dry runs, and re-seeded when `.paper/` changes. `SESSION.log`, `COSTS.jsonl`, `INTAKE.raw.local`, `HANDOFF.json` (the real session's resume pointer) and `export/` are not copied or fingerprinted. The real `.paper/` is never created, never written, and read only to seed. The dry run holds the paper's own session lock, a dry-run paper is never registered in the library (§6), and `.paper-dry-run/` is ignored like `.paper/`. Every dry-run artifact carries a marker (`.paper-dry-run/DRY-RUN.md`, the offline marker line in RESEARCH/VERIFICATION/COMPILE-REPORT and in the INTAKE/OUTLINE/PLAN bodies, `synthetic: true` on library entries) except the section drafts, the compiled `DRAFT.md`/`FINAL.md` and the exports, which stay zero-trace and are disclosed by their name and place: `.paper-dry-run/export/DRAFT.dry-run.<ext>`, whose path `done` prints.
   - **Loop** (D-18-30). Bare `pensmith --dry-run` (and `next`/`resume --dry-run`) repeats the §5.1 step until the router reports done or attention, a step fails or a gate refuses, or a decision repeats without progress. With `--yolo` it goes from the assignment to the export in one invocation; without it, it stops at the first gate it cannot answer (no terminal: exit 3).
   - A paper a pre-v1.0 dry run made inside `.paper/` (marked `.paper/DRY-RUN.md`) is still refused by normal commands; delete it to start a real paper.
 - `/pensmith --estimate` runs the workflow planner only and makes no LLM or network call. It projects the *remaining* work with the resolved runtime's per-slug models and prices (an unknown model is marked `(fallback price)`) and recorded per-slug output-token p90s from SESSION.log (shipped defaults until 5 samples exist). Completed steps are excluded; with nothing left it prints `nothing left to run ($0.00)`. Without a paper it derives the section count from the assignment (`assignment.*`, `--from` or INTAKE.md) and the length target. It prints per-step rows, the total, the model and the cap, then asks `Proceed? [y/N]` in a terminal: yes runs the next router action (or, for an explicit command such as `pensmith write 2 --estimate`, that command — whose own steps are what is projected, a completed step included), no exits 0. A non-interactive run prints and exits 0. `--yolo` never answers this prompt.
-- **Hard runtime cost cap.** Per `[budget] cost_cap_usd` in config (default: $5 per session; `PENSMITH_COST_CAP_USD` overrides). A *session* is one top-level CLI invocation (a bare-router chain included) or one Claude Code session (one MCP server process). Before every model call, the session's spend plus the call's projection (input estimate plus the slug's p90 output, never more than `max_tokens`) is compared with the cap. Over the cap, a terminal user is asked once per session whether to continue; a run that cannot prompt — `--yolo` included — sends nothing and exits 5 with one line. `warn_at_usd` prints one warning with the running total. This is the only cap: there are no per-step or per-section caps. The `--yolo` pre-flight refuses only when the projected remaining cost exceeds the cap. Running cost meter shown in `/pensmith status` (`cost: $X this session / $Y total (cap $Z)`; `n/a (Claude session)` in the plugin).
+- **Hard runtime cost cap.** Per `[budget] cost_cap_usd` in config (default: $5 per session; `PENSMITH_COST_CAP_USD` overrides). A *session* is one top-level CLI invocation (a bare-router chain included) or one Claude Code session (one MCP server process). Before every model call, the session's spend plus the call's projection (input estimate plus the slug's p90 output, never more than `max_tokens`) is compared with the cap. Over the cap, a terminal user is asked once per session whether to continue; a run that cannot prompt — `--yolo` included — sends nothing and exits 5 with one line. `warn_at_usd` prints one warning with the running total. This is the only cap: there are no per-step or per-section caps. The `--yolo` pre-flight refuses only when the projected remaining cost exceeds the cap. Running cost meter shown in `/pensmith status` (`cost: $X this session / $Y total (cap $Z)`). *(Amended in v1.0.0 Phase 23a, review round 2: the plugin showed `n/a (Claude session)`, but in this release its `plan` and `write` bill the provider configured for pensmith, so both tiers show the same meter until key-free Tier-1 generation ships.)*
 - All three are critical for budget-conscious users.
 
 ### 7.20 `--yolo` flag (autonomous mode, default off)
@@ -503,7 +505,7 @@ Pensmith ships with discipline presets at intake. Each preset configures source 
 | Sociology (extra preset) | APA 7 | OpenAlex → Crossref → Semantic Scholar | Intro / Lit Review / Methods / Findings / Discussion / Conclusion | off | 1–3 |
 | Other / Custom | APA 7 (default) | OpenAlex → Crossref → arXiv | (free-form) | off | 1–3 |
 
-The table lives in `templates/presets/disciplines.json`, read and validated by one module, `bin/lib/disciplines.ts` (GRND-06): every consumer — intake's defaults, the outline's sectioning convention and counterargument default, the plan and draft tone, the export's citation style, the per-paragraph density band of the compile report — asks it, and no other module holds a discipline literal (chokepoint row `discipline-literals`). Precedence for every preset-backed value: preset < intake answer < config.toml < CLI flag. Source preferences are stored as ids — `arxiv`, `semanticscholar`, `openalex`, `pubmed`, `crossref`, `books`, `jstor`, `psycnet`, `nber`, `philpapers` — in the order shown; `books` and `nber` have adapters, and `jstor`, `psycnet` and `philpapers` are reached through OpenAlex, Crossref and PubMed (see "How the source preferences are reached" below). `sociology` is shipped as an extra preset (amended: it was always in the preset file).
+The table lives in `plugin/templates/presets/disciplines.json`, read and validated by one module, `bin/lib/disciplines.ts` (GRND-06): every consumer — intake's defaults, the outline's sectioning convention and counterargument default, the plan and draft tone, the export's citation style, the per-paragraph density band of the compile report — asks it, and no other module holds a discipline literal (chokepoint row `discipline-literals`). Precedence for every preset-backed value: preset < intake answer < config.toml < CLI flag. Source preferences are stored as ids — `arxiv`, `semanticscholar`, `openalex`, `pubmed`, `crossref`, `books`, `jstor`, `psycnet`, `nber`, `philpapers` — in the order shown; `books` and `nber` have adapters, and `jstor`, `psycnet` and `philpapers` are reached through OpenAlex, Crossref and PubMed (see "How the source preferences are reached" below). `sociology` is shipped as an extra preset (amended: it was always in the preset file).
 
 Override examples (parsed deterministically from the assignment and every intake answer, GRND-04):
 - "Use MLA for this paper" at intake → swaps citation style; everything else stays preset.
@@ -618,7 +620,7 @@ refusal_fallbacks = "off"            # off | default — opt-in Anthropic server
 # (pensmithDataDir()/runtime.json); api_key_env must be ANTHROPIC_API_KEY,
 # OPENAI_API_KEY or match ^[A-Z][A-Z0-9_]*_API_KEY$ (never e.g. GITHUB_TOKEN).
 
-[runtime.slugs.section-drafter]      # per-prompt-slug overrides (any slug in templates/prompts/, or a step alias: pass2, pass4, evaluator, queries)
+[runtime.slugs.section-drafter]      # per-prompt-slug overrides (any slug in plugin/templates/prompts/, or a step alias: pass2, pass4, evaluator, queries)
 model = "claude-opus-5"
 effort = "high"
 # Prompt caching needs no setting (RUN-26, D-18-05). Every prompt's fixed
@@ -695,8 +697,8 @@ All HTTP traffic goes through `bin/lib/http.ts`, which provides: a response cach
 
 ```
 pensmith/
-├── .claude-plugin/{plugin.json, marketplace.json}
-├── .mcp.json
+├── .claude-plugin/marketplace.json   # the git marketplace; its one plugin's source is ./plugin
+├── .mcp.json                         # developer server: node ${PWD:-.}/plugin/dist/mcp/server.mjs
 ├── README.md  PRIVACY.md  LICENSE  CHANGELOG.md
 ├── package.json  pyproject.toml
 ├── bin/
@@ -727,36 +729,41 @@ pensmith/
 │       ├── doctor.js            # /pensmith doctor health checks
 │       ├── estimator.js         # cost estimation, dry-run stub responses
 │       └── migrations/          # schema migrations, one file per (from→to) version
-├── mcp/server.js                # Tier 1 MCP server
-├── hooks/hooks.json
-├── skills/                      # one dir per command — primary `pensmith` skill plus shortcuts
-├── agents/
-│   ├── pensmith-intake.md
-│   ├── pensmith-disambiguator.md
-│   ├── pensmith-source-researcher.md
-│   ├── pensmith-source-evaluator.md
-│   ├── pensmith-pdf-ingestor.md
-│   ├── pensmith-outliner.md
-│   ├── pensmith-section-planner.md
-│   ├── pensmith-section-writer.md
-│   ├── pensmith-doi-verifier.md
-│   ├── pensmith-claim-verifier.md
-│   ├── pensmith-quote-verifier.md
-│   ├── pensmith-paragraph-auditor.md
-│   ├── pensmith-compiler.md
-│   ├── pensmith-style-analyzer.md
-│   ├── pensmith-sketch-partner.md
-│   ├── pensmith-humanizer-wrapper.md
-│   ├── pensmith-honesty-scorer.md
-│   ├── pensmith-plagiarism-scanner.md
-│   └── pensmith-citations-formatter.md
-├── workflows/<one .md per skill>
-├── templates/{PROJECT, RESEARCH, OUTLINE, section-PLAN, section-DRAFT,
-│             section-VERIFICATION, COMPILE-REPORT, FINAL, STYLE, disclaimer}.md
-│            + citation-style templates + discipline preset YAML
-├── references/{source-policies, citation-styles, claim-extraction,
-│              academic-integrity, runtime-contract, command-ux,
-│              ecosystem-composition, section-as-phase}.md
+├── mcp/server.ts                # Tier 1 MCP server source (bundled into plugin/dist/mcp/server.mjs)
+├── hooks/*.ts                   # hook entry sources (bundled into plugin/dist/hooks/*.mjs)
+├── plugin/                      # THE plugin, and the one home of every shipped asset for both tiers
+│   ├── .claude-plugin/plugin.json   # metadata + the inline MCP server (${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.mjs)
+│   ├── hooks/hooks.json             # SessionStart, PreCompact, PostToolUse, Stop → dist/hooks/*.mjs
+│   ├── skills/<name>/SKILL.md       # `pensmith` (the one NL router) + 7 user-invoked plumbing skills (§5.5)
+│   ├── agents/
+│   │   ├── pensmith-intake.md
+│   │   ├── pensmith-disambiguator.md
+│   │   ├── pensmith-source-researcher.md
+│   │   ├── pensmith-source-evaluator.md
+│   │   ├── pensmith-pdf-ingestor.md
+│   │   ├── pensmith-outliner.md
+│   │   ├── pensmith-section-planner.md
+│   │   ├── pensmith-section-writer.md
+│   │   ├── pensmith-doi-verifier.md
+│   │   ├── pensmith-claim-verifier.md
+│   │   ├── pensmith-quote-verifier.md
+│   │   ├── pensmith-paragraph-auditor.md
+│   │   ├── pensmith-compiler.md
+│   │   ├── pensmith-style-analyzer.md
+│   │   ├── pensmith-sketch-partner.md
+│   │   ├── pensmith-humanizer-wrapper.md
+│   │   ├── pensmith-honesty-scorer.md
+│   │   ├── pensmith-plagiarism-scanner.md
+│   │   └── pensmith-citations-formatter.md
+│   ├── workflows/<one .md per verb>
+│   ├── templates/{PROJECT, RESEARCH, OUTLINE, section-PLAN, section-DRAFT,
+│   │             section-VERIFICATION, COMPILE-REPORT, FINAL, STYLE, disclaimer}.md
+│   │            + prompts/ + citation-style templates + discipline presets + the dry-run corpus
+│   ├── references/{source-policies, citation-styles, claim-extraction,
+│   │              academic-integrity, runtime-contract, command-ux,
+│   │              ecosystem-composition, section-as-phase}.md
+│   └── dist/                    # the only generated files: committed, drift-checked, self-contained
+│                                # single-file ESM bundles (mcp/server.mjs, mcp/pdf-worker.mjs, hooks/*.mjs)
 ├── schema/
 │   ├── handoff-v1.json
 │   ├── state-v1.json
@@ -780,6 +787,8 @@ pensmith/
     ├── tier-contract.test.js   # runs every workflow body in BOTH Tier 1 + Tier 2 modes
     └── sources.test.js          # cassette-based; gated on PENSMITH_NETWORK_TESTS for live
 ```
+
+(Amended in Phase 23a, PLUG-02.) `plugin/` is the one canonical home of the workflow bodies, templates (prompts, citation styles, presets, the dry-run corpus), references, skills and agents for **both** tiers, and the marketplace installs that directory, not the repository root. A marketplace install runs no build and must contain neither `bin/` (claude.ai and Cowork refuse such a plugin) nor CLAUDE.md, so the plugin's only generated files are the committed, drift-checked bundles in `plugin/dist/`, and the TypeScript sources (`bin/`, `mcp/`, `hooks/*.ts`) stay at the repository root. The Tier-2 CLI finds the same directory through one resolver (`paths.ts` `pluginRoot()`), from source, from its build and from an npm install, whose package ships `plugin/`. The individual file names in the tree above are the original design; the shipped set is reconciled by CONF-06.
 
 The `.paper/` directory layout per project. The project folder that contains `.paper/` is the paper root everywhere — the CLI, the MCP server (`PENSMITH_PAPER_ROOT`) and the hooks. All paper state, `STATE.json` and `config.toml` included, lives under `.paper/`; a pre-v1 paper with a root-level `STATE.json`/`config.toml` is moved into `.paper/` on first use, once, under the file lock (RUN-13):
 
@@ -821,16 +830,16 @@ These are the operational guarantees. Each maps to a specific common pitfall.
 
 - **Section-as-phase is the load-bearing model.** All state is section-scoped via `.paper/sections/<N>/`. Verifier runs bounded per-section. Re-doing one section never disturbs another.
 - **One thing to remember.** `/pensmith` is the only command in the README quick-start. Everything else is fallback.
-- **Two-tier source-of-truth.** Workflow bodies and templates are read by both Claude Code plugin (Tier 1) and portable CLI (Tier 2). Never duplicate logic in SKILL.md when it belongs in the workflow body.
+- **Two-tier source-of-truth.** One `plugin/` directory is the canonical home of the workflow bodies, prompt templates, presets, references, skills and agents for both tiers; its only generated files are the committed, drift-checked JS bundles in `plugin/dist/` (the MCP server and the hooks), so the plugin installs from the git marketplace with no build step. Tier 1 (the Claude Code plugin) is that directory. Tier 2 (the portable CLI) implements each verb in `bin/cli` from the same `plugin/` prompts, presets and references rather than interpreting workflow bodies at runtime; the bodies are Claude-facing instructions, kept in step with the code by the tier contract and the workflow-body tests (PLUG-09, PLUG-15). Never duplicate logic in SKILL.md when it belongs in the workflow body or the code. (Amended in Phase 23a, PLUG-02: a marketplace install runs no build and must not contain `bin/` or CLAUDE.md; one physical copy keeps "two tiers from one set of workflow files" true by construction.)
 - **Two-tier contract testing.** `tests/tier-contract.test.js` runs every workflow body in both modes against the same fixtures; outputs must be equivalent (modulo prose). This catches drift between the tiers.
 - **Graceful degradation.** Workflow `<capability_check>` blocks detect `Task` / MCP / AskUserQuestion / Pandoc / Zotero MCP / external humanizer and choose appropriate paths.
-- **Determinism where it counts.** DOI integrity, DOI normalization, distinctive-phrase plagiarism, quote-verify, per-paragraph claim extraction are pure-Bash/Node, not LLM-judged. Model requests are deterministic too (RUN-26, FEED-05; D-18-03/04): every `templates/prompts/<slug>.md` is fixed instruction text (it interpolates nothing; its `inputs:` frontmatter and `## Inputs` section name the data blocks it receives) and is sent as the system prompt, byte-identical for every call of the slug, so it is a reusable cache prefix; the per-call data follows once, last, in one user message of tagged blocks (`<tag>` … `</tag>`, JSON built field by field in a fixed order), rendered only by `bin/lib/prompt-request.ts`. Data from outside pensmith and the user — source records and abstracts, drafts under review, PDF text, the pasted assignment — is wrapped in the one untrusted-data fence (`bin/lib/untrusted-fence.ts`) after every fence marker and closing block tag in it is neutralised, and every such template says that fenced content is data, never instructions. Under `PENSMITH_NO_LLM` every call gets a contract-valid stub built from those same blocks (`bin/lib/llm-stubs.ts`, `bin/lib/llm-text-stubs.ts`).
+- **Determinism where it counts.** DOI integrity, DOI normalization, distinctive-phrase plagiarism, quote-verify, per-paragraph claim extraction are pure-Bash/Node, not LLM-judged. Model requests are deterministic too (RUN-26, FEED-05; D-18-03/04): every `plugin/templates/prompts/<slug>.md` is fixed instruction text (it interpolates nothing; its `inputs:` frontmatter and `## Inputs` section name the data blocks it receives) and is sent as the system prompt, byte-identical for every call of the slug, so it is a reusable cache prefix; the per-call data follows once, last, in one user message of tagged blocks (`<tag>` … `</tag>`, JSON built field by field in a fixed order), rendered only by `bin/lib/prompt-request.ts`. Data from outside pensmith and the user — source records and abstracts, drafts under review, PDF text, the pasted assignment — is wrapped in the one untrusted-data fence (`bin/lib/untrusted-fence.ts`) after every fence marker and closing block tag in it is neutralised, and every such template says that fenced content is data, never instructions. Under `PENSMITH_NO_LLM` every call gets a contract-valid stub built from those same blocks (`bin/lib/llm-stubs.ts`, `bin/lib/llm-text-stubs.ts`).
 - **DOI / arXiv ID / PMID normalization.** All identifier reads and writes go through `bin/lib/doi.js`. `10.1145/foo`, `https://doi.org/10.1145/foo`, `doi:10.1145/foo` all normalize to the same canonical form.
 - **Author/title verification is part of Pass 1.** DOI existence is necessary but not sufficient; cited authors/year/title must fuzzy-match the canonical metadata or the citation is `MIS-CITED`.
 - **Atomic state writes.** Every state file uses write-then-rename (`.paper/STATE.json.<nonce>.tmp` → fsync → rename → `.paper/STATE.json`, through `bin/lib/atomic-write.ts`). State transitions are single rename operations.
 - **Concurrent-run lock.** `bin/lib/session-lock.ts` takes a per-paper session lock (owner record: host, PID, session id, start time) for every mutating verb and every mutating MCP tool call; a second session refuses with the holder's PID and `run pensmith resume once it ends`. Stale locks (dead PID on this host, or older than the longest-step timeout, 6 h) auto-clear with a notice (RUN-23).
 - **Schema versioning from day one.** Every persisted file carries a version: JSON state (`STATE.json`, `LIBRARY.json`, `runtime.json`, …) a `$schemaVersion` envelope, and `config.toml` plus the markdown frontmatter of section `PLAN.md` (and, when they gain frontmatter, `INTAKE.md`, `DRAFT.md`, `VERIFICATION.md`) a `schema_version` key. Those three are plain markdown (version 0) until then: `INTAKE.md` gains versioned frontmatter with GRND-03, and `DRAFT.md` / `VERIFICATION.md` with the first requirement that adds a field to them; the loader already registers their kinds, and a `schema_version` hand-written into one of them before that is refused as newer than the build supports. Reads go through a migration loader — `loadAndMigrate` for JSON, `loadFrontmatterDoc(kind, file, {writeBack})` for frontmatter — with migrations in `bin/lib/migrations/<kind>/vN_to_vN+1.ts`. A file newer than the build is refused with an "upgrade pensmith" message, never downgraded. A requirement that adds a field ships its migration and version bump in the same change (S-20, CONF-04).
-- **Cross-platform paths.** `bin/lib/paths.js` resolves the data directory: `%APPDATA%\Pensmith\` on Windows, `~/Library/Application Support/Pensmith/` on macOS, `$XDG_DATA_HOME/pensmith` (default `~/.local/share/pensmith`) on Linux.
+- **Cross-platform paths.** `bin/lib/paths.js` resolves the plugin asset root (`pluginRoot()`, from its own module location, PLUG-02) and the data directory: `%APPDATA%\Pensmith\` on Windows, `~/Library/Application Support/Pensmith/` on macOS, `$XDG_DATA_HOME/pensmith` (default `~/.local/share/pensmith`) on Linux.
 - **Hard cost cap.** `cost_cap_usd` (default $5/session) aborts any step that would exceed it. Cost meter visible in `/pensmith status`.
 - **HTTP caching + backoff.** All source-API calls go through `bin/lib/http.js`: response cache (TTL per source — 24h for DOI, 1h for search), exponential backoff with jitter, retry on transient errors, polite User-Agent.
 - **Cassette-based source tests.** Cassettes are a test and dry-run mechanism only; normal runs are live. `tests/fixtures/cassettes/` holds real API responses recorded by `npm run cassettes:refresh` (synthetic fixtures for negative tests live under `synthetic/`), and tests replay them. A user's run re-fetches every source, DOI and detector live by default, because the core value is "verified by re-fetching the live DOI". Recorded fixtures are replayed only under the test runner or `PENSMITH_OFFLINE=1`, by exact match, failing closed: a miss is "unavailable (offline)", which blocks compile and export, and never another paper's record. `--dry-run` uses a labelled synthetic source provider instead of cassettes. Offline and dry-run runs are always disclosed, and the disclosure never reaches an exported document. Under the test runner, live-network tests run only with `PENSMITH_NETWORK_TESTS=1`. (Amended in Phase 17, RUN-01.)

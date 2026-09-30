@@ -24,8 +24,10 @@
 // D-05: exactly 16 verbs from REQUIREMENTS.md UX-02 — doctor (real) + 15 stubs.
 //   Phase 6+ verbs like `export`/`citations`/`humanize`/`gpt-zero`/`plagiarism`
 //   are sub-commands under `compile`/`verify`, NOT first-class verbs in v0.1.0.
-// Pitfall 7 — DO NOT console.log here; this binary is the CLI, not
-// the MCP server, but consistency matters for future stdio surfaces.
+// Pitfall 7 / PLUG-13 — every stdout line goes through bin/lib/output-sink.ts
+// out(): the MCP server runs the same verbs in-process and points that sink at
+// stderr, so a direct stdout write would corrupt its JSON-RPC stream (the
+// `stdout-sink` and `mcp-stdout-graph` chokepoint rows enforce it).
 //
 // WR-03 + WR-06 (cross-AI review): the 16-verb list is owned by
 // bin/lib/verbs.ts (UX02_VERBS); this dispatcher builds subCommands by
@@ -96,6 +98,7 @@ import { resolveNextAction, type RouterDecision } from './lib/router.js';
 import { sameSectionId, sectionIdOf, sectionLabel, type SectionId } from './lib/section-id.js';
 import { readGoalFromConfig, stopAfterResearchFor, renderLearningEndState } from './cli/goal.js';
 import { routeOptionsFor } from './cli/route-options.js';
+import { out as writeOut } from './lib/output-sink.js';
 
 // CommandDef<any> is intentional here: each real verb declares its own
 // strongly-typed ArgsDef (e.g., doctor declares { json: BooleanArgDef }),
@@ -1112,7 +1115,7 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
       if (e instanceof PensmithError) throw e;
       throw new PensmithError((e as Error).message, EXIT_ERROR);
     }
-    process.stdout.write(renderEstimate(est) + '\n');
+    writeOut(renderEstimate(est) + '\n');
     if (est.nothingLeft) return;
     const outcome = await runGate('estimate-proceed', { yolo: false });
     const proceed = outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
@@ -1125,7 +1128,7 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
   // of the root or of the named verb followed by the exit-code / global-flag /
   // environment footer (RUN-09). Never falls into the bare router path.
   if (checked.version && !checked.help) {
-    process.stdout.write(`${VERSION}\n`);
+    writeOut(`${VERSION}\n`);
     return undefined;
   }
   if (checked.help) {
@@ -1133,7 +1136,7 @@ export async function dispatchInner(argv: string[] = process.argv.slice(2)): Pro
     const target = helpVerb ? await loadVerbCommand(helpVerb) : command;
     const usageText = await renderUsage(target, helpVerb ? command : undefined);
     const plain = process.stdout.isTTY ? usageText : stripAnsi(usageText);
-    process.stdout.write(`${plain}\n\n${helpFooter()}\n`);
+    writeOut(`${plain}\n\n${helpFooter()}\n`);
     return undefined;
   }
 

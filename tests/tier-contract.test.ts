@@ -17,7 +17,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1325,8 +1325,8 @@ test('tier-contract: done — verb file exists (D-24)', () => {
   // body + bin/lib path drives both tiers (compile precedent). Assert the
   // workflow body exists and the CLI delegate is the documented one.
   assert.ok(
-    existsSync(new URL('../workflows/done.md', import.meta.url)),
-    'workflows/done.md must exist (the Tier-1 surface delegating to bin/cli/done.ts)',
+    existsSync(new URL('../plugin/workflows/done.md', import.meta.url)),
+    'plugin/workflows/done.md must exist (the Tier-1 surface delegating to bin/cli/done.ts)',
   );
 });
 
@@ -1494,13 +1494,13 @@ function seedGlobalRegistry(): { dataDir: string; resolvedDataDir: string; paper
 for (const verb of PROMOTED_VERBS) {
   const verbFile = `bin/cli/${verb}.ts`;
   const verbExists = existsSync(new URL(`../${verbFile}`, import.meta.url));
-  const bodyExists = existsSync(new URL(`../workflows/${verb}.md`, import.meta.url));
+  const bodyExists = existsSync(new URL(`../plugin/workflows/${verb}.md`, import.meta.url));
 
   test(`tier-contract: ${verb} — verb file + workflow body exist (D-24)`, () => {
     assert.ok(verbExists, `MISSING: ${verbFile} — ${verb} must ship its registry entry in-plan`);
     assert.ok(
       bodyExists,
-      `MISSING: workflows/${verb}.md — the Tier-1 surface delegating to bin/cli/${verb}.ts`,
+      `MISSING: plugin/workflows/${verb}.md — the Tier-1 surface delegating to bin/cli/${verb}.ts`,
     );
     // Tier-2 surface: the verb is a member of the locked-16 dispatcher list.
     assert.ok(
@@ -1577,7 +1577,7 @@ test('tier-contract: sketch parity — dispatchable in both tiers (no-advance sh
   // surface delegates to the SAME bin/cli/sketch.ts as Tier 2, and the
   // no-advance-until-confirm invariant (ERGO-05 / Pitfall 6) is observable.
   assert.ok((UX02_VERBS as readonly string[]).includes('sketch'), 'Tier 2: sketch is a locked-16 verb');
-  const body = readFileSync(fileURLToPath(new URL('../workflows/sketch.md', import.meta.url)), 'utf8');
+  const body = readFileSync(fileURLToPath(new URL('../plugin/workflows/sketch.md', import.meta.url)), 'utf8');
   // Tier-1 surface: the workflow body names AskUserQuestion (required) and the
   // @clack stdin degrade — the documented dual-tier path.
   assert.match(body, /AskUserQuestion/, 'sketch Tier-1: workflow body must require AskUserQuestion');
@@ -1618,7 +1618,7 @@ test('tier-contract: add parity — dispatchable in both tiers, assigned_sources
   // to the SAME bin/cli/add.ts as Tier 2, and the verifier-preserving
   // assigned_sources-only remap invariant (ERGO-06 / Pitfall 3) is observable.
   assert.ok((UX02_VERBS as readonly string[]).includes('add'), 'Tier 2: add is a locked-16 verb');
-  const body = readFileSync(fileURLToPath(new URL('../workflows/add.md', import.meta.url)), 'utf8');
+  const body = readFileSync(fileURLToPath(new URL('../plugin/workflows/add.md', import.meta.url)), 'utf8');
   // Tier-1 surface: AskUserQuestion (remap gate) + the @clack stdin degrade.
   assert.match(body, /AskUserQuestion/, 'add Tier-1: workflow body must require AskUserQuestion (remap gate)');
   assert.match(body, /@clack\/prompts|stdin/i, 'add Tier-2: workflow body must degrade to @clack/stdin');
@@ -1652,39 +1652,39 @@ test('tier-contract: 16-verb bijection re-asserted — list/open/sketch/add pres
 
 // ============================================================================
 // Plan 07-04 — verb-shortcut + plumbing-namespace parity (UX-02 / UX-03, D-24)
+// Rewritten in Phase 23a for the Claude Code SKILL.md layout (PLUG-01, PLUG-05)
 // ============================================================================
 //
-// The NL-routing skills (skills/pensmith.md + the 3 plumbing skills) and the
-// plugin.json skills array land in THIS plan, so their D-24 tier-contract
-// obligation is satisfied here. Two parity properties, plus the standing
-// no-17th-verb guard:
+// The NL-routing skill (plugin/skills/pensmith/SKILL.md) and the 7 plumbing
+// skills (plugin/skills/<name>/SKILL.md, /pensmith:<name>) are the Tier-1
+// surface. The earlier version read a plugin.json `skills` array of
+// {name, file} objects, which Claude Code rejected ("skills: Invalid input") —
+// the default skills/ scan now loads each <name>/SKILL.md. Two parity
+// properties, plus the standing no-17th-verb guard:
 //
 //   1. The verbs promoted to REAL in 07-02 (next / status / resume) are present
 //      in BOTH tier surfaces: Tier 2 = the CLI dispatcher (UX02_VERBS); Tier 1 =
-//      the porcelain NL-routing skill (skills/pensmith.md description routes the
-//      §5.4 phrases to those same verbs).
+//      the pensmith skill, which routes the §5.4 phrases to those same verbs.
 //   2. The plumbing namespace resolves to the SAME underlying locked-16 verb in
-//      BOTH tiers: Tier 1 registers `pensmith:<verb>-section` in plugin.json's
-//      skills array (porcelain → the existing `<verb>` verb); Tier 2 exposes the
-//      same `<verb>` in UX02_VERBS. There is NO colon-prefix concept in Tier 2
-//      and NO 17th verb — the namespace is a Tier-1 alias onto the locked 16.
-//
-// This case is metadata-level (no MCP tool exists for the porcelain/plumbing
-// skills — pure Tier-1 model routing, per 07-RESEARCH); it asserts the contract
-// surfaces agree, then re-pins UX02_VERBS.length === 16.
+//      BOTH tiers: each Tier-1 plumbing skill forwards `<verb> $ARGUMENTS` to the
+//      pensmith skill; Tier 2 exposes the same `<verb>` in UX02_VERBS. There is
+//      NO colon-prefix concept in Tier 2 and NO 17th verb — the namespace is a
+//      Tier-1 alias onto the locked 16.
 
-function readSkill(rel: string): string {
-  return readFileSync(fileURLToPath(new URL('../' + rel, import.meta.url)), 'utf8');
+function readSkill(name: string): string {
+  return readFileSync(fileURLToPath(new URL(`../plugin/skills/${name}/SKILL.md`, import.meta.url)), 'utf8');
 }
 
-interface PluginSkillEntry { name: string; file: string }
-
-function readPluginSkills(): PluginSkillEntry[] {
-  const pkg = JSON.parse(
-    readFileSync(fileURLToPath(new URL('../.claude-plugin/plugin.json', import.meta.url)), 'utf8'),
-  ) as { skills?: PluginSkillEntry[] };
-  return pkg.skills ?? [];
-}
+/** The plumbing skills: directory (/pensmith:<dir>) → the locked-16 verb it forwards. */
+const PLUMBING_TO_VERB: Readonly<Record<string, string>> = {
+  'plan-section': 'plan',
+  'write-section': 'write',
+  'verify-section': 'verify',
+  research: 'research',
+  outline: 'outline',
+  compile: 'compile',
+  done: 'done',
+};
 
 const VERB_SET = new Set<string>(UX02_VERBS as readonly string[]);
 
@@ -1693,39 +1693,34 @@ test('tier-contract: verb-shortcut parity — next/status/resume live in BOTH ti
   for (const verb of ['next', 'status', 'resume']) {
     assert.ok(VERB_SET.has(verb), `Tier 2: "${verb}" must be a member of UX02_VERBS (07-02 promoted it to a real verb)`);
   }
-  // Tier 1 surface: the porcelain NL-routing skill description routes the §5.4
-  // phrases to those same verbs (status / resume / next).
-  const desc = readSkill('skills/pensmith.md');
-  assert.match(desc, /\bstatus\b/, 'Tier 1: pensmith skill must route "where am I?"/"what\'s next?" → status');
-  assert.match(desc, /\bresume\b/, 'Tier 1: pensmith skill must route "continue where I left off" → resume');
-  assert.match(desc, /\bnext\b/, 'Tier 1: pensmith skill must route "write the next section" → next');
+  // Tier 1 surface: the pensmith skill routes the §5.4 phrases to those same verbs.
+  const skill = readSkill('pensmith');
+  assert.match(skill, /\| "where am I\?" \/ "what's next\?" \| `status` \|/, 'Tier 1: "where am I?"/"what\'s next?" → status');
+  assert.match(skill, /\| "resume" \/ "continue where I left off" \| `resume` \|/, 'Tier 1: "continue where I left off" → resume');
+  assert.match(skill, /\| "write the next section" \/ "continue" \| the bare step above \(`next`\) \|/, 'Tier 1: "write the next section" → next');
 });
 
-test('tier-contract: plumbing-namespace parity — pensmith:<verb>-section resolves to the SAME locked-16 verb in both tiers (UX-03, D-24)', () => {
-  const skills = readPluginSkills();
-  // The colon-prefix plumbing namespace → the underlying locked-16 verb.
-  const NAMESPACE_TO_VERB: Record<string, string> = {
-    'pensmith:plan-section': 'plan',
-    'pensmith:write-section': 'write',
-    'pensmith:verify-section': 'verify',
-  };
-  for (const [pluginName, verb] of Object.entries(NAMESPACE_TO_VERB)) {
-    // Tier 1: the plumbing skill is registered in plugin.json's skills array.
-    const entry = skills.find((s) => s.name === pluginName);
-    assert.ok(entry, `Tier 1: plugin.json skills array must register "${pluginName}" (plumbing namespace)`);
+test('tier-contract: plumbing-namespace parity — /pensmith:<name> resolves to the SAME locked-16 verb in both tiers (UX-03, PLUG-05, D-24)', () => {
+  const dirs = readdirSync(fileURLToPath(new URL('../plugin/skills/', import.meta.url)), { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort();
+  assert.deepEqual(dirs, ['pensmith', ...Object.keys(PLUMBING_TO_VERB)].sort(), 'Tier 1: the pensmith skill + the 7 plumbing skills');
+  for (const [name, verb] of Object.entries(PLUMBING_TO_VERB)) {
     // Tier 2: the underlying verb is a member of the locked 16 (the namespace is
     // an alias onto it — NO colon-prefix concept and NO 17th verb in Tier 2).
-    assert.ok(VERB_SET.has(verb), `Tier 2: plumbing "${pluginName}" must alias the locked-16 verb "${verb}"`);
-    // The skill body itself maps the namespace onto that same `pensmith <verb>`.
-    const body = readSkill(entry!.file);
-    assert.match(
-      body,
-      new RegExp(`pensmith ${verb}\\b`),
-      `Tier 1↔2: ${pluginName} body must delegate to the existing "pensmith ${verb}" verb (D-06 single path)`,
-    );
+    assert.ok(VERB_SET.has(verb), `Tier 2: plumbing "/pensmith:${name}" must alias the locked-16 verb "${verb}"`);
+    assert.ok(!VERB_SET.has(name) || name === verb, `"${name}" is not a verb of its own`);
+    // Tier 1: the skill, named after its directory, forwards exactly that verb
+    // to the pensmith skill (D-06 single path) — the same `pensmith <verb>`.
+    const body = readSkill(name);
+    assert.match(body, new RegExp(`^name: ${name}$`, 'm'), `Tier 1: ${name}/SKILL.md is named after its directory`);
+    assert.match(body, /^disable-model-invocation: true$/m, `Tier 1: /pensmith:${name} is user-invoked only`);
+    assert.match(body, new RegExp(`Run the pensmith verb \`${verb} \\$ARGUMENTS\``), `Tier 1↔2: /pensmith:${name} runs the existing "${verb}" verb`);
+    assert.match(body, new RegExp(`\`pensmith ${verb} \\$ARGUMENTS\` in a terminal`), `Tier 1↔2: /pensmith:${name} is the same as "pensmith ${verb}" in Tier 2`);
   }
-  // The primary porcelain skill is registered too (bare /pensmith).
-  assert.ok(skills.some((s) => s.name === 'pensmith'), 'plugin.json skills array must register the primary "pensmith" skill');
+  // The primary porcelain skill is model-invocable (bare /pensmith).
+  assert.doesNotMatch(readSkill('pensmith'), /^disable-model-invocation: true$/m, 'the primary "pensmith" skill is model-invocable');
 });
 
 test('tier-contract: no 17th verb — adding the skills/plumbing namespace keeps UX02_VERBS at exactly 16 (T-07-02)', () => {

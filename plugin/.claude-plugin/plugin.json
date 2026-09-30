@@ -1,0 +1,20 @@
+{
+  "name": "pensmith",
+  "version": "0.1.0-dev+08ba1a3f51e3",
+  "description": "Structured research-and-drafting assistant for academic papers — verifies every citation against the live source.",
+  "author": {
+    "name": "Akhil Achanta",
+    "email": "akhilachanta8@gmail.com"
+  },
+  "homepage": "https://github.com/ZeusCraft10/pensmith",
+  "repository": "https://github.com/ZeusCraft10/pensmith",
+  "license": "AGPL-3.0-or-later",
+  "keywords": ["academic-writing", "citation-verification", "research", "papers"],
+  "mcpServers": {
+    "pensmith": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.mjs"]
+    }
+  }
+}

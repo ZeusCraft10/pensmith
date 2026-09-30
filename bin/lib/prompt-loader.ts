@@ -1,7 +1,7 @@
 // bin/lib/prompt-loader.ts — hash-validated prompt loader (T-3-09).
 //
-// SOLE call site for `readFileSync('templates/prompts/<slug>.md')` in the
-// runtime path. A model request is built by bin/lib/prompt-request.ts
+// SOLE call site for `readFileSync('plugin/templates/prompts/<slug>.md')` in
+// the runtime path. A model request is built by bin/lib/prompt-request.ts
 // `buildPromptRequest(slug, values)` (D-18-03): `loadPrompt(slug)` — the fixed
 // template, byte-identical for every call and so the cacheable prefix (RUN-26)
 // — is the system prompt, and the per-call data follows as tagged blocks in the
@@ -43,42 +43,15 @@
 
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { pluginTemplatePath } from './paths.js';
 
-// ---------------------------------------------------------------------------
-// Locate the repo's templates/ dir relative to THIS module.
-// Same shape as bin/lib/citations.ts findPkgRoot — walk up from here until
-// we find package.json. This makes the loader robust under both `tsx` (where
-// the source lives at bin/lib/prompt-loader.ts) and the compiled dist build
-// (where it lives at dist/bin/lib/prompt-loader.js).
-// ---------------------------------------------------------------------------
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      // statSync via require/readFileSync indirection avoids importing
-      // node:fs/promises here; we only need the sync presence check.
-      const probe = path.join(cur, 'package.json');
-      readFileSync(probe);
-      return cur;
-    } catch {
-      // continue upward
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
-}
-
-const PKG_ROOT = findPkgRoot(__dirname);
+// The prompts live in the plugin's templates/prompts/ (PLUG-02). paths.ts
+// pluginRoot() finds the plugin from this module's own location — the source
+// tree under tsx, the tsc build in dist/, an npm install, or the plugin bundle
+// — so the loader reads the same bytes in every layout (D-23a-03).
 
 /**
- * SHA-256 hashes for each `templates/prompts/<slug>.md` file.
+ * SHA-256 hashes for each `plugin/templates/prompts/<slug>.md` file.
  *
  * MUST match the pins in `tests/repo-files.test.ts` — that test imports
  * this map (single source of truth — WN-3) so drift between the runtime
@@ -189,7 +162,7 @@ export function loadPrompt(name: string): string {
     );
   }
 
-  const promptPath = path.join(PKG_ROOT, 'templates', 'prompts', `${name}.md`);
+  const promptPath = pluginTemplatePath('prompts', `${name}.md`);
   const bytes = readFileSync(promptPath);
   const actual = createHash('sha256').update(bytes).digest('hex');
   const text = bytes.toString('utf8');

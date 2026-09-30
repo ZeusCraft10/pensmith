@@ -85,6 +85,18 @@ test('RUN-14: resolver order — flag/env, the cwd paper, a new paper; MCP/hooks
   assert.deepEqual(resolvePaperRoot({ verb: null, mode: 'cli', cwd: empty, env: {}, stdinAssignment: true }), { kind: 'root', root: empty, source: 'new' });
   assert.throws(() => resolvePaperRoot({ verb: 'write', mode: 'cli', cwd: empty, env: {} }),
     (e: unknown) => (e as { exitCode?: number }).exitCode === EXIT_USAGE && /no paper in /.test((e as Error).message));
+  // Review round 2: PENSMITH_PAPER_ROOT at a folder with no paper is refused
+  // like the cwd is, for a verb that needs a paper (never a placeholder
+  // section there); `new`, a bare run and read-only verbs still resolve it.
+  const envEmpty = sb.project('env-empty');
+  for (const verb of ['plan', 'write', 'verify', 'research', 'compile']) {
+    assert.throws(() => resolvePaperRoot({ verb, mode: 'cli', cwd: withPaper, env: { PENSMITH_PAPER_ROOT: envEmpty } }),
+      (e: unknown) => (e as { exitCode?: number }).exitCode === EXIT_USAGE && (e as Error).message.startsWith(`no paper in ${envEmpty} — `), verb);
+  }
+  for (const verb of ['new', null, 'next', 'resume']) {
+    assert.deepEqual(resolvePaperRoot({ verb, mode: 'cli', cwd: withPaper, env: { PENSMITH_PAPER_ROOT: envEmpty } }), { kind: 'root', root: envEmpty, source: 'env' });
+  }
+  assert.deepEqual(resolvePaperRoot({ verb: 'status', mode: 'cli', readOnly: true, cwd: withPaper, env: { PENSMITH_PAPER_ROOT: envEmpty } }), { kind: 'root', root: envEmpty, source: 'env' });
   assert.equal(activePaperBanner({ name: 'p2', root: '/x/p2' }), '(active paper "p2" at /x/p2)');
 });
 

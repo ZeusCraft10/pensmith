@@ -1,65 +1,43 @@
 #!/usr/bin/env node
-// hooks/session-start.ts — Phase 7 Plan 07-03 (HOOK-02).
+// hooks/session-start.ts — Claude Code SessionStart hook entry (PLUG-14,
+// D-23a-15). Bundled to plugin/dist/hooks/session-start.mjs (scripts/
+// bundle.mjs); plugin/hooks/hooks.json runs it for every SessionStart source,
+// `startup|resume|clear|compact|fork` (review round 3: after `/clear` and in a
+// forked session the model's context also lacks the paper's step).
 //
-// Claude Code SessionStart hook. Reads .paper/HANDOFF.json (the crash-resilient
-// pointer document written by hooks/pre-compact.ts) and, when a resumable paper
-// exists, emits a SINGLE { systemMessage } JSON frame on stdout so Claude Code
-// auto-invokes `pensmith resume` on the session's first turn.
+// In a folder that holds a paper it prints exactly ONE JSON line:
+//   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}
+// — the router's next step, after a compaction (stdin `source: compact`) a
+// summary of a not-done HANDOFF.json, and the instruction to run /pensmith
+// (bin/lib/hooks/session-start.ts). Claude Code
+// adds additionalContext to the model's context; it never prints
+// `systemMessage`, which only the user sees. Outside a paper it prints nothing.
 //
-// CRITICAL stdout protocol (T-07-01 / Pitfall 1): stdout is the hook-protocol
-// channel. It MUST be empty OR exactly one parseable JSON frame. This is the
-// ONLY hook permitted to write a non-empty stdout frame. Diagnostics go to
-// stderr. The hook NEVER throws and ALWAYS exits 0 — a malformed HANDOFF.json
-// must never crash the session (T-07-13).
-//
-// NEVER console.log here — stdout is reserved for the single JSON frame.
+// stdout is the hook-protocol channel: that one line or nothing. Diagnostics go
+// to stderr. It always exits 0 — a hook must never break the session.
 
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { HandoffSchema, type Handoff } from '../bin/lib/schemas/handoff.js';
-import { paperDir, servicePaperRoot } from '../bin/lib/paths.js';
+import { isMainModule } from '../bin/lib/main-guard.js';
+import { readHookInput } from '../bin/lib/hooks/stdin.js';
+import { hookDiagnostic, hookPaperRoot } from '../bin/lib/hooks/entry.js';
 
-function readHandoff(paperDir: string): Handoff | null {
-  const path = join(paperDir, 'HANDOFF.json');
-  if (!existsSync(path)) return null;
-  try {
-    const raw: unknown = JSON.parse(readFileSync(path, 'utf8'));
-    const result = HandoffSchema.safeParse(raw);
-    return result.success ? result.data : null;
-  } catch {
-    // Malformed JSON / read error — never throw; nothing to resume.
-    return null;
-  }
+async function main(): Promise<void> {
+  const input = await readHookInput();
+  const root = hookPaperRoot(input);
+  if (root === null) return; // no paper here: no output, no files
+  const [{ sessionStartOutput }, { routeOptionsFor }] = await Promise.all([
+    import('../bin/lib/hooks/session-start.js'),
+    import('../bin/cli/route-options.js'),
+  ]);
+  // `source` limits the HANDOFF summary to the SessionStart after a compaction.
+  const output = await sessionStartOutput(root, { routeOptions: routeOptionsFor(root), source: input?.source });
+  // Wait for the flush: a pipe can be asynchronous, and the process exits next.
+  await new Promise<void>((resolve) => {
+    process.stdout.write(JSON.stringify(output) + '\n', () => resolve());
+  });
 }
 
-function buildResumeMessage(handoff: Handoff): string {
-  const section = handoff.current_section ?? '(none)';
-  const states = handoff.section_pointers
-    .map((p) => `${p.slug}(${p.state})`)
-    .join(', ');
-  const sectionsSummary = states.length > 0 ? ` Sections: ${states}.` : '';
-  return (
-    `Pensmith has an in-progress paper at phase "${handoff.phase}" ` +
-    `(section ${section}). ${handoff.next_action}${sectionsSummary} ` +
-    `Run \`pensmith resume\` to continue.`
-  );
+if (isMainModule(import.meta.url)) {
+  main()
+    .catch((e: unknown) => hookDiagnostic('session-start', 'resume context skipped', e))
+    .finally(() => process.exit(0));
 }
-
-function main(): void {
-  try {
-    // RUN-13 / D-17-33: the paper resolves like the MCP server's —
-    // PENSMITH_PAPER_ROOT, else the working directory (never the open pointer).
-    const handoff = readHandoff(paperDir(servicePaperRoot()));
-    // Nothing to resume: no handoff, or the paper is already done.
-    if (!handoff || handoff.phase === 'done') return;
-    const message = buildResumeMessage(handoff);
-    process.stdout.write(JSON.stringify({ systemMessage: message }) + '\n');
-  } catch (err) {
-    // Diagnostics → stderr ONLY. Never corrupt the stdout frame.
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[session-start] resume-context skipped: ${msg}\n`);
-  }
-}
-
-main();
-process.exit(0);

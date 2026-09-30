@@ -22,6 +22,7 @@
 import { defineCommand } from 'citty';
 import { loadGlobalLibrary, deriveLibraryStatus } from '../lib/global-library.js';
 import type { GlobalLibrary, GlobalLibraryEntry } from '../lib/schemas/global-library.js';
+import { out } from '../lib/output-sink.js';
 
 /** Render the status cell: `sectioning X/Y` when sectioning, else the bare status. */
 function renderStatus(folderPath: string, storedStatus: string): string {
@@ -50,12 +51,12 @@ export const listCommand = defineCommand({
     try {
       lib = await loadGlobalLibrary();
     } catch {
-      process.stdout.write('pensmith list: no papers yet — run `pensmith new` to start.\n');
+      out('pensmith list: no papers yet — run `pensmith new` to start.\n');
       return { ok: true, papers: [] as GlobalLibraryEntry[] };
     }
 
     if (lib.entries.length === 0) {
-      process.stdout.write('pensmith list: no papers yet — run `pensmith new` to start.\n');
+      out('pensmith list: no papers yet — run `pensmith new` to start.\n');
       return { ok: true, papers: [] as GlobalLibraryEntry[] };
     }
 
@@ -78,7 +79,7 @@ export const listCommand = defineCommand({
       }
     }
 
-    process.stdout.write(lines.join('\n') + '\n');
+    out(lines.join('\n') + '\n');
     return { ok: true, papers: lib.entries };
   },
 });

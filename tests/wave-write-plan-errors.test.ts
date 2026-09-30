@@ -115,9 +115,9 @@ test('GRND-16: the outline\'s stubs are skipped with a note; a single write on a
 });
 
 test('GRND-16: the documented --max-parallel default equals the code', () => {
-  const doc = fs.readFileSync(new URL('../workflows/write.md', import.meta.url), 'utf8');
+  const doc = fs.readFileSync(new URL('../plugin/workflows/write.md', import.meta.url), 'utf8');
   const stated = [...doc.matchAll(/--max-parallel`?\s*\(default (\d+)\)/g)].map((m) => Number(m[1]));
-  assert.ok(stated.length > 0, 'workflows/write.md states the default');
+  assert.ok(stated.length > 0, 'plugin/workflows/write.md states the default');
   for (const n of stated) assert.equal(n, DEFAULT_MAX_PARALLEL);
   assert.equal(DEFAULT_MAX_PARALLEL, 5);
   assert.doesNotMatch(doc, /max-parallel ignored/);

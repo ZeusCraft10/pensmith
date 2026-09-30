@@ -93,6 +93,7 @@ import {
 import { loadSectionInfos, rankSections, type SectionInfo, type SectionRelevance } from '../lib/section-relevance.js';
 import type { SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { excludedRemedy, verifierBlindSpot } from '../lib/source-context.js';
+import { out as writeOut } from '../lib/output-sink.js';
 
 const P = 'pensmith add';
 
@@ -100,7 +101,7 @@ const P = 'pensmith add';
 export const UNIDENTIFIED_PDF_MESSAGE = 'could not confidently identify this PDF — pass its DOI: pensmith add <doi> --pdf <file>';
 
 function out(line: string): void {
-  process.stdout.write(`${line}\n`);
+  writeOut(`${line}\n`);
 }
 function err(line: string): void {
   process.stderr.write(`${line}\n`);
