@@ -19572,6 +19572,26 @@ function isLegacyPensmithState(root) {
     return false;
   }
 }
+function isDirectory(p2) {
+  try {
+    return fs.statSync(p2).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function hasPaper(root) {
+  const r2 = path2.resolve(root);
+  if (isPaperDirName(path2.basename(r2))) return false;
+  if (isDirectory(paperDir(r2))) return true;
+  if (dryRunWorkspaceActive() && isDirectory(realPaperDir(r2))) return true;
+  return isLegacyPensmithState(r2);
+}
+function noPaperHereMessage(cwd) {
+  return `no paper in ${cwd} \u2014 run pensmith new to start one here, or pass --paper <name|path> (pensmith list shows your papers)`;
+}
+function assertPaperHere(root) {
+  if (!hasPaper(root)) throw new PensmithError(noPaperHereMessage(root), EXIT_USAGE);
+}
 function realpathNearest(p2) {
   const resolved = path2.resolve(p2);
   const tail = [];
@@ -19722,11 +19742,15 @@ var init_paths = __esm({
     __name(paperConfigFile, "paperConfigFile");
     LEGACY_STATE_MAX_BYTES = 1048576;
     __name(isLegacyPensmithState, "isLegacyPensmithState");
+    __name(isDirectory, "isDirectory");
+    __name(hasPaper, "hasPaper");
     ASSIGNMENT_FILE_NAMES = Object.freeze([
       "assignment.txt",
       "assignment.md",
       "assignment.pdf"
     ]);
+    __name(noPaperHereMessage, "noPaperHereMessage");
+    __name(assertPaperHere, "assertPaperHere");
     __name(realpathNearest, "realpathNearest");
     __name(asProjectRoot, "asProjectRoot");
     __name(servicePaperRoot, "servicePaperRoot");
@@ -51989,13 +52013,13 @@ function mirrorRequest(method, url, body, llm) {
 }
 function httpLogger() {
   const cwd = projectRoot();
-  let hasPaper = false;
+  let hasPaper2 = false;
   try {
-    hasPaper = statSync5(path9.join(cwd, ".paper")).isDirectory();
+    hasPaper2 = statSync5(path9.join(cwd, ".paper")).isDirectory();
   } catch {
-    hasPaper = false;
+    hasPaper2 = false;
   }
-  const key2 = `${cwd}\0${pensmithDataDir()}\0${hasPaper ? "paper" : "global"}`;
+  const key2 = `${cwd}\0${pensmithDataDir()}\0${hasPaper2 ? "paper" : "global"}`;
   let log4 = httpLoggers.get(key2);
   if (!log4) {
     log4 = openSessionLog({ scope: "auto", cwd });
@@ -112471,7 +112495,7 @@ async function assertLlmConfigured(verb) {
   const v2 = envName ? process.env[envName] : void 0;
   if (!v2) {
     throw new MissingApiKeyError(
-      `pensmith ${verb}: no LLM key configured (${envName ?? "no key variable"} is not set for provider ${rt.provider}). ${NO_PROVIDER_CONFIGURED_HINT}. Run inside Claude Code (Tier 1) for key-free operation.`
+      `pensmith ${verb}: no LLM key configured (${envName ?? "no key variable"} is not set for provider ${rt.provider}). ${NO_PROVIDER_CONFIGURED_HINT}; \`pensmith doctor\` checks the setup (README: Model runtimes).`
     );
   }
 }
@@ -141349,7 +141373,10 @@ async function runVerbDirect(load, args) {
 }
 __name(runVerbDirect, "runVerbDirect");
 function mutate(root, opts, fn) {
-  return runClassified(() => withPaperSession(root, opts, fn));
+  return runClassified(async () => {
+    if (opts.needsPaper === true) assertPaperHere(root);
+    return withPaperSession(root, opts, fn);
+  });
 }
 __name(mutate, "mutate");
 function toolResult(o2) {
@@ -141479,7 +141506,7 @@ function registerPaperTools(server) {
         yolo: external_exports.boolean().optional()
       }
     },
-    async ({ n: n2, slug, revise, yolo }) => toolResult(await mutate(projectRoot(), { verb: "pensmith_plan", section: n2 }, () => runVerbDirect(
+    async ({ n: n2, slug, revise, yolo }) => toolResult(await mutate(projectRoot(), { verb: "pensmith_plan", section: n2, needsPaper: true }, () => runVerbDirect(
       () => Promise.resolve().then(() => (init_plan(), plan_exports)).then((m3) => m3.default),
       { n: String(n2), slug: slug ?? "", revise: revise ?? false, yolo: yolo ?? false }
     )))
@@ -141495,7 +141522,7 @@ function registerPaperTools(server) {
         yolo: external_exports.boolean().optional()
       }
     },
-    async ({ n: n2, slug, yolo }) => toolResult(await mutate(projectRoot(), { verb: "pensmith_write", section: n2 }, () => runVerbDirect(
+    async ({ n: n2, slug, yolo }) => toolResult(await mutate(projectRoot(), { verb: "pensmith_write", section: n2, needsPaper: true }, () => runVerbDirect(
       () => Promise.resolve().then(() => (init_write(), write_exports)).then((m3) => m3.default),
       { n: String(n2), slug: slug ?? "", yolo: yolo ?? false }
     )))
@@ -141511,7 +141538,7 @@ function registerPaperTools(server) {
         yolo: external_exports.boolean().optional()
       }
     },
-    async ({ n: n2, slug, yolo }) => toolResult(await mutate(projectRoot(), { verb: "pensmith_verify", section: n2 }, () => runVerbDirect(
+    async ({ n: n2, slug, yolo }) => toolResult(await mutate(projectRoot(), { verb: "pensmith_verify", section: n2, needsPaper: true }, () => runVerbDirect(
       () => Promise.resolve().then(() => (init_verify(), verify_exports)).then((m3) => m3.default),
       { n: String(n2), slug: slug ?? "", yolo: yolo ?? false }
     )))

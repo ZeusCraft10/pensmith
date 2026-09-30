@@ -420,7 +420,13 @@ function resolvePaperRoot(opts) {
   if (opts.paperFlag !== void 0) {
     return { kind: "root", root: resolvePaperFlag(opts.paperFlag, here), source: "flag" };
   }
-  if (envRoot) return { kind: "root", root: asProjectRoot(envRoot), source: "env" };
+  if (envRoot) {
+    const root = asProjectRoot(envRoot);
+    if (opts.readOnly !== true && mutatingVerbNeedsPaper(opts.verb) && !hasPaper(root)) {
+      throw new PensmithError(noPaperHereMessage(root), EXIT_USAGE);
+    }
+    return { kind: "root", root, source: "env" };
+  }
   if (hasPaper(cwd)) return { kind: "root", root: cwd, source: "cwd" };
   if (opts.verb !== null && NEW_PAPER_VERBS.has(opts.verb) || opts.verb === null && findAssignmentFile(cwd) !== null) {
     return { kind: "root", root: cwd, source: "new" };

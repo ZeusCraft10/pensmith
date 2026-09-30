@@ -7,11 +7,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { EXIT_OK, EXIT_ERROR, EXIT_BLOCKED } from '../../bin/lib/exit-codes.js';
+import { EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_BLOCKED } from '../../bin/lib/exit-codes.js';
 import {
   CLI_BIN,
   MCP_BIN,
@@ -105,4 +105,50 @@ test('RUN-09 parity: an expected failure (a PLAN.md from a newer pensmith) is EX
   assertParity('newer PLAN.md', cli.status, mcp, EXIT_ERROR, 'EXIT_ERROR');
   assert.match(cli.stderr, /upgrade pensmith$/m);
   assert.match(String(mcp.body.message), /upgrade pensmith$/);
+});
+
+// Review round 2 (PLUG-05): the plugin's section tools refuse a folder with no
+// paper exactly as the CLI verbs do — EXIT_USAGE, the same one line, and
+// nothing created there (no placeholder section, no model call, no `.paper/`).
+test('RUN-09 / PLUG-05 parity: plan, write and verify in a folder with no paper are EXIT_USAGE in both tiers and create nothing', async () => {
+  const sb = sandbox('parity-no-paper');
+  const cliRoot = sb.project('cli');
+  const envRoot = sb.project('cli-env');
+  const mcpCwdRoot = sb.project('mcp-cwd');
+  const mcpEnvRoot = sb.project('mcp-env');
+  const noPaperLine = (root: string): string =>
+    `no paper in ${root} — run pensmith new to start one here, or pass --paper <name|path> (pensmith list shows your papers)`;
+  const verbs = [['plan', 'pensmith_plan'], ['write', 'pensmith_write'], ['verify', 'pensmith_verify']] as const;
+
+  for (const [verb] of verbs) {
+    // Tier 2, addressed by the working directory and by PENSMITH_PAPER_ROOT.
+    const cli = runCli(sb, cliRoot, [verb, '1']);
+    assert.equal(cli.status, EXIT_USAGE, `${verb} 1 in a paper-less cwd: ${cli.stderr}`);
+    assert.equal(cli.stderr.trim().split('\n').at(-1), `pensmith: ${noPaperLine(cliRoot)}`);
+    const viaEnv = runCli(sb, sb.base, [verb, '1'], { env: { PENSMITH_PAPER_ROOT: envRoot } });
+    assert.equal(viaEnv.status, EXIT_USAGE, `${verb} 1 with PENSMITH_PAPER_ROOT at a paper-less folder: ${viaEnv.stderr}`);
+    assert.equal(viaEnv.stderr.trim().split('\n').at(-1), `pensmith: ${noPaperLine(envRoot)}`);
+  }
+
+  // Tier 1: the server's root is its cwd, or PENSMITH_PAPER_ROOT.
+  for (const [root, env] of [[mcpCwdRoot, { PENSMITH_PAPER_ROOT: undefined }], [mcpEnvRoot, { PENSMITH_PAPER_ROOT: mcpEnvRoot }]] as const) {
+    const transport = new StdioClientTransport({ command: process.execPath, args: [MCP_BIN], env: sb.env(env), cwd: root });
+    const client = new Client({ name: 'exit-parity-no-paper', version: '0.0.0' }, { capabilities: {} });
+    await client.connect(transport);
+    try {
+      for (const [verb, tool] of verbs) {
+        const res = await client.callTool({ name: tool, arguments: { n: 1, yolo: true } });
+        const text = (res.content as Array<{ text: string }>)[0]?.text ?? 'null';
+        const body = JSON.parse(text) as McpOutcome['body'];
+        assertParity(`${tool} with no paper`, EXIT_USAGE, { isError: res.isError === true, body }, EXIT_USAGE, 'EXIT_USAGE');
+        assert.equal(body.message, noPaperLine(root), `${tool}: the CLI's one line (${verb})`);
+        assert.equal(body['result'], null, `${tool}: the verb never ran`);
+      }
+    } finally {
+      await client.close();
+    }
+  }
+  for (const root of [cliRoot, envRoot, mcpCwdRoot, mcpEnvRoot]) {
+    assert.deepEqual(readdirSync(root), [], `${root}: nothing was created (no .paper/, no placeholder section)`);
+  }
 });

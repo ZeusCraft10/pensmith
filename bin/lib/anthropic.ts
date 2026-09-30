@@ -312,7 +312,10 @@ export async function assertLlmConfigured(verb: string): Promise<void> {
   if (!v) {
     throw new MissingApiKeyError(
       `pensmith ${verb}: no LLM key configured (${envName ?? 'no key variable'} is not set for provider ${rt.provider}). ` +
-        `${NO_PROVIDER_CONFIGURED_HINT}. Run inside Claude Code (Tier 1) for key-free operation.`,
+        // Review round 2: no key-free promise. In this release every tier —
+        // the plugin's pensmith_plan / pensmith_write included — calls the
+        // provider configured here (README "Model runtimes").
+        `${NO_PROVIDER_CONFIGURED_HINT}; \`pensmith doctor\` checks the setup (README: Model runtimes).`,
     );
   }
 }

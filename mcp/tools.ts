@@ -45,7 +45,7 @@ import {
 } from '../bin/lib/state.js';
 import { verifyDoi } from '../bin/lib/doi.js';
 import { loadCapabilityFacts } from '../bin/lib/capabilities.js';
-import { projectRoot, asProjectRoot } from '../bin/lib/paths.js';
+import { projectRoot, asProjectRoot, assertPaperHere } from '../bin/lib/paths.js';
 import { withPaperSession } from '../bin/lib/session-lock.js';
 import { runClassified, failureLine, type ClassifiedOutcome } from '../bin/lib/verb-outcome.js';
 import { withCapturedOutput } from '../bin/lib/output-sink.js';
@@ -91,13 +91,18 @@ async function runVerbDirect(
  * sub-lock, so different sections run in parallel and the same section
  * serializes) and classify its outcome like the CLI dispatcher. A CLI session
  * holding the paper makes this a structured refusal before anything runs.
+ * `needsPaper` (the pensmith_* section verbs): a folder with no paper is the
+ * CLI's EXIT_USAGE refusal, before the lock or anything else touches it.
  */
 function mutate(
   root: string,
-  opts: { verb: string; section?: number },
+  opts: { verb: string; section?: number; needsPaper?: boolean },
   fn: () => Promise<unknown>,
 ): Promise<ClassifiedOutcome> {
-  return runClassified(() => withPaperSession(root, opts, fn));
+  return runClassified(async () => {
+    if (opts.needsPaper === true) assertPaperHere(root);
+    return withPaperSession(root, opts, fn);
+  });
 }
 
 /**
@@ -298,7 +303,7 @@ export function registerPaperTools(server: McpServer): void {
       },
     },
     async ({ n, slug, revise, yolo }) =>
-      toolResult(await mutate(projectRoot(), { verb: 'pensmith_plan', section: n }, () => runVerbDirect(
+      toolResult(await mutate(projectRoot(), { verb: 'pensmith_plan', section: n, needsPaper: true }, () => runVerbDirect(
         () => import('../bin/cli/plan.js').then((m) => m.default),
         { n: String(n), slug: slug ?? '', revise: revise ?? false, yolo: yolo ?? false },
       ))),
@@ -317,7 +322,7 @@ export function registerPaperTools(server: McpServer): void {
       },
     },
     async ({ n, slug, yolo }) =>
-      toolResult(await mutate(projectRoot(), { verb: 'pensmith_write', section: n }, () => runVerbDirect(
+      toolResult(await mutate(projectRoot(), { verb: 'pensmith_write', section: n, needsPaper: true }, () => runVerbDirect(
         () => import('../bin/cli/write.js').then((m) => m.default),
         { n: String(n), slug: slug ?? '', yolo: yolo ?? false },
       ))),
@@ -336,7 +341,7 @@ export function registerPaperTools(server: McpServer): void {
       },
     },
     async ({ n, slug, yolo }) =>
-      toolResult(await mutate(projectRoot(), { verb: 'pensmith_verify', section: n }, () => runVerbDirect(
+      toolResult(await mutate(projectRoot(), { verb: 'pensmith_verify', section: n, needsPaper: true }, () => runVerbDirect(
         () => import('../bin/cli/verify.js').then((m) => m.default),
         { n: String(n), slug: slug ?? '', yolo: yolo ?? false },
       ))),

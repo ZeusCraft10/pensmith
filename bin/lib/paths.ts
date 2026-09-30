@@ -706,6 +706,18 @@ export function noPaperHereMessage(cwd: string): string {
     '(pensmith list shows your papers)';
 }
 
+/**
+ * The CLI's refusal of a verb that needs a paper, for the MCP section tools
+ * (pensmith_plan / pensmith_write / pensmith_verify, review round 2): the MCP
+ * server resolves its root once (PENSMITH_PAPER_ROOT or the cwd, never the
+ * pointer), so a folder with no paper would otherwise get a placeholder
+ * section, a model bill and a stray `.paper/`. Throws the same EXIT_USAGE line
+ * `pensmith plan|write|verify <N>` exits with there; nothing is created.
+ */
+export function assertPaperHere(root: string): void {
+  if (!hasPaper(root)) throw new PensmithError(noPaperHereMessage(root), EXIT_USAGE);
+}
+
 /** `(active paper "<name>" at <path>)` — the read-only pointer banner. */
 export function activePaperBanner(pointer: PaperPointer): string {
   return `(active paper "${pointer.name}" at ${pointer.root})`;
@@ -865,7 +877,16 @@ export function resolvePaperRoot(opts: ResolvePaperRootOptions): PaperRootResolu
     // A relative --paper is relative to where the user typed it.
     return { kind: 'root', root: resolvePaperFlag(opts.paperFlag, here), source: 'flag' };
   }
-  if (envRoot) return { kind: 'root', root: asProjectRoot(envRoot), source: 'env' };
+  if (envRoot) {
+    // PENSMITH_PAPER_ROOT names the paper like `--paper` does: a verb that
+    // needs a paper refuses a folder without one there too, rather than build
+    // a placeholder section in it (review round 2 — the MCP tools refuse alike).
+    const root = asProjectRoot(envRoot);
+    if (opts.readOnly !== true && mutatingVerbNeedsPaper(opts.verb) && !hasPaper(root)) {
+      throw new PensmithError(noPaperHereMessage(root), EXIT_USAGE);
+    }
+    return { kind: 'root', root, source: 'env' };
+  }
   if (hasPaper(cwd)) return { kind: 'root', root: cwd, source: 'cwd' };
   // A bare run starts a new paper here when the folder holds an assignment
   // file (GRND-01, D-18-08).
