@@ -23,6 +23,7 @@ import { stopHook } from '../../bin/lib/hooks/stop.js';
 import { HandoffSchema } from '../../bin/lib/handoff.js';
 import { acquireSessionLock, readSessionLock } from '../../bin/lib/session-lock.js';
 import { activePaperRoot, setActivePaperRoot } from '../../bin/lib/paths.js';
+import { out, resetOutputSink } from '../../bin/lib/output-sink.js';
 import { REPO, sandbox } from '../helpers/paper-cli-harness.js';
 import { seedThreeSectionPaper } from '../helpers/status-fixture.js';
 import { hookBundle, hookInput, type HookName } from './hook-runner.js';
@@ -110,7 +111,42 @@ test('hooks/entry: hookPaperRoot resolves the stdin cwd or PENSMITH_PAPER_ROOT, 
     assert.equal(hookPaperRoot({ cwd: root }, { PENSMITH_PAPER_ROOT: empty }), null, 'PENSMITH_PAPER_ROOT wins');
   } finally {
     setActivePaperRoot(before);
+    resetOutputSink();
   }
+});
+
+test('hooks/entry: once a paper is found, out() goes to stderr, never the hook-protocol stdout (PLUG-13)', async () => {
+  const root = await paper();
+  const empty = tmpDir('hook-logic-sink');
+  const before = activePaperRoot();
+  const written: { stdout: string[]; stderr: string[] } = { stdout: [], stderr: [] };
+  const realOut = process.stdout.write.bind(process.stdout);
+  const realErr = process.stderr.write.bind(process.stderr);
+  const capture = (into: string[]) =>
+    ((chunk: string | Uint8Array): boolean => {
+      into.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'));
+      return true;
+    }) as typeof process.stdout.write;
+  try {
+    assert.equal(hookPaperRoot({ cwd: empty }, {}), null);
+    process.stdout.write = capture(written.stdout);
+    out('no paper: the default sink\n');
+    process.stdout.write = realOut;
+    assert.deepEqual(written.stdout, ['no paper: the default sink\n'], 'outside a paper the sink is untouched');
+
+    written.stdout.length = 0;
+    assert.equal(hookPaperRoot({ cwd: root }, {}), root);
+    process.stdout.write = capture(written.stdout);
+    process.stderr.write = capture(written.stderr);
+    out('pensmith: a verb line\n');
+  } finally {
+    process.stdout.write = realOut;
+    process.stderr.write = realErr;
+    setActivePaperRoot(before);
+    resetOutputSink();
+  }
+  assert.deepEqual(written.stdout, [], 'nothing reached stdout');
+  assert.deepEqual(written.stderr, ['pensmith: a verb line\n']);
 });
 
 // ---------------------------------------------------------------------------

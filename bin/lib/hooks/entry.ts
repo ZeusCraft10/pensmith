@@ -11,20 +11,27 @@
 // The paper resolves through resolvePaperRoot in 'hook' mode (RUN-14,
 // D-17-33): PENSMITH_PAPER_ROOT, else the folder the hook runs in (the stdin
 // `cwd`, else the working directory) — never `--paper`, never the `pensmith
-// open` pointer. This module is light (paths.ts only) and never writes stdout:
-// only the entries in hooks/ print protocol JSON (the stdout-sink row, PLUG-13).
+// open` pointer. This module is light (paths.ts and output-sink.ts only) and
+// never writes stdout: only the entries in hooks/ print protocol JSON (the
+// stdout-sink row, PLUG-13).
 
 import { hasPaper, resolvePaperRoot, setActivePaperRoot, workingDirectory } from '../paths.js';
+import { setOutputSink } from '../output-sink.js';
 import { hookInputCwd, type HookInput } from './stdin.js';
 
 /**
  * The project root of the paper this hook addresses, or null when the folder
- * holds no paper. Records it as the process's active root (like the MCP server).
+ * holds no paper. Like the MCP server, it records the root as the process's
+ * active root and points the output sink at stderr before the entry imports
+ * any heavier module: the hook's stdout is the Claude Code hook protocol
+ * (SessionStart's one JSON line), so a verb or bin/lib line printed through
+ * out() must never land there (PLUG-13, PLUG-14).
  */
 export function hookPaperRoot(input: HookInput | null, env: NodeJS.ProcessEnv = process.env): string | null {
   const resolution = resolvePaperRoot({ mode: 'hook', verb: null, cwd: hookInputCwd(input) ?? workingDirectory(), env });
   if (resolution.kind !== 'root' || !hasPaper(resolution.root)) return null;
   setActivePaperRoot(resolution.root);
+  setOutputSink(process.stderr);
   return resolution.root;
 }
 
