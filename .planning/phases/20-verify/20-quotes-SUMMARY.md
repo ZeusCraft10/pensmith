@@ -189,4 +189,11 @@ None. No file under `workflows/`, `templates/`, `references/`, `skills/` or `age
 
 ## Stream gate
 
-See the StructuredOutput's `verification_done` for the final run: prebuild, lint, typecheck, build, `npm test` (only the root-only `atomic-write` case fails in this container), `test:tier-contract`, `validate:manifests`.
+Green on the branch head, as root in the cloud container, Node 22:
+- `npm run prebuild`, `lint`, `typecheck`, `build`: all pass, and the working tree is clean after the build.
+- `npm test`: 2457 tests, 2455 pass. Two failed:
+  - the root-only `atomic-write` case "preserves OLD content on rename/write failure" (known; `chmod 0o500` does not block root);
+  - one timing flake, `http-rate-limit.test.ts` "Crossref declaring 3 / 1s …". It passed in the previous full run and in 3 of 3 isolated re-runs. It measures the Crossref bucket, which this stream does not touch.
+- `npm run test:tier-contract`: 57 of 57 pass.
+- `npm run validate:manifests`: pass.
+- `node scripts/live-verify-quotes.mjs`: live, all 5 checks pass.
