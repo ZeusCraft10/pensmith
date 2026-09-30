@@ -112,10 +112,12 @@ export async function recordCheckpoint(root: string, input: CheckpointInput, opt
           tool_name: input.toolName ?? 'unknown',
           next: nextStepLabel(decision),
         };
-        const line = JSON.stringify(record) + '\n';
+        // A torn last line (a process killed mid-append) is closed first, so
+        // the new record never merges into it.
+        const line = (text.length > 0 && !text.endsWith('\n') ? '\n' : '') + JSON.stringify(record) + '\n';
         if (Buffer.byteLength(text, 'utf8') > CHECKPOINT_MAX_BYTES) {
           const kept = text.split('\n').filter((l) => l.trim().length > 0).slice(-(CHECKPOINT_KEEP_LINES - 1));
-          await atomicWriteFile(target, kept.map((l) => l + '\n').join('') + line);
+          await atomicWriteFile(target, kept.map((l) => l + '\n').join('') + line.replace(/^\n/, ''));
         } else {
           await fsp.appendFile(target, line, 'utf8');
         }
