@@ -46,13 +46,25 @@ test('VRFY-20: acceptableRows takes only UNVERIFIABLE-QUOTE ids; any other id is
   assert.deepEqual(acceptableRows(ROWS, ['q1'], '1').map((r) => r.id), ['q1']);
   for (const [ids, re] of [
     [['q2'], /--accept-quote q2: its verdict is NOT_FOUND \(\[@vaswani2017\]\) — only an UNVERIFIABLE-QUOTE quote .* can be accepted; nothing was recorded/],
-    [['q3'], /its verdict is PASS/],
+    [['q3'], /--accept-quote q3: it already passes for every source it cites \(\[@smith2020\] PASS\) — nothing to accept; nothing was recorded/],
     [['q9'], /section 1's draft has no quote q9 — nothing was recorded/],
     [['Q1'], /a quote id is q1, q2, …/],
     [['q1', 'q2'], /q2: its verdict is NOT_FOUND/],
   ] as const) {
     assert.throws(() => acceptableRows(ROWS, ids, '1'), (e: unknown) => e instanceof QuoteAcceptanceError && e.exitCode === EXIT_USAGE && re.test(e.message));
   }
+});
+
+test('VRFY-20 (review round 2): a quote cited to several sources — one holds it (PASS), one shows no text (UNVERIFIABLE-QUOTE) — is accepted for the open source only, as the refusal tells the user to', () => {
+  const multi: AcceptableQuoteRow[] = [
+    { id: 'q1', citekey: 'a', quoteSha256: quoteTextSha256(QUOTE), verdict: 'PASS', snippet: QUOTE.slice(0, 40) },
+    { id: 'q1', citekey: 'b', quoteSha256: quoteTextSha256(QUOTE), verdict: 'UNVERIFIABLE-QUOTE', snippet: QUOTE.slice(0, 40) },
+    { id: 'q2', citekey: 'a', quoteSha256: quoteTextSha256('x'), verdict: 'FUZZY', snippet: 'x' },
+    { id: 'q2', citekey: 'c', quoteSha256: quoteTextSha256('x'), verdict: 'NOT_FOUND', snippet: 'x' },
+  ];
+  assert.deepEqual(acceptableRows(multi, ['q1'], '1').map((r) => [r.id, r.citekey]), [['q1', 'b']]);
+  // A NOT_FOUND source is never covered, whatever the other source says.
+  assert.throws(() => acceptableRows(multi, ['q2'], '1'), (e: unknown) => e instanceof QuoteAcceptanceError && /q2: its verdict is NOT_FOUND \(\[@c\]\)/.test(e.message));
 });
 
 test('VRFY-20: recordQuoteAcceptances writes schema v1, bound to the quote and draft hashes; a re-accept replaces, a changed draft drops the void ones', async () => {

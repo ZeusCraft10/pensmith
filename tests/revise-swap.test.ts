@@ -289,6 +289,30 @@ test('revise (review round 1): a flagged citation an earlier revise already remo
   assert.equal(readFileSync(targetPlanPath(root), 'utf8'), planBefore, 'PLAN.md unchanged (no hash reset reported as applied)');
 });
 
+test('revise (review round 2): text rows (L<line>, a bare doi:…) are not citations — never "already gone", named with the edit or re-draft that fixes them, no model call', async () => {
+  const { root } = seedFixture();
+  const textOnly = [
+    '# VERIFICATION (Section 2, target)',
+    '',
+    'Status: failed',
+    '',
+    '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
+    '',
+    '- smith2020: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed',
+    '- L3: **UNPARSEABLE** — titleJW=n/a, authorJW=n/a — `[@smith2020`: `[@smith2020` is never closed in its paragraph',
+    '- doi:10.5555/pensmith-no-such-work-2017: **FABRICATED** — titleJW=0.00, authorJW=0.00 — DOI did not resolve via Crossref',
+    '',
+  ].join('\n');
+  assert.deepEqual(failingCitations(textOnly), [], 'no citekey among the text rows');
+  writeFileSync(targetVerifPath(root), textOnly);
+  const before = readFileSync(targetDraftPath(root), 'utf8');
+  const res = await runRevise({ paperRoot: root, n: 2, slug: 'target', yolo: true, proposeSwap: () => Promise.reject(new Error('no model call expected')) });
+  assert.equal(res.accepted, false);
+  assert.doesNotMatch(res.message, /already gone/);
+  assert.match(res.message, /^No citation in section 2 for revise to swap\. VERIFICATION\.md flags text that is not a citation revise can swap — L3 \(UNPARSEABLE\), doi:10\.5555\/pensmith-no-such-work-2017 \(FABRICATED\): edit that text in DRAFT\.md \(a citation written as \[@citekey\]\) or re-draft the section \(`pensmith write 2`\), then `pensmith verify 2`\.$/);
+  assert.equal(readFileSync(targetDraftPath(root), 'utf8'), before, 'DRAFT.md unchanged');
+});
+
 // ===========================================================================
 // 5. runRevise has no research branch any more (GRND-17 moved it to
 //    bin/lib/section-research.ts): the options it accepts are the swap loop's.

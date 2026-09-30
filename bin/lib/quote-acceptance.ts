@@ -24,7 +24,7 @@ import { dirname, join } from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { EXIT_USAGE, PensmithError } from './exit-codes.js';
-import { ACCEPTABLE_QUOTE_VERDICT, QUOTE_ID_RE, UNATTRIBUTED_CITEKEY } from './verify/verdicts.js';
+import { ACCEPTABLE_QUOTE_VERDICT, PASSING_VERDICTS, QUOTE_ID_RE, UNATTRIBUTED_CITEKEY } from './verify/verdicts.js';
 import {
   ACCEPTANCE_EXCERPT_MAX,
   QUOTE_ACCEPTANCES_FILE,
@@ -96,10 +96,14 @@ export class QuoteAcceptanceError extends PensmithError {
 
 /**
  * Check the ids `verify N --accept-quote <id>` names against the section's
- * recomputed quote rows: every id must be a quote whose verdict is
- * UNVERIFIABLE-QUOTE. Throws QuoteAcceptanceError (EXIT_USAGE) naming the
- * first id that is not — its verdict, or that the draft has no such quote.
- * Returns the rows to accept (one per id, every citekey of a multi-cited quote).
+ * recomputed quote rows: every id must be a quote whose open rows — those not
+ * already passing (PASS / FUZZY) — are UNVERIFIABLE-QUOTE. A quote cited to
+ * several sources whose text one source holds (PASS) and another does not
+ * show (UNVERIFIABLE-QUOTE) is accepted for the open source only (review
+ * round 2). Throws QuoteAcceptanceError (EXIT_USAGE) naming the first id that
+ * cannot be accepted — a NOT_FOUND, UNVERIFIABLE-NETWORK or UNATTRIBUTED row,
+ * a quote that already passes for every source, or no such quote. Returns the
+ * rows to accept (the UNVERIFIABLE-QUOTE rows of each id).
  */
 export function acceptableRows(rows: readonly AcceptableQuoteRow[], ids: readonly string[], section: string): AcceptableQuoteRow[] {
   const out: AcceptableQuoteRow[] = [];
@@ -111,14 +115,21 @@ export function acceptableRows(rows: readonly AcceptableQuoteRow[], ids: readonl
     if (matching.length === 0) {
       throw new QuoteAcceptanceError(`--accept-quote ${id}: section ${section}'s draft has no quote ${id} — nothing was recorded`);
     }
-    const other = matching.find((r) => r.verdict !== ACCEPTABLE_QUOTE_VERDICT);
+    // A source that already holds the quote needs no acceptance.
+    const open = matching.filter((r) => !PASSING_VERDICTS.has(r.verdict));
+    const other = open.find((r) => r.verdict !== ACCEPTABLE_QUOTE_VERDICT);
     if (other !== undefined) {
       throw new QuoteAcceptanceError(
         `--accept-quote ${id}: its verdict is ${other.verdict} (${other.citekey === UNATTRIBUTED_CITEKEY ? 'no citation' : `[@${other.citekey}]`}) — ` +
           `only an ${ACCEPTABLE_QUOTE_VERDICT} quote (no source text to check it against) can be accepted; nothing was recorded`,
       );
     }
-    out.push(...matching);
+    if (open.length === 0) {
+      throw new QuoteAcceptanceError(
+        `--accept-quote ${id}: it already passes for every source it cites (${matching.map((r) => `[@${r.citekey}] ${r.verdict}`).join(', ')}) — nothing to accept; nothing was recorded`,
+      );
+    }
+    out.push(...open);
   }
   return out;
 }

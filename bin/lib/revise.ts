@@ -44,6 +44,8 @@ import { runGate, declineGate, canPrompt } from './gates.js';
 import { withLock } from './lock.js';
 import { extractCitedKeysForVerification, findCitations, removeCitekey, renameCitekey } from './citation-token.js';
 import { sectionDraft, sectionPlan, sectionVerification } from './paths.js';
+import { UNATTRIBUTED_CITEKEY } from './verify/verdicts.js';
+import { DRAFT_ROW_KEY } from './verify/verification-md.js';
 import { formatSectionId, sectionIdOf, type SectionId } from './section-id.js';
 
 // --yolo retry cap (D-06): 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
@@ -147,17 +149,45 @@ interface FailingCitation {
  * i.e. a row whose verdict is one of REVISABLE_VERDICTS.
  */
 export function failingCitations(verificationMd: string): FailingCitation[] {
-  const out: FailingCitation[] = [];
+  return failingRows(verificationMd).citations;
+}
+
+/**
+ * The key slot of a row that names no citation (review round 2): a text
+ * finding (`L<line>` — an UNPARSEABLE or UNSUPPORTED-FORM text), an
+ * identifier written in the prose (`doi:10.…`, `arXiv:…`, `PMID:…`), a draft
+ * check (`draft`) or an unattributed quote. revise cannot swap one: the text
+ * needs a hand edit or a re-draft.
+ */
+function isTextRowKey(key: string, rest: string): boolean {
+  if (key === DRAFT_ROW_KEY || key === UNATTRIBUTED_CITEKEY) return true;
+  if (/^(?:doi:10\.|arXiv:|PMID:\d)/.test(key)) return true;
+  return /^L\d+$/.test(key) && /titleJW=n\/a, authorJW=n\/a/.test(rest);
+}
+
+/** The failing rows of VERIFICATION.md: the citations revise can repair, and the text rows it cannot (each once). */
+function failingRows(verificationMd: string): { citations: FailingCitation[]; textRows: FailingCitation[] } {
+  const citations: FailingCitation[] = [];
+  const textRows: FailingCitation[] = [];
   const seen = new Set<string>();
   for (const line of verificationMd.split(/\r?\n/)) {
     const row = verdictRowOf(line);
     if (row === null || seen.has(row.citekey)) continue;
-    if ((REVISABLE_VERDICTS as readonly string[]).includes(row.verdict)) {
-      seen.add(row.citekey);
-      out.push({ citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, '').trim()}` });
-    }
+    if (!(REVISABLE_VERDICTS as readonly string[]).includes(row.verdict)) continue;
+    seen.add(row.citekey);
+    const f = { citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, '').trim()}` };
+    (isTextRowKey(row.citekey, row.rest) ? textRows : citations).push(f);
   }
-  return out;
+  return { citations, textRows };
+}
+
+/** The sentence naming the rows revise cannot repair and what to do instead. */
+function textRowsAdvice(textRows: readonly FailingCitation[], id: string): string {
+  const named = textRows.map((f) => `${f.citekey} (${f.reason.split(':')[0]})`).join(', ');
+  return (
+    `VERIFICATION.md also flags text that is not a citation revise can swap — ${named}: edit that text in DRAFT.md ` +
+    `(a citation written as [@citekey]) or re-draft the section (\`pensmith write ${id}\`), then \`pensmith verify ${id}\`.`
+  );
 }
 
 /**
@@ -385,8 +415,12 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
     return { ...base, message: `${base.message} No VERIFICATION.md at section ${opts.n} — nothing to revise.`.trim() };
   }
   const verificationMd = readFileSync(verifPath, 'utf8');
-  const flagged = failingCitations(verificationMd);
+  const { citations: flagged, textRows } = failingRows(verificationMd);
+  const sectionId = formatSectionId(sectionIdOf(opts.n, opts.suffix));
   if (flagged.length === 0) {
+    if (textRows.length > 0) {
+      return { ...base, message: `No citation in section ${sectionId} for revise to swap. ${textRowsAdvice(textRows, sectionId).replace(/^VERIFICATION\.md also flags/, 'VERIFICATION.md flags')}` };
+    }
     return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation (nor RETRACTED, UNASSIGNED, UNPARSEABLE or UNRESOLVABLE) in section ${opts.n}.`.trim() };
   }
 
@@ -402,12 +436,13 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
   const stillCited = new Set(extractCitedKeysForVerification(draftMd));
   const failing = flagged.find((f) => stillCited.has(f.citekey));
   if (!failing) {
-    const id = formatSectionId(sectionIdOf(opts.n, opts.suffix));
+    const id = sectionId;
     return {
       ...base,
       message:
         `Nothing to change: every citation VERIFICATION.md flags in section ${id} (${flagged.map((f) => f.citekey).join(', ')}) ` +
-        `is already gone from DRAFT.md — re-check the section with \`pensmith verify ${id}\`.`,
+        `is already gone from DRAFT.md — re-check the section with \`pensmith verify ${id}\`.` +
+        (textRows.length > 0 ? ` ${textRowsAdvice(textRows, id)}` : ''),
     };
   }
   base.flagged_citekey = failing.citekey;

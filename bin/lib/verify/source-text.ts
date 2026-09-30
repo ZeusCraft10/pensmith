@@ -126,20 +126,45 @@ export interface SourceTextOptions {
 // ---------------------------------------------------------------------------
 // In-process memo: one lookup / fetch per copy per run (verify's Pass 3 and
 // Pass 2 share it), kept briefly so a long-lived process (the MCP server)
-// asks again on its next run.
+// asks again on its next run. An entry holds a whole extracted text, so
+// expired entries are dropped on every use and the map is capped (oldest
+// first): the long-lived MCP server never keeps every source it ever read in
+// memory (review round 2; the on-disk text cache avoids refetching).
 // ---------------------------------------------------------------------------
 
 const MEMO_TTL_MS = 60_000;
+/** The most entries the memo keeps (the oldest go first). */
+export const MEMO_MAX_ENTRIES = 64;
 const memo = new Map<string, { readonly at: number; readonly value: Promise<unknown> }>();
+
+/** Drop expired entries, then the oldest beyond MEMO_MAX_ENTRIES (a Map iterates in insertion order). */
+function sweepMemo(now: number): void {
+  for (const [k, v] of memo) if (now - v.at >= MEMO_TTL_MS) memo.delete(k);
+  while (memo.size > MEMO_MAX_ENTRIES) {
+    const oldest = memo.keys().next();
+    if (oldest.done === true) break;
+    memo.delete(oldest.value);
+  }
+}
 
 function memoized<T>(key: string, fresh: boolean, fn: () => Promise<T>): Promise<T> {
   const full = `${networkMode().sourcesOffline ? 'offline' : 'live'}|${key}`;
+  const now = Date.now();
+  sweepMemo(now);
   const hit = memo.get(full);
-  if (!fresh && hit !== undefined && Date.now() - hit.at < MEMO_TTL_MS) return hit.value as Promise<T>;
+  if (!fresh && hit !== undefined && now - hit.at < MEMO_TTL_MS) return hit.value as Promise<T>;
   const value = fn();
-  memo.set(full, { at: Date.now(), value });
+  memo.delete(full); // re-inserted last: the newest entry
+  memo.set(full, { at: now, value });
+  sweepMemo(now);
   return value;
 }
+
+/** Test hooks: the memo's size, and the memo itself. */
+export function _sourceTextMemoSizeForTest(): number {
+  return memo.size;
+}
+export const _memoizedForTest = memoized;
 
 /** Test hook: forget every memoized lookup and text (a new "run"). */
 export function _resetSourceTextMemoForTest(): void {
