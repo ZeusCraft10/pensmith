@@ -5,7 +5,9 @@
 // bodies. A draft citing an unassigned key gets one corrective turn; if it
 // persists, write exits 4, keeps no draft (DRAFT.rejected.md), sets status
 // failed + failure_reason, touches no other section, and the router reports
-// attention naming `pensmith write N`. write chains verify unless --no-verify.
+// attention naming `pensmith write N`. A citation form the verifier cannot
+// check (VRFY-09 / VRFY-10) takes the same path. write chains verify unless
+// --no-verify.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -232,6 +234,42 @@ test('FEED-04: an unassigned key cited author-suppressed ([-@k]) or narratively 
     assert.match(retry, /\[@evil9999\], \[@ghost2020\]/);
     assert.equal(fs.existsSync(path.join(sb.paper, 'sections', '02-background', 'DRAFT.md')), false);
     assert.equal(loadFrontmatterDocSync('plan', path.join(sb.paper, 'sections', '02-background', 'PLAN.md')).frontmatter['status'], 'failed');
+  });
+});
+
+test('VRFY-09 / VRFY-10 at write: a draft attributing sources in a form the verifier cannot check (a reference list, author-date prose, a footnote) gets the one corrective turn naming each; a corrected retry is kept', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await plannedPaper(sb);
+    sb.mock!.script(
+      'section-drafter',
+      { text: 'Attention aligns the input (Bahdanau et al., 2015).[^1]\n\n[^1]: A note.\n\n## References\n\n- Bahdanau, D. (2015). Neural machine translation.\n' },
+      { text: 'Attention aligns the input [@bahdanau2015].\n' },
+    );
+    const r = await write(sb, '2', '--no-verify');
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(sb.mock!.callCount('section-drafter'), 2, 'one corrective turn');
+    const retry = JSON.stringify((sb.mock!.bodiesFor('section-drafter')[1]!['messages'] as unknown[]).at(-1));
+    assert.match(retry, /citation forms the verifier cannot check/);
+    assert.match(retry, /\(Bahdanau et al\., 2015\)/, 'the author-date citation is named');
+    assert.match(retry, /## References/, 'the reference list is named');
+    assert.match(retry, /no reference list or bibliography, no footnotes/);
+    assert.equal(fs.readFileSync(path.join(sb.paper, 'sections', '02-background', 'DRAFT.md'), 'utf8'), 'Attention aligns the input [@bahdanau2015].\n');
+  });
+});
+
+test('VRFY-10 at write: an uncheckable form that persists fails the section (exit 4, DRAFT.rejected.md, failure_reason naming it)', async () => {
+  await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
+    await plannedPaper(sb);
+    const bad = { text: 'Attention aligns the input \\cite{bahdanau2015}.\n' };
+    sb.mock!.script('section-drafter', bad, bad);
+    const r = await write(sb, '2');
+    assert.equal(r.status, 4, `${r.stdout}\n${r.stderr}`);
+    const dir = path.join(sb.paper, 'sections', '02-background');
+    assert.equal(fs.existsSync(path.join(dir, 'DRAFT.md')), false);
+    assert.ok(fs.existsSync(path.join(dir, 'DRAFT.rejected.md')));
+    const fm = loadFrontmatterDocSync('plan', path.join(dir, 'PLAN.md')).frontmatter;
+    assert.equal(fm['status'], 'failed');
+    assert.match(String(fm['failure_reason']), /citation forms the verifier cannot check — line 1: `\\cite\{bahdanau2015\}` \(UNSUPPORTED-FORM\)/);
   });
 });
 

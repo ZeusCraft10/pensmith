@@ -20,13 +20,21 @@
 //     full-text.ts fullTextByCitekey and a byo-text.ts re-check of each BYO
 //     PDF). A quote from an abstract-only source could only end as
 //     UNVERIFIABLE-QUOTE; the corrective turn asks the drafter to paraphrase it.
-// write's one corrective turn and failure path enforce both unchanged. The
-// Tier-1 draft submission tool (PLUG-07) runs the same check. PURE.
+//   - `uncheckable-citation-form` (VRFY-09, VRFY-10 at write): an attribution
+//     the verifier can never pass — citation text the one grammar cannot read
+//     (citation-token.ts findUnparseableCitations: `[@]`, `[@k`, `@{k`) or a
+//     form it does not check (verify/unsupported-forms.ts
+//     findUnsupportedForms: a typed reference list, footnotes, author-date
+//     prose, `\cite`, `<cite>`). verify would block it as UNPARSEABLE /
+//     UNSUPPORTED-FORM; the corrective turn asks for `[@citekey]` tokens only.
+// write's one corrective turn and failure path enforce all three unchanged.
+// The Tier-1 draft submission tool (PLUG-07) runs the same check. PURE.
 
-import { extractCitedKeysForVerification } from './citation-token.js';
+import { extractCitedKeysForVerification, findUnparseableCitations } from './citation-token.js';
+import { findUnsupportedForms } from './verify/unsupported-forms.js';
 import { describeQuotesWithoutFullText, quotesWithoutFullText, type QuoteWithoutFullText } from './full-text.js';
 
-export type DraftViolationKind = 'unassigned-citekey' | 'quote-without-full-text';
+export type DraftViolationKind = 'unassigned-citekey' | 'quote-without-full-text' | 'uncheckable-citation-form';
 
 export interface DraftViolation {
   readonly kind: DraftViolationKind;
@@ -62,6 +70,10 @@ export function checkDraft(draft: string, opts: CheckDraftOptions): DraftViolati
     if (assigned.has(key)) continue;
     out.push({ kind: 'unassigned-citekey', citekey: key, message: `citekey ${key} not assigned to section ${opts.section}` });
   }
+  // VRFY-09 / VRFY-10: forms the verifier would block (key slot `L<line>`).
+  for (const f of [...findUnparseableCitations(draft), ...findUnsupportedForms(draft)].sort((a, b) => a.line - b.line)) {
+    out.push({ kind: 'uncheckable-citation-form', citekey: `L${f.line}`, message: `line ${f.line}: \`${oneLine(f.text)}\` (${f.verdict})` });
+  }
   if (opts.fullText !== undefined) {
     // One violation per quote, each carrying the corrective text for that quote.
     for (const q of quotesWithoutFullText(draft, opts.fullText, opts.quoteMinWords !== undefined ? { minWords: opts.quoteMinWords } : {})) {
@@ -69,6 +81,20 @@ export function checkDraft(draft: string, opts: CheckDraftOptions): DraftViolati
     }
   }
   return out;
+}
+
+/** A finding's text on one line, clipped for a message. */
+function oneLine(text: string): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  return t.length > 80 ? `${t.slice(0, 79)}…` : t;
+}
+
+/** The forms the verifier cannot check, as one clause (at most five named), or ''. */
+function describeForms(violations: readonly DraftViolation[]): string {
+  const forms = violations.filter((v) => v.kind === 'uncheckable-citation-form');
+  if (forms.length === 0) return '';
+  const named = forms.slice(0, 5).map((v) => v.message).join('; ');
+  return `citation forms the verifier cannot check — ${named}${forms.length > 5 ? `; … (${forms.length - 5} more)` : ''}`;
 }
 
 function unassignedKeys(violations: readonly DraftViolation[]): string[] {
@@ -93,6 +119,8 @@ export function failureReason(violations: readonly DraftViolation[], section: st
   else if (keys.length > 1) parts.push(`citekeys ${keys.join(', ')} not assigned to section ${section}`);
   const quotes = describeQuotes(violations);
   if (quotes) parts.push(quotes);
+  const forms = describeForms(violations);
+  if (forms) parts.push(forms);
   return parts.join('; ');
 }
 
@@ -111,6 +139,13 @@ export function containmentCorrection(violations: readonly DraftViolation[], ass
   }
   const quotes = describeQuotes(violations);
   if (quotes) parts.push(`Your draft has ${quotes.charAt(0).toLowerCase()}${quotes.slice(1)}.`);
+  const forms = describeForms(violations);
+  if (forms) {
+    parts.push(
+      `Your draft uses ${forms}. Cite only with [@citekey] tokens from the sources block: no reference list or bibliography, ` +
+        'no footnotes or notes, no author-date citations such as (Author, 2020), no \\cite commands, HTML citation tags or numbered markers.',
+    );
+  }
   parts.push('Reply with the complete corrected section.');
   return parts.join(' ');
 }
