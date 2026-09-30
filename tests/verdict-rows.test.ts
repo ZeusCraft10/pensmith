@@ -3,7 +3,7 @@
 // Contract under test:
 //   bin/lib/verify/verdict-rows.ts (Wave-1, Plan 02):
 //     renderPass1VerdictRow(citekey, verdict, titleJW, authorJW, reason): string
-//     renderPass3VerdictRow(citekey, quoteSnippet, verdict, levRatio, reason): string
+//   bin/lib/verify/verification-md.ts renderQuoteRow (the Pass-3 row verify writes, D-20-20)
 //     parseVerdictRows(verificationMd): string[]  — failing citekeys only
 //
 // RED-by-skip (Wave-0 scaffold): behavioral assertions SKIP until verdict-rows.ts
@@ -48,17 +48,16 @@ if (existsSync(verdictRowsTsPath)) {
     // Dynamic import via .href keeps noEmit clean (no static TS resolution
     // of a file that does not exist at typecheck time). tsx maps .js → .ts.
     const mod = await import(verdictRowsJsUrl.href) as Record<string, unknown>;
-    if (
-      typeof mod['renderPass1VerdictRow'] === 'function' &&
-      typeof mod['renderPass3VerdictRow'] === 'function' &&
-      typeof mod['parseVerdictRows'] === 'function'
-    ) {
+    const vmd = await import('../bin/lib/verify/verification-md.js');
+    if (typeof mod['renderPass1VerdictRow'] === 'function' && typeof mod['parseVerdictRows'] === 'function') {
       renderPass1VerdictRow = mod['renderPass1VerdictRow'] as typeof renderPass1VerdictRow;
-      renderPass3VerdictRow = mod['renderPass3VerdictRow'] as typeof renderPass3VerdictRow;
+      // The Pass-3 row verify writes (D-20-20: with the quote id).
+      renderPass3VerdictRow = (citekey, quoteSnippet, verdict, levRatio, reason) =>
+        vmd.renderQuoteRow({ key: citekey, id: 'q1', snippet: quoteSnippet, verdict, levRatio, reason });
       parseVerdictRows = mod['parseVerdictRows'] as typeof parseVerdictRows;
       moduleLoaded = true;
     } else {
-      skipReason = 'verdict-rows.ts exists but does not yet export renderPass1VerdictRow / renderPass3VerdictRow / parseVerdictRows — not yet wired (Wave-1)';
+      skipReason = 'verdict-rows.ts exists but does not yet export renderPass1VerdictRow / parseVerdictRows — not yet wired (Wave-1)';
     }
   } catch {
     skipReason = 'verdict-rows.ts import failed — not yet wired (Wave-1)';
@@ -178,8 +177,9 @@ test('D-17-07 / D-20-03: a retry-online row blocks with a "re-run online" refusa
     mod.renderPass1VerdictRow('jumper2021', 'UNVERIFIABLE-NETWORK', 0, 0, 'offline: no recorded fixture — re-run online'),
     mod.renderPass1VerdictRow('zenodo2018', 'UNVERIFIABLE', Number.NaN, Number.NaN, 'mEDRA holds 10.1234/x but has no record of it — give the work\'s arXiv id, PMID or ISBN (pensmith add)'),
     mod.renderPass1VerdictRow('ok2020', 'OK', 1, 1, 'D-11 AND-gate passed'),
-    mod.renderPass3VerdictRow('ok2020', 'a quoted passage', 'PDF_UNAVAILABLE', 0, 'text unavailable (offline)'),
-    mod.renderPass3VerdictRow('ok2020', 'a quoted passage', 'TEXT_UNAVAILABLE', 0, 'no text layer'),
+    // Rows only an older pensmith wrote (the pre-Phase-20 Pass-3 form).
+    legacyPass3Row('ok2020', 'a quoted passage', 'PDF_UNAVAILABLE', 0, 'text unavailable (offline)'),
+    legacyPass3Row('ok2020', 'a quoted passage', 'TEXT_UNAVAILABLE', 0, 'no text layer'),
   ].join('\n');
   assert.ok(mod.BLOCKING_VERDICTS.has('UNVERIFIABLE'));
   assert.ok(mod.BLOCKING_VERDICTS.has('UNVERIFIABLE-NETWORK'));
@@ -211,3 +211,8 @@ test('D-17-07 / D-20-03: a retry-online row blocks with a "re-run online" refusa
   );
   assert.equal(mod.blockingRowReason(r!), 'citation [@wakefield1998] is RETRACTED — cited work is retracted (Crossref: retraction notice 10.1016/S0140-6736(10)60175-4)');
 });
+
+/** A Pass-3 row as pensmith wrote it before Phase 20 (no quote id; D-20-20 added `[qN]`) — the parser still reads files that hold one. */
+function legacyPass3Row(citekey: string, snippet: string, verdict: string, levRatio: number, reason: string): string {
+  return `- ${citekey} ("${snippet}…"): **${verdict}** — lev=${levRatio.toFixed(3)} — ${reason}`;
+}

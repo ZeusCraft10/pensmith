@@ -62,24 +62,6 @@ export function renderPass1VerdictRow(
 }
 
 /**
- * Render a Pass-3 verdict row (writer side — verify.ts).
- *
- * Output format (byte-identical to verify.ts:159):
- *   - ${citekey} ("${quoteSnippet}…"): **${verdict}** — lev=${levRatio.toFixed(3)} — ${reason}
- *
- * Note: the … character is U+2026 HORIZONTAL ELLIPSIS, matching verify.ts exactly.
- */
-export function renderPass3VerdictRow(
-  citekey: string,
-  quoteSnippet: string,
-  verdict: string,
-  levRatio: number,
-  reason: string,
-): string {
-  return `- ${citekey} ("${quoteSnippet}…"): **${verdict}** — lev=${levRatio.toFixed(3)} — ${reason}`;
-}
-
-/**
  * Parse all failing citekeys from a VERIFICATION.md body (parser side — compile.ts).
  *
  * Matches list-item verdict rows in two forms:

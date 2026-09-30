@@ -48,24 +48,8 @@ export interface CitationIdentifiers {
   readonly isbn?: string | null | undefined;
 }
 
-/**
- * Well-known DOI prefixes registered with DataCite that are not arXiv's:
- * Zenodo, figshare, Dryad. Crossref has no record of them; since Phase 20
- * (VRFY-11) Pass 1 checks them at DataCite, so they are checkable like any
- * other DOI (uncheckableReason). (arXiv's own DataCite prefix, 10.48550, is
- * resolved at arXiv.)
- */
-export const DATACITE_DOI_PREFIXES: readonly string[] = Object.freeze(['10.5281', '10.6084', '10.5061']);
-
 function trimmed(v: string | null | undefined): string {
   return typeof v === 'string' ? v.trim() : '';
-}
-
-/** The DOI's lower-cased prefix (`10.5281`), or '' when there is none. */
-export function doiPrefixOf(doi: string | null | undefined): string {
-  const d = trimmed(doi).toLowerCase();
-  const slash = d.indexOf('/');
-  return slash > 0 ? d.slice(0, slash) : '';
 }
 
 /** The identifiers Pass 1 resolves without a DOI, each with its registrar, in the order it asks them. */

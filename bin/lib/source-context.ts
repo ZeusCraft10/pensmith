@@ -238,7 +238,7 @@ export function libraryCitekeys(entries: readonly SourceContextInput[]): Set<str
 // synthetic --dry-run source outside a dry run.
 // ---------------------------------------------------------------------------
 
-export { DATACITE_DOI_PREFIXES, NO_IDENTIFIER_REASON } from './verify/pass1-identifiers.js';
+export { NO_IDENTIFIER_REASON } from './verify/pass1-identifiers.js';
 
 /** The reason a retracted source is withheld (verifierBlindSpot); it never becomes citable. */
 export const RETRACTED_REASON = 'retracted (Retraction Watch)';

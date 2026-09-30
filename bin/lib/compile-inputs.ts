@@ -129,17 +129,6 @@ export function compiledInputsCurrent(paperRoot: string, registered: readonly Se
 }
 
 /**
- * True when `.paper/DRAFT.md` holds exactly the bytes the last compile wrote;
- * false when it was changed since (a hand edit), when the record predates v2
- * (the hash is unknown) or when there is no record. Never throws.
- */
-export function compiledDraftUnchanged(paperRoot: string): boolean {
-  const record = readCompileInputs(paperRoot);
-  if (record === null || record.compiled_draft_sha256 === null) return false;
-  return fileSha256(join(paperDir(paperRoot), 'DRAFT.md')) === record.compiled_draft_sha256;
-}
-
-/**
  * Why the compiled DRAFT.md cannot be exported as it is (VRFY-27), one line
  * each — empty when it is exactly what compile wrote from the sections as they
  * are now. `current` maps each registered section's id to its PLAN.md

@@ -12,7 +12,7 @@ import fc from 'fast-check';
 import { CITEKEY_GRAMMAR } from '../bin/lib/schemas/library.js';
 import { PASS1_VERDICTS, PASS3_VERDICTS, DRAFT_VERDICTS, BLOCKING_VERDICTS, quoteId } from '../bin/lib/verify/verdicts.js';
 import { renderVerificationMd, parseVerificationMd, summaryMismatches } from '../bin/lib/verify/verification-md.js';
-import { parseBlockingVerdictRows, renderPass3VerdictRow } from '../bin/lib/verify/verdict-rows.js';
+import { parseBlockingVerdictRows } from '../bin/lib/verify/verdict-rows.js';
 import type { GateRow } from '../bin/lib/verify/gate.js';
 
 const FIRST = [...'abcxyzABCXYZ0123456789_', 'é', 'ü', 'ß', 'ж', '中', 'α'];
@@ -73,10 +73,15 @@ test('VRFY-24 property: every CITEKEY_GRAMMAR key and every verdict round-trips 
   );
 });
 
+/** A Pass-3 row as pensmith wrote it before Phase 20 (no quote id; D-20-20 added `[qN]`) — the parser still reads files that hold one. */
+function legacyPass3Row(citekey: string, snippet: string, verdict: string, levRatio: number, reason: string): string {
+  return `- ${citekey} ("${snippet}…"): **${verdict}** — lev=${levRatio.toFixed(3)} — ${reason}`;
+}
+
 test('VRFY-24 property: the pre-Phase-20 Pass-3 row (no quote id) still reads under every key shape', () => {
   fc.assert(
     fc.property(citekey, fc.constantFrom('NOT_FOUND', 'UNVERIFIABLE-QUOTE', 'UNATTRIBUTED'), freeText, (key, verdict, snippet) => {
-      const line = renderPass3VerdictRow(key, snippet.replace(/\*/g, '\\*'), verdict, 0.1, 'reason');
+      const line = legacyPass3Row(key, snippet.replace(/\*/g, '\\*'), verdict, 0.1, 'reason');
       assert.deepEqual(parseBlockingVerdictRows(line).map((r) => [r.citekey, r.verdict]), [[key, verdict]]);
     }),
     { numRuns: 300 },

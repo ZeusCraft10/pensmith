@@ -11,7 +11,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DATACITE_DOI_PREFIXES,
   NO_IDENTIFIER_REASON,
   SYNTHETIC_REASON,
   describeExcluded,
@@ -32,12 +31,11 @@ test('GRND-18: verifierBlindSpot follows Pass 1 — a Crossref DOI, a DataCite D
   assert.equal(verifierBlindSpot({ doi: null }, false), NO_IDENTIFIER_REASON);
   assert.equal(verifierBlindSpot({ doi: '  ' }, false), NO_IDENTIFIER_REASON);
   assert.equal(verifierBlindSpot({}, false), NO_IDENTIFIER_REASON);
-  assert.deepEqual([...DATACITE_DOI_PREFIXES], ['10.5281', '10.6084', '10.5061'], 'Zenodo, figshare, Dryad');
-  for (const prefix of DATACITE_DOI_PREFIXES) {
+  // Zenodo, figshare, Dryad (DataCite): VRFY-11 — Pass 1 checks them at DataCite.
+  for (const prefix of ['10.5281', '10.6084', '10.5061']) {
     assert.equal(verifierBlindSpot({ doi: `${prefix}/x.1` }, false), null, `${prefix}: VRFY-11 — Pass 1 checks it at DataCite`);
     assert.equal(verifierBlindSpot({ doi: `${prefix}/x.1`, arxiv: '2101.00001' }, false), null, `${prefix} with an arXiv id`);
   }
-  assert.ok(!DATACITE_DOI_PREFIXES.includes('10.48550'), "arXiv's DataCite prefix is checked at arXiv");
   // Synthetic sources: only a dry run checks them.
   assert.equal(verifierBlindSpot({ doi: '10.0000/pensmith-dryrun.a', synthetic: true }, true), null, 'a dry run checks its synthetic sources');
   assert.equal(verifierBlindSpot({ doi: '10.0000/pensmith-dryrun.a', synthetic: true }, false), SYNTHETIC_REASON);

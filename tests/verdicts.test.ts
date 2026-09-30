@@ -28,7 +28,8 @@ import {
   quoteTextSha256,
   quoteId,
 } from '../bin/lib/verify/verdicts.js';
-import { BLOCKING_VERDICTS as ROWS_BLOCKING, blockingRowReason, parseBlockingVerdictRows, renderPass1VerdictRow, renderPass3VerdictRow } from '../bin/lib/verify/verdict-rows.js';
+import { BLOCKING_VERDICTS as ROWS_BLOCKING, blockingRowReason, parseBlockingVerdictRows, renderPass1VerdictRow } from '../bin/lib/verify/verdict-rows.js';
+import { renderQuoteRow } from '../bin/lib/verify/verification-md.js';
 import { readUnsupportedClaims, type DoneSection } from '../bin/cli/done.js';
 
 test('seam S-C: every verdict of every pass is exactly one of passing, failing or unverifiable', () => {
@@ -102,7 +103,7 @@ test('seam S-C: the refusal wording of the retry-online and the unverifiable-quo
   const md = [
     'Status: unverifiable',
     renderPass1VerdictRow('ghost.2099', 'UNVERIFIABLE-NETWORK', Number.NaN, Number.NaN, 'Crossref re-fetch failed: HTTP 503 after retries'),
-    renderPass3VerdictRow('aggarwal2022', 'attention mechanisms are nothing more t', 'UNVERIFIABLE-QUOTE', 0, 'no open-access copy'),
+    renderQuoteRow({ key: 'aggarwal2022', id: 'q1', snippet: 'attention mechanisms are nothing more t', verdict: 'UNVERIFIABLE-QUOTE', levRatio: 0, reason: 'no open-access copy' }),
     renderPass1VerdictRow('ok2020', 'OK-BYO', Number.NaN, Number.NaN, 'your own PDF sources/ok2020.pdf'),
   ].join('\n');
   const rows = parseBlockingVerdictRows(md);
