@@ -19,9 +19,9 @@ intake → research → outline → for each section { plan → write → verify
 
 It ships in two tiers from one source of truth:
 - **Tier 1 — Claude Code plugin.** Single slash command `/pensmith`, parallel subagents via the `Task` tool, MCP-backed state, hooks for auto-resume across `/compact`. Best UX.
-- **Tier 2 — Portable Node CLI.** `pensmith <verb>` runs the same workflows against any OpenAI-compatible endpoint (Anthropic, OpenAI, Ollama, vLLM, llama.cpp). Sequential execution, no subagents, no MCP. Same workflow files, same templates.
+- **Tier 2 — Portable Node CLI.** `pensmith <verb>` runs the same pipeline against any OpenAI-compatible endpoint (Anthropic, OpenAI, Ollama, vLLM, llama.cpp). Sequential execution, no subagents, no MCP. Same prompts, presets and references.
 
-Workflow bodies (`workflows/*.md`) and templates (`templates/*.md`) are the shared source of truth — both tiers read them. Workflows must include `<capability_check>` blocks that detect Task / MCP / AskUserQuestion availability and degrade gracefully.
+The `plugin/` directory is the shared source of truth: its workflow bodies (`plugin/workflows/*.md`), prompt templates, citation styles and presets (`plugin/templates/`), references and skills. Tier 1 is that directory; Tier 2 implements each verb in `bin/cli` from the same `plugin/` prompts, presets and references rather than interpreting the workflow bodies at runtime, and the tier contract keeps the two in step (§14, amended in Phase 23a, PLUG-02). Workflows must include `<capability_check>` blocks that detect Task / MCP / AskUserQuestion availability and degrade gracefully. *(Amended in Phase 23a, PLUG-02: this paragraph named root-level `workflows/*.md` and `templates/*.md` read by both tiers; those paths moved under `plugin/`, and Tier 2 never read the workflow bodies.)*
 
 ---
 

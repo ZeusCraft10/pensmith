@@ -56,6 +56,8 @@ test('PLUG-14: SessionStart in a paper emits one additionalContext line naming t
     assert.match(ctx, /pensmith paper/);
     assert.match(ctx, /Next step \(the pensmith router\): Draft section §2 \(methods\): run \/pensmith \(or `pensmith write 2`\)/, ctx);
     assert.match(ctx, /To continue the paper, run \/pensmith/);
+    // A section's plan → write → verify is one /pensmith step (D-18-28), never "one verb at a time".
+    assert.match(ctx, /a section's plan, write and verify are one step/);
     assert.doesNotMatch(ctx, /Before the last context compaction/, 'no HANDOFF, no handoff summary');
     assert.doesNotMatch(r.stdout, /systemMessage/);
   }

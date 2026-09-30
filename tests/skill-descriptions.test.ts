@@ -22,6 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
+import { BLOCKING_VERDICTS } from '../bin/lib/verify/verdicts.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SKILLS_DIR = path.join(REPO, 'plugin', 'skills');
@@ -163,7 +164,13 @@ test('D-23a-10: a bare /pensmith calls pensmith_status first and runs one step',
   assert.doesNotMatch(bare, /last line/, 'an attention or note line can follow the next: line');
   assert.match(bare, /Run exactly the verb in the `next:` line/);
   assert.match(bare, /Never run\s+`pensmith_plan` when it says `write` or `verify`/);
-  assert.match(bare, /Only if that verb was `plan N` and it succeeded, call `pensmith_status`\s+again and continue with its `next:` step only when it names the same\s+section \(`write N`\)/);
+  // Review round 1 of the Phase 20 merge: the plan → write chain is an instruction, not a limit —
+  // with the old "continue … only when it names the same section" wording, claude-sonnet-5-5
+  // stopped after `plan N` in 2 of 3 live sessions (the CLI runs plan → write → verify, D-18-28).
+  assert.match(bare, /A section's plan, write and verify are ONE step, exactly as in the CLI\./);
+  assert.match(bare, /when that verb was `plan N` and it succeeded, call `pensmith_status`\s+again, and when its `next:` line names `write N` for the same section, you\s+MUST call `pensmith_write` for that section now, in this same \/pensmith/);
+  assert.match(bare, /do not stop to tell the user to run \/pensmith again/);
+  assert.match(bare, /never go on to another section or a later stage/);
   assert.doesNotMatch(bare, /plan →\s+write → verify: `pensmith_plan`, then/, 'no hard-coded section chain');
 });
 
@@ -199,6 +206,12 @@ test('honest framing: "make it sound less AI" improves prose — never a promise
     const text = readFileSync(path.join(SKILLS_DIR, name, 'SKILL.md'), 'utf8');
     assert.doesNotMatch(text, /undetectable|bypass(?:es)? (?:AI )?detect/i, `${name} makes no detection-evasion claim`);
   }
+});
+
+test('review round 1 (Phase 20 merge): the verify-section skill names every blocking verdict and the failed-write refusal', () => {
+  const { body } = readSkill('verify-section');
+  for (const v of BLOCKING_VERDICTS) assert.match(body, new RegExp(`\\b${v}\\b`), `verify-section names ${v}`);
+  assert.match(body, /A section whose last `write` failed is not verified: `verify N` refuses \(exit 4\)\s+and names `pensmith write N`/);
 });
 
 test('D-23a-09: each plumbing skill forwards `<verb> $ARGUMENTS` to the pensmith skill and holds no routing logic', () => {

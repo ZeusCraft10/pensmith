@@ -79,7 +79,7 @@ export async function buildSessionStartContext(root: string, opts: SessionStartO
   lines.push(
     decision.verb === 'status' && decision.reason === 'done'
       ? 'Nothing more is routed for this paper; run /pensmith status to review it.'
-      : 'To continue the paper, run /pensmith (one step at a time; /pensmith status shows where it stands).',
+      : 'To continue the paper, run /pensmith: each run takes the next step, and a section\'s plan, write and verify are one step (/pensmith status shows where it stands).',
   );
   const text = lines.join('\n');
   return text.length > MAX_CONTEXT_CHARS ? `${text.slice(0, MAX_CONTEXT_CHARS - 1)}…` : text;

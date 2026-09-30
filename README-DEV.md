@@ -75,4 +75,4 @@ If your repo lives inside a sync folder (the upstream dev folder is `Documents/G
 
 ## Quick check
 
-`npm run check` runs prebuild, lint, typecheck, build, the tier contract, the tests and the manifest validation in one shot — the same order as CI.
+`npm run check` runs prebuild, lint, typecheck, build, the tier contract, the tests, the manifest validation and `bundle:check` (the committed plugin bundles and version stamp match a fresh `npm run bundle`) in one shot — the same order as CI.

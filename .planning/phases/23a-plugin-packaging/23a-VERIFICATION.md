@@ -2,10 +2,10 @@
 phase: 23a-plugin-packaging
 verified: 2026-09-30
 verified_at_branch: v1/p23a (closer: gate, plugin smoke, live sessions and user-path checks at 03d1654 — §8; review round 3 fixer at 339a2de — §7; round 2 at 0f2c2c3 — §6; round 1 at 90f8c7d / df1e767 — §1-§3)
-status: closed — 6 of 8 requirements met; PLUG-04 and CI-05 pending maintainer items (§8)
+status: closed — 5 of 8 requirements met; PLUG-04, PLUG-14 (its 3-OS CI leg) and CI-05 pending maintainer items (§8)
 requirements_in_scope: [PLUG-01, PLUG-02, PLUG-03, PLUG-04, PLUG-05, PLUG-13, PLUG-14, CI-05]
-requirements_met: [PLUG-01, PLUG-02, PLUG-03, PLUG-05, PLUG-13, PLUG-14]
-requirements_not_met: [PLUG-04, CI-05]
+requirements_met: [PLUG-01, PLUG-02, PLUG-03, PLUG-05, PLUG-13]
+requirements_not_met: [PLUG-04, PLUG-14, CI-05]
 open_items:
   - "CI-05 (NOT complete): the `plugin` job (ubuntu, macOS, Windows) and `bundle:check` in `check` have not run on a GitHub runner (v1/p23a has no upstream) — maintainer, after the push; record the run URLs in 23a-SUMMARY, then tick CI-05"
   - "CI-05: make the `plugin` and `check` jobs required checks on main — maintainer (§5)"
@@ -314,7 +314,7 @@ So PLUG-04 stays **Pending** until the maintainer decides on the amended accepta
 | The lint rule fires on a `bin/lib` fixture that writes to stdout, and the import-graph test fires on a reachable `bin/cli` fixture | `tests/chokepoints.test.ts`: the `stdout-sink` fixture (a `bin/lib` file) and the `mcp-stdout-graph` fixture (a `bin/cli` module reachable from `mcp/`) each violate their row; each stdout form and each harmless form is tested on its own |
 | The mutation check (23a-PLAN §6) | §8.12: reverting one `out()` in `bin/cli/plan.ts` to `process.stdout.write` fails lint (`stdout-sink`), fails the import-graph harness (`mcp-stdout-graph`, reached from `mcp/`), and, once rebuilt and rebundled, fails `mcp-stdout-clean` for both servers with the `pensmith plan: wrote PLAN.md …` line on stdout |
 
-### 8.7 PLUG-14: Hooks run under Claude Code and do their jobs. **Met** (caveat: the macOS and Windows legs are pending).
+### 8.7 PLUG-14: Hooks run under Claude Code and do their jobs. **Met on Linux; pending** its 3-OS CI leg (the macOS and Windows legs have not run; unticked in the Phase 20 merge's review round 1).
 
 | Acceptance criterion | Evidence |
 |---|---|
@@ -464,7 +464,7 @@ The clone's `node_modules` was a symlink to this checkout's, so its regenerated 
 | PLUG-04 | Not met: the acceptance text needs a maintainer amendment (23a-PLAN §7.6) | `[ ]`, Pending |
 | PLUG-05 | Met | `[x]`, Complete (23a) |
 | PLUG-13 | Met | `[x]`, Complete (23a) |
-| PLUG-14 | Met on Linux, with the 3-OS CI leg pending the first green `check` matrix | `[x]`, Complete (23a) with that caveat |
+| PLUG-14 | Met on Linux; not met: its acceptance "pass on all 3 OSes in CI" waits for the first green `check` matrix | `[ ]`, Pending (unticked in the Phase 20 merge's review round 1; it was `[x]` with a caveat) |
 | CI-05 | Not met: never run on a runner; not a required check | `[ ]`, Pending (maintainer) |
 
 ROADMAP: Phase 23 stays unticked. 23b is still to come, and 23a itself leaves PLUG-04 and CI-05 open.

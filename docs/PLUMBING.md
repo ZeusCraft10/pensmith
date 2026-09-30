@@ -42,7 +42,7 @@ claude -p "/pensmith:verify-section 3" \
 
 - For a stage that runs through the CLI, allow that command too, for example `Bash(pensmith compile *)` next to `Skill(pensmith:pensmith)` for `/pensmith:compile`.
 - `claude -p` exits 0 when the Claude Code run itself succeeded — a blocked section is reported in the reply, not in the exit code. When a script must branch on the verdict, run the CLI: `pensmith verify 3` exits `4` when the verifier blocks the section, `3` when a gate needs an answer, `5` at the cost cap (the [exit codes](../README.md#exit-codes)).
-- The gates stay on. `/pensmith:outline` and `/pensmith:done` stop at their approval gate when there is no terminal; pass `--yolo` in the arguments only when you mean to approve the outline or the export unattended (it never lifts the cost cap or grants detector consent).
+- The gates stay on. `/pensmith:outline` and `/pensmith:done` stop at their approval gate when there is no terminal; pass `--yolo` in the arguments only when you mean to answer that gate unattended. On `outline` it approves the outline. On `done` it confirms the export and also accepts every claim the advisory check judged UNSUPPORTED — `.paper/VERIFICATION.md` then records each one as auto-accepted under `--yolo`, not as confirmed by you, so read the list `done` prints when it stops first. `--yolo` never answers the cost cap, the estimate confirmation, detector consent, the active-paper choice, reading a PDF folder outside the paper, pulling a Zotero collection a paper's config names, attaching a PDF whose first page does not show the work or accepting a quote whose source text cannot be checked (the list `pensmith --help` prints).
 
 ## Scheduled tasks
 

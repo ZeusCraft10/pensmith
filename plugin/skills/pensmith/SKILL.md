@@ -78,9 +78,16 @@ the outline approval, the export confirmation — need a terminal. Without one
 the CLI stops at that question with exit code 3. Tell the user what it asked
 and suggest running that step in their own terminal. Only when the user
 explicitly says so, re-run it with `--yolo`, which accepts the suggested
-answers and approves the outline or the export for them (it never lifts the
-cost cap or gives detector consent). `pensmith new --answers <file.toml>`
-answers intake up front.
+answers and approves the outline or the export for them. On `done`, `--yolo`
+also accepts every claim the advisory check judged UNSUPPORTED, and
+`.paper/VERIFICATION.md` records each as auto-accepted under `--yolo`, not as
+confirmed by the user: first show the user the UNSUPPORTED claims `done`
+printed when it stopped, and say how the acceptance will be recorded.
+`--yolo` never answers the cost cap, the estimate confirmation, detector
+consent, the active-paper choice, reading a PDF folder outside the paper,
+pulling a Zotero collection a paper's config names, attaching a PDF whose
+first page does not show the work or accepting a quote whose source text
+cannot be checked. `pensmith new --answers <file.toml>` answers intake up front.
 
 ## A bare /pensmith, "continue", "what's next?"
 
@@ -92,11 +99,16 @@ answers intake up front.
    `pensmith_plan` when it says `write` or `verify`: that would re-plan a
    section that is already planned and bill a model call for nothing.
    (`pensmith_write` verifies the draft it writes.)
-3. Only if that verb was `plan N` and it succeeded, call `pensmith_status`
-   again and continue with its `next:` step only when it names the same
-   section (`write N`). Stop at the first failure.
+3. A section's plan, write and verify are ONE step, exactly as in the CLI.
+   So when that verb was `plan N` and it succeeded, call `pensmith_status`
+   again, and when its `next:` line names `write N` for the same section, you
+   MUST call `pensmith_write` for that section now, in this same /pensmith:
+   do not stop to tell the user to run /pensmith again. `pensmith_write`
+   verifies the draft it writes, which completes the step. Stop at the first
+   failure, and never go on to another section or a later stage.
 4. Tell the user what ran and what `pensmith_status` now names next. One
-   /pensmith is one step; "continue" is another /pensmith.
+   /pensmith is one step (a section's plan, write and verify count as one);
+   "continue" is another /pensmith.
 
 If status says there is no paper here, the first step is `pensmith new` (it
 reads `assignment.txt`, `.md` or `.pdf` in the folder).

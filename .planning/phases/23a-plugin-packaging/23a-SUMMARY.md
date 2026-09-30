@@ -5,9 +5,9 @@ branch: v1/p23a
 base: c8f28e3
 closed_at: 2026-09-30
 closed_at_commit: 03d1654 (the closer's gate, smoke and live checks ran here; this SUMMARY lands in the closing docs commit on top)
-status: closed — 6 of 8 requirements Complete, 2 Pending on maintainer items
-requirements_complete: [PLUG-01, PLUG-02, PLUG-03, PLUG-05, PLUG-13, PLUG-14]
-requirements_pending: [PLUG-04, CI-05]
+status: closed — 5 of 8 requirements Complete, 3 Pending on maintainer items (PLUG-14 unticked in the Phase 20 merge's review round 1)
+requirements_complete: [PLUG-01, PLUG-02, PLUG-03, PLUG-05, PLUG-13]
+requirements_pending: [PLUG-04, PLUG-14, CI-05]
 decisions: D-23a-01..20 (23a-CONTEXT.md, amended in review rounds 1-3)
 verification: 23a-VERIFICATION.md
 ---
@@ -36,7 +36,7 @@ Phase 23 itself stays open: Phase 23b (PLUG-06..12, PLUG-15) is still to come, a
 | PLUG-04 repo-root `.mcp.json` works for developers | **Pending**: the acceptance text needs a maintainer amendment | §8.4 |
 | PLUG-05 plumbing namespace registered and documented | **Complete** | §8.5 |
 | PLUG-13 MCP stdio channel stays clean | **Complete** | §8.6 |
-| PLUG-14 hooks run under Claude Code and do their jobs | **Complete** (caveat: the macOS and Windows legs of the spawned-bundle hook tests wait for the first green `check` matrix) | §8.7 |
+| PLUG-14 hooks run under Claude Code and do their jobs | **Pending**: met on Linux; its acceptance is the spawned-bundle hook tests passing on all 3 OSes in CI, which waits for the first green `check` matrix (unticked in the Phase 20 merge's review round 1) | §8.7 |
 | CI-05 CI validates and installs the real plugin | **Pending**: the job has never run on a GitHub runner and is not yet a required check | §8.8 |
 
 **Why PLUG-04 is pending.** Its two criteria cannot both hold on every shell with any committed `.mcp.json`. Claude Code 2.1.285 drops a plugin MCP server only when its expanded command line exactly matches a project server's. The plugin's line carries the absolute plugin root, and no variable Claude Code expands in `.mcp.json` names the project folder on every shell. The shipped `${PWD:-.}` form behaves like this:
