@@ -36,6 +36,7 @@ import {
   toRepoRelative,
   fromRepoRelative,
   type ChokepointRow,
+  type ChokepointMatcher,
 } from '../scripts/eslint-rules/chokepoint.mjs';
 
 const ROWS = loadChokepointRows();
@@ -54,8 +55,12 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 const TREE = WALK_ROOTS.flatMap((d) => (fs.existsSync(path.join(REPO_ROOT, d)) ? walk(path.join(REPO_ROOT, d)) : []));
 
-/** A virtual TypeScript path inside the row's scope and outside its allow list. */
+/**
+ * Where the harness reads a row's fixture: the row's `fixturePath`, else a
+ * virtual TypeScript path inside the row's scope and outside its allow list.
+ */
 function virtualPathFor(row: ChokepointRow): string {
+  if (row.fixturePath !== undefined) return row.fixturePath;
   for (const glob of row.scope) {
     const rel = glob
       .replace(/\{([^,}]+)[^}]*\}/g, '$1')
@@ -109,6 +114,23 @@ test('RUN-29: every row is written down in the CLAUDE.md chokepoint table', () =
 test('RUN-29: a malformed row is rejected by the loader validation', () => {
   assert.notDeepEqual(validateRow({ id: 'x', requirement: 'nope', scope: [], match: { kind: 'magic', pattern: '(' } }), []);
   assert.deepEqual(validateRow(ROWS[0], `${ROWS[0]!.id}.json`), []);
+  const base = {
+    id: 'x',
+    requirement: 'PLUG-13',
+    module: 'bin/lib/x.ts',
+    description: 'a synthetic row for the validation self-test',
+    scope: ['mcp/**/*.ts'],
+    fixture: 'tests/fixtures/chokepoints/x.violation.ts.txt',
+  };
+  assert.deepEqual(validateRow({ ...base, match: { kind: 'import-graph', pattern: '.', content: 'console\\.log\\(' } }), []);
+  assert.deepEqual(validateRow({ ...base, fixturePath: 'bin/cli/plan.ts', match: { kind: 'member', pattern: '.' } }), []);
+  const problems = (row: Record<string, unknown>): string => validateRow({ ...base, ...row }).join('; ');
+  assert.match(problems({ match: { kind: 'member', pattern: '.', content: 'x' } }), /content .*import-graph matchers only/);
+  assert.match(problems({ match: { kind: 'import-graph', pattern: '.', content: '' } }), /content .*non-empty/);
+  assert.match(problems({ match: { kind: 'import-graph', pattern: '.', content: '(' } }), /bad pattern/);
+  for (const fixturePath of ['../bin/x.ts', '/abs/x.ts', 'bin/./x.ts', 'bin/x.js', 'bin\\x.ts', 7]) {
+    assert.match(problems({ fixturePath, match: { kind: 'member', pattern: '.' } }), /fixturePath/, JSON.stringify(fixturePath));
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -121,14 +143,26 @@ for (const row of ROWS) {
     const rel = virtualPathFor(row);
     const kinds = matchersOf(row).map((m) => m.kind);
     if (kinds.every((k) => k === 'import-graph')) {
-      // The fixture is read from memory at its virtual path; its relative
-      // imports resolve against the real tree around that path.
+      // The fixture is read from memory at its path; its relative imports
+      // resolve against the real tree around that path. A fixture in scope is
+      // itself the entry; one outside it stands in for a real module, and the
+      // walk starts from the row's real in-scope modules — so the real graph
+      // must reach it.
       const virtualAbs = path.join(REPO_ROOT, rel);
-      const v = importGraphViolations(row, [rel], {
+      const inScope = matchesAny(rel, row.scope) && !matchesAny(rel, row.allow);
+      const entries = inScope ? [rel] : TREE.filter((f) => matchesAny(f, row.scope) && !matchesAny(f, row.allow));
+      assert.ok(entries.length > 0, `row ${row.id} has modules to walk`);
+      const v = importGraphViolations(row, entries, {
         read: (f) => (f === virtualAbs ? text : fs.readFileSync(f, 'utf8')),
         exists: (f) => f === virtualAbs || fs.existsSync(f),
       });
       assert.ok(v.length > 0, `the ${row.id} fixture must reach a forbidden module`);
+      if (!inScope) {
+        assert.ok(v.some((x) => x.reached === rel), `the ${row.id} fixture is reached at ${rel}: ${JSON.stringify(v)}`);
+        // …and only because of the fixture: the real module at that path is clean.
+        const real = importGraphViolations(row, entries, { read: (f) => fs.readFileSync(f, 'utf8'), exists: (f) => fs.existsSync(f) });
+        assert.deepEqual(real.filter((x) => x.reached === rel), [], `the real ${rel} does not violate ${row.id}`);
+      }
       return;
     }
     const result = await lintAs(text, rel);
@@ -356,6 +390,76 @@ test('RUN-29: import-graph walks static, side-effect and dynamic relative import
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/** The synthetic tree the import-graph `content` self-test walks: an MCP-like server reaching verbs. */
+const CONTENT_FILES: Readonly<Record<string, string>> = {
+  'mcp/server.ts': `import { tools } from './tools.js';\nexport const s = tools;\n`,
+  'mcp/tools.ts': `import { sink } from '../lib/output-sink.js';\nexport async function tools() {\n  await import('../cli/plan.js');\n  return sink;\n}\n`,
+  'mcp/noisy.ts': `export function hi() { console.log('hi'); }\n`,
+  'mcp/commented.ts': `// never console.log here, and never write to process.stdout.isTTY-less streams\nexport const quiet = process.stdout.isTTY;\n`,
+  'lib/output-sink.ts': `export function sink(t: string) { process.stdout.write(t); }\n`,
+  'cli/plan.ts': `import { deeper } from './deeper.js';\nexport function plan() { (1 > 0 ? process.stdout : process.stderr).write('pensmith plan: wrote PLAN.md\\n'); return deeper; }\n`,
+  'cli/deeper.ts': `export const deeper = () => console.info('deeper');\n`,
+  'cli/clean.ts': `import { sink } from '../lib/output-sink.js';\nexport const c = () => sink('ok');\n`,
+  'mcp/typed.ts': `import type { W } from '../cli/worker.js';\nexport type { V } from '../cli/worker.js';\nexport const t: W | null = null;\n`,
+  'cli/worker.ts': `export type W = number;\nexport type V = string;\nconsole.log('worker thread noise');\n`,
+};
+
+test('PLUG-13: import-graph `content` — a reached module violates only when its path AND text match; the walk goes on through it', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-graph-content-'));
+  const abs = (rel: string): string => path.join(dir, ...rel.split('/'));
+  for (const [rel, text] of Object.entries(CONTENT_FILES)) {
+    fs.mkdirSync(path.dirname(abs(rel)), { recursive: true });
+    fs.writeFileSync(abs(rel), text);
+  }
+  try {
+    const rootRel = toRepoRelative(dir);
+    const row = ROWS.find((r) => r.id === 'mcp-stdout-graph')!;
+    const matcher = matchersOf(row)[0]!;
+    // The real row's matcher, re-rooted on the synthetic tree (its path pattern is repo-relative).
+    const synthetic: ChokepointRow = {
+      ...row,
+      id: 'synthetic-content',
+      scope: [`${rootRel}/mcp/*.ts`],
+      allow: [],
+      match: { ...matcher, pattern: `^(?!${rootRel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/lib/output-sink\\.ts$)` },
+    };
+    const io = { read: (f: string) => fs.readFileSync(f, 'utf8'), exists: (f: string) => fs.existsSync(f) };
+    const entries = Object.keys(CONTENT_FILES).map((f) => `${rootRel}/${f}`);
+    const v = importGraphViolations(synthetic, entries, io);
+    const short = (x: string): string => x.slice(rootRel.length + 1);
+    const found = v.map((x) => `${short(x.entry)} -> ${short(x.reached)} via ${x.chain.map(short).join(' > ')}`).sort();
+    assert.deepEqual(found, [
+      'mcp/noisy.ts -> mcp/noisy.ts via mcp/noisy.ts',
+      'mcp/server.ts -> cli/deeper.ts via mcp/server.ts > mcp/tools.ts > cli/plan.ts > cli/deeper.ts',
+      'mcp/server.ts -> cli/plan.ts via mcp/server.ts > mcp/tools.ts > cli/plan.ts',
+      'mcp/tools.ts -> cli/deeper.ts via mcp/tools.ts > cli/plan.ts > cli/deeper.ts',
+      'mcp/tools.ts -> cli/plan.ts via mcp/tools.ts > cli/plan.ts',
+    ], 'the entry itself counts; the sink module, comments, isTTY reads, type-only imports and unreached modules do not; the walk continues through a violating module');
+    // Without typeImports: "allow", a type-only import is an edge like any other.
+    const { pattern, content } = synthetic.match as ChokepointMatcher;
+    const strict: ChokepointRow = { ...synthetic, match: { kind: 'import-graph', pattern, ...(content !== undefined ? { content } : {}) } };
+    const typed = importGraphViolations(strict, [`${rootRel}/mcp/typed.ts`], io).map((x) => short(x.reached));
+    assert.deepEqual(typed, ['cli/worker.ts'], 'a type-only edge is followed unless the matcher allows type imports');
+    assert.deepEqual(relativeImports(CONTENT_FILES['mcp/typed.ts']!, { skipTypeOnly: true }), []);
+    assert.deepEqual(
+      relativeImports(`import type from './default-named-type.js';\nimport { type A } from './inline.js';\nimport type * as N from './ns.js';\n`, { skipTypeOnly: true }),
+      ['./default-named-type.js', './inline.js'],
+      'a default import named `type` and an inline type specifier still load the module',
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('PLUG-13: the mcp-stdout-graph walk really reaches the verbs the MCP tools run (the row is not vacuous)', () => {
+  const row = ROWS.find((r) => r.id === 'mcp-stdout-graph')!;
+  // Same walk, but every module counts as a hit for its path: which modules does mcp/ reach?
+  const reach: ChokepointRow = { ...row, match: { kind: 'import-graph', pattern: '^bin/(?:cli/(?:plan|write|verify|status)|lib/output-sink)\\.ts$' } };
+  const io = { read: (f: string) => fs.readFileSync(f, 'utf8'), exists: (f: string) => fs.existsSync(f) };
+  const reached = new Set(importGraphViolations(reach, TREE, io).map((x) => x.reached));
+  assert.deepEqual([...reached].sort(), ['bin/cli/plan.ts', 'bin/cli/status.ts', 'bin/cli/verify.ts', 'bin/cli/write.ts', 'bin/lib/output-sink.ts']);
 });
 
 test('RUN-29: import-graph walks a tree on another Windows drive (temp dir on C:, checkout on D:)', () => {

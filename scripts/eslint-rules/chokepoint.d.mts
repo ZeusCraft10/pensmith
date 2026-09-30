@@ -10,6 +10,8 @@ export interface ChokepointMatcher {
   names?: string;
   typeImports?: 'allow';
   arg?: { index?: number; pattern: string };
+  /** import-graph only: a regex source the reached module's raw text must match too. */
+  content?: string;
 }
 
 export interface ChokepointRow {
@@ -21,6 +23,8 @@ export interface ChokepointRow {
   allow?: string[];
   match: ChokepointMatcher | ChokepointMatcher[];
   fixture: string;
+  /** The repo-relative .ts path the harness reads the fixture at (see chokepoint.mjs). */
+  fixturePath?: string;
   baseline?: Record<string, number>;
 }
 
@@ -43,7 +47,7 @@ export function loadChokepointRows(dir?: string): ChokepointRow[];
 export function validateRow(row: unknown, fileName?: string): string[];
 export function rowsForFile(rows: readonly ChokepointRow[], rel: string): ChokepointRow[];
 export function fileRegexMatches(matcher: ChokepointMatcher, text: string): Array<{ index: number; text: string }>;
-export function relativeImports(text: string): string[];
+export function relativeImports(text: string, opts?: { skipTypeOnly?: boolean }): string[];
 export function resolveImport(
   fromFile: string,
   spec: string,

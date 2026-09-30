@@ -5,6 +5,7 @@
 // exit 0. Phase 3+ replaces each one with a real implementation.
 
 import { defineCommand } from 'citty';
+import { out } from '../lib/output-sink.js';
 
 export function makeStub(verb: string) {
   return defineCommand({
@@ -13,7 +14,7 @@ export function makeStub(verb: string) {
       description: `(Phase 2 stub) ${verb} — not implemented yet`,
     },
     run() {
-      process.stdout.write(`pensmith ${verb}: not implemented yet\n`);
+      out(`pensmith ${verb}: not implemented yet\n`);
       // exit 0 is the citty default when run() returns normally.
     },
   });

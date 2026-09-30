@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { pluginReferencePath } from './paths.js';
 import { fetch as httpFetch } from './http.js';
 import { networkMode } from './http-mock.js';
+import { out } from './output-sink.js';
 import { assertBudget, appendCost } from './budget.js';
 import { runGate } from './gates.js';
 
@@ -220,7 +221,7 @@ export interface GptzeroScoringOptions {
 
 /** One stdout line naming why no GPTZero score was produced. */
 function unavailable(why: string): null {
-  process.stdout.write(`pensmith: GPTZero honesty score unavailable (${why}) — no text was sent.\n`);
+  out(`pensmith: GPTZero honesty score unavailable (${why}) — no text was sent.\n`);
   return null;
 }
 
@@ -249,7 +250,7 @@ async function scoreWithGptzero(
   // Key-absence guard FIRST. Presence-check only — the value is never printed.
   const apiKey = process.env['GPTZERO_API_KEY'];
   if (!apiKey) {
-    process.stdout.write('pensmith: GPTZero API key not set — honesty score skipped.\n');
+    out('pensmith: GPTZero API key not set — honesty score skipped.\n');
     return null;
   }
 
@@ -269,7 +270,7 @@ async function scoreWithGptzero(
   // HARD-05 Step 1: Disclosure — always shown before the consent question,
   // even if the user later declines. Copy is read VERBATIM from the locked
   // references/honesty-framing.md (never inlined — loadDisclosureNote).
-  process.stdout.write(`pensmith: ${loadDisclosureNote()}\n`);
+  out(`pensmith: ${loadDisclosureNote()}\n`);
 
   // HARD-05 Step 2 / D-17-16: the detector-consent gate (V2) before any POST.
   if (opts?.consentGranted !== true) {
@@ -285,7 +286,7 @@ async function scoreWithGptzero(
       return unavailable('no consent');
     }
     if (!consented) {
-      process.stdout.write('pensmith: GPTZero honesty scoring declined — skipped.\n');
+      out('pensmith: GPTZero honesty scoring declined — skipped.\n');
       return null;
     }
   }
@@ -294,7 +295,7 @@ async function scoreWithGptzero(
   let postText = text;
   if (Buffer.byteLength(text, 'utf8') > GPTZERO_MAX_BYTES) {
     postText = __truncateForGptzeroTest(text);
-    process.stdout.write(
+    out(
       `pensmith: paper text truncated to ${GPTZERO_MAX_BYTES} bytes for GPTZero scoring.\n`,
     );
   }
@@ -360,7 +361,7 @@ function notImplementedBackend(name: string): HonestyBackend {
   return {
     name,
     score: async (): Promise<HonestyScore | null> => {
-      process.stdout.write(
+      out(
         `pensmith: ${name} honesty backend not implemented — score skipped.\n`,
       );
       return null;

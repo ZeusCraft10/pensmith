@@ -1,0 +1,18 @@
+// Chokepoint fixture (mcp-stdout-graph, PLUG-13): stands in for bin/cli/plan.ts,
+// the verb the MCP tool pensmith_plan imports (mcp/tools.ts → bin/cli/plan.ts).
+// It prints its result line straight to the process's stdout, as plan.ts did
+// before the output sink: under the MCP server that line lands in the JSON-RPC
+// stream. The harness walks the real mcp/ modules, reaches this text at
+// bin/cli/plan.ts, and must report the chain.
+import { defineCommand } from 'citty';
+
+export const planCommand = defineCommand({
+  meta: { name: 'plan', description: 'Plan one section.' },
+  args: { n: { type: 'positional', required: true } },
+  async run({ args }) {
+    process.stdout.write(`pensmith plan: wrote PLAN.md for section ${String(args.n)}\n`);
+    return { ok: true };
+  },
+});
+
+export default planCommand;

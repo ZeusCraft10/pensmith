@@ -117,7 +117,8 @@ Each concern below may live only in the named module. Rows marked `row:` are enf
 | Citation regexes (`\[@`, `@\{`) — one Pandoc citation grammar | `bin/lib/citation-token.ts` | enforced from VRFY-09 |
 | The FEED-05 untrusted-data fence markers (`<<<PENSMITH_UNTRUSTED_DATA_…>>>` and their UUID) — applied by the prompt renderer (`bin/lib/prompt-request.ts`) | `bin/lib/untrusted-fence.ts` | row: `untrusted-fence` (FEED-05) |
 | Discipline-slug literals (`'history'`, `'computer-science'`, …) — every discipline → style, density, sections, tone or source-preference mapping, and free-text normalisation | `bin/lib/disciplines.ts` (over `plugin/templates/presets/disciplines.json`) | row: `discipline-literals` (GRND-06) |
-| `process.stdout.write` / `console.log` in `bin/lib` and in `bin/cli` code reachable from `mcp/` (the output sink) | the injected output sink | enforced from PLUG-13 (lint rule + import-graph row) |
+| `process.stdout.write`, `console.log`/`info`/`debug`/`dir`/`table` and `process.stdout` passed as a stream in `bin/` and `mcp/` (`bin/lib/pdf-worker.ts` is exempt: a worker thread with its own captured console; `hooks/` is out of scope: its stdout is the hook protocol) | `bin/lib/output-sink.ts` `out()` (the MCP server points it at stderr; `withCapturedOutput` captures it) | row: `stdout-sink` (PLUG-13) |
+| A stdout write in any module reachable from `mcp/**` through its import graph | `bin/lib/output-sink.ts` | row: `mcp-stdout-graph` (PLUG-13; import-graph with `content`) |
 | `mcp/` reaching `bin/lib/anthropic.ts` through its import graph | nowhere | enforced from PLUG-06 (import-graph row) |
 | The committed plugin bundles (`plugin/dist/`) | ESLint `ignores` + every grep test's exclusions; lint runs on the bundles' sources | enforced from PLUG-02 |
 

@@ -65,6 +65,7 @@ import { formatSectionId, loggedSectionId, parseSectionId, sectionIdOf } from '.
 import { EXIT_BLOCKED, EXIT_COST_CAP, EXIT_ERROR, EXIT_OK, PensmithError, type ExitCode } from '../lib/exit-codes.js';
 import { classifyFailure, exitCodeForResult, failureLine } from '../lib/verb-outcome.js';
 import { verifySection } from './verify.js';
+import { out as writeOut } from '../lib/output-sink.js';
 
 // STYL-03 voice precedence lives with the drafter contract (drafter-input.ts);
 // re-exported here for the write-style-integration contract test.
@@ -245,7 +246,7 @@ async function writeOneSection(
 async function verifyWritten(section: { n: number; slug: string }, id: string): Promise<{ status: string; code: ExitCode }> {
   const v = await verifySection(section.n, section.slug, parseSectionId(id)?.suffix);
   const code = exitCodeForResult(v);
-  process.stdout.write(`pensmith write: section ${id} verify: ${String(v.status)}\n`);
+  writeOut(`pensmith write: section ${id} verify: ${String(v.status)}\n`);
   return { status: String(v.status), code };
 }
 
@@ -342,7 +343,7 @@ export const writeCommand = defineCommand({
       const results = await runAllSections(paperRoot, {
         maxParallel,
         writeSection: async (node: SectionNode) => {
-          process.stdout.write(
+          writeOut(
             JSON.stringify({ event: 'section_start', wave: node.computed_wave, section: node.slug }) + '\n',
           );
           const written = await writeOneSection(paperRoot, { n: node.n, slug: node.slug }, entries);
@@ -353,7 +354,7 @@ export const writeCommand = defineCommand({
             if (v.code !== EXIT_OK) verifyCodes.push(v.code);
           }
           verified[node.slug] = verify;
-          process.stdout.write(
+          writeOut(
             JSON.stringify({ event: 'section_done', wave: node.computed_wave, section: node.slug, status: 'done', verify }) + '\n',
           );
         },
@@ -394,7 +395,7 @@ export const writeCommand = defineCommand({
           acc[s.status] = (acc[s.status] ?? 0) + 1;
           return acc;
         }, {});
-        process.stdout.write(
+        writeOut(
           JSON.stringify({ event: 'wave_complete', wave: wave.wave, results: counts }) + '\n',
         );
       }
@@ -446,9 +447,9 @@ export const writeCommand = defineCommand({
       await subscriber.flush();
     }
 
-    process.stdout.write(`pensmith write: wrote DRAFT.md to ${written.draftPath}\n`);
+    writeOut(`pensmith write: wrote DRAFT.md to ${written.draftPath}\n`);
     if (!chainVerify) {
-      process.stdout.write(`pensmith write: section ${written.id} left written (--no-verify); run \`pensmith verify ${written.id}\` next\n`);
+      writeOut(`pensmith write: section ${written.id} left written (--no-verify); run \`pensmith verify ${written.id}\` next\n`);
       return { ok: true, path: written.draftPath, mode: 'real', verify: 'not run' };
     }
     const v = await verifyWritten({ n, slug }, written.id);

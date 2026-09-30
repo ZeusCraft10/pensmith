@@ -35,6 +35,7 @@ import { promisify } from 'node:util';
 import JSZip from 'jszip';
 import { PDFDocument, PDFName } from 'pdf-lib';
 import { parseBib, renderStyle, renderCitationItems, type CitationItemInput } from './citations.js';
+import { out as writeOut } from './output-sink.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { isHumanizerSkillPresent, isPandocPresent } from './ecosystem-presence.js';
 import { paperDir, projectRoot, dryRunWorkspaceActive, pluginTemplatePath } from './paths.js';
@@ -119,7 +120,7 @@ export async function runHumanizer(
 
     // No runner wired (Tier 2 / no transport): check skill presence.
     if (!isHumanizerSkillPresent()) {
-      process.stdout.write(
+      writeOut(
         'pensmith done: humanizer skill not found at ~/.claude/skills/humanizer/ — skipping humanize step.\n',
       );
       return null;
@@ -127,13 +128,13 @@ export async function runHumanizer(
 
     // Skill present but no Task transport (Tier-2 era): skip cleanly with a
     // distinct banner; the export proceeds on DRAFT.md.
-    process.stdout.write(
+    writeOut(
       'pensmith done: humanizer skill present but no Task transport in this tier — skipping humanize step (export proceeds on DRAFT.md).\n',
     );
     return null;
   } catch {
     // Advisory — the humanize step must NEVER fail the export (Pitfall 7).
-    process.stdout.write(
+    writeOut(
       'pensmith done: humanizer skill not found at ~/.claude/skills/humanizer/ — skipping humanize step.\n',
     );
     return null;
@@ -824,7 +825,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   } else if (format === 'md' || !pandoc) {
     // md-only path (explicit md request OR Pandoc-absent fallback for docx/pdf).
     if (!pandoc && format !== 'md') {
-      process.stdout.write('pensmith export: Pandoc not found — markdown-only fallback.\n');
+      writeOut('pensmith export: Pandoc not found — markdown-only fallback.\n');
     }
     outputPath = join(exportDir, `${stem}.md`);
     const rawMd = await fsp.readFile(inputPath, 'utf8');
@@ -846,7 +847,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
       pandocUsed = true;
     } catch {
       // A missing PDF engine (or any Pandoc failure) → md-only fallback, never throw.
-      process.stdout.write(
+      writeOut(
         `pensmith export: ${format === 'pdf' ? 'PDF engine' : 'Pandoc'} not available — markdown-only fallback.\n`,
       );
       outputPath = join(exportDir, `${stem}.md`);

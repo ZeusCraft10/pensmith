@@ -9,6 +9,7 @@ import { defineCommand } from 'citty';
 import { runDoctor } from '../lib/doctor/probes.js';
 import { renderTty, renderJson } from '../lib/doctor/render.js';
 import { EXIT_ERROR } from '../lib/exit-codes.js';
+import { out } from '../lib/output-sink.js';
 
 export const doctorCommand = defineCommand({
   meta: { name: 'doctor', description: 'Ecosystem self-check.' },
@@ -18,7 +19,7 @@ export const doctorCommand = defineCommand({
   async run({ args }) {
     const results = await runDoctor();
     const output = args.json ? renderJson(results) : renderTty(results);
-    process.stdout.write(output + '\n');
+    out(output + '\n');
     const failed = Object.values(results).some((r) => r.severity === 'FAIL');
     // D-15 / RUN-09: any FAIL probe exits EXIT_ERROR (1) — through the
     // dispatcher's result mapping, so stdout is flushed before the process ends.

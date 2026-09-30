@@ -29,6 +29,8 @@ const EXPECTED_RESOURCES = ['capabilities', 'library', 'outline', 'section', 'st
 // the "Tier-1 surface of a CLI verb" from the state-mutation tools.
 // Phase 19 (SRC-16, D-19-24) adds paper_ingest_zotero_items — the Tier 1 half
 // of the Zotero source (a paper_* data tool: it upserts LIBRARY.json).
+// Phase 23a (PLUG-03, D-23a-12) adds pensmith_status — the read-only Tier 1
+// equivalent of `pensmith status` (the one PLUG-06 tool pulled forward).
 const EXPECTED_TOOLS = [
   'paper_advance_section',
   'paper_capability_probe',
@@ -38,6 +40,7 @@ const EXPECTED_TOOLS = [
   'paper_record_verification',
   'paper_set_status',
   'pensmith_plan',
+  'pensmith_status',
   'pensmith_verify',
   'pensmith_write',
 ];
@@ -88,10 +91,10 @@ test('preflight: MCP server registers exactly 5 resources (D-13)', async () => {
   assert.deepEqual(names, EXPECTED_RESOURCES, 'resource name set mismatch');
 });
 
-test('preflight: MCP server registers exactly 10 tools (6 Phase-2 + 3 Phase-3 Plan 03-07 Task 7.3 + 1 Phase-19)', async () => {
+test('preflight: MCP server registers exactly 11 tools (6 Phase-2 + 3 Phase-3 Plan 03-07 Task 7.3 + 1 Phase-19 + 1 Phase-23a)', async () => {
   const res = await client.listTools();
   const names = (res.tools ?? []).map((t: { name: string }) => t.name).sort();
-  assert.equal(names.length, 10, `expected 10 tools (6 Phase-2 + 3 Phase-3 + paper_ingest_zotero_items), got ${names.length}: ${JSON.stringify(names)}`);
+  assert.equal(names.length, 11, `expected 11 tools (6 Phase-2 + 3 Phase-3 + paper_ingest_zotero_items + pensmith_status), got ${names.length}: ${JSON.stringify(names)}`);
   assert.deepEqual(names, EXPECTED_TOOLS, 'tool name set mismatch (TIER-02 snake_case + Plan 03-07 pensmith_<verb> names are LOCKED)');
 });
 

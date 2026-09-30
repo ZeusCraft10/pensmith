@@ -42,6 +42,7 @@ import { formatSectionId, loggedSectionId, sectionIdOf } from '../lib/section-id
 import { offlineMarkerLine } from '../lib/http-mock.js';
 import { EXIT_ERROR } from '../lib/exit-codes.js';
 import { tryReadPaperConfigSync } from '../lib/config.js';
+import { out } from '../lib/output-sink.js';
 
 // Force-bind the deterministic primitives so the acceptance grep
 // (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
@@ -124,7 +125,7 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
         delete fm.failure_reason;
       });
     }
-    process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${id}\` first\n`);
+    out(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${id}\` first\n`);
     return { ok: false, status: 'unverifiable', path: verifPath };
   }
 
@@ -160,7 +161,7 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
     // them against is never a passable verdict (compile refuses Status: failed).
     const body = `${markerPrefix()}# VERIFICATION (Section ${id}, ${slug})\n\nStatus: failed\nReason: .paper/CITATIONS.bib is missing, so the ${citedKeys.length} source(s) DRAFT.md cites cannot be checked — run \`pensmith research\` to rebuild it, then \`pensmith verify ${id}\`.\n`;
     await atomicWriteFile(verifPath, body);
-    process.stdout.write(`pensmith verify: CITATIONS.bib missing — wrote failed VERIFICATION.md to ${verifPath}\n`);
+    out(`pensmith verify: CITATIONS.bib missing — wrote failed VERIFICATION.md to ${verifPath}\n`);
     return { ok: false, status: 'failed', path: verifPath, exitCode: EXIT_ERROR };
   }
 
@@ -315,7 +316,7 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
     );
   }
 
-  process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
+  out(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
   // The deterministic verdict is on disk; now stop with the advisory failure
   // (e.g. EXIT_COST_CAP, one line through the dispatcher).
   if (advisoryStop !== undefined) throw advisoryStop;
