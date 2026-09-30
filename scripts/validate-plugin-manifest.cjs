@@ -19,7 +19,8 @@
 //                 `skills` array of {name,file} objects (only path strings);
 //                 no `hooks` key (hooks/hooks.json loads by default — declaring
 //                 it again merges it twice); mcpServers.pensmith is exactly
-//                 `node ${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.mjs` (stdio); no
+//                 `node ${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.mjs` (stdio) with
+//                 the per-server tool-call `timeout` MCP_TOOL_TIMEOUT_MS; no
 //                 unknown top-level key (Claude Code strips it with a warning).
 //   plugin dir    no bin/ (claude.ai and Cowork refuse the plugin), no
 //                 CLAUDE.md (never loaded; `claude plugin validate` warns), no
@@ -41,8 +42,8 @@
 //                 ships bin/ and CLAUDE.md) and it sets no `version` (plugin.json's
 //                 stamped version is the one Claude Code reads).
 //   .mcp.json     the developer server `node ${PWD:-.}/plugin/dist/mcp/server.mjs`
-//                 (no ${CLAUDE_PLUGIN_ROOT}, undefined outside a plugin), and the
-//                 bundle it targets exists (D-23a-07).
+//                 (no ${CLAUDE_PLUGIN_ROOT}, undefined outside a plugin) with the
+//                 same `timeout`, and the bundle it targets exists (D-23a-07).
 //
 // Every failure is printed as one line naming the file and the reason; the
 // exit code is 1 on any failure. `claude plugin validate --strict` (CI-05,
@@ -63,6 +64,16 @@ const SELF_ROOT = path.resolve(__dirname, '..');
 const PLUGIN_NAME = 'pensmith';
 const MCP_SERVER_ARG = '${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.mjs';
 const DEV_MCP_SERVER_ARG = '${PWD:-.}/plugin/dist/mcp/server.mjs';
+/**
+ * The pensmith server's per-server tool-call timeout, in ms (review round 2 of
+ * the Phase 20 + 23a merge). Without one, Claude Code applies MCP_TOOL_TIMEOUT,
+ * which Claude Code on the web sets to 60 s: a section write (the drafter call
+ * plus its chained verify's registrar look-ups and advisory model calls) runs
+ * past that with a real provider, fails on the client while the server keeps
+ * working, and leaves the section `verifying`. 30 minutes covers a long verify;
+ * the key overrides MCP_TOOL_TIMEOUT for this server only.
+ */
+const MCP_TOOL_TIMEOUT_MS = 1800000;
 const HOOKS = {
   SessionStart: { script: 'session-start', matcher: 'startup|resume|clear|compact|fork' },
   PreCompact: { script: 'pre-compact', matcher: null },
@@ -271,6 +282,9 @@ function checkPluginJson(pluginDir, label, expectedVersion) {
   if (srv.command !== 'node') fail(`${where}: mcpServers.${PLUGIN_NAME}.command must be "node"`);
   if (!Array.isArray(srv.args) || srv.args.length !== 1 || srv.args[0] !== MCP_SERVER_ARG) {
     fail(`${where}: mcpServers.${PLUGIN_NAME}.args must be ["${MCP_SERVER_ARG}"] (the committed bundle), got ${JSON.stringify(srv.args)}`);
+  }
+  if (srv.timeout !== MCP_TOOL_TIMEOUT_MS) {
+    fail(`${where}: mcpServers.${PLUGIN_NAME}.timeout must be ${MCP_TOOL_TIMEOUT_MS} (a section verb outlasts a 60 s MCP_TOOL_TIMEOUT), got ${JSON.stringify(srv.timeout)}`);
   }
   for (const s of Array.isArray(srv.args) ? srv.args : []) {
     if (typeof s !== 'string') continue;
@@ -544,8 +558,11 @@ function checkDevMcpJson(root) {
     fail(`${where}: mcpServers.${PLUGIN_NAME} is required`);
     return;
   }
-  if (srv.type !== 'stdio' || srv.command !== 'node' || !Array.isArray(srv.args) || srv.args.length !== 1 || srv.args[0] !== DEV_MCP_SERVER_ARG) {
-    fail(`${where}: mcpServers.${PLUGIN_NAME} must be {"type":"stdio","command":"node","args":["${DEV_MCP_SERVER_ARG}"]} (D-23a-07), got ${JSON.stringify(srv)}`);
+  if (
+    srv.type !== 'stdio' || srv.command !== 'node' || !Array.isArray(srv.args) || srv.args.length !== 1 || srv.args[0] !== DEV_MCP_SERVER_ARG ||
+    srv.timeout !== MCP_TOOL_TIMEOUT_MS
+  ) {
+    fail(`${where}: mcpServers.${PLUGIN_NAME} must be {"type":"stdio","command":"node","args":["${DEV_MCP_SERVER_ARG}"],"timeout":${MCP_TOOL_TIMEOUT_MS}} (D-23a-07), got ${JSON.stringify(srv)}`);
   }
   if (!isFile(path.join(root, 'plugin', 'dist', 'mcp', 'server.mjs'))) {
     fail(`${where}: targets plugin/dist/mcp/server.mjs, which is missing (run \`npm run bundle\`)`);

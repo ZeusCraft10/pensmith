@@ -108,7 +108,8 @@ test('seam S-C: the refusal wording of the retry-online and the unverifiable-quo
   const rows = parseBlockingVerdictRows(md);
   assert.deepEqual(rows.map((r) => `${r.citekey}:${r.verdict}`), ['ghost.2099:UNVERIFIABLE-NETWORK', 'aggarwal2022:UNVERIFIABLE-QUOTE']);
   assert.match(blockingRowReason(rows[0]!), /\[@ghost\.2099\] is UNVERIFIABLE-NETWORK .* re-run online$/);
-  assert.match(blockingRowReason(rows[1]!), /pensmith add <pdf>.*--revise.*--accept-quote <id>/);
+  assert.match(blockingRowReason(rows[1]!), /pensmith add <pdf>.*re-draft with pensmith write <N>, or edit the section's DRAFT\.md and run pensmith verify <N>.*--accept-quote <id>/);
+  assert.doesNotMatch(blockingRowReason(rows[1]!), /--revise/);
   assert.match(blockingRowReason({ citekey: 'x', verdict: 'FABRICATED' }), /\[@x\].*FABRICATED/);
 });
 

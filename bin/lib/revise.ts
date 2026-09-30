@@ -45,6 +45,8 @@ import { withLock } from './lock.js';
 import { extractCitedKeysForVerification, findCitations, removeCitekey, renameCitekey } from './citation-token.js';
 import { sectionDraft, sectionPlan, sectionVerification } from './paths.js';
 import { formatSectionId, sectionIdOf, type SectionId } from './section-id.js';
+import { isTextFindingRow, parseBlockingVerdictRows } from './verify/verdict-rows.js';
+import { ACCEPTABLE_QUOTE_VERDICT } from './verify/verdicts.js';
 
 // --yolo retry cap (D-06): 2 retries → 3 total attempts, then RETRY_EXHAUSTED.
 const YOLO_RETRY_CAP = 2;
@@ -55,7 +57,11 @@ const YOLO_RETRY_CAP = 2;
  * RETRACTED, UNASSIGNED, UNPARSEABLE and UNRESOLVABLE join FABRICATED,
  * MIS-CITED and NOT_FOUND). The rows without a citekey (a citation form the
  * grammar cannot read, an unattributed quote, NO-CITATIONS) need a re-plan —
- * REV-03 (Phase 22).
+ * REV-03 (Phase 22). UNPARSEABLE is revisable only on a bibliography entry's
+ * row, keyed by its citekey: a text scanner's UNPARSEABLE row is keyed
+ * `L<line>` (isTextFindingRow) and failingCitations skips it (review round 2
+ * of the Phase 20 + 23a merge — it was read as a citekey and reported "already
+ * gone" while the unreadable citation stayed in the draft).
  */
 export const REVISABLE_VERDICTS = ['FABRICATED', 'MIS-CITED', 'RETRACTED', 'UNASSIGNED', 'UNPARSEABLE', 'UNRESOLVABLE', 'NOT_FOUND'] as const;
 
@@ -144,20 +150,52 @@ interface FailingCitation {
  * citekey once). A failing line looks like:
  *   - jones2019: **FABRICATED** — ... — <reason>
  *   - jones2019 [q2] ("…"): **NOT_FOUND** — ... — <reason>
- * i.e. a row whose verdict is one of REVISABLE_VERDICTS.
+ * i.e. a row whose verdict is one of REVISABLE_VERDICTS — never a text
+ * scanner's row (`- L3: **UNPARSEABLE** — …`), whose key is a draft line.
  */
 export function failingCitations(verificationMd: string): FailingCitation[] {
   const out: FailingCitation[] = [];
   const seen = new Set<string>();
   for (const line of verificationMd.split(/\r?\n/)) {
     const row = verdictRowOf(line);
-    if (row === null || seen.has(row.citekey)) continue;
+    if (row === null || isTextFindingRow(row) || seen.has(row.citekey)) continue;
     if ((REVISABLE_VERDICTS as readonly string[]).includes(row.verdict)) {
       seen.add(row.citekey);
       out.push({ citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, '').trim()}` });
     }
   }
   return out;
+}
+
+/**
+ * The blocking rows of VERIFICATION.md that --revise cannot repair, as one
+ * sentence naming what does, or null (review round 2 of the Phase 20 + 23a
+ * merge). Revise swaps or removes one citekey; it cannot rewrite the prose:
+ *   - a text finding (key `L<line>`: a citation that does not parse, or a
+ *     form the verifier cannot check) is fixed by a re-draft or an edit that
+ *     writes the citation as `[@citekey]`;
+ *   - an UNVERIFIABLE-QUOTE needs a paraphrase (a re-draft or an edit), the
+ *     source's PDF, or the user's acceptance of that one quote.
+ */
+export function unrevisableRows(verificationMd: string, id: string): string | null {
+  const rows = parseBlockingVerdictRows(verificationMd);
+  const lines = [...new Set(rows.filter(isTextFindingRow).map((r) => r.citekey.slice(1)))];
+  const quotes = [...new Set(rows.filter((r) => r.verdict === ACCEPTABLE_QUOTE_VERDICT).map((r) => r.quoteId ?? '?'))];
+  const parts: string[] = [];
+  if (lines.length > 0) {
+    parts.push(
+      `line(s) ${lines.join(', ')} of the draft hold a citation the verifier cannot check (UNPARSEABLE / UNSUPPORTED-FORM) — ` +
+        `re-draft the section with \`pensmith write ${id}\`, or edit its DRAFT.md so each citation reads [@citekey] and run \`pensmith verify ${id}\``,
+    );
+  }
+  if (quotes.length > 0) {
+    parts.push(
+      `quote(s) ${quotes.join(', ')} could not be checked against any source text — paraphrase (re-draft with \`pensmith write ${id}\`, ` +
+        `or edit its DRAFT.md and run \`pensmith verify ${id}\`), add the source's PDF (\`pensmith add <pdf>\`), ` +
+        `or accept a quote (\`pensmith verify ${id} --accept-quote ${quotes[0] as string}\`)`,
+    );
+  }
+  return parts.length > 0 ? `--revise cannot repair ${parts.length > 1 ? 'these' : 'this'}: ${parts.join('; ')}.` : null;
 }
 
 /**
@@ -386,8 +424,11 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
   }
   const verificationMd = readFileSync(verifPath, 'utf8');
   const flagged = failingCitations(verificationMd);
+  const sectionId = formatSectionId(sectionIdOf(opts.n, opts.suffix));
+  const unrevisable = unrevisableRows(verificationMd, sectionId);
   if (flagged.length === 0) {
-    return { ...base, message: `${base.message} No FABRICATED/MIS-CITED/NOT_FOUND citation (nor RETRACTED, UNASSIGNED, UNPARSEABLE or UNRESOLVABLE) in section ${opts.n}.`.trim() };
+    const none = `No FABRICATED/MIS-CITED/NOT_FOUND citation (nor RETRACTED, UNASSIGNED, UNPARSEABLE or UNRESOLVABLE) in section ${opts.n}.`;
+    return { ...base, message: `${base.message} ${none}${unrevisable !== null ? ` ${unrevisable}` : ''}`.trim() };
   }
 
   if (!existsSync(planPath) || !existsSync(draftPath)) {
@@ -402,12 +443,11 @@ export async function runRevise(opts: ReviseOptions): Promise<ReviseResult> {
   const stillCited = new Set(extractCitedKeysForVerification(draftMd));
   const failing = flagged.find((f) => stillCited.has(f.citekey));
   if (!failing) {
-    const id = formatSectionId(sectionIdOf(opts.n, opts.suffix));
     return {
       ...base,
       message:
-        `Nothing to change: every citation VERIFICATION.md flags in section ${id} (${flagged.map((f) => f.citekey).join(', ')}) ` +
-        `is already gone from DRAFT.md — re-check the section with \`pensmith verify ${id}\`.`,
+        `Nothing to change: every citation VERIFICATION.md flags in section ${sectionId} (${flagged.map((f) => f.citekey).join(', ')}) ` +
+        `is already gone from DRAFT.md — re-check the section with \`pensmith verify ${sectionId}\`.${unrevisable !== null ? ` ${unrevisable}` : ''}`,
     };
   }
   base.flagged_citekey = failing.citekey;

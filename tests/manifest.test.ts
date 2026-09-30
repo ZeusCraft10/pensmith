@@ -31,7 +31,15 @@ interface ServerConfig {
   type?: string;
   command?: string;
   args?: string[];
+  timeout?: number;
 }
+
+/**
+ * The server's per-server tool-call timeout (ms; review round 2 of the Phase
+ * 20 + 23a merge): it overrides MCP_TOOL_TIMEOUT, which Claude Code on the web
+ * sets to 60 s — shorter than a section write with its chained verify.
+ */
+const MCP_TOOL_TIMEOUT_MS = 1_800_000;
 interface CommandHook {
   type?: string;
   command?: string;
@@ -69,6 +77,7 @@ test('PLUG-01: plugin/.claude-plugin/plugin.json holds metadata and the inline M
     type: 'stdio',
     command: 'node',
     args: ['${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.mjs'],
+    timeout: MCP_TOOL_TIMEOUT_MS,
   });
 });
 
@@ -138,6 +147,7 @@ test('PLUG-04: the developer .mcp.json runs the committed bundle with no ${CLAUD
     type: 'stdio',
     command: 'node',
     args: ['${PWD:-.}/plugin/dist/mcp/server.mjs'],
+    timeout: MCP_TOOL_TIMEOUT_MS,
   });
 });
 

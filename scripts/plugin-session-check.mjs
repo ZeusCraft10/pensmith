@@ -52,6 +52,13 @@
 //            MCP server sees CLAUDE_CODE_SESSION_ID equal to the session id
 //            the Stop hook gets on stdin (the D-17-37 owner match), checked
 //            with a probe copy of the plugin.
+//   slow-call (review round 2 of the Phase 20 + 23a merge) with
+//            MCP_TOOL_TIMEOUT=60000 in the session (Claude Code on the web
+//            exports it) and the RUN-21 mock LLM answering every model call
+//            after 75 s, `/pensmith plan 1` gets pensmith_plan's result — the
+//            plugin's per-server `timeout` overrides the 60 s — and leaves a
+//            planned PLAN.md. The delay stays under the 120 s after which
+//            Claude Code may move a call to the background.
 //
 // Usage: node scripts/plugin-session-check.mjs [--repo <dir>] [--cli <pensmith.js>]
 //        [--model <id>] [--only <check,…>] [--keep]
@@ -59,14 +66,14 @@
 //            assembly before a merge)
 //   --cli    the pensmith CLI that makes the paper (default: this checkout's
 //            dist/bin/pensmith.js — run `npm run build` first)
-//   --only   a comma list of plug03,plug04,plug05,plug14,session-id
+//   --only   a comma list of plug03,plug04,plug05,plug14,session-id,slow-call
 // Claude Code: CLAUDE_BIN, else `claude` on PATH. Exit 1 when a check fails.
 
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   EXPECTED_SKILLS,
   PLUGIN_SERVER,
@@ -85,7 +92,7 @@ const DISALLOWED = [
   'SendUserFile', 'PushNotification', 'SendMessage', 'ListAgents', 'Artifact', 'ArtifactComments', 'ArtifactData',
   'RemoteTrigger', 'CronCreate', 'CronDelete', 'Bash', 'Write', 'Edit', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'Agent',
 ].join(',');
-const CHECKS = ['plug03', 'plug04', 'plug05', 'plug14', 'session-id'];
+const CHECKS = ['plug03', 'plug04', 'plug05', 'plug14', 'session-id', 'slow-call'];
 
 function parseArgs(argv) {
   const opts = { repo: REPO_ROOT, cli: path.join(REPO_ROOT, 'dist', 'bin', 'pensmith.js'), model: null, only: new Set(CHECKS), keep: false };
@@ -207,7 +214,7 @@ function readTranscript(stdout) {
   return t;
 }
 
-function headless(ctx, name, { cwd, prompt, pluginDir, tools = '', allowed = [], maxTurns = 1, resume = null, pwd = cwd, settings = null }) {
+function headless(ctx, name, { cwd, prompt, pluginDir, tools = '', allowed = [], maxTurns = 1, resume = null, pwd = cwd, settings = null, extraEnv = {} }) {
   if (maxTurns > 3) throw new Error('max-turns is capped at 3 (D-23a-19)');
   const debug = path.join(ctx.tmp, `${name}.debug.log`);
   const args = [
@@ -225,7 +232,7 @@ function headless(ctx, name, { cwd, prompt, pluginDir, tools = '', allowed = [],
   if (settings) args.push('--settings', JSON.stringify(settings));
   if (ctx.model) args.push('--model', ctx.model);
   // `pwd: null` starts the session with no PWD at all (PowerShell and cmd set none).
-  const env = { ...ctx.env };
+  const env = { ...ctx.env, ...extraEnv };
   delete env.PWD;
   if (pwd !== null) env.PWD = pwd;
   const r = runClaude(ctx.claude, args, { cwd, env, timeoutMs: 300_000 });
@@ -506,6 +513,86 @@ function sessionIdProbe(ctx, paper) {
     'the MCP server sees CLAUDE_CODE_SESSION_ID equal to the Stop hook\'s stdin session_id (the lock owner match, D-17-37)');
 }
 
+/** How long the mock LLM waits before each answer in the slow-call check (over 60 s, under the 120 s background mark). */
+const SLOW_CALL_DELAY_MS = 75_000;
+
+/** The RUN-21 mock LLM as its own process (a headless session blocks this one): resolves with its URL and a stop(). */
+function startMockLlmProcess(delayMs) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      ['--import', import.meta.resolve('tsx'), path.join(REPO_ROOT, 'scripts', 'mock-llm.mjs'), '--port', '0', '--shape', 'anthropic', '--delay-ms', String(delayMs)],
+      { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+    );
+    let out = '';
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`the mock LLM did not start:\n${out}`));
+    }, 30_000);
+    child.stdout.setEncoding('utf8').on('data', (d) => {
+      out += d;
+      const m = /mock-llm listening on (http:\/\/127\.0\.0\.1:\d+)/.exec(out);
+      if (m) {
+        clearTimeout(timer);
+        resolve({ url: m[1], stop: () => child.kill() });
+      }
+    });
+    child.stderr.setEncoding('utf8').on('data', (d) => {
+      out += d;
+    });
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+  });
+}
+
+/** pensmithDataDir() as the built CLI resolves it with the session environment (platform-correct: XDG, LOCALAPPDATA or HOME). */
+function sessionDataDir(ctx) {
+  const paths = pathToFileURL(path.join(path.dirname(ctx.cli), 'lib', 'paths.js')).href;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', `const m = await import(${JSON.stringify(paths)}); process.stdout.write(m.pensmithDataDir());`], {
+    env: ctx.env,
+    encoding: 'utf8',
+  });
+  if (r.status !== 0 || !r.stdout) throw new Error(`could not resolve the pensmith data dir:\n${r.stderr}`);
+  return r.stdout;
+}
+
+async function slowCall(ctx) {
+  const paper = makePaper(ctx, 'paper-slow');
+  const mock = await startMockLlmProcess(SLOW_CALL_DELAY_MS);
+  const runtime = path.join(sessionDataDir(ctx), 'runtime.json');
+  try {
+    mkdirSync(path.dirname(runtime), { recursive: true });
+    // The one place an LLM endpoint may be set (D-17-19); the key variable is the check's own, never a real key.
+    writeFileSync(runtime, JSON.stringify({ $schemaVersion: 2, provider: 'anthropic', endpoint: mock.url, api_key_env: 'PENSMITH_SESSION_CHECK_API_KEY' }, null, 2) + '\n');
+    const started = Date.now();
+    const s = headless(ctx, 'slow-call', {
+      cwd: paper.dir,
+      prompt: '/pensmith plan 1',
+      pluginDir: ctx.pluginDir,
+      allowed: [TOOL('pensmith_status'), TOOL('pensmith_plan')],
+      maxTurns: 3,
+      extraEnv: { MCP_TOOL_TIMEOUT: '60000', PENSMITH_SESSION_CHECK_API_KEY: 'mock-key' },
+    });
+    const seconds = Math.round((Date.now() - started) / 1000);
+    const uses = s.transcript.toolUses.map((u) => u.name);
+    const results = s.transcript.toolResults.map((r) => r.text);
+    const planned = s.transcript.toolResults.some((r) => !r.isError && /"ok": true/.test(r.text) && /PLAN\.md/.test(r.text));
+    const timedOut = /timed out after/i.test(s.log) || results.some((t) => /timed out/i.test(t));
+    const planMd = path.join(paper.dir, '.paper', 'sections', `01-${PAPER_SECTIONS[0].slug}`, 'PLAN.md');
+    const fm = existsSync(planMd) ? readFileSync(planMd, 'utf8') : '';
+    const planStatus = /^status:\s*(\S+)/m.exec(fm)?.[1] ?? '(no PLAN.md)';
+    const stub = /^stub:\s*true\s*$/m.test(fm);
+    evidence('slow-call', uses.includes(TOOL('pensmith_plan')) && planned && !timedOut && planStatus === 'planned' && !stub && seconds > 60,
+      `MCP_TOOL_TIMEOUT=60000, every model call answered after ${SLOW_CALL_DELAY_MS / 1000} s: /pensmith plan 1 → ${uses.join(', ') || '(no tool call)'} in ${seconds} s; ` +
+      `pensmith_plan ${planned ? 'returned its result' : 'returned no result'}${timedOut ? ' (a timeout was logged)' : ', no timeout'}; PLAN.md status ${planStatus}${stub ? ' (still the stub)' : ''}`);
+  } finally {
+    mock.stop();
+    rmSync(runtime, { force: true });
+  }
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (!existsSync(opts.cli)) throw new Error(`the pensmith CLI ${opts.cli} is missing — run \`npm run build\` (or pass --cli)`);
@@ -526,6 +613,7 @@ async function main() {
     if (opts.only.has('plug05')) plug05(ctx, paper);
     if (opts.only.has('plug14')) plug14(ctx, paper);
     if (opts.only.has('session-id')) sessionIdProbe(ctx, paper);
+    if (opts.only.has('slow-call')) await slowCall(ctx);
   } finally {
     // The login copy never outlives the run, even when the transcripts do.
     removeCredentialCopy();

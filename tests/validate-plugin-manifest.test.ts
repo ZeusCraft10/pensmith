@@ -276,6 +276,20 @@ test('PLUG-01: the MCP server must be the committed bundle, not the tsc build', 
   }, /mcpServers\.pensmith\.args must be \["\$\{CLAUDE_PLUGIN_ROOT\}\/dist\/mcp\/server\.mjs"\]/);
 });
 
+test('review round 2: both server declarations carry the per-server tool-call timeout (a section verb outlasts a 60 s MCP_TOOL_TIMEOUT)', () => {
+  withBrokenCopy((root) => {
+    editJson(path.join(root, 'plugin', '.claude-plugin', 'plugin.json'), (v) => {
+      delete (v['mcpServers'] as Record<string, Record<string, unknown>>)['pensmith']!['timeout'];
+    });
+    editJson(path.join(root, '.mcp.json'), (v) => {
+      (v['mcpServers'] as Record<string, Record<string, unknown>>)['pensmith']!['timeout'] = 60000;
+    });
+  }, [
+    /plugin\.json: mcpServers\.pensmith\.timeout must be 1800000 \(a section verb outlasts a 60 s MCP_TOOL_TIMEOUT\), got undefined/,
+    /\.mcp\.json: mcpServers\.pensmith must be \{"type":"stdio","command":"node","args":\["\$\{PWD:-\.\}\/plugin\/dist\/mcp\/server\.mjs"\],"timeout":1800000\}/,
+  ]);
+});
+
 test('PLUG-02: the plugin must not ship bin/, CLAUDE.md, node_modules/ or a second .mcp.json', () => {
   withBrokenCopy((root) => {
     mkdirSync(path.join(root, 'plugin', 'bin'));

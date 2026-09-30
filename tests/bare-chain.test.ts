@@ -280,7 +280,7 @@ test('review round 3 (D-18-43), Phase 20 (D-20-03, S-13): a section left `unveri
   assert.equal(c.status, EXIT_BLOCKED, `${c.stdout}\n${c.stderr}`);
   assert.match(
     `${c.stdout}\n${c.stderr}`,
-    /section 1 \(introduction\): quote q1 \(".*"\) \[@aspelmeyer2009\] is UNVERIFIABLE-QUOTE — .*pensmith add <pdf>.*pensmith plan 1 --revise.*pensmith verify 1 --accept-quote q1/,
+    /section 1 \(introduction\): quote q1 \(".*"\) \[@aspelmeyer2009\] is UNVERIFIABLE-QUOTE — .*pensmith add <pdf>.*re-draft with `pensmith write 1`, or edit the section's DRAFT\.md and run `pensmith verify 1`.*pensmith verify 1 --accept-quote q1/,
     'compile names the quote and its remedies',
   );
   assert.ok(!existsSync(join(sb.root, '.paper', 'DRAFT.md')), 'nothing compiled');

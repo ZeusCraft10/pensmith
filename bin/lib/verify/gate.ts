@@ -457,8 +457,8 @@ export function gateRowReason(row: GateRow, scope: GateScope): string {
       const head = `quote ${row.id} ("${row.snippet}…") ${who} is ${row.verdict} — ${row.reason}`;
       if (row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
         return (
-          `${head} — add the source's PDF (\`pensmith add <pdf>\`), paraphrase the quote (\`pensmith plan ${n} --revise\`), ` +
-          `or accept this one quote (\`pensmith verify ${n} --accept-quote ${row.id}\`)`
+          `${head} — add the source's PDF (\`pensmith add <pdf>\`), paraphrase the quote (re-draft with \`pensmith write ${n}\`, ` +
+          `or edit the section's DRAFT.md and run \`pensmith verify ${n}\`), or accept this one quote (\`pensmith verify ${n} --accept-quote ${row.id}\`)`
         );
       }
       if (RETRY_ONLINE_VERDICTS.has(row.verdict)) return `${head}; re-run online`;

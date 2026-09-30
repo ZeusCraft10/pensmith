@@ -289,6 +289,47 @@ test('revise (review round 1): a flagged citation an earlier revise already remo
   assert.equal(readFileSync(targetPlanPath(root), 'utf8'), planBefore, 'PLAN.md unchanged (no hash reset reported as applied)');
 });
 
+test('revise (review round 2): a text scanner\'s row (`L<line>`) is a draft line, never a citekey — revise names the re-draft or the edit instead of "already gone"; an UNVERIFIABLE-QUOTE names the paraphrase routes', async () => {
+  const textRow = '- L3: **UNPARSEABLE** — titleJW=n/a, authorJW=n/a — `[@smith2020`: a citation that does not parse';
+  const formRow = '- L5: **UNSUPPORTED-FORM** — titleJW=n/a, authorJW=n/a — `(Smith, 2020)`: an author-date citation the verifier cannot check';
+  const bibRow = '- brown2018: **UNPARSEABLE** — titleJW=n/a, authorJW=n/a — the CITATIONS.bib entry brown2018 (line 4) does not parse';
+  assert.deepEqual(failingCitations([textRow, formRow].join('\n')), [], 'a text finding is not a flagged citekey');
+  assert.deepEqual(failingCitations(bibRow).map((f) => f.citekey), ['brown2018'], "a bibliography entry's UNPARSEABLE row still is");
+
+  const { root } = seedFixture();
+  writeFileSync(targetVerifPath(root), ['# VERIFICATION (Section 2, target)', '', 'Status: failed', '', '## Pass-1', '', textRow, formRow, ''].join('\n'));
+  writeFileSync(targetDraftPath(root), 'Intro.\n\nA claim [@smith2020.\n\nAnother (Smith, 2020).\n');
+  const before = readFileSync(targetDraftPath(root), 'utf8');
+  const res = await runRevise({ paperRoot: root, n: 2, slug: 'target', yolo: true, proposeSwap: () => Promise.reject(new Error('no model call expected')) });
+  assert.equal(res.flagged_citekey, null);
+  assert.equal(res.accepted, false);
+  assert.doesNotMatch(res.message, /already gone/, 'the unreadable citation is still in the draft');
+  assert.match(
+    res.message,
+    /--revise cannot repair this: line\(s\) 3, 5 of the draft hold a citation the verifier cannot check \(UNPARSEABLE \/ UNSUPPORTED-FORM\) — re-draft the section with `pensmith write 2`, or edit its DRAFT\.md so each citation reads \[@citekey\] and run `pensmith verify 2`\.$/,
+  );
+  assert.equal(readFileSync(targetDraftPath(root), 'utf8'), before, 'DRAFT.md unchanged');
+
+  // A citekey row and a text row: the citekey is repaired; the text row is named for what fixes it.
+  writeFileSync(targetVerifPath(root), TARGET_VERIFICATION + textRow + '\n');
+  writeFileSync(targetDraftPath(root), TARGET_DRAFT);
+  const both = await runRevise({
+    paperRoot: root, n: 2, slug: 'target', yolo: true,
+    proposeSwap: (vars) => Promise.resolve(JSON.stringify({ action: 'remove', flagged_citekey: vars.flagged_citekey, replacement_citekey: null, rationale: 'r', patch: { before_excerpt: 'a', after_excerpt: 'b' } })),
+  });
+  assert.equal(both.flagged_citekey, 'jones2019');
+  assert.equal(both.accepted, true);
+
+  // An UNVERIFIABLE-QUOTE: revise cannot paraphrase; it names the routes that can.
+  const quoteRow = '- smith2020 [q1] ("the quick brown fox jumps…"): **UNVERIFIABLE-QUOTE** — lev=0.000 — no open-access copy';
+  writeFileSync(targetVerifPath(root), ['# VERIFICATION (Section 2, target)', '', 'Status: unverifiable', '', '## Pass-3', '', quoteRow, ''].join('\n'));
+  const quote = await runRevise({ paperRoot: root, n: 2, slug: 'target', yolo: true, proposeSwap: () => Promise.reject(new Error('no model call expected')) });
+  assert.match(
+    quote.message,
+    /--revise cannot repair this: quote\(s\) q1 could not be checked against any source text — paraphrase \(re-draft with `pensmith write 2`, or edit its DRAFT\.md and run `pensmith verify 2`\), add the source's PDF \(`pensmith add <pdf>`\), or accept a quote \(`pensmith verify 2 --accept-quote q1`\)\.$/,
+  );
+});
+
 // ===========================================================================
 // 5. runRevise has no research branch any more (GRND-17 moved it to
 //    bin/lib/section-research.ts): the options it accepts are the swap loop's.

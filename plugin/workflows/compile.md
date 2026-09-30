@@ -102,8 +102,9 @@ smoothing operates only on placeholder-masked text — the model never sees raw
    RETRACTED, UNASSIGNED, UNPARSEABLE, UNSUPPORTED-FORM, UNRESOLVABLE,
    NO-CITATIONS, NOT_FOUND, UNATTRIBUTED, UNVERIFIABLE-NETWORK ("re-run
    online"), UNVERIFIABLE (the reason names the agency and what would help),
-   UNVERIFIABLE-QUOTE (add the source's PDF, paraphrase, or
-   `pensmith verify N --accept-quote qN`) and PLACEHOLDER (re-draft with a
+   UNVERIFIABLE-QUOTE (add the source's PDF, paraphrase — a re-draft with
+   `pensmith write N`, or an edit of the section's DRAFT.md and
+   `pensmith verify N` — or `pensmith verify N --accept-quote qN`) and PLACEHOLDER (re-draft with a
    model; under `--dry-run` it passes and compile removes the stub marker lines
    from the compiled dry-run draft). An unverifiable section does not stop the
    other sections' verification (S-13); it stops compile here, with its options.

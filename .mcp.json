@@ -3,7 +3,8 @@
     "pensmith": {
       "type": "stdio",
       "command": "node",
-      "args": ["${PWD:-.}/plugin/dist/mcp/server.mjs"]
+      "args": ["${PWD:-.}/plugin/dist/mcp/server.mjs"],
+      "timeout": 1800000
     }
   }
 }

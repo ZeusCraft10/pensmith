@@ -1,6 +1,6 @@
 {
   "name": "pensmith",
-  "version": "0.1.0-dev+5e1a2f413d88",
+  "version": "0.1.0-dev+c417a3e95f18",
   "description": "Structured research-and-drafting assistant for academic papers — verifies every citation against the live source.",
   "author": {
     "name": "Akhil Achanta",
@@ -14,7 +14,8 @@
     "pensmith": {
       "type": "stdio",
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.mjs"]
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.mjs"],
+      "timeout": 1800000
     }
   }
 }

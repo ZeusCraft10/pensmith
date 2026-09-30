@@ -181,7 +181,9 @@ test('gate core: an acceptance lifts ONLY a recomputed UNVERIFIABLE-QUOTE with t
   // Unaccepted, it blocks with the three remedies.
   const open = await run('UNVERIFIABLE-QUOTE', []);
   assert.deepEqual(open.outcome, { status: 'unverifiable', blocked: true });
-  assert.match(gateRefusals(open, { kind: 'section', id: '1' })[0] ?? '', /`pensmith add <pdf>`.*`pensmith plan 1 --revise`.*`pensmith verify 1 --accept-quote q1`/);
+  assert.match(gateRefusals(open, { kind: 'section', id: '1' })[0] ?? '', /`pensmith add <pdf>`.*paraphrase the quote \(re-draft with `pensmith write 1`, or edit the section's DRAFT\.md and run `pensmith verify 1`\).*`pensmith verify 1 --accept-quote q1`/);
+  // Review round 2: `plan N --revise` repairs a flagged citekey and cannot paraphrase a quote — it is never named for one.
+  assert.doesNotMatch(gateRefusals(open, { kind: 'section', id: '1' })[0] ?? '', /--revise/);
   // A changed draft (hash) voids it.
   assert.equal((await run('UNVERIFIABLE-QUOTE', [{ currentDraftHash: 'b'.repeat(64), acceptances: [acceptance] }])).outcome.blocked, true);
   // Another quote (text hash) or another source is never covered.

@@ -45,7 +45,7 @@ run in the pensmith command-line tool (Tier 2) for now.
 | Verb | Run it with |
 | --- | --- |
 | `status` | the MCP tool `pensmith_status` (read-only; no key needed). Show the status text between its two fence lines as it is, without the fence lines. |
-| `plan N` | the MCP tool `pensmith_plan` with `n` = N (for a lettered section such as `1a`, `n` = 1 and `slug` = its slug from status); `revise: true` for `plan N --revise` |
+| `plan N` | the MCP tool `pensmith_plan` with `n` = N (for a lettered section such as `1a`, `n` = 1 and `slug` = its slug from status); `revise: true` for `plan N --revise` (it asks a question: see below) |
 | `write N` | the MCP tool `pensmith_write` (it verifies the new draft itself) |
 | `verify N` | the MCP tool `pensmith_verify` (no key needed: the blocking checks are registrar look-ups) |
 | `new`, `next`, `resume`, `research`, `outline`, `compile`, `done`, `list`, `open`, `sketch`, `add`, `doctor` | the CLI: run `pensmith <verb> [args]` with the Bash tool when `pensmith --version` answers |
@@ -78,11 +78,19 @@ the pensmith README's Install section (a clone, `npm install`, `npm run build`,
 `npm link`; Node.js ≥ 22.12); the four MCP verbs above still work without it.
 
 Steps that ask the user something — the intake questions, the research picks,
-the outline approval, the export confirmation — need a terminal. Without one
-the CLI stops at that question with exit code 3. Tell the user what it asked
-and suggest running that step in their own terminal. Only when the user
-explicitly says so, re-run it with `--yolo`, which accepts the suggested
-answers and approves the outline or the export for them. On `done`, `--yolo`
+the outline approval, the export confirmation, and the citation swap `plan N
+--revise` proposes — need a terminal. Without one the CLI stops at that
+question with exit code 3, and so does every MCP tool: the pensmith server
+never asks. Tell the user what it asked and suggest running that step in their
+own terminal. Only when the user explicitly says so, re-run it with `--yolo`,
+which accepts the suggested answers and approves the outline or the export for
+them. `pensmith_plan`, `pensmith_write` and `pensmith_verify` take `yolo: true`,
+the same answer for one call — never pass it on your own. For the revise swap,
+show the user the swap the fenced line names (`remove of [@key]`, or a
+replacement key) and pass `yolo: true` only after they approve that swap, and
+say first that the call asks the provider again and applies the swap it then
+proposes, which can differ; to see and approve the exact swap, they run
+`pensmith plan N --revise` in a terminal. On `done`, `--yolo`
 also accepts every claim the advisory check judged UNSUPPORTED, and
 `.paper/VERIFICATION.md` records each as auto-accepted under `--yolo`, not as
 confirmed by the user: first show the user the UNSUPPORTED claims `done`
@@ -117,6 +125,14 @@ cannot be checked. `pensmith new --answers <file.toml>` answers intake up front.
 If status says there is no paper here, the first step is `pensmith new` (it
 reads `assignment.txt`, `.md` or `.pdf` in the folder).
 
+A section verb can run for minutes: a model call, then a verify that re-checks
+every citation at its registrar. If a pensmith tool call times out, or Claude
+Code moves it to the background, the server is still working on it. Never
+start a second verb on that section (it would wait for the first, or bill it
+again): call `pensmith_status`, which shows the section as `writing` or
+`verifying` while the work runs, and tell the user to continue once it has
+finished.
+
 ## What the user says → verb
 
 | The user says… | Verb |
@@ -126,7 +142,7 @@ reads `assignment.txt`, `.md` or `.pdf` in the folder).
 | "outline the paper" | `outline` |
 | "write the next section" / "continue" | the bare step above (`next`) |
 | "resume" / "continue where I left off" | `resume` |
-| "redo section 3" / "section 3 needs work" / "re-do section 3" | if section 3's verification flagged a citation by its citekey (FABRICATED, MIS-CITED, RETRACTED, UNASSIGNED, UNRESOLVABLE, UNPARSEABLE or a quote NOT_FOUND), `plan 3 --revise` (it repairs one flagged citation a run; repeat it while one is left), then `verify 3`; otherwise `plan 3`, then `write 3` (a fresh plan and draft; the route for every other blocking verdict too) |
+| "redo section 3" / "section 3 needs work" / "re-do section 3" | if section 3's verification flagged a citation by its citekey (FABRICATED, MIS-CITED, RETRACTED, UNASSIGNED, UNRESOLVABLE, a quote NOT_FOUND, or UNPARSEABLE on a bibliography entry — a row keyed `L<line>` is a citation form in the prose, not a citekey), `plan 3 --revise` (it repairs one flagged citation a run; repeat it while one is left), then `verify 3`; a quote no source text could check (UNVERIFIABLE-QUOTE) is paraphrased by `write 3` (or the user edits the draft and runs `verify 3`), or accepted (below); otherwise `plan 3`, then `write 3` (a fresh plan and draft; the route for every other blocking verdict too) |
 | "check the citations in section 3" | `verify 3` |
 | "accept quote qK in section 3" (a quote section 3's VERIFICATION.md lists as UNVERIFIABLE-QUOTE) | `verify 3 --accept-quote qK` (the CLI form: `pensmith_verify` takes no such option). Ask the user first with AskUserQuestion, one quote id at a time, and accept only on their own decision: never on your own, never a blanket acceptance |
 | "make it sound less AI" | `done` (its humanize step) |
@@ -138,9 +154,10 @@ reads `assignment.txt`, `.md` or `.pdf` in the folder).
 | "add a section about counterexamples" / "drop the section about X" | edit the table in `.paper/OUTLINE.md`: a new row takes a lettered number after the section it follows (`3a` after §3), and no existing number changes (a renumbered row is refused); delete a row to drop that section. Then `outline` (it applies the table; a dropped section is archived, never deleted) |
 | "use a different source for the claim about X in section 4" | `add <DOI or id> --section 4` (`add --remap <citekey> --section 4` for a source already in the library; `plan 4 --research "<query>"` finds one), then `plan 4` and `write 4` |
 
-`plan N --revise` only repairs a citation the verifier flagged; on a clean
-section it changes nothing, so a length or source change is never a
-`--revise`. This release has no single-claim source swap: the planner picks
+`plan N --revise` only repairs a citation the verifier flagged by its citekey;
+on a clean section it changes nothing, and it cannot rewrite prose (a quote to
+paraphrase, a citation form to rewrite as `[@citekey]`), so a length or source
+change is never a `--revise`. This release has no single-claim source swap: the planner picks
 the source for each claim, so after `plan 4` read section 4's new PLAN.md and
 tell the user which source the claim now cites. A new word target changes only
 the sections you re-plan and re-write; the assignment's length target in the

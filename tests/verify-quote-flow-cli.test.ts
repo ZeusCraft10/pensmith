@@ -63,7 +63,7 @@ test('VRFY-19 / VRFY-20 (built CLI): a quote with no source text is UNVERIFIABLE
   assert.match(md, /^- lecun2015 \[q1\] \("attention mechanisms are nothing more th…"\): \*\*UNVERIFIABLE-QUOTE\*\* — lev=0\.000 — Unpaywall needs a contact email/m);
   const c = cli(sb, root, ['compile', '--yolo']);
   assert.equal(c.status, 4, `${c.stdout}\n${c.stderr}`);
-  assert.match(c.stdout + c.stderr, /quote q1 \("attention mechanisms are nothing more th…"\) \[@lecun2015\] is UNVERIFIABLE-QUOTE — .*pensmith add <pdf>.*pensmith plan 1 --revise.*pensmith verify 1 --accept-quote q1/);
+  assert.match(c.stdout + c.stderr, /quote q1 \("attention mechanisms are nothing more th…"\) \[@lecun2015\] is UNVERIFIABLE-QUOTE — .*pensmith add <pdf>.*re-draft with `pensmith write 1`, or edit the section's DRAFT\.md and run `pensmith verify 1`.*pensmith verify 1 --accept-quote q1/);
   assert.ok(!fs.existsSync(path.join(root, '.paper', 'DRAFT.md')), 'nothing compiled');
 
   // The user's own copy of the work: Pass 3 now reads real text (local, no network).

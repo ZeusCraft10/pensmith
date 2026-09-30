@@ -222,3 +222,36 @@ test('D-23a-09: each plumbing skill forwards `<verb> $ARGUMENTS` to the pensmith
     assert.doesNotMatch(body, /\| The user says/, `${name} has no natural-language routing table`);
   }
 });
+
+test('review round 2 (Phase 20 + 23a merge): the skills send only a citekey row to --revise — a text row (`L<line>`) and an UNVERIFIABLE-QUOTE go to a re-draft', () => {
+  const { body } = readSkill(ROUTER);
+  const redo = /\| "redo section 3"[^\n]*\|/.exec(body)?.[0] ?? '';
+  assert.match(redo, /or UNPARSEABLE on a bibliography entry — a row keyed `L<line>` is a citation form in the prose, not a citekey\), `plan 3 --revise`/);
+  assert.match(redo, /a quote no source text could check \(UNVERIFIABLE-QUOTE\) is paraphrased by `write 3` \(or the user edits the draft and runs `verify 3`\)/);
+  assert.match(body, /it cannot rewrite prose \(a quote to\s+paraphrase, a citation form to rewrite as `\[@citekey\]`\)/);
+  const plan = readSkill('plan-section').body;
+  assert.match(plan, /or UNPARSEABLE on a bibliography entry\), one a run/);
+  assert.match(plan, /a row keyed `L<line>`/);
+  assert.match(plan, /A quote no source text could check \(UNVERIFIABLE-QUOTE\) is paraphrased by `write N`, never by `--revise`\./);
+});
+
+test('review round 2 (Phase 20 + 23a merge): the pensmith skill names the revise swap among the questions and when the tools\' `yolo` may be passed', () => {
+  const { body } = readSkill(ROUTER);
+  assert.match(body, /the export confirmation, and the citation swap `plan N\s+--revise` proposes — need a terminal/);
+  assert.match(body, /and so does every MCP tool: the pensmith server\s+never asks/);
+  assert.match(body, /`pensmith_plan`, `pensmith_write` and `pensmith_verify` take `yolo: true`,\s+the same answer for one call — never pass it on your own/);
+  assert.match(body, /pass `yolo: true` only after they approve that swap/);
+  assert.match(body, /the call asks the provider again and applies the swap it then\s+proposes, which can differ/);
+});
+
+test('review round 2 (Phase 20 + 23a merge): the pensmith skill says a timed-out or backgrounded tool call is still running — status, never a second verb on the section', () => {
+  const { body } = readSkill(ROUTER);
+  assert.match(body, /If a pensmith tool call times out, or Claude\s+Code moves it to the background, the server is still working on it\./);
+  assert.match(body, /Never\s+start a second verb on that section/);
+  assert.match(body, /call `pensmith_status`, which shows the section as `writing` or\s+`verifying` while the work runs/);
+});
+
+test('review round 2 (Phase 20 + 23a merge): the pensmith skill says a failed section tool\'s line is fenced data', () => {
+  const { body } = readSkill(ROUTER);
+  assert.match(body, /when `pensmith_plan`, `pensmith_write` or\s+`pensmith_verify` fails, its reply is the exit code as JSON and then the line\s+the CLI prints for that failure, fenced the same way/);
+});
