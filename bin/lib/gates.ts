@@ -133,11 +133,26 @@ export function gateDef(id: GateId): GateDef {
   return def;
 }
 
+let promptsDisabled = false;
+
+/**
+ * Make this process unable to prompt for good (the MCP server, whose stdin is
+ * the JSON-RPC channel): every gate then takes its non-interactive path — skip,
+ * or refuse with its exit code — even with PENSMITH_PROMPT_MODE=numbered in
+ * the environment, which would otherwise read an answer from that channel and
+ * hang the tool call while it holds the paper's session lock.
+ */
+export function disablePrompts(): void {
+  promptsDisabled = true;
+}
+
 /**
  * A gate may prompt when stdin is a terminal, or when numbered answers are
- * scripted explicitly (PENSMITH_PROMPT_MODE=numbered with answers piped on stdin).
+ * scripted explicitly (PENSMITH_PROMPT_MODE=numbered with answers piped on
+ * stdin) — never after disablePrompts().
  */
 export function canPrompt(): boolean {
+  if (promptsDisabled) return false;
   return Boolean(process.stdin.isTTY) || process.env['PENSMITH_PROMPT_MODE'] === 'numbered';
 }
 

@@ -44,6 +44,7 @@ import { servicePaperRoot, setActivePaperRoot } from '../bin/lib/paths.js';
 import { migrateLegacyLayout } from '../bin/lib/state.js';
 import { VERSION } from '../bin/lib/version.generated.js';
 import { setOutputSink } from '../bin/lib/output-sink.js';
+import { disablePrompts } from '../bin/lib/gates.js';
 
 // cross-AI cycle-2 HIGH #4 fix: resolve paperRoot ONCE at boot time and
 // close it over the resource handlers. The CLI launcher and the 02-07
@@ -82,6 +83,11 @@ export async function main(): Promise<void> {
   // PLUG-13: from here on, every verb line this process prints goes to stderr —
   // stdout carries only the transport's JSON-RPC frames.
   setOutputSink(process.stderr);
+  // stdin is the JSON-RPC channel: no gate may read an answer from it, even
+  // with PENSMITH_PROMPT_MODE=numbered in the server's environment (a quote-accept,
+  // revise or cost-cap question would block the call and keep the paper locked).
+  // Every gate takes its non-interactive path instead.
+  disablePrompts();
   // Boot-time paperRoot resolution (RUN-13 / D-17-33): PENSMITH_PAPER_ROOT,
   // else the working directory — the project root, never `.paper/` itself, and
   // never the `pensmith open` pointer (the MCP server does not follow it).
