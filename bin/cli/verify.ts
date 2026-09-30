@@ -158,7 +158,12 @@ export type VerifyGateResult = Omit<GateResult, 'bib'> & { readonly bib: Omit<Lo
 
 /** A gate result without the parsed bibliography entries (VerifyGateResult). */
 function compactGate(gate: GateResult): VerifyGateResult {
-  const { entries: _entries, ...bib } = gate.bib;
+  const bib: Omit<LoadedBibliography, 'entries'> = {
+    path: gate.bib.path,
+    exists: gate.bib.exists,
+    problems: gate.bib.problems,
+    ...(gate.bib.unreadable !== undefined ? { unreadable: gate.bib.unreadable } : {}),
+  };
   return { ...gate, bib };
 }
 
