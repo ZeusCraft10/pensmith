@@ -4,8 +4,9 @@
 // Crossref, a DataCite arXiv DOI at arXiv, and an entry without a DOI by its
 // arXiv id, PMID or ISBN at their own registrars — one predicate shared with
 // Pass 1 (verify/pass1-identifiers.ts, review round 1 of the Phase 18/19
-// merge). Withheld: retracted, synthetic outside a dry run, no identifier at
-// all, and a Zenodo / figshare / Dryad DataCite DOI with nothing else.
+// merge). Withheld: retracted, synthetic outside a dry run, and no identifier
+// at all. Since Phase 20 (VRFY-11) a Zenodo / figshare / Dryad DataCite DOI is
+// checked at DataCite, so it is offered like any other DOI.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +20,7 @@ import {
 } from '../bin/lib/source-context.js';
 import { citationCheckRoute } from '../bin/lib/verify/pass1-identifiers.js';
 
-test('GRND-18: verifierBlindSpot follows Pass 1 — a Crossref DOI, an arXiv id, a PMID, an ISBN or a DataCite arXiv DOI is checkable', () => {
+test('GRND-18: verifierBlindSpot follows Pass 1 — a Crossref DOI, a DataCite DOI, an arXiv id, a PMID, an ISBN or a DataCite arXiv DOI is checkable', () => {
   assert.equal(verifierBlindSpot({ doi: '10.18653/v1/N19-1423' }, false), null, 'a Crossref DOI is checkable');
   assert.equal(verifierBlindSpot({ doi: null, isbn: '9780226458083' }, false), null, 'an ISBN-only book (Pass 1: the books registries)');
   assert.equal(verifierBlindSpot({ doi: null, arxiv: '1706.03762' }, false), null, 'an arXiv-only preprint (Pass 1: arXiv)');
@@ -31,9 +32,10 @@ test('GRND-18: verifierBlindSpot follows Pass 1 — a Crossref DOI, an arXiv id,
   assert.equal(verifierBlindSpot({ doi: null }, false), NO_IDENTIFIER_REASON);
   assert.equal(verifierBlindSpot({ doi: '  ' }, false), NO_IDENTIFIER_REASON);
   assert.equal(verifierBlindSpot({}, false), NO_IDENTIFIER_REASON);
+  assert.deepEqual([...DATACITE_DOI_PREFIXES], ['10.5281', '10.6084', '10.5061'], 'Zenodo, figshare, Dryad');
   for (const prefix of DATACITE_DOI_PREFIXES) {
-    assert.match(verifierBlindSpot({ doi: `${prefix}/x.1` }, false) ?? '', /DataCite DOI/, prefix);
-    assert.equal(verifierBlindSpot({ doi: `${prefix}/x.1`, arxiv: '2101.00001' }, false), null, `${prefix} with an arXiv id: Pass 1 checks the id`);
+    assert.equal(verifierBlindSpot({ doi: `${prefix}/x.1` }, false), null, `${prefix}: VRFY-11 — Pass 1 checks it at DataCite`);
+    assert.equal(verifierBlindSpot({ doi: `${prefix}/x.1`, arxiv: '2101.00001' }, false), null, `${prefix} with an arXiv id`);
   }
   assert.ok(!DATACITE_DOI_PREFIXES.includes('10.48550'), "arXiv's DataCite prefix is checked at arXiv");
   // Synthetic sources: only a dry run checks them.
@@ -64,12 +66,9 @@ test('GRND-18: partitionCheckable keeps library order and names every excluded s
     { citekey: 'd', doi: '10.5281/zenodo.1' },
   ];
   const { checkable, excluded } = partitionCheckable(entries, false);
-  assert.deepEqual(checkable.map((e) => e.citekey), ['a', 'c']);
-  assert.deepEqual(excluded.map((e) => e.citekey), ['b', 'd']);
-  assert.equal(
-    describeExcluded(excluded),
-    'b (no DOI, arXiv id, PMID or ISBN), d (a DataCite DOI (10.5281) the verifier cannot check yet, and no arXiv id, PMID or ISBN)',
-  );
+  assert.deepEqual(checkable.map((e) => e.citekey), ['a', 'c', 'd'], 'a Zenodo DOI is checked at DataCite (VRFY-11)');
+  assert.deepEqual(excluded.map((e) => e.citekey), ['b']);
+  assert.equal(describeExcluded(excluded), 'b (no DOI, arXiv id, PMID or ISBN)');
   const many = Array.from({ length: 10 }, (_, i) => ({ citekey: `k${i}`, reason: 'no DOI' }));
   assert.match(describeExcluded(many, 3), /^k0 \(no DOI\), k1 \(no DOI\), k2 \(no DOI\), and 7 more$/);
 });
@@ -95,12 +94,13 @@ test('review round 3: a source flagged retracted is withheld from outline and pl
     { citekey: 'wakefield1998', doi: '10.1016/s0140-6736(97)11096-0', retracted: true, title: 'Ileal-lymphoid-nodular hyperplasia' },
     { citekey: 'good2020', doi: '10.1000/good', title: 'A sound study' },
     { citekey: 'dataset2021', doi: '10.5281/zenodo.2101', title: 'A dataset' },
+    { citekey: 'notes2021', doi: null, title: 'Lecture notes' },
   ];
   const { checkable, excluded } = partitionCheckable(library, false);
-  assert.deepEqual(checkable.map((e) => e.citekey), ['good2020']);
+  assert.deepEqual(checkable.map((e) => e.citekey), ['good2020', 'dataset2021']);
   assert.deepEqual(excluded, [
     { citekey: 'wakefield1998', reason: 'retracted (Retraction Watch)' },
-    { citekey: 'dataset2021', reason: 'a DataCite DOI (10.5281) the verifier cannot check yet, and no arXiv id, PMID or ISBN' },
+    { citekey: 'notes2021', reason: NO_IDENTIFIER_REASON },
   ]);
   assert.ok(!JSON.stringify(buildOutlineSources(checkable)).includes('wakefield1998'), 'the outline is never offered the retracted source');
   assert.equal(
