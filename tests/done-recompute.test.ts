@@ -148,7 +148,7 @@ test('VRFY-22 / D-08 (built CLI): a section compile re-verified after an edit ha
   assert.equal(refused.status, EXIT_APPROVAL, `${refused.stdout}\n${refused.stderr}`);
   assert.doesNotMatch(refused.stdout, /UNSUPPORTED|<unparseable>/);
   assert.doesNotMatch(refused.stderr, /UNSUPPORTED claims/);
-  assert.match(refused.stdout, /§1 \(intro\): claim support \(Pass 2, advisory\) was not run on the current draft — compile re-verified it after an edit; run `pensmith verify 1` to judge it/);
+  assert.match(refused.stdout, /§1 \(intro\): claim support \(Pass 2, advisory\) was not run on the current draft — compile re-verified it after the draft was edited; run `pensmith verify 1` to judge it/);
 
   const done = p.cli(['done', '--yolo', '--format', 'md']);
   assert.equal(done.status, EXIT_OK, `${done.stdout}\n${done.stderr}`);

@@ -102,6 +102,12 @@ export interface ReVerifyInput {
   slug: string;
   /** The section's letter (§1a), absent for §1 (GRND-09). */
   suffix?: string;
+  /**
+   * The draft has not changed since its record (an `unverifiable` section, not
+   * a stale one): the record's advisory sections — judged on this very draft —
+   * are kept (review round 2).
+   */
+  keepAdvisory?: boolean;
   /** Present ONLY so a test can prove Pass 2/4 are never wired here. */
   runPass2?: () => void;
   runPass4?: () => void;
@@ -410,9 +416,9 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       const recordStatus = verificationMd !== null ? (parseVerificationMd(verificationMd).status ?? '').toLowerCase() : '';
       const unverifiable = !stale && recordReasons.length === 0 && (sec.planStatus === 'unverifiable' || recordStatus === 'unverifiable');
       if (unverifiable) {
-        warn(`WARN: ${label} is unverifiable — re-verifying (Pass 1+3)`);
+        warn(`WARN: ${label} is unverifiable — re-verifying (Pass 1+3; its claim-support and orphan results for this unchanged draft are kept)`);
         const reVerify = opts.reVerify ?? (async () => ({ passed: false, failingCitekeys: [] } as ReVerifyResult));
-        await reVerify(os.suffix !== undefined ? { n: os.n, slug: os.slug, suffix: os.suffix } : { n: os.n, slug: os.slug });
+        await reVerify(os.suffix !== undefined ? { n: os.n, slug: os.slug, suffix: os.suffix, keepAdvisory: true } : { n: os.n, slug: os.slug, keepAdvisory: true });
       }
 
       // Staleness (COMP-01 / D-08): the draft changed since its (sound)

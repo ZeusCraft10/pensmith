@@ -61,7 +61,7 @@ import {
   type LoadedBibliography,
   type Pass3GateRow,
 } from '../lib/verify/gate.js';
-import { renderVerificationMd, NO_CITATIONS_NOTE } from '../lib/verify/verification-md.js';
+import { renderVerificationMd, NO_CITATIONS_NOTE, advisorySectionsOf } from '../lib/verify/verification-md.js';
 import {
   acceptableRows,
   loadQuoteAcceptances,
@@ -133,6 +133,15 @@ export interface VerifySectionOptions {
    * false — compile never writes LIBRARY.json, CITATIONS.bib or last_verified.
    */
   readonly writePaperFiles?: boolean;
+  /**
+   * With `advisory: false`: the section's current VERIFICATION.md. When it
+   * judged the very draft verified now (its `Draft:` hash), its freshness,
+   * Pass-2 and Pass-4 sections are kept as they are instead of "not run" —
+   * compile's re-verify of an unverifiable section whose draft has not changed
+   * (review round 2: the claim-support judgments, and the UNSUPPORTED claims
+   * done decides, stay valid for that draft).
+   */
+  readonly keepAdvisoryFrom?: string | null;
   /** Quote ids from `--accept-quote` (VRFY-20). */
   readonly acceptQuotes?: readonly string[];
   /** Ask the `quote-accept` gate for UNVERIFIABLE-QUOTE rows when a terminal is attached (default false). */
@@ -452,6 +461,10 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
   const notes: string[] = [];
   if (gate.citedKeys.length === 0 && assignedSources.length === 0) notes.push(NO_CITATIONS_NOTE);
   const notRun = `${COMPILE_REVERIFY_NOT_RUN} ${id}\``;
+  // The advisory sections an earlier record judged on this very draft (compile's
+  // re-verify of an unverifiable, unchanged section) are kept, never "not run".
+  const kept = !advisory && opts.keepAdvisoryFrom ? advisorySectionsOf(opts.keepAdvisoryFrom) : null;
+  const keep = kept !== null && kept.draftHash === draftHash ? kept : null;
   await atomicWriteFile(
     verifPath,
     renderVerificationMd({
@@ -465,18 +478,19 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
       accepted: gate.accepted,
       freshness,
       freshnessSection: !advisory
-        ? `## Source Freshness (RSCH-10)\n\n_(${notRun})_\n`
+        ? (keep?.freshnessSection ?? `## Source Freshness (RSCH-10)\n\n_(${notRun})_\n`)
         : freshnessNote !== null
           ? `## Source Freshness (RSCH-10)\n\n_(${freshnessNote} — fix the bibliography, then re-verify)_\n`
           : renderFreshnessTable(freshness ?? []),
       pass2Verdicts: advisory ? pass2.map((r) => r.verdict) : null,
-      pass2Section: advisory ? renderPass2Section(pass2) : `## Pass-2 (claim support, advisory)\n\n_(${notRun})_\n`,
+      pass2Section: advisory ? renderPass2Section(pass2) : (keep?.pass2Section ?? `## Pass-2 (claim support, advisory)\n\n_(${notRun})_\n`),
       pass4Orphans: pass4 !== null ? pass4.reduce((s, r) => s + r.orphanCount, 0) : null,
       pass4Section: !advisory
-        ? `## Pass-4 (orphan claims, advisory)\n\n_(${notRun})_\n`
+        ? (keep?.pass4Section ?? `## Pass-4 (orphan claims, advisory)\n\n_(${notRun})_\n`)
         : pass4 !== null
           ? renderPass4Section(pass4)
           : `## Pass-4 (orphan claims, advisory)\n\n_(not run: ${stopReason(advisoryStop)})_\n`,
+      advisorySummary: keep?.summary ?? null,
     }),
   );
 

@@ -91,6 +91,13 @@ export interface VerificationDoc {
   readonly pass4Orphans?: number | null;
   /** The rendered `## Pass-4` section. */
   readonly pass4Section?: string | null;
+  /**
+   * The Summary's Pass-2, Pass-4 and freshness rows of an earlier record of
+   * the SAME draft whose advisory sections this one keeps (compile's
+   * re-verify of an unverifiable, unchanged section — advisorySectionsOf);
+   * used only when this document ran none of them itself.
+   */
+  readonly advisorySummary?: readonly SummaryRow[] | null;
 }
 
 /** A snippet safe inside a row: no line breaks, no `**` a reader could take for a verdict. */
@@ -153,7 +160,7 @@ export function summaryLabel(row: GateRow): string {
 }
 
 /** The Summary rows of a document (every non-zero label; Pass-2 / Pass-4 / freshness when they ran). */
-export function summaryRows(doc: Pick<VerificationDoc, 'rows' | 'freshness' | 'pass2Verdicts' | 'pass4Orphans'>): SummaryRow[] {
+export function summaryRows(doc: Pick<VerificationDoc, 'rows' | 'freshness' | 'pass2Verdicts' | 'pass4Orphans' | 'advisorySummary'>): SummaryRow[] {
   const out: SummaryRow[] = [];
   const pass1 = doc.rows.filter((r) => r.kind === 'pass1' || r.kind === 'text').map(summaryLabel);
   const pass3 = doc.rows.filter((r) => r.kind === 'pass3').map(summaryLabel);
@@ -175,7 +182,53 @@ export function summaryRows(doc: Pick<VerificationDoc, 'rows' | 'freshness' | 'p
     const unknownRetraction = doc.freshness.reduce((n, r) => n + (r.info ?? []).filter((i) => i.probe === 'retraction-watch' && i.status === 'unknown').length, 0);
     if (unknownRetraction > 0) out.push({ pass: 'Freshness', verdict: 'retraction status unknown', count: unknownRetraction });
   }
+  const ranAdvisory = (doc.pass2Verdicts ?? null) !== null || (doc.pass4Orphans ?? null) !== null || (doc.freshness ?? null) !== null;
+  if (!ranAdvisory && doc.advisorySummary) out.push(...doc.advisorySummary);
   return out;
+}
+
+/** The advisory part of a VERIFICATION.md, as written (see advisorySectionsOf). */
+export interface AdvisorySections {
+  /** The judged draft's hash (`Draft: sha256 …`). */
+  readonly draftHash: string;
+  readonly freshnessSection: string | null;
+  readonly pass2Section: string | null;
+  readonly pass4Section: string | null;
+  /** The Summary's Pass-2, Pass-4 and freshness rows. */
+  readonly summary: SummaryRow[];
+}
+
+/**
+ * The advisory sections of a section's VERIFICATION.md — the freshness
+ * table, Pass 2 and Pass 4, each from its heading to the next `## ` — and
+ * their Summary rows, with the hash of the draft they judged (null without
+ * one). compile's re-verify of an unverifiable section whose draft has not
+ * changed keeps them: they were judged on this exact draft (review round 2).
+ */
+export function advisorySectionsOf(md: string): AdvisorySections | null {
+  const doc = parseVerificationMd(md);
+  if (doc.draftHash === null) return null;
+  const lines = md.split(/\r?\n/);
+  const section = (prefix: string): string | null => {
+    const at = lines.findIndex((l) => l.startsWith(prefix));
+    if (at === -1) return null;
+    let end = at + 1;
+    while (end < lines.length && !(lines[end] as string).startsWith('## ')) end += 1;
+    return lines.slice(at, end).join('\n').replace(/\s+$/u, '') + '\n';
+  };
+  return {
+    draftHash: doc.draftHash,
+    freshnessSection: section('## Source Freshness'),
+    pass2Section: section('## Pass-2'),
+    pass4Section: section('## Pass-4'),
+    // Pass 2 is counted from its own table (the rows kept), the rest as the Summary said.
+    summary: [
+      ...(section('## Pass-2') !== null && doc.pass2Verdicts.length > 0
+        ? summaryRows({ rows: [], pass2Verdicts: doc.pass2Verdicts })
+        : doc.summary.filter((r) => r.pass === 'Pass-2')),
+      ...doc.summary.filter((r) => r.pass === 'Pass-4' || r.pass === 'Freshness'),
+    ],
+  };
 }
 
 /** The summary table alone (`| Pass | Verdict | Count |`). */

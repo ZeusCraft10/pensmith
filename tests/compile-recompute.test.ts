@@ -19,6 +19,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { EXIT_BLOCKED, EXIT_OK } from '../bin/lib/exit-codes.js';
 import { readCompileInputs } from '../bin/lib/compile-inputs.js';
+import { summaryMismatches } from '../bin/lib/verify/verification-md.js';
 import { seedGatePaper, sectionDraftHash, mtimes, fileSha, RECORDED_BIB } from './helpers/gate-paper.js';
 import { STACK_LINE } from './helpers/paper-cli-harness.js';
 
@@ -81,7 +82,7 @@ test('S-13 / VRFY-26 (built CLI): a section whose record says unverifiable (an e
 
   const c = p.cli(['compile', '--yolo']);
   assert.equal(c.status, EXIT_OK, `${c.stdout}\n${c.stderr}`);
-  assert.match(c.stderr, /WARN: section 1 \(intro\) is unverifiable — re-verifying \(Pass 1\+3\)/);
+  assert.match(c.stderr, /WARN: section 1 \(intro\) is unverifiable — re-verifying \(Pass 1\+3; its claim-support and orphan results for this unchanged draft are kept\)/);
   assert.match(readFileSync(verif, 'utf8'), /^Status: verified$/m);
   assert.match(readFileSync(join(s1, 'PLAN.md'), 'utf8'), /^status: verified$/m);
   assert.deepEqual(mtimes(p.sectionDir(2, 'measurement')), s2Before, '§2 untouched');
@@ -90,6 +91,49 @@ test('S-13 / VRFY-26 (built CLI): a section whose record says unverifiable (an e
   assert.equal(d.status, EXIT_OK, `${d.stdout}\n${d.stderr}`);
   const st = p.cli(['status']);
   assert.doesNotMatch(st.stdout, /unverifiable/, st.stdout);
+});
+
+test('VRFY-22 (built CLI, review round 2): compile\'s re-verify of an unverifiable, UNCHANGED section keeps its Pass-2 judgments — done still asks about the UNSUPPORTED claim and records the decision', () => {
+  const p = seedGatePaper('recompute-keep-pass2', SECTIONS, RECORDED_BIB);
+  for (const s of SECTIONS) assert.equal(p.cli(['verify', String(s.n)]).status, EXIT_OK);
+  const s1 = p.sectionDir(1, 'intro');
+  const verif = join(s1, 'VERIFICATION.md');
+  // The judge's verdict on THIS draft, and a record an offline run left `unverifiable`.
+  const judged = readFileSync(verif, 'utf8')
+    .replace(/^Status: verified$/m, 'Status: unverifiable')
+    .replace(/\| \*\*UNCLEAR\*\* \| [^|\n]* \|/, '| **UNSUPPORTED** | The source says nothing about this. |');
+  assert.match(judged, /\*\*UNSUPPORTED\*\*/, 'a Pass-2 row to plant the judgment in');
+  writeFileSync(verif, judged);
+  writeFileSync(join(s1, 'PLAN.md'), readFileSync(join(s1, 'PLAN.md'), 'utf8').replace(/^status: verified$/m, 'status: unverifiable'));
+
+  const c = p.cli(['compile', '--yolo']);
+  assert.equal(c.status, EXIT_OK, `${c.stdout}\n${c.stderr}`);
+  assert.match(c.stderr, /WARN: section 1 \(intro\) is unverifiable — re-verifying \(Pass 1\+3; its claim-support and orphan results for this unchanged draft are kept\)/);
+  const after = readFileSync(verif, 'utf8');
+  assert.match(after, /^Status: verified$/m);
+  assert.match(after, /\*\*UNSUPPORTED\*\*/, 'the Pass-2 judgment of the unchanged draft is kept');
+  assert.doesNotMatch(after, /not run — compile staleness re-verify/, 'no "not run" marker for an unchanged draft');
+  assert.match(after, /^\| Pass-2 \| UNSUPPORTED \| 1 \|$/m, 'the Summary counts the kept Pass-2 rows');
+  assert.deepEqual(summaryMismatches(after), [], 'the Summary equals the rows');
+
+  const d = p.cli(['done', '--yolo', '--format', 'md']);
+  assert.equal(d.status, EXIT_OK, `${d.stdout}\n${d.stderr}`);
+  assert.match(d.stdout, /claim\(s\) Pass 2 judged UNSUPPORTED/);
+  assert.doesNotMatch(d.stdout, /was not run on the current draft/);
+  assert.match(readFileSync(join(p.root, '.paper', 'VERIFICATION.md'), 'utf8'), /Auto-accepted under --yolo \d{4}-/);
+});
+
+test('VRFY-22 (built CLI): a section edited after verify is re-verified by compile with Pass 2 marked not run — the old judgment was of another draft', () => {
+  const p = seedGatePaper('recompute-edited-pass2', SECTIONS, RECORDED_BIB);
+  for (const s of SECTIONS) assert.equal(p.cli(['verify', String(s.n)]).status, EXIT_OK);
+  const s1 = p.sectionDir(1, 'intro');
+  writeFileSync(join(s1, 'DRAFT.md'), `${readFileSync(join(s1, 'DRAFT.md'), 'utf8')}\nOne more sentence of prose.\n`);
+  const c = p.cli(['compile', '--yolo']);
+  assert.equal(c.status, EXIT_OK, `${c.stdout}\n${c.stderr}`);
+  assert.match(readFileSync(join(s1, 'VERIFICATION.md'), 'utf8'), /not run — compile staleness re-verify/);
+  const d = p.cli(['done', '--yolo', '--format', 'md']);
+  assert.equal(d.status, EXIT_OK, `${d.stdout}\n${d.stderr}`);
+  assert.match(d.stdout, /claim support \(Pass 2, advisory\) was not run on the current draft — compile re-verified it after the draft was edited; run `pensmith verify 1`/);
 });
 
 test('VRFY-25 (built CLI): an unreadable CITATIONS.bib is a REFUSED reason naming why — never a stack, never a DRAFT.md', () => {

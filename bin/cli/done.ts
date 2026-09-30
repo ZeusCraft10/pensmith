@@ -651,8 +651,9 @@ export interface UnjudgedSection {
 
 /**
  * The registered sections whose VERIFICATION.md says Pass 2 was not run on the
- * draft it holds — compile re-verified them after an edit with the advisory
- * passes off (D-08). done names them with the remedy (`pensmith verify N`)
+ * draft it holds — compile re-verified them after their draft was edited, with
+ * the advisory passes off (D-08; an unverifiable section whose draft did not
+ * change keeps its judgments). done names them with the remedy (`pensmith verify N`)
  * instead of treating the marker as a claim (VRFY-22); Pass 2 is advisory, so
  * they never block. Never throws.
  */
@@ -671,7 +672,7 @@ export function unjudgedClaimSections(paperRoot: string, sections: readonly Done
 
 /** One line naming a section whose current draft has no claim-support judgment. */
 function unjudgedLine(u: UnjudgedSection): string {
-  return `§${u.section} (${u.slug}): claim support (Pass 2, advisory) was not run on the current draft — compile re-verified it after an edit; run \`pensmith verify ${u.section}\` to judge it`;
+  return `§${u.section} (${u.slug}): claim support (Pass 2, advisory) was not run on the current draft — compile re-verified it after the draft was edited; run \`pensmith verify ${u.section}\` to judge it`;
 }
 
 // ---------------------------------------------------------------------------

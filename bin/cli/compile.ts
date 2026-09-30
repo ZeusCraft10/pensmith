@@ -26,7 +26,8 @@
 import { defineCommand } from 'citty';
 import { runCompile, type ReVerifyInput, type ReVerifyResult } from '../lib/compile.js';
 import { EXIT_BLOCKED } from '../lib/exit-codes.js';
-import { projectRoot } from '../lib/paths.js';
+import { readFileSync } from 'node:fs';
+import { projectRoot, sectionVerification } from '../lib/paths.js';
 import { readPaperBrief } from '../lib/paper-brief.js';
 import { gateRefusals, rowBlocks } from '../lib/verify/gate.js';
 import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
@@ -37,13 +38,25 @@ import { verifySection } from './verify.js';
  * itself with the advisory passes off — Pass 1 + Pass 3 and the draft checks
  * through the gate core, never Pass 2/4 — which rewrites that section's
  * VERIFICATION.md (Pass 2 / Pass 4 marked "not run — compile staleness
- * re-verify") and its PLAN.md status and hash, and never a DRAFT.md, the
- * bibliography or last_verified. Reuses the same cassette-backed paths as
- * `pensmith verify` in offline CI.
+ * re-verify" for an edited draft; an unverifiable section whose draft has not
+ * changed keeps the advisory sections its record judged on that draft) and its
+ * PLAN.md status and hash, and never a DRAFT.md, the bibliography or
+ * last_verified. Reuses the same cassette-backed paths as `pensmith verify` in
+ * offline CI.
  */
 async function productionReVerify(input: ReVerifyInput): Promise<ReVerifyResult> {
   const id = formatSectionId(sectionIdOf(input.n, input.suffix));
-  const v = await verifySection(input.n, input.slug, input.suffix ?? null, { advisory: false, writePaperFiles: false });
+  // An unverifiable section whose draft has not changed keeps its advisory
+  // sections (verifySection keeps them only when the record judged this draft).
+  let keepAdvisoryFrom: string | null = null;
+  if (input.keepAdvisory === true) {
+    try {
+      keepAdvisoryFrom = readFileSync(sectionVerification(input.n, input.slug), 'utf8');
+    } catch {
+      keepAdvisoryFrom = null;
+    }
+  }
+  const v = await verifySection(input.n, input.slug, input.suffix ?? null, { advisory: false, writePaperFiles: false, keepAdvisoryFrom });
   if (v.gate === undefined) {
     // An early return: the draft is missing, or the section's last write failed.
     return { passed: false, failingCitekeys: [], reasons: [v.status === 'failed' ? `its last write failed — run \`pensmith write ${id}\`` : `DRAFT.md missing — run \`pensmith write ${id}\``] };
