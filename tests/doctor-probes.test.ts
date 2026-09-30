@@ -294,7 +294,7 @@ test('DOCT-07 runtime-config-presence WARN when no provider keys present + no va
 test('D-19: runDoctor is read-only — does not create files in the configured paper root', async () => {
   // IN-02 fix: previous version mutated process.cwd() via process.chdir(tmp).
   // After the CR-02 fix the probes resolve their inputs from import.meta.url
-  // (findPkgRoot) and from PENSMITH_PAPER_ROOT — NOT from cwd. So the chdir
+  // (paths.ts pluginRoot()) and from PENSMITH_PAPER_ROOT — NOT from cwd. So the chdir
   // dance was decorative; worse, it mutated a process-wide global that other
   // top-level tests could observe if the runner ever flipped them concurrent.
   // We exercise the actual contract by pointing the canonical paper-root env

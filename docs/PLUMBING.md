@@ -46,7 +46,7 @@ claude -p "/pensmith:verify-section 3" \
 
 ## Scheduled tasks
 
-The plumbing commands are user-invoked only (`disable-model-invocation: true`): Claude never picks one on its own, they add nothing to the skill listing, and Claude Code does not run them when a scheduled task fires with one as its prompt. Schedule `/pensmith <verb> …` (for example `/pensmith verify 3`) or the CLI instead.
+The plumbing commands are user-invoked only (`disable-model-invocation: true`): Claude never picks one on its own, their descriptions stay out of Claude's context, and Claude Code does not run them when a scheduled task fires with one as its prompt. Schedule `/pensmith <verb> …` (for example `/pensmith verify 3`) or the CLI instead.
 
 ## Troubleshooting
 
