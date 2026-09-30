@@ -3,7 +3,8 @@
 // BUILT CLI with sources offline (the PDF is local: no network is needed).
 //
 //   - `add metadata-doi.pdf` stores LeCun et al. 2015 with its hashed text;
-//   - a quote that IS in that text is OK "verified against your local file";
+//   - a quote that IS in that text is PASS "verified against your local file"
+//     (Phase 20, D-20-02: Pass 3's passing labels are PASS / FUZZY);
 //   - a quote that is NOT in it is NOT_FOUND (blocking: verify exits 4 and
 //     compile refuses);
 //   - once the PDF is edited, moved or deleted, its text is never trusted and
@@ -50,7 +51,7 @@ test('SRC-15 / S-17 (built CLI): a quote is verified against the user\'s hash-ma
 
   const ok = verifyQuote(sb, root, REAL);
   assert.equal(ok.status, 0, ok.out);
-  assert.match(ok.md, /lecun2015 \("deep learning allows computational model…"\): \*\*OK\*\* — .*verified against your local file sources\/lecun2015\.pdf \(sha256 [0-9a-f]{12}…\)/);
+  assert.match(ok.md, /lecun2015 \("deep learning allows computational model…"\): \*\*PASS\*\* — .*verified against your local file sources\/lecun2015\.pdf \(sha256 [0-9a-f]{12}…\)/);
 
   const fake = verifyQuote(sb, root, FAKE);
   assert.equal(fake.status, 4, fake.out);
@@ -69,7 +70,7 @@ test('S-17 (built CLI): an edited PDF or a forged .txt never makes a quote pass 
   fs.appendFileSync(pdf, `\n% ${FAKE}\n`);
   const r = verifyQuote(sb, root, FAKE);
   assert.equal(r.status, 4, `verify still blocks\n${r.out}`);
-  assert.doesNotMatch(r.md, /lecun2015 \("deep learning has already[^\n]*\*\*OK\*\*/, r.out);
+  assert.doesNotMatch(r.md, /lecun2015 \("deep learning has already[^\n]*\*\*(?:OK|PASS|FUZZY)\*\*/, r.out);
   assert.match(
     r.md,
     /lecun2015 \("deep learning has already[^\n]*\*\*NOT_FOUND\*\*[^\n]*quote cannot be checked against your local file: PDF changed since ingest[^\n]*restore that PDF, or attach the right copy with `pensmith add <identifier> --pdf <file> --replace-pdf`/,
