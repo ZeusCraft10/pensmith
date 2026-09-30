@@ -415,6 +415,42 @@ test('BRDTH-01 collapse boundaries: distinct version-of-record DOIs, another fir
   assert.equal(new Set(r.outcomes.map((o) => o.citekey)).size, 5, 'five distinct keys');
 });
 
+test('Phase 19 criterion 4 (merge review round 2): OpenAlex\'s 2025 re-post of the 2017 arXiv paper is the same work — one entry, the 2017 record kept, the re-post DOI a candidate only (either order)', async () => {
+  const arxiv = await import('../bin/lib/sources/arxiv.js');
+  const openalex = await import('../bin/lib/sources/openalex.js');
+  // The recorded records: arXiv 1706.03762 and OpenAlex's title search, whose hit is the 2025 re-post.
+  const preprint = await arxiv.fetchById('1706.03762');
+  assert.ok(preprint);
+  const hits = await openalex.search('Attention Is All You Need', { limit: 5 });
+  const repost = hits.find((h) => h.doi === '10.65215/2q58a426');
+  assert.ok(repost, 'the recorded OpenAlex search holds the re-post');
+  assert.equal(repost.year, 2025);
+  assert.equal(repost.authors.length, preprint.authors.length, 'the same eight authors');
+
+  for (const order of [[preprint, repost], [repost, preprint]] as const) {
+    const root = project();
+    await upsertSources(root, [order[0]], { provenance: order[0] === preprint ? 'byo' : 'research' });
+    const r = await upsertSources(root, [order[1]], { provenance: order[1] === preprint ? 'byo' : 'research' });
+    assert.equal(r.outcomes[0]!.status, 'merged', `merged (${order[0].source} first)`);
+    const entries = (await loadLibrary(root)).entries;
+    assert.equal(entries.length, 1, 'one entry per work');
+    const e = entries[0]!;
+    assert.equal(e.year, 2017, 'the earlier year stands');
+    assert.equal(e.arxiv, '1706.03762');
+    assert.equal(e.doi, null, 'the re-post DOI never becomes the work\'s DOI');
+    assert.deepEqual(e.alternate_dois, ['10.65215/2q58a426'], 'kept as a candidate only');
+    assert.equal(e.volume, null, 'nothing of the re-post record is mixed in');
+    assert.deepEqual(e.authors, preprint.authors);
+  }
+
+  // Two different works that share a title and a first author, years apart, stay two.
+  const root = project();
+  const one = cand({ title: 'A survey of attention', authors: ['Rao, Q.', 'Li, M.', 'Park, J.'], year: 2018, type: 'preprint' });
+  const two = cand({ title: 'A survey of attention', authors: ['Rao, Q.', 'Chen, W.', 'Park, J.'], year: 2024, type: 'preprint' });
+  const r2 = await upsertSources(root, [one, two], { provenance: 'research' });
+  assert.deepEqual(r2.outcomes.map((o) => o.status), ['added', 'added'], 'another co-author: another work');
+});
+
 test('BRDTH-01: the preprint-server DOI table (SSRN, Research Square, arXiv, bioRxiv — not CSHL journals)', () => {
   assert.equal(isPreprintDoi('10.2139/ssrn.3456789'), true);
   assert.equal(isPreprintDoi('10.21203/rs.3.rs-123456/v1'), true);

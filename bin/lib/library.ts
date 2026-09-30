@@ -35,7 +35,12 @@
 //           bioRxiv, a record typed `preprint` — Crossref's posted-content —
 //           whatever its DOI prefix, or no DOI at all). Two distinct
 //           version-of-record DOIs never collapse (annual editorials share
-//           titles and authors).
+//           titles and authors). The years may lie further apart when the
+//           whole author list (three or more names, in order) is the same: a
+//           later RE-POST of the work (OpenAlex's 2025 posted copy of a 2017
+//           arXiv paper). The earlier record then stands whole — its title,
+//           year, authors and DOI — and the re-post's DOI is a candidate only
+//           (merge review round 2).
 //   3. Merges into it: the richer field wins (longer abstract, longer author
 //      list, any missing identifier / OA URL / venue), provenance tags are
 //      unioned, `retracted` is sticky, `last_verified` keeps the latest time.
@@ -370,12 +375,31 @@ function sameTitleAndFirstAuthor(a: LibraryEntry, b: LibraryEntry): boolean {
   return jaroWinkler(ta, tb) >= VERSION_TITLE_JW;
 }
 
-/** Same work by the version rule (title JW, first author, year), see header. */
+/** Both author lists name the same people in the same order: at least 3, every family name equal. */
+function sameAuthorFamilies(a: LibraryEntry, b: LibraryEntry): boolean {
+  if (a.authors.length < 3 || a.authors.length !== b.authors.length) return false;
+  return a.authors.every((name, i) => {
+    const f = familyName([name]);
+    return f !== '' && f === familyName([b.authors[i] ?? '']);
+  });
+}
+
+/**
+ * Same work by the version rule (title JW, first author, year), see header.
+ * The years may lie further apart when the whole author list (three or more
+ * names, in order) is the same: a later re-post of a work (OpenAlex's 2025
+ * posted copy of a 2017 arXiv paper) is that work (see isRepost).
+ */
 export function sameWorkVersion(a: LibraryEntry, b: LibraryEntry): boolean {
   if (a.year === null || b.year === null) return false;
-  if (Math.abs(a.year - b.year) > 1) return false;
   if (isVersionOfRecord(a) && isVersionOfRecord(b)) return false;
-  return sameTitleAndFirstAuthor(a, b);
+  if (!sameTitleAndFirstAuthor(a, b)) return false;
+  return Math.abs(a.year - b.year) <= 1 || sameAuthorFamilies(a, b);
+}
+
+/** A version-rule match whose years lie more than a year apart: the later one is a re-post of the earlier. */
+function isRepost(a: LibraryEntry, b: LibraryEntry): boolean {
+  return a.year !== null && b.year !== null && Math.abs(a.year - b.year) > 1;
 }
 
 /** The version family of a DOI: its base when it carries a `.vN` / `_vN` suffix, else itself. */
@@ -398,7 +422,7 @@ function isPartOfBook(e: Pick<LibraryEntry, 'type'>): boolean {
   return e.type === 'chapter' || e.type === 'paper-conference';
 }
 
-function findMatch(entries: LibraryEntry[], d: LibraryEntry): { entry: LibraryEntry; by: MatchKind } | null {
+function findMatch(entries: LibraryEntry[], d: LibraryEntry): { entry: LibraryEntry; by: MatchKind; repost?: true } | null {
   if (d.doi || d.alternate_dois.length > 0) {
     const mine = new Set([d.doi, ...d.alternate_dois].filter((x): x is string => x !== null));
     const hit = entries.find((e) => [e.doi, ...e.alternate_dois].some((x) => x !== null && mine.has(x)));
@@ -423,7 +447,8 @@ function findMatch(entries: LibraryEntry[], d: LibraryEntry): { entry: LibraryEn
   const family = entries.find((e) => sameDoiVersionFamily(e, d));
   if (family) return { entry: family, by: 'version' };
   const version = entries.find((e) => sameWorkVersion(e, d));
-  return version ? { entry: version, by: 'version' } : null;
+  if (!version) return null;
+  return isRepost(version, d) ? { entry: version, by: 'version', repost: true } : { entry: version, by: 'version' };
 }
 
 function union(a: string[], b: string[]): string[] {
@@ -442,15 +467,28 @@ function longer(a: string | null, b: string | null): string | null {
   return b.length > a.length ? b : a;
 }
 
-/** Merge `d` (incoming) into `e` in place. Returns true when `e` changed. */
-function mergeInto(e: LibraryEntry, d: LibraryEntry, now: string): boolean {
+/**
+ * Merge `d` (incoming) into `e` in place. Returns true when `e` changed.
+ * `repost`: the match was a later re-post of the work (sameWorkVersion's
+ * lifted year limit) — the EARLIER record's bibliographic fields and DOI
+ * stand, and the re-post's DOI is kept as a candidate only.
+ */
+function mergeInto(e: LibraryEntry, d: LibraryEntry, now: string, repost = false): boolean {
   const before = JSON.stringify(e);
 
   // The version of record wins the primary DOI over a preprint DOI.
   // `incomingIsRecord`: the incoming record becomes the version of record, so
   // its bibliographic fields (what the citation will point at) win.
   let incomingIsRecord = false;
-  if (d.doi && d.doi !== e.doi) {
+  const incomingEarlier = repost && (d.year ?? Number.POSITIVE_INFINITY) < (e.year ?? Number.POSITIVE_INFINITY);
+  if (repost) {
+    if (incomingEarlier) {
+      if (e.doi) e.alternate_dois = union(e.alternate_dois, [e.doi]);
+      e.doi = d.doi;
+    } else if (d.doi && d.doi !== e.doi) {
+      e.alternate_dois = union(e.alternate_dois, [d.doi]);
+    }
+  } else if (d.doi && d.doi !== e.doi) {
     if (!e.doi) {
       e.doi = d.doi;
       incomingIsRecord = !isPreprintDoi(d.doi);
@@ -471,9 +509,24 @@ function mergeInto(e: LibraryEntry, d: LibraryEntry, now: string): boolean {
 
   // Phase 19 seam S-B (SRC-15): a registrar-hydrated record replaces the
   // local metadata of an unhydrated bring-your-own entry.
-  if (!e.hydrated && d.hydrated) incomingIsRecord = true;
+  if (!repost && !e.hydrated && d.hydrated) incomingIsRecord = true;
 
-  if (incomingIsRecord) {
+  if (repost) {
+    // The earlier record is the work; nothing of the re-post's own record
+    // (its year, venue, volume, pages) is mixed into it.
+    if (incomingEarlier) {
+      e.title = d.title;
+      e.year = d.year;
+      e.venue = d.venue;
+      if (d.authors.length > 0) e.authors = d.authors;
+      e.type = d.type;
+      e.publisher = d.publisher;
+      e.volume = d.volume;
+      e.issue = d.issue;
+      e.pages = d.pages;
+      e.editors = d.editors;
+    }
+  } else if (incomingIsRecord) {
     e.title = d.title ?? e.title;
     e.year = d.year ?? e.year;
     e.venue = d.venue ?? e.venue;
@@ -744,7 +797,7 @@ export async function upsertSources(
       }
       const match = findMatch(entries, draft);
       if (match) {
-        const changed = mergeInto(match.entry, draft, now);
+        const changed = mergeInto(match.entry, draft, now, match.repost === true);
         outcomes.push({ index, citekey: match.entry.citekey, status: changed ? 'merged' : 'unchanged', matchedBy: match.by });
         return;
       }
