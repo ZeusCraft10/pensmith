@@ -2,7 +2,7 @@
 name: plan-section
 description: "Plumbing for scripts: plan one section, the same step as `/pensmith plan N`."
 disable-model-invocation: true
-argument-hint: "<N> [--revise] [--research \"query\"]"
+argument-hint: "<N> [--slug <slug>] [--revise] [--research \"query\"]"
 ---
 
 # /pensmith:plan-section

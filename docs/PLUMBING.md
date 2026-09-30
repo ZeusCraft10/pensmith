@@ -10,13 +10,13 @@ The plugin also ships seven **plumbing** commands for automation: one per pipeli
 | --- | --- | --- | --- |
 | `/pensmith:research` | `research` | `pensmith research` | `[--scope <n\|text>] [--queries <n>]` |
 | `/pensmith:outline` | `outline` | `pensmith outline` | `[--force] [--no-counter]` |
-| `/pensmith:plan-section` | `plan` | `pensmith plan <N>` | `<N> [--revise] [--research "<query>"]` |
-| `/pensmith:write-section` | `write` | `pensmith write <N>` | `<N> [--no-verify]` |
-| `/pensmith:verify-section` | `verify` | `pensmith verify <N>` | `<N>` |
-| `/pensmith:compile` | `compile` | `pensmith compile` | none |
-| `/pensmith:done` | `done` | `pensmith done` | `[--raw]` |
+| `/pensmith:plan-section` | `plan` | `pensmith plan <N>` | `<N> [--slug <slug>] [--revise] [--research "<query>"]` |
+| `/pensmith:write-section` | `write` | `pensmith write <N>` | `<N> [--slug <slug>] [--no-verify]` |
+| `/pensmith:verify-section` | `verify` | `pensmith verify <N>` | `<N> [--slug <slug>]` |
+| `/pensmith:compile` | `compile` | `pensmith compile` | `[--discipline <preset>] [--lintHeadings]` |
+| `/pensmith:done` | `done` | `pensmith done` | `[--format docx\|pdf\|latex\|md] [--raw]` |
 
-`<N>` is a section id as `pensmith status` shows it: `3`, or `1a` for a section a re-outline inserted.
+`<N>` is a section id as `pensmith status` shows it: `3`, or `1a` for a section a re-outline inserted; `--slug` names the section by its slug instead. `--format` picks the export (`docx` by default); `--discipline` and `--lintHeadings` tune compile's citation-density band and add its opt-in heading-tense check. The global flags (`--yolo`, `--dry-run`, `--estimate`, …; `pensmith --help`) work with every command. The table is checked against each verb's own options (`tests/plumbing-args.test.ts`).
 
 Each command forwards `<verb> <your arguments>` to the `pensmith` skill and adds nothing of its own: no routing, no extra steps, no new verb. Pensmith has exactly 16 verbs in both tiers (`pensmith --help` lists them); the plumbing names are Claude Code aliases for seven of them (`plan`, `write` and `verify` get a `-section` name because they act on one section). The Tier-2 CLI has no `pensmith:` names — use the verbs.
 

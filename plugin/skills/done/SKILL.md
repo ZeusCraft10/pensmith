@@ -2,7 +2,7 @@
 name: done
 description: "Plumbing for scripts: finish and export the paper, the same step as `/pensmith done`."
 disable-model-invocation: true
-argument-hint: "[--raw]"
+argument-hint: "[--format docx|pdf|latex|md] [--raw]"
 ---
 
 # /pensmith:done

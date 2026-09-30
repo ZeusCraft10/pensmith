@@ -449,22 +449,38 @@ Run these on the merged tree (§7). `S` is a scratch dir under `…/scratchpad/p
 | `hooks/hooks.json` | `plugin/hooks/hooks.json` |
 | `.claude-plugin/plugin.json` | `plugin/.claude-plugin/plugin.json` |
 
-**Trial merge (review round 1).** Each Phase 20 stream was merged into `v1/p23a` (after round 1's fixes) in a scratch clone with `git merge --no-edit` (rename detection on). The prompt edits of `v1/p20-grammar` land on `plugin/templates/prompts/claim-support.md` and `orphan-label.md` by rename detection. The Phase 20 main branch (`akhil/pensive-faraday-qx3o58` at `1e43b9e`, the phase plan) merges cleanly. The streams conflict here:
+**Trial merge (review round 2).** Phase 20 has since integrated its four streams into its main branch, so the merge that matters is that branch. `akhil/pensive-faraday-qx3o58` at `f2cc81d` (it holds `v1/p20-gate` `95959e2`, `v1/p20-quotes` `8ebdbf0`, `v1/p20-registrar` `2bab275` and `v1/p20-grammar` `857d26c`) was merged into `v1/p23a` at `ffc2758` in a scratch clone with `git merge --no-edit` (rename detection on). The edits to `templates/prompts/claim-support.md`, `orphan-label.md` and `workflows/{compile,done,verify}.md` land on their `plugin/` paths by rename detection. It stops with these conflicts:
 
-| Stream (commit tried) | Conflicting files |
+| File | What conflicts |
 |---|---|
-| `v1/p20-grammar` (`857d26c`) | `CLAUDE.md`, `bin/cli/compile.ts`, `bin/cli/done.ts`, `bin/lib/llm-text-stubs.ts`, `bin/lib/plagiarism.ts`, `scripts/eslint-rules/chokepoint.mjs`, `tests/repo-files.test.ts` |
-| `v1/p20-gate` (`67498b5`) | `bin/cli/compile.ts`, `bin/cli/done.ts`, `bin/cli/verify.ts` |
-| `v1/p20-quotes` (`52a03bd`) | `bin/cli/compile.ts`, `bin/cli/done.ts` |
-| `v1/p20-registrar` (`2bab275`) | `CLAUDE.md`, `bin/cli/compile.ts`, `bin/cli/done.ts`, `package.json` |
+| `skills/verify-section.md` | **modify/delete**: 23a moved it to `plugin/skills/verify-section/SKILL.md` and rewrote it past git's 50 % rename threshold, so git does not follow the rename and leaves Phase 20's version (048f55d: the `accept quote qK` row) at the old path — where `tests/plugin-layout.test.ts` fails on it |
+| `CLAUDE.md` | 3 hunks (layout text and chokepoint rows) |
+| `bin/cli/compile.ts` | 1 hunk (imports: 23a's `out` vs Phase 20's gate imports) |
+| `bin/cli/done.ts` | 3 hunks (imports; the export BLOCKED block; the GATE-04 block) |
+| `bin/cli/verify.ts` | 4 hunks (imports; the DRAFT.md-missing branch; the CITATIONS.bib check; the final summary) |
+| `bin/lib/llm-text-stubs.ts`, `bin/lib/plagiarism.ts` | 1 import hunk each |
+| `package.json` | the `scripts` block |
+| `scripts/eslint-rules/chokepoint.mjs` | the header comment (the matcher kinds) |
+| `tests/repo-files.test.ts` | the two re-pinned prompt hashes |
+| `tests/tier-contract/exit-parity.test.ts` | the `node:fs` import (23a added `readdirSync`, Phase 20 `writeFileSync`) |
+
+The round-1 trial (each stream on its own: `p20-grammar` `857d26c`, `p20-gate` `67498b5`, `p20-quotes` `52a03bd`, `p20-registrar` `2bab275`) conflicted in a subset of these files; the integrated branch supersedes it.
+
+**`skills/verify-section.md` step by step.**
+1. `git rm skills/verify-section.md` (the plugin reads only `plugin/skills/<name>/SKILL.md`).
+2. Port its new row into the routing table of `plugin/skills/pensmith/SKILL.md`: "accept quote qK in section N" (a quote VERIFICATION.md lists as UNVERIFIABLE-QUOTE) → `verify N --accept-quote qK`, **in the CLI form** — the `pensmith_verify` MCP tool takes only `n`, `slug` and `yolo`, and the skill already sends a flag the tool does not take to the CLI — and only after asking the user with AskUserQuestion, one id at a time, never on Claude's own initiative (there is no blanket acceptance). Keep its "a section whose last write failed is not verified" note if the skill lacks it.
+3. Add `[--accept-quote <qK>]` to the `argument-hint` of `plugin/skills/verify-section/SKILL.md` and to the `/pensmith:verify-section` row of `docs/PLUMBING.md`: `tests/plumbing-args.test.ts` derives each plumbing command's options from its verb's citty `args` and fails until both name the new flag.
+4. Re-stamp and rebundle (below).
 
 **How to resolve them.**
-- `bin/cli/compile.ts`, `bin/cli/done.ts` (every stream) and `bin/cli/verify.ts` (`p20-gate`): 23a routed every stdout line through `out()` (`bin/lib/output-sink.ts`, PLUG-13). Keep 23a's `out()` form of the existing lines and re-apply Phase 20's changes through `out()`. **`p20-gate` adds new `process.stdout.write` calls: 8 in `bin/cli/done.ts` (the VRFY-22 unsupported-claims block, the accepted-quote and local-file lines, the GATE-04 re-verification lines) and 3 in `bin/cli/verify.ts` (the verdict summary, the DRAFT.md-missing line, the quote-acceptance line).** Each must become `out(…)`, or the `stdout-sink` lint row fails — and `bin/cli/verify.ts` is reached by the MCP server (`pensmith_verify`), so the `mcp-stdout-graph` row fails too.
+- `bin/cli/compile.ts`, `bin/cli/done.ts` and `bin/cli/verify.ts`: 23a routed every stdout line through `out()` (`bin/lib/output-sink.ts`, PLUG-13). Keep 23a's `out()` form of the existing lines and re-apply Phase 20's changes through `out()`. **Phase 20 adds new `process.stdout.write` calls. In the round-2 trial of `f2cc81d`: `bin/cli/done.ts` — 5 merge in cleanly (the VRFY-22 unsupported-claims block, the accepted-quote and local-file lines) and 5 more sit in the conflict hunks (the export BLOCKED list, the GATE-04 re-verification lines); `bin/cli/verify.ts` — 2 merge in cleanly (the verdict summary, the quote-acceptance line) and 2 sit in conflict hunks (the DRAFT.md-missing line, the final `wrote … VERIFICATION.md` line).** The cleanly merged ones are the easy ones to miss. Each must become `out(…)`, or the `stdout-sink` lint row fails — and `bin/cli/verify.ts` is reached by the MCP server (`pensmith_verify`), so the `mcp-stdout-graph` row fails too.
 - `bin/lib/llm-text-stubs.ts` and `bin/lib/plagiarism.ts` (`p20-grammar`): 23a replaced their asset lookups with the `paths.ts` plugin resolver and their stdout writes with `out()`; keep those and re-apply the grammar changes. Phase 20's versions of `exporter.ts`, `llm-text-stubs.ts`, `prompt-loader.ts`, `citations.ts` and `http.ts` still carry the pre-23a `path.join(root, 'templates', …)` / `'references'` lookups: wherever a conflict region includes one, keep 23a's `pluginTemplatePath` / `pluginReferencePath` call (the `plugin-assets` row fails otherwise).
 - `scripts/eslint-rules/chokepoint.mjs` (`p20-grammar`): keep both changes — Phase 20's `regex-literal` matcher kind (add it to `MATCH_KINDS` and to `ChokepointKind` in `chokepoint.d.mts`) and 23a round 1's `arg.index: "any"` for `call` matchers (the `plugin-assets` row uses it). Phase 20's new `citation-grammar` row needs its CLAUDE.md table line.
 - `package.json` (`p20-registrar`): keep 23a's `bundle`, `bundle:check`, `plugin:smoke` scripts, the `check` script ending in `bundle:check`, the `files` list (`plugin/`) and `esbuild`; add Phase 20's `live:verify` script.
 - `tests/repo-files.test.ts` (`p20-grammar`): the new prompt hashes go in with their `plugin/templates/prompts/…` paths; re-pin `EXPECTED_PROMPT_HASHES` (`bin/lib/prompt-loader.ts`) to the same values.
 - `CLAUDE.md`: keep 23a's layout text and chokepoint rows (`plugin-assets`, `stdout-sink`, `mcp-stdout-graph`) and add Phase 20's rows and text.
+- `tests/tier-contract/exit-parity.test.ts`: import `existsSync, readFileSync, readdirSync, writeFileSync` (both sides' additions).
+- `package.json` (the integrated branch): keep 23a's `bundle`, `bundle:check`, `plugin:version` and `plugin:smoke` scripts and the `check` script ending in `bundle:check`; add Phase 20's `live:verify`.
 
 **The `plugin-assets` row no longer collides with Phase 20's vocabulary.** Before round 1 the row flagged any string literal that was exactly `references`, `templates` or `workflows`, which made `REFERENCE_LIST_NAMES` in Phase 20's new `bin/lib/verify/unsupported-forms.ts` fail lint (`112:3 … Matched \`references\``). Round 1 narrowed the row to path segments (a `path.join` / `path.resolve` / `new URL` / fs-reader argument that is exactly one of the names, or a string holding one after a leading separator or `plugin/`); that file now lints clean against the row, and `tests/chokepoints.test.ts` pins the clean case.
 
@@ -475,9 +491,15 @@ Run these on the merged tree (§7). `S` is a scratch dir under `…/scratchpad/p
 
 **New Phase 20 files at old locations.** A new prompt, reference, workflow or skill file must be moved under `plugin/`, because `tests/plugin-layout.test.ts` fails otherwise. A new prompt slug is also added to `EXPECTED_PROMPT_HASHES` with its `plugin/` path pin.
 
-**Bundles.** The committed bundles inline `bin/lib/`, the `bin/cli/` verbs the MCP tools and hooks run (`plan`, `write`, `verify`, `status`, `route-options`, `goal`), `bin/lib/version.generated.ts` (the package.json version) and the locked dependencies. Phase 20 edits `bin/lib/` and `bin/cli/verify.ts` (and `compile.ts` / `done.ts`), so after the merge re-run `npm ci` (if the lockfile changed) and `npm run bundle`, and commit `plugin/dist/`, or `bundle:check` fails.
+**Bundles and the plugin version.** The committed bundles inline `bin/lib/`, the `bin/cli/` verbs the MCP tools and hooks run (`plan`, `write`, `verify`, `status`, `route-options`, `goal`), `bin/lib/version.generated.ts` (the package.json version) and the locked dependencies. Phase 20 edits `bin/lib/` and `bin/cli/verify.ts` (and `compile.ts` / `done.ts`), so after the merge re-run `npm ci` (if the lockfile changed) and `npm run bundle`, and commit `plugin/dist/` **and `plugin/.claude-plugin/plugin.json`**, or `bundle:check` fails. Since review round 2 plugin.json's `version` is `<package.json version>+<digest of plugin/>` (`scripts/plugin-version.cjs`; Claude Code updates a git-marketplace install only when that string changes): the merge changes files under `plugin/` (the prompts, the workflow bodies, the skills), so `npm run validate:manifests` fails with "version … is not …" until `npm run bundle` (or `npm run plugin:version`) re-stamps it. Never resolve a conflict on that line by hand — re-stamp.
 
-**stdout writes.** Any stdout write that Phase 20 adds in `bin/lib` or `bin/cli` must go through `out()` (`bin/lib/output-sink.ts`), or the `stdout-sink` lint row fails. Since round 1 that row (and `mcp-stdout-graph`) also catches `import { stdout } from 'node:process'`, a destructured `const { stdout } = process` and `globalThis.console.log`.
+**stdout writes.** Any stdout write that Phase 20 adds in `bin/lib` or `bin/cli` must go through `out()` (`bin/lib/output-sink.ts`), or the `stdout-sink` lint row fails. Since round 1 that row (and `mcp-stdout-graph`) also catches `import { stdout } from 'node:process'`, a destructured `const { stdout } = process` and `globalThis.console.log`; since round 2 also every `console` method but `warn`/`error`/`trace`/`assert` (`console.count`, `group`, `timeLog`, `dirxml` …) and `process` or `console` taken under another name or passed as a value (`const p = process`, `f(console)`, `const { log } = console`). A comment that spells `= process` or `(console)` trips the row too (it reads the raw text): reword it.
+
+**Behaviour Phase 20 code meets after the merge (review round 2).**
+- `PENSMITH_PAPER_ROOT` at a folder with no paper is now refused (EXIT_USAGE, `no paper in <folder> — …`) for every verb that needs a paper, as the cwd already was, and the MCP `pensmith_plan` / `pensmith_write` / `pensmith_verify` tools refuse such a folder the same way before touching it. A Phase 20 test that points the env at an empty folder and expects a verb to create a placeholder section must seed a paper first.
+- `paper://state`'s cost line is the real COSTS.jsonl meter in both tiers (it was `cost: n/a (Claude session)`).
+- The SessionStart context adds the HANDOFF summary only when the hook's stdin `source` is `compact`.
+- The missing-key error ends "`pensmith doctor` checks the setup (README: Model runtimes)." instead of promising key-free Tier-1 operation.
 
 ## 9. Risks
 

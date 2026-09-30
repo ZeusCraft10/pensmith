@@ -2,7 +2,7 @@
 name: write-section
 description: "Plumbing for scripts: draft one section and verify it, the same step as `/pensmith write N`."
 disable-model-invocation: true
-argument-hint: "<N> [--no-verify]"
+argument-hint: "<N> [--slug <slug>] [--no-verify]"
 ---
 
 # /pensmith:write-section

@@ -69,17 +69,32 @@ test('UX-05: every row of the pensmith skill\'s phrase table routes to a locked-
   }
 });
 
-test('UX-05: the §5.6 corrections ride plan --revise / write / outline — never a new verb', () => {
+test('UX-05: the §5.6 corrections ride existing verbs by the routes that work today — never a new verb', () => {
   const byPhrase = new Map(routingRows().map((r) => [r.says.toLowerCase(), r.verb]));
   const find = (fragment: string): string => {
     for (const [says, verb] of byPhrase) if (says.includes(fragment)) return verb;
     return '';
   };
-  assert.match(find('re-do section 3'), /`plan 3 --revise`, then `write 3`/);
-  assert.match(find('make it 1500 words'), /`plan N --revise`/);
-  assert.match(find('use a different source'), /`plan 4 --revise`, then `write 4`/);
-  assert.match(find('add a section about counterexamples'), /`outline`/);
+  // Review round 2: `plan N --revise` only repairs a verifier-flagged citation
+  // (bin/lib/revise.ts); on a clean section it changes nothing. It is the
+  // redo route only for a flagged section, and never the length or source
+  // route. tests/correction-routes.test.ts runs each route through the CLI.
+  const redo = find('re-do section 3');
+  assert.match(redo, /flagged a citation[^|]*`plan 3 --revise`[^|]*then `write 3`; otherwise `plan 3`, then `write 3`/);
+  const length = find('make it 1500 words');
+  assert.match(length, /word target column of `\.paper\/OUTLINE\.md`[^|]*then `outline`[^|]*then `plan N` and `write N`/);
+  assert.doesNotMatch(length, /--revise/);
+  const source = find('use a different source');
+  assert.match(source, /`add <DOI or id> --section 4`[^|]*`add --remap <citekey> --section 4`[^|]*then `plan 4` and `write 4`/);
+  assert.doesNotMatch(source, /--revise/);
+  const addSection = find('add a section about counterexamples');
+  assert.match(addSection, /lettered number after the section it follows \(`3a` after §3\)[^|]*no existing number changes[^|]*Then `outline`/);
   assert.match(find('check the citations in section 3'), /`verify 3`/);
+  const body = readFileSync(path.join(SKILLS_DIR, 'pensmith', 'SKILL.md'), 'utf8');
+  assert.match(body, /`plan N --revise` only repairs a citation the verifier flagged; on a clean\nsection it changes nothing/);
+  assert.match(body, /no single-claim source swap/);
+  // The one file the skill may edit is the OUTLINE.md table the user asked to change.
+  assert.match(body, /never writes files under `\.paper\/` itself — with one\nexception: the edit to the `\.paper\/OUTLINE\.md` table that the user asked for/);
 });
 
 // === UX-05: every verb a skill body names is a member of the 16 ===

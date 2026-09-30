@@ -2,7 +2,7 @@
 name: verify-section
 description: "Plumbing for scripts: re-check one section's citations, the same step as `/pensmith verify N`."
 disable-model-invocation: true
-argument-hint: "<N>"
+argument-hint: "<N> [--slug <slug>]"
 ---
 
 # /pensmith:verify-section
