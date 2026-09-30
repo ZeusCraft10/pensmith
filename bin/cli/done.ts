@@ -29,6 +29,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { runFreshnessForDraft } from '../lib/verify/pass1.js';
+import { decidedRetractions, type DecidedRetraction } from '../lib/verify/freshness.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
 import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
@@ -804,16 +805,20 @@ function writeExportFindings(
 export interface RetractionRecheck {
   /** One refusal line per cited source found retracted now. */
   readonly retracted: string[];
-  /** The decided statuses, recorded once done exports. */
-  readonly decided: Record<string, { status: 'clear' | 'retracted'; details: string | null }>;
+  /** The decided statuses (and an `unknown` that stays so for good, with its reason), recorded once done exports. */
+  readonly decided: Record<string, DecidedRetraction>;
 }
 
 /**
  * Re-check, live, the retraction status of every source `text` cites whose
- * LIBRARY.json status is `unknown` (research or an earlier verify could not
- * decide it). Nothing is written here. Skipped under --dry-run and for a
- * bibliography that does not parse; never throws (a failed re-check leaves the
- * status unknown, as verify does — the gate core's Pass 1 still decides).
+ * LIBRARY.json status is `unknown` because a lookup failed (research or an
+ * earlier verify could not decide it) — never one whose agency publishes no
+ * retraction data (recorded; it stays unknown for good). The re-check sends no
+ * DOI HEAD and learns the agency from doi.org's (cached) prefix lookup, so a
+ * second done on an unchanged paper asks nothing (VRFY-26). Nothing is written
+ * here. Skipped under --dry-run and for a bibliography that does not parse;
+ * never throws (a failed re-check leaves the status unknown, as verify does —
+ * the gate core's Pass 1 still decides).
  */
 export async function recheckUnknownRetractions(paperRoot: string, text: string): Promise<RetractionRecheck> {
   const none: RetractionRecheck = { retracted: [], decided: {} };
@@ -826,11 +831,9 @@ export async function recheckUnknownRetractions(paperRoot: string, text: string)
   } catch {
     return none;
   }
-  const out: RetractionRecheck = { retracted: [], decided: {} };
+  const out: RetractionRecheck = { retracted: [], decided: decidedRetractions(results) };
   for (const r of results) {
-    if (r.recheck === undefined || r.recheck.status === 'unknown') continue;
-    out.decided[r.citekey] = { status: r.recheck.status, details: r.recheck.details };
-    if (r.recheck.status === 'retracted') {
+    if (r.recheck?.status === 'retracted') {
       out.retracted.push(
         `citation [@${r.citekey}] is RETRACTED — ${r.recheck.details ?? 'it appears in Retraction Watch'} (re-checked now: LIBRARY.json had its retraction status unknown) — replace the source`,
       );
@@ -1063,12 +1066,36 @@ export const doneCommand = defineCommand({
       // Missing or unparseable INTAKE.md → style undefined → citation rendering is skipped.
     }
 
+    // VRFY-26: the export is EXACTLY the text the gate judged, and the
+    // bibliography the gate read — never the files read again after the
+    // plagiarism queries, the humanizer, the detector or the confirmation (a
+    // sync client, an editor or the user may have changed them meanwhile).
+    const exportedFrom = finalPath ?? draftPath;
     const result = await exportDraft({
-      inputPath: finalPath ?? draftPath,
+      inputPath: exportedFrom,
+      text: exportedText,
+      ...(bib.text !== undefined ? { bibText: bib.text } : {}),
       format,
       paperRoot,
       ...(style !== undefined ? { style } : {}),
     });
+    const sha = (t: string): string => createHash('sha256').update(t, 'utf8').digest('hex');
+    let onDisk: string | null = null;
+    try {
+      onDisk = readFileSync(exportedFrom, 'utf8');
+    } catch {
+      onDisk = null;
+    }
+    const changed = [
+      ...(onDisk !== exportedText ? [finalPath !== null ? '.paper/FINAL.md' : '.paper/DRAFT.md'] : []),
+      ...(bib.text !== undefined && loadBibliography(paperRoot).text !== bib.text ? ['.paper/CITATIONS.bib'] : []),
+    ];
+    if (changed.length > 0) {
+      process.stderr.write(
+        `pensmith done: WARN — ${changed.join(' and ')} changed while done ran; the export holds the text done checked (sha256 ${sha(exportedText).slice(0, 12)}), ` +
+          'not the edit — `pensmith done` checks the edited text before it exports it\n',
+      );
+    }
 
     // (6) VRFY-28: the registrar answers that confirmed the exported citations
     // become their LIBRARY.json last_verified (the one writer, under its lock);

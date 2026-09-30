@@ -114,6 +114,7 @@ import { metadataSearch } from './metadata-search.js';
 import { DATACITE_RETRACTION_UNKNOWN } from '../sources/datacite.js';
 import { tryLoadLibrary } from '../library.js';
 import { registrationAgency, doiPrefix } from '../sources/doi-ra.js';
+import { isNoRetractionDataReason } from '../sources/retraction-cross-check.js';
 import { doilessIdentifiers as routeIdentifiers, type CitationIdentifiers, type NoDoiRegistrar } from './pass1-identifiers.js';
 import type { LibraryEntry } from '../schemas/library.js';
 import type { Pass1RowVerdict } from './verdicts.js';
@@ -1092,7 +1093,10 @@ export async function runFreshnessForDraft(
       library = [];
     }
   }
-  const status = new Map(library.map((e) => [e.citekey, e.retraction_status]));
+  // A status is re-checked only when a lookup failed: an agency that publishes
+  // no retraction data (the recorded reason) leaves it unknown for good.
+  const recheckable = new Set(library.filter((e) => e.retraction_status === 'unknown' && !isNoRetractionDataReason(e.retraction_details)).map((e) => e.citekey));
+  const recheckOnly = opts.onlyRecheck === true;
   const probes: FreshnessSource[] = cited.map((ck) => {
     const e = bibByCitekey.get(ck);
     if (!e) return { citekey: ck, inBib: false, doi: null, registrar: null };
@@ -1102,9 +1106,10 @@ export async function runFreshnessForDraft(
       inBib: true,
       doi: typeof e.DOI === 'string' && e.DOI.trim() ? e.DOI : null,
       registrar: ids.length > 0 ? REGISTRAR_LABEL[ids[0]!.registrar] : null,
-      recheck: status.get(ck) === 'unknown',
+      recheck: recheckable.has(ck),
+      ...(recheckOnly ? { recheckOnly: true } : {}),
     };
   });
-  const list = opts.onlyRecheck === true ? probes.filter((p) => p.recheck === true) : probes;
+  const list = recheckOnly ? probes.filter((p) => p.recheck === true && p.doi !== null) : probes;
   return probeFreshnessAll(list, opts.root !== undefined && opts.record !== false ? { root: opts.root } : {});
 }

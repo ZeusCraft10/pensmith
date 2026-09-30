@@ -66,6 +66,7 @@ import { applySourcePolicy, type PolicyExclusion, type PolicyInput, type SourceP
 import { planAdapters, zoteroConfigured, RESEARCH_PER_QUERY_LIMIT, EVALUATOR_BATCH, evaluatorCallsFor, type AdapterPlan } from './adapter-plan.js';
 import { resolveDiscipline } from './disciplines.js';
 import { RESEARCH_LOG_END, formatReference, inertMarkup, markerLines } from './research-md.js';
+import { isNoRetractionDataReason } from './sources/retraction-cross-check.js';
 
 export { RESEARCH_LOG_END };
 
@@ -990,7 +991,8 @@ export function renderResearchLog(input: ResearchLogInput): string {
     lines.push('', '## Retractions', '');
     for (const r of input.retracted) lines.push(`- RETRACTED: [@${r.citekey}]${r.detail ? ` — ${oneLine(r.detail)}` : ''} (fails Pass 1 if cited)`);
     for (const r of input.retractionUnknown) {
-      lines.push(`- retraction status unknown: [@${r.citekey}]${r.detail ? ` — ${oneLine(r.detail)}` : ''} (re-checked at verify time)`);
+      const next = isNoRetractionDataReason(r.detail) ? 'reported at verify, never shown as clear' : 're-checked at verify and done';
+      lines.push(`- retraction status unknown: [@${r.citekey}]${r.detail ? ` — ${oneLine(r.detail)}` : ''} (${next})`);
     }
   }
   // Every value above comes from registrars, the model or the user's sources:

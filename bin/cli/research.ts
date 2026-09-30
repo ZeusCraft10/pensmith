@@ -61,7 +61,7 @@ import { defineCommand } from 'citty';
 import { loadPrompt } from '../lib/prompt-loader.js';
 import { upsertSources, assertLibraryReadable, tryLoadLibrary, type LibraryCandidate } from '../lib/library.js';
 import { projectRoot } from '../lib/paths.js';
-import { crossCheckRetractions, retractionCheckReason, type RetractionLookup } from '../lib/sources/retraction-cross-check.js';
+import { crossCheckRetractions, isNoRetractionDataReason, retractionCheckReason, type RetractionLookup } from '../lib/sources/retraction-cross-check.js';
 import type { SourceCandidate } from '../lib/schemas/source-candidate.js';
 import { complete, assertLlmConfigured, isNoLlmMode, StructuredOutputError } from '../lib/anthropic.js';
 import type { TopicDisambiguation } from '../lib/llm-contracts.js';
@@ -809,9 +809,17 @@ export async function runResearch(opts: ResearchRunOptions): Promise<ResearchRun
     // D-20-13: why each is unknown — a failed lookup, or a DOI another agency
     // registered (no retraction data for it) — is in RESEARCH.md; never "clear".
     const why = [...new Set(unknown.map((r) => r.detail).filter((d): d is string => typeof d === 'string' && d.length > 0))];
+    // Review round 2: a failed lookup is asked again; an agency with no retraction data never answers.
+    const failedLookups = unknown.filter((r) => !isNoRetractionDataReason(r.detail)).length;
+    const next =
+      failedLookups === 0
+        ? 'their registration agencies publish no retraction data, so they stay unknown (reported, never shown as clear)'
+        : failedLookups === unknown.length
+          ? 'verify and done re-check them'
+          : 'verify and done re-check the failed lookups; a DOI whose agency publishes no retraction data stays unknown';
     err(
       `WARN: retraction status unknown for ${unknown.length} source(s): ${unknown.map((r) => r.citekey).join(', ')} — ` +
-        `${why.length === 1 ? why[0] : why.length > 1 ? `${why[0]} (and ${why.length - 1} other reason(s), see RESEARCH.md)` : 'the lookup failed'}; verify re-checks them.`,
+        `${why.length === 1 ? why[0] : why.length > 1 ? `${why[0]} (and ${why.length - 1} other reason(s), see RESEARCH.md)` : 'the lookup failed'}; ${next}.`,
     );
   }
   out(

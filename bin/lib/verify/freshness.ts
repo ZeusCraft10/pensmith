@@ -26,13 +26,19 @@
 //         (no retraction data for <agency> DOIs)` — reported, never shown as
 //         clean, D-20-13).
 //
-// A key whose LIBRARY.json retraction status is `unknown` (research could not
-// decide it) is RE-CHECKED on every verify (with the rest of the probe) and
-// done (only those keys, before export: runFreshnessForDraft `onlyRecheck`;
-// a retraction found blocks, and done records the answers once it exports),
+// A key whose LIBRARY.json retraction status is `unknown` because a lookup
+// failed is RE-CHECKED on every verify (with the rest of the probe) and done
+// (only those keys, before export: runFreshnessForDraft `onlyRecheck`; a
+// retraction found blocks, and done records the answers once it exports),
 // never from the HTTP cache (`refresh`); a decided answer (clear / retracted)
 // is recorded through the library writer (library.ts recordRetractionStatuses,
-// under its lock).
+// under its lock). A DOI whose agency publishes no retraction data (DataCite,
+// mEDRA, …) stays `unknown` for good: the first re-check records that reason
+// (`no retraction data for <agency> DOIs`, library `retraction_details`) and
+// nothing asks again. done's re-check sends no DOI HEAD (its answer is not
+// used there) and asks doi.org's agency lookup of the prefix (cached) before
+// any registrar, so a second done on an unchanged paper makes no request
+// (VRFY-26, review round 2).
 //
 // SSRF mitigation (T-04-05): the DOI is format-validated via doi.ts BEFORE any
 // request, and the HEAD target is always `https://doi.org/<normalized-doi>`.
@@ -44,6 +50,7 @@ import { networkMode } from '../http-mock.js';
 import { fetchById as retractionWatchFetchById, isRetractionLookupError } from '../sources/retraction-watch.js';
 import { sources } from '../sources/index.js';
 import { registrationAgency } from '../sources/doi-ra.js';
+import { noRetractionDataReason } from '../sources/retraction-cross-check.js';
 import { isDataCiteArxivDoi } from '../full-text.js';
 import { recordRetractionStatuses } from '../library.js';
 import { Semaphore } from '../budget.js';
@@ -70,6 +77,11 @@ export interface FreshnessSource {
   readonly registrar: string | null;
   /** LIBRARY.json records its retraction status as `unknown`: re-check it live, never from the cache. */
   readonly recheck?: boolean;
+  /**
+   * done's re-check (runFreshnessForDraft `onlyRecheck`): the retraction
+   * status only — no DOI HEAD, and the agency from doi.org's prefix lookup.
+   */
+  readonly recheckOnly?: boolean;
 }
 
 export interface FreshnessResult {
@@ -88,8 +100,12 @@ export interface FreshnessResult {
   ok?: Array<{ probe: FreshnessProbe; detail: string }>;
   /** What the table says instead of a probe: no DOI, not in the bib, a retraction status no registrar holds. */
   info?: Array<{ probe: FreshnessProbe; status: string; detail: string }>;
-  /** The live re-check of a status LIBRARY.json records as unknown (VRFY-15). */
-  recheck?: { status: 'clear' | 'retracted' | 'unknown'; details: string | null };
+  /**
+   * The live re-check of a status LIBRARY.json records as unknown (VRFY-15).
+   * `terminal`: an `unknown` that no later check can decide (the agency
+   * publishes no retraction data) — recorded, so nothing asks again.
+   */
+  recheck?: { status: 'clear' | 'retracted' | 'unknown'; details: string | null; terminal?: boolean };
 }
 
 function debug(msg: string): void {
@@ -110,9 +126,17 @@ type Agency = { kind: 'agency'; agency: string } | { kind: 'none'; reason: strin
  * of it (the answer Pass 1 fetched — cache or fixture), else doi.org's agency
  * of the prefix. Never throws.
  */
-async function registrationAgencyOf(doi: string): Promise<Agency> {
+async function registrationAgencyOf(doi: string, prefixFirst = false): Promise<Agency> {
   if (isDataCiteArxivDoi(doi)) return { kind: 'agency', agency: 'DataCite' };
   try {
+    if (prefixFirst) {
+      // done's re-check: doi.org's (cached) agency lookup of the prefix answers
+      // without asking Crossref for a DOI Crossref never registered.
+      const ra = await registrationAgency(doi);
+      if (ra.kind === 'agency') return ra;
+      if (ra.kind === 'unknown-prefix') return { kind: 'none', reason: 'no registration agency holds its prefix — see its Pass-1 row' };
+      return { kind: 'unavailable', note: `the registration agency of ${doi} is unknown: ${cell(ra.reason)} — re-run verify` };
+    }
     const r = await sources.crossref.lookupById(doi);
     if (r.kind === 'found') return { kind: 'agency', agency: 'Crossref' };
     if (r.kind === 'failed') return { kind: 'unavailable', note: `${cell(r.reason)} — re-run verify` };
@@ -167,9 +191,11 @@ export async function probeFreshness(source: FreshnessSource): Promise<Freshness
     return done(null);
   }
 
-  // --- DOI HEAD probe ---
+  // --- DOI HEAD probe (not in done's re-check: its answer is not used there) ---
   const mode = networkMode();
-  if (mode.sourcesOffline) {
+  if (source.recheckOnly === true) {
+    // done's retraction re-check only.
+  } else if (mode.sourcesOffline) {
     // RUN-03: offline never HEADs doi.org and never replays a canned answer.
     skipped.push({ probe: 'DOI HEAD', detail: `skipped (${mode.dryRun ? 'dry-run' : 'offline'})` });
   } else {
@@ -192,7 +218,7 @@ export async function probeFreshness(source: FreshnessSource): Promise<Freshness
     info.push({ probe: 'retraction-watch', status: 'not probed', detail: 'a synthetic --dry-run source' });
     return done(normalized);
   }
-  const agency = await registrationAgencyOf(normalized);
+  const agency = await registrationAgencyOf(normalized, source.recheckOnly === true);
   if (agency.kind === 'skipped') {
     skipped.push({ probe: 'retraction-watch', detail: agency.detail });
     return done(normalized);
@@ -207,8 +233,9 @@ export async function probeFreshness(source: FreshnessSource): Promise<Freshness
     return done(normalized);
   }
   if (!/^crossref$/i.test(agency.agency)) {
-    info.push({ probe: 'retraction-watch', status: 'unknown', detail: `retraction status unknown (no retraction data for ${agency.agency} DOIs)` });
-    if (source.recheck === true) recheck = { status: 'unknown', details: null };
+    info.push({ probe: 'retraction-watch', status: 'unknown', detail: `retraction status unknown (${noRetractionDataReason(agency.agency)})` });
+    // For good: recorded once, never asked again.
+    if (source.recheck === true) recheck = { status: 'unknown', details: noRetractionDataReason(agency.agency), terminal: true };
     return done(normalized);
   }
   try {
@@ -248,10 +275,7 @@ export async function probeFreshnessAll(
   const sem = new Semaphore(5);
   const results = await Promise.all(list.map((s) => sem.withLock(() => probeFreshness(s))));
   if (opts.root !== undefined) {
-    const decided: Record<string, { status: 'clear' | 'retracted'; details: string | null }> = {};
-    for (const r of results) {
-      if (r.recheck !== undefined && r.recheck.status !== 'unknown') decided[r.citekey] = { status: r.recheck.status, details: r.recheck.details };
-    }
+    const decided = decidedRetractions(results);
     if (Object.keys(decided).length > 0) {
       try {
         await recordRetractionStatuses(opts.root, decided);
@@ -261,6 +285,19 @@ export async function probeFreshnessAll(
     }
   }
   return results;
+}
+
+/** What a re-check decided, for the library writer: clear / retracted, and an `unknown` that stays so for good (its reason). */
+export type DecidedRetraction = { status: 'clear' | 'retracted' | 'unknown'; details: string | null };
+
+/** The re-checks worth recording (see the header): every decided status, and a terminal `unknown` with its reason. */
+export function decidedRetractions(results: ReadonlyArray<FreshnessResult>): Record<string, DecidedRetraction> {
+  const decided: Record<string, DecidedRetraction> = {};
+  for (const r of results) {
+    if (r.recheck === undefined) continue;
+    if (r.recheck.status !== 'unknown' || r.recheck.terminal === true) decided[r.citekey] = { status: r.recheck.status, details: r.recheck.details };
+  }
+  return decided;
 }
 
 const PROBE_ORDER: readonly FreshnessProbe[] = ['CITATIONS.bib', 'registrar', 'DOI HEAD', 'retraction-watch'];

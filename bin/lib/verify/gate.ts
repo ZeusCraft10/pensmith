@@ -170,6 +170,8 @@ export interface LoadedBibliography {
   readonly problems: BibEntryProblem[];
   /** Why a CITATIONS.bib that exists could not be read (e.g. `EACCES`); absent when it was read or is missing. */
   readonly unreadable?: string;
+  /** The file's text as read (the bytes the gate judged — done exports exactly these, VRFY-26). */
+  readonly text?: string;
 }
 
 /** Read `<root>/.paper/CITATIONS.bib` entry by entry. Never throws (an unreadable file reads as missing, saying why). */
@@ -183,7 +185,7 @@ export function loadBibliography(root: string): LoadedBibliography {
     return { path, exists: false, entries: [], problems: [], unreadable: (e as NodeJS.ErrnoException).code ?? (e as Error).message };
   }
   const { entries, problems } = parseBibEntries(text);
-  return { path, exists: true, entries, problems };
+  return { path, exists: true, entries, problems, text };
 }
 
 /** Who the text belongs to — it words the remedies. */

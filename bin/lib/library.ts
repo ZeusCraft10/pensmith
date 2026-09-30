@@ -870,15 +870,18 @@ export async function recordLastVerified(
 
 /**
  * Record the outcome of re-checking retraction statuses LIBRARY.json holds as
- * `unknown` (VRFY-15, D-20-13: the freshness pass re-checks every unknown
- * status on each verify and done). Only an `unknown` entry changes: `clear`,
- * or `retracted` with the notice (sticky, as everywhere in the library). An
- * entry already decided is never overwritten here. Same lock and render path
- * as upsertSources; unknown keys are ignored and returned.
+ * `unknown` (VRFY-15, D-20-13: the freshness pass re-checks an unknown status
+ * on each verify and done). Only an `unknown` entry changes: `clear`, or
+ * `retracted` with the notice (sticky, as everywhere in the library), or —
+ * for a DOI whose agency publishes no retraction data — the reason, kept in
+ * `retraction_details` with the status still `unknown`, so nothing re-checks
+ * it again (review round 2). An entry already decided is never overwritten
+ * here. Same lock and render path as upsertSources; unknown keys are ignored
+ * and returned.
  */
 export async function recordRetractionStatuses(
   root: string,
-  outcomes: Readonly<Record<string, { status: 'clear' | 'retracted'; details?: string | null }>>,
+  outcomes: Readonly<Record<string, { status: 'clear' | 'retracted' | 'unknown'; details?: string | null }>>,
 ): Promise<{ updated: string[]; unknown: string[] }> {
   const paths = libraryPaths(root);
   return withLock(paths.library, async () => {
@@ -895,7 +898,12 @@ export async function recordRetractionStatuses(
         continue;
       }
       if (e.retraction_status !== 'unknown') continue;
-      if (o.status === 'retracted') {
+      if (o.status === 'unknown') {
+        // An `unknown` for good (the agency publishes no retraction data): its reason, once.
+        const why = o.details && o.details.trim() ? o.details.trim() : null;
+        if (why === null || e.retraction_details !== null) continue;
+        e.retraction_details = why;
+      } else if (o.status === 'retracted') {
         e.retracted = true;
         e.retraction_status = 'retracted';
         e.retraction_details = e.retraction_details ?? (o.details && o.details.trim() ? o.details.trim() : null);
@@ -1244,6 +1252,12 @@ export async function exportCitedCitations(
   exportDir: string,
   /** The exported files' name stem: `CITATIONS`, or `CITATIONS.dry-run` in a dry run (GRND-19). */
   stem = 'CITATIONS',
+  /**
+   * The bibliography text to export from, in place of reading
+   * `.paper/CITATIONS.bib` again: done passes the bytes its gate judged, so an
+   * edit made while done ran never reaches the export (VRFY-26).
+   */
+  opts: { readonly bibText?: string } = {},
 ): Promise<CitedExportResult> {
   const paths = libraryPaths(root);
   if (path.resolve(exportDir) === path.resolve(paths.dir)) {
@@ -1260,7 +1274,7 @@ export async function exportCitedCitations(
   };
 
   const { bibText, risText } = await withLock(paths.library, async () => ({
-    bibText: await readText(paths.bib),
+    bibText: opts.bibText ?? (await readText(paths.bib)),
     risText: await readText(paths.ris),
   }));
 

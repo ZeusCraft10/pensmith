@@ -52,7 +52,7 @@ import { resolveDiscipline } from './disciplines.js';
 import { redactPii } from './pii.js';
 import { networkMode } from './http-mock.js';
 import { sourcePolicyFrom } from './source-policy.js';
-import { crossCheckRetractions, retractionCheckReason, type RetractionLookup } from './sources/retraction-cross-check.js';
+import { crossCheckRetractions, isNoRetractionDataReason, retractionCheckReason, type RetractionLookup } from './sources/retraction-cross-check.js';
 import { enrichOpenAccess, describeOpenAccess } from './open-access.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 import { refreshResearchSources, formatReference } from './research-md.js';
@@ -374,7 +374,7 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
     `- New to LIBRARY.json: ${newToLibrary.length > 0 ? newToLibrary.join(', ') : '(none)'}`,
     ...(retracted.length > 0 ? [`- RETRACTED (kept in LIBRARY.json, not assigned — Pass 1 blocks a citation of it): ${retracted.map((r) => r.key).join(', ')}`] : []),
     ...(unknown.length > 0
-      ? [`- Retraction status unknown (re-checked at verify time): ${unknown.map((u) => `${u.key}${u.reason ? ` — ${oneLine(u.reason)}` : ''}`).join('; ')}`]
+      ? [`- Retraction status unknown (a failed lookup is re-checked at verify and done; an agency with no retraction data stays unknown): ${unknown.map((u) => `${u.key}${u.reason ? ` — ${oneLine(u.reason)}` : ''}`).join('; ')}`]
       : []),
     ...(notAdded.length > 0 ? ['- Not added:', ...notAdded.map((x) => `  - ${x}`)] : []),
   ];
@@ -394,7 +394,16 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
     );
   }
   if (unknown.length > 0) {
-    err(`WARN: retraction status unknown for ${unknown.length} source(s): ${unknown.map((u) => u.key).join(', ')} — the lookup failed; verify re-checks them.`);
+    const failed = unknown.filter((u) => !isNoRetractionDataReason(u.reason));
+    const agencies = unknown.length - failed.length;
+    err(
+      `WARN: retraction status unknown for ${unknown.length} source(s): ${unknown.map((u) => u.key).join(', ')} — ` +
+        [
+          ...(failed.length > 0 ? [`${failed.length === unknown.length ? 'the lookup failed' : `${failed.length} failed lookup(s)`}; verify and done re-check them`] : []),
+          ...(agencies > 0 ? [`${agencies} registered with an agency that publishes no retraction data (reported, never shown as clear)`] : []),
+        ].join('; ') +
+        '.',
+    );
   }
   out(
     `${label}: added ${added.length} source(s) to section ${id}'s assigned_sources` +

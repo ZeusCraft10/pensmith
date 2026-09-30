@@ -29,6 +29,7 @@ import { withLock } from './lock.js';
 import { libraryPaths, tryLoadLibrary } from './library.js';
 import type { LibraryEntry } from './schemas/library.js';
 import { lookupTable } from './lookup-table.js';
+import { isNoRetractionDataReason } from './sources/retraction-cross-check.js';
 
 /**
  * The line that ends the generated research log. Identical to (and asserted
@@ -187,9 +188,11 @@ export function renderSourcesBlock(entries: readonly LibraryEntry[]): string {
       // D-20-13: another agency's DOI has no retraction data (the reason is
       // recorded); otherwise the lookup failed. Either way: never "clear".
       lines.push(
-        e.retraction_details
-          ? `  - Retraction: retraction status unknown (${oneLine(e.retraction_details)}; it is re-checked at verify time)`
-          : '  - Retraction: retraction status unknown (the lookup failed; it is re-checked at verify time)',
+        isNoRetractionDataReason(e.retraction_details)
+          ? `  - Retraction: retraction status unknown (${oneLine(e.retraction_details ?? '')}; reported at verify, never shown as clear)`
+          : e.retraction_details
+            ? `  - Retraction: retraction status unknown (${oneLine(e.retraction_details)}; it is re-checked at verify and done)`
+            : '  - Retraction: retraction status unknown (the lookup failed; it is re-checked at verify and done)',
       );
     }
     if (!e.hydrated) {

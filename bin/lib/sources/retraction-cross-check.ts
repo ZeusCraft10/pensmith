@@ -68,6 +68,16 @@ export function noRetractionDataReason(agency: string): string {
   return `no retraction data for ${agency} DOIs`;
 }
 
+/**
+ * True for a recorded `retraction_details` that says the DOI's agency
+ * publishes no retraction data (noRetractionDataReason): the status stays
+ * `unknown` for good, so nothing re-checks it (review round 2) — only a failed
+ * lookup is worth asking again.
+ */
+export function isNoRetractionDataReason(details: string | null | undefined): boolean {
+  return typeof details === 'string' && /^no retraction data for .+ DOIs$/.test(details.trim());
+}
+
 /** The registrar adapters whose own record says who registered its DOI. */
 const AGENCY_OF_SOURCE: Readonly<Record<string, string>> = { crossref: 'Crossref', datacite: 'DataCite' };
 

@@ -30,6 +30,7 @@
 import { execFile } from 'node:child_process';
 import * as fsp from 'node:fs/promises';
 import { existsSync, statSync } from 'node:fs';
+import os from 'node:os';
 import path, { basename, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -421,6 +422,15 @@ export interface ExportOptions {
    *  is skipped entirely (back-compat: existing callers without style pass through
    *  unchanged). */
   style?: string;
+  /**
+   * The exact markdown to export, in place of reading `inputPath` again (which
+   * then only names the export): done passes the text its gate judged, so an
+   * edit made while done ran — a sync client, an editor, the user at the
+   * confirmation — never reaches the export ungated (VRFY-26).
+   */
+  text?: string;
+  /** The bibliography text the gate judged (exportCitedCitations `bibText`). */
+  bibText?: string;
 }
 
 /**
@@ -753,12 +763,28 @@ function buildPandocArgs(
  * both style and bibCopied are true. (REND-01/02)
  */
 export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
-  const { inputPath, format } = opts;
+  if (opts.text === undefined) return exportDraftFrom(opts, opts.inputPath);
+  // The exact text given: pandoc reads it from a private copy (same file name),
+  // every other path reads the string itself.
+  const dir = await fsp.mkdtemp(join(os.tmpdir(), 'pensmith-export-'));
+  try {
+    const copy = join(dir, basename(opts.inputPath));
+    await atomicWriteFile(copy, opts.text);
+    return await exportDraftFrom(opts, copy);
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** exportDraft reading `source` (the draft itself, or the private copy of the text it was given). */
+async function exportDraftFrom(opts: ExportOptions, source: string): Promise<ExportResult> {
+  const { format } = opts;
+  const inputPath = source;
   const exportDir = opts.outputDir ?? join(paperDir(opts.paperRoot), 'export');
   await fsp.mkdir(exportDir, { recursive: true });
 
   const pandoc = opts.pandocPresent ?? isPandocPresent();
-  const stem = exportStem(inputPath);
+  const stem = exportStem(opts.inputPath);
 
   // DONE-08 — write the bibliography into the export dir BEFORE any pandoc
   // shellout (Pitfall-4: --bibliography bibDst must resolve at pandoc call
@@ -769,7 +795,7 @@ export async function exportDraft(opts: ExportOptions): Promise<ExportResult> {
   // GRND-19: under --dry-run every exported file is named `.dry-run`
   // (`CITATIONS.dry-run.bib` / `.ris`), like the document.
   const bibStem = exportStem('CITATIONS.bib');
-  const citations = await exportCitedCitations(opts.paperRoot ?? projectRoot(), cited, exportDir, bibStem);
+  const citations = await exportCitedCitations(opts.paperRoot ?? projectRoot(), cited, exportDir, bibStem, opts.bibText !== undefined ? { bibText: opts.bibText } : {});
   if (citations.missing.length > 0) {
     process.stderr.write(
       `pensmith export: WARN — cited key(s) not in .paper/CITATIONS.bib: ${citations.missing.join(', ')}\n`,

@@ -56,6 +56,13 @@ interface Counts {
   crossref: number;
   unpaywall: number;
   pdf: number;
+  /** doi.org: the freshness HEAD of a DOI and the agency lookup of a prefix (review round 2: counted too). */
+  doi: number;
+}
+
+/** The sha256 of a string (UTF-8). */
+function sha256Of(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
 function sha(p: string): string {
@@ -63,7 +70,7 @@ function sha(p: string): string {
 }
 
 /** Answer every registrar and open-access host the paper reaches, counting requests. */
-function arm(agent: Agent, works: readonly Work[], pdf: Buffer, counts: Counts): void {
+function arm(agent: Agent, works: readonly Work[], pdf: Buffer, counts: Counts, onSearch?: () => void): void {
   const crossref = agent.get('https://api.crossref.org');
   for (const w of works) {
     crossref
@@ -110,9 +117,24 @@ function arm(agent: Agent, works: readonly Work[], pdf: Buffer, counts: Counts):
       return { statusCode: 200, data: pdf, responseOptions: { headers: { 'content-type': 'application/pdf' } } };
     })
     .persist();
-  // The advisory freshness probe (DOI HEAD) and the plagiarism phrase search.
-  agent.get('https://doi.org').intercept({ path: /.*/, method: 'HEAD' }).reply(302, '', { headers: { location: 'https://publisher.example/' } }).persist();
-  agent.get('https://html.duckduckgo.com').intercept({ path: /.*/, method: /GET|POST/ }).reply(200, '<html><body></body></html>', { headers: { 'content-type': 'text/html' } }).persist();
+  // The advisory freshness probe (DOI HEAD) — counted: compile and done send none.
+  agent
+    .get('https://doi.org')
+    .intercept({ path: /.*/, method: 'HEAD' })
+    .reply(() => {
+      counts.doi += 1;
+      return { statusCode: 302, data: '', responseOptions: { headers: { location: 'https://publisher.example/' } } };
+    })
+    .persist();
+  // The plagiarism phrase search (`onSearch` runs while done waits for it).
+  agent
+    .get('https://html.duckduckgo.com')
+    .intercept({ path: /.*/, method: /GET|POST/ })
+    .reply(() => {
+      onSearch?.();
+      return { statusCode: 200, data: '<html><body></body></html>', responseOptions: { headers: { 'content-type': 'text/html' } } };
+    })
+    .persist();
 }
 
 /** Run `fn` with the verb's stdout lines captured (the TAP stream passes through). */
@@ -165,7 +187,7 @@ test('VRFY-19 / VRFY-25 / VRFY-26 / VRFY-28: a wave verify records every last_ve
       const body = i === 0 ? `One study reports that "${QUOTE}" [@${works[i]!.key}].` : `Canopy cover matters for heat in cities [@${works[i]!.key}].`;
       writeFileSync(join(sectionDirOf(sb.root, s.n, s.slug), 'DRAFT.md'), `# Section ${s.n}\n\n${body}\n`);
     }
-    const counts: Counts = { crossref: 0, unpaywall: 0, pdf: 0 };
+    const counts: Counts = { crossref: 0, unpaywall: 0, pdf: 0, doi: 0 };
     const libPath = join(sb.paper, 'LIBRARY.json');
     const bibPath = join(sb.paper, 'CITATIONS.bib');
 
@@ -236,6 +258,113 @@ test('VRFY-19 / VRFY-25 / VRFY-26 / VRFY-28: a wave verify records every last_ve
       assert.deepEqual(counts, mid, 'within 7 days: served from the cache');
       await withClock(plus(newest, 8), done);
       assert.ok(counts.crossref > mid.crossref, `past 7 days: re-fetched ${JSON.stringify(counts)}`);
+    }, { contactEmail: EMAIL });
+  });
+});
+
+test('VRFY-26 (review round 2): done exports the bytes its gate judged — a DRAFT.md and a CITATIONS.bib written while done runs (here: during the plagiarism queries) never reach the export', async () => {
+  const pdf = await textPdf(TEXT);
+  await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1' } }, async (sb) => {
+    const w: Work = { key: 'work1', doi: `10.5555/${uniq('toctou')}`, title: 'Urban Canopy and Heat, Part One', family: 'Doe' };
+    await upsertSources(
+      sb.root,
+      [{ source: 'crossref', id: w.doi, doi: w.doi, title: w.title, authors: [`${w.family}, Ann`], year: 2020, retracted: false, last_verified: null, citekey: w.key, raw: null } as unknown as SourceCandidate],
+      { provenance: 'add' },
+    );
+    writeState(sb.root, [{ n: 1, slug: 's1' }]);
+    writeOutline(sb.root, [{ n: 1, slug: 's1', sources: [w.key] }]);
+    writePlan(sb.root, 1, 's1', { status: 'written', assigned_sources: `[${w.key}]` });
+    writeFileSync(join(sectionDirOf(sb.root, 1, 's1'), 'DRAFT.md'), `# Section 1\n\nCanopy cover matters for heat in cities [@${w.key}].\n`);
+    const counts: Counts = { crossref: 0, unpaywall: 0, pdf: 0, doi: 0 };
+    const draftPath = join(sb.paper, 'DRAFT.md');
+    const bibPath = join(sb.paper, 'CITATIONS.bib');
+    let armed = false;
+    let tampered = 0;
+    // A sync client (or an editor) writes the compiled draft and the bibliography while done runs its plagiarism queries.
+    const tamper = (): void => {
+      if (!armed || tampered++ > 0) return;
+      writeFileSync(draftPath, `${readFileSync(draftPath, 'utf8')}\nA fabricated survey agrees [@fake2099]. See also (Nguyen & Patel, 2019).\n`);
+      writeFileSync(bibPath, `${readFileSync(bibPath, 'utf8')}\n@article{fake2099, title = {Fabricated}, author = {Nobody, Nora}, year = {2099}}\n`);
+    };
+    await liveLane(async (agent) => {
+      arm(agent, [w], pdf, counts, tamper);
+      const { verifySection } = await import('../bin/cli/verify.js');
+      const { compileCommand } = await import('../bin/cli/compile.js');
+      const { doneCommand } = await import('../bin/cli/done.js');
+      const v = await quiet(() => verifySection(1, 's1', null));
+      assert.equal(v.result.status, 'verified', v.out);
+      const c = await quiet(() => compileCommand.run!({ args: { yolo: true } } as never));
+      assert.notEqual((c.result as { refused?: boolean }).refused, true, c.out);
+      const gated = readFileSync(draftPath, 'utf8');
+
+      const stderr: string[] = [];
+      const origErr = process.stderr.write.bind(process.stderr);
+      process.stderr.write = ((chunk: string | Uint8Array) => {
+        stderr.push(String(chunk));
+        return true;
+      }) as typeof process.stderr.write;
+      armed = true;
+      let d: { result: unknown; out: string };
+      try {
+        d = await quiet(() => doneCommand.run!({ args: { yolo: true, raw: true, format: 'md' } } as never));
+      } finally {
+        process.stderr.write = origErr;
+      }
+      assert.ok(tampered > 0, 'the files were written while done ran');
+      assert.equal((d.result as { ok?: boolean }).ok, true, d.out);
+      const exported = readFileSync(join(sb.paper, 'export', 'DRAFT.md'), 'utf8');
+      assert.doesNotMatch(exported, /fake2099|Nguyen/, 'the export holds only the gated text');
+      assert.match(exported, /Canopy cover matters for heat in cities/);
+      assert.doesNotMatch(readFileSync(join(sb.paper, 'export', 'CITATIONS.bib'), 'utf8'), /fake2099/, 'the exported bibliography is the gated one');
+      assert.equal(readFileSync(join(sb.paper, 'FINAL.md'), 'utf8'), gated, 'FINAL.md is the text done checked');
+      assert.match(stderr.join(''), /pensmith done: WARN — \.paper\/DRAFT\.md and \.paper\/CITATIONS\.bib changed while done ran; the export holds the text done checked/);
+      const report = readFileSync(join(sb.paper, 'VERIFICATION.md'), 'utf8');
+      assert.ok(report.includes(`Text checked: .paper/DRAFT.md (sha256 ${sha256Of(gated)})`), 'the report names the exported bytes');
+    }, { contactEmail: EMAIL });
+  });
+});
+
+test('VRFY-15 / VRFY-26 (review round 2): done\'s retraction re-check sends no DOI HEAD, asks the prefix\'s agency before any registrar, and records a DataCite DOI\'s status as unknown for good — a second done asks nothing', async () => {
+  await withLlmSandbox({ mock: false, env: { PENSMITH_NO_LLM: '1' } }, async (sb) => {
+    const doi = '10.5281/zenodo.1234567';
+    await upsertSources(
+      sb.root,
+      [{ source: 'datacite', id: doi, doi, title: 'A dataset of things', authors: ['Doe, Ann'], year: 2020, retracted: false, retraction_status: 'unknown', last_verified: null, citekey: 'doe2020', raw: null } as unknown as SourceCandidate],
+      { provenance: 'add' },
+    );
+    const counts = { head: 0, crossref: 0, ra: 0 };
+    await liveLane(async (agent) => {
+      agent.get('https://api.crossref.org').intercept({ path: /.*/, method: 'GET' }).reply(() => {
+        counts.crossref += 1;
+        return { statusCode: 404, data: 'Resource not found.' };
+      }).persist();
+      agent
+        .get('https://doi.org')
+        .intercept({ path: /^\/ra\//, method: 'GET' })
+        .reply(() => {
+          counts.ra += 1;
+          return { statusCode: 200, data: JSON.stringify([{ DOI: '10.5281', RA: 'DataCite' }]), responseOptions: JSON_HEADERS };
+        })
+        .persist();
+      agent.get('https://doi.org').intercept({ path: /.*/, method: 'HEAD' }).reply(() => {
+        counts.head += 1;
+        return { statusCode: 302, data: '', responseOptions: { headers: { location: 'https://zenodo.org/x' } } };
+      }).persist();
+      const { recheckUnknownRetractions } = await import('../bin/cli/done.js');
+      const { recordRetractionStatuses } = await import('../bin/lib/library.js');
+      const text = 'A claim [@doe2020].\n';
+      const first = await recheckUnknownRetractions(sb.root, text);
+      assert.deepEqual(first.retracted, []);
+      assert.deepEqual(first.decided, { doe2020: { status: 'unknown', details: 'no retraction data for DataCite DOIs' } });
+      assert.deepEqual(counts, { head: 0, crossref: 0, ra: 1 }, 'the prefix\'s agency only: no DOI HEAD, no Crossref lookup');
+      // done records the answers once it exports.
+      await recordRetractionStatuses(sb.root, first.decided);
+      const e = (await tryLoadLibrary(sb.root))?.entries.find((x) => x.citekey === 'doe2020');
+      assert.equal(e?.retraction_status, 'unknown', 'never "clear"');
+      assert.equal(e?.retraction_details, 'no retraction data for DataCite DOIs');
+      const second = await recheckUnknownRetractions(sb.root, text);
+      assert.deepEqual(second, { retracted: [], decided: {} });
+      assert.deepEqual(counts, { head: 0, crossref: 0, ra: 1 }, 'a second done asks nothing');
     }, { contactEmail: EMAIL });
   });
 });
