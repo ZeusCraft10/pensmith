@@ -25,10 +25,13 @@
 // Non-Latin surnames (review round 1 of the Phase 18/19 merge): a Cyrillic or
 // Greek surname is transliterated (a fixed letter table, below) before the
 // [a-z] filter, so `Эсенаманов, Байэл` keys as `esenamanov2025`, not
-// `anon2025`; so are the Latin letters Unicode does not decompose (ß, æ, ø,
-// ł, đ, þ, …). A script with no table here (CJK, Arabic, Hebrew, …) still
-// falls back to 'anon' — the key stays valid; only its readability suffers.
-// Existing keys never change (library.ts): this applies to new entries only.
+// `anon2025`. Latin letters are left as they were (a letter Unicode does not
+// decompose — ł, ø, ß — is still dropped), so every key a Latin-script name
+// produced before stays the same: recorded research runs (the e2e corpus's
+// evaluator script) name candidates by these keys. A script with no table
+// here (CJK, Arabic, Hebrew, …) still falls back to 'anon' — the key stays
+// valid; only its readability suffers. Existing library keys never change
+// (library.ts): this applies to new entries only.
 
 import { firstAuthorSurname } from './author-normalize.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
@@ -39,9 +42,8 @@ export const CITEKEY_RE = /^[a-z][a-z0-9_-]*$/;
 /**
  * Latin letters for Cyrillic (Russian, Ukrainian, Belarusian, Serbian,
  * Macedonian, Kazakh, Kyrgyz) and Greek, lower case and after the combining
- * marks are stripped (author-normalize.ts: й → и, ά → α), plus the Latin
- * letters NFKD leaves whole. A simplified ISO 9 / ELOT 743 romanisation — for
- * a readable key, not a scholarly transliteration.
+ * marks are stripped (author-normalize.ts: й → и, ά → α). A simplified ISO 9 /
+ * ELOT 743 romanisation — for a readable key, not a scholarly transliteration.
  */
 const TRANSLITERATION: Readonly<Record<string, string>> = Object.freeze({
   а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ж: 'zh', з: 'z', и: 'i', к: 'k', л: 'l', м: 'm',
@@ -51,7 +53,6 @@ const TRANSLITERATION: Readonly<Record<string, string>> = Object.freeze({
   ә: 'a', ғ: 'g', қ: 'k', ң: 'n', ө: 'o', ұ: 'u', ү: 'u', һ: 'h',
   α: 'a', β: 'v', γ: 'g', δ: 'd', ε: 'e', ζ: 'z', η: 'i', θ: 'th', ι: 'i', κ: 'k', λ: 'l', μ: 'm',
   ν: 'n', ξ: 'x', ο: 'o', π: 'p', ρ: 'r', σ: 's', ς: 's', τ: 't', υ: 'y', φ: 'f', χ: 'ch', ψ: 'ps', ω: 'o',
-  ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', ł: 'l', đ: 'd', ð: 'd', þ: 'th', ı: 'i', ŋ: 'n', ħ: 'h',
 });
 
 /** Greek vowel pairs romanised as one sound (ELOT 743), applied before the letter table. */
