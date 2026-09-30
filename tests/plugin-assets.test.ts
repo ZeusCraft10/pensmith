@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -37,8 +37,13 @@ import { EXPECTED_PROMPT_HASHES, loadPrompt } from '../bin/lib/prompt-loader.js'
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MANIFEST = path.join('.claude-plugin', 'plugin.json');
 
+/**
+ * A temp dir by its real path: Node loads an ES module under its real path, so
+ * a module's import.meta.url — and so the resolver's walk — names /private/var
+ * on macOS (where tmpdir() is /var/…) and long names on Windows.
+ */
 function tmp(prefix: string): string {
-  return mkdtempSync(path.join(tmpdir(), prefix));
+  return realpathSync(mkdtempSync(path.join(tmpdir(), prefix)));
 }
 
 function writeManifest(pluginDir: string): void {
