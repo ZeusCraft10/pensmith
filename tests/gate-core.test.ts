@@ -203,12 +203,14 @@ test('gate core: an acceptance lifts ONLY a recomputed UNVERIFIABLE-QUOTE with t
   // Unaccepted, it blocks with the three remedies.
   const open = await run('UNVERIFIABLE-QUOTE', []);
   assert.deepEqual(open.outcome, { status: 'unverifiable', blocked: true });
-  assert.match(gateRefusals(open, { kind: 'section', id: '1' })[0] ?? '', /`pensmith add <pdf>`.*`pensmith plan 1 --revise`.*`pensmith verify 1 --accept-quote q1`/);
+  assert.match(gateRefusals(open, { kind: 'section', id: '1' })[0] ?? '', /`pensmith add <pdf>`.*paraphrase the quote \(re-draft with `pensmith write 1`, or edit the section's DRAFT\.md and run `pensmith verify 1`\).*`pensmith verify 1 --accept-quote q1`/);
+  // Review round 2: `plan N --revise` repairs a flagged citekey and cannot paraphrase a quote — it is never named for one.
+  assert.doesNotMatch(gateRefusals(open, { kind: 'section', id: '1' })[0] ?? '', /--revise/);
   // At paper scope the paper-wide id is not the section's: the remedy names the quote's own section and id.
   const paperWide = gateRefusals(open, { kind: 'paper', quoteSections: new Map([[quoteTextSha256(quote), { section: '2', id: 'q3' }]]) })[0] ?? '';
   assert.match(paperWide, /^quote q1 \(§2's q3\) /);
-  assert.match(paperWide, /`pensmith plan 2 --revise`.*`pensmith verify 2 --accept-quote q3`/);
-  assert.doesNotMatch(paperWide, /<N>|--accept-quote q1/);
+  assert.match(paperWide, /`pensmith write 2`.*`pensmith verify 2`.*`pensmith verify 2 --accept-quote q3`/);
+  assert.doesNotMatch(paperWide, /<N>|--accept-quote q1|--revise/);
   // A quote in no section draft (added after compile) has nothing to accept it in.
   assert.match(gateRefusals(open, { kind: 'paper' })[0] ?? '', /it is in no section draft: remove it/);
   // A changed draft (hash) voids it.

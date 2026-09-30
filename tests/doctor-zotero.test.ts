@@ -8,13 +8,16 @@
 //     local (project entry) in $CLAUDE_CONFIG_DIR/.claude.json, the project's
 //     .mcp.json, the legacy mcp_servers.json files — in the JSON shapes
 //     `claude mcp add` writes; detected-but-no-key is "not authenticated";
+//   - a local-scope entry matches the project in either spelling: the realpath
+//     Claude Code keys it by (macOS /var → /private/var, a symlinked folder)
+//     or the path pensmith was handed;
 //   - nothing configured → `Zotero: not detected`, with real fix links.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { installMockAgent, type InstalledMockAgent } from './helpers/local-servers/mock-agent.js';
 import { zoteroMcpPresenceProbe, ZOTERO_MCP_SERVER_REPO } from '../bin/lib/doctor/probes/zotero-mcp-presence.js';
 import { detectZoteroMcpServers } from '../bin/lib/ecosystem-presence.js';
@@ -138,6 +141,49 @@ test('SRC-16: a server added with `claude mcp add` (local scope: the project ent
     assert.match(r.summary, /^Zotero: MCP server detected — not authenticated for the CLI/);
     assert.match(r.detail ?? '', /^MCP server: detected — "zotero" \(local scope, /m);
     assert.equal((await loadCapabilityFacts()).zotero_mcp, true, 'paper://capabilities reports the same fact');
+  });
+});
+
+test('SRC-16: a project reached through a symlink matches its local-scope entry in either spelling (the realpath `claude mcp add` writes, or the linked path)', async () => {
+  await isolated({}, async (e) => {
+    // <base>/repo is a repository and <base>/shortcut links to <base>/repo/papers,
+    // so <base>/shortcut/p1 is the folder <base>/repo/papers/p1 reached through
+    // the link — as a macOS temp folder under /var is /private/var/… .
+    const base = dirname(e.project);
+    const repo = join(base, 'repo');
+    const real = join(repo, 'papers', 'p1');
+    mkdirSync(join(repo, '.git'), { recursive: true });
+    mkdirSync(real, { recursive: true });
+    const shortcut = join(base, 'shortcut');
+    symlinkSync(join(repo, 'papers'), shortcut, 'junction'); // a junction on Windows, a symlink elsewhere
+    const linked = join(shortcut, 'p1');
+    const claudeJson = join(e.config, '.claude.json');
+    const keyedBy = (key: string): Promise<void> =>
+      atomicWriteFile(claudeJson, JSON.stringify({ projects: { [key]: { mcpServers: { zotero: STDIO('npx', ['-y', 'zotero-mcp']) } } } }));
+    const found = (root: string): string[][] => detectZoteroMcpServers(root).servers.map((s) => [s.name, s.scope]);
+
+    // What Claude Code writes inside a repository: the realpath of its root
+    // (`claude mcp add` run from <link>/proj/sub keys <real>/proj).
+    await keyedBy(realpathSync.native(repo));
+    assert.deepEqual(found(real), [['zotero', 'local']], 'the real folder');
+    assert.deepEqual(found(linked), [['zotero', 'local']], 'the folder through the link: the repository is an ancestor of its realpath only');
+    // Outside a repository Claude Code keys the working directory's realpath.
+    await keyedBy(realpathSync.native(real));
+    assert.deepEqual(found(linked), [['zotero', 'local']]);
+    // An entry that keeps the linked spelling (written by hand, or by a client that does not resolve links).
+    await keyedBy(linked);
+    assert.deepEqual(found(real), [['zotero', 'local']]);
+    assert.deepEqual(found(realpathSync.native(real)), [['zotero', 'local']]);
+    // Another folder under the same link is still another project.
+    await keyedBy(join(shortcut, 'p2'));
+    assert.deepEqual(found(linked), []);
+
+    // The doctor and paper://capabilities, handed the linked path, see the entry Claude Code wrote.
+    await keyedBy(realpathSync.native(real));
+    process.env['PENSMITH_PAPER_ROOT'] = linked;
+    const r = await zoteroMcpPresenceProbe.run();
+    assert.match(r.summary, /^Zotero: MCP server detected — not authenticated for the CLI/);
+    assert.equal((await loadCapabilityFacts()).zotero_mcp, true);
   });
 });
 

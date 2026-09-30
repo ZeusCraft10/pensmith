@@ -115,6 +115,7 @@ import {
   type LogRetraction,
 } from '../lib/research-orchestrator.js';
 import type { AdapterPlan } from '../lib/adapter-plan.js';
+import { out as writeOut } from '../lib/output-sink.js';
 
 /** An expected research failure: one line, exit 1 (D-19-27). */
 export class ResearchError extends PensmithError {
@@ -147,7 +148,7 @@ export interface ResearchIo {
 }
 
 const STD_IO: ResearchIo = {
-  out: (line) => void process.stdout.write(`${line}\n`),
+  out: (line) => writeOut(`${line}\n`),
   err: (line) => void process.stderr.write(`${line}\n`),
 };
 

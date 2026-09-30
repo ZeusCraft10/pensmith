@@ -3,11 +3,13 @@
 //
 // Wraps proper-lockfile@^4 (battle-tested, used by npm/yarn).
 //
-// CJS-shim necessity (RESEARCH §Key Finding #4 — BLOCKING):
-//   `import lockfile from 'proper-lockfile'` raises ERR_REQUIRE_ESM under
-//   tsx + node:test in this project's "type":"module" mode. proper-lockfile
-//   ships only CommonJS; the createRequire pattern below is the ONLY way to
-//   import it under our toolchain.
+// Importing proper-lockfile (CommonJS-only): a static namespace import. Node
+//   and tsx expose its `module.exports.lock/unlock/check` as named exports
+//   (as bin/lib/handoff.ts relies on too), and esbuild inlines it into the
+//   committed plugin bundles (PLUG-02). The former `createRequire(import.meta
+//   .url)` shim resolved the package at runtime next to the bundle, where a
+//   git-marketplace install has no node_modules, so the bundled MCP server
+//   could not start.
 //
 // Lock dir (D-40 — OneDrive non-negotiable):
 //   Locks live in pensmithLockDir() (`%LOCALAPPDATA%\pensmith\locks` on
@@ -60,22 +62,15 @@
 //   - isLocked(resource)              — non-destructive check
 //   - lockOwner(resource)             — the holder record, or null
 
-import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
+import * as lockfile from 'proper-lockfile';
 import { pensmithLockDir, realpathNearest } from './paths.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { PensmithError, EXIT_ERROR } from './exit-codes.js';
-
-// CJS-shim — see "BLOCKING" note above. proper-lockfile is CommonJS-only.
-// The `as typeof import('proper-lockfile')` cast is a type-only operation
-// (TypeScript's `typeof import(...)` is the module's type signature) and
-// does not introduce a runtime ESM import.
-const require_ = createRequire(import.meta.url);
-const lockfile = require_('proper-lockfile') as typeof import('proper-lockfile');
 
 export interface LockOptions {
   /** Max wait before LockTimeoutError, queue wait included (ms). Default 60_000. */

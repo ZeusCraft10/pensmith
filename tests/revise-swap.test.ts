@@ -328,6 +328,25 @@ test('revise (review round 3): a real citekey shaped like a line number (L12, L1
   assert.equal(firstFailingCitation(md)?.citekey, 'L12');
 });
 
+test('revise (Phase 20 + 23a merge, review round 2): a bibliography entry\'s UNPARSEABLE row is still a citation revise repairs; an UNVERIFIABLE-QUOTE is named with the routes that paraphrase it', async () => {
+  const bibRow = '- brown2018: **UNPARSEABLE** — titleJW=n/a, authorJW=n/a — the CITATIONS.bib entry brown2018 (line 4) does not parse';
+  assert.deepEqual(failingCitations(bibRow).map((f) => f.citekey), ['brown2018'], "a bibliography entry's UNPARSEABLE row is keyed by its citekey");
+
+  const { root } = seedFixture();
+  const quoteRow = '- smith2020 [q1] ("the quick brown fox jumps…"): **UNVERIFIABLE-QUOTE** — lev=0.000 — no open-access copy';
+  const acceptedRow = '- smith2020 [q2] ("a second quoted sentence…"): **UNVERIFIABLE-QUOTE** — lev=0.000 — no open-access copy — accepted by you 2026-09-30T10:00:00.000Z (--accept-quote)';
+  writeFileSync(targetVerifPath(root), ['# VERIFICATION (Section 2, target)', '', 'Status: unverifiable', '', '## Pass-3', '', quoteRow, acceptedRow, ''].join('\n'));
+  const before = readFileSync(targetDraftPath(root), 'utf8');
+  const res = await runRevise({ paperRoot: root, n: 2, slug: 'target', yolo: true, proposeSwap: () => Promise.reject(new Error('no model call expected')) });
+  assert.equal(res.accepted, false);
+  assert.match(
+    res.message,
+    /^No FABRICATED\/MIS-CITED\/NOT_FOUND citation \(nor RETRACTED, UNASSIGNED, UNPARSEABLE or UNRESOLVABLE\) in section 2\. revise cannot paraphrase quote\(s\) q1, which no source text could be checked against: paraphrase \(re-draft with `pensmith write 2`, or edit DRAFT\.md and run `pensmith verify 2`\), add the source's PDF \(`pensmith add <pdf>`\), or accept a quote \(`pensmith verify 2 --accept-quote q1`\)\.$/,
+    'the accepted quote q2 is not named',
+  );
+  assert.equal(readFileSync(targetDraftPath(root), 'utf8'), before, 'DRAFT.md unchanged');
+});
+
 // ===========================================================================
 // 5. runRevise has no research branch any more (GRND-17 moved it to
 //    bin/lib/section-research.ts): the options it accepts are the swap loop's.

@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { hasTextStub, loadTextStubs, proseWordCount, textStub, TEXT_STUBS_PATH, hintsFromMessages } from '../bin/lib/llm-text-stubs.js';
+import { hasTextStub, loadTextStubs, proseWordCount, textStub, textStubsPath, hintsFromMessages } from '../bin/lib/llm-text-stubs.js';
 import { hasStructuredStub } from '../bin/lib/llm-stubs.js';
 import { SLUG_NAMES, slugSpec } from '../bin/lib/llm-models.js';
 import { buildPromptRequest, type PromptJson } from '../bin/lib/prompt-request.js';
@@ -56,12 +56,12 @@ test('GRND-19: every text slug has a text stub and every structured slug a struc
   assert.throws(() => textStub('outline-author', []), /no text stub/);
 });
 
-test('GRND-19: the stub prose file validates and ships under templates/', () => {
+test('GRND-19: the stub prose file validates and ships under plugin/templates/ (PLUG-02)', () => {
   const data = loadTextStubs();
   assert.ok(data['section-drafter'].cited.every((s) => s.includes('{cite}')));
-  assert.equal(path.relative(REPO, TEXT_STUBS_PATH).split(path.sep).join('/'), 'templates/stubs/text-stubs.json');
+  assert.equal(path.relative(REPO, textStubsPath()).split(path.sep).join('/'), 'plugin/templates/stubs/text-stubs.json');
   const pkg = JSON.parse(readFileSync(path.join(REPO, 'package.json'), 'utf8')) as { files: string[] };
-  assert.ok(pkg.files.includes('templates/'), 'templates/ (and so templates/stubs/) is in the published files');
+  assert.ok(pkg.files.includes('plugin/'), 'plugin/ (and so plugin/templates/stubs/) is in the published files');
   // The drafter prose never quotes: no double quotes anywhere in the data file's drafter entry.
   assert.doesNotMatch(JSON.stringify(data['section-drafter']).replace(/\\"/g, ''), /[“”]/);
   for (const s of [...data['section-drafter'].cited, ...data['section-drafter'].filler]) assert.ok(!s.includes('"'), s);

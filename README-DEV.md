@@ -6,9 +6,11 @@
 
 Node **≥ 22.12** (`engines.node`); CI runs the Node 22 and 24 LTS lines on Ubuntu, macOS arm64 and Windows. `@types/node` tracks the floor (`^22`). The lockfile is committed and CI installs with `npm ci`, so a dependency change is `npm install <pkg>` plus the regenerated `package-lock.json` in the same commit.
 
-## Build-first dependency
+## The plugin needs no build; the CLI and the tests do
 
-`.mcp.json` references `${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.js`. A fresh git clone has no `dist/` (it is `.gitignore`'d per D-22). Before loading the plugin, running the manifest validator, or running the tests that spawn the built CLI, run:
+The Claude Code plugin is the `plugin/` directory. Its MCP server and hooks are committed, self-contained bundles in `plugin/dist/` (generated from `mcp/server.ts` and `hooks/*.ts`), so a git-marketplace install and the developer `.mcp.json` (`node ${PWD:-.}/plugin/dist/mcp/server.mjs`, opened at the repo root; see CONTRIBUTING.md) run with no `npm ci` and no build. Everything the Tier-2 CLI reads at runtime — workflow bodies, prompts, citation styles, presets, stubs, the dry-run corpus, references — also lives in `plugin/`, found through `bin/lib/paths.ts` `pluginRoot()`, which walks up from its own module location (source under tsx, the tsc build in `dist/`, an npm install) to `plugin/.claude-plugin/plugin.json`.
+
+A fresh git clone has no `dist/` (the tsc output is `.gitignore`'d per D-22). Before running the CLI from its build or the tests that spawn the built CLI or `dist/mcp/server.js`, run:
 
 ```bash
 npm ci
@@ -25,7 +27,7 @@ node dist/bin/pensmith.js --version     # the built CLI
 npm link && pensmith --version          # a global symlink, exactly like `npm i -g`
 ```
 
-Entry points use `bin/lib/main-guard.ts` `isMainModule(import.meta.url)`, which compares realpaths, so the CLI and `dist/mcp/server.js` also run through `npm link`, `npm i -g`, `node_modules/.bin` shims and symlinked (or, on Windows, junctioned) plugin roots. A hand-rolled `import.meta.url === pathToFileURL(process.argv[1]).href` guard is false under a symlink and is rejected by the `main-guard` chokepoint row.
+Entry points use `bin/lib/main-guard.ts` `isMainModule(import.meta.url)`, which compares realpaths, so the CLI, `dist/mcp/server.js` and the plugin bundles also run through `npm link`, `npm i -g`, `node_modules/.bin` shims and symlinked (or, on Windows, junctioned) plugin roots. A hand-rolled `import.meta.url === pathToFileURL(process.argv[1]).href` guard is false under a symlink and is rejected by the `main-guard` chokepoint row.
 
 ## Trying the workflow without a real key
 
@@ -73,4 +75,4 @@ If your repo lives inside a sync folder (the upstream dev folder is `Documents/G
 
 ## Quick check
 
-`npm run check` runs prebuild, lint, typecheck, build, the tier contract, the tests and the manifest validation in one shot — the same order as CI.
+`npm run check` runs prebuild, lint, typecheck, build, the tier contract, the tests, the manifest validation and `bundle:check` (the committed plugin bundles and version stamp match a fresh `npm run bundle`) in one shot — the same order as CI.

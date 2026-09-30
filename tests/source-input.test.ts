@@ -161,3 +161,21 @@ test('SRC-13: an ISBN lookup goes to the registry\'s books adapter; without one 
     assert.match((r as { reason: string }).reason, /no book \(ISBN\) lookup is available/);
   }
 });
+
+test('review round 2: a PMID lookup confirms the record at Crossref — a translated PubMed title takes the title the DOI\'s registrar holds; a DOI Crossref does not know keeps PubMed\'s record', async () => {
+  // Recorded: PubMed 40121571 (Orvosi Hetilap, Hungarian) and Crossref's record of its DOI.
+  const r = await lookupIdentifier({ kind: 'pmid', raw: 'PMID:40121571', pmid: '40121571' });
+  assert.equal(r.kind, 'found');
+  const c = (r as { candidate: { title: string; pmid?: string; doi?: string; source: string } }).candidate;
+  assert.equal(c.title, 'Mennyit felejtenek az orvostanhallgatók?', "Crossref's printed title, not PubMed's bracketed translation");
+  assert.equal(c.pmid, '40121571');
+  assert.equal(c.doi, '10.1556/650.2025.33246');
+  assert.equal(c.source, 'pubmed', 'provenance stays');
+
+  // PubMed 42706103's DOI is registered with ISTIC: Crossref answers 404 (recorded), the record stays as PubMed gave it.
+  const istic = await lookupIdentifier({ kind: 'pmid', raw: 'PMID:42706103', pmid: '42706103' });
+  assert.equal(istic.kind, 'found');
+  const ic = (istic as { candidate: { pmid?: string; title: string } }).candidate;
+  assert.equal(ic.pmid, '42706103');
+  assert.match(ic.title, /^\[Application of transformer in intelligent diagnosis/, "PubMed's title, unconfirmed");
+});

@@ -683,7 +683,8 @@ test('review round 3 + S-13 (Phase 20): "unverifiable" on the draft verify judge
     assert.match(unverifiableSectionDetail(verification, '1') ?? '', /\[@a2020\] could not be checked .* re-run `pensmith verify 1` online$/);
     writeFileSync(verification, '# VERIFICATION\n\nStatus: unverifiable\n\n- a2020 [q1] ("attention mechanisms are nothing more t…"): **UNVERIFIABLE-QUOTE** — lev=0.000 — no open-access copy\n- draft: **PLACEHOLDER** — stub text\n');
     const detail = unverifiableSectionDetail(verification, '1') ?? '';
-    assert.match(detail, /1 quote\(s\) \(q1\) could not be checked .*`pensmith add <pdf>`.*`pensmith plan 1 --revise`.*`pensmith verify 1 --accept-quote q1`/);
+    assert.match(detail, /1 quote\(s\) \(q1\) could not be checked .*`pensmith add <pdf>`.*paraphrase \(re-draft with `pensmith write 1`, or edit its DRAFT\.md and run `pensmith verify 1`\).*`pensmith verify 1 --accept-quote q1`/);
+    assert.doesNotMatch(detail, /--revise/, 'revise cannot paraphrase a quote (review round 2)');
     assert.match(detail, /stub text .*PLACEHOLDER.* `pensmith write 1`/);
     // Review round 2: stub text is the one thing compile can never pass outside
     // --dry-run — attention naming `pensmith write 1`, never a compile loop.

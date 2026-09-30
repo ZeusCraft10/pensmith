@@ -101,20 +101,29 @@ test('D-20-20: the MCP pensmith_verify reply stays small for a large library —
   const client = new Client({ name: 'verify-size', version: '0.0.0' }, { capabilities: {} });
   await client.connect(transport);
   let text = '';
+  let content: Array<{ type: string; text?: string }> = [];
   try {
     const res = await client.callTool({ name: 'pensmith_verify', arguments: { n: 1, slug: 'intro', yolo: true } });
     assert.notEqual(res.isError, true, JSON.stringify(res.content).slice(0, 2000));
-    text = (res.content as Array<{ type: string; text?: string }>).map((c) => c.text ?? '').join('');
+    content = res.content as Array<{ type: string; text?: string }>;
+    text = content.map((c) => c.text ?? '').join('');
   } finally {
     await client.close();
   }
   assert.ok(text.length < 20_000, `the tool reply is ${text.length} characters`);
   assert.doesNotMatch(text, /An uncited abstract/);
   assert.doesNotMatch(text, /_graph/);
-  const result = JSON.parse(text) as { status: string; gate: { rows: unknown[]; bib: Record<string, unknown> } };
+  // The reply is verify-reply.ts's projection (Phase 20 + 23a merge, review
+  // round 1): the JSON summary first — the status and VERIFICATION.md's
+  // summary counts, never the gate result or the parsed bibliography — and,
+  // for a verified section, no blocking rows after it.
+  assert.equal(content.length, 1, 'a verified section has no blocking rows to list');
+  const result = JSON.parse(content[0]?.text ?? 'null') as { status: string; blocked: boolean; summary: Array<{ pass: string; verdict: string; count: number }>; blocking_rows: number } & Record<string, unknown>;
   assert.equal(result.status, 'verified');
-  assert.ok(result.gate.rows.length > 0, 'the gate rows are in the reply');
-  assert.deepEqual(Object.keys(result.gate.bib).sort(), ['exists', 'path', 'problems']);
+  assert.equal(result.blocked, false);
+  assert.equal(result.blocking_rows, 0);
+  assert.ok(result.summary.some((r) => r.verdict === 'OK' && r.count === 1), `the gate's Pass-1 row is counted: ${JSON.stringify(result.summary)}`);
+  for (const key of ['gate', 'bib', 'pass1', 'pass3']) assert.ok(!(key in result), `no ${key} in the reply`);
 });
 
 test('RUN-09: a draft that cites nothing (an empty library) is verified, so bare `pensmith --yolo` moves on to compile', () => {

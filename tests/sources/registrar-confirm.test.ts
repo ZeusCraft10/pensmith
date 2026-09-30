@@ -21,6 +21,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { confirmRegistrarRecords, AGGREGATOR_SOURCES } from '../../bin/lib/sources/registrar-confirm.js';
+import { pubmedToCandidate, pubmedVernacularTitle } from '../../bin/lib/sources/pubmed.js';
 import { lookupFailed, lookupFound, lookupNotFound, type LookupResult } from '../../bin/lib/sources/lookup.js';
 import { OfflineEgressError } from '../../bin/lib/http.js';
 import type { SourceCandidate } from '../../bin/lib/schemas/source-candidate.js';
@@ -102,7 +103,7 @@ test('VRFY-13: another work under the DOI, a DOI Crossref does not know, a faile
 });
 
 test('VRFY-13: a Crossref candidate and an arXiv DataCite DOI are never asked; one DOI is asked once', async () => {
-  assert.deepEqual([...AGGREGATOR_SOURCES].sort(), ['openalex', 'semanticscholar']);
+  assert.deepEqual([...AGGREGATOR_SOURCES].sort(), ['openalex', 'pubmed', 'semanticscholar']);
   const asked: string[] = [];
   const lookup = async (doi: string): Promise<LookupResult> => {
     asked.push(doi);
@@ -120,6 +121,71 @@ test('VRFY-13: a Crossref candidate and an arXiv DataCite DOI are never asked; o
   );
   assert.deepEqual(asked, [VOR], 'one lookup for the one aggregator DOI');
   assert.deepEqual(candidates.map((c) => c.year), [2021, 2021, 2021, 2023, 2023]);
+});
+
+/**
+ * The live chain's case (review round 1 of the Phase 20 + 23a merge): PubMed
+ * 40121571 is a Hungarian article. esummary gives its English translation in
+ * brackets as `title` and the printed title as `vernaculartitle`; Crossref,
+ * which holds its DOI, has only the Hungarian title (and a subtitle).
+ */
+const CSABA_DOI = '10.1556/650.2025.33246';
+const CSABA_ESUMMARY = {
+  uid: '40121571',
+  title: '[How much do medical students forget?].',
+  vernaculartitle: 'Mennyit felejtenek az orvostanhallgatók?',
+  lang: ['hun'],
+  authors: [{ name: 'Csaba GJ', authtype: 'Author' }, { name: 'Füzesi Z', authtype: 'Author' }, { name: 'Csathó Á', authtype: 'Author' }],
+  pubdate: '2025 Mar 23',
+  fulljournalname: 'Orvosi hetilap',
+  articleids: [{ idtype: 'pubmed', value: '40121571' }, { idtype: 'doi', value: CSABA_DOI }],
+  pubtype: ['Journal Article'],
+};
+const CSABA_CROSSREF = cand({
+  source: 'crossref',
+  id: CSABA_DOI,
+  doi: CSABA_DOI,
+  title: 'Mennyit felejtenek az orvostanhallgatók?',
+  subtitle: 'Stabil tudás kiépítése az orvosképzésben',
+  authors: ['Csaba, Gergely József', 'Füzesi, Zsuzsanna', 'Csathó, Árpád'],
+  year: 2025,
+  venue: 'Orvosi Hetilap',
+  citekey: 'csaba2025',
+});
+
+test('review round 1: a PubMed hit whose title is the English translation of a non-English title takes Crossref\'s record — matched on PubMed\'s original-language title', async () => {
+  const pubmed = pubmedToCandidate(CSABA_ESUMMARY);
+  assert.ok(pubmed);
+  assert.equal(pubmed.title, '[How much do medical students forget?]', "PubMed's title is the bracketed translation");
+  assert.equal(pubmedVernacularTitle(pubmed.raw), 'Mennyit felejtenek az orvostanhallgatók?');
+  const asked: string[] = [];
+  const { candidates, confirmed } = await confirmRegistrarRecords([pubmed], async (doi) => {
+    asked.push(doi);
+    return lookupFound(CSABA_CROSSREF);
+  });
+  const [c] = candidates;
+  assert.deepEqual(asked, [CSABA_DOI]);
+  assert.deepEqual(confirmed, [pubmed.citekey]);
+  assert.equal(c?.title, 'Mennyit felejtenek az orvostanhallgatók?', 'the title Pass 1 finds at the DOI\'s registrar');
+  assert.equal(c?.subtitle, 'Stabil tudás kiépítése az orvosképzésben');
+  assert.equal(c?.pmid, '40121571', 'identifiers stay');
+  assert.equal(c?.source, 'pubmed', 'provenance stays');
+  assert.equal(c?.citekey, pubmed.citekey, 'the citekey never changes');
+
+  // Crossref holding the English title instead: the PubMed title itself matches.
+  const english = cand({ ...CSABA_CROSSREF, title: 'How much do medical students forget?', subtitle: undefined });
+  delete (english as { subtitle?: string }).subtitle;
+  const again = await confirmRegistrarRecords([pubmed], async () => lookupFound(english));
+  assert.equal(again.candidates[0]?.title, 'How much do medical students forget?');
+
+  // Another work under the DOI is still refused, whichever title is compared.
+  const other = await confirmRegistrarRecords([pubmed], async () => lookupFound(cand({ source: 'crossref', title: 'Deep learning', authors: ['LeCun, Yann'], year: 2015 })));
+  assert.equal(other.candidates[0], pubmed);
+  assert.deepEqual(other.confirmed, []);
+
+  // A PubMed record without a vernacular title has one title to compare.
+  assert.equal(pubmedVernacularTitle({ ...CSABA_ESUMMARY, vernaculartitle: '' }), null);
+  assert.equal(pubmedVernacularTitle(null), null);
 });
 
 test('VRFY-13: runResearchPass confirms the kept aggregator candidates through the registry\'s crossref lookup', async () => {

@@ -79,6 +79,7 @@ import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { tryReadPaperConfigSync } from '../lib/config.js';
 import { extractQuotes } from '../lib/quote-extractor.js';
 import { runGate, canPrompt } from '../lib/gates.js';
+import { out } from '../lib/output-sink.js';
 
 // Force-bind the deterministic primitives so the acceptance grep
 // (`grep "jaroWinkler" AND "levenshteinSubstring" bin/cli/verify.ts`)
@@ -224,7 +225,7 @@ async function askQuoteAcceptance(rows: readonly AcceptableQuoteRow[], id: strin
   const open = rows.filter((r) => r.verdict === ACCEPTABLE_QUOTE_VERDICT);
   if (open.length === 0 || !canPrompt()) return [];
   const ids = [...new Set(open.map((r) => r.id))];
-  process.stdout.write(
+  out(
     `pensmith verify: section ${id} has ${ids.length} quote(s) no source text could be checked against (UNVERIFIABLE-QUOTE). ` +
       'Accepting a quote records that YOU vouch for it; add the source\'s PDF (`pensmith add <pdf>`) or paraphrase instead when you can.\n',
   );
@@ -339,7 +340,7 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
       delete fm.failure_reason;
       delete fm.verified_against_draft_hash;
     });
-    process.stdout.write(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${id}\` first\n`);
+    out(`pensmith verify: DRAFT.md missing — wrote unverifiable VERIFICATION.md to ${verifPath}; run \`pensmith write ${id}\` first\n`);
     return { ok: false, status: 'unverifiable', path: verifPath };
   }
 
@@ -407,7 +408,7 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
     acceptanceSets = [{ currentDraftHash: draftHash, acceptances: [...acceptanceSets[0]!.acceptances, ...recorded], section: id }];
     const lifted = applyAcceptances(gate.rows, acceptanceSets);
     gate = { ...gate, rows: lifted.rows, accepted: lifted.accepted, outcome: gateOutcome(lifted.rows) };
-    process.stdout.write(`pensmith verify: accepted ${[...new Set(recorded.map((a) => a.quote_id))].join(', ')} for section ${id} (recorded in QUOTE-ACCEPTANCES.json)\n`);
+    out(`pensmith verify: accepted ${[...new Set(recorded.map((a) => a.quote_id))].join(', ')} for section ${id} (recorded in QUOTE-ACCEPTANCES.json)\n`);
   }
 
   const status = gate.outcome.status;
@@ -545,7 +546,7 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
     }
   }
 
-  process.stdout.write(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
+  out(`pensmith verify: wrote ${status} VERIFICATION.md to ${verifPath}\n`);
   // The deterministic verdict is on disk; now stop with the advisory failure
   // (e.g. EXIT_COST_CAP, one line through the dispatcher).
   if (advisoryStop !== undefined) throw advisoryStop;

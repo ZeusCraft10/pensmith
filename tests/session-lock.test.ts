@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { EXIT_ERROR } from '../bin/lib/exit-codes.js';
+import { unfence } from '../bin/lib/untrusted-fence.js';
 import { staleReason, STALE_SESSION_MS, type SessionOwner } from '../bin/lib/session-lock.js';
 import {
   REPO,
@@ -69,7 +70,9 @@ async function holdLock(sb: Sandbox, root: string, kind: 'cli' | 'mcp', claude?:
     const timer = setTimeout(() => reject(new Error(`holder did not take the lock: ${err}`)), 20_000);
     child.stdout?.on('data', (c: Buffer) => {
       buf += c.toString();
-      const line = buf.split('\n').find((l) => l.startsWith('{'));
+      // Complete lines only: the text after the last newline may be the first
+      // chunk of a line still arriving, and parsing it would throw.
+      const line = buf.split('\n').slice(0, -1).find((l) => l.startsWith('{'));
       if (!line) return;
       clearTimeout(timer);
       const parsed = JSON.parse(line) as { pid: number; file: string };
@@ -234,10 +237,12 @@ test('RUN-23: a mutating MCP tool during a CLI session is a structured refusal a
   try {
     const res = await client.callTool({ name: 'pensmith_write', arguments: { n: 1, yolo: true } });
     assert.equal(res.isError, true, 'refused');
-    const body = JSON.parse((res.content as Array<{ text: string }>)[0]?.text ?? '{}') as { exit_code: number; classification: string; message: string };
+    const blocks = res.content as Array<{ text: string }>;
+    const body = JSON.parse(blocks[0]?.text ?? '{}') as { exit_code: number; classification: string };
     assert.equal(body.exit_code, EXIT_ERROR);
     assert.equal(body.classification, 'EXIT_ERROR');
-    assert.match(body.message, new RegExp(`another pensmith session \\(pid ${holder.pid},`));
+    // The section verbs fence their failure line after the JSON half (review round 2).
+    assert.match(unfence(blocks[2]?.text ?? '') ?? '', new RegExp(`^pensmith: another pensmith session \\(pid ${holder.pid},`));
     const init = await client.callTool({ name: 'paper_init_section', arguments: { paperRoot: root, n: 9, slug: 'extra' } });
     assert.equal(init.isError, true, 'every mutating tool refuses');
     // A `.paper` path names the same paper (asProjectRoot): it keys the SAME

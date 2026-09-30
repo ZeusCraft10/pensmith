@@ -7,8 +7,9 @@
 // `cost: $X.XX <session> / $Y.YY total (cap $5.00)` and `next: write §2`, where
 // <session> is `this session` (this process spent), `running session` (the live
 // session-lock holder) or `last session` (the last one in COSTS.jsonl) — a
-// standalone status never meters its own always-empty process. Tier 1 shows
-// `cost: n/a (Claude session)`.
+// standalone status never meters its own always-empty process. Tier 1
+// (paper://state) shows the same meter: the plugin's plan and write bill the
+// configured provider in this release (review round 2).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -46,15 +47,14 @@ test('RUN-19: the view — title/name/class, current §2 (write), ✓ ⌛ ⌽, c
   });
 });
 
-test('RUN-19: Tier 1 (paper://state) shows cost n/a; the rest of the view is identical', async () => {
+test('RUN-19: Tier 1 (paper://state) shows the same view, cost meter included — the plugin\'s plan and write bill the configured provider', async () => {
   await withLlmSandbox({}, async (sb) => {
     await seeded(sb);
     const cli = await buildStatusView(sb.root, { tier: 'cli', glyphs: 'unicode' });
     const mcp = await buildStatusView(sb.root, { tier: 'mcp', glyphs: 'unicode' });
-    assert.equal(mcp.cost.line, 'cost: n/a (Claude session)');
-    assert.equal(mcp.cost.sessionUsd, null);
-    const strip = (v: typeof cli): unknown => ({ ...v, cost: null });
-    assert.deepEqual(strip(mcp), strip(cli));
+    assert.equal(mcp.cost.line, 'cost: $1.23 last session / $1.23 total (cap $5.00)');
+    assert.doesNotMatch(mcp.cost.line, /n\/a|Claude session/, 'never "n/a": pensmith_plan / pensmith_write spend real money');
+    assert.deepEqual({ ...mcp, cost: { ...mcp.cost, tier: 'cli' } }, cli, 'only the recorded tier differs');
   });
 });
 

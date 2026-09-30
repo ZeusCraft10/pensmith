@@ -245,8 +245,11 @@ function recordHasPlaceholder(verificationPath: string): boolean {
 /**
  * What an `unverifiable` section needs, in one line naming the remedies
  * (S-13, VRFY-20, VRFY-24): a quote no source text could be checked against
- * (UNVERIFIABLE-QUOTE) — add the source's PDF, paraphrase it, or accept that
- * one quote; stub text (PLACEHOLDER) — re-draft with a model configured; a
+ * (UNVERIFIABLE-QUOTE) — add the source's PDF, paraphrase it (a re-draft with
+ * `write N`, whose drafter may quote only a source with full text, or an edit
+ * of the draft and `verify N`; review round 2 of the Phase 20 + 23a merge:
+ * `plan N --revise` repairs a flagged citekey and cannot paraphrase), or
+ * accept that one quote; stub text (PLACEHOLDER) — re-draft with a model configured; a
  * source that could not be reached — re-run the check online. Null when the
  * section's VERIFICATION.md names no blocking row. The walk goes on past such
  * a section (compile refuses it with the same options); `status` shows this
@@ -267,7 +270,8 @@ export function unverifiableSectionDetail(verificationPath: string, label: strin
     const ids = [...new Set(quotes.map((q) => q.quoteId ?? '?'))];
     parts.push(
       `${ids.length} quote(s) (${ids.join(', ')}) could not be checked against any source text — add the source's PDF (\`pensmith add <pdf>\`), ` +
-        `paraphrase (\`pensmith plan ${label} --revise\`), or accept a quote (\`pensmith verify ${label} --accept-quote ${ids[0] as string}\`)`,
+        `paraphrase (re-draft with \`pensmith write ${label}\`, or edit its DRAFT.md and run \`pensmith verify ${label}\`), ` +
+        `or accept a quote (\`pensmith verify ${label} --accept-quote ${ids[0] as string}\`)`,
     );
   }
   if (rows.some((r) => r.verdict === 'PLACEHOLDER')) {

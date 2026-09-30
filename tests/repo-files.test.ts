@@ -30,9 +30,15 @@ test('root config files exist', () => {
     'eslint.config.js',
     'mcp/server.ts',
     'scripts/run-tests.mjs',
-    'references/doctor-output.md',
+    // PLUG-02 (Phase 23a): the plugin lives in plugin/ — its manifest, hooks
+    // config and references; the repo root keeps the marketplace, the developer
+    // .mcp.json and the hook entry sources that plugin/dist bundles.
+    'plugin/.claude-plugin/plugin.json',
+    'plugin/hooks/hooks.json',
+    'plugin/references/doctor-output.md',
+    '.claude-plugin/marketplace.json',
+    '.mcp.json',
     // 02-06: hooks/.gitkeep replaced by real TIER-03 hook modules.
-    'hooks/hooks.json',
     'hooks/session-start.ts',
     'hooks/pre-compact.ts',
     'hooks/post-tool-use.ts',
@@ -146,9 +152,11 @@ test('STYL-04: README style-match dual-use disclosure is present + honest (RED-b
 });
 
 test('directory contract from D-21', () => {
+  // PLUG-02 (Phase 23a): skills, agents, workflows, templates and references
+  // moved into the canonical plugin/ directory.
   for (const d of [
-    'bin', 'bin/lib', 'bin/lib/migrations', 'mcp', 'hooks', 'skills', 'agents',
-    'workflows', 'templates', 'templates/citation-styles', 'references',
+    'bin', 'bin/lib', 'bin/lib/migrations', 'mcp', 'hooks', 'plugin', 'plugin/skills', 'plugin/agents',
+    'plugin/workflows', 'plugin/templates', 'plugin/templates/citation-styles', 'plugin/references',
     'schema', 'tests', 'tests/fixtures', 'scripts',
   ]) {
     assert.ok(fs.statSync(path.resolve(d)).isDirectory(), `missing dir: ${d}`);
@@ -181,16 +189,16 @@ test('scripts/run-tests.mjs is the test runner (not a shell glob)', () => {
   assert.match(runner, /process\.exit\(1\)/, 'must exit 1 on zero matches');
 });
 
-// D-18: references/doctor-output.md is a single source of truth for DOCT copy.
+// D-18: plugin/references/doctor-output.md is a single source of truth for DOCT copy.
 // We pin the file's exact bytes via SHA-256. ANY substantive change to the
 // locked copy MUST be paired with a hash-pin update in this test — making the
 // drift visible at PR-review time. Substring matching was rejected as too weak
 // (it would silently allow inserted lines, reordered probes, or rewritten copy
 // outside the matched fragments).
-test('references/doctor-output.md hash-pin (D-18)', () => {
-  const bytes = readFileSync('references/doctor-output.md');  // raw bytes, no BOM strip
+test('plugin/references/doctor-output.md hash-pin (D-18)', () => {
+  const bytes = readFileSync('plugin/references/doctor-output.md');  // raw bytes, no BOM strip
   const hash = createHash('sha256').update(bytes).digest('hex');
-  // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/doctor-output.md')).digest('hex'))"`
+  // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('plugin/references/doctor-output.md')).digest('hex'))"`
   // after every intentional edit. The PR diff makes the change visible.
   // Re-pinned in Phase 17 (foundations): the network-mode probe (RUN-02), the
   // model-runtime copy of runtime-config-presence (RUN-07/08), the Node 22.12
@@ -206,38 +214,41 @@ test('references/doctor-output.md hash-pin (D-18)', () => {
   // describe what those probes actually check (the resolved variable; the
   // authenticated Zotero key check, local API / group, MCP detection); then in
   // Phase 19 review round 2: a paper may name only a PENSMITH_ contact-email
-  // variable, and the value must be a plain address.
-  const PINNED = '14f56def8f4bbb27f5cae402e361631ccdd410bff4d358ef1eb243b43e40699c';
-  assert.equal(hash, PINNED, `references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
+  // variable, and the value must be a plain address; then in Phase 23a
+  // (PLUG-02): the file moved to plugin/references/, and mcp-sdk-presence,
+  // build-artifact-resolves and intake-outline-verify-wiring describe the
+  // plugin bundle plugin/dist/mcp/server.mjs and the plugin/workflows bodies.
+  const PINNED = 'a2308e6818c90c80506ec04e6f34c94c9a7cd659a86688a107bdcbd071f19633';
+  assert.equal(hash, PINNED, `plugin/references/doctor-output.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 
-// IN-03 / D-24: references/http-warnings.md is the SINGLE source of truth
+// IN-03 / D-24: plugin/references/http-warnings.md is the SINGLE source of truth
 // for the HTTP-client WARN-once banner string. bin/lib/http.ts reads it at
 // module load; tests/http.test.ts asserts the runtime banner matches the
 // "no-contact User-Agent" phrasing from this file. A hash-pin here means any
 // edit to the canonical copy shows up in PR diff alongside the WARN-once
 // test changes — preventing accidental drift that the substring matcher in
 // http.test.ts would not catch (e.g., subtle URL or punctuation changes).
-test('references/http-warnings.md hash-pin (IN-03 / D-24)', () => {
-  const bytes = readFileSync('references/http-warnings.md');  // raw bytes, no BOM strip
+test('plugin/references/http-warnings.md hash-pin (IN-03 / D-24)', () => {
+  const bytes = readFileSync('plugin/references/http-warnings.md');  // raw bytes, no BOM strip
   const hash = createHash('sha256').update(bytes).digest('hex');
-  // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/http-warnings.md')).digest('hex'))"`
+  // PINNED-HASH below: regenerate by running `node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('plugin/references/http-warnings.md')).digest('hex'))"`
   // after every intentional edit. The PR diff makes the change visible.
   const PINNED = 'd4bd6d2eca6448afef9a73874ba05721da32c2ad716dad53061678d6c8e0d07b';
-  assert.equal(hash, PINNED, `references/http-warnings.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
+  assert.equal(hash, PINNED, `plugin/references/http-warnings.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional.`);
 });
 
-// Phase 6 DONE-04: references/honesty-framing.md is the SINGLE source of truth
+// Phase 6 DONE-04: plugin/references/honesty-framing.md is the SINGLE source of truth
 // for the GPTZero honest-framing copy. bin/lib/honesty.ts renders it VERBATIM.
 // The non-negotiable (CLAUDE.md: "improves prose, does not evade detection") is
 // enforced by this byte-pin: any wording change shows up in PR diff and must
 // re-pin the hash. GREEN from creation (static copy file, WN-3 single-source).
-test('references/honesty-framing.md hash-pin (Phase 6 DONE-04 LOCKED)', () => {
-  const bytes = readFileSync('references/honesty-framing.md');  // raw bytes, no BOM strip
+test('plugin/references/honesty-framing.md hash-pin (Phase 6 DONE-04 LOCKED)', () => {
+  const bytes = readFileSync('plugin/references/honesty-framing.md');  // raw bytes, no BOM strip
   const hash = createHash('sha256').update(bytes).digest('hex');
-  // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('references/honesty-framing.md')).digest('hex'))"
+  // Regenerate: node -e "console.log(require('node:crypto').createHash('sha256').update(require('node:fs').readFileSync('plugin/references/honesty-framing.md')).digest('hex'))"
   const PINNED = '9f894ea88129e2b43975de5e1179180d4dc71d70e3959f33ee02601986009707';
-  assert.equal(hash, PINNED, `references/honesty-framing.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional (and review the transparency-only constraint in CONTRIBUTING.md).`);
+  assert.equal(hash, PINNED, `plugin/references/honesty-framing.md drifted from locked copy. Update PINNED to ${hash} if the edit was intentional (and review the transparency-only constraint in CONTRIBUTING.md).`);
 });
 
 // Phase 6 TEST-10 fixture: tests/fixtures/sample-zero-trace.docx is the offline
@@ -268,8 +279,8 @@ test('tests/fixtures/sample-zero-trace.pdf hash-pin (Phase 6 TEST-10 fixture, HI
 
 // Coarse-grained content sentinel — catches gross removals even before the
 // hash pin gets a chance to re-fire (e.g., file wiped to empty).
-test('references/doctor-output.md retains all probe section anchors (Phase 2 + Phase 3)', () => {
-  const copy = read('references/doctor-output.md');
+test('plugin/references/doctor-output.md retains all probe section anchors (Phase 2 + Phase 3)', () => {
+  const copy = read('plugin/references/doctor-output.md');
   assert.match(copy, /# Doctor Output Strings \(locked — D-18\)/);
   assert.match(copy, /node-version \(DOCT-01\)/);
   assert.match(copy, /mcp-sdk-presence \(DOCT-01 wiring\)/);
@@ -336,33 +347,33 @@ test('tests/fixtures/known-bad-quotes.json hash-pin (SC-3)', () => {
 export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; decision: string; hash: string }> = [
   // CYCLE-4 M-1 REVIEWS CONVERGENCE — `export` keyword present so Plan 09 Task 9.3.5
   // dynamic-imports this array (not undefined); single source of truth for the 9 hash-pin slugs.
-  { slug: 'intake-clarifier',    path: 'templates/prompts/intake-clarifier.md',    decision: 'D-12', hash: '7700947abfc9a94d2785996fd7b26e8f812a5b01c77ab24ee1563314b7eb9a53' },  // re-pinned Phase 18 GRND-02/RUN-26 — suggestions-only contract v2, data-last layout; WN-3 lockstep with prompt-loader pin
-  { slug: 'topic-disambiguator', path: 'templates/prompts/topic-disambiguator.md', decision: 'D-12', hash: '34587e4f81be0e16848f7aa19bd176f050da2381cba31a1ea6b36c54816b1378' },  // re-pinned Phase 19 SRC-08 — WN-3 lockstep with prompt-loader pin
-  { slug: 'source-evaluator',    path: 'templates/prompts/source-evaluator.md',    decision: 'D-12', hash: 'b10cd38425ab01dd5572592dc01f11b646006dbd86b13be311f8b0eb9ca0eed4' },  // re-pinned Phase 19 SRC-09 — WN-3 lockstep with prompt-loader pin
-  { slug: 'outline-author',      path: 'templates/prompts/outline-author.md',      decision: 'D-12', hash: '914bdd23f6182ac47b5679b45144a10ada702ab8e6eb3415db879063f7419c2a' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin
-  { slug: 'section-planner',     path: 'templates/prompts/section-planner.md',     decision: 'D-12', hash: 'd10b4513bec7bbce182e6fb8fe31b64bc5f5f1352dda498ee0b2414ad3f5f28c' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin
-  { slug: 'section-drafter',     path: 'templates/prompts/section-drafter.md',     decision: 'D-12', hash: '0600aed58e85b9182a5c3ea0e7e45a691d41a8e21797ed00559e7b56b08999cc' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin
-  { slug: 'pass1-fuzzy-judge',   path: 'templates/prompts/pass1-fuzzy-judge.md',   decision: 'D-12 + D-13 DORMANT in Phase 3', hash: '80011728b81766a6bad092a6fae2868cd7e75515344c5e8ecb38b3cfac14498d' },
-  { slug: 'pass3-quote-checker', path: 'templates/prompts/pass3-quote-checker.md', decision: 'D-12 + D-13 DORMANT in Phase 3', hash: '19ef3929f85b0f20c4b0f12cea535cbb7c2e28a342c883f9af6737fd7e896421' },
-  { slug: 'apa-csl',             path: 'templates/citation-styles/apa.csl',        decision: 'D-22 (different chokepoint)',    hash: '249341f13df5cff992efdc71e12b9888678f8e4ad69e17fe12bd2c5245681094' },
+  { slug: 'intake-clarifier',    path: 'plugin/templates/prompts/intake-clarifier.md',    decision: 'D-12', hash: '7700947abfc9a94d2785996fd7b26e8f812a5b01c77ab24ee1563314b7eb9a53' },  // re-pinned Phase 18 GRND-02/RUN-26 — suggestions-only contract v2, data-last layout; WN-3 lockstep with prompt-loader pin
+  { slug: 'topic-disambiguator', path: 'plugin/templates/prompts/topic-disambiguator.md', decision: 'D-12', hash: '34587e4f81be0e16848f7aa19bd176f050da2381cba31a1ea6b36c54816b1378' },  // re-pinned Phase 19 SRC-08 — WN-3 lockstep with prompt-loader pin
+  { slug: 'source-evaluator',    path: 'plugin/templates/prompts/source-evaluator.md',    decision: 'D-12', hash: 'b10cd38425ab01dd5572592dc01f11b646006dbd86b13be311f8b0eb9ca0eed4' },  // re-pinned Phase 19 SRC-09 — WN-3 lockstep with prompt-loader pin
+  { slug: 'outline-author',      path: 'plugin/templates/prompts/outline-author.md',      decision: 'D-12', hash: '914bdd23f6182ac47b5679b45144a10ada702ab8e6eb3415db879063f7419c2a' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin
+  { slug: 'section-planner',     path: 'plugin/templates/prompts/section-planner.md',     decision: 'D-12', hash: 'd10b4513bec7bbce182e6fb8fe31b64bc5f5f1352dda498ee0b2414ad3f5f28c' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin
+  { slug: 'section-drafter',     path: 'plugin/templates/prompts/section-drafter.md',     decision: 'D-12', hash: '0600aed58e85b9182a5c3ea0e7e45a691d41a8e21797ed00559e7b56b08999cc' },  // re-pinned Phase 18 (sections stream) — WN-3 lockstep with prompt-loader pin
+  { slug: 'pass1-fuzzy-judge',   path: 'plugin/templates/prompts/pass1-fuzzy-judge.md',   decision: 'D-12 + D-13 DORMANT in Phase 3', hash: '80011728b81766a6bad092a6fae2868cd7e75515344c5e8ecb38b3cfac14498d' },
+  { slug: 'pass3-quote-checker', path: 'plugin/templates/prompts/pass3-quote-checker.md', decision: 'D-12 + D-13 DORMANT in Phase 3', hash: '19ef3929f85b0f20c4b0f12cea535cbb7c2e28a342c883f9af6737fd7e896421' },
+  { slug: 'apa-csl',             path: 'plugin/templates/citation-styles/apa.csl',        decision: 'D-22 (different chokepoint)',    hash: '249341f13df5cff992efdc71e12b9888678f8e4ad69e17fe12bd2c5245681094' },
   // Phase 4 04-CONTEXT.md D-05 — new revise-swap prompt. The byte-pin below is
   // GREEN from Task 1 (the file is byte-stable). bin/lib/prompt-loader.ts holds
   // a __PENDING_HASH_revise-swap__ sentinel until Plan 04-04 Task 3 re-pins the
   // SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
-  { slug: 'revise-swap',         path: 'templates/prompts/revise-swap.md',         decision: 'Phase 4 D-05',                   hash: '2c604b215eaafcb49f4bd138ad64772b0e2f74e7255a5e2ea22e65719e54ff8d' },
+  { slug: 'revise-swap',         path: 'plugin/templates/prompts/revise-swap.md',         decision: 'Phase 4 D-05',                   hash: '2c604b215eaafcb49f4bd138ad64772b0e2f74e7255a5e2ea22e65719e54ff8d' },
   // Phase 4 04-CONTEXT.md D-12 — new smoother prompt (Plan 04-05). The byte-pin
   // below is GREEN from Task 1a (the file is byte-stable). bin/lib/prompt-loader.ts
   // holds a __PENDING_HASH_smoother__ sentinel until Plan 04-05 Task 4 re-pins the
   // SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
-  { slug: 'smoother',            path: 'templates/prompts/smoother.md',            decision: 'Phase 4 D-12',                   hash: '37aa691f174c5fa75f9569c3c08bdc1a33eb64f503d04834e94d27d5938d9330' },
+  { slug: 'smoother',            path: 'plugin/templates/prompts/smoother.md',            decision: 'Phase 4 D-12',                   hash: '37aa691f174c5fa75f9569c3c08bdc1a33eb64f503d04834e94d27d5938d9330' },
   // Phase 5 05-CONTEXT.md D-12 — new claim-support + orphan-label prompts (Plans
   // 05-02/05-03 advisory Pass 2/4). The byte-pins below are the REAL SHA-256 and are
   // GREEN from Wave 0 (Plan 05-01) the moment the prompt files are byte-stable.
   // bin/lib/prompt-loader.ts holds __PENDING_HASH_<slug>__ sentinels until Plan 05-05
   // re-pins the SAME real SHA-256 there (WN-3 lockstep — both surfaces then agree).
   // Phase 20 D-20-30 re-pinned both (claim-support: the source text; orphan-label: the per-paragraph audit).
-  { slug: 'claim-support',       path: 'templates/prompts/claim-support.md',       decision: 'Phase 5 D-12 / Phase 20 D-20-30', hash: '44727c65d9ffec142d9d0a8419c4caad551ea0a243efd655b9bc48c069275bf4' },
-  { slug: 'orphan-label',        path: 'templates/prompts/orphan-label.md',        decision: 'Phase 5 D-12 / Phase 20 D-20-30', hash: 'c1d45a9f9c7d74889a5f476a2f1b2e847e4edfae96ddf6604479da5334979dc0' },
+  { slug: 'claim-support',       path: 'plugin/templates/prompts/claim-support.md',       decision: 'Phase 5 D-12 / Phase 20 D-20-30', hash: '44727c65d9ffec142d9d0a8419c4caad551ea0a243efd655b9bc48c069275bf4' },
+  { slug: 'orphan-label',        path: 'plugin/templates/prompts/orphan-label.md',        decision: 'Phase 5 D-12 / Phase 20 D-20-30', hash: 'c1d45a9f9c7d74889a5f476a2f1b2e847e4edfae96ddf6604479da5334979dc0' },
   // Phase 9 D-12 — tutorial/educator teaching-wrapper prompts. RE-PINNED to the real
   // SHA-256 in Plan 09-03 Task 3 (WN-3 lockstep — the SAME commit re-pins bin/lib/
   // prompt-loader.ts EXPECTED_PROMPT_HASHES, so drift between the two surfaces is
@@ -371,8 +382,8 @@ export const PENDING_HASH_PINS: ReadonlyArray<{ slug: string; path: string; deci
   // content. Any intentional edit to the prompt bodies requires recomputing BOTH hashes
   // here AND in prompt-loader.ts in one commit (D-12 single-source rule). The byte-pin
   // loop now runs (no longer skipped) and the file-exists loop still guards presence.
-  { slug: 'tutorial-section-provenance', path: 'templates/prompts/tutorial-section-provenance.md', decision: 'Phase 9 D-12', hash: 'ce1d8c4876e1096d02239e55283e55decd2df8b0358b0d697d14d5005baab380' },
-  { slug: 'tutorial-research-rationale', path: 'templates/prompts/tutorial-research-rationale.md', decision: 'Phase 9 D-12', hash: 'd4d305f2a1e8bebe87849b358f9e4fb9199b78a493bc867a306a63b6e51523e7' },
+  { slug: 'tutorial-section-provenance', path: 'plugin/templates/prompts/tutorial-section-provenance.md', decision: 'Phase 9 D-12', hash: 'ce1d8c4876e1096d02239e55283e55decd2df8b0358b0d697d14d5005baab380' },
+  { slug: 'tutorial-research-rationale', path: 'plugin/templates/prompts/tutorial-research-rationale.md', decision: 'Phase 9 D-12', hash: 'd4d305f2a1e8bebe87849b358f9e4fb9199b78a493bc867a306a63b6e51523e7' },
 ];
 for (const pin of PENDING_HASH_PINS) {
   // WN-3 sentinel entries (hash === `__PENDING_HASH_<slug>__`) are NOT yet

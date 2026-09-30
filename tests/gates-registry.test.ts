@@ -407,6 +407,17 @@ test('RUN-28: the --yolo lists in `pensmith --help` and the README name exactly 
   assert.ok(m, 'README states what --yolo answers');
   for (const s of skips) assert.ok((m[1] as string).includes(s), `README --yolo list names ${s}`);
   for (const s of never) assert.ok((m[2] as string).includes(s), `README never-list names ${s}`);
+  // The plugin's --yolo guidance (review round 1 of the Phase 20 merge): the pensmith skill and
+  // docs/PLUMBING.md name every gate --yolo never answers, and say that `done --yolo` records
+  // the UNSUPPORTED claims as auto-accepted (the unsupported-claims gate's yoloChoice).
+  assert.match(gateDef('unsupported-claims').yoloChoice, /auto-accepted/);
+  for (const rel of [join('plugin', 'skills', 'pensmith', 'SKILL.md'), join('docs', 'PLUMBING.md')]) {
+    const text = readFileSync(join(REPO, rel), 'utf8').replace(/\s+/g, ' ');
+    const never1 = /`--yolo` never answers (.*?)[.(]/.exec(text);
+    assert.ok(never1, `${rel} says what --yolo never answers`);
+    for (const g of never) assert.ok((never1[1] as string).includes(g.replace(/`/g, '')), `${rel}: the never-list names ${g}`);
+    assert.match(text, /UNSUPPORTED.{0,120}?records? each (?:one )?as auto-accepted under `--yolo`, not as confirmed by (?:you|the user)/, `${rel}: done --yolo auto-accepts the UNSUPPORTED claims`);
+  }
 });
 
 // ---------------------------------------------------------------------------

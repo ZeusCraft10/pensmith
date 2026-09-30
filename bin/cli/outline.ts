@@ -71,6 +71,7 @@ import { readLlmRecords } from '../lib/replay.js';
 import { closeSessionLog, currentSessionId } from '../lib/session-log.js';
 import { formatSectionId, sectionIdOf, sortBySectionId } from '../lib/section-id.js';
 import type { OutlineContract } from '../lib/llm-contracts.js';
+import { out } from '../lib/output-sink.js';
 
 /** The outline could not be used after the one corrective turn (GRND-08): one line, EXIT_ERROR. */
 export class OutlineRejectedError extends PensmithError {
@@ -369,7 +370,7 @@ export const outlineCommand = defineCommand({
     if (!force && existingOutline !== null && existingOutline.sections.length > 0) {
       const r = await applyExistingOutline(paperRoot, existingOutline.sections.map(entryFromRow), { yolo, marker });
       clearRejection(paperRoot);
-      process.stdout.write(
+      out(
         `pensmith outline: OUTLINE.md already present (${r.registered} section(s)); registered ${r.registered} section(s) in STATE.json` +
           `${r.stubsWritten > 0 ? `, wrote ${r.stubsWritten} stub PLAN.md` : ''}` +
           `${r.archived.length > 0 ? `; archived ${r.archived.join(', ')}` : ''}. Not regenerating — pass --force to re-outline.\n`,
@@ -520,11 +521,11 @@ export const outlineCommand = defineCommand({
     await atomicWriteFile(outlineFile, outlineMd);
     clearRejection(paperRoot);
 
-    process.stdout.write(`pensmith outline: wrote OUTLINE.md to ${outlineFile}\n`);
-    process.stdout.write(`pensmith outline: registered ${reg.registered} section(s) in STATE.json.\n`);
+    out(`pensmith outline: wrote OUTLINE.md to ${outlineFile}\n`);
+    out(`pensmith outline: registered ${reg.registered} section(s) in STATE.json.\n`);
     if (accepted.plan !== null) {
       const added = accepted.numbered.filter((s) => accepted.plan?.added.includes(s.slug)).map((s) => `§${formatSectionId(sectionIdOf(s.n, s.suffix))} ${s.slug}`);
-      process.stdout.write(
+      out(
         `pensmith outline: kept ${accepted.plan.kept.length} section(s) untouched` +
           `${added.length > 0 ? `; added ${added.join(', ')}` : ''}` +
           `${archived.length > 0 ? `; archived ${archived.join(', ')}` : ''}.\n`,
@@ -533,7 +534,7 @@ export const outlineCommand = defineCommand({
         process.stderr.write('pensmith outline: WARN — kept sections keep their numbers, so they stay in their original order.\n');
       }
     }
-    if (counter.required) process.stdout.write(`pensmith outline: counterargument rule applied (${counter.source}).\n`);
+    if (counter.required) out(`pensmith outline: counterargument rule applied (${counter.source}).\n`);
     return { ok: true, path: outlineFile, mode: 'real', sections: reg.registered, stubs: reg.stubsWritten };
   },
 });

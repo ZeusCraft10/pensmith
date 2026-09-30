@@ -79,6 +79,14 @@ export const RECORDED_CROSSREF_404_DOI = '10.48550/arXiv.1706.03762';
 /** A DOI registered with ISTIC, not Crossref (Zou et al. 2026, Zhonghua Wei Chang Wai Ke Za Zhi), and its PMID. */
 export const ISTIC_DOI = '10.3760/cma.j.cn441530-20260508-00189-1';
 export const ISTIC_PMID = '42706103';
+/**
+ * A non-English article (Orvosi Hetilap, Hungarian): PubMed's title is the
+ * bracketed English translation, Crossref — which holds its DOI — the printed
+ * Hungarian title. `add PMID:<it>` stores Crossref's title (review round 2 of
+ * the Phase 20 + 23a merge), so Pass 1 finds the title it compares.
+ */
+export const TRANSLATED_TITLE_PMID = '40121571';
+export const TRANSLATED_TITLE_DOI = '10.1556/650.2025.33246';
 /** A retracted work with a Retraction Watch record in Crossref (Wakefield et al. 1998). */
 export const RECORDED_RETRACTED_DOI = '10.1016/S0140-6736(97)11096-0';
 /**
@@ -208,6 +216,8 @@ const QUERY_SETS = {
     { file: 'works-foreco-2013', calls: [{ fn: 'lookupById', arg: '10.1016/j.foreco.2013.06.030' }] },
     // SRC-12: the Crossref record of PMID 31978945 (Pass 1 of a PubMed-added source).
     { file: 'works-nejmoa2001017', calls: [{ fn: 'lookupById', arg: '10.1056/NEJMoa2001017' }] },
+    // The Crossref record of PMID 40121571 (a translated PubMed title): `add` confirms it, Pass 1 checks it.
+    { file: 'works-orvhet-2025-33246', calls: [{ fn: 'lookupById', arg: TRANSLATED_TITLE_DOI }] },
     // GRND-14: an open-access PLOS ONE article (`add` records its Unpaywall OA PDF, unpaywall/doi-pone-0000001).
     { file: 'works-pone-0000001', calls: [{ fn: 'lookupById', arg: '10.1371/journal.pone.0000001' }] },
     // SRC-05 / SRC-12 (review round 2): registrar markup — an <i> in the title, an &amp; in the journal.
@@ -288,6 +298,9 @@ const QUERY_SETS = {
     // The PubMed record of the ISTIC-registered DOI above (Pass 1's PMID fallback).
     { file: 'esummary-42706103', calls: [{ fn: 'lookupById', arg: ISTIC_PMID, opts: { abstract: false } }] },
     { file: 'efetch-42706103', calls: [{ fn: 'fetchAbstracts', arg: [ISTIC_PMID] }] },
+    // A non-English article: PubMed's title is the bracketed English translation (`add PMID:40121571`).
+    { file: 'esummary-40121571', calls: [{ fn: 'lookupById', arg: TRANSLATED_TITLE_PMID, opts: { abstract: false } }] },
+    { file: 'efetch-40121571', calls: [{ fn: 'fetchAbstracts', arg: [TRANSLATED_TITLE_PMID] }] },
     // Phase 20 (VRFY-11): a PMID-only entry (the DAPA-HF trial). Its efetch
     // answer is over the cassette cap (its collaborator list and references),
     // so only the Pass-1 esummary is recorded.
@@ -343,6 +356,7 @@ const QUERY_SETS = {
     { file: 'updates-nature11247-encode', calls: [{ fn: 'fetchById', arg: '10.1038/nature11247' }] },
     { file: 'updates-foreco-2013', calls: [{ fn: 'fetchById', arg: '10.1016/j.foreco.2013.06.030' }] },
     { file: 'updates-nejmoa2001017', calls: [{ fn: 'fetchById', arg: '10.1056/nejmoa2001017' }] },
+    { file: 'updates-orvhet-2025-33246', calls: [{ fn: 'fetchById', arg: TRANSLATED_TITLE_DOI }] },
     { file: 'updates-pnas-drosophila-coli', calls: [{ fn: 'fetchById', arg: '10.1073/pnas.74.11.5041' }] },
     // Phase 20 (VRFY-11): the re-query Pass 1 makes (the record's spelling) and the freshness probe (normalized).
     { file: 'updates-cbo9780511804441', calls: [{ fn: 'fetchById', arg: VRFY11_CROSSREF_BOOK_DOI }, { fn: 'fetchById', arg: VRFY11_CROSSREF_BOOK_DOI.toLowerCase() }] },

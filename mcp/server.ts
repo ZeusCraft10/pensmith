@@ -22,9 +22,16 @@
 // Entrypoint: stdio MCP server for Pensmith Tier 1.
 //
 // D-02: SDK pinned at @modelcontextprotocol/sdk@^1.29 (NOT v2-alpha).
-// TIER-01 + TIER-02 + D-13: exactly 5 resources + 6 tools (registered via the helpers below).
-// D-07/Pitfall 7: NEVER console.log in this file — corrupts stdio MCP frame.
-//                 Use process.stderr.write or the session-log if diagnostics needed.
+// TIER-01 + TIER-02 + D-13: exactly 5 resources + 11 tools (registered via the helpers below).
+// D-07/Pitfall 7: stdout is the JSON-RPC channel. Nothing here writes to it:
+//                 diagnostics go to process.stderr or the session log.
+// PLUG-13 (D-23a-13): the pensmith_* tools run the CLI verbs in-process, and
+//                 every line a verb prints goes through bin/lib/output-sink.ts
+//                 out(). main() points that sink at stderr before it connects,
+//                 so a verb's `pensmith plan: wrote …` line never reaches the
+//                 frame (the `stdout-sink` / `mcp-stdout-graph` rows keep every
+//                 reachable module on the sink; tests/mcp-stdout-clean.test.ts
+//                 drives every tool over raw stdio).
 
 // FIRST import: filters a dependency's DEP0040 (punycode) deprecation noise
 // before any module that loads citation-js is evaluated (RUN-12).
@@ -36,6 +43,8 @@ import { registerPaperTools } from './tools.js';
 import { servicePaperRoot, setActivePaperRoot } from '../bin/lib/paths.js';
 import { migrateLegacyLayout } from '../bin/lib/state.js';
 import { VERSION } from '../bin/lib/version.generated.js';
+import { setOutputSink } from '../bin/lib/output-sink.js';
+import { disablePrompts } from '../bin/lib/gates.js';
 
 // cross-AI cycle-2 HIGH #4 fix: resolve paperRoot ONCE at boot time and
 // close it over the resource handlers. The CLI launcher and the 02-07
@@ -71,6 +80,14 @@ function oneLine(e: unknown): string {
 }
 
 export async function main(): Promise<void> {
+  // PLUG-13: from here on, every verb line this process prints goes to stderr —
+  // stdout carries only the transport's JSON-RPC frames.
+  setOutputSink(process.stderr);
+  // stdin is the JSON-RPC channel: no gate may read an answer from it, even
+  // with PENSMITH_PROMPT_MODE=numbered in the server's environment (a quote-accept,
+  // revise or cost-cap question would block the call and keep the paper locked).
+  // Every gate takes its non-interactive path instead.
+  disablePrompts();
   // Boot-time paperRoot resolution (RUN-13 / D-17-33): PENSMITH_PAPER_ROOT,
   // else the working directory — the project root, never `.paper/` itself, and
   // never the `pensmith open` pointer (the MCP server does not follow it).

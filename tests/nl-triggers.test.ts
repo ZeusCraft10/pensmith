@@ -1,47 +1,50 @@
-// tests/nl-triggers.test.ts — Phase 7 Wave 0 RED scaffold for UX-05.
+// tests/nl-triggers.test.ts — UX-05 / PLUG-05: natural-language triggers and
+// inline corrections route to the EXISTING locked-16 verbs; nothing adds a
+// 17th verb.
 //
-// Inline conversational corrections must map to the EXISTING locked-16 verbs and
-// must NEVER introduce a 17th verb. Per Phase 4 (04-04): revise ships via
-// `plan --revise` (a flag on the existing `plan` verb), NOT a 17th verb — the
-// locked-16 bijection is preserved.
-//
-// The 16-verb-length / subset invariants are un-skipped (they survive
-// implementation and would catch a 17th verb at any later wave). The
-// skill-file-content assertions are RED-by-skip on the skills landing in 07-04.
+// Per Phase 4 (04-04) revise ships as `plan --revise` (a flag on `plan`), not a
+// 17th verb. Since Phase 23a the ONE natural-language router is the pensmith
+// skill (plugin/skills/pensmith/SKILL.md, D-23a-09): its "What the user says →
+// verb" table maps every PRD §5.4 phrase and §5.6 correction onto a verb, and
+// the 7 plumbing skills (/pensmith:<name>, user-invoked only) each forward one
+// existing verb.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 
-function repoPath(rel: string): string {
-  return fileURLToPath(new URL('../' + rel, import.meta.url));
-}
-
-const SKILL_FILES = [
-  repoPath('skills/pensmith.md'),
-  repoPath('skills/plan-section.md'),
-  repoPath('skills/write-section.md'),
-  repoPath('skills/verify-section.md'),
-];
-const skillsBuilt = existsSync(SKILL_FILES[0]!);
-
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SKILLS_DIR = path.join(REPO, 'plugin', 'skills');
+const SKILL_NAMES = readdirSync(SKILLS_DIR, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
 const VERB_SET = new Set<string>(UX02_VERBS as readonly string[]);
 
+function skillText(name: string): string {
+  return readFileSync(path.join(SKILLS_DIR, name, 'SKILL.md'), 'utf8');
+}
+
+/** The pensmith skill's "What the user says → verb" rows: phrase cell → verb cell. */
+function routingRows(): Array<{ says: string; verb: string }> {
+  const body = skillText('pensmith');
+  const section = /## What the user says → verb\n([\s\S]*?)\n## /.exec(body)?.[1] ?? '';
+  return section
+    .split('\n')
+    .filter((l) => l.startsWith('| "'))
+    .map((l) => {
+      const cells = l.split('|').map((c) => c.trim());
+      return { says: cells[1] ?? '', verb: cells[2] ?? '' };
+    });
+}
+
 // === UX-05 / T-07-02: the locked-16 bijection is exactly 16 (no 17th verb) ===
-// Un-skipped: this invariant survives implementation and is the standing guard
-// that adding the skills/plumbing namespace did NOT introduce a 17th verb.
 test('UX-05 / T-07-02: UX02_VERBS.length === 16 (no 17th verb introduced)', () => {
   assert.equal(UX02_VERBS.length, 16, 'T-07-02: the locked-16 bijection must stay at exactly 16 verbs');
 });
 
 // === UX-05: revise / swap-source / redo route to the EXISTING `plan` verb ===
-// Per 04-04 the revise correction is `plan --revise`, NOT a 17th verb. So the
-// target verb for these corrections must be the existing `plan` (and `write`),
-// both members of the locked 16.
 test('UX-05: inline corrections (revise / swap-source / redo) map to the existing plan/write verbs (no new verb)', () => {
-  // The correction → verb map the skill bodies implement (per 04-04 + PRD §5.4).
   const correctionTargets: Record<string, string> = {
     'revise': 'plan',        // `plan --revise`
     'swap source': 'plan',   // re-plan the section's source assignment
@@ -49,55 +52,75 @@ test('UX-05: inline corrections (revise / swap-source / redo) map to the existin
     'rewrite section': 'write',
   };
   for (const [correction, verb] of Object.entries(correctionTargets)) {
-    assert.ok(
-      VERB_SET.has(verb),
-      `UX-05: the "${correction}" correction must route to an EXISTING locked-16 verb, got "${verb}"`,
-    );
+    assert.ok(VERB_SET.has(verb), `UX-05: the "${correction}" correction must route to an EXISTING locked-16 verb, got "${verb}"`);
   }
-  // Specifically: "revise" must NOT introduce a `revise` verb — it rides `plan`.
   assert.ok(!VERB_SET.has('revise'), 'UX-05: "revise" must NOT be a 17th verb (it ships via plan --revise, per 04-04)');
 });
 
-// --- RED-by-skip presence guard ---
-test('UX-05: skill files presence is consistent with Wave-0 RED state', () => {
-  if (skillsBuilt) {
-    assert.ok(skillsBuilt, 'skills/*.md present — skill-target subset test active');
-  } else {
-    assert.ok(!skillsBuilt, 'Wave-0: skills/*.md not written yet (RED-by-skip; lands in 07-04)');
+// === UX-05 / PLUG-05: every phrase row routes to existing verbs ===
+test('UX-05: every row of the pensmith skill\'s phrase table routes to a locked-16 verb', () => {
+  const rows = routingRows();
+  assert.ok(rows.length >= 15, `the phrase table has its rows (got ${rows.length})`);
+  for (const { says, verb } of rows) {
+    const targets = [...verb.matchAll(/`([a-z]+)(?:[ `])/g)].map((m) => m[1]!);
+    const named = targets.length > 0 ? targets : /\bnext\b/.test(verb) ? ['next'] : [];
+    assert.ok(named.length > 0, `${says} → ${verb}: names a verb`);
+    for (const t of named) assert.ok(VERB_SET.has(t), `${says} → "${t}" must be one of the 16 verbs`);
   }
 });
 
-// === UX-05: every verb a skill body targets is a SUBSET of UX02_VERBS ===
-test('UX-05: the set of skill-mapped target verbs is a SUBSET of UX02_VERBS (no new verb names)',
-  { skip: !skillsBuilt }, () => {
-    // Collect candidate verb tokens the skills reference and assert each known
-    // verb-shaped reference is a member of the locked 16. We extract
-    // `pensmith:<verb>` / `pensmith <verb>` references from the skill bodies and
-    // require each to be a UX02 verb (or the `revise` correction, which maps to
-    // plan — asserted above to NOT be its own verb).
-    const referenced = new Set<string>();
-    for (const path of SKILL_FILES) {
-      if (!existsSync(path)) continue;
-      const text = readFileSync(path, 'utf8');
-      const re = /pensmith[:\s]+([a-z][a-z-]*)/g;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(text)) !== null) {
-        const token = m[1];
-        if (token) referenced.add(token);
-      }
-    }
-    for (const token of referenced) {
-      // Allow the documented plumbing-skill suffixes (plan-section/write-section/
-      // verify-section) and the `revise` correction alias; everything else that
-      // looks like a verb dispatch MUST be a member of the locked 16.
-      const isPlumbingSuffix = /-section$/.test(token);
-      const isReviseAlias = token === 'revise';
-      if (isPlumbingSuffix || isReviseAlias) continue;
-      assert.ok(
-        VERB_SET.has(token),
-        `UX-05: skill-referenced verb "${token}" must be a member of UX02_VERBS (no 17th verb)`,
-      );
-    }
-    // The length invariant must still hold after the skills landed.
-    assert.equal(UX02_VERBS.length, 16, 'UX-05: adding the skills namespace must NOT change UX02_VERBS.length');
-  });
+test('UX-05: the §5.6 corrections ride existing verbs by the routes that work today — never a new verb', () => {
+  const byPhrase = new Map(routingRows().map((r) => [r.says.toLowerCase(), r.verb]));
+  const find = (fragment: string): string => {
+    for (const [says, verb] of byPhrase) if (says.includes(fragment)) return verb;
+    return '';
+  };
+  // Review round 2: `plan N --revise` only repairs a verifier-flagged citation
+  // (bin/lib/revise.ts); on a clean section it changes nothing. It is the
+  // redo route only for a flagged section, and never the length or source
+  // route. tests/correction-routes.test.ts runs each route through the CLI.
+  // After a revise the next step is `verify N` (revise resets the verified
+  // hash, and the router names verify, as its attention line says); a
+  // `write N` would redraft the section and discard the repair.
+  const redo = find('re-do section 3');
+  assert.match(redo, /flagged a citation[^|]*`plan 3 --revise`[^|]*then `verify 3`; otherwise `plan 3`, then `write 3`/);
+  const length = find('make it 1500 words');
+  assert.match(length, /word target column of `\.paper\/OUTLINE\.md`[^|]*then `outline`[^|]*then `plan N` and `write N`/);
+  assert.doesNotMatch(length, /--revise/);
+  const source = find('use a different source');
+  assert.match(source, /`add <DOI or id> --section 4`[^|]*`add --remap <citekey> --section 4`[^|]*then `plan 4` and `write 4`/);
+  assert.doesNotMatch(source, /--revise/);
+  const addSection = find('add a section about counterexamples');
+  assert.match(addSection, /lettered number after the section it follows \(`3a` after §3\)[^|]*no existing number changes[^|]*Then `outline`/);
+  assert.match(find('check the citations in section 3'), /`verify 3`/);
+  const body = readFileSync(path.join(SKILLS_DIR, 'pensmith', 'SKILL.md'), 'utf8');
+  assert.match(body, /`plan N --revise` only repairs a citation the verifier flagged; on a clean\nsection it changes nothing/);
+  assert.match(body, /no single-claim source swap/);
+  // The one file the skill may edit is the OUTLINE.md table the user asked to change.
+  assert.match(body, /never writes files under `\.paper\/` itself — with one\nexception: the edit to the `\.paper\/OUTLINE\.md` table that the user asked for/);
+});
+
+// === UX-05: every verb a skill body names is a member of the 16 ===
+test('UX-05: every `pensmith <verb>` a skill body names is a member of UX02_VERBS (no new verb names)', () => {
+  const referenced = new Set<string>();
+  for (const name of SKILL_NAMES) {
+    const text = skillText(name);
+    // `pensmith <verb>` / `/pensmith <verb>` command references (not the
+    // `pensmith:<skill>` names, which are skills, not verbs).
+    for (const m of text.matchAll(/`\/?pensmith ([a-z][a-z-]*)/g)) referenced.add(m[1]!);
+  }
+  assert.ok(referenced.size > 0, 'the skills name the verbs they run');
+  for (const token of referenced) {
+    if (token === 'verb') continue; // the `pensmith <verb> [args]` placeholder
+    assert.ok(VERB_SET.has(token), `UX-05: skill-referenced verb "${token}" must be a member of UX02_VERBS (no 17th verb)`);
+  }
+  assert.equal(UX02_VERBS.length, 16, 'UX-05: the skills namespace must NOT change UX02_VERBS.length');
+});
+
+test('PLUG-05: the plumbing skill names are not verbs of their own — each forwards an existing verb', () => {
+  for (const name of SKILL_NAMES.filter((n) => n !== 'pensmith')) {
+    const verb = /Run the pensmith verb `([a-z]+) \$ARGUMENTS`/.exec(skillText(name))?.[1];
+    assert.ok(verb && VERB_SET.has(verb), `/pensmith:${name} forwards a locked-16 verb (got ${String(verb)})`);
+    if (name.endsWith('-section')) assert.ok(!VERB_SET.has(name), `${name} is not a verb`);
+  }
+});

@@ -1,51 +1,78 @@
-// tests/handoff-size.test.ts — Wave 0 stub for D-17 / ARCH-04.
-// Asserts HANDOFF.json size < 5120 bytes after pre-compact hook runs against fixture .paper/.
+// tests/handoff-size.test.ts — HANDOFF.json stays ≤ 5120 bytes (D-17, ARCH-04;
+// v2 PLUG-14, D-23a-16).
 //
-// Production code required: hooks/pre-compact.ts (body) — lands Wave 4.
-// Until then: existence assertion fires RED; behavioral tests skip gracefully.
+// A long paper must still get a handoff: assembleHandoff drops the pointers of
+// verified sections first, then the ones furthest from the current section,
+// instead of failing the write. Checked on the assembler directly and through
+// the bundled PreCompact hook (plugin/dist/hooks/pre-compact.mjs) in a paper
+// with 40 long-slug sections.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { assembleHandoff, HandoffSchema, HANDOFF_MAX_BYTES, type HandoffSectionPointer } from '../bin/lib/handoff.js';
+import { REPO, sandbox, writePlan, writeState } from './helpers/paper-cli-harness.js';
 
-const preCompactPath = new URL('../hooks/pre-compact.ts', import.meta.url);
+const HOOK = join(REPO, 'plugin', 'dist', 'hooks', 'pre-compact.mjs');
 
-test('handoff-size: hooks/pre-compact.ts production module exists (D-17, ARCH-04)', () => {
-  assert.ok(
-    existsSync(preCompactPath),
-    'MISSING: hooks/pre-compact.ts body — Wave 4 must implement PreCompact hook that writes HANDOFF.json',
-  );
+function pointer(i: number, state: HandoffSectionPointer['state']): HandoffSectionPointer {
+  const slug = `section-number-${i}-with-a-rather-long-descriptive-slug`;
+  const dir = `.paper/sections/${String(i).padStart(2, '0')}-${slug}`;
+  return { slug, plan_path: `${dir}/PLAN.md`, draft_path: `${dir}/DRAFT.md`, verification_path: `${dir}/VERIFICATION.md`, state };
+}
+
+test('handoff-size: a 40-section handoff fits 5120 bytes, keeps the current section and drops verified ones first', () => {
+  const pointers = Array.from({ length: 40 }, (_, i) => pointer(i + 1, i < 20 ? 'verified' : 'planned'));
+  const current = pointers[24]!;
+  const h = assembleHandoff({
+    decision: { verb: 'write', n: 25, slug: current.slug },
+    sectionPointers: pointers,
+  });
+  const bytes = Buffer.byteLength(JSON.stringify(h, null, 2) + '\n', 'utf8');
+  assert.ok(bytes <= HANDOFF_MAX_BYTES, `${bytes} bytes`);
+  assert.ok(HandoffSchema.safeParse(h).success);
+  assert.ok(h.section_pointers.some((p) => p.slug === current.slug), 'the current section keeps its pointer');
+  assert.ok(h.section_pointers.every((p) => p.state !== 'verified'), 'verified sections are dropped first');
+  assert.ok(h.section_pointers.length > 1, 'as many pointers as fit are kept');
+
+  const small = assembleHandoff({ decision: { verb: 'compile' }, sectionPointers: pointers.slice(0, 3) });
+  assert.equal(small.section_pointers.length, 3, 'a handoff under the budget keeps every pointer');
 });
 
-test('handoff-size: HANDOFF.json size < 5120 bytes after pre-compact hook runs (D-17, ARCH-04)',
-  { skip: !existsSync(preCompactPath) },
-  async () => {
-    // Write minimal fixture state, invoke pre-compact hook entrypoint,
-    // then assert statSync(HANDOFF.json).size < 5120.
-    const tmp = join(tmpdir(), `pensmith-handoff-size-${Date.now()}`);
-    mkdirSync(tmp, { recursive: true });
-
-    // Minimal fixture .paper/STATE.json so the hook has something to read.
-    const paperDir = join(tmp, '.paper');
-    mkdirSync(paperDir, { recursive: true });
-    writeFileSync(join(paperDir, 'STATE.json'), JSON.stringify({
-      schema_version: 2,
-      name: 'test-paper',
-      sections: [],
-    }));
-
-    // Dynamically import and call the pre-compact hook (Wave 5 Plan 03-08 landed onPreCompact).
-    const { onPreCompact } = await import('../hooks/pre-compact.js');
-    await onPreCompact({ paperDir });
-
-    const handoffPath = join(paperDir, 'HANDOFF.json');
-    assert.ok(existsSync(handoffPath), 'HANDOFF.json must exist after pre-compact hook');
-    const size = statSync(handoffPath).size;
-    assert.ok(
-      size < 5120,
-      `HANDOFF.json size ${size} bytes exceeds 5120-byte budget (D-17 / ARCH-04)`,
-    );
-  },
-);
+test('handoff-size: the bundled PreCompact hook writes ≤ 5120 bytes for a 40-section paper', () => {
+  assert.ok(existsSync(HOOK), 'plugin/dist/hooks/pre-compact.mjs is missing — run `npm run bundle`');
+  const sb = sandbox('handoff-size');
+  const root = sb.project('paper');
+  const sections = Array.from({ length: 40 }, (_, i) => ({ n: i + 1, slug: `section-number-${i + 1}-with-a-rather-long-descriptive-slug` }));
+  writeState(root, sections);
+  writeFileSync(join(root, '.paper', 'RESEARCH.md'), '# Research log\n');
+  const rows = sections.map((s) => `| ${s.n} | ${s.slug} | ${s.slug} |  | 300 |  |`);
+  writeFileSync(
+    join(root, '.paper', 'OUTLINE.md'),
+    ['# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', ...rows, ''].join('\n'),
+  );
+  for (const s of sections) {
+    const plan = writePlan(root, s.n, s.slug, { status: s.n < 30 ? 'verified' : 'planned' });
+    // VRFY-16 (Phase 20): the router walks past a verified section only while
+    // its DRAFT.md is in place (one whose draft is gone is re-drafted).
+    if (s.n < 30) writeFileSync(join(dirname(plan), 'DRAFT.md'), `Section ${s.n}.\n`);
+  }
+  const r = spawnSync(process.execPath, [HOOK], {
+    cwd: root,
+    env: sb.env({ NODE_V8_COVERAGE: undefined }), // a bundle is not a coverage target
+    input: JSON.stringify({ session_id: 's-size', cwd: root, hook_event_name: 'PreCompact', trigger: 'auto' }),
+    encoding: 'utf8',
+    timeout: 30_000,
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  const file = join(root, '.paper', 'HANDOFF.json');
+  assert.ok(existsSync(file), `HANDOFF.json written (stderr: ${r.stderr})`);
+  assert.ok(statSync(file).size <= HANDOFF_MAX_BYTES, `${statSync(file).size} bytes`);
+  const h = HandoffSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
+  assert.equal(h.phase, 'sectioning');
+  assert.equal(h.section, '30');
+  assert.equal(h.position, 'write');
+});

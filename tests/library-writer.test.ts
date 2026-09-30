@@ -25,6 +25,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
   upsertSources,
   loadLibrary,
@@ -771,39 +773,29 @@ test('BRDTH-01: an upsert from another process waits for the holder that created
 const DIST_CLI = path.join(REPO, 'dist', 'bin', 'pensmith.js');
 const DIST_MCP = path.join(REPO, 'dist', 'mcp', 'server.js');
 
+/**
+ * paper://library as a Tier 1 client reads it: the MCP SDK's own stdio client,
+ * which frames JSON-RPC messages by newline. (A raw stdout buffer parsed line by
+ * line read a partial message whenever a large answer arrived in several
+ * chunks — the chunk sizes differ between Node 22 and 24.)
+ */
 async function readPaperLibraryOverMcp(cwd: string): Promise<{ entries: Array<{ citekey: string }>; $schemaVersion: number }> {
-  const env = { ...process.env };
-  delete env['PENSMITH_PAPER_ROOT'];
-  const child = spawn(process.execPath, [DIST_MCP], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
-  let buf = '';
-  child.stdout.on('data', (d: Buffer) => (buf += d.toString()));
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== 'PENSMITH_PAPER_ROOT') env[k] = v;
+  const transport = new StdioClientTransport({ command: process.execPath, args: [DIST_MCP], env, cwd, stderr: 'pipe' });
   let stderr = '';
-  child.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
-  const send = (msg: unknown): void => {
-    child.stdin.write(JSON.stringify(msg) + '\n');
-  };
-  const waitFor = async (id: number): Promise<Record<string, unknown>> => {
-    const t0 = Date.now();
-    for (;;) {
-      for (const line of buf.split('\n')) {
-        if (!line.trim()) continue;
-        const msg = JSON.parse(line) as { id?: number };
-        if (msg.id === id) return msg as Record<string, unknown>;
-      }
-      if (Date.now() - t0 > 30_000 || child.exitCode !== null) throw new Error(`no MCP response ${id}; stderr=${stderr}`);
-      await new Promise((r) => setTimeout(r, 25));
-    }
-  };
+  transport.stderr?.on('data', (d: Buffer) => (stderr += d.toString()));
+  const client = new Client({ name: 'libwriter-test', version: '0' }, { capabilities: {} });
+  await client.connect(transport);
   try {
-    send({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'libwriter-test', version: '0' } } });
-    await waitFor(1);
-    send({ jsonrpc: '2.0', method: 'notifications/initialized' });
-    send({ jsonrpc: '2.0', id: 2, method: 'resources/read', params: { uri: 'paper://library' } });
-    const res = (await waitFor(2)) as { result?: { contents?: Array<{ text?: string }> }; error?: unknown };
-    assert.ok(res.result, `paper://library must not error: ${JSON.stringify(res.error)}`);
-    return JSON.parse(res.result.contents![0]!.text!) as { entries: Array<{ citekey: string }>; $schemaVersion: number };
+    const res = await client.readResource({ uri: 'paper://library' }).catch((err: unknown) => {
+      throw new Error(`paper://library must not error: ${String(err)}; stderr=${stderr}`);
+    });
+    const text = res.contents[0] !== undefined && 'text' in res.contents[0] ? res.contents[0].text : undefined;
+    assert.equal(typeof text, 'string', `paper://library returns text: ${JSON.stringify(res.contents)}`);
+    return JSON.parse(text as string) as { entries: Array<{ citekey: string }>; $schemaVersion: number };
   } finally {
-    child.kill();
+    await client.close();
   }
 }
 

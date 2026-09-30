@@ -1,0 +1,16 @@
+{
+  "id": "mcp-stdout-graph",
+  "requirement": "PLUG-13",
+  "module": "bin/lib/output-sink.ts",
+  "description": "No module the MCP server can reach writes to the process's stdout except bin/lib/output-sink.ts. The walk follows static and dynamic relative imports from mcp/**; stdout is the server's JSON-RPC channel, and its pensmith_* tools run the CLI verbs in-process (a `pensmith plan: wrote …` line there made Claude Code drop the server, T1-15). It checks each reachable module's text for process.stdout.write, the process.stdout stream handed around as a value or taken out of process under another name (`import { stdout } from 'node:process'`, `const { stdout: s } = process`), every console method call but warn, error, trace and assert (console.log, count, group, timeLog, dirxml … print to stdout; globalThis.console included), and process or console itself taken under another name or passed as a value (`const p = process`, `f(console)`), wherever the module lives — also outside the stdout-sink lint row's scope and allow list (a statically imported pdf-worker.ts would print on the main thread; pdf-text.ts's type-only import of it is erased at runtime and not followed). Print through out(); the server points that sink at stderr.",
+  "scope": ["mcp/**/*.ts"],
+  "allow": [],
+  "match": {
+    "kind": "import-graph",
+    "pattern": "^(?!bin/lib/output-sink\\.ts$)",
+    "typeImports": "allow",
+    "content": "\\bprocess\\s*(?:\\.\\s*stdout\\b|\\[\\s*['\"`]stdout['\"`]\\s*\\])(?!\\s*\\.\\s*(?:isTTY|columns|rows)\\b)|\\bconsole\\s*(?:\\.\\s*(?!(?:warn|error|trace|assert)\\b)[A-Za-z_$][\\w$]*|\\[\\s*['\"`](?!(?:warn|error|trace|assert)['\"`])[A-Za-z_$][\\w$]*['\"`]\\s*\\])\\s*(?:\\(|\\.\\s*(?:call|apply|bind)\\b)|\\bimport\\s*\\{[^}]*\\bstdout\\b[^}]*\\}\\s*from\\s*['\\\"`](?:node:)?process['\\\"`]|\\{[^{}]*\\bstdout\\b[^{}]*\\}\\s*=\\s*(?:globalThis\\s*\\.\\s*)?process\\b(?!\\s*\\.)|(?:(?<!\\}\\s*)=>?|[(,?]|(?<!\\bnode):|\\breturn\\b)\\s*(?:globalThis\\s*\\.\\s*)?process\\b(?!\\s*(?:[.\\[]|\\?\\.))|(?:=>?|[(,?]|(?<!\\bnode):|\\breturn\\b)\\s*(?:globalThis\\s*\\.\\s*)?console\\b(?!\\s*(?:[.\\[]|\\?\\.))|\\{[^{}]*\\.\\.\\.[^{}]*\\}\\s*=\\s*(?:globalThis\\s*\\.\\s*)?process\\b(?!\\s*(?:[.\\[]|\\?\\.))"
+  },
+  "fixture": "tests/fixtures/chokepoints/mcp-stdout-graph.violation.ts.txt",
+  "fixturePath": "bin/cli/plan.ts"
+}

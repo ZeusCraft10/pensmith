@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { validateArgv } from '../bin/pensmith.js';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 
-const WORKFLOWS = fileURLToPath(new URL('../workflows/', import.meta.url));
+const WORKFLOWS = fileURLToPath(new URL('../plugin/workflows/', import.meta.url));
 
 /** The first backtick span after "Shell fallback" (it may wrap across lines). */
 function fallbackSynopsis(body: string): string | null {

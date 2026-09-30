@@ -9,12 +9,15 @@
 //   - a real hanging worker is terminated, activePdfWorkers() returns to 0 and
 //     a process that hit the timeout exits on its own;
 //   - worker stdout/stderr (pdf.js warnings) never reach the user;
-//   - the worker entry resolves from source (tsx, .ts) and from dist/ (.js).
+//   - the worker entry resolves from source (tsx, .ts), from dist/ (.js) and
+//     inside the committed plugin bundle (.mjs, PLUG-02), whose worker bundle
+//     extracts a PDF and is still terminated on timeout.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { spawnSync } from 'node:child_process';
+import { Worker } from 'node:worker_threads';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -276,6 +279,56 @@ test('SEC-02: the worker entry resolves from dist/ (.js) and parses (run `npm ru
   assert.equal(got.entry, path.join(REPO, 'dist', 'bin', 'lib', 'pdf-worker.js'));
   assert.equal(got.title, true);
   assert.equal(got.workers, 0);
+});
+
+// ---------------------------------------------------------------------------
+// The plugin bundle layout (PLUG-02): pdf-text.ts is inlined into
+// plugin/dist/mcp/server.mjs and starts plugin/dist/mcp/pdf-worker.mjs.
+// ---------------------------------------------------------------------------
+
+const BUNDLED_WORKER = path.join(REPO, 'plugin', 'dist', 'mcp', 'pdf-worker.mjs');
+
+test('SEC-02 / PLUG-02: inside a bundle the worker entry is the pdf-worker.mjs beside it', () => {
+  const server = path.join(REPO, 'plugin', 'dist', 'mcp', 'server.mjs');
+  assert.equal(pdfWorkerEntry(server), BUNDLED_WORKER);
+  assert.equal(pdfWorkerEntry(path.join('x', 'bin', 'lib', 'pdf-text.js')), path.join('x', 'bin', 'lib', 'pdf-worker.js'));
+  assert.equal(pdfWorkerEntry(path.join('x', 'bin', 'lib', 'pdf-text.ts')), path.join('x', 'bin', 'lib', 'pdf-worker.ts'));
+  assert.deepEqual(workerExecArgv(BUNDLED_WORKER), [], 'the bundle needs no loader');
+});
+
+/** Run the bundled worker through the same settle guard pdf-text.ts uses. */
+function runBundledWorker(data: Record<string, unknown>, timeoutMs: number): { job: Promise<WorkerResult>; worker: Worker } {
+  const bytes = new Uint8Array(fs.readFileSync(FIXTURE));
+  const worker = new Worker(BUNDLED_WORKER, { workerData: { bytes, ...data }, transferList: [bytes.buffer], stdout: true, stderr: true });
+  worker.stdout.resume();
+  worker.stderr.resume();
+  const timers: WorkerJobTimers = { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (h) => clearTimeout(h as NodeJS.Timeout) };
+  return { job: runPdfWorkerJob(worker, timeoutMs, timers), worker };
+}
+
+test('SEC-02 / PLUG-02: the bundled worker (plugin/dist/mcp/pdf-worker.mjs) extracts a fixture PDF', async () => {
+  assert.ok(fs.existsSync(BUNDLED_WORKER), 'plugin/dist/mcp/pdf-worker.mjs is missing — run `npm run bundle`');
+  const { job } = runBundledWorker({}, 30_000);
+  const out = await job;
+  assert.equal(out.numpages, 1);
+  assert.match(out.pages[0] ?? '', /Attention Is All You Need/);
+  assert.match(out.text, /arXiv:1706\.03762v7/);
+  assert.equal(activePdfWorkers(), 0);
+});
+
+test('SEC-02 / PLUG-02: a hanging bundled worker is terminated on timeout', async () => {
+  const { job, worker } = runBundledWorker({ testHang: true }, 400);
+  let exitCode: number | null = null;
+  worker.once('exit', (code) => {
+    exitCode = code;
+  });
+  const started = Date.now();
+  await assert.rejects(job, (e: unknown) => e instanceof PdfTimeoutError);
+  assert.ok(Date.now() - started < 10_000, 'the timeout fired');
+  assert.equal(activePdfWorkers(), 0, 'no worker is left running');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.notEqual(exitCode, null, 'the spinning worker thread exited (terminated)');
+  assert.equal(worker.threadId, -1, 'the thread is gone');
 });
 
 // ---------------------------------------------------------------------------

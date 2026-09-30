@@ -1,0 +1,631 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1556%2F650.2025.33246",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              7,
+              30
+            ]
+          ],
+          "date-time": "2026-07-30T09:16:18Z",
+          "timestamp": 1785402978350,
+          "version": "3.56.0"
+        },
+        "reference-count": 69,
+        "publisher": "Akademiai Kiado Zrt.",
+        "issue": "12",
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2025,
+                  3,
+                  23
+                ]
+              ],
+              "date-time": "2025-03-23T00:00:00Z",
+              "timestamp": 1742688000000
+            },
+            "content-version": "unspecified",
+            "delay-in-days": 0,
+            "URL": "http://creativecommons.org/licenses/by/4.0/"
+          }
+        ],
+        "content-domain": {
+          "domain": [
+            "www.akjournals.com"
+          ],
+          "crossmark-restriction": true
+        },
+        "short-container-title": [
+          "OH"
+        ],
+        "published-print": {
+          "date-parts": [
+            [
+              2025,
+              3,
+              23
+            ]
+          ]
+        },
+        "abstract": "<jats:p>Az orvosképzés hagyományosan elméleti és klinikai tanulmányokra válik szét,\n                    azonban egyre több orvosképző helyen jelenik meg a kettőt egymáshoz közelítő\n                    integrált kurrikulum. Az elméleti tudás stabil megszerzése kiemelten fontos,\n                    mivel ez alapozza meg a klinikai tantárgyakat, illetve a diplomaszerzés után a\n                    mindennapi klinikai gondolkodást és döntéshozatalt. Kutatások igazolják, hogy az\n                    elméleti tantárgyak vonatkozásában az egyetemi vizsgák után a hallgatók tárgyi\n                    tudása jelentősen csökkenhet, ami nehézségekhez vezethet a klinikai tanulmányok\n                    teljesítésében és akár az orvosi munkában. Korábbi tanulmányok szerint a\n                    hallgatók megközelítőleg a tanultak harmadát vagy negyedét felejtik el egy év\n                    leforgása alatt. Az egyes kutatásokban a felejtés mértéke ugyanakkor széles\n                    skálán mozog, tudományterületenként különböző. Az aktív tanulást támogató\n                    oktatási módszerek és tanulási stratégiák – mint az előhívási gyakorlatok és az\n                    időközönkénti ismétlés – bizonyítottan hatékonyan segítik elő a hosszú távú\n                    tudásmegőrzést. Az elméleti anyag klinikai kapcsolódási pontjainak\n                    hangsúlyozása, az integrált kurrikulum irányába tett lépések szintén\n                    hozzájárulhatnak a mélyebb megértéshez és a hosszú távú tudásmegőrzéshez. A\n                    jelen tanulmány célja átfogó jelleggel bemutatni az orvostanhallgatók hosszú\n                    távú tárgyi tudásával kapcsolatos tudományos eredményeket, valamint betekintést\n                    nyújtani az orvostanhallgatók körében is bizonyítottan hatékony\n                    tanulási-oktatási stratégiák területébe, amelyek alkalmazása hozzájárulhat az\n                    orvosképzés fejlődéséhez. Orv Hetil. 2025; 166(12): 450–458.</jats:p>",
+        "DOI": "10.1556/650.2025.33246",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2025,
+              3,
+              26
+            ]
+          ],
+          "date-time": "2025-03-26T20:30:36Z",
+          "timestamp": 1743021036000
+        },
+        "page": "450-458",
+        "update-policy": "https://doi.org/10.1556/policypage.crossmark.crossref.2",
+        "source": "Crossref",
+        "is-referenced-by-count": 0,
+        "title": [
+          "Mennyit felejtenek az orvostanhallgatók?"
+        ],
+        "prefix": "10.1556",
+        "volume": "166",
+        "author": [
+          {
+            "given": "Gergely József",
+            "family": "Csaba",
+            "sequence": "first",
+            "affiliation": [
+              {
+                "name": "Pécsi Tudományegyetem, Általános Orvostudományi Kar, Magatartástudományi Intézet Pécs, Szigeti út 12., 7624 Magyarország"
+              }
+            ],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Zsuzsanna",
+            "family": "Füzesi",
+            "sequence": "additional",
+            "affiliation": [
+              {
+                "name": "Pécsi Tudományegyetem, Általános Orvostudományi Kar, Magatartástudományi Intézet Pécs, Szigeti út 12., 7624 Magyarország"
+              }
+            ],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Árpád",
+            "family": "Csathó",
+            "sequence": "additional",
+            "affiliation": [
+              {
+                "name": "Pécsi Tudományegyetem, Általános Orvostudományi Kar, Magatartástudományi Intézet Pécs, Szigeti út 12., 7624 Magyarország"
+              },
+              {
+                "name": "Pécsi Tudományegyetem, Szentágothai János Kutatóközpont Pécs Magyarország"
+              }
+            ],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "425",
+        "reference": [
+          {
+            "key": "R1",
+            "unstructured": "Flexner A. (ed.) Medical Education in The United States and Canada.\n                    The Carnegie Foundation for the Advancement of Teaching, New York, NY,\n                    1910."
+          },
+          {
+            "key": "R2",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Brauer DG, Ferguson KJ. The integrated curriculum in medical\n                    education: AMEE Guide No. 96. Med Teach. 2015; 37: 312–322.",
+            "DOI": "10.3109/0142159X.2014.970998"
+          },
+          {
+            "key": "R3",
+            "unstructured": "18/2016 (VIII. 5.) EMMI decree amending EMMI decree No. 8/2013 (I.\n                    30.) on the training and outcome requirements of higher education vocational\n                    training, bachelor’s and master’s programmes, common requirements for teacher\n                    education and the training and outcome requirements of certain teacher\n                    specialisations. [18/2016 (VIII. 5.) EMMI rendelet a felsőoktatási szakképzések,\n                    az alap- és mesterképzések képzési és kimeneti követelményeiről, valamint a\n                    tanári felkészítés közös követelményeiről és az egyes tanárszakok képzési és\n                    kimeneti követelményeiről szóló 8/2013. (I. 30.) EMMI rendelet módosításáról.]\n                    Available from:\n                        https://net.jogtar.hu/jogszabaly?docid=A1600018.EMM&timeshift=20160813&txtreferer=00000001.txt\n                    [accessed: Oct. 21, 2024]. [Hungarian]"
+          },
+          {
+            "key": "R4",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Grande JP. Training of physicians for the twenty-first century: role\n                    of the basic sciences. Med Teach. 2009; 31: 802–806.",
+            "DOI": "10.1080/01421590903137049"
+          },
+          {
+            "key": "R5",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Finnerty EP, Chauvin S, Bonaminio G, et al. Flexner revisited: the\n                    role and value of the basic sciences in medical education. Acad Med. 2010; 85:\n                    349–355.",
+            "DOI": "10.1097/ACM.0b013e3181c88b09"
+          },
+          {
+            "key": "R6",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Alpár A. Presence and future of the teaching of anatomy, histology\n                    and embryology in the medical curriculum. [Az anatómia, szövet- és fejlődéstan\n                    oktatásának jelene és jövője az orvosképzésben.] Orv Hetil. 2024; 165: 323–331.\n                    [Hungarian]",
+            "DOI": "10.1556/650.2024.33004"
+          },
+          {
+            "key": "R7",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Woods NN. Science is fundamental: The role of biomedical knowledge\n                    in clinical reasoning. Med Educ. 2007; 41: 1173–1177.",
+            "DOI": "10.1111/j.1365-2923.2007.02911.x"
+          },
+          {
+            "key": "R8",
+            "unstructured": "Densen P. Challenges and opportunities facing medical education.\n                    Trans Am Clin Climatol Assoc. 2011; 122: 48–58."
+          },
+          {
+            "key": "R9",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Neame RL. The preclinical course of study: help or hindrance? Acad\n                    Med. 1984; 59: 699–707.",
+            "DOI": "10.1097/00001888-198409000-00002"
+          },
+          {
+            "key": "R10",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Custers EJ. Long-term retention of basic science knowledge: a review\n                    study. Adv in Health Sci Educ. 2010; 15: 109–128.",
+            "DOI": "10.1007/s10459-008-9101-y"
+          },
+          {
+            "key": "R11",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Ling Y, Swanson DB, Holtzman K, et al. Retention of basic science\n                    information by senior medical students. Acad Med. 2008; 83(10 Suppl):\n                    S82–S85.",
+            "DOI": "10.1097/ACM.0b013e318183e2fc"
+          },
+          {
+            "key": "R12",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Custers EJ, ten Cate OT. Very long-term retention of basic science\n                    knowledge in doctors after graduation. Med Educ. 2011; 45:\n                    422–430.",
+            "DOI": "10.1111/j.1365-2923.2010.03889.x"
+          },
+          {
+            "key": "R13",
+            "doi-asserted-by": "crossref",
+            "unstructured": "D’Eon MF. Knowledge loss of medical students on first year basic\n                    science courses at the University of Saskatchewan. BMC Med Educ. 2006; 6:\n                    5.",
+            "DOI": "10.1186/1472-6920-6-5"
+          },
+          {
+            "key": "R14",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Doomernik DE, van Goor H, Kooloos JG, et al. Longitudinal retention\n                    of anatomical knowledge in second-year medical students. Anat Sci Educ. 2017;\n                    10: 242–248.",
+            "DOI": "10.1002/ase.1656"
+          },
+          {
+            "key": "R15",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Mateen FJ, D’Eon MF. Neuroanatomy: a single institution study of\n                    knowledge loss. Med Teach. 2008; 30: 537–539.",
+            "DOI": "10.1080/01421590802064880"
+          },
+          {
+            "key": "R16",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Schneid SD, Pashler H, Armour C. How much basic science content do\n                    second-year medical students remember from their first year? Med Teach. 2019;\n                    41: 231–233.",
+            "DOI": "10.1080/0142159X.2018.1426845"
+          },
+          {
+            "key": "R17",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Weggemans MM, Custers EJ, ten Cate OT. Unprepared retesting of first\n                    year knowledge: how much do second year medical students remember? Med Sci Educ.\n                    2017; 27: 597–605.",
+            "DOI": "10.1007/s40670-017-0431-3"
+          },
+          {
+            "key": "R18",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Saffran M, Kennedy WB, Kelley PR. Retention of knowledge of\n                    pharmacology by U.S. and Canadian medical students. Trends Pharmacol Sci. 1982;\n                    3(C): 461–463.",
+            "DOI": "10.1016/0165-6147(82)91235-4"
+          },
+          {
+            "key": "R19",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Kennedy WB, Kelley PR Jr, Saffran M. Use of NBME examinations to\n                    assess retention of basic science knowledge. J Med Educ. 1981; 56:\n                    167–173.",
+            "DOI": "10.1097/00001888-198103000-00002"
+          },
+          {
+            "key": "R20",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Wijnen-Meijer M, Burdick W, Alofs L, et al. Stages and transitions\n                    in medical education around the world: clarifying structures and terminology.\n                    Med Teach. 2013; 35: 301–307.",
+            "DOI": "10.3109/0142159X.2012.746449"
+          },
+          {
+            "key": "R21",
+            "unstructured": "Csaba G, Szabó I, Környei J, et al. Long-term knowledge retention in\n                    physiology and microbiology at the University of Pécs. In: Medical Conference\n                    for PhD Students and Experts of Clinical Sciences 2023 Book of Abstracts,\n                    University of Pécs, Doctoral Student Association, Pécs, 2023; p.\n                    64."
+          },
+          {
+            "key": "R22",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Schuwirth LW, van der Vleuten CP. How to design a useful test: the\n                    principles of assessment. In: Swanwick T, Forrest K, O’Brien BC. (eds.)\n                    Understanding medical education – evidence, theory, and practice. Wiley\n                    Blackwell, Hoboken, NJ, 2019; pp. 277–289.",
+            "DOI": "10.1002/9781119373780.ch20"
+          },
+          {
+            "key": "R23",
+            "unstructured": "United States Medical Licensing Examination. Sample Test Questions.\n                    Step 1. Available from:\n                        https://www.usmle.org/exam-resources/step-1-materials/step-1-sample-test-questions\n                    [accessed: Jan. 18, 2025]."
+          },
+          {
+            "key": "R24",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Sisson JC, Swartz RD, Wolf FM. Learning, retention and recall of\n                    clinical information. Med Educ. 1992; 26: 454–461.",
+            "DOI": "10.1111/j.1365-2923.1992.tb00205.x"
+          },
+          {
+            "key": "R25",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Donoghue GM, Hattie JA. A meta-analysis of ten learning techniques.\n                    Front Educ. 2021; 6: 581216.",
+            "DOI": "10.3389/feduc.2021.581216"
+          },
+          {
+            "key": "R26",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Freeman S, Eddy SL, McDonough M, et al. Active learning increases\n                    student performance in science, engineering, and mathematics. Proc Natl Acad Sci\n                    USA 2014; 111: 8410–8415.",
+            "DOI": "10.1073/pnas.1319030111"
+          },
+          {
+            "key": "R27",
+            "unstructured": "Kocsis Á, Molnár Gy. The role of learning strategies in determining\n                    academic success in higher education. In: Kasik L, Gál Z. (eds.) 19th Conference\n                    on Educational Assessment – CEA 2023. Szeged, 2022 April, 20–22. [Kocsis Á,\n                    Molnár Gy. A tanulási stratégiák egyetemi sikerességet meghatározó szerepe a\n                    felsőoktatásban. In: Kasik L, Gál Z. (szerk.) XIX. Pedagógiai Értékelési\n                    Konferencia, Szeged, 2022. április 20–22.] Szegedi Tudományegyetem,\n                    Neveléstudományi Doktori Iskola, Szeged, 2023; p. 80.\n                    [Hungarian]"
+          },
+          {
+            "key": "R28",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Madigan DJ, Curran T. Does burnout affect academic achievement? A\n                    meta-analysis of over 100,000 students. Educ Psychol Rev. 2021; 33:\n                    387–405.",
+            "DOI": "10.1007/s10648-020-09533-1"
+          },
+          {
+            "key": "R29",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Kaplan A, Maehr ML. The contributions and prospects of goal\n                    orientation theory. Educ Psychol Rev. 2007; 19: 141–184.",
+            "DOI": "10.1007/s10648-006-9012-5"
+          },
+          {
+            "key": "R30",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Ádám Sz, Hazag A. High prevalence of burnout among medical students\n                    in Hungary: Engagement and positive parental attitudes as potential protective\n                    factors. [Magas a kiégés prevalenciája magyar orvostanhallgatók között: az\n                    elmélyülés és pozitív szülői attitűdök mint lehetséges protektív tényezők.]\n                    Mentálhig Pszichoszom. 2013; 14: 1–23. [Hungarian]",
+            "DOI": "10.1556/Mental.14.2013.1.1"
+          },
+          {
+            "key": "R31",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Gács B, Tényi T, Pálfi K, et al. The role of mental health support\n                    for medical students. Experiences at the University of Pécs. [Az\n                    orvostanhallgatók számára fenntartott mentálhigiénés segítségnyújtás szerepe.\n                    Tapasztalatok a Pécsi Tudományegyetemen.] Orv Hetil. 2023; 164: 1778–1786.\n                    [Hungarian]",
+            "DOI": "10.1556/650.2023.32889"
+          },
+          {
+            "key": "R32",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Brady TF, Konkle T, Alvarez GA, et al. Visual long-term memory has a\n                    massive storage capacity for object details. Proc Natl Acad Sci USA 2008; 105:\n                    14325–14329.",
+            "DOI": "10.1073/pnas.0803390105"
+          },
+          {
+            "key": "R33",
+            "doi-asserted-by": "crossref",
+            "unstructured": "van Merriënboer JJ, Sweller J. Cognitive load theory in health\n                    professional education: design principles and strategies. Med Educ. 2010; 44:\n                    85–93.",
+            "DOI": "10.1111/j.1365-2923.2009.03498.x"
+          },
+          {
+            "key": "R34",
+            "unstructured": "Bjork EL, Bjork RA. Making things hard on yourself, but in a good\n                    way: Creating desirable difficulties to enhance learning. In: Gernsbacher MA,\n                    Pew RW, Hough LM, et al. (eds.) Psychology and the real world: essays\n                    illustrating fundamental contributions to society. Worth Publishers, New York,\n                    NY, 2009; pp. 55–64."
+          },
+          {
+            "key": "R35",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Brown PC. Roediger III, HL, McDaniel MA. (eds.) Make It Stick: The\n                    Science of Successful Learning Make it stick: The science of successful\n                    learning. Harvard University Press, Cambridge, MA, 2014.",
+            "DOI": "10.4159/9780674419377"
+          },
+          {
+            "key": "R36",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Wass R, Golding C. Sharpening a tool for teaching: the zone of\n                    proximal development. Teach High Educ. 2014; 19: 671–684.",
+            "DOI": "10.1080/13562517.2014.901958"
+          },
+          {
+            "key": "R37",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Norman GR, Tugwell P, Feightner JW, et al. Knowledge and clinical\n                    problem‐solving. Med Educ. 1985; 19: 344–356.",
+            "DOI": "10.1111/j.1365-2923.1985.tb01336.x"
+          },
+          {
+            "key": "R38",
+            "unstructured": "Supon V. Implementing strategies to assist test-anxious students. J\n                    Instruct Psychol. 2004; 31: 292–296."
+          },
+          {
+            "key": "R39",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Cauley KM, McMillan JH. Formative assessment techniques to support\n                    student motivation and achievement. Clear House J. Educ. Strateg. Issues Ideas\n                    2010; 83: 1–6.",
+            "DOI": "10.1080/00098650903267784"
+          },
+          {
+            "key": "R40",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Dunlosky J, Rawson KA, Marsh EJ, et al. Improving students’ learning\n                    with effective learning techniques: promising directions from cognitive and\n                    educational psychology. Psychol Sci Public Interest 2013; 14:\n                    4–58.",
+            "DOI": "10.1177/1529100612453266"
+          },
+          {
+            "key": "R41",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Carpenter SK, Pan SC, Butler AC. The science of effective learning\n                    with spacing and retrieval practice. Nat Rev Psychol. 2022; 1:\n                    496–511.",
+            "DOI": "10.1038/s44159-022-00089-1"
+          },
+          {
+            "key": "R42",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Roediger HL 3rd, Butler AC. The critical role of retrieval practice\n                    in long-term retention. Trends Cogn Sci. 2011; 15: 20–27.",
+            "DOI": "10.1016/j.tics.2010.09.003"
+          },
+          {
+            "key": "R43",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Karpicke JD, Bauernschmidt A. Spaced retrieval: absolute spacing\n                    enhances learning regardless of relative spacing. J Exp Psychol Learn Mem Cogn.\n                    2011; 37: 1250–1257.",
+            "DOI": "10.1037/a0023436"
+          },
+          {
+            "key": "R44",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Murre JM, Dros J. Replication and analysis of Ebbinghaus’ Forgetting\n                    Curve. PLOS ONE 2015; 10: e0120644.",
+            "DOI": "10.1371/journal.pone.0120644"
+          },
+          {
+            "key": "R45",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Lu M, Farhat JH, Beck Dallaghan GL. Enhanced learning and retention\n                    of medical knowledge using the mobile flash card application Anki. Med Sci Educ.\n                    2021; 31: 1975–1981.",
+            "DOI": "10.1007/s40670-021-01386-9"
+          },
+          {
+            "key": "R46",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Kang SH, McDermott KB, Roediger HL. Test format and corrective\n                    feedback modify the effect of testing on long-term retention. Eur J Cogn\n                    Psychol. 2007; 19: 528–558.",
+            "DOI": "10.1080/09541440601056620"
+          },
+          {
+            "key": "R47",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Yang C, Luo L, Vadillo MA, Yu R, et al. Testing (quizzing) boosts\n                    classroom learning: a systematic and meta-analytic review. Psychol Bull. 2021;\n                    147: 399–435.",
+            "DOI": "10.1037/bul0000309"
+          },
+          {
+            "key": "R48",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Pan SC, Rickard TC. Transfer of test-enhanced learning:\n                    meta-analytic review and synthesis. Psychol Bull. 2018; 144:\n                    710–756.",
+            "DOI": "10.1037/bul0000151"
+          },
+          {
+            "key": "R49",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Van Gog T, Sweller J. Not new, but nearly forgotten: the testing\n                    effect decreases or even disappears as the complexity of learning materials\n                    increases. Educ Psychol Rev. 2015; 27: 247–264.",
+            "DOI": "10.1007/s10648-015-9310-x"
+          },
+          {
+            "key": "R50",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Latimier A, Peyre H, Ramus F. A meta-analytic review of the benefit\n                    of spacing out retrieval practice episodes on retention. Educ Psychol Rev. 2021;\n                    33: 959–987.",
+            "DOI": "10.1007/s10648-020-09572-8"
+          },
+          {
+            "key": "R51",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Dobson JL. Retrieval practice is an efﬁcient method of enhancing the\n                    retention of anatomy and physiology information. Adv Physiol Educ. 2013; 37:\n                    184–191.",
+            "DOI": "10.1152/advan.00174.2012"
+          },
+          {
+            "key": "R52",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Larsen DP, Butler AC, Roediger HL 3rd. Comparative effects of\n                    test-enhanced learning and self-explanation on long-term retention. Med Educ.\n                    2013; 47: 674–682.",
+            "DOI": "10.1111/medu.12141"
+          },
+          {
+            "key": "R53",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Dobson JL, Perez J, Linderholm T. Distributed retrieval practice\n                    promotes superior recall of anatomy information. Anat Sci Educ. 2017; 10:\n                    339–347.",
+            "DOI": "10.1002/ase.1668"
+          },
+          {
+            "key": "R54",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Kerfoot BP, DeWolf WC, Masser BA, et al. Spaced education improves\n                    the retention of clinical knowledge by medical students: a randomised controlled\n                    trial. Med Educ. 2007; 41: 23–31.",
+            "DOI": "10.1111/j.1365-2929.2006.02644.x"
+          },
+          {
+            "key": "R55",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Kromann CB, Jensen ML, Ringsted C. The effect of testing on skills\n                    learning. Med Educ. 2009; 43: 21–27.",
+            "DOI": "10.1111/j.1365-2923.2008.03245.x"
+          },
+          {
+            "key": "R56",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Kovács E, Jenei ZM, Csordás K, et al. The timing of testing\n                    influences skill retention after basic life support training: a prospective\n                    quasi-experimental study. BMC Med Educ. 2019; 19: 452.",
+            "DOI": "10.1186/s12909-019-1881-7"
+          },
+          {
+            "key": "R57",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Larsen DP, Butler AC, Roediger HL 3rd. Repeated testing improves\n                    long-term retention relative to repeated study: a randomised controlled trial.\n                    Med Educ. 2009; 43: 1174–1181.",
+            "DOI": "10.1111/j.1365-2923.2009.03518.x"
+          },
+          {
+            "key": "R58",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Moulton CA, Dubrowski A, MacRae H, et al. Teaching surgical skills:\n                    what kind of practice makes perfect? A randomized, controlled trial. Ann Surg.\n                    2006; 244: 400–409.",
+            "DOI": "10.1097/01.sla.0000234808.85789.6a"
+          },
+          {
+            "key": "R59",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Dolan BM, Yialamas MA, McMahon GT. A randomized educational\n                    intervention trial to determine the effect of online education on the quality of\n                    resident-delivered care. J Grad Med Educ. 2015; 7: 376–381.",
+            "DOI": "10.4300/JGME-D-14-00571.1"
+          },
+          {
+            "key": "R60",
+            "unstructured": "Anki. Available from: https://apps.ankiweb.net [accessed:\n                    Oct. 21, 2024]."
+          },
+          {
+            "key": "R61",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Green ML, Moeller JJ, Spak JM. Test-enhanced learning in health\n                    professions education: A systematic review: BEME Guide No. 48. Med Teach. 2018;\n                    40: 337–350.",
+            "DOI": "10.1080/0142159X.2018.1430354"
+          },
+          {
+            "key": "R62",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Trumble E, Lodge J, Mandrusiak A, et al. Systematic review of\n                    distributed practice and retrieval practice in health professions education. Adv\n                    Health Sci Educ Theory Pract. 2024; 29: 689–714.",
+            "DOI": "10.1007/s10459-023-10274-3"
+          },
+          {
+            "key": "R63",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Thompson CP, Hughes MA. The effectiveness of spaced learning,\n                    interleaving, and retrieval practice in radiology education: a systematic\n                    review. J Am Coll Radiol. 2023; 20: 1092–1101.",
+            "DOI": "10.1016/j.jacr.2023.08.028"
+          },
+          {
+            "key": "R64",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Cecilio-Fernandes D, Cnossen F, Jaarsma DA, et al. Avoiding surgical\n                    skill decay: a systematic review on the spacing of training sessions. J Surg\n                    Educ. 2018; 75: 471–480.",
+            "DOI": "10.1016/j.jsurg.2017.08.002"
+          },
+          {
+            "key": "R65",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Malau-Aduli BS, Lee AY, Cooling N, et al. Retention of knowledge and\n                    perceived relevance of basic sciences in an integrated case-based learning (CBL)\n                    curriculum. BMC Med Educ. 2013; 13: 139.",
+            "DOI": "10.1186/1472-6920-13-139"
+          },
+          {
+            "key": "R66",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Woods NN, Brooks LR, Norman GR. The value of basic science in\n                    clinical diagnosis: creating coherence among signs and symptoms. Med Educ. 2005;\n                    39: 107–112.",
+            "DOI": "10.1111/j.1365-2929.2004.02036.x"
+          },
+          {
+            "key": "R67",
+            "doi-asserted-by": "crossref",
+            "unstructured": "Urrizola A, Santiago R, Arbea L. Learning techniques that medical\n                    students use for long-term retention: a cross-sectional analysis. Med Teach.\n                    2023; 45: 412–418.",
+            "DOI": "10.1080/0142159X.2022.2137016"
+          },
+          {
+            "key": "R68",
+            "doi-asserted-by": "crossref",
+            "unstructured": "McDaniel MA, Einstein GO. Training learning strategies to promote\n                    self-regulation and transfer: the knowledge, belief, commitment, and planning\n                    framework. Perspect Psychol Sci. 2020; 15: 1363–1381.",
+            "DOI": "10.1177/1745691620920723"
+          },
+          {
+            "key": "R69",
+            "unstructured": "Tarkó K, Marunák M, Szenes M, et al. (eds.) How does a successful\n                    student study? [Tarkó K, Marunák M, Szenes M, et al. (szerk.) Hogyan tanul a\n                    sikeres egyetemista? Tanulásmódszertani útmutató felsőoktatásban részt vevő\n                    hallgatók számára.] Szegedi Tudományegyetem, Szeged, 2021.\n                    [Hungarian]"
+          }
+        ],
+        "container-title": [
+          "Orvosi Hetilap"
+        ],
+        "original-title": [],
+        "link": [
+          {
+            "URL": "https://www.akjournals.com/view/journals/650/166/12/article-p450.xml",
+            "content-type": "text/html",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://www.akjournals.com/downloadpdf/journals/650/166/12/article-p450.xml",
+            "content-type": "text/html",
+            "content-version": "vor",
+            "intended-application": "syndication"
+          },
+          {
+            "URL": "https://www.akjournals.com/downloadpdf/journals/650/166/12/article-p450.xml",
+            "content-type": "unspecified",
+            "content-version": "vor",
+            "intended-application": "similarity-checking"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2026,
+              7,
+              30
+            ]
+          ],
+          "date-time": "2026-07-30T08:48:40Z",
+          "timestamp": 1785401320000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://www.akjournals.com/view/journals/650/166/12/article-p450.xml"
+          }
+        },
+        "subtitle": [
+          "Stabil tudás kiépítése az orvosképzésben"
+        ],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2025,
+              3,
+              23
+            ]
+          ]
+        },
+        "references-count": 69,
+        "journal-issue": {
+          "issue": "12"
+        },
+        "URL": "https://doi.org/10.1556/650.2025.33246",
+        "relation": {},
+        "ISSN": [
+          "0030-6002",
+          "1788-6120"
+        ],
+        "issn-type": [
+          {
+            "value": "0030-6002",
+            "type": "print"
+          },
+          {
+            "value": "1788-6120",
+            "type": "electronic"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2025,
+              3,
+              23
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T18:20:47.822Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

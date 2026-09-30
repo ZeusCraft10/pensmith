@@ -13,7 +13,7 @@
 //               input reaches every question in order.
 //   T-02-09-02: Index parsed with parseInt + bounds check (1 to N); out-of-range
 //               is a re-prompt, not an exception.
-//   T-02-09-03: This file never calls any logging function. No process.stdout writes.
+//   T-02-09-03: This file never calls any logging function and never writes to stdout.
 //   T-02-09-04: Per-question timeout via PENSMITH_PROMPT_TIMEOUT_MS (default 5 min).
 //
 // Wire protocol (stderr output, one example):

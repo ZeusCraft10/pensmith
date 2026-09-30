@@ -24,9 +24,11 @@ export function installWarningFilter(): void {
   installed = true;
   const printers = process.listeners('warning');
   process.removeAllListeners('warning');
-  process.on('warning', (warning: Error & { code?: string }) => {
+  // A plain function: EventEmitter calls it with the process object as its
+  // receiver, and the original printers get that same receiver.
+  process.on('warning', function (this: NodeJS.Process, warning: Error & { code?: string }) {
     if (typeof warning.code === 'string' && SILENCED_WARNING_CODES.has(warning.code)) return;
-    for (const print of printers) print.call(process, warning);
+    for (const print of printers) print.call(this, warning);
   });
 }
 

@@ -488,8 +488,8 @@ export function gateRowReason(row: GateRow, scope: GateScope): string {
           return `${head} — it is in no section draft: remove it, or add it to its section and re-verify and recompile`;
         }
         return (
-          `${head} — add the source's PDF (\`pensmith add <pdf>\`), paraphrase the quote (\`pensmith plan ${ref.section} --revise\`), ` +
-          `or accept this one quote (\`pensmith verify ${ref.section} --accept-quote ${ref.id}\`)`
+          `${head} — add the source's PDF (\`pensmith add <pdf>\`), paraphrase the quote (re-draft with \`pensmith write ${ref.section}\`, ` +
+          `or edit the section's DRAFT.md and run \`pensmith verify ${ref.section}\`), or accept this one quote (\`pensmith verify ${ref.section} --accept-quote ${ref.id}\`)`
         );
       }
       if (RETRY_ONLINE_VERDICTS.has(row.verdict)) return `${head}; re-run online`;

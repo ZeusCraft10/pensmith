@@ -206,7 +206,8 @@ export function blockingRowReason(row: BlockingVerdictRow): string {
   if (row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
     return (
       `${cite} has a quote no source text could be checked against (${row.verdict}) — add the source's PDF (pensmith add <pdf>), ` +
-      'paraphrase the quote (pensmith plan <N> --revise), or accept that one quote (pensmith verify <N> --accept-quote <id>)'
+      "paraphrase the quote (re-draft with pensmith write <N>, or edit the section's DRAFT.md and run pensmith verify <N>), " +
+      'or accept that one quote (pensmith verify <N> --accept-quote <id>)'
     );
   }
   return `${cite} has a blocking verdict (${row.verdict}${row.retraction === true ? ': the cited work is retracted' : ''})`;

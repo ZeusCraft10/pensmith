@@ -23,7 +23,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { isInsideSyncFolder, paperDir, activePaperRoot, servicePaperRoot, userHomeDir } from './paths.js';
+import { isInsideSyncFolder, paperDir, activePaperRoot, servicePaperRoot, userHomeDir, realpathNearest } from './paths.js';
 
 /**
  * Probe whether `pandoc` is on PATH and answers `--version`.
@@ -50,7 +50,9 @@ export function isPandocPresent(): boolean {
 //   user    — top-level `mcpServers` of `.claude.json` in the Claude config dir
 //             ($CLAUDE_CONFIG_DIR when set, else the home folder);
 //   local   — `projects[<absolute project path>].mcpServers` of the same file
-//             (the default scope of `claude mcp add`);
+//             (the default scope of `claude mcp add`), keyed by the project's
+//             realpath — the git root, else the working directory (see
+//             pathSpellings);
 //   project — `.mcp.json` in the project folder (checked into the project).
 // Older setups used `mcp_servers.json` under ~/.claude or ~/.config/claude.
 // A server counts as Zotero when its name, command, arguments or URL mention
@@ -130,9 +132,19 @@ function projectDirs(dir: string): string[] {
   return out;
 }
 
-function samePath(a: string, b: string): boolean {
-  const fold = (p: string): string => (process.platform === 'win32' ? resolve(p).toLowerCase() : resolve(p));
-  return fold(a) === fold(b);
+/**
+ * The spellings a `projects` key may give folder `p`: as written and its
+ * realpath (symlinks resolved — macOS /var → /private/var, a project under a
+ * symlinked folder; Windows 8.3 short names such as RUNNER~1 expanded),
+ * case-folded on Windows. `claude mcp add` keys the project by its realpath
+ * (run from /link/proj it writes /real/proj — the git root's realpath inside a
+ * repository), while the root pensmith was handed (PENSMITH_PAPER_ROOT, a
+ * temp folder under macOS /var) or an entry written by hand may keep the
+ * symlinked spelling. Comparing both forms on both sides matches either.
+ */
+function pathSpellings(p: string): string[] {
+  const fold = (x: string): string => (process.platform === 'win32' ? x.toLowerCase() : x);
+  return [...new Set([fold(resolve(p)), fold(realpathNearest(p))])];
 }
 
 /**
@@ -143,6 +155,11 @@ function samePath(a: string, b: string): boolean {
 export function detectZoteroMcpServers(root?: string, env: NodeJS.ProcessEnv = process.env): ZoteroMcpDetection {
   const project = root ?? activePaperRoot() ?? servicePaperRoot(env);
   const dirs = projectDirs(project);
+  // A local-scope entry belongs to the project when its key names one of the
+  // folders above in either spelling. The realpath's own walk is added: behind
+  // a symlink the repository root (where Claude Code keys the project) may be
+  // an ancestor of the real folder only.
+  const projectKeys = new Set([...dirs, ...projectDirs(realpathNearest(project))].flatMap(pathSpellings));
   const servers: ZoteroMcpServer[] = [];
   const checked: string[] = [];
 
@@ -153,7 +170,7 @@ export function detectZoteroMcpServers(root?: string, env: NodeJS.ProcessEnv = p
     servers.push(...zoteroServersIn(cfg.mcpServers, 'user', claudeJson));
     if (typeof cfg.projects === 'object' && cfg.projects !== null) {
       for (const [path, entry] of Object.entries(cfg.projects as Record<string, unknown>)) {
-        if (!dirs.some((d) => samePath(d, path))) continue;
+        if (!pathSpellings(path).some((k) => projectKeys.has(k))) continue;
         servers.push(...zoteroServersIn((entry as { mcpServers?: unknown } | null)?.mcpServers, 'local', claudeJson));
       }
     }
