@@ -262,3 +262,37 @@ The one failure in every run is `tests/atomic-write.test.ts` "preserves OLD cont
 | SRC-06 | **Pending**: only the keyed OpenAlex / Semantic Scholar live round trip, a maintainer item (§8.4) |
 
 Phase 19 is 19 of 20 Complete and 7 of 8 success criteria met; the ROADMAP checkbox stays unticked until SRC-06's keyed run is recorded. No CI run has been observed for this code yet (CI-06).
+
+### 9.8 Merge review round 1 (fixer, 2026-09-30)
+
+Thirteen findings (six major, seven minor). Confirmed and fixed:
+
+| Finding | Fix |
+|---|---|
+| **D-18-37 `verifierBlindSpot` withheld sources Phase 19's Pass 1 verifies** (major, reported twice: ISBN books, arXiv-only preprints, PMID-only records, DataCite arXiv DOIs; SRC-15 / criterion 7 on the grounded path) | The route Pass 1 takes is one pure predicate, `bin/lib/verify/pass1-identifiers.ts` (`citationCheckRoute`, `doilessIdentifiers`, `uncheckableReason`), read by Pass 1 and by `source-context.ts verifierBlindSpot`. Withheld now: retracted, synthetic outside a dry run, no DOI / arXiv id / PMID / ISBN, and a Zenodo / figshare / Dryad DataCite DOI with none of those (VRFY-11). The WARN, gate text and `excludedRemedy` follow; README, PRD §7.3, CLAUDE.md, `workflows/outline.md`, `workflows/plan.md`, `skills/plan-section.md`, REQUIREMENTS (FEED-01, GRND-07 criterion, VRFY-11 note) and STATE.md updated. Tests: `tests/source-context-verifiable.test.ts` (rewritten for the new premise), `tests/outline-feed.test.ts` (an arXiv DataCite DOI and an ISBN book are offered; a Zenodo-only and an identifier-less source are named), new `tests/verifiable-sources-cli.test.ts` (built CLI: a History paper's ISBN book and a BYO PDF identified by its arXiv id are allocated by the outline, kept by the planner, cited, verified OK, and the second is compiled and exported). |
+| **Pass 1 called a real work FABRICATED on a Crossref 404 for another agency's DOI** (major; ISTIC) | `pass1.ts crossrefNotFound`: doi.org names the prefix's agency (`sources/doi-ra.ts`); Crossref's own prefix or no agency → FABRICATED; another agency → the entry's arXiv id / PMID / ISBN at their registrars, else UNVERIFIABLE naming the agency; an unanswerable agency lookup → UNVERIFIABLE. New recordings (`npm run cassettes:refresh`): `generic/doi-ra-prefixes` gains 10.5555 and 10.3760, `crossref/works-istic-404`, `pubmed/esummary-42706103`. Test: `tests/pass1-lookup.test.ts` (OK through the PMID, UNVERIFIABLE without it, MIS-CITED with another work's PMID; the 10.5555 case stays FABRICATED). `workflows/verify.md`, PRIVACY.md and docs/SOURCES.md say so. |
+| **arXiv hits paired the journal DOI with the preprint's metadata** (major) | `research-orchestrator.ts mergeFound`: two records of one DOI keep the registrar's (version-of-record) record, with the preprint's arXiv id and abstract. `migrations/library/shape.ts candidateToEntry`: an arXiv record whose DOI is not arXiv's own is stored as the preprint (arXiv id; the journal DOI an alternate, VRFY-14) until the version of record merges in and wins. Tests: `tests/research-discovery.test.ts`, `tests/library-writer.test.ts`, `tests/verify-identifiers-cli.test.ts` (`add arXiv:hep-th/9901001` verifies at arXiv). The corpus's live-Pass-1 filter is documented in `scripts/refresh-cassettes.mjs` as a limit of the GRND-18 acceptance (a live-lane unscripted chain stays VRFY-13 / Phase 20 work, STATE.md). |
+| **`add --remap` replaced a section's assigned_sources** (major) | `frontmatter.ts updateFrontmatter`: reads return plain values (a YAML sequence was read as "not an array"). Test: `tests/add-remap-section.test.ts` (appends to a block list; a repeated remap is a no-op). |
+| **`add --section N --slug S` skipped the identity check** (major) | `add.ts resolveOne` goes through `section-slug.ts resolveSectionArg` after add's own "no such section" check. Tests: a mismatched `--slug` exits 2, a STATE/OUTLINE disagreement exits 1, nothing written. |
+| Retracted hits reached assigned_sources (minor) | `plan N --research` assigns only what `verifierBlindSpot` passes (the rest stays in LIBRARY.json, logged "not assigned", WARN); `add` never maps such a source (an explicit `--remap` / `--section` exits 1). Tests in `tests/section-research.test.ts` and `tests/add-remap-section.test.ts`. |
+| `new --pdfs --dry-run` broke D-18-29 (minor) | `intake.ts`: under --dry-run the folder is recorded in the workspace config only. Test: `tests/dry-run-workspace.test.ts`. |
+| Research gate texts said --yolo keeps every candidate (minor) | `gates.ts` yoloChoice and PRD §7.20 rows; test in `tests/gates-registry.test.ts`. |
+| One-sided docs (minor) | `--help`'s GLOBAL FLAGS never-list is generated from the registry (it had dropped the estimate confirmation; drift test added); `skills/write-section.md` names the GRND-14 quote failure; PRIVACY.md says write re-hashes a BYO PDF; the refresh script names `discoverCandidates`. |
+| `plan N --revise` repeated a no-op (minor) | `revise.ts` repairs the first flagged citation the draft still cites, and says "nothing to change" (no model call) when none is left; the router's attention line names the revise → verify loop. Test in `tests/revise-swap.test.ts`. |
+| Cyrillic / Greek first authors keyed `anon` (minor) | `citekey.ts transliterate` (Cyrillic and Greek only; Latin-script keys are unchanged because the recorded e2e corpus names candidates by them — mapping ł / ı renamed two of its candidates). CJK still falls back to `anon`. Test in `tests/citekey.test.ts`. |
+
+Not changed, with reasons:
+- **SRC-06 / keyless OpenAlex (minor).** The keyed round trip remains the maintainer item (§8.4). Waiting out a 31–39 s Retry-After would change D-19-08's documented cap (`RETRY_AFTER_CAP_MS`, 30 s, pinned by the transport tests), and the evidence shows it would not help: runs whose first OpenAlex request succeeded were throttled on most of the rest (pii1: 2 × 200, 8 × 429).
+- **"Research marks retraction `clear` from Crossref for a non-Crossref DOI" (part of the ISTIC finding).** Deciding it needs a doi.org agency lookup per DOI prefix at research time, which the recorded corpus and every offline research suite would then need recorded. The blocking gate no longer depends on it: Pass 1 checks such an entry at PubMed (whose record carries "Retracted Publication") or reports UNVERIFIABLE. Left to VRFY-11 / VRFY-15 (Phase 20).
+
+Gate after the round (Linux, as root):
+
+| Step | Node 22.22.2 (no pandoc on PATH) | Node 24.21.0 (pandoc 3.9 on PATH) |
+|---|---|---|
+| `prebuild`, `lint`, `typecheck`, `build` | exit 0 each | exit 0 each |
+| `npm run test:tier-contract` | 57/57 | 57/57 |
+| `npm test` | 2401 tests: 2400 pass, 1 fail, 0 skipped | 2401 tests: 2400 pass, 1 fail, 0 skipped |
+| `npm run validate:manifests` | exit 0 | exit 0 |
+| `git status --porcelain` after the run | clean | clean |
+
+The one failure is the root-only `tests/atomic-write.test.ts` case (CLAUDE.md). The Node 24 run is the final `node scripts/run-tests.mjs` over Phase 19's new tests too.
