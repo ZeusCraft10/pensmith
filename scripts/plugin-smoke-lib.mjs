@@ -7,6 +7,7 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 
 /** The skills the plugin must load (the 23a contract: the router plus seven plumbing skills). */
@@ -280,5 +281,106 @@ export function mcpHandshake({ command, args, env, cwd, timeoutMs = 30_000 }) {
         stderr,
       });
     })().catch((e) => done(e));
+  });
+}
+
+// ---------------------------------------------------------------------------
+// A loopback git host (review round 2: the git-marketplace update check).
+// ---------------------------------------------------------------------------
+
+/**
+ * Split a CGI response head (`Status: 200 OK`, `Content-Type: …`, a blank
+ * line) from its body. Returns null until the blank line has arrived. Pure.
+ */
+export function parseCgiHead(buffer) {
+  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(String(buffer), 'latin1');
+  let end = buf.indexOf('\r\n\r\n');
+  let sep = 4;
+  const lf = buf.indexOf('\n\n');
+  if (end < 0 || (lf >= 0 && lf < end)) {
+    end = lf;
+    sep = 2;
+  }
+  if (end < 0) return null;
+  let status = 200;
+  const headers = {};
+  for (const line of buf.subarray(0, end).toString('latin1').split(/\r?\n/)) {
+    const m = /^([^:\s]+):\s*(.*)$/.exec(line);
+    if (!m) continue;
+    if (m[1].toLowerCase() === 'status') status = Number.parseInt(m[2], 10) || 500;
+    else headers[m[1]] = m[2];
+  }
+  return { status, headers, body: buf.subarray(end + sep) };
+}
+
+/** The CGI environment `git http-backend` needs for one request. Pure. */
+export function gitCgiEnv(baseEnv, projectRoot, req) {
+  const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+  const env = {
+    ...baseEnv,
+    GIT_PROJECT_ROOT: projectRoot,
+    GIT_HTTP_EXPORT_ALL: '1',
+    REQUEST_METHOD: req.method ?? 'GET',
+    PATH_INFO: decodeURIComponent(url.pathname),
+    QUERY_STRING: url.search.replace(/^\?/, ''),
+    CONTENT_TYPE: String(req.headers?.['content-type'] ?? ''),
+    REMOTE_ADDR: '127.0.0.1',
+  };
+  if (req.headers?.['content-length'] !== undefined) env.CONTENT_LENGTH = String(req.headers['content-length']);
+  for (const [k, v] of Object.entries(req.headers ?? {})) env[`HTTP_${k.toUpperCase().replace(/-/g, '_')}`] = String(v);
+  return env;
+}
+
+/**
+ * Serve the bare repositories under `projectRoot` over git's smart HTTP
+ * protocol on 127.0.0.1 (a random port), through `git http-backend` as CGI —
+ * the transport Claude Code clones a git-hosted marketplace with. Read-only
+ * (no receive-pack). Resolves to {url, close()}.
+ */
+export function startGitHttpBackend({ projectRoot, env = process.env }) {
+  const server = http.createServer((req, res) => {
+    const child = spawn('git', ['http-backend'], { env: gitCgiEnv(env, projectRoot, req), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+    let head = Buffer.alloc(0);
+    let started = false;
+    let stderr = '';
+    req.pipe(child.stdin);
+    child.stdin.on('error', () => {});
+    child.stderr.on('data', (c) => {
+      stderr += String(c);
+    });
+    child.stdout.on('data', (chunk) => {
+      if (started) {
+        res.write(chunk);
+        return;
+      }
+      head = Buffer.concat([head, chunk]);
+      const parsed = parseCgiHead(head);
+      if (parsed === null) return;
+      started = true;
+      res.writeHead(parsed.status, parsed.headers);
+      if (parsed.body.length > 0) res.write(parsed.body);
+    });
+    const finish = (err) => {
+      if (!started) {
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.write(`git http-backend failed: ${err?.message ?? stderr.trim()}\n`);
+      }
+      res.end();
+    };
+    child.on('error', finish);
+    child.on('close', () => finish(null));
+  });
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      resolve({
+        url: `http://127.0.0.1:${port}`,
+        close: () => new Promise((r) => {
+          server.closeAllConnections?.();
+          server.close(() => r());
+        }),
+      });
+    });
   });
 }

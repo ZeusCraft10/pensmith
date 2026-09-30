@@ -15,9 +15,13 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const { expectedPluginVersion } = createRequire(import.meta.url)('../scripts/plugin-version.cjs') as {
+  expectedPluginVersion(packageVersion: string, pluginDir: string): string;
+};
 
 function readJson<T>(...segments: string[]): T {
   return JSON.parse(fs.readFileSync(path.join(REPO, ...segments), 'utf8')) as T;
@@ -44,7 +48,14 @@ const PKG = readJson<{ version: string }>('package.json');
 test('PLUG-01: plugin/.claude-plugin/plugin.json holds metadata and the inline MCP server only', () => {
   const plugin = readJson<Record<string, unknown>>('plugin', '.claude-plugin', 'plugin.json');
   assert.equal(plugin['name'], 'pensmith');
-  assert.equal(plugin['version'], PKG.version, 'the plugin version is the package.json version');
+  // Review round 2: `<package.json version>+<digest of plugin/>`, never a fixed
+  // string — Claude Code keeps a git install on its cached copy until the
+  // manifest version changes (scripts/plugin-version.cjs).
+  assert.equal(
+    plugin['version'],
+    expectedPluginVersion(PKG.version, path.join(REPO, 'plugin')),
+    'the plugin version is the package.json version plus the digest of plugin/ (run `npm run plugin:version`)',
+  );
   assert.equal(plugin['license'], 'AGPL-3.0-or-later');
   assert.equal(typeof plugin['description'], 'string');
   assert.equal(typeof (plugin['author'] as { name?: unknown }).name, 'string');
@@ -113,7 +124,7 @@ test('PLUG-01: the marketplace entry installs plugin/, never the repo root', () 
   const entry = market.plugins.find((p) => p['name'] === 'pensmith');
   assert.ok(entry, 'the pensmith entry');
   assert.equal(entry['source'], './plugin');
-  assert.ok(!('version' in entry) || entry['version'] === PKG.version, 'an entry version, if any, equals package.json');
+  assert.ok(!('version' in entry), 'no entry version: plugin.json\'s content-stamped version is the one Claude Code reads');
 });
 
 test('PLUG-04: the developer .mcp.json runs the committed bundle with no ${CLAUDE_PLUGIN_ROOT}', () => {

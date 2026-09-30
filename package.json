@@ -24,6 +24,7 @@
     "validate:manifests": "node scripts/validate-plugin-manifest.cjs",
     "bundle": "npm run prebuild && node scripts/bundle.mjs",
     "bundle:check": "npm run bundle -- --check",
+    "plugin:version": "node scripts/plugin-version.cjs --write",
     "plugin:smoke": "node scripts/plugin-smoke.mjs",
     "test:tier-contract": "node scripts/run-tests.mjs tests/tier-contract/ tests/tier-contract.test.ts",
     "test:cassettes": "node --import tsx --test tests/tier-contract.test.ts",

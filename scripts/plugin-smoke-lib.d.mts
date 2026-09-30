@@ -69,3 +69,14 @@ export declare function mcpHandshake(opts: {
   cwd: string;
   timeoutMs?: number;
 }): Promise<{ serverInfo: { name?: string; version?: string } | null; tools: string[]; stderr: string }>;
+
+export declare function parseCgiHead(buffer: Buffer | string): { status: number; headers: Record<string, string>; body: Buffer } | null;
+export declare function gitCgiEnv(
+  baseEnv: Record<string, string | undefined>,
+  projectRoot: string,
+  req: { url?: string; method?: string; headers?: Record<string, string | string[] | undefined> },
+): Record<string, string | undefined>;
+export declare function startGitHttpBackend(opts: {
+  projectRoot: string;
+  env?: Record<string, string | undefined>;
+}): Promise<{ url: string; close(): Promise<void> }>;

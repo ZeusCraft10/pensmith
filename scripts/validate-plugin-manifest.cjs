@@ -12,7 +12,10 @@
 // (23a-PLAN §5), and reject the pre-v1 shapes that stopped the plugin from
 // loading at all:
 //
-//   plugin.json   name/version/metadata; version = package.json version; no
+//   plugin.json   name/version/metadata; version = `<package.json version>+<the
+//                 12-hex content digest of plugin/>` (scripts/plugin-version.cjs:
+//                 Claude Code updates a git install only when this string
+//                 changes, so a stale stamp fails here); no
 //                 `skills` array of {name,file} objects (only path strings);
 //                 no `hooks` key (hooks/hooks.json loads by default — declaring
 //                 it again merges it twice); mcpServers.pensmith is exactly
@@ -35,7 +38,8 @@
 //   workflows     the 16 verb bodies (bin/lib/verbs.json) in workflows/, each
 //                 with its <capability_check> block (ARCH-01 / ARCH-03).
 //   marketplace   the pensmith entry's source is "./plugin" (never "./", which
-//                 ships bin/ and CLAUDE.md); a `version` there equals package.json.
+//                 ships bin/ and CLAUDE.md) and it sets no `version` (plugin.json's
+//                 stamped version is the one Claude Code reads).
 //   .mcp.json     the developer server `node ${PWD:-.}/plugin/dist/mcp/server.mjs`
 //                 (no ${CLAUDE_PLUGIN_ROOT}, undefined outside a plugin), and the
 //                 bundle it targets exists (D-23a-07).
@@ -49,6 +53,7 @@
 const fs = require('fs');
 const path = require('path');
 const YAML = require('yaml');
+const { expectedPluginVersion, parseStampedVersion, pluginContentHash } = require('./plugin-version.cjs');
 
 const SELF_ROOT = path.resolve(__dirname, '..');
 
@@ -177,6 +182,36 @@ function readVerbs() {
 // ---------------------------------------------------------------------------
 // plugin/.claude-plugin/plugin.json
 // ---------------------------------------------------------------------------
+
+/**
+ * The version must be `<package.json version>+<content digest of plugin/>`
+ * (scripts/plugin-version.cjs). Claude Code keeps an installed plugin on its
+ * cached copy until this string changes, so a digest that no longer matches
+ * the files means users would never receive them. `packageVersion` is null in
+ * plugin-directory mode (no package.json beside it): only the digest is checked.
+ */
+function checkPluginVersion(version, pluginDir, where, packageVersion) {
+  if (typeof version !== 'string' || version === '') {
+    fail(`${where}: version is required (a string) — \`claude plugin validate --strict\` fails without one`);
+    return;
+  }
+  const stamped = parseStampedVersion(version);
+  let expected;
+  try {
+    expected = packageVersion !== null ? expectedPluginVersion(packageVersion, pluginDir) : `${stamped ? stamped.packageVersion : '<version>'}+${pluginContentHash(pluginDir)}`;
+  } catch (e) {
+    fail(`${where}: the plugin's content digest could not be computed (${e.message})`);
+    return;
+  }
+  if (version !== expected) {
+    fail(
+      `${where}: version ${JSON.stringify(version)} is not ${JSON.stringify(expected)} (the package.json version + the digest of plugin/'s files) — ` +
+        'Claude Code updates a git-marketplace install only when this string changes; run `npm run plugin:version` ' +
+        '(`npm run bundle` stamps it too) and commit plugin/.claude-plugin/plugin.json',
+    );
+  }
+}
+
 function checkPluginJson(pluginDir, label, expectedVersion) {
   const manifest = loadJson(path.join(pluginDir, '.claude-plugin', 'plugin.json'), `${label}/.claude-plugin/plugin.json`);
   if (!manifest) return;
@@ -189,11 +224,7 @@ function checkPluginJson(pluginDir, label, expectedVersion) {
     if (!PLUGIN_JSON_KEYS.has(k)) fail(`${where}: unknown top-level key "${k}" (Claude Code strips it; --strict fails)`);
   }
   if (manifest.name !== PLUGIN_NAME) fail(`${where}: name must be "${PLUGIN_NAME}", got ${JSON.stringify(manifest.name)}`);
-  if (typeof manifest.version !== 'string' || manifest.version === '') {
-    fail(`${where}: version is required (a string)`);
-  } else if (expectedVersion !== null && manifest.version !== expectedVersion) {
-    fail(`${where}: version ${JSON.stringify(manifest.version)} must equal package.json version ${JSON.stringify(expectedVersion)}`);
-  }
+  checkPluginVersion(manifest.version, pluginDir, where, expectedVersion);
   for (const k of ['description', 'license', 'repository', 'homepage']) {
     if (typeof manifest[k] !== 'string' || manifest[k] === '') fail(`${where}: ${k} is required (a string)`);
   }
@@ -464,7 +495,7 @@ function checkWorkflows(pluginDir, label) {
 // ---------------------------------------------------------------------------
 // Repo root: marketplace, developer .mcp.json, no root-level plugin manifest
 // ---------------------------------------------------------------------------
-function checkMarketplace(root, expectedVersion) {
+function checkMarketplace(root) {
   const where = '.claude-plugin/marketplace.json';
   const market = loadJson(path.join(root, '.claude-plugin', 'marketplace.json'), where);
   if (!market) return;
@@ -482,8 +513,11 @@ function checkMarketplace(root, expectedVersion) {
   if (entry.source !== './plugin') {
     fail(`${where}: the ${PLUGIN_NAME} entry's source must be "./plugin", got ${JSON.stringify(entry.source)} ("./" ships bin/ and CLAUDE.md)`);
   }
-  if ('version' in entry && entry.version !== expectedVersion) {
-    fail(`${where}: the ${PLUGIN_NAME} entry's version ${JSON.stringify(entry.version)} must equal package.json ${JSON.stringify(expectedVersion)} (or be dropped)`);
+  if ('version' in entry) {
+    fail(
+      `${where}: the ${PLUGIN_NAME} entry must not set "version" — Claude Code reads plugin.json's content-stamped version first, ` +
+        'so an entry version is never used and only misleads',
+    );
   }
 }
 
@@ -555,7 +589,7 @@ if (pluginMode) {
     checkHooks(pluginDir, 'plugin');
     checkSkills(pluginDir, 'plugin');
     checkWorkflows(pluginDir, 'plugin');
-    checkMarketplace(root, version);
+    checkMarketplace(root);
     checkDevMcpJson(root);
   }
   summary = 'plugin/ (plugin.json, hooks.json, 8 skills, 16 workflow bodies) + marketplace.json + .mcp.json valid';

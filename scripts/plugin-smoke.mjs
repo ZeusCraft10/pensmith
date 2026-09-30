@@ -24,6 +24,17 @@
 //      mcp list` (the real claude executable, by absolute path) reports the
 //      server as not connected — the case the pensmith skill's "install Node.js
 //      ≥ 22" guidance covers.
+//   7. Updates reach a git-marketplace install (review round 2): the clone is
+//      served as a bare repository over smart HTTP on 127.0.0.1 (`git
+//      http-backend`, the transport Claude Code clones a git-hosted marketplace
+//      with) and installed from that URL in a second isolated config — a
+//      COPIED install under the plugin cache, versioned by plugin.json's
+//      content-stamped version. A commit then changes a file under plugin/ and
+//      re-stamps the version (`scripts/plugin-version.cjs --write`, as
+//      `npm run plugin:version` does); after `claude plugin marketplace
+//      update` + `claude plugin update`, the installed copy must hold the
+//      change under the new version. (Step 3's local-directory marketplace
+//      loads the plugin in place, so it never exercises versioning.)
 //
 // Claude Code: CLAUDE_BIN, else `claude` on PATH. Options:
 //   --repo <dir>          the repository to clone (default: this checkout) — a
@@ -39,12 +50,13 @@
 // under plugin/ or .claude-plugin/ are reported and not tested.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   EXPECTED_HOOK_EVENTS,
+  startGitHttpBackend,
   EXPECTED_SKILLS,
   EXPECTED_TOOLS,
   PLUGIN_SERVER,
@@ -119,6 +131,98 @@ function isolatedEnv(tmp) {
   env.XDG_DATA_HOME = data;
   env.LOCALAPPDATA = data;
   return env;
+}
+
+/** Run git with a fixed example identity (never the user's). */
+function git(args, cwd) {
+  return execFileSync('git', ['-c', 'user.name=pensmith plugin smoke', '-c', 'user.email=plugin-smoke@example.org', ...args], {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+/** plugin list --json's pensmith entry: {version, installPath}. */
+function installedEntry(run) {
+  const r = run(['plugin', 'list', '--json']);
+  let listed;
+  try {
+    listed = JSON.parse(r.stdout);
+  } catch {
+    fail('claude plugin list --json did not print JSON', shown(r));
+  }
+  const problems = pluginListProblems(listed);
+  if (r.status !== 0 || problems.length > 0) fail(`plugin list --json: ${problems.join('; ')}`, shown(r));
+  const entry = (Array.isArray(listed) ? listed : listed.plugins ?? []).find((p) => p.id === 'pensmith@pensmith');
+  return { version: entry?.version, installPath: installPathOf(listed) };
+}
+
+/** Step 7 (see the header): updates reach an install from a git-hosted marketplace. */
+async function checkGitMarketplaceUpdate({ claude, clone, tmp }) {
+  const hostRoot = path.join(tmp, 'git-host');
+  mkdirSync(hostRoot, { recursive: true });
+  const bare = path.join(hostRoot, 'pensmith.git');
+  execFileSync('git', ['clone', '--quiet', '--bare', clone, bare], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const probe = runClaude({ command: 'git', prefix: [], path: 'git' }, ['http-backend'], {
+    cwd: hostRoot,
+    env: { ...process.env, GIT_PROJECT_ROOT: hostRoot, REQUEST_METHOD: 'GET', PATH_INFO: '/pensmith.git/HEAD', GIT_HTTP_EXPORT_ALL: '1' },
+  });
+  if (probe.status !== 0 || !/^Status: 200|^Content-Type/im.test(probe.stdout)) fail('`git http-backend` is not available (it ships with git)', shown(probe));
+  const host = await startGitHttpBackend({ projectRoot: hostRoot });
+  try {
+    const url = `${host.url}/pensmith.git`;
+    const env = isolatedEnv(path.join(tmp, 'git-marketplace'));
+    const project = path.join(tmp, 'git-marketplace', 'project');
+    mkdirSync(project, { recursive: true });
+    const run = (args) => runClaude(claude, args, { cwd: project, env });
+
+    const manifestVersion = (dir) => JSON.parse(readFileSync(path.join(dir, 'plugin', '.claude-plugin', 'plugin.json'), 'utf8')).version;
+    const firstVersion = manifestVersion(clone);
+    const add = run(['plugin', 'marketplace', 'add', url]);
+    if (add.status !== 0) fail(`claude plugin marketplace add ${url}`, shown(add));
+    const install = run(['plugin', 'install', 'pensmith@pensmith']);
+    if (install.status !== 0) fail('claude plugin install pensmith@pensmith (git marketplace)', shown(install));
+    const before = installedEntry(run);
+    if (before.version !== firstVersion || before.installPath === null || !existsSync(before.installPath)) {
+      fail(`git marketplace install: expected version ${firstVersion} in the plugin cache, got ${JSON.stringify(before)}`);
+    }
+    ok(`git marketplace (${url}): installed ${before.version} as a cached copy (${before.installPath})`);
+
+    // A new commit: one file under plugin/ changes, and the version is re-stamped.
+    const work = path.join(tmp, 'git-work');
+    execFileSync('git', ['clone', '--quiet', bare, work], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const marker = `plugin smoke update marker ${Date.now().toString(36)}`;
+    const changed = path.join(work, 'plugin', 'workflows', 'status.md');
+    appendFileSync(changed, `\n<!-- ${marker} -->\n`);
+    execFileSync(process.execPath, [path.join(work, 'scripts', 'plugin-version.cjs'), '--write'], { cwd: work, stdio: ['ignore', 'pipe', 'pipe'] });
+    const secondVersion = manifestVersion(work);
+    if (secondVersion === firstVersion) fail(`re-stamping after a plugin/ change kept the version ${firstVersion}`);
+    git(['commit', '--quiet', '-am', 'plugin smoke: change a workflow body'], work);
+    git(['push', '--quiet', 'origin', 'HEAD'], work);
+
+    const mupdate = run(['plugin', 'marketplace', 'update', 'pensmith']);
+    if (mupdate.status !== 0) fail('claude plugin marketplace update pensmith', shown(mupdate));
+    const update = run(['plugin', 'update', 'pensmith@pensmith']);
+    if (update.status !== 0) fail('claude plugin update pensmith@pensmith', shown(update));
+    const after = installedEntry(run);
+    const installedText = after.installPath === null ? '' : (() => {
+      try {
+        return readFileSync(path.join(after.installPath, 'workflows', 'status.md'), 'utf8');
+      } catch {
+        return '';
+      }
+    })();
+    if (after.version !== secondVersion || !installedText.includes(marker)) {
+      fail(
+        `claude plugin update did not install the new commit: expected version ${secondVersion} with the changed workflows/status.md, ` +
+          `got ${JSON.stringify(after)}${installedText.includes(marker) ? '' : ' (the change is missing)'}`,
+        shown(update),
+      );
+    }
+    ok(`git marketplace update: ${before.version} → ${after.version}; the installed copy holds the new commit`);
+  } finally {
+    await host.close();
+  }
 }
 
 async function main() {
@@ -233,6 +337,9 @@ async function main() {
     const row2 = parseMcpList(noNode.stdout).find((r) => r.name === PLUGIN_SERVER);
     if (!row2 || row2.connected) fail(`claude mcp list with no node on PATH: ${PLUGIN_SERVER} must be listed and not connected`, shown(noNode));
     ok(`no node on PATH: ${PLUGIN_SERVER} — ${row2.statusText}`);
+
+    // 7. A git-hosted marketplace: install, push a plugin/ change, update.
+    await checkGitMarketplaceUpdate({ claude, clone, tmp });
     passed = true;
   } finally {
     if (passed && !opts.keep) rmSync(tmp, { recursive: true, force: true });

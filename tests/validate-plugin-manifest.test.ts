@@ -13,11 +13,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const pluginVersion = createRequire(import.meta.url)('../scripts/plugin-version.cjs') as {
+  expectedPluginVersion(packageVersion: string, pluginDir: string): string;
+  writePluginVersion(pluginDir: string, version: string): boolean;
+};
 const VALIDATOR = path.join(REPO, 'scripts', 'validate-plugin-manifest.cjs');
 const LEGACY = path.join(REPO, 'tests', 'fixtures', 'plugin-legacy');
 
@@ -169,8 +174,51 @@ test('PLUG-01: plugin.json with a hooks key, an unknown key or a stale version f
   }, [
     /plugin\.json: no "hooks" key — hooks\/hooks\.json loads by default/,
     /plugin\.json: unknown top-level key "skillz"/,
-    /plugin\.json: version "0\.0\.1" must equal package\.json version/,
+    /plugin\.json: version "0\.0\.1" is not "0\.1\.0-dev\+[0-9a-f]{12}" \(the package\.json version \+ the digest of plugin\/'s files\)/,
   ]);
+});
+
+// Review round 2: Claude Code updates a git-marketplace install only when the
+// manifest version changes, so the version carries the digest of plugin/.
+test('PLUG-03: a change under plugin/ that was not re-stamped fails, naming `npm run plugin:version`', () => {
+  withBrokenCopy((root) => {
+    const f = path.join(root, 'plugin', 'workflows', 'status.md');
+    writeFileSync(f, `${readFileSync(f, 'utf8')}\nA line added after the version was stamped.\n`);
+  }, [
+    /plugin\.json: version "0\.1\.0-dev\+[0-9a-f]{12}" is not "0\.1\.0-dev\+[0-9a-f]{12}"/,
+    /Claude Code updates a git-marketplace install only when this string changes; run `npm run plugin:version`/,
+  ]);
+});
+
+test('PLUG-03: plugin.json without a version fails (`claude plugin validate --strict` refuses it too)', () => {
+  withBrokenCopy((root) => {
+    editJson(path.join(root, 'plugin', '.claude-plugin', 'plugin.json'), (v) => {
+      delete v['version'];
+    });
+  }, /plugin\.json: version is required \(a string\)/);
+});
+
+test('PLUG-03: a re-stamped copy passes again, and the digest ignores CRLF line endings', () => {
+  const { root, cleanup } = copyTree();
+  try {
+    const f = path.join(root, 'plugin', 'workflows', 'status.md');
+    writeFileSync(f, `${readFileSync(f, 'utf8')}\nA new line.\n`);
+    const pkgVersion = (JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as { version: string }).version;
+    const stamped = pluginVersion.expectedPluginVersion(pkgVersion, path.join(root, 'plugin'));
+    assert.equal(pluginVersion.writePluginVersion(path.join(root, 'plugin'), stamped), true);
+    assert.equal(pluginVersion.writePluginVersion(path.join(root, 'plugin'), stamped), false, 'stamping again changes nothing');
+    const r = validate(root);
+    assert.equal(r.status, 0, r.out);
+    // The same content with CRLF line endings (a Windows checkout without eol=lf) has the same digest.
+    writeFileSync(f, readFileSync(f, 'utf8').replace(/\n/g, '\r\n'));
+    assert.equal(pluginVersion.expectedPluginVersion(pkgVersion, path.join(root, 'plugin')), stamped);
+    // Only the value changed: the manifest keeps its layout.
+    const manifest = readFileSync(path.join(root, 'plugin', '.claude-plugin', 'plugin.json'), 'utf8');
+    assert.match(manifest, new RegExp(`^ {2}"version": "${stamped.replace(/[.+]/g, '\\$&')}",$`, 'm'));
+    assert.match(manifest, /"keywords": \[/);
+  } finally {
+    cleanup();
+  }
 });
 
 test('PLUG-01: the MCP server must be the committed bundle, not the tsc build', () => {
@@ -229,6 +277,14 @@ test('PLUG-01: the router skill listing (description + when_to_use) stays within
     const f = path.join(root, 'plugin', 'skills', 'pensmith', 'SKILL.md');
     writeFileSync(f, readFileSync(f, 'utf8').replace('when_to_use: >-\n', `when_to_use: >-\n  ${'x'.repeat(1600)}\n`));
   }, /pensmith\/SKILL\.md: description \+ when_to_use is \d+ characters; Claude Code truncates the listing at 1536/);
+});
+
+test('PLUG-03: the marketplace entry must not set a version (plugin.json\'s stamped version is read first)', () => {
+  withBrokenCopy((root) => {
+    editJson(path.join(root, '.claude-plugin', 'marketplace.json'), (v) => {
+      (v['plugins'] as Array<Record<string, unknown>>)[0]!['version'] = '0.1.0-dev';
+    });
+  }, /marketplace\.json: the pensmith entry must not set "version"/);
 });
 
 test('PLUG-01: the marketplace entry must point at ./plugin', () => {

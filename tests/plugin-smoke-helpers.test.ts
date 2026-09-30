@@ -2,7 +2,9 @@
 // smoke (scripts/plugin-smoke-lib.mjs, D-23a-17): the PATH-without-node filter
 // on win32 and posix, PATH lookup, the Windows npm shim target, and the
 // parsers for `claude plugin details`, `claude mcp list` and `claude plugin
-// list --json` (fed the output Claude Code 2.1.285 prints). The smoke itself
+// list --json` (fed the output Claude Code 2.1.285 prints), and the CGI
+// plumbing of the loopback git host that step 7 installs a git-marketplace
+// copy from (review round 2). The smoke itself
 // runs the real Claude Code (`npm run plugin:smoke`, the CI `plugin` job).
 
 import { test } from 'node:test';
@@ -12,7 +14,9 @@ import {
   executableNames,
   expandPluginRoot,
   findOnPath,
+  gitCgiEnv,
   installPathOf,
+  parseCgiHead,
   parseMcpList,
   parsePluginDetails,
   pathKey,
@@ -177,3 +181,38 @@ test('PLUG-14: sectionStepOf reads a section step in either glyph set, and nothi
   for (const other of ['research', 'compile', 'status (done)', 'plan', 'revise #1', '']) assert.equal(sectionStepOf(other), null, other);
 });
 
+
+test('PLUG-03: parseCgiHead splits git http-backend\'s CGI head from the body (CRLF or LF), waiting for the blank line', () => {
+  assert.equal(parseCgiHead('Status: 200 OK\r\nContent-Type: text/plain'), null, 'no blank line yet');
+  const crlf = parseCgiHead(Buffer.from('Expires: Fri, 01 Jan 1980 00:00:00 GMT\r\nContent-Type: application/x-git-upload-pack-advertisement\r\n\r\n001e# service=git-upload-pack\n', 'latin1'));
+  assert.ok(crlf);
+  assert.equal(crlf.status, 200, 'no Status line means 200');
+  assert.equal(crlf.headers['Content-Type'], 'application/x-git-upload-pack-advertisement');
+  assert.equal(crlf.body.toString('latin1'), '001e# service=git-upload-pack\n');
+  const lf = parseCgiHead('Status: 404 Not Found\nContent-Type: text/plain\n\nRepository not exported.\n');
+  assert.ok(lf);
+  assert.equal(lf.status, 404);
+  assert.equal(lf.body.toString(), 'Repository not exported.\n');
+  assert.equal(parseCgiHead('Status: nonsense\n\n')?.status, 500, 'an unreadable status is a server error');
+});
+
+test('PLUG-03: gitCgiEnv maps one request onto the CGI variables git http-backend reads', () => {
+  const env = gitCgiEnv({ PATH: '/usr/bin' }, '/srv/git', {
+    method: 'POST',
+    url: '/pensmith.git/git-upload-pack?x=1',
+    headers: { 'content-type': 'application/x-git-upload-pack-request', 'content-length': '120', 'content-encoding': 'gzip', 'git-protocol': 'version=2' },
+  });
+  assert.equal(env['PATH'], '/usr/bin');
+  assert.equal(env['GIT_PROJECT_ROOT'], '/srv/git');
+  assert.equal(env['GIT_HTTP_EXPORT_ALL'], '1');
+  assert.equal(env['REQUEST_METHOD'], 'POST');
+  assert.equal(env['PATH_INFO'], '/pensmith.git/git-upload-pack');
+  assert.equal(env['QUERY_STRING'], 'x=1');
+  assert.equal(env['CONTENT_TYPE'], 'application/x-git-upload-pack-request');
+  assert.equal(env['CONTENT_LENGTH'], '120');
+  assert.equal(env['HTTP_CONTENT_ENCODING'], 'gzip', 'a gzipped request body is announced to the backend');
+  assert.equal(env['HTTP_GIT_PROTOCOL'], 'version=2');
+  const get = gitCgiEnv({}, '/srv/git', { method: 'GET', url: '/pensmith.git/info/refs?service=git-upload-pack', headers: {} });
+  assert.equal(get['CONTENT_LENGTH'], undefined, 'no body, no CONTENT_LENGTH');
+  assert.equal(get['QUERY_STRING'], 'service=git-upload-pack');
+});

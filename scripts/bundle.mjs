@@ -43,15 +43,24 @@
 // version.generated.ts (the package.json version) and the locked dependencies:
 // rebundle after any change under bin/ (lib or cli), mcp/ or hooks/, to the
 // package.json version or to package-lock.json, and commit plugin/dist with it.
+//
+// Last, it stamps plugin/.claude-plugin/plugin.json's `version` with the
+// digest of plugin/'s files (scripts/plugin-version.cjs; Claude Code updates a
+// git-marketplace install only when that string changes), and --check fails
+// when the committed stamp differs too. A change to plugin/ that needs no
+// rebundle (a workflow body, a template, a skill) is stamped by `npm run
+// plugin:version` alone.
 
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outRoot = path.join(repoRoot, 'plugin', 'dist');
+const { stampPluginVersion } = createRequire(import.meta.url)('./plugin-version.cjs');
 
 /** Entry source (repo-relative, POSIX) → output (relative to plugin/dist, POSIX). */
 export const BUNDLE_ENTRIES = Object.freeze({
@@ -206,21 +215,24 @@ async function bundleOne(entry) {
   return text;
 }
 
-/** Fail when plugin/dist differs from what git has committed (modified, deleted or new files). */
+/** The generated paths --check compares with git: the bundles and the stamped plugin.json. */
+const GENERATED = ['plugin/dist', 'plugin/.claude-plugin/plugin.json'];
+
+/** Fail when plugin/dist or the stamped version differs from what git has committed (modified, deleted or new files). */
 function checkCommitted() {
-  const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=all', '--', 'plugin/dist'], {
+  const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=all', '--', ...GENERATED], {
     cwd: repoRoot,
     encoding: 'utf8',
   });
   if (status.trim() === '') {
-    process.stdout.write('bundle: plugin/dist matches the committed bundles\n');
+    process.stdout.write('bundle: plugin/dist and the plugin version match what is committed\n');
     return;
   }
   process.stderr.write(
-    'bundle: plugin/dist differs from the committed bundles — run `npm run bundle` and commit plugin/dist:\n' + status,
+    'bundle: plugin/dist or the stamped plugin version differs from what is committed — run `npm run bundle` and commit plugin/dist and plugin/.claude-plugin/plugin.json:\n' + status,
   );
   try {
-    process.stderr.write(execFileSync('git', ['diff', '--stat', '--', 'plugin/dist'], { cwd: repoRoot, encoding: 'utf8' }));
+    process.stderr.write(execFileSync('git', ['diff', '--stat', '--', ...GENERATED], { cwd: repoRoot, encoding: 'utf8' }));
   } catch {
     /* the status above already names the files */
   }
@@ -237,6 +249,8 @@ async function main() {
     writeFileSync(out, text);
     process.stdout.write(`bundle: ${entry} -> plugin/dist/${BUNDLE_ENTRIES[entry]} (${(Buffer.byteLength(text) / 1024).toFixed(0)} KiB)\n`);
   }
+  const stamp = stampPluginVersion(repoRoot);
+  process.stdout.write(`bundle: plugin version ${stamp.version}${stamp.changed ? ' (stamped)' : ''}\n`);
   if (check) checkCommitted();
 }
 
