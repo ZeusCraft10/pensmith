@@ -247,7 +247,7 @@ export const OrphanLabelSchema = z.object({
     sentence: z.string().describe('the claim sentence, copied verbatim from the paragraph'),
     needs_citation: z.boolean().describe('true when a reader would need a source for the sentence'),
     supported_by: z.array(z.string()).default([]).describe('keys of the citations in the paragraph that support it ([] when none)'),
-  })).default([]).describe('every sentence of the paragraph that makes a claim'),
+  })).describe('every sentence of the paragraph that makes a claim ([] when none)'),
 });
 
 export type TopicDisambiguation = z.infer<typeof TopicDisambiguatorSchema>;
@@ -372,6 +372,16 @@ export function coerceEvaluation(v: unknown): unknown {
 }
 
 /**
+ * orphan-label replies with a bare array of claim objects become `{claims}`.
+ * An empty array is left alone: the tolerant parser also offers inner values
+ * (a YAML reply's `supported_by: []`), and an empty array read as "no claims"
+ * would hide the real answer — the prompt asks for `{ "claims": [] }`.
+ */
+function coerceOrphanAudit(v: unknown): unknown {
+  return Array.isArray(v) && v.length > 0 && v.every(isRecord) ? { claims: v } : v;
+}
+
+/**
  * A planner reply written as a PLAN.md document (frontmatter plus `## Claims`,
  * `## Structure` and `## Voice`) instead of JSON — the tolerant text path for a
  * provider without native structured output. undefined when it is not one.
@@ -445,7 +455,7 @@ export const CONTRACTS: Readonly<Record<string, Contract>> = Object.freeze({
   'outline-author': { slug: 'outline-author', schema: OutlineSchema, coerce: coerceOutline },
   'section-planner': { slug: 'section-planner', schema: SectionPlannerSchema, fromText: plannerFromText },
   'claim-support': { slug: 'claim-support', schema: ClaimSupportSchema },
-  'orphan-label': { slug: 'orphan-label', schema: OrphanLabelSchema, coerce: wrapArray('claims') },
+  'orphan-label': { slug: 'orphan-label', schema: OrphanLabelSchema, coerce: coerceOrphanAudit },
 });
 
 export function contractFor(slug: string): Contract | null {

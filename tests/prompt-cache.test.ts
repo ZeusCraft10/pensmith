@@ -236,7 +236,7 @@ test('RUN-26: the OpenAI shape reports automatic prefix caching (prompt_tokens_d
     assert.ok(Math.abs(second.costUsd - costOf(price, { inputTokens: second.inputTokens, outputTokens: second.outputTokens, cacheReadTokens: cached })) < 1e-12);
 
     // A prompt under 1024 tokens is never cached.
-    const short = buildPromptRequest('orphan-label', { paragraph: 'p', sentence: 's' });
+    const short = buildPromptRequest('orphan-label', { paragraph: 'p' });
     await complete({ slug: 'orphan-label', system: short.system, messages: short.messages });
     await complete({ slug: 'orphan-label', system: short.system, messages: short.messages });
     for (const u of sb.mock!.usagesFor('orphan-label') as Array<{ prompt_tokens_details: { cached_tokens: number } }>) {
