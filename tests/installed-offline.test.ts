@@ -6,7 +6,7 @@
 // (tests/helpers/installed-package.ts), then runs the installed CLI from a temp
 // project:
 //   - `--dry-run research --yolo` finds >= 5 synthetic dry-run sources from the
-//     packaged corpus (templates/dry-run/corpus.json) — no ENOENT on
+//     packaged corpus (plugin/templates/dry-run/corpus.json) — no ENOENT on
 //     tests/fixtures, which the package does not ship — and one bare
 //     `--dry-run --yolo` goes from an assignment to `.paper-dry-run/export/
 //     DRAFT.dry-run.*` (GRND-19) with no `.paper/` and no registry entry;
@@ -162,4 +162,29 @@ test('RUN-17 / RUN-05: `PENSMITH_OFFLINE=1 resume --replay <id>` works in the in
     assert.equal(readFileSync(join(project, '.paper', 'INTAKE.md'), 'utf8'), original, 'reproduced byte-for-byte');
     assert.equal(sb.mock!.callCount(), calls, 'no model request');
   });
+});
+
+test('PLUG-02: the installed CLI reads its prompts from the installed plugin/ and checks each hash pin', () => {
+  const { pkgDir, scratch } = install();
+  // The template the installed `new` sends is the one under <pkg>/plugin/, and
+  // it is refused the moment its bytes drift from EXPECTED_PROMPT_HASHES.
+  const template = join(pkgDir, 'plugin', 'templates', 'prompts', 'intake-clarifier.md');
+  assert.ok(existsSync(template), 'the package ships the prompt under plugin/templates/prompts/');
+  const original = readFileSync(template);
+  const run = (): SpawnSyncReturns<string> => {
+    const project = mkdtempSync(join(scratch, 'prompt-pin-'));
+    writeFileSync(join(project, 'assignment.txt'), 'Write a 1500-word essay on the history of the printing press, citing peer-reviewed sources.\n');
+    return runInstalled(['new', '--yolo'], project, { PENSMITH_NO_LLM: '1' });
+  };
+  try {
+    writeFileSync(template, Buffer.concat([original, Buffer.from('\n')]));
+    const drifted = run();
+    assert.equal(drifted.status, 1, `a drifted installed prompt is refused: ${drifted.stderr}`);
+    assert.match(drifted.stderr, /loadPrompt: prompt "intake-clarifier" drifted at runtime/);
+  } finally {
+    writeFileSync(template, original);
+  }
+  const ok = run();
+  assert.equal(ok.status, 0, `the pinned prompt loads from the installed plugin/: ${ok.stderr}`);
+  assert.match(ok.stdout, /pensmith new: wrote INTAKE\.md/);
 });
