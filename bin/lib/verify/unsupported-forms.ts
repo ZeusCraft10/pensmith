@@ -121,6 +121,11 @@ function mathSpans(md: string, code: ReadonlyArray<readonly [number, number]>): 
   return out;
 }
 
+/** A set of the words in a space-separated list. */
+function wordSet(words: string): ReadonlySet<string> {
+  return new Set(words.split(/\s+/).filter((w) => w.length > 0));
+}
+
 // ---------------------------------------------------------------------------
 // Name patterns (reference entries and author-date citations).
 // ---------------------------------------------------------------------------
@@ -195,15 +200,14 @@ function headingText(lines: readonly Line[], i: number, kind: 'atx' | 'setext' |
  * has a reference entry's shape; "Literature Review", "Sources of Error" or
  * "Notes on Method" hold a word from outside, so they never are.
  */
-const REFERENCE_LIST_VOCABULARY: ReadonlySet<string> = new Set([
-  'reference', 'references', 'referenced', 'bibliography', 'bibliographies', 'bibliographic', 'works', 'work', 'cited', 'consulted', 'used',
-  'literature', 'sources', 'source', 'citations', 'citation', 'notes', 'endnotes', 'footnotes', 'further', 'reading', 'readings',
-  'selected', 'select', 'key', 'main', 'primary', 'secondary', 'additional', 'other', 'general', 'annotated', 'recommended', 'suggested',
-  'list', 'of', 'and', '&', 'the', 'for', 'this', 'paper', 'article', 'chapter', 'section',
-]);
-const REFERENCE_LIST_NOUNS: ReadonlySet<string> = new Set([
-  'reference', 'references', 'bibliography', 'bibliographies', 'works', 'literature', 'sources', 'source', 'citations', 'readings', 'reading',
-]);
+const REFERENCE_LIST_VOCABULARY: ReadonlySet<string> = wordSet(
+  'reference references referenced bibliography bibliographies bibliographic works work cited consulted used literature sources ' +
+  'source citations citation notes endnotes footnotes further reading readings selected select key main primary secondary additional ' +
+  'other general annotated recommended suggested list of and & the for this paper article chapter section',
+);
+const REFERENCE_LIST_NOUNS: ReadonlySet<string> = wordSet(
+  'reference references bibliography bibliographies works literature sources source citations readings reading',
+);
 
 function vocabularyHeading(name: string): boolean {
   const words = name.split(/[\s,/]+/).filter((w) => w.length > 0);
@@ -450,13 +454,13 @@ const VALUE_PREPOSITIONS: ReadonlySet<string> = new Set(['in', 'to', 'into', 'on
  * "as described in [1, 5]", "according to [2, 3]", "compared to [4, 6]" —
  * the group stays a marker.
  */
-const CITING_BEFORE_PREPOSITION: ReadonlySet<string> = new Set([
-  'as', 'see', 'cf', 'according', 'refer', 'referred', 'compared', 'similar', 'contrast', 'due', 'owing', 'thanks', 'attributed', 'credited',
-  'shown', 'described', 'reported', 'discussed', 'presented', 'proposed', 'introduced', 'given', 'found', 'studied', 'reviewed', 'summarized',
-  'summarised', 'cited', 'used', 'demonstrated', 'observed', 'noted', 'outlined', 'detailed', 'explained', 'established', 'argued', 'suggested',
-  'examined', 'investigated', 'analyzed', 'analysed', 'developed', 'listed', 'published', 'appeared', 'documented', 'derived', 'proved', 'proven',
-  'considered', 'adopted', 'employed', 'applied', 'discussion', 'work', 'works', 'studies', 'study', 'literature', 'papers', 'paper',
-]);
+const CITING_BEFORE_PREPOSITION: ReadonlySet<string> = wordSet(
+  'as see cf according refer referred compared similar contrast due owing thanks attributed credited shown described reported ' +
+  'discussed presented proposed introduced given found studied reviewed summarized summarised cited used demonstrated observed noted ' +
+  'outlined detailed explained established argued suggested examined investigated analyzed analysed developed listed published ' +
+  'appeared documented derived proved proven considered adopted employed applied discussion work works studies study literature ' +
+  'papers paper',
+);
 /** A relation or operator right before a group ("x ∈ [1, 5]", "= [2, 3]", "≤ [1]"). */
 const VALUE_BEFORE_RE = /[=∈∊∉⊂⊆⊃⊇×→↦≤≥±∓−]\s*$/u;
 /** An operator right after a group ("[1, 5] × [1, 5]", "[1, 5]^2", "[1, 5] ∪ …"). */
