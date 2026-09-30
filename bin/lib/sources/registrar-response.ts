@@ -250,12 +250,16 @@ export async function exchange(send: () => Promise<HttpResponse>, opts: Exchange
 
 /**
  * When the answer in `res` was obtained (ISO-8601, Phase 20 VRFY-28, D-20-15):
- * the HTTP cache entry's savedAt for a cached answer, else now (a live fetch,
- * or an offline fixture replay). The adapters stamp it on their candidates as
+ * the HTTP cache entry's savedAt for a cached answer, the arrival instant
+ * http.ts stamped on a live one (the same instant the cache entry records),
+ * else now. The adapters stamp it on their candidates as
  * `last_verified`, so Pass 1 reports when the registrar really answered.
  */
-export function answeredAt(res: Pick<HttpResponse, 'cachedAt'>): string {
-  return typeof res.cachedAt === 'string' && !Number.isNaN(Date.parse(res.cachedAt)) ? new Date(res.cachedAt).toISOString() : new Date().toISOString();
+export function answeredAt(res: Pick<HttpResponse, 'cachedAt' | 'answeredAt'>): string {
+  for (const at of [res.cachedAt, res.answeredAt]) {
+    if (typeof at === 'string' && !Number.isNaN(Date.parse(at))) return new Date(at).toISOString();
+  }
+  return new Date().toISOString();
 }
 
 /** A lookup's options (Phase 20, VRFY-28): `refresh` skips the HTTP-cache read (FetchOptions.refresh). */

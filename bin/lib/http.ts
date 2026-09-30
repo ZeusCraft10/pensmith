@@ -832,6 +832,12 @@ export interface HttpResponse {
   fixture?: boolean;
   cachedAt?: string; // ISO8601
   /**
+   * When a live (or fixture) answer arrived, ISO8601 (Phase 20, VRFY-28). A
+   * cached copy of this answer carries the same instant as its `cachedAt`, so
+   * a registrar record is dated when it was obtained, not when it was re-read.
+   */
+  answeredAt?: string;
+  /**
    * The URL that answered when http.ts followed redirects to get here (SRC-01).
    * Absent when the requested URL answered itself (and on a cache hit, which
    * stores the final answer under the requested URL).
@@ -1552,7 +1558,7 @@ function filterHeadersForCache(headers: Record<string, string>): Record<string, 
 async function writeCache(key: string, response: HttpResponse): Promise<void> {
   const file = path.join(pensmithHttpCacheDir(), `${key}.json`);
   const envelope: CacheEnvelope = {
-    savedAt: new Date().toISOString(),
+    savedAt: response.answeredAt ?? new Date().toISOString(),
     response: {
       status: response.status,
       // CR-03: ONLY allowlisted headers go to disk. Set-Cookie / Authorization /
@@ -2494,6 +2500,8 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
 
   // The recorder writes one entry per hop, each under its own URL (D-19-07).
   RESPONSE_CHAINS.set(response, hops);
+  // VRFY-28: one instant for the answer and its cache entry's savedAt.
+  response.answeredAt = new Date().toISOString();
   recordHttp({ ...base, url: response.finalUrl ?? url, status: response.status, cache: 'miss', bytes: response.bodyBytes?.length ?? 0, ms: Date.now() - started });
 
   // --- Phase 19 seam S-B (SRC-17): a body that is not the service's answer is
