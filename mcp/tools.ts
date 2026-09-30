@@ -348,7 +348,8 @@ export function registerPaperTools(server: McpServer): void {
   //          capturing output sink (bin/lib/output-sink.ts, scoped to this call)
   //          and returns exactly the text the CLI prints, for the paper the
   //          server resolved at boot — never the `pensmith open` pointer
-  //          (D-17-33). tests/tier-contract.test.ts compares it with the CLI.
+  //          (D-17-33). tests/tier-contract/status-fields.test.ts compares it
+  //          byte for byte with the CLI.
   server.registerTool(
     'pensmith_status',
     {
