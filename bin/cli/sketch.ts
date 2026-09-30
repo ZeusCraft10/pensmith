@@ -28,6 +28,7 @@ import { ask } from '../lib/prompts.js';
 import { dispatchVerb, type GlobalFlags } from '../pensmith.js';
 import type { Ux02Verb } from '../lib/verbs.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
+import { out } from '../lib/output-sink.js';
 
 /** Dispatcher seam — matches the dispatchVerb signature the tests spy on. */
 type Dispatcher = (
@@ -78,7 +79,7 @@ export const sketchCommand = defineCommand({
       synthesized = parts.length > 0 ? parts.join(' — ') : 'An exploratory thesis to refine during intake.';
     }
 
-    process.stdout.write(`\npensmith sketch:\n  ${synthesized}\n\n`);
+    out(`\npensmith sketch:\n  ${synthesized}\n\n`);
 
     // (2) Confirm gate — `sketch-confirm` in the one registry (RUN-28,
     //     approval-gates-default-on). A pre-supplied `confirm` (test seam) wins;

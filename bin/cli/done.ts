@@ -44,6 +44,7 @@ import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
 import { sectionWriteBlockReason } from '../lib/plan-status.js';
 import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
+import { out as writeOut } from '../lib/output-sink.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -97,19 +98,19 @@ export interface DoneGateResult {
  * example citekeys / phrases). Called BEFORE approve() when hasIssues is true.
  */
 function writeGateSummary(issues: GateIssues): void {
-  process.stdout.write('pensmith done: advisory issues found before export (DONE-09):\n');
+  writeOut('pensmith done: advisory issues found before export (DONE-09):\n');
   if (issues.unsupported.length > 0) {
     const sample = issues.unsupported
       .slice(0, 3)
       .map((r) => r.citekey)
       .join(', ');
-    process.stdout.write(
+    writeOut(
       `  - ${issues.unsupported.length} UNSUPPORTED claim(s) (Pass 2): ${sample}\n`,
     );
   }
   if (issues.orphanClaims.length > 0) {
     const total = issues.orphanClaims.reduce((sum, r) => sum + r.orphanCount, 0);
-    process.stdout.write(
+    writeOut(
       `  - ${total} orphan claim(s) across ${issues.orphanClaims.length} paragraph(s) (Pass 4)\n`,
     );
   }
@@ -118,11 +119,11 @@ function writeGateSummary(issues: GateIssues): void {
       .slice(0, 3)
       .map((r) => r.phrase.replace(/[\r\n]+/g, ' ').slice(0, 60))
       .join(' | ');
-    process.stdout.write(
+    writeOut(
       `  - ${issues.plagiarismHits.length} distinctive phrase(s) with web matches (plagiarism): ${sample}\n`,
     );
   }
-  process.stdout.write('These are advisory only — review before confirming export.\n');
+  writeOut('These are advisory only — review before confirming export.\n');
 }
 
 /**
@@ -637,16 +638,16 @@ export const doneCommand = defineCommand({
       // yet stays EXIT_ERROR.
       const gate = runExportBlockingGate(paperRoot);
       if ((gate.verdictReasons ?? []).length > 0) {
-        process.stdout.write(
+        writeOut(
           'pensmith done: BLOCKED — there is no compiled draft because compile refuses these sections:\n',
         );
-        for (const r of gate.verdictReasons ?? []) process.stdout.write(`  - ${r}\n`);
-        process.stdout.write(
+        for (const r of gate.verdictReasons ?? []) writeOut(`  - ${r}\n`);
+        writeOut(
           "Fix the cited section(s) — re-run 'pensmith verify <N>' then 'pensmith compile' — and try again.\n",
         );
         return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
       }
-      process.stdout.write(
+      writeOut(
         `pensmith done: no compiled draft at ${draftPath} — run 'pensmith compile' first.\n`,
       );
       return { ok: false, exitCode: EXIT_ERROR };
@@ -659,11 +660,11 @@ export const doneCommand = defineCommand({
     // never reaches the deliverable.
     const blocking = runExportBlockingGate(paperRoot);
     if (blocking.blocked) {
-      process.stdout.write(
+      writeOut(
         'pensmith done: BLOCKED — export refused (unresolved blocking citations or unverified sections):\n',
       );
-      for (const r of blocking.reasons) process.stdout.write(`  - ${r}\n`);
-      process.stdout.write(
+      for (const r of blocking.reasons) writeOut(`  - ${r}\n`);
+      writeOut(
         "Fix the cited section(s) — re-run 'pensmith verify <N>' then 'pensmith compile' — and try again.\n",
       );
       return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
@@ -713,7 +714,7 @@ export const doneCommand = defineCommand({
       const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
       const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath, paperRoot);
       if (!gate4.passed) {
-        process.stdout.write(
+        writeOut(
           `pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification: ${gate4.reason}\n`,
         );
         return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
@@ -794,10 +795,10 @@ export const doneCommand = defineCommand({
       await atomicWriteFile(finalMdPath, draftMd);
     }
 
-    process.stdout.write(`pensmith done: exported ${result.outputPath}\n`);
+    writeOut(`pensmith done: exported ${result.outputPath}\n`);
     if (networkMode().dryRun) {
       // GRND-19 (D-18-29): say plainly that this is the dry run's trial export.
-      process.stdout.write(
+      writeOut(
         `pensmith done: this is a dry-run export (synthetic sources, stub text) in ${join(paperDir(paperRoot), 'export')}; ` +
           'the real paper was not touched\n',
       );

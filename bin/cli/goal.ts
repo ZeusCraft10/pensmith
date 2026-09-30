@@ -26,6 +26,7 @@ import path from 'node:path';
 import { paperDir } from '../lib/paths.js';
 import { TutorialSubscriber } from '../lib/tutorial.js';
 import { tryReadPaperConfigSync } from '../lib/config.js';
+import { out as writeOut } from '../lib/output-sink.js';
 
 /** The educator-mode goal enum (resolved Open-Q2). */
 export type Goal = 'draft' | 'learning' | 'both';
@@ -159,7 +160,7 @@ export async function renderLearningEndState(paperRoot: string): Promise<void> {
     });
     subscriber.emit({ kind: 'research.done', payload });
     await subscriber.flush();
-    process.stdout.write(
+    writeOut(
       'pensmith: Learning mode — wrote per-claim source provenance to TUTORIAL.md; ' +
         'stopping after research per your goal=learning (no section drafted).\n',
     );

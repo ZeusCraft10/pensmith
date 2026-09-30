@@ -22,6 +22,7 @@ import { defineCommand } from 'citty';
 import { projectRoot } from '../lib/paths.js';
 import { buildStatusView, renderConfigView, renderStatusView } from '../lib/status-view.js';
 import { routeOptionsFor } from './route-options.js';
+import { out } from '../lib/output-sink.js';
 
 export const statusCommand = defineCommand({
   meta: {
@@ -39,7 +40,7 @@ export const statusCommand = defineCommand({
     const paperRoot = projectRoot();
 
     if (args.config === true) {
-      process.stdout.write((await renderConfigView(paperRoot)) + '\n');
+      out((await renderConfigView(paperRoot)) + '\n');
       return { ok: true, mode: 'config' };
     }
 
@@ -47,7 +48,7 @@ export const statusCommand = defineCommand({
     // "next" line reflects the learning hard-stop. status is READ-ONLY — it does
     // not render TUTORIAL.md (rendering belongs to next/resume/bare).
     const view = await buildStatusView(paperRoot, { tier: 'cli', ...routeOptionsFor(paperRoot) });
-    process.stdout.write(renderStatusView(view) + '\n');
+    out(renderStatusView(view) + '\n');
     if (view.problem === 'no-paper') return { ok: false, reason: 'no-paper' };
     if (view.problem === 'corrupt-state') return { ok: false, reason: 'corrupt-state' };
     return { ok: true, next: view.next.split(' ')[0] ?? view.next, view };

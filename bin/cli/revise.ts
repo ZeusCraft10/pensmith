@@ -30,10 +30,11 @@ import { projectRoot } from '../lib/paths.js';
 import { proposeSwap } from '../lib/revise-swap.js';
 import { assertLlmConfigured } from '../lib/anthropic.js';
 import { resolveSectionArg } from '../lib/section-slug.js';
+import { out } from '../lib/output-sink.js';
 
 /** The CLI's output sink for the section research pass (section-research.ts never writes the streams itself). */
 const CLI_IO = {
-  out: (line: string): void => void process.stdout.write(`${line}\n`),
+  out: (line: string): void => out(`${line}\n`),
   err: (line: string): void => void process.stderr.write(`${line}\n`),
 };
 
@@ -96,7 +97,7 @@ export const reviseCommand = defineCommand({
       proposeSwap,
     });
 
-    process.stdout.write(`pensmith revise: ${result.message}\n`);
+    out(`pensmith revise: ${result.message}\n`);
     return { ok: !result.retryExhausted, ...result };
   },
 });
