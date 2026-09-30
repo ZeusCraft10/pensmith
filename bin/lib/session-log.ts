@@ -26,7 +26,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { atomicAppendFile, atomicWriteFile } from './atomic-write.js';
-import { redactKeys, deepRedactPii } from './pii.js';
+import { redactKeys, deepRedactPii, type PiiOptions } from './pii.js';
 import { paperDir, pensmithDataDir, projectRoot } from './paths.js';
 
 // ---------------------------------------------------------------------------
@@ -234,6 +234,9 @@ interface BaseRecord {
   [key: string]: unknown;
 }
 
+/** The PII classes an http record's transport error keeps (see buildRecord). */
+const HTTP_ERROR_PII: PiiOptions = Object.freeze({ exclude: ['NAME', 'DATE', 'IP'] as const });
+
 function buildRecord(
   kind: Kind,
   payload: Record<string, unknown>,
@@ -268,14 +271,18 @@ function buildRecord(
   // (http.ts redactUrl: userinfo dropped, key/token params REDACTED, the
   // contact-email params dropped). It skips the PII patterns, which would read
   // a DOI's digits as a phone number and a loopback host as an IP and destroy
-  // the one thing the record is for — which source was requested. Its other
-  // fields still get stage 2.
+  // the one thing the record is for — which source was requested. Its `error`
+  // is the transport's own text about that request (`HeadersTimeoutError:
+  // Headers Timeout Error`, `HTTP 503 Service Unavailable`): it keeps the
+  // EMAIL, PHONE, SSN, ID and IBAN classes but not NAME, DATE or IP, which
+  // would read its capitalised words as a person and erase why the lookup
+  // failed (GRND-05). Its other fields get the whole of stage 2.
   if (kind === 'llm') {
     if (safe['session_bodies'] === 'redacted') redactLlmBodies(safe);
   } else {
     for (const k of Object.keys(safe)) {
       if (kind === 'http' && k === 'url') continue;
-      safe[k] = deepRedactPii(safe[k]);
+      safe[k] = kind === 'http' && k === 'error' ? deepRedactPii(safe[k], HTTP_ERROR_PII) : deepRedactPii(safe[k]);
     }
   }
 

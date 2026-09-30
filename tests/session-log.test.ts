@@ -152,6 +152,29 @@ test('redaction integration: email PII-redacted in string fields; auth header ke
   assert.notEqual(headers.authorization, 'Bearer sk-leak', 'auth secret must not survive');
 });
 
+test('RUN-15 / GRND-05 (merge review round 2): an http record keeps its transport error readable — the NAME, DATE and IP rules never eat it; an email in it is still redacted', async () => {
+  const tmp = mkTmp();
+  setEnvForTmp(tmp);
+  const log = openSessionLog({ scope: 'global', cwd: tmp });
+  const errors = [
+    'HeadersTimeoutError: Headers Timeout Error',
+    'HTTP 503 Service Unavailable',
+    'Internal Server Error',
+    'Too Many Requests',
+    'HTTP 429 — Retry-After Wed, 21 Oct 2026 07:28:00 GMT',
+    'connect ECONNREFUSED 127.0.0.1:8070',
+  ];
+  for (const error of errors) log.http({ source: 'arxiv', method: 'GET', url: 'https://export.arxiv.org/api/query?id_list=2303.15105', status: null, ms: 30378, error });
+  log.http({ source: 'generic', method: 'GET', url: 'https://repo.example/a.pdf', status: null, ms: 1, error: 'refused: owner is jane.doe@example.org' });
+  log.event({ note: 'Headers Timeout Error from Jane Doe' });
+  await log.close();
+
+  const lines = readLines(await logFilePath());
+  assert.deepEqual(lines.slice(0, errors.length).map((l) => l['error']), errors, 'the reason survives verbatim');
+  assert.equal(lines[errors.length]!['error'], 'refused: owner is [REDACTED:EMAIL]', 'an email in an error is still redacted');
+  assert.match(String(lines[errors.length + 1]!['note']), /\[REDACTED:NAME\]/, 'other records keep the whole of stage 2');
+});
+
 test('D-51 rotation: writing past maxBytes rotates current -> .1; depth capped at maxBackups', async () => {
   const tmp = mkTmp();
   setEnvForTmp(tmp);

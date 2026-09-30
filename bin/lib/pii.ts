@@ -71,6 +71,13 @@ export interface PiiOptions {
    * Every other class is unaffected.
    */
   readonly keep?: readonly string[];
+  /**
+   * Classes not to redact in this text. The session log passes NAME, DATE and
+   * IP for a machine-written transport error ("Headers Timeout Error",
+   * "Service Unavailable", a Retry-After date, the pinned address): its
+   * capitalised words are an error's words, not a person's name (GRND-05).
+   */
+  readonly exclude?: readonly PiiKind[];
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +438,9 @@ export function classifyPii(text: string, opts: PiiOptions = {}): PiiMatch[] {
     overlapsAny([start, end], personSpans) || HONORIFIC_BEFORE.test(text.slice(Math.max(0, start - 14), start));
 
   const candidates: Array<PiiMatch & { order: number }> = [];
+  const excluded: ReadonlySet<PiiKind> = new Set(opts.exclude ?? []);
   PATTERNS.forEach(({ kind, re, group }, order) => {
+    if (excluded.has(kind)) return;
     for (const m of text.matchAll(re)) {
       const at = m.index ?? -1;
       if (at < 0) continue;
