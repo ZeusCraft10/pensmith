@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // hooks/post-tool-use.ts — Claude Code PostToolUse hook entry (PLUG-14,
 // D-23a-15). Bundled to plugin/dist/hooks/post-tool-use.mjs (scripts/
-// bundle.mjs); plugin/hooks/hooks.json runs it after the plugin's own MCP
-// tools (matcher `mcp__plugin_pensmith_pensmith__.*`).
+// bundle.mjs); plugin/hooks/hooks.json runs it after the pensmith MCP tools
+// (matcher `^mcp__(?:plugin_pensmith_)?pensmith__.*`: the plugin's server,
+// `mcp__plugin_pensmith_pensmith__*`, and the developer .mcp.json server that
+// Claude Code keeps in its place at the repo root, `mcp__pensmith__*`).
 //
 // In a folder that holds a paper it reads the stdin `tool_name` and
 // `session_id` and appends at most one checkpoint per minute to

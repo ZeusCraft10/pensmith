@@ -119,6 +119,31 @@ export function parseMcpList(text) {
   return rows;
 }
 
+/**
+ * `pensmith status` output → its `next:` step and its section lines, in either
+ * glyph set bin/lib/status-view.ts prints: ASCII (`[ ] #1 introduction:`,
+ * `next: plan #1`) in a C / POSIX locale, UTF-8 (`⌽ §1 introduction:`,
+ * `next: plan §1`) when LANG / LC_ALL / LC_CTYPE is UTF-8.
+ */
+export function statusSummary(text) {
+  const lines = String(text).split(/\r?\n/).map((l) => l.trim());
+  const next = (lines.find((l) => l.startsWith('next:')) ?? '').replace(/^next:\s*/, '');
+  const start = lines.indexOf('sections:');
+  const sections = [];
+  for (let i = start + 1; start >= 0 && i < lines.length; i += 1) {
+    const m = /^(?:\[.\]|\S+)\s+[#§](\S+)\s+([^:]+):/u.exec(lines[i] ?? '');
+    if (!m) break;
+    sections.push({ id: m[1], slug: m[2].trim() });
+  }
+  return { next, sections };
+}
+
+/** A section step named by a `next:` value (`plan #1`, `write §2a`), or null. */
+export function sectionStepOf(next) {
+  const m = /^(plan|write|verify) [#§](\S+)$/u.exec(String(next).trim());
+  return m ? { verb: m[1], id: m[2] } : null;
+}
+
 /** Problems with `claude plugin list --json`'s entry for `id` (empty when enabled and error-free). */
 export function pluginListProblems(json, id = 'pensmith@pensmith') {
   const list = Array.isArray(json) ? json : Array.isArray(json?.plugins) ? json.plugins : null;

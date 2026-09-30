@@ -18,7 +18,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "mcp__plugin_pensmith_pensmith__.*",
+        "matcher": "^mcp__(?:plugin_pensmith_)?pensmith__.*",
         "hooks": [
           { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/dist/hooks/post-tool-use.mjs"], "timeout": 10 }
         ]

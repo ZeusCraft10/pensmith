@@ -40,6 +40,13 @@ export interface McpListRow {
 }
 export declare function parseMcpList(text: string): McpListRow[];
 
+export interface StatusSummary {
+  next: string;
+  sections: Array<{ id: string; slug: string }>;
+}
+export declare function statusSummary(text: string): StatusSummary;
+export declare function sectionStepOf(next: string): { verb: 'plan' | 'write' | 'verify'; id: string } | null;
+
 export declare function pluginListProblems(json: unknown, id?: string): string[];
 export declare function installPathOf(json: unknown, id?: string): string | null;
 export declare function expandPluginRoot(value: string, root: string): string;

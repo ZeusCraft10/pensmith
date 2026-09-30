@@ -412,7 +412,27 @@ Run these on the merged tree (§7). `S` is a scratch dir under `…/scratchpad/p
 5. **Write `23a-SUMMARY.md`** with:
    - the requirement status;
    - the tests rewritten because they encoded invalid shapes;
-   - the maintainer items: make the `plugin` CI job a required check; the CI run itself after the push;
+   - the maintainer items, stated as open (review round 1). CI-05 is complete only with this caveat: `v1/p23a` has no upstream, so neither the `plugin` job nor `bundle:check` in `check` has run on a GitHub runner, and the macOS/Windows-only paths (`claude.cmd` → `claude.exe`, `Path`/PATHEXT, the no-node PATH filter, byte-identical esbuild output on Windows, the < 500 ms outside-a-paper hook budget) have run only in unit tests with fake file systems. After the push the maintainer (a) confirms a green `plugin (ubuntu-latest)`, `plugin (macos-latest)`, `plugin (windows-latest)` run and a green `check` matrix run that includes `bundle:check`, and (b) makes the jobs required checks on `main` (today `protected=false`, no required checks):
+     ```bash
+     gh api -X PUT repos/ZeusCraft10/pensmith/branches/main/protection \
+       -H "Accept: application/vnd.github+json" --input - <<'JSON'
+     {
+       "required_status_checks": {
+         "strict": true,
+         "contexts": [
+           "check (ubuntu-latest, 22)", "check (ubuntu-latest, 24)",
+           "check (macos-latest, 22)", "check (macos-latest, 24)",
+           "check (windows-latest, 22)", "check (windows-latest, 24)",
+           "plugin (ubuntu-latest)", "plugin (macos-latest)", "plugin (windows-latest)"
+         ]
+       },
+       "enforce_admins": false,
+       "required_pull_request_reviews": null,
+       "restrictions": null
+     }
+     JSON
+     gh api repos/ZeusCraft10/pensmith/branches/main/protection/required_status_checks --jq '.contexts'
+     ```
    - "Merge notes for Phase 20" (§8).
 6. **Mark requirements.** Tick only PLUG-01..05, PLUG-13, PLUG-14 and CI-05 in REQUIREMENTS.md (traceability "Complete (23a)"). Leave Phase 23 unticked in ROADMAP.md, and add the 23a plan and status to its Plans line.
 
@@ -429,19 +449,35 @@ Run these on the merged tree (§7). `S` is a scratch dir under `…/scratchpad/p
 | `hooks/hooks.json` | `plugin/hooks/hooks.json` |
 | `.claude-plugin/plugin.json` | `plugin/.claude-plugin/plugin.json` |
 
-**Files that will need a manual merge:**
+**Trial merge (review round 1).** Each Phase 20 stream was merged into `v1/p23a` (after round 1's fixes) in a scratch clone with `git merge --no-edit` (rename detection on). The prompt edits of `v1/p20-grammar` land on `plugin/templates/prompts/claim-support.md` and `orphan-label.md` by rename detection. The Phase 20 main branch (`akhil/pensive-faraday-qx3o58` at `1e43b9e`, the phase plan) merges cleanly. The streams conflict here:
+
+| Stream (commit tried) | Conflicting files |
+|---|---|
+| `v1/p20-grammar` (`857d26c`) | `CLAUDE.md`, `bin/cli/compile.ts`, `bin/cli/done.ts`, `bin/lib/llm-text-stubs.ts`, `bin/lib/plagiarism.ts`, `scripts/eslint-rules/chokepoint.mjs`, `tests/repo-files.test.ts` |
+| `v1/p20-gate` (`67498b5`) | `bin/cli/compile.ts`, `bin/cli/done.ts`, `bin/cli/verify.ts` |
+| `v1/p20-quotes` (`52a03bd`) | `bin/cli/compile.ts`, `bin/cli/done.ts` |
+| `v1/p20-registrar` (`2bab275`) | `CLAUDE.md`, `bin/cli/compile.ts`, `bin/cli/done.ts`, `package.json` |
+
+**How to resolve them.**
+- `bin/cli/compile.ts`, `bin/cli/done.ts` (every stream) and `bin/cli/verify.ts` (`p20-gate`): 23a routed every stdout line through `out()` (`bin/lib/output-sink.ts`, PLUG-13). Keep 23a's `out()` form of the existing lines and re-apply Phase 20's changes through `out()`. **`p20-gate` adds new `process.stdout.write` calls: 8 in `bin/cli/done.ts` (the VRFY-22 unsupported-claims block, the accepted-quote and local-file lines, the GATE-04 re-verification lines) and 3 in `bin/cli/verify.ts` (the verdict summary, the DRAFT.md-missing line, the quote-acceptance line).** Each must become `out(…)`, or the `stdout-sink` lint row fails — and `bin/cli/verify.ts` is reached by the MCP server (`pensmith_verify`), so the `mcp-stdout-graph` row fails too.
+- `bin/lib/llm-text-stubs.ts` and `bin/lib/plagiarism.ts` (`p20-grammar`): 23a replaced their asset lookups with the `paths.ts` plugin resolver and their stdout writes with `out()`; keep those and re-apply the grammar changes. Phase 20's versions of `exporter.ts`, `llm-text-stubs.ts`, `prompt-loader.ts`, `citations.ts` and `http.ts` still carry the pre-23a `path.join(root, 'templates', …)` / `'references'` lookups: wherever a conflict region includes one, keep 23a's `pluginTemplatePath` / `pluginReferencePath` call (the `plugin-assets` row fails otherwise).
+- `scripts/eslint-rules/chokepoint.mjs` (`p20-grammar`): keep both changes — Phase 20's `regex-literal` matcher kind (add it to `MATCH_KINDS` and to `ChokepointKind` in `chokepoint.d.mts`) and 23a round 1's `arg.index: "any"` for `call` matchers (the `plugin-assets` row uses it). Phase 20's new `citation-grammar` row needs its CLAUDE.md table line.
+- `package.json` (`p20-registrar`): keep 23a's `bundle`, `bundle:check`, `plugin:smoke` scripts, the `check` script ending in `bundle:check`, the `files` list (`plugin/`) and `esbuild`; add Phase 20's `live:verify` script.
+- `tests/repo-files.test.ts` (`p20-grammar`): the new prompt hashes go in with their `plugin/templates/prompts/…` paths; re-pin `EXPECTED_PROMPT_HASHES` (`bin/lib/prompt-loader.ts`) to the same values.
+- `CLAUDE.md`: keep 23a's layout text and chokepoint rows (`plugin-assets`, `stdout-sink`, `mcp-stdout-graph`) and add Phase 20's rows and text.
+
+**The `plugin-assets` row no longer collides with Phase 20's vocabulary.** Before round 1 the row flagged any string literal that was exactly `references`, `templates` or `workflows`, which made `REFERENCE_LIST_NAMES` in Phase 20's new `bin/lib/verify/unsupported-forms.ts` fail lint (`112:3 … Matched \`references\``). Round 1 narrowed the row to path segments (a `path.join` / `path.resolve` / `new URL` / fs-reader argument that is exactly one of the names, or a string holding one after a leading separator or `plugin/`); that file now lints clean against the row, and `tests/chokepoints.test.ts` pins the clean case.
+
+**Also after the merge (whatever the conflicts):**
 - `skills/{plan,write,verify}-section.md`: Phase 23a rewrote their bodies (forwarding plumbing skills; NL phrases moved into `pensmith`). Re-apply any Phase 20 wording to `plugin/skills/pensmith/SKILL.md` or the verify-section body.
-- `workflows/doctor.md`: the probe lines.
-- `workflows/resume.md` and `workflows/status.md`.
-- `tests/repo-files.test.ts`: prompt pins. Phase 20's new hash values go in with the `plugin/templates/prompts` paths.
-- `CLAUDE.md`: the chokepoint table and the layout text.
-- Any test that Phase 20 added or changed which names a `templates/`, `workflows/`, `references/` or `skills/` path. `tests/plugin-layout.test.ts` and the path failures will point to them.
+- `workflows/doctor.md` (the probe lines), `workflows/resume.md` and `workflows/status.md`: merge by hand if Phase 20 touched them.
+- Any test Phase 20 added or changed that names a `templates/`, `workflows/`, `references/` or `skills/` path: `tests/plugin-layout.test.ts` and the path failures point to them.
 
 **New Phase 20 files at old locations.** A new prompt, reference, workflow or skill file must be moved under `plugin/`, because `tests/plugin-layout.test.ts` fails otherwise. A new prompt slug is also added to `EXPECTED_PROMPT_HASHES` with its `plugin/` path pin.
 
-**Bundles.** Phase 20's `bin/lib` changes make the committed bundles stale. After the merge, re-run `npm run bundle` and commit, or `bundle:check` fails.
+**Bundles.** The committed bundles inline `bin/lib/`, the `bin/cli/` verbs the MCP tools and hooks run (`plan`, `write`, `verify`, `status`, `route-options`, `goal`), `bin/lib/version.generated.ts` (the package.json version) and the locked dependencies. Phase 20 edits `bin/lib/` and `bin/cli/verify.ts` (and `compile.ts` / `done.ts`), so after the merge re-run `npm ci` (if the lockfile changed) and `npm run bundle`, and commit `plugin/dist/`, or `bundle:check` fails.
 
-**stdout writes.** Any stdout write that Phase 20 adds in `bin/lib` or `bin/cli` must go through `out()` (`bin/lib/output-sink.ts`), or the `stdout-sink` lint row fails.
+**stdout writes.** Any stdout write that Phase 20 adds in `bin/lib` or `bin/cli` must go through `out()` (`bin/lib/output-sink.ts`), or the `stdout-sink` lint row fails. Since round 1 that row (and `mcp-stdout-graph`) also catches `import { stdout } from 'node:process'`, a destructured `const { stdout } = process` and `globalThis.console.log`.
 
 ## 9. Risks
 

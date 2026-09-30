@@ -9,7 +9,9 @@
 // Session safety (D-23a-19). Every session runs in a fresh `git clone --local`
 // of the repository in a temp folder (never a checkout), with:
 //   - an isolated CLAUDE_CONFIG_DIR and HOME (the login, when it is a
-//     credentials file, is copied in; nothing is written to the real config);
+//     credentials file, is copied in — and removed again when the run ends,
+//     however it ends, even when the transcripts are kept for a failed check
+//     or --keep; nothing is written to the real config);
 //   - an allow-listed environment (PATH, locale, temp, proxy/CA, the Claude
 //     auth variables) — never the parent session's messaging socket, session
 //     id or remote-session variables, so a child session cannot reach the
@@ -29,8 +31,15 @@
 //            the reply names its next step and every section line.
 //   PLUG-04  in the clone's root, with project MCP servers approved, `claude
 //            mcp list` shows the developer .mcp.json server connected with no
-//            missing-variable warning and no build; with `--plugin-dir
-//            ./plugin` a session registers exactly one pensmith server.
+//            missing-variable warning and no build — with PWD equal to the
+//            root and with PWD unset (`${PWD:-.}` falls back to `.`); a PWD
+//            naming another folder is recorded as a note (the documented
+//            limitation, CONTRIBUTING). With `--plugin-dir ./plugin` a session
+//            registers exactly one pensmith server (the project one, whose
+//            tools are mcp__pensmith__*), and in a paper at the root
+//            `/pensmith status` runs mcp__pensmith__pensmith_status with no
+//            --allowedTools (the skill's allowed-tools pre-approves it) and
+//            the plugin's PostToolUse hook writes its checkpoint.
 //   PLUG-05  `/pensmith:verify-section 1` reaches pensmith_verify.
 //   PLUG-14  the PreCompact bundle writes HANDOFF v2 at the router's position
 //            (phase sectioning, section 1, position plan); SessionStart runs
@@ -51,7 +60,7 @@
 // Claude Code: CLAUDE_BIN, else `claude` on PATH. Exit 1 when a check fails.
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,6 +70,8 @@ import {
   parseMcpList,
   resolveClaude,
   runClaude,
+  sectionStepOf,
+  statusSummary,
 } from './plugin-smoke-lib.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -93,6 +104,21 @@ function parseArgs(argv) {
   return opts;
 }
 
+/** The credentials file copied into the isolated config (removed however the run ends). */
+let credentialCopy = null;
+function removeCredentialCopy() {
+  if (credentialCopy === null) return;
+  rmSync(credentialCopy, { force: true });
+  credentialCopy = null;
+}
+process.on('exit', removeCredentialCopy);
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => {
+    removeCredentialCopy();
+    process.exit(130);
+  });
+}
+
 let failures = 0;
 function evidence(check, ok, line) {
   if (!ok) failures += 1;
@@ -118,7 +144,10 @@ function sessionEnv(tmp) {
   // The login: a credentials file in the user's config dir is copied in (never printed).
   const realConfig = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
   const creds = path.join(realConfig, '.credentials.json');
-  if (existsSync(creds)) copyFileSync(creds, path.join(config, '.credentials.json'));
+  if (existsSync(creds)) {
+    credentialCopy = path.join(config, '.credentials.json');
+    copyFileSync(creds, credentialCopy);
+  }
   const auth = env.ANTHROPIC_API_KEY ? 'ANTHROPIC_API_KEY'
     : env.CLAUDE_CODE_OAUTH_TOKEN ? 'CLAUDE_CODE_OAUTH_TOKEN'
       : existsSync(creds) ? 'the local claude login (credentials file copied into the isolated config)'
@@ -208,9 +237,8 @@ const PAPER_SECTIONS = [
   { slug: 'conclusion', title: 'Conclusion', role: 'conclusion', dependsOn: 'mechanisms', words: 400 },
 ];
 
-/** A paper made by the built CLI: `new`, then `outline` over a hand-written OUTLINE.md. */
-function makePaper(ctx, name) {
-  const dir = path.join(ctx.tmp, name);
+/** A paper made by the built CLI in `<tmp>/<name>` (or `dir`): `new`, then `outline` over a hand-written OUTLINE.md. */
+function makePaper(ctx, name, dir = path.join(ctx.tmp, name)) {
   mkdirSync(dir, { recursive: true });
   copyFileSync(path.join(REPO_ROOT, 'tests', 'fixtures', 'assignment.txt'), path.join(dir, 'assignment.txt'));
   const env = { ...ctx.env, PENSMITH_NO_LLM: '1' };
@@ -230,20 +258,6 @@ function makePaper(ctx, name) {
   const status = cli(['status']);
   if (status.status !== 0) throw new Error(`pensmith status failed in ${dir}:\n${status.stderr}`);
   return { dir, status: status.stdout };
-}
-
-/** The `next:` step and the section lines of `pensmith status` output. */
-function statusSummary(text) {
-  const lines = text.split(/\r?\n/).map((l) => l.trim());
-  const next = (lines.find((l) => l.startsWith('next:')) ?? '').replace(/^next:\s*/, '');
-  const start = lines.indexOf('sections:');
-  const sections = [];
-  for (let i = start + 1; start >= 0 && i < lines.length; i += 1) {
-    const m = /^\[.\]\s+#(\S+)\s+([^:]+):/.exec(lines[i] ?? '');
-    if (!m) break;
-    sections.push({ id: m[1], slug: m[2].trim() });
-  }
-  return { next, sections };
 }
 
 // ---------------------------------------------------------------------------
@@ -282,26 +296,83 @@ function plug03(ctx) {
     `pensmith_status text equals \`pensmith status\` stdout (${paper.status.trim().split('\n').length} lines; next: ${summary.next}; sections: ${summary.sections.map((x) => `#${x.id} ${x.slug}`).join(', ')})`);
   const reply = st.transcript.result?.result ?? st.transcript.texts.join('\n');
   const verb = summary.next.split(' ')[0] ?? '';
-  const target = /#(\S+)/.exec(summary.next)?.[1] ?? null;
+  const target = sectionStepOf(summary.next)?.id ?? null;
   const namesNext = verb !== '' && new RegExp(`\\b${verb}\\b`, 'i').test(reply) && (target === null || new RegExp(`(?:#|section\\s*|§\\s*)${target}\\b`, 'i').test(reply));
   evidence('PLUG-03', namesNext, `reply names the next step "${summary.next}": ${reply.replace(/\s+/g, ' ').slice(0, 240)}`);
   const missing = summary.sections.filter((x) => !reply.toLowerCase().includes(x.slug.toLowerCase()));
-  evidence('PLUG-03', summary.sections.length === PAPER_SECTIONS.length && missing.length === 0,
+  evidence('PLUG-03', summary.sections.length === PAPER_SECTIONS.length && missing.length === 0 && summary.next !== '',
     `reply lists the status section lines (${summary.sections.map((x) => x.slug).join(', ')})${missing.length > 0 ? `; missing ${missing.map((x) => x.slug).join(', ')}` : ''}`);
   return paper;
 }
 
+/** `claude mcp list` in `root` with PWD set to `pwd` (undefined: PWD removed from the environment). */
+function mcpListAt(ctx, root, pwd) {
+  const env = { ...ctx.env };
+  delete env.PWD;
+  if (pwd !== undefined) env.PWD = pwd;
+  const list = runClaude(ctx.claude, ['mcp', 'list'], { cwd: root, env });
+  const row = parseMcpList(list.stdout).find((r) => r.name === 'pensmith') ?? null;
+  const warned = /Missing environment variables/i.test(list.stdout + list.stderr);
+  const text = `${row ? `${row.name}: ${row.command} - ${row.statusText}` : 'no pensmith row'}${warned ? ' (Missing environment variables warning)' : ''}`;
+  return { row, warned, text };
+}
+
+/** Files under `dir` (recursively) whose path matches `re`. */
+function findFiles(dir, re, out = []) {
+  if (!existsSync(dir)) return out;
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) findFiles(full, re, out);
+    else if (re.test(full)) out.push(full);
+  }
+  return out;
+}
+
 function plug04(ctx) {
   const root = ctx.clone;
-  const list = runClaude(ctx.claude, ['mcp', 'list'], { cwd: root, env: { ...ctx.env, PWD: root } });
-  const row = parseMcpList(list.stdout).find((r) => r.name === 'pensmith');
-  const warned = /Missing environment variables/i.test(list.stdout + list.stderr);
-  evidence('PLUG-04', row?.connected === true && !warned && !existsSync(path.join(root, 'node_modules')),
-    `fresh clone, no build: claude mcp list → ${row ? `${row.name}: ${row.command} - ${row.statusText}` : 'no pensmith row'}${warned ? ' (Missing environment variables warning)' : ''}`);
+  const fresh = !existsSync(path.join(root, 'node_modules'));
+  const atRoot = mcpListAt(ctx, root, root);
+  evidence('PLUG-04', atRoot.row?.connected === true && !atRoot.warned && fresh,
+    `fresh clone, no build, PWD = the root: claude mcp list → ${atRoot.text}`);
+  const unset = mcpListAt(ctx, root, undefined);
+  evidence('PLUG-04', unset.row?.connected === true && !unset.warned,
+    `PWD unset (\${PWD:-.} falls back to .): claude mcp list → ${unset.text}`);
+  const elsewhere = os.tmpdir();
+  const stale = mcpListAt(ctx, root, elsewhere);
+  note(`PLUG-04 documented limitation (CONTRIBUTING): Claude Code started in the root with PWD=${elsewhere} (a launcher that passes on another PWD): claude mcp list → ${stale.text}`);
+
   const s = headless(ctx, 'plug04-dedupe', { cwd: root, prompt: 'Reply with the word ready.', pluginDir: './plugin' });
   const servers = (s.transcript.init?.mcp_servers ?? []).filter((m) => /pensmith/.test(m.name));
   evidence('PLUG-04', servers.length === 1 && servers[0].status === 'connected',
     `--plugin-dir ./plugin at the repo root: pensmith servers ${JSON.stringify(servers)}`);
+  const kept = servers.length === 1 ? servers[0].name : null;
+  const prefix = kept === 'pensmith' ? 'mcp__pensmith__' : kept === PLUGIN_SERVER ? TOOL('') : null;
+  note(`PLUG-04 dedupe: Claude Code kept ${kept === 'pensmith' ? 'the project .mcp.json server' : kept === PLUGIN_SERVER ? "the plugin's server" : 'no single server'} (${JSON.stringify(kept)}); its tools are ${prefix ?? '?'}*`);
+
+  // In that setup, the plugin's skill pre-approval and PostToolUse hook must
+  // still reach the kept server's tools: `/pensmith status` in a paper at the
+  // root, with no --allowedTools.
+  makePaper(ctx, 'root-paper', root);
+  const st = headless(ctx, 'plug04-dev-status', { cwd: root, prompt: '/pensmith status', pluginDir: './plugin', maxTurns: 3 });
+  const calls = st.transcript.toolUses.map((u) => u.name);
+  const denied = (st.transcript.result?.permission_denials ?? []).map((d) => d.tool_name ?? JSON.stringify(d));
+  const statusTool = prefix ? `${prefix}pensmith_status` : null;
+  const ran = statusTool !== null && calls.includes(statusTool) && st.transcript.toolResults.some((r) => !r.isError && /next:/.test(r.text));
+  evidence('PLUG-04', ran && denied.length === 0,
+    `developer setup, /pensmith status with no --allowedTools → ${calls.join(', ') || '(no tool call)'}${denied.length > 0 ? `; permission denials: ${denied.join(', ')}` : '; no permission denial (the skill\'s allowed-tools)'}`);
+  // The checkpoint lives in the isolated pensmith data dir (XDG_DATA_HOME,
+  // LOCALAPPDATA or HOME's Application Support — all under tmp).
+  const written = findFiles(ctx.tmp, /[\\/]checkpoints[\\/][^\\/]+\.jsonl$/)
+    .flatMap((f) => readFileSync(f, 'utf8').split(/\r?\n/).filter(Boolean).map((l) => {
+      try {
+        return JSON.parse(l);
+      } catch {
+        return null;
+      }
+    }))
+    .filter((r) => r !== null && r.tool_name === statusTool);
+  evidence('PLUG-14', written.length > 0,
+    `developer setup: the PostToolUse hook checkpointed ${statusTool ?? '?'}: ${written.length > 0 ? JSON.stringify(written[written.length - 1]) : 'no checkpoint record'}`);
 }
 
 function plug05(ctx, paper) {
@@ -328,8 +399,8 @@ function plug14(ctx, paper) {
   });
   const handoff = existsSync(path.join(paper.dir, '.paper', 'HANDOFF.json')) ? JSON.parse(readFileSync(path.join(paper.dir, '.paper', 'HANDOFF.json'), 'utf8')) : null;
   // The router's step for the paper (`plan #1` for makePaper's outline) is the position the handoff records.
-  const step = /^(plan|write|verify) #(\S+)/.exec(statusSummary(paper.status).next);
-  const want = step ? { phase: 'sectioning', section: step[2], position: step[1] } : null;
+  const step = sectionStepOf(statusSummary(paper.status).next);
+  const want = step ? { phase: 'sectioning', section: step.id, position: step.verb } : null;
   evidence('PLUG-14', hook.status === 0 && handoff?.schema_version === 2 && want !== null
     && handoff.phase === want.phase && handoff.section === want.section && handoff.position === want.position,
   `pre-compact.mjs wrote HANDOFF v2: phase ${handoff?.phase}, section ${handoff?.section}, position ${handoff?.position} (router: ${statusSummary(paper.status).next})`);
@@ -413,13 +484,14 @@ async function main() {
   const claude = resolveClaude();
   const tmp = mkdtempSync(path.join(os.tmpdir(), 'pensmith-session-check-'));
   const clone = path.join(tmp, 'clone');
-  execFileSync('git', ['clone', '--quiet', '--local', '--no-hardlinks', opts.repo, clone], { stdio: ['ignore', 'pipe', 'pipe'] });
-  const { env, auth } = sessionEnv(tmp);
-  const ctx = { claude, env, tmp, clone, pluginDir: path.join(clone, 'plugin'), cli: opts.cli, model: opts.model, cost: 0 };
-  note(`claude ${runClaude(claude, ['--version'], { cwd: tmp, env }).stdout.trim()} at ${claude.path}; auth: ${auth}`);
-  note(`fresh clone (no npm ci, no build): ${clone}`);
+  const ctx = { claude, env: {}, tmp, clone, pluginDir: path.join(clone, 'plugin'), cli: opts.cli, model: opts.model, cost: 0 };
   let paper = null;
   try {
+    execFileSync('git', ['clone', '--quiet', '--local', '--no-hardlinks', opts.repo, clone], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const { env, auth } = sessionEnv(tmp);
+    ctx.env = env;
+    note(`claude ${runClaude(claude, ['--version'], { cwd: tmp, env }).stdout.trim()} at ${claude.path}; auth: ${auth}`);
+    note(`fresh clone (no npm ci, no build): ${clone}`);
     if (opts.only.has('plug03')) paper = plug03(ctx);
     paper ??= makePaper(ctx, 'paper');
     if (opts.only.has('plug04')) plug04(ctx);
@@ -427,7 +499,9 @@ async function main() {
     if (opts.only.has('plug14')) plug14(ctx, paper);
     if (opts.only.has('session-id')) sessionIdProbe(ctx, paper);
   } finally {
-    note(`model usage: $${ctx.cost.toFixed(4)}; transcripts and debug logs in ${tmp}${opts.keep || failures > 0 ? '' : ' (removed)'}`);
+    // The login copy never outlives the run, even when the transcripts do.
+    removeCredentialCopy();
+    note(`model usage: $${ctx.cost.toFixed(4)}; transcripts and debug logs in ${tmp}${opts.keep || failures > 0 ? ' (the copied login removed)' : ' (removed)'}`);
     if (!opts.keep && failures === 0) rmSync(tmp, { recursive: true, force: true });
   }
   process.stdout.write(failures === 0 ? 'session check: all evidence passed\n' : `session check: ${failures} check(s) failed\n`);
@@ -435,6 +509,7 @@ async function main() {
 }
 
 main().catch((e) => {
+  removeCredentialCopy();
   process.stderr.write(`session check: ${e?.stack ?? String(e)}\n`);
   process.exit(1);
 });

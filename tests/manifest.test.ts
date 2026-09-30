@@ -75,7 +75,7 @@ test('PLUG-01: plugin/hooks/hooks.json is the spec shape — 4 events, exec form
   const want: Record<string, { script: string; matcher?: string }> = {
     SessionStart: { script: 'session-start', matcher: 'startup|resume|compact' },
     PreCompact: { script: 'pre-compact' },
-    PostToolUse: { script: 'post-tool-use', matcher: 'mcp__plugin_pensmith_pensmith__.*' },
+    PostToolUse: { script: 'post-tool-use', matcher: '^mcp__(?:plugin_pensmith_)?pensmith__.*' },
     Stop: { script: 'stop' },
   };
   assert.deepEqual(Object.keys(manifest.hooks).sort(), Object.keys(want).sort());
@@ -91,12 +91,17 @@ test('PLUG-01: plugin/hooks/hooks.json is the spec shape — 4 events, exec form
   }
 });
 
-test('PLUG-01: the PostToolUse matcher covers only the plugin\'s own MCP tools', () => {
+test('PLUG-01: the PostToolUse matcher covers only the pensmith MCP tools — the plugin\'s server and the developer .mcp.json one', () => {
   const manifest = readJson<{ hooks: Record<string, HookGroup[]> }>('plugin', 'hooks', 'hooks.json');
-  const re = new RegExp(`^(?:${manifest.hooks['PostToolUse']![0]!.matcher!})$`);
+  // Claude Code tests a matcher with a non-identifier character as an UNANCHORED
+  // JavaScript regex (RegExp.prototype.test), so the matcher anchors itself.
+  const re = new RegExp(manifest.hooks['PostToolUse']![0]!.matcher!);
   assert.ok(re.test('mcp__plugin_pensmith_pensmith__pensmith_status'));
   assert.ok(re.test('mcp__plugin_pensmith_pensmith__paper_advance_section'));
-  for (const other of ['Write', 'Edit', 'Bash', 'mcp__zotero__search', 'mcp__plugin_other_pensmith__x']) {
+  // At the repo root with `--plugin-dir ./plugin`, Claude Code keeps the project
+  // .mcp.json server (`pensmith`) and drops the plugin's: its tools are mcp__pensmith__* (PLUG-04).
+  assert.ok(re.test('mcp__pensmith__pensmith_status'));
+  for (const other of ['Write', 'Edit', 'Bash', 'mcp__zotero__search', 'mcp__plugin_other_pensmith__x', 'mcp__otherpensmith__x', 'mcp__plugin_pensmith_other__x', 'xmcp__pensmith__pensmith_status']) {
     assert.ok(!re.test(other), `${other} must not spawn a pensmith hook`);
   }
 });

@@ -145,7 +145,7 @@ test('PLUG-01: hooks.json must use the exec form with the contract matcher and a
       delete hooks['Stop']![0]!.hooks[0]!['timeout'];
     });
   }, [
-    /PostToolUse matcher must be "mcp__plugin_pensmith_pensmith__\.\*"/,
+    /PostToolUse matcher must be "\^mcp__\(\?:plugin_pensmith_\)\?pensmith__\.\*"/,
     /SessionStart hook must use exec form/,
     /Stop hook needs an explicit timeout/,
   ]);

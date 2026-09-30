@@ -4,7 +4,7 @@
 
 <capability_check>
 required:
-  - MCP tool pensmith_status (read-only; in Claude Code `mcp__plugin_pensmith_pensmith__pensmith_status`)
+  - MCP tool pensmith_status (read-only; in Claude Code `mcp__plugin_pensmith_pensmith__pensmith_status`, or `mcp__pensmith__pensmith_status` from the developer `.mcp.json` at the repo root)
 
 degrade_if_missing:
   - if pensmith_status is missing but the paper:// resources are there: read paper://state (the same status fields; its cost line is `cost: n/a (Claude session)`)

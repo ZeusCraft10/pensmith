@@ -18,6 +18,8 @@ import {
   pathKey,
   pathWithoutNode,
   pluginListProblems,
+  sectionStepOf,
+  statusSummary,
 } from '../scripts/plugin-smoke-lib.mjs';
 
 /** A fake file system: `exists(file)` is true for exactly these paths. */
@@ -124,3 +126,54 @@ test('CI-05: pluginListProblems wants pensmith@pensmith enabled with no error fi
   assert.equal(installPathOf([]), null);
   assert.equal(expandPluginRoot('${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.mjs', '/c/p'), '/c/p/dist/mcp/server.mjs');
 });
+
+// `pensmith status` in both glyph sets bin/lib/status-view.ts renderStatusView
+// prints: ASCII in a C / POSIX locale, UTF-8 when LANG / LC_ALL / LC_CTYPE is
+// UTF-8 (a typical macOS or Linux desktop) — plugin-session-check parses both.
+const STATUS_ASCII = [
+  'pensmith status:',
+  '  paper: Attention in Transformers - class CS 101',
+  '  id: 3f9c',
+  '  current: #1 (outlined)',
+  '  sections:',
+  '    [ ] #1 introduction: outlined (not planned)',
+  '    [ ] #2 mechanisms: outlined (not planned)',
+  '    [x] #2a background: verified',
+  '  cost: $0.00 this session, $0.00 paper total',
+  '  next: plan #1',
+].join('\n');
+const STATUS_UTF8 = [
+  'pensmith status:',
+  '  paper: Attention in Transformers — class CS 101',
+  '  id: 3f9c',
+  '  current: §1 (outlined)',
+  '  sections:',
+  '    ⌽ §1 introduction: outlined (not planned)',
+  '    ⌛ §2 mechanisms: writing',
+  '    ✓ §2a background: verified',
+  '    ! §3 conclusion: failed',
+  '  cost: $0.00 this session, $0.00 paper total',
+  '  next: write §2',
+  '  attention: section §3 failed — run `pensmith write 3`',
+].join('\r\n');
+
+test('PLUG-03 / PLUG-14: statusSummary reads the next step and the section lines in both glyph sets', () => {
+  assert.deepEqual(statusSummary(STATUS_ASCII), {
+    next: 'plan #1',
+    sections: [{ id: '1', slug: 'introduction' }, { id: '2', slug: 'mechanisms' }, { id: '2a', slug: 'background' }],
+  });
+  assert.deepEqual(statusSummary(STATUS_UTF8), {
+    next: 'write §2',
+    sections: [{ id: '1', slug: 'introduction' }, { id: '2', slug: 'mechanisms' }, { id: '2a', slug: 'background' }, { id: '3', slug: 'conclusion' }],
+  });
+  assert.deepEqual(statusSummary('pensmith status:\n  sections:\n    (none yet)\n  next: research'), { next: 'research', sections: [] });
+  assert.deepEqual(statusSummary(''), { next: '', sections: [] });
+});
+
+test('PLUG-14: sectionStepOf reads a section step in either glyph set, and nothing else', () => {
+  assert.deepEqual(sectionStepOf('plan #1'), { verb: 'plan', id: '1' });
+  assert.deepEqual(sectionStepOf('write §2a'), { verb: 'write', id: '2a' });
+  assert.deepEqual(sectionStepOf('verify §10'), { verb: 'verify', id: '10' });
+  for (const other of ['research', 'compile', 'status (done)', 'plan', 'revise #1', '']) assert.equal(sectionStepOf(other), null, other);
+});
+

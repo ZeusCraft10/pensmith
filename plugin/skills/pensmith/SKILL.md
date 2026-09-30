@@ -17,7 +17,7 @@ when_to_use: >-
   about X", "re-do section 3", "use a different source for the claim about X in
   section 4".
 argument-hint: "[verb] [args] — e.g. status, plan 2, verify 3; empty = next step"
-allowed-tools: mcp__plugin_pensmith_pensmith__pensmith_status
+allowed-tools: mcp__plugin_pensmith_pensmith__pensmith_status mcp__pensmith__pensmith_status
 ---
 
 # pensmith
@@ -74,14 +74,19 @@ answers intake up front.
 
 ## A bare /pensmith, "continue", "what's next?"
 
-1. Call `pensmith_status` first. Its last line names the next step
-   (`next: research`, `next: plan §2`, `next: status (done)`); an `attention`
-   line names the command that fixes a stuck step.
-2. Run that one step as the table says. For a section the step is its plan →
-   write → verify: `pensmith_plan`, then — only if that succeeded —
-   `pensmith_write`. Stop at the first failure.
-3. Call `pensmith_status` again and tell the user what ran and what comes next.
-   One /pensmith is one step; "continue" is another /pensmith.
+1. Call `pensmith_status` first. Its `next:` line names the next step
+   (`next: research`, `next: plan §2`, `next: write §2`, `next: status (done)`);
+   an `attention:` or `note:` line after it says what needs the user, and names
+   the command that fixes a stuck step.
+2. Run exactly the verb in the `next:` line, as the table says. Never run
+   `pensmith_plan` when it says `write` or `verify`: that would re-plan a
+   section that is already planned and bill a model call for nothing.
+   (`pensmith_write` verifies the draft it writes.)
+3. Only if that verb was `plan N` and it succeeded, call `pensmith_status`
+   again and continue with its `next:` step only when it names the same
+   section (`write N`). Stop at the first failure.
+4. Tell the user what ran and what `pensmith_status` now names next. One
+   /pensmith is one step; "continue" is another /pensmith.
 
 If status says there is no paper here, the first step is `pensmith new` (it
 reads `assignment.txt`, `.md` or `.pdf` in the folder).

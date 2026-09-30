@@ -61,7 +61,7 @@ const DEV_MCP_SERVER_ARG = '${PWD:-.}/plugin/dist/mcp/server.mjs';
 const HOOKS = {
   SessionStart: { script: 'session-start', matcher: 'startup|resume|compact' },
   PreCompact: { script: 'pre-compact', matcher: null },
-  PostToolUse: { script: 'post-tool-use', matcher: 'mcp__plugin_pensmith_pensmith__.*' },
+  PostToolUse: { script: 'post-tool-use', matcher: '^mcp__(?:plugin_pensmith_)?pensmith__.*' },
   Stop: { script: 'stop', matcher: null },
 };
 const HOOK_TIMEOUT_MAX_S = 60;

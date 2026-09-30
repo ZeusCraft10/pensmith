@@ -129,8 +129,9 @@ test('D-23a-09: pensmith is the only model-invocable skill; the plumbing skills 
   }
 });
 
-test('D-23a-10: the pensmith skill pre-approves only the read-only pensmith_status tool', () => {
-  assert.equal(readSkill(ROUTER).fm['allowed-tools'], 'mcp__plugin_pensmith_pensmith__pensmith_status');
+test('D-23a-10: the pensmith skill pre-approves only the read-only pensmith_status tool (the plugin\'s server, and the developer .mcp.json one Claude Code keeps at the repo root)', () => {
+  // Claude Code reads a space- or comma-separated string (or a YAML list).
+  assert.equal(readSkill(ROUTER).fm['allowed-tools'], 'mcp__plugin_pensmith_pensmith__pensmith_status mcp__pensmith__pensmith_status');
 });
 
 test('D-23a-10: the pensmith skill says how each of the 16 verbs runs in this release', () => {
@@ -156,7 +157,14 @@ test('D-23a-10: a bare /pensmith calls pensmith_status first and runs one step',
   const { body } = readSkill(ROUTER);
   const bare = /## A bare \/pensmith[^\n]*\n([\s\S]*?)\n## /.exec(body)?.[1] ?? '';
   assert.match(bare, /1\. Call `pensmith_status` first/);
-  assert.match(bare, /One \/pensmith is one step/);
+  assert.match(bare, /One\s+\/pensmith is one step/);
+  // The router decides: the skill runs exactly the `next:` verb and asks status again before chaining.
+  assert.match(bare, /Its `next:` line names the next step/);
+  assert.doesNotMatch(bare, /last line/, 'an attention or note line can follow the next: line');
+  assert.match(bare, /Run exactly the verb in the `next:` line/);
+  assert.match(bare, /Never run\s+`pensmith_plan` when it says `write` or `verify`/);
+  assert.match(bare, /Only if that verb was `plan N` and it succeeded, call `pensmith_status`\s+again and continue with its `next:` step only when it names the same\s+section \(`write N`\)/);
+  assert.doesNotMatch(bare, /plan →\s+write → verify: `pensmith_plan`, then/, 'no hard-coded section chain');
 });
 
 test('CI-05: the pensmith skill tells the user to put Node.js ≥ 22 on PATH and restart when the server is not connected', () => {

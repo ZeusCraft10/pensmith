@@ -20,7 +20,7 @@ export const HOOK_EVENTS: Readonly<Record<HookName, string>> = Object.freeze({
   stop: 'Stop',
 });
 
-/** The pensmith MCP tool name Claude Code reports for a plugin tool (matcher `mcp__plugin_pensmith_pensmith__.*`). */
+/** The pensmith MCP tool name Claude Code reports for a plugin tool (matcher `^mcp__(?:plugin_pensmith_)?pensmith__.*`). */
 export const PLUGIN_TOOL = 'mcp__plugin_pensmith_pensmith__pensmith_write';
 
 export function hookBundle(name: HookName): string {

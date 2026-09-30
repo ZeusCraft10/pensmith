@@ -2,8 +2,9 @@
 // D-23a-15; the throttle is T-3-DOS-04, the lock CR-04).
 //
 // After a pensmith MCP tool call (hooks.json matches
-// `mcp__plugin_pensmith_pensmith__.*`), append a progress checkpoint for the
-// paper: `{ts, session_id, tool_name, next}`, where `next` is the router's
+// `^mcp__(?:plugin_pensmith_)?pensmith__.*`: the plugin's server, and the
+// developer .mcp.json server Claude Code keeps instead of it at the repo root,
+// PLUG-04), append a progress checkpoint for the paper: `{ts, session_id, tool_name, next}`, where `next` is the router's
 // next step after the call. At most one line per minute per paper, so a burst
 // of tool calls costs one append.
 //
