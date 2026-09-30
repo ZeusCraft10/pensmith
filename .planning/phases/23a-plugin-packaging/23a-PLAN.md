@@ -101,14 +101,14 @@ There are three streams, run in parallel in separate worktrees, all forked from 
    - **`plugin/.claude-plugin/plugin.json`** (D-23a-05):
      - Drop the `skills` array.
      - Set `mcpServers.pensmith` to `node ${CLAUDE_PLUGIN_ROOT}/dist/mcp/server.mjs` with `type: stdio`.
-     - Keep the metadata, with `version` equal to `package.json`.
+     - Keep the metadata. *Review round 2:* `version` is `<package.json version>+<digest of plugin/>` (`scripts/plugin-version.cjs`, stamped by `npm run bundle` / `npm run plugin:version`, enforced by the validator), so every change under `plugin/` reaches git-marketplace installs (D-23a-05 as amended).
    - **`plugin/hooks/hooks.json`** (D-23a-06): exec form with these exact commands.
      - Each hook is `{"type":"command","command":"node","args":["${CLAUDE_PLUGIN_ROOT}/dist/hooks/<name>.mjs"],"timeout":10}` for `<name>` in `session-start`, `pre-compact`, `post-tool-use` and `stop`.
      - Matchers:
        - SessionStart `startup|resume|compact`
        - PostToolUse `mcp__plugin_pensmith_pensmith__.*`
        - PreCompact and Stop have none.
-   - **`.claude-plugin/marketplace.json`**: plugin `source: "./plugin"`. Its entry `version` is dropped, or kept equal to `package.json`.
+   - **`.claude-plugin/marketplace.json`**: plugin `source: "./plugin"`, and no entry `version` (review round 2: plugin.json's stamped version is the one Claude Code reads).
    - **`.mcp.json`** (D-23a-07): `{"mcpServers":{"pensmith":{"type":"stdio","command":"node","args":["${PWD:-.}/plugin/dist/mcp/server.mjs"]}}}`.
 4. **Validator** (D-23a-08). Rewrite `scripts/validate-plugin-manifest.cjs` with a `--root <dir>` option; it enforces everything D-23a-08 lists. Then:
    - Create `tests/fixtures/plugin-legacy/`, a small but complete old-shape plugin dir for the negative control. It contains `.claude-plugin/plugin.json` with the old `skills: [{name,file}]`, the old `hooks/hooks.json`, a flat `skills/pensmith.md`, and no personal data.
@@ -434,7 +434,10 @@ Run these on the merged tree (§7). `S` is a scratch dir under `…/scratchpad/p
      gh api repos/ZeusCraft10/pensmith/branches/main/protection/required_status_checks --jq '.contexts'
      ```
    - "Merge notes for Phase 20" (§8).
-6. **Mark requirements.** Tick only PLUG-01..05, PLUG-13, PLUG-14 and CI-05 in REQUIREMENTS.md (traceability "Complete (23a)"). Leave Phase 23 unticked in ROADMAP.md, and add the 23a plan and status to its Plans line.
+6. **Mark requirements.** Tick only PLUG-01, PLUG-02, PLUG-03, PLUG-05 and PLUG-13 outright in REQUIREMENTS.md (traceability "Complete (23a)"). Leave Phase 23 unticked in ROADMAP.md, and add the 23a plan and status to its Plans line. *Review round 2 — do not over-claim:*
+   - **CI-05 stays unticked** (traceability "Pending — maintainer: first green CI run"). Its acceptance is "the job is a required check and passes"; `v1/p23a` has no upstream, so the `plugin` job and `bundle:check` in the `check` matrix have never run on a GitHub runner, and neither is a required check. Record it as pending the maintainer's first green `plugin (ubuntu-latest|macos-latest|windows-latest)` and `check` matrix runs (bundle:check on Windows included) and the branch-protection command in 23a-VERIFICATION §5; once green, add the run URLs to 23a-SUMMARY and tick it.
+   - **PLUG-14**: tick it with its caveat stated in the traceability row — "Complete (23a); the 3-OS CI run of the spawned-bundle hook tests (23a-PLAN §6) pending the first green `check` matrix". The hook tests pass on Linux here; their macOS and Windows legs (and the < 500 ms outside-a-paper budget there) have run only in CI configuration, never on a runner.
+   - **PLUG-04**: tick it with its caveat — acceptance criterion 2 ("registered exactly once" alongside `--plugin-dir`) holds where `PWD` is the repo root (POSIX shells that `cd` there), not in PowerShell/cmd, where Claude Code keeps two servers; CONTRIBUTING documents it and the tested workaround (`disabledMcpjsonServers`, D-23a-07 review round 2).
 
 ## 8. Merge notes for Phase 20 (to be copied into 23a-SUMMARY.md)
 
