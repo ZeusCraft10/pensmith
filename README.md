@@ -26,7 +26,7 @@
 
 ---
 
-Pensmith guides you through a complete paper-writing workflow — **intake → research → outline → (plan → write → verify, per section) → compile → done** — drawing only on verifiable, peer-reviewed, and configurable academic sources. It ships as **two tiers that share the same workflow files**: a [Claude Code](https://claude.com/claude-code) plugin (Tier 1, which generates through your Claude session) and a portable Node.js CLI (Tier 2, which talks to a provider of your choice).
+Pensmith guides you through a complete paper-writing workflow — **intake → research → outline → (plan → write → verify, per section) → compile → done** — drawing only on verifiable, peer-reviewed, and configurable academic sources. It ships as **two tiers that share the same workflow bodies, prompts and presets** (the [`plugin/`](plugin/) directory): a [Claude Code](https://claude.com/claude-code) plugin (Tier 1) and a portable Node.js CLI (Tier 2). Both call a model provider of your choice; [Install](#install) says what the plugin runs itself in this release.
 
 The thing that makes Pensmith different from "ask an AI to write my paper": **a section physically cannot leave the pipeline with a fabricated, mis-attributed, or unverifiable citation.** That gate is deterministic, runs per section, and blocks compile and export.
 
@@ -73,34 +73,33 @@ A section carrying a blocking verdict cannot be compiled or exported. The determ
 
 ## Install
 
-> **Pre-release.** Pensmith is `v0.1.0-dev`. It is **not yet on npm** and the plugin marketplace listing isn't published — so install from source for now. Published npm + Claude plugin distribution is on the roadmap.
+> **Pre-release.** Pensmith is `v0.1.0-dev` and **not yet on npm**. The Claude Code plugin installs straight from this Git repository; the CLI installs from a clone.
+
+Requires **Node.js ≥ 22.12.0** on your `PATH` (the Node 22 and 24 LTS lines are tested on Linux, macOS and Windows) — for the CLI, and for the plugin, whose MCP server and hooks run with `node`.
+
+**Tier 1 — Claude Code plugin**
+
+In a Claude Code session, add this repository as a plugin marketplace and install the plugin:
+
+```text
+/plugin marketplace add ZeusCraft10/pensmith
+/plugin install pensmith@pensmith
+```
+
+(From a terminal: `claude plugin marketplace add ZeusCraft10/pensmith`, then `claude plugin install pensmith@pensmith`. A local clone works too: `/plugin marketplace add ./pensmith`.) There is no `npm install` and no build step: the plugin is the repository's [`plugin/`](plugin/) directory, and its MCP server and hooks are committed, self-contained bundles. After installing, `/mcp` should list the `pensmith` server as connected; if it does not, check that `node --version` reports 22 or newer in the environment Claude Code starts from, then restart Claude Code.
+
+`/pensmith` and plain requests ("where am I?", "check the citations in section 3") then work in any session. In this release the plugin runs `status`, `plan`, `write` and `verify` through its own MCP server: `status` and `verify` need no API key, while `plan` and `write` call the model provider configured for pensmith (see [Model runtimes](#model-runtimes)), exactly as the CLI does. The other stages — intake, research, outline, compile and done — run through the Tier 2 CLI, which `/pensmith` calls for you when `pensmith` is on your `PATH`. Generating through your Claude session with no API key is on the roadmap, not in this release.
+
+**Tier 2 — portable Node CLI**
 
 ```bash
 git clone https://github.com/ZeusCraft10/pensmith.git
 cd pensmith
 npm install
 npm run build
-```
-
-Requires **Node.js ≥ 22.12.0** (the Node 22 and 24 LTS lines are tested on Linux, macOS and Windows).
-
-**Tier 1 — Claude Code plugin (recommended)**
-
-From a Claude Code session, register your local checkout as a plugin marketplace and install it:
-
-```text
-/plugin marketplace add ./pensmith        # path to your clone
-/plugin install pensmith@pensmith
-```
-
-`/pensmith` is then available in any session, and generation runs through your existing Claude subscription — no separate API key required.
-
-**Tier 2 — portable Node CLI**
-
-```bash
 npm link            # exposes `pensmith` on your PATH (from the clone)
 pensmith --version
-pensmith doctor     # environment self-check: Node, pandoc, MCP build, provider and keys, network mode
+pensmith doctor     # environment self-check: Node, pandoc, the plugin's MCP server bundle, provider and keys, network mode
 ```
 
 The CLI needs a model provider — an API key, or a local OpenAI-compatible server such as Ollama or vLLM (see [Configuration](#configuration)).
@@ -164,11 +163,11 @@ Plain-English instructions in the assignment are honoured ("Use MLA for this pap
 
 ## Command reference
 
-In normal use, bare `/pensmith` handles dispatch. The 16 verbs below let power users jump straight to any stage.
+In normal use, bare `/pensmith` handles dispatch. The 16 verbs below let power users jump straight to any stage; for scripts, Claude Code also has the plumbing commands `/pensmith:<stage>` ([`docs/PLUMBING.md`](docs/PLUMBING.md)).
 
 | Verb | What it does |
 |------|-------------|
-| `doctor` | Environment self-check (Node version, MCP build, pandoc, humanizer skill, provider and key presence, network mode, …). Exits 1 on FAIL. |
+| `doctor` | Environment self-check (Node version, the plugin's MCP server bundle, pandoc, humanizer skill, provider and key presence, network mode, …). Exits 1 on FAIL. |
 | `new` | Start a new paper — take the assignment (`--from <file>`, `@<file>`, a pipe, `assignment.*` or a paste), ask the intake questions (flags or `--answers <file.toml>`), write the brief `.paper/INTAKE.md` (see [Starting a paper](#starting-a-paper)). |
 | `next` | Take the next step of the current paper — what bare `/pensmith` does: one verb, or for a section its plan → write → verify. |
 | `status` | The paper's position, per-section progress, cost so far and the next action. `--config` prints every effective setting and where it came from. |
@@ -249,7 +248,7 @@ Expected failures print one line (`pensmith: …`); `PENSMITH_DEBUG=1` adds a st
 
 | Variable | Purpose |
 |----------|---------|
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Provider key for the **Tier 2 CLI**. With only `OPENAI_API_KEY` set, OpenAI is selected automatically. Local runtimes need neither. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Provider key for model calls — the CLI's, and the plugin's `plan` and `write` (the plugin's MCP server reads the environment Claude Code starts with). With only `OPENAI_API_KEY` set, OpenAI is selected automatically. Local runtimes need neither. |
 | `PENSMITH_OFFLINE=1` | Sources offline: exact recorded fixtures or fail closed (see [Network modes](#network-modes)). |
 | `PENSMITH_NO_LLM=1` | Replaces every model call with a deterministic stub that satisfies the step's contract (testing and `--dry-run`). |
 | `PENSMITH_COST_CAP_USD` | Per-session cost cap in USD (overrides `[budget] cost_cap_usd`, default 5.00). Must be a positive number such as `2.50`; any other value (`0`, `$1`) is refused with exit 2, never replaced by the default. |
@@ -280,10 +279,10 @@ To keep this honest at the tool level, Pensmith surfaces a transparency notice w
 
 ## Architecture
 
-Two tiers, one source of truth:
+Two tiers, one source of truth: the [`plugin/`](plugin/) directory holds the workflow bodies, prompt templates, presets, references, skills and agents that both tiers read.
 
-- **Tier 1 — Claude Code plugin.** Skills + an MCP server. Generates through your Claude session and uses `Task` subagents for the heavy stages.
-- **Tier 2 — portable Node CLI.** The same workflow bodies, runnable anywhere Node is. Workflow bodies use `<capability_check>` blocks to degrade gracefully when `Task` / MCP / interactive prompts aren't available.
+- **Tier 1 — Claude Code plugin** (`plugin/`). The `/pensmith` skill (the one natural-language entry point), seven `/pensmith:*` plumbing commands ([`docs/PLUMBING.md`](docs/PLUMBING.md)), four session hooks (resume context at session start, a `HANDOFF.json` before compaction, progress checkpoints, session-lock release at stop) and an MCP server, all shipped as committed, self-contained bundles in `plugin/dist/`. In this release the MCP server runs `status`, `plan`, `write` and `verify`; the other stages go through the CLI.
+- **Tier 2 — portable Node CLI** (`bin/`). Implements every verb from the same `plugin/` prompts, presets and references, runnable anywhere Node is. Workflow bodies use `<capability_check>` blocks to say how each step degrades when `Task`, MCP or interactive prompts aren't available.
 
 A drift gate (`tests/tier-contract.test.ts`) keeps the two tiers behaving identically. Every section lives under its own `.paper/sections/<N>/` directory (`PLAN.md`, `DRAFT.md`, `VERIFICATION.md`), which is what makes per-section isolation and bounded re-verification possible.
 
@@ -298,7 +297,14 @@ See [`PRIVACY.md`](PRIVACY.md) and the project's security notes for the full thr
 
 ## Project status
 
-Pensmith is **alpha** (`v0.1.0-dev`), working toward the v1.0.0 open-source release. The two-tier architecture, the verifier gate, the research pipeline, the structured intake brief, the source-fed outline, planner and writer, compile/export, and the single-command UX are implemented and covered by a CI matrix of Node 22 and 24 on Ubuntu, macOS and Windows; the whole workflow runs end to end in the test suite against recorded sources. The Tier 2 CLI is the complete path today; key-free generation through your Claude session for every Tier 1 stage and published distribution (npm + plugin marketplace) are on the roadmap.
+Pensmith is **alpha** (`v0.1.0-dev`), working toward the v1.0.0 open-source release. The two-tier architecture, the verifier gate, the research pipeline, the structured intake brief, the source-fed outline, planner and writer, compile/export, and the single-command UX are implemented and covered by a CI matrix of Node 22 and 24 on Ubuntu, macOS and Windows; the whole workflow runs end to end in the test suite against recorded sources. The Tier 2 CLI is the complete path today; the Claude Code plugin installs from this repository and runs `status`, `plan`, `write` and `verify` itself. Key-free generation through your Claude session for every Tier 1 stage and npm distribution are on the roadmap.
+
+## Documentation
+
+- [`docs/PLUMBING.md`](docs/PLUMBING.md) — the `/pensmith:*` plumbing commands for scripts and automation
+- [`docs/SOURCES.md`](docs/SOURCES.md) — each scholarly service, what it receives and the keys that help
+- [`PRIVACY.md`](PRIVACY.md) — what leaves your machine, and when
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`README-DEV.md`](README-DEV.md) — working on Pensmith itself
 
 ## Contributing
 

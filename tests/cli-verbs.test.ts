@@ -14,7 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 import { command } from '../bin/pensmith.js';
@@ -70,4 +70,30 @@ test('TIER-04 preflight: plugin/workflows/*.md keys match dispatcher verbs', () 
     dispatcherVerbs,
     `workflow files ${JSON.stringify(workflowVerbs)} must equal dispatcher verbs ${JSON.stringify(dispatcherVerbs)}`,
   );
+});
+
+// PLUG-05 / PRD §5.1: `/pensmith` is the only command the README quick start
+// teaches. The 16 verbs are a power-user fallback, and the plumbing namespace
+// (/pensmith:<name>) is documented outside the quick start (docs/PLUMBING.md).
+test('PLUG-05: the README quick start teaches /pensmith only; the plumbing namespace is documented elsewhere', () => {
+  const readme = readFileSync('README.md', 'utf8');
+  const start = readme.indexOf('\n## Quick start\n');
+  assert.ok(start >= 0, 'README has a "## Quick start" section');
+  const end = readme.indexOf('\n## ', start + 1);
+  const quickStart = readme.slice(start, end === -1 ? undefined : end);
+  // The one command block the section opens with is exactly `/pensmith`.
+  const firstBlock = /```[a-z]*\n([\s\S]*?)```/.exec(quickStart)?.[1] ?? '';
+  assert.equal(firstBlock.trim(), '/pensmith', 'the quick start command is `/pensmith`');
+  // No slash command other than the bare /pensmith anywhere in the section.
+  const slashCommands = [...quickStart.matchAll(/(?:^|[\s`(])(\/pensmith[:\s][^\s`)]*)/g)].map((m) => m[1]!.trim());
+  assert.deepEqual(slashCommands.filter((c) => c !== '/pensmith'), [], 'no /pensmith <verb> or /pensmith:<name> in the quick start');
+  assert.ok(!quickStart.includes('PLUMBING.md'), 'the plumbing docs are not linked from the quick start');
+  // …and the plumbing namespace IS documented, from outside the quick start.
+  const outside = readme.slice(0, start) + readme.slice(end === -1 ? readme.length : end);
+  assert.match(outside, /\(docs\/PLUMBING\.md\)/, 'the README links docs/PLUMBING.md outside the quick start');
+  const plumbing = readFileSync(join('docs', 'PLUMBING.md'), 'utf8');
+  for (const name of ['research', 'outline', 'plan-section', 'write-section', 'verify-section', 'compile', 'done']) {
+    assert.ok(plumbing.includes(`\`/pensmith:${name}\``), `docs/PLUMBING.md documents /pensmith:${name}`);
+  }
+  assert.match(plumbing, /exactly 16 verbs/, 'the plumbing docs keep the 16-verb contract');
 });
