@@ -137,6 +137,35 @@ test('research-discovery: two candidates with the same DOI collapse to one, keep
   assert.ok(d.candidates[0]!.candidate.abstract, 'the record with an abstract wins');
 });
 
+test('review round 1: an arXiv hit and a registrar hit of one DOI → the registrar\'s record (the version of record) is kept, with the arXiv id and abstract', async () => {
+  const now = new Date().toISOString();
+  const common = { retracted: false, last_verified: now, raw: {}, year: 2019 };
+  const registry = {
+    arxiv: {
+      search: async () => [{
+        ...common, source: 'arxiv' as const, id: 'http://arxiv.org/abs/1903.00001v2', arxiv: '1903.00001', doi: '10.1016/j.example.2019.07.001',
+        title: 'Measuring the Unmeasured: a preprint title', authors: ['Righi, Anna', 'Biondi, Bruno'], citekey: 'righi2019', type: 'preprint' as const,
+        abstract: 'The preprint abstract.',
+      }],
+    },
+    crossref: {
+      search: async () => [{
+        ...common, source: 'crossref' as const, id: '10.1016/j.example.2019.07.001', doi: '10.1016/j.example.2019.07.001',
+        title: 'Measuring the unmeasured', authors: ['Biondi, Bruno', 'Righi, Anna'], citekey: 'biondi2019', type: 'article-journal' as const,
+      }],
+    },
+  };
+  const plan = orch.researchAdapterPlan({ registry, byPreference: false, discipline: 'other' });
+  const d = await orch.discoverCandidates({ queries: ['q'], plan, registry, warn: () => undefined });
+  assert.equal(d.candidates.length, 1, 'one work');
+  const c = d.candidates[0]!.candidate;
+  assert.equal(c.source, 'crossref', "the version of record's record, not arXiv's preprint metadata under the journal DOI");
+  assert.equal(c.title, 'Measuring the unmeasured');
+  assert.deepEqual(c.authors, ['Biondi, Bruno', 'Righi, Anna']);
+  assert.equal(c.arxiv, '1903.00001', "the preprint's arXiv id is carried over");
+  assert.equal(c.abstract, 'The preprint abstract.', "and its abstract, which the record lacks");
+});
+
 test('research-discovery: crossCheckRetractions runs BEFORE the library write (D-15 LOCKED ordering)', () => {
   const researchSrc = fs.readFileSync(researchSrcPath, 'utf8');
   const crossCheckIdx = researchSrc.indexOf('crossCheckRetractions(');

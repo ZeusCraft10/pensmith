@@ -17,7 +17,7 @@ Model requests carry a plain `pensmith/<version>` User-Agent — never your cont
 
 - **OpenAlex** — paper metadata search (with your `OPENALEX_API_KEY` as `api_key` when you set one)
 - **Crossref** — DOI resolution and citation verification (polite pool)
-- **doi.org** — when Crossref has no record of a DOI you `add`, the DOI's prefix alone (such as `10.5281`, never the full DOI) to learn which agency registered it, so a DataCite DOI is reported as such instead of "not found"
+- **doi.org** — when Crossref has no record of a DOI (one you `add`, or one `verify` re-fetches), the DOI's prefix alone (such as `10.5281`, never the full DOI) to learn which agency registered it, so a DataCite DOI is reported as such instead of "not found"
 - **Crossref / Retraction Watch** — retraction checks at research and verify time (the Retraction Watch data Crossref serves)
 - **Semantic Scholar** — paper metadata search (with your `PENSMITH_S2_API_KEY` as `x-api-key` when you set one)
 - **Open Library** and, as a fallback for an ISBN it does not know, **Google Books** — book search and ISBN lookups (a title, an author or an ISBN)

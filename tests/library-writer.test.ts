@@ -327,6 +327,55 @@ test('BRDTH-01 collapse: an SSRN preprint then its version of record → one ent
   assert.doesNotMatch(bib, /ssrn/i);
 });
 
+test('review round 1: an arXiv record carrying the journal DOI is stored as the preprint (arXiv id, the DOI an alternate); the version of record then merges in and wins', async () => {
+  const root = project();
+  // arXiv's record of Righi & Biondi: the preprint's author order, arxiv:doi = the journal's DOI.
+  const preprint = cand({
+    source: 'arxiv',
+    id: 'http://arxiv.org/abs/1903.00001v2',
+    arxiv: '1903.00001',
+    doi: '10.1016/j.example.2019.07.001',
+    citekey: 'righi2019',
+    title: 'Measuring the Unmeasured: a preprint title',
+    authors: ['Righi, Anna', 'Biondi, Bruno'],
+    year: 2019,
+    type: 'preprint',
+    abstract: 'The preprint abstract, which is long enough to win the merge.',
+  });
+  await upsertSources(root, [preprint], { provenance: 'research' });
+  let e = (await loadLibrary(root)).entries[0]!;
+  assert.equal(e.doi, null, 'the journal DOI is not paired with the preprint metadata');
+  assert.deepEqual(e.alternate_dois, ['10.1016/j.example.2019.07.001'], 'kept as a candidate only (VRFY-14)');
+  assert.equal(e.arxiv, '1903.00001', 'identified by its arXiv id (Pass 1 re-fetches it at arXiv)');
+  const bib1 = fs.readFileSync(path.join(root, '.paper', 'CITATIONS.bib'), 'utf8');
+  assert.match(bib1, /eprint = \{1903\.00001\}/);
+  assert.doesNotMatch(bib1, /doi = /, 'the bib cites the preprint, not the journal DOI');
+
+  // The version of record arrives (Crossref, the published author order): one entry, its DOI and metadata win.
+  const record = cand({
+    source: 'crossref',
+    id: '10.1016/j.example.2019.07.001',
+    doi: '10.1016/j.example.2019.07.001',
+    citekey: 'biondi2019',
+    title: 'Measuring the unmeasured',
+    authors: ['Biondi, Bruno', 'Righi, Anna'],
+    year: 2019,
+    venue: 'Journal of Examples',
+    type: 'article-journal',
+  });
+  const r = await upsertSources(root, [record], { provenance: 'add' });
+  assert.equal(r.outcomes[0]!.status, 'merged');
+  assert.equal(r.outcomes[0]!.citekey, 'righi2019', 'the existing key is kept');
+  const lib = await loadLibrary(root);
+  assert.equal(lib.entries.length, 1);
+  e = lib.entries[0]!;
+  assert.equal(e.doi, '10.1016/j.example.2019.07.001', 'the version of record wins the primary DOI');
+  assert.deepEqual(e.alternate_dois, []);
+  assert.equal(e.title, 'Measuring the unmeasured', "the record's title");
+  assert.deepEqual(e.authors, ['Biondi, Bruno', 'Righi, Anna'], "the record's author order");
+  assert.equal(e.arxiv, '1903.00001', 'the arXiv id is kept');
+});
+
 test('BRDTH-01 collapse: version of record first, then Research Square / arXiv versions fold into it', async () => {
   const root = project();
   await upsertSources(root, [VOR], { provenance: 'research' });

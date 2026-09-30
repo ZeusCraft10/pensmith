@@ -112,6 +112,19 @@ test('SRC-13 (built CLI): an arXiv-only preprint (no DOI) passes Pass 1 through 
   assert.match(v.md, /- vaswani2017: \*\*OK\*\* — .*arXiv:1706\.03762 re-fetched from arXiv; D-11 AND-gate passed/);
 });
 
+test('review round 1 (built CLI): an arXiv id whose record lists a journal DOI is added as the preprint and verified at arXiv — never against the journal\'s record', () => {
+  const sb = sandbox('verify-ids-arxiv-vor');
+  // arXiv lists 10.1143/PTP.101.1155 (Progress of Theoretical Physics) for hep-th/9901001.
+  const { root, key } = paperCiting(sb, 'arxiv-vor', 'arXiv:hep-th/9901001');
+  const [entry] = library(root) as Array<LibEntry & { alternate_dois: string[] }>;
+  assert.equal(entry!.doi, null, 'the journal DOI is not paired with the preprint metadata');
+  assert.deepEqual(entry!.alternate_dois, ['10.1143/ptp.101.1155'], 'kept as a candidate only');
+  assert.equal(entry!.arxiv, 'hep-th/9901001');
+  const v = verify(sb, root);
+  assert.equal(v.status, 0, v.out);
+  assert.match(v.md, new RegExp(`- ${key}: \\*\\*OK\\*\\* — .*arXiv:hep-th/9901001 re-fetched from arXiv; D-11 AND-gate passed`));
+});
+
 test('Pass 1 (built CLI): a DOI-less entry is UNVERIFIABLE when its registrar cannot be asked (offline, no recording), FABRICATED with no identifier at all', () => {
   const sb = sandbox('verify-ids-unknown');
   const root = sb.project('p');

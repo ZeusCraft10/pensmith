@@ -223,10 +223,32 @@ interface Found {
   rank: number;
 }
 
-/** Merge `b` into the kept record `a`: the adapters and best rank; the record with an abstract wins. */
-function mergeFound(a: Found, b: Found): Found {
+/**
+ * Merge `b` into the kept record `a`: the adapters and best rank; the record
+ * with an abstract wins — except that, for two records of ONE DOI (`sameDoi`),
+ * a registrar's record beats an arXiv record (review round 1 of the Phase
+ * 18/19 merge): arXiv lists the journal's DOI (arxiv:doi) on the preprint's
+ * title and authors, so keeping the arXiv record would pair the version of
+ * record's DOI with the preprint's metadata and Pass 1 would compare the two
+ * (MIS-CITED whenever the title or author order changed on publication). The
+ * registrar's record keeps its metadata and takes the preprint's arXiv id (and
+ * its abstract when it has none).
+ */
+function mergeFound(a: Found, b: Found, sameDoi = false): Found {
   const foundBy = [...a.foundBy, ...b.foundBy.filter((x) => !a.foundBy.includes(x))];
   const rank = Math.min(a.rank, b.rank);
+  const aArxiv = a.candidate.source === 'arxiv';
+  if (sameDoi && aArxiv !== (b.candidate.source === 'arxiv')) {
+    const record = aArxiv ? b.candidate : a.candidate;
+    const preprint = aArxiv ? a.candidate : b.candidate;
+    const arxiv = record.arxiv ?? preprint.arxiv;
+    const candidate: SourceCandidate = {
+      ...record,
+      ...(arxiv !== undefined ? { arxiv } : {}),
+      ...(!record.abstract && preprint.abstract ? { abstract: preprint.abstract } : {}),
+    };
+    return { candidate, foundBy, rank };
+  }
   const candidate = !a.candidate.abstract && b.candidate.abstract ? b.candidate : a.candidate;
   return { candidate, foundBy, rank };
 }
@@ -244,7 +266,7 @@ function dedup(raw: Found[]): Found[] {
     const key = norm ? doiVersionBase(norm) ?? norm : null;
     if (key) {
       const prev = byDoi.get(key);
-      if (prev) byDoi.set(key, mergeFound(prev, f));
+      if (prev) byDoi.set(key, mergeFound(prev, f, true));
       else {
         byDoi.set(key, f);
         order.push({ doi: key });

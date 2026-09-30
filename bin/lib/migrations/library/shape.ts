@@ -268,7 +268,21 @@ export function candidateToEntry(c: LibraryCandidate, provenance: string[], now:
     const n = normDoi(a);
     if (n) alternates.add(n);
   }
-  if (!doi && alternates.size > 0) {
+  // An arXiv record's DOI is the journal's version of record (arXiv's
+  // arxiv:doi), but its title and authors are the preprint's (review round 1
+  // of the Phase 18/19 merge): as the primary DOI, Pass 1 would compare the
+  // preprint with the journal's Crossref record — MIS-CITED whenever the title
+  // or the author order changed on publication. Such an entry IS the preprint:
+  // identified by its arXiv id (Pass 1 re-fetches it at arXiv), with the
+  // journal DOI kept as a candidate only (VRFY-14). When the version of record
+  // itself is ingested, the library merges it by that DOI and its metadata and
+  // DOI win (library.ts mergeInto). A DataCite arXiv DOI is the preprint's own.
+  const preprintOfRecord = source === 'arxiv' && doi !== null && arxiv !== null && normArxiv(doi) === null;
+  if (preprintOfRecord && doi !== null) {
+    alternates.add(doi);
+    doi = null;
+  }
+  if (!doi && alternates.size > 0 && !preprintOfRecord) {
     doi = [...alternates][0]!;
     alternates.delete(doi);
   }
