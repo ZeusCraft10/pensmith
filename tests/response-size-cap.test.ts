@@ -152,7 +152,8 @@ test('SEC-03: every source adapter passes an explicit cap and the arxiv.ts TODO 
   }
   const arxiv = readFileSync(join(dir, 'arxiv.ts'), 'utf8');
   assert.ok(!/TODO/.test(arxiv), 'the arxiv.ts upstream-cap TODO is resolved');
-  for (const f of ['verify/pass3.ts', '../cli/add.ts']) {
+  // Phase 20 (VRFY-19): Pass 3's PDF fetches moved to verify/source-text.ts.
+  for (const f of ['verify/source-text.ts', '../cli/add.ts']) {
     const src = readFileSync(join(REPO, 'bin', 'lib', f), 'utf8');
     assert.match(src, /maxBytes:\s*MAX_PDF_BYTES/, `${f}: PDF fetches pass MAX_PDF_BYTES`);
   }
