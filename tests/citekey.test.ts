@@ -65,3 +65,16 @@ test('citekey 7 (SRC-05 / D-19-19): a braced corporate author keys by its first 
   // A person named "Consortium" is unaffected (no braces).
   assert.equal(generateCitekey(fix({ authors: ['Consortium, Ann'], year: 2012 })), 'consortium2012');
 });
+
+test('review round 1: a Cyrillic or Greek surname is transliterated — a named author never keys as anon', () => {
+  assert.equal(generateCitekey(fix({ authors: ['Эсенаманов, Байэл'], year: 2025 })), 'esenamanov2025');
+  assert.equal(generateCitekey(fix({ authors: ['Щербаков, Ю.'], year: 2019 })), 'shcherbakov2019');
+  assert.equal(generateCitekey(fix({ authors: ['Шевченко, Тарас'], year: 1840 })), 'shevchenko1840');
+  assert.equal(generateCitekey(fix({ authors: ['Παπαδόπουλος, Γιώργος'], year: 2020 })), 'papadopoulos2020');
+  assert.equal(generateCitekey(fix({ authors: ['Łukasiewicz, Jan'], year: 1951 })), 'lukasiewicz1951');
+  assert.equal(generateCitekey(fix({ authors: ['Straße, Anna'], year: 2001 })), 'strasse2001');
+  assert.equal(generateCitekey(fix({ authors: ['Ødegaard, Ø.'], year: 2010 })), 'odegaard2010');
+  // A script with no table keeps the valid fallback; an empty author list is anon too.
+  assert.equal(generateCitekey(fix({ authors: ['王, 小明'], year: 2021 })), 'anon2021');
+  assert.equal(generateCitekey(fix({ authors: [], year: 2024 })), 'anon2024');
+});

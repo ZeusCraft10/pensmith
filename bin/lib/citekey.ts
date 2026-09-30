@@ -21,12 +21,56 @@
 // D-14 LOCKED citekey regex: ^[a-z][a-z0-9_-]*$. Every emit is asserted
 // against the regex; a candidate whose surname is empty falls back to
 // 'anon' so the first character is always a letter.
+//
+// Non-Latin surnames (review round 1 of the Phase 18/19 merge): a Cyrillic or
+// Greek surname is transliterated (a fixed letter table, below) before the
+// [a-z] filter, so `Эсенаманов, Байэл` keys as `esenamanov2025`, not
+// `anon2025`; so are the Latin letters Unicode does not decompose (ß, æ, ø,
+// ł, đ, þ, …). A script with no table here (CJK, Arabic, Hebrew, …) still
+// falls back to 'anon' — the key stays valid; only its readability suffers.
+// Existing keys never change (library.ts): this applies to new entries only.
 
 import { firstAuthorSurname } from './author-normalize.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 
 /** D-14 LOCKED citekey regex — every citekey emitted by this module must match. */
 export const CITEKEY_RE = /^[a-z][a-z0-9_-]*$/;
+
+/**
+ * Latin letters for Cyrillic (Russian, Ukrainian, Belarusian, Serbian,
+ * Macedonian, Kazakh, Kyrgyz) and Greek, lower case and after the combining
+ * marks are stripped (author-normalize.ts: й → и, ά → α), plus the Latin
+ * letters NFKD leaves whole. A simplified ISO 9 / ELOT 743 romanisation — for
+ * a readable key, not a scholarly transliteration.
+ */
+const TRANSLITERATION: Readonly<Record<string, string>> = Object.freeze({
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ж: 'zh', з: 'z', и: 'i', к: 'k', л: 'l', м: 'm',
+  н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh',
+  щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+  є: 'ye', і: 'i', ґ: 'g', ђ: 'dj', ј: 'j', љ: 'lj', њ: 'nj', ћ: 'c', џ: 'dz', ѕ: 'dz',
+  ә: 'a', ғ: 'g', қ: 'k', ң: 'n', ө: 'o', ұ: 'u', ү: 'u', һ: 'h',
+  α: 'a', β: 'v', γ: 'g', δ: 'd', ε: 'e', ζ: 'z', η: 'i', θ: 'th', ι: 'i', κ: 'k', λ: 'l', μ: 'm',
+  ν: 'n', ξ: 'x', ο: 'o', π: 'p', ρ: 'r', σ: 's', ς: 's', τ: 't', υ: 'y', φ: 'f', χ: 'ch', ψ: 'ps', ω: 'o',
+  ß: 'ss', æ: 'ae', œ: 'oe', ø: 'o', ł: 'l', đ: 'd', ð: 'd', þ: 'th', ı: 'i', ŋ: 'n', ħ: 'h',
+});
+
+/** Greek vowel pairs romanised as one sound (ELOT 743), applied before the letter table. */
+const GREEK_DIGRAPHS: ReadonlyArray<readonly [RegExp, string]> = Object.freeze([
+  [/ου/g, 'ou'],
+  [/αυ/g, 'av'],
+  [/ευ/g, 'ev'],
+  [/ηυ/g, 'iv'],
+  [/γγ/g, 'ng'],
+] as const);
+
+/** `s` with every letter the table knows replaced by its Latin spelling (other characters kept). */
+export function transliterate(s: string): string {
+  let t = s;
+  for (const [re, latin] of GREEK_DIGRAPHS) t = t.replace(re, latin);
+  let out = '';
+  for (const ch of t) out += TRANSLITERATION[ch] ?? ch;
+  return out;
+}
 
 /** Leading words a corporate name's key skips ("The ENCODE Project Consortium" → ENCODE). */
 const CORPORATE_SKIP = /^(?:the|a|an|la|le|les|el|los|las|die|der|das)$/i;
@@ -63,7 +107,7 @@ export function generateCitekey(c: Partial<SourceCandidate>): string {
   // firstAuthorSurname already nfkc-normalizes + lowercases + strips
   // combining diacritics. We just need to drop the non-ASCII-letter
   // residue (particle spaces, hyphens, apostrophes).
-  let surname = firstAuthorSurname(corporateKeyWord(firstAuthor) ?? firstAuthor).replace(/[^a-z]/g, '').slice(0, 20);
+  let surname = transliterate(firstAuthorSurname(corporateKeyWord(firstAuthor) ?? firstAuthor)).replace(/[^a-z]/g, '').slice(0, 20);
   if (!surname) surname = 'anon';
 
   const year = c.year ?? 'noyear';
