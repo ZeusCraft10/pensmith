@@ -104,7 +104,9 @@ async function assertVerdicts(root: string, bib: Map<string, Record<string, unkn
       assert.match(r.reason, route, row.id);
       assert.equal(r.localFile, localFile, row.id);
     } else {
-      assert.ok(r.levRatio < 0.95, `${row.id}: lev ${r.levRatio}`);
+      // Below the threshold, or close by characters but refused: a whole word
+      // differs (a negator, a number, another word) or elided parts lie far apart.
+      assert.ok(r.levRatio < 0.95 || /differs by a whole word|elided parts/.test(r.reason), `${row.id}: lev ${r.levRatio} — ${r.reason}`);
       assert.match(r.reason, /^quote not found in /, row.id);
     }
     verdicts.push(r.verdict);

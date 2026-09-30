@@ -7,6 +7,8 @@
     "Every PDF artifact class (ligature, soft hyphen, smart quotes, ellipsis, diacritic; plus the em dash) appears in the source",
     "text and in claimed quotes. Every NOT_FOUND row must be NOT_FOUND on both routes; every PASS row must PASS on both.",
     "The text is from Vaswani et al. 2017 (arXiv 1706.03762), shortened; the DOI and PMCID are test identifiers.",
+    "Rows past the artifact classes: whole-word edits (an inserted negator, a changed number or word) and elisions that stitch",
+    "distant passages or single words must be NOT_FOUND even when close by characters; an editorial [bracket] is not quoted text.",
     "Hash-pinned in tests/repo-files.test.ts."
   ],
   "citekey": "vaswani2017",
@@ -192,6 +194,62 @@
       "draft": "They write ‘The encoder—a stack of six identical layers—maps an input sequence’ [see @vaswani2017, p. 3].\n",
       "expected_verdict": "PASS",
       "note": "The same em dashes on both sides (U+2014 normalizes to \"-\")."
+    },
+    {
+      "id": "stitched-elision-1",
+      "distortion": "stitched_elision",
+      "claimed_quote": "The dominant sequence transduction models … outperforms the best previously reported models by more than 2.0 BLEU.",
+      "draft": "In their words, “The dominant sequence transduction models … outperforms the best previously reported models by more than 2.0 BLEU.” [@vaswani2017].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "Both parts are real, but they lie a whole abstract apart: an elision never stitches distant passages into one quotation."
+    },
+    {
+      "id": "stitched-fragments-1",
+      "distortion": "stitched_elision",
+      "claimed_quote": "recurrent … attention … Transformer … parallelizable … BLEU",
+      "draft": "The paper states that \"recurrent … attention … Transformer … parallelizable … BLEU\" [@vaswani2017].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "Single words that each occur in the paper, in order, joined by elisions: fragments, not a quotation."
+    },
+    {
+      "id": "negation-1",
+      "distortion": "whole_word",
+      "claimed_quote": "To the best of our knowledge, the Transformer is not the first transduction model relying entirely on self-attention to compute representations of its input and output.",
+      "draft": "They write ‘To the best of our knowledge, the Transformer is not the first transduction model relying entirely on self-attention to compute representations of its input and output.’ [@vaswani2017, p. 2].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "An inserted \"not\" inverts the sentence; at 97% character similarity it must still be refused (a whole word differs)."
+    },
+    {
+      "id": "number-1",
+      "distortion": "whole_word",
+      "claimed_quote": "On the WMT 2014 English-to-German translation task, the big transformer model outperforms the best previously reported models by more than 3.0 BLEU.",
+      "draft": "In their words, “On the WMT 2014 English-to-German translation task, the big transformer model outperforms the best previously reported models by more than 3.0 BLEU.” [@vaswani2017, p. 8].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "One digit changed (2.0 to 3.0): a number in a quote must match exactly."
+    },
+    {
+      "id": "word-swap-1",
+      "distortion": "whole_word",
+      "claimed_quote": "Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to test.",
+      "draft": "The paper states that \"Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to test.\" [@vaswani2017, p. 1].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "One word swapped (train to test) in a long sentence: close by characters, but a different claim."
+    },
+    {
+      "id": "single-quotes-1",
+      "distortion": "straight_single_quotes",
+      "claimed_quote": "Positional encodings are learned parameters that replace recurrence entirely in every layer",
+      "draft": "They write 'Positional encodings are learned parameters that replace recurrence entirely in every layer' [@vaswani2017, p. 6].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "Straight single quotes, which the export shows as ‘…’: extracted and checked like any quote."
+    },
+    {
+      "id": "genuine-bracket",
+      "distortion": "editorial_bracket",
+      "claimed_quote": "[the] Transformer is the first transduction model relying entirely on self-attention",
+      "draft": "As @vaswani2017 [p. 2] put it, \"[the] Transformer is the first transduction model relying entirely on self-attention\".\n",
+      "expected_verdict": "PASS",
+      "note": "An editorial insertion in square brackets is not part of the quoted words."
     }
   ]
 }

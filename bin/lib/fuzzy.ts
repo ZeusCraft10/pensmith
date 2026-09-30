@@ -16,9 +16,11 @@
 //   Pass 3 verdict (matchQuote, Phase 20 VRFY-19):
 //     the normalized quote occurs verbatim in the normalized source text → PASS;
 //     else its best match anywhere in the text (the smallest edit distance to
-//     ANY substring, of any length) scores >= QUOTE_LEV_THRESHOLD (0.95) → FUZZY;
-//     else NOT_FOUND. A quote with elisions (`…`, `...`, `[…]`) is matched
-//     segment by segment, in order.
+//     ANY substring, of any length) scores >= QUOTE_LEV_THRESHOLD (0.95) and
+//     differs from it by no whole word (only slips inside words; a negator or
+//     a number never differs) → FUZZY; else NOT_FOUND. A quote with elisions
+//     (`…`, `...`, `[…]`) or editorial brackets is matched part by part, in
+//     order, each part close to the one before (MAX_ELISION_GAP).
 //
 // Hand-rolled per RESEARCH.md "Standard Stack" — no npm dependency added.
 // Algorithm is ~80 LOC for Jaro-Winkler + ~40 LOC for Levenshtein, fully
@@ -396,7 +398,7 @@ export function prepareQuoteText(text: string): PreparedText {
 }
 
 export interface QuoteMatch {
-  /** True when the normalized quote (every segment of an elided one) occurs verbatim. */
+  /** True when the normalized quote (every segment of an elided one) occurs verbatim, its parts close together. */
   readonly verbatim: boolean;
   /**
    * 1 − (edit distance / quote length) of the best match found, in [0, 1].
@@ -404,33 +406,49 @@ export interface QuoteMatch {
    * bound (0 when no passage comes close).
    */
   readonly ratio: number;
+  /**
+   * Why the closest passage is still not the quote although it scores at or
+   * above QUOTE_LEV_THRESHOLD — whole words differ (an inserted "not", a
+   * changed number or name), or an elided quote's parts lie too far apart in
+   * the source. Absent when the match stands.
+   */
+  readonly refused?: string;
+}
+
+/** True when a match is a found quote: verbatim, or close enough with no whole-word change (the FUZZY case). */
+export function quoteMatched(m: QuoteMatch): boolean {
+  return m.verbatim || (m.ratio >= QUOTE_LEV_THRESHOLD && m.refused === undefined);
 }
 
 /** Cells (quote length × text length) the diagnostic ratio of an unmatched quote may cost. */
 const DIAGNOSTIC_CELLS = 60_000_000;
 
-/** An elision mark in a normalized quote: `...` (from `…` too), optionally in brackets. */
-const ELISION_RE = /\s*\[?\s*\.\.\.\s*\]?\s*/g;
+/**
+ * Where a quote is split into parts matched one after another: an elision
+ * mark (`...` — from `…` too — optionally in brackets) or an editorial
+ * insertion in square brackets (`[the model]`, `[sic]`).
+ */
+const SEGMENT_BREAK_RE = /\s*\[?\s*\.\.\.\s*\]?\s*|\s*\[[^\]]{1,60}\]\s*/g;
+
+/** The most normalized characters between two consecutive parts of an elided quote (about a paragraph). */
+export const MAX_ELISION_GAP = 600;
+/** The most characters between a one-word part and its neighbours. */
+const ONE_WORD_GAP = 100;
+/** How many exact places the first part of an elided quote is tried at. */
+const MAX_ANCHORS = 400;
+/** How many approximate places (each a scan of the rest of the text): the best one for a quote in one part, a few for an elided one. */
+const MAX_APPROX_ANCHORS_ONE_PART = 1;
+const MAX_APPROX_ANCHORS = 8;
 
 /** The quote's matchable core: leading and trailing punctuation dropped (a quote's own `.` or `,`). */
 function core(s: string): string {
   return s.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 }
 
-/** One segment's best match at or after `from`: its distance (null when none within `maxDist`) and where it ends. */
-function segmentMatch(seg: string, text: string, from: number, maxDist: number): { dist: number | null; end: number } {
-  const at = text.indexOf(seg, from);
-  if (at !== -1) return { dist: 0, end: at + seg.length };
-  const rest = text.slice(from);
-  const dist = substringDistance(seg, rest, maxDist);
-  if (dist === null) return { dist: null, end: from };
-  // Where the best match ends: the first end position at that distance.
-  const end = firstEndAt(seg, rest, dist);
-  return { dist, end: from + end };
-}
+const wordCount = (s: string): number => s.split(/\s+/u).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
 
-/** The first end offset (exclusive) in `t` of a substring within `dist` of `p`. */
-function firstEndAt(p: string, t: string, dist: number): number {
+/** The first end offset (exclusive) in `t` of a substring within `dist` of `p`, at or after `fromEnd`. */
+function firstEndAt(p: string, t: string, dist: number, fromEnd = 0): number {
   const m = p.length;
   const C = new Uint32Array(m + 1);
   for (let i = 0; i <= m; i += 1) C[i] = i;
@@ -451,48 +469,219 @@ function firstEndAt(p: string, t: string, dist: number): number {
       C[i] = nC;
     }
     while (lact > 0 && C[lact]! > dist) lact -= 1;
-    if (lact === m) return j + 1;
-    lact += 1;
+    if (lact === m) {
+      if (j + 1 >= fromEnd) return j + 1;
+    } else lact += 1;
   }
   return t.length;
+}
+
+/** The start of the substring of `t` ending at `end` whose edit distance to `p` is `dist` (the latest such start). */
+function startFor(p: string, t: string, end: number, dist: number): number {
+  const lo = Math.max(0, end - p.length - dist);
+  const window = t.slice(lo, end);
+  // Align reversed: the first end in the reversed window is the latest start.
+  const rp = [...p].reverse().join('');
+  const rw = [...window].reverse().join('');
+  return end - firstEndAt(rp, rw, dist);
+}
+
+// ---- Whole-word check (VRFY-19): FUZZY absorbs character slips, never a changed word.
+
+/** Words whose change inverts or voids a claim; they must match exactly. */
+const NEGATORS: ReadonlySet<string> = new Set([
+  'not', 'no', 'never', 'none', 'nor', 'neither', 'nothing', 'nobody', 'nowhere', 'cannot', 'without', 'hardly', 'barely', 'scarcely',
+]);
+
+function tokensOf(s: string): string[] {
+  return s
+    .split(/\s+/u)
+    .map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+    .filter((t) => t.length > 0);
+}
+
+/** True when two words differ only by a slip a copy or a PDF introduces (a letter or two), never in meaning-bearing ways. */
+function sameWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (/\p{N}/u.test(a) || /\p{N}/u.test(b)) return false; // numbers, years, versions: exactly
+  const neg = (w: string): boolean => NEGATORS.has(w) || /n['’]t$/u.test(w);
+  if (neg(a) || neg(b)) return false;
+  if (a[0] !== b[0]) return false; // increase / decrease, ever / never
+  const d = levenshtein(a, b);
+  const L = Math.max(a.length, b.length);
+  return d <= (L >= 8 ? 2 : 1) && d / L <= 0.25;
+}
+
+/**
+ * The first word pair that keeps `seg` from being a copy of `src` word for
+ * word (each quote word one source word, or one word split in two / two
+ * joined, the first and last words of `src` possibly cut by the match), or
+ * null when the words line up.
+ */
+function wordMismatch(seg: string, src: string): string | null {
+  const q = tokensOf(seg);
+  const s = tokensOf(src);
+  const n = q.length;
+  const m = s.length;
+  if (n === 0) return null;
+  // reach[i][j]: q[0..i) aligned with s[0..j).
+  const reach: boolean[][] = Array.from({ length: n + 1 }, () => new Array<boolean>(m + 1).fill(false));
+  reach[0]![0] = true;
+  const edge = (qi: number, sj: number, w: string, x: string): boolean =>
+    sameWord(w, x) || (qi === 0 && sj === 0 && x.endsWith(w)) || (qi === n - 1 && sj === m - 1 && x.startsWith(w)) || (n === 1 && m === 1 && x.includes(w));
+  for (let i = 0; i < n; i += 1) {
+    for (let j = 0; j < m; j += 1) {
+      if (!reach[i]![j]) continue;
+      if (edge(i, j, q[i]!, s[j]!)) reach[i + 1]![j + 1] = true;
+      if (j + 1 < m && sameWord(q[i]!, s[j]! + s[j + 1]!)) reach[i + 1]![j + 2] = true;
+      if (i + 1 < n && sameWord(q[i]! + q[i + 1]!, s[j]!)) reach[i + 2]![j + 1] = true;
+    }
+  }
+  if (reach[n]![m]) return null;
+  return firstWordEdit(q, s);
+}
+
+/** The first whole-word edit between the quote's words and the source's (a word-level edit script), for the row. */
+function firstWordEdit(q: readonly string[], s: readonly string[]): string {
+  const n = q.length;
+  const m = s.length;
+  const D: number[][] = Array.from({ length: n + 1 }, (_, i) => Array.from({ length: m + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= n; i += 1) {
+    for (let j = 1; j <= m; j += 1) {
+      D[i]![j] = Math.min(D[i - 1]![j]! + 1, D[i]![j - 1]! + 1, D[i - 1]![j - 1]! + (sameWord(q[i - 1]!, s[j - 1]!) ? 0 : 1));
+    }
+  }
+  // Walk the script from the end; keep the earliest edit.
+  let i = n;
+  let j = m;
+  let first = 'its words do not line up with the source';
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && sameWord(q[i - 1]!, s[j - 1]!) && D[i]![j] === D[i - 1]![j - 1]) {
+      i -= 1;
+      j -= 1;
+    } else if (i > 0 && j > 0 && D[i]![j] === D[i - 1]![j - 1]! + 1) {
+      first = `"${q[i - 1]}" where the source has "${s[j - 1]}"`;
+      i -= 1;
+      j -= 1;
+    } else if (i > 0 && D[i]![j] === D[i - 1]![j]! + 1) {
+      first = `"${q[i - 1]}" is not in the source`;
+      i -= 1;
+    } else {
+      first = `the source has "${s[j - 1]}" there`;
+      j -= 1;
+    }
+  }
+  return first;
+}
+
+/** One part's best match in `text[from, to)`: its distance, where it starts and ends, and a word mismatch (null when the words line up). */
+interface PartMatch {
+  readonly dist: number;
+  readonly start: number;
+  readonly end: number;
+  readonly mismatch: string | null;
+}
+
+function partMatch(seg: string, text: string, from: number, to: number): PartMatch | null {
+  const at = text.indexOf(seg, from);
+  if (at !== -1 && at + seg.length <= to) return { dist: 0, start: at, end: at + seg.length, mismatch: null };
+  const maxDist = Math.floor(seg.length * (1 - QUOTE_LEV_THRESHOLD));
+  const window = text.slice(from, to);
+  const dist = substringDistance(seg, window, maxDist);
+  if (dist === null) return null;
+  const end = firstEndAt(seg, window, dist);
+  const start = startFor(seg, window, end, dist);
+  // The matched passage out to whole words, for the word check.
+  let ws = start;
+  while (ws > 0 && /[\p{L}\p{N}]/u.test(window[ws - 1] ?? '')) ws -= 1;
+  let we = end;
+  while (we < window.length && /[\p{L}\p{N}]/u.test(window[we] ?? '')) we += 1;
+  const cut = window.slice(ws, we);
+  return { dist, start: from + start, end: from + end, mismatch: dist === 0 ? null : wordMismatch(seg, cut) };
+}
+
+/** Every place the first part matches (exact occurrences, else the best approximate ones, at most `approx`). */
+function anchors(seg: string, text: string, approx: number): PartMatch[] {
+  const out: PartMatch[] = [];
+  for (let at = text.indexOf(seg); at !== -1 && out.length < MAX_ANCHORS; at = text.indexOf(seg, at + 1)) {
+    out.push({ dist: 0, start: at, end: at + seg.length, mismatch: null });
+  }
+  if (out.length > 0) return out;
+  let from = 0;
+  while (out.length < approx) {
+    const m = partMatch(seg, text, from, text.length);
+    if (m === null) break;
+    out.push(m);
+    from = m.end;
+  }
+  return out;
 }
 
 /**
  * How well `quote` matches the source `text` (a prepared text is normalized
  * once for all of a source's quotes). Verbatim after normalization is the
- * PASS case; `ratio >= QUOTE_LEV_THRESHOLD` the FUZZY case; below it the
- * quote is NOT_FOUND. A quote with elisions matches when each of its
- * segments does, in order.
+ * PASS case; `ratio >= QUOTE_LEV_THRESHOLD` with no `refused` reason the FUZZY
+ * case (quoteMatched); anything else is NOT_FOUND. A close match is refused
+ * when a whole word differs — FUZZY absorbs the slips a copy or a PDF
+ * introduces (a letter or two in a word), never an inserted "not", a changed
+ * number or a different word. A quote with elisions or editorial brackets
+ * matches when each part does, in order, each within MAX_ELISION_GAP
+ * characters of the one before (a one-word part within ONE_WORD_GAP of its
+ * neighbours), and one part has at least three words: fragments stitched
+ * from far apart in the source are not a quotation.
  */
 export function matchQuote(quote: string, text: string | PreparedText): QuoteMatch {
   const hay = typeof text === 'string' ? normalizeForQuote(text) : text.normalized;
   const needle = normalizeForQuote(quote);
   const segments = needle
-    .split(ELISION_RE)
+    .split(SEGMENT_BREAK_RE)
     .map(core)
     .filter((s) => /[\p{L}\p{N}]/u.test(s));
   if (segments.length === 0) return { verbatim: true, ratio: 1 };
-  let from = 0;
-  let total = 0;
-  let distSum = 0;
-  let verbatim = true;
-  let found = true;
-  for (const seg of segments) {
-    total += seg.length;
-    const maxDist = Math.floor(seg.length * (1 - QUOTE_LEV_THRESHOLD));
-    const m = segmentMatch(seg, hay, from, maxDist);
-    if (m.dist === null) {
-      found = false;
-      break;
+  const total = segments.reduce((n, s) => n + s.length, 0);
+  let refused: string | undefined;
+  let bestRatio = -1;
+
+  if (segments.length > 1 && Math.max(...segments.map(wordCount)) < 3) {
+    refused = 'its elided parts are each a word or two — fragments, not a quotation';
+  } else {
+    // Try each place the first part occurs; the rest must follow within the gap.
+    for (const first of anchors(segments[0]!, hay, segments.length === 1 ? MAX_APPROX_ANCHORS_ONE_PART : MAX_APPROX_ANCHORS)) {
+      const parts: PartMatch[] = [first];
+      let failure: string | null = null;
+      for (let k = 1; k < segments.length; k += 1) {
+        const prev = parts[k - 1]!;
+        const oneWord = wordCount(segments[k]!) < 2 || wordCount(segments[k - 1]!) < 2;
+        const gap = oneWord ? ONE_WORD_GAP : MAX_ELISION_GAP;
+        const m = partMatch(segments[k]!, hay, prev.end, Math.min(hay.length, prev.end + gap + segments[k]!.length + Math.floor(segments[k]!.length * (1 - QUOTE_LEV_THRESHOLD))));
+        if (m === null || m.start - prev.end > gap) {
+          failure = `its elided parts are not within ${gap} characters of each other in the source`;
+          break;
+        }
+        parts.push(m);
+      }
+      if (failure !== null) {
+        refused ??= failure;
+        continue;
+      }
+      const dist = parts.reduce((d, p) => d + p.dist, 0);
+      const ratio = total === 0 ? 1 : 1 - dist / total;
+      const mismatch = parts.find((p) => p.mismatch !== null)?.mismatch ?? null;
+      if (mismatch === null && dist === 0) return { verbatim: true, ratio: 1 };
+      if (mismatch === null) return { verbatim: false, ratio };
+      if (ratio > bestRatio) {
+        bestRatio = ratio;
+        refused = `the closest passage differs by a whole word: ${mismatch}`;
+      }
     }
-    if (m.dist > 0) verbatim = false;
-    distSum += m.dist;
-    from = m.end;
   }
-  if (found) return { verbatim, ratio: total === 0 ? 1 : 1 - distSum / total };
+  if (bestRatio >= 0) return { verbatim: false, ratio: bestRatio, ...(refused !== undefined ? { refused } : {}) };
   // Not found: the best whole-quote match within the diagnostic bound, for the row.
   const whole = segments.join(' ');
-  if (whole.length * hay.length > DIAGNOSTIC_CELLS) return { verbatim: false, ratio: 0 };
-  const d = substringDistance(whole, hay, Math.floor(whole.length * 0.5));
-  return { verbatim: false, ratio: d === null ? 0 : Math.max(0, 1 - d / whole.length) };
+  let ratio = 0;
+  if (whole.length * hay.length <= DIAGNOSTIC_CELLS) {
+    const d = substringDistance(whole, hay, Math.floor(whole.length * 0.5));
+    ratio = d === null ? 0 : Math.max(0, 1 - d / whole.length);
+  }
+  return { verbatim: false, ratio, ...(refused !== undefined ? { refused } : {}) };
 }

@@ -28,7 +28,11 @@
 //                         ligatures, soft hyphens, smart quotes, dashes,
 //                         ellipses, diacritics, whitespace, case) in a copy;
 //   FUZZY                 its best match in a copy is >= QUOTE_LEV_THRESHOLD
-//                         but not verbatim (passes; the row says so);
+//                         but not verbatim — a letter or two slipped inside
+//                         words, never a whole word changed (an inserted
+//                         "not", another number or name) and never elided
+//                         parts far apart (fuzzy.ts matchQuote; passes, the
+//                         row says so);
 //   NOT_FOUND             a copy's real text was read and no copy has it;
 //   UNVERIFIABLE-QUOTE    every source answered, none with text: no
 //                         open-access copy, paywalled (abstract only), no
@@ -52,7 +56,7 @@
 // order, shared by a cluster's per-key rows) and quoteTextSha256 of the quote:
 // what a per-quote acceptance is bound to (VRFY-20, seam S-C).
 
-import { matchQuote, prepareQuoteText, QUOTE_LEV_THRESHOLD, type PreparedText } from '../fuzzy.js';
+import { matchQuote, prepareQuoteText, quoteMatched, QUOTE_LEV_THRESHOLD, type PreparedText } from '../fuzzy.js';
 import { networkMode } from '../http-mock.js';
 import { isReservedDryRunId } from '../doi.js';
 import { extractQuotes, type ExtractedQuote } from '../quote-extractor.js';
@@ -134,6 +138,14 @@ async function checkQuote(
 
   const checked: string[] = [];
   let best = 0;
+  /** Why the best close passage is still not the quote (a whole word differs, elided parts far apart). */
+  let refusedWhy: string | undefined;
+  const noteBest = (ratio: number, refused: string | undefined): void => {
+    if (ratio >= best) {
+      best = ratio;
+      refusedWhy = refused;
+    }
+  };
   let altered: string | null = null;
   const noText: string[] = [];
   const noAnswer: string[] = [];
@@ -156,11 +168,11 @@ async function checkQuote(
       const m = matchQuote(q.text, p);
       const where = `your local file ${name} (sha256 ${t.sha256.slice(0, 12)}…)`;
       if (m.verbatim) return { verdict: 'PASS', levRatio: 1, reason: `verified against ${where}`, localFile: name };
-      if (m.ratio >= QUOTE_LEV_THRESHOLD) {
+      if (quoteMatched(m)) {
         return { verdict: 'FUZZY', levRatio: m.ratio, reason: `verified against ${where} at lev=${pct(m.ratio)} (not verbatim)`, localFile: name };
       }
       checked.push(`your local file ${name}`);
-      best = Math.max(best, m.ratio);
+      noteBest(m.ratio, m.refused);
     } else if (byoCopyAltered(t.code)) {
       altered = t.reason;
     } else {
@@ -183,9 +195,9 @@ async function checkQuote(
       }
       const m = matchQuote(q.text, a.source.prepared());
       if (m.verbatim) return { verdict: 'PASS', levRatio: 1, reason: `verbatim in ${a.source.label}` };
-      if (m.ratio >= QUOTE_LEV_THRESHOLD) return { verdict: 'FUZZY', levRatio: m.ratio, reason: `found in ${a.source.label} at lev=${pct(m.ratio)} (not verbatim)` };
+      if (quoteMatched(m)) return { verdict: 'FUZZY', levRatio: m.ratio, reason: `found in ${a.source.label} at lev=${pct(m.ratio)} (not verbatim)` };
       checked.push(a.source.label);
-      best = Math.max(best, m.ratio);
+      noteBest(m.ratio, m.refused);
     }
   }
 
@@ -207,7 +219,10 @@ async function checkQuote(
     return {
       verdict: 'NOT_FOUND',
       levRatio: best,
-      reason: `quote not found in ${checked.join(', ')} (best lev=${pct(best)} < ${QUOTE_LEV_THRESHOLD})${unanswered}`,
+      reason:
+        refusedWhy !== undefined
+          ? `quote not found in ${checked.join(', ')} (best lev=${pct(best)}; ${refusedWhy})${unanswered}`
+          : `quote not found in ${checked.join(', ')} (best lev=${pct(best)} < ${QUOTE_LEV_THRESHOLD})${unanswered}`,
     };
   }
   if (noAnswer.length > 0) {
