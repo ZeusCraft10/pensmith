@@ -65,6 +65,11 @@ export interface CrossrefItem {
   issued?: CrossrefDate;
   'published-print'?: CrossrefDate;
   'published-online'?: CrossrefDate;
+  published?: CrossrefDate;
+  /** A dissertation's date (its `issued` is `[[null]]`). */
+  approved?: CrossrefDate;
+  /** A posted-content item's date. */
+  posted?: CrossrefDate;
   abstract?: string;
   'container-title'?: string[] | string;
   type?: string;
@@ -112,8 +117,20 @@ function yearOf(d: CrossrefDate | undefined): number | undefined {
   return typeof y === 'number' && y >= 1800 && y <= 2100 ? y : undefined;
 }
 
+/**
+ * The work's year: `issued`, else the print / online / earliest publication
+ * date, else a dissertation's `approved` or a posted item's `posted` date
+ * (Crossref leaves `issued` as `[[null]]` for many dissertations; SRC-05).
+ */
 function parseYear(item: CrossrefItem): number | undefined {
-  return yearOf(item.issued) ?? yearOf(item['published-print']) ?? yearOf(item['published-online']);
+  return (
+    yearOf(item.issued) ??
+    yearOf(item['published-print']) ??
+    yearOf(item['published-online']) ??
+    yearOf(item.published) ??
+    yearOf(item.approved) ??
+    yearOf(item.posted)
+  );
 }
 
 /**
@@ -252,7 +269,7 @@ const WORK: ShapeCheck = jsonShape(
 
 /** The Crossref fields a search candidate needs (search responses only). */
 const SEARCH_SELECT = [
-  'DOI', 'title', 'author', 'editor', 'issued', 'abstract', 'container-title', 'type',
+  'DOI', 'title', 'author', 'editor', 'issued', 'approved', 'posted', 'abstract', 'container-title', 'type',
   'volume', 'issue', 'page', 'publisher', 'ISBN', 'updated-by',
 ].join(',');
 

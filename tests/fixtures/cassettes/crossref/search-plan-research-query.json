@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=instagram+adolescent+depression+longitudinal&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "path": "/works?query=instagram+adolescent+depression+longitudinal&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 829140,
+        "total-results": 829857,
         "items": [
           {
             "DOI": "10.18297/etd/2721",
@@ -38,11 +38,28 @@
                 ]
               ]
             },
+            "approved": {
+              "date-parts": [
+                [
+                  2017
+                ]
+              ]
+            },
             "type": "dissertation",
             "publisher": "University of Louisville"
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2026
+                ]
+              ]
+            },
+            "publisher": "Elsevier BV",
+            "abstract": "<jats:p>Background: Childhood maltreatment is associated with adolescent depressive symptoms, but the prospective organization of relevant risk and protective processes remains unclear.Objective: To examine prospective associations among trait vulnerabilities, coping strategies, school connectedness, and depressive symptoms and compare these patterns by maltreatment exposure.Participants and Setting: Participants were 957 students aged 15–18 years from one vocational high school in Zhejiang Province, China. Of these, 393 met threshold criteria for at least one maltreatment subtype, and 564 formed the low/no-exposure group.Methods: Three-wave data were analyzed using regularized undirected networks, Bayesian directed acyclic graphs, and cross-lagged panel networks. Cross-lagged models adjusted for autoregressive effects and demographic covariates; network comparison tests assessed group differences.Results: At baseline, maltreatment-exposed adolescents reported more depressive symptoms (p &lt; .001) and lower school connectedness (p &lt; .001). In this group, insecurity showed positive nonzero prospective associations with depressive symptoms from T1 to T2 (β = .10) and T2 to T3 (β = .07), whereas school connectedness showed a negative nonzero association from T2 to T3 (β = -.17). In both groups, depressive symptoms predicted lower subsequent school connectedness and greater insecurity. Formal comparisons provided limited evidence of overall between-group structural differences.Conclusions: Insecurity may be a persistent vulnerability marker, whereas school connectedness may represent a potentially modifiable relational resource for maltreatment-exposed adolescents. These prospective associations do not establish causality.</jats:p>",
             "DOI": "10.2139/ssrn.7388902",
+            "type": "posted-content",
             "title": [
               "Temporal pathways linking childhood maltreatment to adolescent depression: A longitudinal network study"
             ],
@@ -90,10 +107,7 @@
                   2026
                 ]
               ]
-            },
-            "abstract": "<jats:p>Background: Childhood maltreatment is associated with adolescent depressive symptoms, but the prospective organization of relevant risk and protective processes remains unclear.Objective: To examine prospective associations among trait vulnerabilities, coping strategies, school connectedness, and depressive symptoms and compare these patterns by maltreatment exposure.Participants and Setting: Participants were 957 students aged 15–18 years from one vocational high school in Zhejiang Province, China. Of these, 393 met threshold criteria for at least one maltreatment subtype, and 564 formed the low/no-exposure group.Methods: Three-wave data were analyzed using regularized undirected networks, Bayesian directed acyclic graphs, and cross-lagged panel networks. Cross-lagged models adjusted for autoregressive effects and demographic covariates; network comparison tests assessed group differences.Results: At baseline, maltreatment-exposed adolescents reported more depressive symptoms (p &lt; .001) and lower school connectedness (p &lt; .001). In this group, insecurity showed positive nonzero prospective associations with depressive symptoms from T1 to T2 (β = .10) and T2 to T3 (β = .07), whereas school connectedness showed a negative nonzero association from T2 to T3 (β = -.17). In both groups, depressive symptoms predicted lower subsequent school connectedness and greater insecurity. Formal comparisons provided limited evidence of overall between-group structural differences.Conclusions: Insecurity may be a persistent vulnerability marker, whereas school connectedness may represent a potentially modifiable relational resource for maltreatment-exposed adolescents. These prospective associations do not establish causality.</jats:p>",
-            "type": "posted-content",
-            "publisher": "Elsevier BV"
+            }
           },
           {
             "publisher": "MDPI AG",
@@ -344,7 +358,19 @@
             }
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  27
+                ]
+              ]
+            },
+            "publisher": "Springer Science and Business Media LLC",
+            "abstract": "<title>Abstract</title>\n                <p>Peer victimization significantly threatens adolescent mental health, yet longitudinal research on the interplay of intra-individual risk and protective factors remains scarce. This study tested a moderated mediation model in a sample of 874 Chinese adolescents (Mage = 12.41, SD = 1.52, 52.4% girls), surveyed over 1.5 years. The results indicated that MCERSs were an underlying mechanism linking peer victimization to depression, while self-compassion served as a protective factor that weakened the strength between peer victimization and depression as well as between MCERSs and depression. This provides a theoretical and empirical basis for interventions aimed at mitigating the impact of peer victimization by targeting emotion regulation and fostering self-compassion.</p>",
             "DOI": "10.21203/rs.3.rs-8615948/v1",
+            "type": "posted-content",
             "title": [
               "The Longitudinal Association between Peer Victimization and Adolescent Depression: A Moderated Mediation Model"
             ],
@@ -422,13 +448,22 @@
                   27
                 ]
               ]
-            },
-            "abstract": "<title>Abstract</title>\n                <p>Peer victimization significantly threatens adolescent mental health, yet longitudinal research on the interplay of intra-individual risk and protective factors remains scarce. This study tested a moderated mediation model in a sample of 874 Chinese adolescents (Mage = 12.41, SD = 1.52, 52.4% girls), surveyed over 1.5 years. The results indicated that MCERSs were an underlying mechanism linking peer victimization to depression, while self-compassion served as a protective factor that weakened the strength between peer victimization and depression as well as between MCERSs and depression. This provides a theoretical and empirical basis for interventions aimed at mitigating the impact of peer victimization by targeting emotion regulation and fostering self-compassion.</p>",
-            "type": "posted-content",
-            "publisher": "Springer Science and Business Media LLC"
+            }
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2025,
+                  9,
+                  15
+                ]
+              ]
+            },
+            "publisher": "Center for Open Science",
+            "abstract": "<p>Background: The heterogeneity of depression is well documented. Considering the Life Course Theory, longitudinal analysis establishing trajectories may demonstrate the stability and variation of depression. Methods: Data from four waves of the National Longitudinal Study of Adolescent to Adult Health (Add Health) were used to investigate depression trajectories. Nine items from the Center for Epidemiological Studies (CES-D) measured depression of 9421 participants. Trajectories were established using growth mixture modelling (GMM) and multinomial regression was employed to explore the influence of gender and ethnicity.Results: Five distinct and unique trajectories were established as minimal (66.8%), moderate (19.1%), Emerging Adulthood (EA) trough (7.6%), persistently high (3.3%) and EA peak (3.1%). Being female and non-white increased the probability of being in the elevated trajectories during adolescence.  Conclusion: Three stable and two fluctuating trajectories demonstrate both the predictability and heterogeneity of depression across three distinct developmental stages.</p>",
             "DOI": "10.31234/osf.io/mfs5j_v1",
+            "type": "posted-content",
             "title": [
               "Longitudinal trajectories of depression across adolescence, emerging adulthood and adulthood: findings from the National Longitudinal Study of Adolescent to Adult Health (Add Health) (1994-2008)."
             ],
@@ -492,10 +527,7 @@
                   15
                 ]
               ]
-            },
-            "abstract": "<p>Background: The heterogeneity of depression is well documented. Considering the Life Course Theory, longitudinal analysis establishing trajectories may demonstrate the stability and variation of depression. Methods: Data from four waves of the National Longitudinal Study of Adolescent to Adult Health (Add Health) were used to investigate depression trajectories. Nine items from the Center for Epidemiological Studies (CES-D) measured depression of 9421 participants. Trajectories were established using growth mixture modelling (GMM) and multinomial regression was employed to explore the influence of gender and ethnicity.Results: Five distinct and unique trajectories were established as minimal (66.8%), moderate (19.1%), Emerging Adulthood (EA) trough (7.6%), persistently high (3.3%) and EA peak (3.1%). Being female and non-white increased the probability of being in the elevated trajectories during adolescence.  Conclusion: Three stable and two fluctuating trajectories demonstrate both the predictability and heterogeneity of depression across three distinct developmental stages.</p>",
-            "type": "posted-content",
-            "publisher": "Center for Open Science"
+            }
           },
           {
             "publisher": "Elsevier BV",
@@ -629,7 +661,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-28T08:03:23.650Z",
+      "recordedAt": "2026-09-30T04:39:36.865Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

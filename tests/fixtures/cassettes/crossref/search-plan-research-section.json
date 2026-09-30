@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=instagram+adolescent+depression+longitudinal+Social+media+and+depression&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "path": "/works?query=instagram+adolescent+depression+longitudinal+Social+media+and+depression&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 5107791,
+        "total-results": 5112464,
         "items": [
           {
             "publisher": "Opast Group LLC",
@@ -67,6 +67,13 @@
               }
             ],
             "issued": {
+              "date-parts": [
+                [
+                  2023
+                ]
+              ]
+            },
+            "posted": {
               "date-parts": [
                 [
                   2023
@@ -136,6 +143,13 @@
               "date-parts": [
                 [
                   null
+                ]
+              ]
+            },
+            "approved": {
+              "date-parts": [
+                [
+                  2017
                 ]
               ]
             },
@@ -309,7 +323,19 @@
             }
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2025,
+                  9,
+                  1
+                ]
+              ]
+            },
+            "publisher": "Center for Open Science",
+            "abstract": "<p>This study investigated the moderating roles of socioeconomic status (SES) and social media use (SMU) in predicting changes in children’s depressive symptoms over 2 years. Data from 8182 American children (aged 10-14, 52.8% males, 53.6% White) participating in the Adolescent Brain Cognitive Development Study were used. Contrary to expectations, we found decreased depressive symptoms over time that were not predicted by social media use. However, SES was a significant moderator: the highest decreases in depressive symptoms were observed in the low SES and low SMU group (b = -.04) and in the high SES and high SMU group (b = -.037). This study contributes to a more nuanced understanding of social media effects on children.</p>",
             "DOI": "10.31234/osf.io/ew5kv_v1",
+            "type": "posted-content",
             "title": [
               "Children’s Social Media Use, Depression, and Socioeconomic Inequalities - A Longitudinal Investigation Based on the ABCD Study®"
             ],
@@ -365,13 +391,22 @@
                   1
                 ]
               ]
-            },
-            "abstract": "<p>This study investigated the moderating roles of socioeconomic status (SES) and social media use (SMU) in predicting changes in children’s depressive symptoms over 2 years. Data from 8182 American children (aged 10-14, 52.8% males, 53.6% White) participating in the Adolescent Brain Cognitive Development Study were used. Contrary to expectations, we found decreased depressive symptoms over time that were not predicted by social media use. However, SES was a significant moderator: the highest decreases in depressive symptoms were observed in the low SES and low SMU group (b = -.04) and in the high SES and high SMU group (b = -.037). This study contributes to a more nuanced understanding of social media effects on children.</p>",
-            "type": "posted-content",
-            "publisher": "Center for Open Science"
+            }
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2026,
+                  1,
+                  6
+                ]
+              ]
+            },
+            "publisher": "Center for Open Science",
+            "abstract": "<p>Numerous studies have investigated the relationship between social media use and adolescent mental health yielding inconclusive findings. We aimed to advance this field by employing a longitudinal approach and determining which individuals might be most vulnerable to the potential effects of social media. In the current longitudinal study, we focused on the role of socioeconomic inequalities and investigated the moderating roles of socioeconomic status (SES) and social media use (SMU) in predicting changes in youth’s depressive symptoms over 2 years. We expected that frequent social media use among youth from the lower SES backgrounds would predict higher depressive symptoms over time. Data from 8182 American early adolescents (aged 10-14, 52.8% males) participating in the Adolescent Brain Cognitive Development Study were analyzed. Unexpectedly, we found a decrease in depressive symptoms over time, which was not predicted by social media use. However, SES moderated this relationship: the highest decreases in depressive symptoms were observed in the low SES and low SMU group (b = -.04) and in the high SES and high SMU group (b = -.037). This study contributes to a more nuanced understanding of the role of socioeconomic inequalities in the effects of social media use on youth’s mental health.</p>",
             "DOI": "10.31234/osf.io/ew5kv_v2",
+            "type": "posted-content",
             "title": [
               "Youth’s Social Media Use, Depression, and Socioeconomic Inequalities  - A Longitudinal Investigation Based on the ABCD Study®"
             ],
@@ -427,10 +462,7 @@
                   6
                 ]
               ]
-            },
-            "abstract": "<p>Numerous studies have investigated the relationship between social media use and adolescent mental health yielding inconclusive findings. We aimed to advance this field by employing a longitudinal approach and determining which individuals might be most vulnerable to the potential effects of social media. In the current longitudinal study, we focused on the role of socioeconomic inequalities and investigated the moderating roles of socioeconomic status (SES) and social media use (SMU) in predicting changes in youth’s depressive symptoms over 2 years. We expected that frequent social media use among youth from the lower SES backgrounds would predict higher depressive symptoms over time. Data from 8182 American early adolescents (aged 10-14, 52.8% males) participating in the Adolescent Brain Cognitive Development Study were analyzed. Unexpectedly, we found a decrease in depressive symptoms over time, which was not predicted by social media use. However, SES moderated this relationship: the highest decreases in depressive symptoms were observed in the low SES and low SMU group (b = -.04) and in the high SES and high SMU group (b = -.037). This study contributes to a more nuanced understanding of the role of socioeconomic inequalities in the effects of social media use on youth’s mental health.</p>",
-            "type": "posted-content",
-            "publisher": "Center for Open Science"
+            }
           },
           {
             "publisher": "Elsevier BV",
@@ -494,7 +526,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-28T08:03:23.650Z",
+      "recordedAt": "2026-09-30T04:39:36.865Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

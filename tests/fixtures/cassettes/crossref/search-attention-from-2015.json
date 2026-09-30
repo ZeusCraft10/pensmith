@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=attention+mechanisms+in+neural+networks&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by&filter=from-pub-date%3A2015",
+    "path": "/works?query=attention+mechanisms+in+neural+networks&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by&filter=from-pub-date%3A2015",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 1741975,
+        "total-results": 1744006,
         "items": [
           {
             "publisher": "Elsevier BV",
@@ -149,7 +149,19 @@
             }
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2023,
+                  12,
+                  25
+                ]
+              ]
+            },
+            "publisher": "Springer Science and Business Media LLC",
+            "abstract": "<title>Abstract</title>\n        <p>Massive open online courses (MOOCs) have revolutionized education, providing unprecedented access to knowledge and skills to learners worldwide. While traditional methods have achieved comparable performance in personalized recommendations, they suffer from two key limitations. Firstly, they fail to capture the rich relationships between courses and users embedded within the MOOC graph structure. Secondly, they disregard the sequential nature of user learning, neglecting the evolving preferences and interests over time. These methods often overlook the recency of items, potentially neglecting relevant and trending courses. This paper presents a personalized recommendation approach for MOOCs that combines the effectiveness of an Attention mechanism with the capabilities of a Graph Neural Network, namely AGNN, to tackle this problem. This novel recommendation system in MOOCs leverages GNNs for rich learner-course relationships and LSTM for dynamic user preferences, culminating in personalized recommendations through MF-BPR learning. Real-world course data experiments demonstrate AGNN’s ability to significantly improve recommendation performance. An in-depth ablation study further underscores the critical influence of attention mechanisms, highlighting the model’s ability to dynamically adapt to evolving user preferences and prioritize recent, relevant items, ultimately leading to more personalized and effective recommendations.</p>",
             "DOI": "10.21203/rs.3.rs-3780549/v1",
+            "type": "posted-content",
             "title": [
               "Enhancing MOOCs Personalized Recommendation with Graph Neural Networks and Attention Mechanisms"
             ],
@@ -211,10 +223,7 @@
                   25
                 ]
               ]
-            },
-            "abstract": "<title>Abstract</title>\n        <p>Massive open online courses (MOOCs) have revolutionized education, providing unprecedented access to knowledge and skills to learners worldwide. While traditional methods have achieved comparable performance in personalized recommendations, they suffer from two key limitations. Firstly, they fail to capture the rich relationships between courses and users embedded within the MOOC graph structure. Secondly, they disregard the sequential nature of user learning, neglecting the evolving preferences and interests over time. These methods often overlook the recency of items, potentially neglecting relevant and trending courses. This paper presents a personalized recommendation approach for MOOCs that combines the effectiveness of an Attention mechanism with the capabilities of a Graph Neural Network, namely AGNN, to tackle this problem. This novel recommendation system in MOOCs leverages GNNs for rich learner-course relationships and LSTM for dynamic user preferences, culminating in personalized recommendations through MF-BPR learning. Real-world course data experiments demonstrate AGNN’s ability to significantly improve recommendation performance. An in-depth ablation study further underscores the critical influence of attention mechanisms, highlighting the model’s ability to dynamically adapt to evolving user preferences and prioritize recent, relevant items, ultimately leading to more personalized and effective recommendations.</p>",
-            "type": "posted-content",
-            "publisher": "Springer Science and Business Media LLC"
+            }
           },
           {
             "DOI": "10.1109/ijcnn52387.2021.9533966",
@@ -304,48 +313,19 @@
             "publisher": "IEEE"
           },
           {
-            "publisher": "Japanese Neural Network Society",
-            "issue": "3",
-            "DOI": "10.3902/jnns.26.62",
-            "type": "journal-article",
-            "page": "62-71",
-            "title": [
-              "Neuronal Mechanisms Underlying Attention and Visual Search"
-            ],
-            "volume": "26",
-            "author": [
-              {
-                "given": "Tadashi",
-                "family": "Ogawa",
-                "sequence": "first",
-                "affiliation": [
-                  {
-                    "name": "Institute for the Advanced Study of Human Biology (ASHBi), Kyoto University"
-                  }
-                ],
-                "role": [
-                  {
-                    "role": "author",
-                    "vocabulary": "crossref"
-                  }
-                ]
-              }
-            ],
-            "container-title": [
-              "The Brain &amp; Neural Networks"
-            ],
-            "issued": {
+            "posted": {
               "date-parts": [
                 [
-                  2019,
-                  9,
-                  5
+                  2024,
+                  1,
+                  22
                 ]
               ]
-            }
-          },
-          {
+            },
+            "publisher": "Research Square Platform LLC",
+            "abstract": "<jats:title>Abstract</jats:title>\n        <jats:p>Traditional recommendation systems, particularly those based on collaborative filtering, have exhibited robust performance by harnessing the advantages of big data. In these systems, the essence lies in identifying users whose interests closely align with a target user and subsequently recommending items that align with their preferences, showcasing commendable effectiveness in delivering personalized suggestions. Traditional recommender algorithms based on Graph Neural Networks (GNNs) face limitations as they can only handle regular topological graphs composed of a single type of node. However, in contemporary networks, data is often not exclusively comprised of a singular node type. Additionally, conventional GNNs are constrained to incorporating only first-order neighbor features of nodes, lacking the ability to capture deeper structural relationships within the network. Consequently, when dealing with sparse datasets where nodes have very few neighbors, the recommendation quality of algorithms based on traditional GNNs significantly diminishes. To address the aforementioned limitations, this paper proposes a deep recommendation model that combines Graph Neural Networks (GNNs) with heterogeneous networks. By integrating GNNs with heterogeneous network structures, the aim is to overcome the challenges posed by single-node type limitations and the inability to capture deeper structural relationships in traditional recommendation algorithms.</jats:p>",
             "DOI": "10.21203/rs.3.rs-3878298/v1",
+            "type": "posted-content",
             "title": [
               "Recommendation Model with Fusion of Heterogeneous Graph Neural Networks and Attention Mechanisms"
             ],
@@ -407,10 +387,48 @@
                   22
                 ]
               ]
-            },
-            "abstract": "<jats:title>Abstract</jats:title>\n        <jats:p>Traditional recommendation systems, particularly those based on collaborative filtering, have exhibited robust performance by harnessing the advantages of big data. In these systems, the essence lies in identifying users whose interests closely align with a target user and subsequently recommending items that align with their preferences, showcasing commendable effectiveness in delivering personalized suggestions. Traditional recommender algorithms based on Graph Neural Networks (GNNs) face limitations as they can only handle regular topological graphs composed of a single type of node. However, in contemporary networks, data is often not exclusively comprised of a singular node type. Additionally, conventional GNNs are constrained to incorporating only first-order neighbor features of nodes, lacking the ability to capture deeper structural relationships within the network. Consequently, when dealing with sparse datasets where nodes have very few neighbors, the recommendation quality of algorithms based on traditional GNNs significantly diminishes. To address the aforementioned limitations, this paper proposes a deep recommendation model that combines Graph Neural Networks (GNNs) with heterogeneous networks. By integrating GNNs with heterogeneous network structures, the aim is to overcome the challenges posed by single-node type limitations and the inability to capture deeper structural relationships in traditional recommendation algorithms.</jats:p>",
-            "type": "posted-content",
-            "publisher": "Research Square Platform LLC"
+            }
+          },
+          {
+            "publisher": "Japanese Neural Network Society",
+            "issue": "3",
+            "DOI": "10.3902/jnns.26.62",
+            "type": "journal-article",
+            "page": "62-71",
+            "title": [
+              "Neuronal Mechanisms Underlying Attention and Visual Search"
+            ],
+            "volume": "26",
+            "author": [
+              {
+                "given": "Tadashi",
+                "family": "Ogawa",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Institute for the Advanced Study of Human Biology (ASHBi), Kyoto University"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "The Brain &amp; Neural Networks"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2019,
+                  9,
+                  5
+                ]
+              ]
+            }
           },
           {
             "DOI": "10.31525/ct1-nct03948607",
@@ -582,48 +600,51 @@
                 ]
               ]
             },
+            "posted": {
+              "date-parts": [
+                [
+                  2024
+                ]
+              ]
+            },
             "type": "posted-content",
             "publisher": "Elsevier BV"
           },
           {
-            "DOI": "10.2139/ssrn.4520416",
+            "DOI": "10.1109/ijcnn55064.2022.9892274",
             "title": [
-              "An Efficient Forest Smoke Detection Approach Using Convolutional Neural Networks and Attention Mechanisms"
+              "Assessing the Impact of Attention and Self-Attention Mechanisms on the Classification of Skin Lesions"
             ],
             "author": [
               {
-                "given": "Quy  Quyen",
-                "family": "Hoang",
+                "given": "Rafael",
+                "family": "Pedro",
                 "sequence": "first",
-                "affiliation": [],
+                "affiliation": [
+                  {
+                    "name": "INESC-ID / Instituto Superior T&#x00E9;cnico,Lisbon,Portugal"
+                  }
+                ],
                 "role": [
                   {
-                    "role": "author",
-                    "vocabulary": "crossref"
+                    "vocabulary": "crossref",
+                    "role": "author"
                   }
                 ]
               },
               {
-                "given": "Quy  Lam",
-                "family": "Hoang",
+                "given": "Arlindo L.",
+                "family": "Oliveira",
                 "sequence": "additional",
-                "affiliation": [],
-                "role": [
+                "affiliation": [
                   {
-                    "role": "author",
-                    "vocabulary": "crossref"
+                    "name": "INESC-ID / Instituto Superior T&#x00E9;cnico,Lisbon,Portugal"
                   }
-                ]
-              },
-              {
-                "given": "Hoon",
-                "family": "Oh",
-                "sequence": "additional",
-                "affiliation": [],
+                ],
                 "role": [
                   {
-                    "role": "author",
-                    "vocabulary": "crossref"
+                    "vocabulary": "crossref",
+                    "role": "author"
                   }
                 ]
               }
@@ -631,12 +652,18 @@
             "issued": {
               "date-parts": [
                 [
-                  2023
+                  2022,
+                  7,
+                  18
                 ]
               ]
             },
-            "type": "posted-content",
-            "publisher": "Elsevier BV"
+            "container-title": [
+              "2022 International Joint Conference on Neural Networks (IJCNN)"
+            ],
+            "type": "proceedings-article",
+            "page": "1-8",
+            "publisher": "IEEE"
           }
         ],
         "items-per-page": 10,
@@ -650,7 +677,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-28T08:03:23.650Z",
+      "recordedAt": "2026-09-30T04:39:36.865Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

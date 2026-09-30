@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=Attention+Is+All+You+Need&rows=1&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "path": "/works?query=Attention+Is+All+You+Need&rows=1&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 1386272,
+        "total-results": 1389294,
         "items": [
           {
             "publisher": "Springer Nature Switzerland",
@@ -63,7 +63,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-28T05:26:48.315Z",
+      "recordedAt": "2026-09-30T04:39:36.865Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }
@@ -764,7 +764,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-28T05:26:48.315Z",
+      "recordedAt": "2026-09-30T04:39:36.865Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

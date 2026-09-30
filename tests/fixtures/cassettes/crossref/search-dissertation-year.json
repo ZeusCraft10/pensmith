@@ -1,0 +1,179 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=transformers+in+time-series+forecasting+patel&rows=3&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 4304323,
+        "items": [
+          {
+            "DOI": "10.31979/etd.tebp-5gr2",
+            "title": [
+              "Transformers in Time-Series Forecasting"
+            ],
+            "author": [
+              {
+                "given": "Kush",
+                "family": "Patel",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "approved": {
+              "date-parts": [
+                [
+                  2025,
+                  1,
+                  1
+                ]
+              ]
+            },
+            "type": "dissertation",
+            "publisher": "San Jose State University Library"
+          },
+          {
+            "publisher": "Apress",
+            "DOI": "10.1007/979-8-8688-1276-7_3",
+            "type": "book-chapter",
+            "page": "83-130",
+            "title": [
+              "Transformers for Time Series"
+            ],
+            "author": [
+              {
+                "given": "Banglore Vijay Kumar",
+                "family": "Vishwas",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Sri Ram",
+                "family": "Macharla",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Time Series Forecasting Using Generative AI"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025
+                ]
+              ]
+            },
+            "ISBN": [
+              "9798868812750",
+              "9798868812767"
+            ]
+          },
+          {
+            "DOI": "10.2139/ssrn.5403215",
+            "title": [
+              "Chronoshap: Revealing Temporal Patterns from Transformers and Ltsf-Linear Models in Time Series Forecasting"
+            ],
+            "author": [
+              {
+                "given": "Alberto",
+                "family": "Miño Calero",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Adil",
+                "family": "Rasheed",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Anastasios",
+                "family": "Lekkas",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025
+                ]
+              ]
+            },
+            "posted": {
+              "date-parts": [
+                [
+                  2025
+                ]
+              ]
+            },
+            "type": "posted-content",
+            "publisher": "Elsevier BV"
+          }
+        ],
+        "items-per-page": 3,
+        "query": {
+          "start-index": 0,
+          "search-terms": "transformers in time-series forecasting patel"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T04:39:36.865Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

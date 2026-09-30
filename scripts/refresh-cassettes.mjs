@@ -164,6 +164,10 @@ const QUERY_SETS = {
     // SRC-05 / SRC-12 (review round 2): registrar markup — an <i> in the title, an &amp; in the journal.
     { file: 'works-pnas-drosophila-coli', calls: [{ fn: 'lookupById', arg: '10.1073/pnas.74.11.5041' }] },
     { file: 'works-jaac-2010', calls: [{ fn: 'lookupById', arg: '10.1016/j.jaac.2010.05.017' }] },
+    // SRC-05 (merge review round 2): a dissertation whose `issued` is [[null]] — its year is
+    // the `approved` date, by DOI and in a search (the search selects `approved`).
+    { file: 'works-etd-tebp-5gr2', calls: [{ fn: 'lookupById', arg: '10.31979/etd.tebp-5gr2' }] },
+    { file: 'search-dissertation-year', calls: [{ fn: 'search', arg: 'transformers in time-series forecasting patel', limit: 3, minLimit: 1 }] },
     researchFrom2015(),
     ...titleSearches(),
     ...planResearch(),

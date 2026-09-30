@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=Attention+Is+All+You+Need&rows=5&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "path": "/works?query=Attention+Is+All+You+Need&rows=5&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 1386328,
+        "total-results": 1389294,
         "items": [
           {
             "publisher": "Springer Nature Switzerland",
@@ -52,7 +52,17 @@
             ]
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2024
+                ]
+              ]
+            },
+            "publisher": "Elsevier BV",
+            "abstract": "<jats:p>This study discusses the parameters that define the value of artificial intelligence (AI) tokens based on user interaction, their pricing mechanism, and their correlation with the predicted value thus evaluating AI token valuation based on user engagement, pricing, and website visits. This study tests hypotheses that examine the factors that influence the value of AI tokens. Using data from ten AI tokens, the study employs correlation and regression analyses to examine these relationships. The results show that monthly active users (MAU) and website visits significantly predict valuation, while pricing shows a marginal effect. This research provides insights for stakeholders in understanding economic factors affecting AI token values, emphasizing user engagement and pricing strategies.&amp;nbsp;</jats:p>",
             "DOI": "10.2139/ssrn.4993784",
+            "type": "posted-content",
             "title": [
               "Attention Is All You Need: An Analysis Of The Valuation Of Artificial Intelligence Tokens"
             ],
@@ -78,10 +88,7 @@
                   2024
                 ]
               ]
-            },
-            "abstract": "<jats:p>This study discusses the parameters that define the value of artificial intelligence (AI) tokens based on user interaction, their pricing mechanism, and their correlation with the predicted value thus evaluating AI token valuation based on user engagement, pricing, and website visits. This study tests hypotheses that examine the factors that influence the value of AI tokens. Using data from ten AI tokens, the study employs correlation and regression analyses to examine these relationships. The results show that monthly active users (MAU) and website visits significantly predict valuation, while pricing shows a marginal effect. This research provides insights for stakeholders in understanding economic factors affecting AI token values, emphasizing user engagement and pricing strategies.&amp;nbsp;</jats:p>",
-            "type": "posted-content",
-            "publisher": "Elsevier BV"
+            }
           },
           {
             "DOI": "10.2139/ssrn.5967774",
@@ -109,11 +116,52 @@
                 ]
               ]
             },
+            "posted": {
+              "date-parts": [
+                [
+                  2026
+                ]
+              ]
+            },
             "type": "posted-content",
             "publisher": "Elsevier BV"
           },
           {
+            "DOI": "10.1093/bib/bbag239",
+            "title": [
+              "Correction to: Attention is all you need: utilizing attention in AI-enabled drug discovery"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026,
+                  3,
+                  1
+                ]
+              ]
+            },
+            "container-title": [
+              "Briefings in Bioinformatics"
+            ],
+            "type": "journal-article",
+            "volume": "27",
+            "issue": "2",
+            "publisher": "Oxford University Press (OUP)"
+          },
+          {
+            "posted": {
+              "date-parts": [
+                [
+                  2026,
+                  9,
+                  4
+                ]
+              ]
+            },
+            "publisher": "Springer Science and Business Media LLC",
+            "abstract": "<title>Abstract</title>\n                <p>The O(N²) cost of self-attention is structural: N tokens require O(N²) computation and an O(N) cache  that grows with context. This work eliminates the cost: attention is computed between the current  token and a single persistent vector—the ocean state, the previous hidden state—so each step costs  O(1) in computation and memory. Only two repositionings to a standard Transformer: the ocean state,  and BPTT for the backward pass. The ocean state outperforms the standard Transformer, with a stable  training gain without exception, and at 10 million steps of context it shows no sign of forgetting.</p>",
             "DOI": "10.21203/rs.3.rs-10916252/v1",
+            "type": "posted-content",
             "title": [
               "One Vector Is All You Need for O(1) Self-Attention: The Ocean State"
             ],
@@ -143,32 +191,7 @@
                   4
                 ]
               ]
-            },
-            "abstract": "<title>Abstract</title>\n                <p>The O(N²) cost of self-attention is structural: N tokens require O(N²) computation and an O(N) cache  that grows with context. This work eliminates the cost: attention is computed between the current  token and a single persistent vector—the ocean state, the previous hidden state—so each step costs  O(1) in computation and memory. Only two repositionings to a standard Transformer: the ocean state,  and BPTT for the backward pass. The ocean state outperforms the standard Transformer, with a stable  training gain without exception, and at 10 million steps of context it shows no sign of forgetting.</p>",
-            "type": "posted-content",
-            "publisher": "Springer Science and Business Media LLC"
-          },
-          {
-            "DOI": "10.1093/bib/bbag239",
-            "title": [
-              "Correction to: Attention is all you need: utilizing attention in AI-enabled drug discovery"
-            ],
-            "issued": {
-              "date-parts": [
-                [
-                  2026,
-                  3,
-                  1
-                ]
-              ]
-            },
-            "container-title": [
-              "Briefings in Bioinformatics"
-            ],
-            "type": "journal-article",
-            "volume": "27",
-            "issue": "2",
-            "publisher": "Oxford University Press (OUP)"
+            }
           }
         ],
         "items-per-page": 5,
@@ -182,7 +205,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-28T08:03:23.650Z",
+      "recordedAt": "2026-09-30T04:39:36.865Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

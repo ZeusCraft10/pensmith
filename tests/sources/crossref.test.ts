@@ -104,6 +104,28 @@ test('SRC-05: a particle surname keeps its particle (van der Maaten 2013)', asyn
   assert.equal(c.citekey, 'vandermaaten2013');
 });
 
+test('SRC-05 (merge review round 2): a dissertation whose `issued` is [[null]] takes its year from `approved` — by DOI and in a search (recorded)', async () => {
+  const doi = '10.31979/etd.tebp-5gr2';
+  const [work] = recorded('crossref', 'works-etd-tebp-5gr2');
+  assert.match(JSON.stringify(work!.response), /"issued":\{"date-parts":\[\[null\]\]\}/, 'the recorded record has no issued year');
+  const c = await crossref.fetchById(doi);
+  assert.ok(c);
+  assert.equal(c.type, 'thesis');
+  assert.equal(c.year, 2025);
+  assert.equal(c.citekey, 'patel2025', 'never a …noyear key');
+  const [search] = recorded('crossref', 'search-dissertation-year');
+  assert.match(search!.path, /select=[^&]*approved/, 'the search selects approved');
+  const hits = await crossref.search('transformers in time-series forecasting patel', { limit: 3 });
+  const thesis = hits.find((h) => h.doi === doi);
+  assert.equal(thesis?.year, 2025);
+  assert.equal(thesis?.citekey, 'patel2025');
+  // The year resolver's order: issued, then the publication dates, then approved / posted.
+  const yearOf = (item: crossref.CrossrefItem): number | undefined => crossref.crossrefToCandidate({ DOI: '10.5555/y', title: ['T'], author: [{ family: 'A', given: 'B' }], ...item })?.year;
+  assert.equal(yearOf({ issued: { 'date-parts': [[2019]] }, approved: { 'date-parts': [[2020]] } }), 2019);
+  assert.equal(yearOf({ issued: { 'date-parts': [[null]] }, 'published-online': { 'date-parts': [[2018]] }, approved: { 'date-parts': [[2020]] } }), 2018);
+  assert.equal(yearOf({ issued: { 'date-parts': [[null]] }, posted: { 'date-parts': [[2021, 5]] } }), 2021);
+});
+
 test('crossref.lookupById() hydrates the recorded work for exactly that DOI (RSCH-04), any DOI spelling', async () => {
   const [entry] = recorded('crossref', 'works-nphys1170');
   const msg = (entry!.response as { message: Item }).message;
