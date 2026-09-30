@@ -15,6 +15,8 @@ import { join } from 'node:path';
 import { runPass1, retractionWarningLine, type Pass1Result } from '../bin/lib/verify/pass1.js';
 import { upsertSources } from '../bin/lib/library.js';
 import { liveLane, uniq } from './sources/three-way.js';
+import { sources } from '../bin/lib/sources/index.js';
+import { matchWork } from '../bin/lib/verify/name-match.js';
 
 function paper(bib: string): { root: string; bibPath: string } {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-pass1-registrars-'));
@@ -217,6 +219,101 @@ test('VRFY-14 (review round 2): a PDF whose ingested identity LIBRARY.json canno
   const [r] = await runPass1('A claim [@noauthor2021].\n', p.bibPath, { root: p.root });
   assert.equal(r?.verdict, 'UNVERIFIABLE-NETWORK', r?.reason);
   assert.doesNotMatch(r?.reason ?? '', /your own PDF/);
+});
+
+test('VRFY-14 (review round 3): OK-BYO also needs every identifier the entry carries to be the one recorded for the PDF — an edited or added DOI / PMID is MIS-CITED naming it', async () => {
+  const off = await byoPaper('offline2021', { doi: '10.5555/pensmith-byo-unrecorded', title: 'A Paper Whose Lookup Gets No Answer', authors: ['Offline, Olga'], year: 2021 });
+  const original = readFileSync(off.bibPath, 'utf8');
+  // The DOI edited after ingest: its lookup gets no answer offline, and the hash alone never passes it.
+  writeFileSync(off.bibPath, original.replace(/doi = \{[^}]*\}/, 'doi = {10.5555/an-invented-doi-nobody-registered}'));
+  const [doi] = await runPass1('A claim [@offline2021].\n', off.bibPath, { root: off.root });
+  assert.equal(doi?.verdict, 'MIS-CITED', doi?.reason);
+  assert.match(
+    doi?.reason ?? '',
+    /mismatch: the entry's DOI 10\.5555\/an-invented-doi-nobody-registered is not the DOI recorded for that work when you added it \(10\.5555\/pensmith-byo-unrecorded\); the registrar lookup got no answer/,
+  );
+  // The DOI's case is not an edit (DOIs compare normalized).
+  writeFileSync(off.bibPath, original.replace(/doi = \{[^}]*\}/, 'doi = {10.5555/PENSMITH-BYO-UNRECORDED}'));
+  const [same] = await runPass1('A claim [@offline2021].\n', off.bibPath, { root: off.root });
+  assert.equal(same?.verdict, 'OK-BYO', same?.reason);
+
+  // An identifier-less PDF: a PMID the entry adds that was never recorded (its PubMed lookup is not what decides).
+  const moss = await byoPaper('moss2019', { title: 'Field Notes on Moss Growth Beside the Old Mill Stream', authors: ['Moss, Mary'], year: 2019 });
+  const [clean] = await runPass1('A claim [@moss2019].\n', moss.bibPath, { root: moss.root });
+  assert.equal(clean?.verdict, 'OK-BYO', clean?.reason);
+  writeFileSync(moss.bibPath, readFileSync(moss.bibPath, 'utf8').replace(/title = \{/, 'isbn = {9780226458083},\n  title = {'));
+  const [isbn] = await runPass1('A claim [@moss2019].\n', moss.bibPath, { root: moss.root });
+  assert.notEqual(isbn?.verdict, 'OK-BYO', `an added ISBN is checked at its registrar, never passed on the PDF: ${isbn?.reason}`);
+});
+
+test('VRFY-11 (review round 3): a DOI Crossref has no record of yet is checked through the entry\'s PMID — OK when PubMed\'s record lists that DOI, MIS-CITED when it lists another; FABRICATED only when the PMID is unknown too', async () => {
+  // Tang et al. 2026: PubMed listed the DOI the day Crossref still answered 404 (synthetic/crossref/works-jadohealth-unregistered-404).
+  const tang = String.raw`@article{tang2026, author = {Tang, A. and Leung, C. and Prasad, R.}, title = {Longitudinal Relations Among Adolescents' Cognitive Control, Social Media Use, Anxiety, and Depressive Symptoms}, journal = {J Adolesc Health}, year = {2026}, doi = {10.1016/j.jadohealth.2026.07.025}, pmid = {42814079}}`;
+  const ok = await one(`${tang}\n`, 'tang2026');
+  assert.equal(ok.verdict, 'OK', ok.reason);
+  assert.match(ok.reason, /^PMID 42814079 re-fetched from PubMed, whose record lists the entry's DOI 10\.1016\/j\.jadohealth\.2026\.07\.025 \(Crossref has no record of it yet — re-verify later to check it there\); D-11 AND-gate passed \(year 2026\)$/);
+  // The same DOI next to another article's PMID: that record lists another DOI.
+  const other = await one(`${tang.replace('42814079', '42706103').replace('Longitudinal Relations Among Adolescents\' Cognitive Control, Social Media Use, Anxiety, and Depressive Symptoms', 'Some other title')}\n`, 'tang2026');
+  assert.equal(other.verdict, 'MIS-CITED', other.reason);
+  assert.match(other.reason, /^the entry's DOI 10\.1016\/j\.jadohealth\.2026\.07\.025 is not the DOI PubMed's record of PMID 42706103 lists \(10\.3760\/cma\.j\.cn441530-20260508-00189-1\)/);
+  // A DOI no registrar minted with a real work's PMID (Crossref's test prefix, a definitive 404): MIS-CITED on the DOI, never OK.
+  const fake = await one(`${tang.replace('10.1016/j.jadohealth.2026.07.025', '10.5555/pensmith-no-such-work-2017')}\n`, 'tang2026');
+  assert.equal(fake.verdict, 'MIS-CITED', fake.reason);
+  assert.match(fake.reason, /is not the DOI PubMed's record of PMID 42814079 lists \(10\.1016\/j\.jadohealth\.2026\.07\.025\)/);
+  // No other identifier: FABRICATED, as before.
+  const bare = await one('@article{nopmid2017, author = {Nobody, N.}, title = {A Work}, year = {2017}, doi = {10.5555/pensmith-no-such-work-2017}}\n', 'nopmid2017');
+  assert.equal(bare.verdict, 'FABRICATED', bare.reason);
+});
+
+test('VRFY-11 (review round 3): a DOI of an agency with no readable record (ISTIC) passes on a fallback PMID only when that record lists the same DOI — a fabricated suffix under the real prefix is MIS-CITED', async () => {
+  const zou = String.raw`@article{zou2026, author = {Zou, H.}, title = {Placeholder}, year = {2026}, doi = {10.3760/cma.j.fabricated-0000}, pmid = {42706103}}`;
+  const esum = JSON.parse(readFileSync(join('tests', 'fixtures', 'cassettes', 'pubmed', 'esummary-42706103.json'), 'utf8')) as Array<{ response: { result: Record<string, { title: string; authors: Array<{ name: string }>; pubdate: string }> } }>;
+  const rec = esum[0]!.response.result['42706103']!;
+  const entry = zou.replace('{Placeholder}', `{${rec.title.replace(/\.$/, '')}}`).replace('{Zou, H.}', `{${rec.authors[0]!.name}}`);
+  const r = await one(`${entry}\n`, 'zou2026');
+  assert.equal(r.verdict, 'MIS-CITED', r.reason);
+  assert.match(r.reason, /the entry's DOI 10\.3760\/cma\.j\.fabricated-0000 is not the DOI PubMed's record of PMID 42706103 lists \(10\.3760\/cma\.j\.cn441530-20260508-00189-1\)/);
+});
+
+test('VRFY-11 (review round 3, MockAgent): a fallback record that lists no DOI — doi.org must hold the handle of the entry\'s DOI: 404 is FABRICATED, a redirect passes, no answer is UNVERIFIABLE-NETWORK', async () => {
+  const esum = JSON.parse(readFileSync(join('tests', 'fixtures', 'cassettes', 'pubmed', 'esummary-42706103.json'), 'utf8')) as Array<{ response: { result: Record<string, Record<string, unknown>> } }>;
+  const base = esum[0]!.response.result['42706103']!;
+  const title = String(base['title']).replace(/\.$/, '');
+  const author = (base['authors'] as Array<{ name: string }>)[0]!.name;
+  for (const [label, handle, want] of [
+    ['404', 404, 'FABRICATED'],
+    ['redirect', 302, 'OK'],
+    ['no answer', null, 'UNVERIFIABLE-NETWORK'],
+  ] as const) {
+    await liveLane(async (agent) => {
+      const prefix = `10.${88000 + Math.floor(Math.random() * 9000)}`;
+      const doi = `${prefix}/${uniq('noread')}`;
+      const pmid = String(900000000 + Math.floor(Math.random() * 99999999));
+      agent.get('https://api.crossref.org').intercept({ path: (p: string) => decodeURIComponent(p) === `/works/${doi}`, method: 'GET' }).reply(404, 'Resource not found.', { headers: { 'content-type': 'text/plain' } });
+      const doiOrg = agent.get('https://doi.org');
+      doiOrg.intercept({ path: `/ra/${prefix}`, method: 'GET' }).reply(200, [{ DOI: prefix, RA: 'ISTIC' }], JSON_HEADERS);
+      if (handle !== null) doiOrg.intercept({ path: `/${doi}`, method: 'HEAD' }).reply(handle, '', handle === 302 ? { headers: { location: 'https://publisher.example/landing' } } : {});
+      const articleids = [{ idtype: 'pubmed', idtypen: 1, value: pmid }];
+      const body = { header: { type: 'esummary', version: '0.3' }, result: { uids: [pmid], [pmid]: { ...base, uid: pmid, articleids } } };
+      agent.get('https://eutils.ncbi.nlm.nih.gov').intercept({ path: (p: string) => p.startsWith('/entrez/eutils/esummary.fcgi') && p.includes(`id=${pmid}`), method: 'GET' }).reply(200, body, JSON_HEADERS);
+      const r = await one(`@article{nodoi2026, author = {${author}}, title = {${title}}, year = {2026}, doi = {${doi}}, pmid = {${pmid}}}\n`, 'nodoi2026');
+      assert.equal(r.verdict, want, `${label}: ${r.reason}`);
+      if (want === 'FABRICATED') assert.match(r.reason, /is not registered at doi\.org \(its handle answers 404\)/);
+      if (want === 'UNVERIFIABLE-NETWORK') assert.match(r.reason, /doi\.org's handle check of .* got no answer/);
+    });
+  }
+});
+
+test('VRFY-13 (review round 3): the published title of a work whose Crossref title splits "EBA-Net" across JATS markup matches the record Pass 1 reads (the recorded answer for 10.1111/jpy.70240)', async () => {
+  const res = await sources.crossref.lookupById('10.1111/jpy.70240');
+  assert.equal(res.kind, 'found');
+  if (res.kind !== 'found') return;
+  const m = matchWork(
+    { title: 'EBA-Net: A hybrid EfficientNetB3-BiLSTM-Attention model for species-level diatom classification', authors: ['Balo Utku, Esen Damla', 'Kutlu, Banu'], year: 2026 },
+    res.candidate,
+  );
+  assert.equal(m.ok, true, `${res.candidate.title}: ${m.detail}`);
+  assert.ok(m.titleJW >= 0.99, `titleJW ${m.titleJW}`);
 });
 
 test('VRFY-14: a forged alternate DOI in LIBRARY.json pointing at a real work never makes a fabricated primary DOI pass', async () => {

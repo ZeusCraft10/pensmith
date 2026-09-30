@@ -5,13 +5,15 @@
 // arXiv id, PMID or ISBN at their own registrars — one predicate shared with
 // Pass 1 (verify/pass1-identifiers.ts, review round 1 of the Phase 18/19
 // merge). Withheld: retracted, synthetic outside a dry run, and no identifier
-// at all. Since Phase 20 (VRFY-11) a Zenodo / figshare / Dryad DataCite DOI is
+// at all (unless the entry is the user's own PDF with a recorded title and
+// author: OK-BYO, review round 3). Since Phase 20 (VRFY-11) a Zenodo / figshare / Dryad DataCite DOI is
 // checked at DataCite, so it is offered like any other DOI.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   NO_IDENTIFIER_REASON,
+  RETRACTED_REASON,
   SYNTHETIC_REASON,
   describeExcluded,
   partitionCheckable,
@@ -55,6 +57,21 @@ test('D-18-37 (review round 2): a DOI research learned is registered with an age
   for (const a of CONTENT_NEGOTIATION_AGENCIES) assert.ok(READABLE_AGENCIES.has(a.toLowerCase()), a);
   // A failed lookup's reason (or none) names no agency: offered.
   assert.equal(verifierBlindSpot({ doi: '10.3760/x', retraction_details: null }, false), null);
+});
+
+test('VRFY-14 (review round 3): the user\'s own PDF with no identifier is checkable (Pass 1 passes it as OK-BYO) when LIBRARY.json records its title and an author; an asserted PDF or a record with no title or author stays withheld', () => {
+  const byo = { file: 'sources/quill.pdf', sha256: 'a'.repeat(64), text_sha256: null, asserted: false };
+  const own = { doi: null, arxiv: null, pmid: null, isbn: null, byo, title: 'Field Notes on Quills', authors: ['Feather, Quill'] };
+  assert.equal(verifierBlindSpot(own, false), null, 'OK-BYO: Pass 1 checks the entry against the ingested record');
+  assert.equal(verifierBlindSpot({ ...own, authors: [], editors: ['Editor, Ed'] }, false), null, 'an editor-only record');
+  assert.equal(verifierBlindSpot({ ...own, byo: { ...byo, asserted: true } }, false), NO_IDENTIFIER_REASON, 'attached at the user\'s word: never evidence');
+  assert.equal(verifierBlindSpot({ ...own, title: null }, false), NO_IDENTIFIER_REASON, 'no recorded title: nothing to compare');
+  assert.equal(verifierBlindSpot({ ...own, authors: [] }, false), NO_IDENTIFIER_REASON, 'no recorded author or editor');
+  assert.equal(verifierBlindSpot({ ...own, byo: null }, false), NO_IDENTIFIER_REASON, 'no own PDF');
+  assert.equal(verifierBlindSpot({ ...own, retracted: true }, false), RETRACTED_REASON, 'retracted stays withheld');
+  const { checkable, excluded } = partitionCheckable([{ citekey: 'quill2017', ...own }, { citekey: 'notes2021', doi: null }], false);
+  assert.deepEqual(checkable.map((e) => e.citekey), ['quill2017']);
+  assert.deepEqual(excluded, [{ citekey: 'notes2021', reason: NO_IDENTIFIER_REASON }]);
 });
 
 test('GRND-18: the route Pass 1 takes is the one shared predicate', () => {

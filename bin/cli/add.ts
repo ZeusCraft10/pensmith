@@ -246,14 +246,16 @@ function resolveOne(
  */
 async function remapStep(
   paperRoot: string,
-  entry: Pick<LibraryEntry, 'citekey' | 'title' | 'abstract'> & Partial<Pick<LibraryEntry, 'doi' | 'arxiv' | 'pmid' | 'isbn' | 'retracted' | 'synthetic'>>,
+  entry: Pick<LibraryEntry, 'citekey' | 'title' | 'abstract'> &
+    Partial<Pick<LibraryEntry, 'doi' | 'arxiv' | 'pmid' | 'isbn' | 'retracted' | 'synthetic' | 'byo' | 'authors' | 'editors'>>,
   args: { remap: boolean; one: { n: number; suffix?: string | undefined; slug: string } | null; yolo: boolean },
 ): Promise<{ remapped: string[]; refused?: boolean }> {
   const key = entry.citekey;
   // D-18-37: a section is only ever given a source the citation verifier can
   // check (source-context.ts verifierBlindSpot — the outline and planner's
   // rule): a retracted work always fails Pass 1, so mapping it would only
-  // strand the section. It stays in the library, unmapped.
+  // strand the section. It stays in the library, unmapped. (The user's own PDF
+  // no registrar knows is checkable: Pass 1 passes it as OK-BYO.)
   // (Only a library entry is judged: the bare-key fallback carries no identifiers.)
   const blind = 'doi' in entry ? verifierBlindSpot(entry, networkMode().dryRun) : null;
   if (blind !== null) {

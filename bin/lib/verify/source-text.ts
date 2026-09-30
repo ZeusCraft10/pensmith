@@ -8,8 +8,10 @@
 //      best first, de-duplicated; sources/unpaywall.ts lookupOaPdfUrls) —
 //      the DOI Pass 1 verified binds the copy to the work;
 //   2. the Europe PMC open-access full text of its PMCID (sources/
-//      europepmc.ts), used only when the article names the DOI or PMID of the
-//      citation (a PMCID in a local file never lends another article's text);
+//      europepmc.ts), used only when the article names the identifier Pass 1
+//      verified — the citation's DOI, or the PMID of a citation with no DOI or
+//      arXiv id (a PMCID or a PMID in a local file never lends another
+//      article's text; review round 3);
 //   3. the arXiv PDF of its arXiv id, derived from the id (never a stored
 //      URL, S-17). When the arXiv id is not what Pass 1 checks (the entry also
 //      has a registrar DOI), the PDF counts only when it shows the entry's
@@ -447,13 +449,18 @@ export async function* sourceTextAttempts(id: SourceIdentity, opts: SourceTextOp
   const pmcid = id.pmcid !== null ? normPmcid(id.pmcid) : null;
   if (pmcid !== null) {
     routes += 1;
-    if (doi === null && id.pmid === null) {
-      yield { kind: 'no-text', reason: `the PMCID ${pmcid} is not tied to a DOI or PMID pensmith verifies, so its Europe PMC text is not used` };
+    // The article must name the identifier Pass 1 verified (review round 3):
+    // the entry's DOI when it has one (its PMID is then never checked), else
+    // the PMID of an entry with no DOI or arXiv id, which Pass 1 checks at PubMed.
+    const bindDoi = id.doi !== null ? (normalizeDoi(id.doi) ?? id.doi.toLowerCase()) : null;
+    const bindPmid = id.doi === null && id.arxiv === null ? id.pmid : null;
+    if (bindDoi === null && bindPmid === null) {
+      yield { kind: 'no-text', reason: `the PMCID ${pmcid} is not tied to the identifier Pass 1 verifies (a DOI, or the PMID of an entry with no DOI or arXiv id), so its Europe PMC text is not used` };
     } else {
       const r = await memoized(`europepmc|${pmcid}`, fresh, () => europePmcText(pmcid, opts));
       if (r.attempt.kind === 'text') {
         const ids = r.ids;
-        const same = ids !== null && ((doi !== null && ids.doi === doi) || (id.pmid !== null && ids.pmid === id.pmid));
+        const same = ids !== null && (bindDoi !== null ? ids.doi === bindDoi : ids.pmid === bindPmid);
         yield same
           ? r.attempt
           : {

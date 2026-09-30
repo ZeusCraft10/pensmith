@@ -14,6 +14,8 @@ import {
   foldText,
   mainTitle,
   isCorporateAuthor,
+  isConsortiumName,
+  CONSORTIUM_MIN_RECORD_AUTHORS,
   matchWork,
   surnameForms,
   titleForms,
@@ -213,4 +215,49 @@ test('VRFY-13 (review round 2): a consortium cited as the journal prints it — 
   assert.equal(matchWork({ title: 'A title', authors: ['Nobody, Nora'], year: 2012 }, { title: 'A title', authors: persons, year: 2012 }).ok, false, 'a person\'s name never passes by title');
   assert.equal(isCorporateAuthor('{The ENCODE Project Consortium}'), true);
   assert.equal(isCorporateAuthor('Smith, John'), false);
+});
+
+test('VRFY-13 (review round 3): a braced personal name or a looser group word is not a consortium — against a record of persons the first-author check stays', () => {
+  // LeCun 2015 (three authors) and Aspelmeyer 2009 (one author): the right title and year, a wrong author.
+  const lecun = { title: 'Deep learning', authors: ['LeCun, Yann', 'Bengio, Yoshua', 'Hinton, Geoffrey'], year: 2015 };
+  const aspelmeyer = { title: 'Quantum mechanics: The Uncertainty Principle for Mirrors', authors: ['Aspelmeyer, Markus'], year: 2009 };
+  for (const [who, record] of [
+    ['{Stanford Deep Learning Reading Group}', lecun],
+    ['{Anyone}', lecun],
+    ['Nobody Study Team', aspelmeyer],
+    ['{Nobody Study Team}', aspelmeyer],
+    ['{The Mirror Project}', aspelmeyer],
+  ] as const) {
+    const m = matchWork({ title: record.title, authors: [who], year: record.year }, record);
+    assert.equal(m.ok, false, `${who}: ${m.detail}`);
+    assert.deepEqual(m.failing, ['first author'], who);
+  }
+  // A consortium's shape against a record of a few people: not a consortium paper.
+  const few = matchWork({ title: 'Deep learning', authors: ['{CMS Collaboration}'], year: 2015 }, lecun);
+  assert.deepEqual(few.failing, ['first author'], 'three people are not a consortium\'s membership list');
+  const persons = Array.from({ length: CONSORTIUM_MIN_RECORD_AUTHORS }, (_, i) => `Person${i}, A.`);
+  assert.equal(matchWork({ title: 'Deep learning', authors: ['{CMS Collaboration}'], year: 2015 }, { ...lecun, authors: persons }).ok, true, 'a membership list');
+  assert.equal(matchWork({ title: 'Deep learning', authors: ['{Stanford Study Group}'], year: 2015 }, { ...lecun, authors: persons }).ok, false, 'a looser group word never waives the check');
+  for (const name of ['CMS Collaboration', '{GBD 2019 Diseases and Injuries Collaborators}', 'The RECOVERY Collaborative Group', 'Investigators, SPRINT Research', '{1000 Genomes Project Consortium}']) {
+    assert.equal(isConsortiumName(name), true, name);
+  }
+  for (const name of ['{Anyone}', 'Nobody Study Team', '{The Mirror Project}', 'Smith, John', '{World Health Organization}']) {
+    assert.equal(isConsortiumName(name), false, name);
+  }
+});
+
+test('VRFY-13 (review round 3): a registrar title whose markup splits a hyphenated compound ("EBA ‐Net", Crossref JATS) matches the title as published', () => {
+  const record = {
+    title:
+      '<scp>EBA</scp>\n                    ‐Net: A hybrid\n                    <scp>EfficientNetB3</scp>\n                    ‐\n                    <scp>BiLSTM</scp>\n                    ‐Attention model for species‐level diatom classification',
+    authors: ['Balo Utku, Esen Damla', 'Kutlu, Banu', 'Utku, Anil'],
+    year: 2026,
+  };
+  const m = matchWork({ title: 'EBA-Net: A hybrid EfficientNetB3-BiLSTM-Attention model for species-level diatom classification', authors: ['Balo Utku, Esen Damla'], year: 2026 }, record);
+  assert.equal(m.ok, true, m.detail);
+  assert.ok(m.titleJW >= 0.99, `titleJW ${m.titleJW}`);
+  assert.equal(foldText('Input / Output'), foldText('Input/Output'));
+  assert.equal(foldText('EBA ‐Net'), 'eba-net');
+  // A different title still differs.
+  assert.equal(matchWork({ title: 'EBA-Net: A convolutional model for diatom segmentation', authors: ['Balo Utku, Esen Damla'], year: 2026 }, record).ok, false);
 });

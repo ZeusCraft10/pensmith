@@ -1,0 +1,464 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1111%2Fjpy.70240",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              19
+            ]
+          ],
+          "date-time": "2026-09-19T07:19:34Z",
+          "timestamp": 1789802374202,
+          "version": "4.0.1"
+        },
+        "reference-count": 36,
+        "publisher": "Wiley",
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2026,
+                  9,
+                  18
+                ]
+              ],
+              "date-time": "2026-09-18T00:00:00Z",
+              "timestamp": 1789689600000
+            },
+            "content-version": "vor",
+            "delay-in-days": 0,
+            "URL": "http://onlinelibrary.wiley.com/termsAndConditions#vor"
+          },
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2026,
+                  9,
+                  18
+                ]
+              ],
+              "date-time": "2026-09-18T00:00:00Z",
+              "timestamp": 1789689600000
+            },
+            "content-version": "tdm",
+            "delay-in-days": 0,
+            "URL": "http://doi.wiley.com/10.1002/tdm_license_1.1"
+          }
+        ],
+        "content-domain": {
+          "domain": [
+            "onlinelibrary.wiley.com"
+          ],
+          "crossmark-restriction": true
+        },
+        "short-container-title": [
+          "Journal of Phycology"
+        ],
+        "abstract": "<jats:title>Abstract</jats:title>\n                  <jats:p>Species identification in diatoms is important for assessing water bodies, determining environmental quality, and analyzing biodiversity. Nonetheless, diatom classification has proven difficult due to intra‐class variation, interclass similarity, and data imbalance in microscopic images. In this regard, we propose a new deep learning approach for species‐level diatom classification. Various deep learning models, including traditional convolutional neural networks or CNNs (ResNet50, DenseNet121), state‐of‐the‐art CNNs (EfficientNetB3, Xception, MobileNetV3), transformer‐based architectures (ViT‐B16, Swin‐Tiny), and our proposed EBA‐Net (EfficientNetB3‐BiLSTM‐Attention Network), were extensively compared under identical experimental settings. The EBA‐Net integrates the advantages of convolutional feature extraction, sequence modeling, and an attention mechanism to improve classification accuracy. It first uses the EfficientNetB3 model as the backbone network to obtain higher‐level features, followed by a BiLSTM layer to capture dependencies among the extracted features. Then, it applies the attention mechanism to the BiLSTM output to highlight the most informative features. Experimental results showed that the proposed EBA‐Net model outperforms other models considered in the study, yielding 95.8% accuracy and 85.1% macro F1‐score. In addition, Top‐3 (98.9%) and Top‐5 (99.6%) accuracies confirmed the efficiency of the proposed model for classifying objects from visually similar classes. An analysis of the model's interpretability was conducted using Gradient‐weighted Class Activation Mapping, showing that the proposed model's attention is concentrated on relevant morphological features of diatoms. To the best of our knowledge, the suggested approach achieves state‐of‐the‐art accuracy on the data set of diatoms used.</jats:p>",
+        "DOI": "10.1111/jpy.70240",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              19
+            ]
+          ],
+          "date-time": "2026-09-19T06:28:48Z",
+          "timestamp": 1789799328000
+        },
+        "update-policy": "https://doi.org/10.1002/crossmark_policy",
+        "source": "Crossref",
+        "is-referenced-by-count": 0,
+        "title": [
+          "<scp>EBA</scp>\n                    ‐Net: A hybrid\n                    <scp>EfficientNetB3</scp>\n                    ‐\n                    <scp>BiLSTM</scp>\n                    ‐Attention model for species‐level diatom classification"
+        ],
+        "prefix": "10.1111",
+        "author": [
+          {
+            "given": "Esen Damla",
+            "family": "Balo Utku",
+            "sequence": "first",
+            "affiliation": [
+              {
+                "name": "Department of Fisheries, Graduate Education Institute Munzur University  Tunceli Turkey"
+              }
+            ],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Banu",
+            "family": "Kutlu",
+            "sequence": "additional",
+            "affiliation": [
+              {
+                "name": "Department of Basic Sciences, Faculty of Fisheries Munzur University  Tunceli Turkey"
+              }
+            ],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "ORCID": "https://orcid.org/0000-0002-7240-8713",
+            "authenticated-orcid": false,
+            "given": "Anil",
+            "family": "Utku",
+            "sequence": "additional",
+            "affiliation": [
+              {
+                "name": "Department of Computer Engineering, Faculty of Engineering Munzur University  Tunceli Turkey"
+              }
+            ],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "311",
+        "published-online": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              18
+            ]
+          ]
+        },
+        "reference": [
+          {
+            "key": "e_1_2_13_2_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/s10531-025-03218-3"
+          },
+          {
+            "key": "e_1_2_13_3_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1038/s41598-025-07561-x"
+          },
+          {
+            "key": "e_1_2_13_4_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1039/D1EM00258A"
+          },
+          {
+            "key": "e_1_2_13_5_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/s10750-022-04984-9"
+          },
+          {
+            "key": "e_1_2_13_6_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/s10531-021-02339-9"
+          },
+          {
+            "key": "e_1_2_13_7_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1186/s13040-023-00322-4"
+          },
+          {
+            "key": "e_1_2_13_8_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1109/ACCESS.2021.3084050"
+          },
+          {
+            "key": "e_1_2_13_9_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/s10661-022-10383-3"
+          },
+          {
+            "key": "e_1_2_13_10_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1109/TNNLS.2022.3175068"
+          },
+          {
+            "key": "e_1_2_13_11_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/s10462-024-10745-y"
+          },
+          {
+            "key": "e_1_2_13_12_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.3390/jmse13061095"
+          },
+          {
+            "key": "e_1_2_13_13_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.7717/peerj-cs.1970"
+          },
+          {
+            "key": "e_1_2_13_14_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.55730/1300-0632.3938"
+          },
+          {
+            "key": "e_1_2_13_15_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/j.marmicro.2025.102519"
+          },
+          {
+            "key": "e_1_2_13_16_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.63125/feed1x52"
+          },
+          {
+            "key": "e_1_2_13_17_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/s10462-020-09825-6"
+          },
+          {
+            "key": "e_1_2_13_18_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1145/3505244"
+          },
+          {
+            "key": "e_1_2_13_19_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1371/journal.pone.0272103"
+          },
+          {
+            "key": "e_1_2_13_20_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1038/s41598-020-71165-w"
+          },
+          {
+            "key": "e_1_2_13_21_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/s11831-022-09858-w"
+          },
+          {
+            "key": "e_1_2_13_22_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.3390/jmse12101862"
+          },
+          {
+            "key": "e_1_2_13_23_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/j.ijepes.2021.107818"
+          },
+          {
+            "key": "e_1_2_13_24_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/j.tifs.2021.04.042"
+          },
+          {
+            "key": "e_1_2_13_25_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/s12551-022-00949-3"
+          },
+          {
+            "key": "e_1_2_13_26_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.3390/s20216353"
+          },
+          {
+            "key": "e_1_2_13_27_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/j.algal.2021.102256"
+          },
+          {
+            "key": "e_1_2_13_28_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1038/s41467-025-58027-7"
+          },
+          {
+            "key": "e_1_2_13_29_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1111/jpy.13390"
+          },
+          {
+            "key": "e_1_2_13_30_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1007/s10811-022-02735-w"
+          },
+          {
+            "key": "e_1_2_13_31_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/j.micron.2023.103506"
+          },
+          {
+            "key": "e_1_2_13_32_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/j.algal.2021.102568"
+          },
+          {
+            "key": "e_1_2_13_33_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/j.marpolbul.2024.116616"
+          },
+          {
+            "key": "e_1_2_13_34_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1186/s40537-025-01313-4"
+          },
+          {
+            "key": "e_1_2_13_35_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/j.compbiomed.2024.108248"
+          },
+          {
+            "key": "e_1_2_13_36_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1016/j.isci.2025.112236"
+          },
+          {
+            "key": "e_1_2_13_37_1",
+            "doi-asserted-by": "publisher",
+            "DOI": "10.1093/gigascience/giae087"
+          }
+        ],
+        "container-title": [
+          "Journal of Phycology"
+        ],
+        "original-title": [],
+        "language": "en",
+        "link": [
+          {
+            "URL": "https://onlinelibrary.wiley.com/doi/pdf/10.1111/jpy.70240",
+            "content-type": "application/pdf",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://onlinelibrary.wiley.com/doi/full-xml/10.1111/jpy.70240",
+            "content-type": "application/xml",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://onlinelibrary.wiley.com/doi/pdf/10.1111/jpy.70240",
+            "content-type": "unspecified",
+            "content-version": "vor",
+            "intended-application": "similarity-checking"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              19
+            ]
+          ],
+          "date-time": "2026-09-19T06:28:49Z",
+          "timestamp": 1789799329000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://onlinelibrary.wiley.com/doi/10.1111/jpy.70240"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              18
+            ]
+          ]
+        },
+        "references-count": 36,
+        "alternative-id": [
+          "10.1111/jpy.70240"
+        ],
+        "URL": "https://doi.org/10.1111/jpy.70240",
+        "archive": [
+          "Portico"
+        ],
+        "relation": {},
+        "ISSN": [
+          "0022-3646",
+          "1529-8817"
+        ],
+        "issn-type": [
+          {
+            "value": "0022-3646",
+            "type": "print"
+          },
+          {
+            "value": "1529-8817",
+            "type": "electronic"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              18
+            ]
+          ]
+        },
+        "assertion": [
+          {
+            "value": "2026-06-03",
+            "order": 0,
+            "name": "received",
+            "label": "Received",
+            "group": {
+              "name": "publication_history",
+              "label": "Publication History"
+            }
+          },
+          {
+            "value": "2026-07-28",
+            "order": 2,
+            "name": "accepted",
+            "label": "Accepted",
+            "group": {
+              "name": "publication_history",
+              "label": "Publication History"
+            }
+          },
+          {
+            "value": "2026-09-18",
+            "order": 3,
+            "name": "published",
+            "label": "Published",
+            "group": {
+              "name": "publication_history",
+              "label": "Publication History"
+            }
+          }
+        ],
+        "article-number": "jpy.70240"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T20:45:13.311Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

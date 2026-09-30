@@ -227,6 +227,11 @@ const QUERY_SETS = {
     { file: 'works-cbo9780511804441', calls: [{ fn: 'lookupById', arg: VRFY11_CROSSREF_BOOK_DOI }] },
     { file: 'works-miccai-2015-part3', calls: [{ fn: 'lookupById', arg: VRFY11_EDITED_VOLUME_DOI }] },
     { file: 'works-esl-2009', calls: [{ fn: 'lookupById', arg: ESL_DOI }] },
+    // VRFY-13 (review round 3): the live self-consistency lane's two false blocks —
+    // a JATS title that splits "EBA-Net" across <scp> markup ("EBA ‐Net"), and a work
+    // Semantic Scholar lists with another first author than Crossref's record.
+    { file: 'works-jpy-70240', calls: [{ fn: 'lookupById', arg: '10.1111/jpy.70240' }] },
+    { file: 'works-ijsra-2025-0980', calls: [{ fn: 'lookupById', arg: '10.30574/ijsra.2025.15.1.0980' }] },
     // Crossref's 404 for DOIs other agencies registered (DataCite, mEDRA, JaLC) and a fake DataCite-prefix DOI.
     { file: 'works-other-agency-404', calls: [VRFY11_ZENODO_DOI, DATACITE_FAKE_DOI, MEDRA_DOI, JALC_DOI].map((arg) => ({ fn: 'lookupById', arg })) },
     // VRFY-29: every fabricated DOI of tests/fixtures/known-bad-citations.json — Crossref's 404.
@@ -287,6 +292,11 @@ const QUERY_SETS = {
     // answer is over the cassette cap (its collaborator list and references),
     // so only the Pass-1 esummary is recorded.
     { file: 'esummary-31535829', calls: [{ fn: 'lookupById', arg: VRFY11_PMID, opts: { abstract: false } }] },
+    // VRFY-11 (review round 3): a PubMed article listing a DOI Crossref had no record of
+    // yet (Tang et al. 2026, published online the day it was cited). Pass 1 checks the
+    // PMID and PubMed's own DOI for it instead of calling the work FABRICATED; the
+    // Crossref 404 of that day is the hand-kept synthetic/crossref/works-jadohealth-unregistered-404.
+    { file: 'esummary-42814079', calls: [{ fn: 'lookupById', arg: '42814079', opts: { abstract: false } }] },
     // VRFY-12: Pass 1's PubMed title-and-author search for an identifier-less entry of no work.
     { file: 'search-metadata-no-match', calls: [{ fn: 'search', arg: METADATA_SEARCH_PUBMED_NO_MATCH, limit: METADATA_SEARCH_ROWS, minLimit: METADATA_SEARCH_ROWS }] },
     researchFrom2015(),

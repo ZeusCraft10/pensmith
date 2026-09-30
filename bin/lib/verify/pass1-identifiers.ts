@@ -16,7 +16,9 @@
 //     (the books registries), in that order.
 // An entry with none of these is checked only by a metadata search (VRFY-12),
 // which may find no strict match: the outline and the planner are not offered
-// it (NO_IDENTIFIER_REASON). Nor a DOI research learned is registered with an
+// it (NO_IDENTIFIER_REASON) — unless it is the user's own PDF with a recorded
+// title and author (byoCheckable): Pass 1 then checks the entry against that
+// record, OK-BYO (VRFY-14, review round 3). Nor a DOI research learned is registered with an
 // agency that serves no readable record (ISTIC, CNKI, the EU Publications
 // Office, …) when the entry has no other identifier (review round 2).
 //
@@ -55,6 +57,30 @@ export interface CitationIdentifiers {
    * UNVERIFIABLE is not offered (review round 2).
    */
   readonly registrationAgency?: string | null | undefined;
+  /**
+   * The entry is the user's own hash-recorded PDF (not attached at the user's
+   * word alone) and LIBRARY.json records the title and an author or editor of
+   * the work it was identified as: Pass 1 checks an entry with no identifier
+   * against that record (OK-BYO, VRFY-14) — see byoCheckable.
+   */
+  readonly byoIdentity?: boolean | undefined;
+}
+
+/**
+ * True when Pass 1 can check an entry against the user's own PDF (OK-BYO):
+ * a bring-your-own record that is not `asserted`, with the ingested work's
+ * title and an author or editor (review round 3 — the same preconditions as
+ * pass1.ts byoIdentity).
+ */
+export function byoCheckable(entry: {
+  readonly byo?: { readonly asserted?: boolean | undefined } | null | undefined;
+  readonly title?: string | null | undefined;
+  readonly authors?: readonly string[] | null | undefined;
+  readonly editors?: readonly string[] | null | undefined;
+}): boolean {
+  if (entry.byo === null || entry.byo === undefined || entry.byo.asserted === true) return false;
+  if (typeof entry.title !== 'string' || entry.title.trim() === '') return false;
+  return (entry.authors ?? []).length > 0 || (entry.editors ?? []).length > 0;
 }
 
 /**
@@ -122,7 +148,8 @@ export function uncheckableReason(ids: CitationIdentifiers): string | null {
     case 'dry-run-doi':
       return null;
     case 'no-doi':
-      return route.ids.length > 0 ? null : NO_IDENTIFIER_REASON;
+      // No identifier: the user's own PDF (OK-BYO) is what Pass 1 checks it against.
+      return route.ids.length > 0 || ids.byoIdentity === true ? null : NO_IDENTIFIER_REASON;
     case 'crossref': {
       // Crossref, else the agency doi.org names (DataCite, content
       // negotiation, else the entry's other identifiers) — VRFY-11. An agency

@@ -1,0 +1,145 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42814079&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "42814079": {
+          "uid": "42814079",
+          "pubdate": "2026 Sep 30",
+          "epubdate": "2026 Sep 30",
+          "source": "J Adolesc Health",
+          "authors": [
+            {
+              "name": "Tang A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Leung C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Prasad R",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Busso C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Warren SL",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Warren SL",
+          "title": "Longitudinal Relations Among Adolescents' Cognitive Control, Social Media Use, Anxiety, and Depressive Symptoms.",
+          "sorttitle": "longitudinal relations among adolescents cognitive control social media use anxiety and depressive symptoms",
+          "volume": "",
+          "issue": "",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "9102136",
+          "issn": "1054-139X",
+          "essn": "1879-1972",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - as supplied by publisher",
+          "pubstatus": "10",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42814079"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1016/j.jadohealth.2026.07.025"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "S1054-139X(26)00339-3"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/30 11:35"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/30 11:35"
+            },
+            {
+              "pubstatus": "received",
+              "date": "2026/01/09 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/07/15 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/07/21 00:00"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/30 10:31"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "The Journal of adolescent health : official publication of the Society for Adolescent Medicine",
+          "elocationid": "pii: S1054-139X(26)00339-3. doi: 10.1016/j.jadohealth.2026.07.025",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/30 00:00",
+          "sortfirstauthor": "Tang A",
+          "vernaculartitle": ""
+        },
+        "uids": [
+          "42814079"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T20:45:19.079Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

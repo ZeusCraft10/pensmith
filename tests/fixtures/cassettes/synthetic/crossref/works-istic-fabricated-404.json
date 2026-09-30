@@ -1,0 +1,15 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.3760%2Fcma.j.fabricated-0000",
+    "status": 404,
+    "response": "Resource not found.",
+    "responseHeaders": {
+      "content-type": "text/plain"
+    },
+    "provenance": {
+      "note": "Hand-written (review round 3, VRFY-11): Crossref's 404 for a fabricated suffix under the ISTIC prefix 10.3760 — the same answer Crossref gives every ISTIC DOI (crossref/works-istic-404.json)."
+    }
+  }
+]

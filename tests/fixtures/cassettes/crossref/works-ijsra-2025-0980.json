@@ -1,0 +1,222 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.30574%2Fijsra.2025.15.1.0980",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              3,
+              3
+            ]
+          ],
+          "date-time": "2026-03-03T14:57:47Z",
+          "timestamp": 1772549867984,
+          "version": "3.50.1"
+        },
+        "reference-count": 0,
+        "publisher": "GSC Online Press",
+        "issue": "1",
+        "content-domain": {
+          "domain": [
+            "www.ijsra.net"
+          ],
+          "crossmark-restriction": false
+        },
+        "short-container-title": [
+          "Int. J. Sci. Res. Arch."
+        ],
+        "abstract": "<jats:p>The emergence and subsequent development of deep learning, specifically transformer-based architectures, Generative Adversarial Networks (GANs), and attention mechanisms, have had revolutionary implications on Natural Language Processing (NLP) and multimodal learning. Transformer models are neural network architectures that change an input sequence into an output sequence. Transformer architectures like the Generative Pre-Training Transformer (GPT) and Bidirectional Encoder Representations from Transformers (BERT) leverage self-attention mechanisms to enable high-level contextual learning as well as long-range dependencies. GANs are a kind of AI algorithm that is designed to solve generative modeling problems. Different GANs, such as StyleGAN and BigCAN, study a collection of training data and learn the distribution probabilities used to generate such datasets. Attention mechanisms, acting as the unifying thread between Transformers and GANs in multimodal learning, optimize deep learning models to attend to the most relevant parts of the input data. This paper explores the synergy between these technologies, emphasizing their combined potential in multimodal learning frameworks. In addition, the paper analyzes recent advancements, key innovations, and practical implementations that leverage Transformers, GANs, and attention mechanisms to enhance natural language understanding and generation.</jats:p>",
+        "DOI": "10.30574/ijsra.2025.15.1.0980",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2025,
+              4,
+              14
+            ]
+          ],
+          "date-time": "2025-04-14T02:38:21Z",
+          "timestamp": 1744598301000
+        },
+        "page": "454-459",
+        "update-policy": "https://doi.org/10.30574/ijsra.ourcrossmarkpolicy",
+        "source": "Crossref",
+        "is-referenced-by-count": 0,
+        "title": [
+          "A comprehensive review of advances in transformer, GAN, and attention mechanisms: Their role in multimodal learning and applications across NLP"
+        ],
+        "prefix": "10.30574",
+        "volume": "15",
+        "author": [
+          {
+            "family": "Md Fokrul Islam Khan",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "family": "Mst Halema Begum",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "family": "Md Arifur Rahman",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "family": "Golam Qibria Limon",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "family": "Md Ali Azam",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          },
+          {
+            "family": "Abdul Kadar Muhammad Masum",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "role": "author",
+                "vocabulary": "crossref"
+              }
+            ]
+          }
+        ],
+        "member": "12033",
+        "published-online": {
+          "date-parts": [
+            [
+              2025,
+              4,
+              30
+            ]
+          ]
+        },
+        "container-title": [
+          "International Journal of Science and Research Archive"
+        ],
+        "original-title": [],
+        "link": [
+          {
+            "URL": "https://journalijsra.com/node/915",
+            "content-type": "unspecified",
+            "content-version": "vor",
+            "intended-application": "similarity-checking"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2026,
+              3,
+              3
+            ]
+          ],
+          "date-time": "2026-03-03T11:15:33Z",
+          "timestamp": 1772536533000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://ijsra.net/node/4798"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2025,
+              4,
+              30
+            ]
+          ]
+        },
+        "references-count": 0,
+        "journal-issue": {
+          "issue": "1",
+          "published-online": {
+            "date-parts": [
+              [
+                2025,
+                4,
+                30
+              ]
+            ]
+          }
+        },
+        "URL": "https://doi.org/10.30574/ijsra.2025.15.1.0980",
+        "relation": {},
+        "ISSN": [
+          "2582-8185"
+        ],
+        "issn-type": [
+          {
+            "value": "2582-8185",
+            "type": "electronic"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2025,
+              4,
+              30
+            ]
+          ]
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T20:45:13.311Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

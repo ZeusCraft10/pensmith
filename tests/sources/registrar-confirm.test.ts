@@ -13,7 +13,10 @@
 //   - a Crossref candidate and an arXiv DataCite DOI are never asked; one DOI
 //     is asked once;
 //   - runResearchPass applies it to the kept candidates of a registry whose
-//     crossref adapter can look a DOI up.
+//     crossref adapter can look a DOI up;
+//   - review round 3: an aggregator listing the authors in another order is
+//     confirmed on a strict title when its first author is one of the
+//     record's, and takes the record's order.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,6 +26,8 @@ import { OfflineEgressError } from '../../bin/lib/http.js';
 import type { SourceCandidate } from '../../bin/lib/schemas/source-candidate.js';
 import { researchAdapterPlan, runResearchPass } from '../../bin/lib/research-orchestrator.js';
 import { sourcePolicyFrom } from '../../bin/lib/source-policy.js';
+import { sources } from '../../bin/lib/sources/index.js';
+import { matchWork } from '../../bin/lib/verify/name-match.js';
 
 const VOR = '10.1177/21677026221114859';
 const TITLE = 'Lack of Sample Diversity in Research on Adolescent Depression and Social Media Use: A Scoping Review and Meta-Analysis';
@@ -143,4 +148,27 @@ test('VRFY-13: runResearchPass confirms the kept aggregator candidates through t
     if (saved === undefined) delete process.env['PENSMITH_NO_LLM'];
     else process.env['PENSMITH_NO_LLM'] = saved;
   }
+});
+
+test('VRFY-13 (review round 3): an aggregator that lists the authors in another order takes the registrar\'s record and its author order (the recorded Crossref answer for 10.30574/ijsra.2025.15.1.0980)', async () => {
+  const doi = '10.30574/ijsra.2025.15.1.0980';
+  const title = 'A comprehensive review of advances in transformer, GAN, and attention mechanisms: Their role in multimodal learning and applications across NLP';
+  // Semantic Scholar's order (the live self-consistency lane's limon2025).
+  const s2 = cand({ doi, title, authors: ['Limon, Golam Qibria', 'Khan, Md Fokrul Islam', 'Begum, Mst Halema'], year: 2025, citekey: 'limon2025' });
+  const { candidates, confirmed } = await confirmRegistrarRecords([s2], (d) => sources.crossref.lookupById(d));
+  assert.deepEqual(confirmed, ['limon2025']);
+  const [c] = candidates;
+  assert.match(c?.authors[0] ?? '', /Khan/, `Crossref's first author: ${JSON.stringify(c?.authors)}`);
+  assert.equal(c?.citekey, 'limon2025', 'the citekey never changes');
+  // Pass 1 then compares the registrar's own order: the first author matches.
+  const m = matchWork({ title: c!.title, authors: c!.authors, year: c!.year ?? null }, { title, authors: c!.authors, year: 2025 });
+  assert.equal(m.ok, true, m.detail);
+
+  // Still left as it was: the aggregator's first author is not among the record's authors, or the title is only close.
+  const stranger = cand({ doi, title, authors: ['Nobody, Nora'], year: 2025, citekey: 'nobody2025' });
+  const loose = cand({ doi, title: 'A review of transformer, GAN and attention mechanisms', authors: ['Limon, Golam Qibria'], year: 2025, citekey: 'loose2025' });
+  const other = await confirmRegistrarRecords([stranger, loose], (d) => sources.crossref.lookupById(d));
+  assert.deepEqual(other.confirmed, []);
+  assert.equal(other.candidates[0], stranger);
+  assert.equal(other.candidates[1], loose);
 });

@@ -1,0 +1,15 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1016%2Fj.jadohealth.2026.07.025",
+    "status": 404,
+    "response": "Resource not found.",
+    "responseHeaders": {
+      "content-type": "text/plain"
+    },
+    "provenance": {
+      "note": "Hand-kept (review round 3, VRFY-11): Crossref's REST API answered exactly this 404 on 2026-09-30 for a DOI PubMed already listed (PMID 42814079) and doi.org registered later that day. A live re-record would now return the record, so the answer of that day is kept here."
+    }
+  }
+]

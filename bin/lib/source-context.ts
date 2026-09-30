@@ -24,7 +24,7 @@
 // byo-text.ts before it builds the drafter request (write.ts withVerifiedByo).
 
 import { fullTextAvailable as fullTextFromLibrary } from './full-text.js';
-import { citationCheckRoute, registrationAgencyOfRecord, uncheckableReason } from './verify/pass1-identifiers.js';
+import { byoCheckable, citationCheckRoute, registrationAgencyOfRecord, uncheckableReason } from './verify/pass1-identifiers.js';
 import type { LibraryEntry } from './schemas/library.js';
 
 /** The library fields this module reads (a LibraryEntry, or a legacy v1 record). */
@@ -38,6 +38,8 @@ export interface SourceContextInput {
   readonly oa_url?: string | null | undefined;
   /** The bring-your-own PDF record (SRC-15): hashes, never text. */
   readonly byo?: LibraryEntry['byo'] | undefined;
+  /** Editors of an editor-only work (read by verifierBlindSpot for a bring-your-own PDF's recorded identity). */
+  readonly editors?: readonly string[] | null | undefined;
   /** The bare arXiv id (its arXiv PDF is text Pass 3 can check, GRND-14). */
   readonly arxiv?: string | null | undefined;
   /** Source tier (SRC-09, Phase 19); read when present. */
@@ -234,10 +236,12 @@ export function libraryCitekeys(entries: readonly SourceContextInput[]): Set<str
 // DOI; a DataCite DOI — Zenodo, figshare, Dryad at DataCite (VRFY-11), an
 // arXiv DOI at arXiv; another agency's DOI (content negotiation, else its
 // other identifiers); no DOI but an arXiv id (arXiv), a PMID (PubMed) or an
-// ISBN (the books registries). Withheld: a source flagged retracted (Pass 1
-// always blocks it, review round 3), one with no DOI, arXiv id, PMID or ISBN
-// (Pass 1's metadata search may find no match — UNRESOLVABLE), and a
-// synthetic --dry-run source outside a dry run.
+// ISBN (the books registries); no identifier but the user's own PDF with a
+// recorded title and author (OK-BYO — pass1-identifiers.ts byoCheckable).
+// Withheld: a source flagged retracted (Pass 1 always blocks it), one with no
+// DOI, arXiv id, PMID or ISBN and no own PDF to check it against (Pass 1's
+// metadata search may find no match — UNRESOLVABLE), and a synthetic
+// --dry-run source outside a dry run.
 // ---------------------------------------------------------------------------
 
 export { NO_IDENTIFIER_REASON } from './verify/pass1-identifiers.js';
@@ -255,14 +259,19 @@ export const SYNTHETIC_REASON = 'a synthetic --dry-run source';
  * the caller passes whether this is a dry run.
  */
 export function verifierBlindSpot(
-  entry: Pick<SourceContextInput, 'doi' | 'arxiv' | 'pmid' | 'isbn' | 'synthetic' | 'retracted' | 'retraction_details'>,
+  entry: Pick<SourceContextInput, 'doi' | 'arxiv' | 'pmid' | 'isbn' | 'synthetic' | 'retracted' | 'retraction_details'> &
+    Partial<Pick<SourceContextInput, 'byo' | 'title' | 'authors' | 'editors'>>,
   dryRun: boolean,
 ): string | null {
   if (entry.retracted === true) return RETRACTED_REASON;
   if (entry.synthetic === true && !dryRun) return SYNTHETIC_REASON;
   const route = citationCheckRoute(entry);
   if (route.kind === 'dry-run-doi') return dryRun ? null : SYNTHETIC_REASON;
-  return uncheckableReason({ ...entry, registrationAgency: registrationAgencyOfRecord(entry.retraction_details) });
+  return uncheckableReason({
+    ...entry,
+    registrationAgency: registrationAgencyOfRecord(entry.retraction_details),
+    byoIdentity: byoCheckable(entry),
+  });
 }
 
 /** The library split into the sources the verifier can check and the others (with why), in library order. */

@@ -9,7 +9,9 @@
 //
 //   - Text is folded first: NFKD with combining marks removed (Müller →
 //     muller), every Unicode dash and hyphen (U+2010–U+2015, U+2212, U+FE58,
-//     U+FE63, U+FF0D) to `-`, lower case, whitespace collapsed. Non-Latin
+//     U+FE63, U+FF0D) to `-`, lower case, whitespace collapsed and dropped
+//     around a hyphen or a slash (registrar markup splits "EBA-Net" as
+//     "EBA ‐Net"; review round 3). Non-Latin
 //     scripts are compared as they are written — nothing is transliterated on
 //     either side.
 //   - A title is compared as plain text (registrar markup out, markup.ts).
@@ -49,10 +51,16 @@
 //     consortium, collaborators, investigators, group, …) is compared with
 //     EVERY corporate author the record lists, not only its first author
 //     (Crossref lists LIGO's group after 1,011 people). A record that lists
-//     persons only (CMS, ATLAS and GBD 2019 at Crossref) passes the author
-//     check for such a claim when its title matches at STRICT_TITLE_JW and
-//     both years are known and within YEAR_TOLERANCE; a record naming another
-//     group, or any mismatch of a personal name, stays MIS-CITED.
+//     its members only (CMS, ATLAS and GBD 2019 at Crossref: hundreds of
+//     people) passes the author check for a claim with a consortium's shape
+//     (a collaboration, consortium, collaborators, investigators or a
+//     collaborative group — isConsortiumName; never a bare braced name or
+//     "study" / "team" / "project") when the record lists at least
+//     CONSORTIUM_MIN_RECORD_AUTHORS people, its title matches at
+//     STRICT_TITLE_JW and both years are known and within YEAR_TOLERANCE
+//     (review round 3). A record naming another group, a record of a few
+//     people, a braced or "Study Team" name against persons, or any mismatch
+//     of a personal name stays MIS-CITED.
 //   - The year, when both the citation and the record carry one, must be
 //     within YEAR_TOLERANCE (an online-first year versus the issue's year);
 //     a larger gap is a mismatch of its own.
@@ -78,7 +86,10 @@ const PARTICLES: ReadonlySet<string> = new Set([
 
 /**
  * Fold text for comparison: NFKD, combining marks removed, every dash to `-`,
- * lower case, whitespace collapsed. Scripts are kept as written.
+ * lower case, whitespace collapsed, and no space around a hyphen or a slash —
+ * registrar markup splits a compound across lines (Crossref's JATS title
+ * "<scp>EBA</scp>\n ‐Net" reads "EBA ‐Net"; review round 3). Scripts are kept
+ * as written.
  */
 export function foldText(s: string): string {
   return s
@@ -87,6 +98,7 @@ export function foldText(s: string): string {
     .replace(DASHES, '-')
     .toLowerCase()
     .replace(/\s+/g, ' ')
+    .replace(/ ?([-/]) ?/g, '$1')
     .trim();
 }
 
@@ -338,6 +350,27 @@ export function isCorporateAuthor(author: string | null | undefined): boolean {
   return GROUP_WORDS.test(s.replace(/,/g, ' '));
 }
 
+/**
+ * A name with a consortium's shape: it names a collaboration, a consortium,
+ * collaborators, investigators or a collaborative group ("CMS Collaboration",
+ * "GBD 2019 Diseases and Injuries Collaborators", "RECOVERY Collaborative
+ * Group"). A bare braced name or a looser group word ("study", "team",
+ * "project", …) is not enough (review round 3).
+ */
+const CONSORTIUM_WORDS = /\b(?:collaborations?|consortium|consortia|collaborators|investigators|collaborative\s+groups?)\b/iu;
+
+/** True when an author string has a consortium's shape (CONSORTIUM_WORDS). */
+export function isConsortiumName(author: string | null | undefined): boolean {
+  return CONSORTIUM_WORDS.test(String(author ?? '').replace(/[{},]/g, ' '));
+}
+
+/**
+ * The fewest authors a record must list for a consortium claim to pass on a
+ * strict title and the year alone: the consortium papers whose records list
+ * members only (CMS, ATLAS, GBD 2019 at Crossref) list hundreds of people.
+ */
+export const CONSORTIUM_MIN_RECORD_AUTHORS = 30;
+
 /** A corporate name compared whole: braces, a leading "The" and the comma BibTeX puts in an unbraced one ("Collaboration, CMS") folded away. */
 function corporateForm(author: string): string {
   let s = author.trim().replace(/^\{(.*)\}$/su, '$1');
@@ -393,13 +426,17 @@ export function matchWork(
     typeof claimed.year === 'number' && Number.isInteger(claimed.year) && typeof record.year === 'number' && Number.isInteger(record.year)
       ? { claimed: claimed.year, record: record.year }
       : null;
-  // A consortium claim against a record that lists persons only (see the header).
+  // A consortium claim against a record that lists its members only (see the
+  // header): the claimed name must have a consortium's shape and the record
+  // must list as many people as a consortium paper does.
   const claimedFirst = claimed.authors[0] ?? claimed.editors?.[0];
+  const recordNames = [...(record.authors ?? []), ...(record.editors ?? [])];
   const groupByTitle =
     authorJW < at &&
     claimedFirst !== undefined &&
-    isCorporateAuthor(claimedFirst) &&
-    ![...(record.authors ?? []), ...(record.editors ?? [])].some(isCorporateAuthor) &&
+    isConsortiumName(claimedFirst) &&
+    recordNames.length >= CONSORTIUM_MIN_RECORD_AUTHORS &&
+    !recordNames.some(isCorporateAuthor) &&
     titleJW >= Math.max(tt, STRICT_TITLE_JW) &&
     years !== null &&
     Math.abs(years.claimed - years.record) <= tol;

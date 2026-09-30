@@ -15,8 +15,10 @@
 //                         recorded sha256 (byo-text.ts; the row names the file and
 //                         hash; never an `asserted` PDF), AND the entry's title,
 //                         first author and year match the work LIBRARY.json records
-//                         that PDF was identified as at ingest (a mismatch is
-//                         MIS-CITED naming the field) — VRFY-14
+//                         that PDF was identified as at ingest, and every identifier
+//                         the entry carries (DOI, arXiv id, PMID, ISBN) is the one
+//                         recorded for it (a mismatch is MIS-CITED naming the field
+//                         or identifier; review round 3) — VRFY-14
 //   FABRICATED            the key is not in the bibliography; or the DOI's registrar
 //                         definitively does not know it (Crossref's 404 for a Crossref
 //                         prefix or a prefix no agency holds, DataCite's or doi.org's
@@ -45,10 +47,16 @@
 //   - a DOI: Crossref (DOIs compare case-insensitively after doi.ts
 //     normalization). On Crossref's definitive 404, doi.org names the prefix's
 //     agency (sources/doi-ra.ts, only the prefix leaves the machine): Crossref
-//     or no agency → FABRICATED; DataCite → api.datacite.org
+//     or no agency → the entry's PMID / arXiv id / ISBN when it has one (a
+//     DOI PubMed lists before Crossref has a record of it; the record found
+//     must list that same DOI, else MIS-CITED naming both — review round 3),
+//     else FABRICATED; DataCite → api.datacite.org
 //     (sources/datacite.ts); mEDRA, JaLC, KISTI → doi.org content negotiation
 //     (sources/doi-cn.ts, CSL JSON); any other agency → the entry's arXiv id /
-//     PMID / ISBN, else UNVERIFIABLE naming the agency. A DataCite arXiv DOI
+//     PMID / ISBN, whose record must list the entry's DOI (another DOI is
+//     MIS-CITED) or, listing none, doi.org must hold the DOI's handle (HEAD:
+//     404 → FABRICATED, no answer → UNVERIFIABLE-NETWORK) — else UNVERIFIABLE
+//     naming the agency. A DataCite arXiv DOI
 //     (10.48550/arXiv.<id>) is re-fetched at arXiv by its id. A reserved
 //     `10.0000/pensmith-dryrun.*` DOI is answered by the synthetic provider
 //     under --dry-run only (RUN-27), FABRICATED otherwise.
@@ -106,7 +114,7 @@ import { fetch as httpFetch, isOfflineEgressError, type OfflineEgressError } fro
 import { type LookupResult } from '../sources/lookup.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 import { networkMode } from '../http-mock.js';
-import { normArxiv } from '../migrations/library/shape.js';
+import { normArxiv, normIsbn, normPmid } from '../migrations/library/shape.js';
 import { isDataCiteArxivDoi } from '../full-text.js';
 import { byoText } from '../byo-text.js';
 import { matchWork, type ClaimedWork, type MatchResult } from './name-match.js';
@@ -476,6 +484,8 @@ interface Claimed {
   readonly ck: string;
   readonly work: ClaimedWork;
   readonly doi: string | null;
+  /** Every identifier the entry carries (what the export prints). */
+  readonly ids: CitationIdentifiers;
 }
 
 function retractedNotice(c: SourceCandidate): string | null {
@@ -617,12 +627,82 @@ async function lookupAt(registrar: NoDoiRegistrar, id: string, ck: string, facts
 }
 
 /**
- * Pass 1 by an entry's arXiv id, PMID and ISBN (a DOI-less entry, or the
- * fallback for a DOI no readable registrar holds): the first record found is
- * compared; a lookup with no answer is UNVERIFIABLE-NETWORK; FABRICATED only
- * when every registrar said not-found.
+ * The DOI of an entry Pass 1 checks by its other identifiers (review round 3):
+ * the DOI itself was not read at its registrar — its agency serves no record
+ * (`unreadable`), or Crossref, which holds its prefix, has no record of it
+ * yet (`unregistered`) — so the record found by the entry's PMID / arXiv id /
+ * ISBN must vouch for it, since the export prints it.
  */
-async function verdictByIdentifiers(c: Claimed, claimed: BibEntry, facts: LibraryFacts): Promise<Pass1Result> {
+interface FallbackDoi {
+  readonly doi: string;
+  readonly state: 'unreadable' | 'unregistered';
+}
+
+/**
+ * Whether doi.org holds a handle for `doi` (HEAD of the handle, not followed,
+ * never cached): `true` on a redirect, `false` on 404, null with no answer.
+ */
+async function doiHandleExists(doi: string): Promise<boolean | null> {
+  let res: Awaited<ReturnType<typeof httpFetch>>;
+  try {
+    res = await httpFetch(`https://doi.org/${doi}`, { method: 'HEAD', followRedirects: false, timeoutMs: 10_000 });
+  } catch {
+    return null;
+  }
+  if (res.status >= 300 && res.status < 400) return true;
+  if (res.status === 404) return false;
+  return null;
+}
+
+/**
+ * The verdict on the entry's DOI once another identifier's record was found
+ * (see FallbackDoi): null when the DOI stands (the record lists it, or — an
+ * agency with no readable record — doi.org holds its handle); otherwise the
+ * row that refuses it.
+ */
+async function fallbackDoiVerdict(c: Claimed, record: SourceCandidate, who: string, label: string, fb: FallbackDoi): Promise<Pass1Result | null> {
+  const wanted = normalizeDoi(fb.doi) ?? fb.doi.toLowerCase();
+  const listed = typeof record.doi === 'string' ? normalizeDoi(record.doi) : null;
+  const m = (): { titleJW: number; authorJW: number } => {
+    const r = matchWork(c.work, record);
+    return { titleJW: r.titleJW, authorJW: r.authorJW };
+  };
+  if (listed !== null && listed === wanted) return null;
+  if (listed !== null) {
+    return row(
+      c.ck,
+      'MIS-CITED',
+      `the entry's DOI ${fb.doi} is not the DOI ${who}'s record of ${label} lists (${listed}) — correct the entry's DOI (the export prints it)`,
+      m(),
+      record.last_verified,
+    );
+  }
+  if (fb.state === 'unregistered') {
+    return row(
+      c.ck,
+      'MIS-CITED',
+      `the entry's DOI ${fb.doi} did not resolve via Crossref, and ${who}'s record of ${label} lists no DOI — correct or remove the entry's DOI (the export prints it)`,
+      m(),
+      record.last_verified,
+    );
+  }
+  // An agency that serves no readable record: doi.org must at least hold the handle.
+  const exists = await doiHandleExists(wanted);
+  if (exists === true) return null;
+  if (exists === false) {
+    return row(c.ck, 'FABRICATED', `the entry's DOI ${fb.doi} is not registered at doi.org (its handle answers 404), although ${label} is a real record`, { titleJW: 0, authorJW: 0 });
+  }
+  return row(c.ck, 'UNVERIFIABLE-NETWORK', `doi.org's handle check of ${fb.doi} got no answer (${who}'s record of ${label} lists no DOI) — ${RETRY_ONLINE}`);
+}
+
+/**
+ * Pass 1 by an entry's arXiv id, PMID and ISBN (a DOI-less entry, or the
+ * fallback for a DOI no readable registrar holds or Crossref has no record of
+ * yet — `fallbackDoi`, whose DOI the record must then vouch for): the first
+ * record found is compared; a lookup with no answer is UNVERIFIABLE-NETWORK;
+ * FABRICATED only when every registrar said not-found.
+ */
+async function verdictByIdentifiers(c: Claimed, claimed: BibEntry, facts: LibraryFacts, fallbackDoi?: FallbackDoi): Promise<Pass1Result> {
   const ids = doilessIdentifiers(claimed);
   let undecided: Pass1Result | null = null;
   const notFound: string[] = [];
@@ -648,10 +728,18 @@ async function verdictByIdentifiers(c: Claimed, claimed: BibEntry, facts: Librar
       notFound.push(`${label}: ${res.reason}`);
       continue;
     }
+    if (fallbackDoi !== undefined) {
+      const refused = await fallbackDoiVerdict(c, res.candidate, who, label, fallbackDoi);
+      if (refused !== null) return refused;
+    }
+    const doiNote =
+      fallbackDoi?.state === 'unregistered'
+        ? `${label} re-fetched from ${who}, whose record lists the entry's DOI ${fallbackDoi.doi} (Crossref has no record of it yet — re-verify later to check it there)`
+        : `${label} re-fetched from ${who}`;
     return compareRecord(
       c,
       res.candidate,
-      { label: `${who}'s record of ${label}`, prefix: `${label} re-fetched from ${who}`, agency: registrar === 'pubmed' ? 'PubMed' : who },
+      { label: `${who}'s record of ${label}`, prefix: doiNote, agency: registrar === 'pubmed' ? 'PubMed' : who },
       facts,
     );
   }
@@ -692,11 +780,51 @@ async function byoEvidence(
  * or a mistyped own-source entry, is never passed on the file's hash alone.
  * `uncomparable` when the record holds no title or no author / editor.
  */
-function byoIdentity(c: Claimed, entry: LibraryEntry): { kind: 'match' } | { kind: 'mismatch'; match: MatchResult } | { kind: 'uncomparable' } {
+function byoIdentity(
+  c: Claimed,
+  entry: LibraryEntry,
+): { kind: 'match' } | { kind: 'mismatch'; match: MatchResult } | { kind: 'id-mismatch'; detail: string } | { kind: 'uncomparable' } {
+  // The identifiers the export prints must be the ones recorded for the PDF (review round 3).
+  const idDetail = byoIdentifierMismatch(c.ids, entry);
+  if (idDetail !== null) return { kind: 'id-mismatch', detail: idDetail };
   const title = (entry.title ?? '').trim();
   if (title === '' || (entry.authors.length === 0 && entry.editors.length === 0)) return { kind: 'uncomparable' };
   const match = matchWork(c.work, { title, authors: entry.authors, editors: entry.editors, year: entry.year, type: entry.type });
   return match.ok ? { kind: 'match' } : { kind: 'mismatch', match };
+}
+
+/**
+ * The first identifier the entry carries that is not the one LIBRARY.json
+ * recorded for the work its own PDF was identified as (DOI, arXiv id, PMID,
+ * ISBN — each normalized), or null when every one agrees. An identifier the
+ * entry adds that the record lacks is a mismatch too: the export would print
+ * an identifier no registrar and no ingest confirmed.
+ */
+function byoIdentifierMismatch(ids: CitationIdentifiers, entry: LibraryEntry): string | null {
+  const norm = (label: string, v: string | null | undefined): string | null => {
+    if (typeof v !== 'string' || v.trim() === '') return null;
+    const t = v.trim();
+    if (label === 'DOI') return normalizeDoi(t) ?? t.toLowerCase();
+    if (label === 'arXiv id') return normArxiv(t) ?? t;
+    if (label === 'PMID') return normPmid(t) ?? t;
+    return normIsbn(t) ?? t.replace(/[\s-]/g, '');
+  };
+  const recordedArxiv = entry.arxiv ?? (entry.doi !== null && isDataCiteArxivDoi(entry.doi) ? entry.doi : null);
+  const pairs: Array<[string, string | null | undefined, string | null | undefined]> = [
+    ['DOI', ids.doi, entry.doi],
+    ['arXiv id', ids.arxiv, recordedArxiv],
+    ['PMID', ids.pmid, entry.pmid],
+    ['ISBN', ids.isbn, entry.isbn],
+  ];
+  for (const [label, claimedRaw, recordedRaw] of pairs) {
+    const claimed = norm(label, claimedRaw);
+    if (claimed === null) continue;
+    const recorded = norm(label, recordedRaw);
+    if (claimed !== recorded) {
+      return `the entry's ${label} ${claimedRaw?.trim()} is not the ${label} recorded for that work when you added it (${recordedRaw?.trim() || 'none'})`;
+    }
+  }
+  return null;
 }
 
 /** How the ingested identity of a PDF reads in a row: `"Title" (First Author, 2015)`. */
@@ -712,13 +840,13 @@ function okByoRow(c: Claimed, ev: { file: string; sha256: string }, because: str
 }
 
 /** The MIS-CITED row of an entry that does not describe the work its own PDF was ingested as. */
-function byoMisCitedRow(c: Claimed, ev: { file: string; sha256: string; entry: LibraryEntry }, m: MatchResult, because: string): Pass1Result {
+function byoMisCitedRow(c: Claimed, ev: { file: string; sha256: string; entry: LibraryEntry }, m: MatchResult | { detail: string }, because: string): Pass1Result {
   return row(
     c.ck,
     'MIS-CITED',
     `the entry does not describe the work your own PDF ${ev.file} (sha256 ${ev.sha256.slice(0, 12)}) was identified as when you added it, ` +
-      `${byoIdentityLabel(ev.entry)} — ${m.detail}; ${because} — cite the work as the PDF shows it, or re-add the right PDF (pensmith add <pdf>)`,
-    { titleJW: m.titleJW, authorJW: m.authorJW },
+      `${byoIdentityLabel(ev.entry)} — ${'titleJW' in m ? m.detail : `mismatch: ${m.detail}`}; ${because} — cite the work as the PDF shows it, or re-add the right PDF (pensmith add <pdf>)`,
+    'titleJW' in m ? { titleJW: m.titleJW, authorJW: m.authorJW } : undefined,
   );
 }
 
@@ -733,6 +861,7 @@ async function orByo(c: Claimed, failed: Pass1Result, facts: LibraryFacts): Prom
   if (ev?.kind !== 'ok') return failed;
   const because = `the registrar lookup got no answer (${failed.reason})`;
   const id = byoIdentity(c, ev.entry);
+  if (id.kind === 'id-mismatch') return byoMisCitedRow(c, ev, id, because);
   if (id.kind === 'mismatch') return byoMisCitedRow(c, ev, id.match, because);
   if (id.kind === 'uncomparable') return failed;
   return okByoRow(c, ev, because);
@@ -754,6 +883,7 @@ async function verdictWithoutIdentifier(c: Claimed, claimed: BibEntry, facts: Li
     const id = byoIdentity(c, ev.entry);
     if (id.kind === 'match') return okByoRow(c, ev, noId);
     if (id.kind === 'mismatch') return byoMisCitedRow(c, ev, id.match, noId);
+    if (id.kind === 'id-mismatch') return byoMisCitedRow(c, ev, id, noId);
     uncomparableByo = true;
   }
   const found = await metadataSearch(c.work, { isBook: claimed.type === 'book', ...refreshOf(c.ck, facts) });
@@ -848,8 +978,17 @@ async function verdictForDoi(c: Claimed, claimed: BibEntry, doi: string, facts: 
         facts,
       );
     }
-    case 'not-found':
-      return row(c.ck, 'FABRICATED', res.reason, { titleJW: 0, authorJW: 0 });
+    case 'not-found': {
+      // VRFY-11 (review round 3): FABRICATED only when every registrar that
+      // could know the work says not-found. A DOI Crossref has no record of
+      // yet (deposited after PubMed listed it) is checked through the entry's
+      // PMID / arXiv id / ISBN, whose record must list that DOI.
+      if (doilessIdentifiers(claimed).length === 0) return row(c.ck, 'FABRICATED', res.reason, { titleJW: 0, authorJW: 0 });
+      const v = await verdictByIdentifiers(c, claimed, facts, { doi: doi.trim(), state: 'unregistered' });
+      if (v.verdict === 'FABRICATED') return { ...v, reason: `${res.reason}, and ${v.reason}` };
+      if (v.verdict === 'UNVERIFIABLE-NETWORK') return { ...v, reason: `${res.reason}; ${v.reason}` };
+      return v;
+    }
     case 'no-answer':
       return orByo(c, res.offline !== undefined ? offlineRow(c.ck, res.offline, res.reason) : row(c.ck, 'UNVERIFIABLE-NETWORK', `${res.reason} — ${RETRY_ONLINE}`), facts);
     case 'uncomparable': {
@@ -860,8 +999,8 @@ async function verdictForDoi(c: Claimed, claimed: BibEntry, doi: string, facts: 
           `${res.reason} — give the work's arXiv id, PMID or ISBN (pensmith add), or cite its Crossref- or DataCite-registered version`,
         );
       }
-      const v = await verdictByIdentifiers(c, claimed, facts);
-      if (v.verdict === 'FABRICATED') {
+      const v = await verdictByIdentifiers(c, claimed, facts, { doi: doi.trim(), state: 'unreadable' });
+      if (v.verdict === 'FABRICATED' && /^no registrar has this work/.test(v.reason)) {
         return { ...v, verdict: 'UNVERIFIABLE', titleJW: NOT_COMPARED, authorJW: NOT_COMPARED, reason: `${res.reason}, and ${v.reason}` };
       }
       if (v.verdict === 'UNVERIFIABLE-NETWORK') return orByo(c, { ...v, reason: `${res.reason}; ${v.reason}` }, facts);
@@ -897,6 +1036,7 @@ async function verdictForCitekey(ck: string, claimed: BibEntry | undefined, fact
     ck,
     work: { title: shown.title, ...(shown.wholeTitle ? { wholeTitle: true } : {}), authors, editors, year: shown.year },
     doi: claimed.DOI ?? null,
+    ids: bibIdentifiers(claimed),
   };
   const v = await registrarVerdict(c, claimed, facts);
   // D-15 stored-retraction gate: the bib's `note = {RETRACTED}` (the on-disk
@@ -955,7 +1095,7 @@ async function bareRow(b: BareIdentifier, facts: LibraryFacts): Promise<Pass1Res
     case 'record': {
       const notice = retractedNotice(res.candidate);
       if (notice === null && res.agency === 'Crossref') {
-        const c: Claimed = { ck: key, work: { title: res.candidate.title, authors: res.candidate.authors, year: res.candidate.year ?? null }, doi: b.id };
+        const c: Claimed = { ck: key, work: { title: res.candidate.title, authors: res.candidate.authors, year: res.candidate.year ?? null }, doi: b.id, ids: { doi: b.id } };
         const rw = await retractionRequery(c, [b.id, res.candidate.doi ?? b.id], { titleJW: NOT_COMPARED, authorJW: NOT_COMPARED }, res.candidate.last_verified, facts);
         if (rw !== null) return rw;
       }

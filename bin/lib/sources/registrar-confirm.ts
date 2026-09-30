@@ -11,7 +11,9 @@
 // the DOI and rightly finds the year two apart: the tool would block its own
 // source. So research asks Crossref for the DOI of each KEPT candidate an
 // aggregator found, and when Crossref's record is the same work (title and
-// first author, D-11 thresholds; the year is what may differ) its
+// first author, D-11 thresholds; the year is what may differ — or, when the
+// aggregator lists the authors in another order, a strict title and its first
+// author anywhere in the record's list; review round 3) its
 // bibliographic fields — title, subtitle, authors, editors, year, venue,
 // volume, issue, pages, publisher, type — replace the aggregator's. The
 // candidate keeps its citekey, identifiers, abstract and provenance.
@@ -25,7 +27,8 @@
 
 import { isOfflineEgressError } from '../http.js';
 import { isDataCiteArxivDoi } from '../full-text.js';
-import { matchWork } from '../verify/name-match.js';
+import { authorSimilarity, matchWork, STRICT_TITLE_JW } from '../verify/name-match.js';
+import { AUTHOR_JW_THRESHOLD } from '../fuzzy.js';
 import type { LookupResult } from './lookup.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
@@ -67,6 +70,21 @@ function withRecordFields(c: SourceCandidate, r: SourceCandidate): SourceCandida
 }
 
 /**
+ * The same work with its authors in another order: the aggregator lists the
+ * authors differently from the registrar (Semantic Scholar put Limon first
+ * for a paper Crossref lists Khan, Begum, Rahman, Limon, …), so only the first
+ * author failed — the title matches strictly (STRICT_TITLE_JW) and the
+ * aggregator's first author is one of the record's authors. The record's
+ * author order is then adopted (review round 3).
+ */
+function sameWorkReordered(c: SourceCandidate, record: SourceCandidate, m: ReturnType<typeof matchWork>): boolean {
+  if (m.failing.length !== 1 || m.failing[0] !== 'first author' || m.titleJW < STRICT_TITLE_JW) return false;
+  const first = c.authors[0];
+  if (first === undefined) return false;
+  return record.authors.some((a) => authorSimilarity(a, first) >= AUTHOR_JW_THRESHOLD);
+}
+
+/**
  * Confirm each aggregator candidate's DOI record at Crossref (see the
  * header). Never throws for a lookup's outcome; the typed OfflineEgressError
  * is a miss like any other here (the candidate stays as it is).
@@ -105,7 +123,7 @@ export async function confirmRegistrarRecords(candidates: readonly SourceCandida
       { title: c.title, authors: c.authors, ...(c.editors ? { editors: c.editors } : {}), year: null },
       { title: record.title, subtitle: record.subtitle, authors: record.authors, editors: record.editors, year: record.year ?? null },
     );
-    if (!m.ok) {
+    if (!m.ok && !sameWorkReordered(c, record, m)) {
       out.push(c);
       continue;
     }
