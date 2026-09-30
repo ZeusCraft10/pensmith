@@ -448,12 +448,14 @@ For power users / batch processing / CI testing:
 | `assignment-pickup` | Use the assignment file in this folder? | skip: use the file | skip: 0 | 0 | GRND-01 |
 | `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 |
 | `plan-research` | Add these research hits to the section? | skip: add the hits the evaluator kept to the section | refuse: 3 | 3 | GRND-17 |
-| `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |
-| `quote-accept` | Accept this quote match? | never | refuse: 3 | 3 | VRFY-20 (planned) |
 | `reoutline` | Re-outline a paper that already has drafts? | skip: re-outline (a model re-outline also needs --force) | refuse: 3 | 3 | GRND-09 |
 | `byo-folder` | Read the PDFs in this folder outside the paper and copy them into it? | never | skip: 0 | 0 | SRC-15 |
 | `zotero-collection` | Pull this Zotero collection from your library into the paper? | never | skip: 0 | 0 | SRC-16 |
 | `pdf-attach-unmatched` | Attach this PDF although its first page does not show the work's title and first author? | never | refuse: 3 | 3 | SRC-13 |
+| `quote-accept` | Accept these quotes whose source text cannot be checked? | never | skip: 0 | 0 | VRFY-20 |
+| `unsupported-claims` | Export the paper with these UNSUPPORTED claims? | skip: export and record them as auto-accepted | refuse: 3 | 3 | VRFY-22 |
+
+`quote-accept` (VRFY-20) is asked by `pensmith verify N` in a terminal when the section has quotes no source text could be checked against (UNVERIFIABLE-QUOTE): a multi-select of those quotes plus "accept all". It is a verification decision, so `--yolo` never answers it; without a terminal it is skipped and the section stays unverifiable (verify exits 4), and declining leaves it so. `verify N --accept-quote <id>` records one quote per flag. `unsupported-claims` (VRFY-22) replaces the planned `unsupported-confirm`: when Pass 2 judged claims UNSUPPORTED, `done` lists each one with its evidence and asks it instead of the generic `export-confirm`; the answer is recorded in `.paper/VERIFICATION.md` (`Confirmed by user <time>`, or `Auto-accepted under --yolo <time>`).
 
 Automatic revision of a failed section is not a gate `--yolo` can open: it is its own opt-in, `--auto-revise` or `[project] auto_revise = true` (REV-01). Detector consent persisted in `config.toml` (EXP-17) is the only way that gate is answered without asking.
 

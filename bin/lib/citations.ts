@@ -388,6 +388,165 @@ export async function parseBibFileAt(text: string, file: string): Promise<Array<
 }
 
 // =====================================================================
+//   Entry-by-entry parse (VRFY-16, D-20-20)
+// =====================================================================
+
+/** One BibTeX entry of a bibliography that does not parse on its own. */
+export interface BibEntryProblem {
+  /** The entry's citekey as written (`@article{<key>, …`), or null when its head cannot be read. */
+  readonly key: string | null;
+  /** 1-based line of the entry's `@` in the file. */
+  readonly line: number;
+  /** One line: why the entry does not parse. */
+  readonly detail: string;
+}
+
+/** A bibliography read entry by entry: the entries that parse, and the ones that do not. */
+export interface BibEntriesResult {
+  /** CSL-JSON entries (as parseBib returns them) of every entry that parses. */
+  readonly entries: Array<Record<string, unknown>>;
+  /** Every entry that does not parse on its own, in file order. */
+  readonly problems: BibEntryProblem[];
+}
+
+/** One `@type{…}` / `@type(…)` block of a BibTeX text. */
+interface BibBlock {
+  readonly type: string;
+  readonly start: number;
+  readonly text: string;
+  /** False when the block's delimiters never balance (it is cut at the next entry head, or at the end). */
+  readonly closed: boolean;
+}
+
+const ENTRY_HEAD_RE = /@([A-Za-z][A-Za-z0-9_-]*)\s*([{(])/y;
+/** A line that starts a new entry (used to cut a block whose braces never balance). */
+const LINE_ENTRY_HEAD_RE = /(?:^|\n)[ \t]*@[A-Za-z][A-Za-z0-9_-]*\s*[{(]/g;
+
+/**
+ * Split a BibTeX text into its `@type{…}` blocks (text between blocks is a
+ * comment, as in BibTeX). A block ends at the brace (or parenthesis) that
+ * balances its opening one; one that never balances is cut at the next line
+ * that starts an entry, so one broken entry never swallows the entries after it.
+ */
+function splitBibBlocks(text: string): BibBlock[] {
+  const out: BibBlock[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const at = text.indexOf('@', i);
+    if (at === -1) break;
+    ENTRY_HEAD_RE.lastIndex = at;
+    const head = ENTRY_HEAD_RE.exec(text);
+    if (!head) {
+      i = at + 1;
+      continue;
+    }
+    const type = (head[1] ?? '').toLowerCase();
+    const open = head[2] ?? '{';
+    // Brace depth inside the entry: a `{…}` entry closes when its opening
+    // brace balances; a `(…)` entry at the first `)` outside braces.
+    let depth = open === '{' ? 1 : 0;
+    let end = -1;
+    for (let j = at + head[0].length; j < text.length; j++) {
+      const ch = text[j];
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (open === '{' && depth === 0) {
+          end = j + 1;
+          break;
+        }
+        if (depth < 0) depth = 0;
+      } else if (open === '(' && ch === ')' && depth === 0) {
+        end = j + 1;
+        break;
+      }
+    }
+    if (end !== -1) {
+      out.push({ type, start: at, text: text.slice(at, end), closed: true });
+      i = end;
+      continue;
+    }
+    // Never balanced: cut at the next line that starts an entry.
+    LINE_ENTRY_HEAD_RE.lastIndex = at + head[0].length;
+    const next = LINE_ENTRY_HEAD_RE.exec(text);
+    const cut = next ? next.index + (next[0].startsWith('\n') ? 1 : 0) : text.length;
+    out.push({ type, start: at, text: text.slice(at, cut), closed: false });
+    i = cut;
+  }
+  return out;
+}
+
+/** The citekey written in a block's head (`@article{key,`), or null. */
+function blockKey(block: BibBlock): string | null {
+  const m = /^@[A-Za-z][A-Za-z0-9_-]*\s*[{(]\s*([^,\s{}()"]+)\s*,/.exec(block.text);
+  return m?.[1] ?? null;
+}
+
+function lineOf(text: string, offset: number): number {
+  let line = 1;
+  for (let k = 0; k < offset; k++) if (text.charCodeAt(k) === 10) line++;
+  return line;
+}
+
+function oneLine(msg: string): string {
+  // The parser's own "at line L col C" counts within the entry; the problem
+  // carries the entry's line in the file instead.
+  const first = (msg.replace(/^parseBib: invalid BibTeX — /, '').replace(/^parseBib: /, '').split('\n')[0] ?? '')
+    .replace(/\s+at line \d+ col \d+:?\s*$/, '')
+    .trim();
+  return first.length > 160 ? `${first.slice(0, 160)}…` : first || 'invalid BibTeX';
+}
+
+/**
+ * Parse a CITATIONS.bib text ENTRY BY ENTRY (VRFY-16, D-20-20): every
+ * `@type{key, …}` block is parsed on its own, so one broken entry never hides
+ * the others. Returns the entries that parse (CSL-JSON, exactly as parseBib
+ * returns them) and, for each entry that does not, its key as written and its
+ * line. Never throws. A whitespace-only text is zero entries; a text with no
+ * entry at all is one problem (line 1). `@comment` and `@preamble` blocks are
+ * skipped; `@string` definitions are applied to every entry.
+ */
+export function parseBibEntries(text: string): BibEntriesResult {
+  if (typeof text !== 'string' || text.trim().length === 0) return { entries: [], problems: [] };
+  const blocks = splitBibBlocks(text);
+  const strings = blocks.filter((b) => b.type === 'string' && b.closed).map((b) => b.text).join('\n');
+  const regular = blocks.filter((b) => b.type !== 'string' && b.type !== 'comment' && b.type !== 'preamble');
+  if (regular.length === 0) {
+    return { entries: [], problems: [{ key: null, line: 1, detail: 'no BibTeX entry found (every entry starts with @type{key, …})' }] };
+  }
+  // Fast path: the whole text parses and yields one entry per block.
+  if (regular.every((b) => b.closed)) {
+    try {
+      const all = parseBibSync(text);
+      if (all.length === regular.length) return { entries: all, problems: [] };
+    } catch {
+      /* one or more entries do not parse — go entry by entry */
+    }
+  }
+  const entries: Array<Record<string, unknown>> = [];
+  const problems: BibEntryProblem[] = [];
+  for (const block of regular) {
+    const key = blockKey(block);
+    const line = lineOf(text, block.start);
+    if (!block.closed) {
+      problems.push({ key, line, detail: 'the entry\'s braces never close' });
+      continue;
+    }
+    try {
+      const parsed = parseBibSync(strings.length > 0 ? `${strings}\n${block.text}` : block.text);
+      if (parsed.length !== 1) {
+        problems.push({ key, line, detail: `the entry parsed as ${parsed.length} entries` });
+        continue;
+      }
+      entries.push(parsed[0] as Record<string, unknown>);
+    } catch (e) {
+      problems.push({ key, line, detail: oneLine(e instanceof Error ? e.message : String(e)) });
+    }
+  }
+  return { entries, problems };
+}
+
+// =====================================================================
 //   Public: renderStyle (CITE-02 / CITE-03 — generic N-style renderer)
 // =====================================================================
 /**

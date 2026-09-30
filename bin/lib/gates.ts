@@ -5,8 +5,8 @@
 // run without a terminal does (refuse with a documented exit code, or skip the
 // step), and the exit code for an explicit decline. Later requirements add
 // their gates to GATES (intake defaults GRND-02, plan --research GRND-17,
-// UNSUPPORTED confirmation VRFY-22, quote acceptance VRFY-20, re-outline
-// GRND-09, persisted detector consent EXP-17); the Tier-1 context tool
+// UNSUPPORTED claims VRFY-22, quote acceptance VRFY-20, re-outline GRND-09,
+// persisted detector consent EXP-17); the Tier-1 context tool
 // paper_get_gates (PLUG-07) exposes the same table.
 //
 // SEAM FILE (Phase 17 plan, V2). The Phase 17 streams created it byte-identically
@@ -46,7 +46,11 @@ export type GateId =
   // Phase 19 review round 1 (SRC-13, SRC-15, SRC-16): the user's own sources.
   | 'byo-folder'
   | 'zotero-collection'
-  | 'pdf-attach-unmatched';
+  | 'pdf-attach-unmatched'
+  // Phase 20 (VRFY-20, VRFY-22; D-20-26): accepting an uncheckable quote, and
+  // exporting with UNSUPPORTED claims.
+  | 'quote-accept'
+  | 'unsupported-claims';
 
 export interface GateDef {
   readonly id: GateId;
@@ -87,6 +91,10 @@ export const GATES: readonly GateDef[] = Object.freeze([
   { id: 'byo-folder', label: 'Read the PDFs in this folder outside the paper and copy them into it?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'SRC-15', summary: 'reading a PDF folder outside the paper' },
   { id: 'zotero-collection', label: 'Pull this Zotero collection from your library into the paper?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'SRC-16', summary: 'pulling a Zotero collection a paper\'s config names' },
   { id: 'pdf-attach-unmatched', label: "Attach this PDF although its first page does not show the work's title and first author?", yolo: 'never', yoloChoice: '', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'SRC-13', summary: 'attaching a PDF whose first page does not show the work' },
+  // VRFY-20 / S-04: a verification decision — --yolo never accepts a quote; without a terminal the section stays unverifiable (verify's own exit, 4).
+  { id: 'quote-accept', label: 'Accept these quotes whose source text cannot be checked?', yolo: 'never', yoloChoice: '', nonInteractive: 'skip', nonTtyExit: EXIT_OK, declineExit: EXIT_OK, requirement: 'VRFY-20', summary: 'accepting a quote whose source text cannot be checked' },
+  // VRFY-22: done's confirmation when Pass 2 judged claims UNSUPPORTED; the decision is recorded in .paper/VERIFICATION.md.
+  { id: 'unsupported-claims', label: 'Export the paper with these UNSUPPORTED claims?', yolo: 'skip', yoloChoice: 'export and record them as auto-accepted', nonInteractive: 'refuse', nonTtyExit: EXIT_APPROVAL, declineExit: EXIT_APPROVAL, requirement: 'VRFY-22', summary: 'the UNSUPPORTED-claims confirmation' },
 ] satisfies GateDef[]);
 
 /**
