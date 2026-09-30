@@ -444,6 +444,8 @@ Run these on the merged tree (§7). `S` is a scratch dir under `…/scratchpad/p
 
 ## 8. Merge notes for Phase 20 (to be copied into 23a-SUMMARY.md)
 
+*Closer (2026-09-30):* these notes were copied into 23a-SUMMARY.md §9, which is the current copy. The closer re-ran the trial there against Phase 20 at `8c16008` and found the same 12 conflicted files, the same hunks and the same stdout lines.
+
 **Rename map.** Phase 20 edits at these paths land on the new ones through rename detection:
 
 | Old path | New path |
