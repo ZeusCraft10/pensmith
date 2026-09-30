@@ -188,12 +188,12 @@ function recordsFromEsummary(body: { result?: Record<string, unknown> }, ids: re
   return records;
 }
 
-async function get(url: string, check: ShapeCheck, opts: LookupOptions & { maxBytes?: number } = {}): Promise<Exchange> {
+async function get(url: string, check: ShapeCheck, opts: LookupOptions = {}): Promise<Exchange> {
   return exchange(
     () =>
       httpFetch(url, {
         source: 'pubmed',
-        maxBytes: opts.maxBytes ?? MAX_JSON_RESPONSE_BYTES,
+        maxBytes: MAX_JSON_RESPONSE_BYTES,
         validate: validator(check),
         ...(opts.refresh === true ? { refresh: true } : {}),
       }),
@@ -207,8 +207,9 @@ async function get(url: string, check: ShapeCheck, opts: LookupOptions & { maxBy
 
 /** The most ids one efetch request asks for (D-20-16: at most 200). */
 export const EFETCH_BATCH = 200;
-/** efetch's XML carries each article's reference list: allow a large answer (still bounded, SEC-03). */
-const EFETCH_MAX_BYTES = 32 * 1024 * 1024;
+// efetch's XML carries each article's reference list (tens of KB an article):
+// a batch stays under the structured-response cap (SEC-03, 8 MiB) at research's
+// search limits; an answer over it is a named failure like any other.
 
 const EFETCH: ShapeCheck = (res) => (/<PubmedArticleSet\b/.test(res.body) ? null : 'no <PubmedArticleSet>');
 
@@ -281,7 +282,7 @@ export async function fetchAbstracts(
     const batch = unique.slice(i, i + EFETCH_BATCH);
     let ex: Exchange;
     try {
-      ex = await get(efetchUrl(batch), EFETCH, { ...opts, maxBytes: EFETCH_MAX_BYTES });
+      ex = await get(efetchUrl(batch), EFETCH, opts);
     } catch (err) {
       if (!isOfflineEgressError(err)) throw err;
       failure ??= `${offlineLabel(err)}: no recorded fixture for the efetch request — re-run online`;
