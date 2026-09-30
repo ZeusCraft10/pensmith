@@ -1,13 +1,15 @@
 ---
 phase: 23a-plugin-packaging
 verified: 2026-09-30
-verified_at_branch: v1/p23a (review round 1 fixer; gate at 90f8c7d, live sessions at df1e767 — the same code, 90f8c7d adds docs only)
+verified_at_branch: v1/p23a (review round 2 fixer; gate, plugin smoke and live sessions at 0f2c2c3 — §6; round 1 at 90f8c7d / df1e767 — §1-§3)
 status: in_review
 requirements_in_scope: [PLUG-01, PLUG-02, PLUG-03, PLUG-04, PLUG-05, PLUG-13, PLUG-14, CI-05]
 open_items:
-  - "CI-05: the `plugin` job (ubuntu, macOS, Windows) and `bundle:check` in `check` have not run on a GitHub runner (v1/p23a has no upstream) — maintainer, after the push"
+  - "CI-05 (NOT complete): the `plugin` job (ubuntu, macOS, Windows) and `bundle:check` in `check` have not run on a GitHub runner (v1/p23a has no upstream) — maintainer, after the push; record the run URLs in 23a-SUMMARY, then tick CI-05"
   - "CI-05: make the `plugin` and `check` jobs required checks on main — maintainer (§5)"
-review_rounds: [round 1 (fixer, 2026-09-30): §4]
+  - "PLUG-14: the spawned-bundle hook tests' macOS and Windows legs (23a-PLAN §6: 'pass on all 3 OSes in CI') — pending the same first green `check` matrix"
+  - "PLUG-04 criterion 2 (one server alongside --plugin-dir) holds where PWD is the repo root, not in PowerShell/cmd — documented limitation with a tested workaround (§6)"
+review_rounds: [round 1 (fixer, 2026-09-30): §4, round 2 (fixer, 2026-09-30): §6]
 ---
 
 # Phase 23a: Plugin Packaging (PLUGIN-PACKAGING): Verification
@@ -132,4 +134,36 @@ JSON
 gh api repos/ZeusCraft10/pensmith/branches/main/protection/required_status_checks --jq '.contexts'
 ```
 
-CI-05 is complete in this branch only with that caveat stated.
+CI-05 is **not** complete until then (review round 2): its acceptance is "the job is a required check and passes", and neither has happened on a runner. The closer leaves it unticked (23a-PLAN §7.6) and records these items as pending the maintainer.
+
+## 6. Review round 2 (fixer, 2026-09-30)
+
+| Finding | Severity | Outcome |
+|---|---|---|
+| plugin.json pins `0.1.0-dev`, so git-marketplace installs never update | major | Fixed. Confirmed against the docs (the manifest `version` wins; `plugin update` compares for equality) and live: a pushed commit stayed uninstalled. Dropping `version` is not possible — `claude plugin validate --strict` fails on "No version specified" (Phase 23 criterion 1). So `version` is `<package.json version>+<12-hex sha256 of plugin/'s files>` (`scripts/plugin-version.cjs`; plugin.json hashed without its version; LF-normalised text; OS litter skipped). `npm run bundle` / `npm run plugin:version` stamp it; `validate:manifests` fails on a stale stamp or an entry `version`; `bundle:check` compares the stamp too. `plugin:smoke` step 7 serves the clone over a loopback `git http-backend` (`scripts/git-http-host.mjs`, a child process — the smoke's synchronous `claude` calls would starve an in-process server), installs from the URL, pushes a re-stamped `plugin/` change and asserts `claude plugin update` installs it. D-23a-05 amended. |
+| SessionStart repeats a stale HANDOFF position | minor | Fixed: the hook entry passes stdin `source`; the HANDOFF summary is added only for `compact` (the SessionStart after the PreCompact write). Spawned-bundle test: startup / resume / clear / no source give the router line only. |
+| stdout rows miss console.count/group/timeLog/dirxml and `process` under another name | minor | Fixed: every console member but warn/error/trace/assert; `process`/`console` as a value (`= process`, `f(console)`, `{ io: process }`, `return process`, `const { log } = console`, a rest destructure of process) in both the lint row and the graph content regex (`node:process` specifiers and `const { stderr } = process` stay clean). `bin/lib/node-warnings.ts` takes its receiver from the listener's `this`. Fixtures and per-form tests extended. |
+| plan/write/verify tools create a placeholder paper in a folder with no paper | major | Fixed: `mcp/tools.ts` `mutate(…, { needsPaper: true })` calls `paths.ts` `assertPaperHere` before the lock or the verb, returning the CLI's EXIT_USAGE line; the CLI now refuses a paper-less `PENSMITH_PAPER_ROOT` the same way (it also built a placeholder). Tier-contract case (both tiers, cwd and env, same code and line, empty folders), spawned-bundle test (`tests/mcp-tool-refusals.test.ts`), resolver unit cases; live: `pensmith_verify {n:1}` through `--plugin-dir` in an empty folder returned `exit_code 2`, `no paper in … — run pensmith new …`, and created nothing. |
+| PLUG-04: PWD unset registers the server twice; CONTRIBUTING says once | major | Fixed (docs and evidence). Confirmed live: PWD unset + `--plugin-dir ./plugin` → `plugin:pensmith:pensmith` and `pensmith`, both connected. No `.mcp.json` form matches on every shell. CONTRIBUTING now scopes the dedupe to PWD = root, documents the two-server case and the tested workaround (`"disabledMcpjsonServers": ["pensmith"]` in `.claude/settings.local.json`); the session check records the note and proves the workaround. D-23a-07 amended; PLUG-04 criterion 2 is not claimed for PowerShell/cmd. |
+| CI-05 not met; the plugin job never ran | minor | Accepted as stated: CI-05 left unticked, PLUG-14's 3-OS leg recorded as pending (frontmatter, §5, 23a-PLAN §7.6). |
+| Plan/write tools tell a Tier-1 user to "Run inside Claude Code (Tier 1) for key-free operation" | minor | Fixed in both tiers (the promise was false for the CLI too — README: key-free generation is not in this release): the missing-key error ends "`pensmith doctor` checks the setup (README: Model runtimes)." Spawned-bundle test: no tool response contains "key-free". |
+| The skill sends length and source corrections to `plan N --revise` | major | Fixed. Confirmed: `plan 2 --revise` on a clean section prints "No FABRICATED/MIS-CITED/NOT_FOUND citation" and changes nothing. The skill now routes length through the OUTLINE.md word target → `outline` → `plan N` → `write N`; a source through `add <id> --section N` / `add --remap <citekey> --section N` / `plan N --research`, then `plan N`, `write N`, saying there is no single-claim swap; redo through `--revise` only for a flagged section; a new section with a lettered id. It may edit only the OUTLINE.md table the user asked to change. `tests/correction-routes.test.ts` runs every route through the built CLI (the redraft follows the new target; other sections untouched; the renumbering row refused); `tests/nl-triggers.test.ts` asserts the truthful routes. |
+| Phase 20 merge notes out of date (skills/verify-section.md modify/delete) | minor | Fixed: 23a-PLAN §8 records the trial merge of the integrated Phase 20 branch (`f2cc81d`): its conflicts, the step-by-step for `skills/verify-section.md` (git rm; port `--accept-quote qK` as a CLI-form row with AskUserQuestion; extend the argument-hint and PLUMBING.md, which `tests/plumbing-args.test.ts` then enforces), the stdout writes that merge in cleanly, the re-stamp, and the round-2 behaviour Phase 20 code meets. |
+| Tier 1 says `cost: n/a (Claude session)` while plan/write bill the provider | minor | Fixed: `paper://state` shows the same COSTS.jsonl meter as the CLI; the tier contract compares the lines; status.md's fallback note, resume.md's replay note, the PRD cost-meter line and RUN-19 are amended. |
+| Plumbing docs omit `done --format` and compile's flags | minor | Fixed: the argument-hints and docs/PLUMBING.md list every option each verb takes (`--format docx\|pdf\|latex\|md`, `--discipline`, `--lintHeadings`, `--slug`); `tests/plumbing-args.test.ts` derives them from each verb's citty `args` (both directions). |
+
+**Gate (v1/p23a at 0f2c2c3).** `npm run prebuild`, `lint`, `typecheck`, `build`: exit 0. `validate:manifests`: valid. `bundle:check`: "plugin/dist and the plugin version match what is committed". `test:tier-contract`: 60/60. `npm test < /dev/null`: 2549 tests, 2548 pass, 1 fail — `tests/atomic-write.test.ts` "preserves OLD content on rename/write failure" (root only; CLAUDE.md); no skips, no todos. `node scripts/e2e-smoke.mjs`: PASS=16, FINDING=0, FAIL=0. `git status --porcelain`: clean.
+
+**Plugin smoke** (`CLAUDE_BIN=/opt/node22/bin/claude npm run plugin:smoke`, Linux, Claude Code 2.1.285): all checks passed, including
+```
+ok    git marketplace (http://127.0.0.1:45309/pensmith.git): installed 0.1.0-dev+b0fc2d409174 as a cached copy (…/git-marketplace/claude-config/plugins/cache/pensmith/pensmith/0.1.0-dev-b0fc2d409174)
+ok    git marketplace update: 0.1.0-dev+b0fc2d409174 → 0.1.0-dev+d5155c7496c7; the installed copy holds the new commit
+```
+
+**Live sessions** (`LANG=C.UTF-8 node scripts/plugin-session-check.mjs`, all checks): all evidence passed, model usage $0.49. New lines:
+```
+note     PLUG-04 documented limitation (CONTRIBUTING): PWD unset, --plugin-dir ./plugin at the root → 2 pensmith servers [{"name":"plugin:pensmith:pensmith","status":"connected","source":"plugin"},{"name":"pensmith","status":"connected","source":"project"}]
+evidence PASS [PLUG-04] PWD unset, --plugin-dir ./plugin with --settings '{"disabledMcpjsonServers":["pensmith"]}' (the CONTRIBUTING workaround): pensmith servers [{"name":"plugin:pensmith:pensmith","status":"connected","source":"plugin"}]
+evidence PASS [PLUG-14] SessionStart hook: exit 0, success; debug log: Hook SessionStart (node ${CLAUDE_PLUGIN_ROOT}/dist/hooks/session-start.mjs) provided additionalContext (294 chars)
+```
+(294 characters: a startup SessionStart no longer carries the HANDOFF line.)
