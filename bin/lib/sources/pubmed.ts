@@ -223,9 +223,14 @@ export interface PubmedArticleFacts {
   readonly pmcid?: string;
 }
 
-/** Inline XML markup out, entities decoded, whitespace collapsed. */
+/**
+ * Inline XML markup out (PubMed's inline formatting — i, b, u, sup, sub — with
+ * no space, so "H<sub>2</sub>O" stays one word; any other tag as a space),
+ * entities decoded, whitespace collapsed.
+ */
 function xmlText(s: string): string {
-  return decodeEntities(s.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').replace(/\s+([.,;:!?)])/g, '$1').trim();
+  const flat = s.replace(/<\/?(?:i|b|u|sup|sub)(?:\s[^>]*)?>/g, '').replace(/<[^>]+>/g, ' ');
+  return decodeEntities(flat).replace(/\s+/g, ' ').replace(/\s+([.,;:!?)])/g, '$1').trim();
 }
 
 /**
