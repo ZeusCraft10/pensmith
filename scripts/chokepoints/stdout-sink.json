@@ -1,0 +1,24 @@
+{
+  "id": "stdout-sink",
+  "requirement": "PLUG-13",
+  "module": "bin/lib/output-sink.ts",
+  "description": "Every line a verb or a bin/lib module prints for the user goes through out() from bin/lib/output-sink.ts: never process.stdout.write, console.log/info/debug/dir/table, or the process.stdout stream handed around as a value (`(ok ? process.stdout : process.stderr).write(…)`, `output: process.stdout`); reading process.stdout.isTTY / columns / rows is fine. The MCP server runs the same verbs in-process (pensmith_plan / pensmith_write / pensmith_verify) and speaks JSON-RPC on stdout, so it points the sink at stderr before it connects, and pensmith_status captures it with withCapturedOutput(); a direct write would corrupt the frame (T1-15). The CLI keeps the default sink, the process's stdout, so its output is byte-identical. bin/lib/pdf-worker.ts is exempt: it runs in a worker thread whose console goes to the worker's own captured stream, which pdf-text.ts never forwards (SEC-02). The hook entries in hooks/ are out of scope: their stdout is the hook protocol.",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts"],
+  "allow": ["bin/lib/output-sink.ts", "bin/lib/pdf-worker.ts"],
+  "match": [
+    {
+      "kind": "member",
+      "pattern": "^process\\.stdout\\.write$"
+    },
+    {
+      "kind": "member",
+      "pattern": "^console\\.(?:log|info|debug|dir|table)$"
+    },
+    {
+      "kind": "file-regex",
+      "pattern": "\\bprocess\\s*(?:\\.\\s*stdout\\b|\\[\\s*['\"`]stdout['\"`]\\s*\\])(?!\\s*\\.\\s*(?:isTTY|columns|rows|write)\\b)"
+    }
+  ],
+  "fixture": "tests/fixtures/chokepoints/stdout-sink.violation.ts.txt",
+  "fixturePath": "bin/lib/__chokepoint_fixture__/stdout-sink.ts"
+}

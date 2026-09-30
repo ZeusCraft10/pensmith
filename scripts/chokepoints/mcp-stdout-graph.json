@@ -1,0 +1,16 @@
+{
+  "id": "mcp-stdout-graph",
+  "requirement": "PLUG-13",
+  "module": "bin/lib/output-sink.ts",
+  "description": "No module the MCP server can reach, through static or dynamic relative imports from mcp/**, writes to the process's stdout except bin/lib/output-sink.ts: stdout is the server's JSON-RPC channel, and its pensmith_* tools run the CLI verbs in-process (a `pensmith plan: wrote …` line there made Claude Code drop the server, T1-15). The walk checks each reachable module's text for process.stdout.write, the process.stdout stream handed around as a value, and console.log/info/debug/dir/table calls, wherever the module lives — also outside the stdout-sink lint row's scope and allow list (a statically imported pdf-worker.ts would print on the main thread; pdf-text.ts's type-only import of it is erased at runtime and not followed). Print through out(); the server points that sink at stderr.",
+  "scope": ["mcp/**/*.ts"],
+  "allow": [],
+  "match": {
+    "kind": "import-graph",
+    "pattern": "^(?!bin/lib/output-sink\\.ts$)",
+    "typeImports": "allow",
+    "content": "\\bprocess\\s*(?:\\.\\s*stdout\\b|\\[\\s*['\"`]stdout['\"`]\\s*\\])(?!\\s*\\.\\s*(?:isTTY|columns|rows)\\b)|\\bconsole\\s*(?:\\.\\s*(?:log|info|debug|dir|table)|\\[\\s*['\"`](?:log|info|debug|dir|table)['\"`]\\s*\\])\\s*(?:\\(|\\.\\s*(?:call|apply|bind)\\b)"
+  },
+  "fixture": "tests/fixtures/chokepoints/mcp-stdout-graph.violation.ts.txt",
+  "fixturePath": "bin/cli/plan.ts"
+}

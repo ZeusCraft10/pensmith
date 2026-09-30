@@ -8,7 +8,7 @@
 // TTY-only one, which is not compared by tier-contract.
 //
 // Note: clack does not support injected streams (stdin/stderr) — it always
-// uses process.stdin / process.stdout. That is acceptable: the clack path
+// uses the process's own stdin and stdout. That is acceptable: the clack path
 // is only taken when stdout + stderr are TTY (interactive dev), so no test
 // fixture needs to pipe different streams. The numbered path handles all
 // headless/CI/piped scenarios.

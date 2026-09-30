@@ -13,8 +13,16 @@
 //     "allow":       ["bin/lib/library.ts"],        // globs exempt from the row
 //     "match":       { "kind": …, "pattern": … }    // or an array of matchers
 //     "fixture":     "tests/fixtures/chokepoints/<id>.violation.ts.txt",
+//     "fixturePath": "bin/lib/x.ts",                // optional: where the harness puts the fixture
 //     "baseline":    { "<path>": <max count> }      // file-regex rows only (optional)
 //   }
+//
+// `fixturePath` (optional, repo-relative `.ts`): the path tests/chokepoints.test.ts
+// reads the fixture at. An ESLint row's fixture is linted as that file (default:
+// a virtual file under the row's first `.ts` scope glob); an import-graph row's
+// fixture stands in for that module — when the path lies outside the row's
+// scope, the harness walks the row's real in-scope modules, so the fixture
+// proves the real graph reaches it (e.g. a bin/cli verb the MCP tools import).
 //
 // Matcher kinds (each `pattern` is a JavaScript regular-expression source):
 //   string-literal  any string literal or template-literal chunk whose value matches.
@@ -34,6 +42,15 @@
 //   import-graph    enforced only by the harness (tests/chokepoints.test.ts): no
 //                   in-scope module may reach a module whose repo-relative path
 //                   matches, through static or dynamic relative imports.
+//                   Optional `content` (a regex source, no flags, over the raw
+//                   module text — comments included): then a module is a
+//                   violation only when its path matches AND its text does, the
+//                   in-scope module itself counts (chain = [itself]), and the
+//                   walk goes on through it so every offending module is named.
+//                   Optional `typeImports: "allow"`: `import type … from` /
+//                   `export type … from` edges are not followed (they are erased
+//                   at runtime under verbatimModuleSyntax; an inline
+//                   `import { type X }` still loads the module and is followed).
 //
 // Why a separate rule instead of more no-restricted-syntax selectors: flat config
 // lets the LAST matching block win per rule name, so file-scoped overrides of
@@ -155,14 +172,24 @@ export function validateRow(row, fileName) {
   if (typeof row.fixture !== 'string' || !/^tests\/fixtures\/chokepoints\/[a-z0-9-]+\.violation\.ts\.txt$/.test(row.fixture)) {
     p.push('fixture must be tests/fixtures/chokepoints/<id>.violation.ts.txt');
   }
+  if (row.fixturePath !== undefined && (typeof row.fixturePath !== 'string' || !/^(?:[\w.-]+\/)*[\w.-]+\.ts$/.test(row.fixturePath) || row.fixturePath.split('/').some((seg) => seg === '..' || seg === '.'))) {
+    p.push('fixturePath must be a repo-relative .ts path');
+  }
   const matchers = row.match === undefined ? [] : matchersOf(row);
   if (matchers.length === 0) p.push('match is required');
   for (const m of matchers) {
     if (!m || !MATCH_KINDS.includes(m.kind)) p.push(`unknown match kind ${JSON.stringify(m && m.kind)}`);
+    if (m && m.content !== undefined && (m.kind !== 'import-graph' || typeof m.content !== 'string' || m.content === '')) {
+      p.push('content is a non-empty regex source, for import-graph matchers only');
+    }
+    if (m && m.typeImports !== undefined && (m.typeImports !== 'allow' || (m.kind !== 'import' && m.kind !== 'import-graph'))) {
+      p.push('typeImports is "allow", for import and import-graph matchers only');
+    }
     try {
       new RegExp(m.pattern, m.flags ?? '');
       if (m.names) new RegExp(m.names);
       if (m.arg) new RegExp(m.arg.pattern);
+      if (typeof m.content === 'string') new RegExp(m.content);
     } catch (e) {
       p.push(`bad pattern: ${e.message}`);
     }
@@ -195,12 +222,20 @@ export function fileRegexMatches(matcher, text) {
 const IMPORT_SPEC_RE =
   /(?:^|[^\w$.])(?:import|export)\s[^'"`;]*?\sfrom\s*(['"])([^'"]+)\1|(?:^|[^\w$.])import\s*(['"])([^'"]+)\3|(?:^|[^\w$.])import\s*\(\s*(['"])([^'"]+)\5\s*\)/g;
 
-/** Relative module specifiers imported by `text` (static, side-effect, dynamic). */
-export function relativeImports(text) {
+/** `import type … from` / `export type … from` (erased at runtime), not `import type from '…'` (a default import named type). */
+const TYPE_ONLY_RE = /^[^\w$.]?(?:import|export)\s+type(?:\s*[{*]|\s+(?!from\b)[\w$])/;
+
+/**
+ * Relative module specifiers imported by `text` (static, side-effect, dynamic).
+ * With `opts.skipTypeOnly`, type-only import / export statements are left out.
+ */
+export function relativeImports(text, opts = {}) {
   const out = [];
   for (const m of text.matchAll(IMPORT_SPEC_RE)) {
     const spec = m[2] ?? m[4] ?? m[6];
-    if (spec && spec.startsWith('.')) out.push(spec);
+    if (!spec || !spec.startsWith('.')) continue;
+    if (opts.skipTypeOnly && m[2] !== undefined && TYPE_ONLY_RE.test(m[0])) continue;
+    out.push(spec);
   }
   return out;
 }
@@ -223,9 +258,12 @@ export function resolveImport(fromFile, spec, exists, p = path) {
  * import-graph enforcement: for every entry (repo-relative path) in scope and
  * not allowed, walk its relative imports; a reached module whose repo-relative
  * path matches the row's pattern is a violation, reported with the import chain.
- * `io` = { read(abs) → text, exists(abs) → boolean } (injectable for tests),
- * plus the optional seams `root` (the repo root, default REPO_ROOT) and `path`
- * (a node:path flavour, default the host's) for the win32 self-test.
+ * With a `content` matcher, the path AND the module's text must match; the
+ * entry itself is checked too, and the walk continues through a violating
+ * module (its imports may hold more). `io` = { read(abs) → text,
+ * exists(abs) → boolean } (injectable for tests), plus the optional seams
+ * `root` (the repo root, default REPO_ROOT) and `path` (a node:path flavour,
+ * default the host's) for the win32 self-test.
  *
  * An entry is a toRepoRelative() result, which is absolute for a file on
  * another Windows drive (a temp dir on C: while the checkout is on D:), so the
@@ -234,32 +272,47 @@ export function resolveImport(fromFile, spec, exists, p = path) {
 export function importGraphViolations(row, entries, io) {
   const root = io.root ?? REPO_ROOT;
   const p = io.path ?? path;
+  const texts = new Map();
+  /** A module's text (read once per call), or null when it cannot be read. */
+  const textOf = (file) => {
+    if (!texts.has(file)) {
+      let text = null;
+      try {
+        text = io.read(file);
+      } catch {
+        text = null;
+      }
+      texts.set(file, text);
+    }
+    return texts.get(file);
+  };
   const out = [];
   for (const matcher of matchersOf(row).filter((m) => m.kind === 'import-graph')) {
     const target = new RegExp(matcher.pattern, matcher.flags ?? '');
+    const content = typeof matcher.content === 'string' ? new RegExp(matcher.content) : null;
+    /** Whether the module at `file` (repo-relative `rel`) violates this matcher. */
+    const violates = (file, rel) => target.test(rel) && (content === null || content.test(textOf(file) ?? ''));
+    const skipTypeOnly = matcher.typeImports === 'allow';
     for (const rel of entries) {
       if (!matchesAny(rel, row.scope) || matchesAny(rel, row.allow)) continue;
       const start = fromRepoRelative(rel, root, p);
+      if (content !== null && violates(start, rel)) out.push({ row: row.id, entry: rel, reached: rel, chain: [rel] });
       const seen = new Map([[start, null]]);
       const queue = [start];
       while (queue.length > 0) {
         const file = queue.shift();
-        let text;
-        try {
-          text = io.read(file);
-        } catch {
-          continue;
-        }
-        for (const spec of relativeImports(text)) {
+        const text = textOf(file);
+        if (text === null) continue;
+        for (const spec of relativeImports(text, { skipTypeOnly })) {
           const next = resolveImport(file, spec, io.exists, p);
           if (!next || seen.has(next)) continue;
           seen.set(next, file);
           const nextRel = toRepoRelative(next, root, p);
-          if (target.test(nextRel)) {
+          if (violates(next, nextRel)) {
             const chain = [nextRel];
             for (let at = file; at; at = seen.get(at)) chain.unshift(toRepoRelative(at, root, p));
             out.push({ row: row.id, entry: rel, reached: nextRel, chain });
-            continue;
+            if (content === null) continue;
           }
           queue.push(next);
         }
