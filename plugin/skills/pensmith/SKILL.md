@@ -63,12 +63,13 @@ If the CLI is not installed, say so and point the user to the "Tier 2" part of
 the pensmith README's Install section (a clone, `npm install`, `npm run build`,
 `npm link`; Node.js ≥ 22.12); the four MCP verbs above still work without it.
 
-Steps that ask the user something — the intake questions, the outline approval,
-the export confirmation — need a terminal. Without one the CLI stops with exit
-code 3 and writes nothing. Tell the user what it asked and suggest running that
-step in their own terminal. Only when the user explicitly says so, re-run it
-with `--yolo`, which accepts the suggested answers and approves the outline or
-export (it never lifts the cost cap). `pensmith new --answers <file.toml>`
+Steps that ask the user something — the intake questions, the research picks,
+the outline approval, the export confirmation — need a terminal. Without one
+the CLI stops at that question with exit code 3. Tell the user what it asked
+and suggest running that step in their own terminal. Only when the user
+explicitly says so, re-run it with `--yolo`, which accepts the suggested
+answers and approves the outline or the export for them (it never lifts the
+cost cap or gives detector consent). `pensmith new --answers <file.toml>`
 answers intake up front.
 
 ## A bare /pensmith, "continue", "what's next?"
