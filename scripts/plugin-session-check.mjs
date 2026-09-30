@@ -23,14 +23,18 @@
 //   PLUG-03  the init frame lists `pensmith:pensmith` and the 7 plumbing
 //            skills and a connected `plugin:pensmith:pensmith` server with its
 //            tools; the debug log says `Loaded 8 skills`; in a CLI-made paper
-//            `/pensmith status` calls pensmith_status and replies with the
-//            status the CLI prints.
+//            (`new`, then `outline` over a hand-written three-section
+//            OUTLINE.md — no model call, no network) `/pensmith status` calls
+//            pensmith_status, whose text equals the CLI's `status` stdout, and
+//            the reply names its next step and every section line.
 //   PLUG-04  in the clone's root, with project MCP servers approved, `claude
 //            mcp list` shows the developer .mcp.json server connected with no
 //            missing-variable warning and no build; with `--plugin-dir
 //            ./plugin` a session registers exactly one pensmith server.
 //   PLUG-05  `/pensmith:verify-section 1` reaches pensmith_verify.
-//   PLUG-14  SessionStart runs with exit 0 and its additionalContext reaches
+//   PLUG-14  the PreCompact bundle writes HANDOFF v2 at the router's position
+//            (phase sectioning, section 1, position plan); SessionStart runs
+//            with exit 0 and its additionalContext reaches
 //            the model (it quotes the resume step); a headless `/compact` of
 //            the previous session writes HANDOFF.json through PreCompact; the
 //            MCP server sees CLAUDE_CODE_SESSION_ID equal to the session id
@@ -192,15 +196,54 @@ function headless(ctx, name, { cwd, prompt, pluginDir, tools = '', allowed = [],
   return { ...r, transcript, log, debug };
 }
 
+/**
+ * The three sections of the hand-written outline makePaper applies. `pensmith
+ * outline` without --force registers a hand-edited OUTLINE.md with no model
+ * call (D-18-38), so the paper gets real section lines with no network and no
+ * key.
+ */
+const PAPER_SECTIONS = [
+  { slug: 'introduction', title: 'Introduction', role: 'intro', dependsOn: '', words: 400 },
+  { slug: 'mechanisms', title: 'Attention Mechanisms', role: 'body', dependsOn: 'introduction', words: 700 },
+  { slug: 'conclusion', title: 'Conclusion', role: 'conclusion', dependsOn: 'mechanisms', words: 400 },
+];
+
+/** A paper made by the built CLI: `new`, then `outline` over a hand-written OUTLINE.md. */
 function makePaper(ctx, name) {
   const dir = path.join(ctx.tmp, name);
   mkdirSync(dir, { recursive: true });
   copyFileSync(path.join(REPO_ROOT, 'tests', 'fixtures', 'assignment.txt'), path.join(dir, 'assignment.txt'));
   const env = { ...ctx.env, PENSMITH_NO_LLM: '1' };
-  const r = spawnSync(process.execPath, [ctx.cli, 'new', '@assignment.txt', '--yolo'], { cwd: dir, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  if (r.status !== 0 || !existsSync(path.join(dir, '.paper'))) throw new Error(`pensmith new failed in ${dir}:\n${r.stderr}`);
-  const status = spawnSync(process.execPath, [ctx.cli, 'status'], { cwd: dir, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const cli = (args) => spawnSync(process.execPath, [ctx.cli, ...args], { cwd: dir, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const made = cli(['new', '@assignment.txt', '--yolo']);
+  if (made.status !== 0 || !existsSync(path.join(dir, '.paper'))) throw new Error(`pensmith new failed in ${dir}:\n${made.stderr}`);
+  writeFileSync(path.join(dir, '.paper', 'OUTLINE.md'), [
+    '# Outline',
+    '',
+    '| # | slug | title | role | depends_on | word target | assigned_sources | voice |',
+    '|---|---|---|---|---|---|---|---|',
+    ...PAPER_SECTIONS.map((sec, i) => `| ${i + 1} | ${sec.slug} | ${sec.title} | ${sec.role} | ${sec.dependsOn} | ${sec.words} | | |`),
+    '',
+  ].join('\n'));
+  const outlined = cli(['outline', '--yolo']);
+  if (outlined.status !== 0) throw new Error(`pensmith outline failed in ${dir}:\n${outlined.stderr}`);
+  const status = cli(['status']);
+  if (status.status !== 0) throw new Error(`pensmith status failed in ${dir}:\n${status.stderr}`);
   return { dir, status: status.stdout };
+}
+
+/** The `next:` step and the section lines of `pensmith status` output. */
+function statusSummary(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim());
+  const next = (lines.find((l) => l.startsWith('next:')) ?? '').replace(/^next:\s*/, '');
+  const start = lines.indexOf('sections:');
+  const sections = [];
+  for (let i = start + 1; start >= 0 && i < lines.length; i += 1) {
+    const m = /^\[.\]\s+#(\S+)\s+([^:]+):/.exec(lines[i] ?? '');
+    if (!m) break;
+    sections.push({ id: m[1], slug: m[2].trim() });
+  }
+  return { next, sections };
 }
 
 // ---------------------------------------------------------------------------
@@ -234,11 +277,17 @@ function plug03(ctx) {
   const called = st.transcript.toolUses.some((u) => u.name === TOOL('pensmith_status'));
   evidence('PLUG-03', called, `/pensmith status → tool calls: ${st.transcript.toolUses.map((u) => u.name).join(', ') || '(none)'}`);
   const toolText = st.transcript.toolResults.map((r) => r.text).join('\n');
-  const nextLine = paper.status.split('\n').find((l) => l.startsWith('next:')) ?? '';
-  evidence('PLUG-03', toolText.trim() === paper.status.trim(), `pensmith_status text equals \`pensmith status\` stdout (${paper.status.split('\n').length} lines; ${nextLine})`);
+  const summary = statusSummary(paper.status);
+  evidence('PLUG-03', toolText.trim() === paper.status.trim(),
+    `pensmith_status text equals \`pensmith status\` stdout (${paper.status.trim().split('\n').length} lines; next: ${summary.next}; sections: ${summary.sections.map((x) => `#${x.id} ${x.slug}`).join(', ')})`);
   const reply = st.transcript.result?.result ?? st.transcript.texts.join('\n');
-  const nextStep = nextLine.replace(/^next:\s*/, '').split(' ')[0] ?? '';
-  evidence('PLUG-03', nextStep !== '' && reply.includes(nextStep), `reply names the next step "${nextStep}": ${reply.replace(/\s+/g, ' ').slice(0, 240)}`);
+  const verb = summary.next.split(' ')[0] ?? '';
+  const target = /#(\S+)/.exec(summary.next)?.[1] ?? null;
+  const namesNext = verb !== '' && new RegExp(`\\b${verb}\\b`, 'i').test(reply) && (target === null || new RegExp(`(?:#|section\\s*|§\\s*)${target}\\b`, 'i').test(reply));
+  evidence('PLUG-03', namesNext, `reply names the next step "${summary.next}": ${reply.replace(/\s+/g, ' ').slice(0, 240)}`);
+  const missing = summary.sections.filter((x) => !reply.toLowerCase().includes(x.slug.toLowerCase()));
+  evidence('PLUG-03', summary.sections.length === PAPER_SECTIONS.length && missing.length === 0,
+    `reply lists the status section lines (${summary.sections.map((x) => x.slug).join(', ')})${missing.length > 0 ? `; missing ${missing.map((x) => x.slug).join(', ')}` : ''}`);
   return paper;
 }
 
@@ -278,7 +327,12 @@ function plug14(ctx, paper) {
     encoding: 'utf8',
   });
   const handoff = existsSync(path.join(paper.dir, '.paper', 'HANDOFF.json')) ? JSON.parse(readFileSync(path.join(paper.dir, '.paper', 'HANDOFF.json'), 'utf8')) : null;
-  evidence('PLUG-14', hook.status === 0 && handoff?.schema_version === 2, `pre-compact.mjs wrote HANDOFF v2: phase ${handoff?.phase}, section ${handoff?.section}, position ${handoff?.position}`);
+  // The router's step for the paper (`plan #1` for makePaper's outline) is the position the handoff records.
+  const step = /^(plan|write|verify) #(\S+)/.exec(statusSummary(paper.status).next);
+  const want = step ? { phase: 'sectioning', section: step[2], position: step[1] } : null;
+  evidence('PLUG-14', hook.status === 0 && handoff?.schema_version === 2 && want !== null
+    && handoff.phase === want.phase && handoff.section === want.section && handoff.position === want.position,
+  `pre-compact.mjs wrote HANDOFF v2: phase ${handoff?.phase}, section ${handoff?.section}, position ${handoff?.position} (router: ${statusSummary(paper.status).next})`);
 
   const s = headless(ctx, 'plug14-sessionstart', {
     cwd: paper.dir,
