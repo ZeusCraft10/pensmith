@@ -11,6 +11,9 @@
 //     `Auto-accepted under --yolo <ISO>` in the paper-level
 //     .paper/VERIFICATION.md (`## Decisions`), next to the gate summary of the
 //     exported text and the whole-paper Pass-4 table (VRFY-23).
+//   - answered at the gate (the numbered prompt channel a terminal uses): each
+//     claim is listed with its evidence first; yes exports and records
+//     `Confirmed by user <ISO>`, no exports nothing (exit 3).
 //   - done never writes under sections/.
 //
 // Built CLI, sources offline (the cited works are recorded), model stubbed
@@ -23,7 +26,7 @@ import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } 
 import { join } from 'node:path';
 import { EXIT_APPROVAL, EXIT_BLOCKED, EXIT_OK } from '../bin/lib/exit-codes.js';
 import { seedGatePaper, mtimes, RECORDED_BIB, type GatePaper } from './helpers/gate-paper.js';
-import { STACK_LINE } from './helpers/paper-cli-harness.js';
+import { STACK_LINE, runCli } from './helpers/paper-cli-harness.js';
 
 const SECTIONS = [
   { n: 1, slug: 'intro', assigned: ['lecun2015'], draft: '# Introduction\n\nDeep networks learn layered representations of their input data [@lecun2015].\n' },
@@ -92,3 +95,45 @@ test('VRFY-22 / VRFY-23 (built CLI): UNSUPPORTED claims — without a terminal d
   assert.match(report, /^## Pass-4/m, 'the whole-paper Pass 4 over the exported text');
   assert.deepEqual(mtimes(join(p.root, '.paper', 'sections')), sectionsBefore, 'done never writes under sections/');
 });
+
+test('VRFY-22 (built CLI): answering the unsupported-claims gate — each claim is listed with its evidence first; yes exports and records `Confirmed by user <ISO>`; no exports nothing (exit 3)', () => {
+  const unsupported = (paper: GatePaper): void => {
+    const verif = join(paper.sectionDir(1, 'intro'), 'VERIFICATION.md');
+    const md = readFileSync(verif, 'utf8');
+    const at = md.indexOf('## Pass-2');
+    // A model's verdict with the evidence it quoted from the abstract (VRFY-22).
+    const row = /^\| lecun2015 \| ([^|]+) \| \*\*UNCLEAR\*\* \| [^|]* \| [^|]* \|$/m.exec(md.slice(at));
+    assert.ok(row, md.slice(at));
+    writeFileSync(
+      verif,
+      md.slice(0, at) +
+        md.slice(at).replace(row[0], `| lecun2015 | ${row[1]} | **UNSUPPORTED** | The abstract describes the method, not this finding. | deep learning allows computational models |`).replace('| Pass-2 | UNCLEAR |', '| Pass-2 | UNSUPPORTED |'),
+    );
+  };
+  // An answer read from stdin, as a terminal user would type it (the numbered prompt channel).
+  const answer = (p: GatePaper, input: string): ReturnType<typeof runCliWithInput> => runCliWithInput(p, ['done', '--format', 'md'], input);
+
+  const declined = compiledPaper('done-unsupported-no', unsupported);
+  const no = answer(declined, 'n\n');
+  assert.equal(no.status, EXIT_APPROVAL, `${no.stdout}\n${no.stderr}`);
+  assert.match(no.stdout, /1 claim\(s\) Pass 2 judged UNSUPPORTED by the cited source \(VRFY-22\):\n {2}- §1 \[@lecun2015\] "[^"]+" — The abstract describes the method, not this finding\.\n {6}evidence: "deep learning allows computational models"/);
+  assert.ok(!existsSync(join(declined.root, '.paper', 'export')), 'a "no" exports nothing');
+
+  const p = compiledPaper('done-unsupported-yes', unsupported);
+  const sectionsBefore = mtimes(join(p.root, '.paper', 'sections'));
+  const yes = answer(p, 'y\n');
+  assert.equal(yes.status, EXIT_OK, `${yes.stdout}\n${yes.stderr}`);
+  assert.match(yes.stderr, /Export the paper with these UNSUPPORTED claims\?/);
+  assert.ok(readdirSync(join(p.root, '.paper', 'export')).some((f) => f.startsWith('DRAFT.')), 'exported');
+  assert.match(
+    readFileSync(join(p.root, '.paper', 'VERIFICATION.md'), 'utf8'),
+    /^\| §1 \(intro\) \| Pass-2 row 1 \[@lecun2015\] \| [^|]+ \| Confirmed by user \d{4}-\d{2}-\d{2}T[^|]+ \|$/m,
+  );
+  assert.deepEqual(mtimes(join(p.root, '.paper', 'sections')), sectionsBefore, 'done never writes under sections/');
+});
+
+function runCliWithInput(p: GatePaper, args: readonly string[], input: string): { status: number | null; stdout: string; stderr: string } {
+  const r = runCli(p.sb, p.root, args, { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input, timeoutMs: 120_000 });
+  assert.doesNotMatch(r.stderr, STACK_LINE, r.stderr);
+  return r;
+}
