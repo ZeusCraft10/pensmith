@@ -270,6 +270,13 @@ function blockRuns(lines: readonly Line[]): Array<{ first: number; last: number;
   return out;
 }
 
+/** The offset where the paragraph holding line `j` ends. */
+function paragraphEnd(lines: readonly Line[], j: number): number {
+  let k = j;
+  while (k + 1 < lines.length && !isBlank(lines[k + 1]) && !BLOCK_LINE_RE.test(lines[k + 1]!.text)) k += 1;
+  return lines[k]!.end;
+}
+
 /** The last citation of `text` when nothing but punctuation follows it. */
 function trailingCitation(text: string): CitationCluster | null {
   const cites = findCitations(text);
@@ -284,11 +291,14 @@ function blockCandidates(md: string, lines: readonly Line[], cites: readonly Cit
     const text = quoteText(run.text);
     if (words(text).length < minWords) continue;
     const firstLine = lines[run.first]!;
-    // 1a. A citation that ends the block.
+    // 1. A citation that ends the block.
     const inside = trailingCitation(run.text);
     let cite: { c: CitationCluster; src: string } | null = inside !== null ? { c: inside, src: run.text } : null;
-    // 1b. A citation opening the next paragraph (after at most two blank lines), after an optional dash.
-    if (cite === null) {
+    // The citation opening the next paragraph (after at most two blank lines):
+    // at the start of the line (`-@k` included) or after a dash (`— @k`).
+    let opener: CitationCluster | null = null;
+    let openerAlone = false;
+    {
       let j = run.last + 1;
       let blanks = 0;
       while (j < lines.length && isBlank(lines[j]) && blanks < 2) {
@@ -297,12 +307,16 @@ function blockCandidates(md: string, lines: readonly Line[], cites: readonly Cit
       }
       const next = lines[j];
       if (next !== undefined && !isBlank(next) && !BLOCK_LINE_RE.test(next.text)) {
-        const lead = /^[ \t]*(?:[—–]|--?)?[ \t]*/.exec(next.text)?.[0].length ?? 0;
-        const c = cites.find((x) => x.start === next.start + lead);
-        if (c !== undefined) cite = { c, src: md };
+        const ws = /^[ \t]*/.exec(next.text)?.[0].length ?? 0;
+        const dashed = /^[ \t]*(?:[—–]|--?)[ \t]*/.exec(next.text)?.[0].length ?? -1;
+        opener = cites.find((x) => x.start === next.start + ws || (dashed > ws && x.start === next.start + dashed)) ?? null;
+        // A paragraph that is only the citation (`[@k, p. 3].`) attributes the block outright.
+        openerAlone = opener !== null && /^[\s.,;:!?)\]]*$/u.test(md.slice(citationEnd(opener, md), paragraphEnd(lines, j)));
       }
     }
-    // 2. A citation in the last sentence of the lead-in paragraph.
+    // 2. A citation standing alone after the block.
+    if (cite === null && opener !== null && openerAlone) cite = { c: opener, src: md };
+    // 3. A citation in the last sentence of the lead-in paragraph (`@k puts it this way:`).
     if (cite === null) {
       let j = run.first - 1;
       if (j >= 0 && isBlank(lines[j])) j -= 1;
@@ -314,6 +328,8 @@ function blockCandidates(md: string, lines: readonly Line[], cites: readonly Cit
         if (c !== null) cite = { c, src: md };
       }
     }
+    // 4. A citation that opens the next sentence after the block (`-@k adds …`).
+    if (cite === null && opener !== null) cite = { c: opener, src: md };
     const firstText = firstLine.text.replace(BLOCK_MARKERS_RE, '');
     const alnum = firstText.search(/[\p{L}\p{N}_*]/u);
     const probe = alnum > 0 ? firstLine.start + (firstLine.text.length - firstText.length) + alnum - 1 : -1;
@@ -341,6 +357,13 @@ interface Span {
 
 const ALNUM_RE = /[\p{L}\p{N}]/u;
 
+/** True when an odd run of backslashes ends just before `i`: the mark there is a literal, never a delimiter. */
+function escaped(md: string, i: number): boolean {
+  let n = 0;
+  for (let j = i - 1; j >= 0 && md[j] === '\\'; j -= 1) n += 1;
+  return n % 2 === 1;
+}
+
 /**
  * The double-quoted spans of one paragraph (`[from, to)`), paired left to
  * right as Pandoc's smart-quote reader pairs them: outside a quote, `"` or
@@ -354,6 +377,7 @@ function doubleQuoteSpans(md: string, from: number, to: number): Span[] {
   for (let i = from; i < to; i += 1) {
     const c = md[i];
     if (c !== '"' && c !== '“' && c !== '”') continue;
+    if (escaped(md, i)) continue;
     if (open !== -1 && c === '“' && /\S/u.test(md[i + 1] ?? ' ')) {
       open = i;
       continue;
