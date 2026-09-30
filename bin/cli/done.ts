@@ -44,6 +44,7 @@ import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
 import { sectionWriteBlockReason } from '../lib/plan-status.js';
 import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
+import { blocksCompile, PASS2_TABLE_HEADER, PASS2_TABLE_HEADER_V1 } from '../lib/verify/verdicts.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -309,11 +310,11 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
 // bin/lib/verify/pass2.ts renderPass2Section — if that writer ever changes its
 // table header or its bolded-verdict cell convention, the desync MUST be caught
 // here (the parser fails safe rather than silently dropping UNSUPPORTED rows).
-//   header:        | Citekey | Claim Sentence | Verdict | Rationale |
+//   header:        verify/verdicts.ts PASS2_TABLE_HEADER (with the VRFY-22
+//                  Evidence column) or PASS2_TABLE_HEADER_V1 (without it)
 //   verdict cell:  **<VERDICT>**  (e.g. **UNSUPPORTED**)
 //   empty section: _(no citations to judge)_
 const PASS2_HEADING = '## Pass-2';
-const PASS2_TABLE_HEADER = '| Citekey | Claim Sentence | Verdict | Rationale |';
 const PASS2_EMPTY_MARKER = '_(no citations to judge)_';
 const VALID_VERDICTS: ReadonlySet<string> = new Set([
   'SUPPORTED',
@@ -369,8 +370,9 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
   // Explicit empty-section marker → clean.
   if (bodyText.includes(PASS2_EMPTY_MARKER)) return [];
 
-  // The Pass-2 section is present but non-empty. Find the pinned header row.
-  const headerLineIdx = body.findIndex((l) => l.trim() === PASS2_TABLE_HEADER);
+  // The Pass-2 section is present but non-empty. Find the pinned header row
+  // (5 columns with Evidence, or the 4-column layout written before Phase 20).
+  const headerLineIdx = body.findIndex((l) => l.trim() === PASS2_TABLE_HEADER || l.trim() === PASS2_TABLE_HEADER_V1);
   if (headerLineIdx === -1) {
     // Heading present but the pinned 4-column header is missing → fail safe.
     return [unparseableSentinel(sectionName)];
@@ -384,6 +386,7 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
     return [unparseableSentinel(sectionName)];
   }
 
+  const columns = (body[headerLineIdx] ?? '').trim() === PASS2_TABLE_HEADER ? 5 : 4;
   const out: Pass2Result[] = [];
   for (let i = sepIdx + 1; i < body.length; i++) {
     const raw = (body[i] ?? '').trim();
@@ -395,15 +398,16 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
       .split('|')
       .slice(1, -1)
       .map((c) => c.trim());
-    if (cells.length !== 4) {
-      // A row that does not parse into the expected 4 cells → fail safe.
+    if (cells.length !== columns) {
+      // A row that does not parse into the header's cells → fail safe.
       return [unparseableSentinel(sectionName)];
     }
-    const [citekey, claimSentence, verdictCell, rationale] = cells as [
+    const [citekey, claimSentence, verdictCell, rationale, evidence = ''] = cells as [
       string,
       string,
       string,
       string,
+      string | undefined,
     ];
     // The verdict cell is bolded: **<VERDICT>**. Strip the ** markers.
     const verdict = verdictCell.replace(/\*\*/g, '').trim();
@@ -417,7 +421,7 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
         claimSentence,
         verdict: 'UNSUPPORTED' as Pass2Verdict,
         rationale,
-        evidence: '',
+        evidence,
       });
     }
   }
@@ -544,7 +548,8 @@ export async function reCheckFinalMd(
     };
   }
 
-  const notFound = pass3Results.filter((r) => r.verdict === 'NOT_FOUND');
+  // The one blocking rule (verify/verdicts.ts, Phase 20 seam S-C).
+  const notFound = pass3Results.filter((r) => blocksCompile(r.verdict));
   if (notFound.length > 0) {
     const detail = notFound
       .map((r) => `[@${r.citekey}] "${r.quoteSnippet}"`)

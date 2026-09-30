@@ -74,6 +74,7 @@ import { computeDraftHash } from './draft-hash.js';
 import { compiledInputsCurrent } from './compile-inputs.js';
 import { outlineProblem, sectionRegistryProblem } from './section-registry.js';
 import { parseBlockingVerdictRows, sectionVerificationReasons } from './verify/verdict-rows.js';
+import { RETRY_ONLINE_VERDICTS } from './verify/verdicts.js';
 import { isResearchDone } from './research-sentinel.js';
 import type { Handoff } from './schemas/handoff.js';
 
@@ -213,7 +214,7 @@ function verificationBlockers(verificationPath: string): string[] {
   }
   const reasons = sectionVerificationReasons(md, dryRunWorkspaceActive());
   // One line for the usual case — every blocker an UNVERIFIABLE row.
-  const unverifiable = parseBlockingVerdictRows(md).filter((r) => r.verdict === 'UNVERIFIABLE');
+  const unverifiable = parseBlockingVerdictRows(md).filter((r) => r.verdict === 'UNVERIFIABLE' || RETRY_ONLINE_VERDICTS.has(r.verdict));
   if (reasons.length > 1 && unverifiable.length === reasons.length) {
     const keys = unverifiable.map((r) => `[@${r.citekey}]`);
     const list = `${keys.slice(0, -1).join(', ')} and ${keys[keys.length - 1] as string}`;
