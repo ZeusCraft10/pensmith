@@ -23,10 +23,10 @@
 // The static half: the `mcp-stdout-graph` chokepoint row holds on the real
 // import graph, and fires once a verb the tools reach writes to stdout.
 
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -150,11 +150,22 @@ function cli(cwd: string, ...args: string[]): { status: number | null; stdout: s
 }
 
 let seeded: string | null = null;
+/** Every temp dir this file made (removed after the suite; the servers have exited by then). */
+const made: string[] = [];
+after(() => {
+  for (const dir of made) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+});
+
+function tempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  made.push(dir);
+  return dir;
+}
 
 /** A paper the built CLI made (new → research → outline), copied fresh for each leg. */
 function seededPaper(): string {
   if (seeded === null) {
-    const root = mkdtempSync(join(tmpdir(), 'pensmith-stdout-clean-seed-'));
+    const root = tempDir('pensmith-stdout-clean-seed-');
     writeFileSync(join(root, 'assignment.txt'), 'Write a 1500-word literature review on attention mechanisms in neural networks, APA style.\n');
     for (const step of [['new', '--from', 'assignment.txt', '--yolo'], ['research', '--yolo'], ['outline', '--yolo']]) {
       const r = cli(root, ...step);
@@ -162,7 +173,7 @@ function seededPaper(): string {
     }
     seeded = root;
   }
-  const copy = mkdtempSync(join(tmpdir(), 'pensmith-stdout-clean-'));
+  const copy = tempDir('pensmith-stdout-clean-');
   cpSync(seeded, copy, { recursive: true });
   return copy;
 }

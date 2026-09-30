@@ -20,7 +20,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { buildServer } from '../mcp/server.js';
@@ -207,6 +207,13 @@ function listTree(dir: string): string[] {
   return out.sort();
 }
 
+/** A temp dir removed when the test ends (the in-memory server holds no handle on it). */
+function tempRoot(t: { after: (fn: () => void) => void }, prefix: string): string {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  return root;
+}
+
 /** A process-wide sink double installed for `fn` (what the server's stderr sink would receive). */
 async function withRecordingSink<T>(fn: (printed: () => string) => Promise<T>): Promise<T> {
   const chunks: string[] = [];
@@ -218,8 +225,8 @@ async function withRecordingSink<T>(fn: (printed: () => string) => Promise<T>): 
   }
 }
 
-test('PLUG-03: pensmith_status returns exactly the text `pensmith status` prints, captured (never on the process sink), and writes nothing', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'pensmith-status-tool-'));
+test('PLUG-03: pensmith_status returns exactly the text `pensmith status` prints, captured (never on the process sink), and writes nothing', async (t) => {
+  const root = tempRoot(t, 'pensmith-status-tool-');
   await seedThreeSectionPaper(root);
   const { client } = await pair(root);
   const expected = renderStatusView(await buildStatusView(root, { tier: 'cli', ...routeOptionsFor(root) })) + '\n';
@@ -238,8 +245,8 @@ test('PLUG-03: pensmith_status returns exactly the text `pensmith status` prints
   assert.deepEqual(listTree(root), before, 'read-only: no file created or removed');
 });
 
-test('PLUG-03: pensmith_status on a folder without a paper is an error carrying the CLI text and exit code', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'pensmith-status-tool-empty-'));
+test('PLUG-03: pensmith_status on a folder without a paper is an error carrying the CLI text and exit code', async (t) => {
+  const root = tempRoot(t, 'pensmith-status-tool-empty-');
   const { client } = await pair(root);
   const res = await client.callTool({ name: 'pensmith_status', arguments: {} });
   assert.equal(res.isError, true);
@@ -250,8 +257,8 @@ test('PLUG-03: pensmith_status on a folder without a paper is an error carrying 
   assert.deepEqual(listTree(root), [], 'nothing created in a folder without a paper');
 });
 
-test('PLUG-13: parallel pensmith_status calls and other printing never mix (the capture is per call)', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'pensmith-status-tool-parallel-'));
+test('PLUG-13: parallel pensmith_status calls and other printing never mix (the capture is per call)', async (t) => {
+  const root = tempRoot(t, 'pensmith-status-tool-parallel-');
   await seedThreeSectionPaper(root);
   const { client } = await pair(root);
   const expected = renderStatusView(await buildStatusView(root, { tier: 'cli', ...routeOptionsFor(root) })) + '\n';
