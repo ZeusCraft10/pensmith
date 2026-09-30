@@ -256,11 +256,13 @@ test('RUN-14 / S-21: with no paper and no pointer, a mutating verb exits 2 and c
 test('RUN-14: `--paper p2 write 1` works non-interactively from anywhere', () => {
   const { sb, p2 } = openedP2('resolver-flag');
   const empty = sb.project('empty');
-  const r = runCli(sb, empty, ['--paper', 'p2', 'write', '1']);
+  // `--no-verify`: these cases pin paper resolution; the chained verify of a
+  // PENSMITH_NO_LLM stub draft is PLACEHOLDER (VRFY-24, exit 4).
+  const r = runCli(sb, empty, ['--paper', 'p2', 'write', '1', '--no-verify']);
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
   assert.ok(existsSync(join(p2, '.paper', 'sections', '01-intro', 'DRAFT.md')), "p2's section 1 was drafted");
   assert.ok(!existsSync(join(empty, '.paper')), 'nothing written where the command was typed');
-  const byPath = runCli(sb, empty, ['write', '1', `--paper=${p2}`]);
+  const byPath = runCli(sb, empty, ['write', '1', '--no-verify', `--paper=${p2}`]);
   assert.equal(byPath.status, 0, byPath.stderr);
   const unknown = runCli(sb, empty, ['--paper', 'nope', 'status']);
   assert.equal(unknown.status, EXIT_USAGE);
@@ -270,7 +272,7 @@ test('RUN-14: `--paper p2 write 1` works non-interactively from anywhere', () =>
 test('RUN-14: in a terminal-style run (numbered answers) the pointer is offered and "continue" proceeds on p2', () => {
   const { sb, p2 } = openedP2('resolver-ask');
   const empty = sb.project('empty');
-  const r = runCli(sb, empty, ['write', '1'], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '1\n' });
+  const r = runCli(sb, empty, ['write', '1', '--no-verify'], { env: { PENSMITH_PROMPT_MODE: 'numbered' }, input: '1\n' });
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
   assert.match(r.stderr, /No paper here\. Continue "p2" at .+, or start a new paper in .+\? \(select\)/);
   assert.ok(existsSync(join(p2, '.paper', 'sections', '01-intro', 'DRAFT.md')), 'continued on p2');

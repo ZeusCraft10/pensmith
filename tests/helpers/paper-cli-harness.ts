@@ -219,7 +219,11 @@ export function seedVerifiedSection(root: string, n: number, slug: string): void
   );
 }
 
-/** A clean paper ready for `done`: verified sections + a compiled DRAFT.md. */
+/**
+ * A clean paper ready for `done`: verified sections + a compiled DRAFT.md with
+ * the compile record `done` checks (COMPILE-INPUTS.json v2: the sha256 of the
+ * DRAFT.md compile wrote and each section's verified hash — VRFY-27).
+ */
 export function seedCompiledPaper(root: string): void {
   writeState(root, [{ n: 1, slug: 'one' }, { n: 2, slug: 'two' }]);
   writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
@@ -228,6 +232,27 @@ export function seedCompiledPaper(root: string): void {
   seedVerifiedSection(root, 1, 'one');
   seedVerifiedSection(root, 2, 'two');
   writeFileSync(join(root, '.paper', 'DRAFT.md'), '# Paper\n\nOne.\n\nTwo.\n');
+  writeCompileRecord(root, [{ n: 1, slug: 'one' }, { n: 2, slug: 'two' }]);
+}
+
+/**
+ * The COMPILE-INPUTS.json v2 a compile of `sections` into the current
+ * `.paper/DRAFT.md` records (compile-inputs.ts): what `done` checks the
+ * compiled draft and each section's verified hash against (VRFY-27).
+ */
+export function writeCompileRecord(root: string, sections: Array<{ n: number; slug: string }>): void {
+  const sha = (p: string): string => (existsSync(p) ? createHash('sha256').update(readFileSync(p)).digest('hex') : '');
+  const record = {
+    $schemaVersion: 2,
+    compiled_at: '2026-01-01T00:00:00.000Z',
+    compiled_draft_sha256: sha(join(root, '.paper', 'DRAFT.md')),
+    sections: sections.map((s) => {
+      const dir = sectionDirOf(root, s.n, s.slug);
+      const hash = /^verified_against_draft_hash:\s*'?([0-9a-f]{64})'?\s*$/m.exec(readFileSync(join(dir, 'PLAN.md'), 'utf8'))?.[1] ?? null;
+      return { id: String(s.n), slug: s.slug, draft_sha256: sha(join(dir, 'DRAFT.md')), verification_sha256: sha(join(dir, 'VERIFICATION.md')), verified_against_draft_hash: hash };
+    }),
+  };
+  writeFileSync(join(root, '.paper', 'COMPILE-INPUTS.json'), JSON.stringify(record, null, 2) + '\n');
 }
 
 // ---------------------------------------------------------------------------
