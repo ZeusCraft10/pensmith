@@ -1,8 +1,9 @@
 // bin/lib/doctor/probes/build-artifact-resolves.ts
 //
 // DOCT-05 Phase-2 substitute (per checker iter 2 + B4 user decision):
-//   statSync on dist/bin/pensmith.js and dist/mcp/server.js (both must be non-empty);
-//   then execFileSync(process.execPath, ['dist/bin/pensmith.js', '--version']) smoke-test.
+//   statSync on the Tier-2 CLI build dist/bin/pensmith.js and the Tier-1 MCP
+//   server bundle plugin/dist/mcp/server.mjs (both must be non-empty); then
+//   execFileSync(process.execPath, [<cli>, '--version']) smoke-test.
 // D-15 severity: PASS when both artifacts exist non-empty AND --version exits 0;
 //   FAIL when either artifact is missing/empty OR the smoke exec fails.
 // D-19 read-only: statSync + execFileSync (read-only query), no writes.
@@ -11,44 +12,16 @@
 import type { Probe, ProbeResult } from '../probes.js';
 import { statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { cliPackageRoot, pluginMcpServerBundle, PLUGIN_MCP_SERVER_LABEL } from '../../paths.js';
 
-// CR-02 fix: resolve build artifacts relative to THIS file, not the process working directory.
-// The PRD §3 / §19 Tier-2 contract guarantees `pensmith doctor` runs from
-// inside a user's paper directory — not from the pensmith repo root. Using
-// cwd-relative literals silently failed every Tier-2 user's first
-// `pensmith doctor` invocation outside the repo root. CI never caught this
-// because CI always runs from the repo root.
-//
-// Walk up from HERE until we find a directory containing package.json.
-// Fixed-depth `..` arithmetic does not work because this file ships at two
-// different depths: bin/lib/doctor/probes/*.ts under tsx (4 `..` to root)
-// and dist/bin/lib/doctor/probes/*.js after build (5 `..` to root). An
-// earlier fix used `..` × 4 unconditionally and produced a bogus
-// dist/dist/bin/pensmith.js path that no Tier-2 install would satisfy.
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  // Fall back to start; the probe will report FAIL with a clear summary.
-  return start;
-}
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PKG_ROOT = findPkgRoot(HERE);
+// CR-02: resolve the artifacts from the installed package, never from the
+// process working directory — `pensmith doctor` runs from inside a user's
+// paper folder, not the pensmith repo root. paths.ts (the one asset resolver,
+// D-23a-03) finds the plugin from its own module location: the package that
+// holds plugin/ is where the CLI build lives (source checkout, npm install),
+// and the Tier-1 server is the committed plugin bundle (D-23a-04).
 const BIN_REL = 'dist/bin/pensmith.js';
-const MCP_REL = 'dist/mcp/server.js';
-const BIN = path.join(PKG_ROOT, BIN_REL);
-const MCP = path.join(PKG_ROOT, MCP_REL);
 
 function presentNonEmpty(p: string): { ok: boolean; size: number; reason?: string } {
   try {
@@ -70,19 +43,45 @@ function presentNonEmpty(p: string): { ok: boolean; size: number; reason?: strin
 export const buildArtifactResolvesProbe: Probe = {
   id: 'build-artifact-resolves',
   async run(): Promise<ProbeResult> {
-    const bin = presentNonEmpty(BIN);
-    const mcp = presentNonEmpty(MCP);
+    let binPath: string;
+    let mcpPath: string;
+    try {
+      const pkg = cliPackageRoot();
+      if (pkg === null) {
+        return {
+          id: 'build-artifact-resolves',
+          severity: 'FAIL',
+          summary: 'Running inside the plugin bundle, which ships no Tier-2 CLI build.',
+          fix: 'Run `pensmith doctor` from the npm-installed CLI or a source checkout.',
+        };
+      }
+      binPath = path.join(pkg, 'dist', 'bin', 'pensmith.js');
+      mcpPath = pluginMcpServerBundle();
+    } catch (err) {
+      return {
+        id: 'build-artifact-resolves',
+        severity: 'FAIL',
+        summary: `Build artifacts not located: ${err instanceof Error ? err.message : String(err)}`,
+        fix: 'Reinstall pensmith, or restore plugin/ in a source checkout.',
+      };
+    }
+    const bin = presentNonEmpty(binPath);
+    const mcp = presentNonEmpty(mcpPath);
     if (!bin.ok || !mcp.ok) {
+      const fixes = [
+        !bin.ok && 'run `npm run build` for the CLI',
+        !mcp.ok && 'run `npm run bundle` for the plugin bundle',
+      ].filter(Boolean).join(' and ');
       return {
         id: 'build-artifact-resolves',
         severity: 'FAIL',
         summary: `Build artifact missing: ${[!bin.ok && bin.reason, !mcp.ok && mcp.reason].filter(Boolean).join('; ')}`,
-        fix: 'Run `npm run build`.',
+        fix: `In a source checkout, ${fixes}; an npm install ships both, so reinstall pensmith.`,
       };
     }
     try {
       // execFileSync (NEVER exec) — argv array, no shell. 5s timeout.
-      execFileSync(process.execPath, [BIN, '--version'], {
+      execFileSync(process.execPath, [binPath, '--version'], {
         stdio: ['ignore', 'pipe', 'pipe'],
         encoding: 'utf8',
         timeout: 5000,
@@ -90,7 +89,7 @@ export const buildArtifactResolvesProbe: Probe = {
       return {
         id: 'build-artifact-resolves',
         severity: 'PASS',
-        summary: `Build artifacts present (${BIN_REL}: ${bin.size}B, ${MCP_REL}: ${mcp.size}B) and \`pensmith --version\` exits 0.`,
+        summary: `Build artifacts present (${BIN_REL}: ${bin.size}B, ${PLUGIN_MCP_SERVER_LABEL}: ${mcp.size}B) and \`pensmith --version\` exits 0.`,
       };
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
@@ -98,7 +97,7 @@ export const buildArtifactResolvesProbe: Probe = {
         id: 'build-artifact-resolves',
         severity: 'FAIL',
         summary: `Build artifacts exist but ${BIN_REL} --version failed to exit 0: ${reason}`,
-        fix: 'Run `npm run clean && npm run build`; investigate the build output.',
+        fix: 'Run `npm run build` again and investigate its output.',
       };
     }
   },

@@ -1,0 +1,13 @@
+{
+  "id": "plugin-assets",
+  "requirement": "PLUG-02",
+  "module": "bin/lib/paths.ts",
+  "description": "plugin/ is the one home of every shipped asset (workflow bodies, templates — prompts, citation styles, presets, stubs, the dry-run corpus — references, skills, agents and the committed bundles) for both tiers, and bin/lib/paths.ts pluginRoot() is the one resolver: lazy, cached, walking up from its own module location to .claude-plugin/plugin.json (the bundle, a Claude Code plugin-cache copy) or plugin/.claude-plugin/plugin.json (source, dist/, an npm install). A private package.json walk (the old findPkgRoot copies) reads the wrong folder in the plugin bundle and the plugin cache, which hold no package.json. So only paths.ts names the plugin's asset directories as path segments; everything else calls pluginTemplatePath / pluginReferencePath / pluginWorkflowPath / pluginMcpServerBundle / pluginPath.",
+  "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs"],
+  "allow": ["bin/lib/paths.ts"],
+  "match": {
+    "kind": "string-literal",
+    "pattern": "^(?:templates|workflows|references|\\.claude-plugin)$|^(?:\\.\\.?[\\\\/])*(?:plugin[\\\\/])?(?:templates|workflows|references|\\.claude-plugin)[\\\\/]|(?:^|[\\\\/])plugin[\\\\/](?:dist|skills|agents|hooks)(?:[\\\\/]|$)"
+  },
+  "fixture": "tests/fixtures/chokepoints/plugin-assets.violation.ts.txt"
+}

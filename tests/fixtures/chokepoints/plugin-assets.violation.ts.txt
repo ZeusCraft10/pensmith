@@ -1,0 +1,11 @@
+// Chokepoint fixture (plugin-assets, PLUG-02): a module that finds a shipped
+// asset with its own package.json walk and names the asset directory itself.
+// The plugin bundle and a Claude Code plugin-cache copy hold no package.json,
+// so this reads the wrong folder there — the rule must flag it and point at
+// paths.ts pluginReferencePath().
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
+export function sneakyReference(pkgRoot: string): string {
+  return readFileSync(path.join(pkgRoot, 'references', 'http-warnings.md'), 'utf8');
+}

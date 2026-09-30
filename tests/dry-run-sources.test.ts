@@ -48,10 +48,11 @@ function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-test('RUN-27: the corpus is packaged under templates/, never under tests/ (RUN-05)', () => {
-  assert.ok(existsSync(dryRun.DRY_RUN_CORPUS_PATH), dryRun.DRY_RUN_CORPUS_PATH);
-  assert.ok(dryRun.DRY_RUN_CORPUS_PATH.endsWith(join('templates', 'dry-run', 'corpus.json')));
-  assert.ok(!dryRun.DRY_RUN_CORPUS_PATH.includes(`${sep}tests${sep}`), 'the dry-run corpus is not a test fixture');
+test('RUN-27: the corpus is packaged under plugin/templates/, never under tests/ (RUN-05, PLUG-02)', () => {
+  const corpusPath = dryRun.dryRunCorpusPath();
+  assert.ok(existsSync(corpusPath), corpusPath);
+  assert.ok(corpusPath.endsWith(join('plugin', 'templates', 'dry-run', 'corpus.json')), corpusPath);
+  assert.ok(!corpusPath.includes(`${sep}tests${sep}`), 'the dry-run corpus is not a test fixture');
 });
 
 test('RUN-27: search returns >=5 deterministic, schema-valid synthetic sources covering article, preprint and book', async () => {

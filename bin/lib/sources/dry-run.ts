@@ -5,8 +5,8 @@
 // sockets. Cassette replay cannot do that (RUN-03 limits it to exact recorded
 // requests), so --dry-run gets its own provider: for any query it returns
 // deterministic synthetic sources minted from the packaged corpus
-// templates/dry-run/corpus.json (shipped through package.json `files`, never
-// under tests/ — RUN-05).
+// plugin/templates/dry-run/corpus.json (shipped through package.json `files`,
+// never under tests/ — RUN-05).
 //
 // Every source it mints:
 //   - carries `synthetic: true` and source 'dry-run';
@@ -25,10 +25,9 @@
 // every reserved identifier it could produce is refused (RUN-27).
 
 import { createHash } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { generateCitekey } from '../citekey.js';
+import { pluginTemplatePath } from '../paths.js';
 import { DRY_RUN_DOI_PREFIX, isbn13CheckDigit, normalizeDoi } from '../doi.js';
 import { lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
@@ -50,34 +49,19 @@ interface DryRunCorpus {
   publishers: string[];
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Ships at bin/lib/sources/ (tsx) and dist/bin/lib/sources/ (build): walk up to
-// the directory that owns package.json (IN-03 defect class).
-function findPkgRoot(start: string): string {
-  let cur = start;
-  for (let i = 0; i < 8; i++) {
-    try {
-      if (statSync(path.join(cur, 'package.json')).isFile()) return cur;
-    } catch {
-      // continue
-    }
-    const next = path.dirname(cur);
-    if (next === cur) break;
-    cur = next;
-  }
-  return start;
+/**
+ * The packaged corpus: the plugin's templates/dry-run/corpus.json (PLUG-02),
+ * resolved lazily through paths.ts (the one asset resolver, D-23a-03).
+ */
+export function dryRunCorpusPath(): string {
+  return pluginTemplatePath('dry-run', 'corpus.json');
 }
-
-/** The packaged corpus path (the canonical asset root; PLUG-02 moves it later). */
-export const DRY_RUN_CORPUS_PATH = path.join(findPkgRoot(__dirname), 'templates', 'dry-run', 'corpus.json');
 
 let corpusCache: DryRunCorpus | null = null;
 
 function corpus(): DryRunCorpus {
   if (corpusCache !== null) return corpusCache;
-  const parsed = JSON.parse(readFileSync(DRY_RUN_CORPUS_PATH, 'utf8')) as DryRunCorpus;
+  const parsed = JSON.parse(readFileSync(dryRunCorpusPath(), 'utf8')) as DryRunCorpus;
   const lists: Array<keyof DryRunCorpus> = [
     'title_templates', 'book_templates', 'adjectives', 'nouns', 'fields',
     'surnames', 'given_names', 'venues', 'publishers',
@@ -85,7 +69,7 @@ function corpus(): DryRunCorpus {
   for (const k of lists) {
     const v = parsed[k];
     if (!Array.isArray(v) || v.length === 0) {
-      throw new Error(`dry-run corpus ${DRY_RUN_CORPUS_PATH}: "${String(k)}" must be a non-empty array`);
+      throw new Error(`dry-run corpus ${dryRunCorpusPath()}: "${String(k)}" must be a non-empty array`);
     }
   }
   corpusCache = parsed;

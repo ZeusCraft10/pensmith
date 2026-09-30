@@ -31,14 +31,7 @@
   },
   "files": [
     "dist/",
-    "skills/",
-    "agents/",
-    "workflows/",
-    "templates/",
-    "references/",
-    "hooks/",
-    ".claude-plugin/",
-    ".mcp.json",
+    "plugin/",
     "README.md",
     "PRIVACY.md",
     "LICENSE"

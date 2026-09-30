@@ -100,7 +100,8 @@ Each concern below may live only in the named module. Rows marked `row:` are enf
 | Writing `LIBRARY.json` / `CITATIONS.bib` / `CITATIONS.ris`, importing the BibTeX/RIS writers | `bin/lib/library.ts` | row: `library-writer` (BRDTH-01) |
 | Comparing a module with `process.argv[1]` (the main guard) | `bin/lib/main-guard.ts` | row: `main-guard` (RUN-10) |
 | A new inline `eslint-disable` / `eslint-enable` / rule-config comment | nowhere (the 12 pre-existing directives are the baseline; each entry must equal its file's count) | row: `no-new-eslint-disable` (RUN-29) |
-| Reading `templates/prompts/*.md` | `bin/lib/prompt-loader.ts` | row: `prompt-loader` (D-12) |
+| Reading `plugin/templates/prompts/*.md` | `bin/lib/prompt-loader.ts` | row: `prompt-loader` (D-12) |
+| Naming the plugin's asset folders (`templates`, `workflows`, `references`, `.claude-plugin`, `plugin/dist`…) as path segments — the one asset resolver `pluginRoot()` / `pluginPath()` and its helpers (`pluginTemplatePath`, `pluginReferencePath`, `pluginWorkflowPath`, `pluginMcpServerBundle`), which walk up from their own module location, never a package.json walk or `CLAUDE_PLUGIN_ROOT` | `bin/lib/paths.ts` | row: `plugin-assets` (PLUG-02) |
 | DOI regex `/^10\./` | `bin/lib/doi.ts` | `no-restricted-syntax`; `tests/lint-chokepoint.test.ts` |
 | `fs.writeFile` | `bin/lib/atomic-write.ts` | `no-restricted-syntax`; `tests/lint-atomic-write-chokepoint.test.ts` |
 | `os.homedir()` (or a named `homedir` import from `node:os`; everything else calls `paths.ts userHomeDir()`), `process.env.{LOCALAPPDATA,APPDATA,XDG_DATA_HOME}` | `bin/lib/paths.ts` | `no-restricted-syntax`; `tests/lint-paths-chokepoint.test.ts` |

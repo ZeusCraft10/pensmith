@@ -13,7 +13,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  DISCIPLINES_PATH,
+  disciplinesPath,
   PresetsFileSchema,
   loadDisciplinePresets,
   disciplineSlugs,
@@ -76,7 +76,7 @@ const PRD_8: Readonly<Record<string, Row>> = {
 };
 
 test('GRND-06: disciplines.json validates and holds exactly the PRD §8 presets (plus sociology)', () => {
-  const raw = JSON.parse(readFileSync(DISCIPLINES_PATH, 'utf8')) as unknown;
+  const raw = JSON.parse(readFileSync(disciplinesPath(), 'utf8')) as unknown;
   assert.doesNotThrow(() => PresetsFileSchema.parse(raw));
   assert.deepEqual(disciplineSlugs().sort(), Object.keys(PRD_8).sort());
 });
@@ -96,7 +96,7 @@ test('GRND-06: every PRD §8 row value — style, alternates, source order, sect
 });
 
 test('GRND-06: an invalid preset file is rejected (unknown style, empty sources, inverted band, missing fallback)', () => {
-  const good = JSON.parse(readFileSync(DISCIPLINES_PATH, 'utf8')) as { presets: Record<string, Record<string, unknown>> };
+  const good = JSON.parse(readFileSync(disciplinesPath(), 'utf8')) as { presets: Record<string, Record<string, unknown>> };
   const mutate = (fn: (f: typeof good) => void): unknown => {
     const copy = JSON.parse(JSON.stringify(good)) as typeof good;
     fn(copy);
