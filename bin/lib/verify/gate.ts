@@ -160,17 +160,19 @@ export interface LoadedBibliography {
   /** CSL-JSON entries that parse (parseBibEntries). */
   readonly entries: Array<Record<string, unknown>>;
   readonly problems: BibEntryProblem[];
+  /** Why a CITATIONS.bib that exists could not be read (e.g. `EACCES`); absent when it was read or is missing. */
+  readonly unreadable?: string;
 }
 
-/** Read `<root>/.paper/CITATIONS.bib` entry by entry. Never throws (an unreadable file reads as missing). */
+/** Read `<root>/.paper/CITATIONS.bib` entry by entry. Never throws (an unreadable file reads as missing, saying why). */
 export function loadBibliography(root: string): LoadedBibliography {
   const path = join(paperDir(root), 'CITATIONS.bib');
   if (!existsSync(path)) return { path, exists: false, entries: [], problems: [] };
   let text: string;
   try {
     text = readFileSync(path, 'utf8');
-  } catch {
-    return { path, exists: false, entries: [], problems: [] };
+  } catch (e) {
+    return { path, exists: false, entries: [], problems: [], unreadable: (e as NodeJS.ErrnoException).code ?? (e as Error).message };
   }
   const { entries, problems } = parseBibEntries(text);
   return { path, exists: true, entries, problems };
@@ -267,6 +269,9 @@ function bibAwareRow(r: Pass1Result, bib: LoadedBibliography, parsedKeys: Readon
   }
   if (r.verdict !== 'FABRICATED') return base;
   if (!bib.exists) {
+    if (bib.unreadable !== undefined) {
+      return { ...base, reason: `.paper/CITATIONS.bib could not be read (${bib.unreadable}), so this citation cannot be checked — make the file readable (or rebuild it with \`pensmith research\` / \`pensmith add <id>\`), then re-verify` };
+    }
     return { ...base, reason: '.paper/CITATIONS.bib is missing, so this citation cannot be checked — rebuild it with `pensmith research` (or `pensmith add <id>`), then re-verify' };
   }
   if (bib.entries.length === 0 && bib.problems.length === 0) {
