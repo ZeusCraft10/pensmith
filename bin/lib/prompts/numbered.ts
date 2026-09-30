@@ -128,6 +128,14 @@ interface SharedLineReader {
 
 const LINE_READERS = new WeakMap<NodeJS.ReadableStream, SharedLineReader>();
 
+// Pause the shared input once nobody waits for a line. A closed interface is
+// left alone: Node 24's readline throws ERR_USE_AFTER_CLOSE from pause() /
+// resume() after close (Node 22 ignored the call), and the 'close' handler
+// settles the pending waiters — which pause — from inside close() itself.
+function pauseWhenIdle(reader: SharedLineReader): void {
+  if (!reader.closed && reader.waiters.length === 0) reader.rl.pause();
+}
+
 function lineReaderFor(stdin: NodeJS.ReadableStream): SharedLineReader {
   const existing = LINE_READERS.get(stdin);
   if (existing) return existing;
@@ -142,7 +150,7 @@ function lineReaderFor(stdin: NodeJS.ReadableStream): SharedLineReader {
     const waiter = reader.waiters.shift();
     if (waiter) waiter.resolve(line);
     else reader.queue.push(line);
-    if (reader.waiters.length === 0) rl.pause();
+    pauseWhenIdle(reader);
   });
   rl.on('close', () => {
     reader.closed = true;
@@ -182,7 +190,7 @@ async function readOneLine(
       clearTimeout(timer);
       const i = reader.waiters.indexOf(waiter);
       if (i >= 0) reader.waiters.splice(i, 1);
-      if (reader.waiters.length === 0) reader.rl.pause();
+      pauseWhenIdle(reader);
       action();
     }
 

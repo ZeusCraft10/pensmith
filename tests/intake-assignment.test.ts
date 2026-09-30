@@ -29,7 +29,7 @@ import {
   resolveAssignment,
   type ResolveAssignmentOptions,
 } from '../bin/lib/assignment.js';
-import { stdinMayCarryAssignment } from '../bin/lib/stdin-source.js';
+import { statMayCarryAssignment, stdinMayCarryAssignment } from '../bin/lib/stdin-source.js';
 import { resolvePaperRoot } from '../bin/lib/paths.js';
 import { PensmithError, EXIT_USAGE } from '../bin/lib/exit-codes.js';
 import type { PromptAnswer, PromptQuestion } from '../bin/lib/prompts.js';
@@ -169,6 +169,16 @@ test('GRND-01 / RUN-14: stdin may carry an assignment only as a FIFO or a non-em
     fs.closeSync(fd);
     fs.closeSync(efd);
   }
+  // The file type comes from st_mode's type bits on every platform: Node's
+  // Stats.isFIFO() / isSocket() are always false on Windows, where libuv's
+  // fstat reports a pipe (`type a.txt | pensmith`, child_process 'pipe') as
+  // exactly _S_IFIFO with size 0, and NUL as a character device.
+  assert.equal(statMayCarryAssignment({ mode: 0o010000, size: 0 }), true, 'a pipe (a POSIX FIFO; libuv\'s Windows pipe)');
+  assert.equal(statMayCarryAssignment({ mode: 0o140755, size: 0 }), true, 'a socket');
+  assert.equal(statMayCarryAssignment({ mode: 0o100644, size: 18 }), true, 'a non-empty regular file');
+  assert.equal(statMayCarryAssignment({ mode: 0o100644, size: 0 }), false, 'an empty regular file');
+  assert.equal(statMayCarryAssignment({ mode: 0o020666, size: 0 }), false, '/dev/null or NUL (a character device)');
+  assert.equal(statMayCarryAssignment({ mode: 0o040755, size: 4096 }), false, 'a directory');
   // The resolver: a bare run with a piped assignment starts a new paper here.
   const empty = dir();
   assert.deepEqual(resolvePaperRoot({ verb: null, mode: 'cli', cwd: empty, env: {}, stdinAssignment: true }), { kind: 'root', root: empty, source: 'new' });

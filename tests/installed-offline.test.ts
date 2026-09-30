@@ -30,7 +30,14 @@ import { pensmithGlobalLibraryIndexPath } from '../bin/lib/paths.js';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
 
-/** A user's environment: no test context, no PENSMITH_* unless given, isolated data dir. */
+/**
+ * A user's environment: no test context, no PENSMITH_* unless given, isolated
+ * data dir. Without a test context bin/lib/paths.ts takes the platform data
+ * dir as-is, so EVERY platform's variable points into the scratch dir — HOME
+ * too, because on macOS the data dir is ~/Library/Application Support (the
+ * test runner never redirects HOME; CI-09 caught this test's locks in the real
+ * macOS data dir when HOME was left out).
+ */
 function userEnv(scratch: string, extra: Record<string, string> = {}): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) {
@@ -39,7 +46,8 @@ function userEnv(scratch: string, extra: Record<string, string> = {}): Record<st
     if (/^(ANTHROPIC|OPENAI|GPTZERO)_/.test(k)) continue;
     env[k] = v;
   }
-  return { ...env, XDG_DATA_HOME: join(scratch, 'data'), LOCALAPPDATA: join(scratch, 'data'), ...extra };
+  const data = join(scratch, 'data');
+  return { ...env, XDG_DATA_HOME: data, LOCALAPPDATA: data, HOME: data, USERPROFILE: data, ...extra };
 }
 
 let pkg: InstalledPackage | null = null;
@@ -97,9 +105,7 @@ test('GRND-19: from the installed package, one `--dry-run --yolo` beside an assi
   const { scratch } = install();
   const project = mkdtempSync(join(scratch, 'dry-run-chain-'));
   writeFileSync(join(project, 'assignment.txt'), 'Write a 1500-word literature review on attention mechanisms in transformers, APA style.\n');
-  // HOME inside the scratch dir too: on macOS the data dir derives from it.
-  const home = { HOME: join(scratch, 'data') };
-  const r = runInstalled(['--dry-run', '--yolo'], project, home);
+  const r = runInstalled(['--dry-run', '--yolo'], project);
   const out = `${r.stdout}\n${r.stderr}`;
   assert.equal(r.status, 0, `the dry run reaches done: ${out.slice(-3000)}`);
   assert.ok(!/ENOENT|tests[\\/]fixtures/.test(out), `no ENOENT and no tests/fixtures path: ${out.slice(0, 2000)}`);
@@ -108,7 +114,7 @@ test('GRND-19: from the installed package, one `--dry-run --yolo` beside an assi
   assert.ok(exported.length > 0 && exported.every((f) => f.startsWith('DRAFT.dry-run.')), `the export is named DRAFT.dry-run.*: ${exported.join(', ')}`);
   assert.ok(existsSync(join(project, '.paper-dry-run', 'FINAL.md')));
   assert.ok(!existsSync(join(project, '.paper')), 'a dry run never creates .paper/');
-  const registry = pensmithGlobalLibraryIndexPath(process.platform, userEnv(scratch, home));
+  const registry = pensmithGlobalLibraryIndexPath(process.platform, userEnv(scratch));
   const entries = existsSync(registry)
     ? (JSON.parse(readFileSync(registry, 'utf8')) as { entries: Array<{ folderPath: string }> }).entries
     : [];

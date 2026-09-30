@@ -23,7 +23,7 @@
 
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess, type SpawnSyncReturns } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,6 +64,25 @@ before(async () => {
 after(async () => {
   await pkg?.close();
 });
+
+/**
+ * Stop a spawned child and wait until it has EXITED, not merely been signalled.
+ * On Windows a running process keeps its cwd busy, so after() removing the
+ * scratch dir while a just-killed MCP server was still shutting down failed
+ * with EBUSY (rmdir <scratch>\mcp-XXXX).
+ */
+async function stopChild(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+  child.stdin?.end();
+  child.kill();
+  const hard = setTimeout(() => child.kill('SIGKILL'), 10_000);
+  try {
+    await exited;
+  } finally {
+    clearTimeout(hard);
+  }
+}
 
 function runShim(args: string[], cwd: string): SpawnSyncReturns<string> {
   const { shim, runEnv } = installed!;
@@ -157,6 +176,6 @@ test('RUN-10: the MCP server started through the linked root answers initialize 
     assert.equal(msg.result?.serverInfo?.name, 'pensmith');
     assert.equal(msg.result?.serverInfo?.version, PKG.version);
   } finally {
-    child.kill();
+    await stopChild(child);
   }
 });

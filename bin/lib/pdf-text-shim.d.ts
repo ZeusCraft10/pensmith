@@ -25,6 +25,6 @@ declare module 'pdf-parse/lib/pdf-parse.js' {
     pagerender?: (pageData: never) => Promise<string>;
     max?: number;
   }
-  const pdfParse: (buf: Buffer, options?: PdfParseOptions) => Promise<PdfParseResult>;
+  const pdfParse: (buf: Uint8Array, options?: PdfParseOptions) => Promise<PdfParseResult>;
   export default pdfParse;
 }

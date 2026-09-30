@@ -74,6 +74,23 @@ function npmAsync(args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv })
   });
 }
 
+/**
+ * Remove a scratch dir, best-effort. Callers stop (and await) every process
+ * they spawned first; what can remain on Windows is a handle that is released
+ * a moment after its process exited (the process table, an antivirus scan).
+ * fs.promises.rm retries the WHOLE removal on EBUSY / EPERM / ENOTEMPTY with a
+ * linear backoff — the synchronous rmSync of Node 22 does not retry a busy
+ * NESTED directory at all, whatever maxRetries says. A temp dir that still
+ * cannot be removed is reported, never a suite failure.
+ */
+async function removeScratch(dir: string): Promise<void> {
+  try {
+    await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch (err) {
+    process.stderr.write(`installed-package: could not remove the temp dir ${dir}: ${(err as Error).message}\n`);
+  }
+}
+
 /** `npm pack` the built repo and `npm install -g` the tarball into a fresh temp prefix. */
 export async function packAndInstall(label: string): Promise<InstalledPackage> {
   assert.ok(
@@ -98,7 +115,7 @@ export async function packAndInstall(label: string): Promise<InstalledPackage> {
   const registry: LocalNpmRegistry = await startLockfileRegistry({ lockfile: path.join(REPO, 'package-lock.json'), cacheDir: npmCache });
   const close = async (): Promise<void> => {
     await registry.close();
-    fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+    await removeScratch(scratch);
   };
 
   try {

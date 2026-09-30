@@ -55,6 +55,7 @@ jobs:
       # dir (LOCALAPPDATA / ~/Library/Application Support / XDG_DATA_HOME) before
       # any test runs; the step after the test suite asserts it is unchanged.
       - name: Fingerprint the real pensmith data dir (before tests — CI-09)
+        id: data-dir-before
         shell: bash
         run: |
           node scripts/data-dir-fingerprint.mjs > "$RUNNER_TEMP/pensmith-data-before.txt"
@@ -67,7 +68,10 @@ jobs:
         shell: bash
         run: npm run test:coverage < /dev/null
 
+      # Runs even when a test step failed (a failing suite used to hide a leak:
+      # the step was skipped), as long as the "before" fingerprint was taken.
       - name: Assert tests left the real pensmith data dir untouched (CI-09)
+        if: ${{ !cancelled() && steps.data-dir-before.outcome == 'success' }}
         shell: bash
         run: |
           node scripts/data-dir-fingerprint.mjs > "$RUNNER_TEMP/pensmith-data-after.txt"

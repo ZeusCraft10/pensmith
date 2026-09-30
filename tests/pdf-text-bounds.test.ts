@@ -13,18 +13,21 @@
 //   - HARD-04b: exported MAX_PDF_BYTES constant is a positive number.
 //   - HARD-04b: exported PDF_TIMEOUT_MS constant is a positive number.
 //   - (Timeout assertion is skip-guarded separately on PDF_TIMEOUT_MS presence.)
+//   - RSCH-05: a PDF handed over as a view at a non-zero byteOffset (a pooled
+//     Buffer — every small `fs.readFile` / `Buffer.from`) extracts its text.
 //
 // Path resolution: fileURLToPath(new URL(..., import.meta.url)) — Phase-11.
 // Dynamic-import: URL.href specifier so tsc --noEmit stays clean.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 // ---- path resolution (Phase-11 spaced-path safe) ----
 const pdfTextSrcPath = fileURLToPath(new URL('../bin/lib/pdf-text.ts', import.meta.url));
 const pdfTextModUrl = new URL('../bin/lib/pdf-text.js', import.meta.url);
+const byoPdfPath = fileURLToPath(new URL('./fixtures/pdf/byo-text.pdf', import.meta.url));
 
 // ---- probe: do the named constant exports exist? ----
 let extractPdfTextFn: ((buf: Buffer | Uint8Array) => Promise<string>) | undefined;
@@ -106,7 +109,7 @@ test('HARD-04b: Buffer of MAX_PDF_BYTES + 1 → extractPdfText rejects with cap 
   },
   async () => {
     // Build a buffer 1 byte over cap. We fill with zeros — this will NOT be
-    // parsed by pdf-parse because the cap check happens BEFORE parseWithRetry.
+    // parsed by pdf-parse because the cap check happens BEFORE parsePdf.
     const oversized = Buffer.alloc(MAX_PDF_BYTES! + 1, 0);
     await assert.rejects(
       () => extractPdfTextFn!(oversized),
@@ -128,6 +131,39 @@ test('HARD-04b: Buffer of MAX_PDF_BYTES + 1 → extractPdfText rejects with cap 
       },
       `extractPdfText must reject a ${MAX_PDF_BYTES! + 1}-byte input with a descriptive cap error`,
     );
+  },
+);
+
+// ---- RSCH-05: byteOffset-safe parse ----
+//
+// pdf-parse's bundled PDF.js builds sub-streams from `bytes.buffer` and drops
+// the view's byteOffset, so a PDF inside Node's shared Buffer pool (any small
+// fs.readFile / Buffer.from) used to be parsed from the wrong bytes ("bad XRef
+// entry") whenever the pool cursor was not at 0 — which Node 24's larger pool
+// made the common case. Every view below sits at a non-zero offset of a larger
+// ArrayBuffer; each must yield the fixture's text, on every Node version.
+
+test('RSCH-05: extractPdfText parses a PDF held in a view at a non-zero byteOffset (pooled Buffer)',
+  { skip: typeof extractPdfTextFn !== 'function' ? 'extractPdfText not exported' : false },
+  async () => {
+    const bytes = readFileSync(byoPdfPath);
+    for (const offset of [1, 8, 1000, 4093]) {
+      const backing = new ArrayBuffer(offset + bytes.length + 512);
+      const asBuffer = Buffer.from(backing, offset, bytes.length);
+      bytes.copy(asBuffer);
+      const asUint8 = new Uint8Array(backing, offset, bytes.length);
+      for (const view of [asBuffer, asUint8]) {
+        assert.equal(view.byteOffset, offset);
+        const text = await extractPdfTextFn!(view);
+        assert.match(text, /Attention Is All You Need/, `offset ${offset} (${view.constructor.name}) must parse`);
+      }
+    }
+    // And the pooled copies real callers produce.
+    for (let i = 0; i < 4; i++) {
+      const pooled = Buffer.from(bytes);
+      const text = await extractPdfTextFn!(pooled);
+      assert.match(text, /Attention Is All You Need/, `pooled copy at byteOffset ${pooled.byteOffset} must parse`);
+    }
   },
 );
 

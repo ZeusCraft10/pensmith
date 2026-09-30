@@ -9,8 +9,8 @@
 //
 // This file is ONLY ever loaded as a worker entry (pdf-text.ts resolves it
 // next to itself: `pdf-worker.ts` under tsx, `pdf-worker.js` from dist/). It
-// reads the PDF bytes from `workerData`, parses them (with the transient
-// FormatError retry below) and posts exactly one message:
+// reads the PDF bytes from `workerData`, parses them (from a copy that owns
+// its ArrayBuffer — parsePdf below) and posts exactly one message:
 //   { ok: true, result: WorkerResult } | { ok: false, error: string }
 // Its console output (pdf.js prints warnings with console.log) goes to the
 // worker's own stdout/stderr, which the parent captures and never forwards.
@@ -84,31 +84,32 @@ interface ParseResult {
 }
 
 /**
- * pdf-parse's PDF.js fork keeps mutable lexer state in module globals and
- * parses in event-loop-scheduled chunks; with prior async activity it can
- * intermittently reject a valid PDF with a transient FormatError ("Command
- * token too long", "Invalid number", "bad XRef entry") that the SAME bytes do
- * not raise on the next tick. Retry a bounded number of times, yielding a
- * fresh tick between attempts. The debug-shim ENOENT (the bare `pdf-parse`
- * import reading a test file, D-06 Pitfall #1) is deterministic and never
- * retried. The last error propagates.
+ * Parse with pdf-parse, handing it a Uint8Array that OWNS its whole
+ * ArrayBuffer (byteOffset 0, byteLength === buffer.byteLength).
+ *
+ * pdf-parse@1.1.1 bundles PDF.js v1.10.100, whose `Stream.makeSubStream` builds
+ * every sub-stream from `this.bytes.buffer` — the view's byteOffset is dropped.
+ * A small Node Buffer (< poolSize / 2: `fs.readFile` of a short PDF, any
+ * `Buffer.from` copy, and PDF.js's own fake-worker clone, which re-creates a
+ * Buffer through `new value.constructor(value)`) is a view into the shared
+ * Buffer pool at a non-zero offset, so each object fetched through a
+ * sub-stream was read from the wrong bytes and the parse failed with a
+ * FormatError ("bad XRef entry", "Command token too long", "Invalid number").
+ * Whether a parse survived depended on where the pool cursor happened to sit
+ * — and Node 24's 64 KiB pool (8 KiB before) made a non-zero offset the rule
+ * (`add <pdf>` and @assignment.pdf failed on Node 24 only). The old bounded
+ * retry only re-rolled the pool offset. A plain Uint8Array copy has its own
+ * exactly-sized ArrayBuffer, and PDF.js's clone of it (`new Uint8Array(view)`)
+ * is one too, so the parse is deterministic on every Node version. A
+ * genuinely broken PDF fails once, loudly; pdf-text.ts maps the debug-shim
+ * ENOENT (the bare `pdf-parse` import, D-06 Pitfall #1) and routes any other
+ * failure to the PyMuPDF fallback (RSCH-05b).
  */
-async function parseWithRetry(input: Buffer): Promise<{ result: ParseResult; pages: string[] }> {
-  const MAX_ATTEMPTS = 3;
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const pages: string[] = [];
-    try {
-      const result = (await pdfParse(Buffer.from(input), { pagerender: recordingRender(pages) })) as ParseResult;
-      return { result, pages };
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('ENOENT') && msg.includes('05-versions-space.pdf')) throw err;
-      lastErr = err;
-      if (attempt < MAX_ATTEMPTS - 1) await new Promise<void>((resolve) => setImmediate(resolve));
-    }
-  }
-  throw lastErr;
+async function parsePdf(bytes: Uint8Array): Promise<{ result: ParseResult; pages: string[] }> {
+  const pages: string[] = [];
+  const owned = new Uint8Array(bytes); // a copy: byteOffset 0, its own exactly-sized ArrayBuffer
+  const result = (await pdfParse(owned, { pagerender: recordingRender(pages) })) as ParseResult;
+  return { result, pages };
 }
 
 function primitives(v: unknown): Record<string, string | number | boolean> {
@@ -133,7 +134,7 @@ function xmpMap(md: unknown): Record<string, string> | null {
 
 /** Parse `bytes` into the posted result shape. */
 export async function parseInWorker(bytes: Uint8Array): Promise<WorkerResult> {
-  const { result, pages } = await parseWithRetry(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+  const { result, pages } = await parsePdf(bytes);
   const numpages = typeof result.numpages === 'number' ? result.numpages : 0;
   const filled = Array.from({ length: numpages }, (_, i) => (typeof pages[i] === 'string' ? pages[i]! : ''));
   return {
