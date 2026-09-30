@@ -490,3 +490,9 @@ test('SRC-13 (review round 3): a PLOS-style PDF whose title block follows the bo
   assert.deepEqual(labelledDoiLines('See doi:10.1371/journal.pmed.0020124 for the data.'), []);
   assert.deepEqual(labelledDoiLines('https://doi.org/10.1038/nature14539'), ['10.1038/nature14539']);
 });
+
+test('SRC-12 (merge review round 2): a braced group author compares with the PDF\'s printed group name like Pass 1 — without its braces', () => {
+  const title = 'Observation of a new particle in the search for the Standard Model Higgs boson with the ATLAS detector at the LHC';
+  const local = { title, authors: ['The ATLAS Collaboration'], year: 2012, titleSource: 'metadata' as const };
+  assert.deepEqual(matchScores({ title, authors: ['{The ATLAS Collaboration}'] }, local), { titleJW: 1, authorJW: 1 });
+});

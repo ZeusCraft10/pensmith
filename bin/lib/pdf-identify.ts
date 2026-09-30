@@ -457,10 +457,15 @@ export function localPdfMetadata(ex: Pick<PdfExtraction, 'info' | 'xmp' | 'pages
 // Matching.
 // ---------------------------------------------------------------------------
 
-/** Family name of an author display string, lowercased and normalized (Pass-1 form). */
+/**
+ * Family name of an author display string, lowercased and normalized (Pass-1
+ * form): a braced group name (`{The ATLAS Collaboration}`, SRC-12) is read
+ * without its braces, as Pass 1 reads it.
+ */
 function family(author: string): string {
   const parsed = parsePersonName(author);
-  return firstAuthorSurname(parsed && !parsed.literal ? `${parsed.family}, ${parsed.given ?? ''}` : author);
+  if (parsed?.literal === true) return firstAuthorSurname(parsed.family);
+  return firstAuthorSurname(parsed ? `${parsed.family}, ${parsed.given ?? ''}` : author);
 }
 
 /** Title + first-author similarity of a registrar record against the PDF's own metadata. */
