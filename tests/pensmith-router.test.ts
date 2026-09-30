@@ -685,6 +685,15 @@ test('review round 3 + S-13 (Phase 20): "unverifiable" on the draft verify judge
     const detail = unverifiableSectionDetail(verification, '1') ?? '';
     assert.match(detail, /1 quote\(s\) \(q1\) could not be checked .*`pensmith add <pdf>`.*`pensmith plan 1 --revise`.*`pensmith verify 1 --accept-quote q1`/);
     assert.match(detail, /stub text .*PLACEHOLDER.* `pensmith write 1`/);
+    // Review round 2: stub text is the one thing compile can never pass outside
+    // --dry-run — attention naming `pensmith write 1`, never a compile loop.
+    const stub = await resolveNextAction(root);
+    assert.equal(stub.verb, 'status');
+    assert.equal(stub.reason, 'attention');
+    assert.deepEqual(stub.section, { n: 1, slug: 'intro' });
+    assert.match(stub.detail ?? '', /stub text .*PLACEHOLDER.* `pensmith write 1`/);
+    // An uncheckable quote alone still reaches compile (a PDF added since, or an acceptance, can pass it there).
+    writeFileSync(verification, '# VERIFICATION\n\nStatus: unverifiable\n\n- a2020 [q1] ("attention mechanisms are nothing more t…"): **UNVERIFIABLE-QUOTE** — lev=0.000 — no open-access copy\n');
     assert.equal((await resolveNextAction(root)).verb, 'compile');
 
     writeFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'Draft text, revised.\n');

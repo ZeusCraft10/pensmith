@@ -37,6 +37,9 @@ export const CURRENT_CONFIG_VERSION = 3;
  */
 export const DEFAULT_QUOTE_MIN_WORDS = 5;
 
+/** The default `[verification] recheck_after_days` (PRD §7.12, §10; VRFY-28): how old a citation's last check may be before verify and done re-fetch it. */
+export const DEFAULT_RECHECK_AFTER_DAYS = 30;
+
 /** The 8 citation styles (display names from PRD §10 / the intake clarifier, plus their CSL keys). */
 export const CITATION_STYLE_NAMES = [
   'APA',

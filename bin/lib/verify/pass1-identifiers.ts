@@ -16,7 +16,9 @@
 //     (the books registries), in that order.
 // An entry with none of these is checked only by a metadata search (VRFY-12),
 // which may find no strict match: the outline and the planner are not offered
-// it (NO_IDENTIFIER_REASON).
+// it (NO_IDENTIFIER_REASON). Nor a DOI research learned is registered with an
+// agency that serves no readable record (ISTIC, CNKI, the EU Publications
+// Office, …) when the entry has no other identifier (review round 2).
 //
 // source-context.ts verifierBlindSpot reads citationCheckRoute to decide which
 // LIBRARY entries the outline and the planner may be offered (D-18-37): only
@@ -46,6 +48,27 @@ export interface CitationIdentifiers {
   readonly arxiv?: string | null | undefined;
   readonly pmid?: string | null | undefined;
   readonly isbn?: string | null | undefined;
+  /**
+   * The agency that registered the DOI, when research learned it (a DOI of
+   * another agency: LIBRARY.json records `no retraction data for <agency>
+   * DOIs`, registrationAgencyOfRecord) — so a DOI Pass 1 can only report
+   * UNVERIFIABLE is not offered (review round 2).
+   */
+  readonly registrationAgency?: string | null | undefined;
+}
+
+/**
+ * The registration agencies whose DOI records Pass 1 reads: Crossref and
+ * DataCite directly, mEDRA / JaLC / KISTI through doi.org content negotiation
+ * (sources/doi-cn.ts CONTENT_NEGOTIATION_AGENCIES — tests/pass1-identifiers
+ * keeps the two lists together). Lower case.
+ */
+export const READABLE_AGENCIES: ReadonlySet<string> = new Set(['crossref', 'datacite', 'medra', 'jalc', 'kisti']);
+
+/** The agency a LIBRARY.json `retraction_details` names (`no retraction data for ISTIC DOIs` → `ISTIC`), or null. */
+export function registrationAgencyOfRecord(retractionDetails: string | null | undefined): string | null {
+  const m = typeof retractionDetails === 'string' ? /^no retraction data for (.+) DOIs$/.exec(retractionDetails.trim()) : null;
+  return m?.[1]?.trim() || null;
 }
 
 function trimmed(v: string | null | undefined): string {
@@ -100,9 +123,16 @@ export function uncheckableReason(ids: CitationIdentifiers): string | null {
       return null;
     case 'no-doi':
       return route.ids.length > 0 ? null : NO_IDENTIFIER_REASON;
-    case 'crossref':
+    case 'crossref': {
       // Crossref, else the agency doi.org names (DataCite, content
-      // negotiation, else the entry's other identifiers) — VRFY-11.
+      // negotiation, else the entry's other identifiers) — VRFY-11. An agency
+      // known to serve no record the verifier can read, with no other
+      // identifier to fall back on, can only ever be UNVERIFIABLE.
+      const agency = trimmed(ids.registrationAgency);
+      if (agency !== '' && !READABLE_AGENCIES.has(agency.toLowerCase()) && route.fallback.length === 0) {
+        return `its DOI is registered with ${agency}, which serves no record the verifier can read (and it has no arXiv id, PMID or ISBN)`;
+      }
       return null;
+    }
   }
 }

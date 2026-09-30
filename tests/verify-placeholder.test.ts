@@ -58,19 +58,24 @@ function sectionFile(root: string, n: number, slug: string, file: string, dir = 
   return join(root, dir, 'sections', `${String(n).padStart(2, '0')}-${slug}`, file);
 }
 
-test('VRFY-24 (built CLI): repeated `PENSMITH_NO_LLM=1 pensmith next --yolo` (no --dry-run) never exports — stub drafts are PLACEHOLDER, the other sections go on, compile refuses naming `pensmith write N`', async () => {
+test('VRFY-24 (built CLI): repeated `PENSMITH_NO_LLM=1 pensmith next --yolo` (no --dry-run) never exports — stub drafts are PLACEHOLDER, the other sections go on, and the walk stops naming `pensmith write N` (never a compile loop); compile refuses the same way', async () => {
   const sb: Sandbox = sandbox('placeholder-chain');
   const root = sb.project('p');
   await seedApproved(root, ['introduction', 'discussion']);
   const outputs: string[] = [];
-  let refused = '';
+  let stopped = '';
   for (let i = 0; i < 6; i += 1) {
     const r = runCli(sb, root, ['next', '--yolo'], { env: { PENSMITH_NO_LLM: '1' } });
-    outputs.push(`${r.status}: ${r.stderr.split('\n').find((l) => l.startsWith('pensmith: ran')) ?? ''}`);
+    outputs.push(`${r.status}: ${r.stderr.split('\n').find((l) => l.startsWith('pensmith: ran')) ?? ''} ${r.stdout.split('\n')[0] ?? ''}`);
     assert.doesNotMatch(r.stderr, STACK_LINE);
     assert.ok(!existsSync(join(root, '.paper', 'export')), `run ${i + 1} never exports:\n${outputs.join('\n')}`);
-    if (/compile: REFUSED/.test(r.stdout)) refused = r.stdout;
+    assert.doesNotMatch(r.stderr, /ran compile/, `run ${i + 1}: no compile loop over stub text:\n${outputs.join('\n')}`);
+    if (/stub text .*PLACEHOLDER.* `pensmith write 1`/.test(`${r.stdout}\n${r.stderr}`)) stopped = `${r.stdout}\n${r.stderr}`;
   }
+  assert.ok(stopped !== '', `the walk stops at the stub sections naming \`pensmith write 1\`:\n${outputs.join('\n')}`);
+  // An explicit compile refuses with the placeholder reason (VRFY-24).
+  const c = runCli(sb, root, ['compile', '--yolo'], { env: { PENSMITH_NO_LLM: '1' } });
+  const refused = c.stdout;
   for (const [n, slug] of [[1, 'introduction'], [2, 'discussion']] as const) {
     const draft = readFileSync(sectionFile(root, n, slug, 'DRAFT.md'), 'utf8');
     assert.equal(draft.split('\n')[0], STUB_DRAFT_MARKER, `§${n} is marked stub text`);

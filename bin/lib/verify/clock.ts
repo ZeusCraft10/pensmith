@@ -17,8 +17,9 @@ import { isTestContext } from '../http-mock.js';
 /** The environment variable a test sets to move the recheck clock (ISO-8601). */
 export const TEST_NOW_ENV = 'PENSMITH_TEST_NOW';
 
-/** The default `[verification] recheck_after_days` (PRD §7.12, §10). */
-export const DEFAULT_RECHECK_AFTER_DAYS = 30;
+/** The default `[verification] recheck_after_days` (PRD §7.12, §10) — defined with the config schema. */
+export { DEFAULT_RECHECK_AFTER_DAYS } from '../schemas/config.js';
+import { DEFAULT_RECHECK_AFTER_DAYS } from '../schemas/config.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

@@ -284,6 +284,12 @@ test('CONF-01 / S-20 (Phase 20, VRFY-18): a v2 file migrates to v3 by its versio
     assert.deepEqual(effectiveConfigRows(sb.root).find((r) => r.key === 'verification.quote_min_words'), { key: 'verification.quote_min_words', value: 4, source: 'config' });
     sb.writePaperConfig('schema_version = 3\n');
     assert.deepEqual(effectiveConfigRows(sb.root).find((r) => r.key === 'verification.quote_min_words'), { key: 'verification.quote_min_words', value: 5, source: 'default' });
+    // Review round 2: every effective [verification] value is shown (PRD §10) — the re-check threshold and the BYO-passage switch too.
+    const rows = effectiveConfigRows(sb.root);
+    assert.deepEqual(rows.find((r) => r.key === 'verification.recheck_after_days'), { key: 'verification.recheck_after_days', value: 30, source: 'default' });
+    assert.deepEqual(rows.find((r) => r.key === 'verification.send_byo_passages'), { key: 'verification.send_byo_passages', value: false, source: 'default' });
+    sb.writePaperConfig('schema_version = 3\n[verification]\nrecheck_after_days = 7\n');
+    assert.deepEqual(effectiveConfigRows(sb.root).find((r) => r.key === 'verification.recheck_after_days'), { key: 'verification.recheck_after_days', value: 7, source: 'config' });
   });
 });
 

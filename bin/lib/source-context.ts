@@ -24,7 +24,7 @@
 // byo-text.ts before it builds the drafter request (write.ts withVerifiedByo).
 
 import { fullTextAvailable as fullTextFromLibrary } from './full-text.js';
-import { citationCheckRoute, uncheckableReason } from './verify/pass1-identifiers.js';
+import { citationCheckRoute, registrationAgencyOfRecord, uncheckableReason } from './verify/pass1-identifiers.js';
 import type { LibraryEntry } from './schemas/library.js';
 
 /** The library fields this module reads (a LibraryEntry, or a legacy v1 record). */
@@ -51,6 +51,8 @@ export interface SourceContextInput {
   readonly synthetic?: boolean | null | undefined;
   /** Flagged retracted at research time (Retraction Watch); Pass 1 always blocks a citation of it. */
   readonly retracted?: boolean | null | undefined;
+  /** LIBRARY.json's retraction note: for another agency's DOI it names the agency (`no retraction data for ISTIC DOIs`). */
+  readonly retraction_details?: string | null | undefined;
 }
 
 /** One source as the planner and the drafter see it (18-PLAN.md §3.3). */
@@ -253,14 +255,14 @@ export const SYNTHETIC_REASON = 'a synthetic --dry-run source';
  * the caller passes whether this is a dry run.
  */
 export function verifierBlindSpot(
-  entry: Pick<SourceContextInput, 'doi' | 'arxiv' | 'pmid' | 'isbn' | 'synthetic' | 'retracted'>,
+  entry: Pick<SourceContextInput, 'doi' | 'arxiv' | 'pmid' | 'isbn' | 'synthetic' | 'retracted' | 'retraction_details'>,
   dryRun: boolean,
 ): string | null {
   if (entry.retracted === true) return RETRACTED_REASON;
   if (entry.synthetic === true && !dryRun) return SYNTHETIC_REASON;
   const route = citationCheckRoute(entry);
   if (route.kind === 'dry-run-doi') return dryRun ? null : SYNTHETIC_REASON;
-  return uncheckableReason(entry);
+  return uncheckableReason({ ...entry, registrationAgency: registrationAgencyOfRecord(entry.retraction_details) });
 }
 
 /** The library split into the sources the verifier can check and the others (with why), in library order. */

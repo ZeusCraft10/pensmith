@@ -45,7 +45,10 @@
 //   unverifiable, draft changed           → verify
 //   unverifiable, the draft verify judged → continue (S-13: the other sections
 //     go on; compile recomputes it and refuses with its options — never a
-//     paid verify loop; `status` names them, unverifiableSectionDetail)
+//     paid verify loop; `status` names them, unverifiableSectionDetail) —
+//     except stub text (PLACEHOLDER) outside --dry-run: once the walk is past
+//     every section, status/attention naming `pensmith write N` (compile
+//     could only refuse it again, run after run)
 //   failed WITH a DRAFT.md, draft changed → verify (re-attempt verification)
 //   failed, the draft verify judged       → status/attention naming the repair
 //   failed WITHOUT a DRAFT.md or with a failure_reason → status/attention,
@@ -228,6 +231,15 @@ function verificationBlockers(verificationPath: string): string[] {
     return [`${list} are UNVERIFIABLE (their sources could not be checked: offline, --dry-run or a failed lookup)`];
   }
   return reasons;
+}
+
+/** True when a section's VERIFICATION.md holds a PLACEHOLDER row (stub text). Never throws. */
+function recordHasPlaceholder(verificationPath: string): boolean {
+  try {
+    return parseBlockingVerdictRows(readFileSync(verificationPath, 'utf8')).some((r) => r.verdict === 'PLACEHOLDER');
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -456,6 +468,8 @@ export async function resolveNextAction(
     // SectionStateSchema). The walk goes on only past a 'verified' section
     // whose DRAFT.md is in place, and past an 'unverifiable' one on the draft
     // verify judged (S-13).
+    // The unverifiable sections the walk went past (S-13), for the stub-text check after it.
+    const unverifiablePast: Array<{ id: { n: number; slug: string; suffix?: string }; label: string; verificationPath: string }> = [];
     for (const { n, slug, suffix } of sortBySectionId(sections)) {
       const id = suffix !== undefined ? { n, slug, suffix } : { n, slug };
       const label = formatSectionId(sectionIdOf(n, suffix));
@@ -534,6 +548,7 @@ export async function resolveNextAction(
           if (r.verifiedHash === null || draftHashOf(sectionDraft(n, slug, paperRoot), r.assignedSources) !== r.verifiedHash) {
             return { verb: 'verify', ...id }; // the draft changed (or was never judged): verify it
           }
+          unverifiablePast.push({ id, label, verificationPath: sectionVerification(n, slug, paperRoot) });
           continue;
         }
         case 'written':
@@ -557,6 +572,23 @@ export async function resolveNextAction(
     // All sections verified (the walk fell through ONLY because every section
     // was 'verified', or 'unverifiable' on the draft verify judged — S-13:
     // compile recomputes such a section and refuses it with its options).
+    //
+    // Stub text (PLACEHOLDER — a draft written with no model configured) is
+    // one thing compile's recomputation can never pass outside --dry-run: the
+    // draft has to be written again. Routing to compile would refuse the same
+    // way on every run (VRFY-16, VRFY-24; review round 2), so it is attention
+    // naming `pensmith write N` — never a compile loop.
+    if (!dryRunWorkspaceActive()) {
+      const stub = unverifiablePast.filter((u) => recordHasPlaceholder(u.verificationPath));
+      if (stub.length > 0) {
+        return {
+          verb: 'status',
+          reason: 'attention',
+          section: (stub[0] as (typeof stub)[number]).id,
+          detail: stub.map((u) => unverifiableSectionDetail(u.verificationPath, u.label) ?? `section ${u.label}'s draft is stub text — \`pensmith write ${u.label}\``).join('; '),
+        };
+      }
+    }
     //
     // VRFY-27: a compiled DRAFT.md edited by hand after compile is not the
     // paper done may export — and recompiling would silently replace the

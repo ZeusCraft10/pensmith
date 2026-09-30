@@ -17,7 +17,8 @@ import {
   partitionCheckable,
   verifierBlindSpot,
 } from '../bin/lib/source-context.js';
-import { citationCheckRoute } from '../bin/lib/verify/pass1-identifiers.js';
+import { citationCheckRoute, READABLE_AGENCIES } from '../bin/lib/verify/pass1-identifiers.js';
+import { CONTENT_NEGOTIATION_AGENCIES } from '../bin/lib/sources/doi-cn.js';
 
 test('GRND-18: verifierBlindSpot follows Pass 1 — a Crossref DOI, a DataCite DOI, an arXiv id, a PMID, an ISBN or a DataCite arXiv DOI is checkable', () => {
   assert.equal(verifierBlindSpot({ doi: '10.18653/v1/N19-1423' }, false), null, 'a Crossref DOI is checkable');
@@ -40,6 +41,20 @@ test('GRND-18: verifierBlindSpot follows Pass 1 — a Crossref DOI, a DataCite D
   assert.equal(verifierBlindSpot({ doi: '10.0000/pensmith-dryrun.a', synthetic: true }, true), null, 'a dry run checks its synthetic sources');
   assert.equal(verifierBlindSpot({ doi: '10.0000/pensmith-dryrun.a', synthetic: true }, false), SYNTHETIC_REASON);
   assert.equal(verifierBlindSpot({ doi: '10.0000/pensmith-dryrun.a' }, false), SYNTHETIC_REASON, 'a reserved DOI is synthetic even unflagged');
+});
+
+test('D-18-37 (review round 2): a DOI research learned is registered with an agency serving no readable record (ISTIC, the EU Publications Office) is withheld unless the entry has an arXiv id, PMID or ISBN; readable agencies stay offered', () => {
+  const istic = { doi: '10.3760/cma.j.cn441530-20260508-00189-1', retraction_details: 'no retraction data for ISTIC DOIs' };
+  assert.match(verifierBlindSpot(istic, false) ?? '', /^its DOI is registered with ISTIC, which serves no record the verifier can read \(and it has no arXiv id, PMID or ISBN\)$/);
+  assert.equal(verifierBlindSpot({ ...istic, pmid: '42706103' }, false), null, 'with its PMID, Pass 1 checks it at PubMed');
+  assert.match(verifierBlindSpot({ doi: '10.2760/12345', retraction_details: 'no retraction data for OP DOIs' }, false) ?? '', /registered with OP/);
+  for (const agency of ['DataCite', 'mEDRA', 'JaLC', 'KISTI']) {
+    assert.equal(verifierBlindSpot({ doi: '10.1400/19806', retraction_details: `no retraction data for ${agency} DOIs` }, false), null, agency);
+  }
+  // Every agency doi.org content negotiation serves is one Pass 1 reads.
+  for (const a of CONTENT_NEGOTIATION_AGENCIES) assert.ok(READABLE_AGENCIES.has(a.toLowerCase()), a);
+  // A failed lookup's reason (or none) names no agency: offered.
+  assert.equal(verifierBlindSpot({ doi: '10.3760/x', retraction_details: null }, false), null);
 });
 
 test('GRND-18: the route Pass 1 takes is the one shared predicate', () => {
