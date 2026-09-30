@@ -23,7 +23,7 @@
 //
 // Test isolation (CI-09 / D-17-40) — every run gets a fresh, private data dir:
 //   - A per-run temp dir is created under os.tmpdir(). XDG_DATA_HOME,
-//     LOCALAPPDATA and PENSMITH_TEST_DATA_DIR all point at it, so
+//     LOCALAPPDATA and PENSMITH_TEST_DATA_DIR all point at its `data/`, so
 //     pensmithDataDir() (locks, the HTTP cache, the global paper registry,
 //     runtime.json, COSTS, session logs) resolves inside it on every OS.
 //     macOS derives its data dir from HOME, which is never redirected here
@@ -36,6 +36,9 @@
 //     which node:test sets in each test-file process). Under a test context
 //     sources are OFFLINE (exact recorded fixtures) unless
 //     PENSMITH_NETWORK_TESTS=1 (the maintainer's live lane) — D-V1-01.
+//   - TMPDIR / TEMP / TMP point at the per-run root (the data dir is its
+//     `data/`), so every temp dir a test (or a CLI it spawns) makes is deleted
+//     with the run instead of piling up in the system temp dir.
 //   - The per-run dir is deleted when the run ends. Set
 //     PENSMITH_KEEP_TEST_DATA=1 to keep it for debugging (its path is printed).
 //   - The runner also fingerprints the REAL data dir (scripts/
@@ -53,7 +56,7 @@
 // "discovered N test files" line and asserts N >= 1.
 
 import { readdir, stat } from 'node:fs/promises';
-import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -119,9 +122,19 @@ if (files.length === 0) {
 
 // CI-09: the per-run data dir. mkdtemp under os.tmpdir() — the one location
 // bin/lib/paths.ts honours for a platform data-dir variable under a test context.
-const runDataDir = mkdtempSync(path.join(os.tmpdir(), 'pensmith-test-run-'));
+const runRoot = mkdtempSync(path.join(os.tmpdir(), 'pensmith-test-run-'));
+const runDataDir = path.join(runRoot, 'data');
+mkdirSync(runDataDir, { recursive: true });
 const keep = process.env.PENSMITH_KEEP_TEST_DATA === '1';
 if (keep) console.log(`per-run test data dir (kept): ${runDataDir}`);
+
+// The tests' own temp dirs (every mkdtemp under os.tmpdir(): scratch papers,
+// sandboxes, the CLIs they spawn) go into the per-run root too, next to the
+// data dir, so the run leaves nothing behind in the system temp dir — tens of
+// thousands of dirs over a working day otherwise. TMPDIR (POSIX, macOS) and
+// TEMP / TMP (Windows) are what os.tmpdir() reads; the data dir stays inside
+// it, as bin/lib/paths.ts requires under a test context.
+const runTmpDir = runRoot;
 
 const env = {
   ...process.env,
@@ -129,6 +142,9 @@ const env = {
   PENSMITH_TEST_DATA_DIR: runDataDir,
   XDG_DATA_HOME: runDataDir,
   LOCALAPPDATA: runDataDir,
+  TMPDIR: runTmpDir,
+  TEMP: runTmpDir,
+  TMP: runTmpDir,
 };
 
 // On Windows npm's default cache is %LOCALAPPDATA%\npm-cache, which the
@@ -144,7 +160,7 @@ if (process.platform === 'win32' && !process.env.npm_config_cache) {
 function cleanup() {
   if (keep) return;
   try {
-    rmSync(runDataDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    rmSync(runRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   } catch {
     /* best-effort: a Windows handle may still be closing */
   }
