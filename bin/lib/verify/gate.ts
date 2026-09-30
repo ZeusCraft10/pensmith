@@ -425,9 +425,9 @@ export function gateRowReason(row: GateRow, scope: GateScope): string {
   switch (row.kind) {
     case 'pass1':
       if (row.verdict === 'UNVERIFIABLE' || RETRY_ONLINE_VERDICTS.has(row.verdict)) {
-        return `[@${row.key}] is ${row.verdict} (${row.reason}) — its source could not be checked; re-run online`;
+        return `citation [@${row.key}] is ${row.verdict} (${row.reason}) — its source could not be checked; re-run online`;
       }
-      return `[@${row.key}] is ${row.verdict} — ${row.reason}`;
+      return `citation [@${row.key}] is ${row.verdict} — ${row.reason}`;
     case 'text':
       return `line ${row.line}: ${row.verdict} \`${row.text.replace(/`/g, "'").slice(0, 80)}\` — ${row.reason}`;
     case 'pass3': {

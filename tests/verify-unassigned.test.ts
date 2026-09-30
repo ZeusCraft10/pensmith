@@ -42,5 +42,5 @@ test('VRFY-17 (built CLI): a hand edit adding an unassigned key after a clean ve
   writeFileSync(plan, readFileSync(plan, 'utf8').replace(/verified_against_draft_hash: \S+/, `verified_against_draft_hash: ${computeDraftHash(readFileSync(draft), ['aspelmeyer2009'])}`));
   const c = p.cli(['compile', '--yolo']);
   assert.equal(c.status, EXIT_BLOCKED, `${c.stdout}\n${c.stderr}`);
-  assert.match(c.stdout, /section 1 \(intro\): \[@lecun2015\] is UNASSIGNED/);
+  assert.match(c.stdout, /section 1 \(intro\): citation \[@lecun2015\] is UNASSIGNED/);
 });

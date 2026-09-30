@@ -79,7 +79,7 @@ test('VRFY-16: a stale compile re-verify over a malformed bibliography is a REFU
   writeFileSync(join(p.root, '.paper', 'CITATIONS.bib'), '@article{lecun2015,\n  title = {Deep learning\n');
   const c = p.cli(['compile', '--yolo']);
   assert.equal(c.status, EXIT_BLOCKED, `${c.stdout}\n${c.stderr}`);
-  assert.match(c.stdout, /staleness re-verify FAILED — \[@lecun2015\] is UNPARSEABLE/);
+  assert.match(c.stdout, /staleness re-verify FAILED — citation \[@lecun2015\] is UNPARSEABLE/);
   assert.doesNotMatch(c.stderr, STACK_LINE);
   assert.ok(!existsSync(join(p.root, '.paper', 'DRAFT.md')));
 });

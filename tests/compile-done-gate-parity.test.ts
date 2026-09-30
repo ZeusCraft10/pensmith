@@ -62,7 +62,7 @@ test('compile and done both refuse a section whose verifier FAILED on a dotted c
   assert.equal(c.status, EXIT_BLOCKED, `compile must refuse: ${c.stdout}\n${c.stderr}`);
   assert.match(c.stdout + c.stderr, /REFUSE: section 1 \(intro\): VERIFICATION\.md Status is 'failed'/);
   // VRFY-25: compile names the recomputed verdict (the gate core), not a row it read.
-  assert.match(c.stdout + c.stderr, /REFUSE: section 1 \(intro\): \[@ghost\.2099\] is FABRICATED/);
+  assert.match(c.stdout + c.stderr, /REFUSE: section 1 \(intro\): citation \[@ghost\.2099\] is FABRICATED/);
   assert.ok(!existsSync(join(root, '.paper', 'DRAFT.md')), 'no compiled DRAFT.md');
 
   // done's re-check agrees (it never had a DRAFT.md to export): its record gate refuses the failed section,
