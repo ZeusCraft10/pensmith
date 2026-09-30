@@ -1,6 +1,6 @@
 {
   "name": "pensmith",
-  "version": "0.1.0-dev+c417a3e95f18",
+  "version": "0.1.0-dev+b4e153667f5a",
   "description": "Structured research-and-drafting assistant for academic papers — verifies every citation against the live source.",
   "author": {
     "name": "Akhil Achanta",

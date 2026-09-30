@@ -122,6 +122,12 @@ cannot be checked. `pensmith new --answers <file.toml>` answers intake up front.
    /pensmith is one step (a section's plan, write and verify count as one);
    "continue" is another /pensmith.
 
+This chaining is for a bare /pensmith (and "continue", "next", "resume")
+only. When the user names a verb — `/pensmith plan 2`, "plan section 2",
+`/pensmith verify 3` — run exactly that verb once and stop: never call
+`pensmith_write` or another verb after it, exactly as the CLI never chains an
+explicit verb.
+
 If status says there is no paper here, the first step is `pensmith new` (it
 reads `assignment.txt`, `.md` or `.pdf` in the folder).
 

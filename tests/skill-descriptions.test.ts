@@ -255,3 +255,9 @@ test('review round 2 (Phase 20 + 23a merge): the pensmith skill says a failed se
   const { body } = readSkill(ROUTER);
   assert.match(body, /when `pensmith_plan`, `pensmith_write` or\s+`pensmith_verify` fails, its reply is the exit code as JSON and then the line\s+the CLI prints for that failure, fenced the same way/);
 });
+
+test('review round 2 (Phase 20 + 23a merge): an explicit verb runs once — the plan → write chaining is for a bare /pensmith only', () => {
+  const { body } = readSkill(ROUTER);
+  assert.match(body, /This chaining is for a bare \/pensmith \(and "continue", "next", "resume"\)\s+only\./);
+  assert.match(body, /run exactly that verb once and stop: never call\s+`pensmith_write` or another verb after it/);
+});
