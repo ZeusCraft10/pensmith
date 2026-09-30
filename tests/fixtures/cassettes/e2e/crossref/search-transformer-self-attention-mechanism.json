@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=transformer+self-attention+mechanism&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "path": "/works?query=transformer+self-attention+mechanism&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 2268752,
+        "total-results": 2268869,
         "items": [
           {
             "DOI": "10.7717/peerj-cs.3829/fig-3",
@@ -60,7 +60,19 @@
             "publisher": "British Machine Vision Association"
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2023,
+                  11,
+                  16
+                ]
+              ]
+            },
+            "publisher": "Springer Science and Business Media LLC",
+            "abstract": "<title>Abstract</title>\n        <p>To improve the robustness of transformer neural networks used for temporal-dynamics prediction of chaotic systems, we propose a novel attention mechanism called easy attention which we\ndemonstrate in time-series reconstruction and prediction. As a consequence of the fact that self attention only makes use of the inner product of queries and keys, it is demonstrated that the keys, queries and softmax are not necessary for obtaining the attention score required to capture\nlong-term dependencies in temporal sequences. Through the singular-value decomposition (SVD)\non the softmax attention score, we further observe that self attention compresses the contributions\nfrom both queries and keys in the spanned space of the attention score. Therefore, our proposed\neasy-attention method directly treats the attention scores as learnable parameters. This approach\nproduces excellent results when reconstructing and predicting the temporal dynamics of chaotic\nsystems exhibiting more robustness and less complexity than self attention or the widely-used long\nshort-term memory (LSTM) network. Our results show great potential for applications in more\ncomplex high-dimensional dynamical systems.</p>",
             "DOI": "10.21203/rs.3.rs-3545247/v1",
+            "type": "posted-content",
             "title": [
               "Easy attention: A simple self-attention mechanism for transformer-based time-series reconstruction and prediction"
             ],
@@ -158,10 +170,7 @@
                   16
                 ]
               ]
-            },
-            "abstract": "<title>Abstract</title>\n        <p>To improve the robustness of transformer neural networks used for temporal-dynamics prediction of chaotic systems, we propose a novel attention mechanism called easy attention which we\ndemonstrate in time-series reconstruction and prediction. As a consequence of the fact that self attention only makes use of the inner product of queries and keys, it is demonstrated that the keys, queries and softmax are not necessary for obtaining the attention score required to capture\nlong-term dependencies in temporal sequences. Through the singular-value decomposition (SVD)\non the softmax attention score, we further observe that self attention compresses the contributions\nfrom both queries and keys in the spanned space of the attention score. Therefore, our proposed\neasy-attention method directly treats the attention scores as learnable parameters. This approach\nproduces excellent results when reconstructing and predicting the temporal dynamics of chaotic\nsystems exhibiting more robustness and less complexity than self attention or the widely-used long\nshort-term memory (LSTM) network. Our results show great potential for applications in more\ncomplex high-dimensional dynamical systems.</p>",
-            "type": "posted-content",
-            "publisher": "Springer Science and Business Media LLC"
+            }
           },
           {
             "DOI": "10.2139/ssrn.6136211",
@@ -213,6 +222,13 @@
                 ]
               ]
             },
+            "posted": {
+              "date-parts": [
+                [
+                  2026
+                ]
+              ]
+            },
             "type": "posted-content",
             "publisher": "Elsevier BV"
           },
@@ -232,7 +248,18 @@
             "publisher": "PeerJ"
           },
           {
+            "publisher": "University of Missouri Libraries",
+            "abstract": "<jats:p xml:lang=\"en\">Bus transit is a crucial component of transportation networks, especially in urban areas. Bus agencies must enhance the quality of their real-time bus travel information service to serve their passengers better and attract more travelers. Various models have recently been developed for estimating bus travel times to increase the quality of real-time information service. However, most are concentrated on smaller road networks due to their generally subpar performance in densely populated urban regions on a vast network and failure to produce good results with long-range dependencies. This paper develops a deep learning-based architecture using a single-step multi-station forecasting approach to predict average bus travel times for numerous routes, stops, and trips on a large-scale network using heterogeneous bus transit data collected from the GTFS database and the vehicle probe data. Over one week, data was gathered from multiple bus routes in Saint Louis, Missouri. This study developed a multi-headed self-attention mechanism-based Univariate Transformer neural network to predict the mean vehicle travel times for different hours of the day for multiple stations across multiple routes. In addition, we developed Multivariate GRU and LSTM neural network models for our research to compare the prediction accuracy and comprehend the robustness of the Transformer model. To validate the Transformer Model's performance more in comparison to the GRU and LSTM models, we employed the Historical Average Model and XGBoost model as benchmark models. Historical time steps and prediction horizon were set up to 5 and 1, respectively, which means that five hours of historical average travel time data were used to predict average travel time for the following hour. Only the historical average bus travel time was used as the input parameter for the Transformer model. Other features, including spatial and temporal information, volatility measures (e.g., the standard deviation and variance of travel time), dwell time, expected travel time, jam factors, hours of a day, etc., were captured from our dataset. These parameters were employed to develop the Multivariate GRU and LSTM models. The model's performance was evaluated based on a performance metric called Mean Absolute Percentage Error (MAPE). The results showed that the Transformer model outperformed other models for one-hour ahead prediction having minimum and mean MAPE values of 4.32 percent and 8.29 percent, respectively. We also investigated that the Transformer model performed the best during different traffic conditions (e.g., peak and off-peak hours). Furthermore, we also displayed the model computation time for the prediction; XGBoost was found to be the quickest, with a prediction time of 6.28 seconds, while the Transformer model had a prediction time of 7.42 seconds. The study's findings demonstrate that the Transformer model showed its applicability for real-time travel time prediction and guaranteed the high quality of the predictions produced by the model in the context of a complicated extensive transportation network in high-density urban areas and capturing long-range dependencies.</jats:p>",
             "DOI": "10.32469/10355/96193",
+            "type": "dissertation",
+            "approved": {
+              "date-parts": [
+                [
+                  2023,
+                  5
+                ]
+              ]
+            },
             "title": [
               "Multi-headed self-attention mechanism-based Transformer model for predicting bus travel times across multiple bus routes using heterogeneous datasets"
             ],
@@ -256,10 +283,7 @@
                   null
                 ]
               ]
-            },
-            "abstract": "<jats:p xml:lang=\"en\">Bus transit is a crucial component of transportation networks, especially in urban areas. Bus agencies must enhance the quality of their real-time bus travel information service to serve their passengers better and attract more travelers. Various models have recently been developed for estimating bus travel times to increase the quality of real-time information service. However, most are concentrated on smaller road networks due to their generally subpar performance in densely populated urban regions on a vast network and failure to produce good results with long-range dependencies. This paper develops a deep learning-based architecture using a single-step multi-station forecasting approach to predict average bus travel times for numerous routes, stops, and trips on a large-scale network using heterogeneous bus transit data collected from the GTFS database and the vehicle probe data. Over one week, data was gathered from multiple bus routes in Saint Louis, Missouri. This study developed a multi-headed self-attention mechanism-based Univariate Transformer neural network to predict the mean vehicle travel times for different hours of the day for multiple stations across multiple routes. In addition, we developed Multivariate GRU and LSTM neural network models for our research to compare the prediction accuracy and comprehend the robustness of the Transformer model. To validate the Transformer Model's performance more in comparison to the GRU and LSTM models, we employed the Historical Average Model and XGBoost model as benchmark models. Historical time steps and prediction horizon were set up to 5 and 1, respectively, which means that five hours of historical average travel time data were used to predict average travel time for the following hour. Only the historical average bus travel time was used as the input parameter for the Transformer model. Other features, including spatial and temporal information, volatility measures (e.g., the standard deviation and variance of travel time), dwell time, expected travel time, jam factors, hours of a day, etc., were captured from our dataset. These parameters were employed to develop the Multivariate GRU and LSTM models. The model's performance was evaluated based on a performance metric called Mean Absolute Percentage Error (MAPE). The results showed that the Transformer model outperformed other models for one-hour ahead prediction having minimum and mean MAPE values of 4.32 percent and 8.29 percent, respectively. We also investigated that the Transformer model performed the best during different traffic conditions (e.g., peak and off-peak hours). Furthermore, we also displayed the model computation time for the prediction; XGBoost was found to be the quickest, with a prediction time of 6.28 seconds, while the Transformer model had a prediction time of 7.42 seconds. The study's findings demonstrate that the Transformer model showed its applicability for real-time travel time prediction and guaranteed the high quality of the predictions produced by the model in the context of a complicated extensive transportation network in high-density urban areas and capturing long-range dependencies.</jats:p>",
-            "type": "dissertation",
-            "publisher": "University of Missouri Libraries"
+            }
           },
           {
             "DOI": "10.2139/ssrn.4329702",
@@ -317,6 +341,13 @@
               }
             ],
             "issued": {
+              "date-parts": [
+                [
+                  2023
+                ]
+              ]
+            },
+            "posted": {
               "date-parts": [
                 [
                   2023
@@ -436,6 +467,15 @@
                 ]
               ]
             },
+            "posted": {
+              "date-parts": [
+                [
+                  2022,
+                  7,
+                  27
+                ]
+              ]
+            },
             "type": "posted-content",
             "publisher": "Open Engineering Inc"
           }
@@ -451,7 +491,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recordedAt": "2026-09-30T04:41:49.456Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

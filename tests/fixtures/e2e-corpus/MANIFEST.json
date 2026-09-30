@@ -24,13 +24,13 @@
     ],
     "expectedMiss": [
       {
-        "adapter": "openalex",
+        "adapter": "semanticscholar",
         "query": "transformer self-attention mechanism",
         "why": "no response was recorded (rate-limited, unreachable or a transport error)"
       },
       {
-        "adapter": "semanticscholar",
-        "query": "attention mechanism neural machine translation",
+        "adapter": "openalex",
+        "query": "transformer self-attention mechanism",
         "why": "no response was recorded (rate-limited, unreachable or a transport error)"
       },
       {
@@ -72,9 +72,9 @@
   },
   "keptSources": [
     {
-      "citekey": "cai2024",
-      "doi": "10.1109/ISCAS58744.2024.10558182",
-      "title": "In-Memory Transformer Self-Attention Mechanism Using Passive Memristor Crossbar",
+      "citekey": "li2024",
+      "doi": "10.1109/ACAIT63902.2024.11022229",
+      "title": "Design of a Neural Machine Translation Model for English Based on LSTM and Enhanced Attention Mechanism",
       "adapter": "semanticscholar"
     },
     {
@@ -96,21 +96,21 @@
       "adapter": "pubmed"
     },
     {
-      "citekey": "li2022",
-      "doi": "10.1145/3558819.3565216",
-      "title": "Stock quantitative prediction analysis method based on deep learning transformer self-attention mechanism",
+      "citekey": "wang2025",
+      "doi": "10.1109/DAPIC66097.2025.00037",
+      "title": "Research on Korean Neural Machine Translation Model Based on Attention Mechanism",
       "adapter": "semanticscholar"
     },
     {
-      "citekey": "smaldone2025",
-      "doi": "10.1021/acs.jctc.5c00331",
-      "title": "A Hybrid Transformer Architecture with a Quantized Self-Attention Mechanism Applied to Molecular Generation",
+      "citekey": "spandan2024",
+      "doi": "10.58346/jowua.2024.i4.017",
+      "title": "Neural Machine Translation Model Using GRU with Hybrid Attention Mechanism for English to Kannada Language",
       "adapter": "semanticscholar"
     }
   ],
   "expectedSections": 3,
   "runBound": 8,
-  "recordedAt": "2026-09-29T23:58:57.262Z",
+  "recordedAt": "2026-09-30T04:42:05.293Z",
   "recorder": "scripts/refresh-cassettes.mjs --corpus e2e",
   "cassettes": [
     "tests/fixtures/cassettes/e2e/arxiv/search-attention-mechanism-neural-machine-translation.json",
@@ -118,12 +118,12 @@
     "tests/fixtures/cassettes/e2e/arxiv/search-scaled-dot-product-attention-transformer.json",
     "tests/fixtures/cassettes/e2e/arxiv/search-transformer-attention-interpretability.json",
     "tests/fixtures/cassettes/e2e/arxiv/search-transformer-self-attention-mechanism.json",
-    "tests/fixtures/cassettes/e2e/crossref/lookups-cai2024.json",
     "tests/fixtures/cassettes/e2e/crossref/lookups-catapang2022.json",
-    "tests/fixtures/cassettes/e2e/crossref/lookups-li2022.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-li2024.json",
     "tests/fixtures/cassettes/e2e/crossref/lookups-meng2023.json",
-    "tests/fixtures/cassettes/e2e/crossref/lookups-smaldone2025.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-spandan2024.json",
     "tests/fixtures/cassettes/e2e/crossref/lookups-sun2026.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-wang2025.json",
     "tests/fixtures/cassettes/e2e/crossref/search-attention-mechanism-neural-machine-translation.json",
     "tests/fixtures/cassettes/e2e/crossref/search-multi-head-attention-transformer-architecture.json",
     "tests/fixtures/cassettes/e2e/crossref/search-scaled-dot-product-attention-transformer.json",
@@ -134,12 +134,12 @@
     "tests/fixtures/cassettes/e2e/pubmed/search-scaled-dot-product-attention-transformer.json",
     "tests/fixtures/cassettes/e2e/pubmed/search-transformer-attention-interpretability.json",
     "tests/fixtures/cassettes/e2e/pubmed/search-transformer-self-attention-mechanism.json",
-    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-cai2024.json",
     "tests/fixtures/cassettes/e2e/retraction-watch/lookups-catapang2022.json",
-    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-li2022.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-li2024.json",
     "tests/fixtures/cassettes/e2e/retraction-watch/lookups-meng2023.json",
-    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-smaldone2025.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-spandan2024.json",
     "tests/fixtures/cassettes/e2e/retraction-watch/lookups-sun2026.json",
-    "tests/fixtures/cassettes/e2e/semanticscholar/search-transformer-self-attention-mechanism.json"
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-wang2025.json",
+    "tests/fixtures/cassettes/e2e/semanticscholar/search-attention-mechanism-neural-machine-translation.json"
   ]
 }

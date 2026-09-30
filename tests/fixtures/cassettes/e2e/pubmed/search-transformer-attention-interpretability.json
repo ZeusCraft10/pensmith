@@ -10,10 +10,12 @@
         "version": "0.3"
       },
       "esearchresult": {
-        "count": "1633",
+        "count": "1635",
         "retmax": "10",
         "retstart": "0",
         "idlist": [
+          "42810281",
+          "42809959",
           "42806359",
           "42806311",
           "42803837",
@@ -21,9 +23,7 @@
           "42794920",
           "42794454",
           "42793777",
-          "42791843",
-          "42791834",
-          "42791830"
+          "42791843"
         ],
         "translationset": [
           {
@@ -46,7 +46,7 @@
       "content-type": "application/json; charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recordedAt": "2026-09-30T04:41:49.456Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "pubmed"
     }
@@ -54,7 +54,7 @@
   {
     "scope": "https://eutils.ncbi.nlm.nih.gov",
     "method": "GET",
-    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42806359%2C42806311%2C42803837%2C42798415%2C42794920%2C42794454%2C42793777%2C42791843%2C42791834%2C42791830&retmode=json",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42810281%2C42809959%2C42806359%2C42806311%2C42803837%2C42798415%2C42794920%2C42794454%2C42793777%2C42791843&retmode=json",
     "status": 200,
     "response": {
       "header": {
@@ -62,290 +62,6 @@
         "version": "0.3"
       },
       "result": {
-        "42791830": {
-          "uid": "42791830",
-          "pubdate": "2026 Aug 22",
-          "epubdate": "2026 Aug 22",
-          "source": "Bioengineering (Basel)",
-          "authors": [
-            {
-              "name": "Ali A",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Raza B",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Zahra K",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Naqvi RA",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Dharejo FA",
-              "authtype": "Author",
-              "clusterid": ""
-            }
-          ],
-          "lastauthor": "Dharejo FA",
-          "title": "DGTN: Graph-Enhanced Transformer with Diffusive Attention and Gating Mechanism for Multi-Task Breast Ultrasound Tumor Analysis.",
-          "sorttitle": "dgtn graph enhanced transformer with diffusive attention and gating mechanism for multi task breast ultrasound tumor analysis",
-          "volume": "13",
-          "issue": "9",
-          "pages": "",
-          "lang": [
-            "eng"
-          ],
-          "nlmuniqueid": "101676056",
-          "issn": "2306-5354",
-          "essn": "2306-5354",
-          "pubtype": [
-            "Journal Article"
-          ],
-          "recordstatus": "PubMed",
-          "pubstatus": "3",
-          "articleids": [
-            {
-              "idtype": "pubmed",
-              "idtypen": 1,
-              "value": "42791830"
-            },
-            {
-              "idtype": "pmc",
-              "idtypen": 8,
-              "value": "PMC13603613"
-            },
-            {
-              "idtype": "pmcid",
-              "idtypen": 5,
-              "value": "pmc-id: PMC13603613;"
-            },
-            {
-              "idtype": "doi",
-              "idtypen": 3,
-              "value": "10.3390/bioengineering13090956"
-            },
-            {
-              "idtype": "pii",
-              "idtypen": 4,
-              "value": "bioengineering13090956"
-            }
-          ],
-          "history": [
-            {
-              "pubstatus": "received",
-              "date": "2026/07/07 00:00"
-            },
-            {
-              "pubstatus": "revised",
-              "date": "2026/08/16 00:00"
-            },
-            {
-              "pubstatus": "accepted",
-              "date": "2026/08/19 00:00"
-            },
-            {
-              "pubstatus": "medline",
-              "date": "2026/09/26 05:36"
-            },
-            {
-              "pubstatus": "pubmed",
-              "date": "2026/09/26 05:35"
-            },
-            {
-              "pubstatus": "entrez",
-              "date": "2026/09/26 01:00"
-            },
-            {
-              "pubstatus": "pmc-release",
-              "date": "2026/08/22 00:00"
-            }
-          ],
-          "references": [],
-          "attributes": [
-            "Has Abstract"
-          ],
-          "pmcrefcount": 18,
-          "fulljournalname": "Bioengineering (Basel, Switzerland)",
-          "elocationid": "doi: 10.3390/bioengineering13090956",
-          "doctype": "citation",
-          "srccontriblist": [],
-          "booktitle": "",
-          "medium": "",
-          "edition": "",
-          "publisherlocation": "",
-          "publishername": "",
-          "srcdate": "",
-          "reportnumber": "",
-          "availablefromurl": "",
-          "locationlabel": "",
-          "doccontriblist": [],
-          "docdate": "",
-          "bookname": "",
-          "chapter": "",
-          "sortpubdate": "2026/08/22 00:00",
-          "sortfirstauthor": "Ali A",
-          "vernaculartitle": ""
-        },
-        "42791834": {
-          "uid": "42791834",
-          "pubdate": "2026 Aug 23",
-          "epubdate": "2026 Aug 23",
-          "source": "Bioengineering (Basel)",
-          "authors": [
-            {
-              "name": "Talaat FM",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Elnakib A",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Hekal AA",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Alnaggar M",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Abdellatif AG",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Shawky MA",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Safwat S",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Shaban WM",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Shehata M",
-              "authtype": "Author",
-              "clusterid": ""
-            }
-          ],
-          "lastauthor": "Shehata M",
-          "title": "End-to-End Intelligent Drug Discovery via a Scalable and Explainable Graph-Transformer Framework.",
-          "sorttitle": "end to end intelligent drug discovery via a scalable and explainable graph transformer framework",
-          "volume": "13",
-          "issue": "9",
-          "pages": "",
-          "lang": [
-            "eng"
-          ],
-          "nlmuniqueid": "101676056",
-          "issn": "2306-5354",
-          "essn": "2306-5354",
-          "pubtype": [
-            "Journal Article"
-          ],
-          "recordstatus": "PubMed",
-          "pubstatus": "3",
-          "articleids": [
-            {
-              "idtype": "pubmed",
-              "idtypen": 1,
-              "value": "42791834"
-            },
-            {
-              "idtype": "pmc",
-              "idtypen": 8,
-              "value": "PMC13603830"
-            },
-            {
-              "idtype": "pmcid",
-              "idtypen": 5,
-              "value": "pmc-id: PMC13603830;"
-            },
-            {
-              "idtype": "doi",
-              "idtypen": 3,
-              "value": "10.3390/bioengineering13090961"
-            },
-            {
-              "idtype": "pii",
-              "idtypen": 4,
-              "value": "bioengineering13090961"
-            }
-          ],
-          "history": [
-            {
-              "pubstatus": "received",
-              "date": "2026/07/02 00:00"
-            },
-            {
-              "pubstatus": "revised",
-              "date": "2026/08/18 00:00"
-            },
-            {
-              "pubstatus": "accepted",
-              "date": "2026/08/19 00:00"
-            },
-            {
-              "pubstatus": "medline",
-              "date": "2026/09/26 05:36"
-            },
-            {
-              "pubstatus": "pubmed",
-              "date": "2026/09/26 05:35"
-            },
-            {
-              "pubstatus": "entrez",
-              "date": "2026/09/26 01:00"
-            },
-            {
-              "pubstatus": "pmc-release",
-              "date": "2026/08/23 00:00"
-            }
-          ],
-          "references": [],
-          "attributes": [
-            "Has Abstract"
-          ],
-          "pmcrefcount": 46,
-          "fulljournalname": "Bioengineering (Basel, Switzerland)",
-          "elocationid": "doi: 10.3390/bioengineering13090961",
-          "doctype": "citation",
-          "srccontriblist": [],
-          "booktitle": "",
-          "medium": "",
-          "edition": "",
-          "publisherlocation": "",
-          "publishername": "",
-          "srcdate": "",
-          "reportnumber": "",
-          "availablefromurl": "",
-          "locationlabel": "",
-          "doccontriblist": [],
-          "docdate": "",
-          "bookname": "",
-          "chapter": "",
-          "sortpubdate": "2026/08/23 00:00",
-          "sortfirstauthor": "Talaat FM",
-          "vernaculartitle": ""
-        },
         "42791843": {
           "uid": "42791843",
           "pubdate": "2026 Aug 25",
@@ -1430,7 +1146,235 @@
           "sortfirstauthor": "Tjondronegoro D",
           "vernaculartitle": ""
         },
+        "42809959": {
+          "uid": "42809959",
+          "pubdate": "2026 Sep 24",
+          "epubdate": "2026 Sep 24",
+          "source": "Neural Netw",
+          "authors": [
+            {
+              "name": "Wang F",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Arora C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Xie Z",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Xie Z",
+          "title": "The role of grammar in transformer encoders: Does it really matter for language understanding process?",
+          "sorttitle": "role of grammar in transformer encoders does it really matter for language understanding process",
+          "volume": "206",
+          "issue": "Pt A",
+          "pages": "109682",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "8805018",
+          "issn": "0893-6080",
+          "essn": "1879-2782",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - as supplied by publisher",
+          "pubstatus": "10",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42809959"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1016/j.neunet.2026.109682"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "S0893-6080(26)01137-8"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/29 23:29"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/29 23:29"
+            },
+            {
+              "pubstatus": "received",
+              "date": "2025/08/10 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/07/10 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/21 00:00"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/29 18:04"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Neural networks : the official journal of the International Neural Network Society",
+          "elocationid": "doi: 10.1016/j.neunet.2026.109682",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/24 00:00",
+          "sortfirstauthor": "Wang F",
+          "vernaculartitle": ""
+        },
+        "42810281": {
+          "uid": "42810281",
+          "pubdate": "2026 Sep 27",
+          "epubdate": "2026 Sep 27",
+          "source": "Psychiatry Res",
+          "authors": [
+            {
+              "name": "Wang Q",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhao S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Tian C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Qi W",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Hu J",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Hu J",
+          "title": "Clinical feature grouping-based FT-Transformer for postpartum depression risk prediction: a longitudinal cohort study in perinatal women.",
+          "sorttitle": "clinical feature grouping based ft transformer for postpartum depression risk prediction a longitudinal cohort study in perinatal women",
+          "volume": "366",
+          "issue": "",
+          "pages": "117475",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "7911385",
+          "issn": "0165-1781",
+          "essn": "1872-7123",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - as supplied by publisher",
+          "pubstatus": "10",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42810281"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1016/j.psychres.2026.117475"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "S0165-1781(26)00535-4"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/29 23:29"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/29 23:29"
+            },
+            {
+              "pubstatus": "received",
+              "date": "2026/07/30 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/09/13 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/22 00:00"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/29 18:25"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Psychiatry research",
+          "elocationid": "doi: 10.1016/j.psychres.2026.117475",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/27 00:00",
+          "sortfirstauthor": "Wang Q",
+          "vernaculartitle": ""
+        },
         "uids": [
+          "42810281",
+          "42809959",
           "42806359",
           "42806311",
           "42803837",
@@ -1438,9 +1382,7 @@
           "42794920",
           "42794454",
           "42793777",
-          "42791843",
-          "42791834",
-          "42791830"
+          "42791843"
         ]
       }
     },
@@ -1448,7 +1390,7 @@
       "content-type": "application/json; charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recordedAt": "2026-09-30T04:41:49.456Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "pubmed"
     }

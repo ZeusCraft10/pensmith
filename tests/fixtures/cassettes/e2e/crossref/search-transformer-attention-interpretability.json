@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=transformer+attention+interpretability&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "path": "/works?query=transformer+attention+interpretability&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 327705,
+        "total-results": 327730,
         "items": [
           {
             "DOI": "10.2139/ssrn.5956857",
@@ -44,6 +44,13 @@
               }
             ],
             "issued": {
+              "date-parts": [
+                [
+                  2025
+                ]
+              ]
+            },
+            "posted": {
               "date-parts": [
                 [
                   2025
@@ -109,6 +116,13 @@
               }
             ],
             "issued": {
+              "date-parts": [
+                [
+                  2025
+                ]
+              ]
+            },
+            "posted": {
               "date-parts": [
                 [
                   2025
@@ -248,7 +262,19 @@
             "publisher": "IEEE"
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  13
+                ]
+              ]
+            },
+            "publisher": "MDPI AG",
+            "abstract": "<jats:p>Alzheimer’s disease (AD) is a progressive neurodegenerative disorder for which early and accurate diagnosis remains a critical challenge. In this work, we propose a Multi-ROI Multimodal 3D Vision Transformer for AD classification that integrates structural MRI data with clinical and volumetric biomarkers within a unified attention-based framework. The proposed approach leverages anatomically guided multi-region-of-interest (ROI) decomposition to focus on disease-relevant brain structures, including the hippocampus, entorhinal cortex, fornix, and major cortical lobes. Each ROI is encoded using 3D tubelet embeddings, while clinical and volumetric features are transformed into feature-wise tokens, enabling seamless multimodal fusion through self-attention mechanisms. A hemisphere-aware selection strategy is introduced to identify the most discriminative ROI representations, enhancing both performance and interpretability. The model is evaluated on a merged multi-cohort dataset combining ADNI, AIBL, and OASIS, using a 7-fold cross-validation protocol. Experimental results demonstrate that the proposed method achieves high classification performance, reaching an accuracy of 97.62% and an AUC of 0.9940, outperforming single-modality and whole-brain baselines. Furthermore, attention-based analysis provides interpretable insights into the relative importance of clinical and neuroanatomical features, revealing consistency with established AD biomarkers. These findings highlight the effectiveness of multimodal integration and ROI-based representation for robust and explainable AD classification.</jats:p>",
             "DOI": "10.20944/preprints202605.0910.v1",
+            "type": "posted-content",
             "title": [
               "Multi-ROI Multimodal 3D Vision Transformer for Alzheimer’s Disease Classification with Attention-Based Interpretability"
             ],
@@ -304,10 +330,7 @@
                   13
                 ]
               ]
-            },
-            "abstract": "<jats:p>Alzheimer’s disease (AD) is a progressive neurodegenerative disorder for which early and accurate diagnosis remains a critical challenge. In this work, we propose a Multi-ROI Multimodal 3D Vision Transformer for AD classification that integrates structural MRI data with clinical and volumetric biomarkers within a unified attention-based framework. The proposed approach leverages anatomically guided multi-region-of-interest (ROI) decomposition to focus on disease-relevant brain structures, including the hippocampus, entorhinal cortex, fornix, and major cortical lobes. Each ROI is encoded using 3D tubelet embeddings, while clinical and volumetric features are transformed into feature-wise tokens, enabling seamless multimodal fusion through self-attention mechanisms. A hemisphere-aware selection strategy is introduced to identify the most discriminative ROI representations, enhancing both performance and interpretability. The model is evaluated on a merged multi-cohort dataset combining ADNI, AIBL, and OASIS, using a 7-fold cross-validation protocol. Experimental results demonstrate that the proposed method achieves high classification performance, reaching an accuracy of 97.62% and an AUC of 0.9940, outperforming single-modality and whole-brain baselines. Furthermore, attention-based analysis provides interpretable insights into the relative importance of clinical and neuroanatomical features, revealing consistency with established AD biomarkers. These findings highlight the effectiveness of multimodal integration and ROI-based representation for robust and explainable AD classification.</jats:p>",
-            "type": "posted-content",
-            "publisher": "MDPI AG"
+            }
           },
           {
             "publisher": "Korean Institute of Industrial Engineers",
@@ -426,7 +449,18 @@
             "publisher": "IEEE"
           },
           {
+            "publisher": "Drexel University Libraries",
+            "abstract": "<jats:p>Transformer-based language models achieve strong empirical performance across natural language processing tasks, yet their predictions are not verifiable: users cannot determine where in the input an answer is supported, nor whether it reflects genuine evidential reasoning or spurious statistical correlations. This limitation is particularly problematic in domains such as legal document analysis and clinical information retrieval, where correctness alone is insufficient without locatable, inspectable evidence. This dissertation investigates how intrinsic interpretability can be embedded into transformer architectures to resolve the trade-off between transparency and predictive power. The work progresses from prototype-based classification to spatially-grounded generation, concluding with an analysis of internal representations. RQ1 introduces prototype-based representations integrated via graph attention into transformer models to provide semantic, case-based explanations while maintaining competitive accuracy. RQ2 extends this framework to generative question answering by enforcing joint optimization of textual answers and spatial grounding signals, enabling the model to point to precise evidence locations. RQ3 employs mechanistic interpretability techniques to examine which model components --- specifically attention heads and residual stream layers --- encode and compress spatial attributes introduced through grounding supervision. The contributions of this dissertation are threefold: (1) a prototype-based language modeling framework with graph attention that delivers faithful explanations alongside competitive classification performance; (2) end-to-end architectures for Visually Grounded Document Question Answering that jointly predict textual answers and bounding box coordinates; and (3) a mechanistic characterization of spatial grounding in the Switch-Token architecture, identifying components responsible for encoding and routing spatial information.</jats:p>",
             "DOI": "10.17918/00011460",
+            "type": "dissertation",
+            "approved": {
+              "date-parts": [
+                [
+                  2026,
+                  6
+                ]
+              ]
+            },
             "title": [
               "Investigating intrinsic interpretability in transformer-based language models"
             ],
@@ -466,13 +500,22 @@
                   null
                 ]
               ]
-            },
-            "abstract": "<jats:p>Transformer-based language models achieve strong empirical performance across natural language processing tasks, yet their predictions are not verifiable: users cannot determine where in the input an answer is supported, nor whether it reflects genuine evidential reasoning or spurious statistical correlations. This limitation is particularly problematic in domains such as legal document analysis and clinical information retrieval, where correctness alone is insufficient without locatable, inspectable evidence. This dissertation investigates how intrinsic interpretability can be embedded into transformer architectures to resolve the trade-off between transparency and predictive power. The work progresses from prototype-based classification to spatially-grounded generation, concluding with an analysis of internal representations. RQ1 introduces prototype-based representations integrated via graph attention into transformer models to provide semantic, case-based explanations while maintaining competitive accuracy. RQ2 extends this framework to generative question answering by enforcing joint optimization of textual answers and spatial grounding signals, enabling the model to point to precise evidence locations. RQ3 employs mechanistic interpretability techniques to examine which model components --- specifically attention heads and residual stream layers --- encode and compress spatial attributes introduced through grounding supervision. The contributions of this dissertation are threefold: (1) a prototype-based language modeling framework with graph attention that delivers faithful explanations alongside competitive classification performance; (2) end-to-end architectures for Visually Grounded Document Question Answering that jointly predict textual answers and bounding box coordinates; and (3) a mechanistic characterization of spatial grounding in the Switch-Token architecture, identifying components responsible for encoding and routing spatial information.</jats:p>",
-            "type": "dissertation",
-            "publisher": "Drexel University Libraries"
+            }
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2026,
+                  4,
+                  15
+                ]
+              ]
+            },
+            "publisher": "Springer Science and Business Media LLC",
+            "abstract": "<title>Abstract</title>\n                <p>Based on the hypothesis that \"human language is composed of fundamental semantic atoms,\" this paper proposes reEtym, a feature-disentangled architecture that modifies only the embedding layer. By factorizing the embedding matrix into a \"recipe\" matrix W_recipe and an \"etymological basis\" matrix W_basis, the model is guided to maintain a continuous set of semantic etymological bases in the latent space.\nAt 0.5B parameters and 50k pretraining steps, reEtym achieves near-lossless equivalence with conventional architectures on zero-shot benchmarks (fluctuations within ±2.4%), while improving topic coherence by 28.4% and reducing extreme failure cases by 98.6%. Concurrently, interpretable structures spontaneously emerge in the etymological space: semantic algebra (6/6 hits, including linguistic and arithmetic analogies), natural sparsity (11-13% activation rate), and signal-level causal traceability (ablating a single signal reduces prediction from 8.31% to 0.03%), revealing new avenues for exploration.\nUnlike post-hoc reconstruction methods, the etymological space in reEtym is directly defined by the architecture and constitutes a native component of the model's computation. This enables audit findings to be directly translated into model modifications—adjusting recipes or bases can achieve behavioral steering such as sentiment manipulation and topic coherence enhancement, without retraining. Since modifications are confined to the embedding layer, this mechanism naturally extends to non-Transformer architectures such as Mamba and RWKV.\nThe complete source code, model weights, training logs, and an online interpretability platform are publicly available under the MIT license at: https://github.com/reEtym/reEtym</p>",
             "DOI": "10.21203/rs.3.rs-9416412/v1",
+            "type": "posted-content",
             "title": [
               "reEtym: A Natively Feature-Disentangled Transformer for Interpretability"
             ],
@@ -504,10 +547,7 @@
                   15
                 ]
               ]
-            },
-            "abstract": "<title>Abstract</title>\n                <p>Based on the hypothesis that \"human language is composed of fundamental semantic atoms,\" this paper proposes reEtym, a feature-disentangled architecture that modifies only the embedding layer. By factorizing the embedding matrix into a \"recipe\" matrix W_recipe and an \"etymological basis\" matrix W_basis, the model is guided to maintain a continuous set of semantic etymological bases in the latent space.\nAt 0.5B parameters and 50k pretraining steps, reEtym achieves near-lossless equivalence with conventional architectures on zero-shot benchmarks (fluctuations within ±2.4%), while improving topic coherence by 28.4% and reducing extreme failure cases by 98.6%. Concurrently, interpretable structures spontaneously emerge in the etymological space: semantic algebra (6/6 hits, including linguistic and arithmetic analogies), natural sparsity (11-13% activation rate), and signal-level causal traceability (ablating a single signal reduces prediction from 8.31% to 0.03%), revealing new avenues for exploration.\nUnlike post-hoc reconstruction methods, the etymological space in reEtym is directly defined by the architecture and constitutes a native component of the model's computation. This enables audit findings to be directly translated into model modifications—adjusting recipes or bases can achieve behavioral steering such as sentiment manipulation and topic coherence enhancement, without retraining. Since modifications are confined to the embedding layer, this mechanism naturally extends to non-Transformer architectures such as Mamba and RWKV.\nThe complete source code, model weights, training logs, and an online interpretability platform are publicly available under the MIT license at: https://github.com/reEtym/reEtym</p>",
-            "type": "posted-content",
-            "publisher": "Springer Science and Business Media LLC"
+            }
           },
           {
             "DOI": "10.5220/0012419200003654",
@@ -574,7 +614,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recordedAt": "2026-09-30T04:41:49.456Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

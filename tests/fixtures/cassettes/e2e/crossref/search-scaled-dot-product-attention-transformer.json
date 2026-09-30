@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=scaled+dot-product+attention+transformer&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "path": "/works?query=scaled+dot-product+attention+transformer&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 777635,
+        "total-results": 777673,
         "items": [
           {
             "DOI": "10.7717/peerj-cs.2267/fig-3",
@@ -363,7 +363,19 @@
             "publisher": "Intelligence Science and Technology Press Inc."
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2025,
+                  10,
+                  23
+                ]
+              ]
+            },
+            "publisher": "Springer Science and Business Media LLC",
+            "abstract": "<title>Abstract</title>\n                <p>Timely and precise insect pest detection is critical in areas with high agricultural intensity and climates that favor continuous pest activity.\nTraditional pest identification methods, such as manual inspection or expert guided analysis, are labor intensive and time consuming. These approaches lack scalability and hinder timely intervention, particularly in resource-constrained settings.\nFurthermore, the high visual similarity between pest species and intra-species variability across developmental stages further challenge detection efforts in real-world agricultural conditions.\nTo address these limitations, we propose Pest-Net, a novel one-stage object detection network designed for insect pest detection.\nOur method consist of two key attention-based modules to enhance feature extraction and improve detection performance. \nFirst, the Hierarchical Scaled Dot-Product Attention module leverages a multi-level attention mechanism to capture salient pest features at different scales. \nSecond, the Spatial Attention module refines spatial feature representations by incorporating horizontal and vertical attention pathways with multi-scale max-pooling operation to enhance contextual understanding. \nExtensive experiments were conducted on two public benchmarks, IP102 and R2000 datasets, which represent agricultural conditions in Asia. The results demonstrate that Pest-Net outperforms state-of-the-art models in both visualization outputs and quantitative metrics. Pest-Net shows strong potential as a scalable and cost-effective solution for intelligent pest monitoring in modern precision agriculture.\nOur code and data for this paper are made available at: \\textit{\\url{https://github.com/thinhdoanvu/HSDPA}}.</p>",
             "DOI": "10.21203/rs.3.rs-7784075/v1",
+            "type": "posted-content",
             "title": [
               "Pest-Net: Hierarchical Scaled Dot-Product Attention for Insect Pest Detection"
             ],
@@ -457,10 +469,7 @@
                   23
                 ]
               ]
-            },
-            "abstract": "<title>Abstract</title>\n                <p>Timely and precise insect pest detection is critical in areas with high agricultural intensity and climates that favor continuous pest activity.\nTraditional pest identification methods, such as manual inspection or expert guided analysis, are labor intensive and time consuming. These approaches lack scalability and hinder timely intervention, particularly in resource-constrained settings.\nFurthermore, the high visual similarity between pest species and intra-species variability across developmental stages further challenge detection efforts in real-world agricultural conditions.\nTo address these limitations, we propose Pest-Net, a novel one-stage object detection network designed for insect pest detection.\nOur method consist of two key attention-based modules to enhance feature extraction and improve detection performance. \nFirst, the Hierarchical Scaled Dot-Product Attention module leverages a multi-level attention mechanism to capture salient pest features at different scales. \nSecond, the Spatial Attention module refines spatial feature representations by incorporating horizontal and vertical attention pathways with multi-scale max-pooling operation to enhance contextual understanding. \nExtensive experiments were conducted on two public benchmarks, IP102 and R2000 datasets, which represent agricultural conditions in Asia. The results demonstrate that Pest-Net outperforms state-of-the-art models in both visualization outputs and quantitative metrics. Pest-Net shows strong potential as a scalable and cost-effective solution for intelligent pest monitoring in modern precision agriculture.\nOur code and data for this paper are made available at: \\textit{\\url{https://github.com/thinhdoanvu/HSDPA}}.</p>",
-            "type": "posted-content",
-            "publisher": "Springer Science and Business Media LLC"
+            }
           }
         ],
         "items-per-page": 10,
@@ -474,7 +483,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recordedAt": "2026-09-30T04:41:49.456Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

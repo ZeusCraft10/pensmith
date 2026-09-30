@@ -1,0 +1,523 @@
+[
+  {
+    "scope": "https://api.semanticscholar.org",
+    "method": "GET",
+    "path": "/graph/v1/paper/search?query=attention+mechanism+neural+machine+translation&limit=10&fields=title%2Cauthors%2Cyear%2CexternalIds%2Cabstract%2Cvenue%2CpublicationTypes%2Cjournal",
+    "status": 200,
+    "response": {
+      "total": 8863,
+      "offset": 0,
+      "next": 10,
+      "data": [
+        {
+          "paperId": "93499a7c7f699b6630a86fad964536f9423bb6d0",
+          "externalIds": {
+            "DBLP": "journals/corr/LuongPM15",
+            "MAG": "1902237438",
+            "ArXiv": "1508.04025",
+            "ACL": "D15-1166",
+            "DOI": "10.18653/v1/D15-1166",
+            "CorpusId": 1998416
+          },
+          "title": "Effective Approaches to Attention-based Neural Machine Translation",
+          "venue": "Conference on Empirical Methods in Natural Language Processing",
+          "year": 2015,
+          "openAccessPdf": {
+            "url": "https://www.aclweb.org/anthology/D15-1166.pdf",
+            "status": "HYBRID",
+            "license": "CCBY",
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/1508.04025, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle",
+            "Conference"
+          ],
+          "journal": {
+            "name": "ArXiv",
+            "volume": "abs/1508.04025"
+          },
+          "authors": [
+            {
+              "authorId": "1821711",
+              "name": "Thang Luong"
+            },
+            {
+              "authorId": "143950636",
+              "name": "Hieu Pham"
+            },
+            {
+              "authorId": "144783904",
+              "name": "Christopher D. Manning"
+            }
+          ],
+          "abstract": "An attentional mechanism has lately been used to improve neural machine translation (NMT) by selectively focusing on parts of the source sentence during translation. However, there has been little work exploring useful architectures for attention-based NMT. This paper examines two simple and effective classes of attentional mechanism: a global approach which always attends to all source words and a local one that only looks at a subset of source words at a time. We demonstrate the effectiveness of both approaches on the WMT translation tasks between English and German in both directions. With local attention, we achieve a significant gain of 5.0 BLEU points over non-attentional systems that already incorporate known techniques such as dropout. Our ensemble model using different attention architectures yields a new state-of-the-art result in the WMT’15 English to German translation task with 25.9 BLEU points, an improvement of 1.0 BLEU points over the existing best system backed by NMT and an n-gram reranker. 1"
+        },
+        {
+          "paperId": "ffa75e960f56afd5cb06d61175ae372d3024c4dd",
+          "externalIds": {
+            "DOI": "10.1109/DAPIC66097.2025.00037",
+            "CorpusId": 278665864
+          },
+          "title": "Research on Korean Neural Machine Translation Model Based on Attention Mechanism",
+          "venue": "2025 International Conference on Digital Analysis and Processing, Intelligent Computation (DAPIC)",
+          "year": 2025,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/DAPIC66097.2025.00037?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/DAPIC66097.2025.00037, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "Conference"
+          ],
+          "journal": {
+            "name": "2025 International Conference on Digital Analysis and Processing, Intelligent Computation (DAPIC)",
+            "pages": "171-176"
+          },
+          "authors": [
+            {
+              "authorId": "47119081",
+              "name": "Xin-Feng Wang"
+            },
+            {
+              "authorId": "2247705318",
+              "name": "Qingsong Chang"
+            }
+          ],
+          "abstract": "The study examines a Korean Neural Machine Translation (NMT) model based on Attention Mechanism (AM). In the context of globalization, the demand for crosslingual communication is increasing, yet Korean machine translation faces challenges due to scarce data resources and complex grammatical structures. To improve translation quality, this paper proposes an innovative NMT model that integrates specially designed AM into the encoder-decoder framework. The model employs a bidirectional long short-term memory network (Bi-LSTM) as the encoder to capture bidirectional dependencies in sentences and utilizes multi-head AM in the decoder to dynamically focus on different parts of the source sentence, thereby providing more precise contextual information. Experimental results show that the proposed model outperforms baseline models based on RNN, CNN, and Transformer across multiple evaluation metrics such as BLEU, METEOR, ROUGE-N, and TER, demonstrating significant performance improvements. Particularly, when dealing with the complex grammar and morphological changes specific to the Korean language, the model exhibits stronger adaptability and accuracy, offering new insights for research in the field of Korean machine translation."
+        },
+        {
+          "paperId": "9be26291355de9e338b938b848d3071f847743ec",
+          "externalIds": {
+            "DOI": "10.1109/SSITCON66133.2025.11342115",
+            "CorpusId": 284968126
+          },
+          "title": "Improved Neural Machine Translation Algorithm for English-Chinese Translation Based on Multi-Head Attention Mechanism",
+          "venue": "2025 2nd International Conference on Software, Systems and Information Technology (SSITCON)",
+          "year": 2025,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/SSITCON66133.2025.11342115?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/SSITCON66133.2025.11342115, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "Conference"
+          ],
+          "journal": {
+            "name": "2025 2nd International Conference on Software, Systems and Information Technology (SSITCON)",
+            "pages": "1-6"
+          },
+          "authors": [
+            {
+              "authorId": "2498343746",
+              "name": "Qi Lin"
+            }
+          ],
+          "abstract": "With the acceleration of globalization, the demand for English-Chinese translation has surged, yet existing neural machine translation algorithms struggle with long sentences, ambiguous phrases, and specialized vocabulary. This study addresses the limitations of multi-head attention-based models by proposing an improved algorithm that optimizes weight allocation, introduces a dynamic attention mask mechanism, and integrates a bidirectional gated recurrent unit to enhance feature extraction. The new model achieved 84.5% translation accuracy, surpassing three comparative models by 6.2, 4.9, and 4.3 percentage points, respectively, while also scoring 3.9 in fluency, outperforming alternatives. The proposed method demonstrates significant effectiveness."
+        },
+        {
+          "paperId": "16cd7a5819dd1dd27c62adbb9905b988c9fa2c57",
+          "externalIds": {
+            "DOI": "10.1109/PEEEC67807.2025.00045",
+            "CorpusId": 287029799
+          },
+          "title": "Research on the Optimization of Transformer Model Based on Multi-head Attention Mechanism in Neural Machine Translation",
+          "venue": "2025 International Conference on Power, Electrical Engineering, Electronics and Control (PEEEC)",
+          "year": 2025,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/PEEEC67807.2025.00045?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/PEEEC67807.2025.00045, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "Conference"
+          ],
+          "journal": {
+            "name": "2025 International Conference on Power, Electrical Engineering, Electronics and Control (PEEEC)",
+            "pages": "235-240"
+          },
+          "authors": [
+            {
+              "authorId": "2427169069",
+              "name": "Xiulian Du"
+            },
+            {
+              "authorId": "2286497230",
+              "name": "Jun-Tong Liang"
+            }
+          ],
+          "abstract": "This paper explores Transformer and its several derivatives in machine translation. Transformer uses selfattention to capture global sequence dependencies, outperforming prior state-of-the-art models by solving longrange modeling issues and boosting parallelism. First, the BERT-fused model integrates pre-trained BERT's contextual features into NMT via extra attention modules, enhancing semantic utilization and translation performance. Second, our Dynamic Attention Aggregation adjusts multi-head attention weights to focus on key syntactic and semantic features, achieving better performance than baseline models. Third, the Parallel Attention mechanism optimizes multi-head attention's computation flow, enabling simultaneous processing of different semantic dimensions to enhance efficiency and capture diverse contextual features. Fourth, the Hierarchical Attention Transformer adopts two-tiered attention (word-level and phrase/sentence-level) to capture multi-scale semantics, addressing single-level attention's limitations and enhancing translation coherence."
+        },
+        {
+          "paperId": "2ba98be099b090a2487c2b03fe922d70abf927da",
+          "externalIds": {
+            "DBLP": "journals/jifs/CaoHCTWLJG24",
+            "DOI": "10.3233/JIFS-234037",
+            "CorpusId": 267726211
+          },
+          "title": "Multi-mechanism neural machine translation framework for automatic program repair",
+          "venue": "Journal of Intelligent & Fuzzy Systems",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "",
+            "status": "CLOSED",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.3233/JIFS-234037?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.3233/JIFS-234037, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "Journal of Intelligent & Fuzzy Systems",
+            "pages": "7859 - 7873",
+            "volume": "46"
+          },
+          "authors": [
+            {
+              "authorId": "2284640971",
+              "name": "He-Ling Cao"
+            },
+            {
+              "authorId": "2225125211",
+              "name": "Dong Han"
+            },
+            {
+              "authorId": "2160995182",
+              "name": "Yong-He Chu"
+            },
+            {
+              "authorId": "2284502532",
+              "name": "Fangchao Tian"
+            },
+            {
+              "authorId": "2284734787",
+              "name": "Yun Wang"
+            },
+            {
+              "authorId": "2285740361",
+              "name": "Yu Liu"
+            },
+            {
+              "authorId": "2284671889",
+              "name": "Junliang Jia"
+            },
+            {
+              "authorId": "2284509674",
+              "name": "Haoyang Ge"
+            }
+          ],
+          "abstract": "Automatic program repair (APR) is crucial to improve software quality. Recently, neural machine translation (NMT) based modeling for bug fixes has demonstrated great potential. However, these approaches still have two major challenges. One is that their search space is limited due to the out-of-vocabulary (OOV) problem. The other is that the NMT-based APR models tend to ignore past translation information, which often leads to over-translation and under-translation. To address the above challenges, we propose MNRepair, a new NMT-based APR approach that combines multiple mechanisms to fix bugs in source code. Specifically, we devise an encoder-decoder NMT framework with the attention mechanism. Our framework combines the copy mechanism to overcome the OOV problem that occurs with source code. To deal with the over-translation and under-translation, we utilize a coverage mechanism to record past translation information. MNRepair is able to capture a wide range of repair operators and fix 26 bugs in Defects4J. Our evaluation shows the effectiveness of multiple mechanisms in the repair process."
+        },
+        {
+          "paperId": "e576b9329eecd4bcddd4b2300672c2fa0d6c98d6",
+          "externalIds": {
+            "DBLP": "journals/jowua/SpandanT24",
+            "DOI": "10.58346/jowua.2024.i4.017",
+            "CorpusId": 274733275
+          },
+          "title": "Neural Machine Translation Model Using GRU with Hybrid Attention Mechanism for English to Kannada Language",
+          "venue": "J. Wirel. Mob. Networks Ubiquitous Comput. Dependable Appl.",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "",
+            "status": "CLOSED",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.58346/jowua.2024.i4.017?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.58346/jowua.2024.i4.017, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "J. Wirel. Mob. Networks Ubiquitous Comput. Dependable Appl.",
+            "pages": "259-276",
+            "volume": "15"
+          },
+          "authors": [
+            {
+              "authorId": "2084707999",
+              "name": "Gunti Spandan"
+            },
+            {
+              "authorId": "108822678",
+              "name": "P. Theerthagiri"
+            }
+          ],
+          "abstract": "Neural machine translation is a machine translation system that uses artificial neural networks to identify nonlinear relationships between bilingual sentence pairs. The language English-Kannada pair has met with less attention in the field of Neural Machine Translation (NMT), mostly due to lack of parallel corpora and the complexity of Kannada's linguistic structure. This research proposes a novel NMT model based on Gated Recurrent Units (GRU) and a Hybrid attention mechanism designed specifically for Kannada's morphological complexity and compared with existing models. By adding language-specific preprocessing techniques and employing data augmentation tactics, our model outperforms previous LSTM, GRU and Bi-LSTM-based algorithms in terms of BLEU and METEOR scores. The proposed model with hybrid attention might be a useful substitute in low-resource settings because transformers and other large models require more resources. The comparative study indicates that the proposed methodology improves the translation by 10% increase in Bilingual Evaluation Understudy (BLEU) and accuracy of 80% and achieved a Rouge Score of 0.9."
+        },
+        {
+          "paperId": "9ed9bff37ec952134564b3b2a022b7aba9479ff2",
+          "externalIds": {
+            "DBLP": "journals/corr/FiratCB16",
+            "ArXiv": "1601.01073",
+            "MAG": "2963247703",
+            "ACL": "N16-1101",
+            "DOI": "10.18653/v1/N16-1101",
+            "CorpusId": 6359641
+          },
+          "title": "Multi-Way, Multilingual Neural Machine Translation with a Shared Attention Mechanism",
+          "venue": "North American Chapter of the Association for Computational Linguistics",
+          "year": 2016,
+          "openAccessPdf": {
+            "url": "https://www.aclweb.org/anthology/N16-1101.pdf",
+            "status": "GOLD",
+            "license": "CCBY",
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/1601.01073, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle",
+            "Conference"
+          ],
+          "journal": {
+            "name": "ArXiv",
+            "volume": "abs/1601.01073"
+          },
+          "authors": [
+            {
+              "authorId": "2345617",
+              "name": "Orhan Firat"
+            },
+            {
+              "authorId": "1979489",
+              "name": "Kyunghyun Cho"
+            },
+            {
+              "authorId": "1751762",
+              "name": "Yoshua Bengio"
+            }
+          ],
+          "abstract": "We propose multi-way, multilingual neural machine translation. The proposed approach enables a single neural translation model to translate between multiple languages, with a number of parameters that grows only linearly with the number of languages. This is made possible by having a single attention mechanism that is shared across all language pairs. We train the proposed multi-way, multilingual model on ten language pairs from WMT'15 simultaneously and observe clear performance improvements over models trained on only one language pair. In particular, we observe that the proposed model significantly improves the translation quality of low-resource language pairs."
+        },
+        {
+          "paperId": "4520c334837f305f8f116778c67b33079594dc5e",
+          "externalIds": {
+            "DOI": "10.1109/TIACOMP64125.2024.00081",
+            "CorpusId": 273902518
+          },
+          "title": "Neural Machine Translation for Hindi to English Using Sequence-to-Sequence Architecture with Attention Mechanism",
+          "venue": "2024 First International Conference on Technological Innovations and Advance Computing (TIACOMP)",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "",
+            "status": "CLOSED",
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/TIACOMP64125.2024.00081?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/TIACOMP64125.2024.00081, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "Conference"
+          ],
+          "journal": {
+            "name": "2024 First International Conference on Technological Innovations and Advance Computing (TIACOMP)",
+            "pages": "449-454"
+          },
+          "authors": [
+            {
+              "authorId": "2329744905",
+              "name": "Ishan Rathi"
+            },
+            {
+              "authorId": "2329746111",
+              "name": "Paurav Goel"
+            },
+            {
+              "authorId": "2293175397",
+              "name": "Jaspreet Singh"
+            }
+          ],
+          "abstract": "In an increasingly linked world, effective cross-linguistic communication has become essential. Machine translation systems play an important role in improving communication among speakers of different languages. This research paper describes a thorough analysis into the creation and testing of a machine translation framework for translating Hindi words into English. The model is trained using a sequence-to-sequence (Seq2Seq) architecture and an attention mechanism on a dataset of concurrent Hindi-English phrase pairings. The training phase, which lasts 50 epochs, produces encouraging results, with the model reaching a training accuracy of 81.68% along with a validation accuracy of 75.71% on a rigorously selected dataset of different English-Hindi phrase pairings. The qualitative examination of the translated result reveals great accuracy and integrity to the original purpose. Comparative comparison using a benchmark translation model confirms the proposed model's ability to capture language intricacies and provide contextually suitable translations. This paper also identifies limits and suggests areas for further research, including the use of advanced approaches like domain adaptation along with transfer learning to improve translation quality. Overall, this study advances machine translation technologies and has implications for increasing cross-lingual communication in many linguistic circumstances."
+        },
+        {
+          "paperId": "c6850869aa5e78a107c378d2e8bfa39633158c0c",
+          "externalIds": {
+            "ArXiv": "1609.08144",
+            "MAG": "2525778437",
+            "DBLP": "journals/corr/WuSCLNMKCGMKSJL16",
+            "CorpusId": 3603249
+          },
+          "title": "Google's Neural Machine Translation System: Bridging the Gap between Human and Machine Translation",
+          "venue": "arXiv.org",
+          "year": 2016,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/1609.08144, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "JournalArticle"
+          ],
+          "journal": {
+            "name": "ArXiv",
+            "volume": "abs/1609.08144"
+          },
+          "authors": [
+            {
+              "authorId": "48607963",
+              "name": "Yong-Hui Wu"
+            },
+            {
+              "authorId": "144927151",
+              "name": "Mike Schuster"
+            },
+            {
+              "authorId": "2545358",
+              "name": "Z. Chen"
+            },
+            {
+              "authorId": "2827616",
+              "name": "Quoc V. Le"
+            },
+            {
+              "authorId": "144739074",
+              "name": "Mohammad Norouzi"
+            },
+            {
+              "authorId": "3153147",
+              "name": "Wolfgang Macherey"
+            },
+            {
+              "authorId": "2048712",
+              "name": "M. Krikun"
+            },
+            {
+              "authorId": "145144022",
+              "name": "Yuan Cao"
+            },
+            {
+              "authorId": "145312180",
+              "name": "Qin Gao"
+            },
+            {
+              "authorId": "113439369",
+              "name": "Klaus Macherey"
+            },
+            {
+              "authorId": "2367620",
+              "name": "J. Klingner"
+            },
+            {
+              "authorId": "145825976",
+              "name": "Apurva Shah"
+            },
+            {
+              "authorId": "145657834",
+              "name": "Melvin Johnson"
+            },
+            {
+              "authorId": "2109059862",
+              "name": "Xiaobing Liu"
+            },
+            {
+              "authorId": "40527594",
+              "name": "Lukasz Kaiser"
+            },
+            {
+              "authorId": "2776283",
+              "name": "Stephan Gouws"
+            },
+            {
+              "authorId": "2739610",
+              "name": "Yoshikiyo Kato"
+            },
+            {
+              "authorId": "1765329",
+              "name": "Taku Kudo"
+            },
+            {
+              "authorId": "1754386",
+              "name": "H. Kazawa"
+            },
+            {
+              "authorId": "144077726",
+              "name": "K. Stevens"
+            },
+            {
+              "authorId": "1753079661",
+              "name": "George Kurian"
+            },
+            {
+              "authorId": "2056800684",
+              "name": "Nishant Patil"
+            },
+            {
+              "authorId": "49337181",
+              "name": "Wei Wang"
+            },
+            {
+              "authorId": "39660914",
+              "name": "Cliff Young"
+            },
+            {
+              "authorId": "2119125158",
+              "name": "Jason R. Smith"
+            },
+            {
+              "authorId": "2909504",
+              "name": "Jason Riesa"
+            },
+            {
+              "authorId": "29951847",
+              "name": "Alex Rudnick"
+            },
+            {
+              "authorId": "1689108",
+              "name": "O. Vinyals"
+            },
+            {
+              "authorId": "102388768",
+              "name": "G. Corrado"
+            },
+            {
+              "authorId": "48342565",
+              "name": "Macduff Hughes"
+            },
+            {
+              "authorId": "49959210",
+              "name": "Jeffrey Dean"
+            }
+          ],
+          "abstract": "Neural Machine Translation (NMT) is an end-to-end learning approach for automated translation, with the potential to overcome many of the weaknesses of conventional phrase-based translation systems. Unfortunately, NMT systems are known to be computationally expensive both in training and in translation inference. Also, most NMT systems have difficulty with rare words. These issues have hindered NMT's use in practical deployments and services, where both accuracy and speed are essential. In this work, we present GNMT, Google's Neural Machine Translation system, which attempts to address many of these issues. Our model consists of a deep LSTM network with 8 encoder and 8 decoder layers using attention and residual connections. To improve parallelism and therefore decrease training time, our attention mechanism connects the bottom layer of the decoder to the top layer of the encoder. To accelerate the final translation speed, we employ low-precision arithmetic during inference computations. To improve handling of rare words, we divide words into a limited set of common sub-word units (\"wordpieces\") for both input and output. This method provides a good balance between the flexibility of \"character\"-delimited models and the efficiency of \"word\"-delimited models, naturally handles translation of rare words, and ultimately improves the overall accuracy of the system. Our beam search technique employs a length-normalization procedure and uses a coverage penalty, which encourages generation of an output sentence that is most likely to cover all the words in the source sentence. On the WMT'14 English-to-French and English-to-German benchmarks, GNMT achieves competitive results to state-of-the-art. Using a human side-by-side evaluation on a set of isolated simple sentences, it reduces translation errors by an average of 60% compared to Google's phrase-based production system."
+        },
+        {
+          "paperId": "2beef38fe0e48adcfad70e5eab77d2c168e80f7b",
+          "externalIds": {
+            "DOI": "10.1109/ACAIT63902.2024.11022229",
+            "CorpusId": 279268695
+          },
+          "title": "Design of a Neural Machine Translation Model for English Based on LSTM and Enhanced Attention Mechanism",
+          "venue": "2024 8th Asian Conference on Artificial Intelligence Technology (ACAIT)",
+          "year": 2024,
+          "openAccessPdf": {
+            "url": "",
+            "status": null,
+            "license": null,
+            "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1109/ACAIT63902.2024.11022229?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1109/ACAIT63902.2024.11022229, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+          },
+          "publicationTypes": [
+            "Conference"
+          ],
+          "journal": {
+            "name": "2024 8th Asian Conference on Artificial Intelligence Technology (ACAIT)",
+            "pages": "661-665"
+          },
+          "authors": [
+            {
+              "authorId": "2302212792",
+              "name": "Jieying Li"
+            }
+          ],
+          "abstract": "The fusion of long short-term memory networks and attention mechanisms has led to the creation of a novel English translation model aimed at addressing the shortcomings of existing models, such as low translation efficiency and accuracy. Firstly, the output of the LSTM network is used as the input for the multi hop attention mechanism, and attention weights are calculated through multiple iterations, allowing the model to gradually focus on important information in the sentence and generate weighted sentence representations accordingly. Then, the weighted sentence representation is fed into a multi head attention mechanism, which divides the input sentence into multiple subspaces and independently calculates attention weights in each subspace to further extract deep features of the sentence. Finally, these features are used to generate translation results. The results indicated that the proposed model achieved accuracy, recall rate, and F1 score of up to 0.99, 0.98, and 0.98 respectively, in benchmark performance tests. In contrast, other advanced models achieved the highest accuracy of 0.95, recall of 0.96, and F1 score of 0.96. Furthermore, the proposed model demonstrated an accuracy of up to 0.99 in real translation tasks. These findings suggest that the designed translation model not only exhibits superior performance but also excels in extracting deep sentence information, thereby providing improved translation effects for real-time translation of long and complex sentences through the combined use of two attention mechanisms."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T04:41:49.456Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "semanticscholar"
+    }
+  }
+]

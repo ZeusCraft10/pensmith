@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=multi-head+attention+transformer+architecture&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "path": "/works?query=multi-head+attention+transformer+architecture&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 2565910,
+        "total-results": 2566048,
         "items": [
           {
             "DOI": "10.7717/peerj-cs.2890/fig-1",
@@ -124,7 +124,19 @@
             "publisher": "PeerJ"
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2023,
+                  12,
+                  4
+                ]
+              ]
+            },
+            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)",
+            "abstract": "<jats:p>&lt;p&gt;We propose a novel framework based on the attention mechanism to identify the sentiment of a movie review document. Previous efforts on deep neural networks with attention mechanisms focus on encoder and decoder with fixed numbers of multi-head attention. Therefore, we need a mechanism to stop the attention process automatically if no more useful information can be read from the memory.In this paper, we propose an adaptive multi-head attention architecture (AdaptAttn) which varies the number of attention heads based on length of sentences. AdaptAttn has a data preprocessing step where each document is classified into any one of the three bins small, medium or large based on length of the sentence. The document classified as small goes through two heads in each layer, the medium group passes four heads and the large group is processed by eight heads. We examine the merit of our model on the Stanford large movie review dataset. The experimental results show that the F1 score from our model is on par with the baseline model.&lt;/p&gt;</jats:p>",
             "DOI": "10.36227/techrxiv.24638745",
+            "type": "posted-content",
             "title": [
               "Sentiment analysis with adaptive multi-head attention in Transformer"
             ],
@@ -162,13 +174,22 @@
                   4
                 ]
               ]
-            },
-            "abstract": "<jats:p>&lt;p&gt;We propose a novel framework based on the attention mechanism to identify the sentiment of a movie review document. Previous efforts on deep neural networks with attention mechanisms focus on encoder and decoder with fixed numbers of multi-head attention. Therefore, we need a mechanism to stop the attention process automatically if no more useful information can be read from the memory.In this paper, we propose an adaptive multi-head attention architecture (AdaptAttn) which varies the number of attention heads based on length of sentences. AdaptAttn has a data preprocessing step where each document is classified into any one of the three bins small, medium or large based on length of the sentence. The document classified as small goes through two heads in each layer, the medium group passes four heads and the large group is processed by eight heads. We examine the merit of our model on the Stanford large movie review dataset. The experimental results show that the F1 score from our model is on par with the baseline model.&lt;/p&gt;</jats:p>",
-            "type": "posted-content",
-            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)"
+            }
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2023,
+                  12,
+                  4
+                ]
+              ]
+            },
+            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)",
+            "abstract": "<jats:p>We propose a novel framework based on the attention mechanism to\nidentify the sentiment of a movie review document. Previous efforts on\ndeep neural networks with attention mechanisms focus on encoder and\ndecoder with fixed numbers of multi-head attention. Therefore, we need a\nmechanism to stop the attention process automatically if no more useful\ninformation can be read from the memory.In this paper, we propose an\nadaptive multi-head attention architecture (AdaptAttn) which varies the\nnumber of attention heads based on length of sentences. AdaptAttn has a\ndata preprocessing step where each document is classified into any one\nof the three bins small, medium or large based on length of the\nsentence. The document classified as small goes through two heads in\neach layer, the medium group passes four heads and the large group is\nprocessed by eight heads. We examine the merit of our model on the\nStanford large movie review dataset. The experimental results show that\nthe F1 score from our model is on par with the baseline model.</jats:p>",
             "DOI": "10.36227/techrxiv.24638745.v1",
+            "type": "posted-content",
             "title": [
               "Sentiment analysis with adaptive multi-head attention in Transformer"
             ],
@@ -212,10 +233,7 @@
                   4
                 ]
               ]
-            },
-            "abstract": "<jats:p>We propose a novel framework based on the attention mechanism to\nidentify the sentiment of a movie review document. Previous efforts on\ndeep neural networks with attention mechanisms focus on encoder and\ndecoder with fixed numbers of multi-head attention. Therefore, we need a\nmechanism to stop the attention process automatically if no more useful\ninformation can be read from the memory.In this paper, we propose an\nadaptive multi-head attention architecture (AdaptAttn) which varies the\nnumber of attention heads based on length of sentences. AdaptAttn has a\ndata preprocessing step where each document is classified into any one\nof the three bins small, medium or large based on length of the\nsentence. The document classified as small goes through two heads in\neach layer, the medium group passes four heads and the large group is\nprocessed by eight heads. We examine the merit of our model on the\nStanford large movie review dataset. The experimental results show that\nthe F1 score from our model is on par with the baseline model.</jats:p>",
-            "type": "posted-content",
-            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)"
+            }
           },
           {
             "DOI": "10.7717/peerj-cs.1515/fig-2",
@@ -259,7 +277,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recordedAt": "2026-09-30T04:41:49.456Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

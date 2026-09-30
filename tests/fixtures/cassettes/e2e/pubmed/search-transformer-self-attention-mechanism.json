@@ -10,10 +10,11 @@
         "version": "0.3"
       },
       "esearchresult": {
-        "count": "1207",
+        "count": "1208",
         "retmax": "10",
         "retstart": "0",
         "idlist": [
+          "42809956",
           "42807068",
           "42801901",
           "42791472",
@@ -22,8 +23,7 @@
           "42746552",
           "42743970",
           "42741109",
-          "42740235",
-          "42740136"
+          "42740235"
         ],
         "translationset": [
           {
@@ -42,7 +42,7 @@
       "content-type": "application/json; charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recordedAt": "2026-09-30T04:41:49.456Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "pubmed"
     }
@@ -50,7 +50,7 @@
   {
     "scope": "https://eutils.ncbi.nlm.nih.gov",
     "method": "GET",
-    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42807068%2C42801901%2C42791472%2C42774040%2C42773344%2C42746552%2C42743970%2C42741109%2C42740235%2C42740136&retmode=json",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42809956%2C42807068%2C42801901%2C42791472%2C42774040%2C42773344%2C42746552%2C42743970%2C42741109%2C42740235&retmode=json",
     "status": 200,
     "response": {
       "header": {
@@ -58,148 +58,6 @@
         "version": "0.3"
       },
       "result": {
-        "42740136": {
-          "uid": "42740136",
-          "pubdate": "2026 Aug 31",
-          "epubdate": "2026 Aug 31",
-          "source": "Sensors (Basel)",
-          "authors": [
-            {
-              "name": "Liu M",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Wu W",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Chen W",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Han P",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Liu M",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Meng S",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Glade T",
-              "authtype": "Author",
-              "clusterid": ""
-            }
-          ],
-          "lastauthor": "Glade T",
-          "title": "Classification of Surface Deformation Using DTW-Transformer Model in Lower Jinsha River Basin.",
-          "sorttitle": "classification of surface deformation using dtw transformer model in lower jinsha river basin",
-          "volume": "26",
-          "issue": "17",
-          "pages": "",
-          "lang": [
-            "eng"
-          ],
-          "nlmuniqueid": "101204366",
-          "issn": "",
-          "essn": "1424-8220",
-          "pubtype": [
-            "Journal Article"
-          ],
-          "recordstatus": "PubMed",
-          "pubstatus": "3",
-          "articleids": [
-            {
-              "idtype": "pubmed",
-              "idtypen": 1,
-              "value": "42740136"
-            },
-            {
-              "idtype": "pmc",
-              "idtypen": 8,
-              "value": "PMC13568235"
-            },
-            {
-              "idtype": "pmcid",
-              "idtypen": 5,
-              "value": "pmc-id: PMC13568235;"
-            },
-            {
-              "idtype": "doi",
-              "idtypen": 3,
-              "value": "10.3390/s26175515"
-            },
-            {
-              "idtype": "pii",
-              "idtypen": 4,
-              "value": "s26175515"
-            }
-          ],
-          "history": [
-            {
-              "pubstatus": "received",
-              "date": "2026/07/19 00:00"
-            },
-            {
-              "pubstatus": "revised",
-              "date": "2026/08/28 00:00"
-            },
-            {
-              "pubstatus": "accepted",
-              "date": "2026/08/28 00:00"
-            },
-            {
-              "pubstatus": "medline",
-              "date": "2026/09/15 05:37"
-            },
-            {
-              "pubstatus": "pubmed",
-              "date": "2026/09/15 05:36"
-            },
-            {
-              "pubstatus": "entrez",
-              "date": "2026/09/15 03:25"
-            },
-            {
-              "pubstatus": "pmc-release",
-              "date": "2026/08/31 00:00"
-            }
-          ],
-          "references": [],
-          "attributes": [
-            "Has Abstract"
-          ],
-          "pmcrefcount": 41,
-          "fulljournalname": "Sensors (Basel, Switzerland)",
-          "elocationid": "doi: 10.3390/s26175515",
-          "doctype": "citation",
-          "srccontriblist": [],
-          "booktitle": "",
-          "medium": "",
-          "edition": "",
-          "publisherlocation": "",
-          "publishername": "",
-          "srcdate": "",
-          "reportnumber": "",
-          "availablefromurl": "",
-          "locationlabel": "",
-          "doccontriblist": [],
-          "docdate": "",
-          "bookname": "",
-          "chapter": "",
-          "sortpubdate": "2026/08/31 00:00",
-          "sortfirstauthor": "Liu M",
-          "vernaculartitle": ""
-        },
         "42740235": {
           "uid": "42740235",
           "pubdate": "2026 Sep 3",
@@ -1380,7 +1238,131 @@
           "sortfirstauthor": "Zhao J",
           "vernaculartitle": ""
         },
+        "42809956": {
+          "uid": "42809956",
+          "pubdate": "2026 Sep 21",
+          "epubdate": "2026 Sep 21",
+          "source": "Neural Netw",
+          "authors": [
+            {
+              "name": "Jia Z",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhang J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Guo D",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yan P",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Guo J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Qu K",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Qu K",
+          "title": "ALSRFormer: An adaptive transformer with dynamic window attention and multi-scale deformable feed-forward network for remote sensing image segmentation.",
+          "sorttitle": "alsrformer an adaptive transformer with dynamic window attention and multi scale deformable feed forward network for remote sensing image segmentation",
+          "volume": "206",
+          "issue": "Pt A",
+          "pages": "109651",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "8805018",
+          "issn": "0893-6080",
+          "essn": "1879-2782",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - as supplied by publisher",
+          "pubstatus": "10",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42809956"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1016/j.neunet.2026.109651"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "S0893-6080(26)01106-8"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/29 23:29"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/29 23:29"
+            },
+            {
+              "pubstatus": "received",
+              "date": "2025/09/18 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/07/01 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/17 00:00"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/29 18:04"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Neural networks : the official journal of the International Neural Network Society",
+          "elocationid": "doi: 10.1016/j.neunet.2026.109651",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/21 00:00",
+          "sortfirstauthor": "Jia Z",
+          "vernaculartitle": ""
+        },
         "uids": [
+          "42809956",
           "42807068",
           "42801901",
           "42791472",
@@ -1389,8 +1371,7 @@
           "42746552",
           "42743970",
           "42741109",
-          "42740235",
-          "42740136"
+          "42740235"
         ]
       }
     },
@@ -1398,7 +1379,7 @@
       "content-type": "application/json; charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recordedAt": "2026-09-30T04:41:49.456Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "pubmed"
     }

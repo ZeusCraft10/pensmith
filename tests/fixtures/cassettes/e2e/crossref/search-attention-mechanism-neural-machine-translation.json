@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=attention+mechanism+neural+machine+translation&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "path": "/works?query=attention+mechanism+neural+machine+translation&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 2854869,
+        "total-results": 2854991,
         "items": [
           {
             "DOI": "10.1109/ssitcon66133.2025.11342115",
@@ -52,7 +52,19 @@
             "publisher": "IEEE"
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2022,
+                  7,
+                  29
+                ]
+              ]
+            },
+            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)",
+            "abstract": "<jats:p>&lt;p&gt;The paper implements a neural machine translation model with attention using tensorflow and keras libraries for the task of translating English to Swedish.&lt;/p&gt;</jats:p>",
             "DOI": "10.36227/techrxiv.20369091",
+            "type": "posted-content",
             "title": [
               "English to Swedish Neural Machine Translation Using Attention"
             ],
@@ -78,13 +90,22 @@
                   29
                 ]
               ]
-            },
-            "abstract": "<jats:p>&lt;p&gt;The paper implements a neural machine translation model with attention using tensorflow and keras libraries for the task of translating English to Swedish.&lt;/p&gt;</jats:p>",
-            "type": "posted-content",
-            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)"
+            }
           },
           {
+            "posted": {
+              "date-parts": [
+                [
+                  2022,
+                  7,
+                  29
+                ]
+              ]
+            },
+            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)",
+            "abstract": "<jats:p>The paper implements a neural machine translation model with attention\nusing tensorflow and keras libraries for the task of translating English\nto Swedish.</jats:p>",
             "DOI": "10.36227/techrxiv.20369091.v1",
+            "type": "posted-content",
             "title": [
               "English to Swedish Neural Machine Translation Using Attention"
             ],
@@ -116,10 +137,7 @@
                   29
                 ]
               ]
-            },
-            "abstract": "<jats:p>The paper implements a neural machine translation model with attention\nusing tensorflow and keras libraries for the task of translating English\nto Swedish.</jats:p>",
-            "type": "posted-content",
-            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)"
+            }
           },
           {
             "DOI": "10.18653/v1/w17-3201",
@@ -494,7 +512,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recordedAt": "2026-09-30T04:41:49.456Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }
