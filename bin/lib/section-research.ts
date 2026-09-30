@@ -350,7 +350,7 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
   const notAdded = [
     ...final
       .map((i, index) => ({ i, key: realKeys[index] as string }))
-      .filter(({ key }) => withheld.has(key))
+      .filter(({ key }, index) => withheld.has(key) && realKeys.indexOf(key) === index)
       .map(({ i, key }) => `[@${key}] ${formatReference(i.view)} — not assigned: the citation verifier would not pass a citation of it (${withheld.get(key) as string})`),
     ...pass.kept.filter((k) => !selected.has(k.candidate.citekey)).map((k) => `[@${k.candidate.citekey}] ${formatReference(k.view)} — deselected`),
     ...pass.rejected.filter((r) => !selected.has(r.candidate.citekey)).map((r) => `[@${r.candidate.citekey}] ${formatReference(r.view)} — evaluator: ${oneLine(r.reason ?? 'rejected')}`),
@@ -368,7 +368,7 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
     `- Queries: ${queries.map((q) => `\`${q}\``).join('; ')}${redact ? ' (PII-redacted)' : ''}`,
     `- Adapters: ${pass.adapters.map((a) => `${a.adapter} ${a.count} (${a.status})`).join('; ')}`,
     `- Result: ${tierSummary(final)}; ${pass.excluded.length} excluded by [sources] policy; ${pass.rejected.length} rejected by the evaluator`,
-    `- Added to this section's assigned_sources: ${added.length > 0 ? added.join(', ') : '(none new — already assigned)'}`,
+    `- Added to this section's assigned_sources: ${added.length > 0 ? added.join(', ') : assignable.length > 0 ? '(none new — already assigned)' : '(none — see "Not added")'}`,
     `- New to LIBRARY.json: ${newToLibrary.length > 0 ? newToLibrary.join(', ') : '(none)'}`,
     ...(retracted.length > 0 ? [`- RETRACTED (kept in LIBRARY.json, not assigned — Pass 1 blocks a citation of it): ${retracted.map((r) => r.key).join(', ')}`] : []),
     ...(unknown.length > 0

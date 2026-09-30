@@ -254,7 +254,8 @@ async function remapStep(
   // check (source-context.ts verifierBlindSpot — the outline and planner's
   // rule): a retracted work always fails Pass 1, so mapping it would only
   // strand the section. It stays in the library, unmapped.
-  const blind = verifierBlindSpot(entry, networkMode().dryRun);
+  // (Only a library entry is judged: the bare-key fallback carries no identifiers.)
+  const blind = 'doi' in entry ? verifierBlindSpot(entry, networkMode().dryRun) : null;
   if (blind !== null) {
     const excluded = [{ citekey: key, reason: blind }];
     const explicit = args.one !== null || args.remap;
