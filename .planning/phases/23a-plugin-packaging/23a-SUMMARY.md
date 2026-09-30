@@ -350,3 +350,34 @@ Also expect the planning files that both branches close with: `.planning/STATE.m
 - The missing-key error ends "`pensmith doctor` checks the setup (README: Model runtimes)."
 
 **Phase 20 is still moving.** Re-run the trial against the Phase 20 head of the day before merging, and refresh this section.
+
+## 10. Merge record (integration branch `v1/int-23a`, 2026-09-30)
+
+Phase 20 was still in its review rounds, so `v1/p23a` merged onto the Phase 20 head of the day (`7eb0cbf`, one commit past the §9 trial's `8c16008`) in a separate integration worktree (`/home/user/pensmith-int`, branch `v1/int-23a`), followed by the CI run 68 fixes (`v1/ci-fix-68`). `v1/int-23a` merges into the main branch once Phase 20 closes.
+
+**Commits (first parent, on top of `7eb0cbf`):**
+
+| Commit | What |
+|---|---|
+| `d565233` | `merge(23a)`: `git merge --no-ff v1/p23a`, default rename detection |
+| `b322dd7` | the six bundles rebuilt from an `npm ci` of the merged lockfile in this checkout, and re-stamped |
+| `1865e57` | `merge(ci)`: `git merge --no-ff v1/ci-fix-68` (no conflicts) |
+| `05949d8` | `plugin/dist/mcp/server.mjs` rebuilt: it inlines the doctor's `ecosystem-presence.ts` |
+| `d67c624` | the three test failures the merge exposed (below), and a re-stamp |
+
+**The merge stopped on the 12 files §9 predicted** and no others. The planning files merged cleanly (Phase 20 has not yet written its closure edits). Every Phase 20 edit under `workflows/` and `templates/` landed at its `plugin/` path by rename detection; the moved files' bytes equal Phase 20's (checked file by file), so the prompt hashes needed no new values, only the `plugin/templates/prompts/…` paths in `tests/repo-files.test.ts`. The resolutions followed §9: the two old skill files removed and Phase 20's rows ported to `plugin/skills/{pensmith,verify-section,plan-section}/SKILL.md` (the `--revise` verdicts are named from `bin/lib/revise.ts` `REVISABLE_VERDICTS`: FABRICATED, MIS-CITED, RETRACTED, UNASSIGNED, UNRESOLVABLE, UNPARSEABLE and a quote NOT_FOUND); `--accept-quote <qK>` in verify-section's `argument-hint` and in `docs/PLUMBING.md`; Phase 20's 20 new `process.stdout.write` calls (16 in `done.ts`, 4 in `verify.ts`, clean hunks included) routed through `out()`; both sides of the imports, `chokepoint.mjs`, `package.json` and CLAUDE.md kept.
+
+**Failures the merge exposed, each fixed on the side it describes (`d67c624`):**
+- The pensmith skill's "redo section 3" row sent a flagged section to `plan 3 --revise` **then `write 3`**. Revise repairs DRAFT.md in place and resets the verified hash, and the router then names `verify 3` (its own attention line says so); a `write 3` would redraft from a plan that still assigns the flagged source and discard the repair. The row now names `verify 3`, `plan-section` says revise repairs one a run and verify re-checks, and `tests/nl-triggers.test.ts` pins the corrected route.
+- `tests/correction-routes.test.ts` matched revise's pre-Phase-20 "nothing to revise" line; it now matches the merged message, which names the widened verdict list.
+- `tests/handoff-size.test.ts` seeded verified sections with no DRAFT.md. Since VRFY-16 the router re-drafts such a section, so the PreCompact hook named §1 instead of §30; the fixture now writes each verified section's draft.
+
+**Gate at `d67c624`** (as root in the cloud container; `CI=true`, pandoc 3.9 on PATH):
+- Node 22.22.2 and Node 24.21.0: `prebuild`, `lint`, `typecheck`, `build`, `validate:manifests` and `bundle:check` exit 0, and the tree is clean after the build.
+- `npm run test:tier-contract`: 61/61 on both.
+- `npm test`: 2815 tests, 2814 pass on Node 22 and on Node 24 — the one failure is the root-only `tests/atomic-write.test.ts` case (the Node 22 run at `05949d8`, before the fixes, failed that case and the three tests above). HARDEN-03 ran 1000 drafts against pandoc on both. The runner's CI-09 fingerprint reported no change to the real data dir.
+- `node scripts/e2e-smoke.mjs`: PASS=17, FINDING=0, FAIL=0 on both.
+- `CLAUDE_BIN=/opt/node22/bin/claude npm run plugin:smoke` (Claude Code 2.1.285, isolated config and HOME, scratch temp dir): all checks passed, including the git-marketplace install and update.
+- The recorded e2e corpus was not re-recorded: neither merged branch changes an adapter's request URLs, and `tests/e2e-corpus-manifest.test.ts` passes.
+
+**Still open:** PLUG-04 and CI-05 (§1, §8), unchanged by the merge. Phase 20 commits made after `7eb0cbf` meet the same rules when `v1/int-23a` merges into the main branch: an edit under `workflows/`, `templates/`, `references/` or `skills/` lands at its `plugin/` path (a skill edit is ported by hand, as above), a new stdout line goes through `out()`, a changed prompt is re-pinned at its `plugin/templates/prompts/` path, and the bundles are rebuilt and re-stamped (`npm run bundle`, then `bundle:check`).
