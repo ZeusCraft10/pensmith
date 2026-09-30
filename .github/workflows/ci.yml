@@ -54,8 +54,10 @@ jobs:
       # exactly what `npm run bundle` makes from these sources — fails on any
       # modified, deleted or new file. Rebundle and commit after changing
       # anything under bin/ (lib or cli), mcp/ or hooks/, the package.json
-      # version, or package-lock.json.
-      - name: Plugin bundles match their sources (bundle:check)
+      # version, or package-lock.json. It also re-stamps plugin.json's content
+      # version (scripts/plugin-version.cjs) and fails when that differs from
+      # the commit: any change under plugin/ needs `npm run plugin:version`.
+      - name: Plugin bundles and version match their sources (bundle:check)
         run: npm run bundle:check
 
       # CI-09 / D-17-40: tests must never touch the real user data dir. Record a
@@ -109,9 +111,11 @@ jobs:
   # marketplace (plus the plugin-legacy negative control); marketplace add +
   # install + list + details from a fresh clone with no npm ci or build in an
   # isolated CLAUDE_CONFIG_DIR; `claude mcp list` connected; the installed
-  # cache's server answering initialize + tools/list; and "not connected" with
-  # no node on PATH. Maintainer item: make this job a required check in the
-  # branch protection settings.
+  # cache's server answering initialize + tools/list; "not connected" with no
+  # node on PATH; and an install from a git-hosted marketplace (the clone
+  # served by a loopback `git http-backend`) that `claude plugin update` moves
+  # to a newly pushed commit. Maintainer item: make this job a required check
+  # in the branch protection settings.
   plugin:
     strategy:
       fail-fast: false

@@ -257,6 +257,26 @@ test('PLUG-13: stdout-sink flags each way to reach the process stdout on its own
     `export function g(): void { const { stdout: s } = process; s.write('x'); }`,
     `export function h(): void { const { stdout } = globalThis.process; stdout.write('x'); }`,
     `export const i = (ok: boolean): boolean => (ok ? process.stdout : process.stderr).write('x');`,
+    // Review round 2: every console method that prints to stdout, and process
+    // or console itself under another name.
+    `export const j = (): number => { console.count('x'); return 0; };`,
+    `export const k = (): void => console.countReset('x');`,
+    `export const l = (): void => console.group('x');`,
+    `export const m = (): void => console.groupCollapsed('x');`,
+    `export const n = (): void => console.timeLog('t', 'x');`,
+    `export const o = (): void => console.timeEnd('t');`,
+    `export const p = (): void => console.dirxml('x');`,
+    `export const q = (): void => console['count']('x');`,
+    `export const r = (): void => globalThis.console.group('x');`,
+    `export function s(): void { const p = process; p.stdout.write('x'); }`,
+    `export function t(): void { const p = globalThis.process; p.stdout.write('x'); }`,
+    `export function u(): void { const c = console; c.log('x'); }`,
+    `export const v = (w: (io: NodeJS.Process) => void): void => w(process);`,
+    `export const x = { io: process };`,
+    `export const y = (): NodeJS.Process => process;`,
+    `export function z(): Console { return console; }`,
+    `export function aa(): void { const { log } = console; log('x'); }`,
+    `export function ab(): void { const { ...all } = process; all.stdout.write('x'); }`,
   ]) {
     assert.ok((await count(bad)) >= 1, `must fire: ${bad}`);
   }
@@ -267,6 +287,13 @@ test('PLUG-13: stdout-sink flags each way to reach the process stdout on its own
     `export function e(): void { const { stderr } = process; stderr.write('x'); }`,
     `export function f(): void { const { stdout } = { stdout: 'text' }; void stdout; }`,
     `export const g = (): void => console.error('x');`,
+    `export const h = (): void => { console.warn('x'); console.trace('x'); console.assert(true, 'x'); };`,
+    `export const i = process.env['HOME'];`,
+    `export const j = typeof process === 'undefined';`,
+    `export const k = (): void => process.on('exit', () => undefined);`,
+    `export const l = globalThis.process?.platform;`,
+    `export const subprocess = 1; export const processed = subprocess;`,
+    `// a comment about the process (and console) is not code`,
   ]) {
     assert.equal(await count(clean), 0, `must not fire: ${clean}`);
   }
@@ -284,10 +311,37 @@ test('PLUG-13: the mcp-stdout-graph content regex finds each stdout form in a re
     `import { env, stdout as out } from "process";`,
     `const { stdout: s } = process;`,
     `const { stdout } = globalThis.process;`,
+    `console.count('x')`,
+    `console.group('x')`,
+    `console.groupCollapsed('x')`,
+    `console.timeLog('t', 'x')`,
+    `console.timeEnd('t')`,
+    `console.dirxml('x')`,
+    `console['count']('x')`,
+    `const p = process;`,
+    `const p = globalThis.process;`,
+    `const c = console;`,
+    `f(process)`,
+    `f(a, console)`,
+    `({ io: process })`,
+    `return process;`,
+    `const { log } = console;`,
+    `const { env, ...rest } = process;`,
   ]) {
     assert.ok(re.test(bad), `must match: ${bad}`);
   }
-  for (const clean of [`process.stdout.isTTY`, `import { env } from 'node:process';`, `const { stderr } = process;`, `const { stdout } = process.env;`, `console.error('x')`]) {
+  for (const clean of [
+    `process.stdout.isTTY`,
+    `import { env } from 'node:process';`,
+    `const { stderr } = process;`,
+    `const { stdout } = process.env;`,
+    `console.error('x')`,
+    `console.warn('x'); console.trace('x'); console.assert(true);`,
+    `const home = process.env['HOME'];`,
+    `process.on('exit', f)`,
+    `typeof process === 'undefined'`,
+    `globalThis.process?.platform`,
+  ]) {
     assert.equal(re.test(clean), false, `must not match: ${clean}`);
   }
 });

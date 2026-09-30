@@ -130235,9 +130235,9 @@ function installWarningFilter() {
   installed = true;
   const printers = process.listeners("warning");
   process.removeAllListeners("warning");
-  process.on("warning", (warning) => {
+  process.on("warning", function(warning) {
     if (typeof warning.code === "string" && SILENCED_WARNING_CODES.has(warning.code)) return;
-    for (const print of printers) print.call(process, warning);
+    for (const print of printers) print.call(this, warning);
   });
 }
 __name(installWarningFilter, "installWarningFilter");
