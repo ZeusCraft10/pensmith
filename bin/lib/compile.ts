@@ -63,7 +63,7 @@ import { loadFrontmatterDoc } from './frontmatter.js';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { computeDraftHash } from './draft-hash.js';
-import { extractCitedKeysForVerification, replaceCitations } from './citation-token.js';
+import { extractCitedKeysForVerification, replaceCitations, stripLeadingBom } from './citation-token.js';
 import { runConsistencyScan, type SectionSpan } from './consistency-scan.js';
 import { computeCitationDensity } from './citation-density.js';
 import {
@@ -272,7 +272,10 @@ async function loadSection(
   return {
     outline: outlineSection,
     slug: outlineSection.slug,
-    draft: normalizeTrailingNewline(draftBytes.toString('utf8')),
+    // A leading byte-order mark is stripped as Pandoc strips it from a file
+    // (review round 3): mid-way through the compiled DRAFT.md it would be a
+    // character Pandoc keeps, not what the section's gate judged.
+    draft: normalizeTrailingNewline(stripLeadingBom(draftBytes.toString('utf8'))),
     draftBytes,
     assignedSources,
     storedHash,

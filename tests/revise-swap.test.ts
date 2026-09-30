@@ -289,7 +289,7 @@ test('revise (review round 1): a flagged citation an earlier revise already remo
   assert.equal(readFileSync(targetPlanPath(root), 'utf8'), planBefore, 'PLAN.md unchanged (no hash reset reported as applied)');
 });
 
-test('revise (review round 2): text rows (L<line>, a bare doi:…) are not citations — never "already gone", named with the edit or re-draft that fixes them, no model call', async () => {
+test('revise (review round 2): text rows ((L<line>), a bare doi:…) are not citations — never "already gone", named with the edit or re-draft that fixes them, no model call', async () => {
   const { root } = seedFixture();
   const textOnly = [
     '# VERIFICATION (Section 2, target)',
@@ -299,7 +299,7 @@ test('revise (review round 2): text rows (L<line>, a bare doi:…) are not citat
     '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
     '',
     '- smith2020: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed',
-    '- L3: **UNPARSEABLE** — titleJW=n/a, authorJW=n/a — `[@smith2020`: `[@smith2020` is never closed in its paragraph',
+    '- (L3): **UNPARSEABLE** — titleJW=n/a, authorJW=n/a — `[@smith2020`: `[@smith2020` is never closed in its paragraph',
     '- doi:10.5555/pensmith-no-such-work-2017: **FABRICATED** — titleJW=0.00, authorJW=0.00 — DOI did not resolve via Crossref',
     '',
   ].join('\n');
@@ -309,8 +309,23 @@ test('revise (review round 2): text rows (L<line>, a bare doi:…) are not citat
   const res = await runRevise({ paperRoot: root, n: 2, slug: 'target', yolo: true, proposeSwap: () => Promise.reject(new Error('no model call expected')) });
   assert.equal(res.accepted, false);
   assert.doesNotMatch(res.message, /already gone/);
-  assert.match(res.message, /^No citation in section 2 for revise to swap\. VERIFICATION\.md flags text that is not a citation revise can swap — L3 \(UNPARSEABLE\), doi:10\.5555\/pensmith-no-such-work-2017 \(FABRICATED\): edit that text in DRAFT\.md \(a citation written as \[@citekey\]\) or re-draft the section \(`pensmith write 2`\), then `pensmith verify 2`\.$/);
+  assert.match(res.message, /^No citation in section 2 for revise to swap\. VERIFICATION\.md flags text that is not a citation revise can swap — line 3 \(UNPARSEABLE\), doi:10\.5555\/pensmith-no-such-work-2017 \(FABRICATED\): edit that text in DRAFT\.md \(a citation written as \[@citekey\]\) or re-draft the section \(`pensmith write 2`\), then `pensmith verify 2`\.$/);
   assert.equal(readFileSync(targetDraftPath(root), 'utf8'), before, 'DRAFT.md unchanged');
+});
+
+test('revise (review round 3): a real citekey shaped like a line number (L12, L1) is a citation revise can repair — never taken for a text row', () => {
+  const md = [
+    'Status: failed',
+    '',
+    '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
+    '',
+    '- L12: **FABRICATED** — titleJW=n/a, authorJW=n/a — citekey not in .paper/CITATIONS.bib (drafter invented)',
+    '- L1: **UNPARSEABLE** — titleJW=n/a, authorJW=n/a — its .paper/CITATIONS.bib entry (line 4) does not parse',
+    '- (L3): **UNSUPPORTED-FORM** — titleJW=n/a, authorJW=n/a — `\\cite{x}`: raw TeX citation',
+    '',
+  ].join('\n');
+  assert.deepEqual(failingCitations(md).map((f) => f.citekey), ['L12', 'L1']);
+  assert.equal(firstFailingCitation(md)?.citekey, 'L12');
 });
 
 // ===========================================================================
@@ -429,7 +444,7 @@ test('Phase 20 (D-20-20): revise reads every citekey-bearing failing row — RET
     '- Wakefield:1998: **RETRACTED** — titleJW=1.00, authorJW=1.00 — cited work is retracted',
     '- brokenEntry2020: **UNPARSEABLE** — titleJW=n/a, authorJW=n/a — its entry (line 4) does not parse',
     '- nobody2019: **UNRESOLVABLE** — titleJW=n/a, authorJW=n/a — no registrar has this work',
-    '- L7: **UNSUPPORTED-FORM** — titleJW=n/a, authorJW=n/a — a citation form the grammar cannot read',
+    '- (L7): **UNSUPPORTED-FORM** — titleJW=n/a, authorJW=n/a — a citation form the grammar cannot read',
     '',
     '## Pass-3 (quote integrity, deterministic — levenshtein-substring)',
     '',

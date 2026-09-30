@@ -251,3 +251,78 @@ test('VRFY-14 (built CLI, review round 2): the user\'s own PDF vouches for the F
   assert.match(c.stdout, /citation \[@offline2021\] is MIS-CITED/);
   assert.ok(!existsSync(join(root, '.paper', 'DRAFT.md')), 'no compiled draft');
 });
+
+// ---------------------------------------------------------------------------
+// A key defined twice (review round 3)
+// ---------------------------------------------------------------------------
+
+/** lecun2015 again, with a subtitle and a biblatex date the export would print. */
+const LECUN_DUPLICATE =
+  '@article{lecun2015,\n  title = {Deep learning},\n  subtitle = {How machines replaced every radiologist},\n  author = {LeCun, Yann and Bengio, Yoshua and Hinton, Geoffrey},\n  journal = {Nature},\n  date = {2099},\n  doi = {10.1038/nature14539}\n}\n';
+
+test('VRFY-25 / VRFY-26 (built CLI, review round 3): a citekey CITATIONS.bib defines twice is UNPARSEABLE at verify, compile and done — Pass 1 never judges one entry while the export prints the other', () => {
+  const draft = '# Intro\n\nDeep learning changed computer vision [@lecun2015].\n';
+  // The clean entry first (Pass 1 used to judge it), the forged one last (Pandoc renders it).
+  const p = seedGatePaper('forged-dupkey', [{ n: 1, slug: 'intro', assigned: ['lecun2015'], draft }], LECUN_BIB + LECUN_DUPLICATE);
+  const v = p.cli(['verify', '1', '--yolo']);
+  assert.equal(v.status, EXIT_BLOCKED, `${v.stdout}\n${v.stderr}`);
+  const md = readFileSync(join(p.sectionDir(1, 'intro'), 'VERIFICATION.md'), 'utf8');
+  assert.match(md, /^Status: failed$/m);
+  assert.match(md, /^- lecun2015: \*\*UNPARSEABLE\*\* — titleJW=n\/a, authorJW=n\/a — its \.paper\/CITATIONS\.bib entry \(line 1\) is ambiguous: the key is defined 2 times \(lines 1, 8\)/m);
+
+  // A forged clean record changes nothing: compile recomputes the row.
+  forgeClean(p.root, p.sectionDir(1, 'intro'), 1, 'intro', ['lecun2015']);
+  const c = p.cli(['compile', '--yolo']);
+  assert.equal(c.status, EXIT_BLOCKED, `${c.stdout}\n${c.stderr}`);
+  assert.match(c.stdout, /section 1 \(intro\): citation \[@lecun2015\] is UNPARSEABLE/);
+  assert.ok(!existsSync(join(p.root, '.paper', 'DRAFT.md')), 'no compiled DRAFT.md');
+
+  // A forged compiled paper: done blocks, and nothing is exported (no two-entry export/CITATIONS.bib).
+  writeFileSync(join(p.root, '.paper', 'DRAFT.md'), draft);
+  writeCompileRecord(p.root, [{ n: 1, slug: 'intro' }]);
+  const d = p.cli(['done', '--yolo', '--format', 'md']);
+  assert.equal(d.status, EXIT_BLOCKED, `${d.stdout}\n${d.stderr}`);
+  assert.match(d.stdout, /citation \[@lecun2015\] is UNPARSEABLE/);
+  assert.ok(!existsSync(join(p.root, '.paper', 'export')), 'nothing under export/');
+  // The same key written in another case is the same BibTeX key: still ambiguous.
+  const q = seedGatePaper('forged-dupkey-case', [{ n: 1, slug: 'intro', assigned: ['lecun2015'], draft }], LECUN_BIB + LECUN_DUPLICATE.replace('@article{lecun2015', '@article{LeCun2015'));
+  const v2 = q.cli(['verify', '1', '--yolo']);
+  assert.equal(v2.status, EXIT_BLOCKED, `${v2.stdout}\n${v2.stderr}`);
+  assert.match(readFileSync(join(q.sectionDir(1, 'intro'), 'VERIFICATION.md'), 'utf8'), /^- lecun2015: \*\*UNPARSEABLE\*\* — .*the key is defined 2 times/m);
+  // The duplicate alone is an ordinary entry: Pass 1 compares what the export prints (MIS-CITED).
+  const r = seedGatePaper('forged-dupkey-alone', [{ n: 1, slug: 'intro', assigned: ['lecun2015'], draft }], LECUN_DUPLICATE);
+  const v3 = r.cli(['verify', '1', '--yolo']);
+  assert.equal(v3.status, EXIT_BLOCKED, `${v3.stdout}\n${v3.stderr}`);
+  assert.match(readFileSync(join(r.sectionDir(1, 'intro'), 'VERIFICATION.md'), 'utf8'), /^- lecun2015: \*\*MIS-CITED\*\* — .*year \(claimed 2099, record 2015\)/m);
+});
+
+test('VRFY-26 (review round 3): the export never writes two entries for one key, and verify re-renders a two-entry CITATIONS.bib from LIBRARY.json keeping the old file as a backup', async () => {
+  const { exportCitedCitations, rerenderCitations, upsertSources } = await import('../bin/lib/library.js');
+  const { parseBibEntries } = await import('../bin/lib/citations.js');
+  const { mkdirSync, readdirSync } = await import('node:fs');
+  const sb = sandbox('forged-dupkey-export');
+  const root = sb.project('p');
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  await upsertSources(
+    root,
+    [{ source: 'crossref', id: '10.1038/nature14539', doi: '10.1038/nature14539', title: 'Deep learning', authors: ['LeCun, Yann', 'Bengio, Yoshua'], year: 2015, last_verified: new Date().toISOString(), citekey: 'lecun2015', raw: {} }],
+    { provenance: 'add' },
+  );
+  const bibPath = join(root, '.paper', 'CITATIONS.bib');
+  const twice = readFileSync(bibPath, 'utf8') + LECUN_DUPLICATE;
+  writeFileSync(bibPath, twice);
+  const parsed = parseBibEntries(twice);
+  assert.deepEqual(parsed.entries.map((e) => e['id']), [], 'neither block is an entry');
+  assert.deepEqual(parsed.problems.map((x) => x.key), ['lecun2015', 'lecun2015']);
+  await assert.rejects(
+    () => exportCitedCitations(root, ['lecun2015'], join(root, 'out')),
+    /defines lecun2015 more than once — keep one entry per key/,
+  );
+  assert.ok(!existsSync(join(root, 'out', 'CITATIONS.bib')), 'nothing exported');
+  const r = await rerenderCitations(root);
+  assert.ok(r.backup !== null, 'the two-entry file is kept');
+  assert.match(r.previousProblem ?? '', /the key is defined 2 times/);
+  assert.equal(readFileSync(r.backup!, 'utf8'), twice);
+  assert.equal(parseBibEntries(readFileSync(bibPath, 'utf8')).entries.length, 1, 'LIBRARY.json\'s one entry');
+  assert.ok(readdirSync(join(root, '.paper')).some((f) => f.startsWith('CITATIONS.bib.unparsed-')));
+});

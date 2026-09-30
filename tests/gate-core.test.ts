@@ -158,7 +158,7 @@ test('gate core: scanner findings become rows keyed L<line> and block (VRFY-09 /
     }),
   );
   const text = r.rows.find((x) => x.kind === 'text');
-  assert.ok(text && text.key === 'L2' && text.verdict === 'UNSUPPORTED-FORM');
+  assert.ok(text && text.key === '(L2)' && text.verdict === 'UNSUPPORTED-FORM');
   assert.equal(r.outcome.status, 'failed');
   assert.match(gateRefusals(r, { kind: 'section', id: '1' })[0] ?? '', /^line 2: UNSUPPORTED-FORM `\(Nguyen & Patel, 2019\)` — author-date prose/);
 });

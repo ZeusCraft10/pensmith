@@ -18,7 +18,7 @@
 //           FABRICATED (never a stack). Each cited key outside `allowedKeys`
 //           gets its own UNASSIGNED row right after its registrar row (VRFY-17).
 //           Text findings (UNPARSEABLE / UNSUPPORTED-FORM scanners, key slot
-//           `L<line>`) follow.
+//           `(L<line>)`) follow.
 //   Pass 3  runPass3 over the same text; an UNVERIFIABLE-QUOTE row a valid
 //           acceptance covers is marked accepted (it then passes).
 //   Draft   PLACEHOLDER — the stub-draft marker outside --dry-run (VRFY-24);
@@ -31,7 +31,7 @@ import { join } from 'node:path';
 import { runPass1 as defaultRunPass1, type Pass1Options, type Pass1Result } from './pass1.js';
 import { runPass3 as defaultRunPass3, type Pass3Options, type Pass3Result } from './pass3.js';
 import { parseBibEntries, type BibEntryProblem } from '../citations.js';
-import { extractCitedKeysForVerification, findUnparseableCitations } from '../citation-token.js';
+import { extractCitedKeysForVerification, findUnparseableCitations, stripLeadingBom } from '../citation-token.js';
 import { findUnsupportedForms } from './unsupported-forms.js';
 import { paperDir } from '../paths.js';
 import { tryLoadLibrary } from '../library.js';
@@ -44,6 +44,7 @@ import {
   UNATTRIBUTED_CITEKEY,
   blocksCompile,
   sectionOutcome,
+  textRowKey,
   type SectionOutcome,
   type TextFinding,
 } from './verdicts.js';
@@ -95,7 +96,7 @@ export interface Pass1GateRow {
 
 export interface TextGateRow {
   readonly kind: 'text';
-  /** `L<line>`. */
+  /** `(L<line>)`. */
   readonly key: string;
   readonly line: number;
   readonly verdict: TextFinding['verdict'];
@@ -150,7 +151,7 @@ export type TextScanner = (md: string) => readonly TextFinding[];
 
 /**
  * The text scanners every gate run applies (VRFY-09, VRFY-10): each returns
- * the findings of one family of forms. Their rows are keyed `L<line>`.
+ * the findings of one family of forms. Their rows are keyed `(L<line>)`.
  *   - findUnparseableCitations (citation-token.ts, D-20-07): citation-shaped
  *     text the one grammar cannot read — `[@]`, `[@k`, `@{k`, `[@k [note]]` —
  *     is UNPARSEABLE, never silently absent;
@@ -289,6 +290,7 @@ function bibAwareRow(r: Pass1Result, bib: LoadedBibliography, parsedKeys: Readon
   if (parsedKeys.has(r.citekey) || !cited.has(r.citekey)) return base;
   const bad = bib.problems.find((p) => p.key === r.citekey);
   if (bad !== undefined) {
+    const duplicate = /^the key is defined \d+ times/.test(bad.detail);
     return {
       kind: 'pass1',
       key: r.citekey,
@@ -296,7 +298,7 @@ function bibAwareRow(r: Pass1Result, bib: LoadedBibliography, parsedKeys: Readon
       titleJW: Number.NaN,
       authorJW: Number.NaN,
       reason:
-        `its .paper/CITATIONS.bib entry (line ${bad.line}) does not parse: ${bad.detail} — fix that entry by hand, ` +
+        `its .paper/CITATIONS.bib entry (line ${bad.line}) ${duplicate ? 'is ambiguous' : 'does not parse'}: ${bad.detail} — fix that entry by hand, ` +
         'or re-render the file from LIBRARY.json (`pensmith verify` does it when the paper has a LIBRARY.json)',
     };
   }
@@ -385,7 +387,10 @@ export function rowBlocks(row: GateRow): boolean {
  * http.ts (the HTTP cache, offline fixture replay or fail-closed), so a failed
  * lookup is a blocking UNVERIFIABLE row, never a pass.
  */
-export async function recomputeGate(input: GateInput): Promise<GateResult> {
+export async function recomputeGate(gateInput: GateInput): Promise<GateResult> {
+  // The text as Pandoc reads it: one leading byte-order mark stripped (review
+  // round 3) — every pass and scanner below reads the same text.
+  const input: GateInput = { ...gateInput, text: stripLeadingBom(gateInput.text) };
   const bib = input.bib ?? loadBibliography(input.root);
   const runPass1 = input.deps?.runPass1 ?? defaultRunPass1;
   const runPass3 = input.deps?.runPass3 ?? defaultRunPass3;
@@ -408,7 +413,7 @@ export async function recomputeGate(input: GateInput): Promise<GateResult> {
   }
   for (const scan of input.scanners ?? TEXT_SCANNERS) {
     for (const f of scan(input.text)) {
-      rows.push({ kind: 'text', key: `L${f.line}`, line: f.line, verdict: f.verdict, form: f.form, text: f.text, reason: f.reason });
+      rows.push({ kind: 'text', key: textRowKey(f.line), line: f.line, verdict: f.verdict, form: f.form, text: f.text, reason: f.reason });
     }
   }
 

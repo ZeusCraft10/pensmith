@@ -502,9 +502,12 @@ function oneLine(msg: string): string {
  * `@type{key, …}` block is parsed on its own, so one broken entry never hides
  * the others. Returns the entries that parse (CSL-JSON, exactly as parseBib
  * returns them) and, for each entry that does not, its key as written and its
- * line. Never throws. A whitespace-only text is zero entries; a text with no
- * entry at all is one problem (line 1). `@comment` and `@preamble` blocks are
- * skipped; `@string` definitions are applied to every entry.
+ * line. A key defined in more than one block (compared without regard to
+ * case, as BibTeX does) is a problem for every one of its blocks and never an
+ * entry (review round 3). Never throws. A whitespace-only text is zero
+ * entries; a text with no entry at all is one problem (line 1). `@comment`
+ * and `@preamble` blocks are skipped; `@string` definitions are applied to
+ * every entry.
  */
 export function parseBibEntries(text: string): BibEntriesResult {
   const { entries, problems } = parseBibEntriesRaw(text);
@@ -551,6 +554,22 @@ export function bibEntryRawFields(entry: Record<string, unknown>): Readonly<Reco
   return {};
 }
 
+/**
+ * The keys (lower case — BibTeX and biber match keys without regard to case)
+ * written in more than one block, each with the lines of its blocks.
+ */
+function duplicateKeyLines(blocks: readonly BibBlock[], text: string): Map<string, number[]> {
+  const lines = new Map<string, number[]>();
+  for (const b of blocks) {
+    const key = blockKey(b);
+    if (key === null) continue;
+    const k = key.toLowerCase();
+    lines.set(k, [...(lines.get(k) ?? []), lineOf(text, b.start)]);
+  }
+  for (const [k, at] of lines) if (at.length < 2) lines.delete(k);
+  return lines;
+}
+
 function parseBibEntriesRaw(text: string): BibEntriesResult {
   if (typeof text !== 'string' || text.trim().length === 0) return { entries: [], problems: [] };
   const blocks = splitBibBlocks(text);
@@ -559,8 +578,13 @@ function parseBibEntriesRaw(text: string): BibEntriesResult {
   if (regular.length === 0) {
     return { entries: [], problems: [{ key: null, line: 1, detail: 'no BibTeX entry found (every entry starts with @type{key, …})' }] };
   }
+  // A key defined more than once (review round 3): Pass 1 would judge one
+  // entry while Pandoc renders the last and BibTeX / biber the first, so the
+  // export could print metadata no pass compared. Every such block is a
+  // problem (never an entry): a cited duplicate is UNPARSEABLE and blocks.
+  const dupLines = duplicateKeyLines(regular, text);
   // Fast path: the whole text parses and yields one entry per block.
-  if (regular.every((b) => b.closed)) {
+  if (dupLines.size === 0 && regular.every((b) => b.closed)) {
     try {
       const all = parseBibSync(text);
       if (all.length === regular.length) return { entries: all, problems: [] };
@@ -573,6 +597,15 @@ function parseBibEntriesRaw(text: string): BibEntriesResult {
   for (const block of regular) {
     const key = blockKey(block);
     const line = lineOf(text, block.start);
+    const dups = key !== null ? dupLines.get(key.toLowerCase()) : undefined;
+    if (dups !== undefined) {
+      problems.push({
+        key,
+        line,
+        detail: `the key is defined ${dups.length} times (lines ${dups.join(', ')}) — keep one entry: the verifier cannot tell which one the export prints`,
+      });
+      continue;
+    }
     if (!block.closed) {
       problems.push({ key, line, detail: 'the entry\'s braces never close' });
       continue;

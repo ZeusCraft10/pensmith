@@ -744,6 +744,17 @@ export function offsetInSpans(at: number, spans: ReadonlyArray<readonly [number,
   return inSpans(at, spans);
 }
 
+/**
+ * A document as Pandoc reads it: one leading byte-order mark (U+FEFF) removed
+ * — Pandoc strips it and parses line 1 normally, so a block quote, a YAML
+ * metadata block or a raw fence after it is what the export renders (review
+ * round 3). A mark anywhere else is a character Pandoc keeps. Line numbers are
+ * unchanged (the mark is on line 1).
+ */
+export function stripLeadingBom(md: string): string {
+  return md.charCodeAt(0) === 0xfeff ? md.slice(1) : md;
+}
+
 /** The 1-based line of offset `at` in `md` (LF and CRLF alike: lines end at `\n`). */
 export function lineOfOffset(md: string, at: number): number {
   let line = 1;
@@ -862,7 +873,8 @@ interface OpenBracket {
  * reported, and neither is an escaped bracket (`\[`). Line numbers are 1-based
  * and count `\n`, so an LF and a CRLF copy of a draft report the same lines.
  */
-export function findUnparseableCitations(md: string): TextFinding[] {
+export function findUnparseableCitations(text: string): TextFinding[] {
+  const md = stripLeadingBom(text);
   if (!md.includes('@')) return [];
   const code = provableCodeSpans(md);
   const loose = tableMayCut(md);

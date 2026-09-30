@@ -124,7 +124,7 @@ test('VRFY-19: every PDF Unpaywall lists, best first and de-duplicated, until on
   assert.deepEqual(seen, ['a', 'b'], 'the duplicate link is asked once, in order');
 });
 
-test('VRFY-19: the Europe PMC full text of the PMCID — used only when the article names the cited DOI or PMID', async () => {
+test('VRFY-19: the Europe PMC full text of the PMCID — used only when the article names the identifier Pass 1 verified (the cited DOI, or the PMID of an entry with no DOI)', async () => {
   await liveLane(async (agent) => {
     const doi = `10.5555/${uniq('epmc')}`;
     const pmcid = `PMC${Math.floor(Math.random() * 1e8) + 1e7}`;
@@ -258,6 +258,29 @@ test('VRFY-19: the user\'s own PDF first — verified with zero connects, even l
   assert.equal(fake?.verdict, 'NOT_FOUND', fake?.reason);
   assert.equal(fake?.localFile, undefined);
   assert.match(fake?.reason ?? '', /^quote not found in your local file sources\/k\.pdf \(best lev=0\.\d{3} < 0\.95\); the Unpaywall lookup of DOI 10\.5555\/no-recording: offline: no recorded fixture for GET /);
+});
+
+test('VRFY-19 (review round 3, recorded, offline): a DOI entry never borrows the Europe PMC text of another article through an unverified PMID and PMCID — only the DOI Pass 1 checks binds it', async () => {
+  await withContactEmail(EMAIL, async () => {
+    const root = mkdtempSync(join(tmpdir(), 'pensmith-p3pmid-'));
+    mkdirSync(join(root, '.paper'), { recursive: true });
+    // LeCun 2015's DOI, with the PMCID of a 2026 STEMI letter in LIBRARY.json and that letter's PMID in the bib.
+    const entry = { ...libraryEntry({ citekey: 'lecun2015', title: 'Deep learning', author: 'LeCun, Yann', year: 2015, doi: '10.1038/nature14539' }), pmcid: 'PMC13598034' };
+    writeFileSync(join(root, '.paper', 'LIBRARY.json'), JSON.stringify({ $schemaVersion: 2, entries: [entry] }));
+    const bib = new Map([['lecun2015', { DOI: '10.1038/nature14539', PMID: '42771069', title: 'Deep learning' }]]);
+    const [r] = await pass3(
+      'LeCun et al. put it plainly: "One of the most clinically actionable findings is the longer pre-hospital delay among women" [@lecun2015].',
+      bib,
+      root,
+    );
+    assert.notEqual(r?.verdict, 'PASS', r?.reason);
+    assert.match(r?.reason ?? '', /the Europe PMC full text of PMC13598034 is another article \(DOI 10\.1186\/s43044-026-00785-w, PMID 42771069\), so it is not used/);
+    // A DOI-less entry whose PMID is the one Pass 1 checks: the article naming that PMID is its text.
+    const pmidOnly = new Map([['k', { PMID: '42771069', title: 'Sex disparities in STEMI care' }]]);
+    writeFileSync(join(root, '.paper', 'LIBRARY.json'), JSON.stringify({ $schemaVersion: 2, entries: [{ ...libraryEntry({ citekey: 'k', title: 'Sex disparities in STEMI care', author: 'Dziewierz, Artur', year: 2026 }), pmid: '42771069', pmcid: 'PMC13598034' }] }));
+    const [ok] = await pass3('The authors note that "One of the most clinically actionable findings is the longer pre-hospital delay among women" [@k].', pmidOnly, root);
+    assert.deepEqual([ok?.verdict, ok?.reason], ['PASS', 'verbatim in the Europe PMC full text of PMC13598034']);
+  });
 });
 
 test('VRFY-19 (recorded, offline): Unpaywall → the arXiv PDF of an erratum; the Europe PMC full text of a letter; arXiv\'s `.pdf` redirect replayed hop by hop', async () => {

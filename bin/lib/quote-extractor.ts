@@ -25,13 +25,17 @@
 //   - with at least `[verification] quote_min_words` words once citations are
 //     stripped (default 5: DEFAULT_QUOTE_MIN_WORDS). Fewer words is a scare
 //     quote or a quoted term, not a quotation.
-// Excluded by rule (inline only): a quoted title — after an explicit title
-// cue (`titled`, `entitled`, `the article`, `the book`, `the paper`, …), or
-// written in Title Case with no sentence-ending punctuation inside and at most
-// 12 words (after `called` / `named` it must look like one too) — and a
-// Markdown link title (`[text](url "title")`). The Title Case rule never
-// applies after a reporting colon or verb (`wrote:`, `states that`, `put it,`):
-// that quote is a quotation whatever its capitals (review round 2).
+// Excluded by rule (inline only): a quoted title — text written in Title Case
+// with no sentence-ending punctuation inside and at most 12 words, either
+// right after an explicit title cue (`titled`, `entitled`, `the article`,
+// `the book`, `the paper`, … with only spaces before the mark) or with no
+// citation right after it — and a Markdown link title (`[text](url
+// "title")`). Never after a reporting colon or verb (`wrote:`, `states that`,
+// `put it,`, `predicted`, `In LeCun's words,`): that quote is a quotation
+// whatever its capitals (review round 2). A title cue followed by a comma or
+// a colon (`In the paper, "…"`), a quote that is not Title Case, and a Title
+// Case quote a citation follows are all extracted — a real title of the cited
+// work passes against its own text (review round 3).
 //
 // Who a quote is attributed to (every Pandoc citation form, read through
 // citation-token.ts; a cluster attributes the quote to EVERY key in it — one
@@ -42,8 +46,12 @@
 //      the next paragraph (`> …` then `[@k]` or `— @k`);
 //   2. else a citation before it in the same sentence: `[@k] writes, "…"`,
 //      `@k notes that "…"`, `As @k put it, "…"`; for a block quote, one in the
-//      last sentence of the lead-in (`@k puts it this way:` then `> …`).
-// A quote with neither is UNATTRIBUTED (`citekey: null`): Pass 3 blocks it.
+//      last sentence of the lead-in (`@k puts it this way:` then `> …`);
+//   3. else (inline) the first citation in the rest of its sentence past a
+//      short reporting phrase — at most six words, no other quotation mark:
+//      `"…," wrote @k [p. 3].`, `"…," as LeCun argued [@k].`, `"…" (LeCun et
+//      al.) [@k].` (review round 3).
+// A quote with none is UNATTRIBUTED (`citekey: null`): Pass 3 blocks it.
 //
 // Every quote has an id in document order — `q1`, `q2`, … (verdicts.ts
 // quoteId) — shared by its per-key entries, its 1-based line, and the
@@ -56,6 +64,7 @@ import {
   offsetInSpans,
   provableCodeSpans,
   replaceCitations,
+  stripLeadingBom,
   type CitationCluster,
 } from './citation-token.js';
 import { quoteId } from './verify/verdicts.js';
@@ -197,16 +206,21 @@ function looksLikeTitle(text: string): boolean {
   });
 }
 
-/** True when the words right before the opening mark introduce a title (`a paper titled "…"`). */
+/**
+ * True when the words right before the opening mark introduce a title (`a
+ * paper titled "…"`, `the book "…"`): the cue sits directly before the mark,
+ * with nothing but spaces between (a comma or a colon after it — `In the
+ * paper, "…"`, `in the paper: "…"` — introduces a quotation; review round 3).
+ */
 const TITLE_INTRO_RE =
-  /\b(?:titled|entitled|the\s+(?:article|book|paper|chapter|report|essay|study|novel|poem|film|song|album|play|series|volume|monograph|thesis|dissertation|editorial|column|lecture|talk|speech|section|journal|magazine))[\s,:]*$/iu;
+  /\b(?:titled|entitled|the\s+(?:article|book|paper|chapter|report|essay|study|novel|poem|film|song|album|play|series|volume|monograph|thesis|dissertation|editorial|column|lecture|talk|speech|section|journal|magazine))[ \t]*$/iu;
 /**
  * A reporting colon or verb right before the opening mark (`wrote:`, `states
  * that`, `put it,`, `according to Smith,`): what follows is a quotation, never
  * a title, whatever its capitals.
  */
 const REPORTING_INTRO_RE =
-  /(?::|\b(?:wr(?:ote|ites?|itten)|sa(?:id|ys|y)|state[sd]?|argue[sd]?|note[sd]?|conclude[sd]?|observe[sd]?|claim(?:s|ed)?|explain(?:s|ed)?|add(?:s|ed)?|remark(?:s|ed)?|insist(?:s|ed)?|assert(?:s|ed)?|report(?:s|ed)?|declare[sd]?|warn(?:s|ed)?|emphasi[sz]e[sd]?|stress(?:es|ed)?|suggest(?:s|ed)?|contend(?:s|ed)?|maintain(?:s|ed)?|put\s+it|puts\s+it|as\s+follows|that|according\s+to\s+[^,\n]{1,60},|in\s+(?:his|her|their|its)\s+words,?))[\s,]*$/iu;
+  /(?::|\b(?:wr(?:ote|ites?|itten)|sa(?:id|ys|y)|state[sd]?|argue[sd]?|note[sd]?|conclude[sd]?|observe[sd]?|claim(?:s|ed)?|explain(?:s|ed)?|add(?:s|ed)?|remark(?:s|ed)?|insist(?:s|ed)?|assert(?:s|ed)?|report(?:s|ed)?|declare[sd]?|warn(?:s|ed)?|emphasi[sz]e[sd]?|stress(?:es|ed)?|suggest(?:s|ed)?|contend(?:s|ed)?|maintain(?:s|ed)?|predict(?:s|ed)?|propose[sd]?|posit(?:s|ed)?|acknowledge[sd]?|admit(?:s|ted)?|concede[sd]?|caution(?:s|ed)?|recall(?:s|ed)?|repl(?:y|ies|ied)|respond(?:s|ed)?|answer(?:s|ed)?|announce[sd]?|proclaim(?:s|ed)?|put\s+it|puts\s+it|as\s+follows|that|according\s+to\s+[^,\n]{1,60},|in\s+(?:his|her|their|its)\s+words,?|in\s+[\p{L}\p{M}'’. -]{1,60}(?:'s|’s|s'|s’)\s+words,?))[\s,]*$/iu;
 /** A Markdown link or image destination whose title the mark opens: `](url "…`. */
 const LINK_TITLE_RE = /\]\([^()\s]*[ \t]+$/;
 
@@ -261,6 +275,25 @@ function citationRightAfter(md: string, at: number, cites: readonly CitationClus
   const start = at + gap;
   if (start >= maxAt) return null;
   return cites.find((c) => c.start === start) ?? null;
+}
+
+/** The most words between a quote and a citation that attributes it through a reporting phrase (`"…," wrote @k`). */
+const AFTER_PHRASE_WORDS = 6;
+/** Any quotation mark (another quote between the two would take the citation). */
+const ANY_QUOTE_MARK_RE = /["“”‘’«»‹›„‚「」『』]/u;
+
+/**
+ * The citation after a quote in the rest of its sentence, past a short
+ * reporting phrase (review round 3): `"…," wrote @k [p. 3].`, `"…," as LeCun
+ * argued [@k].`, `"…" (LeCun et al.) [@k].` — at most AFTER_PHRASE_WORDS
+ * words between, no sentence end and no other quotation mark; or null.
+ */
+function citationAfterPhrase(md: string, at: number, cites: readonly CitationCluster[], to: number): CitationCluster | null {
+  const next = cites.filter((c) => c.start >= at && c.start < to).sort((a, b) => a.start - b.start)[0];
+  if (next === undefined) return null;
+  const between = md.slice(at, next.start);
+  if (ANY_QUOTE_MARK_RE.test(between) || endsSentence(between)) return null;
+  return words(between).length <= AFTER_PHRASE_WORDS ? next : null;
 }
 
 /**
@@ -684,13 +717,14 @@ function inlineCandidates(
       const lineStart = md.lastIndexOf('\n', s.open) + 1;
       const before = md.slice(lineStart, s.open);
       if (LINK_TITLE_RE.test(before)) continue;
-      // A title (see the header) — never after a reporting colon or verb.
-      if (TITLE_INTRO_RE.test(before)) continue;
-      // (After `called` / `named` only what looks like a title is one: `Smith called
-      // "for an immediate halt to all funding …"` is a quote.)
-      if (!REPORTING_INTRO_RE.test(before) && looksLikeTitle(text)) continue;
       const after = citationRightAfter(md, s.close + 1, cites, to);
-      const cite = after ?? citationBefore(md, s.open, from, cites);
+      // A title (see the header) — never after a reporting colon or verb, and
+      // only what looks like a title: a title cue right before the mark and
+      // Title Case, or Title Case with no citation right after it (a quote a
+      // citation claims is checked — a real title of the cited work passes
+      // against its own text; review round 3). Fail toward extracting.
+      if (!REPORTING_INTRO_RE.test(before) && looksLikeTitle(text) && (TITLE_INTRO_RE.test(before) || after === null)) continue;
+      const cite = after ?? citationBefore(md, s.open, from, cites) ?? citationAfterPhrase(md, s.close + 1, cites, to);
       out.push({
         kind: 'inline',
         start: s.open,
@@ -718,7 +752,8 @@ function inlineCandidates(
  */
 export function extractQuotes(draftMd: string, opts: ExtractQuotesOptions = {}): ExtractedQuote[] {
   const minWords = Math.max(1, Math.floor(opts.minWords ?? DEFAULT_QUOTE_MIN_WORDS));
-  const md = decodeQuoteEntities(draftMd.replace(/\r\n/g, '\n'));
+  // A leading byte-order mark is stripped as Pandoc strips it (review round 3).
+  const md = decodeQuoteEntities(stripLeadingBom(draftMd).replace(/\r\n/g, '\n'));
   const lines = linesOf(md);
   const cites = findCitations(md);
 

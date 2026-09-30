@@ -17,7 +17,7 @@
 //
 // Row formats:
 //   Pass 1  `- <key>: **VERDICT** — titleJW=…, authorJW=… — reason`
-//           (a text finding's key slot is `L<line>`)
+//           (a text finding's key slot is `(L<line>)`)
 //   Pass 3  `- <key> [q<N>] ("<snippet>…"): **VERDICT** — lev=… — reason`
 //           (an accepted UNVERIFIABLE-QUOTE ends `— accepted by you <ISO> (<via>)`)
 //   Draft   `- draft: **VERDICT** — reason`

@@ -10,6 +10,7 @@
     "Rows past the artifact classes: whole-word edits (an inserted negator, a changed number or word) and elisions that stitch",
     "distant passages or single words must be NOT_FOUND even when close by characters; an editorial [bracket] is not quoted text.",
     "Review round 2: quotes in other languages' quotation marks (guillemets, low-high marks) and a Title Case quote after a reporting colon are extracted and checked like any other.",
+    "Review round 3: an editorial [bracket] that adds or stands in for a negation or a number, and an elision that skips a negation of the sentence, change what the source says: NOT_FOUND. A bracket that keeps the source's negation passes. The source gained the paper's own 'no recurrence and no convolution' sentence (Section 3.5) for these rows.",
     "Hash-pinned in tests/repo-files.test.ts."
   ],
   "citekey": "vaswani2017",
@@ -17,7 +18,7 @@
     "title": "Attention Is All You Need",
     "doi": "10.5555/pensmith-known-bad-quotes",
     "pmcid": "PMC9990001",
-    "text": "Attention Is All You Need\nThe dominant sequence trans­duction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.\nExperiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring signiﬁcantly less time to train.\nRecurrent models typically factor computation along the symbol positions of the input and output sequences … this inherently sequential nature precludes parallelization within training examples.\nThe encoder—a stack of six identical layers—maps an input sequence of symbol representations to a sequence of continuous representations.\nWe call our particular attention “Scaled Dot-Product Attention” and compute the dot products of the query with all keys.\nA naïve implementation of self-attention would be slower than recurrent layers for very long sequences.\nTo the best of our knowledge, the Transformer is the first transduction model relying entirely on self-attention to compute representations of its input and output.\nOn the WMT 2014 English-to-German translation task, the big transformer model outperforms the best previously reported models by more than 2.0 BLEU."
+    "text": "Attention Is All You Need\nThe dominant sequence trans­duction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.\nExperiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring signiﬁcantly less time to train.\nRecurrent models typically factor computation along the symbol positions of the input and output sequences … this inherently sequential nature precludes parallelization within training examples.\nThe encoder—a stack of six identical layers—maps an input sequence of symbol representations to a sequence of continuous representations.\nWe call our particular attention “Scaled Dot-Product Attention” and compute the dot products of the query with all keys.\nA naïve implementation of self-attention would be slower than recurrent layers for very long sequences.\nTo the best of our knowledge, the Transformer is the first transduction model relying entirely on self-attention to compute representations of its input and output.\nOn the WMT 2014 English-to-German translation task, the big transformer model outperforms the best previously reported models by more than 2.0 BLEU.\nSince our model contains no recurrence and no convolution, in order for the model to make use of the order of the sequence, we must inject some information about the relative or absolute position of the tokens in the sequence."
   },
   "quotes": [
     {
@@ -283,6 +284,46 @@
       "draft": "Les auteurs écrivent «We propose a new simple network architecture, the Transformer, based solely on attention mechanisms» [@vaswani2017].\n",
       "expected_verdict": "PASS",
       "note": "A genuine quote in guillemets is found in the source text."
+    },
+    {
+      "id": "bracket-negation-1",
+      "distortion": "editorial_bracket",
+      "claimed_quote": "The best performing models [do not] also connect the encoder and decoder through an attention mechanism",
+      "draft": "The authors write that \"The best performing models [do not] also connect the encoder and decoder through an attention mechanism\" [@vaswani2017, p. 2].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "An editorial bracket that inserts a negation the source does not have: every part is verbatim, the claim is inverted."
+    },
+    {
+      "id": "bracket-negation-2",
+      "distortion": "editorial_bracket",
+      "claimed_quote": "Since our model contains [some] recurrence and no convolution, in order for the model to make use of the order of the sequence",
+      "draft": "They explain: \"Since our model contains [some] recurrence and no convolution, in order for the model to make use of the order of the sequence\" [@vaswani2017, p. 6].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "An editorial bracket standing in for the source's \"no\": the negation is dropped."
+    },
+    {
+      "id": "elision-negation-1",
+      "distortion": "elision",
+      "claimed_quote": "Since our model contains ... recurrence and no convolution, in order for the model to make use of the order of the sequence",
+      "draft": "They explain: \"Since our model contains ... recurrence and no convolution, in order for the model to make use of the order of the sequence\" [@vaswani2017, p. 6].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "An elision that skips the source's \"no\": the parts are verbatim, the sentence now says the model contains recurrence."
+    },
+    {
+      "id": "bracket-number-1",
+      "distortion": "editorial_bracket",
+      "claimed_quote": "the big transformer model outperforms the best previously reported models by more than [3.0] BLEU",
+      "draft": "They report that \"the big transformer model outperforms the best previously reported models by more than [3.0] BLEU\" [@vaswani2017, p. 8].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "An editorial bracket that replaces the source's number (2.0) with another."
+    },
+    {
+      "id": "genuine-bracket-negation",
+      "distortion": "editorial_bracket",
+      "claimed_quote": "our model contains [neither] recurrence [nor] convolution, in order for the model to make use of the order of the sequence",
+      "draft": "As they put it, \"our model contains [neither] recurrence [nor] convolution, in order for the model to make use of the order of the sequence\" [@vaswani2017, p. 6].\n",
+      "expected_verdict": "PASS",
+      "note": "Editorial brackets that keep the source's negations (\"no … and no\" as \"neither … nor\") are a faithful quotation."
     }
   ]
 }

@@ -105,8 +105,12 @@ async function assertVerdicts(root: string, bib: Map<string, Record<string, unkn
       assert.equal(r.localFile, localFile, row.id);
     } else {
       // Below the threshold, or close by characters but refused: a whole word
-      // differs (a negator, a number, another word) or elided parts lie far apart.
-      assert.ok(r.levRatio < 0.95 || /differs by a whole word|elided parts/.test(r.reason), `${row.id}: lev ${r.levRatio} — ${r.reason}`);
+      // differs (a negator, a number, another word), elided parts lie far apart,
+      // or a bracket or an elision changes what the source says (review round 3).
+      assert.ok(
+        r.levRatio < 0.95 || /differs by a whole word|elided parts|the editorial bracket|its elision drops/.test(r.reason),
+        `${row.id}: lev ${r.levRatio} — ${r.reason}`,
+      );
       assert.match(r.reason, /^quote not found in /, row.id);
     }
     verdicts.push(r.verdict);

@@ -44,7 +44,7 @@ import { runGate, declineGate, canPrompt } from './gates.js';
 import { withLock } from './lock.js';
 import { extractCitedKeysForVerification, findCitations, removeCitekey, renameCitekey } from './citation-token.js';
 import { sectionDraft, sectionPlan, sectionVerification } from './paths.js';
-import { UNATTRIBUTED_CITEKEY } from './verify/verdicts.js';
+import { UNATTRIBUTED_CITEKEY, textRowLine } from './verify/verdicts.js';
 import { DRAFT_ROW_KEY } from './verify/verification-md.js';
 import { formatSectionId, sectionIdOf, type SectionId } from './section-id.js';
 
@@ -154,15 +154,17 @@ export function failingCitations(verificationMd: string): FailingCitation[] {
 
 /**
  * The key slot of a row that names no citation (review round 2): a text
- * finding (`L<line>` — an UNPARSEABLE or UNSUPPORTED-FORM text), an
+ * finding (`(L<line>)` — an UNPARSEABLE or UNSUPPORTED-FORM text), an
  * identifier written in the prose (`doi:10.…`, `arXiv:…`, `PMID:…`), a draft
  * check (`draft`) or an unattributed quote. revise cannot swap one: the text
  * needs a hand edit or a re-draft.
  */
-function isTextRowKey(key: string, rest: string): boolean {
+function isTextRowKey(key: string): boolean {
   if (key === DRAFT_ROW_KEY || key === UNATTRIBUTED_CITEKEY) return true;
   if (/^(?:doi:10\.|arXiv:|PMID:\d)/.test(key)) return true;
-  return /^L\d+$/.test(key) && /titleJW=n\/a, authorJW=n\/a/.test(rest);
+  // A text finding's key slot `(L<line>)` — never a citekey (review round 3: a
+  // citekey `L12` is a citation revise can repair).
+  return textRowLine(key) !== null;
 }
 
 /** The failing rows of VERIFICATION.md: the citations revise can repair, and the text rows it cannot (each once). */
@@ -176,14 +178,19 @@ function failingRows(verificationMd: string): { citations: FailingCitation[]; te
     if (!(REVISABLE_VERDICTS as readonly string[]).includes(row.verdict)) continue;
     seen.add(row.citekey);
     const f = { citekey: row.citekey, reason: `${row.verdict}: ${row.rest.replace(/^—\s*/, '').trim()}` };
-    (isTextRowKey(row.citekey, row.rest) ? textRows : citations).push(f);
+    (isTextRowKey(row.citekey) ? textRows : citations).push(f);
   }
   return { citations, textRows };
 }
 
 /** The sentence naming the rows revise cannot repair and what to do instead. */
 function textRowsAdvice(textRows: readonly FailingCitation[], id: string): string {
-  const named = textRows.map((f) => `${f.citekey} (${f.reason.split(':')[0]})`).join(', ');
+  const named = textRows
+    .map((f) => {
+      const line = textRowLine(f.citekey);
+      return `${line !== null ? `line ${line}` : f.citekey} (${f.reason.split(':')[0]})`;
+    })
+    .join(', ');
   return (
     `VERIFICATION.md also flags text that is not a citation revise can swap — ${named}: edit that text in DRAFT.md ` +
     `(a citation written as [@citekey]) or re-draft the section (\`pensmith write ${id}\`), then \`pensmith verify ${id}\`.`

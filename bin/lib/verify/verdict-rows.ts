@@ -11,7 +11,7 @@
 // than silently nulling the blocking set.
 
 import { BLOCKING_VERDICTS, RETRY_ONLINE_VERDICTS, ACCEPTABLE_QUOTE_VERDICT } from './verdicts.js';
-import { DRAFT_VERDICTS } from './verdicts.js';
+import { DRAFT_VERDICTS, textRowLine } from './verdicts.js';
 
 /**
  * Verdicts that block compile and done: the ONE vocabulary of verdicts.ts
@@ -168,7 +168,7 @@ export function sectionVerificationReasons(verificationMd: string, dryRunNow: bo
 /**
  * The refusal wording for any blocking row a VERIFICATION.md lists: a draft
  * check (`- draft: **PLACEHOLDER**`, `**NO-CITATIONS**`) and a text finding
- * (key slot `L<line>`) are worded as what they are; every citation row goes
+ * (key slot `(L<line>)`) are worded as what they are; every citation row goes
  * through blockingRowReason.
  */
 export function verdictRowReason(row: BlockingVerdictRow): string {
@@ -177,8 +177,9 @@ export function verdictRowReason(row: BlockingVerdictRow): string {
       ? 'the draft is stub text written with no model configured (PLACEHOLDER) — re-draft it with a model configured (`pensmith write <N>`)'
       : 'the draft cites none of its assigned sources (NO-CITATIONS) — re-draft it (`pensmith write <N>`)';
   }
-  if (/^L\d+$/.test(row.citekey) && (row.verdict === 'UNPARSEABLE' || row.verdict === 'UNSUPPORTED-FORM')) {
-    return `line ${row.citekey.slice(1)} of the draft holds a citation the verifier cannot check (${row.verdict})`;
+  const line = textRowLine(row.citekey);
+  if (line !== null && (row.verdict === 'UNPARSEABLE' || row.verdict === 'UNSUPPORTED-FORM')) {
+    return `line ${line} of the draft holds a citation the verifier cannot check (${row.verdict})`;
   }
   if (row.quoteId !== undefined && row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
     return blockingRowReason(row).replace('--accept-quote <id>', `--accept-quote ${row.quoteId}`);

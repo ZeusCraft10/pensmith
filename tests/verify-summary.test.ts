@@ -28,7 +28,7 @@ const ROWS: GateRow[] = [
   { kind: 'pass1', key: 'lecun2015', verdict: 'OK', titleJW: 1, authorJW: 1, reason: 'D-11 AND-gate passed' },
   { kind: 'pass1', key: 'lecun2015', verdict: 'UNASSIGNED', titleJW: Number.NaN, authorJW: Number.NaN, reason: 'not assigned' },
   { kind: 'pass1', key: 'ghost.2099', verdict: 'FABRICATED', titleJW: 0, authorJW: 0, reason: 'not in bib' },
-  { kind: 'text', key: 'L7', line: 7, verdict: 'UNSUPPORTED-FORM', form: 'tex-cite', text: '\\cite{fake2019}', reason: 'raw TeX citation' },
+  { kind: 'text', key: '(L7)', line: 7, verdict: 'UNSUPPORTED-FORM', form: 'tex-cite', text: '\\cite{fake2019}', reason: 'raw TeX citation' },
   { kind: 'pass3', key: 'vaswani2017', id: 'q1', quoteSha256: 'a'.repeat(64), snippet: 'The dominant sequence transduction mod', verdict: 'PASS', levRatio: 1, reason: 'arXiv PDF' },
   { kind: 'pass3', key: 'aggarwal2022', id: 'q2', quoteSha256: 'b'.repeat(64), snippet: 'attention mechanisms are **nothing** mo', verdict: 'UNVERIFIABLE-QUOTE', levRatio: 0, reason: 'no open-access copy', accepted: { at: '2026-09-30T10:00:00.000Z', via: 'flag' } },
   { kind: 'pass3', key: 'aggarwal2022', id: 'q3', quoteSha256: 'c'.repeat(64), snippet: 'another quote that no text supports', verdict: 'UNVERIFIABLE-QUOTE', levRatio: 0, reason: 'paywalled (abstract only)' },
@@ -66,7 +66,7 @@ test('VRFY-24: the Status and Draft lines, then the Summary FIRST, then Pass-1, 
   assert.ok(md.indexOf(PASS3_HEADING) < md.indexOf(DRAFT_CHECKS_HEADING));
   // Row formats (D-20-20).
   assert.match(md, /^- ghost\.2099: \*\*FABRICATED\*\* — titleJW=0\.00, authorJW=0\.00 — not in bib$/m);
-  assert.match(md, /^- L7: \*\*UNSUPPORTED-FORM\*\* — titleJW=n\/a, authorJW=n\/a — `\\cite\{fake2019\}`: raw TeX citation$/m);
+  assert.match(md, /^- \(L7\): \*\*UNSUPPORTED-FORM\*\* — titleJW=n\/a, authorJW=n\/a — `\\cite\{fake2019\}`: raw TeX citation$/m);
   assert.match(md, /^- vaswani2017 \[q1\] \("The dominant sequence transduction mod…"\): \*\*PASS\*\* — lev=1\.000 — arXiv PDF$/m);
   assert.match(md, /^- aggarwal2022 \[q2\] \("attention mechanisms are \\\*\\\*nothing\\\*\\\* mo…"\): \*\*UNVERIFIABLE-QUOTE\*\* — lev=0\.000 — no open-access copy — accepted by you 2026-09-30T10:00:00\.000Z \(--accept-quote\)$/m);
   assert.match(md, /^- draft: \*\*NO-CITATIONS\*\* — no citations; 2 sources assigned$/m);

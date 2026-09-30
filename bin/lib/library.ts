@@ -89,7 +89,7 @@ import {
 } from './schemas/library.js';
 import { BibRenderError, renderBibtex, suffixForCollision } from './bibtex-write.js';
 import { renderRis } from './ris-write.js';
-import { parseBib, parseBibFileAt, parseBibSync } from './citations.js';
+import { parseBib, parseBibEntries, parseBibFileAt, parseBibSync } from './citations.js';
 import { jaroWinkler } from './fuzzy.js';
 import { firstAuthorSurname } from './author-normalize.js';
 import { generateCitekey } from './citekey.js';
@@ -951,10 +951,11 @@ export async function rerenderCitations(root: string, opts: { now?: () => Date }
       existing = null;
     }
     if (existing !== null && existing.trim().length > 0) {
-      try {
-        parseBibSync(existing);
-      } catch (e) {
-        previousProblem = ((e as Error).message.split('\n')[0] ?? '').replace(/^parseBib: invalid BibTeX — /, '');
+      // Entry by entry, as verify reads it: an entry that does not parse, or a
+      // key defined twice (review round 3), keeps the old file as a backup.
+      const first = parseBibEntries(existing).problems[0];
+      if (first !== undefined) {
+        previousProblem = `line ${first.line}${first.key !== null ? ` (${first.key})` : ''}: ${first.detail}`;
         backup = `${paths.bib}.unparsed-${now.replace(/[:.]/g, '-')}.bak`;
         await atomicWriteFile(backup, existing);
       }
@@ -1283,7 +1284,18 @@ export async function exportCitedCitations(
   await parseBibFileAt(bibText, paths.bib);
   const blocks = bibText.trim() ? splitBibBlocks(bibText) : [];
   const keptEntries = blocks.filter((b) => b.key !== null && wanted.has(b.key));
-  const exported = [...new Set(keptEntries.map((b) => b.key!))];
+  // One entry per exported key (review round 3): a key the paper's bib defines
+  // twice is never exported — the gate cannot tell which one a reader's tool prints.
+  const defined = new Map<string, number>();
+  for (const b of blocks) if (b.key !== null) defined.set(b.key.toLowerCase(), (defined.get(b.key.toLowerCase()) ?? 0) + 1);
+  const twice = [...new Set(keptEntries.map((b) => b.key!).filter((k) => (defined.get(k.toLowerCase()) ?? 0) > 1))];
+  if (twice.length > 0) {
+    throw new PensmithError(
+      `could not export the cited bibliography: ${paths.bib} defines ${twice.join(', ')} more than once — keep one entry per key, then re-verify`,
+      EXIT_ERROR,
+    );
+  }
+  const exported = keptEntries.map((b) => b.key!);
   const keptBib =
     keptEntries.length === 0
       ? ''
@@ -1293,7 +1305,7 @@ export async function exportCitedCitations(
           .join('');
   if (keptBib) {
     const readBack = parseBibSync(keptBib).map((c) => String(c['id']));
-    if ([...new Set(readBack)].sort().join('\n') !== [...exported].sort().join('\n')) {
+    if ([...readBack].sort().join('\n') !== [...exported].sort().join('\n')) {
       throw new PensmithError(
         `could not export the cited bibliography: ${paths.bib} reads back with different keys once filtered — check its entries`,
         EXIT_ERROR,

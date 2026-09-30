@@ -78,7 +78,7 @@ verifier-flagged citation rather than authoring a fresh PLAN.md:
    so the rows an earlier revise repaired are skipped). When every flagged
    citation is already gone, nothing changes and the step says so, naming
    `pensmith verify <N>`. A row that names no citation — a text finding
-   (`L<line>`), an identifier written in the prose (`doi:…`), a draft check or
+   (`(L<line>)`), an identifier written in the prose (`doi:…`), a draft check or
    an unattributed quote — is not swapped: the step names it and says to edit
    that text or re-draft (`pensmith write <N>`), then verify.
 2. **Load `assigned_sources` + voice hint** from `<sectionPlan(n, slug)>`

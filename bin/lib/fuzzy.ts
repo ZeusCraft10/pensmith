@@ -440,6 +440,100 @@ const MAX_ANCHORS = 400;
 const MAX_APPROX_ANCHORS_ONE_PART = 1;
 const MAX_APPROX_ANCHORS = 8;
 
+/**
+ * A quote's parts and what stands between them: `breaks[k]` is the text of
+ * the quote between part k-1 and part k (breaks[0] before the first part,
+ * breaks[parts.length] after the last) — elision marks, editorial brackets,
+ * and punctuation.
+ */
+function splitQuote(needle: string): { segments: string[]; breaks: string[] } {
+  const raw: Array<{ start: number; end: number }> = [];
+  let at = 0;
+  for (const m of needle.matchAll(SEGMENT_BREAK_RE)) {
+    raw.push({ start: at, end: m.index });
+    at = m.index + m[0].length;
+  }
+  raw.push({ start: at, end: needle.length });
+  const segments: string[] = [];
+  const breaks: string[] = [];
+  let prevEnd = 0;
+  for (const r of raw) {
+    const seg = core(needle.slice(r.start, r.end));
+    if (!/[\p{L}\p{N}]/u.test(seg)) continue;
+    // Where the core sits inside the raw part (its trimmed punctuation belongs to the break).
+    const offset = needle.indexOf(seg, r.start);
+    breaks.push(needle.slice(prevEnd, offset));
+    segments.push(seg);
+    prevEnd = offset + seg.length;
+  }
+  breaks.push(needle.slice(prevEnd));
+  return { segments, breaks };
+}
+
+/** True for a word that negates (NEGATORS, or a `n't` form). */
+function isNegator(w: string): boolean {
+  return NEGATORS.has(w) || /n['’]t$/u.test(w);
+}
+
+/** The editorial insertions of a break: the text of each `[…]` that is not an elision mark. */
+function bracketTexts(brk: string): string[] {
+  return [...brk.matchAll(/\[([^\]]{1,60})\]/g)].map((m) => m[1] as string).filter((t) => !/^\s*\.\.\.\s*$/.test(t));
+}
+
+/**
+ * The part of a skipped source span that belongs to the sentences the quote's
+ * parts are in: up to its first sentence end and from its last one (a whole
+ * sentence elided in between reports nothing about the parts).
+ */
+function adjoiningFragments(span: string): string {
+  const ends = [...span.matchAll(/[.!?]["')\]]*\s/g)];
+  if (ends.length === 0) return span;
+  const first = ends[0]!;
+  const last = ends[ends.length - 1]!;
+  return `${span.slice(0, first.index + first[0].length)} ${span.slice(last.index + last[0].length)}`;
+}
+
+/**
+ * Why an elided or bracketed quote says something its source does not
+ * (review round 3), or null: an editorial bracket that adds a negation ("the
+ * trial [did not] show") or a number absent from the source text it stands
+ * in for, a bracket that stands in for a negation it drops, and an elision
+ * that skips a negation of the sentence ("the trial ... show" over "the trial
+ * do not show"). A leading or trailing bracket is compared with the source
+ * right before the first part or after the last.
+ */
+function elisionChange(hay: string, parts: readonly PartMatch[], breaks: readonly string[]): string | null {
+  const numbers = (s: string): string[] => tokensOf(s).filter((w) => /\p{N}/u.test(w));
+  const negations = (s: string): string[] => tokensOf(s).filter(isNegator);
+  for (let k = 0; k <= parts.length; k += 1) {
+    const brk = breaks[k] ?? '';
+    const inserted = bracketTexts(brk);
+    const edge = k === 0 || k === parts.length;
+    if (edge && inserted.length === 0) continue; // a leading or trailing elision cuts nothing out of the quote
+    const span =
+      k === 0
+        ? hay.slice(Math.max(0, parts[0]!.start - 80), parts[0]!.start)
+        : k === parts.length
+          ? hay.slice(parts[k - 1]!.end, parts[k - 1]!.end + 80)
+          : hay.slice(parts[k - 1]!.end, parts[k]!.start);
+    const near = edge ? (k === 0 ? (span.split(/[.!?]\s/).pop() ?? span) : (span.split(/[.!?]\s/)[0] ?? span)) : adjoiningFragments(span);
+    const bracketNeg = inserted.flatMap(negations);
+    const sourceNeg = negations(near);
+    if (bracketNeg.length > 0 && sourceNeg.length === 0) {
+      return `the editorial bracket "[${inserted.join('] [')}]" adds "${bracketNeg[0]}", which the source does not say there`;
+    }
+    if (!edge && sourceNeg.length > 0 && bracketNeg.length === 0) {
+      return inserted.length > 0
+        ? `the editorial bracket "[${inserted.join('] [')}]" stands in for "${sourceNeg[0]}" in the source`
+        : `its elision drops "${sourceNeg[0]}" from the source`;
+    }
+    const sourceNums = new Set(numbers(span));
+    const addedNum = inserted.flatMap(numbers).find((n) => !sourceNums.has(n));
+    if (addedNum !== undefined) return `the editorial bracket "[${inserted.join('] [')}]" adds the number ${addedNum}, which the source does not have there`;
+  }
+  return null;
+}
+
 /** The quote's matchable core: leading and trailing punctuation dropped (a quote's own `.` or `,`). */
 function core(s: string): string {
   return s.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
@@ -628,15 +722,15 @@ function anchors(seg: string, text: string, approx: number): PartMatch[] {
  * matches when each part does, in order, each within MAX_ELISION_GAP
  * characters of the one before (a one-word part within ONE_WORD_GAP of its
  * neighbours), and one part has at least three words: fragments stitched
- * from far apart in the source are not a quotation.
+ * from far apart in the source are not a quotation. Nor may a bracket or an
+ * elision change what the source says: a bracket that adds a negation or a
+ * number, or stands in for a negation, and an elision that skips a negation
+ * of the parts' sentences are refused, naming it (review round 3).
  */
 export function matchQuote(quote: string, text: string | PreparedText): QuoteMatch {
   const hay = typeof text === 'string' ? normalizeForQuote(text) : text.normalized;
   const needle = normalizeForQuote(quote);
-  const segments = needle
-    .split(SEGMENT_BREAK_RE)
-    .map(core)
-    .filter((s) => /[\p{L}\p{N}]/u.test(s));
+  const { segments, breaks } = splitQuote(needle);
   if (segments.length === 0) return { verbatim: true, ratio: 1 };
   const total = segments.reduce((n, s) => n + s.length, 0);
   let refused: string | undefined;
@@ -666,6 +760,16 @@ export function matchQuote(quote: string, text: string | PreparedText): QuoteMat
       }
       const dist = parts.reduce((d, p) => d + p.dist, 0);
       const ratio = total === 0 ? 1 : 1 - dist / total;
+      // An editorial bracket or an elision must not change what the source
+      // says (review round 3): no negation or number added, none dropped.
+      const changed = elisionChange(hay, parts, breaks);
+      if (changed !== null) {
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          refused = changed;
+        }
+        continue;
+      }
       const mismatch = parts.find((p) => p.mismatch !== null)?.mismatch ?? null;
       if (mismatch === null && dist === 0) return { verbatim: true, ratio: 1 };
       if (mismatch === null) return { verbatim: false, ratio };

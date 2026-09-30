@@ -30,8 +30,9 @@
 // write's one corrective turn and failure path enforce all three unchanged.
 // The Tier-1 draft submission tool (PLUG-07) runs the same check. PURE.
 
-import { extractCitedKeysForVerification, findUnparseableCitations } from './citation-token.js';
+import { extractCitedKeysForVerification, findUnparseableCitations, stripLeadingBom } from './citation-token.js';
 import { findUnsupportedForms } from './verify/unsupported-forms.js';
+import { textRowKey } from './verify/verdicts.js';
 import { describeQuotesWithoutFullText, quotesWithoutFullText, type QuoteWithoutFullText } from './full-text.js';
 
 export type DraftViolationKind = 'unassigned-citekey' | 'quote-without-full-text' | 'uncheckable-citation-form';
@@ -63,16 +64,18 @@ export interface CheckDraftOptions {
 }
 
 /** Every containment violation of `draft` (empty when it is contained). */
-export function checkDraft(draft: string, opts: CheckDraftOptions): DraftViolation[] {
+export function checkDraft(text: string, opts: CheckDraftOptions): DraftViolation[] {
+  // The draft as Pandoc reads it: a leading byte-order mark stripped (review round 3).
+  const draft = stripLeadingBom(text);
   const assigned = new Set(opts.assigned);
   const out: DraftViolation[] = [];
   for (const key of extractCitedKeysForVerification(draft)) {
     if (assigned.has(key)) continue;
     out.push({ kind: 'unassigned-citekey', citekey: key, message: `citekey ${key} not assigned to section ${opts.section}` });
   }
-  // VRFY-09 / VRFY-10: forms the verifier would block (key slot `L<line>`).
+  // VRFY-09 / VRFY-10: forms the verifier would block (key slot `(L<line>)`, verdicts.ts textRowKey).
   for (const f of [...findUnparseableCitations(draft), ...findUnsupportedForms(draft)].sort((a, b) => a.line - b.line)) {
-    out.push({ kind: 'uncheckable-citation-form', citekey: `L${f.line}`, message: `line ${f.line}: \`${oneLine(f.text)}\` (${f.verdict})` });
+    out.push({ kind: 'uncheckable-citation-form', citekey: textRowKey(f.line), message: `line ${f.line}: \`${oneLine(f.text)}\` (${f.verdict})` });
   }
   if (opts.fullText !== undefined) {
     // One violation per quote, each carrying the corrective text for that quote.

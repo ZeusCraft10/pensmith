@@ -10,18 +10,26 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fc from 'fast-check';
 import { CITEKEY_GRAMMAR } from '../bin/lib/schemas/library.js';
-import { PASS1_VERDICTS, PASS3_VERDICTS, DRAFT_VERDICTS, BLOCKING_VERDICTS, quoteId } from '../bin/lib/verify/verdicts.js';
+import { PASS1_VERDICTS, PASS3_VERDICTS, DRAFT_VERDICTS, BLOCKING_VERDICTS, quoteId, textRowKey, textRowLine } from '../bin/lib/verify/verdicts.js';
 import { renderVerificationMd, parseVerificationMd, summaryMismatches } from '../bin/lib/verify/verification-md.js';
-import { parseBlockingVerdictRows } from '../bin/lib/verify/verdict-rows.js';
+import { parseBlockingVerdictRows, verdictRowReason } from '../bin/lib/verify/verdict-rows.js';
 import type { GateRow } from '../bin/lib/verify/gate.js';
 
 const FIRST = [...'abcxyzABCXYZ0123456789_', 'é', 'ü', 'ß', 'ж', '中', 'α'];
 const MIDDLE = [...FIRST, ...':.#$%&+?<>~/-'];
 
-const citekey = fc
-  .tuple(fc.constantFrom(...FIRST), fc.array(fc.constantFrom(...MIDDLE), { maxLength: 12 }), fc.constantFrom(...FIRST))
-  .map(([a, mid, z]) => `${a}${mid.join('')}${z}`)
-  .filter((k) => CITEKEY_GRAMMAR.test(k));
+const citekey = fc.oneof(
+  { weight: 9, arbitrary: fc
+    .tuple(fc.constantFrom(...FIRST), fc.array(fc.constantFrom(...MIDDLE), { maxLength: 12 }), fc.constantFrom(...FIRST))
+    .map(([a, mid, z]) => `${a}${mid.join('')}${z}`)
+    .filter((k) => CITEKEY_GRAMMAR.test(k)) },
+  // Review round 3: citekeys shaped like a text row's line (`L12`, `L1`) stay citekeys.
+  { weight: 1, arbitrary: fc.integer({ min: 1, max: 999 }).map((n) => `L${n}`) },
+);
+/** A text finding's row (an UNSUPPORTED-FORM / UNPARSEABLE text on a line). */
+const textRow = fc.record({ line: fc.integer({ min: 1, max: 999 }), verdict: fc.constantFrom('UNSUPPORTED-FORM', 'UNPARSEABLE') }).map(
+  (r): GateRow => ({ kind: 'text', key: textRowKey(r.line), line: r.line, verdict: r.verdict as 'UNSUPPORTED-FORM' | 'UNPARSEABLE', form: 'author-date', text: '(Nguyen, 2019)', reason: 'an author-date citation' }),
+);
 
 /** Free text a registrar record or a quoted snippet could hold (asterisks, quotes, parens, colons included). */
 const freeText = fc.oneof(
@@ -49,8 +57,9 @@ const draftRow = fc.record({ verdict: fc.constantFrom(...DRAFT_VERDICTS), reason
 
 test('VRFY-24 property: every CITEKEY_GRAMMAR key and every verdict round-trips through the VERIFICATION.md writer and both readers', () => {
   fc.assert(
-    fc.property(fc.array(pass1Row, { maxLength: 6 }), fc.array(pass3Row, { maxLength: 6 }), fc.array(draftRow, { maxLength: 2 }), fc.boolean(), (p1, p3raw, draft, crlf) => {
+    fc.property(fc.array(pass1Row, { maxLength: 6 }), fc.array(pass3Row, { maxLength: 6 }), fc.array(draftRow, { maxLength: 2 }), fc.array(textRow, { maxLength: 2 }), fc.boolean(), (p1only, p3raw, draft, text, crlf) => {
       const p3: GateRow[] = p3raw.map((r, i) => ({ ...r, id: quoteId(i) }));
+      const p1 = [...p1only, ...text];
       const rows = [...p1, ...p3, ...draft];
       let md = renderVerificationMd({ sectionId: '1', slug: 'intro', offlineMarker: null, status: 'failed', draftHash: 'a'.repeat(64), rows });
       if (crlf) md = md.replace(/\n/g, '\r\n');
@@ -68,6 +77,13 @@ test('VRFY-24 property: every CITEKEY_GRAMMAR key and every verdict round-trips 
         .filter((r) => BLOCKING_VERDICTS.has(r.verdict) && !(r.kind === 'pass3' && r.accepted !== undefined))
         .map((r) => [r.kind === 'draft' ? 'draft' : r.key, r.verdict]);
       assert.deepEqual(blocking.map((r) => [r.citekey, r.verdict]), expected);
+      // A text row is worded by its line; a citekey row (even `L12`) as a citation.
+      for (const b of blocking) {
+        if (b.citekey === 'draft' || b.quoteId !== undefined) continue;
+        const line = textRowLine(b.citekey);
+        if (line !== null) assert.match(verdictRowReason(b), new RegExp(`^line ${line} of the draft holds a citation the verifier cannot check`));
+        else assert.doesNotMatch(verdictRowReason(b), /of the draft holds a citation the verifier cannot check/, b.citekey);
+      }
     }),
     { numRuns: 400 },
   );

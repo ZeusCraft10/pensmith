@@ -101,10 +101,16 @@ test('VRFY-20 (built CLI): --accept-quote naming another verdict, a quote the dr
   assert.match(md, /^- \(unattributed\) \[q1\] \("deep learning allows computational model…"\): \*\*UNATTRIBUTED\*\*/m, 'the verification ran and was written');
   assert.match(md, /^- lecun2015 \[q2\] \("attention mechanisms are nothing more th…"\): \*\*UNVERIFIABLE-QUOTE\*\* — .*Unpaywall needs a contact email/m);
 
-  // Repeated: the first id the draft does not hold is named (both occurrences are read).
+  // Repeated: the first id the draft does not hold is named (both occurrences are read) —
+  // before any pass runs or any file is written (review round 3).
+  const verifBefore = readFileSync(join(dir, 'VERIFICATION.md'));
+  const planBefore = readFileSync(join(dir, 'PLAN.md'));
   const missing = p.cli(['verify', '1', '--accept-quote', 'q9', '--accept-quote', 'q2'], NO_EMAIL);
   assert.equal(missing.status, EXIT_USAGE, `${missing.stdout}\n${missing.stderr}`);
   assert.match(missing.stderr, /--accept-quote q9: section 1's draft has no quote q9 — nothing was recorded/);
+  assert.doesNotMatch(missing.stdout, /wrote .*VERIFICATION\.md/, 'no verification ran');
+  assert.deepEqual(readFileSync(join(dir, 'VERIFICATION.md')), verifBefore, 'VERIFICATION.md untouched');
+  assert.deepEqual(readFileSync(join(dir, 'PLAN.md')), planBefore, 'PLAN.md untouched (not even `verifying`)');
 
   const malformed = p.cli(['verify', '1', '--accept-quote', 'quote-1'], NO_EMAIL);
   assert.equal(malformed.status, EXIT_USAGE);

@@ -77,6 +77,7 @@ import { resolveSectionArg } from '../lib/section-slug.js';
 import { formatSectionId, loggedSectionId, sectionIdOf } from '../lib/section-id.js';
 import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { tryReadPaperConfigSync } from '../lib/config.js';
+import { extractQuotes } from '../lib/quote-extractor.js';
 import { runGate, canPrompt } from '../lib/gates.js';
 
 // Force-bind the deterministic primitives so the acceptance grep
@@ -278,6 +279,19 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
   for (const q of opts.acceptQuotes ?? []) {
     if (!QUOTE_ID_RE.test(q)) {
       throw new QuoteAcceptanceError(`--accept-quote ${q}: a quote id is q1, q2, … as VERIFICATION.md lists them — nothing was recorded`);
+    }
+  }
+  // The ids are deterministic from the draft (extractQuotes): an id the draft
+  // does not have is a usage error before any pass runs or anything is
+  // written (RUN-09; review round 3).
+  if ((opts.acceptQuotes ?? []).length > 0) {
+    if (!existsSync(draftPath)) {
+      throw new QuoteAcceptanceError(`--accept-quote: section ${id} has no DRAFT.md — run \`pensmith write ${id}\` first; nothing was recorded`);
+    }
+    const minWords = tryReadPaperConfigSync(root)?.verification?.quote_min_words;
+    const ids = new Set(extractQuotes(readFileSync(draftPath, 'utf8'), minWords !== undefined ? { minWords } : {}).map((q) => q.id));
+    for (const q of opts.acceptQuotes ?? []) {
+      if (!ids.has(q)) throw new QuoteAcceptanceError(`--accept-quote ${q}: section ${id}'s draft has no quote ${q} — nothing was recorded`);
     }
   }
 

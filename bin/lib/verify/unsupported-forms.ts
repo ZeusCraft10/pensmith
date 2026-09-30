@@ -51,7 +51,7 @@
 // PURE: no I/O. Line numbers are 1-based and count `\n`, so an LF and a CRLF
 // copy of a draft report the same lines.
 
-import { findCitations, lineOfOffset, offsetInSpans, provableCodeSpans } from '../citation-token.js';
+import { findCitations, lineOfOffset, offsetInSpans, provableCodeSpans, stripLeadingBom } from '../citation-token.js';
 import type { TextFinding } from './verdicts.js';
 
 /** The forms this scanner reports (TextFinding.form). */
@@ -1141,7 +1141,9 @@ function linkedAuthorDate(md: string): RawFinding[] {
  * author-date string in a reference-list entry, a `[1]` in a footnote
  * definition) is reported once, by the outer one.
  */
-export function findUnsupportedForms(md: string): TextFinding[] {
+export function findUnsupportedForms(text: string): TextFinding[] {
+  // Pandoc strips a leading byte-order mark and reads line 1 normally (review round 3).
+  const md = stripLeadingBom(text);
   const code = provableCodeSpans(md);
   const skip = [...code, ...mathSpans(md, code)];
   const lines = linesOf(md);

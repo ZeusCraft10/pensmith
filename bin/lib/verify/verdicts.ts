@@ -183,6 +183,21 @@ export function quoteTextSha256(text: string): string {
   return createHash('sha256').update(text.normalize('NFKC').replace(/\s+/gu, ' ').trim(), 'utf8').digest('hex');
 }
 
+/**
+ * The key slot of a text finding's row (an UNPARSEABLE or UNSUPPORTED-FORM
+ * text on line `line`): `(L<line>)`. No citekey can hold a parenthesis, so a
+ * row of a real citekey `L12` is never read as a text row (review round 3).
+ */
+export function textRowKey(line: number): string {
+  return `(L${line})`;
+}
+
+/** The line a text row's key names (`(L12)` → 12), or null for any other key. */
+export function textRowLine(key: string): number | null {
+  const m = /^\(L([1-9]\d*)\)$/.exec(key);
+  return m === null ? null : Number(m[1]);
+}
+
 /** The id of the `index`-th quote (0-based) of a draft, in document order: `q1`, `q2`, … */
 export function quoteId(index: number): string {
   return `q${index + 1}`;
