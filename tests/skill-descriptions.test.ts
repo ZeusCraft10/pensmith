@@ -265,7 +265,8 @@ test('review round 2 (Phase 20 + 23a merge): an explicit verb runs once — the 
 test('VRFY-20 in Tier 1 (Phase 20 436eeb9, merged into the plugin layout): "accept quote qK" routes to pensmith_verify accept_quote, only after asking the user', () => {
   const { body } = readSkill(ROUTER);
   const row = /\| "accept quote qK in section 3"[^\n]*\|/.exec(body)?.[0] ?? '';
-  assert.match(row, /`pensmith_verify` with `n` = 3 and `accept_quote: \["qK"\]` \(the CLI form: `verify 3 --accept-quote qK`\)/);
+  // The Verb column names the verb (tests/nl-triggers.test.ts reads every backticked word there as one), then its tool call.
+  assert.match(row, /\| `verify 3 --accept-quote qK` \(the tool: `pensmith_verify` for section 3 with `accept_quote: \["qK"\]`\)/);
   assert.match(row, /Ask the user first with AskUserQuestion, one quote id at a time, and accept only on their own decision: never on your own, never a blanket acceptance/);
   // The verb table names the option on the tool, and the CLI-only flag list no longer carries it.
   assert.match(body, /\| `verify N` \| the MCP tool `pensmith_verify`[^\n]*`accept_quote: \["qK"\]` for `verify N --accept-quote qK`, only after asking the user/);

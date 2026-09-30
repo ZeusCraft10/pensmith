@@ -150,7 +150,7 @@ finished.
 | "resume" / "continue where I left off" | `resume` |
 | "redo section 3" / "section 3 needs work" / "re-do section 3" | if section 3's verification flagged a citation by its citekey (FABRICATED, MIS-CITED, RETRACTED, UNASSIGNED, UNRESOLVABLE, a quote NOT_FOUND, or UNPARSEABLE on a bibliography entry — a row keyed `(L<line>)` is a citation form in the prose, not a citekey), `plan 3 --revise` (it repairs one flagged citation a run; repeat it while one is left), then `verify 3`; otherwise `plan 3`, then `write 3` (a fresh plan and draft; the route for every other blocking verdict too — a quote no source text could check (UNVERIFIABLE-QUOTE) needs only `write 3`, which re-drafts it paraphrased, or the user's own edit of the draft and `verify 3`, or accepting that quote, below) |
 | "check the citations in section 3" | `verify 3` |
-| "accept quote qK in section 3" (a quote section 3's VERIFICATION.md lists as UNVERIFIABLE-QUOTE) | `pensmith_verify` with `n` = 3 and `accept_quote: ["qK"]` (the CLI form: `verify 3 --accept-quote qK`). Ask the user first with AskUserQuestion, one quote id at a time, and accept only on their own decision: never on your own, never a blanket acceptance |
+| "accept quote qK in section 3" (a quote section 3's VERIFICATION.md lists as UNVERIFIABLE-QUOTE) | `verify 3 --accept-quote qK` (the tool: `pensmith_verify` for section 3 with `accept_quote: ["qK"]`). Ask the user first with AskUserQuestion, one quote id at a time, and accept only on their own decision: never on your own, never a blanket acceptance |
 | "make it sound less AI" | `done` (its humanize step) |
 | "compile" / "put it all together" | `compile` |
 | "export to Word" | `done` (it exports DOCX, PDF, LaTeX or Markdown) |
