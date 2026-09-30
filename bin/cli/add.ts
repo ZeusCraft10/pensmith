@@ -45,7 +45,10 @@
 // the command. `add --remap <key> --section N` changes only §N;
 // `add --remap <key>` alone remaps the relevant sections it lists. A remap
 // appends to PLAN.md `assigned_sources` ONLY — never status or
-// verified_against_draft_hash (Pitfall 3 / A6).
+// verified_against_draft_hash (Pitfall 3 / A6). A source the citation verifier
+// could never pass (retracted, or no identifier it resolves — D-18-37) is
+// never mapped: the question is not asked, and an explicit --remap /
+// --section is refused (exit 1; the source stays in the library).
 //
 // Exit codes (D-19-27): a refusal, a failed or empty lookup, an SSRF refusal
 // → 1; an unclassifiable argument → 2.
@@ -89,6 +92,7 @@ import {
 } from '../lib/byo-ingest.js';
 import { loadSectionInfos, rankSections, type SectionInfo, type SectionRelevance } from '../lib/section-relevance.js';
 import type { SourceCandidate } from '../lib/schemas/source-candidate.js';
+import { excludedRemedy, verifierBlindSpot } from '../lib/source-context.js';
 
 const P = 'pensmith add';
 
@@ -242,10 +246,23 @@ function resolveOne(
  */
 async function remapStep(
   paperRoot: string,
-  entry: Pick<LibraryEntry, 'citekey' | 'title' | 'abstract'>,
+  entry: Pick<LibraryEntry, 'citekey' | 'title' | 'abstract'> & Partial<Pick<LibraryEntry, 'doi' | 'arxiv' | 'pmid' | 'isbn' | 'retracted' | 'synthetic'>>,
   args: { remap: boolean; one: { n: number; suffix?: string | undefined; slug: string } | null; yolo: boolean },
-): Promise<{ remapped: string[] }> {
+): Promise<{ remapped: string[]; refused?: boolean }> {
   const key = entry.citekey;
+  // D-18-37: a section is only ever given a source the citation verifier can
+  // check (source-context.ts verifierBlindSpot — the outline and planner's
+  // rule): a retracted work always fails Pass 1, so mapping it would only
+  // strand the section. It stays in the library, unmapped.
+  const blind = verifierBlindSpot(entry, networkMode().dryRun);
+  if (blind !== null) {
+    const excluded = [{ citekey: key, reason: blind }];
+    const explicit = args.one !== null || args.remap;
+    (explicit ? err : out)(
+      `${P}: ${key} is not mapped to any section — the citation verifier would not pass a citation of it (${blind}); ${excludedRemedy(excluded)}.`,
+    );
+    return { remapped: [], refused: explicit };
+  }
   const sections = await loadSectionInfos(paperRoot);
   if (args.one !== null) {
     const one = args.one;
@@ -476,7 +493,8 @@ export const addCommand = defineCommand({
       const library = await tryLoadLibrary(paperRoot);
       const entry = library?.entries.find((e) => e.citekey === source);
       if (entry) {
-        const { remapped } = await remapStep(paperRoot, entry, remapArgs);
+        const { remapped, refused } = await remapStep(paperRoot, entry, remapArgs);
+        if (refused === true) return failed({ citekey: entry.citekey, remapped: 0, refused: true });
         return { ok: true, citekey: entry.citekey, remapped: remapped.length };
       }
     }
@@ -592,8 +610,11 @@ export const addCommand = defineCommand({
       err(`${P}: WARN — ${key} is RETRACTED${entry.retraction_details ? ` (${entry.retraction_details})` : ''}: it fails Pass 1 (blocking) if cited.`);
     }
 
-    const { remapped } = await remapStep(paperRoot, entry ?? { citekey: key, title: null, abstract: null }, remapArgs);
-    return { ok: true, citekey: key, added: status === 'added', alreadyInLibrary: status !== 'added', remapped: remapped.length };
+    const { remapped, refused } = await remapStep(paperRoot, entry ?? { citekey: key, title: null, abstract: null }, remapArgs);
+    const result = { citekey: key, added: status === 'added', alreadyInLibrary: status !== 'added', remapped: remapped.length };
+    // The source is in the library; the mapping the user asked for was refused (exit 1).
+    if (refused === true) return failed({ ...result, refused: true });
+    return { ok: true, ...result };
   },
 });
 

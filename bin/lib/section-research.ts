@@ -22,7 +22,9 @@
 //   6. The retraction cross-check (D-15), then the ONE library writer
 //      (upsertSources, provenance `plan-research:§<id>` — revise.ts
 //      planResearchProvenance, which the planner's allowed set reads); then ONLY section N's
-//      PLAN.md `assigned_sources` gains the real (library) citekeys, under the
+//      PLAN.md `assigned_sources` gains the real (library) citekeys the
+//      citation verifier can check (a retracted hit stays in LIBRARY.json,
+//      logged "not assigned" — D-18-37), under the
 //      PLAN.md lock — its status and verified_against_draft_hash are untouched;
 //      then an entry is appended to sections/<NN>-<slug>/RESEARCH-LOG.md and the
 //      RESEARCH.md sources block is refreshed from LIBRARY.json (the user's
@@ -54,6 +56,7 @@ import { crossCheckRetractions, retractionCheckReason, type RetractionLookup } f
 import { enrichOpenAccess, describeOpenAccess } from './open-access.js';
 import type { SourceCandidate } from './schemas/source-candidate.js';
 import { refreshResearchSources, formatReference } from './research-md.js';
+import { describeExcluded, excludedRemedy, verifierBlindSpot } from './source-context.js';
 import {
   researchRegistry,
   researchAdapterPlan,
@@ -186,10 +189,7 @@ async function assignToSection(planPath: string, keys: readonly string[]): Promi
   await withLock(planPath, async () => {
     const migrated = migrateFrontmatterText('plan', readFileSync(planPath, 'utf8'), planPath).text;
     const next = updateFrontmatter(migrated, (fm) => {
-      const cur = fm['assigned_sources'] as unknown;
-      const list: unknown = cur !== null && typeof cur === 'object' && typeof (cur as { toJSON?: unknown }).toJSON === 'function'
-        ? (cur as { toJSON: () => unknown }).toJSON()
-        : cur;
+      const list: unknown = fm['assigned_sources'];
       const existing = Array.isArray(list) ? list.map(String) : [];
       added = keys.filter((k, i) => !existing.includes(k) && keys.indexOf(k) === i);
       fm['assigned_sources'] = [...existing, ...added];
@@ -330,13 +330,28 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
   const counts = upsertCounts(upsert.outcomes);
   const newToLibrary = counts.added;
 
-  // Only section N's PLAN.md gains the keys.
-  const added = await assignToSection(planPath, realKeys);
+  // Only section N's PLAN.md gains the keys — and only the ones Pass 1 can
+  // check (D-18-37, source-context.ts verifierBlindSpot): a retracted hit
+  // always fails Pass 1, so it stays in LIBRARY.json and is logged as not
+  // added, never handed to the planner or the drafter.
+  const library = new Map(((await tryLoadLibrary(opts.root))?.entries ?? []).map((e) => [e.citekey, e]));
+  const withheld = new Map<string, string>();
+  for (const key of realKeys) {
+    const entry = library.get(key);
+    const why = entry !== undefined ? verifierBlindSpot(entry, networkMode().dryRun) : null;
+    if (why !== null) withheld.set(key, why);
+  }
+  const assignable = realKeys.filter((k) => !withheld.has(k));
+  const added = assignable.length > 0 ? await assignToSection(planPath, assignable) : [];
 
   // The section's research log.
   const logPath = path.join(path.dirname(planPath), 'RESEARCH-LOG.md');
   const now = new Date().toISOString();
   const notAdded = [
+    ...final
+      .map((i, index) => ({ i, key: realKeys[index] as string }))
+      .filter(({ key }) => withheld.has(key))
+      .map(({ i, key }) => `[@${key}] ${formatReference(i.view)} — not assigned: the citation verifier would not pass a citation of it (${withheld.get(key) as string})`),
     ...pass.kept.filter((k) => !selected.has(k.candidate.citekey)).map((k) => `[@${k.candidate.citekey}] ${formatReference(k.view)} — deselected`),
     ...pass.rejected.filter((r) => !selected.has(r.candidate.citekey)).map((r) => `[@${r.candidate.citekey}] ${formatReference(r.view)} — evaluator: ${oneLine(r.reason ?? 'rejected')}`),
     ...pass.excluded.map((x) => `[@${x.candidate.citekey}] ${formatReference(x.view)} — policy: ${x.exclusion?.reason ?? 'excluded'}`),
@@ -355,7 +370,7 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
     `- Result: ${tierSummary(final)}; ${pass.excluded.length} excluded by [sources] policy; ${pass.rejected.length} rejected by the evaluator`,
     `- Added to this section's assigned_sources: ${added.length > 0 ? added.join(', ') : '(none new — already assigned)'}`,
     `- New to LIBRARY.json: ${newToLibrary.length > 0 ? newToLibrary.join(', ') : '(none)'}`,
-    ...(retracted.length > 0 ? [`- RETRACTED (fails Pass 1 if cited): ${retracted.map((r) => r.key).join(', ')}`] : []),
+    ...(retracted.length > 0 ? [`- RETRACTED (kept in LIBRARY.json, not assigned — Pass 1 blocks a citation of it): ${retracted.map((r) => r.key).join(', ')}`] : []),
     ...(unknown.length > 0
       ? [`- Retraction status unknown (re-checked at verify time): ${unknown.map((u) => `${u.key}${u.reason ? ` — ${oneLine(u.reason)}` : ''}`).join('; ')}`]
       : []),
@@ -369,6 +384,12 @@ export async function runSectionResearch(opts: SectionResearchOptions): Promise<
   out(`${label}: ${tierSummary(final)}; ${pass.excluded.length} excluded by [sources] policy; ${pass.rejected.length - final.filter((i) => i.decision === 'rejected').length} rejected by the evaluator`);
   if (retracted.length > 0) {
     err(`WARN: ${retracted.length} retracted source(s) found in LIBRARY.json: ${retracted.map((r) => r.key).join(', ')}. These will FAIL Pass-1 if cited.`);
+  }
+  if (withheld.size > 0) {
+    err(
+      `${label}: WARN — not added to section ${id}: ${describeExcluded([...withheld].map(([citekey, reason]) => ({ citekey, reason })))} ` +
+        `— the citation verifier would not pass a citation of them (${excludedRemedy([...withheld].map(([citekey, reason]) => ({ citekey, reason })))})`,
+    );
   }
   if (unknown.length > 0) {
     err(`WARN: retraction status unknown for ${unknown.length} source(s): ${unknown.map((u) => u.key).join(', ')} — the lookup failed; verify re-checks them.`);

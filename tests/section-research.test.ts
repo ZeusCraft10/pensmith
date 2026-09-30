@@ -218,6 +218,32 @@ test('GRND-17: plan 2 --research adds real hits to section 2 only; §1/§3 byte-
   });
 });
 
+test('D-18-37 (review round 1): a retracted hit is kept in LIBRARY.json but never assigned to the section — the drafter can never be shown it', async () => {
+  await withSection(async (sb) => {
+    await seedPaper(sb);
+    const notice = '2020-06-04: Retraction (notice 10.5555/sr.notice)';
+    const { registry } = registryWith(() => [cand(1), cand(3, { retracted: true, retraction_status: 'retracted', retraction_details: notice })]);
+    __setResearchRegistryForTest(registry);
+    const r = await run({ root: sb.root, n: 2, slug: 'background', query: QUERY, yolo: true });
+    assert.equal(r.error, null, `${String(r.error)}\n${r.err}`);
+
+    const lib = LibrarySchema.parse(JSON.parse(fs.readFileSync(path.join(sb.paper, 'LIBRARY.json'), 'utf8')));
+    const bad = lib.entries.find((e) => e.citekey === 'writer32019');
+    assert.ok(bad, 'the retracted work is recorded in the library');
+    assert.equal(bad.retracted, true);
+
+    const plan2 = parseFrontmatter(fs.readFileSync(path.join(sectionDir(sb, 2, 'background'), 'PLAN.md'), 'utf8')).frontmatter;
+    assert.deepEqual(plan2['assigned_sources'], ['known2018', 'writer12019'], 'the retracted hit never reaches assigned_sources');
+    assert.deepEqual(r.value!.added, ['writer12019']);
+    assert.match(r.err, /pensmith plan --research: WARN — not added to section 2: writer32019 \(retracted \(Retraction Watch\)\) — the citation verifier would not pass a citation of them \(a retracted source is never cited\)/);
+
+    const log = fs.readFileSync(path.join(sectionDir(sb, 2, 'background'), 'RESEARCH-LOG.md'), 'utf8');
+    assert.match(log, /^- Added to this section's assigned_sources: writer12019$/m);
+    assert.match(log, /^ {2}- \[@writer32019\] .* — not assigned: the citation verifier would not pass a citation of it \(retracted \(Retraction Watch\)\)$/m);
+    assert.match(log, /^- RETRACTED \(kept in LIBRARY\.json, not assigned — Pass 1 blocks a citation of it\): writer32019$/m);
+  });
+});
+
 test('GRND-17: without a terminal and without --yolo it refuses (exit 3) before any model call, search or file change', async () => {
   await withSection(async (sb) => {
     await seedPaper(sb);

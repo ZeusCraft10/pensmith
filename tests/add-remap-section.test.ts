@@ -168,3 +168,29 @@ test('D-18-38 (review round 1): a STATE.json / OUTLINE.md disagreement is refuse
   assert.ok(fs.readFileSync(intro, 'utf8').includes('assigned_sources: []'));
   assert.ok(fs.readFileSync(methods, 'utf8').includes('assigned_sources: []'));
 });
+
+test('D-18-37 (review round 1): a retracted work is added but never mapped — an explicit --remap --section is refused (exit 1), the section untouched', async () => {
+  const { root, intro, methods } = await mkTwoSectionProject(true);
+  const prev = process.cwd();
+  process.chdir(root);
+  const errs: string[] = [];
+  const write = process.stderr.write.bind(process.stderr);
+  (process.stderr as unknown as { write: (s: string) => boolean }).write = (s: string) => { errs.push(String(s)); return true; };
+  let res: Record<string, unknown>;
+  try {
+    const { addCommand } = (await import(ADD_MOD.href)) as AddMod;
+    // Wakefield et al. 1998: Crossref's record carries its Retraction Watch notice (recorded).
+    res = (await addCommand.run({ args: { source: '10.1016/S0140-6736(97)11096-0', remap: true, section: '2', yolo: true } })) as Record<string, unknown>;
+  } finally {
+    (process.stderr as unknown as { write: typeof write }).write = write;
+    process.chdir(prev);
+  }
+  assert.equal(res['ok'], false);
+  assert.equal(res['exitCode'], 1, 'the mapping the user asked for was refused');
+  assert.equal(res['added'], true, 'the work itself is in the library');
+  assert.match(errs.join(''), /pensmith add: wakefield1998 is not mapped to any section — the citation verifier would not pass a citation of it \(retracted \(Retraction Watch\)\); a retracted source is never cited\./);
+  assert.ok(fs.readFileSync(methods, 'utf8').includes('assigned_sources: []'), 'section 2 never gets the retracted work');
+  assert.ok(fs.readFileSync(intro, 'utf8').includes('assigned_sources: []'));
+  const lib = JSON.parse(fs.readFileSync(path.join(root, '.paper', 'LIBRARY.json'), 'utf8')) as { entries: Array<{ citekey: string; retracted: boolean }> };
+  assert.equal(lib.entries.find((e) => e.citekey === 'wakefield1998')?.retracted, true);
+});
