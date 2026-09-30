@@ -233,3 +233,32 @@ Phase 19 changed the adapters' request URLs and research's shape (5–10 queries
 - `bin/lib/full-text.ts`: a blank `oa_url` is not an open-access PDF.
 - `tests/helpers/section-fixture.ts` writes a current-version LIBRARY.json (v2 entries through the library's own v2 → v3 migration), so a read never has to migrate — and rewrite — it.
 - `tests/mock-llm.test.ts` (the stub's queries are the topic's deterministic expansion, SRC-08), `tests/research-request-shape.test.ts` (the evaluator record carries `type` and `tier_hint`, SRC-09; the CLI case uses a recorded research query), `tests/bare-chain.test.ts` (the D-18-43 case's quoted source now has an open-access PDF, which Pass 3 cannot fetch offline — a quote from an abstract-only source is corrected at write), `tests/dry-run-boundary.test.ts` (the dry-run export is the format this host makes — DOCX with Pandoc, else Markdown — and a .docx's XML parts are checked for markers), `tests/add-identifiers.test.ts` (drains the session log before reading its http records; the doi.org RA case was flaky under a loaded full run).
+
+### 9.5 The cross-platform CI fixes (`v1/ci-fix-18`, merged after the Phase 19 merge)
+
+Kept whole: Node 24's readline pause-after-close (`prompts/numbered.ts`), the pdf-parse byte-offset fix, a Windows piped stdin read from st_mode's FIFO bits (`stdin-source.ts`), the macOS data-dir leaks (installed-offline's `HOME`, ssrf-pinning), installed-bin's EBUSY cleanup, llm-sandbox's session-log drain, the Windows fake TTY, c8 `merge-async`, the CI-09 step that runs after a failed test step, and `scripts/run-tests.mjs`'s own fingerprint of the real data dir. Applied to Phase 19's code:
+- **The PDF worker.** Phase 19 moved pdf-parse into `bin/lib/pdf-worker.ts`, which still retried a `Buffer.from` copy (a pooled Buffer at a non-zero byteOffset). The worker now parses a Uint8Array copy that owns its ArrayBuffer, and the retry is gone (19-CONTEXT D-19-22 amended). Before the fix, Node 24 failed `tests/pdf-identify.test.ts` with `bad XRef entry`; after it, `tests/pdf-text-bounds.test.ts` (views at offsets 1, 8, 1000, 4093 and pooled copies) and every PDF suite pass on Node 22 and 24.
+- **Context-free children.** `tests/pdf-worker.test.ts`'s seam-refusal child drops the test context, so it now points `HOME`, `USERPROFILE`, `XDG_DATA_HOME` and `LOCALAPPDATA` at a temp dir. Phase 19's built-CLI suites keep the test context (`tests/helpers/built-cli.ts` → `sb.spawnEnv`), and no other Phase 19 test drops it.
+
+### 9.6 Gate (after both merges; Linux, as root)
+
+| Step | Node 22.22.2 (pandoc 3.9 on PATH) | Node 24.21.0 (pandoc 3.9 on PATH) |
+|---|---|---|
+| `npm run prebuild`, `lint`, `typecheck`, `build` | exit 0 each | exit 0 each |
+| `git status --porcelain` after the build and after the tests | clean | clean |
+| `npm test` | 2384 tests: 2383 pass, 1 fail, 0 skipped, 0 todo, 0 cancelled | 2384 tests: 2383 pass, 1 fail, 0 skipped, 0 todo, 0 cancelled |
+| `npm run test:tier-contract` | 57/57 | 57/57 |
+| `npm run validate:manifests` | exit 0 | exit 0 |
+| `node scripts/e2e-smoke.mjs` | PASS=16, FINDING=0, FAIL=0 | PASS=16, FINDING=0, FAIL=0 |
+
+The one failure in every run is `tests/atomic-write.test.ts` "preserves OLD content on rename/write failure", which is root-only (`chmod 0o500` does not stop root; CLAUDE.md) and passes in CI. The runner's real-data-dir fingerprint (CI-09) reported no change. A final `node scripts/run-tests.mjs` on Node 24 without pandoc (the CI shape: the dry-run export falls back to Markdown) gave the same 2383 / 2384. Before the CI fixes were merged, the suite on Node 22 without pandoc ran 2383 tests: 2381 pass and 2 fail — the root-only case and the doi.org RA case of `tests/add-identifiers.test.ts`, a session-log flush race that is fixed (§9.4).
+
+### 9.7 Final status at the merge
+
+| Req | Final |
+|---|---|
+| SRC-01..05, SRC-07..17, GRND-17, SEC-02 (18) | **Complete** (unchanged; re-run by the §9.6 gate) |
+| GRND-14 | **Complete** (§9.1, §9.2) |
+| SRC-06 | **Pending**: only the keyed OpenAlex / Semantic Scholar live round trip, a maintainer item (§8.4) |
+
+Phase 19 is 19 of 20 Complete and 7 of 8 success criteria met; the ROADMAP checkbox stays unticked until SRC-06's keyed run is recorded. No CI run has been observed for this code yet (CI-06).
