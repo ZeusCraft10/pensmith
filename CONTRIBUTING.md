@@ -85,6 +85,8 @@ Adding or renaming an input tag is a template re-pin **plus** an edit of `PROMPT
 - Several tests spawn the **built** CLI or MCP server (`dist/`). Run `npm run build` after changing source.
 - Whole-workflow tests use `tests/helpers/e2e-chain.ts`: one project folder, an isolated data dir, the mock LLM configured through that data dir's `runtime.json`, per-slug call counts, and the recorded e2e corpus (below) for sources.
 - Run one file with `node --import tsx --test tests/<file>.test.ts`, or through the runner with `node scripts/run-tests.mjs tests/<file-or-dir>`.
+- A draft written under `PENSMITH_NO_LLM=1` carries the stub marker and is `PLACEHOLDER` to the verifier outside `--dry-run` (VRFY-24): a test that needs a draft to verify, compile or export uses the mock LLM (its default replies are the same contract stubs, unmarked), `--dry-run`, `write --no-verify` followed by a seeded draft, or a hand-written DRAFT.md — never a way around the verdict.
+- compile and done recompute every verdict over the text they process (D-20-23..25): a fixture's VERIFICATION.md and PLAN.md must agree with its draft and bibliography, and a compiled paper handed to `done` needs the compile record `done` checks (`tests/helpers/paper-cli-harness.ts` `writeCompileRecord`).
 - Every local test server (mock LLM, TLS/SNI and streaming servers, MockAgent helper, npm registry) lives in `tests/helpers/local-servers/` — the only place under `tests/` allowed to import `node:http` / `undici`.
 
 ### Data-dir isolation

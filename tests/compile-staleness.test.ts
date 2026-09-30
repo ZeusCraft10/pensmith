@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCompile } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { RECORDED_BIB } from './helpers/gate-paper.js';
 
 interface SectionSpec {
   n: number;
@@ -43,7 +44,9 @@ function seedPaper(specs: SectionSpec[]): string {
     join(root, '.paper', 'OUTLINE.md'),
     ['# Stale Fixture', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', ...rows, ''].join('\n'),
   );
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+  // Recorded works (VRFY-25: compile recomputes every section, so the citations
+  // must really verify — Crossref + Retraction Watch replay offline).
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), RECORDED_BIB);
   for (const s of specs) {
     const dir = join(root, '.paper', 'sections', `${String(s.n).padStart(2, '0')}-${s.slug}`);
     mkdirSync(dir, { recursive: true });
@@ -87,8 +90,8 @@ function seedPaper(specs: SectionSpec[]): string {
 
 test('D-08: a stale section triggers WARN + Pass 1+3 re-verify; all-pass → compile continues + records the event', async () => {
   const root = seedPaper([
-    { n: 1, slug: 'intro', draft: '# Intro\n\nGrounded [@smith2020].\n', assignedSources: ['smith2020'], stale: false },
-    { n: 2, slug: 'body', draft: '# Body\n\nGrounded [@jones2019].\n', assignedSources: ['jones2019'], stale: true },
+    { n: 1, slug: 'intro', draft: '# Intro\n\nGrounded [@lecun2015].\n', assignedSources: ['lecun2015'], stale: false },
+    { n: 2, slug: 'body', draft: '# Body\n\nGrounded [@aspelmeyer2009].\n', assignedSources: ['aspelmeyer2009'], stale: true },
   ]);
 
   const reVerified: number[] = [];
@@ -129,7 +132,7 @@ test('D-08: a stale section triggers WARN + Pass 1+3 re-verify; all-pass → com
 
 test('D-08: a stale section whose re-verify FAILS blocks compile (refuse, no DRAFT.md)', async () => {
   const root = seedPaper([
-    { n: 1, slug: 'intro', draft: '# Intro\n\nGrounded [@smith2020].\n', assignedSources: ['smith2020'], stale: true },
+    { n: 1, slug: 'intro', draft: '# Intro\n\nGrounded [@lecun2015].\n', assignedSources: ['lecun2015'], stale: true },
   ]);
 
   const result = await runCompile({
@@ -138,19 +141,19 @@ test('D-08: a stale section whose re-verify FAILS blocks compile (refuse, no DRA
     reVerify: async ({ n }: { n: number }) => {
       void n;
       // Re-verify surfaces a fresh FABRICATED on the stale section.
-      return { passed: false, failingCitekeys: ['smith2020'] };
+      return { passed: false, failingCitekeys: ['lecun2015'] };
     },
   });
 
   assert.equal(result.refused, true, 're-verify failure on a stale section must block compile');
-  assert.match((result.refuseReasons ?? []).join(' '), /smith2020/, 'refuse names the re-verify-flagged citekey');
+  assert.match((result.refuseReasons ?? []).join(' '), /lecun2015/, 'refuse names the re-verify-flagged citekey');
   assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), false, 'no DRAFT.md when staleness re-verify fails');
 });
 
 test('D-08: NO stale sections → re-verify seam is never called', async () => {
   const root = seedPaper([
-    { n: 1, slug: 'intro', draft: '# Intro\n\nGrounded [@smith2020].\n', assignedSources: ['smith2020'], stale: false },
-    { n: 2, slug: 'body', draft: '# Body\n\nGrounded [@jones2019].\n', assignedSources: ['jones2019'], stale: false },
+    { n: 1, slug: 'intro', draft: '# Intro\n\nGrounded [@lecun2015].\n', assignedSources: ['lecun2015'], stale: false },
+    { n: 2, slug: 'body', draft: '# Body\n\nGrounded [@aspelmeyer2009].\n', assignedSources: ['aspelmeyer2009'], stale: false },
   ]);
   let called = false;
   const result = await runCompile({
@@ -161,4 +164,18 @@ test('D-08: NO stale sections → re-verify seam is never called', async () => {
   assert.equal(called, false, 'fresh sections must not trigger re-verify');
   assert.equal(result.refused, false);
   assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), true);
+});
+
+test('VRFY-25 (D-20-23): a re-verify seam that answers "passed" is not the last word — the gate core recomputes the stale section and refuses a fabricated citation', async () => {
+  const root = seedPaper([
+    { n: 1, slug: 'intro', draft: '# Intro\n\nGrounded [@ghost2099].\n', assignedSources: ['ghost2099'], stale: true },
+  ]);
+  const result = await runCompile({
+    paperRoot: root,
+    yolo: true,
+    reVerify: async () => ({ passed: true, failingCitekeys: [] }),
+  });
+  assert.equal(result.refused, true, 'the recomputation refuses what the seam passed');
+  assert.match((result.refuseReasons ?? []).join(' '), /\[@ghost2099\] is FABRICATED/);
+  assert.equal(existsSync(join(root, '.paper', 'DRAFT.md')), false);
 });

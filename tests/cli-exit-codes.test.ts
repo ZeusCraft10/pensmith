@@ -131,7 +131,8 @@ test('RUN-09: a fabricated citation — verify 1, compile --yolo and done --yolo
   const noDraft = runCli(sb, root, ['done', '--yolo', '--format', 'md']);
   assert.equal(noDraft.status, EXIT_BLOCKED, `done (no DRAFT.md): ${noDraft.stdout}\n${noDraft.stderr}`);
   assert.match(noDraft.stdout, /BLOCKED — there is no compiled draft because compile refuses these sections/);
-  assert.match(noDraft.stdout, /section 01-intro: .*ghost2099|section 01-intro: VERIFICATION\.md Status is 'failed'/);
+  // VRFY-26: done names the section by its id and slug (STATE.json + OUTLINE.md), as compile does.
+  assert.match(noDraft.stdout, /section 1 \(intro\): VERIFICATION\.md Status is 'failed'/);
   assert.ok(!existsSync(join(root, '.paper', 'export')), 'a blocked done writes no export/');
 
   // done's own gate: a DRAFT.md placed by hand still cannot be exported.

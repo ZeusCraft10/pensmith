@@ -7,7 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -78,8 +78,24 @@ test('RUN-09 parity: a failed verification is EXIT_BLOCKED in the CLI and isErro
   assert.equal(result?.blocked, true);
 });
 
-test('RUN-09 parity: a successful write is exit 0 in the CLI and a plain result over MCP', async () => {
+test('RUN-09 parity: a successful verify is exit 0 in the CLI and a plain result over MCP', async () => {
   const sb = sandbox('parity-ok');
+  const roots = [sb.project('cli'), sb.project('mcp')];
+  for (const root of roots) {
+    writeState(root, [{ n: 1, slug: 'intro' }]);
+    writeOutline(root, [{ n: 1, slug: 'intro' }]);
+    writePlan(root, 1, 'intro', { status: 'written' });
+    // An introduction with no assigned sources that cites nothing verifies (VRFY-24).
+    writeFileSync(join(sectionDirOf(root, 1, 'intro'), 'DRAFT.md'), '# Intro\n\nThis paper argues one point and cites nothing yet.\n');
+  }
+  const cli = runCli(sb, roots[0]!, ['verify', '1']);
+  const mcp = await callTool(sb, roots[1]!, 'pensmith_verify', { n: 1, yolo: true });
+  assertParity('verify ok', cli.status, mcp, EXIT_OK, 'EXIT_OK');
+  for (const root of roots) assert.match(readFileSync(join(sectionDirOf(root, 1, 'intro'), 'VERIFICATION.md'), 'utf8'), /^Status: verified$/m);
+});
+
+test('RUN-09 parity (VRFY-24): a stub write under PENSMITH_NO_LLM is EXIT_BLOCKED in the CLI and isError exit_code 4 over MCP — its chained verify finds PLACEHOLDER', async () => {
+  const sb = sandbox('parity-stub-write');
   const roots = [sb.project('cli'), sb.project('mcp')];
   for (const root of roots) {
     writeState(root, [{ n: 1, slug: 'intro' }]);
@@ -88,8 +104,11 @@ test('RUN-09 parity: a successful write is exit 0 in the CLI and a plain result 
   }
   const cli = runCli(sb, roots[0]!, ['write', '1']);
   const mcp = await callTool(sb, roots[1]!, 'pensmith_write', { n: 1, yolo: true });
-  assertParity('write ok', cli.status, mcp, EXIT_OK, 'EXIT_OK');
-  for (const root of roots) assert.ok(existsSync(join(sectionDirOf(root, 1, 'intro'), 'DRAFT.md')));
+  assertParity('stub write', cli.status, mcp, EXIT_BLOCKED, 'EXIT_BLOCKED');
+  for (const root of roots) {
+    assert.ok(existsSync(join(sectionDirOf(root, 1, 'intro'), 'DRAFT.md')), 'the draft is written');
+    assert.match(readFileSync(join(sectionDirOf(root, 1, 'intro'), 'VERIFICATION.md'), 'utf8'), /^- draft: \*\*PLACEHOLDER\*\*/m);
+  }
 });
 
 test('RUN-09 parity: an expected failure (a PLAN.md from a newer pensmith) is EXIT_ERROR with the same one line', async () => {

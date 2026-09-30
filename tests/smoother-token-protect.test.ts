@@ -21,6 +21,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCompile, type SmoothBoundaryInput } from '../bin/lib/compile.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { RECORDED_BIB } from './helpers/gate-paper.js';
 
 function seedTwoSection(): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-token-protect-'));
@@ -32,12 +33,15 @@ function seedTwoSection(): string {
       '',
       '| # | slug | title | depends_on | word target | assigned_sources |',
       '| --- | --- | --- | --- | --- | --- |',
-      '| 1 | intro | Intro | | 300 | smith2020 |',
-      '| 2 | body | Body | | 300 | jones2019 |',
+      '| 1 | intro | Intro | | 300 | lecun2015 |',
+      '| 2 | body | Body | | 300 | aspelmeyer2009 |',
       '',
     ].join('\n'),
   );
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '');
+  // Recorded works: compile recomputes every section's gate (VRFY-25), so the
+  // citations must really verify (Crossref + Retraction Watch replay offline).
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), RECORDED_BIB);
+  writeFileSync(join(root, '.paper', 'STATE.json'), JSON.stringify({ $schemaVersion: 3, paperId: 'token-protect', createdAt: '2026-01-01T00:00:00.000Z', sections: [{ n: 1, slug: 'intro' }, { n: 2, slug: 'body' }] }));
   const seed = (n: number, slug: string, draft: string, sources: string[]): void => {
     const dir = join(root, '.paper', 'sections', `${String(n).padStart(2, '0')}-${slug}`);
     mkdirSync(dir, { recursive: true });
@@ -52,8 +56,8 @@ function seedTwoSection(): string {
       [`# VERIFICATION (Section ${n}, ${slug})`, '', 'Status: verified', '', '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)', '', `- ${sources[0]}: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed`, '', ''].join('\n'),
     );
   };
-  seed(1, 'intro', '# Intro\n\nThe last paragraph of the intro cites [@smith2020].\n', ['smith2020']);
-  seed(2, 'body', '# Body\n\nThe first paragraph of the body cites [@jones2019].\n', ['jones2019']);
+  seed(1, 'intro', '# Intro\n\nThe last paragraph of the intro cites [@lecun2015].\n', ['lecun2015']);
+  seed(2, 'body', '# Body\n\nThe first paragraph of the body cites [@aspelmeyer2009].\n', ['aspelmeyer2009']);
   return root;
 }
 
@@ -73,8 +77,8 @@ test('D-13: a smoother that DROPS a placeholder → raw-concat fallback + zero c
 
   const draft = readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8');
   // Both real citekeys must survive intact (zero mutation — the invariant).
-  assert.match(draft, /\[@smith2020\]/, 'flagged-free citation [@smith2020] must survive a drift-rejected boundary');
-  assert.match(draft, /\[@jones2019\]/, 'citation [@jones2019] must survive a drift-rejected boundary');
+  assert.match(draft, /\[@lecun2015\]/, 'flagged-free citation [@lecun2015] must survive a drift-rejected boundary');
+  assert.match(draft, /\[@aspelmeyer2009\]/, 'citation [@aspelmeyer2009] must survive a drift-rejected boundary');
   // No placeholder token may leak into the final draft.
   assert.ok(!/\{\{cite_/.test(draft), 'no {{cite_K_M}} placeholder may leak into the compiled draft');
   // The original prose (raw concat) must be present, not the drifted smoother output.
@@ -99,8 +103,8 @@ test('D-13: a clean smoother (placeholders intact) is accepted and stitched in',
   assert.equal(result.refused, false);
   const draft = readFileSync(join(root, '.paper', 'DRAFT.md'), 'utf8');
   // Citations restored from placeholders → real tokens present, no placeholder leak.
-  assert.match(draft, /\[@smith2020\]/);
-  assert.match(draft, /\[@jones2019\]/);
+  assert.match(draft, /\[@lecun2015\]/);
+  assert.match(draft, /\[@aspelmeyer2009\]/);
   assert.ok(!/\{\{cite_/.test(draft), 'placeholders must be restored to real tokens, none leaking');
 });
 

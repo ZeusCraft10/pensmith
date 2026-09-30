@@ -25,6 +25,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { assertEquivalent } from './lib/assert-tier-equivalent.js';
 import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { parseBlockingVerdictRows } from '../bin/lib/verify/verdict-rows.js';
 import { UX02_VERBS } from '../bin/lib/verbs.js';
 import { pensmithDataDir } from '../bin/lib/paths.js';
 import { sources } from '../bin/lib/sources/index.js';
@@ -418,7 +419,9 @@ const PHASE_3_CASES: Phase3Case[] = [
     // Task 4 extends this with the full 3-section deps-b→a,c→a parity assertions.
     name: 'write-wave',
     mcpTool: null,
-    cliArgs: ['write', '--max-parallel', '1', '--yolo'],
+    // VRFY-24 (Phase 20): --no-verify — this case pins the wave SCHEDULING; a stub
+    // draft's chained verify would be PLACEHOLDER (unverifiable, exit 4).
+    cliArgs: ['write', '--max-parallel', '1', '--no-verify', '--yolo'],
     verbFile: 'bin/cli/write.ts',
     // Last-wave section DRAFT.md of the 2-section fixture seeded below.
     expectedArtifact: '.paper/sections/02-beta/DRAFT.md',
@@ -546,11 +549,15 @@ async function runMcpToolResultInDir(
  * carries a blocking Pass-1 UNVERIFIABLE row; else 0.
  */
 function expectedPhase3Exit(caseName: string, root: string): number {
-  if (caseName === 'verify-section') {
+  // verify, and write (which chains verify, GRND-15), exit 4 on a blocking
+  // verification: Status failed, or any blocking row — an UNVERIFIABLE lookup,
+  // or (Phase 20, VRFY-24) the PLACEHOLDER row of a stub draft written with
+  // PENSMITH_NO_LLM=1, as both tiers run here.
+  if (caseName === 'verify-section' || caseName === 'write-section') {
     const vpath = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`, 'VERIFICATION.md');
     const md = existsSync(vpath) ? readFileSync(vpath, 'utf8') : '';
     const status = /^Status:\s*(\S+)/m.exec(md)?.[1] ?? '';
-    return status === 'failed' || /^-\s*\S+:\s*\*\*UNVERIFIABLE(?:-NETWORK)?\*\*/m.test(md) ? 4 : 0;
+    return status === 'failed' || parseBlockingVerdictRows(md).length > 0 ? 4 : 0;
   }
   return 0;
 }
@@ -935,7 +942,7 @@ test('tier-contract: write-wave parity — both tiers schedule all sections to t
 
   // --- Tier 1 (default --max-parallel, bounded parallel): same final state ---
   const t1Root = seedWaveFixture();
-  const t1 = runCliCaptureBoth(['write', '--yolo'], t1Root);
+  const t1 = runCliCaptureBoth(['write', '--no-verify', '--yolo'], t1Root);
   assert.equal(
     t1.exitCode,
     0,
@@ -1131,13 +1138,14 @@ function seedWaveDepsFixture(): string {
 test('tier-contract: write-wave 3-section deps parity — identical settled state, no serial WARN (D-02, D-24, GRND-16)', { skip: !writeWaveVerbExists }, () => {
   // --- Tier 2 (forced serial --max-parallel 1) ---
   const t2Root = seedWaveDepsFixture();
-  const t2 = runCliCaptureBoth(['write', '--max-parallel', '1', '--yolo'], t2Root);
+  // VRFY-24: --no-verify — the deps parity pins scheduling; stub drafts would be PLACEHOLDER.
+  const t2 = runCliCaptureBoth(['write', '--max-parallel', '1', '--no-verify', '--yolo'], t2Root);
   assert.equal(t2.exitCode, 0, `write-wave deps Tier 2: exit 0 expected; got ${t2.exitCode}. stderr: ${t2.stderr.slice(0, 400)}`);
   assert.doesNotMatch(t2.stderr, /max-parallel ignored/i, 'write-wave deps Tier 2: --max-parallel 1 is honored — no "ignored" WARN (GRND-16)');
 
   // --- Tier 1 (default --max-parallel 5, b/c parallel) ---
   const t1Root = seedWaveDepsFixture();
-  const t1 = runCliCaptureBoth(['write', '--max-parallel', '5', '--yolo'], t1Root);
+  const t1 = runCliCaptureBoth(['write', '--max-parallel', '5', '--no-verify', '--yolo'], t1Root);
   assert.equal(t1.exitCode, 0, `write-wave deps Tier 1: exit 0 expected; got ${t1.exitCode}. stderr: ${t1.stderr.slice(0, 400)}`);
 
   // Both tiers reach IDENTICAL final per-section state (all 3 DRAFT.md written
@@ -1279,40 +1287,35 @@ const DONE_CASE = PHASE_3_CASES.find((c) => c.name === 'done')!;
 const doneVerbExists = existsSync(new URL(`../${DONE_CASE.verbFile}`, import.meta.url));
 
 /**
- * Seed a fixture for `pensmith done`: a compiled `.paper/DRAFT.md`, a
- * `.paper/CITATIONS.bib` (bundled into the export dir, DONE-08), and one section
- * `VERIFICATION.md` whose ## Pass-2 table carries an UNSUPPORTED row (so the
- * DONE-09 gate HAS Pass-2 data to feed — exercised under --yolo here, which
- * bypasses the prompt while keeping the pipeline path identical).
+ * Seed a fixture for `pensmith done`: a REAL verified and compiled paper
+ * (VRFY-26, VRFY-27 — done exports only what a gated compile wrote from
+ * verified sections: STATE.json + OUTLINE.md, a section citing a recorded
+ * source, `verify` then `compile` through the CLI), whose section
+ * VERIFICATION.md carries an UNSUPPORTED Pass-2 row (so the DONE-09 gate HAS
+ * Pass-2 data to feed — exercised under --yolo here, which answers the
+ * `unsupported-claims` gate while keeping the pipeline path identical).
  */
 function seedDoneFixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-tier-done-'));
-  mkdirSync(join(root, '.paper'), { recursive: true });
+  const pDir = join(root, '.paper');
+  mkdirSync(pDir, { recursive: true });
+  writeFileSync(join(pDir, 'STATE.json'), JSON.stringify({ $schemaVersion: 3, paperId: 'tier-done', createdAt: '2026-01-01T00:00:00.000Z', sections: [{ n: 1, slug: 'intro' }] }) + '\n');
+  writeFileSync(join(pDir, 'OUTLINE.md'), '# Outline\n\n| # | slug | title | depends_on | word target | assigned_sources |\n| --- | --- | --- | --- | --- | --- |\n| 1 | intro | intro |  | 300 | lecun2015 |\n');
   writeFileSync(
-    join(root, '.paper', 'DRAFT.md'),
-    '# Paper\n\nThe transformer relies solely on attention mechanisms [@vaswani2017].\n',
+    join(pDir, 'CITATIONS.bib'),
+    '@article{lecun2015,\n  title = {Deep learning},\n  author = {LeCun, Yann and Bengio, Yoshua and Hinton, Geoffrey},\n  journal = {Nature},\n  year = {2015},\n  doi = {10.1038/nature14539}\n}\n',
   );
-  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '@article{vaswani2017, title={Attention}}\n');
-  const sectionDir = join(root, '.paper', 'sections', '01-intro');
+  const sectionDir = join(pDir, 'sections', '01-intro');
   mkdirSync(sectionDir, { recursive: true });
-  writeFileSync(
-    join(sectionDir, 'VERIFICATION.md'),
-    [
-      '# Section Verification — 01-intro',
-      '',
-      // A verified section carries a Status line (GATE-01 parity); the
-      // unconditional export gate (audit #3/#14) requires it. UNSUPPORTED is an
-      // advisory Pass-2 verdict (pipe table) and is NOT a blocking verdict.
-      'Status: verified',
-      '',
-      '## Pass-2 (claim support, advisory — LLM-judged)',
-      '',
-      '| Citekey | Claim Sentence | Verdict | Rationale |',
-      '|---------|---------------|---------|-----------|',
-      '| smith2020 | The effect persists across all populations. | **UNSUPPORTED** | Single cohort only. |',
-      '',
-    ].join('\n'),
-  );
+  writeFileSync(join(sectionDir, 'PLAN.md'), "---\nschema_version: 2\nsection: 1\nslug: intro\ntitle: intro\ndepends_on: []\nassigned_sources: ['lecun2015']\nverified_against_draft_hash: null\nstatus: written\n---\n\n## Brief\n");
+  writeFileSync(join(sectionDir, 'DRAFT.md'), '# Paper\n\nDeep networks learn layered representations of data [@lecun2015].\n');
+  const v = runCliInDir(['verify', '1'], root);
+  assert.equal(v.exitCode, 0, `done fixture: verify 1 must pass: ${v.stdout} ${v.stderr}`);
+  // The judge's verdict for this fixture: UNSUPPORTED (the no-LLM stub writes UNCLEAR).
+  const vpath = join(sectionDir, 'VERIFICATION.md');
+  writeFileSync(vpath, readFileSync(vpath, 'utf8').replace(/\| \*\*UNCLEAR\*\* \| [^|\n]* \|/, '| **UNSUPPORTED** | Single cohort only. |'));
+  const c = runCliInDir(['compile', '--yolo'], root);
+  assert.equal(c.exitCode, 0, `done fixture: compile must pass: ${c.stdout} ${c.stderr}`);
   return root;
 }
 

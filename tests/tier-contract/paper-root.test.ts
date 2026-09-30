@@ -31,10 +31,16 @@ test('RUN-13 parity: paper://state and paper://section/3 read the paper the CLI 
   const outline = runCli(sb, root, ['outline', '--yolo']);
   assert.equal(outline.status, 0, `outline registers the existing table: ${outline.stderr}`);
   writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '@article{real2020, title={A Real Paper}, author={Real, Rita}, year={2020}}\n');
-  for (const verb of [['plan', '3'], ['write', '3'], ['verify', '3']]) {
+  // VRFY-24 (Phase 20): a PENSMITH_NO_LLM draft is stub text (PLACEHOLDER), so
+  // write drafts without its chained verify and the section gets the user's
+  // own prose before `verify 3` — the paper Tier 1 then reads is a verified one.
+  for (const verb of [['plan', '3'], ['write', '3', '--no-verify']]) {
     const r = runCli(sb, root, verb);
     assert.equal(r.status, 0, `${verb.join(' ')}: ${r.stdout}\n${r.stderr}`);
   }
+  writeFileSync(join(sectionDirOf(root, 3, 'methods'), 'DRAFT.md'), '# Methods\n\nWe describe the method in plain words, citing nothing in this section.\n');
+  const verified = runCli(sb, root, ['verify', '3']);
+  assert.equal(verified.status, 0, `verify 3: ${verified.stdout}\n${verified.stderr}`);
   const stateOnDisk = JSON.parse(readFileSync(join(root, '.paper', 'STATE.json'), 'utf8')) as { paperId: string; sections: unknown[] };
   assert.equal(stateOnDisk.sections.length, 5, 'the CLI registered five sections in .paper/STATE.json');
 

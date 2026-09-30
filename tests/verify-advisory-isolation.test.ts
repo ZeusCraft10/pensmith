@@ -28,12 +28,19 @@ const verifyPath = fileURLToPath(new URL('../bin/cli/verify.ts', import.meta.url
 test('advisory-isolation (A): bin/cli/verify.ts never sets hasFail/status from a pass2/pass4 expression (VRFY-07)', () => {
   const src = readFileSync(verifyPath, 'utf-8');
 
-  // The blocking machinery must still exist (sanity: we are guarding the right file).
-  assert.ok(src.includes('hasFail'), 'verify.ts must still compute the blocking hasFail flag');
+  // The blocking machinery must still exist (sanity: we are guarding the right
+  // file). Since Phase 20 (D-20-05) the status and the blocked flag come from the
+  // ONE gate core (verify/gate.ts recomputeGate) — Pass 1, Pass 3 and the draft
+  // checks — and are frozen before any advisory pass runs.
+  assert.ok(src.includes('recomputeGate('), 'verify.ts must still compute the blocking verdict through the gate core');
+  const frozen = src.indexOf('const status = gate.outcome.status;');
+  assert.ok(frozen > 0, 'verify.ts freezes the status from the gate core');
+  assert.ok(src.indexOf('runPass2(') > frozen && src.indexOf('runPass4(') > frozen, 'the advisory passes run after the status is frozen');
 
-  // No assignment of hasFail / status from a pass2/pass4 expression.
+  // No assignment of hasFail / status / blocked from a pass2/pass4 expression.
   assert.ok(!/hasFail\s*=.*pass[24]/.test(src), 'hasFail must NOT be assigned from a pass2/pass4 expression (advisory-only)');
   assert.ok(!/status\s*=.*pass[24]/.test(src), 'status must NOT be assigned from a pass2/pass4 expression (advisory-only)');
+  assert.ok(!/blocked\s*=.*pass[24]/.test(src), 'blocked must NOT be assigned from a pass2/pass4 expression (advisory-only)');
 
   // Forward-looking guard (stays meaningful after Plan 05-05 wires the advisory
   // calls): if runPass2 / runPass4 ever appear, they must NEVER share a line with
@@ -44,6 +51,7 @@ test('advisory-isolation (A): bin/cli/verify.ts never sets hasFail/status from a
     if (!mentionsPass) continue;
     assert.ok(!/hasFail\s*=/.test(line), `runPass2/runPass4 must not appear on the same line as "hasFail =": ${line.trim()}`);
     assert.ok(!/status\s*=/.test(line), `runPass2/runPass4 must not appear on the same line as "status =": ${line.trim()}`);
+    assert.ok(!/blocked\s*=/.test(line), `runPass2/runPass4 must not appear on the same line as "blocked =": ${line.trim()}`);
   }
 });
 

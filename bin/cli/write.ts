@@ -54,7 +54,8 @@ import { parseOutline } from '../lib/outline-parse.js';
 import type { SectionNode } from '../lib/schemas/wave-graph.js';
 import { TutorialSubscriber } from '../lib/tutorial.js';
 import { isReplayActive } from '../lib/replay.js';
-import { complete, assertLlmConfigured, correctiveMessages, isFatalLlmError, type ChatMessage } from '../lib/anthropic.js';
+import { complete, assertLlmConfigured, correctiveMessages, isFatalLlmError, isNoLlmMode, type ChatMessage } from '../lib/anthropic.js';
+import { STUB_DRAFT_MARKER } from '../lib/verify/gate.js';
 import { requestHints } from '../lib/prompt-request.js';
 import { tryLoadLibrary } from '../lib/library.js';
 import type { SourceContextInput } from '../lib/source-context.js';
@@ -222,6 +223,13 @@ async function writeOneSection(
     throw new DraftContainmentError(reason, id, path.relative(paperRoot, rejectedPath).split(path.sep).join('/'));
   }
 
+  // VRFY-24 (D-20-21): a draft produced with no model (PENSMITH_NO_LLM=1 or
+  // --dry-run) is marked as stub text on its first line. Outside --dry-run the
+  // gate core reads it as PLACEHOLDER (unverifiable, blocking), so stub prose
+  // is never verified, compiled or exported as the paper; a dry-run compile
+  // removes the marker. A model's draft — the RUN-21 mock LLM's too — is never
+  // marked.
+  if (isNoLlmMode()) draft = `${STUB_DRAFT_MARKER}\n\n${draft}`;
   await atomicWriteFile(draftPath, draft);
   if (existsSync(rejectedPath)) rmSync(rejectedPath, { force: true });
 

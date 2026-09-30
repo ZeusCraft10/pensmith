@@ -25,6 +25,7 @@
 
 import { defineCommand } from 'citty';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
 import { runPass3 } from '../lib/verify/pass3.js';
@@ -32,19 +33,36 @@ import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
 import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
 import { exportDraft, runHumanizer, type ExportFormat } from '../lib/exporter.js';
-import { paperDir, projectRoot, SECTION_ARCHIVE_DIRNAME } from '../lib/paths.js';
+import { paperDir, projectRoot, sectionDraft, sectionPlan, sectionVerification } from '../lib/paths.js';
 import { parseIntakeMd } from '../lib/intake-parse.js';
 import { resolveStyleName, parseBibFileAt } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
 import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
 import { extractCitedKeysForVerification } from '../lib/citation-token.js';
-import { sectionVerificationReasons } from '../lib/verify/verdict-rows.js';
 import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
 import { sectionWriteBlockReason } from '../lib/plan-status.js';
 import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
 import { blocksCompile, PASS2_TABLE_HEADER, PASS2_TABLE_HEADER_V1 } from '../lib/verify/verdicts.js';
+import { computeDraftHash } from '../lib/draft-hash.js';
+import { outlineIdentitiesSync, registeredSectionsSync, sectionRegistryProblem, type SectionIdentity } from '../lib/section-registry.js';
+import { compileRecordProblems } from '../lib/compile-inputs.js';
+import { verificationRecordReasons } from '../lib/verify/verification-md.js';
+import {
+  recomputeGate,
+  gateRefusals,
+  loadBibliography,
+  recheckKeys,
+  type AcceptanceSet,
+  type AcceptedQuote,
+  type ByoQuote,
+  type GateResult,
+  type LoadedBibliography,
+} from '../lib/verify/gate.js';
+import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.js';
+import { readQuoteAcceptances, sectionDirOfPlan } from '../lib/quote-acceptance.js';
+import { recordLastVerified, LibraryNotFoundError } from '../lib/library.js';
 
 // ---------------------------------------------------------------------------
 // DONE-09 gate-issue collection
@@ -170,18 +188,21 @@ export async function runDoneGate(input: {
 // ---------------------------------------------------------------------------
 
 /**
- * Run the whole-paper Pass 4 orphan audit on the compiled `.paper/DRAFT.md`
- * (DONE-01). Reads the draft via paperDir; a missing draft yields [] (the
- * caller surfaces the missing-draft error separately). runPass4 is deterministic
- * and offline under PENSMITH_NO_LLM=1 (CI path). Never throws.
+ * Run the whole-paper Pass 4 orphan audit (DONE-01, VRFY-23) over `text` — the
+ * exact text done exports (FINAL.md after the humanizer, else the compiled
+ * DRAFT.md) — or, without it, the compiled `.paper/DRAFT.md` (a missing draft
+ * yields []; the caller surfaces the missing-draft error separately). runPass4
+ * is deterministic and offline under PENSMITH_NO_LLM=1 (CI path). Never throws.
  */
-export async function runWholePaperPass4(paperRoot: string): Promise<Pass4Result[]> {
-  const draftPath = join(paperDir(paperRoot), 'DRAFT.md');
+export async function runWholePaperPass4(paperRoot: string, text?: string): Promise<Pass4Result[]> {
   let draftMd: string;
-  try {
-    draftMd = readFileSync(draftPath, 'utf8');
-  } catch {
-    return [];
+  if (text !== undefined) draftMd = text;
+  else {
+    try {
+      draftMd = readFileSync(join(paperDir(paperRoot), 'DRAFT.md'), 'utf8');
+    } catch {
+      return [];
+    }
   }
   try {
     return await runPass4(draftMd, { n: 0 });
@@ -192,7 +213,7 @@ export async function runWholePaperPass4(paperRoot: string): Promise<Pass4Result
 }
 
 // ---------------------------------------------------------------------------
-// UNCONDITIONAL export blocking gate (audit #3/#14)
+// UNCONDITIONAL export blocking gate (audit #3/#14; Phase 20 VRFY-26, VRFY-27)
 // ---------------------------------------------------------------------------
 
 export interface ExportBlock {
@@ -200,106 +221,185 @@ export interface ExportBlock {
   reasons: string[];
   /**
    * The subset of `reasons` that are verifier refusals of a section that WAS
-   * verified (a Status: failed, a blocking verdict row, a --dry-run
-   * verification) — as opposed to a section never verified or no sections.
+   * verified (a Status: failed, a --dry-run verification, a failed PLAN.md
+   * status) — as opposed to a section never verified, a stale one or no
+   * sections.
    */
   verdictReasons?: string[];
 }
 
-/**
- * Re-assert the Core Value at EXPORT time (audit #3/#14). Before this gate,
- * compile was the ONLY component running the FABRICATED/MIS-CITED/NOT_FOUND
- * refuse-gate; `done` trusted that compile had gated and re-read DRAFT.md without
- * re-checking. That trust is unsound because `done` is independently reachable
- * (explicit `done`, bare `/pensmith` via router.ts:217, `next`), `done --raw`
- * skips GATE-04 entirely (the old re-check only fired when the humanizer ran),
- * and a section can become UNCLEAN after compile but before done — so a
- * FABRICATED/MIS-CITED citation could reach the deliverable.
- *
- * This gate re-scans every `.paper/sections/<*>/VERIFICATION.md` with the SAME
- * tested `parseVerdictRows` parser compile uses, and blocks export when:
- *   - a section carries a blocking verdict row (FABRICATED/MIS-CITED/NOT_FOUND),
- *   - a section's VERIFICATION.md has no `Status:` line (never verified —
- *     GATE-01 parity with compile.ts:263), or
- *   - there are NO section VERIFICATION.md files at all (a hand-placed/stale
- *     DRAFT.md that was never produced by a gated compile — #14).
- *
- * It is UNCONDITIONAL: neither `--raw` nor `--yolo` bypasses it (per the PRD §14
- * non-negotiable — verifier gates are unconditional; `--yolo` skips ONLY the
- * advisory DONE-09 confirmation). Deterministic, offline, never throws.
- */
-/** The FEED-04 write block of a section's PLAN.md (plan-status.ts), or null (absent or unreadable: the VERIFICATION.md gate decides). */
-function planWriteBlock(planPath: string): string | null {
+/** One registered section as done reads it (VRFY-26: STATE.json + OUTLINE.md, never a directory listing). */
+export interface DoneSection {
+  readonly identity: SectionIdentity;
+  /** `1`, `1a`. */
+  readonly id: string;
+  readonly planPath: string;
+  readonly assignedSources: string[];
+  /** PLAN.md verified_against_draft_hash, or null. */
+  readonly verifiedHash: string | null;
+  /** computeDraftHash of the section's DRAFT.md now, or null when it has none. */
+  readonly currentDraftHash: string | null;
+}
+
+/** The PLAN.md frontmatter of a section, or null (absent or unreadable). Never throws. */
+function planFrontmatter(planPath: string): Record<string, unknown> | null {
   if (!existsSync(planPath)) return null;
   try {
-    const fm = loadFrontmatterDocSync('plan', planPath).frontmatter;
-    const n = typeof fm['section'] === 'number' ? fm['section'] : 0;
-    const suffix = typeof fm['suffix'] === 'string' ? fm['suffix'] : undefined;
-    return sectionWriteBlockReason(fm, n > 0 ? formatSectionId(sectionIdOf(n, suffix)) : '<n>');
+    return loadFrontmatterDocSync('plan', planPath).frontmatter;
   } catch {
     return null;
   }
 }
 
-export function runExportBlockingGate(paperRoot: string): ExportBlock {
-  const reasons: string[] = [];
-  const sectionsDir = join(paperDir(paperRoot), 'sections');
-
-  let dirNames: string[] = [];
-  try {
-    dirNames = readdirSync(sectionsDir, { withFileTypes: true })
-      // GRND-09: `sections/_archive/` holds sections a re-outline dropped —
-      // they are not part of the paper, so the gate does not read them.
-      .filter((d) => d.isDirectory() && d.name !== SECTION_ARCHIVE_DIRNAME)
-      .map((d) => d.name)
-      .sort();
-  } catch {
-    dirNames = [];
+/**
+ * The sections compile compiles, with what done checks of each: the ones
+ * STATE.json registers (OUTLINE.md must list the same — sectionRegistryProblem),
+ * or OUTLINE.md's rows for a paper whose STATE.json registers none (compile
+ * compiles those too). Never a directory listing. Never throws.
+ */
+export function doneSections(paperRoot: string): DoneSection[] {
+  const out: DoneSection[] = [];
+  const registered = registeredSectionsSync(paperRoot);
+  const identities = registered !== null && registered.length > 0 ? registered : (outlineIdentitiesSync(paperRoot) ?? []);
+  for (const identity of identities) {
+    const id = formatSectionId(sectionIdOf(identity.n, identity.suffix));
+    const planPath = sectionPlan(identity.n, identity.slug, paperRoot);
+    const fm = planFrontmatter(planPath);
+    const assignedSources = Array.isArray(fm?.['assigned_sources']) ? (fm['assigned_sources'] as unknown[]).map(String) : [];
+    const rawHash = fm?.['verified_against_draft_hash'];
+    let currentDraftHash: string | null = null;
+    try {
+      currentDraftHash = computeDraftHash(readFileSync(sectionDraft(identity.n, identity.slug, paperRoot)), assignedSources);
+    } catch {
+      currentDraftHash = null;
+    }
+    out.push({ identity, id, planPath, assignedSources, verifiedHash: typeof rawHash === 'string' ? rawHash : null, currentDraftHash });
   }
+  return out;
+}
 
-  // A compiled DRAFT.md with NO section directories was not produced by a gated
-  // compile — refuse rather than export a hand-placed / stale draft (#14).
-  if (dirNames.length === 0) {
+/**
+ * Re-assert the Core Value at EXPORT time from what the section records say
+ * (audit #3/#14, VRFY-26, VRFY-27). done is independently reachable (explicit
+ * `done`, bare `/pensmith`, `next`), so it never trusts that compile gated.
+ * The sections come from STATE.json and OUTLINE.md (section-registry.ts,
+ * doneSections) — never from a directory listing — and done refuses when:
+ *   - OUTLINE.md and STATE.json disagree, or the paper has no section;
+ *   - a section has no PLAN.md, no DRAFT.md or no VERIFICATION.md;
+ *   - a section's last write failed or is unfinished (FEED-04);
+ *   - its VERIFICATION.md has no Status line, says `failed`, or was written
+ *     under --dry-run (outside --dry-run, RUN-27); its PLAN.md says `failed`;
+ *   - it is stale: its verified_against_draft_hash is not the hash of its
+ *     DRAFT.md now ("stale: §1 changed since verification — re-verify and
+ *     recompile").
+ * These local records can only ADD refusals (D-20-04): the verdicts
+ * themselves are recomputed by the gate core over the exact text done
+ * exports (recomputeExportGate). UNCONDITIONAL: neither `--raw` nor `--yolo`
+ * bypasses it. Deterministic, offline, never throws.
+ */
+export function runExportBlockingGate(paperRoot: string): ExportBlock {
+  const registry = sectionRegistryProblem(paperRoot);
+  if (registry !== null) return { blocked: true, reasons: [registry], verdictReasons: [] };
+  const sections = doneSections(paperRoot);
+  if (sections.length === 0) {
     return {
       blocked: true,
-      reasons: [
-        "no verified sections found under .paper/sections/ — this DRAFT.md was not produced by a gated compile; run 'pensmith compile' first",
-      ],
+      reasons: ["no sections are registered for this paper — this DRAFT.md was not produced by a gated compile; run 'pensmith outline' and 'pensmith compile' first"],
+      verdictReasons: [],
     };
   }
-
+  const reasons: string[] = [];
   const verdictReasons: string[] = [];
-  for (const name of dirNames) {
-    // FEED-04: a failed or unfinished write left an OLDER draft in place; the
-    // compiled DRAFT.md holds that older draft, so it must not be exported.
-    const writeBlock = planWriteBlock(join(sectionsDir, name, 'PLAN.md'));
-    if (writeBlock !== null) reasons.push(`section ${name}: ${writeBlock}`);
-    const vpath = join(sectionsDir, name, 'VERIFICATION.md');
-    // A section directory with NO VERIFICATION.md was never verified. It must
-    // BLOCK, never be invisible — filtering missing files out would let an
-    // unverified section ride alongside a clean one (CodeRabbit #14).
-    if (!existsSync(vpath)) {
-      reasons.push(`section ${name}: missing VERIFICATION.md (section never verified)`);
+  const dryRun = networkMode().dryRun;
+  for (const s of sections) {
+    const label = `section ${s.id} (${s.identity.slug})`;
+    const fm = planFrontmatter(s.planPath);
+    if (fm === null) {
+      reasons.push(`${label}: missing or unreadable PLAN.md — run \`pensmith plan ${s.id}\``);
       continue;
     }
-    let md = '';
+    // FEED-04: a failed or unfinished write left an OLDER draft in place; the
+    // compiled DRAFT.md holds that older draft, so it must not be exported.
+    const writeBlock = sectionWriteBlockReason(fm, s.id);
+    if (writeBlock !== null) reasons.push(`${label}: ${writeBlock}`);
+    if (s.currentDraftHash === null) {
+      reasons.push(`${label}: missing DRAFT.md — run \`pensmith write ${s.id}\``);
+      continue;
+    }
+    const vpath = sectionVerification(s.identity.n, s.identity.slug, paperRoot);
+    let md: string | null = null;
     try {
-      md = readFileSync(vpath, 'utf8');
+      md = existsSync(vpath) ? readFileSync(vpath, 'utf8') : null;
     } catch {
       md = '';
     }
-    // The SAME per-section gate compile's refuse-gate runs (verdict-rows.ts
-    // sectionVerificationReasons): no Status line, `Status: failed` (fail
-    // CLOSED even when no verdict row parses), a --dry-run verification outside
-    // --dry-run (RUN-27), and every blocking verdict row of any citekey shape
-    // (UNVERIFIABLE rows say "re-run online", D-17-07).
-    for (const reason of sectionVerificationReasons(md, networkMode().dryRun)) {
-      reasons.push(`section ${name}: ${reason}`);
-      verdictReasons.push(`section ${name}: ${reason}`);
+    // A section with NO VERIFICATION.md was never verified. It must BLOCK,
+    // never be invisible (CodeRabbit #14).
+    const record = verificationRecordReasons(md, s.id, s.currentDraftHash, dryRun);
+    if (fm['status'] === 'failed') record.push(`PLAN.md status is 'failed' — repair the section, then \`pensmith verify ${s.id}\``);
+    for (const r of record) {
+      reasons.push(`${label}: ${r}`);
+      if (md !== null && md !== '') verdictReasons.push(`${label}: ${r}`);
+    }
+    // VRFY-27: the section's draft must be the one its verification judged.
+    if (md !== null && s.verifiedHash !== s.currentDraftHash) {
+      reasons.push(`${label}: stale: §${s.id} changed since verification — re-verify and recompile (\`pensmith verify ${s.id}\`, then \`pensmith compile\`)`);
     }
   }
-
   return { blocked: reasons.length > 0, reasons, verdictReasons };
+}
+
+/** Every compiled section's quote acceptances, bound to its draft hash NOW (D-20-22). */
+export function exportAcceptanceSets(sections: readonly DoneSection[]): AcceptanceSet[] {
+  return sections
+    .filter((s) => s.currentDraftHash !== null)
+    .map((s) => ({ currentDraftHash: s.currentDraftHash as string, acceptances: readQuoteAcceptances(sectionDirOfPlan(s.planPath)), section: s.id }));
+}
+
+/**
+ * VRFY-26 (D-20-24): the ONE gate core over the exact text done exports (the
+ * compiled DRAFT.md, or FINAL.md after the humanizer), with the union of the
+ * sections' assigned_sources as the allowed keys and every section's quote
+ * acceptances still bound to its current draft. Returns the gate result and
+ * its refusal lines (empty when nothing blocks). Never writes a file.
+ */
+export async function recomputeExportGate(
+  paperRoot: string,
+  text: string,
+  opts: { sections?: readonly DoneSection[]; bib?: LoadedBibliography; recheck?: boolean } = {},
+): Promise<{ gate: GateResult; refusals: string[] }> {
+  const sections = opts.sections ?? doneSections(paperRoot);
+  const allowed = new Set(sections.flatMap((s) => s.assignedSources));
+  const refresh = opts.recheck === true ? await recheckKeys(paperRoot, extractCitedKeysForVerification(text)) : undefined;
+  const gate = await recomputeGate({
+    root: paperRoot,
+    text,
+    allowedKeys: allowed,
+    scope: { kind: 'paper' },
+    dryRun: networkMode().dryRun,
+    ...(refresh !== undefined ? { refresh } : {}),
+    acceptanceSets: exportAcceptanceSets(sections),
+    bib: opts.bib ?? loadBibliography(paperRoot),
+  });
+  return { gate, refusals: gateRefusals(gate, { kind: 'paper' }) };
+}
+
+/**
+ * The cited keys a humanized FINAL.md added or dropped against the compiled
+ * draft (the broad Pandoc grammar), as one refusal line — or null when the
+ * sets match. The humanizer only improves prose: it never adds, drops or
+ * swaps a citation (GATE-04). The gate core then recomputes FINAL.md itself.
+ */
+export function citedKeySetChange(finalMd: string, draftMd: string): string | null {
+  const finalKeys = new Set(extractCitedKeysForVerification(finalMd));
+  const draftKeys = new Set(extractCitedKeysForVerification(draftMd));
+  const added = [...finalKeys].filter((k) => !draftKeys.has(k));
+  const dropped = [...draftKeys].filter((k) => !finalKeys.has(k));
+  if (added.length === 0 && dropped.length === 0) return null;
+  const parts: string[] = [];
+  if (added.length > 0) parts.push(`added: [${added.join(', ')}]`);
+  if (dropped.length > 0) parts.push(`dropped: [${dropped.join(', ')}]`);
+  return `citekey-set mismatch after humanization — ${parts.join('; ')}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -348,6 +448,12 @@ function unparseableSentinel(sectionName: string): Pass2Result {
  *     unparseable table.
  */
 function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
+  return parseSectionPass2Rows(md, sectionName).map((r) => r.result);
+}
+
+/** parseSectionPass2 with each UNSUPPORTED row's 1-based position in the section's Pass-2 table (0 for the sentinel). */
+function parseSectionPass2Rows(md: string, sectionName: string): Array<{ row: number; result: Pass2Result }> {
+  const sentinel = (): Array<{ row: number; result: Pass2Result }> => [{ row: 0, result: unparseableSentinel(sectionName) }];
   // Locate the ## Pass-2 heading line. Absent → clean (nothing to report).
   const lines = md.split(/\r?\n/);
   let headingIdx = -1;
@@ -375,7 +481,7 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
   const headerLineIdx = body.findIndex((l) => l.trim() === PASS2_TABLE_HEADER || l.trim() === PASS2_TABLE_HEADER_V1);
   if (headerLineIdx === -1) {
     // Heading present but the pinned 4-column header is missing → fail safe.
-    return [unparseableSentinel(sectionName)];
+    return sentinel();
   }
 
   // Data rows start AFTER the header + the dashed separator line.
@@ -383,11 +489,12 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
   const sep = (body[sepIdx] ?? '').trim();
   if (!/^\|[\s|:-]+\|$/.test(sep)) {
     // The separator is missing/malformed → fail safe (shape desync).
-    return [unparseableSentinel(sectionName)];
+    return sentinel();
   }
 
   const columns = (body[headerLineIdx] ?? '').trim() === PASS2_TABLE_HEADER ? 5 : 4;
-  const out: Pass2Result[] = [];
+  const out: Array<{ row: number; result: Pass2Result }> = [];
+  let row = 0;
   for (let i = sepIdx + 1; i < body.length; i++) {
     const raw = (body[i] ?? '').trim();
     if (raw.length === 0) continue; // blank line ends the table body
@@ -398,9 +505,10 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
       .split('|')
       .slice(1, -1)
       .map((c) => c.trim());
+    row += 1;
     if (cells.length !== columns) {
       // A row that does not parse into the header's cells → fail safe.
-      return [unparseableSentinel(sectionName)];
+      return sentinel();
     }
     const [citekey, claimSentence, verdictCell, rationale, evidence = ''] = cells as [
       string,
@@ -413,15 +521,18 @@ function parseSectionPass2(md: string, sectionName: string): Pass2Result[] {
     const verdict = verdictCell.replace(/\*\*/g, '').trim();
     if (!VALID_VERDICTS.has(verdict)) {
       // A verdict cell that is not one of the four enum values → fail safe.
-      return [unparseableSentinel(sectionName)];
+      return sentinel();
     }
     if (verdict === 'UNSUPPORTED') {
       out.push({
-        citekey,
-        claimSentence,
-        verdict: 'UNSUPPORTED' as Pass2Verdict,
-        rationale,
-        evidence,
+        row,
+        result: {
+          citekey,
+          claimSentence,
+          verdict: 'UNSUPPORTED' as Pass2Verdict,
+          rationale,
+          evidence,
+        },
       });
     }
   }
@@ -457,6 +568,40 @@ export function readSectionUnsupported(paperRoot: string): Pass2Result[] {
       continue; // unreadable file → skip (I/O defensive only)
     }
     out.push(...parseSectionPass2(md, entry));
+  }
+  return out;
+}
+
+/** An UNSUPPORTED claim of one registered section, with where it is (VRFY-22). */
+export interface UnsupportedClaim {
+  /** `1`, `1a`. */
+  readonly section: string;
+  readonly slug: string;
+  /** Its 1-based row in the section's Pass-2 table (0: the table could not be read). */
+  readonly row: number;
+  readonly result: Pass2Result;
+}
+
+/**
+ * The UNSUPPORTED claims of the paper's REGISTERED sections (STATE.json +
+ * OUTLINE.md; VRFY-26), with each claim's section and Pass-2 row — what the
+ * `unsupported-claims` gate lists and `.paper/VERIFICATION.md` records a
+ * decision for (VRFY-22). Fail safe like readSectionUnsupported: a present but
+ * unreadable table is one `<unparseable>` claim. Never throws.
+ */
+export function readUnsupportedClaims(paperRoot: string, sections: readonly DoneSection[] = doneSections(paperRoot)): UnsupportedClaim[] {
+  const out: UnsupportedClaim[] = [];
+  for (const s of sections) {
+    const vPath = sectionVerification(s.identity.n, s.identity.slug, paperRoot);
+    let md: string;
+    try {
+      if (!existsSync(vPath)) continue;
+      md = readFileSync(vPath, 'utf8');
+    } catch {
+      continue;
+    }
+    const name = `${String(s.identity.n).padStart(2, '0')}${s.identity.suffix ?? ''}-${s.identity.slug}`;
+    for (const r of parseSectionPass2Rows(md, name)) out.push({ section: s.id, slug: s.identity.slug, row: r.row, result: r.result });
   }
   return out;
 }
@@ -570,29 +715,112 @@ export async function reCheckFinalMd(
 
 const VALID_FORMATS: ReadonlySet<string> = new Set(['docx', 'pdf', 'latex', 'md']);
 
-/** Build the whole-paper `.paper/VERIFICATION.md` report body (a SOURCE
- *  artifact, NOT written into the distinct export dir). */
-function buildVerificationReport(
-  honestyReport: string,
-  plagiarismResults: PlagiarismResult[],
-  pass4Results: Pass4Result[],
-): string {
+/** One recorded decision on an UNSUPPORTED claim (VRFY-22). */
+export interface ClaimDecision {
+  readonly claim: UnsupportedClaim;
+  /** `Confirmed by user <ISO>` or `Auto-accepted under --yolo <ISO>`. */
+  readonly decision: string;
+}
+
+/** A table cell: one line, no pipes, at most `max` characters. */
+function cell(s: string, max: number): string {
+  const flat = s.replace(/[\r\n]+/g, ' ').replace(/\|/g, '/').trim();
+  return flat.length <= max ? flat : `${flat.slice(0, max - 1)}…`;
+}
+
+export interface PaperVerificationReport {
+  /** The file whose bytes the gate judged (`.paper/FINAL.md` or `.paper/DRAFT.md`) and their sha256. */
+  readonly checkedFile: string;
+  readonly checkedSha256: string;
+  readonly gate: GateResult;
+  readonly decisions: readonly ClaimDecision[];
+  readonly accepted: readonly AcceptedQuote[];
+  readonly byoQuotes: readonly ByoQuote[];
+  readonly honestyReport: string;
+  readonly plagiarismResults: readonly PlagiarismResult[];
+  readonly pass4Results: readonly Pass4Result[];
+}
+
+/**
+ * Build the whole-paper `.paper/VERIFICATION.md` (a SOURCE artifact, NOT
+ * written into the distinct export dir; D-20-24): the recomputed gate's
+ * summary over the exported text, the decisions on UNSUPPORTED claims
+ * (VRFY-22), the accepted quotes and the quotes verified against the user's
+ * own files, the honesty and plagiarism checks, and the per-paragraph Pass-4
+ * audit of the exported text (VRFY-23). done never writes under sections/.
+ */
+export function buildVerificationReport(r: PaperVerificationReport): string {
   // D-17-08: an offline run's report carries the marker as its first line (the
   // export never does — exporters read DRAFT.md / FINAL.md, not this file).
   const offlineMarker = offlineMarkerLine();
+  const decisions = r.decisions.length
+    ? [
+        '| Section | Row | Claim | Decision |',
+        '|---------|-----|-------|----------|',
+        ...r.decisions.map(
+          (d) =>
+            `| §${d.claim.section} (${d.claim.slug}) | ${d.claim.row > 0 ? `Pass-2 row ${d.claim.row}` : 'Pass-2 table'} [@${cell(d.claim.result.citekey, 60)}] | ${cell(d.claim.result.claimSentence, 160)} | ${d.decision} |`,
+        ),
+      ]
+    : ['_(no UNSUPPORTED claims to decide)_'];
+  const accepted = r.accepted.length
+    ? [
+        '| Quote | Citekey | Section | Accepted | Via |',
+        '|-------|---------|---------|----------|-----|',
+        ...r.accepted.map((a) => `| ${a.id} "${cell(a.excerpt, 80)}" | ${a.citekey} | ${a.section !== undefined ? `§${a.section}` : '—'} | ${a.acceptedAt} | ${a.via === 'flag' ? '--accept-quote' : 'prompt'} |`),
+      ]
+    : ['_(no quotes accepted without a source check)_'];
+  const local = r.byoQuotes.length
+    ? r.byoQuotes.map((q) => `- ${q.id} [@${q.citekey}] "${cell(q.snippet, 60)}…" — verified against your local file ${q.localFile}`)
+    : ['_(no quotes verified against your own files)_'];
   return [
     ...(offlineMarker !== null ? [offlineMarker, ''] : []),
     '# Paper Verification (done)',
     '',
+    '## Gate',
+    '',
+    `Text checked: ${r.checkedFile} (sha256 ${r.checkedSha256})`,
+    '',
+    renderSummaryTable(summaryRows({ rows: r.gate.rows })),
+    '',
+    '## Decisions',
+    '',
+    ...decisions,
+    '',
+    '## Accepted quotes',
+    '',
+    ...accepted,
+    '',
+    '## Quotes verified against your files',
+    '',
+    ...local,
+    '',
     '## Honesty (DONE-04)',
     '',
-    honestyReport,
+    r.honestyReport,
     '',
-    renderPlagiarismSection(plagiarismResults),
+    renderPlagiarismSection([...r.plagiarismResults]),
     '',
-    renderPass4Section(pass4Results),
+    renderPass4Section(r.pass4Results),
     '',
   ].join('\n');
+}
+
+/** Print the UNSUPPORTED claims with their evidence, the accepted quotes and the local-file quotes (the confirmation's list). */
+function writeExportFindings(claims: readonly UnsupportedClaim[], accepted: readonly AcceptedQuote[], byoQuotes: readonly ByoQuote[]): void {
+  if (claims.length > 0) {
+    process.stdout.write(`pensmith done: ${claims.length} claim(s) Pass 2 judged UNSUPPORTED by the cited source (VRFY-22):\n`);
+    for (const c of claims) {
+      process.stdout.write(`  - §${c.section} [@${c.result.citekey}] "${cell(c.result.claimSentence, 160)}" — ${cell(c.result.rationale, 200)}\n`);
+      process.stdout.write(`      evidence: ${c.result.evidence.trim().length > 0 ? `"${cell(c.result.evidence, 200)}"` : '(none quoted)'}\n`);
+    }
+  }
+  for (const a of accepted) {
+    process.stdout.write(`  - accepted without a source check: ${a.section !== undefined ? `§${a.section} ` : ''}${a.id} [@${a.citekey}] "${cell(a.excerpt, 80)}" (${a.acceptedAt})\n`);
+  }
+  for (const q of byoQuotes) {
+    process.stdout.write(`  - ${q.id} [@${q.citekey}] "${cell(q.snippet, 60)}…" verified against your local file ${q.localFile}\n`);
+  }
 }
 
 /** True when FINAL.md is absent or older than the compiled DRAFT.md. Never throws. */
@@ -657,38 +885,55 @@ export const doneCommand = defineCommand({
       return { ok: false, exitCode: EXIT_ERROR };
     }
 
-    // UNCONDITIONAL export blocking gate (audit #3/#14) — re-assert the Core
-    // Value on the section verdicts BEFORE any advisory/humanizer/export work.
-    // Runs for EVERY done invocation (explicit, bare /pensmith, next) and is NOT
-    // skipped by --raw or --yolo. A blocking citation or an unverified section
-    // never reaches the deliverable.
+    // (1) UNCONDITIONAL export blocking gate (audit #3/#14, VRFY-26, VRFY-27,
+    // D-20-24) — BEFORE any paid or third-party step, for EVERY done invocation
+    // (explicit, bare /pensmith, next), whatever --raw or --yolo: the sections
+    // STATE.json and OUTLINE.md register (never a directory listing), each
+    // verified for the draft it holds now; the compiled DRAFT.md exactly as
+    // compile wrote it from those sections; and the ONE gate core recomputed
+    // over the DRAFT.md bytes about to be exported. Every reason is collected
+    // (staleness and recomputed verdicts together) and listed.
+    const sections = doneSections(paperRoot);
     const blocking = runExportBlockingGate(paperRoot);
-    if (blocking.blocked) {
+    const reasons = [...blocking.reasons];
+    if (sectionRegistryProblem(paperRoot) === null && sections.length > 0) {
+      const current = new Map(sections.map((s) => [s.id, s.verifiedHash]));
+      reasons.push(...compileRecordProblems(paperRoot, sections.map((s) => s.identity), current));
+    }
+    const bib = loadBibliography(paperRoot);
+    const draftGate = await recomputeExportGate(paperRoot, draftMd, { sections, bib, recheck: true });
+    for (const r of draftGate.refusals) reasons.push(`.paper/DRAFT.md: ${r}`);
+    if (reasons.length > 0) {
       process.stdout.write(
-        'pensmith done: BLOCKED — export refused (unresolved blocking citations or unverified sections):\n',
+        'pensmith done: BLOCKED — export refused (unresolved blocking citations, unverified or stale sections, or a stale compiled draft):\n',
       );
-      for (const r of blocking.reasons) process.stdout.write(`  - ${r}\n`);
+      for (const r of reasons) process.stdout.write(`  - ${r}\n`);
       process.stdout.write(
         "Fix the cited section(s) — re-run 'pensmith verify <N>' then 'pensmith compile' — and try again.\n",
       );
       return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
     }
 
+    // The UNSUPPORTED claims of the registered sections (VRFY-22): with any,
+    // the confirmation is the `unsupported-claims` gate, else `export-confirm`.
+    const claims = readUnsupportedClaims(paperRoot, sections);
+    const confirmGate = claims.length > 0 ? 'unsupported-claims' : 'export-confirm';
+
     // RUN-09 / RUN-28: the export confirmation needs an answer. Without a
     // terminal (and without --yolo) refuse NOW — EXIT_APPROVAL, before the
-    // plagiarism / detector / humanizer work — instead of after it.
+    // plagiarism / detector / humanizer work — instead of after it, listing
+    // what the answer is about (the UNSUPPORTED claims with their evidence and
+    // the quotes the gate took on the user's word) first.
     if (args.yolo !== true && !canPrompt()) {
-      await runGate('export-confirm', { yolo: false, detail: 'nothing was exported' });
+      writeExportFindings(claims, draftGate.gate.accepted, draftGate.gate.byoQuotes);
+      await runGate(confirmGate, { yolo: false, detail: 'nothing was exported' });
     }
 
-    // 1. DONE-01 whole-paper Pass 4 (orphan audit). 2. DONE-02 plagiarism.
-    const pass4Results = await runWholePaperPass4(paperRoot);
+    // (2) DONE-02 plagiarism, DONE-04 honesty score (before humanize).
     const plagiarismResults = await runPlagiarism(draftMd);
-
-    // 3. DONE-04 honesty score (before humanize).
     const before = await scoreHonesty(draftMd);
 
-    // 4. DONE-03 humanize (skip-clean if absent / no transport). 5. honesty after.
+    // (3) DONE-03 humanize (skip-clean if absent / no transport), honesty after.
     let finalPath: string | null = null;
     let after: Awaited<ReturnType<typeof scoreHonesty>> = null;
     if (args.raw !== true) {
@@ -709,36 +954,57 @@ export const doneCommand = defineCommand({
         ? 'Pensmith honesty check: skipped (no GPTZero API key set or backend unavailable).'
         : renderHonestyReport(before.aiProbability, after?.aiProbability ?? null, before.backend);
 
-    // GATE-04: re-verify humanized FINAL.md before export (HARD block, BEFORE runDoneGate).
-    // Skip only when no humanizer ran (finalPath === null) — i.e. no humanized artifact exists.
-    // --yolo NEVER bypasses this gate (per PRD §14 non-negotiable: verifier gates are unconditional).
-    // --yolo belongs ONLY on the advisory runDoneGate (DONE-09) confirmation below.
+    // GATE-04 (VRFY-26): the humanized FINAL.md is gated on its OWN exact bytes
+    // — the humanizer never adds, drops or swaps a citation, and the gate core
+    // recomputes every row over FINAL.md (a form or key the humanizer
+    // introduced is refused). HARD block, before the confirmation; --yolo never
+    // bypasses it (PRD §14).
+    let exportedText = draftMd;
+    let exportGate = draftGate.gate;
     if (finalPath !== null) {
       const finalMd = readFileSync(finalPath, 'utf8');
-      const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
-      const gate4 = await reCheckFinalMd(finalMd, draftMd, bibPath, paperRoot);
-      if (!gate4.passed) {
-        process.stdout.write(
-          `pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification: ${gate4.reason}\n`,
-        );
+      const finalReasons: string[] = [];
+      const change = citedKeySetChange(finalMd, draftMd);
+      if (change !== null) finalReasons.push(change);
+      const finalGate = await recomputeExportGate(paperRoot, finalMd, { sections, bib });
+      finalReasons.push(...finalGate.refusals);
+      if (finalReasons.length > 0) {
+        process.stdout.write('pensmith done: GATE-04 BLOCKED — FINAL.md failed re-verification:\n');
+        for (const r of finalReasons) process.stdout.write(`  - ${r}\n`);
         return { ok: false, blocked: true, exitCode: EXIT_BLOCKED };
       }
+      exportedText = finalMd;
+      exportGate = finalGate.gate;
     }
 
-    // 6. DONE-09 export-confirmation gate. Pass-2 UNSUPPORTED is read from the
-    //    section VERIFICATION.md files (the load-bearing disk→gate feed, HIGH-3).
-    const pass2Results = readSectionUnsupported(paperRoot);
+    // Whole-paper Pass 4 (DONE-01, VRFY-23) over the exact text to be exported.
+    const pass4Results = await runWholePaperPass4(paperRoot, exportedText);
+
+    // (4) The confirmation: every UNSUPPORTED claim with its evidence, the
+    // orphans, the plagiarism hits, the accepted quotes and the quotes verified
+    // against the user's own files; then `unsupported-claims` (VRFY-22) or the
+    // generic `export-confirm` (DONE-09). --yolo answers either.
+    writeExportFindings(claims, exportGate.accepted, exportGate.byoQuotes);
+    if (args.yolo === true) {
+      const issues = collectGateIssues({ pass2Results: claims.map((c) => c.result), pass4Results, plagiarismResults });
+      if (issues.orphanClaims.length > 0 || issues.plagiarismHits.length > 0) writeGateSummary(issues);
+    }
     const gateResult = await runDoneGate({
-      pass2Results,
+      pass2Results: claims.map((c) => c.result),
       pass4Results,
       plagiarismResults,
       yolo: args.yolo === true,
-      // The `export-confirm` gate of the registry (RUN-28). --yolo is handled by
-      // runDoneGate; a run that cannot prompt refuses (EXIT_APPROVAL).
+      // The registry gate (RUN-28). --yolo is handled by runDoneGate; a run that
+      // cannot prompt refuses (EXIT_APPROVAL).
       approve: async () => {
-        const outcome = await runGate('export-confirm', {
+        const outcome = await runGate(confirmGate, {
           yolo: false,
-          question: { id: 'export-confirm', kind: 'confirm', label: 'Export the paper?', default: true },
+          question: {
+            id: confirmGate,
+            kind: 'confirm',
+            label: confirmGate === 'unsupported-claims' ? 'Export the paper with these UNSUPPORTED claims?' : 'Export the paper?',
+            default: confirmGate !== 'unsupported-claims',
+          },
         });
         return outcome.kind === 'answered' && outcome.answer.kind === 'confirm' && outcome.answer.value === true;
       },
@@ -746,10 +1012,15 @@ export const doneCommand = defineCommand({
 
     if (gateResult.exported === false && gateResult.gateSkipped !== true) {
       // An explicit "no" is the gate's decline: EXIT_APPROVAL, nothing exported.
-      declineGate('export-confirm', 'export cancelled by user');
+      declineGate(confirmGate, claims.length > 0 ? 'export cancelled — the UNSUPPORTED claims were not accepted' : 'export cancelled by user');
     }
+    const decidedAt = new Date().toISOString();
+    const decisions: ClaimDecision[] = claims.map((claim) => ({
+      claim,
+      decision: gateResult.gateSkipped === true ? `Auto-accepted under --yolo ${decidedAt}` : `Confirmed by user ${decidedAt}`,
+    }));
 
-    // 7. DONE-06/07/08 exportDraft into the exporter's DISTINCT export dir. Leave
+    // (5) DONE-06/07/08 exportDraft into the exporter's DISTINCT export dir. Leave
     //    outputDir UNSET so the md-fallback never overwrites the source DRAFT.md.
     const format: ExportFormat = VALID_FORMATS.has(String(args.format))
       ? (String(args.format) as ExportFormat)
@@ -757,7 +1028,6 @@ export const doneCommand = defineCommand({
 
     // Resolve discipline → CSL style from INTAKE.md (never-throw: missing or
     // unparseable INTAKE.md leaves style undefined; citation rendering is skipped).
-    // Mirrors the draft-read never-throw at lines 388-399.
     const intakePath = join(paperDir(paperRoot), 'INTAKE.md');
     let style: string | undefined;
     try {
@@ -775,12 +1045,35 @@ export const doneCommand = defineCommand({
       ...(style !== undefined ? { style } : {}),
     });
 
-    // Write the whole-paper VERIFICATION.md (a SOURCE artifact, not the export dir).
+    // (6) VRFY-28: the registrar answers that confirmed the exported citations
+    // become their LIBRARY.json last_verified (the one writer, under its lock).
+    const stamps = { ...draftGate.gate.checkedAt, ...exportGate.checkedAt };
+    if (Object.keys(stamps).length > 0) {
+      try {
+        await recordLastVerified(paperRoot, stamps);
+      } catch (e) {
+        if (!(e instanceof LibraryNotFoundError)) throw e;
+      }
+    }
+
+    // The whole-paper VERIFICATION.md (a SOURCE artifact, not the export dir;
+    // never a file under sections/).
     const verificationPath = join(paperDir(paperRoot), 'VERIFICATION.md');
     await atomicWriteFile(
       verificationPath,
-      buildVerificationReport(honestyReport, plagiarismResults, pass4Results),
+      buildVerificationReport({
+        checkedFile: finalPath !== null ? '.paper/FINAL.md' : '.paper/DRAFT.md',
+        checkedSha256: createHash('sha256').update(exportedText, 'utf8').digest('hex'),
+        gate: exportGate,
+        decisions,
+        accepted: exportGate.accepted,
+        byoQuotes: exportGate.byoQuotes,
+        honestyReport,
+        plagiarismResults,
+        pass4Results,
+      }),
     );
+
 
     // Audit #15 / review round 2: the router's terminus is "FINAL.md present and
     // not older than DRAFT.md" (router.ts). In Tier 2 there is usually no

@@ -15,10 +15,15 @@ onto the existing `verify` verb; adds no workflow logic.
 | "verify section N" | `pensmith verify N` |
 | "check section N citations" / "check the citations in section N" | `pensmith verify N` |
 | "re-verify section N" | `pensmith verify N` |
+| "accept quote qK in section N" (a quote VERIFICATION.md lists as UNVERIFIABLE-QUOTE) | `pensmith verify N --accept-quote qK` — ask the user first (AskUserQuestion); never on your own |
 
-The verifier blocks compile and export: no FABRICATED, MIS-CITED, or
-quote-NOT_FOUND citation escapes a section (CLAUDE.md non-negotiable). This
+The verifier blocks compile and export: no FABRICATED, MIS-CITED,
+UNVERIFIABLE or quote-NOT_FOUND citation escapes a section (CLAUDE.md
+non-negotiable), and compile and done recompute every verdict themselves. This
 plumbing skill only routes — the blocking semantics live in the `verify` verb.
+Only a quote whose source text cannot be checked (UNVERIFIABLE-QUOTE) can be
+accepted, one id at a time and only by the user's own decision; there is no
+blanket acceptance.
 A section whose last `write` failed is not verified: `verify N` refuses (exit 4)
 and names `pensmith write N`, the step that fixes it.
 

@@ -29,7 +29,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadCassetteFile } from '../bin/lib/http-mock.js';
-import { runRevise } from '../bin/lib/revise.js';
+import { runRevise, failingCitations, firstFailingCitation, REVISABLE_VERDICTS } from '../bin/lib/revise.js';
 import { proposeSwap } from '../bin/lib/revise-swap.js';
 import { loadPrompt } from '../bin/lib/prompt-loader.js';
 import { promptHints } from '../bin/lib/prompt-request.js';
@@ -392,4 +392,37 @@ test('revise: the swap request carries the planned `## Voice`, then the outline 
   assert.equal(voiceHint('---\nvoice: plain and direct\n---\n\n## Outline entry\n\nx\n'), 'Voice: plain and direct', 'a stub: the outline row voice');
   assert.equal(voiceHint('---\nsection: 1\n---\n\n## Brief\n\nVoice: terse\n'), 'Voice: terse', 'a legacy PLAN.md');
   assert.equal(voiceHint('---\nsection: 1\n---\n\n## Voice\n\n(no voice direction)\n'), 'Voice: formal academic tone.');
+});
+
+test('Phase 20 (D-20-20): revise reads every citekey-bearing failing row — RETRACTED, UNASSIGNED, UNPARSEABLE, UNRESOLVABLE and a `[qN]` NOT_FOUND quote row — and leaves the rows without a citekey to a re-plan', () => {
+  const md = [
+    'Status: failed',
+    '',
+    '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
+    '',
+    '- lecun2015: **OK** — titleJW=1.00, authorJW=1.00 — D-11 AND-gate passed',
+    '- lecun2015: **UNASSIGNED** — titleJW=n/a, authorJW=n/a — not in section 1\'s assigned_sources',
+    '- Wakefield:1998: **RETRACTED** — titleJW=1.00, authorJW=1.00 — cited work is retracted',
+    '- brokenEntry2020: **UNPARSEABLE** — titleJW=n/a, authorJW=n/a — its entry (line 4) does not parse',
+    '- nobody2019: **UNRESOLVABLE** — titleJW=n/a, authorJW=n/a — no registrar has this work',
+    '- L7: **UNSUPPORTED-FORM** — titleJW=n/a, authorJW=n/a — a citation form the grammar cannot read',
+    '',
+    '## Pass-3 (quote integrity, deterministic — levenshtein-substring)',
+    '',
+    '- smith2020 [q1] ("the quoted words that are not in the so…"): **NOT_FOUND** — lev=0.410 — quote not found',
+    '- (unattributed) [q2] ("a quote with no citation at all in the…"): **UNATTRIBUTED** — lev=0.000 — no citation',
+    '',
+    '## Draft checks',
+    '',
+    '- draft: **NO-CITATIONS** — no citations; 2 sources assigned',
+    '',
+  ].join('\n');
+  assert.deepEqual(
+    failingCitations(md).map((f) => [f.citekey, f.reason.split(':')[0]]),
+    [['lecun2015', 'UNASSIGNED'], ['Wakefield:1998', 'RETRACTED'], ['brokenEntry2020', 'UNPARSEABLE'], ['nobody2019', 'UNRESOLVABLE'], ['smith2020', 'NOT_FOUND']],
+  );
+  assert.equal(firstFailingCitation(md)?.citekey, 'lecun2015');
+  assert.deepEqual([...REVISABLE_VERDICTS], ['FABRICATED', 'MIS-CITED', 'RETRACTED', 'UNASSIGNED', 'UNPARSEABLE', 'UNRESOLVABLE', 'NOT_FOUND']);
+  // A pre-Phase-20 quote row (no id) still reads.
+  assert.equal(firstFailingCitation('- smith2020 ("old style quote row snippet…"): **NOT_FOUND** — lev=0.2 — x\n')?.citekey, 'smith2020');
 });

@@ -33,7 +33,9 @@ async function paper(sb: LlmSandbox, stubs: readonly string[] = []): Promise<voi
     fs.writeFileSync(
       path.join(sb.paper, 'sections', `0${e.n}-${e.slug}`, 'PLAN.md'),
       renderPlannedPlanMd(
-        { section: e.n, slug: e.slug, title: e.title, depends_on: e.depends_on, word_target: e.estimated_word_count, assigned_sources: e.assigned_sources },
+        // No assigned sources: these cases pin SCHEDULING, and a citation-free
+        // draft of a section with assigned sources is NO-CITATIONS (VRFY-24).
+        { section: e.n, slug: e.slug, title: e.title, depends_on: e.depends_on, word_target: e.estimated_word_count, assigned_sources: [] },
         { claims: [{ claim: `${e.slug} claim.`, sources: [], evidence: '', counterexamples: '' }], structure: [{ paragraph: 1, purpose: 'p', claims: [1] }], voice: 'Plain.' },
       ),
     );
@@ -50,8 +52,10 @@ const write = (sb: LlmSandbox, ...args: string[]) => sb.runTsx(null, ['write', .
  * These tests are about scheduling, not citation verification: the fixture's
  * sources carry no DOI and the paper has no CITATIONS.bib, so a draft citing
  * them fails Pass 1 closed (the drafter stub cites every assigned key, D-18-06).
- * The drafter is scripted to a citation-free section so verify's verdict is
- * `verified` and each exit code comes from the scheduling under test.
+ * The drafter is scripted to a citation-free section — and the planned
+ * sections are assigned no source, so a citation-free draft is not
+ * NO-CITATIONS (VRFY-24) — so verify's verdict is `verified` and each exit
+ * code comes from the scheduling under test.
  */
 function citationFreeDrafts(sb: LlmSandbox, count: number): void {
   const text = 'Attention lets a model weigh every position of its input when it builds each output.\n\nThe section explains the idea in plain terms.\n';

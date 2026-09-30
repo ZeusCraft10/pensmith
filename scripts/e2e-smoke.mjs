@@ -236,6 +236,20 @@ let sections = [];
   }
   if (!existsSync(path.join(WORK, '.paper'))) pass('no-real-paper', 'the dry run never created .paper/');
   else fail('no-real-paper', 'a dry run created .paper/ (D-18-29)');
+  // VRFY-24 (D-20-21): every section draft of the dry run carries the stub
+  // marker, and neither the compiled draft nor the export does.
+  const MARKER = '<!-- stub draft (no model configured) — not real prose -->';
+  const sectionsDir = ppaper('sections');
+  const drafts = existsSync(sectionsDir)
+    ? readdirSync(sectionsDir).filter((d) => d !== '_archive').map((d) => path.join(sectionsDir, d, 'DRAFT.md')).filter((f) => existsSync(f))
+    : [];
+  const unmarked = drafts.filter((f) => !readFileSync(f, 'utf8').startsWith(MARKER));
+  const leaked = [ppaper('DRAFT.md'), ...exported.map((f) => path.join(exportDir, f))].filter((f) => existsSync(f) && readFileSync(f, 'latin1').includes('stub draft (no model configured)'));
+  if (drafts.length > 0 && unmarked.length === 0 && leaked.length === 0) {
+    pass('stub-marker', `${drafts.length} stub section draft(s) marked; the compiled draft and the export carry no marker`);
+  } else {
+    fail('stub-marker', `drafts=${drafts.length} unmarked=${unmarked.join(', ')} leaked=${leaked.join(', ')}`);
+  }
 }
 
 // ── 7. registry isolation (Bug-3 hygiene) ──

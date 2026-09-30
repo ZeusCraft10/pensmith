@@ -38,13 +38,20 @@ tool (the Tier-1 surface is THIS workflow body delegating to the same code, the
 compile precedent — a documented asymmetry that keeps the locked 16 verbs
 bijective with the 16 workflow bodies).
 
-**LOCKED INVARIANT — the DONE-09 gate is the SOLE escape valve.** Pass 2 (claim
-support) and Pass 4 (orphan claims) are advisory and NEVER auto-block (VRFY-07);
-the Core Value ("every citation supports its claim") is honored by REQUIRING an
-explicit confirmation before export when any UNSUPPORTED claim, orphan claim, or
-plagiarism hit is present — only `--yolo` skips the gate. The Pass-2 UNSUPPORTED
-feed is read from each section `VERIFICATION.md` and FAILS SAFE: a present-but-
-unparseable `## Pass-2` table is treated as issues-present, never a silent clean.
+**LOCKED INVARIANT — done trusts no local file (VRFY-26).** Before any paid or
+third-party step it recomputes the gate with the one gate core over the exact
+text it exports — `.paper/DRAFT.md`, and again over a humanized FINAL.md — and
+refuses (EXIT_BLOCKED, whatever `--yolo` / `--raw`) on any blocking row, a
+section record that refuses, a section changed since its verification, or a
+compiled draft changed since compile (VRFY-27). Pass 2 (claim support) and
+Pass 4 (orphan claims) are advisory and NEVER auto-block (VRFY-07); the Core
+Value ("every citation supports its claim") is honored by REQUIRING an explicit
+decision before export: the `unsupported-claims` gate when any UNSUPPORTED claim
+is present (each listed with its evidence; `--yolo` records it as
+auto-accepted), else the generic export confirmation — only `--yolo` skips it.
+The Pass-2 UNSUPPORTED feed is read from each section `VERIFICATION.md` and FAILS
+SAFE: a present-but-unparseable `## Pass-2` table is treated as issues-present,
+never a silent clean.
 
 ## Outputs
 
@@ -56,8 +63,16 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
   entry exactly as in `.paper/CITATIONS.bib` / `.ris` (never the whole research
   library). A document that cites nothing gets neither file.
 - `.paper/VERIFICATION.md` — a SOURCE artifact (not in the export dir) carrying
-  the honesty report (DONE-04, framed verbatim), the plagiarism section
-  (DONE-02), and the whole-paper Pass-4 orphan summary (DONE-01).
+  `## Gate` (the exported text's file and sha256 and the summary of the
+  recomputed rows), `## Decisions` (`| Section | Row | Claim | Decision |` —
+  each UNSUPPORTED claim `Confirmed by user <time>` or
+  `Auto-accepted under --yolo <time>`, VRFY-22), the accepted quotes and the
+  quotes verified against the user's own files, the honesty report (DONE-04,
+  framed verbatim), the plagiarism section (DONE-02), and the whole-paper Pass-4
+  table over the exported text (DONE-01, VRFY-23).
+- `.paper/LIBRARY.json` — `last_verified` of the citations a registrar
+  confirmed during done's gate, through the one library writer (VRFY-28).
+- done never writes under `.paper/sections/`.
 - stdout: `pensmith done: exported <path>` — the deliverable's path.
 - **Under `--dry-run`** (GRND-19, D-18-29) the paper is the dry-run workspace
   `./.paper-dry-run/` (seeded from `.paper/`, which is never written): the
@@ -75,20 +90,44 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
 > `zeroTracePdf` for pdf). The export-confirmation gate ALWAYS prompts (generic
 > confirm even on a clean paper); only `--yolo` skips it.
 
-0. **Export blocking gate** (audit #3/#14, unconditional — `--yolo` never
-   skips it): re-check every section `VERIFICATION.md` the way compile's
-   refuse-gate does. A missing or Status-less file, `Status: failed`, a blocking
-   verdict (FABRICATED / MIS-CITED / NOT_FOUND, or UNVERIFIABLE — "re-run
-   online"), or, outside `--dry-run`, a verification written under `--dry-run`
-   (synthetic sources, RUN-27) refuses the export with EXIT_BLOCKED (4) and
-   writes nothing. With no `.paper/DRAFT.md` at all, the same check runs
-   first: when a section's verification blocks (compile refused, so there is no
-   draft), done prints those reasons and exits EXIT_BLOCKED (4); only a paper
-   that has not reached compile yet is "run `pensmith compile` first" (exit 1).
+0. **Export blocking gate** (audit #3/#14, VRFY-26, VRFY-27 — unconditional,
+   `--yolo` and `--raw` never skip it; D-20-24): every reason is collected, then
+   the export is refused with EXIT_BLOCKED (4) before any paid or third-party
+   step, writing nothing:
+   - the sections are the ones STATE.json registers (OUTLINE.md must list the
+     same; a paper whose STATE.json registers none uses OUTLINE.md's rows, as
+     compile does) — never a directory listing; a paper with no section refuses;
+   - each section's record can only add refusals (D-20-04): a missing PLAN.md,
+     DRAFT.md or VERIFICATION.md, a failed write, a Status-less or
+     `Status: failed` VERIFICATION.md, a failed PLAN.md, or — outside
+     `--dry-run` — a verification written under `--dry-run` (RUN-27); a section
+     whose DRAFT.md changed since its verification is `stale: §N changed since
+     verification — re-verify and recompile`;
+   - the compiled `.paper/DRAFT.md` must be the one compile wrote from those
+     verifications (`COMPILE-INPUTS.json` v2: `compiled_draft_sha256` and each
+     section's verified hash): a hand edit is `stale: .paper/DRAFT.md changed
+     since compile` (VRFY-27) — the edit belongs in the section drafts; a v1
+     record is stale ("recompile");
+   - the gate core recomputes every row over `.paper/DRAFT.md`'s exact bytes
+     (`bin/lib/verify/gate.ts`): a cited key outside the union of the sections'
+     `assigned_sources` is UNASSIGNED, and every blocking row (FABRICATED,
+     MIS-CITED, UNVERIFIABLE, UNPARSEABLE, NOT_FOUND, an UNVERIFIABLE-QUOTE the
+     user did not accept for the current draft, …) is listed with the
+     staleness reasons — so a hand-appended fake citation is named as both.
+   Citations whose `last_verified` is older than `[verification]
+   recheck_after_days` are re-checked past the HTTP cache (VRFY-28). With no
+   `.paper/DRAFT.md` at all, the section records are checked first: when a
+   section's verification blocks (compile refused, so there is no draft), done
+   prints those reasons and exits EXIT_BLOCKED (4); only a paper that has not
+   reached compile yet is "run `pensmith compile` first" (exit 1). Without a
+   terminal and without `--yolo`, done then refuses at once (EXIT_APPROVAL, 3)
+   because the export decision (step 6) needs an answer — before the paid steps.
 
-1. **Whole-paper Pass 4** (DONE-01): run `runPass4` over `.paper/DRAFT.md`. The
-   per-paragraph orphan counts (HIGH-confidence, R8) feed the DONE-09 gate. A
-   missing draft → error out and stop (run `pensmith compile` first).
+1. **Whole-paper Pass 4** (DONE-01, VRFY-23): run `runPass4` over the exact text
+   to be exported (FINAL.md when the humanizer wrote one, after step 5's
+   re-check; else `.paper/DRAFT.md`). The per-paragraph orphan counts
+   (HIGH-confidence, R8) feed the DONE-09 gate and the per-paragraph table of
+   `.paper/VERIFICATION.md`.
 
 2. **Plagiarism check** (DONE-02, advisory): run `runPlagiarism` over the draft
    (distinctive 5+-word phrases via the DuckDuckGo HTML endpoint, offline
@@ -105,22 +144,33 @@ unparseable `## Pass-2` table is treated as issues-present, never a silent clean
    this step entirely.
 
 5. **Honesty score — after**: `scoreHonesty(FINAL.md)` when a humanized artifact
-   was produced; otherwise the 'after' score is N/A in the report.
+   was produced; otherwise the 'after' score is N/A in the report. A humanized
+   FINAL.md is then gated on its OWN exact bytes (GATE-04, VRFY-26): its cited
+   keys must equal the compiled draft's (the humanizer never adds, drops or
+   swaps a citation) and the gate core recomputes every row over it; any
+   refusal blocks the export (EXIT_BLOCKED).
 
-6. **DONE-09 export-confirmation gate** (`runDoneGate`): collect the gate issue
+6. **DONE-09 export decision** (`runDoneGate`): collect the gate issue
    set — UNSUPPORTED Pass-2 rows (read from each section `VERIFICATION.md`, FAIL
-   SAFE on an unparseable table), Pass-4 orphans, and plagiarism hits. When any
-   exist, print a PER-ISSUE summary FIRST; then ALWAYS require an explicit
-   confirm (generic confirm even when clean — PRD §7.9). `--yolo` skips the gate.
-   A declined gate cancels the export and writes no deliverable.
+   SAFE on an unparseable table), Pass-4 orphans, and plagiarism hits. Print
+   each UNSUPPORTED claim with its evidence, the orphans, the plagiarism hits,
+   the quotes accepted without a source check and the quotes verified against
+   the user's own files FIRST; then ALWAYS require an explicit answer: the
+   `unsupported-claims` gate ("Export the paper with these UNSUPPORTED
+   claims?") when an UNSUPPORTED claim is present, else the generic confirm
+   (even when clean — PRD §7.9). `--yolo` skips it and records each UNSUPPORTED
+   claim as `Auto-accepted under --yolo <time>`; a confirmation records
+   `Confirmed by user <time>`. A declined gate cancels the export (exit 3) and
+   writes no deliverable.
 
 7. **Export + mandatory scrub** (DONE-06/07/08): `exportDraft` into the DISTINCT
    export dir (`outputDir` LEFT UNSET so the md-fallback never overwrites the
    source `DRAFT.md`). docx → `zeroTracePatch`; pdf → `zeroTracePdf`; latex →
    the offline md→tex writer (no generator comment); md → the trace-free body.
    Bundle the cited-only `.paper/export/CITATIONS.bib` / `.ris` (library.ts
-   `exportCitedCitations`, written before any Pandoc run). Then write the source
-   `.paper/VERIFICATION.md` (honesty + plagiarism + Pass-4 sections), and — when
+   `exportCitedCitations`, written before any Pandoc run). Then record
+   `last_verified` (VRFY-28), write the source `.paper/VERIFICATION.md` (gate,
+   decisions, quote lists, honesty, plagiarism, Pass-4 sections), and — when
    no humanizer wrote FINAL.md — write `.paper/FINAL.md` from the exported
    `DRAFT.md` whenever FINAL.md is absent or older than it (a humanized FINAL.md
    of this compile is kept). The router's terminus is a FINAL.md not older than

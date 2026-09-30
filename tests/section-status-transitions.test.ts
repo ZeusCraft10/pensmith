@@ -25,6 +25,7 @@ import { resolveNextAction } from '../bin/lib/router.js';
 import { planCommand } from '../bin/cli/plan.js';
 import { writeCommand } from '../bin/cli/write.js';
 import { verifyCommand } from '../bin/cli/verify.js';
+import { hasStubMarker, stripStubMarker } from '../bin/lib/verify/gate.js';
 
 const PLAN = [
   '---',
@@ -124,6 +125,12 @@ test('section status (audit #8/#9): write -> "written", verify -> "verified", ro
   // #9: write set status -> 'written' and produced the section DRAFT.md.
   assert.ok(existsSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md')), 'write must produce DRAFT.md');
   assert.equal(planStatus(planPath).status, 'written', 'write must set PLAN.md status to written');
+  // VRFY-24 (Phase 20): the no-LLM draft is marked stub text (PLACEHOLDER when
+  // verified outside --dry-run). The author's own prose replaces it here — this
+  // case pins the status transitions, not the stub rule.
+  const draftPath = join(root, '.paper', 'sections', '01-intro', 'DRAFT.md');
+  assert.ok(hasStubMarker(readFileSync(draftPath, 'utf8')), 'a PENSMITH_NO_LLM draft carries the stub marker');
+  writeFileSync(draftPath, stripStubMarker(readFileSync(draftPath, 'utf8')));
 
   await withEnvCwd(root, async () => {
     const vrun = verifyCommand.run as (ctx: { args: Record<string, unknown> }) => Promise<unknown>;

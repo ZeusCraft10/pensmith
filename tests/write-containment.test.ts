@@ -201,7 +201,8 @@ test('FEED-04: a failed RE-write keeps the older DRAFT.md byte-identical, report
     const { runExportBlockingGate } = await import('../bin/cli/done.js');
     const gate = runExportBlockingGate(sb.root);
     assert.equal(gate.blocked, true);
-    assert.ok(gate.reasons.some((r) => /02-background: its last write failed/.test(r)), gate.reasons.join(' | '));
+    // VRFY-26: done names a section by its id and slug (the registry), as compile does.
+    assert.ok(gate.reasons.some((r) => /section 2 \(background\): its last write failed/.test(r)), gate.reasons.join(' | '));
   });
 });
 
@@ -236,7 +237,9 @@ test('FEED-04: an unassigned key cited author-suppressed ([-@k]) or narratively 
 
 test('GRND-15: write N chains verify — DRAFT.md and VERIFICATION.md in one invocation, the verify status reported', async () => {
   await withLlmSandbox({ mock: 'anthropic', env: { ANTHROPIC_API_KEY: KEY } }, async (sb) => {
-    await plannedPaper(sb);
+    // §1 is assigned no source: its citation-free draft verifies (VRFY-24 — the
+    // same draft for a section WITH assigned sources is NO-CITATIONS).
+    await plannedPaper(sb, { emptySources: 'introduction' });
     sb.mock!.script('section-drafter', { text: 'The transformer changed sequence modelling.\n' });
     const r = await write(sb, '1');
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);

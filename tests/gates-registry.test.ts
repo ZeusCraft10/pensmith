@@ -57,6 +57,8 @@ const NEVER: ReadonlySet<GateId> = new Set([
   'byo-folder',
   'zotero-collection',
   'pdf-attach-unmatched',
+  // VRFY-20 (S-04): accepting an uncheckable quote is a verification decision.
+  'quote-accept',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -377,10 +379,13 @@ test('RUN-28: PRD §7.20 carries the gate table and it matches GATES (drift test
     assert.match(row.owner, /^[A-Z]+-\d+ \(planned\)$/, `${row.id} is not in GATES, so it must be marked (planned) with its landing requirement`);
   }
   // GRND-01, GRND-02 and GRND-09 landed their gates in Phase 18 (seam S-A);
-  // GRND-17 landed plan-research in Phase 19 (seam S-B).
-  for (const req of ['VRFY-22', 'VRFY-20']) {
-    assert.ok(rows.some((r) => r.owner === `${req} (planned)`), `future gate from ${req} is listed`);
+  // GRND-17 landed plan-research in Phase 19 (seam S-B); VRFY-20 and VRFY-22
+  // landed quote-accept and unsupported-claims in Phase 20 (D-20-26), which
+  // replaced the planned `unsupported-confirm` row.
+  for (const id of ['quote-accept', 'unsupported-claims']) {
+    assert.ok(rows.some((r) => r.id === id && !/\(planned\)/.test(r.owner)), `${id} is a real row`);
   }
+  assert.ok(!rows.some((r) => r.id === 'unsupported-confirm'), 'the planned unsupported-confirm row is gone');
 });
 
 test('RUN-28: the --yolo lists in `pensmith --help` and the README name exactly the registry\'s gates (drift test)', () => {

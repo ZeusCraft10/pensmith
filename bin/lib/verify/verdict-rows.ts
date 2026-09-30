@@ -11,6 +11,7 @@
 // than silently nulling the blocking set.
 
 import { BLOCKING_VERDICTS, RETRY_ONLINE_VERDICTS, ACCEPTABLE_QUOTE_VERDICT } from './verdicts.js';
+import { DRAFT_VERDICTS } from './verdicts.js';
 
 /**
  * Verdicts that block compile and done: the ONE vocabulary of verdicts.ts
@@ -25,6 +26,8 @@ export interface BlockingVerdictRow {
   verdict: string;
   /** The row says the cited work is retracted (a MIS-CITED retraction verdict; RETRACTED from VRFY-15). */
   retraction?: boolean;
+  /** A Pass-3 row's quote id (`q1`), when the row carries one (Phase 20 format). */
+  quoteId?: string;
 }
 
 /**
@@ -93,21 +96,34 @@ export function parseBlockingVerdictRows(verificationMd: string): BlockingVerdic
   for (const line of verificationMd.split(/\r?\n/)) {
     // Every `- … **VERDICT**` list item is a verdict row; the `^\s*-\s*` anchor
     // keeps the pipe-delimited freshness / Pass-2 tables out (Pitfall 2).
-    const any = /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
-    const verdict = any?.[1];
-    if (verdict === undefined || !BLOCKING_VERDICTS.has(verdict)) continue;
     // The citekey is ANY non-space run before the row's delimiter, so every key
     // the library accepts (the Pandoc CITEKEY_GRAMMAR: `.:#$%&+?<>~/` and
     // Unicode letters — `ghost.2099`, `müller2020`, `doe:2020`) is named:
-    //   Pass-3: `- <key> ("quote…"): **VERDICT**`
+    //   Pass-3: `- <key> [q<N>] ("quote…"): **VERDICT**` (the id since Phase 20)
     //   Pass-1: `- <key>: **VERDICT**`
-    const pass3 = /^\s*-\s*(\S+?)\s+\(".*"\):\s*\*\*[A-Z_-]+\*\*/u.exec(line);
-    const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*[A-Z_-]+\*\*/u.exec(line);
+    // The verdict is read right after the row's delimiter, so a `**…**` inside
+    // a quoted snippet is never taken for it.
+    const pass3 = /^\s*-\s*(\S+?)(?:\s+\[(q[1-9]\d*)\])?\s+\(".*"\):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
+    const pass1 = pass3 ? null : /^\s*-\s*(\S+):\s*\*\*([A-Z_-]+)\*\*/u.exec(line);
+    const any = pass3 || pass1 ? null : /^\s*-.*?\*\*([A-Z_-]+)\*\*/.exec(line);
+    const verdict = pass3?.[3] ?? pass1?.[2] ?? any?.[1];
+    if (verdict === undefined || !BLOCKING_VERDICTS.has(verdict)) continue;
+    // An UNVERIFIABLE-QUOTE row the section's verification says the user
+    // accepted (verification-md.ts) passes like its section status did. This is
+    // a REPORT reader (the router's wording): compile and done recompute the
+    // row and honour only a QUOTE-ACCEPTANCES.json record (D-20-04).
+    if (verdict === ACCEPTABLE_QUOTE_VERDICT && / — accepted by you \S+ \((?:--accept-quote|at the prompt)\)\s*$/.test(line)) continue;
     const citekey = pass3?.[1] ?? pass1?.[1];
     // FAIL CLOSED (audit #2/#20, VRFY-09): a blocking verdict on a row whose key
     // cannot be read still blocks — it is never treated as absent.
     const retraction = /\bcited work is retracted\b/.test(line);
-    out.push({ citekey: citekey ?? UNREADABLE_CITEKEY, verdict, ...(retraction ? { retraction: true } : {}) });
+    const quoteId = pass3?.[2];
+    out.push({
+      citekey: citekey ?? UNREADABLE_CITEKEY,
+      verdict,
+      ...(retraction ? { retraction: true } : {}),
+      ...(quoteId !== undefined ? { quoteId } : {}),
+    });
   }
   return out;
 }
@@ -136,8 +152,29 @@ export function sectionVerificationReasons(verificationMd: string, dryRunNow: bo
   if (dryRun !== null) return [dryRun];
   const reasons: string[] = [];
   if (status.toLowerCase() === 'failed') reasons.push("VERIFICATION.md Status is 'failed'");
-  for (const row of parseBlockingVerdictRows(verificationMd)) reasons.push(blockingRowReason(row));
+  for (const row of parseBlockingVerdictRows(verificationMd)) reasons.push(verdictRowReason(row));
   return reasons;
+}
+
+/**
+ * The refusal wording for any blocking row a VERIFICATION.md lists: a draft
+ * check (`- draft: **PLACEHOLDER**`, `**NO-CITATIONS**`) and a text finding
+ * (key slot `L<line>`) are worded as what they are; every citation row goes
+ * through blockingRowReason.
+ */
+export function verdictRowReason(row: BlockingVerdictRow): string {
+  if (row.citekey === 'draft' && DRAFT_VERDICTS.includes(row.verdict as (typeof DRAFT_VERDICTS)[number])) {
+    return row.verdict === 'PLACEHOLDER'
+      ? 'the draft is stub text written with no model configured (PLACEHOLDER) — re-draft it with a model configured (`pensmith write <N>`)'
+      : 'the draft cites none of its assigned sources (NO-CITATIONS) — re-draft it (`pensmith write <N>`)';
+  }
+  if (/^L\d+$/.test(row.citekey) && (row.verdict === 'UNPARSEABLE' || row.verdict === 'UNSUPPORTED-FORM')) {
+    return `line ${row.citekey.slice(1)} of the draft holds a citation the verifier cannot check (${row.verdict})`;
+  }
+  if (row.quoteId !== undefined && row.verdict === ACCEPTABLE_QUOTE_VERDICT) {
+    return blockingRowReason(row).replace('--accept-quote <id>', `--accept-quote ${row.quoteId}`);
+  }
+  return blockingRowReason(row);
 }
 
 /** The refusal wording for one blocking row (compile refuse-gate, done re-check). */

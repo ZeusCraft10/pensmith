@@ -2,8 +2,12 @@
 //
 // THIN ORCHESTRATOR: this verb delegates 100% to bin/lib/compile.ts::runCompile
 // (the keystone pipeline). No business logic lives here — it only resolves args,
-// supplies the production re-verify seam (deterministic Pass 1 + Pass 3 — NEVER
-// Pass 2/4, D-08), and emits the COMPILE-REPORT path + outcome to stdout.
+// supplies the production re-verify seam (verify.ts verifySection with the
+// advisory passes off — deterministic Pass 1 + Pass 3, NEVER Pass 2/4, D-08;
+// it rewrites only that section's VERIFICATION.md and PLAN.md, and never
+// LIBRARY.json, CITATIONS.bib or last_verified — D-20-23), and emits the
+// COMPILE-REPORT path + outcome to stdout. runCompile recomputes every section
+// through the gate core itself (VRFY-25), whatever the seam answers.
 //
 // `compile` IS one of the locked UX-02 16 verbs (bin/lib/verbs.ts) — this file
 // promotes the Phase-2 dispatcher stub to a real loader (bin/pensmith.ts
@@ -20,48 +24,36 @@
 // regen, and report emission all run in Tier 2.
 
 import { defineCommand } from 'citty';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { runCompile, type ReVerifyInput, type ReVerifyResult } from '../lib/compile.js';
 import { EXIT_BLOCKED } from '../lib/exit-codes.js';
-import { runPass1 } from '../lib/verify/pass1.js';
-import { runPass3 } from '../lib/verify/pass3.js';
-import { parseBibFileAt } from '../lib/citations.js';
-import { sectionDraft, paperDir, projectRoot } from '../lib/paths.js';
+import { projectRoot } from '../lib/paths.js';
 import { readPaperBrief } from '../lib/paper-brief.js';
-import { blocksCompile } from '../lib/verify/verdicts.js';
+import { gateRefusals, rowBlocks } from '../lib/verify/gate.js';
+import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
+import { verifySection } from './verify.js';
 
 /**
- * Production staleness re-verify seam (D-08 — Pass 1 + Pass 3 ONLY). Runs the
- * deterministic verifiers for the stale section and reports whether any blocking
- * verdict surfaced. NEVER wires Pass 2/4 (advisory, Phase 5). Reuses the same
- * cassette-backed paths as `pensmith verify` in offline CI.
+ * Production staleness re-verify seam (D-08, D-20-23): the section verifier
+ * itself with the advisory passes off — Pass 1 + Pass 3 and the draft checks
+ * through the gate core, never Pass 2/4 — which rewrites that section's
+ * VERIFICATION.md (Pass 2 / Pass 4 marked "not run — compile staleness
+ * re-verify") and its PLAN.md status and hash, and never a DRAFT.md, the
+ * bibliography or last_verified. Reuses the same cassette-backed paths as
+ * `pensmith verify` in offline CI.
  */
-async function productionReVerify(paperRoot: string, input: ReVerifyInput): Promise<ReVerifyResult> {
-  const draftPath = sectionDraft(input.n, input.slug, paperRoot);
-  const bibPath = join(paperDir(paperRoot), 'CITATIONS.bib');
-  let draftMd: string;
-  let bibText: string;
-  try {
-    draftMd = readFileSync(draftPath, 'utf8');
-    bibText = readFileSync(bibPath, 'utf8');
-  } catch {
-    // Missing inputs → treat as a re-verify failure (fail-safe: never let a
-    // stale section escape unverified).
-    return { passed: false, failingCitekeys: [] };
+async function productionReVerify(input: ReVerifyInput): Promise<ReVerifyResult> {
+  const id = formatSectionId(sectionIdOf(input.n, input.suffix));
+  const v = await verifySection(input.n, input.slug, input.suffix ?? null, { advisory: false, writePaperFiles: false });
+  if (v.gate === undefined) {
+    // An early return: the draft is missing, or the section's last write failed.
+    return { passed: false, failingCitekeys: [], reasons: [v.status === 'failed' ? `its last write failed — run \`pensmith write ${id}\`` : `DRAFT.md missing — run \`pensmith write ${id}\``] };
   }
-  const pass1 = await runPass1(draftMd, bibPath, { root: paperRoot });
-  const bibEntries = await parseBibFileAt(bibText, bibPath);
-  const bibByCitekey = new Map<string, { DOI?: string }>(
-    bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
-  );
-  const pass3 = await runPass3(draftMd, bibByCitekey, { root: paperRoot });
-
-  const failing: string[] = [];
-  // The one blocking rule (verify/verdicts.ts, Phase 20 seam S-C).
-  for (const r of pass1) if (blocksCompile(r.verdict)) failing.push(r.citekey);
-  for (const r of pass3) if (blocksCompile(r.verdict)) failing.push(r.citekey);
-  return { passed: failing.length === 0, failingCitekeys: [...new Set(failing)] };
+  const failing = v.gate.rows.filter(rowBlocks).flatMap((r) => (r.kind === 'draft' || r.kind === 'text' ? [] : [r.key]));
+  return {
+    passed: v.ok && !v.gate.outcome.blocked,
+    failingCitekeys: [...new Set(failing)],
+    reasons: gateRefusals(v.gate, { kind: 'section', id }),
+  };
 }
 
 /**
@@ -107,7 +99,7 @@ export const compileCommand = defineCommand({
       yolo: args.yolo === true,
       lintHeadings: args.lintHeadings === true,
       ...(discipline ? { discipline } : {}),
-      reVerify: (input: ReVerifyInput) => productionReVerify(paperRoot, input),
+      reVerify: (input: ReVerifyInput) => productionReVerify(input),
       // Tier-2: no boundary smoother wired (raw concat — best-effort prose).
     });
 

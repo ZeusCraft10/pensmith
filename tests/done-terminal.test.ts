@@ -14,6 +14,8 @@ import { join } from 'node:path';
 import { initState, initSection } from '../bin/lib/state.js';
 import { resolveNextAction } from '../bin/lib/router.js';
 import { doneCommand } from '../bin/cli/done.js';
+import { computeDraftHash } from '../bin/lib/draft-hash.js';
+import { writeCompileRecord } from './helpers/paper-cli-harness.js';
 
 async function withEnvCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   const prevCwd = process.cwd();
@@ -43,11 +45,15 @@ test('audit #15: Tier-2 done writes FINAL.md so the router reaches the terminal 
     '',
   ].join('\n'));
   writeFileSync(join(root, '.paper', 'CITATIONS.bib'), '@article{x, title={X}, author={Y}, year={2020}}\n');
-  // A verified, compiled paper: section PLAN.md verified, VERIFICATION.md clean,
-  // DRAFT.md present, FINAL.md absent.
-  writeFileSync(join(root, '.paper', 'sections', '01-intro', 'PLAN.md'), '---\nstatus: verified\nassigned_sources: []\n---\n# intro\n');
-  writeFileSync(join(root, '.paper', 'sections', '01-intro', 'VERIFICATION.md'), 'Status: verified\n\n## Pass-1\n- x: **OK** — titleJW=1.00, authorJW=1.00 — ok\n');
-  writeFileSync(join(root, '.paper', 'DRAFT.md'), '# Paper\n\nA grounded claim.\n');
+  // A verified, compiled paper: the section's draft, its PLAN.md verified for
+  // that draft (VRFY-27: done refuses a stale one), VERIFICATION.md clean, the
+  // compiled DRAFT.md and the compile record done checks it against, FINAL.md absent.
+  const sectionDraft = '# Paper\n\nA grounded claim.\n';
+  writeFileSync(join(root, '.paper', 'sections', '01-intro', 'DRAFT.md'), sectionDraft);
+  writeFileSync(join(root, '.paper', 'sections', '01-intro', 'PLAN.md'), `---\nstatus: verified\nassigned_sources: []\nverified_against_draft_hash: '${computeDraftHash(Buffer.from(sectionDraft), [])}'\n---\n# intro\n`);
+  writeFileSync(join(root, '.paper', 'sections', '01-intro', 'VERIFICATION.md'), 'Status: verified\n\n## Pass-1\n');
+  writeFileSync(join(root, '.paper', 'DRAFT.md'), sectionDraft);
+  writeCompileRecord(root, [{ n: 1, slug: 'intro' }]);
 
   // Precondition: with DRAFT.md present but FINAL.md absent, the router wants done.
   assert.equal((await resolveNextAction(root)).verb, 'done', 'precondition: router should want done');

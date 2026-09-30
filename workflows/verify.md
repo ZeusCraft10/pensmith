@@ -2,8 +2,10 @@
 
 > Verify citations + claims in one section. Per-section verb — writes ONLY
 > inside `.paper/sections/<NN>-<slug>/` (TEST-09 section-isolation invariant),
-> with one paper-level repair: an unparseable `.paper/CITATIONS.bib` is
-> re-rendered from `LIBRARY.json` (step 3; SRC-12).
+> with two paper-level writes, both through the one library writer: an
+> unparseable `.paper/CITATIONS.bib` is re-rendered from `LIBRARY.json` (step 3;
+> SRC-12), and each citation a registrar confirmed gets its `LIBRARY.json`
+> `last_verified` (step 10; VRFY-28).
 >
 > **D-13 LOCKED INVARIANT — the blocking verdict is 100% deterministic.**
 > No model call decides a Pass-1 or Pass-3 verdict or the section status; the
@@ -42,7 +44,9 @@ or after editing DRAFT.md by hand).
 
 ## Outputs
 
-- `.paper/sections/<NN>-<slug>/VERIFICATION.md` — Pass-1 + Pass-3 narratives + overall verdict
+- `.paper/sections/<NN>-<slug>/VERIFICATION.md` — Status, draft hash, the Summary table, then the Pass-1, Pass-3 and draft-check rows, the accepted quotes and the advisory sections
+- `.paper/sections/<NN>-<slug>/QUOTE-ACCEPTANCES.json` — only when the user accepts a quote (step 7a)
+- `.paper/LIBRARY.json` — `last_verified` of the citations a registrar confirmed (step 10, through the library writer)
 - `.paper/sections/<NN>-<slug>/PLAN.md` — frontmatter status updated to `'verifying'` → `'verified'` | `'failed'` | `'unverifiable'` (D-08-AMENDED)
 - Only when `.paper/CITATIONS.bib` does not parse and `.paper/LIBRARY.json` exists: `.paper/CITATIONS.bib` and `.paper/CITATIONS.ris` re-rendered from the library, the unreadable file kept as `.paper/CITATIONS.bib.unparsed-<time>.bak`, one stderr notice (SRC-12). This is the one write verify makes outside the section folder.
 
@@ -60,19 +64,22 @@ or after editing DRAFT.md by hand).
 
 1. **Parse args**: `pensmith verify <N>` — `N` is the section id (`3`, or `1a` for a section a re-outline inserted). Resolve the slug from the section's STATE.json registration (OUTLINE.md's rows only while nothing is registered; a registered section whose OUTLINE.md row disagrees is refused naming `pensmith outline`, D-18-38); the section's folder is found by slug. An `N` that is not a section id from 1 to 99 (optionally with one letter), a section the outline does not have, or a `--slug` that is not the outline's slug for `N` is a usage error (exit 2) before anything is read or written — never a `NN-placeholder` folder for a paper with an outline (RUN-09).
 
-2. **Set status to `'verifying'`** (D-08-AMENDED LOCKED enum value): update the section's PlanFrontmatter `status: 'verifying'` via `bin/lib/frontmatter.ts updateFrontmatter()` (round-trip-safe per D-08).
+2. **Set status to `'verifying'`** (D-08-AMENDED LOCKED enum value): update the section's PlanFrontmatter `status: 'verifying'` and remove `verified_against_draft_hash` via `bin/lib/plan-status.ts updatePlanFrontmatter()` (round-trip-safe per D-08) BEFORE any pass runs — a verify that crashes or is killed leaves a section the router verifies again, never an earlier `verified` (VRFY-16). Every exit below persists a final status.
 
 3. **Read inputs**:
    - `<sectionDraft(n, slug)>` = `.paper/sections/<NN>-<slug>/DRAFT.md` — Markdown body with Pandoc `[@citekey]` tokens (D-21).
    - `<sectionPlan(n, slug)>` = `.paper/sections/<NN>-<slug>/PLAN.md` — for `assigned_sources` and the `verified_against_draft_hash` invalidation check.
-   - **`.paper/CITATIONS.bib`** — canonical BibTeX (D-20), parsed through `bin/lib/citations.ts parseBibtex` (D-19 citation-js chokepoint). This file is the **single source of truth** for citation METADATA at verify time (title, authors, identifiers). An empty bib is zero entries (BRDTH-01).
+   - **`.paper/CITATIONS.bib`** — canonical BibTeX (D-20), parsed ENTRY BY ENTRY through `bin/lib/citations.ts parseBibEntries` (D-19 citation-js chokepoint; VRFY-16): every `@type{key, …}` block is parsed on its own, so the entries that parse are checked and a cited key whose entry does not parse is its own `UNPARSEABLE` row naming the key and the entry's line — no parse error ever reaches the user as a stack. This file is the **single source of truth** for citation METADATA at verify time (title, authors, identifiers). An empty bib is zero entries (BRDTH-01).
    - **Bib repair (SRC-12)**: when CITATIONS.bib does not parse and `.paper/LIBRARY.json` exists, verify first re-renders CITATIONS.bib and CITATIONS.ris from the library through the one library writer (`bin/lib/library.ts rerenderCitations`), keeps the unreadable file as `CITATIONS.bib.unparsed-<time>.bak`, and prints one stderr notice. Without a LIBRARY.json nothing is rewritten and the parse error fails closed.
    - **`.paper/LIBRARY.json`** is read for one more thing: which cited sources have a bring-your-own PDF (`byo`). Its text is read ONLY through `bin/lib/byo-text.ts`, which re-hashes `.paper/sources/<citekey>.pdf` against the recorded sha256 first (S-17): Pass 3 checks quotes against it (step 6), and — only when the user turned on `[verification] send_byo_passages` (off by default: PRD §9 keeps a bring-your-own PDF's contents on the machine) — the advisory Pass 2 sends its passages nearest each claim to the model provider. LIBRARY.json also says which identifier-less entries are the user's own unidentified PDFs (step 4) and which retraction notices were recorded at ingest. An edited PDF, a loose `.paper/sources/<citekey>.txt`, a poisoned cache or a PDF the user attached although it does not show the work (`byo.asserted`) is never used.
    - **Refusal after a failed write** (FEED-04, D-18-25): when PLAN.md carries a `failure_reason` (the section's last `write` was refused and kept no new draft), the DRAFT.md on disk is an older one that the failed write was never retried for. `verify` does not verify it: it prints `pensmith verify: section N not verified — its last write failed (<reason>); the DRAFT.md on disk is older — run \`pensmith write N\`` and exits 4 (EXIT_BLOCKED); nothing is written and PLAN.md keeps the failure. Compile and the export gate refuse the section the same way.
-   - **Early exits** (each keeps the router moving): no DRAFT.md → an unverifiable VERIFICATION.md naming `pensmith write N`, PLAN.md `status: 'writing'` (the router re-drafts), exit 1. No CITATIONS.bib while the draft cites sources (any citation shape, `bin/lib/citation-token.ts`) → `Status: failed` naming `pensmith research` (fail closed; PLAN.md untouched), exit 1. A draft that cites nothing needs no bib: it takes the normal path, Pass 1 and Pass 3 have nothing to check, and the section is `verified` (with a note line) — so an empty library never loops the router on verify.
+   - **Early exits** (each keeps the router moving and persists a status): no DRAFT.md → an unverifiable VERIFICATION.md naming `pensmith write N`, PLAN.md `status: 'writing'` (the router re-drafts), exit 1. No CITATIONS.bib — or an empty one — while the draft cites sources (any citation shape, `bin/lib/citation-token.ts`) is no early exit: every cited key is a `FABRICATED` row saying the bibliography is missing or empty, `Status: failed`, exit 4 (fail closed, D-20-20). A draft that cites nothing needs no bib: it takes the normal path, Pass 1 and Pass 3 have nothing to check, and the section is `verified` (with a note line) when it has no assigned sources — so an empty library never loops the router on verify; with assigned sources it is `NO-CITATIONS` (step 4b).
+   - **The quote acceptances** the user recorded for this section (`QUOTE-ACCEPTANCES.json` next to PLAN.md, schema v1, read and written only by `bin/lib/quote-acceptance.ts`; VRFY-20). A record that does not parse accepts nothing (a stderr WARN says why).
 
-4. **PASS 1 — Citation Integrity (DETERMINISTIC, VRFY-01)**:
+4. **PASS 1 — Citation Integrity (DETERMINISTIC, VRFY-01)** — run by the one gate core (`bin/lib/verify/gate.ts recomputeGate`, D-20-05), the same code compile and done run over the text they process:
    - Extract every cited key from DRAFT.md with the one citation grammar (`bin/lib/citation-token.ts`): bare `[@k]`, clusters `[@a; @b]`, locators `[@k, p. 5]`, author-suppressed `[-@k]`, braced `@{k}` and narrative `@k` — every form Pandoc renders as a citation gets a row, so none can look absent (D-18-40).
+   - **Membership (VRFY-17)**: a cited key that is not in the section's PLAN.md `assigned_sources` gets its own `UNASSIGNED` row right after its registrar row (`not in section N's assigned_sources — re-plan the section's sources with pensmith plan N --revise, or assign it to the section with pensmith add --remap <key> --section N`). It fails the section.
+   - **Re-check past the cache (VRFY-28)**: the cited keys whose `LIBRARY.json` `last_verified` is null or older than `[verification] recheck_after_days` (default 30) are looked up past the HTTP cache; the others may be answered from it.
    - For each citekey, look up the parsed `.paper/CITATIONS.bib` entry → `claimed = {title, authors, doi, retracted}`.
    - If the citekey is absent from `.paper/CITATIONS.bib` → `verdict = 'FABRICATED'`, `reason = 'citekey ${citekey} not present in .paper/CITATIONS.bib (citation invented by drafter)'`. Skip the rest of step 4 for this citekey.
    - For each DOI present in claimed: call `sources.crossref.fetchById(doi)` (the three-way lookup, D-19-05; recorded fixtures in CI) → `actual = {title, authors, doi, retraction_status}`.
@@ -93,11 +100,13 @@ or after editing DRAFT.md by hand).
     - **Retracted-flag handling**: if `claimed.retracted === true` or the bib's `note = {RETRACTED}` (recorded when the source entered the library — research's cross-check, or the registrar record `add` read) → `verdict = 'MIS-CITED'`, `reason = 'cited work is retracted (recorded when the source entered the library: <notice>)'`, after the same re-fetch, so the row carries the real scores (`n/a` when there was no record to compare) and says where the flag came from. **Override even if JW thresholds pass** — retraction is a citation-integrity failure regardless of metadata match.
     - **Multi-DOI redirect handling**: if `fetchById(claimed.doi)` returns a record whose `doi` field DIFFERS from `claimed.doi` — compared case-insensitively, since DOIs are (Crossref returns canonical DOI for redirected entries), treat as `'OK'` iff `titleJW >= 0.98` AND `authorJW >= 0.95` (stricter band to account for Crossref publishing two distinct DOIs for the same work). Otherwise `verdict = 'MIS-CITED'`, `reason = 'claimed DOI ${claimed.doi} resolves to a different work (canonical: ${actual.doi})'`.
 
-5. **Narrate Pass-1 results into VERIFICATION.md** via TEMPLATE LITERAL (no LLM): for each `pass1Result`, one list row (`bin/lib/verify/verdict-rows.ts renderPass1VerdictRow` — the same module parses it back for compile and done):
+4b. **Draft checks (DETERMINISTIC, VRFY-24)**: a draft that cites nothing while its section has assigned sources is `NO-CITATIONS` (`no citations; N sources assigned` — fails the section; an introduction with no assigned sources and no citations verifies). A draft that carries the stub marker `<!-- stub draft (no model configured) — not real prose -->` — which `pensmith write` puts on a draft produced with no model (`PENSMITH_NO_LLM=1` or `--dry-run`) — is `PLACEHOLDER` outside `--dry-run` (unverifiable, blocking: re-draft it with a model, `pensmith write N`); under `--dry-run` it passes, and the dry-run compile removes the marker so no dry-run export carries it.
+
+5. **Narrate Pass-1 results into VERIFICATION.md** via TEMPLATE LITERAL (no LLM): for each Pass-1 row, one list row (`bin/lib/verify/verification-md.ts renderGateRow`; `bin/lib/verify/verdict-rows.ts` parses it back — a round-trip property test covers every key the citation grammar accepts):
    ```text
    - ${citekey}: **${verdict}** — titleJW=${titleJW.toFixed(2)}, authorJW=${authorJW.toFixed(2)} — ${reason}
    ```
-   The narration is mechanical string interpolation — no model call is issued. The rows go under `## Pass-1 (citation integrity, deterministic — D-11 AND-gate)`.
+   A finding about the citation text itself (a form the grammar cannot read) takes `L<line>` in the key slot. The narration is mechanical string interpolation — no model call is issued. The rows go under `## Pass-1 (citation integrity, deterministic — D-11 AND-gate)`; the draft checks of step 4b go under `## Draft checks` as `- draft: **${verdict}** — ${reason}`.
 
 6. **PASS 3 — Quote Integrity (DETERMINISTIC, VRFY-04 / VRFY-05)**:
 
@@ -124,22 +133,26 @@ or after editing DRAFT.md by hand).
    - Else if all quotes are `'PDF_UNAVAILABLE'` or `'TEXT_UNAVAILABLE'` → section Pass-3 is **UNVERIFIABLE** for this source (D-08-AMENDED `status: 'unverifiable'`).
    - Mixed (some `'OK'`, some `'PDF_UNAVAILABLE'`): per-source Pass-3 is **UNVERIFIABLE** overall (do NOT auto-promote to PASS — surface to writer so they can substitute a quote with available OA PDF backing).
 
-7. **Narrate Pass-3 results into VERIFICATION.md** via TEMPLATE LITERAL (no LLM): for each `pass3Result`, one list row (`renderPass3VerdictRow`):
+7. **Narrate Pass-3 results into VERIFICATION.md** via TEMPLATE LITERAL (no LLM): for each quote, one list row naming its id in the draft (`q1`, `q2`, … in document order):
    ```text
-   - ${citekey} ("${quoteSnippet}…"): **${verdict}** — lev=${levRatio.toFixed(3)} — ${reason}
+   - ${citekey} [${id}] ("${quoteSnippet}…"): **${verdict}** — lev=${levRatio.toFixed(3)} — ${reason}
    ```
    The rows go under `## Pass-3 (quote integrity, deterministic — levenshtein-substring)`.
 
-8. **Compute overall verdict** (DETERMINISTIC, no LLM):
-   - **FAIL** (`status: failed`) iff any `'FABRICATED'` / `'MIS-CITED'` Pass-1 verdict or any `'NOT_FOUND'` Pass-3 verdict.
-   - **UNVERIFIABLE, blocking** (`status: unverifiable`) iff no FAIL and any Pass-1 verdict is `'UNVERIFIABLE'` (checked offline or under `--dry-run`, step 4): compile and done refuse the row with "re-run online".
-   - **UNVERIFIABLE, advisory** (`status: unverifiable`) iff no FAIL, no Pass-1 UNVERIFIABLE, and a Pass-3 quote is `'PDF_UNAVAILABLE'` / `'TEXT_UNAVAILABLE'`: it surfaces loudly in VERIFICATION.md but does not block compile (Pitfall 3; the README disclaimer per PRD §3 covers it).
+7a. **Accepting a quote no source text can check (VRFY-20)**: an `UNVERIFIABLE-QUOTE` row (no bring-your-own PDF and no open-access copy has the text) can be accepted by the user — `pensmith verify N --accept-quote q2` (repeatable), or, in a terminal, the `quote-accept` gate (a multi-select of those quotes plus "accept all"; `--yolo` never answers it; without a terminal it is skipped). Only an `UNVERIFIABLE-QUOTE` id is accepted: any other id exits 2 naming its verdict and records nothing. An acceptance is recorded in the section's `QUOTE-ACCEPTANCES.json` (bound to the quote's text and the draft's hash — one changed byte of the draft voids it) and lifts the row only while the gate's recomputation still yields `UNVERIFIABLE-QUOTE` for that quote; the row then reads `… — accepted by you <time> (--accept-quote | at the prompt)` and the quote is listed under `## Accepted quotes`. A hand-written acceptance line in VERIFICATION.md means nothing. There is no blanket flag (`--accept-unverifiable-quotes` is an unknown flag, exit 2).
+
+8. **Compute overall verdict** (DETERMINISTIC, no LLM; `bin/lib/verify/verdicts.ts`):
+   - **FAIL** (`status: failed`) iff any failing row: `FABRICATED`, `MIS-CITED`, `UNASSIGNED`, `UNPARSEABLE`, `NO-CITATIONS` or a quote `NOT_FOUND` (and the other failing labels `verdicts.ts` lists).
+   - **UNVERIFIABLE, blocking** (`status: unverifiable`) iff no FAIL and a check could not run: a Pass-1 `UNVERIFIABLE` (checked offline or under `--dry-run`, or a failed lookup — "re-run online"), a quote `UNVERIFIABLE-QUOTE` that is not accepted (step 7a), or `PLACEHOLDER` (step 4b). An unverifiable section does NOT stop the others (S-13): the router goes on to the next section and never re-runs verify on the same draft; compile refuses the section naming its options (re-run online, add the source's PDF, paraphrase, accept the quote, re-draft with a model), and `pensmith status` shows them.
+   - **UNVERIFIABLE, advisory** (`status: unverifiable`) iff no blocking row and a quote carries the pre-Phase-20 label `'PDF_UNAVAILABLE'` / `'TEXT_UNAVAILABLE'`: it surfaces in VERIFICATION.md but does not block compile (Pitfall 3).
    - **PASS** (`status: verified`) otherwise.
 
 9. **Write `<sectionVerification(n, slug)>`** = `.paper/sections/<NN>-<slug>/VERIFICATION.md` via `bin/lib/atomic-write.ts` (D-07 chokepoint), in this order:
    - **Offline marker** (RUN-02): when sources were offline, the FIRST line is `> OFFLINE MODE (<reason>) — recorded fixtures, not live results.` (or the `--dry-run` synthetic-sources form). A VERIFICATION.md written under `--dry-run` never lets a real compile or export through (RUN-27): re-verify without `--dry-run`.
-   - `# VERIFICATION (Section N, slug)` and the `Status: verified | failed | unverifiable` line (compile and done refuse a missing Status line and a `Status: failed` even when no row parses — fail closed).
-   - The Pass-1 rows (step 5) and the Pass-3 rows (step 7).
+   - `# VERIFICATION (Section N, slug)`, the `Status: verified | failed | unverifiable` line (compile and done refuse a missing Status line and a `Status: failed` even when no row parses — fail closed) and `Draft: sha256 <hash>` (the draft hash the rows judged).
+   - `## Summary` FIRST: a table `| Pass | Verdict | Count |` of every Pass-1, Pass-3 and draft-check label with a non-zero count, the Pass-2 verdict counts, the Pass-4 orphan total and the freshness warning / unknown counts. A parser proves the counts equal the rows (VRFY-24).
+   - The Pass-1 rows (step 5), the Pass-3 rows (step 7), `## Draft checks` (step 4b) and `## Accepted quotes` (when any, step 7a).
+   - compile and done never trust this file's rows: they recompute them with the same gate core over the text they process (D-20-04, D-20-23); the record can only add refusals (no Status line, `Status: failed`, a draft hash of another draft, a `--dry-run` record outside `--dry-run`).
    - The source-freshness table and the ADVISORY claim-support (Pass 2) and orphan-claim (Pass 4) sections. They are computed after the status above is frozen and never change it (VRFY-07). With no model configured (Tier 1, or a Tier-2 user checking a hand-written draft, D-V1-04) they record `skipped (no LLM configured)` rows and verify still exits by the frozen status. When the session cost cap (or an invalid runtime config) stops them, their rows say `not run (…)`, VERIFICATION.md and step 10 are still written, and verify then exits with that failure's code (5 for the cost cap). A failed Retraction Watch probe is an `unavailable` freshness row, never silence. The DOI HEAD probe asks only whether doi.org resolves the handle: its redirect is the answer (never followed), and only a 4xx/5xx from doi.org is a WARN row.
 
 10. **Update PlanFrontmatter** per D-08-AMENDED LOCKED enum:
@@ -149,8 +162,10 @@ or after editing DRAFT.md by hand).
 
     Set `verified_against_draft_hash` (the per-section hash compile recomputes from DRAFT.md bytes + sorted `assigned_sources`). If the drafter is re-run, the hash changes, automatically invalidating this verification — the cycle-break between write and verify (D-08-AMENDED).
 
-    **Exit code** (RUN-09): 0 for `verified` and for an advisory `unverifiable`; **4** (EXIT_BLOCKED) for `failed` and for a blocking Pass-1 UNVERIFIABLE.
+    Record `last_verified` (VRFY-28): each citation whose Pass-1 row passed on a registrar's answer gets that answer's time as its `LIBRARY.json` `last_verified`, through the one library writer (`library.ts recordLastVerified`, under the library lock). compile never records it.
 
-11. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/` — except the bib repair of step 3 (a paper-level file rendered from LIBRARY.json; no other section's files are ever touched).
+    **Exit code** (RUN-09): 0 for `verified` and for an advisory `unverifiable`; **4** (EXIT_BLOCKED) for `failed` and for a blocking `unverifiable`; **2** (EXIT_USAGE) for an `--accept-quote` id that cannot be accepted (after the verification is written; nothing is recorded).
 
-12. **Shell fallback** (TIER-06 equivalence path): `pensmith verify <N> [--yolo]`.
+11. **Section-isolation invariant** (TEST-09): this verb MUST NOT touch any file outside `.paper/sections/<NN>-<slug>/` — except the bib repair of step 3 and the `last_verified` record of step 10 (paper-level files written by the library writer; no other section's files are ever touched).
+
+12. **Shell fallback** (TIER-06 equivalence path): `pensmith verify <N> [--accept-quote <id>] [--yolo]` (`--accept-quote` repeats, one quote id each).

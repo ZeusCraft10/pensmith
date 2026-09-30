@@ -590,7 +590,7 @@ test('SRC-12: a bib-only entry is imported with its eprint, abstract, editors an
   assert.match(rendered, /@incollection\{handmade2019,[\s\S]*booktitle = \{The Handbook\}[\s\S]*eprint = \{1906\.00001\}[\s\S]*abstract = \{An abstract \\& more\.\}/);
 });
 
-test('BRDTH-01: verify on an unparseable CITATIONS.bib is one classified line (no stack hint), never "no citations"', () => {
+test('BRDTH-01 / VRFY-16: verify on an unparseable CITATIONS.bib names the key and line as UNPARSEABLE (exit 4, no stack hint), never "no citations"', () => {
   const root = project();
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'pensmith-libwriter-data-'));
   const sec = path.join(root, '.paper', 'sections', '01-intro');
@@ -607,9 +607,13 @@ test('BRDTH-01: verify on an unparseable CITATIONS.bib is one classified line (n
   const r = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), path.join(REPO, 'bin', 'pensmith.ts'), 'verify', '1', '--yolo'], {
     cwd: root, env, encoding: 'utf8', timeout: 120_000,
   });
-  assert.equal(r.status, 1, r.stderr);
-  assert.match(r.stderr, /CITATIONS\.bib is not valid BibTeX/);
-  assert.doesNotMatch(r.stderr, /PENSMITH_DEBUG/, 'a bad bib is a classified error, not an internal one');
+  // VRFY-16 (D-20-20): the bib is read entry by entry — the cited key whose
+  // entry does not parse is its own blocking row, naming the key and line.
+  assert.equal(r.status, 4, r.stderr);
+  const md = fs.readFileSync(path.join(sec, 'VERIFICATION.md'), 'utf8');
+  assert.match(md, /- bad2025: \*\*UNPARSEABLE\*\* — .*CITATIONS\.bib entry \(line 1\) does not parse/, md);
+  assert.doesNotMatch(md, /cites no sources|no citations/);
+  assert.doesNotMatch(r.stderr, /PENSMITH_DEBUG|\n\s+at /, 'a bad bib is a classified verdict, not an internal error');
 });
 
 test('BRDTH-01: recordLastVerified keeps the latest time per citekey through the same writer', async () => {

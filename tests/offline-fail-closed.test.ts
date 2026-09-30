@@ -34,7 +34,7 @@ const { sources } = await import('../bin/lib/sources/index.js');
 const { runPass1, UNVERIFIABLE_OFFLINE_REASON } = await import('../bin/lib/verify/pass1.js');
 const { renderPass1VerdictRow } = await import('../bin/lib/verify/verdict-rows.js');
 const { runCompile } = await import('../bin/lib/compile.js');
-const { runExportBlockingGate } = await import('../bin/cli/done.js');
+const { runExportBlockingGate, recomputeExportGate, doneSections } = await import('../bin/cli/done.js');
 const { computeDraftHash } = await import('../bin/lib/draft-hash.js');
 const { runPlagiarism } = await import('../bin/lib/plagiarism.js');
 const { scoreHonestyWithOptions } = await import('../bin/lib/honesty.js');
@@ -207,22 +207,34 @@ test('RUN-03: the recorded fixture is still evidence — correct metadata OK, wr
 // online"; a zero-row `Status: unverifiable` section passes (Pitfall 3).
 // ---------------------------------------------------------------------------
 
-function seedCompiledPaper(verification: string): string {
+/**
+ * A compiled-paper fixture whose files agree with its VERIFICATION.md, since
+ * compile and done recompute the gate from the draft (D-20-23/25): `cites`
+ * → the draft cites jumper2021 (an unrecorded DOI: UNVERIFIABLE offline),
+ * assigned and in the bib; otherwise a citation-free draft over an empty bib
+ * (the zero-row case).
+ */
+function seedCompiledPaper(verification: string, cites = true): string {
   const root = tmp('pensmith-offline-compile-');
   const pDir = join(root, '.paper');
   const secDir = join(pDir, 'sections', '01-intro');
   mkdirSync(secDir, { recursive: true });
-  writeFileSync(join(pDir, 'CITATIONS.bib'), '');
+  const assigned = cites ? ['jumper2021'] : [];
+  writeFileSync(join(pDir, 'STATE.json'), JSON.stringify({ $schemaVersion: 3, paperId: 'offline', createdAt: '2026-01-01T00:00:00.000Z', sections: [{ n: 1, slug: 'intro' }] }));
+  writeFileSync(
+    join(pDir, 'CITATIONS.bib'),
+    cites ? `@article{jumper2021,\n  title = {Highly accurate protein structure prediction with AlphaFold},\n  author = {Jumper, John},\n  doi = {${ALPHAFOLD_DOI}},\n  year = {2021}\n}\n` : '',
+  );
   writeFileSync(
     join(pDir, 'OUTLINE.md'),
-    ['# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', '| 1 | intro | Introduction | | 300 |  |', ''].join('\n'),
+    ['# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', `| 1 | intro | Introduction | | 300 | ${assigned.join(', ')} |`, ''].join('\n'),
   );
-  const draft = '# Introduction\n\nAlphaFold changed structural biology [@jumper2021].\n';
+  const draft = cites ? '# Introduction\n\nAlphaFold changed structural biology [@jumper2021].\n' : '# Introduction\n\nAlphaFold changed structural biology.\n';
   writeFileSync(join(secDir, 'DRAFT.md'), draft);
-  const hash = computeDraftHash(Buffer.from(draft, 'utf8'), []);
+  const hash = computeDraftHash(Buffer.from(draft, 'utf8'), assigned);
   writeFileSync(
     join(secDir, 'PLAN.md'),
-    ['---', 'section: 1', 'slug: intro', 'title: Introduction', 'depends_on: []', 'assigned_sources: []', `verified_against_draft_hash: '${hash}'`, 'status: unverifiable', '---', '', '# Introduction', ''].join('\n'),
+    ['---', 'section: 1', 'slug: intro', 'title: Introduction', 'depends_on: []', `assigned_sources: [${assigned.join(', ')}]`, `verified_against_draft_hash: '${hash}'`, 'status: unverifiable', '---', '', '# Introduction', ''].join('\n'),
   );
   writeFileSync(join(secDir, 'VERIFICATION.md'), verification);
   return root;
@@ -264,17 +276,22 @@ test('RUN-03 / D-17-07: the compile refuse-gate blocks an UNVERIFIABLE row with 
 });
 
 test('Pitfall 3: a `Status: unverifiable` section with ZERO verdict rows still compiles', async () => {
-  const root = seedCompiledPaper(ZERO_ROW_UNVERIFIABLE);
+  const root = seedCompiledPaper(ZERO_ROW_UNVERIFIABLE, false);
   const res = await runCompile({ paperRoot: root, yolo: true, onWarn: () => {} });
   assert.equal(res.refused, false, `zero-row unverifiable passes: ${JSON.stringify(res.refuseReasons)}`);
 });
 
-test('RUN-03 / D-17-07: the done re-check blocks an UNVERIFIABLE row with "re-run online"; zero-row unverifiable passes', () => {
-  const blocked = runExportBlockingGate(seedCompiledPaper(UNVERIFIABLE_VERIFICATION));
-  assert.equal(blocked.blocked, true);
-  assert.ok(blocked.reasons.some((r) => /UNVERIFIABLE .*re-run online/.test(r)), JSON.stringify(blocked.reasons));
-  const clean = runExportBlockingGate(seedCompiledPaper(ZERO_ROW_UNVERIFIABLE));
+test('RUN-03 / D-17-07: the done re-check blocks an UNVERIFIABLE row with "re-run online"; zero-row unverifiable passes', async () => {
+  // done recomputes the verdicts over the text it exports (D-20-25).
+  const blockedRoot = seedCompiledPaper(UNVERIFIABLE_VERIFICATION);
+  const text = readFileSync(join(blockedRoot, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'utf8');
+  const blocked = await recomputeExportGate(blockedRoot, text, { sections: doneSections(blockedRoot) });
+  assert.ok(blocked.refusals.some((r) => /UNVERIFIABLE .*re-run online/.test(r)), JSON.stringify(blocked.refusals));
+  const cleanRoot = seedCompiledPaper(ZERO_ROW_UNVERIFIABLE, false);
+  const clean = runExportBlockingGate(cleanRoot);
   assert.equal(clean.blocked, false, JSON.stringify(clean.reasons));
+  const cleanGate = await recomputeExportGate(cleanRoot, readFileSync(join(cleanRoot, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'utf8'), { sections: doneSections(cleanRoot) });
+  assert.deepEqual(cleanGate.refusals, []);
 });
 
 // ---------------------------------------------------------------------------

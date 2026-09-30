@@ -85,8 +85,9 @@ test('SRC-13 (built CLI): a PDF attached at the user\'s word is recorded asserte
   );
   const v = runCli(sb, root, ['verify', '1', '--yolo'], { timeoutMs: 120_000 });
   const md = fs.readFileSync(path.join(sectionDirOf(root, 1, 'background'), 'VERIFICATION.md'), 'utf8');
-  assert.doesNotMatch(md, /aspelmeyer2009 \("these notes record[^\n]*\*\*OK\*\*/, `${v.stdout}\n${v.stderr}`);
-  assert.match(md, /aspelmeyer2009 \("these notes record[^\n]*was attached although its first page does not show this work/);
+  // D-20-20: a Pass-3 row names its quote id — `- <key> [q<N>] ("<snippet>…")`.
+  assert.doesNotMatch(md, /aspelmeyer2009 \[q1\] \("these notes record[^\n]*\*\*OK\*\*/, `${v.stdout}\n${v.stderr}`);
+  assert.match(md, /aspelmeyer2009 \[q1\] \("these notes record[^\n]*was attached although its first page does not show this work/);
 });
 
 test('SRC-13 (built CLI): an essay whose footnote cites "Deep learning" with its DOI is never added as LeCun 2015', () => {

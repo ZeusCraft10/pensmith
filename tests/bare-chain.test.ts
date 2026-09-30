@@ -216,15 +216,23 @@ test('GRND-18: the step exits with the last verb\'s code — a blocking verify e
   assert.ok(!existsSync(sectionFile(sb.root, 2, 'discussion', 'DRAFT.md')));
 
   // Review round 3 (D-18-43): the verdict judged THIS draft and a blocking
-  // UNVERIFIABLE row stays until the source can be reached — next and resume
-  // report attention naming the re-run instead of re-billing the verify on
-  // every bare run; an explicit `verify 1` still re-checks it (exit 4 offline).
+  // UNVERIFIABLE row stays until the source can be reached — a bare run never
+  // re-bills the verify. S-13 (Phase 20): nor does the section stop the others
+  // — `next` runs §2's step, and the step after it is compile, which
+  // recomputes §1 and refuses it naming the re-run; `status` names it too. An
+  // explicit `verify 1` still re-checks it (exit 4 offline).
+  const n2 = await sb.run(['next', '--yolo']);
+  assert.equal(n2.status, EXIT_OK, `${n2.stdout}\n${n2.stderr}`);
+  assert.match(n2.stderr, /^pensmith: ran plan §2, write §2(, verify §2)?; next: compile$/m, 'S-13: §2 goes on; §1 is not re-verified');
+  assert.equal(statusOf(sb.root, 1, 'introduction'), 'unverifiable');
+  assert.equal(statusOf(sb.root, 2, 'discussion'), 'verified');
   const before = sb.mock.requests.length;
-  for (const verb of ['next', 'resume']) {
-    const r2 = await sb.run([verb, '--yolo']);
-    assert.equal(r2.status, EXIT_OK, `${r2.stdout}\n${r2.stderr}`);
-    assert.match(r2.stdout, /attention: section 1 could not be verified: citation \[@nofixture2020\] is UNVERIFIABLE(?:-NETWORK)? .*`pensmith verify 1`/);
-  }
+  const c = await sb.run(['resume', '--yolo']);
+  assert.equal(c.status, EXIT_BLOCKED, `${c.stdout}\n${c.stderr}`);
+  assert.match(`${c.stdout}\n${c.stderr}`, /section 1 \(introduction\): .*nofixture2020.*UNVERIFIABLE/, 'compile recomputes §1 and refuses it');
+  assert.ok(!existsSync(join(sb.root, '.paper', 'DRAFT.md')), 'nothing compiled');
+  const st = await sb.run(['status']);
+  assert.match(st.stdout, /#1 introduction: unverifiable - \[@nofixture2020\] could not be checked \(offline or a failed lookup\) — re-run `pensmith verify 1` online/);
   assert.equal(sb.mock.requests.length, before, 'no model call: the unchanged draft is not re-verified');
   const verify = await sb.run(['verify', '1', '--yolo']);
   assert.equal(verify.status, EXIT_BLOCKED, `${verify.stdout}\n${verify.stderr}`);

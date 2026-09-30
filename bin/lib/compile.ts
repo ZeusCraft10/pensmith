@@ -12,13 +12,20 @@
 //   1. parseOutline; for each section in OUTLINE order (sort by n — D-11):
 //        - read PLAN.md frontmatter (assigned_sources, verified_against_draft_hash,
 //          slug) + the section's DRAFT.md bytes + its VERIFICATION.md.
-//        - REFUSE-GATE (COMP-01): any FABRICATED / MIS-CITED / quote-NOT_FOUND
-//          verdict in VERIFICATION.md → collect a refuse reason naming the
-//          section + citekey.
+//        - LOCAL RECORDS ADD REFUSALS, NEVER REMOVE THEM (D-20-04): a missing
+//          PLAN.md / DRAFT.md / VERIFICATION.md, a missing or `failed` Status
+//          line, a PLAN.md write block (FEED-04) or `failed` status, a
+//          --dry-run verification outside --dry-run (RUN-27) refuse.
 //        - STALENESS (COMP-01 / D-08): if verified_against_draft_hash !=
 //          computeDraftHash(draftBytes, assigned_sources) → WARN + re-verify
-//          (Pass 1 + Pass 3 ONLY, NEVER Pass 2/4). A re-verify failure adds a
-//          refuse reason; an all-pass records a Compile-Staleness-Resolved event.
+//          through the injected seam (production: verify.ts verifySection with
+//          the advisory passes off — it rewrites that section's VERIFICATION.md
+//          and PLAN.md, never a DRAFT.md). A re-verify failure refuses; an
+//          all-pass records a Compile-Staleness-Resolved event.
+//        - RECOMPUTE (VRFY-25, D-20-23): the ONE gate core (verify/gate.ts)
+//          over the section's EXACT draft bytes with its assigned_sources and
+//          quote acceptances — every blocking row refuses, whatever the local
+//          files say (a forged VERIFICATION.md or PLAN.md cannot pass it).
 //      If ANY refuse reason was collected, REFUSE: do NOT write .paper/DRAFT.md.
 //   2. Concatenate section drafts in OUTLINE order (COMP-02), each normalized to
 //      exactly one trailing '\n', joined with '\n\n'.
@@ -29,14 +36,19 @@
 //      Transitions-Changed rejection. Then run the consistency scan (COMP-04,
 //      flags only) and citation density (COMP-05, warn-only vs discipline target).
 //   4. atomicWriteFile DRAFT.md + COMPILE-REPORT.md (schema v1, D-14) +
-//      COMPILE-INPUTS.json (the compiled sections' content hashes, for the router).
-//      .paper/CITATIONS.bib stays the full library rendered from LIBRARY.json by
-//      bin/lib/library.ts (BRDTH-01 / D-17-43); citeproc renders cited keys only.
+//      COMPILE-INPUTS.json v2 (the compiled sections' content and verified
+//      hashes, and the sha256 of the DRAFT.md written — the router and done
+//      read it, VRFY-27). compile never writes LIBRARY.json,
+//      .paper/CITATIONS.bib or last_verified: the bib stays the full library
+//      rendered from LIBRARY.json by bin/lib/library.ts (BRDTH-01 / D-17-43);
+//      citeproc renders cited keys only. Under --dry-run the stub-draft marker
+//      lines are removed from the compiled draft (VRFY-24).
 //
 // The smoother + re-verify transports are injectable seams so CI never touches a
-// live model/network. Production callers (bin/cli/compile.ts) wire the real
-// loadPrompt('smoother') + model call and the runPass1 + runPass3 re-verify.
+// live model. Production callers (bin/cli/compile.ts) wire verify.ts
+// verifySection as the re-verify; the gate core is not injectable.
 
+import { createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { paperDir, sectionDraft, sectionPlan, sectionVerification } from './paths.js';
@@ -56,11 +68,13 @@ import {
   type ConsistencyEntry,
   type StalenessEntry,
 } from './compile-report.js';
-import { sectionVerificationReasons } from './verify/verdict-rows.js';
 import { sectionWriteBlockReason } from './plan-status.js';
 import { networkMode } from './http-mock.js';
 import { writeCompileInputs } from './compile-inputs.js';
 import { outlineProblem, sectionRegistryProblem } from './section-registry.js';
+import { recomputeGate, gateRefusals, loadBibliography, stripStubMarker, type AcceptedQuote, type ByoQuote } from './verify/gate.js';
+import { verificationRecordReasons } from './verify/verification-md.js';
+import { readQuoteAcceptances, sectionDirOfPlan } from './quote-acceptance.js';
 
 /** The boundary window handed to the (injectable) smoother seam. */
 export interface SmoothBoundaryInput {
@@ -78,6 +92,8 @@ export interface SmoothBoundaryInput {
 export interface ReVerifyInput {
   n: number;
   slug: string;
+  /** The section's letter (§1a), absent for §1 (GRND-09). */
+  suffix?: string;
   /** Present ONLY so a test can prove Pass 2/4 are never wired here. */
   runPass2?: () => void;
   runPass4?: () => void;
@@ -87,6 +103,8 @@ export interface ReVerifyResult {
   passed: boolean;
   /** Citekeys that re-verify flagged (named in the refuse reason on failure). */
   failingCitekeys: string[];
+  /** The re-verify's own refusal lines (the gate core's wording), when it has them. */
+  reasons?: string[];
 }
 
 export interface RunCompileOpts {
@@ -130,6 +148,8 @@ interface LoadedSection {
   draftBytes: Buffer;
   assignedSources: string[];
   storedHash: string | null;
+  /** PLAN.md `status`. */
+  planStatus: string | null;
   /** Set when the PLAN.md says the draft must not ship (a failed or unfinished write, FEED-04). */
   writeBlock: string | null;
 }
@@ -211,17 +231,24 @@ function restorePlaceholders(text: string, restore: Map<string, string>): string
 async function loadSection(
   paperRoot: string,
   outlineSection: ParsedOutlineSection,
-): Promise<LoadedSection | null> {
+): Promise<LoadedSection | string> {
   // GRND-09: the section's folder is found by its slug (`NN[a]-<slug>`).
   const draftPath = sectionDraft(outlineSection.n, outlineSection.slug, paperRoot);
   const planPath = sectionPlan(outlineSection.n, outlineSection.slug, paperRoot);
-  if (!existsSync(draftPath) || !existsSync(planPath)) return null;
+  const id = outlineSectionId(outlineSection);
+  if (!existsSync(planPath)) return `missing PLAN.md or DRAFT.md (no PLAN.md) — run \`pensmith plan ${id}\``;
+  if (!existsSync(draftPath)) return `missing PLAN.md or DRAFT.md (no DRAFT.md) — run \`pensmith write ${id}\``;
 
   const draftBytes = readFileSync(draftPath);
   // CONF-04: the versioned PLAN.md reader (a v0 file is migrated in memory; a
-  // newer one is refused with "upgrade pensmith"). compile never writes a
-  // section's PLAN.md — the verbs that own it persist the migration.
-  const { frontmatter } = await loadFrontmatterDoc('plan', planPath);
+  // newer one is refused with "upgrade pensmith"). compile writes a section's
+  // PLAN.md only through its staleness re-verify.
+  let frontmatter: Record<string, unknown>;
+  try {
+    ({ frontmatter } = await loadFrontmatterDoc('plan', planPath));
+  } catch (e) {
+    return `PLAN.md cannot be read (${(e as Error).message.split('\n')[0] ?? ''}) — fix it, or re-plan with \`pensmith plan ${id}\``;
+  }
   const assignedSources = Array.isArray(frontmatter['assigned_sources'])
     ? (frontmatter['assigned_sources'] as unknown[]).map(String)
     : [];
@@ -235,7 +262,8 @@ async function loadSection(
     draftBytes,
     assignedSources,
     storedHash,
-    writeBlock: sectionWriteBlockReason(frontmatter, outlineSectionId(outlineSection)),
+    planStatus: typeof frontmatter['status'] === 'string' ? frontmatter['status'] : null,
+    writeBlock: sectionWriteBlockReason(frontmatter, id),
   };
 }
 
@@ -293,14 +321,22 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     const loaded: LoadedSection[] = [];
     const refuseReasons: string[] = [];
     const stalenessResolved: StalenessEntry[] = [];
+    const acceptedQuotes: AcceptedQuote[] = [];
+    const byoQuotes: ByoQuote[] = [];
+    const verifiedHashes = new Map<string, string>();
+    const dryRun = networkMode().dryRun;
+    // The one bibliography every section's gate reads (entry by entry; an
+    // unreadable or broken file is a REFUSED reason through the rows, never a stack).
+    const bib = loadBibliography(opts.paperRoot);
 
     for (const os of ordered) {
       // GRND-09: the section as the user types it (`1a`), so a refusal names
       // the command that fixes THIS section, never its neighbour §1.
-      const label = `section ${outlineSectionId(os)} (${os.slug})`;
+      const id = outlineSectionId(os);
+      const label = `section ${id} (${os.slug})`;
       const sec = await loadSection(opts.paperRoot, os);
-      if (!sec) {
-        refuseReasons.push(`${label}: missing PLAN.md or DRAFT.md`);
+      if (typeof sec === 'string') {
+        refuseReasons.push(`${label}: ${sec}`);
         continue;
       }
       loaded.push(sec);
@@ -313,59 +349,78 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
         continue;
       }
 
-      const verifPath = sectionVerification(os.n, os.slug, opts.paperRoot);
-      const verificationMd = existsSync(verifPath) ? readFileSync(verifPath, 'utf8') : '';
-
-      // Refuse-gate (GATE-01 / GATE-02 / COMP-01): the ONE per-section gate done
-      // shares (verdict-rows.ts sectionVerificationReasons) — no Status line,
-      // `Status: failed` (even when no verdict row parses), a --dry-run
-      // verification outside --dry-run (RUN-27), or any blocking verdict row of
-      // any citekey shape (UNVERIFIABLE says "re-run online", D-17-07).
-      // 'Status: unverifiable' with no blocking row passes (Pitfall 3).
-      const gateReasons = sectionVerificationReasons(verificationMd, networkMode().dryRun);
-      if (gateReasons.length > 0) {
-        for (const reason of gateReasons) refuseReasons.push(`${label}: ${reason}`);
-        continue; // already refused: skip the staleness re-verify
-      }
-
-      // Staleness (COMP-01 / D-08): recompute the per-section hash.
+      // A section's own record can only add refusals (D-20-04): never
+      // verified (no VERIFICATION.md / no Status line), `Status: failed`, a
+      // --dry-run verification outside --dry-run, a failed PLAN.md. Such a
+      // section is refused as it stands — compile never verifies it in the
+      // user's place — and the recomputation below still runs, so the refusal
+      // names the rows.
       const freshHash = computeDraftHash(sec.draftBytes, sec.assignedSources);
-      if (sec.storedHash !== freshHash) {
+      const stale = sec.storedHash !== freshHash;
+      const verifPath = sectionVerification(os.n, os.slug, opts.paperRoot);
+      const verificationMd = existsSync(verifPath) ? readFileSync(verifPath, 'utf8') : null;
+      // A stale section's record judged its older draft by definition; the
+      // staleness re-verify below rewrites it, so only a current section's
+      // record is compared with the draft it holds.
+      const recordReasons = verificationRecordReasons(verificationMd, id, stale ? null : freshHash, dryRun);
+      if (sec.planStatus === 'failed' && !recordReasons.some((r) => r.startsWith("VERIFICATION.md Status is 'failed'"))) {
+        recordReasons.push(`PLAN.md status is 'failed' — repair the section, then \`pensmith verify ${id}\``);
+      }
+      for (const reason of recordReasons) refuseReasons.push(`${label}: ${reason}`);
+
+      // Staleness (COMP-01 / D-08): the draft changed since its (sound)
+      // verification — re-verify it now.
+      if (recordReasons.length === 0 && stale) {
         warn(`WARN: ${label} stale — re-verifying (Pass 1+3)`);
         const reVerify =
           opts.reVerify ??
           (async () => ({ passed: false, failingCitekeys: [] } as ReVerifyResult));
-        // SEAM DESIGN NOTE (WR-03 / Phase 14): the staleness re-verify path trusts
-        // the seam's boolean `result.passed` rather than routing fresh verdicts through
-        // parseVerdictRows / GATE-02. This means a production reVerify implementation
-        // with a bug that returns { passed: true, failingCitekeys: [] } when there are
-        // actually failing citekeys (e.g. a network timeout misclassified as clean)
-        // would bypass GATE-02 for the re-verified section.
-        //
-        // The seam contract requires that a production reVerify:
-        //   (a) writes updated verdict rows to the section's VERIFICATION.md, AND
-        //   (b) only returns { passed: true } when parseVerdictRows on the written
-        //       VERIFICATION.md would return an empty failing-citekey set.
-        // Enforce this in integration tests: assert that a passing reVerify produces
-        // a VERIFICATION.md whose verdict rows parse clean through parseVerdictRows.
-        // A buggy reVerify that skips (b) can bypass GATE-02 — it is a contractual
-        // obligation of the production implementation, not enforced here structurally.
-        const result = await reVerify({ n: os.n, slug: os.slug });
+        // The re-verify rewrites this section's VERIFICATION.md and PLAN.md
+        // (production: verifySection, advisory passes off). Its verdict is
+        // never the last word: the gate core below recomputes the section
+        // whatever the seam answered (D-20-23).
+        const result = await reVerify(os.suffix !== undefined ? { n: os.n, slug: os.slug, suffix: os.suffix } : { n: os.n, slug: os.slug });
         if (!result.passed) {
-          const named =
-            result.failingCitekeys.length > 0
-              ? result.failingCitekeys.map((ck) => `[@${ck}]`).join(', ')
-              : '(stale, re-verify failed)';
-          refuseReasons.push(`${label}: staleness re-verify FAILED — ${named}`);
-        } else {
-          stalenessResolved.push({
-            section: `${outlineSectionId(os)} (${os.slug})`,
-            prior_hash: (sec.storedHash ?? 'null').slice(0, 12),
-            new_hash: freshHash.slice(0, 12),
-            re_verify_passed: true,
-          });
+          const reasons = result.reasons ?? [];
+          if (reasons.length > 0) {
+            for (const r of reasons) refuseReasons.push(`${label}: staleness re-verify FAILED — ${r}`);
+          } else {
+            const named =
+              result.failingCitekeys.length > 0
+                ? result.failingCitekeys.map((ck) => `[@${ck}]`).join(', ')
+                : '(stale, re-verify failed)';
+            refuseReasons.push(`${label}: staleness re-verify FAILED — ${named}`);
+          }
+          continue;
         }
+        stalenessResolved.push({
+          section: `${id} (${os.slug})`,
+          prior_hash: (sec.storedHash ?? 'null').slice(0, 12),
+          new_hash: freshHash.slice(0, 12),
+          re_verify_passed: true,
+        });
       }
+
+      // VRFY-25 (D-20-23): the ONE gate core over the EXACT bytes compile
+      // concatenates, with the section's assigned_sources and quote acceptances.
+      const planPath = sectionPlan(os.n, os.slug, opts.paperRoot);
+      const gate = await recomputeGate({
+        root: opts.paperRoot,
+        text: sec.draftBytes.toString('utf8'),
+        allowedKeys: new Set(sec.assignedSources),
+        scope: { kind: 'section', id },
+        dryRun,
+        acceptanceSets: [{ currentDraftHash: freshHash, acceptances: readQuoteAcceptances(sectionDirOfPlan(planPath)), section: id }],
+        bib,
+      });
+      const refusals = gateRefusals(gate, { kind: 'section', id });
+      if (refusals.length > 0) {
+        for (const r of refusals) refuseReasons.push(`${label}: ${r}`);
+        continue;
+      }
+      acceptedQuotes.push(...gate.accepted.map((a) => ({ ...a, section: id })));
+      byoQuotes.push(...gate.byoQuotes);
+      verifiedHashes.set(id, freshHash);
     }
 
     // REFUSE: no DRAFT.md write, no bib regen (COMP-01 — bad citation never escapes).
@@ -380,6 +435,9 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
     }
 
     // ---- Step 2: concat in OUTLINE order (COMP-02) -------------------------
+    // VRFY-24: a --dry-run preview's stub drafts carry the stub-draft marker;
+    // the compiled dry-run draft (and so every dry-run export) does not.
+    if (dryRun) for (const s of loaded) s.draft = normalizeTrailingNewline(stripStubMarker(s.draft));
     // Keep per-section draft strings so per-boundary smoothing can replace only
     // the adjacent paragraphs without disturbing the rest of each section.
     const drafts = loaded.map((s) => s.draft);
@@ -510,14 +568,19 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
       citation_density: density.entries,
       citation_density_summary: density.summary,
       staleness_resolved: stalenessResolved,
+      accepted_quotes: acceptedQuotes.map((a) => ({ section: a.section ?? '', id: a.id, citekey: a.citekey, excerpt: a.excerpt, accepted_at: a.acceptedAt, via: a.via })),
+      local_file_quotes: byoQuotes.map((q) => ({ id: q.id, citekey: q.citekey, excerpt: q.snippet, file: q.localFile })),
     });
     await atomicWriteFile(reportPath, report);
     // What this compile was made from (compile-inputs.ts): the router decides
-    // whether DRAFT.md is current from these content hashes, never from mtimes.
+    // whether DRAFT.md is current from these content hashes, never from mtimes;
+    // done checks the compiled DRAFT.md and every section's verified hash
+    // against them (VRFY-27).
     await writeCompileInputs(
       opts.paperRoot,
       loaded.map((s) => ({ n: s.outline.n, suffix: s.outline.suffix, slug: s.slug })),
       compiledAt,
+      { compiledDraftSha256: createHash('sha256').update(compiled, 'utf8').digest('hex'), verifiedHashes },
     );
 
     return {

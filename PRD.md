@@ -270,7 +270,7 @@ This is the equivalent of GSD's `roadmap` step — it produces the section struc
 
 ### 7.7 Verify section (`/pensmith verify <N>` — equivalent to `/gsd:verify-work`)
 
-Bounded to a single section. Four passes, all scoped to this section's draft:
+Bounded to a single section. Four passes, all scoped to this section's draft: *(Amended in v1.0.0 Phase 20 — VRFY-16, VRFY-17, VRFY-24, VRFY-25: the blocking passes run in one gate core (`bin/lib/verify/gate.ts`) that `verify`, `compile` and `done` all run over the text they process. It adds `UNASSIGNED` — a citation outside the section's assigned sources — as a Pass-1 row, `UNPARSEABLE` for a cited key whose bibliography entry does not parse (the bibliography is read entry by entry), and two draft checks: `NO-CITATIONS` — a section with assigned sources that cites none — and `PLACEHOLDER` — stub text written with no model configured, blocking outside `--dry-run`.)*
 
 **Pass 1 — DOI/identifier integrity (deterministic):**
 - Extract every DOI / arXiv ID / PMID from the section: each cited entry's identifiers, and every identifier written in the prose (`doi:10.…`, a doi.org, arXiv or PubMed link, `PMID: …`), which gets its own row keyed `doi:<doi>`, `arXiv:<id>` or `PMID:<id>`. *(Amended in v1.0.0 Phase 20 — VRFY-10.)*
@@ -301,28 +301,28 @@ Bounded to a single section. Four passes, all scoped to this section's draft:
 - For each paragraph, list claims it makes and which sources support each. *(Amended in v1.0.0 Phase 20 — VRFY-23, D-20-29: the `orphan-label` prompt audits each paragraph with a claim once and returns its claims with `needs_citation` and `supported_by`; it can only ADD orphans.)*
 - Flag orphan claims (asserted but uncited). *(Amended in Phase 20: a deterministic floor works offline and is a lower bound no model answer can lower — a sentence of at least 8 words that is not a question or a definition is a claim when it holds one strong marker (a causal verb, a universal quantifier, an evidential verb in any inflection, a statistic or percentage, a comparative change) or two weak ones, and an orphan when the sentence itself carries no citation of any Pandoc form. VERIFICATION.md lists per paragraph the counts and each orphan sentence. Advisory; done runs it whole-paper over the exact text it exports.)*
 
-Output `.paper/sections/<N>/VERIFICATION.md` with summary table. Section is marked `verified` only when Passes 1 and 3 are clean (FABRICATED, MIS-CITED, NOT_FOUND must all be 0).
+Output `.paper/sections/<N>/VERIFICATION.md` with summary table. Section is marked `verified` only when Passes 1 and 3 are clean (FABRICATED, MIS-CITED, NOT_FOUND must all be 0). *(Amended in v1.0.0 Phase 20 — VRFY-16, VRFY-20, VRFY-24: VERIFICATION.md opens with `Status:`, the judged draft's hash and the summary table `| Pass | Verdict | Count |`, then the Pass-1, Pass-3 and draft-check rows; a parser proves the counts equal the rows. Status is `verified`, `failed` (any failing row) or `unverifiable` (a check could not run: a source unreachable, a quote with no checkable source text — `UNVERIFIABLE-QUOTE` — or `PLACEHOLDER`); `unverifiable` blocks compile and export too, but does not stop the other sections (the router goes on; compile refuses the section naming its options). verify sets `verifying` before any pass, so a crash never leaves an earlier `verified`. The user may accept a single `UNVERIFIABLE-QUOTE` quote — `verify N --accept-quote qK` or the `quote-accept` prompt, never `--yolo`, never in bulk by flag — recorded in the section's `QUOTE-ACCEPTANCES.json`, bound to the quote and the draft's hash, and honoured only while the recomputed verdict is still `UNVERIFIABLE-QUOTE`.)*
 
 ### 7.8 Compile (`/pensmith compile` — equivalent to `/gsd:complete-milestone`)
 
 This is the equivalent of GSD's milestone completion. It assembles the verified sections into a coherent paper.
 
-- Refuses if any section has FABRICATED, MIS-CITED, or quote-NOT_FOUND.
+- Refuses if any section has FABRICATED, MIS-CITED, or quote-NOT_FOUND. *(Amended in v1.0.0 Phase 20 — VRFY-25, VRFY-27: compile trusts no section record. It recomputes every section's verdicts with the verifier's gate core over the exact draft bytes it concatenates and refuses on any blocking row — whatever VERIFICATION.md says — and on a missing, Status-less or failed record. A section changed since its verification is re-verified (Passes 1 and 3 only); that re-verify is the only section write compile makes. compile never writes LIBRARY.json, CITATIONS.bib or `last_verified`.)*
 - Concatenates sections in outline order.
 - **Cross-section smoothing pass**: reads the assembled draft and edits *only* the last paragraph of each section + first paragraph of the next, integrating transitions. Does not touch citations or claims.
 - **Cross-section claim consistency check**: flags contradictions between sections (e.g., section 2 claims X, section 4 claims not-X).
 - **Citation density check**: per-discipline density target (§8); flags out-of-range paragraphs.
-- Writes `.paper/DRAFT.md` (the compiled paper), `.paper/COMPILE-REPORT.md` (transitions changed, contradictions flagged, density stats) and `.paper/COMPILE-INPUTS.json` (the sections it compiled and the sha256 of each section's draft and verification, so the next step decides from content whether the compiled paper is current — D-18-39).
+- Writes `.paper/DRAFT.md` (the compiled paper), `.paper/COMPILE-REPORT.md` (transitions changed, contradictions flagged, density stats, the quotes accepted without a source check and the quotes verified against the user's own files) and `.paper/COMPILE-INPUTS.json` (the sections it compiled and the sha256 of each section's draft and verification, so the next step decides from content whether the compiled paper is current — D-18-39; since Phase 20 also the sha256 of the DRAFT.md it wrote and each section's verified draft hash, so `done` refuses a compiled draft edited by hand — VRFY-27).
 
 ### 7.9 Done (`/pensmith done` or `/pensmith export`)
 
 The umbrella for finishing. Equivalent to GSD's `/gsd:ship`.
 
-- Refuses to run if any section's verification is unclean.
-- Runs **whole-paper verify pass** (Pass 4 — per-paragraph audit across the compiled draft, catches issues that emerged at section boundaries).
+- Refuses to run if any section's verification is unclean. *(Amended in v1.0.0 Phase 20 — VRFY-26, VRFY-27: before any paid or third-party step, done takes the sections STATE.json registers, refuses a section changed since its verification and a compiled draft changed since compile, and recomputes the verifier's gate over the exact text it exports — the compiled draft, and again the humanized FINAL.md — listing every reason at once. `--yolo` and `--raw` never bypass it. done never writes under `sections/`.)*
+- Runs **whole-paper verify pass** (Pass 4 — per-paragraph audit across the compiled draft, catches issues that emerged at section boundaries). *(Since Phase 20 over the exact text to be exported — VRFY-23.)*
 - Runs **plagiarism check** (§7.16).
 - Runs **humanizer** (§7.10), which itself runs the **detection-aware honesty score** (§7.11).
-- Confirms with user if any UNSUPPORTED, orphan claims, or plagiarism hits.
+- Confirms with user if any UNSUPPORTED, orphan claims, or plagiarism hits. *(Amended in v1.0.0 Phase 20 — VRFY-22: UNSUPPORTED claims are listed with their evidence at the `unsupported-claims` gate, §7.20; each decision — confirmed by the user, or auto-accepted under `--yolo` — is recorded with its time in `.paper/VERIFICATION.md`.)*
 - Exports to `.docx` / `.pdf` / `.tex` / `.md` (via pandoc if present, else markdown for docx).
 - **No metadata stamp. No visible footer. No trace of pensmith in the exported document.** This is a deliberate user-facing design choice. The README disclaimer (§3) is the project's only integrity-disclosure mechanism.
 - Bundles the bibliography of the cited sources only (`export/CITATIONS.bib` / `.ris`, never the whole research library), formatted in the configured citation style.
@@ -355,7 +355,7 @@ it does not promise to make output undetectable.
 
 Each citation in CITATIONS.bib gets a `last_verified` ISO timestamp: when a registrar last answered for it (an answer served from the HTTP cache keeps the time it was obtained), recorded in `.paper/LIBRARY.json` and `.paper/CITATIONS.bib` and never in an exported bibliography (zero trace). *(Amended in v1.0.0 Phase 20 — VRFY-28.)*
 
-- On every `verify <N>` or `done` run, citations older than `recheck_after_days` (default: 30) are auto-rechecked.
+- On every `verify <N>` or `done` run, citations older than `recheck_after_days` (default: 30) are auto-rechecked. *(Amended in v1.0.0 Phase 20 — VRFY-28: `last_verified` lives in LIBRARY.json (rendered into CITATIONS.bib, never into an export) and is the time of the latest registrar answer that passed the citation; a citation with no `last_verified`, or one older than `[verification] recheck_after_days`, is looked up past the HTTP cache by verify and done. compile only reads.)*
 - Retraction Watch flag triggers a hard warning, surfaced for user review.
 - Configurable per-project in config.toml.
 
@@ -454,12 +454,14 @@ For power users / batch processing / CI testing:
 | `assignment-pickup` | Use the assignment file in this folder? | skip: use the file | skip: 0 | 0 | GRND-01 |
 | `intake-defaults` | Accept the intake defaults? | skip: accept the defaults | refuse: 3 | 3 | GRND-02 |
 | `plan-research` | Add these research hits to the section? | skip: add the hits the evaluator kept to the section | refuse: 3 | 3 | GRND-17 |
-| `unsupported-confirm` | Keep this UNSUPPORTED claim? | skip: keep it and flag it | refuse: 3 | 3 | VRFY-22 (planned) |
-| `quote-accept` | Accept this quote match? | never | refuse: 3 | 3 | VRFY-20 (planned) |
 | `reoutline` | Re-outline a paper that already has drafts? | skip: re-outline (a model re-outline also needs --force) | refuse: 3 | 3 | GRND-09 |
 | `byo-folder` | Read the PDFs in this folder outside the paper and copy them into it? | never | skip: 0 | 0 | SRC-15 |
 | `zotero-collection` | Pull this Zotero collection from your library into the paper? | never | skip: 0 | 0 | SRC-16 |
 | `pdf-attach-unmatched` | Attach this PDF although its first page does not show the work's title and first author? | never | refuse: 3 | 3 | SRC-13 |
+| `quote-accept` | Accept these quotes whose source text cannot be checked? | never | skip: 0 | 0 | VRFY-20 |
+| `unsupported-claims` | Export the paper with these UNSUPPORTED claims? | skip: export and record them as auto-accepted | refuse: 3 | 3 | VRFY-22 |
+
+`quote-accept` (VRFY-20) is asked by `pensmith verify N` in a terminal when the section has quotes no source text could be checked against (UNVERIFIABLE-QUOTE): a multi-select of those quotes plus "accept all". It is a verification decision, so `--yolo` never answers it; without a terminal it is skipped and the section stays unverifiable (verify exits 4), and declining leaves it so. `verify N --accept-quote <id>` records one quote per flag. `unsupported-claims` (VRFY-22) replaces the planned `unsupported-confirm`: when Pass 2 judged claims UNSUPPORTED, `done` lists each one with its evidence and asks it instead of the generic `export-confirm`; the answer is recorded in `.paper/VERIFICATION.md` (`Confirmed by user <time>`, or `Auto-accepted under --yolo <time>`).
 
 Automatic revision of a failed section is not a gate `--yolo` can open: it is its own opt-in, `--auto-revise` or `[project] auto_revise = true` (REV-01). Detector consent persisted in `config.toml` (EXP-17) is the only way that gate is answered without asking.
 

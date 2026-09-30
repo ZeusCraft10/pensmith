@@ -111,5 +111,6 @@ test('SRC-04 (review round 2): `add` of a retracted DOI says so; verify names th
   assert.doesNotMatch(row, /Retraction Watch cross-check at research time/, 'the flag says where it came from');
   const c = runCli(sb, root, ['compile', '--yolo'], { timeoutMs: 120_000 });
   assert.equal(c.status, 4);
+  // D-20-23: compile recomputes the row (it never reads VERIFICATION.md's verdicts).
   assert.match(c.stdout + c.stderr, /citation \[@wakefield1998\] .*\bRETRACTED\b.*retracted/, 'compile names the key and the RETRACTED verdict');
 });

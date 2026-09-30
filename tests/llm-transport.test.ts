@@ -306,7 +306,10 @@ const VERB_REQUIRED_ARGS: Record<GenerativeVerb, string[]> = {
   research: ['--yolo'],
   outline: ['--yolo'],
   plan: ['1'],
-  write: ['1'],
+  // VRFY-24 (Phase 20): write chains verify, and a stub draft (PENSMITH_NO_LLM)
+  // is PLACEHOLDER — unverifiable, exit 4. This case checks the WRITE artifact,
+  // so it drafts without the chained verify.
+  write: ['1', '--no-verify'],
   revise: ['1', '--revise'],
 };
 
