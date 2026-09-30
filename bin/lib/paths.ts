@@ -195,6 +195,16 @@ export function pensmithHttpCacheDir(): string {
 }
 
 /**
+ * Returns `<pensmithDataDir>/source-text` — Pass 3's extracted-text cache
+ * (Phase 20, VRFY-19): the text of the open-access copies of cited works
+ * (an open-access PDF, a Europe PMC full text, an arXiv PDF), one JSON file
+ * per URL. Public text only — never a bring-your-own PDF's (byo-text/).
+ */
+export function pensmithSourceTextCacheDir(): string {
+  return path.join(pensmithDataDir(), 'source-text');
+}
+
+/**
  * Returns `<pensmithDataDir>/library/index.json` — the GLOBAL PAPER registry
  * (LIB-01). One entry per paper across all projects. This is SEPARATE from the
  * per-paper `.paper/LIBRARY.json` (D-59 source/citation store) AND from the

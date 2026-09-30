@@ -231,3 +231,61 @@ export async function lookupById(id: string): Promise<LookupResult> {
 export async function fetchById(doi: string): Promise<SourceCandidate | null> {
   return unwrapLookup(await lookupById(doi), 'unpaywall', doi);
 }
+
+// ---------------------------------------------------------------------------
+// The open-access PDFs of a DOI, for Pass 3 (VRFY-19, D-20-18).
+// ---------------------------------------------------------------------------
+
+/**
+ * Unpaywall's answer for one DOI as Pass 3 reads it: every PDF it lists.
+ *   found      the record: `pdfUrls` best first (best_oa_location, then the
+ *              other oa_locations in order; each location's `url_for_pdf`,
+ *              else a location URL that is itself a PDF link — the links
+ *              bestPdfUrl and open-access.ts consider), de-duplicated; and
+ *              whether Unpaywall calls the work open access at all (`isOa`);
+ *   not-found  HTTP 404: Unpaywall has no record of the DOI;
+ *   failed     no usable answer. `noEmail`: no request was made because no
+ *              contact email is configured (Unpaywall requires one);
+ *              `status`: the HTTP status of an answer that was not a record.
+ * The request is the one lookupById makes (one cache entry, one recording).
+ * Throws only the typed OfflineEgressError (sources offline, no recording).
+ */
+export type OaPdfLookup =
+  | { readonly kind: 'found'; readonly isOa: boolean; readonly pdfUrls: readonly string[] }
+  | { readonly kind: 'not-found'; readonly reason: string }
+  | { readonly kind: 'failed'; readonly reason: string; readonly status?: number; readonly noEmail?: boolean };
+
+/** The PDF links of an Unpaywall record, best first, de-duplicated. */
+export function oaPdfUrls(item: Pick<UnpaywallResponse, 'best_oa_location' | 'oa_locations'>): string[] {
+  const locations = [item.best_oa_location, ...(item.oa_locations ?? [])].filter((l): l is UnpaywallOALocation => l !== null && l !== undefined && typeof l === 'object');
+  const out: string[] = [];
+  const add = (u: string | undefined): void => {
+    if (u !== undefined && !out.includes(u)) out.push(u);
+  };
+  for (const l of locations) add(httpUrl(l.url_for_pdf));
+  for (const l of locations) add(pdfLinkOf(httpUrl(l.url)));
+  return out;
+}
+
+export async function lookupOaPdfUrls(id: string): Promise<OaPdfLookup> {
+  const doi = normalizeDoi(id);
+  if (doi === null) return { kind: 'not-found', reason: `not a DOI: ${JSON.stringify(id.slice(0, 80))}` };
+  const email = contactEmail().email;
+  if (email === null) {
+    const reason = unpaywallSkippedReason();
+    warnNoEmailOnce(reason);
+    return { kind: 'failed', reason, noEmail: true };
+  }
+  const url = `${BASE}/v2/${encodeURIComponent(doi)}?email=${encodeURIComponent(email)}`;
+  const ex = await exchange(
+    () => httpFetch(url, { source: 'unpaywall', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(RECORD) }),
+    { service: SERVICE, check: RECORD },
+  );
+  if (ex.kind === 'failed') return { kind: 'failed', reason: ex.reason, ...(ex.status !== undefined ? { status: ex.status } : {}) };
+  if (ex.kind === 'status') {
+    if (ex.res.status === 404) return { kind: 'not-found', reason: 'HTTP 404 (Unpaywall has no record of this DOI)' };
+    return { kind: 'failed', reason: statusReason(ex.res), status: ex.res.status };
+  }
+  const item = JSON.parse(ex.res.body) as UnpaywallResponse;
+  return { kind: 'found', isOa: item.is_oa !== false, pdfUrls: oaPdfUrls(item) };
+}

@@ -21,6 +21,7 @@ import * as arxiv from './arxiv.js';
 import * as pubmed from './pubmed.js';
 import * as semanticscholar from './semanticscholar.js';
 import * as unpaywall from './unpaywall.js';
+import * as europepmc from './europepmc.js';
 import * as retractionWatch from './retraction-watch.js';
 import * as books from './books.js';
 import * as zotero from './zotero.js';
@@ -32,6 +33,9 @@ export const sources = {
   pubmed,
   semanticscholar,
   unpaywall,
+  // Phase 20 (VRFY-19, D-20-18): Europe PMC's open-access full text of a
+  // PMCID, for Pass 3 only — no `search` and no metadata lookup.
+  europepmc,
   'retraction-watch': retractionWatch,
   // SRC-11 (D-19-14): books — Open Library search and ISBN lookups, Google
   // Books as the keyless ISBN fallback.

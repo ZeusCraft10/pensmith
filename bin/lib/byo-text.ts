@@ -191,6 +191,16 @@ function words(s: string): string[] {
  * judge sees what the source says about the claim, not the whole PDF).
  */
 export function byoPassages(text: string, claim: string, maxChars: number = BYO_PASSAGE_CHARS): string {
+  return passagesNearClaim(text, claim, maxChars);
+}
+
+/**
+ * The passages of any source text that share the most content words with
+ * `claim` (see byoPassages): the one passage picker for the user's own PDFs
+ * and for the open-access text Pass 2 receives (verify/source-text.ts
+ * sourceTextPassage).
+ */
+export function passagesNearClaim(text: string, claim: string, maxChars: number = BYO_PASSAGE_CHARS): string {
   // The claim's own words: every citation cluster out (citation-token.ts, the one citation grammar).
   const want = new Set(words(replaceCitations(claim, () => ' ')));
   const flat = text.replace(/\s+/g, ' ').trim();

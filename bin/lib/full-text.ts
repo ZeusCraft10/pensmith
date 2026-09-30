@@ -36,7 +36,7 @@
 // the describeQuotesWithoutFullText text (the Phase 18/19 merge, 19-PLAN §9),
 // so write's single corrective turn enforces the policy. Pure: no I/O.
 
-import { extractQuotes } from './quote-extractor.js';
+import { extractQuotes, type ExtractQuotesOptions } from './quote-extractor.js';
 import { normArxiv } from './migrations/library/shape.js';
 import type { LibraryEntry } from './schemas/library.js';
 
@@ -90,19 +90,24 @@ export interface QuoteWithoutFullText {
 
 /**
  * The direct quotes in `draft` attributed to a source without full text —
- * the same quotes Pass 3 checks (quote-extractor.ts). A citekey missing from
- * `fullText` counts as "no full text": an unknown source's quote cannot be
- * checked either.
+ * the same quotes Pass 3 checks (quote-extractor.ts, with the same
+ * `[verification] quote_min_words` when the caller passes it). A citekey
+ * missing from `fullText` counts as "no full text": an unknown source's quote
+ * cannot be checked either. A quote attributed to no citation is not listed
+ * here: Pass 3 blocks it as UNATTRIBUTED.
  */
 export function quotesWithoutFullText(
   draft: string,
   fullText: ReadonlyMap<string, boolean> | Readonly<Record<string, boolean>>,
+  opts: ExtractQuotesOptions = {},
 ): QuoteWithoutFullText[] {
   const has = (key: string): boolean =>
     fullText instanceof Map ? fullText.get(key) === true : (fullText as Readonly<Record<string, boolean>>)[key] === true;
-  return extractQuotes(draft)
-    .filter((q) => !has(q.citekey))
-    .map((q) => ({ citekey: q.citekey, quote: q.text, kind: q.kind }));
+  const out: QuoteWithoutFullText[] = [];
+  for (const q of extractQuotes(draft, opts)) {
+    if (q.citekey !== null && !has(q.citekey)) out.push({ citekey: q.citekey, quote: q.text, kind: q.kind });
+  }
+  return out;
 }
 
 /**
