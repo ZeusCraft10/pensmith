@@ -64,9 +64,10 @@ export function renderPass1VerdictRow(
 /**
  * Parse all failing citekeys from a VERIFICATION.md body — the parse side of
  * the round trip renderPass1VerdictRow writes (VRFY-09's property test:
- * every key the extractor accepts survives it). compile and done do not read
- * these rows back (they recompute the gate, D-20-04); the router words a
- * section's attention from parseBlockingVerdictRows.
+ * every key the extractor accepts survives it). compile and done do not gate
+ * on these rows (they recompute the gate, D-20-04): the router words a
+ * section's attention from parseBlockingVerdictRows, and done words the
+ * refusal of a paper with no compiled draft from them.
  *
  * Matches list-item verdict rows in two forms:
  *   Pass-1: - citekey: **VERDICT** — titleJW=…, authorJW=… — reason
@@ -78,8 +79,11 @@ export function renderPass1VerdictRow(
  * The `^\s*-\s*` anchor excludes pipe-delimited table rows (| citekey | ...) so
  * the Source Freshness table (RSCH-10) does NOT pollute the blocking set (Pitfall 2).
  *
- * Returns only citekeys whose verdict is in BLOCKING_VERDICTS (FABRICATED / MIS-CITED /
- * NOT_FOUND / UNVERIFIABLE). Safe to call on any string, including ''.
+ * Returns only citekeys whose verdict is in BLOCKING_VERDICTS (verdicts.ts:
+ * FABRICATED, MIS-CITED, NOT_FOUND, UNVERIFIABLE, …). A label it does not know
+ * is skipped here — a report reader; the record's `Status:` line still blocks
+ * (sectionVerificationReasons), and compile and done recompute every row.
+ * Safe to call on any string, including ''.
  */
 export function parseVerdictRows(verificationMd: string): string[] {
   return parseBlockingVerdictRows(verificationMd).map((r) => r.citekey);
