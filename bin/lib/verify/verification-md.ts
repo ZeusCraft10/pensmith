@@ -26,7 +26,8 @@
 // count, the Pass-2 verdict counts, the Pass-4 orphan total and the freshness
 // WARN / not-probed counts (plus the retraction statuses no registrar holds
 // data for). parseVerificationMd reads the file back and summaryMismatches
-// proves the counts equal the rows (tests/verify-summary).
+// proves the counts equal the rows: verify runs it on every record before it
+// writes the file (a mismatch writes nothing), and tests/verify-summary.
 //
 // A VERIFICATION.md is a REPORT: compile and done recompute the verdicts from
 // the draft (verify/gate.ts, D-20-04) and read this file only for what can

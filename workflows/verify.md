@@ -2,10 +2,11 @@
 
 > Verify citations + claims in one section. Per-section verb — writes ONLY
 > inside `.paper/sections/<NN>-<slug>/` (TEST-09 section-isolation invariant),
-> with two paper-level writes, both through the one library writer: an
+> with three paper-level writes, all through the one library writer: an
 > unparseable `.paper/CITATIONS.bib` is re-rendered from `LIBRARY.json` (step 3;
-> SRC-12), and each citation a registrar confirmed gets its `LIBRARY.json`
-> `last_verified` (step 10; VRFY-28).
+> SRC-12), each citation a registrar confirmed gets its `LIBRARY.json`
+> `last_verified` (step 10; VRFY-28), and a cited source's `unknown` retraction
+> status is recorded once the freshness probe's re-check decides it (VRFY-15).
 >
 > **D-13 LOCKED INVARIANT — the blocking verdict is 100% deterministic.**
 > No model call decides a Pass-1 or Pass-3 verdict or the section status; the
@@ -46,9 +47,9 @@ or after editing DRAFT.md by hand).
 
 - `.paper/sections/<NN>-<slug>/VERIFICATION.md` — Status, draft hash, the Summary table, then the Pass-1, Pass-3 and draft-check rows, the accepted quotes and the advisory sections
 - `.paper/sections/<NN>-<slug>/QUOTE-ACCEPTANCES.json` — only when the user accepts a quote (step 7a)
-- `.paper/LIBRARY.json` — `last_verified` of the citations a registrar confirmed (step 10), and the `retraction_status` of a cited source the library held as `unknown` once the freshness probe's live re-check decides it (VRFY-15), both through the library writer — which re-renders `.paper/CITATIONS.bib` and `.paper/CITATIONS.ris` from the library when an entry changed (`last_verified` is written into the bib)
+- `.paper/LIBRARY.json` — `last_verified` of the citations a registrar confirmed (step 10), and the `retraction_status` of a cited source the library held as `unknown` once the freshness probe's live re-check decides it (VRFY-15) — or, for a DOI whose agency publishes no retraction data, that reason, so nothing re-checks it again — both through the library writer — which re-renders `.paper/CITATIONS.bib` and `.paper/CITATIONS.ris` from the library when an entry changed (`last_verified` is written into the bib)
 - `.paper/sections/<NN>-<slug>/PLAN.md` — frontmatter status updated to `'verifying'` → `'verified'` | `'failed'` | `'unverifiable'` (D-08-AMENDED)
-- Only when `.paper/CITATIONS.bib` does not parse and `.paper/LIBRARY.json` exists: `.paper/CITATIONS.bib` and `.paper/CITATIONS.ris` re-rendered from the library, the unreadable file kept as `.paper/CITATIONS.bib.unparsed-<time>.bak`, one stderr notice (SRC-12). These library-writer writes are the only ones verify makes outside the section folder.
+- Only when `.paper/CITATIONS.bib` does not parse and `.paper/LIBRARY.json` exists: `.paper/CITATIONS.bib` and `.paper/CITATIONS.ris` re-rendered from the library, the unreadable file kept as `.paper/CITATIONS.bib.unparsed-<time>.bak`, one stderr notice (SRC-12). With the `last_verified` and retraction-status writes above, these library-writer writes are the only ones verify makes outside the section folder.
 
 ## Body
 
@@ -133,7 +134,7 @@ or after editing DRAFT.md by hand).
 9. **Write `<sectionVerification(n, slug)>`** = `.paper/sections/<NN>-<slug>/VERIFICATION.md` via `bin/lib/atomic-write.ts` (D-07 chokepoint), in this order:
    - **Offline marker** (RUN-02): when sources were offline, the FIRST line is `> OFFLINE MODE (<reason>) — recorded fixtures, not live results.` (or the `--dry-run` synthetic-sources form). A VERIFICATION.md written under `--dry-run` never lets a real compile or export through (RUN-27): re-verify without `--dry-run`.
    - `# VERIFICATION (Section N, slug)`, the `Status: verified | failed | unverifiable` line (compile and done refuse a missing Status line and a `Status: failed` even when no row parses — fail closed) and `Draft: sha256 <hash>` (the draft hash the rows judged).
-   - `## Summary` FIRST: a table `| Pass | Verdict | Count |` of every Pass-1, Pass-3 and draft-check label with a non-zero count, the Pass-2 verdict counts, the Pass-4 orphan total and the freshness counts (WARN, `not probed`, and `retraction status unknown`). A parser proves the counts equal the rows (VRFY-24).
+   - `## Summary` FIRST: a table `| Pass | Verdict | Count |` of every Pass-1, Pass-3 and draft-check label with a non-zero count, the Pass-2 verdict counts, the Pass-4 orphan total and the freshness counts (WARN, `not probed`, and `retraction status unknown`). verify checks the counts equal the rows before it writes the file, and writes nothing when they do not (VRFY-24).
    - The Pass-1 rows (step 5), the Pass-3 rows (step 7), `## Draft checks` (step 4b) and `## Accepted quotes` (when any, step 7a).
    - compile and done never trust this file's rows: they recompute them with the same gate core over the text they process (D-20-04, D-20-23); the record can only add refusals (no Status line, `Status: failed`, a draft hash of another draft, a `--dry-run` record outside `--dry-run`).
    - The source-freshness table and the ADVISORY claim-support (Pass 2) and orphan-claim (Pass 4) sections. They are computed after the status above is frozen and never change it (VRFY-07). With no model configured (Tier 1, or a Tier-2 user checking a hand-written draft, D-V1-04) they record `skipped (no LLM configured)` rows and verify still exits by the frozen status. When the session cost cap (or an invalid runtime config) stops them, their rows say `not run (…)`, VERIFICATION.md and step 10 are still written, and verify then exits with that failure's code (5 for the cost cap). A failed Retraction Watch probe is an `unavailable` freshness row, never silence. The DOI HEAD probe asks only whether doi.org resolves the handle: its redirect is the answer (never followed), and only a 4xx/5xx from doi.org is a WARN row.

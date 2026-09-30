@@ -62,7 +62,11 @@ export function renderPass1VerdictRow(
 }
 
 /**
- * Parse all failing citekeys from a VERIFICATION.md body (parser side — compile.ts).
+ * Parse all failing citekeys from a VERIFICATION.md body — the parse side of
+ * the round trip renderPass1VerdictRow writes (VRFY-09's property test:
+ * every key the extractor accepts survives it). compile and done do not read
+ * these rows back (they recompute the gate, D-20-04); the router words a
+ * section's attention from parseBlockingVerdictRows.
  *
  * Matches list-item verdict rows in two forms:
  *   Pass-1: - citekey: **VERDICT** — titleJW=…, authorJW=… — reason
@@ -130,10 +134,13 @@ export function parseBlockingVerdictRows(verificationMd: string): BlockingVerdic
 export const UNREADABLE_CITEKEY = '(unreadable verdict row)';
 
 /**
- * The ONE per-section verification gate compile's refuse-gate and done's
- * export re-check share, so the two can never drift apart again. Given a
- * section's VERIFICATION.md text, the reasons it may NOT compile or export
- * (empty = it may):
+ * The reasons a section's recorded VERIFICATION.md shows it may not compile —
+ * the router's wording of a section's attention (router.ts
+ * verificationBlockers). compile and done do NOT use it: they recompute the
+ * gate from the draft (verify/gate.ts) and read the record only for what can
+ * make them stricter (verification-md.ts verificationRecordReasons, which
+ * also compares the record's draft hash). Given a section's VERIFICATION.md
+ * text, the reasons (empty = none):
  *   - no `Status:` line — never verified, or the verifier output is unreadable;
  *   - a --dry-run verification outside --dry-run (RUN-27, synthetic sources);
  *   - `Status: failed` — blocks even when no verdict row parses (fail closed);

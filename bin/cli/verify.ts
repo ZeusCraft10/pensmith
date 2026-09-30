@@ -61,7 +61,7 @@ import {
   type LoadedBibliography,
   type Pass3GateRow,
 } from '../lib/verify/gate.js';
-import { renderVerificationMd, NO_CITATIONS_NOTE, advisorySectionsOf } from '../lib/verify/verification-md.js';
+import { renderVerificationMd, NO_CITATIONS_NOTE, advisorySectionsOf, summaryMismatches } from '../lib/verify/verification-md.js';
 import {
   acceptableRows,
   loadQuoteAcceptances,
@@ -465,34 +465,39 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
   // re-verify of an unverifiable, unchanged section) are kept, never "not run".
   const kept = !advisory && opts.keepAdvisoryFrom ? advisorySectionsOf(opts.keepAdvisoryFrom) : null;
   const keep = kept !== null && kept.draftHash === draftHash ? kept : null;
-  await atomicWriteFile(
-    verifPath,
-    renderVerificationMd({
-      sectionId: id,
-      slug,
-      offlineMarker: offlineMarkerLine(),
-      status,
-      draftHash,
-      rows: gate.rows,
-      notes,
-      accepted: gate.accepted,
-      freshness,
-      freshnessSection: !advisory
-        ? (keep?.freshnessSection ?? `## Source Freshness (RSCH-10)\n\n_(${notRun})_\n`)
-        : freshnessNote !== null
-          ? `## Source Freshness (RSCH-10)\n\n_(${freshnessNote} — fix the bibliography, then re-verify)_\n`
-          : renderFreshnessTable(freshness ?? []),
-      pass2Verdicts: advisory ? pass2.map((r) => r.verdict) : null,
-      pass2Section: advisory ? renderPass2Section(pass2) : (keep?.pass2Section ?? `## Pass-2 (claim support, advisory)\n\n_(${notRun})_\n`),
-      pass4Orphans: pass4 !== null ? pass4.reduce((s, r) => s + r.orphanCount, 0) : null,
-      pass4Section: !advisory
-        ? (keep?.pass4Section ?? `## Pass-4 (orphan claims, advisory)\n\n_(${notRun})_\n`)
-        : pass4 !== null
-          ? renderPass4Section(pass4)
-          : `## Pass-4 (orphan claims, advisory)\n\n_(not run: ${stopReason(advisoryStop)})_\n`,
-      advisorySummary: keep?.summary ?? null,
-    }),
-  );
+  const record = renderVerificationMd({
+    sectionId: id,
+    slug,
+    offlineMarker: offlineMarkerLine(),
+    status,
+    draftHash,
+    rows: gate.rows,
+    notes,
+    accepted: gate.accepted,
+    freshness,
+    freshnessSection: !advisory
+      ? (keep?.freshnessSection ?? `## Source Freshness (RSCH-10)\n\n_(${notRun})_\n`)
+      : freshnessNote !== null
+        ? `## Source Freshness (RSCH-10)\n\n_(${freshnessNote} — fix the bibliography, then re-verify)_\n`
+        : renderFreshnessTable(freshness ?? []),
+    pass2Verdicts: advisory ? pass2.map((r) => r.verdict) : null,
+    pass2Section: advisory ? renderPass2Section(pass2) : (keep?.pass2Section ?? `## Pass-2 (claim support, advisory)\n\n_(${notRun})_\n`),
+    pass4Orphans: pass4 !== null ? pass4.reduce((s, r) => s + r.orphanCount, 0) : null,
+    pass4Section: !advisory
+      ? (keep?.pass4Section ?? `## Pass-4 (orphan claims, advisory)\n\n_(${notRun})_\n`)
+      : pass4 !== null
+        ? renderPass4Section(pass4)
+        : `## Pass-4 (orphan claims, advisory)\n\n_(not run: ${stopReason(advisoryStop)})_\n`,
+    advisorySummary: keep?.summary ?? null,
+  });
+  // VRFY-24: the Summary a reader trusts must equal the rows below it — checked
+  // on the record before it is written (a mismatch is a verifier fault, never
+  // a report).
+  const mismatch = summaryMismatches(record);
+  if (mismatch.length > 0) {
+    throw new Error(`pensmith verify: VERIFICATION.md for section ${id} would disagree with its own Summary (${mismatch.join('; ')}) — nothing was written`);
+  }
+  await atomicWriteFile(verifPath, record);
 
   // Audit #8: persist the verdict to the section PLAN.md frontmatter so the
   // router advances the pipeline instead of looping on verify.
