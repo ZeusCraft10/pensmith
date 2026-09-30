@@ -1014,6 +1014,8 @@ export async function runFreshnessForDraft(
     readonly record?: boolean;
   } = {},
 ): Promise<FreshnessResult[]> {
+  const cited = extractCitedKeysForVerification(draftMd);
+  if (cited.length === 0) return []; // nothing to probe: the library is not even read
   const entries = opts.bibEntries !== undefined ? [...opts.bibEntries] : await parseBibFileAt(readFileSync(citationsBibPath, 'utf8'), citationsBibPath);
   const bibByCitekey = new Map<string, BibEntry>(entries.map((e) => [String(e['id'] ?? ''), e as BibEntry]));
   let library: readonly LibraryEntry[] = [];
@@ -1025,7 +1027,7 @@ export async function runFreshnessForDraft(
     }
   }
   const status = new Map(library.map((e) => [e.citekey, e.retraction_status]));
-  const probes: FreshnessSource[] = extractCitedKeysForVerification(draftMd).map((ck) => {
+  const probes: FreshnessSource[] = cited.map((ck) => {
     const e = bibByCitekey.get(ck);
     if (!e) return { citekey: ck, inBib: false, doi: null, registrar: null };
     const ids = doilessIdentifiers(e);

@@ -800,7 +800,7 @@ function writeExportFindings(
 }
 
 /** What done's re-check of `unknown` retraction statuses found (VRFY-15, D-20-13). */
-interface RetractionRecheck {
+export interface RetractionRecheck {
   /** One refusal line per cited source found retracted now. */
   readonly retracted: string[];
   /** The decided statuses, recorded once done exports. */
@@ -814,7 +814,7 @@ interface RetractionRecheck {
  * bibliography that does not parse; never throws (a failed re-check leaves the
  * status unknown, as verify does — the gate core's Pass 1 still decides).
  */
-async function recheckUnknownRetractions(paperRoot: string, text: string): Promise<RetractionRecheck> {
+export async function recheckUnknownRetractions(paperRoot: string, text: string): Promise<RetractionRecheck> {
   const none: RetractionRecheck = { retracted: [], decided: {} };
   if (networkMode().dryRun) return none;
   const bib = loadBibliography(paperRoot);

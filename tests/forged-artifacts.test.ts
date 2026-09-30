@@ -173,23 +173,25 @@ test('VRFY-15 / D-20-13 (built CLI): done re-checks a cited source LIBRARY.json 
   const sb = sandbox('forged-retraction-recheck');
   const root = sb.project('p');
   writeState(root, [{ n: 1, slug: 'background' }], 'forged-retraction-recheck');
+  // A work whose (recorded, synthetic) Crossref record and Retraction Watch answer say retracted.
+  const doi = '10.0000/gate03-retracted';
   await upsertSources(
     root,
-    [{ source: 'crossref', id: '10.1016/s0140-6736(97)11096-0', doi: '10.1016/s0140-6736(97)11096-0', title: 'RETRACTED: Ileal-lymphoid-nodular hyperplasia, non-specific colitis, and pervasive developmental disorder in children', authors: ['Wakefield, A.J.'], year: 1998, retraction_status: 'unknown', last_verified: new Date().toISOString(), citekey: 'wakefield1998', raw: {} }],
+    [{ source: 'openalex', id: doi, doi, title: 'A Gate-03 Live-Retraction Fixture', authors: ['Retracted, Alice'], year: 2018, retraction_status: 'unknown', last_verified: new Date().toISOString(), citekey: 'retracted2018', raw: {} }],
     { provenance: 'research' },
   );
-  writeOutline(root, [{ n: 1, slug: 'background', sources: ['wakefield1998'] }]);
-  writePlan(root, 1, 'background', { status: 'written', assigned_sources: '[wakefield1998]' });
+  writeOutline(root, [{ n: 1, slug: 'background', sources: ['retracted2018'] }]);
+  writePlan(root, 1, 'background', { status: 'written', assigned_sources: '[retracted2018]' });
   const dir = sectionDirOf(root, 1, 'background');
-  writeFileSync(join(dir, 'DRAFT.md'), '# Background\n\nAn early case series proposed a link [@wakefield1998].\n');
+  writeFileSync(join(dir, 'DRAFT.md'), '# Background\n\nAn early study proposed a link [@retracted2018].\n');
   // A record that says verified, and a compile record to match (the forgery done must not trust).
-  forgeClean(root, dir, 1, 'background', ['wakefield1998']);
+  forgeClean(root, dir, 1, 'background', ['retracted2018']);
   writeFileSync(join(root, '.paper', 'DRAFT.md'), readFileSync(join(dir, 'DRAFT.md')));
   writeCompileRecord(root, [{ n: 1, slug: 'background' }]);
   const libBefore = readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8');
   const d = runCli(sb, root, ['done', '--yolo', '--format', 'md'], { timeoutMs: 120_000 });
   assert.equal(d.status, EXIT_BLOCKED, `${d.stdout}\n${d.stderr}`);
-  assert.match(d.stdout, /citation \[@wakefield1998\] is RETRACTED — .*\(re-checked now: LIBRARY\.json had its retraction status unknown\)/);
+  assert.match(d.stdout, /citation \[@retracted2018\] is RETRACTED — .*\(re-checked now: LIBRARY\.json had its retraction status unknown\)/);
   assert.ok(!existsSync(join(root, '.paper', 'export')), 'nothing exported');
   assert.equal(readFileSync(join(root, '.paper', 'LIBRARY.json'), 'utf8'), libBefore, 'a refused done writes nothing');
 });
