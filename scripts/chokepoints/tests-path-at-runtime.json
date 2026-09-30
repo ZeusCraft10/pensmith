@@ -2,7 +2,7 @@
   "id": "tests-path-at-runtime",
   "requirement": "RUN-05",
   "module": "bin/lib/http-mock.ts",
-  "description": "The installed npm package ships no tests/ directory, so shipped code never resolves a tests/ path at runtime. The one exception is bin/lib/http-mock.ts, which locates tests/fixtures/cassettes for offline replay in a source checkout and reports fixturesAvailable=false (the 'not shipped' refusal) when it is absent. Anything --dry-run needs ships under the asset root (templates/dry-run/corpus.json).",
+  "description": "The installed npm package ships no tests/ directory, so shipped code never resolves a tests/ path at runtime. The one exception is bin/lib/http-mock.ts, which locates tests/fixtures/cassettes for offline replay in a source checkout and reports fixturesAvailable=false (the 'not shipped' refusal) when it is absent. Anything --dry-run needs ships under the plugin root (plugin/templates/dry-run/corpus.json).",
   "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs"],
   "allow": ["bin/lib/http-mock.ts"],
   "match": {

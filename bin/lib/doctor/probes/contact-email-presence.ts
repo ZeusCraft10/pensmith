@@ -6,7 +6,7 @@
 // the requests will send: the variable `[network] contact_email_env` names
 // (default PENSMITH_CONTACT_EMAIL), and only a value that looks like an email.
 // D-15 severity: PASS when an address will be sent; WARN otherwise.
-// D-18: WARN copy matches references/http-warnings.md warning-text style.
+// D-18: WARN copy matches plugin/references/http-warnings.md warning-text style.
 // D-19 read-only: reads the paper config through contact-email.ts, writes nothing.
 // The address itself never appears in the result (only the variable name).
 
@@ -31,7 +31,7 @@ export const contactEmailPresenceProbe: Probe = {
       summary:
         `${envName} is not set (or is not an email address)${named} — Crossref and OpenAlex requests use their public pools ` +
         '(a fallback User-Agent with stricter rate limits), and Unpaywall, which requires an email, is skipped.',
-      fix: `Set ${envName} to an address you read; it is sent only to Crossref, OpenAlex and Unpaywall (PRIVACY.md). See references/http-warnings.md.`,
+      fix: `Set ${envName} to an address you read; it is sent only to Crossref, OpenAlex and Unpaywall (PRIVACY.md). See plugin/references/http-warnings.md.`,
     };
   },
 };

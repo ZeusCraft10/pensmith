@@ -47,7 +47,7 @@ jobs:
 
       - run: npx tsc --noEmit
 
-      - name: Build (produces dist/mcp/server.js for manifest validation)
+      - name: Build (dist/ — the built CLI and MCP server the spawning tests run)
         run: npm run build
 
       # PLUG-02 / D-23a-04: the committed plugin bundles (plugin/dist/) must be
