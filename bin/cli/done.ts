@@ -49,6 +49,7 @@ import { computeDraftHash } from '../lib/draft-hash.js';
 import { outlineIdentitiesSync, registeredSectionsSync, sectionRegistryProblem, type SectionIdentity } from '../lib/section-registry.js';
 import { compileRecordProblems } from '../lib/compile-inputs.js';
 import { verificationRecordReasons } from '../lib/verify/verification-md.js';
+import { parseBlockingVerdictRows, verdictRowReason } from '../lib/verify/verdict-rows.js';
 import {
   recomputeGate,
   gateRefusals,
@@ -131,6 +132,10 @@ function writeGateSummary(issues: GateIssues): void {
     process.stdout.write(
       `  - ${total} orphan claim(s) across ${issues.orphanClaims.length} paragraph(s) (Pass 4)\n`,
     );
+    // VRFY-23: name the uncited claims themselves (the first few).
+    const sentences = issues.orphanClaims.flatMap((r) => r.orphans ?? []);
+    for (const o of sentences.slice(0, 5)) process.stdout.write(`      uncited: "${cell(o, 160)}"\n`);
+    if (sentences.length > 5) process.stdout.write(`      … and ${sentences.length - 5} more (see .paper/VERIFICATION.md)\n`);
   }
   if (issues.plagiarismHits.length > 0) {
     const sample = issues.plagiarismHits
@@ -226,6 +231,13 @@ export interface ExportBlock {
    * sections.
    */
   verdictReasons?: string[];
+  /**
+   * The blocking rows the sections' own VERIFICATION.md files list (a REPORT:
+   * the export path recomputes them over the exact text instead). Read only
+   * to word why there is no compiled draft — compile refused these sections
+   * (RUN-09) — never to pass anything (D-20-04).
+   */
+  recordedBlocks?: string[];
 }
 
 /** One registered section as done reads it (VRFY-26: STATE.json + OUTLINE.md, never a directory listing). */
@@ -310,6 +322,7 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
   }
   const reasons: string[] = [];
   const verdictReasons: string[] = [];
+  const recordedBlocks: string[] = [];
   const dryRun = networkMode().dryRun;
   for (const s of sections) {
     const label = `section ${s.id} (${s.identity.slug})`;
@@ -341,12 +354,15 @@ export function runExportBlockingGate(paperRoot: string): ExportBlock {
       reasons.push(`${label}: ${r}`);
       if (md !== null && md !== '') verdictReasons.push(`${label}: ${r}`);
     }
+    if (md !== null && md !== '' && record.length === 0) {
+      for (const row of parseBlockingVerdictRows(md)) recordedBlocks.push(`${label}: ${verdictRowReason(row).replace(/<N>/g, s.id)}`);
+    }
     // VRFY-27: the section's draft must be the one its verification judged.
     if (md !== null && s.verifiedHash !== s.currentDraftHash) {
       reasons.push(`${label}: stale: §${s.id} changed since verification — re-verify and recompile (\`pensmith verify ${s.id}\`, then \`pensmith compile\`)`);
     }
   }
-  return { blocked: reasons.length > 0, reasons, verdictReasons };
+  return { blocked: reasons.length > 0, reasons, verdictReasons, recordedBlocks };
 }
 
 /** Every compiled section's quote acceptances, bound to its draft hash NOW (D-20-22). */
@@ -869,11 +885,12 @@ export const doneCommand = defineCommand({
       // would only refuse again. A paper that genuinely has not reached compile
       // yet stays EXIT_ERROR.
       const gate = runExportBlockingGate(paperRoot);
-      if ((gate.verdictReasons ?? []).length > 0) {
+      const refused = [...(gate.verdictReasons ?? []), ...(gate.recordedBlocks ?? [])];
+      if (refused.length > 0) {
         process.stdout.write(
           'pensmith done: BLOCKED — there is no compiled draft because compile refuses these sections:\n',
         );
-        for (const r of gate.verdictReasons ?? []) process.stdout.write(`  - ${r}\n`);
+        for (const r of refused) process.stdout.write(`  - ${r}\n`);
         process.stdout.write(
           "Fix the cited section(s) — re-run 'pensmith verify <N>' then 'pensmith compile' — and try again.\n",
         );

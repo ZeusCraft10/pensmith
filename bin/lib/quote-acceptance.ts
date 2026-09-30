@@ -24,7 +24,7 @@ import { dirname, join } from 'node:path';
 import { atomicWriteFile } from './atomic-write.js';
 import { withLock } from './lock.js';
 import { EXIT_USAGE, PensmithError } from './exit-codes.js';
-import { ACCEPTABLE_QUOTE_VERDICT, QUOTE_ID_RE } from './verify/verdicts.js';
+import { ACCEPTABLE_QUOTE_VERDICT, QUOTE_ID_RE, UNATTRIBUTED_CITEKEY } from './verify/verdicts.js';
 import {
   ACCEPTANCE_EXCERPT_MAX,
   QUOTE_ACCEPTANCES_FILE,
@@ -114,7 +114,8 @@ export function acceptableRows(rows: readonly AcceptableQuoteRow[], ids: readonl
     const other = matching.find((r) => r.verdict !== ACCEPTABLE_QUOTE_VERDICT);
     if (other !== undefined) {
       throw new QuoteAcceptanceError(
-        `--accept-quote ${id}: its verdict is ${other.verdict} ([@${other.citekey}]) — only an ${ACCEPTABLE_QUOTE_VERDICT} quote (no source text to check it against) can be accepted; nothing was recorded`,
+        `--accept-quote ${id}: its verdict is ${other.verdict} (${other.citekey === UNATTRIBUTED_CITEKEY ? 'no citation' : `[@${other.citekey}]`}) — ` +
+          `only an ${ACCEPTABLE_QUOTE_VERDICT} quote (no source text to check it against) can be accepted; nothing was recorded`,
       );
     }
     out.push(...matching);

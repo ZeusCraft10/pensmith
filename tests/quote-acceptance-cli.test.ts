@@ -12,10 +12,10 @@
 //     `via: prompt`; an empty answer declines; without a terminal it is
 //     skipped, and --yolo never answers it (the section stays unverifiable).
 //
-// The built-CLI cases run the production passes offline (the base Pass 3
-// labels a quote it has no text for PDF_UNAVAILABLE, which is not acceptable).
-// The gate cases run verifySection in a child process with the gate core's
-// Pass-1 / Pass-3 seams standing in for the registrar and the quotes stream
+// Every case runs the production passes offline (the recorded Crossref answer
+// for lecun2015; no contact email, so Pass 3 cannot ask Unpaywall for an
+// open-access copy and each quote is UNVERIFIABLE-QUOTE — D-20-03). The gate
+// cases run verifySection in a child process
 // (tests/fixtures/paper-cli/verify-quote-prompt.ts), answered on stdin.
 
 import { test } from 'node:test';
@@ -28,19 +28,20 @@ import { readQuoteAcceptances, quoteAcceptancesPath } from '../bin/lib/quote-acc
 import { seedGatePaper, LECUN_BIB, type GatePaper } from './helpers/gate-paper.js';
 import { runLibScript, lastJson, STACK_LINE } from './helpers/paper-cli-harness.js';
 
-/** Two quotes whose source text cannot be checked (the stand-in Pass 3 says UNVERIFIABLE-QUOTE). */
+/** Two quotes whose source text cannot be checked (no contact email: Unpaywall is not asked). */
 const QUOTES = [
   'attention mechanisms are nothing more than lookup tables for bananas',
   'every transformer secretly counts the commas in its training data',
 ] as const;
 
-const AGGARWAL_BIB = '@article{aggarwal2022,\n  title = {Attention Everywhere},\n  author = {Aggarwal, Anu},\n  year = {2022}\n}\n';
+/** No contact email reaches the child, whatever the developer's shell exports. */
+const NO_EMAIL = { PENSMITH_CONTACT_EMAIL: undefined } as const;
 
 function quotePaper(prefix: string): GatePaper {
   return seedGatePaper(
     prefix,
-    [{ n: 1, slug: 'intro', assigned: ['aggarwal2022'], draft: `# Intro\n\nOne review claims that "${QUOTES[0]}" [@aggarwal2022]. It adds that "${QUOTES[1]}" [@aggarwal2022].\n` }],
-    AGGARWAL_BIB,
+    [{ n: 1, slug: 'intro', assigned: ['lecun2015'], draft: `# Intro\n\nOne review claims that "${QUOTES[0]}" [@lecun2015]. It adds that "${QUOTES[1]}" [@lecun2015].\n` }],
+    LECUN_BIB,
   );
 }
 
@@ -51,9 +52,9 @@ interface PromptRun {
 }
 
 function promptVerify(p: GatePaper, opts: { input?: string; interactive?: boolean; yolo?: boolean }): PromptRun {
-  const r = runLibScript(p.sb, 'verify-quote-prompt.ts', ['1', 'intro', String(opts.interactive ?? true), String(opts.yolo ?? false), JSON.stringify(QUOTES)], {
+  const r = runLibScript(p.sb, 'verify-quote-prompt.ts', ['1', 'intro', String(opts.interactive ?? true), String(opts.yolo ?? false)], {
     cwd: p.root,
-    env: { PENSMITH_NO_LLM: '1', PENSMITH_PROMPT_MODE: opts.input !== undefined ? 'numbered' : undefined },
+    env: { ...NO_EMAIL, PENSMITH_NO_LLM: '1', PENSMITH_PROMPT_MODE: opts.input !== undefined ? 'numbered' : undefined },
     ...(opts.input !== undefined ? { input: opts.input } : {}),
   });
   assert.doesNotMatch(r.stderr, STACK_LINE, r.stderr);
@@ -77,27 +78,45 @@ test('VRFY-20 (built CLI): `--accept-unverifiable-quotes` is an unknown flag —
 });
 
 test('VRFY-20 (built CLI): --accept-quote naming another verdict, a quote the draft lacks, or a malformed id exits 2 naming why; nothing recorded; the verification is still written', () => {
+  // q1 has no citation (UNATTRIBUTED, blocking and never acceptable); q2 is attributed.
   const p = seedGatePaper(
     'qa-refuse',
-    [{ n: 1, slug: 'intro', assigned: ['lecun2015'], draft: '# Intro\n\nThe review says "deep learning allows computational models that are composed of multiple processing layers" [@lecun2015].\n' }],
+    [
+      {
+        n: 1,
+        slug: 'intro',
+        assigned: ['lecun2015'],
+        draft:
+          '# Intro\n\nDeep learning changed the field [@lecun2015]. As one review put it, "deep learning allows computational models that are composed of multiple processing layers".\n\n' +
+          `Another review claims that "${QUOTES[0]}" [@lecun2015].\n`,
+      },
+    ],
     LECUN_BIB,
   );
   const dir = p.sectionDir(1, 'intro');
-  const other = p.cli(['verify', '1', '--accept-quote', 'q1']);
+  const other = p.cli(['verify', '1', '--accept-quote', 'q1'], NO_EMAIL);
   assert.equal(other.status, EXIT_USAGE, `${other.stdout}\n${other.stderr}`);
-  assert.match(other.stderr, /--accept-quote q1: its verdict is PDF_UNAVAILABLE \(\[@lecun2015\]\) — only an UNVERIFIABLE-QUOTE quote .* can be accepted; nothing was recorded/);
-  assert.match(readFileSync(join(dir, 'VERIFICATION.md'), 'utf8'), /^- lecun2015 \[q1\] \("deep learning allows computational model…"\): \*\*PDF_UNAVAILABLE\*\*/m, 'the verification ran and was written');
+  assert.match(other.stderr, /--accept-quote q1: its verdict is UNATTRIBUTED \(no citation\) — only an UNVERIFIABLE-QUOTE quote .* can be accepted; nothing was recorded/);
+  const md = readFileSync(join(dir, 'VERIFICATION.md'), 'utf8');
+  assert.match(md, /^- \(unattributed\) \[q1\] \("deep learning allows computational model…"\): \*\*UNATTRIBUTED\*\*/m, 'the verification ran and was written');
+  assert.match(md, /^- lecun2015 \[q2\] \("attention mechanisms are nothing more th…"\): \*\*UNVERIFIABLE-QUOTE\*\* — .*Unpaywall needs a contact email/m);
 
   // Repeated: the first id the draft does not hold is named (both occurrences are read).
-  const missing = p.cli(['verify', '1', '--accept-quote', 'q9', '--accept-quote', 'q1']);
+  const missing = p.cli(['verify', '1', '--accept-quote', 'q9', '--accept-quote', 'q2'], NO_EMAIL);
   assert.equal(missing.status, EXIT_USAGE, `${missing.stdout}\n${missing.stderr}`);
   assert.match(missing.stderr, /--accept-quote q9: section 1's draft has no quote q9 — nothing was recorded/);
 
-  const malformed = p.cli(['verify', '1', '--accept-quote', 'quote-1']);
+  const malformed = p.cli(['verify', '1', '--accept-quote', 'quote-1'], NO_EMAIL);
   assert.equal(malformed.status, EXIT_USAGE);
   assert.match(malformed.stderr, /--accept-quote quote-1: a quote id is q1, q2, … as VERIFICATION\.md lists them — nothing was recorded/);
   for (const r of [other, missing, malformed]) assert.doesNotMatch(r.stderr, STACK_LINE);
   assert.ok(!existsSync(quoteAcceptancesPath(dir)), 'nothing was recorded');
+
+  // The acceptable quote is accepted; the UNATTRIBUTED one still fails the section.
+  const ok = p.cli(['verify', '1', '--accept-quote', 'q2'], NO_EMAIL);
+  assert.equal(ok.status, 4, `${ok.stdout}\n${ok.stderr}`);
+  assert.deepEqual(readQuoteAcceptances(dir).map((a) => [a.quote_id, a.citekey, a.via]), [['q2', 'lecun2015', 'flag']]);
+  assert.match(readFileSync(join(dir, 'VERIFICATION.md'), 'utf8'), /^Status: failed$/m);
 });
 
 test('VRFY-20 / D-20-26: the quote-accept gate — "accept all" records every UNVERIFIABLE-QUOTE via the prompt and the section verifies', () => {
@@ -106,7 +125,7 @@ test('VRFY-20 / D-20-26: the quote-accept gate — "accept all" records every UN
   assert.equal(r.ok, true, r.message);
   assert.deepEqual(r.result, { status: 'verified', blocked: false });
   const acc = readQuoteAcceptances(p.sectionDir(1, 'intro'));
-  assert.deepEqual(acc.map((a) => [a.quote_id, a.citekey, a.via]), [['q1', 'aggarwal2022', 'prompt'], ['q2', 'aggarwal2022', 'prompt']]);
+  assert.deepEqual(acc.map((a) => [a.quote_id, a.citekey, a.via]), [['q1', 'lecun2015', 'prompt'], ['q2', 'lecun2015', 'prompt']]);
   const md = readFileSync(join(p.sectionDir(1, 'intro'), 'VERIFICATION.md'), 'utf8');
   assert.match(md, /^Status: verified$/m);
   assert.equal(md.match(/— accepted by you \S+ \(at the prompt\)$/gm)?.length, 2);
@@ -119,8 +138,8 @@ test('VRFY-20 / D-20-26: the quote-accept gate — picking one quote accepts onl
   assert.deepEqual(r.result, { status: 'unverifiable', blocked: true });
   assert.deepEqual(readQuoteAcceptances(p.sectionDir(1, 'intro')).map((a) => a.quote_id), ['q2']);
   const md = readFileSync(join(p.sectionDir(1, 'intro'), 'VERIFICATION.md'), 'utf8');
-  assert.match(md, /^- aggarwal2022 \[q1\] \("[^\n]*\*\*UNVERIFIABLE-QUOTE\*\* — lev=0\.000 — no open-access copy \(stand-in\)$/m);
-  assert.match(md, /^- aggarwal2022 \[q2\] \("[^\n]*\*\*UNVERIFIABLE-QUOTE\*\* — [^\n]*— accepted by you \S+ \(at the prompt\)$/m);
+  assert.match(md, /^- lecun2015 \[q1\] \("[^\n]*\*\*UNVERIFIABLE-QUOTE\*\* — lev=0\.000 — Unpaywall needs a contact email[^\n]*\)$/m);
+  assert.match(md, /^- lecun2015 \[q2\] \("[^\n]*\*\*UNVERIFIABLE-QUOTE\*\* — [^\n]*— accepted by you \S+ \(at the prompt\)$/m);
 });
 
 test('VRFY-20 / D-20-26: an empty answer declines; without a terminal the gate is skipped and --yolo never answers it — nothing recorded, unverifiable', () => {

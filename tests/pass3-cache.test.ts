@@ -32,13 +32,19 @@ const sha256 = (b: string | Uint8Array): string => createHash('sha256').update(b
 type Agent = Parameters<Parameters<typeof liveLane>[0]>[0];
 
 /** Unpaywall lists `url` for `doi` (answered once: the HTTP cache serves it after). */
-function listed(agent: Agent, doi: string, url: string): void {
+function listed(agent: Agent, doi: string, url: string, count: { n: number } = { n: 0 }, times = 1): void {
   agent
     .get('https://api.unpaywall.org')
     .intercept({ path: (p: string) => decodeURIComponent(p).startsWith(`/v2/${doi}?`), method: 'GET' })
-    .reply(200, JSON.stringify({ doi, is_oa: true, best_oa_location: { url, url_for_pdf: url }, oa_locations: [{ url, url_for_pdf: url }] }), {
-      headers: { 'content-type': 'application/json' },
-    });
+    .reply(() => {
+      count.n += 1;
+      return {
+        statusCode: 200,
+        data: JSON.stringify({ doi, is_oa: true, best_oa_location: { url, url_for_pdf: url }, oa_locations: [{ url, url_for_pdf: url }] }),
+        responseOptions: { headers: { 'content-type': 'application/json' } },
+      };
+    })
+    .times(times);
 }
 
 /** Serve `bytes` at `https://repo.example<path>`, counting requests. */
@@ -131,14 +137,17 @@ test('VRFY-28 (Pass-3 side): a citation due for a re-check fetches its copies ag
   const pdfs = { n: 0 };
   const doi = `10.5555/${uniq('refresh')}`;
   const path = `/${uniq('refresh')}.pdf`;
+  const lookups = { n: 0 };
   await liveLane(async (agent) => {
-    listed(agent, doi, `https://repo.example${path}`);
+    listed(agent, doi, `https://repo.example${path}`, lookups, 2);
     served(agent, path, pdf, pdfs, 2);
     assert.equal((await run(`"${REAL}" [@k].`, doi))[0]?.verdict, 'PASS');
     assert.equal((await run(`"${REAL}" [@k].`, doi))[0]?.verdict, 'PASS');
     assert.equal(pdfs.n, 1, 'fresh: served from the cache');
+    assert.equal(lookups.n, 1, 'fresh: Unpaywall\'s answer served from the HTTP cache');
     assert.equal((await run(`"${REAL}" [@k].`, doi, { refresh: new Set(['k']) }))[0]?.verdict, 'PASS');
     assert.equal(pdfs.n, 2, 'refresh: fetched again');
+    assert.equal(lookups.n, 2, 'refresh: Unpaywall is asked again too (its HTTP-cache read is skipped)');
   }, { contactEmail: EMAIL });
 });
 

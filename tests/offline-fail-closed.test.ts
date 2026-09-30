@@ -249,7 +249,7 @@ const UNVERIFIABLE_VERIFICATION = [
   '',
   '## Pass-1 (citation integrity, deterministic — D-11 AND-gate)',
   '',
-  renderPass1VerdictRow('jumper2021', 'UNVERIFIABLE', 0, 0, UNVERIFIABLE_OFFLINE_REASON),
+  renderPass1VerdictRow('jumper2021', 'UNVERIFIABLE-NETWORK', 0, 0, UNVERIFIABLE_OFFLINE_REASON),
   '',
 ].join('\n');
 
@@ -264,12 +264,12 @@ const ZERO_ROW_UNVERIFIABLE = [
   '',
 ].join('\n');
 
-test('RUN-03 / D-17-07: the compile refuse-gate blocks an UNVERIFIABLE row with "re-run online"', async () => {
+test('RUN-03 / D-17-07, VRFY-12: the compile refuse-gate blocks an offline (UNVERIFIABLE-NETWORK) row with "re-run online"', async () => {
   const root = seedCompiledPaper(UNVERIFIABLE_VERIFICATION);
   const res = await runCompile({ paperRoot: root, yolo: true, onWarn: () => {} });
   assert.equal(res.refused, true, 'compile must refuse');
   assert.ok(
-    (res.refuseReasons ?? []).some((r) => /\[@jumper2021\] is UNVERIFIABLE .*re-run online/.test(r)),
+    (res.refuseReasons ?? []).some((r) => /\[@jumper2021\] is UNVERIFIABLE-NETWORK .*re-run online/.test(r)),
     `refusal names the row and "re-run online": ${JSON.stringify(res.refuseReasons)}`,
   );
   assert.ok(!existsSync(join(root, '.paper', 'DRAFT.md')), 'no compiled DRAFT.md is written');
@@ -281,12 +281,12 @@ test('Pitfall 3: a `Status: unverifiable` section with ZERO verdict rows still c
   assert.equal(res.refused, false, `zero-row unverifiable passes: ${JSON.stringify(res.refuseReasons)}`);
 });
 
-test('RUN-03 / D-17-07: the done re-check blocks an UNVERIFIABLE row with "re-run online"; zero-row unverifiable passes', async () => {
+test('RUN-03 / D-17-07, VRFY-12: the done re-check blocks an offline (UNVERIFIABLE-NETWORK) row with "re-run online"; zero-row unverifiable passes', async () => {
   // done recomputes the verdicts over the text it exports (D-20-25).
   const blockedRoot = seedCompiledPaper(UNVERIFIABLE_VERIFICATION);
   const text = readFileSync(join(blockedRoot, '.paper', 'sections', '01-intro', 'DRAFT.md'), 'utf8');
   const blocked = await recomputeExportGate(blockedRoot, text, { sections: doneSections(blockedRoot) });
-  assert.ok(blocked.refusals.some((r) => /UNVERIFIABLE .*re-run online/.test(r)), JSON.stringify(blocked.refusals));
+  assert.ok(blocked.refusals.some((r) => /\[@jumper2021\] is UNVERIFIABLE-NETWORK .*re-run online/.test(r)), JSON.stringify(blocked.refusals));
   const cleanRoot = seedCompiledPaper(ZERO_ROW_UNVERIFIABLE, false);
   const clean = runExportBlockingGate(cleanRoot);
   assert.equal(clean.blocked, false, JSON.stringify(clean.reasons));
