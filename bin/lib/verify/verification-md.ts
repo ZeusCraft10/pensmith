@@ -170,12 +170,17 @@ export function summaryRows(doc: Pick<VerificationDoc, 'rows' | 'freshness' | 'p
   return out;
 }
 
-/** Render the `## Summary` table. */
-export function renderSummary(rows: readonly SummaryRow[]): string {
-  const lines = [SUMMARY_HEADING, '', SUMMARY_TABLE_HEADER, '|------|---------|-------|'];
+/** The summary table alone (`| Pass | Verdict | Count |`). */
+export function renderSummaryTable(rows: readonly SummaryRow[]): string {
+  const lines = [SUMMARY_TABLE_HEADER, '|------|---------|-------|'];
   for (const r of rows) lines.push(`| ${r.pass} | ${r.verdict} | ${r.count} |`);
   if (rows.length === 0) lines.push('| — | nothing to check | 0 |');
   return lines.join('\n');
+}
+
+/** Render the `## Summary` section. */
+export function renderSummary(rows: readonly SummaryRow[]): string {
+  return [SUMMARY_HEADING, '', renderSummaryTable(rows)].join('\n');
 }
 
 /** Render the `## Accepted quotes` table (empty string when none). */
@@ -206,11 +211,11 @@ export function renderVerificationMd(doc: VerificationDoc): string {
     '',
     PASS1_HEADING,
     '',
-    ...pass1.map(renderGateRow),
+    ...(pass1.length > 0 ? pass1.map(renderGateRow) : ['_(no citations to check)_']),
     '',
     PASS3_HEADING,
     '',
-    ...pass3.map(renderGateRow),
+    ...(pass3.length > 0 ? pass3.map(renderGateRow) : ['_(no direct quotes)_']),
     '',
     DRAFT_CHECKS_HEADING,
     '',

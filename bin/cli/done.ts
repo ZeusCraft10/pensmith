@@ -60,7 +60,7 @@ import {
   type GateResult,
   type LoadedBibliography,
 } from '../lib/verify/gate.js';
-import { renderSummary, summaryRows } from '../lib/verify/verification-md.js';
+import { renderSummaryTable, summaryRows } from '../lib/verify/verification-md.js';
 import { readQuoteAcceptances, sectionDirOfPlan } from '../lib/quote-acceptance.js';
 import { recordLastVerified, LibraryNotFoundError } from '../lib/library.js';
 
@@ -774,7 +774,7 @@ export function buildVerificationReport(r: PaperVerificationReport): string {
     '',
     `Text checked: ${r.checkedFile} (sha256 ${r.checkedSha256})`,
     '',
-    renderSummary(summaryRows({ rows: r.gate.rows })),
+    renderSummaryTable(summaryRows({ rows: r.gate.rows })),
     '',
     '## Decisions',
     '',

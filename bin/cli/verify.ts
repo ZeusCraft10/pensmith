@@ -406,7 +406,6 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
 
   const notes: string[] = [];
   if (gate.citedKeys.length === 0 && assignedSources.length === 0) notes.push(NO_CITATIONS_NOTE);
-  if (freshnessNote !== null) notes.push(freshnessNote);
   const notRun = `${COMPILE_REVERIFY_NOT_RUN} ${id}\``;
   await atomicWriteFile(
     verifPath,
@@ -420,7 +419,11 @@ export async function verifySection(n: number, slug: string, suffix?: string | n
       notes,
       accepted: gate.accepted,
       freshness,
-      freshnessSection: advisory ? renderFreshnessTable(freshness ?? []) : `## Source Freshness (RSCH-10)\n\n_(${notRun})_\n`,
+      freshnessSection: !advisory
+        ? `## Source Freshness (RSCH-10)\n\n_(${notRun})_\n`
+        : freshnessNote !== null
+          ? `## Source Freshness (RSCH-10)\n\n_(${freshnessNote} — fix the bibliography, then re-verify)_\n`
+          : renderFreshnessTable(freshness ?? []),
       pass2Verdicts: advisory ? pass2.map((r) => r.verdict) : null,
       pass2Section: advisory ? renderPass2Section(pass2) : `## Pass-2 (claim support, advisory)\n\n_(${notRun})_\n`,
       pass4Orphans: pass4 !== null ? pass4.reduce((s, r) => s + r.orphanCount, 0) : null,

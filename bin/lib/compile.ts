@@ -381,15 +381,15 @@ export async function runCompile(opts: RunCompileOpts): Promise<CompileResult> {
           re_verify_passed: true,
         });
       } else {
-        // A current verification's own record can only add refusals (D-20-04).
+        // A current verification's own record can only add refusals (D-20-04);
+        // the recomputation below still runs, so the refusal names the rows.
         const verifPath = sectionVerification(os.n, os.slug, opts.paperRoot);
         const verificationMd = existsSync(verifPath) ? readFileSync(verifPath, 'utf8') : null;
         const recordReasons = verificationRecordReasons(verificationMd, id, freshHash, dryRun);
-        if (sec.planStatus === 'failed') recordReasons.push(`PLAN.md status is 'failed' — run \`pensmith verify ${id}\` after repairing the section`);
-        if (recordReasons.length > 0) {
-          for (const reason of recordReasons) refuseReasons.push(`${label}: ${reason}`);
-          continue;
+        if (sec.planStatus === 'failed' && !recordReasons.some((r) => r.startsWith("VERIFICATION.md Status is 'failed'"))) {
+          recordReasons.push(`PLAN.md status is 'failed' — repair the section, then \`pensmith verify ${id}\``);
         }
+        for (const reason of recordReasons) refuseReasons.push(`${label}: ${reason}`);
       }
 
       // VRFY-25 (D-20-23): the ONE gate core over the EXACT bytes compile
