@@ -232,7 +232,7 @@ test('GRND-18: the step exits with the last verb\'s code — a blocking verify e
   assert.match(`${c.stdout}\n${c.stderr}`, /section 1 \(introduction\): .*nofixture2020.*UNVERIFIABLE/, 'compile recomputes §1 and refuses it');
   assert.ok(!existsSync(join(sb.root, '.paper', 'DRAFT.md')), 'nothing compiled');
   const st = await sb.run(['status']);
-  assert.match(st.stdout, /#1 introduction: unverifiable - \[@nofixture2020\] could not be checked \(offline or a failed lookup\) — re-run `pensmith verify 1` online/);
+  assert.match(st.stdout, /[#§]1 introduction: unverifiable [-—] \[@nofixture2020\] could not be checked \(offline or a failed lookup\) — re-run `pensmith verify 1` online/);
   assert.equal(sb.mock.requests.length, before, 'no model call: the unchanged draft is not re-verified');
   const verify = await sb.run(['verify', '1', '--yolo']);
   assert.equal(verify.status, EXIT_BLOCKED, `${verify.stdout}\n${verify.stderr}`);
@@ -285,7 +285,7 @@ test('review round 3 (D-18-43), Phase 20 (D-20-03, S-13): a section left `unveri
   );
   assert.ok(!existsSync(join(sb.root, '.paper', 'DRAFT.md')), 'nothing compiled');
   const st = await sb.run(['status']);
-  assert.match(st.stdout, /#1 introduction: unverifiable - .*quote\(s\) \(q1\) could not be checked against any source text/);
+  assert.match(st.stdout, /[#§]1 introduction: unverifiable [-—] .*quote\(s\) \(q1\) could not be checked against any source text/);
   assert.equal(sb.mock.requests.length, calls, 'no model call: the unchanged draft is not re-verified');
 });
 

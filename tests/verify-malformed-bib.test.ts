@@ -138,7 +138,7 @@ test('VRFY-16 (built CLI): DRAFT.md deleted from a VERIFIED section → the next
   assert.match(readFileSync(join(p.sectionDir(1, 'intro'), 'PLAN.md'), 'utf8'), /^status: verified$/m);
   rmSync(join(p.sectionDir(1, 'intro'), 'DRAFT.md'));
   const st = p.cli(['status']);
-  assert.match(st.stdout + st.stderr, /next: write #1$/m, 'status names the re-draft');
+  assert.match(st.stdout + st.stderr, /next: write [#§]1$/m, 'status names the re-draft');
   const r = p.cli(['--yolo']);
   assert.doesNotMatch(r.stderr, STACK_LINE);
   assert.match(r.stderr, /^pensmith: ran write §?1/m, `the bare run re-drafts the section:\n${r.stderr}`);
