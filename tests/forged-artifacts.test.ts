@@ -252,6 +252,50 @@ test('VRFY-14 (built CLI, review round 2): the user\'s own PDF vouches for the F
   assert.ok(!existsSync(join(root, '.paper', 'DRAFT.md')), 'no compiled draft');
 });
 
+test('VRFY-14 (built CLI, review round 3): the user\'s own PDF never vouches for an identifier — a DOI edited after ingest is MIS-CITED naming both DOIs when the registrar gives no answer, and compile refuses it', async () => {
+  const { upsertSources } = await import('../bin/lib/library.js');
+  const { createHash } = await import('node:crypto');
+  const { mkdirSync } = await import('node:fs');
+  const sb = sandbox('forged-byo-doi');
+  const root = sb.project('p');
+  writeState(root, [{ n: 1, slug: 'background' }], 'forged-byo-doi');
+  const pdf = Buffer.from('%PDF-1.4\n% the user\'s own copy, doi edited later\n');
+  mkdirSync(join(root, '.paper', 'sources'), { recursive: true });
+  writeFileSync(join(root, '.paper', 'sources', 'offline2021.pdf'), pdf);
+  await upsertSources(
+    root,
+    [{
+      source: 'byo',
+      id: 'byo:offline2021',
+      doi: '10.5555/pensmith-byo-unrecorded',
+      title: 'A Paper Whose Lookup Gets No Answer',
+      authors: ['Offline, Olga'],
+      year: 2021,
+      byo: { file: 'sources/offline2021.pdf', sha256: createHash('sha256').update(pdf).digest('hex'), text_sha256: null },
+      last_verified: new Date().toISOString(),
+      citekey: 'offline2021',
+      raw: {},
+    }],
+    { provenance: 'byo' },
+  );
+  writeOutline(root, [{ n: 1, slug: 'background', sources: ['offline2021'] }]);
+  writePlan(root, 1, 'background', { status: 'written', assigned_sources: '[offline2021]' });
+  const dir = sectionDirOf(root, 1, 'background');
+  writeFileSync(join(dir, 'DRAFT.md'), '# Background\n\nThe method works [@offline2021].\n');
+  const bib = join(root, '.paper', 'CITATIONS.bib');
+  writeFileSync(bib, readFileSync(bib, 'utf8').replace(/doi = \{[^}]*\}/, 'doi = {10.5555/an-invented-doi-nobody-registered}'));
+  const v = runCli(sb, root, ['verify', '1', '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(v.status, EXIT_BLOCKED, `${v.stdout}\n${v.stderr}`);
+  assert.match(
+    readFileSync(join(dir, 'VERIFICATION.md'), 'utf8'),
+    /^- offline2021: \*\*MIS-CITED\*\* — .*mismatch: the entry's DOI 10\.5555\/an-invented-doi-nobody-registered is not the DOI recorded for that work when you added it \(10\.5555\/pensmith-byo-unrecorded\)/m,
+  );
+  const c = runCli(sb, root, ['compile', '--yolo'], { timeoutMs: 120_000 });
+  assert.equal(c.status, EXIT_BLOCKED, `${c.stdout}\n${c.stderr}`);
+  assert.match(c.stdout, /citation \[@offline2021\] is MIS-CITED/);
+  assert.ok(!existsSync(join(root, '.paper', 'DRAFT.md')), 'no compiled draft');
+});
+
 // ---------------------------------------------------------------------------
 // A key defined twice (review round 3)
 // ---------------------------------------------------------------------------

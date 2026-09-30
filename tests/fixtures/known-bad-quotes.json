@@ -11,6 +11,7 @@
     "distant passages or single words must be NOT_FOUND even when close by characters; an editorial [bracket] is not quoted text.",
     "Review round 2: quotes in other languages' quotation marks (guillemets, low-high marks) and a Title Case quote after a reporting colon are extracted and checked like any other.",
     "Review round 3: an editorial [bracket] that adds or stands in for a negation or a number, and an elision that skips a negation of the sentence, change what the source says: NOT_FOUND. A bracket that keeps the source's negation passes. The source gained the paper's own 'no recurrence and no convolution' sentence (Section 3.5) for these rows.",
+    "Review round 3: a quote after a title cue with a comma (\"As stated in the paper, …\") and a Title Case quote a citation claims are quotations, extracted and checked.",
     "Hash-pinned in tests/repo-files.test.ts."
   ],
   "citekey": "vaswani2017",
@@ -324,6 +325,22 @@
       "draft": "As they put it, \"our model contains [neither] recurrence [nor] convolution, in order for the model to make use of the order of the sequence\" [@vaswani2017, p. 6].\n",
       "expected_verdict": "PASS",
       "note": "Editorial brackets that keep the source's negations (\"no … and no\" as \"neither … nor\") are a faithful quotation."
+    },
+    {
+      "id": "title-cue-comma-1",
+      "distortion": "fabrication",
+      "claimed_quote": "the Transformer replaces attention with recurrence in every single layer",
+      "draft": "As stated in the paper, \"the Transformer replaces attention with recurrence in every single layer\" [@vaswani2017].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "A title cue followed by a comma introduces a quotation, not a title: the fabricated quote is checked."
+    },
+    {
+      "id": "title-case-cited-1",
+      "distortion": "fabrication",
+      "claimed_quote": "Recurrent Networks Will Always Beat Attention On Translation",
+      "draft": "Vaswani and colleagues predicted \"Recurrent Networks Will Always Beat Attention On Translation\" [@vaswani2017].\n",
+      "expected_verdict": "NOT_FOUND",
+      "note": "A Title Case quote a citation claims is checked (a real title of the cited work would pass against its own text)."
     }
   ]
 }

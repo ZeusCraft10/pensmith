@@ -137,11 +137,13 @@ test('review round 1 (merge): a Crossref 404 for a DOI another agency registered
   const bare = await verdict({ citekey: 'zou2026', title, author: 'Zou, PR', doi: '10.3760/cma.j.cn441530-20260508-00189-1', year: 2026 });
   assert.equal(bare.verdict, 'UNVERIFIABLE');
   assert.match(bare.reason, /is registered with ISTIC, not Crossref, which serves no record the verifier can read — give the work's arXiv id, PMID or ISBN/);
-  // A PMID that names another work is still a mismatch (MIS-CITED), not a pass.
+  // A PMID that names another work is still a mismatch (MIS-CITED), not a pass — named by
+  // the DOI that record lists, which is not the entry's (review round 3: the fallback record
+  // must vouch for the DOI the export prints).
   writeFileSync(bib, readFileSync(bib, 'utf8').replace('pmid = {42706103}', 'pmid = {31978945}'));
   const [wrongPmid] = await runPass1('A claim [@zou2026].\n', bib);
   assert.equal(wrongPmid!.verdict, 'MIS-CITED', wrongPmid!.reason);
-  assert.match(wrongPmid!.reason, /registered with ISTIC.*PMID 31978945 re-fetched from PubMed: mismatch: title \(/);
+  assert.match(wrongPmid!.reason, /registered with ISTIC.*the entry's DOI 10\.3760\/cma\.j\.cn441530-20260508-00189-1 is not the DOI PubMed's record of PMID 31978945 lists \(10\.1056\/nejmoa2001017\)/);
 });
 
 test('review round 2: a DataCite arXiv DOI (research writes it from Semantic Scholar / OpenAlex) is re-fetched at arXiv — OK, never FABRICATED by Crossref\'s 404', async () => {

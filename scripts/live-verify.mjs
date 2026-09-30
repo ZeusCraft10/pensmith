@@ -35,8 +35,11 @@
 //     medicine topic (the adapters and the research pass pensmith uses; the
 //     evaluator as its contract stub keeps every candidate), every source the
 //     outline could be offered is cited, and `verify 1` must block none of them
-//     (0 false blocks). A lookup that got no answer (UNVERIFIABLE-NETWORK — a
-//     throttled or unreachable service) is reported, not counted.
+//     (0 false blocks).
+// In the acceptance list, the round-2 works and the self-consistency sample, a
+// row whose lookup got no answer (UNVERIFIABLE-NETWORK — a throttled or
+// unreachable service, e.g. OpenAlex's keyless daily budget) is reported as
+// INFO, not counted: it failed closed, and what it would have been is unknown.
 //
 // How it runs: the parent (plain node) checks the contact email and the build,
 // then runs one CHILD (under `node --import tsx`, for the seeding helper and the
@@ -181,7 +184,16 @@ async function runChild(work) {
     const keys = VRFY11.map(([k]) => k);
     const { root, dir } = await seedPaper(work, 'vrfy11', keys, `${VRFY11.map(([, , bib]) => bib).join('\n')}\n`);
     const v = verifySection(root, dir);
-    expectRows('VRFY-11 / VRFY-12: the acceptance list verifies at each registrar (fake DOI FABRICATED, unknown work UNRESOLVABLE)', v, VRFY11.map(([k, want]) => [k, want]));
+    // A lookup that got no answer (a throttled service — e.g. OpenAlex's keyless
+    // daily budget for the metadata search) is reported, not counted: the row
+    // is correctly UNVERIFIABLE-NETWORK, and what it would have been is unknown.
+    const counted = [];
+    for (const [key, want] of VRFY11) {
+      const got = v.rows.get(key);
+      if (got?.verdict === 'UNVERIFIABLE-NETWORK' && want !== 'UNVERIFIABLE-NETWORK') line('INFO', `VRFY-11 ${key} not counted (no answer)`, got.line);
+      else counted.push([key, want]);
+    }
+    expectRows('VRFY-11 / VRFY-12: the acceptance list verifies at each registrar (fake DOI FABRICATED, unknown work UNRESOLVABLE)', v, counted);
     const noid = v.rows.get('lecun2015noid');
     if (noid && !/metadata search matched DOI 10\.1038\/nature14539/.test(noid.line)) fail('VRFY-12: the metadata-search row names the DOI it found', noid.line);
     else if (noid) pass('VRFY-12: the metadata-search row names the DOI it found');
