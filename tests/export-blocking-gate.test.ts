@@ -108,6 +108,14 @@ test('export gate (VRFY-26): sections come from STATE.json + OUTLINE.md — a st
   assert.match(r.reasons.join(' '), /OUTLINE\.md and STATE\.json disagree/);
 });
 
+test('export gate (VRFY-26): a paper whose STATE.json registers no section is gated on the OUTLINE.md rows compile compiled', () => {
+  const root = seed([{ n: 1, slug: 'intro', verification: CLEAN }, { n: 2, slug: 'body', verification: FABRICATED }]);
+  writeFileSync(join(root, '.paper', 'STATE.json'), JSON.stringify({ $schemaVersion: 3, paperId: 'export-gate', createdAt: '2026-01-01T00:00:00.000Z', sections: [] }));
+  const r = runExportBlockingGate(root);
+  assert.equal(r.blocked, true);
+  assert.deepEqual(r.verdictReasons?.map((x) => x.split(':')[0]), ['section 2 (body)'], r.reasons.join('; '));
+});
+
 test('export gate (VRFY-27): a section whose draft changed since verification is stale', () => {
   const root = seed([{ n: 1, slug: 'intro', verification: CLEAN, current: false }]);
   const r = runExportBlockingGate(root);

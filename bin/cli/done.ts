@@ -46,7 +46,7 @@ import { sectionWriteBlockReason } from '../lib/plan-status.js';
 import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
 import { blocksCompile, PASS2_TABLE_HEADER, PASS2_TABLE_HEADER_V1 } from '../lib/verify/verdicts.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
-import { registeredSectionsSync, sectionRegistryProblem, type SectionIdentity } from '../lib/section-registry.js';
+import { outlineIdentitiesSync, registeredSectionsSync, sectionRegistryProblem, type SectionIdentity } from '../lib/section-registry.js';
 import { compileRecordProblems } from '../lib/compile-inputs.js';
 import { verificationRecordReasons } from '../lib/verify/verification-md.js';
 import {
@@ -251,10 +251,17 @@ function planFrontmatter(planPath: string): Record<string, unknown> | null {
   }
 }
 
-/** The paper's registered sections with what done checks of each. Never throws. */
+/**
+ * The sections compile compiles, with what done checks of each: the ones
+ * STATE.json registers (OUTLINE.md must list the same — sectionRegistryProblem),
+ * or OUTLINE.md's rows for a paper whose STATE.json registers none (compile
+ * compiles those too). Never a directory listing. Never throws.
+ */
 export function doneSections(paperRoot: string): DoneSection[] {
   const out: DoneSection[] = [];
-  for (const identity of registeredSectionsSync(paperRoot) ?? []) {
+  const registered = registeredSectionsSync(paperRoot);
+  const identities = registered !== null && registered.length > 0 ? registered : (outlineIdentitiesSync(paperRoot) ?? []);
+  for (const identity of identities) {
     const id = formatSectionId(sectionIdOf(identity.n, identity.suffix));
     const planPath = sectionPlan(identity.n, identity.slug, paperRoot);
     const fm = planFrontmatter(planPath);
@@ -275,9 +282,9 @@ export function doneSections(paperRoot: string): DoneSection[] {
  * Re-assert the Core Value at EXPORT time from what the section records say
  * (audit #3/#14, VRFY-26, VRFY-27). done is independently reachable (explicit
  * `done`, bare `/pensmith`, `next`), so it never trusts that compile gated.
- * The sections come from STATE.json and OUTLINE.md (section-registry.ts) —
- * never from a directory listing — and done refuses when:
- *   - OUTLINE.md and STATE.json disagree, or no section is registered;
+ * The sections come from STATE.json and OUTLINE.md (section-registry.ts,
+ * doneSections) — never from a directory listing — and done refuses when:
+ *   - OUTLINE.md and STATE.json disagree, or the paper has no section;
  *   - a section has no PLAN.md, no DRAFT.md or no VERIFICATION.md;
  *   - a section's last write failed or is unfinished (FEED-04);
  *   - its VERIFICATION.md has no Status line, says `failed`, or was written
