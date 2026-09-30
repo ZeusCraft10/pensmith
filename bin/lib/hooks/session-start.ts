@@ -54,7 +54,7 @@ function nextStepLine(decision: RouterDecision): string {
   return `Next step (the pensmith router): ${nextActionOf(decision, { quoteDetail: false })}`;
 }
 
-/** The resume context for the paper at `root`. Read-only; never throws. */
+/** The resume context for the paper at `root`. Writes nothing but the `state.load` events every STATE.json read appends to SESSION.log; never throws. */
 export async function buildSessionStartContext(root: string, opts: SessionStartOptions = {}): Promise<string> {
   let decision: RouterDecision;
   try {
