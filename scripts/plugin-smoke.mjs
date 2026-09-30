@@ -110,6 +110,9 @@ function isolatedEnv(tmp) {
   mkdirSync(home, { recursive: true });
   mkdirSync(data, { recursive: true });
   env.CLAUDE_CONFIG_DIR = path.join(tmp, 'claude-config');
+  // No self-update and no non-essential traffic from the Claude Code under test.
+  env.DISABLE_AUTOUPDATER = '1';
+  env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1';
   env.HOME = home;
   env.USERPROFILE = home;
   // The pensmith server's own data dir (locks, cache) stays in the temp folder too.
