@@ -671,7 +671,7 @@ function inlineCodeSpans(md: string, lines: readonly SourceLine[], fences: Reado
  * interior may end sooner than the proof thinks) and a byte-order mark — turn
  * the proof off even inside a fenced block.
  */
-const GLOBALLY_UNMODELLED_RE = /\r(?!\n)|﻿/;
+const GLOBALLY_UNMODELLED_RE = /\r(?!\n)|\uFEFF/;
 
 /**
  * `md` with the interior lines of each proven fenced block blanked (offsets
