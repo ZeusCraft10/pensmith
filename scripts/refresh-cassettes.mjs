@@ -277,6 +277,42 @@ function fitting(entries) {
 }
 
 // ---------------------------------------------------------------------------
+// Cassette entries
+// ---------------------------------------------------------------------------
+
+/** Any email address (an author's address inside an affiliation string, say). */
+const EMAIL_ADDRESS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+/**
+ * The committed cassette entry for one recorded fixture — the per-adapter
+ * recordings and the e2e corpus share it: sensitive headers dropped, the
+ * contact email and then every other email address redacted (fixtures commit
+ * no email address at all, tests/cassette-no-leak), a non-text body kept as
+ * base64 (D-19-07), recorder provenance.
+ */
+function recordedEntry(mock, f, adapter, recordedAt) {
+  const email = (process.env.PENSMITH_CONTACT_EMAIL ?? '').trim();
+  const headers = {};
+  for (const [k, v] of Object.entries(f.responseHeaders ?? {})) {
+    if (!mock.SENSITIVE_HEADERS.has(k.toLowerCase())) headers[k.toLowerCase()] = v;
+  }
+  const entry = {
+    scope: f.scope,
+    method: f.method,
+    path: f.path,
+    status: f.status,
+    response: f.response,
+    responseHeaders: headers,
+    // D-19-07: a non-text body (a PDF) is base64 — replay decodes it by this field.
+    ...(f.bodyEncoding ? { bodyEncoding: f.bodyEncoding } : {}),
+    ...(f.bodySha256 ? { bodySha256: f.bodySha256 } : {}),
+    provenance: { recordedAt, recorder: 'scripts/refresh-cassettes.mjs', adapter },
+  };
+  const text = JSON.stringify(entry);
+  return JSON.parse((email ? text.split(email).join('REDACTED_CONTACT_EMAIL') : text).replace(EMAIL_ADDRESS, 'REDACTED_EMAIL'));
+}
+
+// ---------------------------------------------------------------------------
 // Child: record one adapter (runs under `node --import tsx`)
 // ---------------------------------------------------------------------------
 
@@ -307,35 +343,8 @@ async function runChild(adapter, files = []) {
   if (!mock.isRecordingEnabled()) {
     throw new Error('recording is not enabled (needs PENSMITH_RECORD_CASSETTES=1, live mode, outside a test context)');
   }
-  const email = (process.env.PENSMITH_CONTACT_EMAIL ?? '').trim();
   const recordedAt = new Date().toISOString();
-
-  // The contact email, then every other email address a response carries (an
-  // author's address inside an affiliation string, say): fixtures commit no
-  // email address at all (tests/cassette-no-leak).
-  const EMAIL_ADDRESS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-  const redactEmail = (text) =>
-    (email ? text.split(email).join('REDACTED_CONTACT_EMAIL') : text).replace(EMAIL_ADDRESS, 'REDACTED_EMAIL');
-
-  const entryFor = (f) => {
-    const headers = {};
-    for (const [k, v] of Object.entries(f.responseHeaders ?? {})) {
-      if (!mock.SENSITIVE_HEADERS.has(k.toLowerCase())) headers[k.toLowerCase()] = v;
-    }
-    const entry = {
-      scope: f.scope,
-      method: f.method,
-      path: f.path,
-      status: f.status,
-      response: f.response,
-      responseHeaders: headers,
-      // D-19-07: a non-text body (a PDF) is base64 — replay decodes it by this field.
-      ...(f.bodyEncoding ? { bodyEncoding: f.bodyEncoding } : {}),
-      ...(f.bodySha256 ? { bodySha256: f.bodySha256 } : {}),
-      provenance: { recordedAt, recorder: 'scripts/refresh-cassettes.mjs', adapter },
-    };
-    return JSON.parse(redactEmail(JSON.stringify(entry)));
-  };
+  const entryFor = (f) => recordedEntry(mock, f, adapter, recordedAt);
 
   const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
 
@@ -510,10 +519,24 @@ async function runChild(adapter, files = []) {
 /** The topic, discipline and queries the corpus is recorded for (the PRD §15 assignment). */
 export const E2E_TOPIC = 'attention mechanisms in transformers';
 export const E2E_DISCIPLINE = 'computer-science';
+/**
+ * The scripted scope's queries. Research sends 5–10 per scope (SRC-08: fewer
+ * are padded from the topic's deterministic expansion), so the corpus scripts
+ * exactly five — the chain sends them unchanged (query-expansion.ts
+ * clampQueries keeps them as written).
+ */
 export const E2E_QUERIES = Object.freeze([
   'transformer self-attention mechanism',
   'attention mechanism neural machine translation',
+  'multi-head attention transformer architecture',
+  'scaled dot-product attention transformer',
+  'transformer attention interpretability',
 ]);
+/** The scripted scope (topic-disambiguator, SRC-08). */
+const E2E_SCOPE = Object.freeze({
+  label: 'transformer-attention',
+  description: 'Attention mechanisms in transformer neural networks: self-attention, multi-head attention and their analysis.',
+});
 /** At most this many sources are kept (the evaluator keep-list, D-18-31). */
 export const E2E_MAX_KEPT = 6;
 /** DOI-bearing candidates whose Pass-1 lookups are recorded, to keep ≤ E2E_MAX_KEPT that verify. */
@@ -523,7 +546,6 @@ export const E2E_EXPECTED_SECTIONS = 3;
 const E2E_ROOT = path.join(CASSETTES_ROOT, 'e2e');
 const E2E_CORPUS_DIR = path.join(REPO_ROOT, 'tests', 'fixtures', 'e2e-corpus');
 const E2E_ASSIGNMENT = path.join(REPO_ROOT, 'tests', 'fixtures', 'assignment.txt');
-const E2E_SEARCH_ADAPTERS = Object.freeze(['crossref', 'openalex', 'arxiv', 'pubmed', 'semanticscholar']);
 const E2E_PHASES = Object.freeze([
   { name: 'search', mode: 'live' },
   { name: 'stage', mode: 'none' },
@@ -556,10 +578,38 @@ async function e2eModules() {
     mock: await import(bin('http-mock.js')),
     atomic: await import(bin('atomic-write.js')),
     research: await import(bin('research-orchestrator.js')),
+    policy: await import(bin('source-policy.js')),
+    sourceContext: await import(bin('source-context.js')),
     retraction: await import(bin('sources/retraction-cross-check.js')),
     library: await import(bin('library.js')),
     pass1: await import(bin('verify/pass1.js')),
   };
+}
+
+/**
+ * The adapter plan and registry `pensmith research` uses for the corpus
+ * brief (bin/cli/research.ts): the computer-science preset's source
+ * preference over the default five, no `[sources]` settings.
+ */
+function e2ePlan(m) {
+  const registry = m.research.researchRegistry();
+  const plan = m.research.researchAdapterPlan({ registry, byPreference: true, discipline: E2E_DISCIPLINE });
+  return { registry, plan };
+}
+
+/** research's pass over the corpus queries (the evaluator runs as its contract stub: it keeps every candidate). */
+async function e2eResearchPass(m) {
+  const { registry, plan } = e2ePlan(m);
+  return m.research.runResearchPass({
+    queries: [...E2E_QUERIES],
+    plan,
+    registry,
+    policy: m.policy.sourcePolicyFrom(undefined),
+    topic: E2E_TOPIC,
+    discipline: E2E_DISCIPLINE,
+    scope: `${E2E_SCOPE.label} — ${E2E_SCOPE.description}`,
+    warn: (line) => process.stdout.write(`  ${line}\n`),
+  });
 }
 
 async function writeJson(m, file, value) {
@@ -568,27 +618,6 @@ async function writeJson(m, file, value) {
 
 function readJson(file) {
   return JSON.parse(readFileSync(file, 'utf8'));
-}
-
-/** A cassette entry for a recorded fixture: scrubbed headers, redacted contact email, provenance. */
-function cassetteEntry(m, f, adapter, recordedAt) {
-  const email = (process.env.PENSMITH_CONTACT_EMAIL ?? '').trim();
-  const headers = {};
-  for (const [k, v] of Object.entries(f.responseHeaders ?? {})) {
-    if (!m.mock.SENSITIVE_HEADERS.has(k.toLowerCase())) headers[k.toLowerCase()] = v;
-  }
-  const entry = {
-    scope: f.scope,
-    method: f.method,
-    path: f.path,
-    status: f.status,
-    response: f.response,
-    responseHeaders: headers,
-    ...(f.bodySha256 ? { bodySha256: f.bodySha256 } : {}),
-    provenance: { recordedAt, recorder: RECORDER, adapter },
-  };
-  const text = JSON.stringify(entry);
-  return JSON.parse(email ? text.split(email).join('REDACTED_CONTACT_EMAIL') : text);
 }
 
 /** Why a set of recorded fixtures cannot be committed, or null. */
@@ -631,18 +660,18 @@ async function paperRoot(m, work, name) {
 }
 
 const E2E_PHASE_RUNNERS = {
-  /** 1. The research searches, live and recorded — one drain per query. */
+  /** 1. The research searches (research-orchestrator.ts discoverCandidates, the chain's plan), live and recorded — one drain per query. */
   async search(m, work) {
     assertRecording(m);
-    const root = await paperRoot(m, work, 'search-paper');
+    const { registry, plan } = e2ePlan(m);
     const out = [];
     for (const query of E2E_QUERIES) {
       m.http.takeRecordedFixtures();
-      await m.research.discoverSources([query], { topic: E2E_TOPIC, discipline: E2E_DISCIPLINE, paperRoot: root });
+      const d = await m.research.discoverCandidates({ queries: [query], plan, registry, warn: (line) => process.stdout.write(`  ${line}\n`) });
       out.push({ query, fixtures: m.http.takeRecordedFixtures() });
-      process.stdout.write(`  searched "${query}"\n`);
+      process.stdout.write(`  searched "${query}": ${d.adapters.map((a) => `${a.adapter} ${a.count} (${a.status})`).join(', ')}\n`);
     }
-    await writeJson(m, path.join(work, 'search.json'), out);
+    await writeJson(m, path.join(work, 'search.json'), { adapters: plan.entries.map((e) => e.adapter), searches: out });
   },
 
   /** 2. Write the search cassettes: one file per (adapter, query), or an expected miss. */
@@ -651,8 +680,9 @@ const E2E_PHASE_RUNNERS = {
     const committed = committedKeysOutsideE2e(m);
     const files = [];
     const misses = [];
-    for (const { query, fixtures } of readJson(path.join(work, 'search.json'))) {
-      for (const adapter of E2E_SEARCH_ADAPTERS) {
+    const { adapters, searches } = readJson(path.join(work, 'search.json'));
+    for (const { query, fixtures } of searches) {
+      for (const adapter of adapters) {
         const fx = lastPerKey(fixtures.filter((f) => f.source === adapter));
         if (fx.length === 0) {
           misses.push({ adapter, query, why: 'no response was recorded (rate-limited, unreachable or a transport error)' });
@@ -663,38 +693,52 @@ const E2E_PHASE_RUNNERS = {
           misses.push({ adapter, query, why: `the live endpoint answered ${bad}` });
           continue;
         }
-        const entries = fx.filter((f) => !committed.has(f.key)).map((f) => cassetteEntry(m, f, adapter, recordedAt));
+        const entries = fx.filter((f) => !committed.has(f.key)).map((f) => recordedEntry(m.mock, f, adapter, recordedAt));
         if (entries.length === 0) continue; // a committed per-adapter cassette answers it already
-        const text = JSON.stringify(entries, null, 2) + '\n';
-        const bytes = Buffer.byteLength(text, 'utf8');
-        if (bytes > MAX_CASSETTE_BYTES) {
+        const text = fitting(entries);
+        if (text === null) {
+          const bytes = Buffer.byteLength(renderCassette(entries, true), 'utf8');
           misses.push({ adapter, query, why: `the recorded response is ${bytes} bytes, over the ${MAX_CASSETTE_BYTES}-byte cassette cap` });
           continue;
         }
         const file = path.join(E2E_ROOT, adapter, `search-${querySlug(query)}.json`);
         await m.atomic.atomicWriteFile(file, text);
         files.push(repoRel(file));
-        process.stdout.write(`  recorded ${repoRel(file)} (${(bytes / 1024).toFixed(1)} KiB)\n`);
+        process.stdout.write(`  recorded ${repoRel(file)} (${(Buffer.byteLength(text, 'utf8') / 1024).toFixed(1)} KiB)\n`);
       }
     }
     for (const miss of misses) process.stdout.write(`  expected miss: ${miss.adapter} "${miss.query}" — ${miss.why}\n`);
     await writeJson(m, path.join(work, 'stage.json'), { files, misses });
   },
 
-  /** 3. Replay the research offline, exactly as the chain will, and preselect DOI-bearing candidates. */
+  /**
+   * 3. Replay research's pass offline, exactly as the chain will (discovery,
+   * dedup, citekeys, tiers, the `[sources]` policy; the evaluator stub keeps
+   * every candidate), and preselect the candidates the chain can cite: a DOI
+   * the verifier checks (source-context.ts verifierBlindSpot), not retracted.
+   */
   async select(m, work) {
-    const root = await paperRoot(m, work, 'select-paper');
-    const { candidates } = await m.research.discoverSources([...E2E_QUERIES], { topic: E2E_TOPIC, discipline: E2E_DISCIPLINE, paperRoot: root });
-    const preselected = candidates.filter((c) => typeof c.doi === 'string' && c.doi.length > 0 && c.retracted !== true).slice(0, E2E_PRESELECT);
-    if (preselected.length === 0) throw new Error('the replayed research found no DOI-bearing source — nothing to keep');
-    process.stdout.write(`  replayed research: ${candidates.length} candidate(s), ${preselected.length} preselected\n`);
+    const pass = await e2eResearchPass(m);
+    // The evaluator's batch: every candidate the pre-evaluation policy let
+    // through (kept, rejected, or excluded afterwards with its final tier —
+    // those carry the evaluator's relevance).
+    const batch = [...pass.kept, ...pass.rejected, ...pass.excluded.filter((e) => e.relevance !== null)];
+    if (batch.length > m.research.EVALUATOR_BATCH) {
+      throw new Error(`the replayed research sends ${batch.length} candidates to the evaluator, over one batch of ${m.research.EVALUATOR_BATCH} — the chain would make two evaluator calls; pick narrower E2E_QUERIES`);
+    }
+    const preselected = pass.kept
+      .filter((i) => i.view.doi !== null && i.candidate.retracted !== true && m.sourceContext.verifierBlindSpot(i.view, false) === null)
+      .slice(0, E2E_PRESELECT)
+      .map((i) => i.candidate);
+    if (preselected.length === 0) throw new Error('the replayed research found no citable DOI-bearing source — nothing to keep');
+    process.stdout.write(`  replayed research: ${pass.distinct} distinct candidate(s), ${batch.length} evaluated, ${preselected.length} preselected\n`);
     await writeJson(m, path.join(work, 'select.json'), {
-      all: candidates.map((c) => ({ citekey: c.citekey, doi: c.doi ?? null, source: c.source })),
+      evaluated: batch.map((i) => ({ citekey: i.candidate.citekey, tier: i.tier ?? i.tierHint ?? 'other' })),
       preselected,
     });
   },
 
-  /** 4. Each preselected source's retraction cross-check and Pass-1 lookups, live and recorded. */
+  /** 4. Each preselected source's retraction cross-check and Pass-1 lookups (with the freshness probe), live and recorded. */
   async lookups(m, work) {
     assertRecording(m);
     const { preselected } = readJson(path.join(work, 'select.json'));
@@ -703,18 +747,26 @@ const E2E_PHASE_RUNNERS = {
     for (const c of preselected) {
       m.http.takeRecordedFixtures();
       await m.retraction.crossCheckRetractions([c]);
-      results.push({ citekey: c.citekey, doi: c.doi, title: c.title, source: c.source, retracted: c.retracted === true, fixtures: m.http.takeRecordedFixtures() });
+      results.push({
+        citekey: c.citekey,
+        doi: c.doi,
+        title: c.title,
+        source: c.source,
+        retracted: c.retracted === true || c.retraction_status === 'retracted',
+        retractionUnknown: c.retraction_status === 'unknown',
+        fixtures: m.http.takeRecordedFixtures(),
+      });
     }
     await m.library.upsertSources(root, preselected, { provenance: 'research' });
     const bib = path.join(root, '.paper', 'CITATIONS.bib');
     for (const r of results) {
-      if (r.retracted) {
-        r.verdict = 'RETRACTED';
+      if (r.retracted || r.retractionUnknown) {
+        r.verdict = r.retracted ? 'RETRACTED' : 'RETRACTION-UNKNOWN';
         continue;
       }
       const draft = `# Section\n\nA claim the source supports [@${r.citekey}].\n`;
       m.http.takeRecordedFixtures();
-      const [v] = await m.pass1.runPass1(draft, bib);
+      const [v] = await m.pass1.runPass1(draft, bib, { root });
       await m.pass1.runFreshnessForDraft(draft, bib);
       r.fixtures.push(...m.http.takeRecordedFixtures());
       r.verdict = v?.verdict ?? 'MISSING';
@@ -756,9 +808,8 @@ const E2E_PHASE_RUNNERS = {
       const out = [];
       let over = null;
       for (const [adapter, list] of groups) {
-        const text = JSON.stringify(list.map((f) => cassetteEntry(m, f, adapter, recordedAt)), null, 2) + '\n';
-        const bytes = Buffer.byteLength(text, 'utf8');
-        if (bytes > MAX_CASSETTE_BYTES) over = `${adapter} lookups are ${bytes} bytes, over the cap`;
+        const text = fitting(list.map((f) => recordedEntry(m.mock, f, adapter, recordedAt)));
+        if (text === null) over = `${adapter} lookups are over the ${MAX_CASSETTE_BYTES}-byte cap`;
         out.push({ file: path.join(E2E_ROOT, adapter, `lookups-${r.citekey}.json`), text, keys: list.map((f) => f.key) });
       }
       if (over !== null) {
@@ -788,13 +839,18 @@ const E2E_PHASE_RUNNERS = {
           follow_ups: [],
         },
       }],
-      'topic-disambiguator': [{ data: { scopes: [{ label: 'transformer-attention', queries: [...E2E_QUERIES] }] } }],
+      'topic-disambiguator': [{ data: { ambiguous: false, scopes: [{ ...E2E_SCOPE, queries: [...E2E_QUERIES] }] } }],
+      // One verdict per candidate of the evaluator's batch (SRC-09): the
+      // keep-list is kept, every other candidate rejected — a candidate with no
+      // verdict would be kept as "not evaluated".
       'source-evaluator': [{
         data: {
-          verdicts: select.all.map((c) => ({
+          verdicts: select.evaluated.map((c) => ({
             citekey: c.citekey,
             keep: keptKeys.has(c.citekey),
             reason: keptKeys.has(c.citekey) ? 'recorded e2e corpus: kept' : 'recorded e2e corpus: not in the keep-list',
+            relevance: keptKeys.has(c.citekey) ? 0.9 : 0.1,
+            tier: c.tier,
           })),
         },
       }],
@@ -831,18 +887,19 @@ const E2E_PHASE_RUNNERS = {
   async verify(m, work) {
     const manifest = readJson(path.join(E2E_CORPUS_DIR, 'MANIFEST.json'));
     const root = await paperRoot(m, work, 'verify-paper');
-    const { candidates } = await m.research.discoverSources([...manifest.queries], { topic: manifest.topic, discipline: manifest.discipline, paperRoot: root });
-    const byKey = new Map(candidates.map((c) => [c.citekey, c]));
+    const pass = await e2eResearchPass(m);
+    const byKey = new Map(pass.kept.map((i) => [i.candidate.citekey, i.candidate]));
     const kept = manifest.keptSources.map((k) => {
       const c = byKey.get(k.citekey);
       if (!c || c.doi !== k.doi) throw new Error(`replayed research lost the kept source ${k.citekey} (${k.doi})`);
       return c;
     });
     await m.retraction.crossCheckRetractions(kept);
+    for (const c of kept) if (c.retraction_status !== 'clear') throw new Error(`offline retraction check of ${c.citekey}: ${c.retraction_status}`);
     await m.library.upsertSources(root, kept, { provenance: 'research' });
     const bib = path.join(root, '.paper', 'CITATIONS.bib');
     const draft = `# Section\n\n${kept.map((c) => `A claim [@${c.citekey}].`).join(' ')}\n`;
-    for (const v of await m.pass1.runPass1(draft, bib)) {
+    for (const v of await m.pass1.runPass1(draft, bib, { root })) {
       if (v.verdict !== 'OK') throw new Error(`offline Pass 1 of ${v.citekey}: ${v.verdict} — ${v.reason}`);
     }
     process.stdout.write(`  offline replay: research and Pass 1 of ${kept.length} kept source(s) OK\n`);

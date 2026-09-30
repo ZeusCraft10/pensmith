@@ -154,8 +154,11 @@ test('RUN-27 / BRDTH-01 / GRND-19: one --dry-run --yolo reaches a .dry-run expor
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
   const ws = join(root, '.paper-dry-run');
   const exportDir = join(ws, 'export');
-  assert.ok(existsSync(join(exportDir, 'DRAFT.dry-run.md')), 'the dry run reached done in one invocation');
-  assert.match(r.stdout, new RegExp(`pensmith done: exported .*${'DRAFT\\.dry-run\\.md'}`));
+  // The export format depends on the host (DOCX with Pandoc, else Markdown):
+  // either way it is named DRAFT.dry-run.<ext> (GRND-19).
+  const exported = existsSync(exportDir) ? readdirSync(exportDir).filter((f) => f.startsWith('DRAFT.dry-run.')) : [];
+  assert.equal(exported.length, 1, `the dry run reached done in one invocation: ${exported.join(', ')}`);
+  assert.match(r.stdout, new RegExp(`pensmith done: exported .*DRAFT\\.dry-run\\.(?:md|docx|pdf|tex)`));
   const library = readFileSync(join(ws, 'CITATIONS.bib'), 'utf8');
   const libraryKeys = [...library.matchAll(/^@\w+\{([^,]+),/gm)].map((m) => m[1]!);
   assert.ok(libraryKeys.length > 0, 'research left synthetic sources in the library');

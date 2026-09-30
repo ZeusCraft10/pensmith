@@ -9,98 +9,137 @@
   "discipline": "computer-science",
   "queries": [
     "transformer self-attention mechanism",
-    "attention mechanism neural machine translation"
+    "attention mechanism neural machine translation",
+    "multi-head attention transformer architecture",
+    "scaled dot-product attention transformer",
+    "transformer attention interpretability"
   ],
   "adapters": {
     "recorded": [
       "arxiv",
       "crossref",
       "pubmed",
-      "retraction-watch"
+      "retraction-watch",
+      "semanticscholar"
     ],
     "expectedMiss": [
       {
         "adapter": "openalex",
         "query": "transformer self-attention mechanism",
-        "why": "the recorded response is 103492 bytes, over the 51200-byte cassette cap"
+        "why": "no response was recorded (rate-limited, unreachable or a transport error)"
       },
       {
         "adapter": "semanticscholar",
-        "query": "transformer self-attention mechanism",
+        "query": "attention mechanism neural machine translation",
         "why": "no response was recorded (rate-limited, unreachable or a transport error)"
       },
       {
         "adapter": "openalex",
         "query": "attention mechanism neural machine translation",
-        "why": "the recorded response is 87786 bytes, over the 51200-byte cassette cap"
+        "why": "no response was recorded (rate-limited, unreachable or a transport error)"
       },
       {
         "adapter": "semanticscholar",
-        "query": "attention mechanism neural machine translation",
+        "query": "multi-head attention transformer architecture",
+        "why": "no response was recorded (rate-limited, unreachable or a transport error)"
+      },
+      {
+        "adapter": "openalex",
+        "query": "multi-head attention transformer architecture",
+        "why": "no response was recorded (rate-limited, unreachable or a transport error)"
+      },
+      {
+        "adapter": "semanticscholar",
+        "query": "scaled dot-product attention transformer",
+        "why": "no response was recorded (rate-limited, unreachable or a transport error)"
+      },
+      {
+        "adapter": "openalex",
+        "query": "scaled dot-product attention transformer",
+        "why": "no response was recorded (rate-limited, unreachable or a transport error)"
+      },
+      {
+        "adapter": "semanticscholar",
+        "query": "transformer attention interpretability",
+        "why": "no response was recorded (rate-limited, unreachable or a transport error)"
+      },
+      {
+        "adapter": "openalex",
+        "query": "transformer attention interpretability",
         "why": "no response was recorded (rate-limited, unreachable or a transport error)"
       }
     ]
   },
   "keptSources": [
     {
-      "citekey": "ikehata2021",
-      "doi": "10.5244/c.35.86",
-      "title": "PS-Transformer: Learning Sparse Photometric Stereo Network using Self-Attention Mechanism",
+      "citekey": "cai2024",
+      "doi": "10.1109/ISCAS58744.2024.10558182",
+      "title": "In-Memory Transformer Self-Attention Mechanism Using Passive Memristor Crossbar",
+      "adapter": "semanticscholar"
+    },
+    {
+      "citekey": "meng2023",
+      "doi": "10.36227/techrxiv.24638745",
+      "title": "Sentiment analysis with adaptive multi-head attention in Transformer",
       "adapter": "crossref"
     },
     {
-      "citekey": "vinuesa2023",
-      "doi": "10.21203/rs.3.rs-3545247/v1",
-      "title": "Easy attention: A simple self-attention mechanism for transformer-based time-series reconstruction and prediction",
+      "citekey": "catapang2022",
+      "doi": "10.1109/iscmi56532.2022.10068484",
+      "title": "Hadamard Estimated Attention Transformer (HEAT): Fast Approximation of Dot Product Self-attention for Transformers Using Low-Rank Projection of Hadamard Product",
       "adapter": "crossref"
     },
     {
-      "citekey": "wang2026",
-      "doi": "10.2139/ssrn.6136211",
-      "title": "Single-lead ECG arrhythmia detection based on a hybrid transformer model with self-attention mechanism",
-      "adapter": "crossref"
+      "citekey": "sun2026",
+      "doi": "10.1016/j.patter.2026.101594",
+      "title": "Efficient attention mechanisms for large language models",
+      "adapter": "pubmed"
     },
     {
-      "citekey": "zahinnoyear",
-      "doi": "10.32469/10355/96193",
-      "title": "Multi-headed self-attention mechanism-based Transformer model for predicting bus travel times across multiple bus routes using heterogeneous datasets",
-      "adapter": "crossref"
+      "citekey": "li2022",
+      "doi": "10.1145/3558819.3565216",
+      "title": "Stock quantitative prediction analysis method based on deep learning transformer self-attention mechanism",
+      "adapter": "semanticscholar"
     },
     {
-      "citekey": "gao2023",
-      "doi": "10.2139/ssrn.4329702",
-      "title": "A Personalized Paper Recommendation Method Based on Knowledge Graph and Transformer Encoder with a Self-Attention Mechanism",
-      "adapter": "crossref"
-    },
-    {
-      "citekey": "bao2025",
-      "doi": "10.1016/j.procs.2025.05.168",
-      "title": "Research on Transformer Point Cloud Segmentation Technology under Self Attention Mechanism",
-      "adapter": "crossref"
+      "citekey": "smaldone2025",
+      "doi": "10.1021/acs.jctc.5c00331",
+      "title": "A Hybrid Transformer Architecture with a Quantized Self-Attention Mechanism Applied to Molecular Generation",
+      "adapter": "semanticscholar"
     }
   ],
   "expectedSections": 3,
   "runBound": 8,
-  "recordedAt": "2026-09-28T06:25:11.650Z",
+  "recordedAt": "2026-09-29T23:58:57.262Z",
   "recorder": "scripts/refresh-cassettes.mjs --corpus e2e",
   "cassettes": [
     "tests/fixtures/cassettes/e2e/arxiv/search-attention-mechanism-neural-machine-translation.json",
+    "tests/fixtures/cassettes/e2e/arxiv/search-multi-head-attention-transformer-architecture.json",
+    "tests/fixtures/cassettes/e2e/arxiv/search-scaled-dot-product-attention-transformer.json",
+    "tests/fixtures/cassettes/e2e/arxiv/search-transformer-attention-interpretability.json",
     "tests/fixtures/cassettes/e2e/arxiv/search-transformer-self-attention-mechanism.json",
-    "tests/fixtures/cassettes/e2e/crossref/lookups-bao2025.json",
-    "tests/fixtures/cassettes/e2e/crossref/lookups-gao2023.json",
-    "tests/fixtures/cassettes/e2e/crossref/lookups-ikehata2021.json",
-    "tests/fixtures/cassettes/e2e/crossref/lookups-vinuesa2023.json",
-    "tests/fixtures/cassettes/e2e/crossref/lookups-wang2026.json",
-    "tests/fixtures/cassettes/e2e/crossref/lookups-zahinnoyear.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-cai2024.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-catapang2022.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-li2022.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-meng2023.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-smaldone2025.json",
+    "tests/fixtures/cassettes/e2e/crossref/lookups-sun2026.json",
     "tests/fixtures/cassettes/e2e/crossref/search-attention-mechanism-neural-machine-translation.json",
+    "tests/fixtures/cassettes/e2e/crossref/search-multi-head-attention-transformer-architecture.json",
+    "tests/fixtures/cassettes/e2e/crossref/search-scaled-dot-product-attention-transformer.json",
+    "tests/fixtures/cassettes/e2e/crossref/search-transformer-attention-interpretability.json",
     "tests/fixtures/cassettes/e2e/crossref/search-transformer-self-attention-mechanism.json",
     "tests/fixtures/cassettes/e2e/pubmed/search-attention-mechanism-neural-machine-translation.json",
+    "tests/fixtures/cassettes/e2e/pubmed/search-multi-head-attention-transformer-architecture.json",
+    "tests/fixtures/cassettes/e2e/pubmed/search-scaled-dot-product-attention-transformer.json",
+    "tests/fixtures/cassettes/e2e/pubmed/search-transformer-attention-interpretability.json",
     "tests/fixtures/cassettes/e2e/pubmed/search-transformer-self-attention-mechanism.json",
-    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-bao2025.json",
-    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-gao2023.json",
-    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-ikehata2021.json",
-    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-vinuesa2023.json",
-    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-wang2026.json",
-    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-zahinnoyear.json"
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-cai2024.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-catapang2022.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-li2022.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-meng2023.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-smaldone2025.json",
+    "tests/fixtures/cassettes/e2e/retraction-watch/lookups-sun2026.json",
+    "tests/fixtures/cassettes/e2e/semanticscholar/search-transformer-self-attention-mechanism.json"
   ]
 }

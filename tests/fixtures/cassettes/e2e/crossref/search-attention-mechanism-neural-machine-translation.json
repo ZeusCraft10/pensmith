@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?query=attention+mechanism+neural+machine+translation&rows=10&select=DOI%2Ctitle%2Cauthor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype",
+    "path": "/works?query=attention+mechanism+neural+machine+translation&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
     "status": 200,
     "response": {
       "status": "ok",
@@ -10,7 +10,7 @@
       "message-version": "1.0.0",
       "message": {
         "facets": {},
-        "total-results": 2852347,
+        "total-results": 2854869,
         "items": [
           {
             "DOI": "10.1109/ssitcon66133.2025.11342115",
@@ -47,7 +47,9 @@
             "container-title": [
               "2025 2nd International Conference on Software, Systems and Information Technology (SSITCON)"
             ],
-            "type": "proceedings-article"
+            "type": "proceedings-article",
+            "page": "1-6",
+            "publisher": "IEEE"
           },
           {
             "DOI": "10.36227/techrxiv.20369091",
@@ -78,7 +80,8 @@
               ]
             },
             "abstract": "<jats:p>&lt;p&gt;The paper implements a neural machine translation model with attention using tensorflow and keras libraries for the task of translating English to Swedish.&lt;/p&gt;</jats:p>",
-            "type": "posted-content"
+            "type": "posted-content",
+            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)"
           },
           {
             "DOI": "10.36227/techrxiv.20369091.v1",
@@ -115,7 +118,8 @@
               ]
             },
             "abstract": "<jats:p>The paper implements a neural machine translation model with attention\nusing tensorflow and keras libraries for the task of translating English\nto Swedish.</jats:p>",
-            "type": "posted-content"
+            "type": "posted-content",
+            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)"
           },
           {
             "DOI": "10.18653/v1/w17-3201",
@@ -158,7 +162,9 @@
             "container-title": [
               "Proceedings of the First Workshop on Neural Machine Translation"
             ],
-            "type": "proceedings-article"
+            "type": "proceedings-article",
+            "page": "1-10",
+            "publisher": "Association for Computational Linguistics"
           },
           {
             "DOI": "10.18653/v1/w18-2702",
@@ -213,13 +219,21 @@
             "container-title": [
               "Proceedings of the 2nd Workshop on Neural Machine Translation and Generation"
             ],
-            "type": "proceedings-article"
+            "type": "proceedings-article",
+            "page": "11-17",
+            "publisher": "Association for Computational Linguistics"
           },
           {
+            "publisher": "Journal of Management and Technology, Federal Polytechnic Idah",
+            "issue": "1",
+            "abstract": "<jats:p>Translation is a matter of absolute necessity in the globally united and yet; linguistically and culturally separated world in which we live. Translation allows individuals who speak different languages to communicate and understand one another. The obvious limitations in human translation in terms of speed, scalability and high cost gave birth to the quest for alternative means of translation which is machine translation. Machine translation involves the use of computers to translate from one natural language (source) to another natural language (target).  Machine translation applications can be developed using rule-based, example- based and statistical-based technologies. Machine translation applications have been developed to translate English language text to Igala language text using rule-based and example-based approaches. Recently, Neural Machine Translation (NMT) emerged as a new paradigm that swiftly superseded other methods of machine translation evolved with the development of deep learning. This study is aimed at developing a system that can translate contents rendered in English language to Igala language using the Neural Machine Translation with attention mechanism approach. The Neural Machine Translation model for English-to-Igala translation was built with encoder-decoder architecture with an attention layer. The model was trained with a dataset using English-Igala parallel corpus that contains 50,000 parallel sentences. The dataset was partitioned into training, validation and test set in the ratio of 80/20 percent. The model was implemented using python programming language. After training, validation and testing, the output of the model was tested on a corpus of 276 selected English texts using the Bilingual Evaluation Understudy (BLEU) method for evaluating Machine Translation system. An accuracy of 71.0% was obtained. The adoption of this model will play crucial role in facilitating everyday interaction, information exchange and active participation in society among Igala people. It will give Igala people access to information in Igala language that will enhance their standard of living as it will enable them to participate in abundant business opportunities available in the online community, and ensure proper integration in the emerging information society.</jats:p>",
             "DOI": "10.62254/jmt.2023.19.1.7",
+            "type": "journal-article",
+            "page": "83-96",
             "title": [
               "Development of English-to-Igala machine translation system using neural machine translation with attention mechanism"
             ],
+            "volume": "19",
             "author": [
               {
                 "name": "Department of Computer Science, The Federal Polytechnic, Idah, Kogi State, Nigeria",
@@ -245,6 +259,9 @@
                 ]
               }
             ],
+            "container-title": [
+              "Journal of Management and Technology"
+            ],
             "issued": {
               "date-parts": [
                 [
@@ -253,12 +270,7 @@
                   15
                 ]
               ]
-            },
-            "abstract": "<jats:p>Translation is a matter of absolute necessity in the globally united and yet; linguistically and culturally separated world in which we live. Translation allows individuals who speak different languages to communicate and understand one another. The obvious limitations in human translation in terms of speed, scalability and high cost gave birth to the quest for alternative means of translation which is machine translation. Machine translation involves the use of computers to translate from one natural language (source) to another natural language (target).  Machine translation applications can be developed using rule-based, example- based and statistical-based technologies. Machine translation applications have been developed to translate English language text to Igala language text using rule-based and example-based approaches. Recently, Neural Machine Translation (NMT) emerged as a new paradigm that swiftly superseded other methods of machine translation evolved with the development of deep learning. This study is aimed at developing a system that can translate contents rendered in English language to Igala language using the Neural Machine Translation with attention mechanism approach. The Neural Machine Translation model for English-to-Igala translation was built with encoder-decoder architecture with an attention layer. The model was trained with a dataset using English-Igala parallel corpus that contains 50,000 parallel sentences. The dataset was partitioned into training, validation and test set in the ratio of 80/20 percent. The model was implemented using python programming language. After training, validation and testing, the output of the model was tested on a corpus of 276 selected English texts using the Bilingual Evaluation Understudy (BLEU) method for evaluating Machine Translation system. An accuracy of 71.0% was obtained. The adoption of this model will play crucial role in facilitating everyday interaction, information exchange and active participation in society among Igala people. It will give Igala people access to information in Igala language that will enhance their standard of living as it will enable them to participate in abundant business opportunities available in the online community, and ensure proper integration in the emerging information society.</jats:p>",
-            "container-title": [
-              "Journal of Management and Technology"
-            ],
-            "type": "journal-article"
+            }
           },
           {
             "DOI": "10.1109/dapic66097.2025.00037",
@@ -311,7 +323,9 @@
             "container-title": [
               "2025 International Conference on Digital Analysis and Processing, Intelligent Computation (DAPIC)"
             ],
-            "type": "proceedings-article"
+            "type": "proceedings-article",
+            "page": "171-176",
+            "publisher": "IEEE"
           },
           {
             "DOI": "10.1109/itnec52019.2021.9586824",
@@ -368,7 +382,9 @@
             "container-title": [
               "2021 IEEE 5th Information Technology,Networking,Electronic and Automation Control Conference (ITNEC)"
             ],
-            "type": "proceedings-article"
+            "type": "proceedings-article",
+            "page": "1485-1489",
+            "publisher": "IEEE"
           },
           {
             "DOI": "10.1109/acait63902.2024.11022229",
@@ -405,7 +421,9 @@
             "container-title": [
               "2024 8th Asian Conference on Artificial Intelligence Technology (ACAIT)"
             ],
-            "type": "proceedings-article"
+            "type": "proceedings-article",
+            "page": "661-665",
+            "publisher": "IEEE"
           },
           {
             "DOI": "10.18653/v1/w18-2707",
@@ -460,7 +478,9 @@
             "container-title": [
               "Proceedings of the 2nd Workshop on Neural Machine Translation and Generation"
             ],
-            "type": "proceedings-article"
+            "type": "proceedings-article",
+            "page": "55-63",
+            "publisher": "Association for Computational Linguistics"
           }
         ],
         "items-per-page": 10,
@@ -474,7 +494,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-28T06:25:02.777Z",
+      "recordedAt": "2026-09-29T23:58:44.356Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "crossref"
     }

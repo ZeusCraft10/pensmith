@@ -1,0 +1,582 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=transformer+attention+interpretability&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 327705,
+        "items": [
+          {
+            "DOI": "10.2139/ssrn.5956857",
+            "title": [
+              "Global Attention Matters: A Vision Transformer Approach for Fine-Grained Diagnosis of Lumbar Spinal Stenosis with Clinical Interpretability"
+            ],
+            "author": [
+              {
+                "given": "muerali",
+                "family": "yeerjiang",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Qing",
+                "family": "Zhang",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025
+                ]
+              ]
+            },
+            "type": "posted-content",
+            "publisher": "Elsevier BV"
+          },
+          {
+            "DOI": "10.2139/ssrn.5445923",
+            "title": [
+              "Attention-Guided Transformer-CNN Hybrid for Real-Time Road Accident Classification with Interpretability"
+            ],
+            "author": [
+              {
+                "given": "Faiza",
+                "family": "Bukhari",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Bilal",
+                "family": "Gul",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Jamal  Hussain",
+                "family": "Shah",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Armughan",
+                "family": "Ali",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025
+                ]
+              ]
+            },
+            "type": "posted-content",
+            "publisher": "Elsevier BV"
+          },
+          {
+            "DOI": "10.1109/cvpr46437.2021.00084",
+            "title": [
+              "Transformer Interpretability Beyond Attention Visualization"
+            ],
+            "author": [
+              {
+                "given": "Hila",
+                "family": "Chefer",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Shir",
+                "family": "Gur",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Lior",
+                "family": "Wolf",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2021,
+                  6
+                ]
+              ]
+            },
+            "container-title": [
+              "2021 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)"
+            ],
+            "type": "proceedings-article",
+            "page": "782-791",
+            "publisher": "IEEE"
+          },
+          {
+            "DOI": "10.1109/icip55913.2025.11084559",
+            "title": [
+              "GMAR: Gradient-Driven Multi-Head Attention Rollout for Vision Transformer Interpretability"
+            ],
+            "author": [
+              {
+                "given": "Sehyeong",
+                "family": "Jo",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "University of Colorado Boulder,Boulder,CO,USA"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Gangjae",
+                "family": "Jang",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "University of Colorado Boulder,Boulder,CO,USA"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Haesol",
+                "family": "Park",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Korea Institute of Science and Technology(KIST),Seoul,Korea"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  9,
+                  14
+                ]
+              ]
+            },
+            "container-title": [
+              "2025 IEEE International Conference on Image Processing (ICIP)"
+            ],
+            "type": "proceedings-article",
+            "page": "582-587",
+            "publisher": "IEEE"
+          },
+          {
+            "DOI": "10.20944/preprints202605.0910.v1",
+            "title": [
+              "Multi-ROI Multimodal 3D Vision Transformer for Alzheimer’s Disease Classification with Attention-Based Interpretability"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0002-5009-6886",
+                "authenticated-orcid": false,
+                "given": "Juan A.",
+                "family": "Castro-Silva",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0003-2809-3707",
+                "authenticated-orcid": false,
+                "given": "María N.",
+                "family": "Moreno-García",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0002-9045-6997",
+                "authenticated-orcid": false,
+                "given": "Diego H.",
+                "family": "Peluffo-Ordóñez",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  13
+                ]
+              ]
+            },
+            "abstract": "<jats:p>Alzheimer’s disease (AD) is a progressive neurodegenerative disorder for which early and accurate diagnosis remains a critical challenge. In this work, we propose a Multi-ROI Multimodal 3D Vision Transformer for AD classification that integrates structural MRI data with clinical and volumetric biomarkers within a unified attention-based framework. The proposed approach leverages anatomically guided multi-region-of-interest (ROI) decomposition to focus on disease-relevant brain structures, including the hippocampus, entorhinal cortex, fornix, and major cortical lobes. Each ROI is encoded using 3D tubelet embeddings, while clinical and volumetric features are transformed into feature-wise tokens, enabling seamless multimodal fusion through self-attention mechanisms. A hemisphere-aware selection strategy is introduced to identify the most discriminative ROI representations, enhancing both performance and interpretability. The model is evaluated on a merged multi-cohort dataset combining ADNI, AIBL, and OASIS, using a 7-fold cross-validation protocol. Experimental results demonstrate that the proposed method achieves high classification performance, reaching an accuracy of 97.62% and an AUC of 0.9940, outperforming single-modality and whole-brain baselines. Furthermore, attention-based analysis provides interpretable insights into the relative importance of clinical and neuroanatomical features, revealing consistency with established AD biomarkers. These findings highlight the effectiveness of multimodal integration and ROI-based representation for robust and explainable AD classification.</jats:p>",
+            "type": "posted-content",
+            "publisher": "MDPI AG"
+          },
+          {
+            "publisher": "Korean Institute of Industrial Engineers",
+            "issue": "2",
+            "DOI": "10.7232/iems.2024.23.2.253",
+            "type": "journal-article",
+            "page": "253-266",
+            "title": [
+              "Optimizing FT-Transformer: Sparse Attention for Improved Performance and Interpretability"
+            ],
+            "volume": "23",
+            "author": [
+              {
+                "given": "Isomura",
+                "family": "Tokimasa",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Shimizu",
+                "family": "Ryotaro",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Masayuki",
+                "family": "Goto",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Industrial Engineering &amp; Management Systems"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2024,
+                  6,
+                  30
+                ]
+              ]
+            }
+          },
+          {
+            "DOI": "10.1109/dsaa53316.2021.9564126",
+            "title": [
+              "Constructing Global Coherence Representations: Identifying Interpretability and Coherences of Transformer Attention in Time Series Data"
+            ],
+            "author": [
+              {
+                "given": "Leonid",
+                "family": "Schwenke",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Semantic Information Systems Group (SIS), Osnabr&#x00FC;ck University,Osnabr&#x00FC;ck,Germany"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Martin",
+                "family": "Atzmueller",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Semantic Information Systems Group (SIS), Osnabr&#x00FC;ck University,Osnabr&#x00FC;ck,Germany"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2021,
+                  10,
+                  6
+                ]
+              ]
+            },
+            "container-title": [
+              "2021 IEEE 8th International Conference on Data Science and Advanced Analytics (DSAA)"
+            ],
+            "type": "proceedings-article",
+            "page": "1-12",
+            "publisher": "IEEE"
+          },
+          {
+            "DOI": "10.17918/00011460",
+            "title": [
+              "Investigating intrinsic interpretability in transformer-based language models"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0009-0009-2740-6936",
+                "authenticated-orcid": false,
+                "given": "Ximing",
+                "family": "Wen",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0000-0001-7048-8812",
+                "authenticated-orcid": false,
+                "given": "Rosina O.",
+                "family": "Weber",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "abstract": "<jats:p>Transformer-based language models achieve strong empirical performance across natural language processing tasks, yet their predictions are not verifiable: users cannot determine where in the input an answer is supported, nor whether it reflects genuine evidential reasoning or spurious statistical correlations. This limitation is particularly problematic in domains such as legal document analysis and clinical information retrieval, where correctness alone is insufficient without locatable, inspectable evidence. This dissertation investigates how intrinsic interpretability can be embedded into transformer architectures to resolve the trade-off between transparency and predictive power. The work progresses from prototype-based classification to spatially-grounded generation, concluding with an analysis of internal representations. RQ1 introduces prototype-based representations integrated via graph attention into transformer models to provide semantic, case-based explanations while maintaining competitive accuracy. RQ2 extends this framework to generative question answering by enforcing joint optimization of textual answers and spatial grounding signals, enabling the model to point to precise evidence locations. RQ3 employs mechanistic interpretability techniques to examine which model components --- specifically attention heads and residual stream layers --- encode and compress spatial attributes introduced through grounding supervision. The contributions of this dissertation are threefold: (1) a prototype-based language modeling framework with graph attention that delivers faithful explanations alongside competitive classification performance; (2) end-to-end architectures for Visually Grounded Document Question Answering that jointly predict textual answers and bounding box coordinates; and (3) a mechanistic characterization of spatial grounding in the Switch-Token architecture, identifying components responsible for encoding and routing spatial information.</jats:p>",
+            "type": "dissertation",
+            "publisher": "Drexel University Libraries"
+          },
+          {
+            "DOI": "10.21203/rs.3.rs-9416412/v1",
+            "title": [
+              "reEtym: A Natively Feature-Disentangled Transformer for Interpretability"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0009-0006-0778-8613",
+                "authenticated-orcid": false,
+                "given": "Hongyu",
+                "family": "Shi",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Independent Researcher"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026,
+                  4,
+                  15
+                ]
+              ]
+            },
+            "abstract": "<title>Abstract</title>\n                <p>Based on the hypothesis that \"human language is composed of fundamental semantic atoms,\" this paper proposes reEtym, a feature-disentangled architecture that modifies only the embedding layer. By factorizing the embedding matrix into a \"recipe\" matrix W_recipe and an \"etymological basis\" matrix W_basis, the model is guided to maintain a continuous set of semantic etymological bases in the latent space.\nAt 0.5B parameters and 50k pretraining steps, reEtym achieves near-lossless equivalence with conventional architectures on zero-shot benchmarks (fluctuations within ±2.4%), while improving topic coherence by 28.4% and reducing extreme failure cases by 98.6%. Concurrently, interpretable structures spontaneously emerge in the etymological space: semantic algebra (6/6 hits, including linguistic and arithmetic analogies), natural sparsity (11-13% activation rate), and signal-level causal traceability (ablating a single signal reduces prediction from 8.31% to 0.03%), revealing new avenues for exploration.\nUnlike post-hoc reconstruction methods, the etymological space in reEtym is directly defined by the architecture and constitutes a native component of the model's computation. This enables audit findings to be directly translated into model modifications—adjusting recipes or bases can achieve behavioral steering such as sentiment manipulation and topic coherence enhancement, without retraining. Since modifications are confined to the embedding layer, this mechanism naturally extends to non-Transformer architectures such as Mamba and RWKV.\nThe complete source code, model weights, training logs, and an online interpretability platform are publicly available under the MIT license at: https://github.com/reEtym/reEtym</p>",
+            "type": "posted-content",
+            "publisher": "Springer Science and Business Media LLC"
+          },
+          {
+            "DOI": "10.5220/0012419200003654",
+            "title": [
+              "Vision Transformer Interpretability via Prediction of Image Reflected Relevance Among Tokens"
+            ],
+            "author": [
+              {
+                "given": "Kento",
+                "family": "Sago",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Meijo University, Nagoya, Japan, --- Select a Country ---"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Kazuhiro",
+                "family": "Hotta",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Meijo University, Nagoya, Japan, --- Select a Country ---"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2024
+                ]
+              ]
+            },
+            "container-title": [
+              "Proceedings of the 13th International Conference on Pattern Recognition Applications and Methods"
+            ],
+            "type": "proceedings-article",
+            "page": "100-106",
+            "publisher": "SCITEPRESS - Science and Technology Publications"
+          }
+        ],
+        "items-per-page": 10,
+        "query": {
+          "start-index": 0,
+          "search-terms": "transformer attention interpretability"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

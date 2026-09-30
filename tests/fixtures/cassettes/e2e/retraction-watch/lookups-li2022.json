@@ -2,7 +2,7 @@
   {
     "scope": "https://api.crossref.org",
     "method": "GET",
-    "path": "/works?filter=updates%3A10.21203%2Frs.3.rs-3545247%2Fv1&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
+    "path": "/works?filter=updates%3A10.1145%2F3558819.3565216&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
     "status": 200,
     "response": {
       "status": "ok",
@@ -23,7 +23,7 @@
       "content-type": "application/json"
     },
     "provenance": {
-      "recordedAt": "2026-09-28T06:25:11.650Z",
+      "recordedAt": "2026-09-29T23:58:57.262Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "retraction-watch"
     }

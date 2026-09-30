@@ -1,0 +1,965 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works/10.1016%2Fj.patter.2026.101594",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work",
+      "message-version": "1.0.0",
+      "message": {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              11
+            ]
+          ],
+          "date-time": "2026-09-11T16:11:28Z",
+          "timestamp": 1789143088906,
+          "version": "build-2803163510"
+        },
+        "reference-count": 87,
+        "publisher": "Elsevier BV",
+        "issue": "9",
+        "license": [
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2026,
+                  9,
+                  1
+                ]
+              ],
+              "date-time": "2026-09-01T00:00:00Z",
+              "timestamp": 1788220800000
+            },
+            "content-version": "tdm",
+            "delay-in-days": 0,
+            "URL": "https://www.elsevier.com/tdm/userlicense/1.0/"
+          },
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2026,
+                  9,
+                  1
+                ]
+              ],
+              "date-time": "2026-09-01T00:00:00Z",
+              "timestamp": 1788220800000
+            },
+            "content-version": "tdm",
+            "delay-in-days": 0,
+            "URL": "https://www.elsevier.com/legal/tdmrep-license"
+          },
+          {
+            "start": {
+              "date-parts": [
+                [
+                  2026,
+                  5,
+                  21
+                ]
+              ],
+              "date-time": "2026-05-21T00:00:00Z",
+              "timestamp": 1779321600000
+            },
+            "content-version": "vor",
+            "delay-in-days": 0,
+            "URL": "http://creativecommons.org/licenses/by/4.0/"
+          }
+        ],
+        "funder": [
+          {
+            "DOI": "10.13039/501100001809",
+            "name": "National Natural Science Foundation of China",
+            "doi-asserted-by": "publisher",
+            "id": [
+              {
+                "id": "10.13039/501100001809",
+                "id-type": "DOI",
+                "asserted-by": "publisher"
+              }
+            ]
+          }
+        ],
+        "content-domain": {
+          "domain": [
+            "cell.com",
+            "elsevier.com",
+            "sciencedirect.com"
+          ],
+          "crossmark-restriction": true
+        },
+        "short-container-title": [
+          "Patterns"
+        ],
+        "published-print": {
+          "date-parts": [
+            [
+              2026,
+              9
+            ]
+          ]
+        },
+        "DOI": "10.1016/j.patter.2026.101594",
+        "type": "journal-article",
+        "created": {
+          "date-parts": [
+            [
+              2026,
+              7,
+              3
+            ]
+          ],
+          "date-time": "2026-07-03T15:18:52Z",
+          "timestamp": 1783091932000
+        },
+        "page": "101594",
+        "update-policy": "https://doi.org/10.1016/elsevier_cm_policy",
+        "source": "Crossref",
+        "is-referenced-by-count": 3,
+        "title": [
+          "Efficient attention mechanisms for large language models"
+        ],
+        "prefix": "10.1016",
+        "volume": "7",
+        "author": [
+          {
+            "ORCID": "https://orcid.org/0009-0001-3283-8006",
+            "authenticated-orcid": false,
+            "given": "Yutao",
+            "family": "Sun",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Zhenyu",
+            "family": "Li",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Yike",
+            "family": "Zhang",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Tengyu",
+            "family": "Pan",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Bowen",
+            "family": "Dong",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Yuyi",
+            "family": "Guo",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          },
+          {
+            "given": "Jianyong",
+            "family": "Wang",
+            "sequence": "additional",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "78",
+        "reference": [
+          {
+            "key": "10.1016/j.patter.2026.101594_bib1",
+            "series-title": "Advances in Neural Information Processing Systems 30: Annual Conference on Neural Information Processing Systems 2017",
+            "first-page": "6000",
+            "article-title": "Attention is all you need",
+            "author": "Vaswani",
+            "year": "2017"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib2",
+            "series-title": "International Conference on Machine Learning",
+            "first-page": "5156",
+            "article-title": "Transformers are rnns: Fast autoregressive transformers with linear attention",
+            "author": "Katharopoulos",
+            "year": "2020"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib3",
+            "article-title": "Retentive network: A successor to transformer for large language models",
+            "author": "Sun",
+            "year": "2023",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib4",
+            "article-title": "Mamba: Linear-time sequence modeling with selective state spaces",
+            "author": "Gu",
+            "year": "2023",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib5",
+            "article-title": "Gated linear attention transformers with hardware-efficient training",
+            "author": "Yang",
+            "year": "2023",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib6",
+            "series-title": "International conference on machine learning",
+            "first-page": "9355",
+            "article-title": "Linear transformers are secretly fast weight programmers",
+            "author": "Schlag",
+            "year": "2021"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib7",
+            "doi-asserted-by": "crossref",
+            "first-page": "115491",
+            "DOI": "10.52202/079017-3668",
+            "article-title": "Parallelizing linear transformers with the delta rule over sequence length",
+            "volume": "37",
+            "author": "Yang",
+            "year": "2024",
+            "journal-title": "Adv. Neural Inf. Process. Syst."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib8",
+            "unstructured": "Child, R., Gray, S., Radford, A., and Sutskever, I. (2019). Generating long sequences with sparse Transformers. URL https://openai.com/blog/sparse-transformers."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib9",
+            "doi-asserted-by": "crossref",
+            "first-page": "52481",
+            "DOI": "10.52202/079017-1663",
+            "article-title": "Minference 1.0: Accelerating pre-filling for long-context llms via dynamic sparse attention",
+            "volume": "37",
+            "author": "Jiang",
+            "year": "2024",
+            "journal-title": "Adv. Neural Inf. Process. Syst."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib10",
+            "article-title": "Quest: Query-aware sparsity for efficient long-context llm inference",
+            "author": "Tang",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib11",
+            "article-title": "Native sparse attention: Hardware-aligned and natively trainable sparse attention",
+            "author": "Yuan",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib12",
+            "article-title": "Moba: Mixture of block attention for long-context llms",
+            "author": "Lu",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib13",
+            "article-title": "Fast transformer decoding: One write-head is all you need",
+            "author": "Shazeer",
+            "year": "2019",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib14",
+            "article-title": "Training generalized multi-query transformer models from multi-head checkpoints",
+            "author": "Ainslie",
+            "year": "2023",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib15",
+            "article-title": "Deepseek-v2: A strong, economical, and efficient mixture-of-experts language model",
+            "author": "DeepSeek",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib16",
+            "article-title": "Rethinking attention with performers",
+            "author": "Choromanski",
+            "year": "2020",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib17",
+            "article-title": "Random feature attention",
+            "author": "Peng",
+            "year": "2021",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib18",
+            "series-title": "International conference on machine learning",
+            "first-page": "9229",
+            "article-title": "Test-time training with self-supervision for generalization under distribution shifts",
+            "author": "Sun",
+            "year": "2020"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib19",
+            "article-title": "Learning to (learn at test time): Rnns with expressive hidden states",
+            "author": "Sun",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib20",
+            "article-title": "Longformer: The long-document transformer",
+            "author": "Beltagy",
+            "year": "2020",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib21",
+            "article-title": "Efficient streaming language models with attention sinks",
+            "author": "Xiao",
+            "year": "2023",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib22",
+            "article-title": "Longnet: Scaling transformers to 1,000,000,000 tokens",
+            "author": "Ding",
+            "year": "2023",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib23",
+            "article-title": "Xattention: Block sparse attention with antidiagonal scoring",
+            "author": "Xu",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib24",
+            "article-title": "Seerattention: Learning intrinsic sparse attention in your llms",
+            "author": "Gao",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib25",
+            "article-title": "Reformer: The efficient transformer",
+            "author": "Kitaev",
+            "year": "2020",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib26",
+            "article-title": "Magicpig: Lsh sampling for efficient llm generation",
+            "author": "Chen",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib27",
+            "article-title": "Clusterkv: Manipulating llm kv cache in semantic space for recallable compression",
+            "author": "Liu",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib28",
+            "article-title": "FlashAttention-2: Faster attention with better parallelism and work partitioning",
+            "author": "Dao",
+            "year": "2023",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib29",
+            "article-title": "Eagle and finch: Rwkv with matrix-valued states and dynamic recurrence",
+            "author": "Peng",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib30",
+            "article-title": "Falcon mamba: The first competitive attention-free 7b language model",
+            "author": "Zuo",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib31",
+            "article-title": "Minicpm4: Ultra-efficient llms on end devices",
+            "author": "Team",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib32",
+            "first-page": "1877",
+            "article-title": "Language models are few-shot learners",
+            "volume": "33",
+            "author": "Brown",
+            "year": "2020",
+            "journal-title": "Adv. Neural Inf. Process. Syst."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib33",
+            "article-title": "Gemma 3 technical report",
+            "author": "Team",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib34",
+            "unstructured": "Llama Team, A.M. (2025). Llama 4: Leading intelligence. unrivaled speed and efficiency. https://www.llama.com/models/llama-4/. ."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib35",
+            "article-title": "Minimax-01: Scaling foundation models with lightning attention",
+            "author": "Li",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib36",
+            "article-title": "Jamba: A hybrid Transformer-Mamba language model",
+            "author": "Lieber",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib37",
+            "article-title": "You only cache once: Decoder-decoder architectures for language models",
+            "author": "Sun",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib38",
+            "article-title": "Rope to nope and back again: A new hybrid attention strategy",
+            "author": "Yang",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib39",
+            "doi-asserted-by": "crossref",
+            "first-page": "1",
+            "DOI": "10.1145/3530811",
+            "article-title": "Efficient transformers: A survey",
+            "volume": "55",
+            "author": "Tay",
+            "year": "2022",
+            "journal-title": "ACM Comput. Surv."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib40",
+            "article-title": "Speed always wins: A survey on efficient architectures for large language models",
+            "author": "Sun",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib41",
+            "unstructured": "Zhang, J., Su, R., Liu, C., Wei, J., Wang, Z., Wang, H., Zhang, P., Jiang, H., Huang, H., Xiang, C. et al. (2025). Efficient attention methods: Hardware-efficient, sparse, compact, and linear attention. GitHub, https://attention-survey.github.io/files/Attention_Survey.pdf.a."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib42",
+            "article-title": "Transformer dissection: a unified understanding of transformer’s attention via the lens of kernel",
+            "author": "Tsai",
+            "year": "2019",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib43",
+            "article-title": "cosformer: Rethinking softmax in attention",
+            "author": "Qin",
+            "year": "2022",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib44",
+            "article-title": "The hedgehog & the porcupine: Expressive linear attentions with softmax mimicry",
+            "author": "Zhang",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib45",
+            "article-title": "Various lengths, constant speed: Efficient language modeling with lightning attention",
+            "author": "Qin",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib46",
+            "article-title": "Transnormerllm: A faster and better large language model with improved transnormer",
+            "author": "Qin",
+            "year": "2023",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib47",
+            "article-title": "Hungry hungry hippos: Towards language modeling with state space models",
+            "author": "Dao",
+            "year": "2022",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib48",
+            "article-title": "Efficiently modeling long sequences with structured state spaces",
+            "author": "Gu",
+            "year": "2021",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib49",
+            "article-title": "Transformers are ssms: Generalized models and efficient algorithms through structured state space duality",
+            "author": "Dao",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib50",
+            "article-title": "xLSTM: Extended long short-term memory",
+            "author": "Beck",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib51",
+            "article-title": "Gateloop: Fully data-controlled linear recurrence for sequence modeling",
+            "author": "Katsch",
+            "year": "2023",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib52",
+            "doi-asserted-by": "crossref",
+            "first-page": "33202",
+            "DOI": "10.52202/075280-1442",
+            "article-title": "Hierarchically gated recurrent neural network for sequence modeling",
+            "volume": "36",
+            "author": "Qin",
+            "year": "2023",
+            "journal-title": "Adv. Neural Inf. Process. Syst."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib53",
+            "article-title": "Hgrn2: Gated linear rnns with state expansion",
+            "author": "Qin",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib54",
+            "article-title": "Gated delta networks: Improving mamba2 with delta rule",
+            "author": "Yang",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib55",
+            "article-title": "Longhorn: State space models are amortized online learners",
+            "author": "Liu",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib56",
+            "article-title": "Titans: Learning to memorize at test time",
+            "author": "Behrouz",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib87",
+            "article-title": "Atlas: Learning to optimally memorize the context at test time",
+            "author": "Behrouz",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib57",
+            "article-title": "An attention free transformer",
+            "author": "Zhai",
+            "year": "2021",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib58",
+            "article-title": "Rwkv: Reinventing rnns for the transformer era",
+            "author": "Peng",
+            "year": "2023",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib59",
+            "article-title": "Gated slot attention for efficient linear-time sequence modeling",
+            "author": "Zhang",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib60",
+            "article-title": "Abc: Attention with bounded-memory control",
+            "author": "Peng",
+            "year": "2021",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib61",
+            "series-title": "Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)",
+            "first-page": "4171",
+            "article-title": "BERT: Pre-training of deep bidirectional transformers for language understanding",
+            "author": "Devlin",
+            "year": "2019"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib62",
+            "article-title": "Linformer: Self-attention with linear complexity",
+            "author": "Wang",
+            "year": "2020",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib63",
+            "first-page": "2441",
+            "article-title": "Luna: Linear unified nested attention",
+            "volume": "34",
+            "author": "Ma",
+            "year": "2021",
+            "journal-title": "Adv. Neural Inf. Process. Syst."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib64",
+            "series-title": "Proceedings of the European conference on computer vision (ECCV)",
+            "first-page": "3",
+            "article-title": "Group normalization",
+            "author": "Wu",
+            "year": "2018"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib65",
+            "series-title": "International Conference on Machine Learning",
+            "first-page": "9099",
+            "article-title": "Transformer quality in linear time",
+            "author": "Hua",
+            "year": "2022"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib66",
+            "unstructured": "Yang, S., and Zhang, Y. (2024). FLA: A Triton-based library for hardware-efficient implementations of linear attention mechanism. GitHub, https://github.com/sustcsonglin/flash-linear-attention. ."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib67",
+            "unstructured": "Tile.ai (2024). Tilelang: A tensor dsl for compiling sparse and dense attention. GitHub, https://github.com/tile-ai/tilelang. ."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib68",
+            "unstructured": "Guo, J., Tang, H., Yang, S., Zhang, Z., Liu, Z., and Han, S. (2024). Block Sparse Attention. GitHub, https://github.com/mit-han-lab/Block-Sparse-Attention. ."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib69",
+            "first-page": "5244",
+            "article-title": "Enhancing the locality and breaking the memory bottleneck of transformer on time series forecasting",
+            "volume": "32",
+            "author": "Li",
+            "year": "2019",
+            "journal-title": "Adv. Neural Inf. Process. Syst."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib70",
+            "article-title": "Flexprefill: A context-aware sparse attention mechanism for efficient long-sequence inference",
+            "author": "Lai",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib71",
+            "article-title": "Spargeattn: Accurate sparse attention accelerating any model inference",
+            "author": "Zhang",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib72",
+            "article-title": "Post-training sparse attention with double sparsity",
+            "author": "Yang",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib73",
+            "article-title": "Rectified sparse attention",
+            "author": "Sun",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib74",
+            "article-title": "Landmark attention: Random-access infinite context length for transformers",
+            "author": "Mohtashami",
+            "year": "2023",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib75",
+            "article-title": "Seerattention-r: Sparse attention adaptation for long reasoning",
+            "author": "Gao",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib76",
+            "article-title": "Hysparse: A hybrid sparse attention architecture with oracle token selection and kv cache sharing",
+            "author": "Gao",
+            "year": "2026",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib77",
+            "article-title": "Deepseek-v3. 2: Pushing the frontier of open large language models",
+            "author": "Liu",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib78",
+            "article-title": "Indexcache: Accelerating sparse attention via cross-layer index reuse",
+            "author": "Bai",
+            "year": "2026",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib79",
+            "article-title": "Retrievalattention: Accelerating long-context llm inference via vector retrieval",
+            "author": "Liu",
+            "year": "2024",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib80",
+            "first-page": "17283",
+            "article-title": "Big bird: Transformers for longer sequences",
+            "volume": "33",
+            "author": "Zaheer",
+            "year": "2020",
+            "journal-title": "Adv. Neural Inf. Process. Syst."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib81",
+            "article-title": "Efficient content-based sparse attention with routing transformers",
+            "author": "Roy",
+            "year": "2020",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib82",
+            "series-title": "Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)",
+            "first-page": "2390",
+            "article-title": "ClusterFormer: Neural clustering attention for efficient and effective transformer",
+            "author": "Wang",
+            "year": "2022"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib83",
+            "article-title": "Rwkv-7 “goose” with expressive dynamic state evolution",
+            "author": "Peng",
+            "year": "2025",
+            "journal-title": "arXiv"
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib84",
+            "unstructured": "Mistral AI Team (2024). Codestral Mamba: A mamba2 language model specialized in code generation. . URL: https://mistral.ai/news/codestral-mamba."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib85",
+            "unstructured": "Character.AI (2024). Optimizing ai inference at character.ai. https://research.character.ai/optimizing-inference/. ."
+          },
+          {
+            "key": "10.1016/j.patter.2026.101594_bib86",
+            "article-title": "Decoder-hybrid-decoder architecture for efficient reasoning with long generation",
+            "author": "Ren",
+            "year": "2025",
+            "journal-title": "arXiv"
+          }
+        ],
+        "container-title": [
+          "Patterns"
+        ],
+        "original-title": [],
+        "language": "en",
+        "link": [
+          {
+            "URL": "https://api.elsevier.com/content/article/PII:S2666389926001030?httpAccept=text/xml",
+            "content-type": "text/xml",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://api.elsevier.com/content/article/PII:S2666389926001030?httpAccept=text/plain",
+            "content-type": "text/plain",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          }
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              11
+            ]
+          ],
+          "date-time": "2026-09-11T15:33:48Z",
+          "timestamp": 1789140828000
+        },
+        "score": 1,
+        "resource": {
+          "primary": {
+            "URL": "https://linkinghub.elsevier.com/retrieve/pii/S2666389926001030"
+          }
+        },
+        "subtitle": [],
+        "short-title": [],
+        "issued": {
+          "date-parts": [
+            [
+              2026,
+              9
+            ]
+          ]
+        },
+        "references-count": 87,
+        "journal-issue": {
+          "issue": "9",
+          "published-print": {
+            "date-parts": [
+              [
+                2026,
+                9
+              ]
+            ]
+          }
+        },
+        "alternative-id": [
+          "S2666389926001030"
+        ],
+        "URL": "https://doi.org/10.1016/j.patter.2026.101594",
+        "relation": {},
+        "ISSN": [
+          "2666-3899"
+        ],
+        "issn-type": [
+          {
+            "value": "2666-3899",
+            "type": "print"
+          }
+        ],
+        "subject": [],
+        "published": {
+          "date-parts": [
+            [
+              2026,
+              9
+            ]
+          ]
+        },
+        "assertion": [
+          {
+            "value": "Elsevier",
+            "name": "publisher",
+            "label": "This article is maintained by"
+          },
+          {
+            "value": "Efficient attention mechanisms for large language models",
+            "name": "articletitle",
+            "label": "Article Title"
+          },
+          {
+            "value": "Patterns",
+            "name": "journaltitle",
+            "label": "Journal Title"
+          },
+          {
+            "value": "https://doi.org/10.1016/j.patter.2026.101594",
+            "name": "articlelink",
+            "label": "CrossRef DOI link to publisher maintained version"
+          },
+          {
+            "value": "article",
+            "name": "content_type",
+            "label": "Content Type"
+          },
+          {
+            "value": "© 2026 The Author(s). Published by Elsevier Inc.",
+            "name": "copyright",
+            "label": "Copyright"
+          }
+        ],
+        "article-number": "101594"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T23:58:57.262Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

@@ -1,0 +1,1230 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=scaled+dot-product+attention+transformer&retmode=json&retmax=10",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esearch",
+        "version": "0.3"
+      },
+      "esearchresult": {
+        "count": "18",
+        "retmax": "10",
+        "retstart": "0",
+        "idlist": [
+          "41748656",
+          "41609035",
+          "41475131",
+          "41318779",
+          "40989407",
+          "40811797",
+          "40629056",
+          "40567686",
+          "40500907",
+          "40085455"
+        ],
+        "translationset": [
+          {
+            "from": "scaled",
+            "to": "\"scale\"[All Fields] OR \"scale's\"[All Fields] OR \"scaled\"[All Fields] OR \"scales\"[All Fields] OR \"scaling\"[All Fields] OR \"scalings\"[All Fields]"
+          },
+          {
+            "from": "attention",
+            "to": "\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention's\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]"
+          },
+          {
+            "from": "transformer",
+            "to": "\"transformer\"[All Fields] OR \"transformers\"[All Fields]"
+          }
+        ],
+        "querytranslation": "(\"scale\"[All Fields] OR \"scale s\"[All Fields] OR \"scaled\"[All Fields] OR \"scales\"[All Fields] OR \"scaling\"[All Fields] OR \"scalings\"[All Fields]) AND \"dot-product\"[All Fields] AND (\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention s\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]) AND (\"transformer\"[All Fields] OR \"transformers\"[All Fields])"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  },
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=41748656%2C41609035%2C41475131%2C41318779%2C40989407%2C40811797%2C40629056%2C40567686%2C40500907%2C40085455&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "40085455": {
+          "uid": "40085455",
+          "pubdate": "2025 Jul",
+          "epubdate": "",
+          "source": "IEEE Trans Pattern Anal Mach Intell",
+          "authors": [
+            {
+              "name": "Park J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yun S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Park H",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Kang J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Jeong J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Kim KM",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ha JW",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Kim HJ",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Kim HJ",
+          "title": "Deformable Graph Transformer.",
+          "sorttitle": "deformable graph transformer",
+          "volume": "47",
+          "issue": "7",
+          "pages": "5385-5396",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "9885960",
+          "issn": "0098-5589",
+          "essn": "1939-3539",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "4",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "40085455"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1109/TPAMI.2025.3550281"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2025/03/14 18:29"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2025/03/14 18:28"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2025/03/14 12:33"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "IEEE transactions on pattern analysis and machine intelligence",
+          "elocationid": "doi: 10.1109/TPAMI.2025.3550281",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2025/07/01 00:00",
+          "sortfirstauthor": "Park J",
+          "vernaculartitle": ""
+        },
+        "40500907": {
+          "uid": "40500907",
+          "pubdate": "2025 Jun 26",
+          "epubdate": "2025 Jun 12",
+          "source": "J Phys Chem A",
+          "authors": [
+            {
+              "name": "Wu J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Lu W",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Wu J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhang B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Guo Y",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Guo Y",
+          "title": "Graph Transformer Model Integrating Physical Features for Projected Electronic Density of States Prediction.",
+          "sorttitle": "graph transformer model integrating physical features for projected electronic density of states prediction",
+          "volume": "129",
+          "issue": "25",
+          "pages": "5700-5708",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "9890903",
+          "issn": "1089-5639",
+          "essn": "1520-5215",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "256",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "40500907"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1021/acs.jpca.5c03006"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2025/06/12 06:31"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2025/06/12 06:30"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2025/06/12 01:02"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "The journal of physical chemistry. A",
+          "elocationid": "doi: 10.1021/acs.jpca.5c03006",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2025/06/26 00:00",
+          "sortfirstauthor": "Wu J",
+          "vernaculartitle": ""
+        },
+        "40567686": {
+          "uid": "40567686",
+          "pubdate": "2025",
+          "epubdate": "2025 Jun 5",
+          "source": "PeerJ Comput Sci",
+          "authors": [
+            {
+              "name": "Yang X",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhang Z",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Zhang Z",
+          "title": "Enhancing book genre classification with BERT and InceptionV3: a deep learning approach for libraries.",
+          "sorttitle": "enhancing book genre classification with bert and inceptionv3 a deep learning approach for libraries",
+          "volume": "11",
+          "issue": "",
+          "pages": "e2934",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101660598",
+          "issn": "",
+          "essn": "2376-5992",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "258",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "40567686"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC12193415"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC12193415;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.7717/peerj-cs.2934"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "cs-2934"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/02/17 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2025/05/11 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2025/06/26 06:28"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2025/06/26 06:27"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2025/06/26 05:20"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2025/06/05 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 31,
+          "fulljournalname": "PeerJ. Computer science",
+          "elocationid": "doi: 10.7717/peerj-cs.2934",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2025/06/05 00:00",
+          "sortfirstauthor": "Yang X",
+          "vernaculartitle": ""
+        },
+        "40629056": {
+          "uid": "40629056",
+          "pubdate": "2025 Jul 8",
+          "epubdate": "2025 Jul 8",
+          "source": "Sci Rep",
+          "authors": [
+            {
+              "name": "Li P",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Huang L",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Li J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yan H",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Shan D",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Shan D",
+          "title": "Graph-based vision transformer with sparsity for training on small datasets from scratch.",
+          "sorttitle": "graph based vision transformer with sparsity for training on small datasets from scratch",
+          "volume": "15",
+          "issue": "1",
+          "pages": "24520",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101563288",
+          "issn": "",
+          "essn": "2045-2322",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "40629056"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC12238448"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC12238448;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1038/s41598-025-10408-0"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "10.1038/s41598-025-10408-0"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/03/10 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2025/07/03 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2025/07/09 00:28"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2025/07/09 00:27"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2025/07/08 23:39"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2025/07/08 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 43,
+          "fulljournalname": "Scientific reports",
+          "elocationid": "doi: 10.1038/s41598-025-10408-0",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2025/07/08 00:00",
+          "sortfirstauthor": "Li P",
+          "vernaculartitle": ""
+        },
+        "40811797": {
+          "uid": "40811797",
+          "pubdate": "2025 Sep 22",
+          "epubdate": "",
+          "source": "Neural Comput",
+          "authors": [
+            {
+              "name": "Sanger TD",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Sanger TD",
+          "title": "Transformer Models for Signal Processing: Scaled Dot-Product Attention Implements Constrained Filtering.",
+          "sorttitle": "transformer models for signal processing scaled dot product attention implements constrained filtering",
+          "volume": "37",
+          "issue": "10",
+          "pages": "1839-1852",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "9426182",
+          "issn": "0899-7667",
+          "essn": "1530-888X",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "4",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "40811797"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1162/neco.a.29"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "132658"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/02/05 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2025/05/26 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2025/08/14 22:52"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2025/08/14 22:51"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2025/08/14 16:54"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Neural computation",
+          "elocationid": "doi: 10.1162/neco.a.29",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2025/09/22 00:00",
+          "sortfirstauthor": "Sanger TD",
+          "vernaculartitle": ""
+        },
+        "40989407": {
+          "uid": "40989407",
+          "pubdate": "2025",
+          "epubdate": "2025 Aug 11",
+          "source": "PeerJ Comput Sci",
+          "authors": [
+            {
+              "name": "Acı M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Vuran Sarı N",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "İnan Acı Ç",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "İnan Acı Ç",
+          "title": "Morphological and structural complexity analysis of low-resource English-Turkish language pair using neural machine translation models.",
+          "sorttitle": "morphological and structural complexity analysis of low resource english turkish language pair using neural machine translation models",
+          "volume": "11",
+          "issue": "",
+          "pages": "e3072",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101660598",
+          "issn": "",
+          "essn": "2376-5992",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "258",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "40989407"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC12453858"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC12453858;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.7717/peerj-cs.3072"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "cs-3072"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/02/27 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2025/07/03 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2025/09/24 06:29"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2025/09/24 06:28"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2025/09/24 05:23"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2025/08/11 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 46,
+          "fulljournalname": "PeerJ. Computer science",
+          "elocationid": "doi: 10.7717/peerj-cs.3072",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2025/08/11 00:00",
+          "sortfirstauthor": "Acı M",
+          "vernaculartitle": ""
+        },
+        "41318779": {
+          "uid": "41318779",
+          "pubdate": "2025 Nov 29",
+          "epubdate": "2025 Nov 29",
+          "source": "Sci Rep",
+          "authors": [
+            {
+              "name": "Li S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhu J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Liu J",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Liu J",
+          "title": "Learning transformer network for effective radar chaff jamming suppression.",
+          "sorttitle": "learning transformer network for effective radar chaff jamming suppression",
+          "volume": "16",
+          "issue": "1",
+          "pages": "745",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101563288",
+          "issn": "",
+          "essn": "2045-2322",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "41318779"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC12779984"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC12779984;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1038/s41598-025-30315-8"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "10.1038/s41598-025-30315-8"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/10/16 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2025/11/24 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2025/11/30 00:31"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2025/11/30 00:30"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2025/11/29 23:24"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2025/11/29 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 32,
+          "fulljournalname": "Scientific reports",
+          "elocationid": "doi: 10.1038/s41598-025-30315-8",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2025/11/29 00:00",
+          "sortfirstauthor": "Li S",
+          "vernaculartitle": ""
+        },
+        "41475131": {
+          "uid": "41475131",
+          "pubdate": "2026 May",
+          "epubdate": "2025 Dec 24",
+          "source": "Neural Netw",
+          "authors": [
+            {
+              "name": "Carreto Picón G",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Oleksiienko I",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Hedegaard L",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Bakhtiarnia A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Iosifidis A",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Iosifidis A",
+          "title": "Continual low-rank scaled dot-product attention.",
+          "sorttitle": "continual low rank scaled dot product attention",
+          "volume": "197",
+          "issue": "",
+          "pages": "108517",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "8805018",
+          "issn": "0893-6080",
+          "essn": "1879-2782",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - in process",
+          "pubstatus": "256",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "41475131"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1016/j.neunet.2025.108517"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "S0893-6080(25)01398-X"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/03/22 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2025/10/31 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2025/12/20 00:00"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/01/01 00:35"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/01/01 00:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2025/12/31 18:05"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Neural networks : the official journal of the International Neural Network Society",
+          "elocationid": "doi: 10.1016/j.neunet.2025.108517",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/05/01 00:00",
+          "sortfirstauthor": "Carreto Picón G",
+          "vernaculartitle": ""
+        },
+        "41609035": {
+          "uid": "41609035",
+          "pubdate": "2026 Jan 26",
+          "epubdate": "",
+          "source": "J Integr Neurosci",
+          "authors": [
+            {
+              "name": "Velumani B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Krishnakumar S",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Krishnakumar S",
+          "title": "Multi-Scale Adaptive Temporal Network for Parkinson's Motor Symptom Fluctuation Detection Using Coarsened 2D Skeleton Pose Data.",
+          "sorttitle": "multi scale adaptive temporal network for parkinson s motor symptom fluctuation detection using coarsened 2d skeleton pose data",
+          "volume": "25",
+          "issue": "1",
+          "pages": "47677",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101156357",
+          "issn": "0219-6352",
+          "essn": "",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "4",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "41609035"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.31083/JIN47677"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "S0219-6352(25)01066-6"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/10/25 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2025/12/02 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2025/12/23 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/01/29 14:02"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/01/29 14:01"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/01/29 07:03"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Journal of integrative neuroscience",
+          "elocationid": "doi: 10.31083/JIN47677",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/01/26 00:00",
+          "sortfirstauthor": "Velumani B",
+          "vernaculartitle": ""
+        },
+        "41748656": {
+          "uid": "41748656",
+          "pubdate": "2026 Feb 26",
+          "epubdate": "2026 Feb 26",
+          "source": "Sci Rep",
+          "authors": [
+            {
+              "name": "Hossain MA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ye Z",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Hossen MB",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Rahman MA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Islam MS",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Abdullah MI",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Abdullah MI",
+          "title": "MSSA: memory-driven and simplified scaled attention for enhanced image captioning.",
+          "sorttitle": "mssa memory driven and simplified scaled attention for enhanced image captioning",
+          "volume": "16",
+          "issue": "1",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101563288",
+          "issn": "",
+          "essn": "2045-2322",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "41748656"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13046894"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13046894;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1038/s41598-026-40164-8"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "10.1038/s41598-026-40164-8"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/11/05 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/02/10 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/02/27 00:35"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/02/27 00:34"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/02/26 23:17"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/02/26 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 46,
+          "fulljournalname": "Scientific reports",
+          "elocationid": "doi: 10.1038/s41598-026-40164-8",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/02/26 00:00",
+          "sortfirstauthor": "Hossain MA",
+          "vernaculartitle": ""
+        },
+        "uids": [
+          "41748656",
+          "41609035",
+          "41475131",
+          "41318779",
+          "40989407",
+          "40811797",
+          "40629056",
+          "40567686",
+          "40500907",
+          "40085455"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

@@ -1,13 +1,16 @@
 // tests/helpers/section-fixture.ts — a paper seeded for the Phase 18 sections
 // stream tests (GRND-07..16, FEED-01..04): STATE.json, a v1 INTAKE.md written
-// through the one brief renderer (renderIntakeDocument), and a v2 LIBRARY.json
-// with a handful of sources. No network, no model.
+// through the one brief renderer (renderIntakeDocument), and a current-version
+// LIBRARY.json (v2 entries through the library's own v2 → v3 migration, so a
+// read never has to migrate — and rewrite — it) with a handful of sources.
+// No network, no model.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { renderIntakeDocument, type IntakeBriefInput } from '../../bin/lib/intake-brief.js';
 import { initState } from '../../bin/lib/state.js';
 import type { OutlineContract } from '../../bin/lib/llm-contracts.js';
+import { migrate as libraryV2ToV3 } from '../../bin/lib/migrations/library/v2_to_v3.js';
 
 export const FIXTURE_NOW = '2026-09-01T00:00:00.000Z';
 
@@ -33,7 +36,7 @@ export const DEFAULT_SOURCES: readonly FixtureSource[] = Object.freeze([
   { citekey: 'devlin2019', title: 'BERT: Pre-training of Deep Bidirectional Transformers', author: 'Devlin, Jacob', year: 2019, abstract: 'Bidirectional pre-training of transformers.' },
 ]);
 
-/** A v2 LIBRARY.json entry. */
+/** A v2 LIBRARY.json entry (writeLibrary migrates it to the current version). */
 export function libraryEntry(s: FixtureSource): Record<string, unknown> {
   return {
     citekey: s.citekey,
@@ -64,7 +67,7 @@ export function writeLibrary(root: string, sources: readonly FixtureSource[] = D
   fs.mkdirSync(path.join(root, '.paper'), { recursive: true });
   fs.writeFileSync(
     path.join(root, '.paper', 'LIBRARY.json'),
-    JSON.stringify({ $schemaVersion: 2, entries: sources.map(libraryEntry) }, null, 2) + '\n',
+    JSON.stringify(libraryV2ToV3({ $schemaVersion: 2, entries: sources.map(libraryEntry) }), null, 2) + '\n',
   );
 }
 

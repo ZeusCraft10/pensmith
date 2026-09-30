@@ -1,0 +1,60 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?filter=updates%3A10.1109%2FISCAS58744.2024.10558182&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 0,
+        "items": [],
+        "items-per-page": 20,
+        "query": {
+          "start-index": 0,
+          "search-terms": null
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T23:58:57.262Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "retraction-watch"
+    }
+  },
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?filter=updates%3A10.1109%2Fiscas58744.2024.10558182&select=DOI%2Ctitle%2Cauthor%2Cupdate-to&rows=20",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 0,
+        "items": [],
+        "items-per-page": 20,
+        "query": {
+          "start-index": 0,
+          "search-terms": null
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T23:58:57.262Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "retraction-watch"
+    }
+  }
+]

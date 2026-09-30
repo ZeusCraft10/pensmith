@@ -1,0 +1,482 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=scaled+dot-product+attention+transformer&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 777635,
+        "items": [
+          {
+            "DOI": "10.7717/peerj-cs.2267/fig-3",
+            "title": [
+              "Figure 3: Scaled dot-product attention technique."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component",
+            "publisher": "PeerJ"
+          },
+          {
+            "DOI": "10.7717/peerjcs.1946/fig-10",
+            "title": [
+              "Figure 10: Scaled dot-product attention and multi-head attention (Vaswani et al., 2017)."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component",
+            "publisher": "PeerJ"
+          },
+          {
+            "publisher": "MIT Press",
+            "issue": "10",
+            "abstract": "<jats:title>Abstract</jats:title>\n                  <jats:p>The remarkable success of the transformer machine learning architecture for processing language sequences far exceeds the performance of classical signal processing methods. A unique component of transformer models is the scaled dot-product attention (SDPA) layer, which does not appear to have an analog in prior signal processing algorithms. Here, we show that SDPA operates using a novel principle that projects the current state estimate onto the space spanned by prior estimates. We show that SDPA, when used for causal recursive state estimation, implements constrained state estimation in circumstances where the constraint is unknown and may be time varying. Since constraints in high-dimensional space may represent the complex relationships that define nonlinear signals and models, this suggests that the SDPA layer and transformer models leverage constrained estimation to achieve their success. This also suggests that transformers and the SPDA layer could be a computational model for previously unexplained capabilities of human behavior.</jats:p>",
+            "DOI": "10.1162/neco.a.29",
+            "type": "journal-article",
+            "page": "1839-1852",
+            "title": [
+              "Transformer Models for Signal Processing: Scaled Dot-Product Attention Implements Constrained Filtering"
+            ],
+            "volume": "37",
+            "author": [
+              {
+                "given": "Terence D.",
+                "family": "Sanger",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Department of Electrical Engineering, University of California, Irvine, Irvine, CA 92697, USA"
+                  },
+                  {
+                    "name": "Children’s Hospital of Orange County, Orange, CA 92868, USA REDACTED_EMAIL"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Neural Computation"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  9,
+                  22
+                ]
+              ]
+            }
+          },
+          {
+            "DOI": "10.7717/peerjcs.2025/fig-4",
+            "title": [
+              "Figure 4: Multi-head structure contains two components: (A) scaled dot-product attention and (B) multi-head attention."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component",
+            "publisher": "PeerJ"
+          },
+          {
+            "publisher": "Apress",
+            "DOI": "10.1007/979-8-8688-2297-1_6",
+            "type": "book-chapter",
+            "page": "207-239",
+            "title": [
+              "Scaled Dot-Product Attention Core—Sliding Window and Grouped Query Attention—The Core Behind All Transformer Models"
+            ],
+            "author": [
+              {
+                "given": "Dilyan",
+                "family": "Grigorov",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "Building Large Language Models from Scratch"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026
+                ]
+              ]
+            },
+            "ISBN": [
+              "9798868822964",
+              "9798868822971"
+            ]
+          },
+          {
+            "DOI": "10.1109/ictis62692.2024.10894163",
+            "title": [
+              "Enhancing Cochlear Implant Signal Coding with Scaled Dot-Product Attention"
+            ],
+            "author": [
+              {
+                "given": "Billel",
+                "family": "Essaid",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "University of Medea,LSEA Lab.,Medea,Algeria,26000"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Hamza",
+                "family": "Kheddar",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "University of Medea,LSEA Lab.,Medea,Algeria,26000"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Noureddine",
+                "family": "Batel",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "University of Medea,LSEA Lab.,Medea,Algeria,26000"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2024,
+                  12,
+                  14
+                ]
+              ]
+            },
+            "container-title": [
+              "2024 International Conference on Telecommunications and Intelligent Systems (ICTIS)"
+            ],
+            "type": "proceedings-article",
+            "page": "1-6",
+            "publisher": "IEEE"
+          },
+          {
+            "DOI": "10.1109/iscmi56532.2022.10068484",
+            "title": [
+              "Hadamard Estimated Attention Transformer (HEAT): Fast Approximation of Dot Product Self-attention for Transformers Using Low-Rank Projection of Hadamard Product"
+            ],
+            "author": [
+              {
+                "given": "Jasper Kyle",
+                "family": "Catapang",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "University of Birmingham,Department of English Language and Linguistics,United Kingdom"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2022,
+                  11,
+                  26
+                ]
+              ]
+            },
+            "container-title": [
+              "2022 9th International Conference on Soft Computing &amp; Machine Intelligence (ISCMI)"
+            ],
+            "type": "proceedings-article",
+            "page": "203-206",
+            "publisher": "IEEE"
+          },
+          {
+            "publisher": "University of Florida George A Smathers Libraries",
+            "abstract": "<jats:p>This study presents an enhanced MobileNetV2-based model architecture for efficient and accurate skin cancer classification, suitable for mobile deployment. Addressing the limitations of current MobileNet V2 and V3 architectures, we integrate a Scaled Dot-Product Attention mechanism to improve feature selectivity while maintaining computational efficiency. Our model was trained and evaluated on a balanced subset of the ISIC 2019 dataset, employing data augmentation and class-balancing techniques to mitigate dataset imbalances and enhance generalization. Comparative experiments demonstrated that the proposed model outperformed standard MobileNet V2 and V3 models in validation accuracy, particularly in distinguishing melanoma, basal cell carcinoma, and squamous cell carcinoma. Future research will focus on further optimizing the model’s architecture by incorporating additional MobileNet V3 features, expanding testing on diverse datasets, and exploring alternative attention mechanisms. This work supports the development of mobile-accessible, AI-driven diagnostic tools, contributing to early skin cancer detection and potentially improving public health outcomes.</jats:p>",
+            "DOI": "10.32473/flairs.38.1.138983",
+            "type": "journal-article",
+            "title": [
+              "Enhanced Feature Selectivity in MobileNetV2 for Skin Cancer Detection through Scaled Dot-Product Attention"
+            ],
+            "volume": "38",
+            "author": [
+              {
+                "given": "Omar",
+                "family": "Gasmann",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Nazmul",
+                "family": "Shahadat",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "The International FLAIRS Conference Proceedings"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  5,
+                  14
+                ]
+              ]
+            }
+          },
+          {
+            "DOI": "10.37965/jdmd.2026.1552",
+            "title": [
+              "A Rolling Bearing Fault Diagnosis Method Based on Scaled Dot-Product Attention"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0009-0000-8948-4651",
+                "authenticated-orcid": false,
+                "given": "Changgang",
+                "family": "Yan",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0009-0008-2363-1901",
+                "authenticated-orcid": false,
+                "given": "Zhichao",
+                "family": "Cong",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "ORCID": "https://orcid.org/0009-0001-9641-3162",
+                "authenticated-orcid": false,
+                "given": "Jinlong",
+                "family": "Wang",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026,
+                  8,
+                  19
+                ]
+              ]
+            },
+            "abstract": "<jats:p>To tackle the persistent challenges of low bearing fault diagnosis accuracy—specifically the difficulty of extracting faint fault features under complex, variable operating conditions and strong background noise, as well as the tendency to lose deep temporal dependencies—this paper proposes a novel diagnosis method integrating FFT-VMD feature extraction with a Bi-TCN-Bi-GRU neural network. First, to overcome the heuristic parameter selection and frequency-band aliasing inherent in traditional Variational Mode Decomposition (VMD), the Fast Fourier Transform (FFT) is introduced. By extracting global spectral prior information, the FFT guides the VMD to perform adaptive decomposition and effective denoising of non-stationary vibration signals. Subsequently, a dual-path Bi-TCN-Bi-GRU diagnostic model is constructed. The dilated causal convolution mechanism of the Bidirectional Temporal Convolutional Network (Bi-TCN) is utilized to extract deep local spatial features, while the Bidirectional Gated Recurrent Unit (Bi-GRU) is integrated to deeply mine the forward and backward dynamic evolutionary dependencies within the sequence. Experimental results demonstrate that even under severe background noise with a signal-to-noise ratio (SNR) of -2 dB, the proposed method maintains an exceptional diagnostic accuracy of 98.21% on a self-built bearing dataset and 99.90% on the Southeast University (SEU) dataset. This study provides a highly robust and promising solution for enhancing bearing safety and predictive maintenance in complex industrial environments.</jats:p>",
+            "container-title": [
+              "Journal of Dynamics, Monitoring and Diagnostics"
+            ],
+            "type": "journal-article",
+            "publisher": "Intelligence Science and Technology Press Inc."
+          },
+          {
+            "DOI": "10.21203/rs.3.rs-7784075/v1",
+            "title": [
+              "Pest-Net: Hierarchical Scaled Dot-Product Attention for Insect Pest Detection"
+            ],
+            "author": [
+              {
+                "given": "Vu Thinh",
+                "family": "Doan",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "National Kaohsiung University of Science and Technology"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Hoang Thanh",
+                "family": "Le",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "University of Wollongong"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Son Lam",
+                "family": "Phung",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "University of Wollongong"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Thi Thu Thuy",
+                "family": "Pham",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "Nha Trang University"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "Hong-Jie",
+                "family": "Dai",
+                "sequence": "additional",
+                "affiliation": [
+                  {
+                    "name": "National Kaohsiung University of Science and Technology"
+                  }
+                ],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2025,
+                  10,
+                  23
+                ]
+              ]
+            },
+            "abstract": "<title>Abstract</title>\n                <p>Timely and precise insect pest detection is critical in areas with high agricultural intensity and climates that favor continuous pest activity.\nTraditional pest identification methods, such as manual inspection or expert guided analysis, are labor intensive and time consuming. These approaches lack scalability and hinder timely intervention, particularly in resource-constrained settings.\nFurthermore, the high visual similarity between pest species and intra-species variability across developmental stages further challenge detection efforts in real-world agricultural conditions.\nTo address these limitations, we propose Pest-Net, a novel one-stage object detection network designed for insect pest detection.\nOur method consist of two key attention-based modules to enhance feature extraction and improve detection performance. \nFirst, the Hierarchical Scaled Dot-Product Attention module leverages a multi-level attention mechanism to capture salient pest features at different scales. \nSecond, the Spatial Attention module refines spatial feature representations by incorporating horizontal and vertical attention pathways with multi-scale max-pooling operation to enhance contextual understanding. \nExtensive experiments were conducted on two public benchmarks, IP102 and R2000 datasets, which represent agricultural conditions in Asia. The results demonstrate that Pest-Net outperforms state-of-the-art models in both visualization outputs and quantitative metrics. Pest-Net shows strong potential as a scalable and cost-effective solution for intelligent pest monitoring in modern precision agriculture.\nOur code and data for this paper are made available at: \\textit{\\url{https://github.com/thinhdoanvu/HSDPA}}.</p>",
+            "type": "posted-content",
+            "publisher": "Springer Science and Business Media LLC"
+          }
+        ],
+        "items-per-page": 10,
+        "query": {
+          "start-index": 0,
+          "search-terms": "scaled dot-product attention transformer"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

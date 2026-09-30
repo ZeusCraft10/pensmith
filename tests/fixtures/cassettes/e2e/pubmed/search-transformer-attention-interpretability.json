@@ -1,0 +1,1456 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=transformer+attention+interpretability&retmode=json&retmax=10",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esearch",
+        "version": "0.3"
+      },
+      "esearchresult": {
+        "count": "1633",
+        "retmax": "10",
+        "retstart": "0",
+        "idlist": [
+          "42806359",
+          "42806311",
+          "42803837",
+          "42798415",
+          "42794920",
+          "42794454",
+          "42793777",
+          "42791843",
+          "42791834",
+          "42791830"
+        ],
+        "translationset": [
+          {
+            "from": "transformer",
+            "to": "\"transformer\"[All Fields] OR \"transformers\"[All Fields]"
+          },
+          {
+            "from": "attention",
+            "to": "\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention's\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]"
+          },
+          {
+            "from": "interpretability",
+            "to": "\"interpret\"[All Fields] OR \"interpretability\"[All Fields] OR \"interpretable\"[All Fields] OR \"interpretating\"[All Fields] OR \"interpretation\"[All Fields] OR \"interpretation's\"[All Fields] OR \"interpretational\"[All Fields] OR \"interpretations\"[All Fields] OR \"interpretative\"[All Fields] OR \"interpreted\"[All Fields] OR \"interpreter\"[All Fields] OR \"interpreter's\"[All Fields] OR \"interpreters\"[All Fields] OR \"interpreting\"[All Fields] OR \"interpretive\"[All Fields] OR \"interpretively\"[All Fields] OR \"interprets\"[All Fields]"
+          }
+        ],
+        "querytranslation": "(\"transformer\"[All Fields] OR \"transformers\"[All Fields]) AND (\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention s\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]) AND (\"interpret\"[All Fields] OR \"interpretability\"[All Fields] OR \"interpretable\"[All Fields] OR \"interpretating\"[All Fields] OR \"interpretation\"[All Fields] OR \"interpretation s\"[All Fields] OR \"interpretational\"[All Fields] OR \"interpretations\"[All Fields] OR \"interpretative\"[All Fields] OR \"interpreted\"[All Fields] OR \"interpreter\"[All Fields] OR \"interpreter s\"[All Fields] OR \"interpreters\"[All Fields] OR \"interpreting\"[All Fields] OR \"interpretive\"[All Fields] OR \"interpretively\"[All Fields] OR \"interprets\"[All Fields])"
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  },
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42806359%2C42806311%2C42803837%2C42798415%2C42794920%2C42794454%2C42793777%2C42791843%2C42791834%2C42791830&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "42791830": {
+          "uid": "42791830",
+          "pubdate": "2026 Aug 22",
+          "epubdate": "2026 Aug 22",
+          "source": "Bioengineering (Basel)",
+          "authors": [
+            {
+              "name": "Ali A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Raza B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zahra K",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Naqvi RA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Dharejo FA",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Dharejo FA",
+          "title": "DGTN: Graph-Enhanced Transformer with Diffusive Attention and Gating Mechanism for Multi-Task Breast Ultrasound Tumor Analysis.",
+          "sorttitle": "dgtn graph enhanced transformer with diffusive attention and gating mechanism for multi task breast ultrasound tumor analysis",
+          "volume": "13",
+          "issue": "9",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101676056",
+          "issn": "2306-5354",
+          "essn": "2306-5354",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42791830"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13603613"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13603613;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/bioengineering13090956"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "bioengineering13090956"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/07/07 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/08/16 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/08/19 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 01:00"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/08/22 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 18,
+          "fulljournalname": "Bioengineering (Basel, Switzerland)",
+          "elocationid": "doi: 10.3390/bioengineering13090956",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/08/22 00:00",
+          "sortfirstauthor": "Ali A",
+          "vernaculartitle": ""
+        },
+        "42791834": {
+          "uid": "42791834",
+          "pubdate": "2026 Aug 23",
+          "epubdate": "2026 Aug 23",
+          "source": "Bioengineering (Basel)",
+          "authors": [
+            {
+              "name": "Talaat FM",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Elnakib A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Hekal AA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Alnaggar M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Abdellatif AG",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Shawky MA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Safwat S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Shaban WM",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Shehata M",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Shehata M",
+          "title": "End-to-End Intelligent Drug Discovery via a Scalable and Explainable Graph-Transformer Framework.",
+          "sorttitle": "end to end intelligent drug discovery via a scalable and explainable graph transformer framework",
+          "volume": "13",
+          "issue": "9",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101676056",
+          "issn": "2306-5354",
+          "essn": "2306-5354",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42791834"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13603830"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13603830;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/bioengineering13090961"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "bioengineering13090961"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/07/02 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/08/18 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/08/19 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 01:00"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/08/23 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 46,
+          "fulljournalname": "Bioengineering (Basel, Switzerland)",
+          "elocationid": "doi: 10.3390/bioengineering13090961",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/08/23 00:00",
+          "sortfirstauthor": "Talaat FM",
+          "vernaculartitle": ""
+        },
+        "42791843": {
+          "uid": "42791843",
+          "pubdate": "2026 Aug 25",
+          "epubdate": "2026 Aug 25",
+          "source": "Bioengineering (Basel)",
+          "authors": [
+            {
+              "name": "Heba KM",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Atya AHA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Alrawashdeh NHS",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Shahab S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Anjum M",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Anjum M",
+          "title": "Hybrid CNN-Transformer Framework for Automated Detection of Developmental Coordination Disorder from Motion Imaging Sequences.",
+          "sorttitle": "hybrid cnn transformer framework for automated detection of developmental coordination disorder from motion imaging sequences",
+          "volume": "13",
+          "issue": "9",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101676056",
+          "issn": "2306-5354",
+          "essn": "2306-5354",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42791843"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13603484"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13603484;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/bioengineering13090970"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "bioengineering13090970"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/06/27 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/07/16 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/07/23 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 01:00"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/08/25 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 34,
+          "fulljournalname": "Bioengineering (Basel, Switzerland)",
+          "elocationid": "doi: 10.3390/bioengineering13090970",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/08/25 00:00",
+          "sortfirstauthor": "Heba KM",
+          "vernaculartitle": ""
+        },
+        "42793777": {
+          "uid": "42793777",
+          "pubdate": "2026 Sep 16",
+          "epubdate": "2026 Sep 16",
+          "source": "Diagnostics (Basel)",
+          "authors": [
+            {
+              "name": "Zhang J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Shu L",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Shu L",
+          "title": "Colposcopic Imaging Carries Most of the Signal: Externally Validated Tri-Modal Integration of Imaging, Vaginal Microbiome, and Coagulation-Immune Data in HPV-Associated Co-Infection.",
+          "sorttitle": "colposcopic imaging carries most of the signal externally validated tri modal integration of imaging vaginal microbiome and coagulation immune data in hpv associated co infection",
+          "volume": "16",
+          "issue": "18",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101658402",
+          "issn": "2075-4418",
+          "essn": "2075-4418",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42793777"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13605049"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13605049;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/diagnostics16182992"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "diagnostics16182992"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/08/12 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/09/03 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/09 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 01:05"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/09/16 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 33,
+          "fulljournalname": "Diagnostics (Basel, Switzerland)",
+          "elocationid": "doi: 10.3390/diagnostics16182992",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/16 00:00",
+          "sortfirstauthor": "Zhang J",
+          "vernaculartitle": ""
+        },
+        "42794454": {
+          "uid": "42794454",
+          "pubdate": "2026 Sep 9",
+          "epubdate": "2026 Sep 9",
+          "source": "Int J Mol Sci",
+          "authors": [
+            {
+              "name": "Popa MF",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Șiancu P",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Mohor CI",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Oprinca-Muja LA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Oprinca GC",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Mohor CI",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Tănăsescu C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Tănăsescu D",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Cristian A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Vereș VV",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Bereanu A",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Bereanu A",
+          "title": "Artificial Intelligence-Based Prediction of Molecular Alterations in Colorectal Cancer Using Routine H&E Whole-Slide Images.",
+          "sorttitle": "artificial intelligence based prediction of molecular alterations in colorectal cancer using routine h e whole slide images",
+          "volume": "27",
+          "issue": "18",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101092791",
+          "issn": "",
+          "essn": "1422-0067",
+          "pubtype": [
+            "Journal Article",
+            "Review"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42794454"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13606828"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13606828;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/ijms27188025"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "ijms27188025"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/07/13 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/09/02 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/06 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 01:07"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/09/09 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 38,
+          "fulljournalname": "International journal of molecular sciences",
+          "elocationid": "doi: 10.3390/ijms27188025",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/09 00:00",
+          "sortfirstauthor": "Popa MF",
+          "vernaculartitle": ""
+        },
+        "42794920": {
+          "uid": "42794920",
+          "pubdate": "2026 Sep 13",
+          "epubdate": "2026 Sep 13",
+          "source": "Cancers (Basel)",
+          "authors": [
+            {
+              "name": "Chakrabarti T",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Mansour AG",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Wu X",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Arias-Romero J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Mambetsariev I",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Chang N",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Delos Santos S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Mirzapoiazova T",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Fricke J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Kim J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Afkhami M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Lall C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Khan AM",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Reyes A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Lee M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Bruno DS",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ladbury C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Amini A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Salgia R",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Salgia R",
+          "title": "Multimodal Artificial Intelligence in Lung Cancer: From Data Integration to Precision Oncology.",
+          "sorttitle": "multimodal artificial intelligence in lung cancer from data integration to precision oncology",
+          "volume": "18",
+          "issue": "18",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101526829",
+          "issn": "2072-6694",
+          "essn": "2072-6694",
+          "pubtype": [
+            "Journal Article",
+            "Review"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42794920"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13604624"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13604624;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3390/cancers18182953"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "cancers18182953"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/07/22 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/09/04 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/09 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 01:09"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/09/13 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 125,
+          "fulljournalname": "Cancers",
+          "elocationid": "doi: 10.3390/cancers18182953",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/13 00:00",
+          "sortfirstauthor": "Chakrabarti T",
+          "vernaculartitle": ""
+        },
+        "42798415": {
+          "uid": "42798415",
+          "pubdate": "2026",
+          "epubdate": "2026 Sep 11",
+          "source": "Front Artif Intell",
+          "authors": [
+            {
+              "name": "Aziz FI",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Koo I",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Erdenebold T",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Hossain JA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Fagerstrøm A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ghose D",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Ghose D",
+          "title": "NeuroTrustNet: a cost-effective multimodal ensemble framework for brain tumor classification under cross-dataset variability.",
+          "sorttitle": "neurotrustnet a cost effective multimodal ensemble framework for brain tumor classification under cross dataset variability",
+          "volume": "9",
+          "issue": "",
+          "pages": "1900160",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101770551",
+          "issn": "",
+          "essn": "2624-8212",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "258",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42798415"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13612349"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13612349;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3389/frai.2026.1900160"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/06/04 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/08/17 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/08/18 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/26 05:36"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/26 05:35"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/26 04:54"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/09/11 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 49,
+          "fulljournalname": "Frontiers in artificial intelligence",
+          "elocationid": "doi: 10.3389/frai.2026.1900160",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/11 00:00",
+          "sortfirstauthor": "Aziz FI",
+          "vernaculartitle": ""
+        },
+        "42803837": {
+          "uid": "42803837",
+          "pubdate": "2026 Sep 28",
+          "epubdate": "2026 Sep 28",
+          "source": "Int Ophthalmol",
+          "authors": [
+            {
+              "name": "Karuppusamy K",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Thangavel B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Subramanian KM",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Thangavel S",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Thangavel S",
+          "title": "Retinal neovascularization detection from fundus images using deformable attention ResNet and swarm-hiking optimization.",
+          "sorttitle": "retinal neovascularization detection from fundus images using deformable attention resnet and swarm hiking optimization",
+          "volume": "46",
+          "issue": "1",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "7904294",
+          "issn": "0165-5701",
+          "essn": "1573-2630",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42803837"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1007/s10792-026-04143-2"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "10.1007/s10792-026-04143-2"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2025/08/28 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/06/15 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/28 17:32"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/28 17:31"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/28 11:10"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "International ophthalmology",
+          "elocationid": "pii: 412. doi: 10.1007/s10792-026-04143-2",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/28 00:00",
+          "sortfirstauthor": "Karuppusamy K",
+          "vernaculartitle": ""
+        },
+        "42806311": {
+          "uid": "42806311",
+          "pubdate": "2026 Sep 17",
+          "epubdate": "2026 Sep 17",
+          "source": "BMC Med Imaging",
+          "authors": [
+            {
+              "name": "Asare A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Sagoe M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Asare JW",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Moore SE",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Moore SE",
+          "title": "TransUNet-GradCAM: a hybrid transformer-U-Net with self-attention and explainable visualizations for foot ulcer segmentation.",
+          "sorttitle": "transunet gradcam a hybrid transformer u net with self attention and explainable visualizations for foot ulcer segmentation",
+          "volume": "26",
+          "issue": "1",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "100968553",
+          "issn": "",
+          "essn": "1471-2342",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42806311"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1186/s12880-026-02793-3"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "10.1186/s12880-026-02793-3"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/04/18 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/08 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/29 05:31"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/29 05:30"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/28 23:50"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "BMC medical imaging",
+          "elocationid": "pii: 474. doi: 10.1186/s12880-026-02793-3",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/17 00:00",
+          "sortfirstauthor": "Asare A",
+          "vernaculartitle": ""
+        },
+        "42806359": {
+          "uid": "42806359",
+          "pubdate": "2026 Sep 28",
+          "epubdate": "2026 Sep 28",
+          "source": "BMC Med Inform Decis Mak",
+          "authors": [
+            {
+              "name": "Tjondronegoro D",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yuwono EI",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Costa FDS",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Costa FDS",
+          "title": "CTG-FRAME: development and validation of a multi‑modal deep learning for intrapartum escalation support and severe fetal acidemia prediction.",
+          "sorttitle": "ctg frame development and validation of a multi modal deep learning for intrapartum escalation support and severe fetal acidemia prediction",
+          "volume": "26",
+          "issue": "1",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101088682",
+          "issn": "",
+          "essn": "1472-6947",
+          "pubtype": [
+            "Journal Article",
+            "Validation Study"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "3",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42806359"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1186/s12911-026-03651-6"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "10.1186/s12911-026-03651-6"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13617899"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13617899;"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/04/07 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/06/19 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/29 05:31"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/29 05:30"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/29 00:00"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/09/28 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 54,
+          "fulljournalname": "BMC medical informatics and decision making",
+          "elocationid": "doi: 10.1186/s12911-026-03651-6",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/28 00:00",
+          "sortfirstauthor": "Tjondronegoro D",
+          "vernaculartitle": ""
+        },
+        "uids": [
+          "42806359",
+          "42806311",
+          "42803837",
+          "42798415",
+          "42794920",
+          "42794454",
+          "42793777",
+          "42791843",
+          "42791834",
+          "42791830"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

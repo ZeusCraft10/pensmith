@@ -1,0 +1,267 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query=multi-head+attention+transformer+architecture&rows=10&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 2565910,
+        "items": [
+          {
+            "DOI": "10.7717/peerj-cs.2890/fig-1",
+            "title": [
+              "Figure 1: The transformer and multi head attention."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component",
+            "publisher": "PeerJ"
+          },
+          {
+            "DOI": "10.1038/s41598-026-67604-9",
+            "title": [
+              "Dual-stream EfficientNet–Swin Transformer architecture with multi-head attention fusion for endoscopic gastrointestinal image classification"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0002-1176-0035",
+                "authenticated-orcid": false,
+                "given": "Bekir Emre",
+                "family": "Altun",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2026,
+                  8,
+                  20
+                ]
+              ]
+            },
+            "container-title": [
+              "Scientific Reports"
+            ],
+            "type": "journal-article",
+            "publisher": "Springer Science and Business Media LLC"
+          },
+          {
+            "DOI": "10.7717/peerjcs.1422/fig-7",
+            "title": [
+              "Figure 7: The architecture of multi-head attention."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component",
+            "publisher": "PeerJ"
+          },
+          {
+            "DOI": "10.7717/peerj-cs.2865/fig-3",
+            "title": [
+              "Figure 3: Multi-head self-attention mechanism architecture diagram."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component",
+            "publisher": "PeerJ"
+          },
+          {
+            "DOI": "10.7717/peerj-cs.2910/fig-1",
+            "title": [
+              "Figure 1: Multi-head attention Siamese meta-learning model architecture."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component",
+            "publisher": "PeerJ"
+          },
+          {
+            "DOI": "10.7717/peerj-cs.3927/fig-2",
+            "title": [
+              "Figure 2: Intermediate fusion architecture using multi-head cross-attention."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component",
+            "publisher": "PeerJ"
+          },
+          {
+            "DOI": "10.36227/techrxiv.24638745",
+            "title": [
+              "Sentiment analysis with adaptive multi-head attention in Transformer"
+            ],
+            "author": [
+              {
+                "given": "Fanfei",
+                "family": "Meng",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              },
+              {
+                "given": "David",
+                "family": "Demeter",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2023,
+                  12,
+                  4
+                ]
+              ]
+            },
+            "abstract": "<jats:p>&lt;p&gt;We propose a novel framework based on the attention mechanism to identify the sentiment of a movie review document. Previous efforts on deep neural networks with attention mechanisms focus on encoder and decoder with fixed numbers of multi-head attention. Therefore, we need a mechanism to stop the attention process automatically if no more useful information can be read from the memory.In this paper, we propose an adaptive multi-head attention architecture (AdaptAttn) which varies the number of attention heads based on length of sentences. AdaptAttn has a data preprocessing step where each document is classified into any one of the three bins small, medium or large based on length of the sentence. The document classified as small goes through two heads in each layer, the medium group passes four heads and the large group is processed by eight heads. We examine the merit of our model on the Stanford large movie review dataset. The experimental results show that the F1 score from our model is on par with the baseline model.&lt;/p&gt;</jats:p>",
+            "type": "posted-content",
+            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)"
+          },
+          {
+            "DOI": "10.36227/techrxiv.24638745.v1",
+            "title": [
+              "Sentiment analysis with adaptive multi-head attention in Transformer"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0009-0009-9272-0665",
+                "authenticated-orcid": false,
+                "given": "Fanfei",
+                "family": "Meng",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "Northwestern University"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              },
+              {
+                "given": "Chen-ao",
+                "family": "Wang",
+                "sequence": "additional",
+                "affiliation": [],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2023,
+                  12,
+                  4
+                ]
+              ]
+            },
+            "abstract": "<jats:p>We propose a novel framework based on the attention mechanism to\nidentify the sentiment of a movie review document. Previous efforts on\ndeep neural networks with attention mechanisms focus on encoder and\ndecoder with fixed numbers of multi-head attention. Therefore, we need a\nmechanism to stop the attention process automatically if no more useful\ninformation can be read from the memory.In this paper, we propose an\nadaptive multi-head attention architecture (AdaptAttn) which varies the\nnumber of attention heads based on length of sentences. AdaptAttn has a\ndata preprocessing step where each document is classified into any one\nof the three bins small, medium or large based on length of the\nsentence. The document classified as small goes through two heads in\neach layer, the medium group passes four heads and the large group is\nprocessed by eight heads. We examine the merit of our model on the\nStanford large movie review dataset. The experimental results show that\nthe F1 score from our model is on par with the baseline model.</jats:p>",
+            "type": "posted-content",
+            "publisher": "Institute of Electrical and Electronics Engineers (IEEE)"
+          },
+          {
+            "DOI": "10.7717/peerj-cs.1515/fig-2",
+            "title": [
+              "Figure 2: Swin Transformer block (W-MSA is a multi-head self-attention module with conventional configuration, and SW-MSA is a multi-head self-attention module based on shifted window configuration)."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component",
+            "publisher": "PeerJ"
+          },
+          {
+            "DOI": "10.7717/peerj-cs.2817/fig-1",
+            "title": [
+              "Figure 1: Overview of the proposed BERT-GGNN-multi-head attention model architecture."
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  null
+                ]
+              ]
+            },
+            "type": "component",
+            "publisher": "PeerJ"
+          }
+        ],
+        "items-per-page": 10,
+        "query": {
+          "start-index": 0,
+          "search-terms": "multi-head attention transformer architecture"
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-29T23:58:44.356Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

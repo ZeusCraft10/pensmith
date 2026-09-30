@@ -25,6 +25,7 @@ import {
 import { resolveRuntime } from '../bin/lib/runtime.js';
 import { textStub } from '../bin/lib/llm-text-stubs.js';
 import { buildPromptRequest, requestHints } from '../bin/lib/prompt-request.js';
+import { expandTopicQueries } from '../bin/lib/query-expansion.js';
 
 const KEY = 'sk-test-mock-llm-key-0001';
 
@@ -249,7 +250,10 @@ test('D-18-06: default structured replies read the request blocks — the same o
   const verdicts = (mocked[0] as { verdicts: Array<{ citekey: string; keep: boolean }> }).verdicts;
   assert.deepEqual(verdicts.map((v) => [v.citekey, v.keep]), [['vaswani2017', true], ['bahdanau2015', true]], 'every candidate kept');
   const scopes = (mocked[1] as { scopes: Array<{ queries: string[] }> }).scopes;
-  assert.deepEqual(scopes[0]!.queries, ['attention mechanisms in neural translation'], 'queries come from the topic block');
+  // Phase 19 (SRC-08, D-19-15): the stub's queries are the deterministic
+  // expansion of the topic block, led by the topic itself.
+  assert.deepEqual(scopes[0]!.queries, expandTopicQueries('attention mechanisms in neural translation', 'computer-science'), 'queries come from the topic block');
+  assert.equal(scopes[0]!.queries[0], 'attention mechanisms in neural translation');
 });
 
 test('D-18-06: a corrective retry still reads the blocks of the first user turn', async () => {

@@ -2,7 +2,7 @@
   {
     "scope": "https://eutils.ncbi.nlm.nih.gov",
     "method": "GET",
-    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=transformer+self-attention+mechanism&retmode=json&retmax=10",
+    "path": "/entrez/eutils/esearch.fcgi?db=pubmed&term=multi-head+attention+transformer+architecture&retmode=json&retmax=10",
     "status": 200,
     "response": {
       "header": {
@@ -10,32 +10,36 @@
         "version": "0.3"
       },
       "esearchresult": {
-        "count": "1207",
+        "count": "233",
         "retmax": "10",
         "retstart": "0",
         "idlist": [
-          "42807068",
-          "42801901",
-          "42791472",
-          "42774040",
-          "42773344",
-          "42746552",
-          "42743970",
-          "42741109",
-          "42740235",
-          "42740136"
+          "42791843",
+          "42789432",
+          "42766948",
+          "42756136",
+          "42708755",
+          "42685753",
+          "42628458",
+          "42620682",
+          "42596484",
+          "42596454"
         ],
         "translationset": [
+          {
+            "from": "attention",
+            "to": "\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention's\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]"
+          },
           {
             "from": "transformer",
             "to": "\"transformer\"[All Fields] OR \"transformers\"[All Fields]"
           },
           {
-            "from": "mechanism",
-            "to": "\"mechanism\"[All Fields] OR \"mechanisms\"[All Fields]"
+            "from": "architecture",
+            "to": "\"architectural\"[All Fields] OR \"architecturally\"[All Fields] OR \"architecture\"[MeSH Terms] OR \"architecture\"[All Fields] OR \"architecture's\"[All Fields] OR \"architectured\"[All Fields] OR \"architectures\"[All Fields]"
           }
         ],
-        "querytranslation": "(\"transformer\"[All Fields] OR \"transformers\"[All Fields]) AND \"self-attention\"[All Fields] AND (\"mechanism\"[All Fields] OR \"mechanisms\"[All Fields])"
+        "querytranslation": "\"multi-head\"[All Fields] AND (\"attention\"[MeSH Terms] OR \"attention\"[All Fields] OR \"attentions\"[All Fields] OR \"attention s\"[All Fields] OR \"attentional\"[All Fields] OR \"attentive\"[All Fields] OR \"attentively\"[All Fields] OR \"attentiveness\"[All Fields]) AND (\"transformer\"[All Fields] OR \"transformers\"[All Fields]) AND (\"architectural\"[All Fields] OR \"architecturally\"[All Fields] OR \"architecture\"[MeSH Terms] OR \"architecture\"[All Fields] OR \"architecture s\"[All Fields] OR \"architectured\"[All Fields] OR \"architectures\"[All Fields])"
       }
     },
     "responseHeaders": {
@@ -50,7 +54,7 @@
   {
     "scope": "https://eutils.ncbi.nlm.nih.gov",
     "method": "GET",
-    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42807068%2C42801901%2C42791472%2C42774040%2C42773344%2C42746552%2C42743970%2C42741109%2C42740235%2C42740136&retmode=json",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=42791843%2C42789432%2C42766948%2C42756136%2C42708755%2C42685753%2C42628458%2C42620682%2C42596484%2C42596454&retmode=json",
     "status": 200,
     "response": {
       "header": {
@@ -58,201 +62,44 @@
         "version": "0.3"
       },
       "result": {
-        "42740136": {
-          "uid": "42740136",
-          "pubdate": "2026 Aug 31",
-          "epubdate": "2026 Aug 31",
-          "source": "Sensors (Basel)",
+        "42596454": {
+          "uid": "42596454",
+          "pubdate": "2026 Jul 27",
+          "epubdate": "",
+          "source": "Opt Express",
           "authors": [
             {
-              "name": "Liu M",
+              "name": "Wang X",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Wu W",
+              "name": "Li Z",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Chen W",
+              "name": "Tao S",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Han P",
+              "name": "Li L",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Liu M",
+              "name": "Zhao Y",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Meng S",
+              "name": "Gu Z",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Glade T",
-              "authtype": "Author",
-              "clusterid": ""
-            }
-          ],
-          "lastauthor": "Glade T",
-          "title": "Classification of Surface Deformation Using DTW-Transformer Model in Lower Jinsha River Basin.",
-          "sorttitle": "classification of surface deformation using dtw transformer model in lower jinsha river basin",
-          "volume": "26",
-          "issue": "17",
-          "pages": "",
-          "lang": [
-            "eng"
-          ],
-          "nlmuniqueid": "101204366",
-          "issn": "",
-          "essn": "1424-8220",
-          "pubtype": [
-            "Journal Article"
-          ],
-          "recordstatus": "PubMed",
-          "pubstatus": "3",
-          "articleids": [
-            {
-              "idtype": "pubmed",
-              "idtypen": 1,
-              "value": "42740136"
-            },
-            {
-              "idtype": "pmc",
-              "idtypen": 8,
-              "value": "PMC13568235"
-            },
-            {
-              "idtype": "pmcid",
-              "idtypen": 5,
-              "value": "pmc-id: PMC13568235;"
-            },
-            {
-              "idtype": "doi",
-              "idtypen": 3,
-              "value": "10.3390/s26175515"
-            },
-            {
-              "idtype": "pii",
-              "idtypen": 4,
-              "value": "s26175515"
-            }
-          ],
-          "history": [
-            {
-              "pubstatus": "received",
-              "date": "2026/07/19 00:00"
-            },
-            {
-              "pubstatus": "revised",
-              "date": "2026/08/28 00:00"
-            },
-            {
-              "pubstatus": "accepted",
-              "date": "2026/08/28 00:00"
-            },
-            {
-              "pubstatus": "medline",
-              "date": "2026/09/15 05:37"
-            },
-            {
-              "pubstatus": "pubmed",
-              "date": "2026/09/15 05:36"
-            },
-            {
-              "pubstatus": "entrez",
-              "date": "2026/09/15 03:25"
-            },
-            {
-              "pubstatus": "pmc-release",
-              "date": "2026/08/31 00:00"
-            }
-          ],
-          "references": [],
-          "attributes": [
-            "Has Abstract"
-          ],
-          "pmcrefcount": 41,
-          "fulljournalname": "Sensors (Basel, Switzerland)",
-          "elocationid": "doi: 10.3390/s26175515",
-          "doctype": "citation",
-          "srccontriblist": [],
-          "booktitle": "",
-          "medium": "",
-          "edition": "",
-          "publisherlocation": "",
-          "publishername": "",
-          "srcdate": "",
-          "reportnumber": "",
-          "availablefromurl": "",
-          "locationlabel": "",
-          "doccontriblist": [],
-          "docdate": "",
-          "bookname": "",
-          "chapter": "",
-          "sortpubdate": "2026/08/31 00:00",
-          "sortfirstauthor": "Liu M",
-          "vernaculartitle": ""
-        },
-        "42740235": {
-          "uid": "42740235",
-          "pubdate": "2026 Sep 3",
-          "epubdate": "2026 Sep 3",
-          "source": "Sensors (Basel)",
-          "authors": [
-            {
-              "name": "Ou Z",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Zhou W",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Zhou Y",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Chen J",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Lu X",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Ma H",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Xu S",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Zhang J",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Zhang H",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Zhang Y",
+              "name": "Wen Z",
               "authtype": "Author",
               "clusterid": ""
             },
@@ -263,340 +110,60 @@
             }
           ],
           "lastauthor": "Yu J",
-          "title": "Frequency-Offset-Estimation-Assisted Transformer Neural Equalization for a 4.6 km Optical-Heterodyne RoF-Wireless OFDM Link.",
-          "sorttitle": "frequency offset estimation assisted transformer neural equalization for a 4 6 km optical heterodyne rof wireless ofdm link",
-          "volume": "26",
-          "issue": "17",
-          "pages": "",
+          "title": "Field-aware physics-informed transformer for robust computer-aided alignment of off-axis TMA system with mirror surface figure errors.",
+          "sorttitle": "field aware physics informed transformer for robust computer aided alignment of off axis tma system with mirror surface figure errors",
+          "volume": "34",
+          "issue": "15",
+          "pages": "28116-28137",
           "lang": [
             "eng"
           ],
-          "nlmuniqueid": "101204366",
+          "nlmuniqueid": "101137103",
           "issn": "",
-          "essn": "1424-8220",
+          "essn": "1094-4087",
           "pubtype": [
             "Journal Article"
           ],
           "recordstatus": "PubMed",
-          "pubstatus": "3",
-          "articleids": [
-            {
-              "idtype": "pubmed",
-              "idtypen": 1,
-              "value": "42740235"
-            },
-            {
-              "idtype": "pmc",
-              "idtypen": 8,
-              "value": "PMC13568451"
-            },
-            {
-              "idtype": "pmcid",
-              "idtypen": 5,
-              "value": "pmc-id: PMC13568451;"
-            },
-            {
-              "idtype": "doi",
-              "idtypen": 3,
-              "value": "10.3390/s26175615"
-            },
-            {
-              "idtype": "pii",
-              "idtypen": 4,
-              "value": "s26175615"
-            }
-          ],
-          "history": [
-            {
-              "pubstatus": "received",
-              "date": "2026/07/28 00:00"
-            },
-            {
-              "pubstatus": "revised",
-              "date": "2026/08/30 00:00"
-            },
-            {
-              "pubstatus": "accepted",
-              "date": "2026/09/01 00:00"
-            },
-            {
-              "pubstatus": "medline",
-              "date": "2026/09/15 05:37"
-            },
-            {
-              "pubstatus": "pubmed",
-              "date": "2026/09/15 05:36"
-            },
-            {
-              "pubstatus": "entrez",
-              "date": "2026/09/15 03:26"
-            },
-            {
-              "pubstatus": "pmc-release",
-              "date": "2026/09/03 00:00"
-            }
-          ],
-          "references": [],
-          "attributes": [
-            "Has Abstract"
-          ],
-          "pmcrefcount": 18,
-          "fulljournalname": "Sensors (Basel, Switzerland)",
-          "elocationid": "doi: 10.3390/s26175615",
-          "doctype": "citation",
-          "srccontriblist": [],
-          "booktitle": "",
-          "medium": "",
-          "edition": "",
-          "publisherlocation": "",
-          "publishername": "",
-          "srcdate": "",
-          "reportnumber": "",
-          "availablefromurl": "",
-          "locationlabel": "",
-          "doccontriblist": [],
-          "docdate": "",
-          "bookname": "",
-          "chapter": "",
-          "sortpubdate": "2026/09/03 00:00",
-          "sortfirstauthor": "Ou Z",
-          "vernaculartitle": ""
-        },
-        "42741109": {
-          "uid": "42741109",
-          "pubdate": "2026",
-          "epubdate": "2026 Aug 31",
-          "source": "Front Artif Intell",
-          "authors": [
-            {
-              "name": "Katti KR",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Katti KR",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Islam A",
-              "authtype": "Author",
-              "clusterid": ""
-            }
-          ],
-          "lastauthor": "Islam A",
-          "title": "Neural Turing Machines for efficient natural language summarization: architecture, optimization, and performance analysis.",
-          "sorttitle": "neural turing machines for efficient natural language summarization architecture optimization and performance analysis",
-          "volume": "9",
-          "issue": "",
-          "pages": "1889866",
-          "lang": [
-            "eng"
-          ],
-          "nlmuniqueid": "101770551",
-          "issn": "",
-          "essn": "2624-8212",
-          "pubtype": [
-            "Journal Article"
-          ],
-          "recordstatus": "PubMed",
-          "pubstatus": "258",
-          "articleids": [
-            {
-              "idtype": "pubmed",
-              "idtypen": 1,
-              "value": "42741109"
-            },
-            {
-              "idtype": "pmc",
-              "idtypen": 8,
-              "value": "PMC13572678"
-            },
-            {
-              "idtype": "pmcid",
-              "idtypen": 5,
-              "value": "pmc-id: PMC13572678;"
-            },
-            {
-              "idtype": "doi",
-              "idtypen": 3,
-              "value": "10.3389/frai.2026.1889866"
-            }
-          ],
-          "history": [
-            {
-              "pubstatus": "received",
-              "date": "2026/05/24 00:00"
-            },
-            {
-              "pubstatus": "revised",
-              "date": "2026/07/13 00:00"
-            },
-            {
-              "pubstatus": "accepted",
-              "date": "2026/08/03 00:00"
-            },
-            {
-              "pubstatus": "medline",
-              "date": "2026/09/15 11:38"
-            },
-            {
-              "pubstatus": "pubmed",
-              "date": "2026/09/15 11:37"
-            },
-            {
-              "pubstatus": "entrez",
-              "date": "2026/09/15 05:29"
-            },
-            {
-              "pubstatus": "pmc-release",
-              "date": "2026/08/31 00:00"
-            }
-          ],
-          "references": [],
-          "attributes": [
-            "Has Abstract"
-          ],
-          "pmcrefcount": 24,
-          "fulljournalname": "Frontiers in artificial intelligence",
-          "elocationid": "doi: 10.3389/frai.2026.1889866",
-          "doctype": "citation",
-          "srccontriblist": [],
-          "booktitle": "",
-          "medium": "",
-          "edition": "",
-          "publisherlocation": "",
-          "publishername": "",
-          "srcdate": "",
-          "reportnumber": "",
-          "availablefromurl": "",
-          "locationlabel": "",
-          "doccontriblist": [],
-          "docdate": "",
-          "bookname": "",
-          "chapter": "",
-          "sortpubdate": "2026/08/31 00:00",
-          "sortfirstauthor": "Katti KR",
-          "vernaculartitle": ""
-        },
-        "42743970": {
-          "uid": "42743970",
-          "pubdate": "2026 Sep 1",
-          "epubdate": "",
-          "source": "Brief Bioinform",
-          "authors": [
-            {
-              "name": "Bai P",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Li G",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Jiang N",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Chen J",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Liang C",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Ding Y",
-              "authtype": "Author",
-              "clusterid": ""
-            }
-          ],
-          "lastauthor": "Ding Y",
-          "title": "Structure-based virulence factor classification using a dual-driven graph transformer with a pretrained language model.",
-          "sorttitle": "structure based virulence factor classification using a dual driven graph transformer with a pretrained language model",
-          "volume": "27",
-          "issue": "5",
-          "pages": "",
-          "lang": [
-            "eng"
-          ],
-          "nlmuniqueid": "100912837",
-          "issn": "1467-5463",
-          "essn": "1477-4054",
-          "pubtype": [
-            "Journal Article"
-          ],
-          "recordstatus": "PubMed - indexed for MEDLINE",
           "pubstatus": "4",
           "articleids": [
             {
               "idtype": "pubmed",
               "idtypen": 1,
-              "value": "42743970"
-            },
-            {
-              "idtype": "pmc",
-              "idtypen": 8,
-              "value": "PMC13577672"
-            },
-            {
-              "idtype": "pmcid",
-              "idtypen": 5,
-              "value": "pmc-id: PMC13577672;"
+              "value": "42596454"
             },
             {
               "idtype": "doi",
               "idtypen": 3,
-              "value": "10.1093/bib/bbag508"
+              "value": "10.1364/OE.601203"
             },
             {
               "idtype": "pii",
               "idtypen": 4,
-              "value": "8796213"
+              "value": "597345"
             }
           ],
           "history": [
             {
-              "pubstatus": "received",
-              "date": "2024/12/10 00:00"
-            },
-            {
-              "pubstatus": "revised",
-              "date": "2026/08/12 00:00"
-            },
-            {
-              "pubstatus": "accepted",
-              "date": "2026/08/28 00:00"
-            },
-            {
               "pubstatus": "medline",
-              "date": "2026/09/15 23:36"
+              "date": "2026/08/14 05:39"
             },
             {
               "pubstatus": "pubmed",
-              "date": "2026/09/15 23:35"
+              "date": "2026/08/14 05:38"
             },
             {
               "pubstatus": "entrez",
-              "date": "2026/09/15 19:02"
-            },
-            {
-              "pubstatus": "pmc-release",
-              "date": "2026/09/15 00:00"
+              "date": "2026/08/14 01:01"
             }
           ],
           "references": [],
           "attributes": [
             "Has Abstract"
           ],
-          "pmcrefcount": 65,
-          "fulljournalname": "Briefings in bioinformatics",
-          "elocationid": "doi: 10.1093/bib/bbag508",
+          "pmcrefcount": "",
+          "fulljournalname": "Optics express",
+          "elocationid": "doi: 10.1364/OE.601203",
           "doctype": "citation",
           "srccontriblist": [],
           "booktitle": "",
@@ -612,67 +179,167 @@
           "docdate": "",
           "bookname": "",
           "chapter": "",
-          "sortpubdate": "2026/09/01 00:00",
-          "sortfirstauthor": "Bai P",
+          "sortpubdate": "2026/07/27 00:00",
+          "sortfirstauthor": "Wang X",
           "vernaculartitle": ""
         },
-        "42746552": {
-          "uid": "42746552",
-          "pubdate": "2026 Sep 11",
-          "epubdate": "2026 Jul 3",
-          "source": "Patterns (N Y)",
+        "42596484": {
+          "uid": "42596484",
+          "pubdate": "2026 Jul 27",
+          "epubdate": "",
+          "source": "Opt Express",
           "authors": [
             {
-              "name": "Sun Y",
+              "name": "Zheng Z",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Li Z",
+              "name": "Lv Y",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Zhang Y",
+              "name": "Zhang X",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Pan T",
+              "name": "Cai W",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Dong B",
+              "name": "Zhang S",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Guo Y",
+              "name": "Wu J",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Wang J",
+              "name": "Tan Z",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Guo X",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zhu Y",
               "authtype": "Author",
               "clusterid": ""
             }
           ],
-          "lastauthor": "Wang J",
-          "title": "Efficient attention mechanisms for large language models.",
-          "sorttitle": "efficient attention mechanisms for large language models",
-          "volume": "7",
-          "issue": "9",
-          "pages": "101594",
+          "lastauthor": "Zhu Y",
+          "title": "Attention-driven simultaneous extraction of semiconductor multilayer parameters via terahertz spectroscopy.",
+          "sorttitle": "attention driven simultaneous extraction of semiconductor multilayer parameters via terahertz spectroscopy",
+          "volume": "34",
+          "issue": "15",
+          "pages": "28620-28631",
           "lang": [
             "eng"
           ],
-          "nlmuniqueid": "101767765",
+          "nlmuniqueid": "101137103",
           "issn": "",
-          "essn": "2666-3899",
+          "essn": "1094-4087",
           "pubtype": [
-            "Journal Article",
-            "Review"
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "4",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42596484"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1364/OE.604950"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "597434"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "medline",
+              "date": "2026/08/14 05:39"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/08/14 05:38"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/08/14 01:01"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Optics express",
+          "elocationid": "doi: 10.1364/OE.604950",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/07/27 00:00",
+          "sortfirstauthor": "Zheng Z",
+          "vernaculartitle": ""
+        },
+        "42620682": {
+          "uid": "42620682",
+          "pubdate": "2026",
+          "epubdate": "2026 Aug 5",
+          "source": "Front Med (Lausanne)",
+          "authors": [
+            {
+              "name": "Konala SSH",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Koppu S",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Koppu S",
+          "title": "Explainable and reliable kidney CT image classification using self-supervised DeiT-Tiny transformer.",
+          "sorttitle": "explainable and reliable kidney ct image classification using self supervised deit tiny transformer",
+          "volume": "13",
+          "issue": "",
+          "pages": "1893419",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "101648047",
+          "issn": "2296-858X",
+          "essn": "2296-858X",
+          "pubtype": [
+            "Journal Article"
           ],
           "recordstatus": "PubMed",
           "pubstatus": "258",
@@ -680,54 +347,61 @@
             {
               "idtype": "pubmed",
               "idtypen": 1,
-              "value": "42746552"
+              "value": "42620682"
             },
             {
               "idtype": "pmc",
               "idtypen": 8,
-              "value": "PMC13576653"
+              "value": "PMC13485564"
             },
             {
               "idtype": "pmcid",
               "idtypen": 5,
-              "value": "pmc-id: PMC13576653;"
+              "value": "pmc-id: PMC13485564;"
             },
             {
               "idtype": "doi",
               "idtypen": 3,
-              "value": "10.1016/j.patter.2026.101594"
-            },
-            {
-              "idtype": "pii",
-              "idtypen": 4,
-              "value": "S2666-3899(26)00103-0"
+              "value": "10.3389/fmed.2026.1893419"
             }
           ],
           "history": [
             {
+              "pubstatus": "received",
+              "date": "2026/05/28 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/07/11 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/07/13 00:00"
+            },
+            {
               "pubstatus": "medline",
-              "date": "2026/09/16 11:42"
+              "date": "2026/08/20 11:42"
             },
             {
               "pubstatus": "pubmed",
-              "date": "2026/09/16 11:41"
+              "date": "2026/08/20 11:41"
             },
             {
               "pubstatus": "entrez",
-              "date": "2026/09/16 06:16"
+              "date": "2026/08/20 07:42"
             },
             {
               "pubstatus": "pmc-release",
-              "date": "2026/07/03 00:00"
+              "date": "2026/08/05 00:00"
             }
           ],
           "references": [],
           "attributes": [
             "Has Abstract"
           ],
-          "pmcrefcount": 87,
-          "fulljournalname": "Patterns (New York, N.Y.)",
-          "elocationid": "doi: 10.1016/j.patter.2026.101594",
+          "pmcrefcount": 41,
+          "fulljournalname": "Frontiers in medicine",
+          "elocationid": "doi: 10.3389/fmed.2026.1893419",
           "doctype": "citation",
           "srccontriblist": [],
           "booktitle": "",
@@ -743,69 +417,49 @@
           "docdate": "",
           "bookname": "",
           "chapter": "",
-          "sortpubdate": "2026/07/03 00:00",
-          "sortfirstauthor": "Sun Y",
+          "sortpubdate": "2026/08/05 00:00",
+          "sortfirstauthor": "Konala SSH",
           "vernaculartitle": ""
         },
-        "42773344": {
-          "uid": "42773344",
-          "pubdate": "2026 Sep 22",
-          "epubdate": "2026 Sep 22",
-          "source": "J Imaging Inform Med",
+        "42628458": {
+          "uid": "42628458",
+          "pubdate": "2026 Aug 11",
+          "epubdate": "2026 Aug 11",
+          "source": "Neural Netw",
           "authors": [
             {
-              "name": "Vera-González V",
+              "name": "Wei M",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "López-González CI",
+              "name": "Zhang H",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Pedrera-Canal M",
+              "name": "Perry S",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Hernando-Dumaraog B",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Elsayed YS",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Vera-Rodríguez V",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Besada-Portas E",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Pajares G",
+              "name": "Xu M",
               "authtype": "Author",
               "clusterid": ""
             }
           ],
-          "lastauthor": "Pajares G",
-          "title": "DentSeg3: A Three-Branch Specialized Fusion Network for Dental Lesion Segmentation in Color Images.",
-          "sorttitle": "dentseg3 a three branch specialized fusion network for dental lesion segmentation in color images",
-          "volume": "",
-          "issue": "",
-          "pages": "",
+          "lastauthor": "Xu M",
+          "title": "Enhanced multi-agent interaction modeling with differential transformers for trajectory prediction.",
+          "sorttitle": "enhanced multi agent interaction modeling with differential transformers for trajectory prediction",
+          "volume": "205",
+          "issue": "Pt B",
+          "pages": "109491",
           "lang": [
             "eng"
           ],
-          "nlmuniqueid": "9918663679206676",
-          "issn": "2948-2925",
-          "essn": "2948-2933",
+          "nlmuniqueid": "8805018",
+          "issn": "0893-6080",
+          "essn": "1879-2782",
           "pubtype": [
             "Journal Article"
           ],
@@ -815,43 +469,43 @@
             {
               "idtype": "pubmed",
               "idtypen": 1,
-              "value": "42773344"
+              "value": "42628458"
             },
             {
               "idtype": "doi",
               "idtypen": 3,
-              "value": "10.1007/s10278-026-02323-1"
+              "value": "10.1016/j.neunet.2026.109491"
             },
             {
               "idtype": "pii",
               "idtypen": 4,
-              "value": "10.1007/s10278-026-02323-1"
+              "value": "S0893-6080(26)00949-4"
             }
           ],
           "history": [
             {
               "pubstatus": "received",
-              "date": "2026/06/25 00:00"
-            },
-            {
-              "pubstatus": "accepted",
-              "date": "2026/09/11 00:00"
+              "date": "2026/01/02 00:00"
             },
             {
               "pubstatus": "revised",
-              "date": "2026/09/10 00:00"
+              "date": "2026/06/10 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/08/05 00:00"
             },
             {
               "pubstatus": "medline",
-              "date": "2026/09/23 05:34"
+              "date": "2026/08/21 23:37"
             },
             {
               "pubstatus": "pubmed",
-              "date": "2026/09/23 05:34"
+              "date": "2026/08/21 23:37"
             },
             {
               "pubstatus": "entrez",
-              "date": "2026/09/22 23:32"
+              "date": "2026/08/21 18:09"
             }
           ],
           "references": [],
@@ -859,8 +513,8 @@
             "Has Abstract"
           ],
           "pmcrefcount": "",
-          "fulljournalname": "Journal of imaging informatics in medicine",
-          "elocationid": "doi: 10.1007/s10278-026-02323-1",
+          "fulljournalname": "Neural networks : the official journal of the International Neural Network Society",
+          "elocationid": "doi: 10.1016/j.neunet.2026.109491",
           "doctype": "citation",
           "srccontriblist": [],
           "booktitle": "",
@@ -876,108 +530,245 @@
           "docdate": "",
           "bookname": "",
           "chapter": "",
-          "sortpubdate": "2026/09/22 00:00",
-          "sortfirstauthor": "Vera-González V",
+          "sortpubdate": "2026/08/11 00:00",
+          "sortfirstauthor": "Wei M",
           "vernaculartitle": ""
         },
-        "42774040": {
-          "uid": "42774040",
-          "pubdate": "2026",
-          "epubdate": "2026 Sep 8",
-          "source": "Front Oncol",
+        "42685753": {
+          "uid": "42685753",
+          "pubdate": "2026 Sep 2",
+          "epubdate": "2026 Sep 2",
+          "source": "J Neural Eng",
           "authors": [
             {
-              "name": "Xu Y",
+              "name": "Wei C",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Liu L",
+              "name": "Rao X",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Tang M",
+              "name": "Hu B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Zeng J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yi P",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Shao H",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Tan Q",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Xie Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Fang L",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Gong Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Hua F",
               "authtype": "Author",
               "clusterid": ""
             }
           ],
-          "lastauthor": "Tang M",
-          "title": "DA-MoE: descriptor-attention mixture-of-experts for multi-class gastrointestinal disease classification.",
-          "sorttitle": "da moe descriptor attention mixture of experts for multi class gastrointestinal disease classification",
-          "volume": "16",
+          "lastauthor": "Hua F",
+          "title": "Harmonizing complexity and efficiency: Helix Fusion HarmonyNet's breakthrough in EEG-based postoperative delirium recognition.",
+          "sorttitle": "harmonizing complexity and efficiency helix fusion harmonynet s breakthrough in eeg based postoperative delirium recognition",
+          "volume": "",
           "issue": "",
-          "pages": "1911603",
+          "pages": "",
           "lang": [
             "eng"
           ],
-          "nlmuniqueid": "101568867",
-          "issn": "2234-943X",
-          "essn": "2234-943X",
+          "nlmuniqueid": "101217933",
+          "issn": "",
+          "essn": "1741-2552",
           "pubtype": [
             "Journal Article"
           ],
-          "recordstatus": "PubMed",
-          "pubstatus": "258",
+          "recordstatus": "PubMed - as supplied by publisher",
+          "pubstatus": "10",
           "articleids": [
             {
               "idtype": "pubmed",
               "idtypen": 1,
-              "value": "42774040"
-            },
-            {
-              "idtype": "pmc",
-              "idtypen": 8,
-              "value": "PMC13593463"
-            },
-            {
-              "idtype": "pmcid",
-              "idtypen": 5,
-              "value": "pmc-id: PMC13593463;"
+              "value": "42685753"
             },
             {
               "idtype": "doi",
               "idtypen": 3,
-              "value": "10.3389/fonc.2026.1911603"
+              "value": "10.1088/1741-2552/aea18f"
             }
           ],
           "history": [
             {
-              "pubstatus": "received",
-              "date": "2026/06/17 00:00"
-            },
-            {
-              "pubstatus": "revised",
-              "date": "2026/07/30 00:00"
-            },
-            {
-              "pubstatus": "accepted",
-              "date": "2026/07/31 00:00"
-            },
-            {
               "pubstatus": "medline",
-              "date": "2026/09/23 05:36"
+              "date": "2026/09/03 01:19"
             },
             {
               "pubstatus": "pubmed",
-              "date": "2026/09/23 05:35"
+              "date": "2026/09/03 01:19"
             },
             {
               "pubstatus": "entrez",
-              "date": "2026/09/23 04:59"
-            },
-            {
-              "pubstatus": "pmc-release",
-              "date": "2026/09/08 00:00"
+              "date": "2026/09/02 18:53"
             }
           ],
           "references": [],
           "attributes": [
             "Has Abstract"
           ],
-          "pmcrefcount": 50,
-          "fulljournalname": "Frontiers in oncology",
-          "elocationid": "doi: 10.3389/fonc.2026.1911603",
+          "pmcrefcount": "",
+          "fulljournalname": "Journal of neural engineering",
+          "elocationid": "doi: 10.1088/1741-2552/aea18f",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/02 00:00",
+          "sortfirstauthor": "Wei C",
+          "vernaculartitle": ""
+        },
+        "42708755": {
+          "uid": "42708755",
+          "pubdate": "2026 Sep 8",
+          "epubdate": "",
+          "source": "Anal Chem",
+          "authors": [
+            {
+              "name": "Lin J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Fang Z",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Chen B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Yang Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Lin E",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Chen Z",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Chen Z",
+          "title": "Unlocking High-Fidelity Chemical NMR Spectral Information from Nonuniformly Sampled Experiments with Deep Learning.",
+          "sorttitle": "unlocking high fidelity chemical nmr spectral information from nonuniformly sampled experiments with deep learning",
+          "volume": "98",
+          "issue": "35",
+          "pages": "25547-25556",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "0370536",
+          "issn": "0003-2700",
+          "essn": "1520-6882",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "4",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42708755"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1021/acs.analchem.6c02079"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "5330548"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/03/27 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/08/19 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/08/18 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/08 12:34"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/08 12:33"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/08 09:14"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "Analytical chemistry",
+          "elocationid": "doi: 10.1021/acs.analchem.6c02079",
           "doctype": "citation",
           "srccontriblist": [],
           "booktitle": "",
@@ -994,63 +785,175 @@
           "bookname": "",
           "chapter": "",
           "sortpubdate": "2026/09/08 00:00",
-          "sortfirstauthor": "Xu Y",
+          "sortfirstauthor": "Lin J",
           "vernaculartitle": ""
         },
-        "42791472": {
-          "uid": "42791472",
-          "pubdate": "2026 Sep 25",
-          "epubdate": "2026 Sep 25",
-          "source": "J Imaging Inform Med",
+        "42756136": {
+          "uid": "42756136",
+          "pubdate": "2026",
+          "epubdate": "2026 Sep 3",
+          "source": "Front Surg",
           "authors": [
             {
-              "name": "Pan N",
+              "name": "Duan Y",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Lei D",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Lu H",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Peng S",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Liu J",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Li Z",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Hu H",
+              "name": "Li W",
               "authtype": "Author",
               "clusterid": ""
             }
           ],
-          "lastauthor": "Hu H",
-          "title": "Automatic Image Classification of Wireless Capsule Endoscopy Using Two-Branch Feature Aggregation and Patch Self-Attention.",
-          "sorttitle": "automatic image classification of wireless capsule endoscopy using two branch feature aggregation and patch self attention",
-          "volume": "",
+          "lastauthor": "Li W",
+          "title": "A transformer-based multi-modal fusion framework for laryngeal lesion classification using contact endoscopy.",
+          "sorttitle": "transformer based multi modal fusion framework for laryngeal lesion classification using contact endoscopy",
+          "volume": "13",
           "issue": "",
-          "pages": "",
+          "pages": "1840300",
           "lang": [
             "eng"
           ],
-          "nlmuniqueid": "9918663679206676",
-          "issn": "2948-2925",
-          "essn": "2948-2933",
+          "nlmuniqueid": "101645127",
+          "issn": "2296-875X",
+          "essn": "2296-875X",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed",
+          "pubstatus": "258",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42756136"
+            },
+            {
+              "idtype": "pmc",
+              "idtypen": 8,
+              "value": "PMC13582240"
+            },
+            {
+              "idtype": "pmcid",
+              "idtypen": 5,
+              "value": "pmc-id: PMC13582240;"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.3389/fsurg.2026.1840300"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "received",
+              "date": "2026/03/27 00:00"
+            },
+            {
+              "pubstatus": "revised",
+              "date": "2026/05/23 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/05/26 00:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/18 12:26"
+            },
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/18 12:25"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/18 06:49"
+            },
+            {
+              "pubstatus": "pmc-release",
+              "date": "2026/09/03 00:00"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": 24,
+          "fulljournalname": "Frontiers in surgery",
+          "elocationid": "doi: 10.3389/fsurg.2026.1840300",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/03 00:00",
+          "sortfirstauthor": "Duan Y",
+          "vernaculartitle": ""
+        },
+        "42766948": {
+          "uid": "42766948",
+          "pubdate": "2026 Sep 17",
+          "epubdate": "2026 Sep 17",
+          "source": "Neural Netw",
+          "authors": [
+            {
+              "name": "Oukdach Y",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Garbaz A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Kerkaou Z",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "El Ansari M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Koutti L",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Fouad El Ouafdi A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Salihoun M",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Salihoun M",
+          "title": "D-TICNN: A dual encoder network with simplified transformer-involution and U-Net-based decoder for enhanced polyp and skin cancer segmentation.",
+          "sorttitle": "d ticnn a dual encoder network with simplified transformer involution and u net based decoder for enhanced polyp and skin cancer segmentation",
+          "volume": "205",
+          "issue": "Pt C",
+          "pages": "109642",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "8805018",
+          "issn": "0893-6080",
+          "essn": "1879-2782",
           "pubtype": [
             "Journal Article"
           ],
@@ -1060,43 +963,43 @@
             {
               "idtype": "pubmed",
               "idtypen": 1,
-              "value": "42791472"
+              "value": "42766948"
             },
             {
               "idtype": "doi",
               "idtypen": 3,
-              "value": "10.1007/s10278-026-02285-4"
+              "value": "10.1016/j.neunet.2026.109642"
             },
             {
               "idtype": "pii",
               "idtypen": 4,
-              "value": "10.1007/s10278-026-02285-4"
+              "value": "S0893-6080(26)01097-X"
             }
           ],
           "history": [
             {
               "pubstatus": "received",
-              "date": "2026/05/27 00:00"
-            },
-            {
-              "pubstatus": "accepted",
-              "date": "2026/09/01 00:00"
+              "date": "2025/06/28 00:00"
             },
             {
               "pubstatus": "revised",
-              "date": "2026/08/23 00:00"
+              "date": "2026/09/09 00:00"
+            },
+            {
+              "pubstatus": "accepted",
+              "date": "2026/09/12 00:00"
             },
             {
               "pubstatus": "medline",
-              "date": "2026/09/26 05:34"
+              "date": "2026/09/21 23:33"
             },
             {
               "pubstatus": "pubmed",
-              "date": "2026/09/26 05:34"
+              "date": "2026/09/21 23:33"
             },
             {
               "pubstatus": "entrez",
-              "date": "2026/09/25 23:42"
+              "date": "2026/09/21 18:04"
             }
           ],
           "references": [],
@@ -1104,8 +1007,94 @@
             "Has Abstract"
           ],
           "pmcrefcount": "",
-          "fulljournalname": "Journal of imaging informatics in medicine",
-          "elocationid": "doi: 10.1007/s10278-026-02285-4",
+          "fulljournalname": "Neural networks : the official journal of the International Neural Network Society",
+          "elocationid": "doi: 10.1016/j.neunet.2026.109642",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2026/09/17 00:00",
+          "sortfirstauthor": "Oukdach Y",
+          "vernaculartitle": ""
+        },
+        "42789432": {
+          "uid": "42789432",
+          "pubdate": "2026 Sep 25",
+          "epubdate": "2026 Sep 25",
+          "source": "IEEE Trans Comput Biol Bioinform",
+          "authors": [
+            {
+              "name": "Nevendra M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Singh D",
+              "authtype": "Author",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Singh D",
+          "title": "Protein FT-Transformer: Species Classification via Amino Acid-Encoded DNA Sequences.",
+          "sorttitle": "protein ft transformer species classification via amino acid encoded dna sequences",
+          "volume": "PP",
+          "issue": "",
+          "pages": "",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "9919068173606676",
+          "issn": "",
+          "essn": "2998-4165",
+          "pubtype": [
+            "Journal Article"
+          ],
+          "recordstatus": "PubMed - as supplied by publisher",
+          "pubstatus": "10",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "42789432"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1109/TCBBIO.2026.3737459"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "pubmed",
+              "date": "2026/09/25 17:33"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2026/09/25 17:33"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2026/09/25 13:04"
+            }
+          ],
+          "references": [],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "IEEE transactions on computational biology and bioinformatics",
+          "elocationid": "doi: 10.1109/TCBBIO.2026.3737459",
           "doctype": "citation",
           "srccontriblist": [],
           "booktitle": "",
@@ -1122,245 +1111,122 @@
           "bookname": "",
           "chapter": "",
           "sortpubdate": "2026/09/25 00:00",
-          "sortfirstauthor": "Pan N",
+          "sortfirstauthor": "Nevendra M",
           "vernaculartitle": ""
         },
-        "42801901": {
-          "uid": "42801901",
-          "pubdate": "2026 Sep 26",
-          "epubdate": "2026 Sep 26",
-          "source": "Food Chem",
+        "42791843": {
+          "uid": "42791843",
+          "pubdate": "2026 Aug 25",
+          "epubdate": "2026 Aug 25",
+          "source": "Bioengineering (Basel)",
           "authors": [
             {
-              "name": "Liao W",
+              "name": "Heba KM",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Wu J",
+              "name": "Atya AHA",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Long Q",
+              "name": "Alrawashdeh NHS",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Zhu Y",
+              "name": "Shahab S",
               "authtype": "Author",
               "clusterid": ""
             },
             {
-              "name": "Shao J",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Ma Y",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Shen Q",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Li H",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Jia L",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Liu K",
+              "name": "Anjum M",
               "authtype": "Author",
               "clusterid": ""
             }
           ],
-          "lastauthor": "Liu K",
-          "title": "MoS(2)@Ag nanoflower-based SERS substrate coupled with transformer network for sensitive detection and intelligent classification of fluoroquinolone antibiotics in milk.",
-          "sorttitle": "mos 2 ag nanoflower based sers substrate coupled with transformer network for sensitive detection and intelligent classification of fluoroquinolone antibiotics in milk",
-          "volume": "530",
-          "issue": "",
-          "pages": "151267",
+          "lastauthor": "Anjum M",
+          "title": "Hybrid CNN-Transformer Framework for Automated Detection of Developmental Coordination Disorder from Motion Imaging Sequences.",
+          "sorttitle": "hybrid cnn transformer framework for automated detection of developmental coordination disorder from motion imaging sequences",
+          "volume": "13",
+          "issue": "9",
+          "pages": "",
           "lang": [
             "eng"
           ],
-          "nlmuniqueid": "7702639",
-          "issn": "0308-8146",
-          "essn": "1873-7072",
-          "pubtype": [
-            "Journal Article"
-          ],
-          "recordstatus": "PubMed - as supplied by publisher",
-          "pubstatus": "10",
-          "articleids": [
-            {
-              "idtype": "pubmed",
-              "idtypen": 1,
-              "value": "42801901"
-            },
-            {
-              "idtype": "doi",
-              "idtypen": 3,
-              "value": "10.1016/j.foodchem.2026.151267"
-            },
-            {
-              "idtype": "pii",
-              "idtypen": 4,
-              "value": "S0308-8146(26)03427-8"
-            }
-          ],
-          "history": [
-            {
-              "pubstatus": "received",
-              "date": "2026/01/04 00:00"
-            },
-            {
-              "pubstatus": "revised",
-              "date": "2026/07/23 00:00"
-            },
-            {
-              "pubstatus": "accepted",
-              "date": "2026/09/20 00:00"
-            },
-            {
-              "pubstatus": "medline",
-              "date": "2026/09/27 23:28"
-            },
-            {
-              "pubstatus": "pubmed",
-              "date": "2026/09/27 23:28"
-            },
-            {
-              "pubstatus": "entrez",
-              "date": "2026/09/27 18:06"
-            }
-          ],
-          "references": [],
-          "attributes": [
-            "Has Abstract"
-          ],
-          "pmcrefcount": "",
-          "fulljournalname": "Food chemistry",
-          "elocationid": "doi: 10.1016/j.foodchem.2026.151267",
-          "doctype": "citation",
-          "srccontriblist": [],
-          "booktitle": "",
-          "medium": "",
-          "edition": "",
-          "publisherlocation": "",
-          "publishername": "",
-          "srcdate": "",
-          "reportnumber": "",
-          "availablefromurl": "",
-          "locationlabel": "",
-          "doccontriblist": [],
-          "docdate": "",
-          "bookname": "",
-          "chapter": "",
-          "sortpubdate": "2026/09/26 00:00",
-          "sortfirstauthor": "Liao W",
-          "vernaculartitle": ""
-        },
-        "42807068": {
-          "uid": "42807068",
-          "pubdate": "2026",
-          "epubdate": "2026 Sep 14",
-          "source": "Front Psychol",
-          "authors": [
-            {
-              "name": "Zhao J",
-              "authtype": "Author",
-              "clusterid": ""
-            },
-            {
-              "name": "Liu F",
-              "authtype": "Author",
-              "clusterid": ""
-            }
-          ],
-          "lastauthor": "Liu F",
-          "title": "Multimodal transformer and directed relational graph learning for emotion recognition in conversations with potential applications in college student mental health research.",
-          "sorttitle": "multimodal transformer and directed relational graph learning for emotion recognition in conversations with potential applications in college student mental health research",
-          "volume": "17",
-          "issue": "",
-          "pages": "1867034",
-          "lang": [
-            "eng"
-          ],
-          "nlmuniqueid": "101550902",
-          "issn": "1664-1078",
-          "essn": "1664-1078",
+          "nlmuniqueid": "101676056",
+          "issn": "2306-5354",
+          "essn": "2306-5354",
           "pubtype": [
             "Journal Article"
           ],
           "recordstatus": "PubMed",
-          "pubstatus": "258",
+          "pubstatus": "3",
           "articleids": [
             {
               "idtype": "pubmed",
               "idtypen": 1,
-              "value": "42807068"
+              "value": "42791843"
             },
             {
               "idtype": "pmc",
               "idtypen": 8,
-              "value": "PMC13617078"
+              "value": "PMC13603484"
             },
             {
               "idtype": "pmcid",
               "idtypen": 5,
-              "value": "pmc-id: PMC13617078;"
+              "value": "pmc-id: PMC13603484;"
             },
             {
               "idtype": "doi",
               "idtypen": 3,
-              "value": "10.3389/fpsyg.2026.1867034"
+              "value": "10.3390/bioengineering13090970"
+            },
+            {
+              "idtype": "pii",
+              "idtypen": 4,
+              "value": "bioengineering13090970"
             }
           ],
           "history": [
             {
               "pubstatus": "received",
-              "date": "2026/04/28 00:00"
+              "date": "2026/06/27 00:00"
             },
             {
               "pubstatus": "revised",
-              "date": "2026/08/16 00:00"
+              "date": "2026/07/16 00:00"
             },
             {
               "pubstatus": "accepted",
-              "date": "2026/08/24 00:00"
+              "date": "2026/07/23 00:00"
             },
             {
               "pubstatus": "medline",
-              "date": "2026/09/29 12:29"
+              "date": "2026/09/26 05:36"
             },
             {
               "pubstatus": "pubmed",
-              "date": "2026/09/29 12:28"
+              "date": "2026/09/26 05:35"
             },
             {
               "pubstatus": "entrez",
-              "date": "2026/09/29 05:28"
+              "date": "2026/09/26 01:00"
             },
             {
               "pubstatus": "pmc-release",
-              "date": "2026/09/14 00:00"
+              "date": "2026/08/25 00:00"
             }
           ],
           "references": [],
           "attributes": [
             "Has Abstract"
           ],
-          "pmcrefcount": 30,
-          "fulljournalname": "Frontiers in psychology",
-          "elocationid": "doi: 10.3389/fpsyg.2026.1867034",
+          "pmcrefcount": 34,
+          "fulljournalname": "Bioengineering (Basel, Switzerland)",
+          "elocationid": "doi: 10.3390/bioengineering13090970",
           "doctype": "citation",
           "srccontriblist": [],
           "booktitle": "",
@@ -1376,21 +1242,21 @@
           "docdate": "",
           "bookname": "",
           "chapter": "",
-          "sortpubdate": "2026/09/14 00:00",
-          "sortfirstauthor": "Zhao J",
+          "sortpubdate": "2026/08/25 00:00",
+          "sortfirstauthor": "Heba KM",
           "vernaculartitle": ""
         },
         "uids": [
-          "42807068",
-          "42801901",
-          "42791472",
-          "42774040",
-          "42773344",
-          "42746552",
-          "42743970",
-          "42741109",
-          "42740235",
-          "42740136"
+          "42791843",
+          "42789432",
+          "42766948",
+          "42756136",
+          "42708755",
+          "42685753",
+          "42628458",
+          "42620682",
+          "42596484",
+          "42596454"
         ]
       }
     },

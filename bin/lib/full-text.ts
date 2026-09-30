@@ -66,7 +66,7 @@ export function arxivPdfUrl(arxivId: string): string {
 /** Where a source's checkable full text comes from, or null when it has none (in the order above). */
 export function fullTextSource(entry: FullTextFields): FullTextSource | null {
   if (entry.byo !== null && entry.byo.text_sha256 !== null && entry.byo.asserted !== true) return 'bring-your-own PDF';
-  if (entry.oa_url && entry.doi && !isDataCiteArxivDoi(entry.doi)) return 'open-access PDF';
+  if (entry.oa_url && entry.oa_url.trim() !== '' && entry.doi && !isDataCiteArxivDoi(entry.doi)) return 'open-access PDF';
   if (arxivIdOfEntry(entry) !== null) return 'arXiv PDF';
   return null;
 }
