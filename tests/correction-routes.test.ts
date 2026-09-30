@@ -79,11 +79,11 @@ test('§5.6 correction routes of the pensmith skill work through the CLI (length
   cli(sb, root, 'write', '2', '--yolo');
   const firstDraftWords = words(join(root, '.paper', 'sections', secondDir, 'DRAFT.md'));
 
-  // `plan 2 --revise` on a section with no FABRICATED / MIS-CITED / NOT_FOUND row changes nothing.
+  // `plan 2 --revise` on a section with no row it repairs (revise.ts REVISABLE_VERDICTS) changes nothing.
   const before = snapshot(join(root, '.paper'));
   const revise = cli(sb, root, 'plan', '2', '--revise', '--yolo');
   assert.equal(revise.status, 0, revise.stderr);
-  assert.match(revise.stdout, /No FABRICATED\/MIS-CITED\/NOT_FOUND citation in section 2\./);
+  assert.match(revise.stdout, /No FABRICATED\/MIS-CITED\/NOT_FOUND citation \(nor RETRACTED, UNASSIGNED, UNPARSEABLE or UNRESOLVABLE\) in section 2\./);
   assert.deepEqual(changedPaths(before, snapshot(join(root, '.paper')), /^(SESSION\.log|COSTS\.jsonl|sessions)/), [], '--revise left the paper as it was');
 
   // Length: the word target column, then outline (applies, no model call), plan 2, write 2.

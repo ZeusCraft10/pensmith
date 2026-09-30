@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { assembleHandoff, HandoffSchema, HANDOFF_MAX_BYTES, type HandoffSectionPointer } from '../bin/lib/handoff.js';
 import { REPO, sandbox, writePlan, writeState } from './helpers/paper-cli-harness.js';
 
@@ -53,7 +53,12 @@ test('handoff-size: the bundled PreCompact hook writes ≤ 5120 bytes for a 40-s
     join(root, '.paper', 'OUTLINE.md'),
     ['# Outline', '', '| # | slug | title | depends_on | word target | assigned_sources |', '| --- | --- | --- | --- | --- | --- |', ...rows, ''].join('\n'),
   );
-  for (const s of sections) writePlan(root, s.n, s.slug, { status: s.n < 30 ? 'verified' : 'planned' });
+  for (const s of sections) {
+    const plan = writePlan(root, s.n, s.slug, { status: s.n < 30 ? 'verified' : 'planned' });
+    // VRFY-16 (Phase 20): the router walks past a verified section only while
+    // its DRAFT.md is in place (one whose draft is gone is re-drafted).
+    if (s.n < 30) writeFileSync(join(dirname(plan), 'DRAFT.md'), `Section ${s.n}.\n`);
+  }
   const r = spawnSync(process.execPath, [HOOK], {
     cwd: root,
     env: sb.env({ NODE_V8_COVERAGE: undefined }), // a bundle is not a coverage target

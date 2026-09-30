@@ -110,7 +110,7 @@ reads `assignment.txt`, `.md` or `.pdf` in the folder).
 | "outline the paper" | `outline` |
 | "write the next section" / "continue" | the bare step above (`next`) |
 | "resume" / "continue where I left off" | `resume` |
-| "redo section 3" / "section 3 needs work" / "re-do section 3" | if section 3's verification flagged a citation by its citekey (FABRICATED, MIS-CITED, RETRACTED, UNASSIGNED, UNRESOLVABLE, UNPARSEABLE or a quote NOT_FOUND), `plan 3 --revise` (it repairs one flagged citation a run; repeat it while one is left), then `verify 3`; otherwise — every other blocking verdict, or no flag at all — `plan 3`, then `write 3` (a fresh plan and draft) |
+| "redo section 3" / "section 3 needs work" / "re-do section 3" | if section 3's verification flagged a citation by its citekey (FABRICATED, MIS-CITED, RETRACTED, UNASSIGNED, UNRESOLVABLE, UNPARSEABLE or a quote NOT_FOUND), `plan 3 --revise` (it repairs one flagged citation a run; repeat it while one is left), then `verify 3`; otherwise `plan 3`, then `write 3` (a fresh plan and draft; the route for every other blocking verdict too) |
 | "check the citations in section 3" | `verify 3` |
 | "accept quote qK in section 3" (a quote section 3's VERIFICATION.md lists as UNVERIFIABLE-QUOTE) | `verify 3 --accept-quote qK` (the CLI form: `pensmith_verify` takes no such option). Ask the user first with AskUserQuestion, one quote id at a time, and accept only on their own decision: never on your own, never a blanket acceptance |
 | "make it sound less AI" | `done` (its humanize step) |

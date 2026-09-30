@@ -79,8 +79,11 @@ test('UX-05: the §5.6 corrections ride existing verbs by the routes that work t
   // (bin/lib/revise.ts); on a clean section it changes nothing. It is the
   // redo route only for a flagged section, and never the length or source
   // route. tests/correction-routes.test.ts runs each route through the CLI.
+  // After a revise the next step is `verify N` (revise resets the verified
+  // hash, and the router names verify, as its attention line says); a
+  // `write N` would redraft the section and discard the repair.
   const redo = find('re-do section 3');
-  assert.match(redo, /flagged a citation[^|]*`plan 3 --revise`[^|]*then `write 3`; otherwise `plan 3`, then `write 3`/);
+  assert.match(redo, /flagged a citation[^|]*`plan 3 --revise`[^|]*then `verify 3`; otherwise `plan 3`, then `write 3`/);
   const length = find('make it 1500 words');
   assert.match(length, /word target column of `\.paper\/OUTLINE\.md`[^|]*then `outline`[^|]*then `plan N` and `write N`/);
   assert.doesNotMatch(length, /--revise/);
