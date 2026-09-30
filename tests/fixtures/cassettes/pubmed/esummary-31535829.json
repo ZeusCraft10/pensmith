@@ -1,0 +1,345 @@
+[
+  {
+    "scope": "https://eutils.ncbi.nlm.nih.gov",
+    "method": "GET",
+    "path": "/entrez/eutils/esummary.fcgi?db=pubmed&id=31535829&retmode=json",
+    "status": 200,
+    "response": {
+      "header": {
+        "type": "esummary",
+        "version": "0.3"
+      },
+      "result": {
+        "31535829": {
+          "uid": "31535829",
+          "pubdate": "2019 Nov 21",
+          "epubdate": "2019 Sep 19",
+          "source": "N Engl J Med",
+          "authors": [
+            {
+              "name": "McMurray JJV",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Solomon SD",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Inzucchi SE",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Køber L",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Kosiborod MN",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Martinez FA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ponikowski P",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Sabatine MS",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Anand IS",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Bělohlávek J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Böhm M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Chiang CE",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Chopra VK",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "de Boer RA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Desai AS",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Diez M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Drozdz J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Dukát A",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ge J",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Howlett JG",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Katova T",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Kitakaze M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Ljungman CEA",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Merkely B",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Nicolau JC",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "O'Meara E",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Petrie MC",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Vinh PN",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Schou M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Tereshchenko S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Verma S",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Held C",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "DeMets DL",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Docherty KF",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Jhund PS",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Bengtsson O",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Sjöstrand M",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "Langkilde AM",
+              "authtype": "Author",
+              "clusterid": ""
+            },
+            {
+              "name": "DAPA-HF Trial Committees and Investigators",
+              "authtype": "CollectiveName",
+              "clusterid": ""
+            }
+          ],
+          "lastauthor": "Langkilde AM",
+          "title": "Dapagliflozin in Patients with Heart Failure and Reduced Ejection Fraction.",
+          "sorttitle": "dapagliflozin in patients with heart failure and reduced ejection fraction",
+          "volume": "381",
+          "issue": "21",
+          "pages": "1995-2008",
+          "lang": [
+            "eng"
+          ],
+          "nlmuniqueid": "0255562",
+          "issn": "0028-4793",
+          "essn": "1533-4406",
+          "pubtype": [
+            "Clinical Trial, Phase III",
+            "Journal Article",
+            "Multicenter Study",
+            "Randomized Controlled Trial",
+            "Research Support, Non-U.S. Gov't"
+          ],
+          "recordstatus": "PubMed - indexed for MEDLINE",
+          "pubstatus": "256",
+          "articleids": [
+            {
+              "idtype": "pubmed",
+              "idtypen": 1,
+              "value": "31535829"
+            },
+            {
+              "idtype": "doi",
+              "idtypen": 3,
+              "value": "10.1056/NEJMoa1911303"
+            }
+          ],
+          "history": [
+            {
+              "pubstatus": "pubmed",
+              "date": "2019/09/20 06:00"
+            },
+            {
+              "pubstatus": "medline",
+              "date": "2019/11/28 06:00"
+            },
+            {
+              "pubstatus": "entrez",
+              "date": "2019/09/20 06:00"
+            }
+          ],
+          "references": [
+            {
+              "refsource": "N Engl J Med. 2019 Nov 21;381(21):2063-2064. doi: 10.1056/NEJMe1912180.",
+              "reftype": "Comment in",
+              "pmid": 31535828,
+              "note": ""
+            },
+            {
+              "refsource": "Nat Rev Cardiol. 2019 Dec;16(12):700. doi: 10.1038/s41569-019-0291-1.",
+              "reftype": "Comment in",
+              "pmid": 31578515,
+              "note": ""
+            },
+            {
+              "refsource": "Ann Intern Med. 2020 Feb 18;172(4):JC16. doi: 10.7326/ACPJ202002180-016.",
+              "reftype": "Comment in",
+              "pmid": 32066149,
+              "note": ""
+            },
+            {
+              "refsource": "N Engl J Med. 2020 Mar 5;382(10):972. doi: 10.1056/NEJMc1917241.",
+              "reftype": "Comment in",
+              "pmid": 32130820,
+              "note": ""
+            },
+            {
+              "refsource": "N Engl J Med. 2020 Mar 5;382(10):972. doi: 10.1056/NEJMc1917241.",
+              "reftype": "Comment in",
+              "pmid": 32130821,
+              "note": ""
+            },
+            {
+              "refsource": "N Engl J Med. 2020 Mar 5;382(10):972-973. doi: 10.1056/NEJMc1917241.",
+              "reftype": "Comment in",
+              "pmid": 32130822,
+              "note": ""
+            },
+            {
+              "refsource": "MMW Fortschr Med. 2021 May;163(9):65. doi: 10.1007/s15006-021-9952-1.",
+              "reftype": "Comment in",
+              "pmid": 33961267,
+              "note": ""
+            }
+          ],
+          "attributes": [
+            "Has Abstract"
+          ],
+          "pmcrefcount": "",
+          "fulljournalname": "The New England journal of medicine",
+          "elocationid": "doi: 10.1056/NEJMoa1911303",
+          "doctype": "citation",
+          "srccontriblist": [],
+          "booktitle": "",
+          "medium": "",
+          "edition": "",
+          "publisherlocation": "",
+          "publishername": "",
+          "srcdate": "",
+          "reportnumber": "",
+          "availablefromurl": "",
+          "locationlabel": "",
+          "doccontriblist": [],
+          "docdate": "",
+          "bookname": "",
+          "chapter": "",
+          "sortpubdate": "2019/11/21 00:00",
+          "sortfirstauthor": "McMurray JJV",
+          "vernaculartitle": ""
+        },
+        "uids": [
+          "31535829"
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:52:42.579Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "pubmed"
+    }
+  }
+]

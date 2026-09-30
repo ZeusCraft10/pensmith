@@ -8,12 +8,22 @@
 //
 //   retracted — a retraction / withdrawal / removal notice updates the DOI
 //               (`retracted: true`, `retraction_details` = the notice);
-//   clear     — a live answer listed no such notice;
+//   clear     — a live answer listed no such notice, for a DOI Crossref
+//               registered (Phase 20, D-20-13: the candidate came from
+//               Crossref, or doi.org's agency lookup of its prefix says
+//               Crossref — one lookup per prefix per run). Retraction data
+//               (Crossref's `updated-by`, the Retraction Watch feed) exists
+//               only for Crossref DOIs: Crossref's "no notice" says nothing
+//               about a DataCite, mEDRA, JaLC … DOI;
 //   unknown   — the lookup could not answer (a non-200, an error body, a rate
 //               limit, an open breaker, a transport error, or — offline — no
-//               recorded fixture). UNKNOWN is never "clear": research reports
-//               `retraction status unknown for N source(s)`, RESEARCH.md shows
-//               it, and Pass 1 re-queries at verify time (blocking).
+//               recorded fixture), or the DOI is another agency's (`no
+//               retraction data for <agency> DOIs`, recorded as the entry's
+//               retraction_details so RESEARCH.md can say why). UNKNOWN is
+//               never "clear": research reports `retraction status unknown for
+//               N source(s)`, RESEARCH.md shows it, Pass 1 re-queries a
+//               Crossref DOI at verify time (blocking), and the freshness pass
+//               re-checks every unknown status on each verify and done.
 //
 // Nothing is swallowed: every failure becomes `unknown`, with its reason
 // available through retractionCheckReason(candidate).
@@ -34,6 +44,8 @@
 import { sources } from './index.js';
 import { isOfflineEgressError, offlineLabel } from '../http.js';
 import { normalizeDoi } from '../doi.js';
+import { registrationAgency as doiRegistrationAgency, doiPrefix, type RegistrationAgency } from './doi-ra.js';
+import { isDataCiteArxivDoi } from '../full-text.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
 /**
@@ -44,7 +56,20 @@ import type { SourceCandidate } from '../schemas/source-candidate.js';
  */
 export interface RetractionLookup {
   fetchById: (doi: string) => Promise<SourceCandidate | null>;
+  /**
+   * Which agency registered a DOI's prefix (doi.org, sources/doi-ra.ts) —
+   * injectable like fetchById; the real lookup when absent.
+   */
+  registrationAgency?: (doi: string) => Promise<RegistrationAgency>;
 }
+
+/** Why a DOI another agency registered has no retraction status (D-20-13). */
+export function noRetractionDataReason(agency: string): string {
+  return `no retraction data for ${agency} DOIs`;
+}
+
+/** The registrar adapters whose own record says who registered its DOI. */
+const AGENCY_OF_SOURCE: Readonly<Record<string, string>> = { crossref: 'Crossref', datacite: 'DataCite' };
 
 const unknownReasons = new WeakMap<SourceCandidate, string>();
 
@@ -68,18 +93,24 @@ function setClear(c: SourceCandidate): void {
   unknownReasons.delete(c);
 }
 
-function setUnknown(c: SourceCandidate, reason: string): void {
+function setUnknown(c: SourceCandidate, reason: string, recordReason = false): void {
   // `retracted` stays false only because nothing confirmed a retraction; the
   // status says the question is open.
   c.retraction_status = 'unknown';
+  // A stable reason (another agency's DOI) is kept on the entry for RESEARCH.md.
+  if (recordReason && !c.retraction_details) c.retraction_details = reason;
   unknownReasons.set(c, reason);
 }
 
-/** What the candidates' own records already say about one DOI, or null. */
+/**
+ * What the candidates' own records already say about one DOI, or null. Only a
+ * Crossref record's `clear` is a decision (its `updated-by` carries the
+ * Retraction Watch notices, D-19-11); a retraction any record reports is.
+ */
 function decidedByRecords(group: readonly SourceCandidate[]): Decided | null {
   const retracted = group.find((c) => c.retracted === true || c.retraction_status === 'retracted');
   if (retracted) return { status: 'retracted', details: retracted.retraction_details };
-  if (group.some((c) => c.retraction_status === 'clear')) return { status: 'clear' };
+  if (group.some((c) => c.source === 'crossref' && c.retraction_status === 'clear')) return { status: 'clear' };
   return null;
 }
 
@@ -103,6 +134,32 @@ export async function crossCheckRetractions(
   candidates: SourceCandidate[],
   lookup: RetractionLookup = sources['retraction-watch'],
 ): Promise<SourceCandidate[]> {
+  const agencyLookup = lookup.registrationAgency ?? doiRegistrationAgency;
+  // D-20-13: one doi.org agency lookup per prefix per run.
+  const agencies = new Map<string, Promise<{ agency: string } | { reason: string }>>();
+  const agencyOf = (doi: string, group: readonly SourceCandidate[]): Promise<{ agency: string } | { reason: string }> => {
+    for (const c of group) {
+      const known = AGENCY_OF_SOURCE[c.source];
+      if (known !== undefined) return Promise.resolve({ agency: known });
+    }
+    if (isDataCiteArxivDoi(doi)) return Promise.resolve({ agency: 'DataCite' });
+    const prefix = doiPrefix(doi) ?? doi;
+    let p = agencies.get(prefix);
+    if (p === undefined) {
+      p = (async () => {
+        try {
+          const ra = await agencyLookup(doi);
+          if (ra.kind === 'agency') return { agency: ra.agency };
+          if (ra.kind === 'unknown-prefix') return { reason: `no registration agency holds the DOI prefix ${prefix}` };
+          return { reason: `doi.org could not say which agency registered ${prefix} (${ra.reason})` };
+        } catch (err) {
+          return { reason: lookupFailureReason(err).replace('the retraction lookup', `doi.org's agency lookup of ${prefix}`) };
+        }
+      })();
+      agencies.set(prefix, p);
+    }
+    return p;
+  };
   // Group by normalized DOI, first-seen order (one lookup per DOI).
   const groups = new Map<string, SourceCandidate[]>();
   for (const c of candidates) {
@@ -123,6 +180,16 @@ export async function crossCheckRetractions(
       continue;
     }
     const doi = group[0]!.doi!;
+    // Retraction data exists for Crossref DOIs only (D-20-13): ask who registered it.
+    const who = await agencyOf(doi, group);
+    if ('reason' in who) {
+      for (const c of group) setUnknown(c, who.reason);
+      continue;
+    }
+    if (!/^crossref$/i.test(who.agency)) {
+      for (const c of group) setUnknown(c, noRetractionDataReason(who.agency), true);
+      continue;
+    }
     try {
       const hit = await lookup.fetchById(doi);
       if (hit && hit.retracted === true) {

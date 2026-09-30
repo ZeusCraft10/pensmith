@@ -29,7 +29,16 @@
         "container-title": [
           "Test Journal"
         ],
-        "type": "journal-article"
+        "type": "journal-article",
+        "relation": {
+          "is-identical-to": [
+            {
+              "id-type": "doi",
+              "id": "10.0000/alias-audit16",
+              "asserted-by": "subject"
+            }
+          ]
+        }
       }
     },
     "responseHeaders": {

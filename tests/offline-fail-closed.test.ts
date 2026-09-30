@@ -6,8 +6,9 @@
 // recorded fixture or refused with a typed OfflineEgressError. There is no
 // "first search item / first cassette entry" fallback anywhere, so:
 //   - an unrecorded identifier is a miss, never another paper's record;
-//   - Pass 1 records a miss as UNVERIFIABLE (offline) — never OK, MIS-CITED or
-//     FABRICATED — and it BLOCKS compile and done with "re-run online";
+//   - Pass 1 records a miss as UNVERIFIABLE-NETWORK (offline: no answer,
+//     D-20-03) — never OK, MIS-CITED or FABRICATED — and it BLOCKS compile and
+//     done with "re-run online";
 //   - add refuses (non-zero exit) and adds nothing;
 //   - research on an unrecorded query yields 0 candidates with a notice;
 //   - plagiarism is "skipped (offline)" and honesty "score unavailable (offline)".
@@ -157,7 +158,7 @@ test('RUN-03: offline research on an unrecorded query yields 0 candidates with t
 });
 
 // ---------------------------------------------------------------------------
-// Pass 1: a miss is UNVERIFIABLE (offline) — never OK, MIS-CITED or FABRICATED.
+// Pass 1: a miss is UNVERIFIABLE-NETWORK (offline) — never OK, MIS-CITED or FABRICATED.
 // ---------------------------------------------------------------------------
 
 function bibFile(entries: Array<{ key: string; doi: string; title: string; author: string; year: number }>): string {
@@ -170,14 +171,14 @@ function bibFile(entries: Array<{ key: string; doi: string; title: string; autho
   return p;
 }
 
-test('RUN-03 / D-17-07: offline Pass 1 of an unrecorded DOI (AlphaFold) is UNVERIFIABLE, never MIS-CITED against nphys1170', async () => {
+test('RUN-03 / D-17-07 / D-20-03: offline Pass 1 of an unrecorded DOI (AlphaFold) is UNVERIFIABLE-NETWORK, never MIS-CITED against nphys1170', async () => {
   const bib = bibFile([{
     key: 'jumper2021', doi: ALPHAFOLD_DOI,
     title: 'Highly accurate protein structure prediction with AlphaFold', author: 'Jumper, John', year: 2021,
   }]);
   const [r] = await runPass1('AlphaFold changed structural biology [@jumper2021].\n', bib);
   assert.ok(r);
-  assert.equal(r.verdict, 'UNVERIFIABLE');
+  assert.equal(r.verdict, 'UNVERIFIABLE-NETWORK');
   assert.ok(r.reason.startsWith(UNVERIFIABLE_OFFLINE_REASON), r.reason);
   assert.ok(!/nphys1170/.test(r.reason));
 });
@@ -187,7 +188,7 @@ test('RUN-03: a made-up DOI carrying a recorded paper\'s title and authors is no
     key: 'fake2009', doi: '10.9999/made-up-measured', title: 'Measured measurement', author: 'Aspelmeyer, Markus', year: 2009,
   }]);
   const [r] = await runPass1('A claim [@fake2009].\n', bib);
-  assert.equal(r?.verdict, 'UNVERIFIABLE', 'no recorded fixture for the made-up DOI → unverifiable, not OK');
+  assert.equal(r?.verdict, 'UNVERIFIABLE-NETWORK', 'no recorded fixture for the made-up DOI → no answer (unverifiable), not OK');
 });
 
 test('RUN-03: the recorded fixture is still evidence — correct metadata OK, wrong title MIS-CITED', async () => {
@@ -309,14 +310,14 @@ test('RUN-03: offline `verify` of a section citing an unrecorded DOI → unverif
   const md = readFileSync(join(secDir, 'VERIFICATION.md'), 'utf8');
   assert.match(md, /^> OFFLINE MODE \(PENSMITH_OFFLINE=1\) — recorded fixtures, not live results\.$/m);
   assert.match(md, /^Status: unverifiable$/m);
-  assert.match(md, /- jumper2021: \*\*UNVERIFIABLE\*\* .*offline: no recorded fixture — re-run online/);
+  assert.match(md, /- jumper2021: \*\*UNVERIFIABLE-NETWORK\*\* .*offline: no recorded fixture — re-run online/);
   assert.ok(!/\*\*(MIS-CITED|FABRICATED|OK)\*\*/.test(md), 'never OK, MIS-CITED or FABRICATED');
   assert.match(readFileSync(join(secDir, 'PLAN.md'), 'utf8'), /status: unverifiable/);
 
   // compile refuses (its exit code is RUN-09's, paper-cli): the refusal names
   // the row and "re-run online", and no compiled DRAFT.md is written.
   const c = runCli(['compile', '--yolo'], root);
-  assert.match(c.stderr + c.stdout, /REFUSE: section 1 \(intro\): citation \[@jumper2021\] is UNVERIFIABLE .*re-run online/);
+  assert.match(c.stderr + c.stdout, /REFUSE: section 1 \(intro\): citation \[@jumper2021\] is UNVERIFIABLE-NETWORK .*re-run online/);
   assert.ok(!existsSync(join(pDir, 'DRAFT.md')), 'compile writes no DRAFT.md');
 });
 

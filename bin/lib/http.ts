@@ -801,6 +801,9 @@ function scrubContactEmail(text: string): string {
 // ============================================================
 export type HttpSource =
   | 'crossref'
+  // Phase 20 (VRFY-11, D-20-10): DataCite's REST API (api.datacite.org) —
+  // Zenodo, figshare, Dryad and the other DataCite DOIs Pass 1 re-fetches.
+  | 'datacite'
   | 'openalex'
   | 'unpaywall'
   | 'arxiv'
@@ -829,6 +832,12 @@ export interface HttpResponse {
   fixture?: boolean;
   cachedAt?: string; // ISO8601
   /**
+   * When a live (or fixture) answer arrived, ISO8601 (Phase 20, VRFY-28). A
+   * cached copy of this answer carries the same instant as its `cachedAt`, so
+   * a registrar record is dated when it was obtained, not when it was re-read.
+   */
+  answeredAt?: string;
+  /**
    * The URL that answered when http.ts followed redirects to get here (SRC-01).
    * Absent when the requested URL answered itself (and on a cache hit, which
    * stores the final answer under the requested URL).
@@ -854,6 +863,14 @@ export interface FetchOptions {
   timeoutMs?: number;
   /** Skip the cache entirely (read AND write). */
   noCache?: boolean;
+  /**
+   * Skip the cache READ only: the request goes to the network and a cacheable
+   * answer is written back (Phase 20, VRFY-28, D-20-15). Pass 1 sets it for a
+   * citation whose last_verified is older than `[verification]
+   * recheck_after_days`, so the re-check is a real answer and the next run is
+   * served that fresh answer from the cache. Ignored offline (no cache).
+   */
+  refresh?: boolean;
   /** Skip the retry wrapper (fire-and-fail). */
   noRetry?: boolean;
   /**
@@ -915,6 +932,8 @@ const ONE_DAY_MS = 24 * 3_600_000;
 const ONE_HOUR_MS = 3_600_000;
 const TTL_MS_BY_SOURCE: Record<HttpSource, number> = {
   crossref: 7 * ONE_DAY_MS,
+  // Phase 20 (VRFY-11): a DataCite record changes as rarely as a Crossref one.
+  datacite: 7 * ONE_DAY_MS,
   openalex: 7 * ONE_DAY_MS,
   arxiv: 7 * ONE_DAY_MS,
   pubmed: 7 * ONE_DAY_MS,
@@ -948,6 +967,9 @@ const RPS_BY_SOURCE: Record<HttpSource, number> = {
   // (`polite-array`; single-work lookups allow 10, the public pool 1) — seed at
   // 3/s and let its headers lower it (never raise it).
   crossref: 3,
+  // DataCite REST API: 3,000 requests per 5 minutes per IP (10/s documented);
+  // pensmith asks at most 5/s (docs/SOURCES.md, Phase 20 VRFY-11).
+  datacite: 5,
   // OpenAlex: 10/s within the (keyed) daily budget.
   openalex: 10,
   unpaywall: 10,
@@ -979,6 +1001,17 @@ const RPS_BY_SOURCE: Record<HttpSource, number> = {
 // bucket, not semaphore). There is NO release()/return-token path — that is
 // intentional. Token return-on-exception is the Semaphore's concern (budget.ts),
 // not the rate bucket's. See RESEARCH A5.
+
+/**
+ * Tokens refill this much slower than the nominal rate. A service counts
+ * requests as they ARRIVE in its window; spacing grants exactly one interval
+ * apart leaves no room for the time between a grant and the request reaching
+ * the server, which varies from request to request (a slower first request
+ * puts the fourth of "3 per second" inside the first one's second). 5% (about
+ * 17 ms per interval at 3/s) absorbs that jitter — never faster than the rate.
+ */
+const GRANT_MARGIN = 1.05;
+
 class TokenBucket {
   private tokens: number;
   private lastRefillMs: number;
@@ -1028,7 +1061,7 @@ class TokenBucket {
     const now = Date.now();
     const elapsedSec = (now - this.lastRefillMs) / 1000;
     if (elapsedSec <= 0) return;
-    this.tokens = Math.min(this.capacity, this.tokens + elapsedSec * this.refillPerSec);
+    this.tokens = Math.min(this.capacity, this.tokens + (elapsedSec * this.refillPerSec) / GRANT_MARGIN);
     this.lastRefillMs = now;
   }
 
@@ -1069,7 +1102,7 @@ class TokenBucket {
   private _scheduleGrant(): void {
     this.timerPending = true;
     const deficit = Math.max(0, 1 - this.tokens);
-    const waitMs = Math.max(1, Math.ceil((deficit / this.refillPerSec) * 1000));
+    const waitMs = Math.max(1, Math.ceil(((deficit * GRANT_MARGIN) / this.refillPerSec) * 1000));
     setTimeout(() => {
       this.timerPending = false;
       this.refill();
@@ -1104,6 +1137,7 @@ const HOST_RPS_FLOOR: Readonly<Record<string, number>> = lookupTable({
   'export.arxiv.org': 1 / 3,
   'arxiv.org': 1 / 3,
   'api.crossref.org': 3,
+  'api.datacite.org': 5,
   'eutils.ncbi.nlm.nih.gov': 3,
   'api.semanticscholar.org': 1,
   'openlibrary.org': 1,
@@ -1119,6 +1153,7 @@ const HOST_RPS_FLOOR: Readonly<Record<string, number>> = lookupTable({
  */
 const RATE_HEADER_HOSTS: ReadonlySet<string> = new Set([
   'api.crossref.org',
+  'api.datacite.org',
   'api.openalex.org',
   'export.arxiv.org',
   'eutils.ncbi.nlm.nih.gov',
@@ -1534,7 +1569,7 @@ function filterHeadersForCache(headers: Record<string, string>): Record<string, 
 async function writeCache(key: string, response: HttpResponse): Promise<void> {
   const file = path.join(pensmithHttpCacheDir(), `${key}.json`);
   const envelope: CacheEnvelope = {
-    savedAt: new Date().toISOString(),
+    savedAt: response.answeredAt ?? new Date().toISOString(),
     response: {
       status: response.status,
       // CR-03: ONLY allowlisted headers go to disk. Set-Cookie / Authorization /
@@ -2223,7 +2258,9 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
 
   // --- Cache short-circuit (live mode, GET only, opt-in) ---
   const cacheAllowed = !mode.sourcesOffline && method === 'GET' && !opts.noCache && llm === undefined && opts.prefixBytes === undefined;
-  if (cacheAllowed) {
+  // FetchOptions.refresh (VRFY-28): the cache is not READ, but a cacheable
+  // answer is still written back below.
+  if (cacheAllowed && opts.refresh !== true) {
     const cached = await readCache(key, ttlMs);
     if (cached) {
       recordHttp({ ...base, status: cached.status, cache: 'hit', bytes: Buffer.byteLength(cached.body, 'utf8'), ms: Date.now() - started });
@@ -2474,6 +2511,8 @@ export async function fetch(url: string, opts: FetchOptions = {}): Promise<HttpR
 
   // The recorder writes one entry per hop, each under its own URL (D-19-07).
   RESPONSE_CHAINS.set(response, hops);
+  // VRFY-28: one instant for the answer and its cache entry's savedAt.
+  response.answeredAt = new Date().toISOString();
   recordHttp({ ...base, url: response.finalUrl ?? url, status: response.status, cache: 'miss', bytes: response.bodyBytes?.length ?? 0, ms: Date.now() - started });
 
   // --- Phase 19 seam S-B (SRC-17): a body that is not the service's answer is

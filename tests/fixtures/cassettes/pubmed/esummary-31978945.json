@@ -283,7 +283,7 @@
       "content-type": "application/json; charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-28T05:27:02.844Z",
+      "recordedAt": "2026-09-30T06:52:42.579Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "pubmed"
     }

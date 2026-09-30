@@ -24,7 +24,7 @@
 import { plainText, plainTextOpt } from '../markup.js';
 import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES, formatRetryAfter } from '../http.js';
 import { type SearchOptions } from './search-failure.js';
-import { exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
+import { answeredAt, exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
 import { displayAuthorName } from '../person-name.js';
@@ -109,7 +109,7 @@ function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined;
 }
 
-export function s2ToCandidate(item: S2Paper): SourceCandidate | null {
+export function s2ToCandidate(item: S2Paper, checkedAt: string = new Date().toISOString()): SourceCandidate | null {
   const id = str(item.paperId);
   if (!id) return null;
   const title = plainText(String(item.title ?? ''));
@@ -149,7 +149,7 @@ export function s2ToCandidate(item: S2Paper): SourceCandidate | null {
     ...(pages !== undefined && pages.length > 0 ? { pages } : {}),
     ...(type !== undefined ? { type } : {}),
     retracted: false,
-    last_verified: new Date().toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...(year !== undefined ? { year } : {}) }),
     raw: item,
   };
@@ -202,7 +202,8 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     return [];
   }
   const data = (JSON.parse(ex.res.body) as { data?: S2Paper[] }).data ?? [];
-  return data.map(s2ToCandidate).filter((c): c is SourceCandidate => c !== null);
+  const at = answeredAt(ex.res);
+  return data.map((p) => s2ToCandidate(p, at)).filter((c): c is SourceCandidate => c !== null);
 }
 
 /**
@@ -237,7 +238,7 @@ export async function lookupById(id: string): Promise<LookupResult> {
     if (ex.res.status === 404) return lookupNotFound('HTTP 404 (Semantic Scholar has no such paper)');
     return lookupFailed(statusReason(ex.res), { status: ex.res.status });
   }
-  const candidate = s2ToCandidate(JSON.parse(ex.res.body) as S2Paper);
+  const candidate = s2ToCandidate(JSON.parse(ex.res.body) as S2Paper, answeredAt(ex.res));
   if (candidate === null) return lookupFailed('the Semantic Scholar record has no title or no authors (an incomplete registrar record — asking again gives the same answer)', { status: 200, permanent: true });
   return lookupFound(candidate);
 }

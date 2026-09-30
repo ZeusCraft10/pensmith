@@ -550,7 +550,7 @@ function expectedPhase3Exit(caseName: string, root: string): number {
     const vpath = join(root, '.paper', 'sections', `0${MIDDLE_SECTION}-placeholder`, 'VERIFICATION.md');
     const md = existsSync(vpath) ? readFileSync(vpath, 'utf8') : '';
     const status = /^Status:\s*(\S+)/m.exec(md)?.[1] ?? '';
-    return status === 'failed' || /^-\s*\S+:\s*\*\*UNVERIFIABLE\*\*/m.test(md) ? 4 : 0;
+    return status === 'failed' || /^-\s*\S+:\s*\*\*UNVERIFIABLE(?:-NETWORK)?\*\*/m.test(md) ? 4 : 0;
   }
   return 0;
 }

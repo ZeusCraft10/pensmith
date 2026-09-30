@@ -9,7 +9,7 @@
 //     answers each id: found, or not-found when the feed has no entry for it;
 //   - runPass1 over three arXiv-only citations (an eprint, a DataCite arXiv
 //     DOI) makes ONE arXiv request and gives each its verdict;
-//   - a batch that failed (503 after the transport's retries) is UNVERIFIABLE
+//   - a batch that failed (503 after the transport's retries) is UNVERIFIABLE-NETWORK
 //     for each citation with that reason — never one request per citation
 //     after it;
 //   - a batch arXiv rejects as a whole (an error entry) and a lone id are
@@ -133,7 +133,7 @@ test('Pass 1: three arXiv-only citations (eprints and a DataCite arXiv DOI) are 
   });
 });
 
-test('Pass 1: a failed batch (503 after retries) is UNVERIFIABLE for every citation, with the reason — and no request per citation after it', async () => {
+test('Pass 1: a failed batch (503 after retries) is UNVERIFIABLE-NETWORK for every citation, with the reason — and no request per citation after it', async () => {
   const [a, b, c] = [freshId(), freshId(), freshId()];
   const bib = bibFile([
     eprintEntry('lovelace2023', a, 'Attention in tables', 'Lovelace, Ada'),
@@ -143,7 +143,7 @@ test('Pass 1: a failed batch (503 after retries) is UNVERIFIABLE for every citat
   await liveLane(async (agent) => {
     const seen = arxivAnswers(agent, () => ({ status: 503, body: 'unavailable' }));
     const rows = await runPass1('One [@lovelace2023]. Two [@hopper2023]. Three [@noether2023].\n', bib);
-    assert.deepEqual(rows.map((r) => r.verdict), ['UNVERIFIABLE', 'UNVERIFIABLE', 'UNVERIFIABLE'], JSON.stringify(rows));
+    assert.deepEqual(rows.map((r) => r.verdict), ['UNVERIFIABLE-NETWORK', 'UNVERIFIABLE-NETWORK', 'UNVERIFIABLE-NETWORK'], JSON.stringify(rows));
     for (const r of rows) assert.match(r.reason, /arXiv lookup of arXiv:[\d.]+ failed: .*503.* — re-run verify once the lookup answers/, r.reason);
     assert.ok(seen.every((p) => p.includes(',')), `only the batched request (and its retries) was sent: ${JSON.stringify(seen)}`);
   });

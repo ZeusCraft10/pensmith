@@ -1,0 +1,216 @@
+[
+  {
+    "scope": "https://api.crossref.org",
+    "method": "GET",
+    "path": "/works?query.bibliographic=A+Work+That+Was+Never+Published+Nobody+2017&rows=5&select=DOI%2Ctitle%2Cauthor%2Ceditor%2Cissued%2Capproved%2Cposted%2Cabstract%2Ccontainer-title%2Ctype%2Cvolume%2Cissue%2Cpage%2Cpublisher%2CISBN%2Cupdated-by%2Csubtitle",
+    "status": 200,
+    "response": {
+      "status": "ok",
+      "message-type": "work-list",
+      "message-version": "1.0.0",
+      "message": {
+        "facets": {},
+        "total-results": 7074323,
+        "items": [
+          {
+            "posted": {
+              "date-parts": [
+                [
+                  2024,
+                  2,
+                  23
+                ]
+              ]
+            },
+            "publisher": "Front Matter",
+            "abstract": "<jats:p>Here is a summary of the key points from the article \"Nobody ever gets credit for fixing problems that never happened: creating and sustaining process improvement\". Overview Many companies invest heavily in process improvement programs, yet few efforts actually produce significant results.</jats:p>",
+            "DOI": "10.59350/a43gx-fbr50",
+            "type": "posted-content",
+            "title": [
+              "The capability trap: Nobody ever gets credit for fixing problems that never happened"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0003-4051-0606",
+                "authenticated-orcid": false,
+                "given": "Reda",
+                "family": "Sadki",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "The Geneva Learning Foundation"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2024,
+                  2,
+                  23
+                ]
+              ]
+            }
+          },
+          {
+            "publisher": "Indiana University Press",
+            "DOI": "10.2307/j.ctv8pzd6f.12",
+            "type": "book-chapter",
+            "page": "84-87",
+            "title": [
+              "Dear Nobody"
+            ],
+            "author": [
+              {
+                "given": "Kirsty",
+                "family": "Logan",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "container-title": [
+              "My Name Was Never Frankenstein"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2019,
+                  1,
+                  1
+                ]
+              ]
+            }
+          },
+          {
+            "posted": {
+              "date-parts": [
+                [
+                  2024,
+                  2,
+                  23
+                ]
+              ]
+            },
+            "publisher": "Front Matter",
+            "abstract": "<jats:p>Here is a summary of the key points from the article \"Nobody ever gets credit for fixing problems that never happened: creating and sustaining process improvement\". Overview Many companies invest heavily in process improvement programs, yet few efforts actually produce significant results.</jats:p>",
+            "DOI": "10.59350/0rrmh-hms77",
+            "type": "posted-content",
+            "title": [
+              "The capability trap: Nobody ever gets credit for fixing problems that never happened"
+            ],
+            "author": [
+              {
+                "ORCID": "https://orcid.org/0000-0003-4051-0606",
+                "authenticated-orcid": false,
+                "given": "Reda",
+                "family": "Sadki",
+                "sequence": "first",
+                "affiliation": [
+                  {
+                    "name": "The Geneva Learning Foundation"
+                  }
+                ],
+                "role": [
+                  {
+                    "vocabulary": "crossref",
+                    "role": "author"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2024,
+                  2,
+                  23
+                ]
+              ]
+            }
+          },
+          {
+            "DOI": "10.1037/11903-000",
+            "title": [
+              "Occasional discourses, including several never before published."
+            ],
+            "author": [
+              {
+                "given": "Francis",
+                "family": "Wayland",
+                "sequence": "first",
+                "affiliation": [],
+                "role": [
+                  {
+                    "role": "author",
+                    "vocabulary": "crossref"
+                  }
+                ]
+              }
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  1833
+                ]
+              ]
+            },
+            "type": "book",
+            "publisher": "James Loring"
+          },
+          {
+            "publisher": "Scarecrow Press",
+            "DOI": "10.5040/9798881840228.ch-008",
+            "type": "other",
+            "page": "95-100",
+            "title": [
+              "“There Was Never Any Good Old Days”"
+            ],
+            "container-title": [
+              "The Films of Sergio Leone"
+            ],
+            "subtitle": [
+              "My Name Is Nobody"
+            ],
+            "issued": {
+              "date-parts": [
+                [
+                  2008
+                ]
+              ]
+            },
+            "ISBN": [
+              "9798881840228",
+              "9780810860414"
+            ]
+          }
+        ],
+        "items-per-page": 5,
+        "query": {
+          "start-index": 0,
+          "search-terms": null
+        }
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/json"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:52:21.793Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "crossref"
+    }
+  }
+]

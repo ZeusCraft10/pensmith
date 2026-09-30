@@ -4,8 +4,8 @@
 // consumers (the research orchestrator, the verifier's retraction filter)
 // import `sources` and iterate `AdapterName`.
 //
-// The registrar adapters (crossref, openalex, arxiv, pubmed, semanticscholar,
-// unpaywall, books) implement the three-way lookup contract of
+// The registrar adapters (crossref, datacite, openalex, arxiv, pubmed,
+// semanticscholar, unpaywall, books) implement the three-way lookup contract of
 // ./lookup.ts (SRC-05, D-19-05): `lookupById(id) → found | not-found | failed`,
 // with `fetchById` as its unwrapped view (a failed lookup throws
 // SourceLookupError, never reads as "not found").
@@ -16,6 +16,7 @@
 // adapter)` before calling.
 
 import * as crossref from './crossref.js';
+import * as datacite from './datacite.js';
 import * as openalex from './openalex.js';
 import * as arxiv from './arxiv.js';
 import * as pubmed from './pubmed.js';
@@ -27,6 +28,10 @@ import * as zotero from './zotero.js';
 
 export const sources = {
   crossref,
+  // Phase 20 (VRFY-11, D-20-10): DataCite DOI records (Zenodo, figshare,
+  // Dryad, …) — a lookup-only registrar (no `search`: research never queries
+  // it); Pass 1 asks it when doi.org names DataCite as a DOI's agency.
+  datacite,
   openalex,
   arxiv,
   pubmed,

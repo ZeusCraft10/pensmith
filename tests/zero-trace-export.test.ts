@@ -410,3 +410,45 @@ test('zero-trace Test H (RUN-02): an offline verify → compile → done run mar
     }
   },
 );
+
+// =====================================================================
+//   Test I — the exported bibliography keeps standard fields only (VRFY-28)
+// =====================================================================
+// `.paper/CITATIONS.bib` carries pensmith's `last_verified` (when a registrar
+// last confirmed each entry) and a retracted entry's `note = {RETRACTED}`; the
+// exported bibliography (export/CITATIONS.bib / .ris) holds only the fields a
+// standard style reads (library.ts EXPORT_BIB_FIELDS, D-20-15) — and an entry
+// with nothing to drop is exported byte for byte (a hand edit survives).
+test('zero-trace Test I (VRFY-28, D-20-15): export/CITATIONS.bib and .ris carry no last_verified, no RETRACTED note, no pensmith', async () => {
+  const { upsertSources, exportCitedCitations } = await import('../bin/lib/library.js');
+  const root = mkdtempSync(join(tmpdir(), 'pensmith-zt-bib-'));
+  mkdirSync(join(root, '.paper'), { recursive: true });
+  await upsertSources(
+    root,
+    [
+      { source: 'crossref', citekey: 'aspelmeyer2009', id: '10.1038/nphys1170', doi: '10.1038/nphys1170', title: 'Measured measurement', authors: ['Aspelmeyer, Markus'], year: 2009, retracted: false, last_verified: '2026-09-30T07:03:50.138Z' },
+      { source: 'crossref', citekey: 'wakefield1998', id: '10.1016/s0140-6736(97)11096-0', doi: '10.1016/s0140-6736(97)11096-0', title: 'Ileal-lymphoid-nodular hyperplasia, non-specific colitis, and pervasive developmental disorder in children', authors: ['Wakefield, A.J.'], year: 1998, retracted: true, retraction_status: 'retracted', last_verified: '2026-09-30T07:03:51.000Z' },
+    ],
+    { provenance: 'research' },
+  );
+  const paperBib = readFileSync(join(root, '.paper', 'CITATIONS.bib'), 'utf8');
+  assert.match(paperBib, /last_verified = \{2026-09-30T07:03:50\.138Z\}/, '.paper/CITATIONS.bib records when the registrar confirmed it');
+  assert.match(paperBib, /note = \{RETRACTED\}/);
+  // A hand-written entry with only standard fields.
+  const hand = '@book{kuhn1996,\n  title = {The Structure of Scientific Revolutions},\n  author = {Kuhn, Thomas S.},\n  year = {1996},\n  publisher = {University of Chicago Press}\n}\n';
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), `${paperBib}${paperBib.endsWith('\n') ? '' : '\n'}${hand}`);
+
+  const exportDir = join(root, '.paper', 'export');
+  const r = await exportCitedCitations(root, ['aspelmeyer2009', 'wakefield1998', 'kuhn1996'], exportDir);
+  assert.deepEqual([...r.exported].sort(), ['aspelmeyer2009', 'kuhn1996', 'wakefield1998']);
+  const bib = readFileSync(join(exportDir, 'CITATIONS.bib'), 'utf8');
+  assert.ok(!/last_verified/i.test(bib), `no last_verified in the export:\n${bib}`);
+  assert.ok(!/RETRACTED/.test(bib), 'no RETRACTED note in the export');
+  assert.ok(!bib.toLowerCase().includes('pensmith'), 'no pensmith trace');
+  assert.match(bib, /doi = \{10\.1038\/nphys1170\}/, 'the standard fields stay');
+  assert.ok(bib.includes(hand), 'an entry with nothing to drop is exported byte for byte');
+  const ris = readFileSync(join(exportDir, 'CITATIONS.ris'), 'utf8');
+  assert.ok(!/RETRACTED/.test(ris), 'no RETRACTED note in the RIS export');
+  assert.ok(!ris.toLowerCase().includes('pensmith'));
+  assert.match(ris, /^DO {2}- 10\.1038\/nphys1170/m);
+});

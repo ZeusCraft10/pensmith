@@ -43,7 +43,7 @@
 import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { contactEmail } from '../contact-email.js';
 import { generateCitekey } from '../citekey.js';
-import { exchange, jsonShape, statusReason, validator, type ShapeCheck } from './registrar-response.js';
+import { answeredAt, exchange, jsonShape, statusReason, validator, type LookupOptions, type ShapeCheck } from './registrar-response.js';
 import type { SourceCandidate } from '../schemas/source-candidate.js';
 
 const BASE = 'https://api.crossref.org';
@@ -115,7 +115,7 @@ export function formatRetractionNotice(update: CrossrefUpdate): string {
   return `${date ? `${date}: ` : ''}${label}${where.length > 0 ? ` (${where.join('; ')})` : ''}`;
 }
 
-function toCandidate(doi: string, notice: CrossrefNotice, update: CrossrefUpdate): SourceCandidate {
+function toCandidate(doi: string, notice: CrossrefNotice, update: CrossrefUpdate, checkedAt: string): SourceCandidate {
   // On a notice, `update-to[].DOI` is the retracted work; the notice's own DOI
   // names where the retraction was published.
   const described: CrossrefUpdate = {
@@ -146,7 +146,7 @@ function toCandidate(doi: string, notice: CrossrefNotice, update: CrossrefUpdate
     retracted: true, // D-15 surface-twice: a hit from this adapter == retracted.
     retraction_details,
     retraction_status: 'retracted',
-    last_verified: new Date().toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors: byline }),
     raw: notice,
   };
@@ -175,12 +175,19 @@ export function retractionLookupUrl(doi: string): string {
  * D-15 LOCKED: Retraction Watch is fetchById-only. Returns a retracted
  * SourceCandidate when a retraction-kind notice updates `doi`, null when the
  * live answer lists none, and throws RetractionLookupError when the status
- * cannot be determined (see the module header).
+ * cannot be determined (see the module header). `refresh` skips the HTTP-cache
+ * read (VRFY-28: a re-check of an `unknown` status is never served from cache).
  */
-export async function fetchById(doi: string): Promise<SourceCandidate | null> {
+export async function fetchById(doi: string, opts: LookupOptions = {}): Promise<SourceCandidate | null> {
   const url = retractionLookupUrl(doi);
   const ex = await exchange(
-    () => httpFetch(url, { source: 'retraction-watch', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(WORK_LIST) }),
+    () =>
+      httpFetch(url, {
+        source: 'retraction-watch',
+        maxBytes: MAX_JSON_RESPONSE_BYTES,
+        validate: validator(WORK_LIST),
+        ...(opts.refresh === true ? { refresh: true } : {}),
+      }),
     { service: 'Crossref', check: WORK_LIST },
   );
   if (ex.kind === 'failed') throw new RetractionLookupError(doi, `the Crossref lookup failed (${ex.reason})`);
@@ -189,7 +196,7 @@ export async function fetchById(doi: string): Promise<SourceCandidate | null> {
   for (const notice of items) {
     for (const u of notice['update-to'] ?? []) {
       if (sameDoi(u.DOI, doi) && isRetractionUpdateType(u.type)) {
-        return toCandidate(doi, notice, u);
+        return toCandidate(doi, notice, u, answeredAt(ex.res));
       }
     }
   }

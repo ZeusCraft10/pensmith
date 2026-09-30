@@ -273,11 +273,14 @@ This is the equivalent of GSD's `roadmap` step — it produces the section struc
 Bounded to a single section. Four passes, all scoped to this section's draft:
 
 **Pass 1 — DOI/identifier integrity (deterministic):**
-- Extract every DOI / arXiv ID / PMID from the section.
-- DOI normalization (`bin/lib/doi.js` — strips prefixes, normalizes case) before lookup.
-- Re-fetch each via Crossref / arXiv / PubMed. *(Amended in v1.0.0 Phase 19 review round 1 — SRC-11, SRC-13: an entry without a DOI is re-fetched at its own registrar — its arXiv id at arXiv, its PMID at PubMed, its ISBN at the books registries — so a book or an arXiv-only preprint can pass; a failed lookup is UNVERIFIABLE and blocks.)*
-- 404 → `FABRICATED` (hard fail; blocks compile) — for a DOI-less entry, only when every registrar it names answers not-found.
-- Fuzzy-match cited authors/year/title against canonical metadata; mismatch → `MIS-CITED`. *Author/title verification is part of Pass 1, not optional.*
+- Extract every DOI / arXiv ID / PMID from the section: each cited entry's identifiers, and every identifier written in the prose (`doi:10.…`, a doi.org, arXiv or PubMed link, `PMID: …`), which gets its own row keyed `doi:<doi>`, `arXiv:<id>` or `PMID:<id>`. *(Amended in v1.0.0 Phase 20 — VRFY-10.)*
+- DOI normalization (`bin/lib/doi.js` — strips prefixes, normalizes case) before lookup; DOIs compare case-insensitively.
+- Re-fetch each at its own registrar. *(Amended in v1.0.0 Phase 19 review round 1 — SRC-11, SRC-13, and Phase 20 — VRFY-11, VRFY-12.)* A DOI at Crossref; when Crossref has no record, doi.org names the prefix's registration agency: a DataCite DOI (Zenodo, figshare, Dryad, …) is re-fetched from DataCite, an mEDRA / JaLC / KISTI DOI through doi.org content negotiation, and a DOI of an agency that serves no record (ISTIC, …) through the entry's arXiv id / PMID / ISBN, else UNVERIFIABLE naming the agency. An entry without a DOI: its arXiv id at arXiv, its PMID at PubMed, its ISBN at the books registries. An entry with no identifier at all: a metadata search (Crossref's bibliographic search; a book at the books registries first) — a strict match (title ≥ 0.95, first author, year ±1) is OK and names the identifier it found; no match → `UNRESOLVABLE` (blocks).
+- 404 → `FABRICATED` (hard fail; blocks compile) — only from the registrar that holds the identifier (a DOI Crossref's own prefix covers, or one no agency holds; for a DOI-less entry, when every registrar it names answers not-found).
+- No answer — offline without a recording, `--dry-run`, a 429 or 5xx after retries, a transport error, a host skipped for the run — → `UNVERIFIABLE-NETWORK` (blocks; re-run verify once the lookup answers), never FABRICATED; an answer that cannot be compared (an incomplete registrar record, an agency with no record) → `UNVERIFIABLE` (blocks).
+- Fuzzy-match cited authors/year/title against canonical metadata; mismatch → `MIS-CITED`, naming each failing field. *Author/title verification is part of Pass 1, not optional.* Names are compared after normalization (Unicode dashes and diacritics, particles such as "van der", PubMed's "Family INITIALS", "et al.", a consortium compared whole, a non-Latin name in its own script); a title matches with or without its subtitle; the year may differ by one (online-first vs issue year); an edited volume is matched on its first editor. *(Amended in v1.0.0 Phase 20 — VRFY-13.)*
+- A registrar answer carrying another DOI than the one cited passes only when the registrar asserts the relation at verification time (Crossref's `is-identical-to`, `is-version-of`, `has-version`, `is-preprint-of` or `has-preprint`, or doi.org's handle redirecting the cited DOI to it) and the match still holds; alternate DOIs stored in the library are never evidence. The user's own PDF, still matching its recorded hash, passes an entry with no registrar identifier (or whose lookup got no answer) as `OK-BYO`, naming the file and hash. *(Amended in v1.0.0 Phase 20 — VRFY-14.)*
+- A work retracted at verification time (Crossref's `updated-by`, the Retraction Watch data) → `RETRACTED` (blocks), also printed on stderr as a hard warning. Retraction data exists only for Crossref DOIs: a passing DOI of another agency says "retraction status unknown". *(Amended in v1.0.0 Phase 20 — VRFY-15.)*
 
 **Pass 2 — Claim support (LLM-judged):**
 - For each in-text citation in this section, find the supported sentence(s). *(Amended in v1.0.0 Phase 20 — VRFY-21, D-20-28: every (citing sentence, citekey) pair is judged once — sentences split as Pass 4 splits them, keys read by the one citation grammar, so `[@smith2020, p. 5]`, clusters, `[-@k]` and narrative `@k` each yield their keys.)*
@@ -348,7 +351,7 @@ it does not promise to make output undetectable.
 
 ### 7.12 Last-verified timestamps + auto-recheck
 
-Each citation in CITATIONS.bib gets a `last_verified` ISO timestamp.
+Each citation in CITATIONS.bib gets a `last_verified` ISO timestamp: when a registrar last answered for it (an answer served from the HTTP cache keeps the time it was obtained), recorded in `.paper/LIBRARY.json` and `.paper/CITATIONS.bib` and never in an exported bibliography (zero trace). *(Amended in v1.0.0 Phase 20 — VRFY-28.)*
 
 - On every `verify <N>` or `done` run, citations older than `recheck_after_days` (default: 30) are auto-rechecked.
 - Retraction Watch flag triggers a hard warning, surfaced for user review.

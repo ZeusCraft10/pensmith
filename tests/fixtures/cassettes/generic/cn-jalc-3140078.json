@@ -1,0 +1,52 @@
+[
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/10.11501/3140078",
+    "status": 302,
+    "response": "<html><head><title>Handle Redirect</title></head>\n<body><a href=\"https://japanlinkcenter.org/data/10.11501/3140078\">https://japanlinkcenter.org/data/10.11501/3140078</a></body></html>",
+    "responseHeaders": {
+      "content-type": "text/html;charset=utf-8",
+      "location": "https://japanlinkcenter.org/data/10.11501/3140078"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:52:55.723Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://japanlinkcenter.org",
+    "method": "GET",
+    "path": "/data/10.11501/3140078",
+    "status": 200,
+    "response": {
+      "DOI": "10.11501/3140078",
+      "URL": "https://doi.org/10.11501/3140078",
+      "title": "領域・空間情報を表現するグラフ構造を用いた類似画像検索",
+      "author": [
+        {
+          "given": "北本, 朝展"
+        }
+      ],
+      "publisher": "東京大学",
+      "issued": {
+        "date-parts": [
+          [
+            1997,
+            3,
+            28
+          ]
+        ]
+      }
+    },
+    "responseHeaders": {
+      "content-type": "application/vnd.citationstyles.csl+json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:52:55.723Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  }
+]

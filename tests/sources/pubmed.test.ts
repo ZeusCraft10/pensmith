@@ -132,3 +132,96 @@ threeWayContract({
   invalid: (m) => ({ body: { error: `API rate limit exceeded ${m}`, count: '4' } }),
   offlineMissId: '12345679',
 });
+
+// ---------------------------------------------------------------------------
+// Abstracts and PMCIDs through efetch (Phase 20 carry-over 3, D-20-16):
+// batched ≤ 200 ids per request; a failure is named (search: the adapter's
+// status note; lookupById: raw.abstractNote), never fatal.
+// ---------------------------------------------------------------------------
+
+test('D-20-16: lookupById adds the efetch abstract and the article\'s own PMCID (recorded: esummary + efetch)', async () => {
+  const [entry] = recorded('pubmed', 'efetch-31978945');
+  assert.equal(`${entry!.scope}${entry!.path}`, pubmed.efetchUrl(['31978945']), 'the exact recorded efetch request');
+  const c = await pubmed.fetchById('31978945');
+  assert.ok(c);
+  assert.match(c.abstract ?? '', /^In December 2019, a cluster of patients with pneumonia of unknown cause was linked to a seafood wholesale market in Wuhan, China\./);
+  assert.equal(c.pmcid, 'PMC7092803', 'its own PMCID — never a cited reference\'s (the recorded reference list carries others)');
+  assert.equal((c.raw as Record<string, unknown>)['abstractNote'], undefined, 'no failure to name');
+  const istic = await pubmed.fetchById('42706103');
+  assert.match(istic?.abstract ?? '', /^Peritoneal metastasis is a common manifestation of advanced malignant tumors\./);
+});
+
+test('D-20-16: `abstract: false` skips efetch (Pass 1 compares metadata only) — no efetch request is made', async () => {
+  // 31535829 has a recorded esummary and no recorded efetch: asking for the abstract would be an offline miss.
+  const r = await pubmed.lookupById('31535829', { abstract: false });
+  assert.equal(r.kind, 'found', JSON.stringify(r));
+  assert.equal(r.kind === 'found' ? r.candidate.abstract : 'x', undefined);
+});
+
+test('D-20-16: offline with no recorded efetch, lookupById still finds the record and NAMES the missing abstract — never fails', async () => {
+  const r = await pubmed.lookupById('31535829');
+  assert.equal(r.kind, 'found', JSON.stringify(r));
+  if (r.kind !== 'found') return;
+  assert.match(String((r.candidate.raw as Record<string, unknown>)['abstractNote']), /^abstract unavailable \(.*no recorded fixture for the efetch request — re-run online\)$/);
+});
+
+test('parseEfetchArticles: structured abstracts joined "LABEL: text", markup and entities out, a book article, and a cited reference\'s PMC id never read', () => {
+  const xml = [
+    '<?xml version="1.0" ?><PubmedArticleSet>',
+    '<PubmedArticle><MedlineCitation><PMID Version="1">111</PMID><Article><Abstract>',
+    '<AbstractText Label="BACKGROUND" NlmCategory="BACKGROUND">Cells <i>in vitro</i> &amp; in vivo.</AbstractText>',
+    '<AbstractText Label="RESULTS">It worked (<b>p</b> &lt; 0.05) in H<sub>2</sub>O .</AbstractText>',
+    '<AbstractText Label="UNLABELLED">Plain part.</AbstractText>',
+    '</Abstract></Article></MedlineCitation><PubmedData><ArticleIdList><ArticleId IdType="pubmed">111</ArticleId><ArticleId IdType="pmc">PMC111</ArticleId></ArticleIdList>',
+    '<ReferenceList><Reference><ArticleIdList><ArticleId IdType="pmc">PMC999</ArticleId></ArticleIdList></Reference></ReferenceList></PubmedData></PubmedArticle>',
+    '<PubmedArticle><MedlineCitation><PMID Version="1">222</PMID><Article></Article></MedlineCitation><PubmedData><ArticleIdList><ArticleId IdType="pubmed">222</ArticleId></ArticleIdList>',
+    '<ReferenceList><Reference><ArticleIdList><ArticleId IdType="pmc">PMC888</ArticleId></ArticleIdList></Reference></ReferenceList></PubmedData></PubmedArticle>',
+    '<PubmedBookArticle><BookDocument><PMID Version="1">333</PMID><Abstract><AbstractText>A book chapter.</AbstractText></Abstract></BookDocument></PubmedBookArticle>',
+    '</PubmedArticleSet>',
+  ].join('');
+  const facts = pubmed.parseEfetchArticles(xml);
+  assert.deepEqual(facts.get('111'), { abstract: 'BACKGROUND: Cells in vitro & in vivo. RESULTS: It worked (p < 0.05) in H2O. Plain part.', pmcid: 'PMC111' });
+  assert.deepEqual(facts.get('222'), {}, 'no abstract, and the reference list\'s PMC888 is not this article\'s');
+  assert.deepEqual(facts.get('333'), { abstract: 'A book chapter.' });
+});
+
+test('D-20-16 (MockAgent): efetch is asked in batches of at most 200 ids', async () => {
+  await liveLane(async (agent) => {
+    const seen: string[] = [];
+    agent
+      .get('https://eutils.ncbi.nlm.nih.gov')
+      .intercept({ path: (p: string) => { if (p.includes('/efetch.fcgi?')) seen.push(p); return p.includes('/efetch.fcgi?'); }, method: 'GET' })
+      .reply(200, '<?xml version="1.0" ?><PubmedArticleSet></PubmedArticleSet>', { headers: { 'content-type': 'text/xml' } })
+      .persist();
+    const base = 700_000_000 + (process.pid % 1000) * 1000;
+    const ids = Array.from({ length: pubmed.EFETCH_BATCH + 1 }, (_, i) => String(base + i));
+    const { facts, failure } = await pubmed.fetchAbstracts(ids);
+    assert.equal(failure, null);
+    assert.equal(facts.size, 0);
+    assert.equal(seen.length, 2, 'two requests');
+    const counts = seen.map((p) => decodeURIComponent(new URL(`https://x${p}`).searchParams.get('id') ?? '').split(',').length);
+    assert.deepEqual(counts, [200, 1]);
+  });
+});
+
+test('D-20-16 (MockAgent): an efetch failure never fails the search — the candidates come back without abstracts and the adapter status names it', async () => {
+  await liveLane(async (agent) => {
+    const pmid = String(800_000_000 + (process.pid % 1000));
+    const pool = agent.get('https://eutils.ncbi.nlm.nih.gov');
+    pool
+      .intercept({ path: (p: string) => p.includes('/esearch.fcgi?'), method: 'GET' })
+      .reply(200, JSON.stringify({ esearchresult: { count: '1', idlist: [pmid] } }), { headers: { 'content-type': 'application/json' } });
+    pool
+      .intercept({ path: (p: string) => p.includes('/esummary.fcgi?'), method: 'GET' })
+      .reply(200, JSON.stringify({ header: { type: 'esummary' }, result: { uids: [pmid], [pmid]: { uid: pmid, title: 'An article.', authors: [{ name: 'Doe J', authtype: 'Author' }], pubdate: '2020', fulljournalname: 'J', articleids: [{ idtype: 'pubmed', value: pmid }] } } }), { headers: { 'content-type': 'application/json' } });
+    pool
+      .intercept({ path: (p: string) => p.includes('/efetch.fcgi?'), method: 'GET' })
+      .reply(503, 'Service Unavailable', { headers: { 'content-type': 'text/plain' } })
+      .persist();
+    const warnings: string[] = [];
+    const results = await pubmed.search(uniq('efetch down'), { limit: 1, onWarning: (w) => warnings.push(w) });
+    assert.deepEqual(results.map((r) => [r.pmid, r.abstract]), [[pmid, undefined]]);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /^abstracts unavailable \(efetch failed: .*503.*\)$/);
+  });
+});

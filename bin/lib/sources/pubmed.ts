@@ -8,6 +8,24 @@
 //   search step 2: GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=<csv>&retmode=json
 //                  -> .result.<pmid> objects
 //   lookupById:    GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=<pmid>&retmode=json
+//   abstracts:     GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=<csv>&rettype=abstract&retmode=xml
+//                  (one request per ≤ EFETCH_BATCH ids; Phase 20 carry-over 3, D-20-16)
+//
+// Abstracts (D-20-16): esummary carries none, so Pass 2 had no source text for
+// a PubMed-only work. After esummary the adapter asks efetch for the ids it
+// returned (search: every hit; lookupById: the one record, unless the caller
+// asks for no abstract — Pass 1 compares titles and authors only) and records
+// each article's `abstract` (its AbstractText parts, `LABEL: text` for a
+// structured abstract) and its own PMCID (the article's ArticleIdList, never a
+// cited reference's). efetch is best-effort: a failed or offline-missing
+// efetch leaves the abstracts empty and is NAMED — search reports it through
+// `onWarning` (the adapter's status line: `abstracts unavailable (…)`),
+// lookupById in the candidate's `raw.abstractNote` — and never fails the
+// search or the lookup. efetch's XML carries each article's reference list, so
+// an answer for ten hits is often a few hundred KB: over the 51200-byte
+// cassette cap, which is why the offline lane replays efetch only for single
+// records (tests/fixtures/cassettes/pubmed/efetch-*.json) and the live lane
+// (`npm run live:sources`) covers search.
 //
 // A complete record (SRC-05, D-19-13): PMID, PMCID, DOI, the journal's full
 // name as venue, volume, issue, pages, the CSL type from the publication types,
@@ -27,10 +45,10 @@
 // Offline replay is the exact-match fixture store inside bin/lib/http.ts; the
 // typed OfflineEgressError is rethrown so callers report "unavailable (offline)".
 
-import { plainText, plainTextOpt } from '../markup.js';
-import { fetch as httpFetch, MAX_JSON_RESPONSE_BYTES } from '../http.js';
+import { decodeEntities, plainText, plainTextOpt } from '../markup.js';
+import { fetch as httpFetch, isOfflineEgressError, offlineLabel, MAX_JSON_RESPONSE_BYTES } from '../http.js';
 import { type SearchOptions } from './search-failure.js';
-import { exchange, jsonShape, statusReason, validator, type Exchange, type ShapeCheck } from './registrar-response.js';
+import { answeredAt, exchange, jsonShape, statusReason, validator, type Exchange, type LookupOptions, type ShapeCheck } from './registrar-response.js';
 import { lookupFailed, lookupFound, lookupNotFound, unwrapLookup, type LookupResult } from './lookup.js';
 import { generateCitekey } from '../citekey.js';
 import { normalizePmid, normalizePmcid } from '../doi.js';
@@ -98,7 +116,7 @@ function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined;
 }
 
-export function pubmedToCandidate(rec: PubmedRecord): SourceCandidate | null {
+export function pubmedToCandidate(rec: PubmedRecord, checkedAt: string = new Date().toISOString()): SourceCandidate | null {
   const pmid = str(rec.uid);
   if (!pmid || rec.error !== undefined) return null;
   const title = plainText(String(rec.title ?? '')).replace(/\.$/, '');
@@ -144,7 +162,7 @@ export function pubmedToCandidate(rec: PubmedRecord): SourceCandidate | null {
     ...(retracted
       ? { retraction_status: 'retracted' as const, retraction_details: 'PubMed publication type: Retracted Publication' }
       : {}),
-    last_verified: new Date().toISOString(),
+    last_verified: checkedAt,
     citekey: generateCitekey({ authors, ...(year !== undefined ? { year } : {}) }),
     raw: rec,
   };
@@ -170,11 +188,130 @@ function recordsFromEsummary(body: { result?: Record<string, unknown> }, ids: re
   return records;
 }
 
-async function get(url: string, check: ShapeCheck): Promise<Exchange> {
+async function get(url: string, check: ShapeCheck, opts: LookupOptions = {}): Promise<Exchange> {
   return exchange(
-    () => httpFetch(url, { source: 'pubmed', maxBytes: MAX_JSON_RESPONSE_BYTES, validate: validator(check) }),
+    () =>
+      httpFetch(url, {
+        source: 'pubmed',
+        maxBytes: MAX_JSON_RESPONSE_BYTES,
+        validate: validator(check),
+        ...(opts.refresh === true ? { refresh: true } : {}),
+      }),
     { service: SERVICE, check },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Abstracts (efetch, D-20-16)
+// ---------------------------------------------------------------------------
+
+/** The most ids one efetch request asks for (D-20-16: at most 200). */
+export const EFETCH_BATCH = 200;
+// efetch's XML carries each article's reference list (tens of KB an article):
+// a batch stays under the structured-response cap (SEC-03, 8 MiB) at research's
+// search limits; an answer over it is a named failure like any other.
+
+const EFETCH: ShapeCheck = (res) => (/<PubmedArticleSet\b/.test(res.body) ? null : 'no <PubmedArticleSet>');
+
+/** The efetch URL for `ids` (exported for the recorder and tests: the exact request). */
+export function efetchUrl(ids: readonly string[]): string {
+  return `${BASE}/efetch.fcgi?db=pubmed&id=${encodeURIComponent(ids.join(','))}&rettype=abstract&retmode=xml`;
+}
+
+/** What efetch says about one article. */
+export interface PubmedArticleFacts {
+  readonly abstract?: string;
+  readonly pmcid?: string;
+}
+
+/**
+ * Inline XML markup out (PubMed's inline formatting — i, b, u, sup, sub — with
+ * no space, so "H<sub>2</sub>O" stays one word; any other tag as a space),
+ * entities decoded, whitespace collapsed.
+ */
+function xmlText(s: string): string {
+  const flat = s.replace(/<\/?(?:i|b|u|sup|sub)(?:\s[^>]*)?>/g, '').replace(/<[^>]+>/g, ' ');
+  return decodeEntities(flat).replace(/\s+/g, ' ').replace(/\s+([.,;:!?)])/g, '$1').trim();
+}
+
+/**
+ * The abstract and own PMCID of every article in an efetch PubmedArticleSet,
+ * by PMID. A structured abstract's parts are joined `LABEL: text`; a cited
+ * reference's ArticleIdList (inside ReferenceList) is never read. Linear
+ * regular expressions only (CR-05); the answer is bounded by maxBytes.
+ */
+export function parseEfetchArticles(xml: string): Map<string, PubmedArticleFacts> {
+  const out = new Map<string, PubmedArticleFacts>();
+  for (const block of xml.split(/<\/PubmedArticle>|<\/PubmedBookArticle>/)) {
+    const pmid = /<PMID\b[^>]*>\s*(\d{1,9})\s*<\/PMID>/.exec(block)?.[1];
+    if (pmid === undefined || out.has(pmid)) continue;
+    const abstractXml = /<Abstract>([\s\S]*?)<\/Abstract>/.exec(block)?.[1] ?? '';
+    const parts: string[] = [];
+    for (const m of abstractXml.matchAll(/<AbstractText\b([^>]*)>([\s\S]*?)<\/AbstractText>/g)) {
+      const text = xmlText(m[2] ?? '');
+      if (!text) continue;
+      const label = /\bLabel="([^"]*)"/.exec(m[1] ?? '')?.[1]?.trim();
+      parts.push(label && !/^unlabelled$/i.test(label) ? `${xmlText(label)}: ${text}` : text);
+    }
+    const dataAt = block.indexOf('<PubmedData>');
+    const own = dataAt >= 0 ? (block.slice(dataAt).split('<ReferenceList')[0] ?? '') : '';
+    const ids = /<ArticleIdList>([\s\S]*?)<\/ArticleIdList>/.exec(own)?.[1] ?? '';
+    const pmcRaw = /<ArticleId\s+IdType="pmc">\s*([^<]+?)\s*<\/ArticleId>/.exec(ids)?.[1];
+    const pmcid = pmcRaw !== undefined ? normalizePmcid(pmcRaw) : null;
+    out.set(pmid, {
+      ...(parts.length > 0 ? { abstract: parts.join(' ') } : {}),
+      ...(pmcid !== null ? { pmcid } : {}),
+    });
+  }
+  return out;
+}
+
+/**
+ * efetch's answers for `ids` (one request per ≤ EFETCH_BATCH): the facts per
+ * PMID, and why some are missing (null when every request answered). Never
+ * throws for a failed or offline-missing request (D-20-16).
+ */
+export async function fetchAbstracts(
+  ids: readonly string[],
+  opts: LookupOptions = {},
+): Promise<{ facts: Map<string, PubmedArticleFacts>; failure: string | null }> {
+  const facts = new Map<string, PubmedArticleFacts>();
+  let failure: string | null = null;
+  const unique = [...new Set(ids)];
+  for (let i = 0; i < unique.length; i += EFETCH_BATCH) {
+    const batch = unique.slice(i, i + EFETCH_BATCH);
+    let ex: Exchange;
+    try {
+      ex = await get(efetchUrl(batch), EFETCH, opts);
+    } catch (err) {
+      if (!isOfflineEgressError(err)) throw err;
+      failure ??= `${offlineLabel(err)}: no recorded fixture for the efetch request — re-run online`;
+      continue;
+    }
+    if (ex.kind === 'failed') {
+      failure ??= `efetch failed: ${ex.reason}`;
+      continue;
+    }
+    if (ex.kind === 'status') {
+      failure ??= `efetch failed: ${statusReason(ex.res)}`;
+      continue;
+    }
+    for (const [pmid, f] of parseEfetchArticles(ex.res.body)) facts.set(pmid, f);
+  }
+  return { facts, failure };
+}
+
+/** The candidates with efetch's abstract and PMCID added (a PMCID esummary gave is kept). */
+function withArticleFacts(candidates: SourceCandidate[], facts: ReadonlyMap<string, PubmedArticleFacts>): SourceCandidate[] {
+  return candidates.map((c) => {
+    const f = c.pmid !== undefined ? facts.get(c.pmid) : undefined;
+    if (f === undefined) return c;
+    return {
+      ...c,
+      ...(f.abstract !== undefined ? { abstract: f.abstract } : {}),
+      ...(c.pmcid === undefined && f.pmcid !== undefined ? { pmcid: f.pmcid } : {}),
+    };
+  });
 }
 
 function failureOf(ex: Exchange): string | null {
@@ -207,15 +344,25 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
     opts.onFailure?.(fail2 ?? 'unknown failure');
     return [];
   }
+  const at = answeredAt(ex2.res);
   const records = recordsFromEsummary(JSON.parse(ex2.res.body) as { result?: Record<string, unknown> }, idlist);
-  return records.map(pubmedToCandidate).filter((c): c is SourceCandidate => c !== null);
+  const candidates = records.map((r) => pubmedToCandidate(r, at)).filter((c): c is SourceCandidate => c !== null);
+  if (candidates.length === 0) return candidates;
+  // D-20-16: the abstracts — best-effort; a failure is named, never fatal.
+  const { facts, failure } = await fetchAbstracts(candidates.map((c) => c.pmid).filter((x): x is string => x !== undefined));
+  if (failure !== null) opts.onWarning?.(`abstracts unavailable (${failure})`);
+  return withArticleFacts(candidates, facts);
 }
 
-/** PubMed's answer for one PMID (`31978945`, `PMID:31978945`): found | not-found | failed (reason). */
-export async function lookupById(id: string): Promise<LookupResult> {
+/**
+ * PubMed's answer for one PMID (`31978945`, `PMID:31978945`): found | not-found
+ * | failed (reason). `refresh` skips the HTTP-cache read (VRFY-28);
+ * `abstract: false` skips efetch (Pass 1 compares metadata only).
+ */
+export async function lookupById(id: string, opts: LookupOptions & { abstract?: boolean } = {}): Promise<LookupResult> {
   const pmid = normalizePmid(id);
   if (pmid === null) return lookupNotFound(`not a PMID: ${JSON.stringify(id.slice(0, 80))}`);
-  const ex = await get(`${BASE}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(pmid)}&retmode=json`, ESUMMARY);
+  const ex = await get(`${BASE}/esummary.fcgi?db=pubmed&id=${encodeURIComponent(pmid)}&retmode=json`, ESUMMARY, opts);
   if (ex.kind === 'failed') {
     return lookupFailed(ex.reason, {
       ...(ex.status !== undefined ? { status: ex.status } : {}),
@@ -229,9 +376,12 @@ export async function lookupById(id: string): Promise<LookupResult> {
   const [rec] = recordsFromEsummary(JSON.parse(ex.res.body) as { result?: Record<string, unknown> }, [pmid]);
   if (!rec) return lookupNotFound(`PubMed has no record for PMID ${pmid}`);
   if (typeof rec.error === 'string') return lookupNotFound(`PubMed has no record for PMID ${pmid} (${rec.error})`);
-  const candidate = pubmedToCandidate(rec);
+  const candidate = pubmedToCandidate(rec, answeredAt(ex.res));
   if (candidate === null) return lookupFailed('the PubMed record has no title or no authors (an incomplete registrar record — asking again gives the same answer)', { status: 200, permanent: true });
-  return lookupFound(candidate);
+  if (opts.abstract === false) return lookupFound(candidate);
+  const { facts, failure } = await fetchAbstracts([pmid], opts);
+  const found = withArticleFacts([candidate], facts)[0] ?? candidate;
+  return lookupFound(failure === null ? found : { ...found, raw: { ...rec, abstractNote: `abstract unavailable (${failure})` } });
 }
 
 export async function fetchById(pmid: string): Promise<SourceCandidate | null> {

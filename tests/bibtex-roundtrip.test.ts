@@ -8,6 +8,7 @@
 //     editor, isbn, eprint + archivePrefix + primaryClass, and the CSL type ->
 //     @article / @book / @incollection / @inproceedings / @techreport /
 //     @phdthesis / @misc mapping;
+//   - last_verified (VRFY-28) when a registrar last confirmed the entry;
 //   - APA in-text "(Vaswani & Shazeer, 2017)" from the offline renderer and,
 //     when pandoc is on PATH, from pandoc citeproc.
 
@@ -170,6 +171,20 @@ test('SRC-12: abstract = {…} is present exactly when the entry has one', () =>
   assert.match(blocks.find((b) => b.includes('with2020,'))!, /abstract = \{/);
   assert.doesNotMatch(blocks.find((b) => b.includes('without2020,'))!, /abstract/);
   assert.equal(entryById(bib, 'with2020')['abstract'], 'Has an abstract & 50% braces {x}.');
+});
+
+test('VRFY-28 (D-20-15): last_verified = {<ISO time>} records when a registrar last confirmed the entry — written, read back, never invented', () => {
+  const bib = renderBibtex([
+    { citekey: 'seen2020', title: 'Seen', authors: ['A, B'], year: 2020, doi: '10.5555/seen', last_verified: '2026-09-30T07:03:50.138Z' },
+    { citekey: 'odd2020', title: 'Odd', authors: ['A, B'], year: 2020, doi: '10.5555/odd', last_verified: 'yesterday' },
+    { citekey: 'never2020', title: 'Never', authors: ['A, B'], year: 2020, doi: '10.5555/never' },
+  ]);
+  const blocks = bib.split(/\n(?=@)/);
+  assert.match(blocks.find((b) => b.includes('seen2020,'))!, /^ {2}last_verified = \{2026-09-30T07:03:50\.138Z\}/m);
+  assert.doesNotMatch(blocks.find((b) => b.includes('odd2020,'))!, /last_verified/, 'a value that is not a time is not written');
+  assert.doesNotMatch(blocks.find((b) => b.includes('never2020,'))!, /last_verified/);
+  // The bib still parses to the same entries (a non-standard field is ignored by citeproc).
+  assert.deepEqual(parseBibSync(bib).map((e) => String(e['id'])).sort(), ['never2020', 'odd2020', 'seen2020']);
 });
 
 test('SRC-12: an identifier-less bring-your-own PDF is written (@misc); an identifier-less source without one is not', () => {

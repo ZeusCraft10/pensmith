@@ -20,7 +20,10 @@
 //     never splits it into a particle and a family;
 //   - title, abstract, journal / booktitle, volume, number (issue), pages,
 //     publisher (institution / school), editor, isbn, pmid, doi, eprint +
-//     archivePrefix = {arXiv} + primaryClass for arXiv works, note = {RETRACTED};
+//     archivePrefix = {arXiv} + primaryClass for arXiv works, note = {RETRACTED},
+//     and last_verified = {<ISO time>} — when a registrar last confirmed the
+//     citation (VRFY-28, D-20-15; the exported bibliography never carries it,
+//     library.ts exportCitedCitations);
 //   - the entry type from the CSL `type`: article-journal / -newspaper /
 //     -magazine → @article, book → @book, chapter → @incollection,
 //     paper-conference → @inproceedings, report → @techreport, thesis →
@@ -95,6 +98,8 @@ export interface BibSource {
   editors?: string[] | undefined;
   /** A bring-your-own PDF record (SRC-15): such a source is citable without a registrar id. */
   byo?: { file: string; sha256: string } | null | undefined;
+  /** When a registrar last confirmed the citation (ISO-8601, VRFY-28): rendered as `last_verified`. */
+  last_verified?: string | null | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -389,6 +394,7 @@ export interface BibRecord {
     readonly authors: readonly PersonName[];
     readonly abstract: string | null;
     readonly eprint: string | null;
+    readonly lastVerified: string | null;
   };
 }
 
@@ -450,12 +456,15 @@ export function toBibRecord(c: BibSource, citekey: string): BibRecord | null {
   const abstract = text(c.abstract);
   if (abstract) push('abstract', escapeBibtexUtf8(abstract));
   if (c.retracted === true) push('note', 'RETRACTED');
+  // VRFY-28 (D-20-15): the time of the latest registrar answer that passed the citation.
+  const lastVerified = typeof c.last_verified === 'string' && !Number.isNaN(Date.parse(c.last_verified)) ? new Date(c.last_verified).toISOString() : null;
+  push('last_verified', lastVerified);
 
   return {
     citekey,
     entryType,
     fields,
-    expect: { title, authors, abstract, eprint },
+    expect: { title, authors, abstract, eprint, lastVerified },
   };
 }
 
@@ -625,6 +634,25 @@ function parsedName(a: unknown): PersonName {
   };
 }
 
+/**
+ * A field of the raw BibTeX entry citation-js parsed (its `_graph` keeps the
+ * entries before the CSL mapping), for a field CSL has no slot for;
+ * undefined when the parser kept no raw entry.
+ */
+function rawBibField(parsed: Record<string, unknown>, citekey: string, name: string): string | undefined {
+  const graph = parsed['_graph'];
+  if (!Array.isArray(graph)) return undefined;
+  for (const step of graph as Array<{ data?: unknown }>) {
+    if (!Array.isArray(step?.data)) continue;
+    for (const e of step.data as Array<{ label?: unknown; properties?: Record<string, unknown> }>) {
+      if (e?.label !== citekey || typeof e.properties !== 'object' || e.properties === null) continue;
+      const v = e.properties[name];
+      return typeof v === 'string' ? v.replace(/^\{(.*)\}$/s, '$1').trim() : undefined;
+    }
+  }
+  return undefined;
+}
+
 /** Why `entryText` does not read back as `r`, or null when it does. */
 function roundTripProblem(entryText: string, r: BibRecord): string | null {
   let parsed: Array<Record<string, unknown>>;
@@ -650,6 +678,11 @@ function roundTripProblem(entryText: string, r: BibRecord): string | null {
   }
   if (r.expect.abstract !== null && got['abstract'] !== r.expect.abstract) return 'abstract changed';
   if (r.expect.eprint !== null && got['eprint'] !== r.expect.eprint) return 'eprint changed';
+  // last_verified is not a CSL field: it reads back from the parser's raw entry.
+  if (r.expect.lastVerified !== null) {
+    const lv = rawBibField(got, r.citekey, 'last_verified');
+    if (lv !== undefined && lv !== r.expect.lastVerified) return 'last_verified changed';
+  }
   return null;
 }
 

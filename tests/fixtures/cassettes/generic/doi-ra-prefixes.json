@@ -14,7 +14,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T01:58:54.447Z",
+      "recordedAt": "2026-09-30T06:54:29.377Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -34,7 +34,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T01:58:54.447Z",
+      "recordedAt": "2026-09-30T06:54:29.377Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -54,7 +54,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T01:58:54.447Z",
+      "recordedAt": "2026-09-30T06:54:29.377Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -74,7 +74,7 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T01:58:54.447Z",
+      "recordedAt": "2026-09-30T06:54:29.377Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }
@@ -94,7 +94,147 @@
       "content-type": "application/json;charset=UTF-8"
     },
     "provenance": {
-      "recordedAt": "2026-09-30T01:58:54.447Z",
+      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/ra/10.1400",
+    "status": 200,
+    "response": [
+      {
+        "DOI": "10.1400",
+        "RA": "mEDRA"
+      }
+    ],
+    "responseHeaders": {
+      "content-type": "application/json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/ra/10.11501",
+    "status": 200,
+    "response": [
+      {
+        "DOI": "10.11501",
+        "RA": "JaLC"
+      }
+    ],
+    "responseHeaders": {
+      "content-type": "application/json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/ra/10.1145",
+    "status": 200,
+    "response": [
+      {
+        "DOI": "10.1145",
+        "RA": "Crossref"
+      }
+    ],
+    "responseHeaders": {
+      "content-type": "application/json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/ra/10.1109",
+    "status": 200,
+    "response": [
+      {
+        "DOI": "10.1109",
+        "RA": "Crossref"
+      }
+    ],
+    "responseHeaders": {
+      "content-type": "application/json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/ra/10.1016",
+    "status": 200,
+    "response": [
+      {
+        "DOI": "10.1016",
+        "RA": "Crossref"
+      }
+    ],
+    "responseHeaders": {
+      "content-type": "application/json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/ra/10.58346",
+    "status": 200,
+    "response": [
+      {
+        "DOI": "10.58346",
+        "RA": "Crossref"
+      }
+    ],
+    "responseHeaders": {
+      "content-type": "application/json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:54:29.377Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "generic"
+    }
+  },
+  {
+    "scope": "https://doi.org",
+    "method": "GET",
+    "path": "/ra/10.9999",
+    "status": 200,
+    "response": [
+      {
+        "DOI": "10.9999",
+        "status": "DOI does not exist"
+      }
+    ],
+    "responseHeaders": {
+      "content-type": "application/json;charset=UTF-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:54:29.377Z",
       "recorder": "scripts/refresh-cassettes.mjs",
       "adapter": "generic"
     }

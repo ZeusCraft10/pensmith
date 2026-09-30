@@ -1,0 +1,24 @@
+[
+  {
+    "scope": "https://api.datacite.org",
+    "method": "GET",
+    "path": "/dois/10.5281%2Fzenodo.pensmith-fake-2099",
+    "status": 404,
+    "response": {
+      "errors": [
+        {
+          "status": "404",
+          "title": "The resource you are looking for doesn't exist."
+        }
+      ]
+    },
+    "responseHeaders": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "provenance": {
+      "recordedAt": "2026-09-30T06:52:10.087Z",
+      "recorder": "scripts/refresh-cassettes.mjs",
+      "adapter": "datacite"
+    }
+  }
+]

@@ -5,10 +5,10 @@
 // The built CLI runs in a sandboxed paper under the test runner, so sources are
 // offline and every request is answered by the REAL recordings: the Crossref
 // record of the work (whose `updated-by` carries the Retraction Watch notice)
-// and the retraction re-query. `verify 1` records a blocking verdict that names
-// the retraction, the section's status is `failed`, and `compile --yolo` and
-// `done --yolo` refuse with EXIT_BLOCKED (4). (The verdict label becomes
-// RETRACTED in Phase 20, VRFY-15; today it is the blocking MIS-CITED.)
+// and the retraction re-query. `verify 1` records a blocking RETRACTED verdict
+// that names the retraction (Phase 20, VRFY-15) and echoes it on stderr as a
+// hard warning, the section's status is `failed`, and `compile --yolo` and
+// `done --yolo` refuse with EXIT_BLOCKED (4).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -56,7 +56,7 @@ function seedWakefieldPaper(root: string): string {
   return dir;
 }
 
-test('SRC-04: `verify 1` citing the retracted Wakefield paper records a blocking verdict naming the retraction; compile and done exit 4', () => {
+test('SRC-04 / VRFY-15: `verify 1` citing the retracted Wakefield paper records a blocking RETRACTED verdict naming the retraction, warns on stderr; compile and done exit 4', () => {
   const sb = sandbox('retraction-cli');
   const root = sb.project('paper');
   const dir = seedWakefieldPaper(root);
@@ -70,8 +70,10 @@ test('SRC-04: `verify 1` citing the retracted Wakefield paper records a blocking
   // The blocking Pass 1 verdict names the retraction notice (Crossref record + Retraction Watch).
   assert.match(
     md,
-    /- wakefield1998: \*\*MIS-CITED\*\* .*retracted.*2010-02-06: Retraction \(notice 10\.1016\/s0140-6736\(10\)60175-4; Retraction Watch record 4036\)/,
+    /- wakefield1998: \*\*RETRACTED\*\* .*retracted.*2010-02-06: Retraction \(notice 10\.1016\/s0140-6736\(10\)60175-4; Retraction Watch record 4036\)/,
   );
+  // VRFY-15: a hard warning on stderr, naming the key and the notice.
+  assert.match(v.stderr, /^pensmith verify: RETRACTED — wakefield1998: .*2010-02-06: Retraction \(notice 10\.1016\/s0140-6736\(10\)60175-4; Retraction Watch record 4036\)/m);
   assert.ok(!/- wakefield1998: \*\*OK\*\*/.test(md), 'never OK');
   assert.match(readFileSync(join(dir, 'PLAN.md'), 'utf8'), /^status: failed$/m);
 
@@ -104,10 +106,10 @@ test('SRC-04 (review round 2): `add` of a retracted DOI says so; verify names th
   const v = runCli(sb, root, ['verify', '1', '--yolo'], { timeoutMs: 120_000 });
   assert.equal(v.status, 4, `${v.stdout}\n${v.stderr}`);
   const row = readFileSync(join(dir, 'VERIFICATION.md'), 'utf8').split('\n').find((l) => l.startsWith('- wakefield1998:')) ?? '';
-  assert.match(row, /\*\*MIS-CITED\*\* — titleJW=1\.00, authorJW=1\.00 — cited work is retracted/, "the stored record is Crossref's own: the metadata matches exactly");
+  assert.match(row, /\*\*RETRACTED\*\* — titleJW=1\.00, authorJW=1\.00 — cited work is retracted/, "the stored record is Crossref's own: the metadata matches exactly");
   assert.doesNotMatch(row, /titleJW=0\.00, authorJW=0\.00/, 'real scores, never a false 0.00');
   assert.doesNotMatch(row, /Retraction Watch cross-check at research time/, 'the flag says where it came from');
   const c = runCli(sb, root, ['compile', '--yolo'], { timeoutMs: 120_000 });
   assert.equal(c.status, 4);
-  assert.match(c.stdout + c.stderr, /citation \[@wakefield1998\] has a blocking verdict \(MIS-CITED: the cited work is retracted\)/);
+  assert.match(c.stdout + c.stderr, /citation \[@wakefield1998\] .*\bRETRACTED\b.*retracted/, 'compile names the key and the RETRACTED verdict');
 });

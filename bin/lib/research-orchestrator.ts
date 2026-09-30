@@ -46,6 +46,7 @@ import { sources } from './sources/index.js';
 import * as dryRunProvider from './sources/dry-run.js';
 import type { SearchOptions } from './sources/search-failure.js';
 import { SourceCandidateSchema, type SourceCandidate } from './schemas/source-candidate.js';
+import { confirmRegistrarRecords, type CrossrefLookup } from './sources/registrar-confirm.js';
 import type { SourceTier } from './schemas/source-types.js';
 import type { LibraryEntry } from './schemas/library.js';
 import { normalizeDoi, isReservedDryRunId } from './doi.js';
@@ -163,6 +164,12 @@ export interface QueryOutcome {
   readonly count: number;
   /** `ok` | `no results` | `offline: no recorded fixture` | `failed (<reason>)` */
   readonly status: string;
+  /**
+   * What the adapter answered without (Phase 20, D-20-16: `abstracts
+   * unavailable (…)` when PubMed's efetch did not answer) — the search itself
+   * succeeded; the note is shown on the adapter's status line.
+   */
+  readonly note?: string;
 }
 
 /** One adapter's outcome over every query (or a plan skip). */
@@ -303,6 +310,9 @@ function aggregateStatus(rows: readonly QueryOutcome[], total: number): string {
   const parts: string[] = [total > 0 ? 'ok' : 'no results'];
   if (failed.length > 0) parts.push(`${failed[0]?.status ?? 'failed'} for ${failed.length} of ${n} queries`);
   if (offline.length > 0) parts.push(`no recorded fixture for ${offline.length} of ${n} queries`);
+  // D-20-16: what the adapter answered without (e.g. PubMed abstracts).
+  const noted = rows.filter((r) => r.note !== undefined);
+  if (noted.length > 0) parts.push(`${noted[0]?.note as string}${n > 1 ? ` for ${noted.length} of ${n} queries` : ''}`);
   return parts.join('; ');
 }
 
@@ -348,18 +358,22 @@ export async function discoverCandidates(args: {
           return { entry, results: [] as SourceCandidate[], status: 'skipped (no adapter)' };
         }
         let failure: string | null = null;
+        let note: string | null = null;
         try {
           const opts: SearchOptions = {
             limit: RESEARCH_PER_QUERY_LIMIT,
             onFailure: (reason) => {
               failure ??= reason;
             },
+            onWarning: (n) => {
+              note ??= n;
+            },
             ...(args.fromYear !== undefined ? { fromYear: args.fromYear } : {}),
             ...(entry.options.doiPrefix !== undefined ? { doiPrefix: entry.options.doiPrefix } : {}),
           };
           const results = await adapter.search(query, opts);
           if (failure !== null && results.length === 0) return { entry, results, status: `failed (${failure})` };
-          return { entry, results, status: 'ok' };
+          return { entry, results, status: 'ok', ...(note !== null ? { note: note as string } : {}) };
         } catch (err) {
           if (isOfflineEgressError(err)) {
             // RUN-03: an offline miss is a distinct "no recorded fixture" result.
@@ -371,7 +385,9 @@ export async function discoverCandidates(args: {
     );
     let queryCount = 0;
     let offlineMisses = 0;
-    for (const { entry, results, status } of settled) {
+    for (const settledOne of settled) {
+      const { entry, results, status } = settledOne;
+      const note = 'note' in settledOne ? settledOne.note : undefined;
       if (status.endsWith('no recorded fixture')) offlineMisses += 1;
       let kept = 0;
       for (const item of results) {
@@ -397,7 +413,13 @@ export async function discoverCandidates(args: {
       }
       found += kept;
       queryCount += kept;
-      perQuery.push({ query, adapter: entry.id, count: kept, status: status === 'ok' && kept === 0 ? 'no results' : status });
+      perQuery.push({
+        query,
+        adapter: entry.id,
+        count: kept,
+        status: status === 'ok' && kept === 0 ? 'no results' : status,
+        ...(note !== undefined && kept > 0 ? { note } : {}),
+      });
     }
     if (mode.sourcesOffline && !mode.dryRun && queryCount === 0 && offlineMisses > 0) {
       warn(`offline: no recorded results for this query ("${query}")`);
@@ -794,13 +816,32 @@ export async function runResearchPass(args: {
     perQuery: discovery.perQuery,
     found: discovery.found,
     distinct: discovery.candidates.length,
-    kept: rankItems(kept),
+    kept: await confirmKept(rankItems(kept), args.registry, now),
     rejected: rankItems(rejected),
     excluded,
     notEvaluated: kept.filter((k) => k.decision === 'not-evaluated').length,
     evaluator: { calls: run.calls, failures: run.failures, unknownVerdicts: applied.unknownVerdicts },
     own,
   };
+}
+
+/**
+ * The kept candidates an aggregator found, confirmed at Crossref (Phase 20,
+ * VRFY-13; sources/registrar-confirm.ts): a record that pairs the journal
+ * DOI with another version's year gets the DOI's own fields, so what research
+ * writes is what verify finds. Only with a registry whose `crossref` adapter
+ * can look a DOI up (never the --dry-run provider or a test's fakes without
+ * one).
+ */
+async function confirmKept(items: ResearchItem[], registry: AdapterRegistry, now: string): Promise<ResearchItem[]> {
+  const crossref = registry['crossref'] as { lookupById?: unknown } | undefined;
+  if (crossref === undefined || typeof crossref.lookupById !== 'function') return items;
+  const lookupById = crossref.lookupById as CrossrefLookup;
+  const { candidates } = await confirmRegistrarRecords(items.map((i) => i.candidate), (doi) => lookupById(doi));
+  return items.map((item, i) => {
+    const c = candidates[i] ?? item.candidate;
+    return c === item.candidate ? item : { ...item, candidate: c, view: candidateToEntry(c, [], now) };
+  });
 }
 
 // ---------------------------------------------------------------------------

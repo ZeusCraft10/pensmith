@@ -24,6 +24,13 @@ export interface SearchOptions {
   /** Called once with a one-line reason when the search request failed (the result is then []). */
   onFailure?: (reason: string) => void;
   /**
+   * Called with a one-line note when the search answered but part of what it
+   * adds could not be fetched (Phase 20, D-20-16: PubMed's efetch abstracts —
+   * `abstracts unavailable (…)`). The results are still returned; the
+   * research log shows the note on the adapter's status line.
+   */
+  onWarning?: (note: string) => void;
+  /**
    * Phase 19 seam S-B (SRC-10): only works published in or after this year,
    * pushed down into the service's own filter where it has one (Crossref
    * `from-pub-date`, OpenAlex `from_publication_date`, PubMed `mindate`,

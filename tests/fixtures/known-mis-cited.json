@@ -1,0 +1,72 @@
+[
+  {
+    "citekey": "miscite2015title",
+    "doi": "10.1038/nature14539",
+    "title": "Deep reinforcement learning for robotics",
+    "authors": ["LeCun, Yann", "Bengio, Yoshua"],
+    "year": 2015,
+    "expected_verdict": "MIS-CITED",
+    "failing": ["title"],
+    "why": "A real DOI (LeCun, Bengio & Hinton, Nature 2015) cited with another paper's title"
+  },
+  {
+    "citekey": "miscite2015author",
+    "doi": "10.1038/nature14539",
+    "title": "Deep learning",
+    "authors": ["Hinton, Geoffrey", "LeCun, Yann"],
+    "year": 2015,
+    "expected_verdict": "MIS-CITED",
+    "failing": ["first author"],
+    "why": "The right DOI and title with the author order changed: the first author is wrong"
+  },
+  {
+    "citekey": "miscite1999year",
+    "doi": "10.1038/nature14539",
+    "title": "Deep learning",
+    "authors": ["LeCun, Yann"],
+    "year": 1999,
+    "expected_verdict": "MIS-CITED",
+    "failing": ["year"],
+    "why": "The right DOI, title and author with a year 16 years off (VRFY-13: the year must be within 1)"
+  },
+  {
+    "citekey": "miscite2009near",
+    "doi": "10.1038/nphys1170",
+    "title": "Measured movement",
+    "authors": ["Aspelmeyer, Markus"],
+    "year": 2009,
+    "expected_verdict": "MIS-CITED",
+    "failing": ["title"],
+    "why": "A title close to the real one (\"Measured measurement\") but below the 0.92 Jaro-Winkler threshold"
+  },
+  {
+    "citekey": "miscite2020paper",
+    "doi": "10.1056/NEJMoa2001017",
+    "title": "A new coronavirus associated with human respiratory disease in China",
+    "authors": ["Wu, Fan"],
+    "year": 2020,
+    "expected_verdict": "MIS-CITED",
+    "failing": ["title", "first author"],
+    "why": "The DOI of one real paper (Zhu et al., NEJM 2020) with the title and first author of another (Wu et al., Nature 2020)"
+  },
+  {
+    "citekey": "miscite2002encode",
+    "doi": "10.1038/nature11247",
+    "title": "An integrated encyclopedia of DNA elements in the human genome",
+    "authors": ["{The ENCODE Project Consortium}"],
+    "year": 2002,
+    "expected_verdict": "MIS-CITED",
+    "failing": ["year"],
+    "why": "A consortium work cited with the right title and author but a year ten years early"
+  },
+  {
+    "citekey": "miscite2013author",
+    "doi": "10.1016/j.foreco.2013.06.030",
+    "title": "Thinning prolongs growth duration of European beech (Fagus sylvatica L.) across a valley in southwestern Germany",
+    "authors": ["Spiecker, Heinrich"],
+    "year": 2013,
+    "expected_verdict": "MIS-CITED",
+    "failing": ["first author"],
+    "why": "The right DOI and title attributed to someone who did not write it"
+  }
+]

@@ -6,13 +6,17 @@
 //   - a DataCite arXiv DOI (`10.48550/arXiv.<id>`) at arXiv, by that id;
 //   - a reserved `10.0000/pensmith-dryrun.*` DOI from the synthetic provider,
 //     under --dry-run only;
-//   - any other DOI at Crossref — and when Crossref has no record of it and
-//     doi.org says another agency (DataCite, ISTIC, JaLC, mEDRA, …) registered
-//     it, by the entry's arXiv id / PMID / ISBN at their own registrars
-//     (else UNVERIFIABLE, never FABRICATED);
+//   - any other DOI at Crossref — and when Crossref has no record of it, at
+//     the agency doi.org names for its prefix (Phase 20, VRFY-11, D-20-10):
+//     DataCite (Zenodo, figshare, Dryad, …) at DataCite's API, mEDRA / JaLC /
+//     KISTI through doi.org content negotiation, and an agency that serves no
+//     record (ISTIC, …) by the entry's arXiv id / PMID / ISBN at their own
+//     registrars (else UNVERIFIABLE, never FABRICATED);
 //   - an entry without a DOI by its arXiv id (arXiv), PMID (PubMed) and ISBN
 //     (the books registries), in that order.
-// An entry with none of these cannot be checked upstream.
+// An entry with none of these is checked only by a metadata search (VRFY-12),
+// which may find no strict match: the outline and the planner are not offered
+// it (NO_IDENTIFIER_REASON).
 //
 // source-context.ts verifierBlindSpot reads citationCheckRoute to decide which
 // LIBRARY entries the outline and the planner may be offered (D-18-37): only
@@ -45,11 +49,11 @@ export interface CitationIdentifiers {
 }
 
 /**
- * DOI prefixes registered with DataCite that are not arXiv's: Zenodo,
- * figshare, Dryad. Crossref has no record of them, and Pass 1 cannot query
- * DataCite yet (VRFY-11), so such an entry is checkable only through its
- * arXiv id / PMID / ISBN. (arXiv's own DataCite prefix, 10.48550, is resolved
- * at arXiv.)
+ * Well-known DOI prefixes registered with DataCite that are not arXiv's:
+ * Zenodo, figshare, Dryad. Crossref has no record of them; since Phase 20
+ * (VRFY-11) Pass 1 checks them at DataCite, so they are checkable like any
+ * other DOI (uncheckableReason). (arXiv's own DataCite prefix, 10.48550, is
+ * resolved at arXiv.)
  */
 export const DATACITE_DOI_PREFIXES: readonly string[] = Object.freeze(['10.5281', '10.6084', '10.5061']);
 
@@ -112,12 +116,9 @@ export function uncheckableReason(ids: CitationIdentifiers): string | null {
       return null;
     case 'no-doi':
       return route.ids.length > 0 ? null : NO_IDENTIFIER_REASON;
-    case 'crossref': {
-      const prefix = doiPrefixOf(ids.doi);
-      if (DATACITE_DOI_PREFIXES.includes(prefix) && route.fallback.length === 0) {
-        return `a DataCite DOI (${prefix}) the verifier cannot check yet, and no arXiv id, PMID or ISBN`;
-      }
+    case 'crossref':
+      // Crossref, else the agency doi.org names (DataCite, content
+      // negotiation, else the entry's other identifiers) — VRFY-11.
       return null;
-    }
   }
 }
