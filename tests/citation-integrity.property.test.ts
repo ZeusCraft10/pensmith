@@ -25,6 +25,9 @@
 //                core verify, compile and done share (verify/gate.ts
 //                recomputeGate): a flagged draft is never `verified`, and a
 //                key missing from the bibliography is a blocking FABRICATED.
+//   Property D — no false positive: a clean draft (citations and noise —
+//                intervals, shapes, numbered labels, math, emails — with no
+//                code) carries no text finding.
 //
 // `Claim A [@smith2020 [see note]].` is a fixed regression example.
 //
@@ -179,6 +182,10 @@ const unsupported: fc.Arbitrary<Segment> = fc.oneof(
   fc.constant(bad('shown<sup>1</sup>')),
   fc.constant(bad('as shown [3]')),
   fc.constant(bad('studies¹ agree')),
+  // MLA author-page and title forms, an APA personal communication.
+  fc.constant(bad('asthma fell (Nguyen 45)')),
+  fc.constant(bad('(Nguyen, *Street Trees*, 2019)')),
+  fc.constant(bad('(T. Nguyen, personal communication, May 3, 2019)')),
 );
 
 const noise: fc.Arbitrary<Segment> = fc.oneof(
@@ -187,6 +194,8 @@ const noise: fc.Arbitrary<Segment> = fc.oneof(
   key.map((k) => ok(`an escaped \\@${k}`)),
   key.map((k) => ok(`code \`@${k}\` here`)),
   fc.constant(ok('the interval $[1]$')),
+  // Intervals, shapes, indices and numbered labels are not citation markers.
+  fc.constantFrom('scores normalized to [0, 1]', 'a tensor of shape [32, 224, 224, 3]', 'values lie in [1, 5]', 'array indices [1] and [2]', 'as in (Figure 3) and (Apollo 11)').map(ok),
 );
 
 const segment = fc.oneof({ weight: 4, arbitrary: citation }, { weight: 2, arbitrary: unsupported }, { weight: 3, arbitrary: noise });
@@ -199,6 +208,19 @@ const block: fc.Arbitrary<{ text: string; flagged: boolean; note?: string }> = f
   })) },
   { weight: 1, arbitrary: key.map((k) => ({ text: `\`\`\`\n@${k} and \\cite{${k}}\n\`\`\``, flagged: false })) },
   { weight: 1, arbitrary: fc.constant({ text: '### References\n\n- Nguyen, T. (2019). Shade and heat. Urban Climate.', flagged: true }) },
+  // Reference lists under other headings, or none (APA, MLA, Vancouver entries).
+  {
+    weight: 1,
+    arbitrary: fc
+      .constantFrom(
+        '## References Cited\n\nNguyen, T., & Patel, R. (2019). Street trees and urban asthma. Journal of Urban Climate, 12(3), 45–67.',
+        '## Key Sources\n\n- Lee, K. (2021). Canopy. Nature, 1, 2.',
+        'Nguyen, T., & Patel, R. (2019). Street trees and urban asthma. Journal of Urban Climate, 12(3), 45–67.',
+        'Nguyen, Thanh. "Street Trees and Asthma." Journal of Urban Climate, vol. 12, 2019, pp. 45–67.',
+        '1. Nguyen T, Patel R. Street trees and asthma. J Urban Clim. 2019;12(3):45-67.',
+      )
+      .map((text) => ({ text, flagged: true })),
+  },
   { weight: 1, arbitrary: fc.tuple(fc.integer({ min: 1, max: 9 }), key).map(([n, k]) => ({ text: `A claim.[^n${n}]`, flagged: true, note: `[^n${n}]: Fakeson, A. (2019). See @${k}.` })) },
 );
 
@@ -242,6 +264,10 @@ function violations(d: Draft, pandoc: readonly string[]): string[] {
   const unseen = rendered.filter((k) => !pass1.has(k));
   if (unseen.length > 0) out.push(`B: the exporter renders ${JSON.stringify(unseen)}, which Pass 1 never sees`);
   if (d.flagged && !blocked) out.push('C: an unsupported or unparseable form yields no blocking finding');
+  // D: a clean draft is never blocked for nothing. (Code is left out: where the
+  // grammar cannot PROVE a span is code, it scans it — fail closed — so a
+  // `\cite` shown in a code block may count when another construct voids the proof.)
+  if (!d.flagged && blocked && !d.md.includes('`')) out.push(`D: a clean draft has a text finding (${[...findUnparseableCitations(d.md), ...findUnsupportedForms(d.md)].map((f) => f.text).join(' | ')})`);
   return out;
 }
 
@@ -261,7 +287,7 @@ function requirePandoc(t: { skip(msg?: string): void }): boolean {
   return false;
 }
 
-test(`HARDEN-03: Properties A, B and C hold over ${RUNS} generated drafts against pandoc (seed ${SEED})`, async (t) => {
+test(`HARDEN-03: Properties A, B, C and D hold over ${RUNS} generated drafts against pandoc (seed ${SEED})`, async (t) => {
   if (!requirePandoc(t)) return;
   const t0 = Date.now();
   const sample = fc.sample(draft, { seed: SEED, numRuns: RUNS });

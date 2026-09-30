@@ -34,6 +34,9 @@ const POSITIVE: readonly Case[] = [
   ['particles and diacritics', 'Heat (van der Berg, 2011) and (García-López & O\'Neil, 2018a).', [['author-date', 1, '(van der Berg, 2011)'], ['author-date', 1, "(García-López & O'Neil, 2018a)"]]],
   ['n.d. and in press', 'One (Smith, n.d.) and two (Lee, in press).', [['author-date', 1, '(Smith, n.d.)'], ['author-date', 1, '(Lee, in press)']]],
   ['MLA with two names', 'As argued (Smith and Jones 45).', [['author-date', 1, '(Smith and Jones 45)']]],
+  ['MLA author-page', 'Street trees lower asthma rates (Nguyen 45) and heat (van der Berg 12).', [['author-date', 1, '(Nguyen 45)'], ['author-date', 1, '(van der Berg 12)']]],
+  ['MLA / Chicago with a title', 'Shade helps (Nguyen, *Street Trees*, 2019) and cools (see Nguyen, "Shade" 12).', [['author-date', 1, '(Nguyen, *Street Trees*, 2019)'], ['author-date', 1, '(see Nguyen, "Shade" 12)']]],
+  ['APA personal communication', 'Trees help (T. Nguyen, personal communication, May 3, 2019).', [['author-date', 1, '(T. Nguyen, personal communication, May 3, 2019)']]],
   ['bracketed author-date', 'Trees help [Smith 2019].', [['author-date', 1, '[Smith 2019]']]],
   ['narrative pair', 'Nguyen and Patel (2019) found that trees help.', [['author-date', 1, 'Nguyen and Patel (2019)']]],
   ['narrative et al.', 'Heat rose.\nSmith et al. (2019, p. 4) measured it.', [['author-date', 2, 'Smith et al. (2019, p. 4)']]],
@@ -61,6 +64,29 @@ const POSITIVE: readonly Case[] = [
   ['setext works cited', 'Body.\n\nWorks Cited\n-----------\n\nSmith, J. Trees. 2019.', [['reference-list', 3, 'Works Cited'], ['reference-list', 6, 'Smith, J. Trees. 2019.']]],
   ['numbered notes heading', 'Body.\n\n## 4. Notes\n\nA note about a source.', [['reference-list', 3, '## 4. Notes'], ['reference-list', 5, 'A note about a source.']]],
   ['a lone label line', 'Body.\n\nSources:\n\n- a\n- b', [['reference-list', 3, 'Sources:'], ['reference-list', 5, '- a'], ['reference-list', 6, '- b']]],
+  // Any heading made of reference-list words, when an entry under it has an entry's shape.
+  ...['References Cited', 'References and Notes', 'Selected References', 'Reference', 'Literature', 'Sources Consulted', 'Key Sources', 'Source list'].map(
+    (h): Case => [
+      `a "${h}" heading`,
+      `Body [@k].\n\n## ${h}\n\nNguyen, T., & Patel, R. (2019). Street trees and urban asthma. Journal of Urban Climate, 12(3), 45–67.`,
+      [['reference-list', 3, `## ${h}`], ['reference-list', 5, 'Nguyen, T., & Patel, R. (2019). Street trees and urban asthma. Journal of Urban Climate, 12(3), 45–67.']],
+    ],
+  ),
+  // Typed reference entries with no heading: APA, MLA, Chicago, Vancouver.
+  [
+    'heading-less entries',
+    'Body [@k].\n\nNguyen, T., & Patel, R. (2019). Street trees. Urban Climate, 12, 45–67.\n\n- Lee, K. (2021). Canopy. Nature, 1, 2.\n\n' +
+      'Nguyen, Thanh. "Street Trees and Asthma." Journal of Urban Climate, vol. 12, 2019, pp. 45–67.\n\nNguyen, Thanh, and Raj Patel. *Street Trees*. Urban Press, 2019.\n\n' +
+      'Nguyen, Thanh. 2019. "Street Trees." Journal of Urban Climate 12 (3): 45–67.\n\n1. Nguyen T, Patel R. Street trees and asthma. J Urban Clim. 2019;12(3):45-67.',
+    [
+      ['reference-list', 3, 'Nguyen, T., & Patel, R. (2019). Street trees. Urban Climate, 12, 45–67.'],
+      ['reference-list', 5, '- Lee, K. (2021). Canopy. Nature, 1, 2.'],
+      ['reference-list', 7, 'Nguyen, Thanh. "Street Trees and Asthma." Journal of Urban Climate, vol. 12, 2019, pp. 45–67.'],
+      ['reference-list', 9, 'Nguyen, Thanh, and Raj Patel. *Street Trees*. Urban Press, 2019.'],
+      ['reference-list', 11, 'Nguyen, Thanh. 2019. "Street Trees." Journal of Urban Climate 12 (3): 45–67.'],
+      ['reference-list', 13, '1. Nguyen T, Patel R. Street trees and asthma. J Urban Clim. 2019;12(3):45-67.'],
+    ],
+  ],
   // Raw TeX (V6).
   ['\\cite', 'Trees cool cities \\cite{fake2019}.', [['tex-cite', 1, '\\cite{fake2019}']]],
   ['starred, optioned natbib', 'Trees \\citep*[p.~4]{a,b} and \\citet{c}.', [['tex-cite', 1, '\\citep*[p.~4]{a,b}'], ['tex-cite', 1, '\\citet{c}']]],
@@ -95,6 +121,9 @@ const NEGATIVE: ReadonlyArray<readonly [string, string]> = [
   ['links, arrays and definitions', 'See x[1], [text][1], [1](http://example.org) and ![a figure](f.png).\n\n[1]: http://example.org'],
   ['Pandoc citations', 'Trees cool cities [@nguyen2019; @patel2019, p. 4]. As @smith2020 argues, shade helps [-@lee2021].'],
   ['headings that are not reference lists', '## Notes on method\n\nText.\n\n## Background\n\nMore text.'],
+  ['reference-list words with prose under them', '## Literature Review\n\nThe literature on street trees is broad [@k].\n\n## Literature\n\nMost studies measure heat [@k].\n\n## Sources of Error\n\nSampling was uneven.'],
+  ['a place name before a year', 'Washington, D.C. (2019) hosted the summit, and Paris, France is large.'],
+  ['numbered labels', 'See (Figure 3), (Level 2), (Apollo 11), (Python 3), (World War 2), (COVID 19), (Windows 10), (Grade 5) and (Title 9).'],
   ['a parenthetical aside', 'Paris (France) is large, and the result (a small one) held.'],
   // Intervals, index lists and shapes are not numbered markers (a citation number is never 0, never descends).
   ['intervals', 'Scores are normalized to the interval [0, 1] [@k]. Probabilities lie in [0,1]. Values lie in [1, 5]; ages in the range [18, 65] were eligible.'],

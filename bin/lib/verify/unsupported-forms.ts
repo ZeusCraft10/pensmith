@@ -4,9 +4,12 @@
 // Only a Pandoc citation (`[@key]` and the other forms citation-token.ts
 // reads) names an entry of CITATIONS.bib, so only a Pandoc citation can be
 // verified. Every other attribution — author-date prose "(Nguyen & Patel,
-// 2019)", a Markdown footnote, an inline note, a reference list typed into
-// the draft, a raw TeX `\cite`, HTML `<cite>` / `<sup>` markers, numbered
-// `[1]` markers — would carry a fabricated source straight past Pass 1 into
+// 2019)" and MLA's "(Nguyen 45)" / "(Nguyen, *Title*, 2019)", a Markdown
+// footnote, an inline note, a reference list typed into the draft (under a
+// reference-list heading, or entries shaped like APA / MLA / Chicago /
+// Vancouver references under any heading or none), a raw TeX `\cite`, HTML
+// `<cite>` / `<sup>` markers, numbered `[1]` markers — would carry a
+// fabricated source straight past Pass 1 into
 // the export (the audit's V4, V6 and V7 escapes, FU1-GATE-1). Each one found is
 // a blocking UNSUPPORTED-FORM row naming its text and line; the gate core runs
 // this scanner over every section draft, the compiled DRAFT.md and FINAL.md.
@@ -19,8 +22,9 @@
 // citations are left alone because they cannot be mistaken for one: a lone
 // name before a year ("the Treaty of Versailles (1919)"), a parenthetical
 // with no name ("(n = 2019)", "(1919)", "(COVID-19)"), a year range
-// ("(World War II, 1939–1945)"), an exponent ("m<sup>2</sup>", "x²"), an
-// email address.
+// ("(World War II, 1939–1945)"), a numbered label ("(Figure 3)", "(Apollo
+// 11)"), an interval, shape or index in brackets ("[0, 1]", "shape [32,
+// 128]"), an exponent ("m<sup>2</sup>", "x²"), an email address.
 //
 // PURE: no I/O. Line numbers are 1-based and count `\n`, so an LF and a CRLF
 // copy of a draft report the same lines.
@@ -118,6 +122,14 @@ function mathSpans(md: string, code: ReadonlyArray<readonly [number, number]>): 
 }
 
 // ---------------------------------------------------------------------------
+// Name patterns (reference entries and author-date citations).
+// ---------------------------------------------------------------------------
+
+/** A capitalised name word: `Nguyen`, `O'Neil`, `García-López`, `St.`, `U.S.`, `WHO`. */
+const CAPWORD = String.raw`\p{Lu}(?:[\p{L}\p{M}'’.]|-(?=\p{L}))*`;
+const PARTICLE = String.raw`(?:van|von|de|der|den|del|della|di|da|du|le|la|ten|ter|al|el|bin|ibn|dos|das|do|zu)`;
+
+// ---------------------------------------------------------------------------
 // Reference lists (a heading or a bold / emphasised / lone line naming one, and
 // every entry under it up to the next heading).
 // ---------------------------------------------------------------------------
@@ -175,45 +187,116 @@ function headingText(lines: readonly Line[], i: number, kind: 'atx' | 'setext' |
   return text;
 }
 
+/**
+ * The words a reference-list heading is made of ("References Cited",
+ * "References and Notes", "Selected References", "Key Sources", "Source
+ * list"). A heading whose words all come from here and name a list
+ * (REFERENCE_LIST_NOUNS) is a reference-list heading when an entry under it
+ * has a reference entry's shape; "Literature Review", "Sources of Error" or
+ * "Notes on Method" hold a word from outside, so they never are.
+ */
+const REFERENCE_LIST_VOCABULARY: ReadonlySet<string> = new Set([
+  'reference', 'references', 'referenced', 'bibliography', 'bibliographies', 'bibliographic', 'works', 'work', 'cited', 'consulted', 'used',
+  'literature', 'sources', 'source', 'citations', 'citation', 'notes', 'endnotes', 'footnotes', 'further', 'reading', 'readings',
+  'selected', 'select', 'key', 'main', 'primary', 'secondary', 'additional', 'other', 'general', 'annotated', 'recommended', 'suggested',
+  'list', 'of', 'and', '&', 'the', 'for', 'this', 'paper', 'article', 'chapter', 'section',
+]);
+const REFERENCE_LIST_NOUNS: ReadonlySet<string> = new Set([
+  'reference', 'references', 'bibliography', 'bibliographies', 'works', 'literature', 'sources', 'source', 'citations', 'readings', 'reading',
+]);
+
+function vocabularyHeading(name: string): boolean {
+  const words = name.split(/[\s,/]+/).filter((w) => w.length > 0);
+  return words.length > 0 && words.length <= 6 && words.every((w) => REFERENCE_LIST_VOCABULARY.has(w)) && words.some((w) => REFERENCE_LIST_NOUNS.has(w));
+}
+
+// Reference entries (APA, Harvard, MLA, Chicago, Vancouver) typed as a
+// paragraph or a list item, under any heading or none: a family name and
+// initials or a given name, then a year in parentheses (APA, Harvard) or a
+// title in quotes or emphasis (MLA, Chicago), or a Vancouver author list, a
+// title and a journal with its year.
+const ENTRY_MARKER = String.raw`^[ \t]{0,3}(?:(?:[-*+]|\d{1,3}[.)]|\[\d{1,3}\])[ \t]+)?`;
+const FAMILY = String.raw`(?:${PARTICLE}\s+)*\p{Lu}[\p{L}\p{M}'’]+(?:-\p{Lu}[\p{L}\p{M}'’]+)?(?:\s+\p{Lu}[\p{L}\p{M}'’]+)?`;
+const INITIALS = String.raw`\p{Lu}\.(?:[\s-]*\p{Lu}\.)*`;
+const GIVEN = String.raw`\p{Lu}[\p{L}\p{M}'’-]+(?:\s+(?:\p{Lu}\.|\p{Lu}[\p{L}\p{M}'’-]+))*`;
+const ENTRY_YEAR = String.raw`(?:(?:1[5-9]|20)\d{2}[a-z]?|n\.\s?d\.|in\s+press|forthcoming)`;
+const APA_AUTHORS = String.raw`${FAMILY},\s+${INITIALS}(?:,?\s*(?:(?:&|and)\s+)?${FAMILY},\s+${INITIALS})*(?:,?\s+(?:…|\.\.\.)\s+${FAMILY},\s+${INITIALS})?(?:,?\s+et\s+al\.)?`;
+const ENTRY_SHAPES: readonly RegExp[] = [
+  // APA / Harvard: Nguyen, T., & Patel, R. (2019). Title … / Nguyen, T. and Patel, R. (2019) 'Title', …
+  new RegExp(String.raw`${ENTRY_MARKER}${APA_AUTHORS}\s*\(\s*${ENTRY_YEAR}[^)\n]{0,30}\)\s*[.,]?\s*(?:\p{Lu}|["'“‘*_])`, 'u'),
+  // Harvard without parentheses / Chicago author-date: Nguyen, T. 2019. Title … / Nguyen, Thanh. 2019. "Title."
+  new RegExp(String.raw`${ENTRY_MARKER}(?:${APA_AUTHORS}|${FAMILY},\s+${GIVEN}(?:,?\s+and\s+${GIVEN}\s+${FAMILY})?)\.?\s+${ENTRY_YEAR}\.\s+(?:\p{Lu}|["'“‘*_])`, 'u'),
+  // MLA / Chicago notes-bibliography: Nguyen, Thanh. "Title." … / Nguyen, Thanh, and Raj Patel. *Title*. …
+  new RegExp(String.raw`${ENTRY_MARKER}${FAMILY},\s+${GIVEN}(?:,?\s+(?:and\s+${GIVEN}\s+${FAMILY}|et\s+al))?\.\s+(?:["“][^"”\n]{3,}[.?!,]?["”]|\*[^*\n]{3,}\*|_[^_\n]{3,}_)`, 'u'),
+  // Vancouver / AMA: Nguyen T, Patel R. Title. Journal. 2019;12(3):45-67.
+  new RegExp(String.raw`${ENTRY_MARKER}${FAMILY}\s+\p{Lu}{1,3}(?:,\s+${FAMILY}\s+\p{Lu}{1,3})*(?:,\s+et\s+al)?\.\s+[^.\n]{3,}\.\s+[^.\n]{2,}\.\s*(?:(?:1[5-9]|20)\d{2})\b`, 'u'),
+];
+
+/** True when `text` (a paragraph's or list item's first line) has the shape of a typed reference entry. */
+function referenceEntryShape(text: string): boolean {
+  return ENTRY_SHAPES.some((re) => re.test(text));
+}
+
+/** The entries of a block of lines: each list item, or each paragraph, as [start line, end line] (inclusive). */
+function blockEntries(lines: readonly Line[], from: number, to: number): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  let open: [number, number] | null = null;
+  for (let j = from; j < to; j += 1) {
+    const l = lines[j] as Line;
+    if (BLANK_RE.test(l.text)) {
+      if (open !== null) out.push(open);
+      open = null;
+      continue;
+    }
+    if (open === null || LIST_ITEM_RE.test(l.text)) {
+      if (open !== null) out.push(open);
+      open = [j, j];
+    } else open[1] = j;
+  }
+  if (open !== null) out.push(open);
+  return out;
+}
+
 function referenceLists(md: string, lines: readonly Line[]): RawFinding[] {
   const out: RawFinding[] = [];
+  const covered = new Set<number>(); // lines already reported under a heading
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i] as Line;
     let kind = headingKind(lines, i);
     let name = kind === null ? '' : listName(headingText(lines, i, kind));
+    let exact = REFERENCE_LIST_NAMES.has(name);
+    let vocabulary = !exact && kind !== null && vocabularyHeading(name);
     // A line that is nothing but the name ("References", "Sources:") opening a paragraph.
-    if (!REFERENCE_LIST_NAMES.has(name)) {
+    if (!exact && !vocabulary) {
       const prevBlank = i === 0 || BLANK_RE.test((lines[i - 1] as Line).text);
       if (!prevBlank) continue;
       name = listName(line.text);
-      if (!REFERENCE_LIST_NAMES.has(name) || line.text.trim().length > 40) continue;
+      if (line.text.trim().length > 40) continue;
+      exact = REFERENCE_LIST_NAMES.has(name);
+      vocabulary = !exact && vocabularyHeading(name);
+      if (!exact && !vocabulary) continue;
       kind = 'label';
     }
-    const headingEnd = kind === 'setext' ? (lines[i + 1] as Line).end : line.end;
-    out.push({ form: 'reference-list', start: line.start, end: headingEnd });
+    const k = kind as 'atx' | 'setext' | 'label';
+    const headingEnd = k === 'setext' ? (lines[i + 1] as Line).end : line.end;
     // Every entry up to the next heading: a list item, or a paragraph.
-    let j = kind === 'setext' ? i + 2 : i + 1;
-    let entry: { start: number; end: number } | null = null;
-    const flush = (): void => {
-      if (entry !== null) out.push({ form: 'reference-list', start: entry.start, end: entry.end });
-      entry = null;
-    };
-    for (; j < lines.length; j += 1) {
-      const l = lines[j] as Line;
-      if (BLANK_RE.test(l.text)) {
-        flush();
-        continue;
-      }
-      if (headingKind(lines, j) !== null) break;
-      if (entry === null || LIST_ITEM_RE.test(l.text)) {
-        flush();
-        entry = { start: l.start, end: l.end };
-      } else {
-        (entry as { start: number; end: number }).end = l.end;
-      }
+    const first = k === 'setext' ? i + 2 : i + 1;
+    let j = first;
+    while (j < lines.length && (BLANK_RE.test((lines[j] as Line).text) || headingKind(lines, j) === null)) j += 1;
+    const entries = blockEntries(lines, first, j);
+    // A heading named only by the vocabulary is a reference list when an entry under it has an entry's shape.
+    if (vocabulary && !entries.some(([a]) => referenceEntryShape((lines[a] as Line).text))) continue;
+    out.push({ form: 'reference-list', start: line.start, end: headingEnd });
+    for (const [a, b] of entries) {
+      out.push({ form: 'reference-list', start: (lines[a] as Line).start, end: (lines[b] as Line).end });
+      for (let x = a; x <= b; x += 1) covered.add(x);
     }
-    flush();
     i = j - 1;
+  }
+  // Entries typed with no heading at all (or under any other heading).
+  for (const [a, b] of blockEntries(lines, 0, lines.length)) {
+    if (covered.has(a) || headingKind(lines, a) !== null) continue;
+    if (referenceEntryShape((lines[a] as Line).text)) out.push({ form: 'reference-list', start: (lines[a] as Line).start, end: (lines[b] as Line).end });
   }
   return out;
 }
@@ -452,9 +535,6 @@ function numericMarkers(md: string): RawFinding[] {
 // Author-date citations.
 // ---------------------------------------------------------------------------
 
-/** A capitalised name word: `Nguyen`, `O'Neil`, `García-López`, `St.`, `U.S.`, `WHO`. */
-const CAPWORD = String.raw`\p{Lu}(?:[\p{L}\p{M}'’.]|-(?=\p{L}))*`;
-const PARTICLE = String.raw`(?:van|von|de|der|den|del|della|di|da|du|le|la|ten|ter|al|el|bin|ibn|dos|das|do|zu)`;
 /** Lower-case words inside a corporate author's name (`World Health Organization`, `Department of Health and Human Services`). */
 const JOINER = String.raw`(?:of|for|the|on|in|and|to|de|du|des|für|und|&)`;
 /**
@@ -489,14 +569,52 @@ const NOT_AUTHORS: ReadonlySet<string> = new Set([
   'experiment', 'model', 'sample', 'n', 'mean', 'median', 'age', 'ages', 'aged', 'q1', 'q2', 'q3', 'q4',
 ]);
 
+/**
+ * Words that label a numbered thing, so "(Level 2)", "(Apollo 11)" or
+ * "(Python 3)" is not an MLA author-page citation like "(Nguyen 45)".
+ */
+const NUMBERED_LABELS: ReadonlySet<string> = new Set([
+  'eq.', 'eqs.', 'equation', 'equations', 'formula', 'hypothesis', 'hypotheses', 'level', 'levels', 'group', 'groups', 'condition', 'trial',
+  'trials', 'round', 'day', 'days', 'week', 'weeks', 'month', 'months', 'grade', 'stage', 'type', 'class', 'article', 'rule', 'box', 'panel',
+  'supplement', 'item', 'items', 'question', 'participant', 'subject', 'patient', 'case', 'site', 'region', 'zone', 'block', 'session',
+  'lesson', 'unit', 'part', 'book', 'act', 'scene', 'line', 'lines', 'verse', 'canto', 'psalm', 'exhibit', 'plate', 'map', 'note', 'notes',
+  'footnote', 'number', 'rank', 'tier', 'layer', 'node', 'epoch', 'run', 'iteration', 'fold', 'seed', 'algorithm', 'lemma', 'theorem',
+  'proposition', 'corollary', 'definition', 'remark', 'example', 'exercise', 'problem', 'claim', 'assumption', 'axiom', 'conjecture',
+  'property', 'protocol', 'task', 'scenario', 'setting', 'configuration', 'option', 'variant', 'arm', 'batch', 'population', 'district',
+  'ward', 'room', 'building', 'floor', 'route', 'highway', 'interstate', 'station', 'channel', 'track', 'disc', 'episode', 'season',
+  'release', 'build', 'level', 'python', 'java', 'windows', 'office', 'android', 'ios', 'iphone', 'galaxy', 'xbox', 'playstation', 'apollo',
+  'gemini', 'artemis', 'voyager', 'pioneer', 'mariner', 'viking', 'sputnik', 'soyuz', 'catch', 'covid', 'sars', 'h1n1', 'web', 'industry',
+  'generation', 'gen', 'league', 'division', 'series', 'model', 'mark', 'mk', 'figure', 'fig.', 'table', 'chapter', 'section', 'appendix',
+  'title', 'phase', 'wave', 'step', 'study', 'experiment', 'cohort', 'sample', 'version', 'volume', 'issue', 'page',
+]);
+
+/** An italic or quoted title in a parenthetical ("*Street Trees*", "\"Street Trees\""). */
+const TITLE_PART = String.raw`(?:\*[^*\n]{2,120}\*|_[^_\n]{2,120}_|"[^"\n]{2,120}"|“[^”\n]{2,120}”)`;
+/** MLA / Chicago with a title: "(Nguyen, *Street Trees*, 2019)", "(Nguyen, *Street Trees* 45)", "(Nguyen, \"Shade\" 12)". */
+const TITLE_SEGMENT_RE = new RegExp(
+  String.raw`^\s*(?:${PREFIX}\s+)?${AUTHOR}(?:\s*,\s*${AUTHOR})*(?:\s*,?\s*(?:&|and)\s+${AUTHOR})?(?:\s*,?\s+${ET_AL})?\s*,\s*${TITLE_PART}\s*(?:,\s*(?:${YEAR}|p{1,2}\.\s*\d+[^,]*)|\s+\d{1,4}(?:[-–]\d{1,4})?)?\s*$`,
+  'u',
+);
+
 function authorDateSegment(segment: string): boolean {
+  // An APA personal communication: "(T. Nguyen, personal communication, May 3, 2019)".
+  if (/\bpersonal\s+communication\b/iu.test(segment) && /\p{Lu}/u.test(segment)) return true;
+  if (TITLE_SEGMENT_RE.test(segment)) return true;
   const m = SEGMENT_RE.exec(segment);
   if (m === null) return false;
   const names = (m.groups?.['names'] ?? '').trim();
   const several = /\s(?:&|and)\s|,|\bet\.?\s+al\b/u.test(names);
-  // An author and a bare page ("(Smith 45)") reads like "(Figure 3)": only with
-  // two names or et al. ("(Smith and Jones 45)", "(Smith et al. 12)").
-  if (m.groups?.['page'] !== undefined && !several) return false;
+  // An author and a bare page is MLA's "(Nguyen 45)" for one name (particles
+  // allowed: "(van der Berg 12)") that is not an acronym and not a label of a
+  // numbered thing ("(Figure 3)", "(Level 2)", "(Apollo 11)"); two or more
+  // words that are not particles ("(World War 2)") are not an author.
+  if (m.groups?.['page'] !== undefined && !several) {
+    const words = names.split(/\s+/);
+    const name = words[words.length - 1] as string;
+    const particlesOnly = words.slice(0, -1).every((w) => new RegExp(`^${PARTICLE}$`, 'u').test(w));
+    if (!particlesOnly || /^[\p{Lu}\p{N}.]+$/u.test(name) || NUMBERED_LABELS.has(name.toLowerCase()) || NOT_AUTHORS.has(name.toLowerCase())) return false;
+    return true;
+  }
   if (!several && !/\s/.test(names) && NOT_AUTHORS.has(names.toLowerCase())) return false;
   return true;
 }
