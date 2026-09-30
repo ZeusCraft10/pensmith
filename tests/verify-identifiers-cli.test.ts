@@ -13,7 +13,9 @@
 //     arXiv id from the arXiv API and the citation is OK.
 //   - A DOI-less entry whose identifier the registrar does not know is still
 //     FABRICATED; one that cannot be looked up (no recording offline) is
-//     UNVERIFIABLE (blocking), never OK and never FABRICATED.
+//     UNVERIFIABLE-NETWORK (blocking), never OK and never FABRICATED; one with
+//     no identifier at all goes to the metadata search (VRFY-12) and, when no
+//     registrar record matches it (recorded), is UNRESOLVABLE (blocking).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -125,11 +127,11 @@ test('review round 1 (built CLI): an arXiv id whose record lists a journal DOI i
   assert.match(v.md, new RegExp(`- ${key}: \\*\\*OK\\*\\* — .*arXiv:hep-th/9901001 re-fetched from arXiv; D-11 AND-gate passed`));
 });
 
-test('Pass 1 (built CLI): a DOI-less entry is UNVERIFIABLE when its registrar cannot be asked (offline, no recording), FABRICATED with no identifier at all', () => {
+test('Pass 1 (built CLI): a DOI-less entry is UNVERIFIABLE-NETWORK when its registrar cannot be asked (offline, no recording); one with no identifier that no registrar record matches is UNRESOLVABLE', () => {
   const sb = sandbox('verify-ids-unknown');
   const root = sb.project('p');
   writeState(root, [{ n: 1, slug: 'background' }], 'verify-ids-unknown');
-  writeOutline(root, [{ n: 1, slug: 'background', sources: ['smith2001', 'nobody2002'] }]);
+  writeOutline(root, [{ n: 1, slug: 'background', sources: ['smith2001', 'nobody2017'] }]);
   writeFileSync(
     join(root, '.paper', 'CITATIONS.bib'),
     [
@@ -140,21 +142,23 @@ test('Pass 1 (built CLI): a DOI-less entry is UNVERIFIABLE when its registrar ca
       '  isbn = {9780000000002},',
       '}',
       '',
-      '@misc{nobody2002,',
+      '@misc{nobody2017,',
       '  author = {Nobody, Ann},',
-      '  title = {No Identifier At All},',
-      '  year = {2002},',
+      '  title = {A Work That Was Never Published},',
+      '  year = {2017},',
       '}',
       '',
     ].join('\n'),
   );
-  writePlan(root, 1, 'background', { status: 'written', assigned_sources: '[smith2001, nobody2002]' });
+  writePlan(root, 1, 'background', { status: 'written', assigned_sources: '[smith2001, nobody2017]' });
   writeFileSync(
     join(sectionDirOf(root, 1, 'background'), 'DRAFT.md'),
-    '# Background\n\nOne claim [@smith2001]. Another claim [@nobody2002].\n',
+    '# Background\n\nOne claim [@smith2001]. Another claim [@nobody2017].\n',
   );
   const v = verify(sb, root);
   assert.equal(v.status, 4, v.out);
-  assert.match(v.md, /- smith2001: \*\*UNVERIFIABLE\*\* — .*offline: no recorded fixture — re-run online \(the books registries lookup of ISBN 9780000000002\)/);
-  assert.match(v.md, /- nobody2002: \*\*FABRICATED\*\* — .*no DOI, arXiv id, PMID or ISBN in citation entry/);
+  assert.match(v.md, /- smith2001: \*\*UNVERIFIABLE-NETWORK\*\* — .*offline: no recorded fixture — re-run online \(the books registries lookup of ISBN 9780000000002\)/);
+  // The recorded Crossref bibliographic search for it answers with no strict match.
+  assert.match(v.md, /- nobody2017: \*\*UNRESOLVABLE\*\* — .*no registrar record matches its title, first author and year/);
+  assert.ok(!/\*\*(OK|FABRICATED)\*\*/.test(v.md), 'never OK, never FABRICATED');
 });
