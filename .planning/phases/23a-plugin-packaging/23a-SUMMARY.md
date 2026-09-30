@@ -458,3 +458,53 @@ The first full gate run (before `58cde6d`) failed two tests this round's changes
 - `bin/lib/source-input.ts`: Phase 20 adds `checkDoi` and an `http.js` import; this branch adds `pubmedConfirmed` and a `registrar-confirm.js` import next to it. Keep both.
 - `scripts/refresh-cassettes.mjs`: keep Phase 20's new recordings and this branch's four (`pubmed/esummary-40121571`, `pubmed/efetch-40121571`, `crossref/works-orvhet-2025-33246`, `retraction-watch/updates-orvhet-2025-33246`).
 - Re-bundle and re-stamp after the merge (`npm run bundle`).
+
+## 13. Merge record (main branch `akhil/pensive-faraday-qx3o58`, 2026-09-30)
+
+Phase 20 closed at `9a169ee`, 51 commits after `7eb0cbf`. `v1/int-23a` (at `2998d28`, after §11 and §12) then merged into the main branch with `git merge --no-ff`, followed by the test-only `v1/flake-arxiv-3way`. A container restart interrupted the integrator after the first merge commit; the work resumed from `git log`, and every item below was re-checked on the committed tree.
+
+**Commits (first parent, on top of `9a169ee`):**
+
+| Commit | What |
+|---|---|
+| `b816d05` | `merge(23a)`: `git merge --no-ff v1/int-23a`, the conflicts below resolved, the bundles rebuilt and re-stamped |
+| `66e6a7d` | the integrator's CLAUDE.md and 20-SUMMARY reconciliation, committed as found after the restart |
+| `2d6871d` | `merge(test)`: `git merge --no-ff v1/flake-arxiv-3way` (no conflicts): each three-way case gets its own arXiv id and PMID (`tests/sources/three-way.ts` `idDigits()` and a per-adapter uniqueness case), the root cause of CI run 72's intermittent arXiv failure |
+| `1c55594` | the one failure the gate exposed (below), and a re-stamp |
+| this commit | this record, STATE and ROADMAP |
+
+**Conflicts, each resolved keeping both sides** (20-SUMMARY; §9–§12 above):
+- `skills/verify-section.md` (modify/delete: `436eeb9` edited it again): removed. Its route is ported to `plugin/skills/verify-section/SKILL.md` and `plugin/skills/pensmith/SKILL.md`: "accept quote qK" runs `pensmith_verify` with `accept_quote: ["qK"]` (the CLI form `verify N --accept-quote qK`), only after asking the user, one id at a time. The skill's CLI-only flag sentence and `docs/PLUMBING.md`'s list no longer name `--accept-quote`.
+- `mcp/tools.ts`: `436eeb9`'s `accept_quote` option sits in the handler that calls `verifyToolResult(…)` (the bounded, fenced reply of §11–§12); both halves of the description are kept.
+- `bin/lib/revise.ts`: Phase 20's round-3 `(L<line>)` text rows and this branch's `unverifiableQuoteAdvice`; the skills and `plugin/workflows/plan.md` name `(L<line>)`.
+- `bin/lib/verify/gate.ts`: Phase 20's `ref.section` / `ref.id` with §12's re-draft wording for an UNVERIFIABLE-QUOTE remedy.
+- `bin/lib/sources/registrar-confirm.ts`: PubMed's vernacular title (§11 finding 9) and Phase 20's reordered-authors rule, for each candidate title.
+- `bin/cli/done.ts`, `bin/lib/exporter.ts`: both import sets (the output sink, `os`, `recordRetractionStatuses`).
+- `plugin/workflows/next.md` and `plan.md`, `PRD.md`, `CLAUDE.md`: both texts combined.
+- Tests: `gate-core`, `revise-swap` and `tier-contract/exit-parity` keep both sides' assertions (`callTool`'s `extraEnv` and the fenced `words`); `verify-no-llm`'s reply-size case reads the `pensmith_verify` projection (§11).
+- `.planning/`: Phase 20 Complete; Phase 23a 5 of 8; 104 requirements Complete.
+
+**Re-apply check (PLUG-02).** `git diff 7eb0cbf 9a169ee -- workflows templates skills agents references` lists 8 files. The skill is ported by hand (above). For each of the 7 workflow bodies, the merged `plugin/workflows/<verb>.md` was compared with a three-way `git merge-file` of `7eb0cbf`'s file, `9a169ee`'s file and `v1/int-23a`'s `plugin/` copy:
+- `compile`, `done`, `research`, `verify` and `write` are equal to it outright.
+- `next` and `plan` differ only in their one conflict hunk each. The resolution keeps Phase 20's round-3 text (the `quote-accept` gate where `write N` chains verify, D-20-22; text rows keyed `(L<line>)`) and §12's re-draft remedy (`plan N --revise` cannot paraphrase a quote).
+
+No prompt, preset or reference changed after `7eb0cbf`, so the pins of `claim-support.md` and `orphan-label.md` at `plugin/templates/prompts/` keep Phase 20's values in both `tests/repo-files.test.ts` and `EXPECTED_PROMPT_HASHES`. `git ls-files` lists no workflow, template, reference, preset, skill or agent file outside `plugin/`. No `process.stdout.write` or stdout `console` call is left in `bin/` or `mcp/` outside `bin/lib/output-sink.ts` and the exempt `bin/lib/pdf-worker.ts`, and lint's `stdout-sink` and `mcp-stdout-graph` rows pass.
+
+**The failure the gate exposed (`1c55594`).** `tests/nl-triggers.test.ts` reads every backticked word in the Verb column of the pensmith skill's routing table as a verb. The merged "accept quote" row began `` `pensmith_verify` with `n` = 3 ``, and `n` is not one of the 16. The row now leads with its verb and then names the tool call: `` `verify 3 --accept-quote qK` (the tool: `pensmith_verify` for section 3 with `accept_quote: ["qK"]`) ``. It still acts only after asking the user. `tests/skill-descriptions.test.ts` pins the new wording with the same strength. The plugin version is re-stamped.
+
+**Gate at `1c55594`** (as root in the cloud container; `CI=true`, `LANG=C.UTF-8`, pandoc 3.9 on PATH):
+- Node 22.22.2 and Node 24.21.0: `prebuild`, `lint`, `typecheck`, `build`, `validate:manifests` and `bundle:check` exit 0, and the tree is clean after the build.
+- `npm run test:tier-contract`: 62/62 on both.
+- `npm test`: 2943 tests, 2942 pass on Node 22 and on Node 24. The one failure is the root-only `tests/atomic-write.test.ts` case. The first Node 22 run, before `1c55594`, also failed `tests/nl-triggers.test.ts` (below). HARDEN-03 ran 1000 drafts against pandoc on both, and the runner's CI-09 fingerprint reported no change to the real data dir.
+- `node scripts/e2e-smoke.mjs`: PASS=17, FINDING=0, FAIL=0 on both.
+- `CLAUDE_BIN=/opt/node22/bin/claude npm run plugin:smoke` (Claude Code 2.1.286): all checks passed: validate `--strict` ×3, the negative control, a fresh-clone install (8 skills, 4 hooks, 1 server connected, the installed server's 11 tools), the no-node refusal, and the git-marketplace install and update.
+- `claude plugin validate plugin`, with and without `--strict`: passed.
+- The recorded e2e corpus was not re-recorded, because no request URL of the corpus's adapters changed since its last recording (`55f0b07`):
+  - The only new adapter URL is DataCite's title search (Pass 1's metadata search for an identifier-less entry). DataCite is not in the corpus's computer-science plan, and every kept source has a DOI.
+  - §11's PubMed confirmation asks Crossref's existing `works/<doi>` URL.
+
+  `tests/e2e-corpus-manifest.test.ts` passes.
+
+**Cleanup.** `v1/int-23a` and `v1/flake-arxiv-3way` were deleted with `git branch -d`. The `/home/user/pensmith-int` worktree was removed (`git worktree remove --force`, `git worktree prune`).
+
+**Still open.** PLUG-04, CI-05 and PLUG-14's 3-OS CI leg (§1, §8) are unchanged by the merge. So is Phase 17's CI-06: no CI run has been observed for the merged code.
