@@ -180,7 +180,11 @@ test('hooks/session-start: the context names the router step, a not-done handoff
 
   const r = await writePreCompactHandoff(root);
   assert.equal(r.written, true);
-  assert.match(await buildSessionStartContext(root), /it was at phase sectioning, section 2 \(write\)/);
+  assert.match(await buildSessionStartContext(root, { source: 'compact' }), /it was at phase sectioning, section 2 \(write\)/);
+  // Only the SessionStart after a compaction reads the HANDOFF (review round 2).
+  for (const source of ['startup', 'resume', undefined]) {
+    assert.doesNotMatch(await buildSessionStartContext(root, { source }), /Before the last context compaction/, String(source));
+  }
 
   // The CLI's stop flags reach the router: an outline-only paper names its own
   // end state, never "complete".

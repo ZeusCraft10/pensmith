@@ -17721,7 +17721,7 @@ async function buildSessionStartContext(root, opts = {}) {
     decision = { verb: "status", reason: "attention" };
   }
   const lines = [`This folder holds a pensmith paper (${path9.join(path9.resolve(root), ".paper")}).`, nextStepLine(decision)];
-  const handoff = loadHandoff(paperDir(root));
+  const handoff = opts.source === "compact" ? loadHandoff(paperDir(root)) : null;
   if (handoff !== null && handoff.phase !== "done") {
     lines.push(
       `Before the last context compaction (${handoff.last_updated}) it was at ${describeHandoffPosition(handoff, { slugFallback: false })}.`
@@ -19666,7 +19666,7 @@ async function main() {
     Promise.resolve().then(() => (init_session_start(), session_start_exports)),
     Promise.resolve().then(() => (init_route_options(), route_options_exports))
   ]);
-  const output = await sessionStartOutput2(root, { routeOptions: routeOptionsFor2(root) });
+  const output = await sessionStartOutput2(root, { routeOptions: routeOptionsFor2(root), source: input?.source });
   await new Promise((resolve) => {
     process.stdout.write(JSON.stringify(output) + "\n", () => resolve());
   });

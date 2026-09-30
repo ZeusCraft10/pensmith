@@ -82,7 +82,7 @@ test('PLUG-14: SessionStart adds the HANDOFF summary — v2 as written by PreCom
     breadcrumbs: [],
     section_pointers: [{ slug: 'methods', plan_path: join(root, '.paper', 'sections', '02-methods', 'PLAN.md'), draft_path: null, verification_path: null, state: 'written' }],
   }));
-  const r1 = runHook(sb, 'session-start', { cwd: root });
+  const r1 = runHook(sb, 'session-start', { cwd: root, input: hookInput('session-start', root, { source: 'compact' }) });
   const ctx1 = contextOf(oneFrame(r1.stdout));
   assert.match(ctx1, /it was at phase sectioning, section 2 \(verify\)\.$/m);
   assert.doesNotMatch(ctx1, /Resume verify on section methods/, 'HANDOFF\'s free-text next_action never reaches the model');
@@ -93,10 +93,40 @@ test('PLUG-14: SessionStart adds the HANDOFF summary — v2 as written by PreCom
     { schema_version: 3, whatever: true },
   ]) {
     writeFileSync(join(root, '.paper', 'HANDOFF.json'), JSON.stringify(body));
-    const rn = runHook(sb, 'session-start', { cwd: root });
+    const rn = runHook(sb, 'session-start', { cwd: root, input: hookInput('session-start', root, { source: 'compact' }) });
     assert.equal(rn.status, 0);
     assert.doesNotMatch(contextOf(oneFrame(rn.stdout)), /Before the last context compaction/);
   }
+});
+
+// Review round 2: HANDOFF.json stays until `pensmith resume`, so a later
+// startup or resume must not describe the position of a compaction the paper
+// has since moved past — the router's step is the only position then.
+test('PLUG-14: only the SessionStart after a compaction adds the HANDOFF summary; a stale HANDOFF never contradicts the router', async () => {
+  const sb = sandbox('hook-sessionstart-stale-handoff');
+  const root = sb.project('paper');
+  await seedThreeSectionPaper(root);
+  // A compaction long ago, at a step the paper has left (it is at write §2 now).
+  writeFileSync(join(root, '.paper', 'HANDOFF.json'), JSON.stringify({
+    schema_version: 2,
+    last_updated: '2026-09-01T00:00:00.000Z',
+    phase: 'sectioning',
+    section: '1',
+    position: 'plan',
+    current_section: 'introduction',
+    next_action: 'Plan section §1',
+    section_pointers: [],
+  }));
+  for (const source of ['startup', 'resume', 'clear', undefined]) {
+    // `undefined`: an input with no `source` field at all (an older Claude Code).
+    const r = runHook(sb, 'session-start', { cwd: root, input: hookInput('session-start', root, { source }) });
+    assert.equal(r.status, 0, r.stderr);
+    const ctx = contextOf(oneFrame(r.stdout));
+    assert.match(ctx, /Next step \(the pensmith router\): Draft section §2 \(methods\)/, `${source}: ${ctx}`);
+    assert.doesNotMatch(ctx, /Before the last context compaction|section 1 \(plan\)/, `${source ?? 'no source'}: no stale HANDOFF position`);
+  }
+  const compact = contextOf(oneFrame(runHook(sb, 'session-start', { cwd: root, input: hookInput('session-start', root, { source: 'compact' }) }).stdout));
+  assert.match(compact, /Before the last context compaction \(2026-09-01T00:00:00\.000Z\) it was at phase sectioning, section 1 \(plan\)\.$/m);
 });
 
 test('PLUG-14: SessionStart in a paper whose STATE.json is corrupt still exits 0 and reports attention', async () => {
@@ -146,7 +176,7 @@ test('PLUG-14: SessionStart never puts text from the paper\'s files into the mod
   // …and a failed section whose PLAN.md failure_reason carries the same payload (the router quotes it in its detail).
   const plan = join(root, '.paper', 'sections', '02-methods', 'PLAN.md');
   writeFileSync(plan, readFileSync(plan, 'utf8').replace('status: writing', `status: failed\nfailure_reason: "${payload.replace(/"/g, '\\"')}"`));
-  const r = runHook(sb, 'session-start', { cwd: root, input: hookInput('session-start', root, { source: 'startup' }) });
+  const r = runHook(sb, 'session-start', { cwd: root, input: hookInput('session-start', root, { source: 'compact' }) });
   assert.equal(r.status, 0, r.stderr);
   const ctx = contextOf(oneFrame(r.stdout));
   for (const bad of [/curl/, /attacker/, /SYSTEM:/, /pre-approved/, /IMPORTANT/]) assert.doesNotMatch(ctx, bad, ctx);

@@ -9,8 +9,13 @@
 // one short paragraph:
 //   - the router's next step for the paper (resolveNextAction, read-only —
 //     the same step `/pensmith` and `pensmith next` take);
-//   - a summary of a HANDOFF.json that is not done (the PreCompact hook's
-//     pointer, read through loadHandoff, which migrates v1 in memory);
+//   - on the SessionStart that follows a compaction (`source: compact`) only,
+//     a summary of a HANDOFF.json that is not done — the pointer the PreCompact
+//     hook wrote moments before, read through loadHandoff (which migrates v1
+//     in memory). Review round 2: HANDOFF.json stays on disk until `pensmith
+//     resume`, so on a later startup or resume it can describe a position the
+//     paper has long left and contradict the router's step; there the router
+//     line alone is the context;
 //   - the instruction to run `/pensmith` to continue.
 // It never emits `systemMessage` and never writes stdout itself: it returns
 // the protocol object, and hooks/session-start.ts prints it as one JSON line.
@@ -45,6 +50,8 @@ export interface SessionStartOutput {
 export interface SessionStartOptions {
   /** The router's stop flags for this paper (the entry derives them like the CLI). */
   readonly routeOptions?: ResolveOptions;
+  /** The hook input's `source` (startup | resume | clear | compact | fork); the HANDOFF summary is added only for `compact`. */
+  readonly source?: string | undefined;
 }
 
 /** Claude Code caps additionalContext at 10,000 characters; stay far below. */
@@ -63,7 +70,7 @@ export async function buildSessionStartContext(root: string, opts: SessionStartO
     decision = { verb: 'status', reason: 'attention' };
   }
   const lines = [`This folder holds a pensmith paper (${path.join(path.resolve(root), '.paper')}).`, nextStepLine(decision)];
-  const handoff = loadHandoff(paperDir(root));
+  const handoff = opts.source === 'compact' ? loadHandoff(paperDir(root)) : null;
   if (handoff !== null && handoff.phase !== 'done') {
     lines.push(
       `Before the last context compaction (${handoff.last_updated}) it was at ${describeHandoffPosition(handoff, { slugFallback: false })}.`,

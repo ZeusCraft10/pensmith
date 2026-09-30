@@ -5,8 +5,9 @@
 //
 // In a folder that holds a paper it prints exactly ONE JSON line:
 //   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"…"}}
-// — the router's next step, a summary of a not-done HANDOFF.json and the
-// instruction to run /pensmith (bin/lib/hooks/session-start.ts). Claude Code
+// — the router's next step, after a compaction (stdin `source: compact`) a
+// summary of a not-done HANDOFF.json, and the instruction to run /pensmith
+// (bin/lib/hooks/session-start.ts). Claude Code
 // adds additionalContext to the model's context; it never prints
 // `systemMessage`, which only the user sees. Outside a paper it prints nothing.
 //
@@ -25,7 +26,8 @@ async function main(): Promise<void> {
     import('../bin/lib/hooks/session-start.js'),
     import('../bin/cli/route-options.js'),
   ]);
-  const output = await sessionStartOutput(root, { routeOptions: routeOptionsFor(root) });
+  // `source` limits the HANDOFF summary to the SessionStart after a compaction.
+  const output = await sessionStartOutput(root, { routeOptions: routeOptionsFor(root), source: input?.source });
   // Wait for the flush: a pipe can be asynchronous, and the process exits next.
   await new Promise<void>((resolve) => {
     process.stdout.write(JSON.stringify(output) + '\n', () => resolve());
