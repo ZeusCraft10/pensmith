@@ -539,10 +539,10 @@ Edge cases documented in PRIVACY.md: PDF contents stay local; only Crossref/Open
 
 ## 10. Per-project config (`.paper/config.toml`)
 
-`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 2` (v2 since Phase 19: `[verification] send_byo_passages` and the `books` / `nber` values of `[sources] allowed_databases`). An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent, except where a comment marks the value as an example. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
+`bin/lib/config.ts` is the only reader and writer of this file (smol-toml + zod; the schema is `bin/lib/schemas/config.ts`, and `tests/config-drift.test.ts` parses the block below against it). `pensmith new` writes it with `schema_version = 3` (v2 since Phase 19: `[verification] send_byo_passages` and the `books` / `nber` values of `[sources] allowed_databases`; v3 since Phase 20: `[verification] quote_min_words`). An older file is migrated (`bin/lib/migrations/config/`) and written back; a file with a newer `schema_version` is refused with "upgrade pensmith"; an unknown key is warned about once and ignored. Every key is optional and takes the default shown when absent, except where a comment marks the value as an example. `pensmith status --config` prints every effective value with its source (default, preset, intake, config, env, flag, global).
 
 ```toml
-schema_version = 2                   # MANDATORY — see §14 NFRs
+schema_version = 3                   # MANDATORY — see §14 NFRs
 
 [project]
 # `pensmith new` writes mode, goal, class, discipline_preset, citation_style,
@@ -575,6 +575,7 @@ peer_reviewed_only = false           # true: only sources whose tier is peer-rev
 [verification]
 fetch_full_text = true
 send_byo_passages = false           # Pass 2 may send your own PDFs' passages nearest a claim to the model (off: §9)
+quote_min_words = 5                  # Pass 3 checks every direct quote of at least this many words (1–5: a paper may only lower the floor)
 flag_threshold = "low"               # low | medium | high
 recheck_after_days = 30
 plagiarism_check = true              # free distinctive-phrase check
