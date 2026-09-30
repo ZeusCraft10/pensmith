@@ -1,9 +1,18 @@
 // Chokepoint fixture (stdout-sink, PLUG-13): a bin/lib module that prints
 // straight to the process's stdout. Under the MCP server each of these lines
 // lands in the JSON-RPC stream and the client drops the connection — the rule
-// must flag all three forms (print through out() from bin/lib/output-sink.ts).
+// must flag every form: a direct write, console.log (also through globalThis),
+// the stream handed around as a value, and the stream taken out of process
+// under another name (a named import, a destructure). Print through out()
+// from bin/lib/output-sink.ts.
+import { stdout } from 'node:process';
+
 export function reportWritten(path: string, ok: boolean): void {
   process.stdout.write(`pensmith plan: wrote PLAN.md to ${path}\n`);
   console.log('pensmith plan: done');
+  globalThis.console.log('pensmith plan: done again');
   (ok ? process.stdout : process.stderr).write('pensmith plan: next is write\n');
+  stdout.write('pensmith plan: imported stream\n');
+  const { stdout: s } = process;
+  s.write('pensmith plan: destructured stream\n');
 }

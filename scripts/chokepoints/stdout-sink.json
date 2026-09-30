@@ -2,17 +2,26 @@
   "id": "stdout-sink",
   "requirement": "PLUG-13",
   "module": "bin/lib/output-sink.ts",
-  "description": "Print through out() from bin/lib/output-sink.ts, never straight to the process's stdout. That rules out process.stdout.write, console.log/info/debug/dir/table, and the process.stdout stream handed around as a value (`(ok ? process.stdout : process.stderr).write(…)`, `output: process.stdout`); reading process.stdout.isTTY / columns / rows is fine. The MCP server runs the same verbs in-process (pensmith_plan / pensmith_write / pensmith_verify) and speaks JSON-RPC on stdout, so it points the sink at stderr before it connects, and pensmith_status captures it with withCapturedOutput(); a direct write would corrupt the frame (T1-15). The CLI keeps the default sink, the process's stdout, so its output is byte-identical. bin/lib/pdf-worker.ts is exempt: it runs in a worker thread whose console goes to the worker's own captured stream, which pdf-text.ts never forwards (SEC-02). The hook entries in hooks/ are out of scope: their stdout is the hook protocol.",
+  "description": "Print through out() from bin/lib/output-sink.ts, never straight to the process's stdout. That rules out process.stdout.write, console.log/info/debug/dir/table (also through globalThis), the process.stdout stream handed around as a value (`(ok ? process.stdout : process.stderr).write(…)`, `output: process.stdout`), and the stream taken out of process under another name (`import { stdout } from 'node:process'`, `const { stdout: s } = process`); reading process.stdout.isTTY / columns / rows is fine. The MCP server runs the same verbs in-process (pensmith_plan / pensmith_write / pensmith_verify) and speaks JSON-RPC on stdout, so it points the sink at stderr before it connects, and pensmith_status captures it with withCapturedOutput(); a direct write would corrupt the frame (T1-15). The CLI keeps the default sink, the process's stdout, so its output is byte-identical. bin/lib/pdf-worker.ts is exempt: it runs in a worker thread whose console goes to the worker's own captured stream, which pdf-text.ts never forwards (SEC-02). The hook entries in hooks/ are out of scope: their stdout is the hook protocol.",
   "scope": ["bin/**/*.ts", "mcp/**/*.ts"],
   "allow": ["bin/lib/output-sink.ts", "bin/lib/pdf-worker.ts"],
   "match": [
     {
       "kind": "member",
-      "pattern": "^process\\.stdout\\.write$"
+      "pattern": "^(?:globalThis\\.)?process\\.stdout\\.write$"
     },
     {
       "kind": "member",
-      "pattern": "^console\\.(?:log|info|debug|dir|table)$"
+      "pattern": "^(?:globalThis\\.)?console\\.(?:log|info|debug|dir|table)$"
+    },
+    {
+      "kind": "import",
+      "pattern": "^(?:node:)?process$",
+      "names": "^stdout$"
+    },
+    {
+      "kind": "file-regex",
+      "pattern": "\\{[^{}]*\\bstdout\\b[^{}]*\\}\\s*=\\s*(?:globalThis\\s*\\.\\s*)?process\\b(?!\\s*\\.)"
     },
     {
       "kind": "file-regex",

@@ -2,12 +2,19 @@
   "id": "plugin-assets",
   "requirement": "PLUG-02",
   "module": "bin/lib/paths.ts",
-  "description": "plugin/ is the one home of every shipped asset (workflow bodies, templates — prompts, citation styles, presets, stubs, the dry-run corpus — references, skills, agents and the committed bundles) for both tiers, and bin/lib/paths.ts pluginRoot() is the one resolver: lazy, cached, walking up from its own module location to .claude-plugin/plugin.json (the bundle, a Claude Code plugin-cache copy) or plugin/.claude-plugin/plugin.json (source, dist/, an npm install). A private package.json walk (the old findPkgRoot copies) reads the wrong folder in the plugin bundle and the plugin cache, which hold no package.json. So only paths.ts names the plugin's asset directories as path segments; everything else calls pluginTemplatePath / pluginReferencePath / pluginWorkflowPath / pluginMcpServerBundle / pluginPath.",
+  "description": "plugin/ is the one home of every shipped asset (workflow bodies, templates — prompts, citation styles, presets, stubs, the dry-run corpus — references, skills, agents and the committed bundles) for both tiers, and bin/lib/paths.ts pluginRoot() is the one resolver: lazy, cached, walking up from its own module location to .claude-plugin/plugin.json (the bundle, a Claude Code plugin-cache copy) or plugin/.claude-plugin/plugin.json (source, dist/, an npm install). A private package.json walk (the old findPkgRoot copies) reads the wrong folder in the plugin bundle and the plugin cache, which hold no package.json. So only paths.ts names the plugin's asset directories as path segments: a path.join / path.resolve / new URL / fs-reader argument that is exactly `templates`, `workflows`, `references` or `.claude-plugin`, or a string (a template-literal chunk or a concatenated piece included) that holds one of them followed by a separator at its start or after `plugin/`; everything else calls pluginTemplatePath / pluginReferencePath / pluginWorkflowPath / pluginMcpServerBundle / pluginPath. The bare words on their own are ordinary vocabulary (a paper's `references` heading) and are not flagged.",
   "scope": ["bin/**/*.ts", "mcp/**/*.ts", "hooks/**/*.ts", "hooks/**/*.mjs"],
   "allow": ["bin/lib/paths.ts"],
-  "match": {
-    "kind": "string-literal",
-    "pattern": "^(?:templates|workflows|references|\\.claude-plugin)$|^(?:\\.\\.?[\\\\/])*(?:plugin[\\\\/])?(?:templates|workflows|references|\\.claude-plugin)[\\\\/]|(?:^|[\\\\/])plugin[\\\\/](?:dist|skills|agents|hooks)(?:[\\\\/]|$)"
-  },
+  "match": [
+    {
+      "kind": "string-literal",
+      "pattern": "^[\\\\/]?(?:\\.\\.?[\\\\/])*(?:plugin[\\\\/])?(?:templates|workflows|references|\\.claude-plugin)[\\\\/]|(?:^|[\\\\/])plugin[\\\\/](?:templates|workflows|references|\\.claude-plugin|dist|skills|agents|hooks)(?:[\\\\/]|$)"
+    },
+    {
+      "kind": "call",
+      "pattern": "^(?:join|resolve|URL|readdirSync|readdir|opendirSync|opendir|readFileSync|readFile|existsSync|statSync|stat|lstatSync|lstat|accessSync|access)$",
+      "arg": { "index": "any", "pattern": "^\\s*(['\"`])(?:templates|workflows|references|\\.claude-plugin)\\1\\s*$" }
+    }
+  ],
   "fixture": "tests/fixtures/chokepoints/plugin-assets.violation.ts.txt"
 }

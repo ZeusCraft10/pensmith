@@ -9,7 +9,8 @@ export interface ChokepointMatcher {
   flags?: string;
   names?: string;
   typeImports?: 'allow';
-  arg?: { index?: number; pattern: string };
+  /** call only: `index` is a position (default 0) or "any". */
+  arg?: { index?: number | 'any'; pattern: string };
   /** import-graph only: a regex source the reached module's raw text must match too. */
   content?: string;
 }

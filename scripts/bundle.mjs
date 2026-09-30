@@ -38,8 +38,11 @@
 // `npm run bundle` regenerates plugin/dist (prebuild first: the sources import
 // bin/lib/version.generated.ts). `npm run bundle:check` (= bundle --check)
 // then fails when plugin/dist differs from what git has committed — a
-// modified, deleted or new file (CI and `npm run check`). Rebundle after any
-// change to bin/lib, mcp/ or hooks/, and commit plugin/dist with it.
+// modified, deleted or new file (CI and `npm run check`). The bundles inline
+// bin/lib, the bin/cli verbs the MCP tools and hooks run, bin/lib/
+// version.generated.ts (the package.json version) and the locked dependencies:
+// rebundle after any change under bin/ (lib or cli), mcp/ or hooks/, to the
+// package.json version or to package-lock.json, and commit plugin/dist with it.
 
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';

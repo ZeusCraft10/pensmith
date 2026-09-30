@@ -211,6 +211,105 @@ test('RUN-29: llm-sdk-types-only allows `import type` and flags value imports', 
   assert.equal(chokepointMessages(dynamic, 'llm-sdk-types-only').length, 1, 'a dynamic import is a value import');
 });
 
+test('PLUG-02: plugin-assets flags the asset directories as path segments, never the bare words (a references heading)', async () => {
+  const row = ROWS.find((r) => r.id === 'plugin-assets')!;
+  const rel = virtualPathFor(row);
+  const head = `import { readFileSync, readdirSync } from 'node:fs';\nimport path from 'node:path';\n`;
+  const count = async (body: string): Promise<number> => chokepointMessages(await lintAs(`${head}${body}\n`, rel), 'plugin-assets').length;
+  // Clean: the words as ordinary vocabulary (Phase 20's reference-list headings, prose, a plain argument).
+  for (const clean of [
+    `export const REFERENCE_LIST_NAMES: ReadonlySet<string> = new Set(['references', 'reference list', 'bibliography', 'templates', 'workflows']);`,
+    `export const heading = 'references';`,
+    `export const note = 'The references section lists every cited work.';`,
+    `export function h(x: string): string { return x; }\nexport const y = h('references');`,
+    `export const both = ['templates', 'workflows'].includes('references');`,
+    `export const p = (root: string): string => path.join(root, '.paper', 'sections');`,
+  ]) {
+    assert.equal(await count(clean), 0, `must not fire: ${clean}`);
+  }
+  // Violations: every way to name an asset directory as a path segment.
+  for (const bad of [
+    `export const a = (root: string): string => path.join(root, 'references', 'x.md');`,
+    `export const b = (root: string): string => path.resolve(root, 'plugin', "templates");`,
+    `const dir = 'workflows';\nexport const c = (root: string): string => path.join(root, dir, 'new.md');`,
+    `export const d = (root: string): string => readFileSync(\`\${root}/plugin/references/honesty-framing.md\`, 'utf8');`,
+    `export const e = (root: string): string => readFileSync(root + '/plugin/templates/presets/disciplines.json', 'utf8');`,
+    `export const f = (root: string): string => \`\${root}/templates/prompts/x.md\`;`,
+    `export const g = (): string[] => readdirSync('templates');`,
+    `export const i = (): string => String(new URL('../workflows/new.md', import.meta.url));`,
+    `export const j = (root: string): string => path.join(root, '.claude-plugin', 'plugin.json');`,
+  ]) {
+    assert.ok((await count(bad)) >= 1, `must fire: ${bad}`);
+  }
+});
+
+test('PLUG-13: stdout-sink flags each way to reach the process stdout on its own, and none of the harmless ones', async () => {
+  const row = ROWS.find((r) => r.id === 'stdout-sink')!;
+  const rel = virtualPathFor(row);
+  const count = async (body: string): Promise<number> => chokepointMessages(await lintAs(`${body}\n`, rel), 'stdout-sink').length;
+  for (const bad of [
+    `export const a = (): boolean => process.stdout.write('x');`,
+    `export const b = (): void => console.log('x');`,
+    `export const c = (): void => globalThis.console.info('x');`,
+    `export const d = (): boolean => globalThis.process.stdout.write('x');`,
+    `import { stdout } from 'node:process';\nexport const e = (): boolean => stdout.write('x');`,
+    `import { stdout as out } from 'process';\nexport const f = (): boolean => out.write('x');`,
+    `export function g(): void { const { stdout: s } = process; s.write('x'); }`,
+    `export function h(): void { const { stdout } = globalThis.process; stdout.write('x'); }`,
+    `export const i = (ok: boolean): boolean => (ok ? process.stdout : process.stderr).write('x');`,
+  ]) {
+    assert.ok((await count(bad)) >= 1, `must fire: ${bad}`);
+  }
+  for (const clean of [
+    `export const tty = process.stdout.isTTY === true;`,
+    `export const cols = process.stdout.columns;`,
+    `import { env } from 'node:process';\nexport const home = env['HOME'];`,
+    `export function e(): void { const { stderr } = process; stderr.write('x'); }`,
+    `export function f(): void { const { stdout } = { stdout: 'text' }; void stdout; }`,
+    `export const g = (): void => console.error('x');`,
+  ]) {
+    assert.equal(await count(clean), 0, `must not fire: ${clean}`);
+  }
+});
+
+test('PLUG-13: the mcp-stdout-graph content regex finds each stdout form in a reached module, and none of the harmless ones', () => {
+  const row = ROWS.find((r) => r.id === 'mcp-stdout-graph')!;
+  const re = new RegExp(matchersOf(row)[0]!.content!);
+  for (const bad of [
+    `process.stdout.write('x')`,
+    `(ok ? process.stdout : process.stderr).write('x')`,
+    `console.log('x')`,
+    `globalThis.console.log('x')`,
+    `import { stdout } from 'node:process';`,
+    `import { env, stdout as out } from "process";`,
+    `const { stdout: s } = process;`,
+    `const { stdout } = globalThis.process;`,
+  ]) {
+    assert.ok(re.test(bad), `must match: ${bad}`);
+  }
+  for (const clean of [`process.stdout.isTTY`, `import { env } from 'node:process';`, `const { stderr } = process;`, `const { stdout } = process.env;`, `console.error('x')`]) {
+    assert.equal(re.test(clean), false, `must not match: ${clean}`);
+  }
+});
+
+test('RUN-29: a call matcher\'s arg.index is a position or "any"', () => {
+  const base = {
+    id: 'x',
+    requirement: 'PLUG-02',
+    module: 'bin/lib/x.ts',
+    description: 'a synthetic row for the validation self-test',
+    scope: ['bin/**/*.ts'],
+    fixture: 'tests/fixtures/chokepoints/x.violation.ts.txt',
+  };
+  assert.deepEqual(validateRow({ ...base, match: { kind: 'call', pattern: '^join$', arg: { index: 'any', pattern: 'x' } } }), []);
+  assert.deepEqual(validateRow({ ...base, match: { kind: 'call', pattern: '^join$', arg: { index: 2, pattern: 'x' } } }), []);
+  assert.deepEqual(validateRow({ ...base, match: { kind: 'call', pattern: '^join$', arg: { pattern: 'x' } } }), []);
+  for (const index of [-1, 1.5, 'all', null]) {
+    assert.match(validateRow({ ...base, match: { kind: 'call', pattern: '^join$', arg: { index, pattern: 'x' } } }).join('; '), /arg\.index/, JSON.stringify(index));
+  }
+  assert.match(validateRow({ ...base, match: { kind: 'member', pattern: '.', arg: { pattern: 'x' } } }).join('; '), /call matchers only/);
+});
+
 test('RUN-29: allow globs exempt the owning module', async () => {
   const mainGuard = await lintAs(
     `export function isMainModule(u: string): boolean { return u === process.argv[1]; }\n`,

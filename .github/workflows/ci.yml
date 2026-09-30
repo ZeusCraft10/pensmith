@@ -53,7 +53,8 @@ jobs:
       # PLUG-02 / D-23a-04: the committed plugin bundles (plugin/dist/) must be
       # exactly what `npm run bundle` makes from these sources — fails on any
       # modified, deleted or new file. Rebundle and commit after changing
-      # bin/lib, mcp/ or hooks/.
+      # anything under bin/ (lib or cli), mcp/ or hooks/, the package.json
+      # version, or package-lock.json.
       - name: Plugin bundles match their sources (bundle:check)
         run: npm run bundle:check
 

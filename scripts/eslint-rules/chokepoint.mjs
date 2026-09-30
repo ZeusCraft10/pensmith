@@ -34,7 +34,9 @@
 //   call            a call or `new` whose callee name (`foo`, `obj.foo` → `foo`) or
 //                   dotted callee (`obj.foo`) matches. Optional `arg: {index,
 //                   pattern}`: only when that argument's source text — or, for a
-//                   same-file identifier, its initializer's — matches.
+//                   same-file identifier, its initializer's — matches. `index`
+//                   is a position (default 0) or "any" (any argument matches,
+//                   e.g. a path segment anywhere in `path.join(root, 'x', …)`).
 //   member          a member expression whose dotted text matches
 //                   (`process.env['X']` is normalized to `process.env.X`).
 //   file-regex      the whole file text (reported per match); `flags` optional.
@@ -184,6 +186,13 @@ export function validateRow(row, fileName) {
     }
     if (m && m.typeImports !== undefined && (m.typeImports !== 'allow' || (m.kind !== 'import' && m.kind !== 'import-graph'))) {
       p.push('typeImports is "allow", for import and import-graph matchers only');
+    }
+    if (m && m.arg !== undefined) {
+      if (m.kind !== 'call' || typeof m.arg !== 'object' || m.arg === null || typeof m.arg.pattern !== 'string') {
+        p.push('arg is {index, pattern}, for call matchers only');
+      } else if (m.arg.index !== undefined && m.arg.index !== 'any' && !(Number.isInteger(m.arg.index) && m.arg.index >= 0)) {
+        p.push('arg.index is a non-negative integer or "any"');
+      }
     }
     try {
       new RegExp(m.pattern, m.flags ?? '');
@@ -480,10 +489,9 @@ const rule = {
           const hit = names.find((n) => re.test(n));
           if (!hit) continue;
           if (m.arg) {
-            const a = node.arguments[m.arg.index ?? 0];
-            if (!a) continue;
             const argRe = new RegExp(m.arg.pattern);
-            if (!argTexts(a, sourceCode, context).some((t) => argRe.test(t))) continue;
+            const args = m.arg.index === 'any' ? node.arguments : [node.arguments[m.arg.index ?? 0]].filter(Boolean);
+            if (!args.some((a) => argTexts(a, sourceCode, context).some((t) => argRe.test(t)))) continue;
           }
           report(row, node, hit);
         }
