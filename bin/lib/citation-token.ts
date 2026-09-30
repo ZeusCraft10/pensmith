@@ -1068,17 +1068,6 @@ export function countCitations(md: string): number {
   return n;
 }
 
-/** Remove every citation cluster from `md` (for word counts over the prose alone). */
-export function stripCitationClusters(md: string): string {
-  let out = '';
-  let at = 0;
-  for (const c of findCitationClusters(md)) {
-    out += md.slice(at, c.start);
-    at = c.end;
-  }
-  return out + md.slice(at);
-}
-
 /**
  * `md` with every citation of findCitations — bracketed clusters and narrative
  * citations, code included — replaced by `fn(citation)`; the text between
@@ -1096,11 +1085,6 @@ export function replaceCitations(md: string, fn: (citation: CitationCluster) => 
     at = c.end;
   }
   return out + md.slice(at);
-}
-
-/** The first citation in `md` — a cluster or a narrative citation — or null. */
-export function firstCitation(md: string): CitationCluster | null {
-  return findCitations(md)[0] ?? null;
 }
 
 /**

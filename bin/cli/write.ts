@@ -253,9 +253,17 @@ async function writeOneSection(
   return { draftPath, id, assignedSources: input.sources };
 }
 
-/** Verify a freshly drafted section (GRND-15) and report its status. */
-async function verifyWritten(section: { n: number; slug: string }, id: string): Promise<{ status: string; code: ExitCode }> {
-  const v = await verifySection(section.n, section.slug, parseSectionId(id)?.suffix);
+/**
+ * Verify a freshly drafted section (GRND-15) and report its status. A single
+ * section's verify is interactive (review round 3, D-20-22): in a terminal it
+ * asks the `quote-accept` gate for quotes no source text can check, as `pensmith
+ * verify N` does — so the single-command flow (bare `pensmith`, whose section
+ * step runs `write N`) offers it; --yolo never answers it, and without a
+ * terminal it is skipped. Wave mode drafts sections in parallel and asks
+ * nothing (`pensmith verify N` asks afterwards).
+ */
+async function verifyWritten(section: { n: number; slug: string }, id: string, opts: { interactive: boolean; yolo: boolean } = { interactive: false, yolo: false }): Promise<{ status: string; code: ExitCode }> {
+  const v = await verifySection(section.n, section.slug, parseSectionId(id)?.suffix, { interactive: opts.interactive, yolo: opts.yolo });
   const code = exitCodeForResult(v);
   process.stdout.write(`pensmith write: section ${id} verify: ${String(v.status)}\n`);
   return { status: String(v.status), code };
@@ -463,7 +471,7 @@ export const writeCommand = defineCommand({
       process.stdout.write(`pensmith write: section ${written.id} left written (--no-verify); run \`pensmith verify ${written.id}\` next\n`);
       return { ok: true, path: written.draftPath, mode: 'real', verify: 'not run' };
     }
-    const v = await verifyWritten({ n, slug }, written.id);
+    const v = await verifyWritten({ n, slug }, written.id, { interactive: true, yolo: args.yolo === true });
     return { ok: v.code === EXIT_OK, path: written.draftPath, mode: 'real', verify: v.status, exitCode: v.code };
   },
 });

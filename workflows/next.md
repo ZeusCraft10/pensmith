@@ -64,7 +64,10 @@ unchanged draft the walk goes past it, and compile re-verifies it (Pass 1 + 3, k
 claim-support and orphan results its record judged on that draft) — a section that now passes
 is compiled and recorded `verified` — or refuses it naming its options (`pensmith verify N`
 online, `pensmith add <pdf>`, a paraphrase with `pensmith plan N --revise`, or
-`pensmith verify N --accept-quote qK`), which `pensmith status` shows too. Stub text written
+`pensmith verify N --accept-quote qK`), which `pensmith status` shows too. A quote no source
+text could be checked against is first offered where the section is written: the verify that
+`write N` chains asks the `quote-accept` gate in a terminal (`--yolo` never answers it; without a
+terminal it is skipped — D-20-22). Stub text written
 with no model (PLACEHOLDER) is the one thing compile can never pass outside `--dry-run`: once
 the walk is past every section it stops as attention naming `pensmith write N` (with a model
 configured) instead of running compile again. A section whose `DRAFT.md` is

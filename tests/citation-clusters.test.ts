@@ -25,7 +25,7 @@ import {
   findCitationClusters,
   removeCitekey,
   renameCitekey,
-  stripCitationClusters,
+  replaceCitations,
 } from '../bin/lib/citation-token.js';
 import { extractQuotes } from '../bin/lib/quote-extractor.js';
 import { citedKeySetChange } from '../bin/cli/done.js';
@@ -45,11 +45,11 @@ test('the drafter template asks for one bare [@key] per source (never a cluster 
   assert.doesNotMatch(t, /`\[@a; @b\]` for two sources/);
 });
 
-test('findCitationClusters / countCitations / stripCitationClusters read every citation form', () => {
+test('findCitationClusters / countCitations / replaceCitations read every citation form', () => {
   const md = 'A [@a]. B [@b; @c]. C [see @d, p. 5; also @e]. Mail me at x@y.org [not a cite]. [@Upper2020]';
   assert.deepEqual(findCitationClusters(md).map((c) => c.keys), [['a'], ['b', 'c'], ['d', 'e'], ['Upper2020']]);
   assert.equal(countCitations(md), 6);
-  assert.equal(stripCitationClusters('One [@a] two [@b; @c].'), 'One  two .');
+  assert.equal(replaceCitations('One [@a] two [@b; @c] and @d says.', () => ''), 'One  two  and  says.');
   assert.deepEqual(extractCitedKeysForVerification(md), ['a', 'b', 'c', 'd', 'e', 'Upper2020']);
 });
 
