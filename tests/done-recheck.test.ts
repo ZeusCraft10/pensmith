@@ -1,223 +1,62 @@
-// tests/done-recheck.test.ts — GATE-04 reCheckFinalMd scaffold (Phase 14, Plan 01).
-//
-// Contract under test:
-//   bin/cli/done.ts (Wave-1, Plan 04) — exported helper:
-//     reCheckFinalMd(finalMd, draftMd, bibPath): Promise<{ passed: boolean; reason: string }>
-//
-//   Semantics:
-//   (a) Citekey-set diff: [@key] tokens in finalMd must equal the set in draftMd.
-//       Added, dropped, or swapped citekey → { passed: false, reason: "citekey-set mismatch ..." }
-//   (b) Pass-3 quote re-check: absent bib → { passed: true } (skip-clean, no quotes to check).
-//       A quote NOT_FOUND in FINAL.md → { passed: false }.
-//
-// RED-by-skip (Wave-0 scaffold): behavioral assertions SKIP until done.ts exports
-// reCheckFinalMd. Feature-detect via dynamic import + typeof check.
-//
-// Deterministic + offline: all test cases use inline strings (PENSMITH_NO_LLM safe).
-// Tests that need a real bib path use mkdtempSync 'pensmith-gate04-' + .paper dir
-// (the compile-refuse.test.ts tmpdir paper-seed pattern).
-//
-// Path resolution: fileURLToPath(import.meta.url) / new URL(...).href —
-// spaced-path safe (OneDrive dev folder; Phase-11 %20 lesson).
+// tests/done-recheck.test.ts — GATE-04 (Phase 14), as Phase 20 ships it
+// (VRFY-26, D-20-24): a humanized FINAL.md is gated before export by
+//   (a) done.ts citedKeySetChange — the humanizer only improves prose, so the
+//       cited key set (the broad Pandoc grammar) must equal the compiled
+//       draft's; an added, dropped or swapped key is named;
+//   (b) the ONE gate core over FINAL.md's own bytes (recomputeExportGate) —
+//       a key the bibliography lacks is FABRICATED, an entry that does not
+//       parse is UNPARSEABLE naming key and line (fail closed, never
+//       "nothing to check"), and every blocking row is a refusal.
+// Neither takes a --yolo argument: done calls both unconditionally (the
+// end-to-end refusal is tests/done-final-gate.test.ts). Offline and
+// deterministic (recorded fixtures only).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { citedKeySetChange, recomputeExportGate } from '../bin/cli/done.js';
+import { writeState, writeOutline, writePlan } from './helpers/paper-cli-harness.js';
+import { LECUN_BIB } from './helpers/gate-paper.js';
 
-// Resolve done module paths using URL semantics — safe for spaced paths.
-// Check for .ts source (which tsx will resolve), import via .js (tsx loader maps it).
-const doneTsUrl = new URL('../bin/cli/done.ts', import.meta.url);
-const doneJsUrl = new URL('../bin/cli/done.js', import.meta.url);
-const doneTsPath = fileURLToPath(doneTsUrl);
-
-// Feature-detect: does done.ts exist AND export reCheckFinalMd?
-let reCheckFinalMd: ((finalMd: string, draftMd: string, bibPath: string) => Promise<{ passed: boolean; reason: string }>) | undefined;
-let moduleLoaded = false;
-let skipReason = '';
-
-if (existsSync(doneTsPath)) {
-  try {
-    // Import via .js — tsx loader resolves to the .ts source.
-    const mod = await import(doneJsUrl.href) as Record<string, unknown>;
-    if (typeof mod['reCheckFinalMd'] === 'function') {
-      reCheckFinalMd = mod['reCheckFinalMd'] as typeof reCheckFinalMd;
-      moduleLoaded = true;
-    } else {
-      skipReason = 'done.ts exists but does not yet export reCheckFinalMd — not yet wired (Wave-1, Plan 04)';
-    }
-  } catch {
-    skipReason = 'done.ts import failed — not yet wired (Wave-1, Plan 04)';
-  }
-} else {
-  skipReason = 'bin/cli/done.ts not found — not yet created (Wave-1, Plan 04)';
-}
-
-// ---------------------------------------------------------------------------
-// Helper: create a minimal paper root with an optional CITATIONS.bib content.
-// ---------------------------------------------------------------------------
-function makePaperRoot(bibContent?: string): string {
+/** A one-section paper assigning `assigned`, with `bib` as CITATIONS.bib. */
+function paper(bib: string, assigned: readonly string[]): string {
   const root = mkdtempSync(join(tmpdir(), 'pensmith-gate04-'));
   mkdirSync(join(root, '.paper'), { recursive: true });
-  if (bibContent !== undefined) {
-    writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bibContent);
-  }
+  writeState(root, [{ n: 1, slug: 'intro' }]);
+  writeOutline(root, [{ n: 1, slug: 'intro', sources: [...assigned] }]);
+  writePlan(root, 1, 'intro', { status: 'verified', assigned_sources: `[${assigned.join(', ')}]` });
+  writeFileSync(join(root, '.paper', 'CITATIONS.bib'), bib);
   return root;
 }
 
-// ---------------------------------------------------------------------------
-// Test 1: Matching citekey sets + no bib (absent bib → skip-clean → passed)
-// ---------------------------------------------------------------------------
-test('GATE-04: matching citekey sets + absent bib → { passed: true } (skip-clean)', {
-  skip: !moduleLoaded ? skipReason : false,
-}, async () => {
-  const root = makePaperRoot(); // No bib file written.
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-
-  const draftMd = 'A claim [@smith2020] and another [@jones2019].';
-  const finalMd = 'A claim [@smith2020] and another [@jones2019].';
-
-  const result = await reCheckFinalMd!(finalMd, draftMd, bibPath);
-  assert.equal(result.passed, true, 'Matching citekey sets + absent bib must pass');
+test('GATE-04: matching cited key sets (any Pandoc form, order and locators aside) → no change', () => {
+  assert.equal(citedKeySetChange('A claim [@smith2020] and another [@jones2019].', 'A claim [@smith2020] and another [@jones2019].'), null);
+  assert.equal(citedKeySetChange('As @jones2019 notes, it holds [@smith2020, p. 4].', 'It holds [@smith2020; @jones2019].'), null);
 });
 
-// ---------------------------------------------------------------------------
-// Test 2: Added citekey in FINAL.md not in draftMd → { passed: false }
-// ---------------------------------------------------------------------------
-test('GATE-04: added citekey in FINAL.md → { passed: false } naming the added key', {
-  skip: !moduleLoaded ? skipReason : false,
-}, async () => {
-  const root = makePaperRoot(''); // Empty bib.
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-
-  const draftMd = 'A claim [@smith2020].';
-  // Humanizer added a new citation that was not in the draft.
-  const finalMd = 'A claim [@smith2020] and a new one [@fabricated2099].';
-
-  const result = await reCheckFinalMd!(finalMd, draftMd, bibPath);
-  assert.equal(result.passed, false, 'Added citekey must cause reCheckFinalMd to fail');
-  assert.match(
-    result.reason,
-    /fabricated2099/,
-    'Failure reason must name the added citekey',
-  );
+test('GATE-04: an added, dropped or swapped citekey in FINAL.md is named', () => {
+  assert.match(citedKeySetChange('A claim [@smith2020] and a new one [@fabricated2099].', 'A claim [@smith2020].') ?? '', /^citekey-set mismatch after humanization — added: \[fabricated2099\]$/);
+  assert.match(citedKeySetChange('A claim [@smith2020].', 'A claim [@smith2020] and another [@jones2019].') ?? '', /dropped: \[jones2019\]/);
+  const swapped = citedKeySetChange('A claim [@jones2019].', 'A claim [@smith2020].') ?? '';
+  assert.match(swapped, /added: \[jones2019\]/);
+  assert.match(swapped, /dropped: \[smith2020\]/);
+  assert.match(citedKeySetChange('A claim [-@fabricated2099].', 'A claim.') ?? '', /added: \[fabricated2099\]/, 'an author-suppressed key is a citation too');
 });
 
-// ---------------------------------------------------------------------------
-// Test 3: Dropped citekey → { passed: false }
-// ---------------------------------------------------------------------------
-test('GATE-04: dropped citekey in FINAL.md → { passed: false }', {
-  skip: !moduleLoaded ? skipReason : false,
-}, async () => {
-  const root = makePaperRoot(''); // Empty bib.
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-
-  const draftMd = 'A claim [@smith2020] and another [@jones2019].';
-  // Humanizer silently dropped a citation.
-  const finalMd = 'A claim [@smith2020].';
-
-  const result = await reCheckFinalMd!(finalMd, draftMd, bibPath);
-  assert.equal(result.passed, false, 'Dropped citekey must cause reCheckFinalMd to fail');
-  assert.match(
-    result.reason,
-    /jones2019/,
-    'Failure reason must name the dropped citekey',
-  );
+test('GATE-04 / VRFY-26: the gate core over FINAL.md\'s bytes refuses a key the bibliography lacks (FABRICATED) — whatever the key-set diff says', async () => {
+  const root = paper(LECUN_BIB, ['lecun2015']);
+  const clean = await recomputeExportGate(root, 'Deep learning reshaped vision [@lecun2015].\n');
+  assert.deepEqual(clean.refusals, [], 'a recorded work passes (offline replay)');
+  const forged = await recomputeExportGate(root, 'Deep learning reshaped vision [@lecun2015]. A survey agrees [@fabricated2099].\n');
+  assert.ok(forged.refusals.some((r) => /^citation \[@fabricated2099\] is FABRICATED — /.test(r)), JSON.stringify(forged.refusals));
+  assert.ok(forged.refusals.some((r) => /^citation \[@fabricated2099\] is UNASSIGNED — /.test(r)), 'a key outside every section\'s assigned sources');
 });
 
-// ---------------------------------------------------------------------------
-// Test 4: Swapped citekey (one dropped, one added) → { passed: false }
-// ---------------------------------------------------------------------------
-test('GATE-04: swapped citekey in FINAL.md → { passed: false }', {
-  skip: !moduleLoaded ? skipReason : false,
-}, async () => {
-  const root = makePaperRoot(''); // Empty bib.
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-
-  const draftMd = 'A claim [@smith2020].';
-  // Humanizer swapped the citekey for a different one.
-  const finalMd = 'A claim [@jones2019].';
-
-  const result = await reCheckFinalMd!(finalMd, draftMd, bibPath);
-  assert.equal(result.passed, false, 'Swapped citekey must cause reCheckFinalMd to fail');
-  // Reason should mention either the added or dropped key (or both).
-  const reasonMentionsBothKeys =
-    /smith2020/.test(result.reason) || /jones2019/.test(result.reason);
-  assert.ok(
-    reasonMentionsBothKeys,
-    `Failure reason must name at least one of the swapped keys (reason: ${result.reason})`,
-  );
-});
-
-// ---------------------------------------------------------------------------
-// Test 5: Absent bib file → { passed: true } (skip-clean, no quotes to check)
-// ---------------------------------------------------------------------------
-test('GATE-04: absent CITATIONS.bib → { passed: true } (skip-clean — no quotes to verify)', {
-  skip: !moduleLoaded ? skipReason : false,
-}, async () => {
-  const root = makePaperRoot(); // No bib file written — simulates no bib path exists.
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-
-  // Matching citekey sets — so only the bib-absent path triggers.
-  const draftMd = 'A claim [@smith2020].';
-  const finalMd = 'A claim [@smith2020].';
-
-  // Verify the bib truly does not exist (defensive — makePaperRoot with no arg writes nothing).
-  assert.equal(existsSync(bibPath), false, 'Precondition: CITATIONS.bib must not exist for this test');
-
-  const result = await reCheckFinalMd!(finalMd, draftMd, bibPath);
-  assert.equal(result.passed, true, 'Absent bib → no quotes to check → must pass cleanly');
-});
-
-// ---------------------------------------------------------------------------
-// Test 6 (CR-01): reCheckFinalMd is unconditional — it has no --yolo escape.
-//
-// The GATE-04 condition in done.ts was `if (finalPath !== null && args.yolo !== true)`.
-// After the CR-01 fix it is `if (finalPath !== null)` (yolo bypass removed).
-// This test proves reCheckFinalMd returns { passed: false } for a citekey mismatch
-// regardless of any flag — reCheckFinalMd has no yolo parameter and must ALWAYS
-// run the full check. A caller that bypasses this via a condition flag is the bug
-// (now fixed in done.ts). If someone re-introduces a yolo arm in done.ts, the
-// GATE-04 integration test (below) would detect it.
-// ---------------------------------------------------------------------------
-test('GATE-04 CR-01: reCheckFinalMd has no --yolo escape — citekey mismatch always returns { passed: false }', {
-  skip: !moduleLoaded ? skipReason : false,
-}, async () => {
-  const root = makePaperRoot(''); // Empty bib — citekey diff fires before Pass-3.
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-
-  const draftMd = 'A claim [@smith2020].';
-  // Simulates a humanizer that swapped a citekey (the exact bypass scenario from CR-01).
-  const finalMd = 'A claim [@fabricated2099].';
-
-  // reCheckFinalMd must return passed:false. It has no yolo parameter;
-  // the verifier gate is unconditional by design.
-  const result = await reCheckFinalMd!(finalMd, draftMd, bibPath);
-  assert.equal(
-    result.passed,
-    false,
-    'GATE-04 must block a citekey mismatch unconditionally — there is no --yolo bypass in reCheckFinalMd',
-  );
-  assert.match(
-    result.reason,
-    /citekey-set mismatch/,
-    'Failure reason must describe the citekey-set mismatch',
-  );
-});
-
-// ---------------------------------------------------------------------------
-// An unparseable CITATIONS.bib is never "no quotes to check": the Pass-3
-// re-check cannot run, so export is blocked (fail closed).
-// ---------------------------------------------------------------------------
-test('GATE-04: an unparseable CITATIONS.bib → { passed: false } naming the file (fail closed, never skip-clean)', {
-  skip: !moduleLoaded ? skipReason : false,
-}, async () => {
-  const root = makePaperRoot('@article{bad2025,\n\tauthor = {,{\\u  }},\n\tdoi = {10.1/x},\n}\n');
-  const bibPath = join(root, '.paper', 'CITATIONS.bib');
-  const md = 'A claim "a quoted phrase" [@bad2025].';
-  const result = await reCheckFinalMd!(md, md, bibPath);
-  assert.equal(result.passed, false, 'an unreadable bib must block export');
-  assert.match(result.reason, /CITATIONS\.bib is not valid BibTeX/);
+test('GATE-04 / VRFY-16: a cited entry of CITATIONS.bib that does not parse is UNPARSEABLE naming key and line (fail closed, never "nothing to check")', async () => {
+  const root = paper(`${LECUN_BIB}@article{bad2025,\n\tauthor = {,{\\u  }},\n\tdoi = {10.1/x},\n}\n`, ['lecun2015', 'bad2025']);
+  const r = await recomputeExportGate(root, 'A claim "a quoted phrase long enough to count" [@bad2025]. Deep learning [@lecun2015].\n');
+  assert.ok(r.refusals.some((x) => /^citation \[@bad2025\] is UNPARSEABLE — its \.paper\/CITATIONS\.bib entry \(line \d+\) does not parse/.test(x)), JSON.stringify(r.refusals));
+  assert.ok(!r.refusals.some((x) => /lecun2015/.test(x)), 'the entries that parse are still checked (and pass)');
 });

@@ -28,14 +28,13 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { runPass4, renderPass4Section, type Pass4Result } from '../lib/verify/pass4.js';
-import { runPass3 } from '../lib/verify/pass3.js';
 import { type Pass2Result, type Pass2Verdict } from '../lib/verify/pass2.js';
 import { runPlagiarism, renderPlagiarismSection, type PlagiarismResult } from '../lib/plagiarism.js';
 import { scoreHonesty, renderHonestyReport } from '../lib/honesty.js';
 import { exportDraft, runHumanizer, type ExportFormat } from '../lib/exporter.js';
 import { paperDir, projectRoot, sectionDraft, sectionPlan, sectionVerification } from '../lib/paths.js';
 import { parseIntakeMd } from '../lib/intake-parse.js';
-import { resolveStyleName, parseBibFileAt } from '../lib/citations.js';
+import { resolveStyleName } from '../lib/citations.js';
 import { atomicWriteFile } from '../lib/atomic-write.js';
 import { runGate, declineGate, canPrompt } from '../lib/gates.js';
 import { EXIT_BLOCKED, EXIT_ERROR } from '../lib/exit-codes.js';
@@ -44,7 +43,7 @@ import { offlineMarkerLine, networkMode } from '../lib/http-mock.js';
 import { loadFrontmatterDocSync } from '../lib/frontmatter.js';
 import { sectionWriteBlockReason } from '../lib/plan-status.js';
 import { formatSectionId, sectionIdOf } from '../lib/section-id.js';
-import { blocksCompile, PASS2_TABLE_HEADER, PASS2_TABLE_HEADER_V1 } from '../lib/verify/verdicts.js';
+import { PASS2_TABLE_HEADER, PASS2_TABLE_HEADER_V1 } from '../lib/verify/verdicts.js';
 import { computeDraftHash } from '../lib/draft-hash.js';
 import { outlineIdentitiesSync, registeredSectionsSync, sectionRegistryProblem, type SectionIdentity } from '../lib/section-registry.js';
 import { compileRecordProblems } from '../lib/compile-inputs.js';
@@ -620,108 +619,6 @@ export function readUnsupportedClaims(paperRoot: string, sections: readonly Done
     for (const r of parseSectionPass2Rows(md, name)) out.push({ section: s.id, slug: s.identity.slug, row: r.row, result: r.result });
   }
   return out;
-}
-
-// ---------------------------------------------------------------------------
-// GATE-04 reCheckFinalMd — re-verify the humanized FINAL.md before export
-// ---------------------------------------------------------------------------
-
-/**
- * Re-verify the humanized FINAL.md immediately before export (GATE-04).
- *
- * (a) Citekey-set diff: the set of cited keys in finalMd MUST equal the set
- *     in draftMd. Any add/drop/swap is a HARD block. Keys are read with the
- *     broad Pandoc grammar (`[@a; @b]`, locators, mixed case, `[-@k]`, `@{k}`,
- *     narrative `@k`), so a key dropped from or swapped into a citation is
- *     seen — never treated as absent.
- * (b) Pass-3 quote re-check on finalMd: absent or empty bib → skip-clean
- *     (no quotes to check); else build bibByCitekey from the FULL CITATIONS.bib
- *     (Pitfall 4 — NOT filtered by DRAFT keys) and run runPass3. Any NOT_FOUND
- *     verdict → HARD block.
- *
- * Never throws. Returns { passed: boolean; reason: string }.
- */
-export async function reCheckFinalMd(
-  finalMd: string,
-  draftMd: string,
-  bibPath: string,
-  /** The project root: Pass 3 re-checks quotes against the hash-verified bring-your-own PDFs too (SRC-15). */
-  root?: string,
-): Promise<{ passed: boolean; reason: string }> {
-  // Step (a): citekey-set diff (runs FIRST — Pitfall 5).
-  const finalKeys = new Set(extractCitedKeysForVerification(finalMd));
-  const draftKeys = new Set(extractCitedKeysForVerification(draftMd));
-
-  const added = [...finalKeys].filter((k) => !draftKeys.has(k));
-  const dropped = [...draftKeys].filter((k) => !finalKeys.has(k));
-
-  if (added.length > 0 || dropped.length > 0) {
-    const parts: string[] = [];
-    if (added.length > 0) parts.push(`added: [${added.join(', ')}]`);
-    if (dropped.length > 0) parts.push(`dropped: [${dropped.join(', ')}]`);
-    return {
-      passed: false,
-      reason: `citekey-set mismatch after humanization — ${parts.join('; ')}`,
-    };
-  }
-
-  // Step (b): Pass-3 quote re-check only when citekey sets match.
-  // Absent or empty bib → skip-clean (no quotes to check).
-  let bibText: string;
-  try {
-    if (!existsSync(bibPath)) return { passed: true, reason: '' };
-    bibText = readFileSync(bibPath, 'utf8');
-  } catch {
-    return { passed: true, reason: '' };
-  }
-  if (bibText.trim().length === 0) return { passed: true, reason: '' };
-
-  // Build bibByCitekey from the FULL CITATIONS.bib (Pitfall 4).
-  let bibByCitekey: Map<string, { DOI?: string }>;
-  try {
-    const bibEntries = await parseBibFileAt(bibText, bibPath);
-    bibByCitekey = new Map(
-      bibEntries.map((e) => [String((e as { id?: string }).id ?? ''), e as { DOI?: string }]),
-    );
-  } catch (err) {
-    // FAIL-CLOSED: a bib that does not parse is never "no quotes to check" —
-    // the quotes cannot be re-checked, so export is blocked (GATE-04).
-    return { passed: false, reason: err instanceof Error ? err.message : String(err) };
-  }
-
-  let pass3Results;
-  try {
-    pass3Results = await runPass3(finalMd, bibByCitekey, root !== undefined ? { root } : {});
-  } catch (err) {
-    // GATE-04 FAIL-CLOSED: an unexpected runPass3 error is NOT a clean pass.
-    // We already have a valid bibByCitekey map here, so an exception is unexpected
-    // (not a "nothing to do" case like the bib-parse catch above). Fail closed so
-    // a humanizer-introduced NOT_FOUND quote that also triggers a runPass3 bug
-    // cannot silently escape the gate. Log to stderr and block export.
-    process.stderr.write(
-      `pensmith done: GATE-04 Pass-3 re-check failed unexpectedly (${
-        err instanceof Error ? err.message : String(err)
-      }) — blocking export (fail-closed verifier gate).\n`,
-    );
-    return {
-      passed: false,
-      reason: `Pass-3 re-check threw unexpectedly: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-
-  // The one blocking rule (verify/verdicts.ts, Phase 20 seam S-C).
-  const notFound = pass3Results.filter((r) => blocksCompile(r.verdict));
-  if (notFound.length > 0) {
-    const detail = notFound
-      .map((r) => `[@${r.citekey}] "${r.quoteSnippet}"`)
-      .join('; ');
-    return {
-      passed: false,
-      reason: `Pass-3 quote NOT_FOUND in humanized FINAL.md: ${detail}`,
-    };
-  }
-
-  return { passed: true, reason: '' };
 }
 
 // ---------------------------------------------------------------------------

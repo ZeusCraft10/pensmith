@@ -24,7 +24,7 @@ import { loadLibrary } from '../bin/lib/library.js';
 import { extractQuotes } from '../bin/lib/quote-extractor.js';
 import { runPass3 } from '../bin/lib/verify/pass3.js';
 import { runPass1 } from '../bin/lib/verify/pass1.js';
-import { reCheckFinalMd } from '../bin/cli/done.js';
+import { citedKeySetChange, recomputeExportGate } from '../bin/cli/done.js';
 import { replaceCitations, findCitationClusters, extractCitedKeysForVerification } from '../bin/lib/citation-token.js';
 import { checkDraft } from '../bin/lib/draft-containment.js';
 
@@ -105,18 +105,18 @@ test('review round 2: a quote cited with a mixed-case key, a locator or a cluste
 
 test('review round 2: done\'s GATE-04 key-set diff sees mixed-case keys — dropping, adding or re-casing one blocks export', async () => {
   const root = paper();
-  const bib = path.join(root, '.paper', 'CITATIONS.bib');
-  fs.writeFileSync(bib, '');
+  fs.writeFileSync(path.join(root, '.paper', 'CITATIONS.bib'), '');
   const draft = `A claim [@lecunDeepLearning2015, p. 3]. Another [@smith2020].\n`;
   assert.deepEqual(extractCitedKeysForVerification(draft), ['lecunDeepLearning2015', 'smith2020']);
-  const dropped = await reCheckFinalMd('A claim. Another [@smith2020].\n', draft, bib, root);
-  assert.equal(dropped.passed, false);
-  assert.match(dropped.reason, /dropped: \[lecunDeepLearning2015\]/);
-  const recased = await reCheckFinalMd('A claim [@LecunDeepLearning2015, p. 3]. Another [@smith2020].\n', draft, bib, root);
-  assert.equal(recased.passed, false);
-  assert.match(recased.reason, /added: \[LecunDeepLearning2015\]; dropped: \[lecunDeepLearning2015\]/);
-  const same = await reCheckFinalMd('Reworded claim [@lecunDeepLearning2015, p. 3]. Another [@smith2020].\n', draft, bib, root);
-  assert.equal(same.passed, true, same.reason);
+  assert.match(citedKeySetChange('A claim. Another [@smith2020].\n', draft) ?? '', /dropped: \[lecunDeepLearning2015\]/);
+  assert.match(
+    citedKeySetChange('A claim [@LecunDeepLearning2015, p. 3]. Another [@smith2020].\n', draft) ?? '',
+    /added: \[LecunDeepLearning2015\]; dropped: \[lecunDeepLearning2015\]/,
+  );
+  assert.equal(citedKeySetChange('Reworded claim [@lecunDeepLearning2015, p. 3]. Another [@smith2020].\n', draft), null);
+  // The gate core over FINAL.md itself (VRFY-26): the re-cased key is not in the bibliography.
+  const gate = await recomputeExportGate(root, 'A claim [@LecunDeepLearning2015, p. 3]. Another [@smith2020].\n', { sections: [] });
+  assert.ok(gate.refusals.some((r) => /^citation \[@LecunDeepLearning2015\] is FABRICATED/.test(r)), JSON.stringify(gate.refusals));
 });
 
 test('review round 2: compile\'s smoother masking covers every citation cluster (mixed case, locators, clusters) and restores it verbatim', () => {

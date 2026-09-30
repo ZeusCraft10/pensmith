@@ -3,7 +3,7 @@
 // that gates or repairs a draft (AUDIT-FINDINGS #2/#3, CLAUDE.md
 // "Non-negotiables"). The drafter is told to write one bare `[@key]` per source,
 // but a model or the humanizer can still write a cluster, so:
-//   - GATE-04 (done.ts reCheckFinalMd) diffs the cited key sets with the broad
+//   - GATE-04 (done.ts citedKeySetChange) diffs the cited key sets with the broad
 //     grammar — a key dropped from or swapped into a cluster is a hard block;
 //   - the Pass-3 quote extractor attributes a quote followed by a cluster to
 //     EVERY key in it (fail closed), and a locator is still an attribution;
@@ -28,7 +28,7 @@ import {
   stripCitationClusters,
 } from '../bin/lib/citation-token.js';
 import { extractQuotes } from '../bin/lib/quote-extractor.js';
-import { reCheckFinalMd } from '../bin/cli/done.js';
+import { citedKeySetChange } from '../bin/cli/done.js';
 import { computeCitationDensity } from '../bin/lib/citation-density.js';
 import { citationDensityForReport } from '../bin/lib/compile-report.js';
 import { runRevise } from '../bin/lib/revise.js';
@@ -53,17 +53,15 @@ test('findCitationClusters / countCitations / stripCitationClusters read every c
   assert.deepEqual(extractCitedKeysForVerification(md), ['a', 'b', 'c', 'd', 'e', 'Upper2020']);
 });
 
-test('GATE-04: a key dropped from, or swapped into, a cluster by the humanizer is a hard block', async () => {
+test('GATE-04: a key dropped from, or swapped into, a cluster by the humanizer is a hard block', () => {
   const draft = 'Attention replaced recurrence [@vaswani2017; @bahdanau2015].';
-  const swapped = await reCheckFinalMd('Attention replaced recurrence [@vaswani2017; @fabricated2099].', draft, '/nonexistent.bib');
-  assert.equal(swapped.passed, false);
-  assert.match(swapped.reason, /citekey-set mismatch after humanization — added: \[fabricated2099\]; dropped: \[bahdanau2015\]/);
-  const dropped = await reCheckFinalMd('Attention replaced recurrence [@vaswani2017].', draft, '/nonexistent.bib');
-  assert.equal(dropped.passed, false);
-  assert.match(dropped.reason, /dropped: \[bahdanau2015\]/);
+  assert.equal(
+    citedKeySetChange('Attention replaced recurrence [@vaswani2017; @fabricated2099].', draft),
+    'citekey-set mismatch after humanization — added: [fabricated2099]; dropped: [bahdanau2015]',
+  );
+  assert.match(citedKeySetChange('Attention replaced recurrence [@vaswani2017].', draft) ?? '', /dropped: \[bahdanau2015\]/);
   // Rewriting a cluster as bare tokens keeps the set: not a change.
-  const same = await reCheckFinalMd('Attention replaced recurrence [@vaswani2017] [@bahdanau2015].', draft, '/nonexistent.bib');
-  assert.deepEqual(same, { passed: true, reason: '' });
+  assert.equal(citedKeySetChange('Attention replaced recurrence [@vaswani2017] [@bahdanau2015].', draft), null);
 });
 
 test('Pass 3 input: a quote followed by a cluster is attributed to every key in it; a locator still attributes', () => {
